@@ -32,6 +32,13 @@ export type Permission = "microphone" | "accessibility" | "inputMonitoring";
 export type PermissionState = "granted" | "denied" | "restricted" | "undetermined";
 export type Permissions = Record<Permission, PermissionState>;
 
+/** Por que o LLM local (Apple Foundation Models) não está disponível. */
+export type LlmUnavailableReason = "appleIntelligenceNotEnabled" | "deviceNotEligible" | "modelNotReady";
+export interface LlmStatus {
+  available: boolean;
+  reason?: LlmUnavailableReason;
+}
+
 /** O que o overlay mostra. `level` vem do próprio sidecar (audio.level). */
 export type OverlayState = "hidden" | "listening" | "processing" | "done" | "error";
 
@@ -61,7 +68,14 @@ export type Command =
   | { type: "insert.text"; text: string; restoreClipboard: boolean }
   | { type: "notify"; title: string; body: string }
   | { type: "permissions.request"; permission: Permission }
-  | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number };
+  /**
+   * Uma resposta do Apple Foundation Models, sempre numa sessão nova (sem contexto entre chamadas).
+   * `temperature: 0` é greedy. Passou de `timeoutMs`, o sidecar cancela e devolve `llm_timeout`.
+   * Erros: `llm_unavailable` (com `data.reason`), `llm_timeout`, `llm_refused` (guardrail).
+   */
+  | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number; temperature?: number; timeoutMs?: number }
+  /** Aquece o modelo com estas instruções. O Bun manda no `record.started`, antes da transcrição chegar. */
+  | { type: "llm.prewarm"; system: string };
 
 export type CommandType = Command["type"];
 
@@ -76,7 +90,8 @@ export interface CommandResults {
   "insert.text": { pasted: boolean };
   notify: Record<string, never>;
   "permissions.request": { permission: Permission; state: PermissionState };
-  "llm.complete": { text: string };
+  "llm.complete": { text: string; ms: number };
+  "llm.prewarm": Record<string, never>;
 }
 
 // ---------------------------------------------------------- sidecar → Bun
@@ -92,8 +107,10 @@ export type Event =
       permissions: Permissions;
       /** Texto para explicar cada permissão na UI. */
       permissionHelp?: Partial<Record<Permission, string>>;
+      /** Se o LLM local está pronto. Opcional até o sidecar mandar (T52). */
+      llm?: LlmStatus;
     }
-  | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean }
+  | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean; llm?: LlmStatus }
   | { type: "hotkey.down"; key: HotkeyKey }
   | { type: "hotkey.up"; key: HotkeyKey }
   | { type: "hotkey.toggle"; on: boolean }
@@ -121,7 +138,7 @@ export type EventMessage<E extends Event = Event> = E & { v: typeof IPC_VERSION 
 
 export type ResultMessage<T extends CommandType = CommandType> =
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: true; data: CommandResults[T] }
-  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`… */
+  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`, `llm_unavailable`, `llm_timeout`, `llm_refused`… */
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: false; error: string; data?: Record<string, unknown> };
 
 export type Message = CommandMessage | EventMessage | ResultMessage;
@@ -136,6 +153,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "notify",
   "permissions.request",
   "llm.complete",
+  "llm.prewarm",
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
