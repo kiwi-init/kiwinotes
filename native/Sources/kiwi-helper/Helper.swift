@@ -107,8 +107,10 @@ final class Helper {
             try audio.start()
         } catch {
             gesture.reset()
-            emit("record.error", ["reason": reason, "error": "\(error)", "microphone": Permission.microphone.status])
-            return "\(error)"
+            // A stable code for the app; AVAudioEngine's own errors are long sentences.
+            let code = (error as? AudioCaptureError)?.description ?? "engine_start_failed"
+            emit("record.error", ["reason": reason, "error": code, "microphone": Permission.microphone.status])
+            return code
         }
         recordingStartedAt = ProcessInfo.processInfo.systemUptime
         emit("record.started", ["reason": reason])
@@ -186,16 +188,10 @@ final class Helper {
         }
     }
 
-    /// `hotkeys {pushToTalk, toggleDoubleTap}` (ADR 0001). Both gestures live on one key for now, so the two must match.
+    /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?}` (ADR 0001). Hold and double tap share the one key.
     private func configure(_ message: InboundMessage) -> String? {
         var requested: HotkeyKey?
-        if let hotkeys = message.fields["hotkeys"] as? [String: Any] {
-            let names = [hotkeys["pushToTalk"], hotkeys["toggleDoubleTap"]].compactMap { $0 as? String }
-            let keys = names.compactMap(HotkeyKey.init(rawValue:))
-            guard keys.count == names.count else { return "unknown_hotkey" }
-            guard Set(keys).count <= 1 else { return "hotkeys_must_match" }
-            requested = keys.first
-        } else if let name = message.string("hotkey") {
+        if let name = message.string("hotkey") {
             guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
             requested = key
         }
