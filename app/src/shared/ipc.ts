@@ -1,0 +1,261 @@
+// Contrato de IPC entre o app (main em Bun) e o sidecar Swift (native/).
+// Decisão e motivos: docs/adr/0001-ipc.md. O lado Swift espelha estes tipos.
+//
+// Transporte: socket unix (0600). O Bun escuta e sobe o sidecar com
+// `--socket <path>`; o sidecar conecta e sai sozinho quando o socket fecha.
+// Framing: NDJSON, uma mensagem JSON por linha (`\n`), no máximo 1 MB por linha.
+// Toda mensagem leva `v: 1` e `type`. Um comando com `id` recebe exatamente um
+// `result` com o mesmo `id` (`data` se ok, um código em `error` se não). Eventos não levam `id`.
+// O áudio cru nunca cruza o socket: gravação e STT ficam no sidecar.
+
+import os from "node:os";
+import path from "node:path";
+
+export const IPC_VERSION = 1 as const;
+export const MAX_LINE_BYTES = 1024 * 1024;
+
+/** Onde fica o socket por padrão. */
+export function defaultSocketPath(home = os.homedir()): string {
+  return path.join(home, "Library", "Application Support", "KiwiNotes", "sidecar.sock");
+}
+
+// ---------------------------------------------------------------- tipos comuns
+
+/**
+ * A tecla do atalho. Os dois gestos ficam nela: segurar grava (push-to-talk) e
+ * duas batidas travam a gravação ligada (toggle). O padrão sai do spec (Fn/🌐 ou ⌥ direito).
+ */
+export type HotkeyKey = "fn" | "rightOption" | "rightCommand" | "rightControl";
+
+/** Sem `inputMonitoring` o event tap nasce, mas não recebe tecla: o atalho não funciona. */
+export type Permission = "microphone" | "accessibility" | "inputMonitoring";
+export type PermissionState = "granted" | "denied" | "restricted" | "undetermined";
+export type Permissions = Record<Permission, PermissionState>;
+
+/** O que o overlay mostra. `level` vem do próprio sidecar (audio.level). */
+export type OverlayState = "hidden" | "listening" | "processing" | "done" | "error";
+
+/** Quem começou ou terminou a gravação. `config`: o atalho mudou no meio. */
+export type RecordReason = "hotkey" | "command" | "config";
+
+/** Como a gravação terminou: soltou a tecla, bateu de novo no toggle, ou pelo app. */
+export type StopMode = "ptt" | "toggle" | "command";
+
+// ---------------------------------------------------------- Bun → sidecar
+
+export type Command =
+  | { type: "ping" }
+  | {
+      type: "config.set";
+      hotkey?: HotkeyKey;
+      /** Quanto segurar até contar como push-to-talk. */
+      holdThresholdMs?: number;
+      /** Janela das duas batidas do toggle. */
+      doubleTapMs?: number;
+      language?: "auto" | "pt" | "en";
+      dictionary?: string[];
+    }
+  | { type: "record.start" }
+  | { type: "record.stop" }
+  | { type: "overlay.state"; state: OverlayState; message?: string }
+  | { type: "insert.text"; text: string; restoreClipboard: boolean }
+  | { type: "notify"; title: string; body: string }
+  | { type: "permissions.request"; permission: Permission }
+  | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number };
+
+export type CommandType = Command["type"];
+
+/** O que cada comando devolve no `result` quando dá certo. */
+export interface CommandResults {
+  ping: Record<string, never>;
+  "config.set": { hotkey: HotkeyKey; hotkeyActive: boolean };
+  "record.start": Record<string, never>;
+  "record.stop": Record<string, never>;
+  "overlay.state": Record<string, never>;
+  /** `pasted: false` quando não havia campo de texto: o texto ficou no clipboard. */
+  "insert.text": { pasted: boolean };
+  notify: Record<string, never>;
+  "permissions.request": { permission: Permission; state: PermissionState };
+  "llm.complete": { text: string };
+}
+
+// ---------------------------------------------------------- sidecar → Bun
+
+export type Event =
+  | {
+      type: "ready";
+      version: string;
+      pid: number;
+      hotkey: HotkeyKey;
+      /** `false` quando falta permissão e o atalho não recebe tecla. */
+      hotkeyActive: boolean;
+      permissions: Permissions;
+      /** Texto para explicar cada permissão na UI. */
+      permissionHelp?: Partial<Record<Permission, string>>;
+    }
+  | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean }
+  | { type: "hotkey.down"; key: HotkeyKey }
+  | { type: "hotkey.up"; key: HotkeyKey }
+  | { type: "hotkey.toggle"; on: boolean }
+  /** O sidecar começa a gravar sozinho no hotkey.down, para não perder a primeira sílaba. */
+  | { type: "record.started"; reason: RecordReason }
+  | { type: "record.stopped"; reason: RecordReason; mode: StopMode; durationMs: number; samples: number; audioPath?: string }
+  /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
+  | { type: "record.cancelled"; reason: RecordReason }
+  /** Não deu para gravar: sem microfone ou sem permissão. */
+  | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState }
+  /** Nível RMS de 0 a 1, ~30 Hz enquanto grava. Alimenta a onda do overlay. */
+  | { type: "audio.level"; rms: number }
+  /** App em foco, para ajustar o tom da limpeza. */
+  | { type: "app.active"; bundleId: string; name: string }
+  | { type: "transcript.partial"; text: string }
+  | { type: "transcript.final"; text: string; lang: string; durationMs: number; audioPath?: string }
+  | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string };
+
+export type EventType = Event["type"];
+
+// ---------------------------------------------------------- envelopes
+
+export type CommandMessage<C extends Command = Command> = C & { v: typeof IPC_VERSION; id: string };
+export type EventMessage<E extends Event = Event> = E & { v: typeof IPC_VERSION };
+
+export type ResultMessage<T extends CommandType = CommandType> =
+  | { v: typeof IPC_VERSION; type: "result"; id: string; ok: true; data: CommandResults[T] }
+  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`… */
+  | { v: typeof IPC_VERSION; type: "result"; id: string; ok: false; error: string; data?: Record<string, unknown> };
+
+export type Message = CommandMessage | EventMessage | ResultMessage;
+
+const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
+  "ping",
+  "config.set",
+  "record.start",
+  "record.stop",
+  "overlay.state",
+  "insert.text",
+  "notify",
+  "permissions.request",
+  "llm.complete",
+]);
+
+const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
+  "ready",
+  "permissions.changed",
+  "hotkey.down",
+  "hotkey.up",
+  "hotkey.toggle",
+  "record.started",
+  "record.stopped",
+  "record.cancelled",
+  "record.error",
+  "audio.level",
+  "app.active",
+  "transcript.partial",
+  "transcript.final",
+  "log",
+]);
+
+export const isCommand = (m: Message): m is CommandMessage => COMMAND_TYPES.has(m.type);
+export const isEvent = (m: Message): m is EventMessage => EVENT_TYPES.has(m.type);
+export const isResult = (m: Message): m is ResultMessage => m.type === "result";
+
+// ---------------------------------------------------------- framing
+
+export class IpcError extends Error {
+  constructor(
+    readonly code: "line_too_long" | "bad_json" | "bad_message" | "bad_version",
+    message: string,
+  ) {
+    super(message);
+    this.name = "IpcError";
+  }
+}
+
+const encoder = new TextEncoder();
+
+/** Serializa uma mensagem numa linha NDJSON (com o `\n`). */
+export function encode(message: Message): string {
+  const line = `${JSON.stringify(message)}\n`;
+  if (encoder.encode(line).byteLength > MAX_LINE_BYTES) {
+    throw new IpcError("line_too_long", `message ${message.type} passes ${MAX_LINE_BYTES} bytes`);
+  }
+  return line;
+}
+
+/** Valida uma linha já sem o `\n`. */
+export function parseLine(line: string): Message {
+  let value: unknown;
+  try {
+    value = JSON.parse(line);
+  } catch {
+    throw new IpcError("bad_json", "line isn't JSON");
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new IpcError("bad_message", "message isn't an object");
+  }
+  const m = value as Record<string, unknown>;
+  if (m.v !== IPC_VERSION) throw new IpcError("bad_version", `unsupported version ${String(m.v)}`);
+  if (typeof m.type !== "string") throw new IpcError("bad_message", "message has no type");
+  if (m.type === "result") {
+    if (typeof m.id !== "string" || typeof m.ok !== "boolean") throw new IpcError("bad_message", "result needs id and ok");
+  } else if (COMMAND_TYPES.has(m.type)) {
+    if (typeof m.id !== "string") throw new IpcError("bad_message", `command ${m.type} needs an id`);
+  } else if (!EVENT_TYPES.has(m.type)) {
+    throw new IpcError("bad_message", `unknown type ${m.type}`);
+  }
+  return m as unknown as Message;
+}
+
+/**
+ * Junta os pedaços que chegam do socket em mensagens. Uma linha ruim vira um
+ * erro em `onError` e não derruba as próximas; uma linha longa demais é descartada
+ * até o próximo `\n`.
+ */
+export class LineDecoder {
+  private buffer = "";
+  private bufferBytes = 0;
+  private discarding = false;
+  private readonly decoder = new TextDecoder();
+
+  constructor(
+    private readonly onMessage: (m: Message) => void,
+    private readonly onError: (e: IpcError) => void = () => {},
+  ) {}
+
+  push(chunk: Uint8Array | string): void {
+    const text = typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });
+    let start = 0;
+    for (let nl = text.indexOf("\n"); nl !== -1; nl = text.indexOf("\n", start)) {
+      this.append(text.slice(start, nl));
+      this.flushLine();
+      start = nl + 1;
+    }
+    this.append(text.slice(start));
+  }
+
+  private append(part: string): void {
+    if (this.discarding || part.length === 0) return;
+    this.bufferBytes += encoder.encode(part).byteLength;
+    if (this.bufferBytes > MAX_LINE_BYTES) {
+      this.discarding = true;
+      this.buffer = "";
+      this.onError(new IpcError("line_too_long", `line passes ${MAX_LINE_BYTES} bytes`));
+      return;
+    }
+    this.buffer += part;
+  }
+
+  private flushLine(): void {
+    const line = this.buffer;
+    const skipped = this.discarding;
+    this.buffer = "";
+    this.bufferBytes = 0;
+    this.discarding = false;
+    if (skipped || line.trim() === "") return;
+    try {
+      this.onMessage(parseLine(line));
+    } catch (e) {
+      this.onError(e instanceof IpcError ? e : new IpcError("bad_message", String(e)));
+    }
+  }
+}
