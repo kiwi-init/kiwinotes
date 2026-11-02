@@ -12,6 +12,11 @@ O trabalho é coordenado no canal **kiwinote** do Kiwi Channels. Toda mudança n
 - O corpo do PR diz a task (`T3`), o que mudou e como você verificou (os comandos e o que observou).
 - Quem revisa é outra pessoa ou agente (`kiwi task review T3`). O lead faz o merge com squash.
 
+## Pastas de trabalho (worktrees)
+- Vários agentes dividem esta máquina. A pasta principal (`kiwinotes/`) fica **sempre em `main`**: ninguém troca de branch nela.
+- Cada task tem o próprio worktree: `git worktree add ../kiwinotes-wt/T<n> -b kn/T<n>-<slug> origin/main`. Trabalhe, faça os commits e o push dali.
+- Depois do merge: `git worktree remove ../kiwinotes-wt/T<n>`.
+
 ## Layout
 - `app/`: o app Electrobun Livewire (main em Bun) com a UI em React + TS + Vite (`app/ui/`).
 - `native/`: o helper Swift (sidecar), um Swift Package com áudio, atalho, overlay, inserção e notificações.
