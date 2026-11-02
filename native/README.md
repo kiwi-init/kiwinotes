@@ -14,11 +14,11 @@ In the probe, type commands as single lines, for example `{"type":"record.start"
 - **Hold** the key to talk (push-to-talk). **Double tap** it to lock recording on, and tap again to stop.
 - A single short tap, or using the key as a modifier (Fn+F5, ⌥+letter), cancels the recording and discards the audio.
 - Recording starts on key down, before the gesture is known, so the first syllable isn't lost.
-- Defaults: Fn/🌐; also `rightOption`, `rightCommand` and `rightControl` (set with `config.set {hotkey}`). Hold is 250 ms (`holdThresholdMs`) and the double-tap window is 350 ms (`doubleTapMs`).
+- Defaults: Fn/🌐; also `rightOption`, `rightCommand` and `rightControl` (set with `config.set {hotkeys: {pushToTalk, toggleDoubleTap}}`; both gestures share one key for now, so the two must be equal). Hold is 250 ms (`holdThresholdMs`) and the double-tap window is 350 ms (`doubleTapMs`).
 - For Fn: set **System Settings → Keyboard → "Press 🌐 key to" → Do Nothing**, otherwise macOS opens the emoji picker or its own dictation.
 
 ## Events (helper → app)
-`ready`, `hotkey.down|up|toggle`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}`, `audio.level {level 0..1}` (~30 Hz while recording), `permissions.changed`, `log`.
+`ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}`, `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `permissions.changed`, `log`.
 
 ## Commands (app → helper)
 `ping`, `config.set`, `record.start`, `record.stop`, `permissions.request {permission}`. `insert.text`, `overlay.state`, `notify` and `llm.complete` return `not_implemented` until their tasks land.

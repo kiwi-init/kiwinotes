@@ -17,10 +17,11 @@ public enum IPC {
         return data
     }
 
-    public static func result(id: String, ok: Bool, error: String? = nil, _ fields: [String: Any] = [:]) throws -> Data {
-        var object = fields
-        object["ok"] = ok
+    /// `{type:"result", id, ok, data}` on success, `{..., ok:false, error, data?}` on failure (ADR 0001).
+    public static func result(id: String, ok: Bool, error: String? = nil, _ data: [String: Any] = [:]) throws -> Data {
+        var object: [String: Any] = ["ok": ok]
         if let error { object["error"] = error }
+        if ok || !data.isEmpty { object["data"] = data }
         return try encode("result", id: id, object)
     }
 }

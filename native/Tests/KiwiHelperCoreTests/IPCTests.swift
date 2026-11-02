@@ -19,6 +19,12 @@ final class IPCTests: XCTestCase {
         XCTAssertEqual(m.id, "7")
         XCTAssertEqual(m.fields["ok"] as? Bool, false)
         XCTAssertEqual(m.string("error"), "not_implemented")
+        XCTAssertNil(m.fields["data"])
+        let okLine = try IPC.result(id: "8", ok: true, ["state": "granted"])
+        let ok = try InboundMessage.decode(okLine.dropLast())
+        XCTAssertEqual((ok.fields["data"] as? [String: Any])?["state"] as? String, "granted")
+        let empty = try InboundMessage.decode(try IPC.result(id: "9", ok: true).dropLast())
+        XCTAssertNotNil(empty.fields["data"] as? [String: Any], "ok results always carry data, even {}")
     }
 
     func testEncodeRejectsHugeLines() {

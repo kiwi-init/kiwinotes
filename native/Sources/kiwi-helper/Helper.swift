@@ -20,7 +20,7 @@ final class Helper {
         tap = HotkeyTap(key: .fn) { [weak self] event in self?.onHotkey(event) }
         audio.onLevel = { [weak self] level in
             // Audio thread: send straight away, the write queue serializes it.
-            self?.emit("audio.level", ["level": (Double(level) * 1000).rounded() / 1000])
+            self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
         }
     }
 
@@ -77,8 +77,9 @@ final class Helper {
         case .startRecording:
             startRecording(reason: "hotkey")
         case .latch:
-            emit("hotkey.toggle", ["key": tap.key.rawValue, "latched": true])
+            emit("hotkey.toggle", ["on": true])
         case .stopRecording(let mode):
+            if mode == .toggle { emit("hotkey.toggle", ["on": false]) }
             stopRecording(reason: "hotkey", mode: mode.rawValue)
         case .cancelRecording:
             cancelRecording(reason: "hotkey")
@@ -157,7 +158,7 @@ final class Helper {
         case "ping":
             reply(id, ok: true)
         case "config.set":
-            configure(message)
+            if let error = configure(message) { return reply(id, ok: false, error: error) }
             reply(id, ok: true, ["hotkey": tap.key.rawValue, "hotkeyActive": hotkeyActive])
         case "record.start":
             if let error = startRecording(reason: "command") {
@@ -175,7 +176,7 @@ final class Helper {
                 return reply(id, ok: false, error: "unknown_permission")
             }
             permission.request { [weak self] status in
-                self?.reply(id, ok: status == "granted", ["permission": name, "status": status])
+                self?.reply(id, ok: true, ["permission": name, "state": status])
                 self?.pollPermissions()
             }
         case "overlay.state", "insert.text", "notify", "llm.complete":
@@ -185,8 +186,20 @@ final class Helper {
         }
     }
 
-    private func configure(_ message: InboundMessage) {
-        if let name = message.string("hotkey"), let key = HotkeyKey(rawValue: name), key != tap.key {
+    /// `hotkeys {pushToTalk, toggleDoubleTap}` (ADR 0001). Both gestures live on one key for now, so the two must match.
+    private func configure(_ message: InboundMessage) -> String? {
+        var requested: HotkeyKey?
+        if let hotkeys = message.fields["hotkeys"] as? [String: Any] {
+            let names = [hotkeys["pushToTalk"], hotkeys["toggleDoubleTap"]].compactMap { $0 as? String }
+            let keys = names.compactMap(HotkeyKey.init(rawValue:))
+            guard keys.count == names.count else { return "unknown_hotkey" }
+            guard Set(keys).count <= 1 else { return "hotkeys_must_match" }
+            requested = keys.first
+        } else if let name = message.string("hotkey") {
+            guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
+            requested = key
+        }
+        if let key = requested, key != tap.key {
             tap.stop()
             tap.key = key
             gesture.reset()
@@ -195,6 +208,7 @@ final class Helper {
         }
         if let ms = message.double("holdThresholdMs") { gesture.holdThreshold = ms / 1000 }
         if let ms = message.double("doubleTapMs") { gesture.doubleTapWindow = ms / 1000 }
+        return nil
     }
 
     // MARK: Permissions
