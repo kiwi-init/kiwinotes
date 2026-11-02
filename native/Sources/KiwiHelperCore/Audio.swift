@@ -55,7 +55,7 @@ public struct LevelPacer: Sendable {
     public let maxBacklog: Int
     private var queue: [Float] = []
 
-    public init(maxBacklog: Int = 6) {
+    public init(maxBacklog: Int = 3) {
         self.maxBacklog = max(1, maxBacklog)
     }
 
