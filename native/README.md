@@ -8,7 +8,7 @@ swift test               # pure logic: gestures, IPC framing, socket, levels, WA
 swift run kiwi-ipc-probe # plays the app: listens, starts the helper, prints what arrives
 ```
 
-In the probe, type commands as single lines, for example `{"type":"record.start","id":"1"}`. Pass `-- --dump-wav ~/kiwi-dumps` to also save each recording as a 16 kHz WAV. That folder must be outside the repo, because audio is never committed.
+The probe prints each line after the ms since it started, so you can read latencies off it (`hotkey.down` → first `audio.level`). In the probe, type commands as single lines, for example `{"type":"record.start","id":"1"}`. Pass `-- --dump-wav ~/kiwi-dumps` to also save each recording as a 16 kHz WAV. That folder must be outside the repo, because audio is never committed.
 
 ## Hotkey
 - **Hold** the key to talk (push-to-talk). **Double tap** it to lock recording on, and tap again to stop.

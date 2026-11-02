@@ -19,7 +19,7 @@ final class Helper {
         self.dumpDirectory = dumpDirectory
         tap = HotkeyTap(key: .fn) { [weak self] event in self?.onHotkey(event) }
         audio.onLevel = { [weak self] level in
-            // Audio thread: send straight away, the write queue serializes it.
+            // Level queue: send straight away, the write queue serializes it.
             self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
         }
     }
@@ -103,6 +103,7 @@ final class Helper {
     @discardableResult
     private func startRecording(reason: String) -> String? {
         guard !audio.isRecording else { return nil }
+        let t0 = ProcessInfo.processInfo.systemUptime
         do {
             try audio.start()
         } catch {
@@ -114,6 +115,9 @@ final class Helper {
         }
         recordingStartedAt = ProcessInfo.processInfo.systemUptime
         emit("record.started", ["reason": reason])
+        // Sound before the engine is up is lost (the first syllable); this shows how long that is.
+        let startMs = Int(((recordingStartedAt! - t0) * 1000).rounded())
+        emit("log", ["level": "debug", "message": "mic engine started in \(startMs) ms"])
         return nil
     }
 

@@ -42,10 +42,17 @@ do {
 }
 FileHandle.standardError.write(Data("listening on \(socketPath), helper pid \(process.processIdentifier). Type NDJSON commands, e.g. {\"type\":\"ping\",\"id\":\"1\"}\n".utf8))
 
+// Each line is printed with the ms since the probe started, to measure latencies by eye
+// (hotkey.down → first audio.level, and the audio.level rate).
+let probeStart = ProcessInfo.processInfo.systemUptime
+func stamp() -> String {
+    String(format: "%7.0f ms  ", (ProcessInfo.processInfo.systemUptime - probeStart) * 1000)
+}
+
 let connection = try listener.accept()
 connection.onMessage = { message in
     let data = (try? JSONSerialization.data(withJSONObject: message.fields, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
-    print(String(decoding: data, as: UTF8.self))
+    print(stamp() + String(decoding: data, as: UTF8.self))
     fflush(stdout)
 }
 connection.onBadLine = { print("bad line: \($0)") }

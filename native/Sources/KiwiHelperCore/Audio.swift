@@ -1,15 +1,17 @@
 import Foundation
 
-/// Turns audio buffers into a 0...1 level for the waveform, at most `rate` times per second.
+/// Turns audio into a 0...1 level for the waveform: one level per window of `sampleRate / rate` samples.
+/// Counting samples instead of wall-clock time keeps the rate right however big the mic buffers are
+/// (on macOS the input tap tends to deliver ~100 ms at once, which a time throttle turns into ~10 Hz).
 public struct LevelMeter: Sendable {
-    public let interval: TimeInterval
+    public let windowSamples: Int
     /// Silence floor in dBFS; maps to 0.
     public let floorDB: Float
-    private var lastEmit: TimeInterval = -.infinity
-    private var peakSinceEmit: Float = 0
+    private var sumSquares: Float = 0
+    private var count = 0
 
-    public init(rate: Double = 30, floorDB: Float = -60) {
-        interval = 1 / rate
+    public init(sampleRate: Double = 16_000, rate: Double = 30, floorDB: Float = -60) {
+        windowSamples = max(1, Int((sampleRate / rate).rounded()))
         self.floorDB = floorDB
     }
 
@@ -25,19 +27,52 @@ public struct LevelMeter: Sendable {
         return min(max((db - floorDB) / -floorDB, 0), 1)
     }
 
-    /// Returns the level to send now, or nil while inside the throttle window (the peak is kept for the next one).
-    public mutating func push<C: Collection>(_ samples: C, at t: TimeInterval) -> Float? where C.Element == Float {
-        peakSinceEmit = max(peakSinceEmit, normalized(rms: Self.rms(samples)))
-        guard t - lastEmit >= interval else { return nil }
-        let level = peakSinceEmit
-        peakSinceEmit = 0
-        lastEmit = t
-        return level
+    /// The level of every window this chunk completes, oldest first. A partial window carries over to the next call.
+    public mutating func push<C: Collection>(_ samples: C) -> [Float] where C.Element == Float {
+        var levels: [Float] = []
+        for s in samples {
+            sumSquares += s * s
+            count += 1
+            if count == windowSamples {
+                levels.append(normalized(rms: (sumSquares / Float(count)).squareRoot()))
+                sumSquares = 0
+                count = 0
+            }
+        }
+        return levels
     }
 
     public mutating func reset() {
-        lastEmit = -.infinity
-        peakSinceEmit = 0
+        sumSquares = 0
+        count = 0
+    }
+}
+
+/// Spreads levels that arrive in bursts (one mic buffer = several windows) over a steady tick,
+/// so the waveform moves at ~30 Hz instead of jumping three steps at a time.
+/// The backlog is capped: when ticks fall behind, the oldest levels go, so the waveform never lags the voice.
+public struct LevelPacer: Sendable {
+    public let maxBacklog: Int
+    private var queue: [Float] = []
+
+    public init(maxBacklog: Int = 6) {
+        self.maxBacklog = max(1, maxBacklog)
+    }
+
+    public var backlog: Int { queue.count }
+
+    public mutating func push(_ levels: [Float]) {
+        queue.append(contentsOf: levels)
+        if queue.count > maxBacklog { queue.removeFirst(queue.count - maxBacklog) }
+    }
+
+    /// The level for this tick, or nil when nothing new arrived (skip the tick).
+    public mutating func next() -> Float? {
+        queue.isEmpty ? nil : queue.removeFirst()
+    }
+
+    public mutating func reset() {
+        queue.removeAll()
     }
 }
 
