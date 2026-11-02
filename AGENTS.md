@@ -1,0 +1,23 @@
+# Kiwi Notes: regras para agentes e pessoas
+
+O trabalho é coordenado no canal **kiwinote** do Kiwi Channels. Toda mudança nasce de uma task (`T<n>`) filed sob um spec aprovado.
+
+## Privacidade (inegociável)
+- Nada sai do Mac: sem telemetria, sem analytics, sem STT nem LLM na nuvem. A única exceção é o Claude Code (decisão #34), e só onde um spec disser.
+- Nunca commite áudio, transcrições reais, modelos baixados ou credenciais.
+
+## Branches e PRs
+- `main` só muda por PR e está sempre buildável. Nunca faça force-push nela.
+- Trabalhe em `kn/T<n>-<slug>`, por exemplo `kn/T3-stt-benchmark`. Uma task por branch e por PR.
+- O corpo do PR diz a task (`T3`), o que mudou e como você verificou (os comandos e o que observou).
+- Quem revisa é outra pessoa ou agente (`kiwi task review T3`). O lead faz o merge com squash.
+
+## Layout
+- `app/`: o app Electrobun Livewire (main em Bun) com a UI em React + TS + Vite (`app/ui/`).
+- `native/`: o helper Swift (sidecar), um Swift Package com áudio, atalho, overlay, inserção e notificações.
+- `docs/specs/`: os specs aprovados. `docs/adr/`: as decisões de arquitetura (uma por arquivo, curta).
+
+## Testes
+- Lógica TS: `bun test`. Lógica Swift: `swift test` em `native/`.
+- Comportamento do app: rode com `ELECTROBUN_AGENT_CONTROL=1` e dirija pelo MCP do Livewire.
+- A máquina é compartilhada (M1 Pro, 16 GB): não rode benchmarks pesados em paralelo com outro agente. Pegue `kiwi lock bench` antes.
