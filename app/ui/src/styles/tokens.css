@@ -1,0 +1,89 @@
+/* Kiwi Notes: tokens do design system. Claro por padrão, escuro pelo sistema.
+   Movimento no estilo do Channels: duas velocidades e um ease para fades,
+   duas springs (linear()) para o que se move. */
+
+:root {
+  color-scheme: light dark;
+
+  /* tipografia: SF do sistema */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --leading: 1.45;
+  --tracking-tight: -0.01em;
+
+  /* raios e espaços */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --titlebar: 52px;
+
+  /* cores (claro) */
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #f0f0ed;
+  --surface-hover: rgba(0, 0, 0, 0.04);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --text: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #a1a1a6;
+  --accent: #5d9e3a; /* kiwi */
+  --accent-soft: rgba(93, 158, 58, 0.12);
+  --accent-text: #3f7a22;
+  --on-accent: #ffffff;
+  --danger: #d9443b;
+  --focus-ring: 0 0 0 3px rgba(93, 158, 58, 0.28);
+
+  /* sombras */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.07), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.14), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+
+  /* movimento */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --fast: 0.16s;
+  --slow: 0.28s;
+  /* spring com leve overshoot: painéis, seleções, janelas */
+  --glide-ease: linear(0, 0.07, 0.223, 0.399, 0.565, 0.705, 0.813, 0.893, 0.947, 0.981, 1.001, 1.011, 1.015, 1.015, 1.013, 1.01, 1.008, 1.005, 1.004, 1.002, 1.001, 1.001, 1);
+  --glide: 0.48s var(--glide-ease);
+  /* spring mais viva: toques, marcas, contadores */
+  --pop-ease: linear(0, 0.073, 0.239, 0.436, 0.626, 0.786, 0.907, 0.99, 1.039, 1.063, 1.068, 1.062, 1.05, 1.037, 1.024, 1.013, 1.005, 1, 0.997, 0.996, 0.995, 0.996, 0.997, 0.998, 1);
+  --pop: 0.35s var(--pop-ease);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --surface: #262628;
+    --surface-2: #2e2e31;
+    --surface-hover: rgba(255, 255, 255, 0.05);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --text: #f5f5f7;
+    --text-2: #a1a1a6;
+    --text-3: #6e6e73;
+    --accent: #8cc46a;
+    --accent-soft: rgba(140, 196, 106, 0.14);
+    --accent-text: #a6d987;
+    --on-accent: #10200a;
+    --danger: #ff6961;
+    --focus-ring: 0 0 0 3px rgba(140, 196, 106, 0.3);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+    --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+    --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  }
+}
