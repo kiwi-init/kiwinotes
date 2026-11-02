@@ -1,0 +1,86 @@
+import XCTest
+@testable import KiwiHelperCore
+
+final class HotkeyGestureTests: XCTestCase {
+    func testHoldIsPushToTalk() {
+        var g = HotkeyGesture(holdThreshold: 0.25, doubleTapWindow: 0.35)
+        XCTAssertEqual(g.keyDown(at: 10.0), [.startRecording])
+        XCTAssertTrue(g.isRecording)
+        XCTAssertEqual(g.keyUp(at: 11.2), [.stopRecording(.pushToTalk)])
+        XCTAssertEqual(g.state, .idle)
+    }
+
+    func testKeyRepeatWhileHeldIsIgnored() {
+        var g = HotkeyGesture()
+        _ = g.keyDown(at: 0)
+        XCTAssertEqual(g.keyDown(at: 0.1), [])
+        XCTAssertEqual(g.keyUp(at: 1), [.stopRecording(.pushToTalk)])
+    }
+
+    func testLoneShortTapCancelsAfterWindow() {
+        var g = HotkeyGesture(holdThreshold: 0.25, doubleTapWindow: 0.35)
+        XCTAssertEqual(g.keyDown(at: 0), [.startRecording])
+        XCTAssertEqual(g.keyUp(at: 0.1), [])
+        XCTAssertEqual(g.deadline ?? 0, 0.45, accuracy: 1e-9)
+        XCTAssertEqual(g.tick(now: 0.3), [], "still inside the double-tap window")
+        XCTAssertEqual(g.tick(now: 0.5), [.cancelRecording])
+        XCTAssertEqual(g.state, .idle)
+        XCTAssertNil(g.deadline)
+    }
+
+    func testDoubleTapLatchesAndNextTapStops() {
+        var g = HotkeyGesture(holdThreshold: 0.25, doubleTapWindow: 0.35)
+        XCTAssertEqual(g.keyDown(at: 0), [.startRecording])
+        XCTAssertEqual(g.keyUp(at: 0.1), [])
+        XCTAssertEqual(g.keyDown(at: 0.3), [.latch])
+        XCTAssertEqual(g.keyUp(at: 0.4), [], "releasing the second tap keeps recording")
+        XCTAssertEqual(g.tick(now: 5), [], "a latched recording never times out")
+        XCTAssertTrue(g.isRecording)
+        XCTAssertEqual(g.keyDown(at: 30), [.stopRecording(.toggle)])
+        XCTAssertFalse(g.isRecording)
+        XCTAssertEqual(g.keyUp(at: 30.1), [])
+        XCTAssertEqual(g.state, .idle)
+    }
+
+    func testSecondTapTooLateStartsOver() {
+        var g = HotkeyGesture(holdThreshold: 0.25, doubleTapWindow: 0.35)
+        _ = g.keyDown(at: 0)
+        _ = g.keyUp(at: 0.1)
+        // The tick was late (busy main thread): the next down cancels the old tap and starts fresh.
+        XCTAssertEqual(g.keyDown(at: 1.0), [.cancelRecording, .startRecording])
+        XCTAssertEqual(g.keyUp(at: 2.0), [.stopRecording(.pushToTalk)])
+    }
+
+    func testUsedAsModifierCancels() {
+        var g = HotkeyGesture()
+        _ = g.keyDown(at: 0)
+        XCTAssertEqual(g.otherKeyDown(), [.cancelRecording])
+        XCTAssertFalse(g.isRecording)
+        XCTAssertEqual(g.keyUp(at: 2), [], "the release after a cancel does nothing")
+        XCTAssertEqual(g.state, .idle)
+    }
+
+    func testOtherKeyWhileLatchedKeepsRecording() {
+        var g = HotkeyGesture()
+        _ = g.keyDown(at: 0); _ = g.keyUp(at: 0.1); _ = g.keyDown(at: 0.2); _ = g.keyUp(at: 0.3)
+        XCTAssertEqual(g.otherKeyDown(), [])
+        XCTAssertEqual(g.state, .latched)
+    }
+
+    func testResetFromCommand() {
+        var g = HotkeyGesture()
+        g.reset(latched: true)
+        XCTAssertEqual(g.keyDown(at: 0), [.stopRecording(.toggle)])
+        _ = g.keyUp(at: 0.1)
+        XCTAssertEqual(g.state, .idle)
+    }
+
+    func testHotkeyFlags() {
+        XCTAssertEqual(HotkeyKey.fn.isDown(keyCode: 63, flags: 0x80_0100), true)
+        XCTAssertEqual(HotkeyKey.fn.isDown(keyCode: 63, flags: 0x100), false)
+        XCTAssertNil(HotkeyKey.fn.isDown(keyCode: 61, flags: 0x80_0000))
+        // Right option down (0x80000 alternate + 0x40 device bit); left option only sets 0x20.
+        XCTAssertEqual(HotkeyKey.rightOption.isDown(keyCode: 61, flags: 0x8_0140), true)
+        XCTAssertEqual(HotkeyKey.rightOption.isDown(keyCode: 61, flags: 0x8_0120), false)
+    }
+}
