@@ -16,7 +16,9 @@ import { focusEditor, NoteEditor } from "./NoteEditor.tsx";
 import { Palette } from "./Palette.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { ancestors, buildTree, editedLabel } from "./tree.ts";
-import type { Backlink, Note, NotesApi, VaultListing } from "./types.ts";
+import type { Backlink, Note, NotesApi, SaveResult, VaultListing } from "./types.ts";
+
+type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
 /** Quanto esperar depois da última tecla para gravar. */
 const SAVE_AFTER_MS = 500;
@@ -41,6 +43,8 @@ function Notes({ api }: { api: NotesApi }) {
   const [body, setBody] = useState("");
   const [title, setTitle] = useState("");
   const [conflict, setConflict] = useState<Note | null>(null);
+  /** O último save falhou (disco cheio, nota apagada fora, grande demais): a edição fica e a pessoa decide. */
+  const [saveFailed, setSaveFailed] = useState(false);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [palette, setPalette] = useState(false);
   const entered = useEnterAnimation();
@@ -77,40 +81,89 @@ function Notes({ api }: { api: NotesApi }) {
       setBody(split.body);
       setDocKey(`${n.path}@${n.version}`);
       setConflict(null);
+      setSaveFailed(false);
       setOpenFolders((open) => new Set([...open, ...ancestors(n.path)]));
       api.backlinks(n.path).then(setBacklinks, () => setBacklinks([]));
     },
     [api],
   );
 
-  /** Grava o que está pendente. Se a nota mudou fora, não grava: mostra o aviso para a pessoa escolher. */
-  const save = useCallback(async () => {
+  /**
+   * Grava o que está pendente e diz o que houve: "clean" (nada a gravar), "saved", "conflict" (mudou fora: o aviso
+   * aparece) ou "error" (o aviso de erro aparece). Um save por vez, numa fila: dois ao mesmo tempo saíam com a mesma
+   * versão, e o 2º via a gravação do 1º como conflito.
+   */
+  const queue = useRef<Promise<SaveOutcome>>(Promise.resolve("clean"));
+  const save = useCallback((): Promise<SaveOutcome> => {
     clearTimeout(timer.current);
-    const path = current.current;
-    const text = pending.current;
-    if (!path || text === null) return;
-    const r = await api.save(path, frontmatter.current + text, version.current).catch(() => null);
-    if (!r || current.current !== path) return;
-    if (!r.saved) return setConflict(r.current);
-    version.current = r.meta.version;
-    // Só limpa se nada foi digitado enquanto gravava.
-    if (pending.current === text) pending.current = null;
-    setNote((old) => (old && old.path === path ? { ...old, ...r.meta, content: frontmatter.current + text } : old));
+    const once = async (): Promise<SaveOutcome> => {
+      const path = current.current;
+      const text = pending.current;
+      if (!path || text === null) return "clean";
+      let r: SaveResult;
+      try {
+        r = await api.save(path, frontmatter.current + text, version.current);
+      } catch {
+        setSaveFailed(true);
+        return "error";
+      }
+      if (!r.saved) {
+        setConflict(r.current);
+        return "conflict";
+      }
+      version.current = r.meta.version;
+      setSaveFailed(false);
+      // Só limpa se nada foi digitado enquanto gravava.
+      if (pending.current === text) pending.current = null;
+      setNote((old) => (old && old.path === path ? { ...old, ...r.meta, content: frontmatter.current + text } : old));
+      return "saved";
+    };
+    queue.current = queue.current.then(once, once);
+    return queue.current;
   }, [api]);
+
+  /**
+   * Antes de sair da nota (abrir outra, criar, renomear): grava, e só deixa sair com tudo gravado. Com conflito ou erro,
+   * fica na nota com o aviso na tela, para a pessoa escolher; trocar de nota nunca descarta texto calado.
+   */
+  const leave = useCallback(async (): Promise<boolean> => {
+    for (let i = 0; i < 3; i++) {
+      const outcome = await save();
+      if (outcome === "conflict" || outcome === "error") {
+        setPalette(false);
+        requestAnimationFrame(() => document.querySelector(".kn-save-alert")?.scrollIntoView({ block: "nearest" }));
+        return false;
+      }
+      if (pending.current === null) return true;
+    }
+    return false;
+  }, [save]);
+
+  /** "Descartar a edição": volta ao que está no disco (ou a nenhuma nota, se ela sumiu). */
+  const discard = useCallback(() => {
+    const path = current.current;
+    pending.current = null;
+    if (!path) return;
+    api.get(path).then(show, () => {
+      current.current = null;
+      setNote(null);
+      setSaveFailed(false);
+    });
+  }, [api, show]);
 
   const open = useCallback(
     async (path: string) => {
-      await save();
+      if (!(await leave())) return;
       const n = await api.get(path).catch(() => null);
       if (n) show(n);
       setPalette(false);
     },
-    [api, save, show],
+    [api, leave, show],
   );
 
   const create = useCallback(
     async (wanted: string, focusTitle = false) => {
-      await save();
+      if (!(await leave())) return;
       const n = await api.create(wanted).catch(() => null);
       setPalette(false);
       if (!n) return;
@@ -121,7 +174,7 @@ function Notes({ api }: { api: NotesApi }) {
         else focusEditor();
       });
     },
-    [api, refresh, save, show],
+    [api, leave, refresh, show],
   );
 
   // Abre o vault e a primeira nota (a Caixa de entrada, se existir).
@@ -200,7 +253,7 @@ function Notes({ api }: { api: NotesApi }) {
   const rename = async () => {
     const wanted = title.trim().replace(/[\\/:]/g, "-");
     if (!note || !wanted || wanted === note.title) return setTitle(note?.title ?? "");
-    await save();
+    if (!(await leave())) return setTitle(note.title);
     const r = await api.rename(note.path, `${note.folder ? `${note.folder}/` : ""}${wanted}.md`).catch(() => null);
     if (!r) return setTitle(note.title); // já existe uma nota com esse nome
     const n = await api.get(r.meta.path).catch(() => null);
@@ -279,7 +332,7 @@ function Notes({ api }: { api: NotesApi }) {
             />
             <div className="kn-meta">{[...note.tags.map((t) => `#${t}`), editedLabel(note)].join(" · ")}</div>
             {conflict ? (
-              <div className="kn-conflict" role="alert">
+              <div className="kn-conflict kn-save-alert" role="alert">
                 Esta nota mudou fora do Kiwi Notes enquanto você editava.
                 <span className="kn-conflict-actions">
                   <button type="button" className="kn-bt" onClick={() => show(conflict)}>
@@ -287,6 +340,18 @@ function Notes({ api }: { api: NotesApi }) {
                   </button>
                   <button type="button" className="kn-bt kn-bt-acc" onClick={keepMine}>
                     Manter a minha
+                  </button>
+                </span>
+              </div>
+            ) : saveFailed ? (
+              <div className="kn-conflict kn-save-alert" role="alert">
+                Não deu para gravar esta nota. O que você escreveu continua aqui.
+                <span className="kn-conflict-actions">
+                  <button type="button" className="kn-bt" onClick={discard}>
+                    Descartar a edição
+                  </button>
+                  <button type="button" className="kn-bt kn-bt-acc" onClick={() => void save()}>
+                    Tentar de novo
                   </button>
                 </span>
               </div>

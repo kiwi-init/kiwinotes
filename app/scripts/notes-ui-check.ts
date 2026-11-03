@@ -190,6 +190,103 @@ await step("edição de fora sem nada pendente: a nota recarrega sozinha", async
   if (await page.$(".kn-conflict")) throw new Error("mostrou conflito sem edição pendente");
 });
 
+// Revisão do T1317 (#1488): trocar de nota nunca descarta texto não gravado.
+const sideClick = (name: string) => page.locator(".kn-side-item", { hasText: name }).first().click();
+const editorText = () => page.$eval(".cm-content", (e) => e.textContent ?? "");
+
+await step("conflito na tela: clicar em outra nota não troca nem perde o texto; 'Manter a minha' grava", async () => {
+  await sideClick("Site novo");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Site novo");
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("\nTEXTO QUE EU DIGITEI");
+  await page.evaluate(() => (window as any).__kiwiNotesMock.editOutside("Projetos/Site novo.md", "Mudou no Obsidian.\n"));
+  await page.waitForSelector(".kn-conflict");
+  await sideClick("Caixa de entrada");
+  await page.waitForTimeout(400);
+  expectEq(await title(), "Site novo");
+  if (!(await editorText()).includes("TEXTO QUE EU DIGITEI")) throw new Error("o texto sumiu do editor");
+  await page.click("text=Manter a minha");
+  await settle();
+  if (!(await content("Projetos/Site novo.md")).includes("TEXTO QUE EU DIGITEI")) throw new Error("não gravou");
+  await sideClick("Caixa de entrada");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Caixa de entrada");
+});
+
+await step("save que falha: aviso na tela, trocar de nota não descarta, 'Tentar de novo' grava", async () => {
+  await sideClick("Ana");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ana");
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.__save = m.save;
+    m.save = async () => {
+      throw new Error("E_FAILED");
+    };
+  });
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("\nOUTRO TEXTO MEU");
+  await page.waitForSelector(".kn-save-alert >> text=Não deu para gravar");
+  await sideClick("Caixa de entrada");
+  await page.waitForTimeout(400);
+  expectEq(await title(), "Ana");
+  if (!(await editorText()).includes("OUTRO TEXTO MEU")) throw new Error("o texto sumiu do editor");
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.save = m.__save;
+  });
+  await page.click("text=Tentar de novo");
+  await settle();
+  if (!(await content("Pessoas/Ana.md")).includes("OUTRO TEXTO MEU")) throw new Error("não gravou");
+  if (await page.$(".kn-save-alert")) throw new Error("o aviso ficou");
+});
+
+await step("save que falha: 'Descartar a edição' volta ao disco e deixa trocar", async () => {
+  await page.evaluate(() => {
+    (window as any).__kiwiNotesMock.save = async () => {
+      throw new Error("E_FAILED");
+    };
+  });
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type(" DESCARTAR ISTO");
+  await page.waitForSelector(".kn-save-alert");
+  await page.click("text=Descartar a edição");
+  await page.waitForTimeout(300);
+  if ((await editorText()).includes("DESCARTAR ISTO")) throw new Error("não descartou");
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.save = m.__save;
+  });
+  await sideClick("Caixa de entrada");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Caixa de entrada");
+});
+
+await step("dois saves seguidos (o do timer e o da troca de nota) não dão conflito falso", async () => {
+  await sideClick("Ana");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ana");
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.save = async (...a: unknown[]) => {
+      await new Promise((r) => setTimeout(r, 400));
+      return m.__save.apply(m, a);
+    };
+  });
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type(" SAVE LENTO");
+  await page.waitForTimeout(600); // o timer já disparou o 1º save, que ainda está gravando
+  await page.keyboard.type(" E MAIS");
+  await sideClick("Caixa de entrada"); // a troca pede o 2º save
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Caixa de entrada", undefined, { timeout: 5000 });
+  if (await page.$(".kn-save-alert")) throw new Error("conflito falso");
+  if (!(await content("Pessoas/Ana.md")).includes("SAVE LENTO E MAIS")) throw new Error(await content("Pessoas/Ana.md"));
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.save = m.__save;
+  });
+});
+
 await step("⌘K cria nota nova quando não há título igual", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ideia nova");
