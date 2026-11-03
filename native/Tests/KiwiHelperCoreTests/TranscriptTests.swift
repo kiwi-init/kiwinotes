@@ -46,6 +46,18 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(TranscriptPostProcessor.process("a loja fechou", dictionary: d), "a loja fechou")
     }
 
+    /// An alias may not swallow a neighboring connective (T711, #706). A term still may: in the T51 clips the connective
+    /// is often a piece of the split name, and refusing it there lost more than it saved. So "Cloud de novo" with
+    /// "Claude" in the dictionary still becomes "Claude novo", as on main.
+    func testAliasesDontSwallowConnectivesT711() {
+        let kube = TranscriptDictionary([DictionaryEntry(term: "kubectl", aliases: ["cube control"])])
+        XCTAssertEqual(TranscriptPostProcessor.process("o cubo de controle caiu", dictionary: kube), "o cubo de controle caiu")
+        XCTAssertEqual(TranscriptPostProcessor.process("roda o cube controle", dictionary: kube), "roda o kubectl")
+        // Split names whose piece is a connective, from the T51 synthetic clips.
+        XCTAssertEqual(TranscriptPostProcessor.process("Sobe o de com novo", dictionary: work), "Sobe o DICOM novo")
+        XCTAssertEqual(TranscriptPostProcessor.process("O PAC se ligado não respondeu", dictionary: work), "O PACS ligado não respondeu")
+    }
+
     /// The first letter may differ only for the K sound (c, k, q); the soft c stays out.
     func testOpeningSoundOnlyForK() {
         let d = TranscriptDictionary(["Sentry", "Kafka", "Kubernetes"].map { DictionaryEntry(term: $0) })
