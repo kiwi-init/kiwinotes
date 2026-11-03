@@ -21,7 +21,7 @@ final class Inserter {
     func insert(_ text: String, restoreClipboard: Bool, completion: @escaping (Outcome) -> Void) {
         let app = NSWorkspace.shared.frontmostApplication
         let plan = InsertPlan.decide(accessibilityGranted: AXIsProcessTrusted(),
-                                     secureInput: IsSecureEventInputEnabled(), focus: Self.focus())
+                                     secureInput: Self.secureInputBlocks && IsSecureEventInputEnabled(), focus: Self.focus())
         let pasteboard = NSPasteboard.general
 
         guard case .paste = plan else {
@@ -42,6 +42,10 @@ final class Inserter {
             snapshot.restore(to: pasteboard, ifStill: ours)
         }
     }
+
+    /// `KIWI_PASTE_THROUGH_SECURE_INPUT=1` skips the secure-input refusal, to check live whether macOS really
+    /// drops a posted ⌘V while some app holds Secure Event Input (review #215). Remove once settled.
+    static let secureInputBlocks = ProcessInfo.processInfo.environment["KIWI_PASTE_THROUGH_SECURE_INPUT"] != "1"
 
     /// How long an Accessibility call may block. The default is ~6 s, on the main thread: a frozen app in front
     /// would freeze the hotkey, the overlay and the IPC with it.
