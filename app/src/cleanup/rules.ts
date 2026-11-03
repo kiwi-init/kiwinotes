@@ -336,6 +336,8 @@ export function lists(text: string): string {
     const end = i + 1 < found.length ? found[i + 1]!.index : text.length;
     return text.slice(f.index + f.length, end).replace(/^[\s,.;:]+|[\s,.;:]+$/gu, "");
   });
+  // Ordinal sem nada depois ("primeiro, segundo, terceiro") não é item: a lista sairia "1.\n2.\n3." (T1292).
+  if (items.some((item) => !item)) return text;
   const body = items.map((item, i) => `${i + 1}. ${capitalizeFirst(item)}`).join("\n");
   return intro ? `${intro}:\n${body}` : body;
 }
