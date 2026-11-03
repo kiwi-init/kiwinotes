@@ -3,6 +3,8 @@
 import { useState } from "react";
 
 import { Kbd, mount, Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
+import { DictionarySection } from "./Dictionary.tsx";
+import { SnippetsSection } from "./Snippets.tsx";
 
 function Settings() {
   const [key, setKey] = useState<"fn" | "rightOption">("fn");
@@ -46,6 +48,9 @@ function Settings() {
           <Switch label="Guardar o áudio no histórico" checked={keepAudio} onChange={setKeepAudio} />
         </Row>
       </Section>
+
+      <DictionarySection />
+      <SnippetsSection />
 
       <Section title="Privacidade">
         <Row label="Tudo roda neste Mac" hint="Áudio, transcrição e texto nunca saem daqui.">

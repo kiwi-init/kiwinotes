@@ -1,0 +1,78 @@
+import { useEffect, useState } from "react";
+
+import { api, type DictionaryTerm } from "../src/api.ts";
+import { RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
+import { Button, Section } from "../src/kit/index.tsx";
+
+type Row = { key: string; term: string; aliases: string; isNew?: boolean };
+
+const toRows = (terms: DictionaryTerm[]): Row[] => terms.map((t) => ({ key: rowKey(), term: t.term, aliases: t.aliases.join(", ") }));
+const toTerms = (rows: Row[]): DictionaryTerm[] =>
+  rows
+    .filter((r) => r.term.trim())
+    .map((r) => ({ term: r.term.trim(), aliases: r.aliases.split(",").map((a) => a.trim()).filter(Boolean) }));
+
+/** Termos que o STT deve reconhecer e que a limpeza nunca muda (DICOM, PACS, nomes de pessoas). */
+export function DictionarySection() {
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.dictionary.get().then(
+      (terms) => {
+        setRows(toRows(terms));
+        setLoaded(true);
+      },
+      () => setLoaded(false),
+    );
+  }, []);
+
+  const status = useAutosave(rows, (r) => api.dictionary.set(toTerms(r)), loaded);
+  const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  return (
+    <Section title="Dicionário">
+      {rows.length === 0 ? (
+        <div className="kn-list-empty">Termos do seu trabalho, como DICOM, PACS ou nomes de pessoas, saem sempre com esta grafia.</div>
+      ) : (
+        rows.map((r) => (
+          <div className="kn-list-row" key={r.key} data-new={r.isNew}>
+            <input
+              className="kn-input"
+              data-strong="true"
+              style={{ width: 170 }}
+              value={r.term}
+              placeholder="Grafia certa"
+              aria-label="Termo"
+              autoFocus={r.isNew}
+              onChange={(e) => update(r.key, { term: e.target.value })}
+            />
+            <input
+              className="kn-input"
+              style={{ flex: 1 }}
+              value={r.aliases}
+              placeholder="Outras formas de dizer, separadas por vírgula"
+              aria-label={`Outras formas de dizer ${r.term}`}
+              onChange={(e) => update(r.key, { aliases: e.target.value })}
+            />
+            <button
+              type="button"
+              className="kn-icon-button"
+              data-tone="danger"
+              aria-label={`Remover ${r.term || "termo"}`}
+              onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
+            >
+              <RemoveIcon />
+            </button>
+          </div>
+        ))
+      )}
+      <div className="kn-list-footer">
+        <Button disabled={!loaded} onClick={() => setRows((rs) => [...rs, { key: rowKey(), term: "", aliases: "", isNew: true }])}>
+          Adicionar termo
+        </Button>
+        <SavedNote {...status} />
+      </div>
+    </Section>
+  );
+}
