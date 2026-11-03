@@ -69,7 +69,7 @@ final class AudioCapture {
     func start() throws {
         guard !isRecording else { return }
         try installTapIfNeeded()
-        converter?.reset()
+        samplesQueue.sync { converter?.reset() }
         meter.reset()
         levelQueue.sync { pacer.reset() }
         samplesQueue.sync {
@@ -111,7 +111,8 @@ final class AudioCapture {
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw AudioCaptureError.noInputDevice }
         guard let converter = AVAudioConverter(from: format, to: target) else { throw AudioCaptureError.converter }
-        self.converter = converter
+        // The tap thread reads it under the same queue, so a device change can't swap it mid-buffer.
+        samplesQueue.sync { self.converter = converter }
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.process(buffer)
         }
@@ -136,13 +137,16 @@ final class AudioCapture {
             levelTimer?.cancel()
             levelTimer = nil
             isRecording = false
-            samplesQueue.sync { capturing = false }
+            samplesQueue.sync {
+                capturing = false
+                samples.removeAll() // what was captured before the change is discarded with the recording
+            }
             onDeviceLost?("device_changed")
         }
     }
 
     private func process(_ buffer: AVAudioPCMBuffer) {
-        guard let converter else { return }
+        guard let converter = samplesQueue.sync(execute: { self.converter }) else { return }
         let ratio = target.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
         guard let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
