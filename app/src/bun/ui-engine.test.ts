@@ -21,7 +21,7 @@ import {
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
-import { builtInFrom, channelUrl, createUiEngine, devServerAllowed, directInvoke, enginePreload } from "./ui-engine.ts";
+import { builtInFrom, channelUrl, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
 
 const key = generateSigningKey();
 const trustedKeys = { [key.keyId]: key.publicKey };
@@ -288,6 +288,35 @@ describe("partes do app", () => {
     const contract = JSON.parse(js.slice(js.indexOf("=") + 1, js.indexOf(";\n")));
     expect(contract.version).toBe(UI_CONTRACT_VERSION);
     expect(contract.capabilities).toContain("clipboard.write");
+  });
+
+  test("abrir a janela: dois cliques seguidos abrem uma só, e um erro não vira rejeição (#1277)", async () => {
+    const pending = new Map<string, Promise<void>>();
+    const errors: unknown[] = [];
+    let runs = 0;
+    let release!: () => void;
+    const open = () =>
+      oneAtATime(pending, "history", async () => {
+        runs++;
+        await new Promise<void>((r) => (release = r));
+      }, (e) => void errors.push(e));
+    const first = open();
+    const second = open();
+    expect(second).toBe(first);
+    release();
+    await first;
+    expect(runs).toBe(1);
+    expect(pending.size).toBe(0);
+
+    // Um erro ao abrir (sem ui.json, mkdir sem permissão): vai para o log, e a promessa resolve.
+    const failing = oneAtATime(pending, "history", async () => {
+      throw new Error("no ui.json");
+    }, (e) => void errors.push(e));
+    await expect(failing).resolves.toBeUndefined();
+    expect(String(errors[0])).toContain("no ui.json");
+    // Depois do erro, o próximo clique tenta de novo.
+    await oneAtATime(pending, "history", async () => void runs++, (e) => void errors.push(e));
+    expect(runs).toBe(2);
   });
 
   test("a UI de fábrica vem do ui.json e da pasta do bundle", () => {

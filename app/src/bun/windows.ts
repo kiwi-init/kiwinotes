@@ -13,7 +13,7 @@ import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
 import { session } from "./session.ts";
 import { stores } from "./stores.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
-import { builtInFrom, channelUrl, createUiEngine, devServerAllowed, directInvoke, enginePreload, servedDir } from "./ui-engine.ts";
+import { builtInFrom, channelUrl, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 
 export type WindowName = UiWindow;
@@ -56,12 +56,24 @@ const open = new Map<WindowName, BrowserWindow>();
 
 const log = (name: WindowName, m: string) => console.log(`[ui:${name}] ${m}`);
 
+/** As aberturas em andamento: um 2º clique enquanto a 1ª sobe só espera, sem criar outra janela e outro engine. */
+const opening = new Map<WindowName, Promise<void>>();
+
 /**
  * Abre a janela, ou traz para a frente a que já existe. Ela entra com a animação
  * da UI (`enter` em ui/src/kit/Window.tsx): no primeiro load sozinha, e ao voltar
  * para a frente chamamos `__kiwiEnter()`.
+ *
+ * Nunca rejeita: um erro ao abrir uma janela vai para o log e não derruba o app (o ditado continua). O menu chama sem
+ * esperar, e no Bun uma rejeição sem tratamento sai com exit 1 (T914, revisão #1277).
  */
-export async function showWindow(name: WindowName): Promise<void> {
+export function showWindow(name: WindowName): Promise<void> {
+  return oneAtATime(opening, name, () => openWindow(name), (e) =>
+    log(name, `couldn't open the window: ${e instanceof Error ? e.message : String(e)}`),
+  );
+}
+
+async function openWindow(name: WindowName): Promise<void> {
   const existing = open.get(name);
   if (existing) {
     existing.show();
@@ -119,8 +131,15 @@ export async function showWindow(name: WindowName): Promise<void> {
       },
     });
     engine.on((e) => log(name, "reason" in e ? `${e.type}: ${e.reason}` : e.type));
-    await engine.start();
-    if (!created) throw new Error(`ui:${name}: the engine showed nothing`);
+    try {
+      await engine.start();
+      if (!created) throw new Error("the engine showed nothing");
+    } catch (e) {
+      // Sem janela pela metade nem engine de pé: o próximo clique tenta do zero.
+      engine.stop();
+      (created as BrowserWindow | null)?.close();
+      throw e;
+    }
     win = created;
   }
   open.set(name, win);

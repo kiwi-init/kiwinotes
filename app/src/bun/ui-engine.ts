@@ -130,3 +130,17 @@ export async function directInvoke(
     };
   }
 }
+
+/**
+ * Uma abertura por vez por chave, e nunca rejeita (revisão #1277): um 2º pedido enquanto o 1º roda recebe a mesma
+ * promessa, e um erro vai para `onError` em vez de virar uma rejeição sem tratamento, que no Bun sai com exit 1.
+ */
+export function oneAtATime<K>(pending: Map<K, Promise<void>>, key: K, run: () => Promise<void>, onError: (e: unknown) => void): Promise<void> {
+  const current = pending.get(key);
+  if (current) return current;
+  const started = run()
+    .catch(onError)
+    .finally(() => pending.delete(key));
+  pending.set(key, started);
+  return started;
+}
