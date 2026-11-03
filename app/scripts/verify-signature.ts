@@ -5,6 +5,7 @@
 // - o .dmg: monta só leitura, sem janela, e confere o app dele e o tar que ele leva.
 // Não abre o app e não pede permissão nenhuma.
 
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -15,6 +16,16 @@ function files(dir: string | undefined, ext: string): string[] {
   return readdirSync(dir).filter((n) => n.endsWith(ext)).map((n) => path.join(dir, n));
 }
 
+/** O wrapper fecha a janela "Installation complete" sozinho (T951, `info-plist.ts`). */
+function checkAutoclose(app: string, where: string): void {
+  const plist = path.join(app, "Contents", "Info.plist");
+  const r = spawnSync("plutil", ["-extract", "LSEnvironment.ELECTROBUN_INSTALLER_UI_AUTOCLOSE", "raw", plist], { encoding: "utf8" });
+  if (r.status !== 0 || r.stdout.trim() !== "1") {
+    throw new Error(`verify-signature: ${where}: ${path.basename(app)} has no LSEnvironment ELECTROBUN_INSTALLER_UI_AUTOCLOSE=1`);
+  }
+  console.log(`verify-signature: ok ${where}: ${path.basename(app)} closes the installer window on its own`);
+}
+
 /** Os .app de `dir` e os de dentro dos .tar.zst que eles levam em Resources. */
 function checkApps(dir: string, where: string): number {
   let count = 0;
@@ -22,7 +33,9 @@ function checkApps(dir: string, where: string): number {
     verifyApp(app);
     console.log(`verify-signature: ok ${where}: ${path.basename(app)}`);
     count++;
-    for (const tar of files(path.join(app, "Contents", "Resources"), ".tar.zst")) {
+    const inner = files(path.join(app, "Contents", "Resources"), ".tar.zst");
+    if (inner.length) checkAutoclose(app, where);
+    for (const tar of inner) {
       for (const inner of verifyBundle(tar)) console.log(`verify-signature: ok ${where}: ${inner} inside ${path.basename(tar)}`);
       count++;
     }
