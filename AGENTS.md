@@ -7,6 +7,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - Nunca commite áudio, transcrições reais, modelos baixados ou credenciais.
 - **Agente não usa o microfone real.** Nada que ligue o mic: `record.start`, o atalho, ou uma ação do app (agent control) que grave, mesmo que o Terminal já tenha a permissão. Para ver o overlay, use `overlay.state`, que não liga o mic. Diagnóstico com áudio sintético (`say`) ou com os arquivos que o harry gravar para isso. Teste com o mic real é só do harry, e quem pede é o lead (#320).
 - **Agente não mexe na sessão do harry.** Nos testes, nada de AppleScript (`osascript`), abrir ou controlar outro app, colar nem escrever no clipboard real: a colagem cai no app que estiver na frente, que pode ser uma conversa dele. O `insert.text` dos agentes vai sempre com `dryRun: true` (o app em `KIWI_DEBUG=1` faz isso sozinho). Colagem de verdade é teste do harry, pedido pelo lead (#489).
+- **Agente não dispara diálogo do macOS.** Nada que possa abrir um pedido do sistema na tela do harry: permissões (`permissions.request`, `AXIsProcessTrustedWithOptions`, mic), Automação ou Ajustes. Fluxo de permissão se testa só com o helper falso, e a chave `defaults` de `com.kiwinotes.helper` não se mexe. Rodar o app ou o helper de verdade só quando todas as permissões já estão dadas, e mesmo assim sem mic e com `dryRun` (#536).
 
 ## Branches e PRs
 - `main` só muda por PR e está sempre buildável. Nunca faça force-push nela.
