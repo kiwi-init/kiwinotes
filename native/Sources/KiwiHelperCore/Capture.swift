@@ -114,6 +114,9 @@ public struct CaptureWatchdog: Sendable {
         since = nil
     }
 
+    /// A buffer came since the last `start(at:)`.
+    public var hasAudio: Bool { gotBuffer }
+
     public func stalled(at now: TimeInterval) -> Bool {
         guard let since else { return false }
         return now - since > (gotBuffer ? gap : firstBuffer)
@@ -125,7 +128,8 @@ public struct CaptureWatchdog: Sendable {
 /// When the input changes (a Bluetooth headset connects, the person picks another mic) the engine is thrown away and
 /// a new one is made: a fresh engine reads the new device's format, while the old one keeps a stale tap. Mid-recording
 /// the new engine starts right away and what was captured is kept. If no audio comes for a while, the engine is
-/// replaced once; if there is still nothing, the recording ends with `no_audio` (T590).
+/// replaced; if the new one gives nothing either, the recording ends with `no_audio` (T590). A stall after audio came
+/// back is a new one and gets its own new engine (T883).
 ///
 /// Everything here runs on the main thread, except the buffers, which come on the engine's thread.
 public final class AudioCapture {
@@ -138,8 +142,12 @@ public final class AudioCapture {
     public var onLevel: ((Float) -> Void)?
 
     /// The recording ended because the mic went away: `device_changed` (the new device didn't start) or `no_audio`
-    /// (no buffer even after a new engine). What was recorded is discarded. Main thread.
-    public var onLost: ((String) -> Void)?
+    /// (no buffer even after a new engine), with what was captured until then, to transcribe like a normal end
+    /// (T883: losing a dictation is worse than a short text). Empty under `keptOnLoss` samples. Main thread.
+    public var onLost: ((_ code: String, _ samples: [Float]) -> Void)?
+
+    /// The least audio worth transcribing when the mic goes away: 0.3 s. Less than that is no dictation.
+    public static let keptOnLoss = 4_800
 
     /// What happened to the engine, for the app's log (no audio in it). Main thread.
     public var onLog: ((String) -> Void)?
@@ -154,7 +162,8 @@ public final class AudioCapture {
     private let watchdogInterval: TimeInterval?
     private var engine: MicEngine
     private var prepared = false
-    /// Restarts the watchdog already made in this recording (one, then `no_audio`).
+    /// New engines the watchdog made in a row without audio in between: one, then `no_audio`. Back to 0 once audio
+    /// comes again, so a later, unrelated stall gets its own new engine (T883).
     private var stallRestarts = 0
     private var meter = LevelMeter(sampleRate: sampleRate, rate: levelRate)
     // The tap hands over ~20–100 ms at a time; the pacer spreads those levels over a 30 Hz tick.
@@ -251,9 +260,14 @@ public final class AudioCapture {
         restartMidRecording(failing: "device_changed")
     }
 
-    /// While recording: no audio for a while means the engine died. Replace it once; then give up with `no_audio`.
+    /// While recording: no audio for a while means the engine died. Replace it; if the new one gives nothing either,
+    /// give up with `no_audio`.
     public func checkStall() {
-        guard isRecording, samplesQueue.sync(execute: { watchdog.stalled(at: now()) }) else { return }
+        guard isRecording else { return }
+        let (stalled, hadAudio) = samplesQueue.sync { (watchdog.stalled(at: now()), watchdog.hasAudio) }
+        guard stalled else { return }
+        // Audio came since the last (re)start: this stall is a new one, not the new engine failing too.
+        if hadAudio { stallRestarts = 0 }
         guard stallRestarts == 0 else { return fail("no_audio") }
         stallRestarts += 1
         onLog?("no audio from the mic: new engine")
@@ -295,19 +309,20 @@ public final class AudioCapture {
         }
     }
 
-    /// Ends the recording without audio, and gets a fresh engine ready for the next one.
+    /// Ends the recording, hands over what was captured (`onLost`), and gets a fresh engine ready for the next one.
     private func fail(_ code: String) {
         engine.stop()
         isRecording = false
         stopTimers()
-        samplesQueue.sync {
+        let captured = samplesQueue.sync { () -> [Float] in
             capturing = false
             watchdog.stop()
-            samples.removeAll()
+            defer { samples.removeAll() }
+            return samples.count >= Self.keptOnLoss ? samples : []
         }
         replaceEngine()
         warmUp()
-        onLost?(code)
+        onLost?(code, captured)
     }
 
     // MARK: Buffers

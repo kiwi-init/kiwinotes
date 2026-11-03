@@ -41,12 +41,20 @@ final class Helper {
         // Touching the input before the mic is granted can bring up the system prompt.
         audio.mayWarmUp = { Permission.microphone.status == "granted" }
         audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "mic: \(message)"]) }
-        audio.onLost = { [weak self] code in
+        audio.onLost = { [weak self] code, samples in
             guard let self else { return }
-            self.gesture.reset()
-            self.recordingStartedAt = nil
-            self.emit("record.error", ["reason": "hotkey", "error": code, "microphone": Permission.microphone.status])
-            self.overlay.set(.error, message: OverlayText.error(code))
+            guard !samples.isEmpty else {
+                self.gesture.reset()
+                self.recordingStartedAt = nil
+                self.emit("record.error", ["reason": "hotkey", "error": code, "microphone": Permission.microphone.status])
+                return self.overlay.set(.error, message: OverlayText.error(code))
+            }
+            // T883: the mic went away mid-dictation. What it heard is transcribed like a normal end (as the pill's ✓:
+            // the key still held doesn't start another one), and `lost` tells the app to say the mic dropped.
+            let mode = self.gesture.endedFromOverlay()
+            self.tickTimer?.cancel()
+            if mode == .toggle { self.emit("hotkey.toggle", ["on": false]) }
+            self.finishRecording(samples, reason: "hotkey", mode: mode.rawValue, lost: code)
         }
     }
 
@@ -212,13 +220,14 @@ final class Helper {
     }
 
     /// The end of a recording, from the mic or from `debug.transcribe`: `record.stopped`, the pill, the transcript.
-    private func finishRecording(_ samples: [Float], reason: String, mode: String) {
+    private func finishRecording(_ samples: [Float], reason: String, mode: String, lost: String? = nil) {
         var fields: [String: Any] = [
             "reason": reason,
             "mode": mode,
             "durationMs": Int(Double(samples.count) / AudioCapture.sampleRate * 1000),
             "samples": samples.count,
         ]
+        if let lost { fields["lost"] = lost }
         let audioPath = dump(samples)
         if let audioPath { fields["audioPath"] = audioPath }
         recordingStartedAt = nil

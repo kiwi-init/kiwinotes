@@ -16,7 +16,10 @@ const SLACK = "com.tinyspeck.slackmacgap";
 const MAIL = "com.apple.mail";
 const TERMINAL = "com.apple.Terminal";
 const GHOSTTY = "com.mitchellh.ghostty";
+const SAFARI = "com.apple.Safari";
+const NOTES = "com.apple.Notes";
 const WORK: DictionaryEntry[] = ["DICOM", "PACS", "Healthcare API", { term: "kubectl", aliases: ["cube control", "kube control"] }, "Kiwi Notes"];
+const DEV: DictionaryEntry[] = ["DICOM", "PACS", "GitHub", "Kafka"];
 
 export const fixtures: Fixture[] = [
   // ---------------------------------------------------------------- muletas
@@ -88,6 +91,18 @@ export const fixtures: Fixture[] = [
   { name: "alias do dicionário", raw: "roda o cube control get pods", expected: "Roda o kubectl get pods.", dictionary: WORK },
   { name: "termo no começo não ganha maiúscula", raw: "kubectl tá fora do path", expected: "kubectl tá fora do path.", dictionary: WORK },
   { name: "termo com muleta no nome não some", raw: "o hum é o nosso bot", expected: "O Hum é o nosso bot.", dictionary: ["Hum"] },
+  // T896 (#868): o termo só casa como palavra solta, nunca dentro de URL, caminho, e-mail, arquivo ou argumento.
+  { name: "dicionário: termo no fim da frase, com ponto", raw: "o problema é o dicom.", expected: "O problema é o DICOM.", dictionary: DEV },
+  { name: "dicionário: termo comum continua corrigido", raw: "vou subir no github", expected: "Vou subir no GitHub.", dictionary: DEV },
+  { name: "dicionário: termo antes de dois-pontos", raw: "no github: abre um PR", expected: "No GitHub: abre um PR.", dictionary: DEV },
+  { name: "terminal: argumento com a grafia do termo fica", raw: "kubectl -n pacs get pods", bundleId: TERMINAL, dictionary: DEV, expected: "kubectl -n pacs get pods" },
+  { name: "ghostty: caminho fica", raw: "cd ~/projetos/pacs", bundleId: GHOSTTY, dictionary: DEV, expected: "cd ~/projetos/pacs" },
+  { name: "terminal: URL do git fica", raw: "git clone git@github.com:davi/pacs.git", bundleId: TERMINAL, dictionary: DEV, expected: "git clone git@github.com:davi/pacs.git" },
+  { name: "mail: e-mail fica", raw: "meu email é davi@github.com", bundleId: MAIL, dictionary: DEV, expected: "Meu email é davi@github.com." },
+  { name: "safari: URL fica", raw: "abre https://github.com/davi/pacs-central", bundleId: SAFARI, dictionary: DEV, expected: "Abre https://github.com/davi/pacs-central." },
+  { name: "notas: nome de arquivo fica", raw: "edita o dicom_store.py e o kafka.yaml", bundleId: NOTES, dictionary: DEV, expected: "Edita o dicom_store.py e o kafka.yaml." },
+  { name: "terminal: alias vira o termo, o argumento fica", raw: "cube control get pods -n pacs", bundleId: TERMINAL, dictionary: [...DEV, ...WORK], expected: "kubectl get pods -n pacs" },
+  { name: "terminal: frase corrige o termo", raw: "o pacs caiu de novo", bundleId: TERMINAL, dictionary: DEV, expected: "O PACS caiu de novo." },
 
   // ---------------------------------------------------------------- tom por app
   { name: "slack: uma frase sem ponto", raw: "ok chego às quatro", bundleId: SLACK, expected: "Ok chego às quatro" },
