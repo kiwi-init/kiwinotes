@@ -28,6 +28,8 @@ bun run agent call actions.invoke '{"name":"open-window","params":{"window":"set
 bun run agent screenshot /tmp/settings.png 1
 ```
 
+As janelas têm CSP sem `'unsafe-eval'` (T1378): um eval com resposta pela ponte (`evaluateJavascriptWithResponse`, que usa `new Function`) devolve erro, e não é bug do app. Para ler ou mexer na página, use o Agent Control (`bun run agent …`) ou o `executeJavascript`, que vem do WebView e não passa pela CSP.
+
 ## O ditado (T58)
 
 O app sobe o helper Swift (`native/`) e fala com ele por um socket unix (`src/bun/sidecar.ts`, [ADR 0001](../docs/adr/0001-ipc.md)). Um ditado faz `transcript.final` → limpeza (regras, LLM local opcional, tom do app em que a pessoa ditou) → snippets → `insert.text` → histórico → pílula em `done` (`src/bun/dictation.ts`).

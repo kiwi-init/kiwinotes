@@ -21,7 +21,7 @@ import {
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
-import { builtInFrom, channelUrl, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
+import { builtInFrom, channelUrl, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
 
 const key = generateSigningKey();
 const trustedKeys = { [key.keyId]: key.publicKey };
@@ -347,5 +347,18 @@ describe("partes do app", () => {
     expect(b.uiVersion).toBe("0.1.0");
     expect(b.seq).toBe(42);
     expect([...b.files().keys()].sort()).toEqual(["assets/a.js", "index.html", "ui.json"]);
+  });
+});
+
+describe("KIWI_UI_CHANNEL errado (T1378)", () => {
+  test("cai no canal desligado com um aviso, e a janela abre com a UI de fábrica", () => {
+    const warnings: string[] = [];
+    expect(channelUrlOrOff("https://example.com", "settings", (m) => warnings.push(m))).toBeNull();
+    expect(channelUrlOrOff("nada", "history", (m) => warnings.push(m))).toBeNull();
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toContain("the UI channel stays off");
+    expect(channelUrlOrOff(undefined, "settings", (m) => warnings.push(m))).toBeNull();
+    expect(channelUrlOrOff("http://127.0.0.1:5179", "settings", (m) => warnings.push(m))).toBe("http://127.0.0.1:5179/settings/manifest.json");
+    expect(warnings).toHaveLength(2);
   });
 });

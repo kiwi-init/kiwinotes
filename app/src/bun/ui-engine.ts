@@ -49,6 +49,19 @@ export function channelUrl(base: string | undefined, name: UiWindow): string | n
   return new URL(`${name}/manifest.json`, url.href.endsWith("/") ? url.href : `${url.href}/`).href;
 }
 
+/**
+ * O `channelUrl` para abrir a janela: um `KIWI_UI_CHANNEL` errado não pode deixar o app sem janela (T1378). Fica no
+ * canal desligado (a UI de fábrica), com um aviso no log.
+ */
+export function channelUrlOrOff(base: string | undefined, name: UiWindow, warn: (message: string) => void): string | null {
+  try {
+    return channelUrl(base, name);
+  } catch (e) {
+    warn(`${e instanceof Error ? e.message : String(e)}; the UI channel stays off`);
+    return null;
+  }
+}
+
 /** O fetch do canal desligado: nada sai, e o canal só fica "offline". */
 const channelOff = (async () => {
   throw new Error("the UI channel is off");
