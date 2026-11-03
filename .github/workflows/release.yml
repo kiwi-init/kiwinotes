@@ -18,8 +18,10 @@ on:
         type: boolean
         default: true
 
+# Só leitura no build: o `bun install` roda scripts de dependência, e nada ali deve ter um token que escreve no repo.
+# Quem publica é o job `publish`, o único com `contents: write` (revisão #1451).
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -34,6 +36,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -111,8 +115,19 @@ jobs:
           path: app/out/*.dmg
           if-no-files-found: error
 
+  publish:
+    needs: mac
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-mac
+          path: out
+
       - name: Publish the Release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" out/*.dmg --repo "$GITHUB_REPOSITORY" --title "Kiwi Notes $GITHUB_REF_NAME" --generate-notes
