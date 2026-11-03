@@ -15,6 +15,19 @@ Um texto que muda de sentido, colado direto no app da pessoa, é pior que um tex
 2. **O dicionário é intocável:** os termos viram marcadores antes das regras e voltam com a grafia exata do dicionário no fim (inclusive no começo da frase, `kubectl` não vira `Kubectl`).
 3. **Tom por bundle id** (`tone.ts`): `casual` (Slack, Teams, mensagens: uma frase sai sem ponto final), `formal` (Mail, Outlook), `literal` (terminal e IDE: comando sai sem maiúscula nem ponto, e prosa para o Claude Code ganha pontuação, mas nunca vira lista) e `default`.
 4. **O LLM é uma camada opcional** atrás de `LlmBackend` (Foundation Models pelo sidecar hoje, MLX depois). O modo `auto` só chama o LLM no tom `formal` ou em ditado longo (≥ 40 palavras), nunca no `literal`. Tem limite de tempo (1,5 s por padrão) e uma **guarda** (`rejectReason`) que descarta a saída que responde em vez de revisar, cresce ou encolhe demais, perde termo do dicionário ou traz palavras que não estavam no texto. Em qualquer falha, fica o texto das regras.
+5. **O prompt e o filtro da saída vêm do VoiceInk** (#258, `19546d2`): `prompts.ts` porta o `AIPrompts.enhancementSystemTemplate` com o prompt "Default", o bloco `<CUSTOM_VOCABULARY>` com o dicionário inteiro (até 150 termos, na ordem da pessoa) e o texto dentro de `<TRANSCRIPT>`. `outputFilter.ts` porta o `AIEnhancementOutputFilter`. Do Kiwi ficam a linha de tom e a guarda. A mensagem de sistema não depende do texto (`llmSystemMessage`), então o `llm.prewarm` antes do ditado serve para o `llm.complete` depois. Os pesos do VoiceInk Refine ficam fora: a licença deles só permite o uso no VoiceInk (#267). Um modelo aberto no MLX do VoiceInk é o T270.
+
+### Medição com o prompt do VoiceInk (Foundation Models, M1 Pro, 7 frases em PT)
+- **Latência:** de 2,2 a 2,8 s por frase numa sessão nova (5 s na primeira), e de 1,6 a 3,6 s com o `llm.prewarm`. O prompt tem ~1,3 mil tokens, contra ~100 do prompt curto do #144. Com o limite padrão de 1,5 s, o LLM quase nunca chega a tempo.
+- **Bom:** a lista ("primeiro… segundo… terceiro" virou 1. 2. 3.), a pontuação, "tá" → "está", e não respondeu "what's the weather".
+- **Ruim:**
+  - **Traduziu** para o inglês um ditado em PT no tom casual. A guarda pegou (`novel_words`).
+  - **Inverteu** uma autocorreção: "na quinta não espera na sexta" virou "na quinta, não na sexta".
+  - Trocou "segue" por "segure" e tirou o nome "Ana".
+  
+  A guarda não pegou esses três.
+
+Por isso o modo continua `off` por padrão, e o T270 compara os modelos nas mesmas frases.
 
 ## Consequências
 - A frase curta sai na hora e sempre igual, e as fixtures (`fixtures.ts`) descrevem exatamente o que a limpeza faz.

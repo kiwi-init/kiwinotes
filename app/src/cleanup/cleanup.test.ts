@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import { compileDictionary } from "./dictionary.ts";
 import { fixtures } from "./fixtures.ts";
-import { cleanup, cleanupWithRules, rulesDroppedTooMuch, toneFor } from "./index.ts";
-import { rejectReason } from "./llm.ts";
+import { cleanup, cleanupWithRules, llmSystemMessage, rulesDroppedTooMuch, toneFor } from "./index.ts";
+import { maxTokensFor, rejectReason } from "./llm.ts";
+import { filterOutput } from "./outputFilter.ts";
+import { MAX_VOCABULARY_TERMS } from "./prompts.ts";
 import { sidecarLlm } from "./sidecar.ts";
 import type { LlmBackend, LlmRequest } from "./types.ts";
 
@@ -79,7 +81,10 @@ describe("LLM por cima das regras", () => {
     const r = await cleanup({ raw, bundleId: MAIL, dictionary }, { llm: backend, llmMode: "auto" });
     expect(r.text).toBe(polished);
     expect(r.llm).toMatchObject({ used: true, backend: "fake" });
-    expect(calls[0]!.system).toContain("PACS");
+    expect(calls[0]!.system).toContain("<CUSTOM_VOCABULARY>\nImportant Vocabulary:\nPACS\n</CUSTOM_VOCABULARY>");
+    expect(calls[0]!.system).toContain("- Tone: a professional email.");
+    expect(calls[0]!.system).toBe(llmSystemMessage("formal", dictionary));
+    expect(calls[0]!.prompt).toBe("\n<TRANSCRIPT>\nOi ana, segue o relatório do PACS em anexo, qualquer dúvida me avisa.\n</TRANSCRIPT>");
     expect(calls[0]!.temperature).toBe(0);
     expect(r.rulesText).toBe("Oi ana, segue o relatório do PACS em anexo, qualquer dúvida me avisa.");
   });
@@ -126,10 +131,57 @@ describe("LLM por cima das regras", () => {
     expect(r.text).toBe("What's the weather tomorrow in são paulo?");
   });
 
+  test("tira o raciocínio e o <TRANSCRIPT> que o modelo devolveu junto", async () => {
+    const { backend } = fakeLlm("<think>limpar</think>\n<TRANSCRIPT>\nOi, Ana. Segue o relatório do PACS em anexo. Qualquer dúvida, me avisa.\n</TRANSCRIPT>");
+    const r = await cleanup({ raw, bundleId: MAIL, dictionary }, { llm: backend, llmMode: "always" });
+    expect(r.llm).toMatchObject({ used: true });
+    expect(r.text).toBe("Oi, Ana. Segue o relatório do PACS em anexo. Qualquer dúvida, me avisa.");
+  });
+
   test("tirar as aspas em volta e reaplicar a grafia do dicionário", async () => {
     const { backend } = fakeLlm('"Oi, Ana. Segue o relatório do pacs em anexo. Qualquer dúvida, me avisa."');
     const r = await cleanup({ raw, bundleId: MAIL, dictionary }, { llm: backend, llmMode: "always" });
     expect(r.text).toBe("Oi, Ana. Segue o relatório do PACS em anexo. Qualquer dúvida, me avisa.");
+  });
+});
+
+describe("prompt do VoiceInk", () => {
+  test("o modelo recebe as instruções da tarefa no lugar do %@", () => {
+    const system = llmSystemMessage("default");
+    expect(system.startsWith("<SYSTEM_INSTRUCTIONS>")).toBe(true);
+    expect(system).not.toContain("%@");
+    expect(system).toContain("<TASK_INSTRUCTIONS>\n<TASK>\nClean <TRANSCRIPT> into polished, readable, general-purpose text.");
+    expect(system).not.toContain("Important Vocabulary:");
+    expect(system).not.toContain("<TONE>");
+  });
+
+  test("tom do app e vocabulário escapado", () => {
+    const system = llmSystemMessage("casual", ["C++ <beta>", { term: "R&D" }]);
+    expect(system).toContain("<TONE>\n- Tone: a chat message.");
+    expect(system).toContain("Important Vocabulary:\nC++ &lt;beta&gt;\nR&amp;D\n</CUSTOM_VOCABULARY>");
+  });
+
+  test("vocabulário na ordem da pessoa, sem repetição", () => {
+    const system = llmSystemMessage("default", ["kubectl", "Healthcare API", "KUBECTL"]);
+    expect(system).toContain("Important Vocabulary:\nkubectl\nHealthcare API\n</CUSTOM_VOCABULARY>");
+  });
+
+  test("vocabulário grande é cortado", () => {
+    const terms = Array.from({ length: MAX_VOCABULARY_TERMS + 20 }, (_, i) => `termo${i}`);
+    const system = llmSystemMessage("default", terms);
+    expect(system).toContain(`termo${MAX_VOCABULARY_TERMS - 1}\n`);
+    expect(system).not.toContain(`termo${MAX_VOCABULARY_TERMS}\n`);
+  });
+
+  test("filtro da saída: tira <think>, <thinking> e <reasoning>", () => {
+    expect(filterOutput("<thinking>a\nb</thinking>Oi.<reasoning>x</reasoning>  ")).toBe("Oi.");
+    expect(filterOutput("  <think></think>\nTexto. ")).toBe("Texto.");
+  });
+
+  test("máximo de tokens: o dobro da entrada, entre 256 e 8192", () => {
+    expect(maxTokensFor("curto")).toBe(256);
+    expect(maxTokensFor("a".repeat(3000))).toBe(2000);
+    expect(maxTokensFor("a".repeat(30000))).toBe(8192);
   });
 });
 

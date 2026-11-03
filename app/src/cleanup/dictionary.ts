@@ -14,6 +14,8 @@ export const PLACEHOLDER_RE = /(\d+)/g;
 interface Compiled {
   term: string;
   re: RegExp;
+  /** A posição no dicionário da pessoa (a lista é reordenada pelo tamanho do termo). */
+  order: number;
 }
 
 /** Uma forma falada vira regex: sem diferença de maiúscula, e espaço ou hífen entre as palavras. */
@@ -28,14 +30,14 @@ function pattern(spoken: string): string {
 
 export function compileDictionary(entries: DictionaryEntry[] = []): Compiled[] {
   const out: Compiled[] = [];
-  for (const entry of entries) {
+  for (const [order, entry] of entries.entries()) {
     const term = typeof entry === "string" ? entry : entry.term;
     if (!term.trim()) continue;
     const forms = [term, ...(typeof entry === "string" ? [] : (entry.aliases ?? []))].filter((f) => f.trim());
     // Formas mais longas primeiro, para "Healthcare API" ganhar de "API".
     forms.sort((a, b) => b.length - a.length);
     const re = new RegExp(`${WORD_START}(?:${forms.map(pattern).join("|")})${WORD_END}`, "giu");
-    out.push({ term: term.trim(), re });
+    out.push({ term: term.trim(), re, order });
   }
   out.sort((a, b) => b.term.length - a.term.length);
   return out;

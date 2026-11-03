@@ -2,14 +2,23 @@
 // As regras sempre rodam e já entregam o texto; o LLM local é opcional (ADR 0002).
 
 import { compileDictionary, protect } from "./dictionary.ts";
-import { polish } from "./llm.ts";
+import { polish, vocabularyOf } from "./llm.ts";
+import { systemMessage } from "./prompts.ts";
 import { applyRules, capitalize, finishRules, tidyPunctuation } from "./rules.ts";
 import { toneFor } from "./tone.ts";
-import type { CleanupInput, CleanupOptions, CleanupResult, LlmMode, Tone } from "./types.ts";
+import type { CleanupInput, CleanupOptions, CleanupResult, DictionaryEntry, LlmMode, Tone } from "./types.ts";
 
 export type * from "./types.ts";
 export { toneFor } from "./tone.ts";
 export { sidecarLlm } from "./sidecar.ts";
+
+/**
+ * A mensagem de sistema do LLM para um tom e um dicionário. Não depende do texto, então serve para
+ * o `llm.prewarm` antes do ditado (T58): o próximo `llm.complete` com ela pega a sessão aquecida.
+ */
+export function llmSystemMessage(tone: Exclude<Tone, "literal">, dictionary: DictionaryEntry[] = []): string {
+  return systemMessage(tone, vocabularyOf(compileDictionary(dictionary)));
+}
 
 // Palavras que as regras tiram de propósito (muletas e marcadores de correção): não contam na trava abaixo.
 const EXPECTED_DROPS = new Set(
