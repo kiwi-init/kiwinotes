@@ -11,7 +11,8 @@ if ! ls "$audio"/*_r1.wav >/dev/null 2>&1; then
   exit 1
 fi
 kiwi=$(command -v kiwi || echo "$HOME/.kiwi/bin/kiwi")
-"$kiwi" lock bench
+# Espera a vez se alguém estiver medindo (sai com erro se não vier em 30 min); sem o lock, nada roda.
+"$kiwi" lock bench --wait 30m --note "T51 voz real"
 trap '"$kiwi" unlock bench' EXIT
 swift build -c release 2>&1 | tail -1
 rm -rf results-voz
