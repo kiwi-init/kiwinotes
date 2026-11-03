@@ -1,17 +1,20 @@
 #!/bin/sh
 # Grava as frases do corpus com a sua voz, para a rodada com voz real do benchmark.
-# Os WAVs (16 kHz mono) vão para fora do repo: ~/kiwi-voz (ou o 1º argumento). Nunca commite esse áudio.
-# Uso: ./record.sh [pasta]   e depois:   STT_AUDIO=~/kiwi-voz STT_RESULTS=results-voz ./run-all.sh
+# Os WAVs (16 kHz mono) vão para fora do repo: ~/kiwi-voz (ou $KIWI_VOZ). Nunca commite esse áudio.
+# Uso: ./record.sh            grava as 10 frases
+#      ./record.sh mix03 pt01 regrava só essas (sobrescreve)
+# Depois: STT_AUDIO=~/kiwi-voz STT_RESULTS=results-voz ./run-all.sh
 set -eu
 cd "$(dirname "$0")"
-out=${1:-"$HOME/kiwi-voz"}
+out=${KIWI_VOZ:-"$HOME/kiwi-voz"}
 mkdir -p "$out"
-ids="pt01 pt03 pt07 en01 en04 mix01 mix02 mix03 mix05 mix06"
+ids=${*:-"pt01 pt03 pt07 en01 en04 mix01 mix02 mix03 mix05 mix06"}
 total=$(echo $ids | wc -w | tr -d ' ')
 n=0
 for id in $ids; do
   n=$((n + 1))
   text=$(grep "^$id	" corpus.tsv | cut -f4)
+  if [ -z "$text" ]; then echo "id desconhecido: $id (veja corpus.tsv)"; exit 2; fi
   echo
   echo "[$n/$total] Leia em voz alta, no seu jeito normal de falar:"
   echo
