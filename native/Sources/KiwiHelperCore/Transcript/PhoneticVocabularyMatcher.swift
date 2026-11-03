@@ -1,4 +1,4 @@
-// Portado de VoiceInk/VoiceInk/Features/Dictionary/Workflows/PhoneticVocabularyMatcher.swift @ 19546d2 (GPL-3.0). Mudanças: `public` na API (init e correct); o resto igual.
+// Portado de VoiceInk/VoiceInk/Features/Dictionary/Workflows/PhoneticVocabularyMatcher.swift @ 19546d2 (GPL-3.0). Mudanças: `public` na API (init e correct); a primeira letra pode ser c, k ou q quando as duas abrem com o som de K (`sameOpeningSound`, T591); o resto igual.
 
 import Foundation
 
@@ -256,7 +256,9 @@ public struct PhoneticVocabularyMatcher: Sendable {
         // A correct vocabulary term is already a complete explanation of its
         // own words. Do not absorb adjacent words into that term on another pass.
         if words.count != term.words.count && words.contains(where: exact.contains) { return nil }
-        if policy == .conservative && key.first != term.key.first { return nil }
+        // The first letter may differ when both open with the K sound: "cubectl" is "kubectl" (T591).
+        if policy == .conservative && key.first != term.key.first
+            && !Self.sameOpeningSound(wordPhones.first ?? "", term.wordPhones.first ?? "") { return nil }
         if words.count == 1 && term.key.count <= 4 { return nil }
         let edits = Self.editDistance(key, term.key)
         let spelling = Double(edits) / Double(length)
@@ -299,6 +301,12 @@ public struct PhoneticVocabularyMatcher: Sendable {
         }
         let boundaryPenalty = 0.012 * Double(abs(words.count - term.words.count))
         return 0.55 * spelling + 0.45 * sound + boundaryPenalty
+    }
+
+    /// Both words open with the hard K sound, spelled c, k or q ("cubectl", "kubectl"). Only K: with the soft c
+    /// too, "century" became "Sentry" in a probe over 48 thousand English words (T591).
+    private static func sameOpeningSound(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.first == "K" && rhs.first == "K"
     }
 
     private static func isAdjacentTransposition(_ lhs: String, _ rhs: String) -> Bool {

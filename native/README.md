@@ -17,7 +17,7 @@ The local engine from VoiceInk (`19546d2`), ported with the origin at the top of
 2. **Optional VAD** (`config.set {vad: true}`, Silero, threshold 0.7): only speech goes to the model, and audio without speech gives `text: ""`.
 3. **Language hint** (`config.set {language}`): passed to Parakeet as VoiceInk does. T51 measured no change for PT and EN (it filters by script).
 4. **CTC vocabulary boosting: off.** It swapped real words for dictionary terms ("cluster de homologação" → "DICOM", review #335). With a guard that only lets through changes that sound like the term (`VocabularyRescoreGuard`), it gained 0.1 point of WER over step 5 alone on the T51 clips, for 150–250 ms more per sentence. `--transcribe … --ctc` still measures it.
-5. **VoiceInk's post-processing, in its order:** `TranscriptionOutputFilter` (`[noise]`, `(laughs)`, tags) → `PhoneticVocabularyMatcher` (the dictionary's spellings: "pulo recueste" → "pull request") → word replacements (the dictionary's `aliases`).
+5. **VoiceInk's post-processing, in its order:** `TranscriptionOutputFilter` (`[noise]`, `(laughs)`, tags) → `PhoneticVocabularyMatcher` (the dictionary's spellings: "pulo recueste" → "pull request", plus "cubectl" → "kubectl" since the first letter may be c, k or q for the same K sound; the aliases too, so "Daikon Stor" lands on the alias "Daikon Store"; T591) → word replacements (the dictionary's `aliases` become the term).
 6. **`transcript.final {text, raw, lang, durationMs, latencyMs}`:** one per `record.stopped`, in order. `lang` comes from `NLLanguageRecognizer` (`pt`, `en` or `mix`). If the model can't load, the event is `transcript.error {error}`.
 
 On the T51 clips, a short sentence takes ~80 to 150 ms from the end of the recording to the text, with the dictionary.
