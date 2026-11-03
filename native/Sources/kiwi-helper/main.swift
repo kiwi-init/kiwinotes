@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import KiwiHelperCore
 
@@ -8,6 +9,7 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --socket <path>   connect to the app's unix socket (the app listens; NDJSON v1, see docs/adr/0001-ipc.md)
   --stdio           talk NDJSON over stdin/stdout instead, for manual testing
   --dump-wav <dir>  also save each recording as 16 kHz WAV there (for the STT benchmark; never inside the repo)
+  --overlay-snapshot <dir>  render the dictation pill in each state as PNGs there, then exit
 """
 
 func fail(_ message: String) -> Never {
@@ -35,6 +37,17 @@ while let arg = args.next() {
             fail("can't create \(dir.path): \(error)")
         }
         dumpDirectory = dir
+    case "--overlay-snapshot":
+        guard let path = args.next() else { fail("--overlay-snapshot needs a folder") }
+        let dir = URL(fileURLWithPath: path, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try MainActor.assumeIsolated { try OverlaySnapshots.write(to: dir) }
+        } catch {
+            fail("can't write snapshots to \(dir.path): \(error)")
+        }
+        print("wrote overlay snapshots to \(dir.path)")
+        exit(0)
     case "-h", "--help":
         print(usage)
         exit(0)
@@ -56,6 +69,10 @@ if let socketPath {
     fail(usage)
 }
 
+// AppKit for the overlay panel. Accessory: no Dock icon, no menu bar, never activates by itself.
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+
 let helper = Helper(connection: connection, dumpDirectory: dumpDirectory)
 helper.run()
-CFRunLoopRun()
+app.run()
