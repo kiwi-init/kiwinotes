@@ -12,7 +12,7 @@ import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 
 import { externalUrl, linkAt } from "../links.ts";
-import { inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview } from "./livePreview.ts";
+import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview } from "./livePreview.ts";
 import { tableEnter, tableTab } from "./table.ts";
 
 export interface LinkTarget {
@@ -157,6 +157,10 @@ const theme = EditorView.theme({
   ".cm-task-box[data-checked=true]": { background: "var(--accent)" },
   ".cm-task-done": { color: "var(--text-3)", textDecoration: "line-through" },
   ".cm-wikilink": { color: "var(--accent-text)", cursor: "pointer" },
+  // O comentário do Obsidian, quando aparece (na linha do cursor), e a legenda do ditado (o `.said` do B v4).
+  ".cm-comment": { color: "var(--text-3)", opacity: "0.7" },
+  ".cm-said": { fontSize: "11px", lineHeight: "1.4", color: "var(--accent-text)" },
+  ".cm-said *": { fontStyle: "normal" },
   ".cm-wikilink-raw": { cursor: "text" },
   ".cm-wikilink-missing": { opacity: "0.55" },
   // Sem margem no bloco (o CodeMirror mede sem ela): o espaço vem do padding.
@@ -232,6 +236,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     syntaxHighlighting(highlight),
     inlinePreview(links),
     tablePreview,
+    commentPreview,
     autocompletion({ override: [linkCompletion(opts.linkTargets)], icons: false, closeOnBlur: true }),
     tableKeys,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),

@@ -9,7 +9,7 @@ import { EditorState } from "@codemirror/state";
 
 import { externalUrl } from "../links.ts";
 import { linkCompletion, urlAt, wikiLinkSyntax } from "./index.ts";
-import { rawCellStart } from "./livePreview.ts";
+import { DICTATION_CAPTION, findComments, rawCellStart } from "./livePreview.ts";
 
 const targets = () => [
   { title: "Ana", folder: "Pessoas", link: "Ana" },
@@ -100,4 +100,20 @@ test("a janela Notas nunca põe HTML do texto na página (o Markdown é só text
     const code = readFileSync(join(root, f), "utf8");
     expect({ f, html: /innerHTML|outerHTML|insertAdjacentHTML|dangerouslySetInnerHTML|document\.write/.test(code) }).toEqual({ f, html: false });
   }
+});
+
+describe("comentário do Obsidian e legenda do ditado (T1584)", () => {
+  test("acha %%…%% de uma linha e de várias; %% sem par não conta", () => {
+    const t = "a %%x%% b\n%%\nlinha 1\nlinha 2\n%%\nc %% sem par";
+    expect(findComments(t).map(([a, b]) => t.slice(a, b))).toEqual(["%%x%%", "%%\nlinha 1\nlinha 2\n%%"]);
+    expect(findComments("só %% um")).toEqual([]);
+  });
+
+  test("a legenda do ditado, com e sem o id", () => {
+    expect(DICTATION_CAPTION.test("*🎙 ditado às 14:30*")).toBe(true);
+    expect(DICTATION_CAPTION.test("*🎙 ditado às 14:30* %%dictation:2026-11-03T17:30:12.345Z-ab12%%")).toBe(true);
+    expect(DICTATION_CAPTION.test("*🎙 ditado às 14:30* e mais texto")).toBe(false);
+    expect(DICTATION_CAPTION.test("🎙 ditado às 14:30")).toBe(false);
+    expect(DICTATION_CAPTION.test("*🎙 ditado às 9:30*")).toBe(false);
+  });
 });

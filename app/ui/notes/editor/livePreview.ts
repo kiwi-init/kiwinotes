@@ -157,6 +157,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
     let pos = from;
     while (pos <= to) {
       const line = state.doc.lineAt(pos);
+      if (DICTATION_CAPTION.test(line.text)) out.push(Decoration.line({ class: "cm-said" }).range(line.from));
       for (const link of parseLinks(line.text)) {
         const a = line.from + link.from;
         const b = line.from + link.to;
@@ -202,6 +203,77 @@ export function inlinePreview(resolver: LinkResolver) {
     { decorations: (v) => v.decorations },
   );
 }
+
+// ---------------------------------------------------------------- comentários e legenda do ditado
+
+/**
+ * A legenda que o ditado→nota (A3, T1320/T1565) põe embaixo do trecho ditado, com o id do ditado num comentário do
+ * Obsidian: `*🎙 ditado às 14:30* %%dictation:…%%`. Fica pequena e verde, como o `.said` do B v4.
+ */
+export const DICTATION_CAPTION = /^\*🎙 ditado às \d\d:\d\d\*( %%dictation:[^%]+%%)?$/u;
+
+/** Os comentários do Obsidian (`%%…%%`, inclusive de várias linhas) no texto: [início, fim). Um `%%` sem par não conta. */
+export function findComments(text: string): [number, number][] {
+  const out: [number, number][] = [];
+  for (const m of text.matchAll(/%%[\s\S]*?%%/g)) out.push([m.index!, m.index! + m[0].length]);
+  return out;
+}
+
+/** O editor está com o foco? Sem foco, nada é "linha do cursor": a nota inteira fica em preview. */
+const focusChanged = StateEffect.define<boolean>();
+const editorFocused = StateField.define<boolean>({
+  create: () => false,
+  update: (v, tr) => tr.effects.reduce((acc, e) => (e.is(focusChanged) ? e.value : acc), v),
+});
+
+function buildComments(state: EditorState): DecorationSet {
+  const out: Range<Decoration>[] = [];
+  const focused = state.field(editorFocused, false) ?? false;
+  const active = activeLines(state, focused);
+  const tree = syntaxTree(state);
+  for (const [a, b] of findComments(state.doc.toString())) {
+    // `%%` dentro de código é código: fica como foi escrito.
+    let code = false;
+    for (let n: SyntaxNode | null = tree.resolveInner(a, 1); n; n = n.parent) {
+      if (n.name === "InlineCode" || n.name === "FencedCode" || n.name === "CodeBlock") code = true;
+    }
+    if (code) continue;
+    const first = state.doc.lineAt(a);
+    const last = state.doc.lineAt(b);
+    let touched = false;
+    for (let n = first.number; n <= last.number && !touched; n++) touched = active.has(n);
+    if (touched) {
+      // Na linha do cursor aparece apagado, para dar para editar.
+      out.push(Decoration.mark({ class: "cm-comment" }).range(a, b));
+    } else if (a === first.from && b === last.to && first.number !== last.number) {
+      // Um bloco de linhas inteiras some sem deixar linha vazia.
+      out.push(Decoration.replace({ block: true }).range(a, b));
+    } else {
+      // No fim da linha, o espaço antes do comentário some junto ("legenda %%id%%" → "legenda").
+      const from = b === last.to && a > first.from && state.doc.sliceString(a - 1, a) === " " ? a - 1 : a;
+      out.push(hide.range(from, b));
+    }
+  }
+  return Decoration.set(out, true);
+}
+
+/**
+ * O comentário do Obsidian some fora da linha do cursor, como no Obsidian. Vem de um StateField porque um comentário
+ * de várias linhas esconde quebras de linha, o que um ViewPlugin não pode fazer.
+ */
+export const commentPreview = [
+  editorFocused,
+  EditorView.focusChangeEffect.of((_state, focusing) => focusChanged.of(focusing)),
+  StateField.define<DecorationSet>({
+    create: buildComments,
+    update(value, tr) {
+      const focus = tr.effects.some((e) => e.is(focusChanged));
+      if (tr.docChanged || tr.selection || focus || syntaxTree(tr.startState) !== syntaxTree(tr.state)) return buildComments(tr.state);
+      return value;
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  }),
+];
 
 // ---------------------------------------------------------------- tabelas
 
