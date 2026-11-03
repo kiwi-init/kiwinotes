@@ -16,34 +16,76 @@ public enum Rules {
     }
 }
 
-/// How to ask for a permission with one window at a time.
-public enum PermissionAsk: Equatable, Sendable {
-    /// Already granted: nothing to show.
-    case none
-    /// The system prompt (macOS shows it once per app; after that the call is silent).
-    case systemPrompt
+/// How to ask for a permission: what the helper does, in order (reset, prompt, Settings).
+public struct PermissionAsk: Equatable, Sendable {
+    /// When System Settings opens.
+    public enum Settings: Equatable, Sendable {
+        case never
+        /// Right after the other steps (after `settingsDelay`, so a fresh entry is already in the list).
+        case after
+        /// Only if the prompt didn't show (`openSettings(granted:elapsed:)`). For the microphone, whose prompt answers.
+        case ifNoPrompt
+    }
+
+    /// Forget this app's entry first (`tccutil reset`). For a switch that is on in Settings but doesn't count for this
+    /// copy of the app (T658): flipping it again doesn't help, a new entry does.
+    public var reset: Bool
+    /// Call the system prompt. For Accessibility and Input Monitoring it also puts Kiwi Notes back in the Settings list
+    /// after a reset, and it is silent once macOS has shown it (T825).
+    public var prompt: Bool
+    public var settings: Settings
+
+    public init(reset: Bool = false, prompt: Bool = false, settings: Settings = .never) {
+        self.reset = reset
+        self.prompt = prompt
+        self.settings = settings
+    }
+
+    /// Already granted (or restricted): nothing to show.
+    public static let none = PermissionAsk()
+    /// The system prompt alone (macOS shows it once per app; after that the call is silent).
+    public static let systemPrompt = PermissionAsk(prompt: true)
     /// The right pane of System Settings, where the person flips the switch.
-    case openSettings
-    /// Forget this app's entry (`tccutil reset`) and show the system prompt again. For a switch that is on in
-    /// Settings but doesn't count for this copy of the app (T658): flipping it again doesn't help, a new entry does.
-    case resetAndPrompt
+    public static let openSettings = PermissionAsk(settings: .after)
 
     /// `state` is the permission's IPC state; `askedBefore` says whether this app already showed the system prompt.
-    /// The first ask shows only the system prompt; later asks go to Settings, since the prompt won't come back.
     /// A `restricted` permission (MDM, parental controls) can't be changed by the person, so nothing opens.
-    /// `reset` (only from a person's click in the app, never on its own) starts over instead of opening Settings, and
-    /// only when the app macOS charges is Kiwi Notes itself (`responsibleBundleId`). From the probe in a terminal, the
-    /// responsible app is the terminal, and a reset would take *its* permission away (review #693).
+    ///
+    /// On its own (`reset` false: at launch, on the first dictation) one window at a time: the prompt the first time,
+    /// Settings after that.
+    ///
+    /// `reset` is a person's click in the app (never on its own). The click always ends in something visible (T825):
+    /// `askedBefore` can be stale (a `tccutil reset`, a new build, the helper's defaults gone), and then macOS may stay
+    /// silent where we expected a prompt. So the click prompts and then opens Settings: for Accessibility and Input
+    /// Monitoring always (their prompt only points to Settings anyway), for the microphone when its prompt didn't show.
+    /// The entry is reset first only when it was asked before and the app macOS charges is Kiwi Notes itself
+    /// (`responsibleBundleId`): from the probe in a terminal, a reset would take the *terminal's* permission away
+    /// (review #693).
     public static func next(
-        state: String, askedBefore: Bool, reset: Bool = false, responsibleBundleId: String? = nil
+        permission: String = "", state: String, askedBefore: Bool, reset: Bool = false, responsibleBundleId: String? = nil
     ) -> PermissionAsk {
         switch state {
         case "granted", "restricted": return .none
-        case "undetermined": return .systemPrompt
-        default:
-            guard askedBefore else { return .systemPrompt }
-            return reset && responsibleBundleId == KiwiApp.bundleId ? .resetAndPrompt : .openSettings
+        default: break
         }
+        guard reset else {
+            return state == "undetermined" || !askedBefore ? .systemPrompt : .openSettings
+        }
+        return PermissionAsk(
+            reset: state != "undetermined" && askedBefore && responsibleBundleId == KiwiApp.bundleId,
+            prompt: true,
+            settings: permission == "microphone" ? .ifNoPrompt : .after
+        )
+    }
+
+    /// How long after the prompt call Settings opens, for `.after`: the prompt (if any) comes up first, and the entry a
+    /// reset removed is back in the list.
+    public static let settingsDelay: TimeInterval = 1.0
+
+    /// For `.ifNoPrompt`: the microphone's prompt answers only after the person clicks, so an answer that is not
+    /// "granted" and came back faster than a person could click means no prompt showed.
+    public static func openSettings(granted: Bool, elapsed: TimeInterval) -> Bool {
+        !granted && elapsed < 0.5
     }
 }
 

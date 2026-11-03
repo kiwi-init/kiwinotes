@@ -29,30 +29,66 @@ final class RulesTests: XCTestCase {
 
     func testResetOnlyWhenAskedForAndStillMissing() {
         let kiwi = KiwiApp.bundleId
-        // T658: the switch is on in Settings, but the permission doesn't count. A click can start over.
-        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true, responsibleBundleId: kiwi),
-                       .resetAndPrompt)
-        // Never asked: the plain prompt is enough. Granted, restricted or not asked yet: nothing to reset.
-        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: false, reset: true, responsibleBundleId: kiwi),
-                       .systemPrompt)
+        // T658: the switch is on in Settings, but the permission doesn't count. A click starts over, and Settings opens
+        // after the prompt (T825).
+        XCTAssertEqual(PermissionAsk.next(permission: "inputMonitoring", state: "denied", askedBefore: true, reset: true,
+                                          responsibleBundleId: kiwi),
+                       PermissionAsk(reset: true, prompt: true, settings: .after))
+        // Not asked yet: nothing to reset. Granted or restricted: nothing at all.
+        XCTAssertFalse(PermissionAsk.next(permission: "accessibility", state: "denied", askedBefore: false, reset: true,
+                                          responsibleBundleId: kiwi).reset)
         XCTAssertEqual(PermissionAsk.next(state: "granted", askedBefore: true, reset: true, responsibleBundleId: kiwi),
                        PermissionAsk.none)
         XCTAssertEqual(PermissionAsk.next(state: "restricted", askedBefore: true, reset: true, responsibleBundleId: kiwi),
                        PermissionAsk.none)
-        XCTAssertEqual(PermissionAsk.next(state: "undetermined", askedBefore: true, reset: true, responsibleBundleId: kiwi),
-                       .systemPrompt)
-        // No reset asked: Settings, as before.
+        XCTAssertFalse(PermissionAsk.next(permission: "microphone", state: "undetermined", askedBefore: true, reset: true,
+                                          responsibleBundleId: kiwi).reset)
+        // No click: Settings alone, as before.
         XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, responsibleBundleId: kiwi), .openSettings)
+    }
+
+    /// T825: after `tccutil reset` (or a new build) the helper still thinks it asked, and macOS may show no prompt.
+    /// Whatever `askedBefore` says, a click on Accessibility or Input Monitoring ends in Settings.
+    func testClickAlwaysEndsInSettings() {
+        for permission in ["accessibility", "inputMonitoring"] {
+            for asked in [true, false] {
+                for responsible in [KiwiApp.bundleId, "com.mitchellh.ghostty", nil] {
+                    let ask = PermissionAsk.next(permission: permission, state: "denied", askedBefore: asked, reset: true,
+                                                 responsibleBundleId: responsible)
+                    XCTAssertTrue(ask.prompt, "\(permission) \(asked) \(responsible ?? "-")")
+                    XCTAssertEqual(ask.settings, .after, "\(permission) \(asked) \(responsible ?? "-")")
+                }
+            }
+        }
+        // The microphone's prompt answers: Settings only when it didn't show.
+        for state in ["denied", "undetermined"] {
+            XCTAssertEqual(PermissionAsk.next(permission: "microphone", state: state, askedBefore: true, reset: true,
+                                              responsibleBundleId: KiwiApp.bundleId).settings, .ifNoPrompt)
+        }
+        XCTAssertTrue(PermissionAsk.openSettings(granted: false, elapsed: 0.01))
+        XCTAssertFalse(PermissionAsk.openSettings(granted: false, elapsed: 3))  // the person said no in the prompt
+        XCTAssertFalse(PermissionAsk.openSettings(granted: true, elapsed: 0.01))
+    }
+
+    /// On its own (launch, first dictation) nothing changes: one window at a time, never Settings with the prompt.
+    func testAutomaticAsksNeverStackWindows() {
+        for permission in ["accessibility", "inputMonitoring", "microphone"] {
+            for state in ["denied", "undetermined"] {
+                for asked in [true, false] {
+                    let ask = PermissionAsk.next(permission: permission, state: state, askedBefore: asked)
+                    XCTAssertFalse(ask.reset)
+                    XCTAssertFalse(ask.prompt && ask.settings != .never, "\(permission) \(state) \(asked)")
+                }
+            }
+        }
     }
 
     func testNeverResetsAnotherAppsPermission() {
         // Review #693: the probe in Ghostty sends `reset: true`; the responsible app is the terminal, not Kiwi Notes.
-        for other in ["com.mitchellh.ghostty", "com.apple.Terminal", "app.kiwinotes.desktop.evil", ""] {
-            XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true, responsibleBundleId: other),
-                           .openSettings, other)
+        for other in ["com.mitchellh.ghostty", "com.apple.Terminal", "app.kiwinotes.desktop.evil", "", nil] {
+            XCTAssertFalse(PermissionAsk.next(permission: "inputMonitoring", state: "denied", askedBefore: true,
+                                              reset: true, responsibleBundleId: other).reset, other ?? "nil")
         }
-        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true, responsibleBundleId: nil),
-                       .openSettings)
         XCTAssertEqual(KiwiApp.bundleId, "app.kiwinotes.desktop")
     }
 
