@@ -52,6 +52,7 @@ const capabilities = uiCapabilities({
   snippetsChanged: (snippets) => session.get()?.snippetsChanged(snippets),
   clipboardWrite: (text) => Utils.clipboardWriteText(text),
   notes: stores.notes,
+  dictationNotes: stores.dictationNotes,
 });
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */

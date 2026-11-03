@@ -164,6 +164,20 @@ export class HistoryStore {
   }
 
   /** Apaga um ditado (e só ele) reescrevendo o arquivo do dia. */
+  /** Um ditado pelo id, ou null. Só lê os arquivos de dia em volta da hora do id (o fuso de quem ditou muda o dia). */
+  async get(id: string): Promise<HistoryEntry | null> {
+    const at = Date.parse(id.slice(0, 24));
+    if (Number.isNaN(at)) return null;
+    const from = `${dayOf(new Date(at - MAX_TZ_SPREAD_MS))}.jsonl`;
+    const to = `${dayOf(new Date(at + MAX_TZ_SPREAD_MS))}.jsonl`;
+    for (const file of await this.days()) {
+      if (file < from || file > to) continue;
+      const hit = (await this.readDay(file)).find((e) => e.id === id);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   delete(id: string): Promise<boolean> {
     return this.serialize(() => this.remove(id));
   }

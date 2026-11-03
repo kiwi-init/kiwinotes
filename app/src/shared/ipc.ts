@@ -173,8 +173,11 @@ export type Event =
   | { type: "hotkey.up"; key: HotkeyKey }
   | { type: "hotkey.toggle"; on: boolean }
   /** O sidecar começa a gravar sozinho no hotkey.down, para não perder a primeira sílaba. */
-  /** `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). */
-  | { type: "record.started"; reason: RecordReason; app?: AppRef }
+  /**
+   * `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). `target: "note"`: a nota
+   * rápida (⌥ segurado ao apertar o atalho, T1320). O texto vira uma nota em vez de ser colado.
+   */
+  | { type: "record.started"; reason: RecordReason; app?: AppRef; target?: "note" }
   /**
    * `lost`: a gravação acabou porque o mic caiu (`no_audio` ou `device_changed`), e o que ele ouviu até ali segue para
    * a transcrição como num fim normal (T883). Com menos de 0,3 s, vem `record.error` no lugar.

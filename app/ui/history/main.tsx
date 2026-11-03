@@ -2,9 +2,10 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { fold, foldWithMap } from "../../src/store/text.ts";
-import { api, type HistoryEntry } from "../src/api.ts";
+import { api, has, type HistoryEntry, type NoteMeta, type SearchHit } from "../src/api.ts";
 import { CopyIcon, TrashIcon } from "../src/kit/editable.tsx";
 import { Button, Empty, mount, Window } from "../src/kit/index.tsx";
+import { INBOX_LABEL, sentText, targetItems } from "./toNote.ts";
 
 const PAGE = 50;
 
@@ -15,6 +16,94 @@ function WaveIcon() {
         <rect key={i} x={4.5 + i * 6} y={(36 - h) / 2} width={3.5} height={h} rx={1.75} fill="currentColor" />
       ))}
     </svg>
+  );
+}
+
+function NoteIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden>
+      <path d="M4 1.75h5.5L12.5 4.75v9.5H4z" />
+      <path d="M9.25 1.75v3.25h3.25M6.25 8.5h4M6.25 11h2.5" />
+    </svg>
+  );
+}
+
+/**
+ * O seletor de "Enviar para nota…" (T1320): nota nova em Caixa de entrada/, ou uma que existe, pela mesma busca do
+ * ⌘K. Um envio por vez: o botão trava até a resposta, e o engine não duplica um trecho mandado de novo.
+ */
+function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: () => void; onSent: (message: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [notes, setNotes] = useState<NoteMeta[]>([]);
+  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
+
+  useEffect(() => {
+    api.notes.list().then(
+      (l) => setNotes(l.notes),
+      () => setError("Não deu para abrir as notas"),
+    );
+  }, []);
+
+  // A busca no texto, 150 ms depois de parar de digitar; a resposta de uma busca velha é jogada fora.
+  useEffect(() => {
+    const my = ++seq.current;
+    if (!query.trim()) return setHits([]);
+    const t = setTimeout(() => {
+      api.notes.search(query).then(
+        (h) => my === seq.current && setHits(h),
+        () => my === seq.current && setHits([]),
+      );
+    }, 150);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const send = async (path?: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onSent(sentText(await api.history.toNote(entry.id, path)));
+    } catch {
+      setError("Não deu para enviar. Tente de novo");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="kn-tonote" role="dialog" aria-label="Enviar para nota" onKeyDown={(e) => e.key === "Escape" && onClose()}>
+      <input
+        className="kn-search"
+        type="search"
+        placeholder="Buscar nota"
+        aria-label="Buscar nota"
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <ul className="kn-tonote-list">
+        {targetItems(notes, query, hits).map((item) =>
+          item.kind === "new" ? (
+            <li key="new">
+              <button type="button" className="kn-tonote-item" data-kind="new" disabled={busy} onClick={() => send()}>
+                <span>＋ Nota nova</span>
+                <small>em {INBOX_LABEL}</small>
+              </button>
+            </li>
+          ) : (
+            <li key={item.path}>
+              <button type="button" className="kn-tonote-item" disabled={busy} onClick={() => send(item.path)}>
+                <span>{item.title}</span>
+                {item.detail ? <small>{item.detail}</small> : null}
+              </button>
+            </li>
+          ),
+        )}
+      </ul>
+      {error ? <p className="kn-tonote-error">{error}</p> : null}
+    </div>
   );
 }
 
@@ -65,6 +154,10 @@ function History() {
   /** "Mostrar mais": trava enquanto a página não chega, e diz se ela falhou. */
   const [more, setMore] = useState<"idle" | "loading" | "error">("idle");
   const [fresh, setFresh] = useState<Set<string>>(new Set());
+  /** O ditado com o "Enviar para nota…" aberto, e o que já foi enviado (o aviso embaixo de cada um). */
+  const [picking, setPicking] = useState<string | null>(null);
+  const [sent, setSent] = useState<Map<string, string>>(new Map());
+  const canSend = has("history.toNote");
   const words = fold(query).split(/\s+/).filter(Boolean);
   const wordsRef = useRef(words);
   wordsRef.current = words;
@@ -180,6 +273,17 @@ function History() {
                   <span>{time(e.at)}</span>
                   {e.app?.name ? <span>· {e.app.name}</span> : null}
                   <span className="kn-entry-actions">
+                    {canSend ? (
+                      <button
+                        type="button"
+                        className="kn-icon-button"
+                        aria-label="Enviar para nota…"
+                        aria-expanded={picking === e.id}
+                        onClick={() => setPicking((p) => (p === e.id ? null : e.id))}
+                      >
+                        <NoteIcon />
+                      </button>
+                    ) : null}
                     <button type="button" className="kn-icon-button" aria-label="Copiar o texto" onClick={() => api.copy(e.text)}>
                       <CopyIcon />
                     </button>
@@ -196,6 +300,17 @@ function History() {
                     <Highlight text={e.raw} words={words} />
                   </div>
                 ) : null}
+                {picking === e.id ? (
+                  <SendToNote
+                    entry={e}
+                    onClose={() => setPicking(null)}
+                    onSent={(message) => {
+                      setPicking(null);
+                      setSent((m) => new Map(m).set(e.id, message));
+                    }}
+                  />
+                ) : null}
+                {sent.has(e.id) ? <div className="kn-entry-sent">{sent.get(e.id)}</div> : null}
               </article>
             ))}
           </div>

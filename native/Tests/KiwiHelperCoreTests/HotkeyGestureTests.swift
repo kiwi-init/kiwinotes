@@ -111,4 +111,24 @@ final class HotkeyGestureTests: XCTestCase {
         XCTAssertEqual(HotkeyKey.rightOption.isDown(keyCode: 61, flags: 0x8_0140), true)
         XCTAssertEqual(HotkeyKey.rightOption.isDown(keyCode: 61, flags: 0x8_0120), false)
     }
+
+    /// T1320: ⌥ held when the dictation key goes down makes it a quick note. Either ⌥, but not the key itself.
+    func testNoteModifier() {
+        // Fn with left ⌥ (0x20) or right ⌥ (0x40) held; the generic ⌥ bit (0x80000) comes along.
+        XCTAssertTrue(HotkeyKey.fn.noteModifierHeld(flags: 0x80_0000 | 0x8_0020))
+        XCTAssertTrue(HotkeyKey.fn.noteModifierHeld(flags: 0x80_0000 | 0x8_0040))
+        XCTAssertFalse(HotkeyKey.fn.noteModifierHeld(flags: 0x80_0000))
+        // ⇧ (0x20002) or ⌘ (0x100008) are not ⌥.
+        XCTAssertFalse(HotkeyKey.fn.noteModifierHeld(flags: 0x80_0000 | 0x2_0002 | 0x10_0008))
+        // Right ⌥ as the dictation key: its own bit doesn't count, the left ⌥ does.
+        XCTAssertFalse(HotkeyKey.rightOption.noteModifierHeld(flags: 0x8_0040))
+        XCTAssertTrue(HotkeyKey.rightOption.noteModifierHeld(flags: 0x8_0060))
+        XCTAssertTrue(HotkeyKey.rightCommand.noteModifierHeld(flags: 0x10_0010 | 0x8_0020))
+
+        XCTAssertTrue(HotkeyKey.fn.isNoteModifier(keyCode: 58))
+        XCTAssertTrue(HotkeyKey.fn.isNoteModifier(keyCode: 61))
+        XCTAssertFalse(HotkeyKey.rightOption.isNoteModifier(keyCode: 61))
+        XCTAssertTrue(HotkeyKey.rightOption.isNoteModifier(keyCode: 58))
+        XCTAssertFalse(HotkeyKey.fn.isNoteModifier(keyCode: 56)) // ⇧
+    }
 }
