@@ -5,6 +5,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 ## Privacidade (inegociável)
 - Nada sai do Mac: sem telemetria, sem analytics, sem STT nem LLM na nuvem. A única exceção é o Claude Code (decisão #34), e só onde um spec disser.
 - Nunca commite áudio, transcrições reais, modelos baixados ou credenciais.
+- **Agente não usa o microfone real.** Nada de `record.start` nem do atalho no probe, mesmo que o Terminal já tenha a permissão. Diagnóstico com áudio sintético (`say`) ou com os arquivos que o harry gravar para isso. Teste com o mic real é só do harry, e quem pede é o lead (#320).
 
 ## Branches e PRs
 - `main` só muda por PR e está sempre buildável. Nunca faça force-push nela.
