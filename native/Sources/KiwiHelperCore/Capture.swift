@@ -89,20 +89,28 @@ public final class Resampler {
 public struct CaptureWatchdog: Sendable {
     /// Time for the first buffer after the engine starts (Bluetooth takes a moment to come up).
     public var firstBuffer: TimeInterval
+    /// Time for the first buffer of an engine made because the input changed: a headset that just switched to HFP
+    /// can take ~2.5 s to hand over audio, and 1.5 s showed "Sem áudio do microfone" right after connecting (T1248).
+    /// Only that first start gets it, so a mic that dies in the normal case is still caught in 1.5 s.
+    public var firstBufferAfterChange: TimeInterval
     /// The longest gap between buffers (they come every ~20–100 ms).
     public var gap: TimeInterval
     private var since: TimeInterval?
     private var gotBuffer = false
+    private var allowance: TimeInterval
 
-    public init(firstBuffer: TimeInterval = 1.5, gap: TimeInterval = 1.0) {
+    public init(firstBuffer: TimeInterval = 1.5, firstBufferAfterChange: TimeInterval = 3.5, gap: TimeInterval = 1.0) {
         self.firstBuffer = firstBuffer
+        self.firstBufferAfterChange = firstBufferAfterChange
         self.gap = gap
+        allowance = firstBuffer
     }
 
-    /// The engine (re)started.
-    public mutating func start(at t: TimeInterval) {
+    /// The engine (re)started; `afterInputChange` when it's the first start of an engine made for a new input.
+    public mutating func start(at t: TimeInterval, afterInputChange: Bool = false) {
         since = t
         gotBuffer = false
+        allowance = afterInputChange ? max(firstBuffer, firstBufferAfterChange) : firstBuffer
     }
 
     public mutating func buffer(at t: TimeInterval) {
@@ -119,7 +127,7 @@ public struct CaptureWatchdog: Sendable {
 
     public func stalled(at now: TimeInterval) -> Bool {
         guard let since else { return false }
-        return now - since > (gotBuffer ? gap : firstBuffer)
+        return now - since > (gotBuffer ? gap : allowance)
     }
 }
 
@@ -130,6 +138,10 @@ public struct CaptureWatchdog: Sendable {
 /// the new engine starts right away and what was captured is kept. If no audio comes for a while, the engine is
 /// replaced; if the new one gives nothing either, the recording ends with `no_audio` (T590). A stall after audio came
 /// back is a new one and gets its own new engine (T883).
+///
+/// Input changes come in bursts: connecting a Bluetooth headset switches its profile (A2DP → HFP), and the default
+/// input and the engine's configuration can each change two or more times in a row. So a change only makes a new
+/// engine once no other came for `inputSettle` seconds: one engine for the whole burst, not one per change (T1248).
 ///
 /// Everything here runs on the main thread, except the buffers, which come on the engine's thread.
 public final class AudioCapture {
@@ -160,13 +172,29 @@ public final class AudioCapture {
 
     public private(set) var isRecording = false
 
+    /// How long the input has to stay put before a change makes a new engine (T1248). Changes in a burst come within
+    /// a few hundred ms of each other; much longer and a switch mid-recording loses more of what's said.
+    public static let inputSettle: TimeInterval = 0.4
+
     private let makeEngine: () -> MicEngine
     private let now: () -> TimeInterval
+    private let after: (TimeInterval, @escaping () -> Void) -> Void
     private let watchdogInterval: TimeInterval?
+    /// Bumped by every input change: only the last one of a burst, once it settles, makes the new engine.
+    private var inputChanges = 0
+    /// Input changes waiting to settle, with why, for the log.
+    private var pendingChanges: [String] = []
+    /// The engine was made because the input changed and hasn't started yet: its first buffer gets more time.
+    private var engineFromInputChange = false
     private var engine: MicEngine
     private var prepared = false
     /// New engines the watchdog made in a row without audio in between: one, then `no_audio`. Back to 0 once audio
     /// comes again, so a later, unrelated stall gets its own new engine (T883).
+    ///
+    /// Why one: a fresh engine reads the device from scratch, which is what fixes a stale one (#589). If the fresh
+    /// one gives nothing either, the device itself is gone, and each further try is another 1.5 s of the person
+    /// talking into nothing before the recording ends anyway. So the second stall in a row ends it with `no_audio`
+    /// and hands over what was captured. Don't count stalls across audio again: T883 made a later stall start over.
     private var stallRestarts = 0
     private var meter = LevelMeter(sampleRate: sampleRate, rate: levelRate)
     // The tap hands over ~20–100 ms at a time; the pacer spreads those levels over a 30 Hz tick.
@@ -185,16 +213,22 @@ public final class AudioCapture {
     /// Bumped when the engine is replaced: a late buffer from the old one (old format) is dropped.
     private var generation = 0
 
-    /// - Parameter watchdogInterval: how often to check for a stall while recording; nil means only `checkStall()`
-    ///   (the tests drive it with their own clock).
+    /// - Parameters:
+    ///   - watchdogInterval: how often to check for a stall while recording; nil means only `checkStall()`
+    ///     (the tests drive it with their own clock).
+    ///   - after: runs the closure on the main thread after that many seconds (the tests run it on their clock).
     public init(
         makeEngine: @escaping () -> MicEngine,
         now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        after: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, work in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        },
         watchdog: CaptureWatchdog = CaptureWatchdog(),
         watchdogInterval: TimeInterval? = 0.25
     ) {
         self.makeEngine = makeEngine
         self.now = now
+        self.after = after
         self.watchdog = watchdog
         self.watchdogInterval = watchdogInterval
         engine = makeEngine()
@@ -214,6 +248,9 @@ public final class AudioCapture {
 
     public func start() throws {
         guard !isRecording else { return }
+        // The input just changed and hasn't settled: the engine we have is for the old one. Make the new one now.
+        if !pendingChanges.isEmpty { applyInputChange() }
+        let afterInputChange = engineFromInputChange
         do {
             try prepareEngine()
         } catch {
@@ -227,8 +264,9 @@ public final class AudioCapture {
             samples.removeAll(keepingCapacity: true)
             capturing = true
             waitingFirstBufferSince = now()
-            watchdog.start(at: now())
+            watchdog.start(at: now(), afterInputChange: afterInputChange)
         }
+        engineFromInputChange = false
         stallRestarts = 0
         do {
             try engine.start()
@@ -259,9 +297,25 @@ public final class AudioCapture {
     }
 
     /// The input changed: the engine's configuration-change notification, or the default input device changed.
+    /// The new engine comes once the input settles (`inputSettle`), one for a burst of changes.
     public func inputChanged(_ why: String) {
-        onLog?("input changed (\(why))\(isRecording ? " mid-recording" : ""): new engine")
+        inputChanges += 1
+        pendingChanges.append(why)
+        let change = inputChanges
+        after(Self.inputSettle) { [weak self] in
+            guard let self, change == self.inputChanges, !self.pendingChanges.isEmpty else { return }
+            self.applyInputChange()
+        }
+    }
+
+    private func applyInputChange() {
+        let whys = pendingChanges
+        pendingChanges.removeAll()
+        inputChanges += 1 // a change still waiting to settle has nothing left to do
+        let what = whys.count == 1 ? whys[0] : "\(whys.count) changes: \(whys.joined(separator: ", "))"
+        onLog?("input changed (\(what))\(isRecording ? " mid-recording" : ""): new engine")
         replaceEngine()
+        engineFromInputChange = true
         guard isRecording else { return warmUp() }
         restartMidRecording(failing: "device_changed")
     }
@@ -269,7 +323,8 @@ public final class AudioCapture {
     /// While recording: no audio for a while means the engine died. Replace it; if the new one gives nothing either,
     /// give up with `no_audio`.
     public func checkStall() {
-        guard isRecording else { return }
+        // A new engine is on its way for the new input: the old one going quiet meanwhile is expected.
+        guard isRecording, pendingChanges.isEmpty else { return }
         let (stalled, hadAudio) = samplesQueue.sync { (watchdog.stalled(at: now()), watchdog.hasAudio) }
         guard stalled else { return }
         // Audio came since the last (re)start: this stall is a new one, not the new engine failing too.
@@ -305,9 +360,11 @@ public final class AudioCapture {
 
     /// A new engine mid-recording: keep what was captured and go on with the new device.
     private func restartMidRecording(failing code: String) {
+        let afterInputChange = engineFromInputChange
+        engineFromInputChange = false
         do {
             try prepareEngine()
-            samplesQueue.sync { watchdog.start(at: now()) }
+            samplesQueue.sync { watchdog.start(at: now(), afterInputChange: afterInputChange) }
             try engine.start()
         } catch {
             onLog?("the new engine didn't start: \(error)")

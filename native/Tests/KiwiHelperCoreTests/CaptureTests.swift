@@ -75,6 +75,9 @@ private final class Rig {
     var kept: [[Float]] = []
     var nextFailsStart = false
     var nextFailsPrepare = false
+    var log: [String] = []
+    /// What `AudioCapture` scheduled with `after`, run by `advance` on the test's clock.
+    private var timers: [(at: TimeInterval, work: () -> Void)] = []
     lazy var capture: AudioCapture = {
         let c = AudioCapture(
             makeEngine: { [unowned self] in
@@ -85,8 +88,10 @@ private final class Rig {
                 return e
             },
             now: { [clock] in clock.t },
+            after: { [unowned self] delay, work in self.timers.append((self.clock.t + delay, work)) },
             watchdogInterval: nil
         )
+        c.onLog = { [unowned self] in self.log.append($0) }
         c.onLost = { [unowned self] code, samples in
             self.lost.append(code)
             self.kept.append(samples)
@@ -94,6 +99,20 @@ private final class Rig {
         return c
     }()
     var engine: FakeEngine { engines.last! }
+
+    /// Moves the clock on, running what came due on the way, in order.
+    func advance(_ seconds: TimeInterval) {
+        let end = clock.t + seconds
+        while let next = timers.indices.filter({ timers[$0].at <= end }).min(by: { timers[$0].at < timers[$1].at }) {
+            let timer = timers.remove(at: next)
+            clock.t = max(clock.t, timer.at)
+            timer.work()
+        }
+        clock.t = end
+    }
+
+    /// Lets an input change settle into a new engine.
+    func settle() { advance(AudioCapture.inputSettle) }
 }
 
 final class CaptureTests: XCTestCase {
@@ -160,6 +179,7 @@ final class CaptureTests: XCTestCase {
         first.feed(rate: 48_000, seconds: 0.5, clock: rig.clock)
         // The headset connects: AVAudioEngine says its configuration changed.
         first.onConfigurationChange?()
+        rig.settle()
         XCTAssertTrue(first.discarded)
         XCTAssertEqual(rig.engines.count, 2)
         XCTAssertTrue(rig.engine.started)
@@ -177,9 +197,11 @@ final class CaptureTests: XCTestCase {
         try rig.capture.start()
         rig.engine.feed(rate: 48_000, seconds: 0.2, clock: rig.clock)
         rig.capture.inputChanged("default input device")
+        rig.settle()
         XCTAssertEqual(rig.engines.count, 2)
         // The old engine no longer reports changes: its late notification doesn't make a third one.
         rig.engines[0].onConfigurationChange?()
+        rig.settle()
         XCTAssertEqual(rig.engines.count, 2)
         rig.engine.feed(rate: 24_000, seconds: 0.3, clock: rig.clock)
         XCTAssertEqual(Double(rig.capture.stop().count), 8_000, accuracy: 300)
@@ -298,6 +320,7 @@ final class CaptureTests: XCTestCase {
         rig.engine.feed(rate: 48_000, seconds: 0.5, clock: rig.clock)
         rig.nextFailsStart = true
         rig.capture.inputChanged("default input device")
+        rig.settle()
         XCTAssertEqual(rig.lost, ["device_changed"])
         XCTAssertEqual(rig.kept.count, 1)
         XCTAssertEqual(Double(rig.kept.first?.count ?? 0), 8_000, accuracy: 16)
@@ -310,11 +333,13 @@ final class CaptureTests: XCTestCase {
         rig.capture.warmUp()
         XCTAssertTrue(rig.engine.isPrepared)
         rig.capture.inputChanged("default input device")
+        rig.settle()
         XCTAssertEqual(rig.engines.count, 2)
         XCTAssertTrue(rig.engine.isPrepared)
         // Before the mic is granted, touching the input can bring up the system prompt.
         rig.capture.mayWarmUp = { false }
         rig.capture.inputChanged("default input device")
+        rig.settle()
         XCTAssertEqual(rig.engines.count, 3)
         XCTAssertFalse(rig.engine.isPrepared)
     }
@@ -343,6 +368,12 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(w.stalled(at: 2.1))
         w.stop()
         XCTAssertFalse(w.stalled(at: 10))
+        // The first start of an engine for a new input gets longer; the next start is back to 1.5 s (T1248).
+        w.start(at: 20, afterInputChange: true)
+        XCTAssertFalse(w.stalled(at: 23.4))
+        XCTAssertTrue(w.stalled(at: 23.6))
+        w.start(at: 30)
+        XCTAssertTrue(w.stalled(at: 31.6))
     }
 
     /// T985: how much of the start of a dictation the engine misses is measured on every recording.
@@ -363,5 +394,134 @@ final class CaptureTests: XCTestCase {
         _ = rig.capture.stop()
         XCTAssertEqual(delays.count, 2)
         XCTAssertEqual(delays[1], 0, accuracy: 0.001)
+    }
+
+    // MARK: T1248: Bluetooth headset connecting (A2DP → HFP)
+
+    /// The headset switches profile while connecting: the default input and the engine's configuration change two or
+    /// more times in a row. One new engine at the end, not one per change.
+    func testABurstOfInputChangesMidRecordingMakesOneEngine() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 48_000, seconds: 0.5, clock: rig.clock)
+        let first = rig.engine
+        rig.capture.inputChanged("default input device")
+        rig.advance(0.1)
+        first.onConfigurationChange?()
+        rig.advance(0.25)
+        rig.capture.inputChanged("default input device")
+        rig.advance(0.3)
+        first.onConfigurationChange?()
+        rig.advance(AudioCapture.inputSettle - 0.01)
+        XCTAssertEqual(rig.engines.count, 1, "still settling")
+        rig.advance(0.02)
+        XCTAssertEqual(rig.engines.count, 2, "one engine for the burst")
+        XCTAssertTrue(first.discarded)
+        XCTAssertTrue(rig.engine.started)
+        XCTAssertEqual(rig.log.filter { $0.contains("new engine") }.count, 1)
+        XCTAssertTrue(rig.log.last?.contains("4 changes") ?? false, rig.log.last ?? "")
+        rig.advance(5)
+        XCTAssertEqual(rig.engines.count, 2, "nothing else was left scheduled")
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        XCTAssertEqual(Double(rig.capture.stop().count), 16_000, accuracy: 300)
+        XCTAssertEqual(rig.lost, [])
+    }
+
+    func testABurstWhileIdleMakesOneEngineReadyForTheNextRecording() throws {
+        let rig = Rig()
+        rig.capture.warmUp()
+        for _ in 0..<3 {
+            rig.capture.inputChanged("default input device")
+            rig.advance(0.2)
+        }
+        rig.settle()
+        XCTAssertEqual(rig.engines.count, 2)
+        XCTAssertTrue(rig.engine.isPrepared)
+        XCTAssertFalse(rig.engine.started, "no mic indicator while idle")
+    }
+
+    /// The person starts dictating before the input settled: the engine for the new input is made right away instead
+    /// of recording from the old one, and the change waiting to settle doesn't replace it again.
+    func testStartingWhileTheInputSettlesUsesTheNewInput() throws {
+        let rig = Rig()
+        rig.capture.warmUp()
+        rig.capture.inputChanged("default input device")
+        rig.advance(0.1)
+        try rig.capture.start()
+        XCTAssertEqual(rig.engines.count, 2)
+        XCTAssertTrue(rig.engines[0].discarded)
+        rig.settle()
+        XCTAssertEqual(rig.engines.count, 2)
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        XCTAssertEqual(rig.capture.stop().count, 8_000)
+    }
+
+    /// The old engine going quiet while the input settles isn't a stall: the new engine is already on its way.
+    func testNoStallWhileTheInputSettles() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 48_000, seconds: 0.5, clock: rig.clock)
+        rig.clock.t += 0.9
+        rig.capture.inputChanged("default input device")
+        rig.advance(0.3)
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.engines.count, 1)
+        rig.settle()
+        XCTAssertEqual(rig.engines.count, 2)
+        XCTAssertEqual(rig.lost, [])
+    }
+
+    /// HFP can take ~2.5 s for the first buffer after the switch: no "Sem áudio do microfone" for that.
+    func testASlowFirstBufferAfterTheSwitchIsntAStall() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 48_000, seconds: 0.5, clock: rig.clock)
+        rig.engines[0].onConfigurationChange?()
+        rig.settle()
+        XCTAssertEqual(rig.engines.count, 2)
+        rig.clock.t += 2.6
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.engines.count, 2, "2.6 s for the first HFP buffer is fine")
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        // Once audio comes, the gap is back to 1 s.
+        rig.clock.t += 1.1
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.engines.count, 3)
+        XCTAssertEqual(rig.lost, [])
+    }
+
+    /// Connecting while idle: the first recording on the new headset gets the longer first buffer too, the next one
+    /// doesn't.
+    func testTheFirstRecordingOnTheNewInputGetsTheLongerFirstBuffer() throws {
+        let rig = Rig()
+        rig.capture.warmUp()
+        rig.capture.inputChanged("default input device")
+        rig.settle()
+        try rig.capture.start()
+        rig.clock.t += 2.6
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.engines.count, 2)
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        _ = rig.capture.stop()
+        try rig.capture.start()
+        rig.clock.t += 1.6
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.engines.count, 3, "a later recording is back to 1.5 s")
+    }
+
+    /// The longer wait is for the first buffer only, and a headset that never gives audio still ends the recording.
+    func testANewInputThatNeverGivesAudioStillEndsTheRecording() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 48_000, seconds: 0.5, clock: rig.clock)
+        rig.capture.inputChanged("default input device")
+        rig.settle()
+        rig.clock.t += 3.6
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.engines.count, 3, "no first buffer in 3.5 s: another new engine")
+        rig.clock.t += 1.6
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.lost, ["no_audio"])
+        XCTAssertEqual(Double(rig.kept.first?.count ?? 0), 8_000, accuracy: 16)
     }
 }
