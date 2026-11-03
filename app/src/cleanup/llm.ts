@@ -25,7 +25,9 @@ const contentWords = (s: string) =>
 export function rejectReason(input: string, output: string, dictionary: CompiledDictionary): string | null {
   const out = output.trim();
   if (!out) return "empty";
-  if (ASSISTANT_PREAMBLE.test(out)) return "answered";
+  // Só conta se o ditado não começa do mesmo jeito: "Segue o link…", "Certo, pode mandar…" são ditados (#309).
+  const preamble = ASSISTANT_PREAMBLE.exec(out)?.[0].toLocaleLowerCase();
+  if (preamble && ASSISTANT_PREAMBLE.exec(input.trim())?.[0].toLocaleLowerCase() !== preamble) return "answered";
   const ratio = out.length / Math.max(1, input.length);
   if (ratio > 1.4) return "grew";
   if (ratio < 0.5) return "shrank";

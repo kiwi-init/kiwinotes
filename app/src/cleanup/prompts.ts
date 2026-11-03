@@ -1,9 +1,9 @@
-// Portado de VoiceInk/VoiceInk/Core/Enhancement/AIPrompts.swift @ 19546d2 (o modelo do prompt).
+// Portado de VoiceInk/VoiceInk/Core/Enhancement/AIPrompts.swift @ 19546d2 (GPL-3.0). Mudanças: ver abaixo.
 // Também, no mesmo commit:
 // - o prompt "Default" de VoiceInk/VoiceInk/Features/Enhancement/Templates/PromptTemplates.swift;
 // - o bloco de vocabulário de VoiceInk/VoiceInk/Features/Dictionary/Workflows/RecordingVocabulary.swift (`enhancementSection`);
 // - o `<TRANSCRIPT>` da mensagem do usuário, de VoiceInk/VoiceInk/Features/Enhancement/Workflows/AIEnhancementService.swift.
-// Os textos estão como no VoiceInk. O que é do Kiwi é a linha de tom (`TONE_RULE`) e o limite de termos.
+// Mudanças: os textos estão como no VoiceInk. O que é do Kiwi é a linha de tom (`TONE_RULE`) e o limite de termos.
 // Os blocos de contexto (texto selecionado, clipboard, janela) não vieram: o Kiwi não captura nada disso.
 
 import type { Tone } from "./types.ts";

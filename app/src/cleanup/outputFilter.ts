@@ -1,4 +1,4 @@
-// Portado de VoiceInk/VoiceInk/Core/Enhancement/AIEnhancementOutputFilter.swift @ 19546d2.
+// Portado de VoiceInk/VoiceInk/Core/Enhancement/AIEnhancementOutputFilter.swift @ 19546d2 (GPL-3.0). Mudanças: nenhuma na lógica; `(?s)` virou `[\s\S]`.
 
 const REASONING_BLOCKS = [
   /<thinking>([\s\S]*?)<\/thinking>/g,

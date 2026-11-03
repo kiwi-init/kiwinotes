@@ -201,6 +201,12 @@ describe("guarda da saída do LLM", () => {
   test("palavras novas (inventou)", () => {
     expect(rejectReason(input, "O DICOM store perdeu dados de pacientes ontem na Healthcare API.", dict)).toBe("novel_words");
   });
+  test("ditado que começa como resposta de assistente não é resposta (#309)", () => {
+    for (const t of ["Segue o link da reunião de amanhã.", "Certo, pode mandar o relatório hoje.", "Sure, I can review it after lunch."]) {
+      expect(rejectReason(t, t, dict)).toBeNull();
+    }
+    expect(rejectReason("Qual o horário da reunião?", "Claro! A reunião é às 10h.", dict)).toBe("answered");
+  });
   test("vazio", () => {
     expect(rejectReason(input, "  ", dict)).toBe("empty");
   });
