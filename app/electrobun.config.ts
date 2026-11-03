@@ -33,6 +33,8 @@ export default {
     // NSMicrophoneUsageDescription no Info.plist (o Electrobun não tem campo para isso).
     postBuild: "./scripts/info-plist.ts",
     postWrap: "./scripts/info-plist.ts",
+    // Falha o build se algum .app que sai dele (build/, artifacts/, .dmg) não passa no codesign --verify --strict (T762).
+    postPackage: "./scripts/verify-signature.ts",
   },
   runtime: {
     // A menu bar app: closing the last window keeps it running.
