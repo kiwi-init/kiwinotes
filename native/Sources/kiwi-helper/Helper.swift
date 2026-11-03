@@ -101,9 +101,9 @@ final class Helper {
             do {
                 try await stt.warmUp()
                 let ms = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
-                DispatchQueue.main.async { self?.setSTT(.ready, ["loadMs": ms]) }
+                await MainActor.run { self?.setSTT(.ready, ["loadMs": ms]) }
             } catch {
-                DispatchQueue.main.async { self?.setSTT(.unavailable, ["error": Transcriber.Failure.modelUnavailable.rawValue]) }
+                await MainActor.run { self?.setSTT(.unavailable, ["error": Transcriber.Failure.modelUnavailable.rawValue]) }
             }
         }
     }
@@ -238,12 +238,12 @@ final class Helper {
                 if let audioPath { fields["audioPath"] = audioPath }
                 self?.emit("transcript.final", fields)
                 // The model loaded now, after a failed start (offline on the first run, #383).
-                DispatchQueue.main.async { self?.setSTT(.ready) }
+                await MainActor.run { self?.setSTT(.ready) }
             } catch {
                 let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
                 self?.emit("transcript.error", ["error": code])
                 if code == Transcriber.Failure.modelUnavailable.rawValue {
-                    DispatchQueue.main.async { self?.setSTT(.unavailable, ["error": code]) }
+                    await MainActor.run { self?.setSTT(.unavailable, ["error": code]) }
                 }
             }
         }
@@ -309,6 +309,15 @@ final class Helper {
             reply(id, ok: true)
         case "insert.text":
             guard let text = message.string("text") else { return reply(id, ok: false, error: "invalid_value") }
+            if message.fields["dryRun"] as? Bool == true {
+                // Agents' tests (#490): nothing touches the person's clipboard or keyboard. The text only reaches the
+                // log in a debug run; otherwise its length, so no real dictation ends up in a log.
+                let shown = debugCommands ? "\"\(text)\"" : "\(text.count) chars"
+                emit("log", ["level": "info", "message": "insert.text dryRun: \(shown)"])
+                var data: [String: Any] = ["pasted": false, "restored": false, "dryRun": true]
+                if let app = FrontApp.current { data["app"] = app.bundleId }
+                return reply(id, ok: true, data)
+            }
             let restore = (message.fields["restoreClipboard"] as? Bool) ?? true
             inserter.insert(text, restoreClipboard: restore) { [weak self] outcome in
                 var data: [String: Any] = ["pasted": outcome.pasted, "restored": outcome.restored]
