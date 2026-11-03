@@ -4,6 +4,7 @@
 // Quem está de pé fica em <dados>/instance.json (pid e o .app de onde subiu). Ao abrir:
 // - ninguém de pé (sem arquivo, ou o pid morreu ou não é mais um Kiwi Notes): assume;
 // - o mesmo .app já de pé: este sai calado, sem tocar no socket nem criar outro ícone na barra;
+// - um registro que não é de um .app (um bun solto): conta como velho e é sobrescrito, sem matar nada (T1041);
 // - outro .app de pé (um build velho): este assume. Quem abre um build novo quer o build novo. O velho recebe SIGTERM,
 //   sai limpo (o handler do SIGTERM em index.ts para o helper e solta o socket) e este espera ele sumir antes de subir.
 // - Com `KIWI_DEBUG=1` (um agente no `bun dev`), nunca pede para outro sair: sai ele, sem tocar no app da pessoa.
@@ -35,6 +36,9 @@ export function decideInstance(
 ): InstanceDecision {
   if (!running || running.pid === self.pid || !alive(running)) return { action: "start" };
   if (running.app === self.app || !mayReplace) return { action: "exit", reason: "already_running" };
+  // Só um .app leva SIGTERM. Um registro de bun solto (`bun dev`, `/opt/homebrew/…/bun`) é tratado como velho e
+  // sobrescrito: um pid reusado por outro bun (o daemon do kiwi, um `bun test`) passaria no `ps` e morreria (T1041).
+  if (!running.app.endsWith(".app")) return { action: "start" };
   return { action: "replace", pid: running.pid, app: running.app };
 }
 

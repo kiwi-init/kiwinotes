@@ -24,6 +24,13 @@ describe("decideInstance (T992)", () => {
     expect(decideInstance(OLD, NEW, () => true)).toEqual({ action: "replace", pid: 100, app: OLD.app });
   });
 
+  test("a record that isn't a .app (a loose bun) is never killed: it's overwritten (T1041)", () => {
+    // A reused pid of another bun process (the kiwi daemon, a `bun test`) would pass the `ps` check and get SIGTERM.
+    for (const app of ["/opt/homebrew/Cellar/bun/1.3.0/bin/bun", "/Users/x/.bun/bin/bun", "/Applications/Kiwi Notes.app.bak/bun"]) {
+      expect(decideInstance({ pid: 100, app }, NEW, () => true)).toEqual({ action: "start" });
+    }
+  });
+
   test("with KIWI_DEBUG=1 it never takes another one down", () => {
     expect(decideInstance(OLD, NEW, () => true, false)).toEqual({ action: "exit", reason: "already_running" });
   });
