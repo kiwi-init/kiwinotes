@@ -8,6 +8,7 @@ final class Helper {
     private let connection: SocketConnection
     private let dumpDirectory: URL?
     private let audio = AudioCapture()
+    private let overlay = Overlay()
     private var gesture = HotkeyGesture()
     private var tap: HotkeyTap!
     private var tickTimer: DispatchWorkItem?
@@ -23,7 +24,10 @@ final class Helper {
         audio.onLevel = { [weak self] level in
             // Level queue: send straight away, the write queue serializes it.
             self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
+            self?.overlay.push(level: level)
         }
+        overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
+        overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
     }
 
     func run() {
@@ -90,6 +94,19 @@ final class Helper {
         }
     }
 
+    /// The pill's ✕ (cancel) or ✓ (finish, like letting go of the key).
+    private func endFromOverlay(finish: Bool) {
+        guard audio.isRecording else { return }
+        let mode = gesture.endedFromOverlay()
+        tickTimer?.cancel()
+        if finish {
+            if mode == .toggle { emit("hotkey.toggle", ["on": false]) }
+            stopRecording(reason: "overlay", mode: mode.rawValue)
+        } else {
+            cancelRecording(reason: "overlay")
+        }
+    }
+
     private func scheduleTick() {
         tickTimer?.cancel()
         guard let deadline = gesture.deadline else { return }
@@ -114,11 +131,15 @@ final class Helper {
             gesture.reset()
             // A stable code for the app; AVAudioEngine's own errors are long sentences.
             let code = (error as? AudioCaptureError)?.description ?? "engine_start_failed"
-            emit("record.error", ["reason": reason, "error": code, "microphone": Permission.microphone.status])
+            let microphone = Permission.microphone.status
+            emit("record.error", ["reason": reason, "error": code, "microphone": microphone])
+            let shown = microphone == "granted" ? code : microphone == "undetermined" ? "microphone_undetermined" : "microphone_denied"
+            overlay.set(.error, message: OverlayText.error(shown))
             return code
         }
         recordingStartedAt = ProcessInfo.processInfo.systemUptime
         emit("record.started", ["reason": reason])
+        overlay.set(.listening)
         // Sound before the engine is up is lost (the first syllable); this shows how long that is.
         let startMs = Int(((recordingStartedAt! - t0) * 1000).rounded())
         emit("log", ["level": "debug", "message": "mic engine started in \(startMs) ms"])
@@ -137,6 +158,9 @@ final class Helper {
         if let path = dump(samples) { fields["audioPath"] = path }
         recordingStartedAt = nil
         emit("record.stopped", fields)
+        // The app moves it on with overlay.state done|error. With nothing recorded (the mic prompt was up,
+        // or the engine never delivered) there is nothing to transcribe, so no `done` would come: hide now.
+        overlay.set(samples.isEmpty ? .hidden : .processing)
         // T51 hooks the STT in here and emits transcript.final.
     }
 
@@ -145,6 +169,7 @@ final class Helper {
         _ = audio.stop()
         recordingStartedAt = nil
         emit("record.cancelled", ["reason": reason])
+        overlay.set(.hidden)
     }
 
     private func dump(_ samples: [Float]) -> String? {
@@ -191,7 +216,13 @@ final class Helper {
             }
         case "llm.complete", "llm.prewarm":
             llm.handle(message) { [weak self] ok, error, fields in self?.reply(id, ok: ok, error: error, fields) }
-        case "overlay.state", "insert.text", "notify":
+        case "overlay.state":
+            guard let name = message.string("state"), let phase = OverlayPhase(rawValue: name) else {
+                return reply(id, ok: false, error: "unknown_state")
+            }
+            overlay.set(phase, message: message.string("message"))
+            reply(id, ok: true)
+        case "insert.text", "notify":
             reply(id, ok: false, error: "not_implemented")
         default:
             reply(id, ok: false, error: "unknown_type")
