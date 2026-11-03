@@ -1,0 +1,17 @@
+Kiwi Notes
+Copyright (C) 2026 Davi Vicente
+
+Este programa é software livre, distribuído sob a GNU General Public License
+versão 3 (veja LICENSE).
+
+Partes do sidecar (native/) são portadas do VoiceInk:
+  https://github.com/Beingpax/VoiceInk
+  commit 19546d2a7f85578f49efb538eb888b37ff2f8f8c
+  Copyright (C) os autores do VoiceInk, GPL-3.0.
+
+Cada arquivo portado diz no topo de onde veio (caminho no VoiceInk e commit)
+e o que mudou. Ficaram de fora os provedores de nuvem, o Sparkle, o
+RemoteConfig, os anúncios e o licenciamento pago.
+
+Dependências com licença própria (Apache-2.0, MIT etc.) seguem as suas
+licenças; veja o Package.resolved de native/ e o bun.lock de app/.
