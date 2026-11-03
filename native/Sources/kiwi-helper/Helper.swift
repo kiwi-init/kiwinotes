@@ -16,6 +16,9 @@ final class Helper {
     private var lastPermissions: [String: String] = [:]
     private let llm = LLM()
     private var lastLlm = ""
+    private let stt = Transcriber()
+    /// The previous transcription: each one waits for it, so transcripts come out in recording order.
+    private var sttChain: Task<Void, Never>?
 
     init(connection: SocketConnection, dumpDirectory: URL?) {
         self.connection = connection
@@ -68,6 +71,27 @@ final class Helper {
         connection.start()
         if Permission.microphone.status == "granted" { audio.warmUp() }
         schedulePermissionPoll()
+        prepareSTT()
+    }
+
+    /// Loads the model while nobody is waiting for it (the first run downloads it), so the first dictation
+    /// only pays for the transcription.
+    private func prepareSTT() {
+        let started = ProcessInfo.processInfo.systemUptime
+        // The first load can take a minute (download, or CoreML compiling for the Neural Engine after a macOS
+        // update): the app shows "preparing" until `ready`.
+        emit("stt.status", ["state": "loading"])
+        let previous = sttChain
+        sttChain = Task { [stt, weak self] in
+            await previous?.value
+            do {
+                try await stt.warmUp()
+                let ms = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
+                self?.emit("stt.status", ["state": "ready", "loadMs": ms])
+            } catch {
+                self?.emit("stt.status", ["state": "unavailable", "error": Transcriber.Failure.modelUnavailable.rawValue])
+            }
+        }
     }
 
     // MARK: Hotkey
@@ -165,13 +189,39 @@ final class Helper {
             "durationMs": Int(Double(samples.count) / AudioCapture.sampleRate * 1000),
             "samples": samples.count,
         ]
-        if let path = dump(samples) { fields["audioPath"] = path }
+        let audioPath = dump(samples)
+        if let audioPath { fields["audioPath"] = audioPath }
         recordingStartedAt = nil
         emit("record.stopped", fields)
         // The app moves it on with overlay.state done|error. With nothing recorded (the mic prompt was up,
         // or the engine never delivered) there is nothing to transcribe, so no `done` would come: hide now.
         overlay.set(samples.isEmpty ? .hidden : .processing)
-        // T51 hooks the STT in here and emits transcript.final.
+        transcribe(samples, durationMs: fields["durationMs"] as! Int, audioPath: audioPath)
+    }
+
+    /// `transcript.final` for a finished recording, or `transcript.error`. `latencyMs` goes from the end of the
+    /// recording (the key let go) to the text, waiting behind an earlier transcription included.
+    private func transcribe(_ samples: [Float], durationMs: Int, audioPath: String?) {
+        let stoppedAt = ProcessInfo.processInfo.systemUptime
+        let previous = sttChain
+        sttChain = Task { [stt, weak self] in
+            await previous?.value
+            do {
+                let output = try await stt.transcribe(samples)
+                var fields: [String: Any] = [
+                    "text": output.text,
+                    "raw": output.raw,
+                    "lang": output.lang,
+                    "durationMs": durationMs,
+                    "latencyMs": Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000),
+                ]
+                if let audioPath { fields["audioPath"] = audioPath }
+                self?.emit("transcript.final", fields)
+            } catch {
+                let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
+                self?.emit("transcript.error", ["error": code])
+            }
+        }
     }
 
     private func cancelRecording(reason: String) {
@@ -244,6 +294,21 @@ final class Helper {
         // Check everything before changing anything: a bad value leaves the whole config as it was.
         let hold = message.double("holdThresholdMs"), doubleTap = message.double("doubleTapMs")
         if let error = Rules.timing(hold) ?? Rules.timing(doubleTap) { return error }
+        var language: TranscriptionLanguage?
+        if let name = message.string("language") {
+            guard let value = TranscriptionLanguage(rawValue: name) else { return "invalid_value" }
+            language = value
+        }
+        var dictionary: [DictionaryEntry]?
+        if message.fields["dictionary"] != nil {
+            guard let entries = DictionaryEntry.parse(message.fields["dictionary"]) else { return "invalid_value" }
+            dictionary = entries
+        }
+        var vad: Bool?
+        if let value = message.fields["vad"] {
+            guard let flag = value as? Bool else { return "invalid_value" }
+            vad = flag
+        }
         var requested: HotkeyKey?
         if let name = message.string("hotkey") {
             guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
@@ -258,6 +323,18 @@ final class Helper {
         }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
+        if language != nil || dictionary != nil || vad != nil {
+            let prepared = dictionary.map(TranscriptDictionary.init)
+            // In the same chain as the transcriptions: a recording that ends after this command uses it.
+            let previous = sttChain
+            sttChain = Task { [stt] in
+                await previous?.value
+                await stt.configure(language: language, dictionary: prepared, vad: vad)
+                // A new dictionary needs a new CTC session, and the VAD its model: load them now, not on the
+                // next dictation.
+                if prepared != nil || vad == true { try? await stt.warmUp() }
+            }
+        }
         return nil
     }
 

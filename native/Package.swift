@@ -8,13 +8,18 @@ let package = Package(
         .executable(name: "kiwi-helper", targets: ["kiwi-helper"]),
         .executable(name: "kiwi-ipc-probe", targets: ["kiwi-ipc-probe"]),
     ],
+    dependencies: [
+        // Parakeet on the Neural Engine (ADR 0003, ADR 0004). A fixed release, not VoiceInk's `main`.
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2"),
+    ],
     targets: [
-        // Pure logic: IPC framing, hotkey gestures, levels, WAV. Everything here is covered by `swift test`.
+        // Pure logic: IPC framing, hotkey gestures, levels, WAV, the transcript's post-processing.
+        // Everything here is covered by `swift test`.
         .target(name: "KiwiHelperCore"),
         // The sidecar the Bun app starts with `--socket <path>`.
         .executableTarget(
             name: "kiwi-helper",
-            dependencies: ["KiwiHelperCore"],
+            dependencies: ["KiwiHelperCore", .product(name: "FluidAudio", package: "FluidAudio")],
             exclude: ["Info.plist"],
             linkerSettings: [
                 // Embeds Info.plist (NSMicrophoneUsageDescription) so macOS can ask for the mic.

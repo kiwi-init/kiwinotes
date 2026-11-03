@@ -1,14 +1,26 @@
 # native: the Swift helper (sidecar)
 
-`kiwi-helper` handles the parts of dictation that need macOS APIs: the global hotkey, the microphone and the permissions. Later tasks add speech-to-text (T51), text insertion (T55), the overlay and notifications. The Bun app listens on a unix socket and starts the helper with `--socket <path>`. They talk NDJSON v1; the contract is in `docs/adr/0001-ipc.md` and `app/src/shared/ipc.ts`.
+`kiwi-helper` handles the parts of dictation that need macOS APIs: the global hotkey, the microphone and the permissions. It also turns each recording into text (T256). Later tasks add text insertion (T55), the overlay and notifications. The Bun app listens on a unix socket and starts the helper with `--socket <path>`. They talk NDJSON v1; the contract is in `docs/adr/0001-ipc.md` and `app/src/shared/ipc.ts`.
 
 ```sh
 swift build              # .build/debug/kiwi-helper and kiwi-ipc-probe
 swift test               # pure logic: gestures, IPC framing, socket, levels, WAV
 swift run kiwi-ipc-probe # plays the app: listens, starts the helper, prints what arrives
+swift run kiwi-helper --transcribe a.wav b.wav --dictionary terms.txt   # the STT on files, one JSON line each
 ```
 
 The probe prints each line after the ms since it started, so you can read latencies off it (`hotkey.down` → first `audio.level`). In the probe, type commands as single lines, for example `{"type":"record.start","id":"1"}`. Pass `-- --dump-wav ~/kiwi-dumps` to also save each recording as a 16 kHz WAV. That folder must be outside the repo, because audio is never committed.
+
+## Speech to text (T256, ADR 0003 and 0004)
+The local engine from VoiceInk (`19546d2`), ported with the origin at the top of each file:
+1. **Model:** Parakeet TDT 0.6B Ultra through FluidAudio 0.18.2 on the Neural Engine. The first start downloads it from Hugging Face (~600 MB). That download is the only network access; audio and text never leave the Mac. At start the helper loads it and runs one inference, so the first dictation doesn't pay for it; `stt.status` goes `loading` → `ready` (the first load can take a minute while CoreML compiles the model).
+2. **Optional VAD** (`config.set {vad: true}`, Silero, threshold 0.7): only speech goes to the model, and audio without speech gives `text: ""`.
+3. **Language hint** (`config.set {language}`): passed to Parakeet as VoiceInk does. T51 measured no change for PT and EN (it filters by script).
+4. **CTC vocabulary boosting: off.** It swapped real words for dictionary terms ("cluster de homologação" → "DICOM", review #335). With a guard that only lets through changes that sound like the term (`VocabularyRescoreGuard`), it gained 0.1 point of WER over step 5 alone on the T51 clips, for 150–250 ms more per sentence. `--transcribe … --ctc` still measures it.
+5. **VoiceInk's post-processing, in its order:** `TranscriptionOutputFilter` (`[noise]`, `(laughs)`, tags) → `PhoneticVocabularyMatcher` (the dictionary's spellings: "pulo recueste" → "pull request") → word replacements (the dictionary's `aliases`).
+6. **`transcript.final {text, raw, lang, durationMs, latencyMs}`:** one per `record.stopped`, in order. `lang` comes from `NLLanguageRecognizer` (`pt`, `en` or `mix`). If the model can't load, the event is `transcript.error {error}`.
+
+On the T51 clips, a short sentence takes ~80 to 150 ms from the end of the recording to the text, with the dictionary.
 
 ## Hotkey
 - **Hold** the key to talk (push-to-talk). **Double tap** it to lock recording on, and tap again to stop.
@@ -18,10 +30,10 @@ The probe prints each line after the ms since it started, so you can read latenc
 - For Fn: set **System Settings → Keyboard → "Press 🌐 key to" → Do Nothing**, otherwise macOS opens the emoji picker or its own dictation.
 
 ## Events (helper → app)
-`ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}` (also `device_changed`; may follow `record.started`, which goes out before the mic is up), `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `permissions.changed`, `log`.
+`ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}` (also `device_changed`; may follow `record.started`, which goes out before the mic is up), `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `transcript.final {text, raw, lang, durationMs, latencyMs, audioPath?}`, `transcript.error {error}`, `stt.status {state, loadMs?}`, `permissions.changed`, `log`.
 
 ## Commands (app → helper)
-`ping`, `config.set`, `record.start`, `record.stop`, `permissions.request {permission}`, `llm.prewarm {system}` and `llm.complete {system, prompt, maxTokens?, temperature?, timeoutMs?}` (Apple Foundation Models, on-device only, fresh session per call; `ready` says `llm: {available, reason?}`). `overlay.state {state, message?}` drives the dictation pill (ADR 0005); its ✕ and ✓ end a recording with `reason: "overlay"`. `kiwi-helper --overlay-snapshot <dir>` renders it in each state as PNGs. `insert.text` and `notify` return `not_implemented` until their tasks land.
+`ping`, `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, language?, dictionary?, vad?}`, `record.start`, `record.stop`, `permissions.request {permission}`, `llm.prewarm {system}` and `llm.complete {system, prompt, maxTokens?, temperature?, timeoutMs?}` (Apple Foundation Models, on-device only, fresh session per call; `ready` says `llm: {available, reason?}`). `overlay.state {state, message?}` drives the dictation pill (ADR 0005); its ✕ and ✓ end a recording with `reason: "overlay"`. `kiwi-helper --overlay-snapshot <dir>` renders it in each state as PNGs. `insert.text` and `notify` return `not_implemented` until their tasks land.
 
 ## Permissions
 | Permission | Why | Checked with |
