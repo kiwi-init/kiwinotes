@@ -410,6 +410,44 @@ await step("rascunho órfão: 'Descartar' apaga sem criar nada", async () => {
   if (await page.evaluate(() => (window as any).__kiwiNotesMock.notes.has("Caixa de entrada/Sumida.md"))) throw new Error("criou nota");
 });
 
+// T1584: comentário do Obsidian e legenda do ditado.
+await step("%%comentário%% some fora da linha do cursor e aparece apagado nela; bloco some inteiro", async () => {
+  const body = "Texto visível %%segredo de uma linha%% depois.\n\n%%\nbloco escondido\nem duas linhas\n%%\nFim.\n\nCódigo: `a %%fica%% b`\n";
+  await page.goto(`${URL}?note=${encodeURIComponent("Pessoas/Ana.md")}`);
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
+  // Muda "fora" com a nota aberta e sem nada pendente: ela recarrega sozinha.
+  await page.evaluate((b) => (window as any).__kiwiNotesMock.editOutside("Pessoas/Ana.md", b), body);
+  await page.waitForSelector(".cm-line >> text=Fim.");
+  const shown = await editorText();
+  for (const hidden of ["segredo", "bloco escondido", "em duas linhas"]) if (shown.includes(hidden)) throw new Error(`apareceu: ${hidden}`);
+  if (!shown.includes("Texto visível") || !shown.includes("depois.")) throw new Error(shown);
+  if (!shown.includes("a %%fica%% b")) throw new Error("comentário dentro de código sumiu");
+  await page.locator(".cm-line", { hasText: "Texto visível" }).click({ position: { x: 4, y: 8 } });
+  await page.waitForSelector(".cm-comment >> text=segredo de uma linha");
+  expectEq(await content("Pessoas/Ana.md"), body);
+});
+
+await step("a legenda do ditado fica pequena e verde, sem mostrar o id", async () => {
+  const body = "Ficou decidido começar pela tomografia.\n*🎙 ditado às 14:30* %%dictation:2026-11-03T17:30:12.345Z-ab12%%\n";
+  await page.goto(`${URL}?note=${encodeURIComponent("Pessoas/Ana.md")}`);
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
+  // Muda "fora" com a nota aberta e sem nada pendente: ela recarrega sozinha.
+  await page.evaluate((b) => (window as any).__kiwiNotesMock.editOutside("Pessoas/Ana.md", b), body);
+  await page.waitForSelector(".cm-said");
+  const said = await page.$eval(".cm-said", (e) => ({ text: e.textContent, size: getComputedStyle(e).fontSize, color: getComputedStyle(e).color }));
+  expectEq(said.text, "🎙 ditado às 14:30");
+  expectEq(said.size, "11px");
+  const expected = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--accent-text)";
+    document.body.append(probe);
+    const c = getComputedStyle(probe).color;
+    probe.remove();
+    return c;
+  });
+  expectEq(said.color, expected);
+});
+
 await step("⌘K cria nota nova quando não há título igual", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ideia nova");
