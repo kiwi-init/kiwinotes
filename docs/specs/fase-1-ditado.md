@@ -14,7 +14,7 @@
 1. **Atalho global.** Segurar uma tecla grava (push-to-talk) e duas batidas travam a gravação ligada (toggle). As duas teclas são configuráveis, e o padrão é Fn/🌐 ou ⌥ direito.
 2. **Overlay mínimo.** Uma pílula flutuante perto do cursor ou da notch, com a onda de áudio animada no estilo do Channels. Não rouba o foco.
 3. **Transcrição local em tempo real.** Com o motor do VoiceInk (Parakeet via FluidAudio, ADR 0004), latência curta depois de soltar a tecla (meta: menos de 1 s para frases curtas no M1 Pro). Português e inglês, misturados na mesma frase.
-4. **Limpeza do texto (o que faz o Wispr Flow ser bom).** Tira "é, hum, tipo", aplica as autocorreções faladas ("não, quer dizer…"), pontua, cria parágrafos e listas, e ajusta o tom ao app ativo (Slack/Teams mais casual, e-mail mais formal, terminal e IDE literal). Roda local: regras como caminho rápido, mais a IA local do VoiceInk (MLX) quando há folga (#171, ADR 0004), sem pagar a latência da nuvem a cada frase.
+4. **Limpeza do texto (o que faz o Wispr Flow ser bom).** Tira "é, hum, tipo", aplica as autocorreções faladas ("não, quer dizer…"), pontua, cria parágrafos e listas, e ajusta o tom ao app ativo (Slack/Teams mais casual, e-mail mais formal, terminal e IDE literal). Roda local: regras como caminho rápido, mais IA local quando há folga, com os prompts e o filtro do VoiceInk (#171, ADR 0004), sem pagar a latência da nuvem a cada frase.
 5. **Inserção.** Cola no app ativo e preserva o clipboard. Se não houver campo de texto, deixa no clipboard e avisa.
 6. **Dicionário pessoal e snippets.** Termos técnicos do trabalho (DICOM, PACS, Healthcare API, nomes de projetos e de pessoas) entram como vocabulário. Snippets por voz ("meu e-mail" → texto).
 7. **Histórico local.** Cada ditado (áudio opcional, transcrição crua e texto final) fica salvo, com busca. Ele é a semente das notas das fases seguintes.
@@ -23,7 +23,7 @@
 - **App:** Electrobun Livewire (fork da Kiwi; main em Bun mais WKWebView). UI em **React + TypeScript + Vite**, com animações no estilo do Channels: soft, smooth e com cara de macOS premium. Fica na barra de menu, com janela de configurações e de histórico.
 - **Nativo:** um helper em Swift (sidecar) para áudio, atalho global, overlay, inserção de texto (Accessibility) e notificações. O Bun conversa com ele por um socket local.
 - **STT:** o motor do VoiceInk: Parakeet via FluidAudio, com o pós-processamento dele. O modelo padrão sai do benchmark em PT-BR no M1 Pro (T51).
-- **Limpeza:** regras em TS, mais a IA local do VoiceInk (MLX) como opção.
+- **Limpeza:** regras em TS, mais IA local opcional: Foundation Models, ou um modelo aberto no motor MLX do VoiceInk (T270). O modelo VoiceInk-Refine não pode ser usado (licença dele).
 - **VoiceInk (GPL-3.0):** o sidecar porta o motor local dele (transcrever, colar e limpar), e o Kiwi passa a ser GPLv3 (#254, ADR 0004).
 - **Dev loop:** o `ELECTROBUN_AGENT_CONTROL=1` do Livewire deixa os agentes dirigirem e testarem o app.
 

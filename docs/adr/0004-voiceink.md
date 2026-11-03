@@ -4,7 +4,7 @@
 - Origem: [VoiceInk](https://github.com/Beingpax/VoiceInk) no commit `19546d2a7f85578f49efb538eb888b37ff2f8f8c` (GPL-3.0)
 
 ## Contexto
-O VoiceInk é um app de ditado para macOS, em Swift e open source, e já resolve as partes difíceis da fase 1: transcrição local com Parakeet (FluidAudio) e Whisper, pós-processamento com o dicionário, colagem no app ativo e limpeza com IA local (MLX). O spec dizia para usá-lo "só como referência, sem copiar código". O harry pediu para usar o motor dele (#247).
+O VoiceInk é um app de ditado para macOS, em Swift e open source, e já resolve as partes difíceis da fase 1: transcrição local com Parakeet (FluidAudio) e Whisper, pós-processamento com o dicionário, colagem no app ativo e limpeza com IA local (MLX, com um modelo próprio). O spec dizia para usá-lo "só como referência, sem copiar código". O harry pediu para usar o motor dele (#247).
 
 A leitura do código (#255) mostrou que:
 - a chamada ao Parakeet é a mesma do nosso benchmark (T51);
@@ -20,6 +20,7 @@ A leitura do código (#255) mostrou que:
   ```swift
   // Portado de VoiceInk/<caminho> @ 19546d2 (GPL-3.0). Mudanças: <o que mudou>.
   ```
+- **O modelo VoiceInk-Refine fica de fora.** O LICENSE.md dos pesos (`beingpax/VoiceInk-Refine-V1`) só permite o uso no app VoiceInk, e a GPLv3 do código não cobre os pesos (#267). A limpeza com IA usa os prompts (`AIPrompts`) e o `AIEnhancementOutputFilter` do VoiceInk, com o Foundation Models ou um modelo aberto (T270).
 - **Dependências em releases fixas:** o FluidAudio entra numa release, não na branch `main` que o VoiceInk usa.
 
 ## Consequências
