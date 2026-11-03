@@ -14,6 +14,8 @@ import WhisperKit
 //              transcribe.cpp passes it to the model (Cohere needs one; Whisper detects without it)
 //     +vocab   each engine's own way to use the dictionary in vocab.txt
 // stt-bench --list-whisper  list WhisperKit models
+// stt-bench --report [dir]   the ADR table of every result in dir (default ./results), with the sidecar's
+//                             post-processing: terms, and aliases learned on one take (Report.swift)
 // One engine per process, so the memory numbers are its own.
 
 let modelsBase = FileManager.default.homeDirectoryForCurrentUser
@@ -335,6 +337,11 @@ func percentile(_ xs: [Double], _ p: Double) -> Double {
 let args = Array(CommandLine.arguments.dropFirst())
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 
+if args.first == "--report" {
+    let dir = args.count > 1 ? URL(fileURLWithPath: (args[1] as NSString).expandingTildeInPath) : root.appendingPathComponent("results")
+    try runReport(root: root, resultsDir: dir)
+    exit(0)
+}
 if args.first == "--list-whisper" {
     for m in try await WhisperKit.fetchAvailableModels() { print(m) }
     exit(0)

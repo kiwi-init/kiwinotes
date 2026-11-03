@@ -7,6 +7,8 @@ let package = Package(
     products: [
         .executable(name: "kiwi-helper", targets: ["kiwi-helper"]),
         .executable(name: "kiwi-ipc-probe", targets: ["kiwi-ipc-probe"]),
+        // For spikes/stt-bench, which reruns the transcript's post-processing on its results (T51).
+        .library(name: "KiwiHelperCore", targets: ["KiwiHelperCore"]),
     ],
     dependencies: [
         // Parakeet on the Neural Engine (ADR 0003, ADR 0004). A fixed release, not VoiceInk's `main`.
