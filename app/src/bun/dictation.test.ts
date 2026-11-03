@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import type { Command, Event, EventMessage, ResultMessage } from "../shared/ipc.ts";
 import type { NewHistoryEntry } from "../store/history.ts";
-import { Dictation, type DictationSidecar, NOT_PASTED, SECURE_INPUT_NOTICE, TRANSCRIPT_ERROR } from "./dictation.ts";
+import {
+  Dictation,
+  type DictationSidecar,
+  MIC_LOST_EMPTY,
+  MIC_LOST_NOTICE,
+  NOT_PASTED,
+  SECURE_INPUT_NOTICE,
+  TRANSCRIPT_ERROR,
+} from "./dictation.ts";
 
 type Listener = (e: EventMessage) => void;
 
@@ -174,6 +182,37 @@ describe("Dictation", () => {
     sidecar.emit(transcript("teste"));
     await d.idle();
     expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: SECURE_INPUT_NOTICE }]);
+  });
+
+  test("the mic drops mid-dictation: what it heard is pasted, and the pill says so (T883)", async () => {
+    const { sidecar, d, overlays, inserted, added } = setup();
+    const stopped = (lost?: "no_audio"): Event => ({
+      type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 4000, samples: 64_000, ...(lost ? { lost } : {}),
+    });
+    // One normal dictation still being transcribed, then one where the headset went away.
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Notes", name: "Notas" } });
+    sidecar.emit(stopped());
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Notes", name: "Notas" } });
+    sidecar.emit(stopped("no_audio"));
+    sidecar.emit(transcript("primeiro ditado"));
+    sidecar.emit(transcript("o fone desligou no meio"));
+    await d.idle();
+    expect(inserted()).toEqual(["Primeiro ditado.", "O fone desligou no meio."]);
+    expect(overlays()).toEqual([
+      { type: "overlay.state", state: "done" },
+      { type: "overlay.state", state: "done", message: MIC_LOST_NOTICE },
+    ]);
+    expect(added).toHaveLength(2);
+  });
+
+  test("the mic drops and what it heard has no speech: the old warning, not a silent pill (T883)", async () => {
+    const { sidecar, d, overlays, inserted } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey" });
+    sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 400, samples: 6400, lost: "device_changed" });
+    sidecar.emit(transcript(""));
+    await d.idle();
+    expect(inserted()).toEqual([]);
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: MIC_LOST_EMPTY }]);
   });
 
   test("insert.text failing still saves the dictation and shows an error", async () => {

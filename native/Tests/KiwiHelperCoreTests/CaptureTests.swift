@@ -71,6 +71,8 @@ private final class Rig {
     let clock = Clock()
     var engines: [FakeEngine] = []
     var lost: [String] = []
+    /// What `onLost` handed over with each loss.
+    var kept: [[Float]] = []
     var nextFailsStart = false
     var nextFailsPrepare = false
     lazy var capture: AudioCapture = {
@@ -85,7 +87,10 @@ private final class Rig {
             now: { [clock] in clock.t },
             watchdogInterval: nil
         )
-        c.onLost = { [unowned self] in self.lost.append($0) }
+        c.onLost = { [unowned self] code, samples in
+            self.lost.append(code)
+            self.kept.append(samples)
+        }
         return c
     }()
     var engine: FakeEngine { engines.last! }
@@ -196,6 +201,9 @@ final class CaptureTests: XCTestCase {
         rig.clock.t += 1.6
         rig.capture.checkStall()
         XCTAssertEqual(rig.lost, ["no_audio"])
+        // The 0.5 s before the mic died goes on to be transcribed (T883); from 48 kHz the resampler keeps < 1 ms back.
+        XCTAssertEqual(rig.kept.count, 1)
+        XCTAssertEqual(Double(rig.kept.first?.count ?? 0), 8_000, accuracy: 16)
         XCTAssertFalse(rig.capture.isRecording)
         XCTAssertEqual(rig.capture.stop(), [])
         // A fresh engine is ready for the next recording, and it works.
@@ -204,6 +212,56 @@ final class CaptureTests: XCTestCase {
         try rig.capture.start()
         rig.engine.feed(rate: 16_000, seconds: 0.25, clock: rig.clock)
         XCTAssertEqual(rig.capture.stop().count, 4_000)
+    }
+
+    /// T883: a stall the new engine recovered from doesn't count against a later, unrelated one (the Bluetooth
+    /// flapping again 50 s on). Only stalls in a row without audio end the recording.
+    func testASecondStallLaterInTheRecordingGetsANewEngineToo() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 10, clock: rig.clock)
+        rig.clock.t += 1.1
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.engines.count, 2, "first stall: new engine")
+        rig.engine.feed(rate: 16_000, seconds: 50, clock: rig.clock)
+        rig.clock.t += 1.1
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.lost, [])
+        XCTAssertEqual(rig.engines.count, 3, "second stall, after audio came back: another new engine")
+        XCTAssertTrue(rig.capture.isRecording)
+        rig.engine.feed(rate: 16_000, seconds: 1, clock: rig.clock)
+        XCTAssertEqual(rig.capture.stop().count, 61 * 16_000)
+    }
+
+    /// Under 0.3 s there is no dictation to save: `no_audio` as before, with nothing handed over (T883).
+    func testATinyRecordingThatLosesTheMicHandsOverNothing() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 0.28, clock: rig.clock)
+        rig.clock.t += 1.1
+        rig.capture.checkStall()
+        rig.clock.t += 1.6
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.lost, ["no_audio"])
+        XCTAssertEqual(rig.kept, [[]])
+        XCTAssertEqual(AudioCapture.keptOnLoss, 4_800)
+    }
+
+    /// The stall counter goes back to 0 only with audio: an engine that keeps dying silent still ends the recording.
+    func testStallsInARowWithoutAudioStillEndTheRecording() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 2, clock: rig.clock)
+        rig.clock.t += 1.1
+        rig.capture.checkStall()
+        rig.engine.feed(rate: 16_000, seconds: 3, clock: rig.clock)
+        rig.clock.t += 1.1
+        rig.capture.checkStall()   // a second stall after audio: new engine
+        XCTAssertEqual(rig.engines.count, 3)
+        rig.clock.t += 1.6
+        rig.capture.checkStall()   // the new one gives nothing
+        XCTAssertEqual(rig.lost, ["no_audio"])
+        XCTAssertEqual(rig.kept.map(\.count), [5 * 16_000])
     }
 
     func testAStallThatRecoversKeepsTheWholeRecording() throws {
@@ -231,6 +289,7 @@ final class CaptureTests: XCTestCase {
         rig.clock.t += 1.6
         rig.capture.checkStall()
         XCTAssertEqual(rig.lost, ["no_audio"])
+        XCTAssertEqual(rig.kept, [[]])
     }
 
     func testNewDeviceThatWontStartEndsTheRecording() throws {
@@ -240,6 +299,8 @@ final class CaptureTests: XCTestCase {
         rig.nextFailsStart = true
         rig.capture.inputChanged("default input device")
         XCTAssertEqual(rig.lost, ["device_changed"])
+        XCTAssertEqual(rig.kept.count, 1)
+        XCTAssertEqual(Double(rig.kept.first?.count ?? 0), 8_000, accuracy: 16)
         XCTAssertFalse(rig.capture.isRecording)
         XCTAssertEqual(rig.capture.stop(), [])
     }

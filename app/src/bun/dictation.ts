@@ -43,6 +43,10 @@ export const NOT_PASTED: Record<string, string> = {
 };
 /** Com secure input o ⌘V pode ter sido descartado: o texto fica no clipboard, e o antigo não volta (#224). */
 export const SECURE_INPUT_NOTICE = "O texto também ficou no clipboard";
+/** O mic caiu no meio do ditado: o que ele ouviu até ali foi transcrito, em vez de ir para o lixo (T883). */
+export const MIC_LOST_NOTICE = "O microfone caiu: transcrevi até aqui";
+/** O mic caiu e o que ele ouviu não tinha fala. */
+export const MIC_LOST_EMPTY = "Sem áudio do microfone";
 export const TRANSCRIPT_ERROR: Record<string, string> = {
   model_unavailable: "O modelo de voz não está pronto",
   stt_failed: "Não deu para transcrever",
@@ -69,7 +73,8 @@ export class Dictation {
    * O app de cada gravação que ainda espera o texto, na ordem (`record.started`). Uma gravação nova pode começar
    * antes de chegar o texto da anterior, e cada texto sai com o tom do app em que foi ditado (review #521).
    */
-  private recordings: (AppRef | undefined)[] = [];
+  /** As gravações à espera do texto, na ordem: o app da frente e, se o mic caiu no meio, o código (T883). */
+  private recordings: { app?: AppRef; lost?: string }[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private offs: (() => void)[] = [];
   /** Avisa cada ditado terminado, inclusive o vazio e o que deu erro (testes, a ação `debug-transcribe`). */
@@ -85,15 +90,20 @@ export class Dictation {
       }),
       sidecar.on("record.started", (e) => {
         const app = e.app ?? this.activeApp;
-        this.recordings.push(app);
+        this.recordings.push({ app });
         this.prewarm(app);
       }),
       // A gravação que acabou de começar não vai ter texto.
       sidecar.on("record.cancelled", () => void this.recordings.pop()),
       sidecar.on("record.error", () => void this.recordings.pop()),
+      // O mic caiu, mas o que ele ouviu vai ser transcrito: a pílula avisa no fim.
+      sidecar.on("record.stopped", (e) => {
+        const last = this.recordings.at(-1);
+        if (e.lost && last) last.lost = e.lost;
+      }),
       sidecar.on("transcript.final", (e) => {
-        const app = this.recordings.length ? this.recordings.shift() : this.activeApp;
-        this.enqueue(() => this.handle(e, app ?? this.activeApp));
+        const recording = this.recordings.shift();
+        this.enqueue(() => this.handle(e, recording?.app ?? this.activeApp, recording?.lost));
       }),
       sidecar.on("transcript.error", (e) => {
         this.recordings.shift();
@@ -135,10 +145,11 @@ export class Dictation {
     void this.options.sidecar.send({ type: "llm.prewarm", system: llmSystemMessage(tone, this.dictionary) }).catch(() => {});
   }
 
-  private async handle(t: Transcript, app: AppRef | undefined): Promise<void> {
+  private async handle(t: Transcript, app: AppRef | undefined, lost?: string): Promise<void> {
     const started = performance.now();
     const empty = async () => {
-      await this.overlay("hidden");
+      // Sem fala depois de o mic cair: o mesmo aviso de antes do T883, em vez de sumir sem dizer nada.
+      await (lost ? this.overlay("error", MIC_LOST_EMPTY) : this.overlay("hidden"));
       this.onDone?.({ text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
     };
     // Sem fala (gravação vazia ou só ruído com o VAD): nada para colar nem guardar.
@@ -172,6 +183,7 @@ export class Dictation {
     else if (insert.data.dryRun) await this.overlay("done");
     else if (!insert.data.pasted) await this.overlay("error", NOT_PASTED[insert.data.reason ?? ""] ?? NOT_PASTED.no_focus);
     else if (insert.data.reason === "secure_input") await this.overlay("done", SECURE_INPUT_NOTICE);
+    else if (lost) await this.overlay("done", MIC_LOST_NOTICE);
     else await this.overlay("done");
     const appMs = Math.round(performance.now() - started);
 
