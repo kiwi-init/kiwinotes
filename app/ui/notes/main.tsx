@@ -279,7 +279,9 @@ function Notes({ api, drafts }: { api: NotesApi; drafts: Drafts }) {
   const onChange = (doc: string) => {
     pending.current = doc;
     // O rascunho anda junto com a edição, para sobreviver a um fechamento que o save não alcançou.
-    if (current.current && !undecided.current) drafts.set({ path: current.current, body: doc, baseVersion: version.current });
+    if (current.current && !undecided.current) {
+      drafts.set({ path: current.current, body: doc, frontmatter: frontmatter.current, baseVersion: version.current });
+    }
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_AFTER_MS);
   };
@@ -327,7 +329,8 @@ function Notes({ api, drafts }: { api: NotesApi; drafts: Drafts }) {
   };
 
   const recoverOrphan = async (d: Draft) => {
-    const n = await api.create(noteName(d.path), INBOX, d.body).catch(() => null);
+    // Com o frontmatter de quando a edição começou: as tags e as propriedades vêm junto (#1538).
+    const n = await api.create(noteName(d.path), INBOX, (d.frontmatter ?? "") + d.body).catch(() => null);
     if (!n) return; // o aviso fica: dá para tentar de novo
     drafts.remove(d.path);
     setOrphans((o) => o.filter((x) => x !== d));
