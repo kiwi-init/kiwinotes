@@ -18,7 +18,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - Depois do merge: `git worktree remove ../kiwinotes-wt/T<n>`.
 
 ## Código do VoiceInk (GPL-3.0)
-- O sidecar porta o motor local do VoiceInk (ADR 0004). Todo arquivo portado leva no topo: `// Portado de VoiceInk/<caminho> @ <commit> (GPL-3.0). Mudanças: …`.
+- O Kiwi porta o motor local do VoiceInk (ADR 0004). Todo arquivo portado, em Swift ou TS, leva no topo: `// Portado de VoiceInk/<caminho> @ <commit> (GPL-3.0). Mudanças: …`.
 - Só a parte local: nada de provedores de nuvem, Sparkle, RemoteConfig ou anúncios.
 
 ## Layout

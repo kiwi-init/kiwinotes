@@ -15,7 +15,7 @@ A leitura do código (#255) mostrou que:
 ## Decisão
 - **O app continua o nosso:** Electrobun com React, barra de menu, Configurações, Histórico, o overlay e o sidecar Swift com o IPC do ADR 0001.
 - **O sidecar porta o motor local do VoiceInk** para transcrever (T256), colar (T55) e limpar com IA (T52). As regras em TS continuam como caminho rápido da limpeza (#171).
-- **Só a parte local entra.** Ficam de fora os provedores de nuvem (OpenAI, Groq, Deepgram e outros), o Sparkle, o RemoteConfig, os `announcements` e o licenciamento pago. Com o Wi-Fi desligado, tudo funciona.
+- **Só a parte local entra.** Ficam de fora os provedores de nuvem (OpenAI, Groq, Deepgram e outros), o Sparkle, o RemoteConfig, os `announcements` e o licenciamento pago. Depois de baixar os modelos (Parakeet, CTC e Silero, do Hugging Face, na primeira vez), tudo funciona com o Wi-Fi desligado. O download é a única conexão, e nada é enviado.
 - **Cada arquivo portado** diz no topo de onde veio e o que mudou:
   ```swift
   // Portado de VoiceInk/<caminho> @ 19546d2 (GPL-3.0). Mudanças: <o que mudou>.
