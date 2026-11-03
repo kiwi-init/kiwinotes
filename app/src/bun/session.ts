@@ -7,10 +7,11 @@ import path from "node:path";
 
 import { sidecarLlm } from "../cleanup/index.ts";
 import type { LlmMode } from "../cleanup/types.ts";
-import { defaultSocketPath, type Event } from "../shared/ipc.ts";
+import { defaultSocketPath, type Event, type Permission } from "../shared/ipc.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { Snippet } from "../store/snippets.ts";
 import { Dictation } from "./dictation.ts";
+import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
 import { Sidecar } from "./sidecar.ts";
 import { stores } from "./stores.ts";
 
@@ -36,11 +37,14 @@ export interface SessionStatus {
   connected: boolean;
   stt: SttState;
   hotkeyActive: boolean;
+  /** As permissões que faltam, na ordem em que o app pede (T532). */
+  missing: Permission[];
 }
 
 export class Session {
   readonly sidecar: Sidecar;
   readonly dictation: Dictation;
+  readonly permissions: PermissionFlow;
   private stt: SttState = "starting";
   private statusListeners = new Set<(s: SessionStatus) => void>();
 
@@ -59,10 +63,12 @@ export class Session {
     // Com KIWI_DEBUG=1 nada é colado nem vai para o clipboard (testes de agente, #490).
     const dryRun = process.env.KIWI_DEBUG === "1";
     this.dictation = new Dictation({ sidecar: this.sidecar, history: stores.history, llm, llmMode, dryRun });
+    this.permissions = new PermissionFlow(this.sidecar, fileAskedStore(stores.dir));
   }
 
   start(): void {
     this.dictation.attach();
+    this.permissions.attach();
     this.sidecar.on("ready", () => {
       this.stt = "starting";
       this.emitStatus();
@@ -87,12 +93,13 @@ export class Session {
 
   stop(): void {
     this.dictation.detach();
+    this.permissions.detach();
     this.sidecar.stop();
   }
 
   status(): SessionStatus {
     const ready = this.sidecar.ready;
-    return { connected: !!ready, stt: this.stt, hotkeyActive: ready?.hotkeyActive ?? false };
+    return { connected: !!ready, stt: this.stt, hotkeyActive: ready?.hotkeyActive ?? false, missing: missing(ready?.permissions) };
   }
 
   onStatus(fn: (s: SessionStatus) => void): () => void {

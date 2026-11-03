@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { AgentControl, PATHS, Tray, Utils } from "electrobun/bun";
 
+import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
 import { stores } from "./stores.ts";
 import { openWindows, showWindow, type WindowName } from "./windows.ts";
@@ -20,7 +21,7 @@ const tray = new Tray({
 /** A primeira linha do menu diz se dá para ditar agora, e por que não. */
 export function statusLabel(s: SessionStatus): string {
   if (!s.connected) return "Iniciando…";
-  if (!s.hotkeyActive) return "Atalho desligado: falta permissão";
+  if (!s.hotkeyActive) return `Atalho desligado: falta ${s.missing.includes("inputMonitoring") ? PERMISSION_NAMES.inputMonitoring : "permissão"}`;
   if (s.stt === "loading" || s.stt === "starting") return "Preparando o modelo de voz…";
   if (s.stt === "unavailable") return "Modelo de voz indisponível";
   return "Pronto para ditar";
@@ -29,6 +30,10 @@ export function statusLabel(s: SessionStatus): string {
 function setMenu(s: SessionStatus) {
   tray.setMenu([
     { type: "normal", label: statusLabel(s), action: "status", enabled: false },
+    // Enquanto faltar alguma permissão: pede a próxima (o diálogo do macOS, ou os Ajustes no lugar certo).
+    ...(s.connected && s.missing.length
+      ? [{ type: "normal" as const, label: `Permitir acesso… (${PERMISSION_NAMES[s.missing[0]!]})`, action: "permissions" }]
+      : []),
     { type: "divider" },
     { type: "normal", label: "Histórico…", action: "history" },
     { type: "normal", label: "Configurações…", action: "settings" },
@@ -50,6 +55,9 @@ tray.on("tray-clicked", (event) => {
     case "history":
     case "settings":
       void showWindow(action);
+      break;
+    case "permissions":
+      void dictation.permissions.askNext();
       break;
     case "quit":
       dictation.stop();
