@@ -31,6 +31,27 @@ export function socketPathFor(dir: string, fallbackDir = os.tmpdir()): string {
 export const sttDictionary = (terms: DictionaryTerm[]) =>
   terms.map((t) => (t.aliases.length ? { term: t.term, aliases: t.aliases } : t.term));
 
+/**
+ * O dicionário e os snippets dos arquivos. Os dois são editáveis à mão: um JSON estragado vale como lista vazia, com
+ * um aviso, em vez de uma rejeição sem tratamento que derruba o processo do Bun (T914). O arquivo fica como está:
+ * só a janela grava, e ela não grava enquanto não conseguiu ler.
+ */
+export async function loadLists(
+  from: { dictionary: { load(): Promise<DictionaryTerm[]>; file: string }; snippets: { load(): Promise<Snippet[]>; file: string } },
+  warn: (message: string) => void = console.warn,
+): Promise<{ terms: DictionaryTerm[]; snippets: Snippet[] }> {
+  const orEmpty = <T>(load: Promise<T[]>, file: string) =>
+    load.catch((e) => {
+      warn(`[session] couldn't read ${path.basename(file)} (${e instanceof Error ? e.message : String(e)}); using an empty list`);
+      return [] as T[];
+    });
+  const [terms, snippets] = await Promise.all([
+    orEmpty(from.dictionary.load(), from.dictionary.file),
+    orEmpty(from.snippets.load(), from.snippets.file),
+  ]);
+  return { terms, snippets };
+}
+
 export type SttState = Extract<Event, { type: "stt.status" }>["state"] | "starting";
 
 export interface SessionStatus {
@@ -81,6 +102,8 @@ export class Session {
       this.emitStatus();
     });
     this.sidecar.on("permissions.changed", () => this.emitStatus());
+    // O helper caiu: o menu sai de "Pronto para ditar" até o próximo `ready` (T914).
+    this.sidecar.onClose(() => this.emitStatus());
     if (process.env.KIWI_DEBUG === "1") {
       // Só o tipo e o app, nunca o texto do ditado.
       this.sidecar.on("*", (e) => {
@@ -116,7 +139,7 @@ export class Session {
 
   /** Lê o dicionário e os snippets dos arquivos e manda o vocabulário para o STT. */
   async syncAll(): Promise<void> {
-    const [terms, snippets] = await Promise.all([stores.dictionary.load(), stores.snippets.load()]);
+    const { terms, snippets } = await loadLists(stores);
     this.dictation.setSnippets(snippets);
     await this.dictionaryChanged(terms);
   }

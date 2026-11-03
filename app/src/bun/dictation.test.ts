@@ -282,6 +282,25 @@ describe("Dictation", () => {
     expect(order).toEqual(["start Um.", "end Um.", "start Dois.", "end Dois."]);
   });
 
+  test("a helper restart drops the recording that died with it: the next dictation keeps its own app (T914)", async () => {
+    const { sidecar, d, added } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Terminal", name: "Terminal" } });
+    // The helper dies before the text and comes back: that recording never gets a transcript.
+    sidecar.emit({
+      type: "ready",
+      version: "t",
+      pid: 2,
+      hotkey: "fn",
+      hotkeyActive: true,
+      permissions: { microphone: "granted", accessibility: "granted", inputMonitoring: "granted" },
+    });
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Notes", name: "Notas" } });
+    sidecar.emit(transcript("o relatório tá pronto"));
+    await d.idle();
+    expect(added[0]!.app).toEqual({ bundleId: "com.apple.Notes", name: "Notas" });
+    expect(added[0]!.tone).not.toBe("literal");
+  });
+
   test("the LLM is prewarmed only when it's on and not for the literal tone", async () => {
     const llm = { name: "foundation-models", available: () => true, complete: async (r: { prompt: string }) => r.prompt };
     const sidecar = fakeSidecar();

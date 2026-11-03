@@ -6,7 +6,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { pack, resealBundles, signAdHoc, unpack, verifyApp, verifyBundle } from "./signing.ts";
+import { detach, pack, resealBundles, signAdHoc, unpack, verifyApp, verifyBundle, withDmg } from "./signing.ts";
 
 let dir: string;
 
@@ -88,5 +88,49 @@ describe("signing (T762)", () => {
     const listed = Bun.spawnSync(["tar", "-tf", "-"], { stdin: raw }).stdout.toString().split("\n").filter(Boolean);
     expect(listed.some((n) => path.basename(n).startsWith("._"))).toBe(false);
     expect(listed).toContain("Fake.app/Contents/Resources/version.json");
+  });
+});
+
+// T914: o `hdiutil detach` falhou no fim de um build bom (volume ocupado). Sem hdiutil de verdade: um `exec` falso.
+describe("detach", () => {
+  const busy = (failures: number) => {
+    const calls: string[][] = [];
+    const exec = (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args]);
+      if (args[0] === "detach" && calls.filter((c) => c[1] === "detach").length <= failures) throw new Error("hdiutil: couldn't unmount: Resource busy");
+    };
+    return { calls, exec };
+  };
+
+  test("a busy volume is tried again and then detached", () => {
+    const { calls, exec } = busy(2);
+    const waits: number[] = [];
+    expect(detach("/tmp/mnt", { exec, sleep: (ms) => waits.push(ms), warn: () => {} })).toBe(true);
+    expect(calls).toHaveLength(3);
+    expect(waits).toEqual([1000, 1000]);
+  });
+
+  test("a volume that never lets go warns instead of failing the build", () => {
+    const { exec } = busy(99);
+    const warnings: string[] = [];
+    expect(detach("/tmp/mnt", { exec, tries: 3, sleep: () => {}, warn: (m) => warnings.push(m) })).toBe(false);
+    expect(warnings[0]).toContain("eject it by hand");
+  });
+
+  test("withDmg returns what the check found even when the detach never works", () => {
+    const { calls, exec } = busy(99);
+    const result = withDmg("/tmp/fake.dmg", () => 7, { exec, tries: 2, sleep: () => {}, warn: () => {} });
+    expect(result).toBe(7);
+    expect(calls[0]!.slice(0, 2)).toEqual(["hdiutil", "attach"]);
+  });
+
+  test("a failing check still fails, and the volume is detached", () => {
+    const { calls, exec } = busy(0);
+    expect(() =>
+      withDmg("/tmp/fake.dmg", () => {
+        throw new Error("codesign failed");
+      }, { exec, sleep: () => {}, warn: () => {} }),
+    ).toThrow("codesign failed");
+    expect(calls.map((c) => c[1])).toEqual(["attach", "detach"]);
   });
 });

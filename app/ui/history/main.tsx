@@ -61,20 +61,43 @@ function History() {
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [nextBefore, setNextBefore] = useState<string | undefined>();
-  const [state, setState] = useState<"loading" | "ready" | "offline">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  /** "Mostrar mais": trava enquanto a página não chega, e diz se ela falhou. */
+  const [more, setMore] = useState<"idle" | "loading" | "error">("idle");
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const words = fold(query).split(/\s+/).filter(Boolean);
   const wordsRef = useRef(words);
   wordsRef.current = words;
+  /**
+   * Cada busca nova ganha um número; a resposta de uma busca que já não é a atual é jogada fora. A busca no disco leva
+   * mais ou menos tempo conforme o termo, e a resposta velha chegava depois e sobrescrevia a lista (T914).
+   */
+  const seq = useRef(0);
 
   const load = useCallback((q: string, before?: string) => {
+    const my = before ? seq.current : ++seq.current;
+    if (before) setMore("loading");
+    else setMore("idle");
     api.history.search({ query: q, limit: PAGE, before }).then(
       (page) => {
-        setEntries((old) => (before ? [...old, ...page.entries] : page.entries));
+        if (my !== seq.current) return;
+        setEntries((old) => {
+          if (!before) return page.entries;
+          const have = new Set(old.map((e) => e.id));
+          return [...old, ...page.entries.filter((e: HistoryEntry) => !have.has(e.id))];
+        });
         setNextBefore(page.nextBefore);
         setState("ready");
+        setMore("idle");
       },
-      () => setState("offline"),
+      () => {
+        if (my !== seq.current) return;
+        // Um erro não desliga a janela: a busca continua ativa e dá para tentar de novo (T914).
+        if (before) return setMore("error");
+        setEntries([]);
+        setNextBefore(undefined);
+        setState("error");
+      },
     );
   }, []);
 
@@ -96,7 +119,11 @@ function History() {
   );
 
   const remove = async (id: string) => {
-    if (await api.history.delete(id).catch(() => false)) setEntries((old) => old.filter((e) => e.id !== id));
+    if (!(await api.history.delete(id).catch(() => false))) return;
+    const left = entries.filter((e) => e.id !== id);
+    setEntries(left);
+    // Apagou tudo o que estava na tela, mas há dias mais antigos: busca de novo, em vez de dizer que não há nada (T914).
+    if (!left.length && nextBefore) load(query);
   };
 
   const search = (
@@ -106,12 +133,21 @@ function History() {
       placeholder="Buscar nos ditados"
       aria-label="Buscar nos ditados"
       value={query}
-      disabled={state === "offline"}
       onChange={(e) => setQuery(e.target.value)}
     />
   );
 
-  if (state !== "loading" && entries.length === 0) {
+  if (state === "error") {
+    return (
+      <Window title="Histórico" end={search}>
+        <Empty title="Não deu para abrir o histórico">
+          <Button onClick={() => load(query)}>Tentar de novo</Button>
+        </Empty>
+      </Window>
+    );
+  }
+
+  if (state !== "loading" && entries.length === 0 && !nextBefore) {
     return (
       <Window title="Histórico" end={search}>
         {query ? (
@@ -167,7 +203,9 @@ function History() {
       ))}
       {nextBefore ? (
         <div className="kn-more">
-          <Button onClick={() => load(query, nextBefore)}>Mostrar mais</Button>
+          <Button disabled={more === "loading"} onClick={() => load(query, nextBefore)}>
+            {more === "error" ? "Não deu para carregar. Tentar de novo" : "Mostrar mais"}
+          </Button>
         </div>
       ) : null}
     </Window>

@@ -56,6 +56,7 @@ export class Sidecar {
   private proc?: { kill(): void; exited: Promise<unknown> };
   private pending = new Map<string, { resolve(r: ResultMessage): void; reject(e: Error): void; timer: Timer }>();
   private listeners = new Map<string, Set<Listener>>();
+  private closeListeners = new Set<() => void>();
   private nextId = 0;
   private stopped = false;
   private restarts = 0;
@@ -116,6 +117,13 @@ export class Sidecar {
           this.ready = undefined;
           this.resetConnected();
           this.failPending("sidecar_closed");
+          for (const fn of this.closeListeners) {
+            try {
+              fn();
+            } catch (e) {
+              this.log(`close listener failed: ${String(e)}`);
+            }
+          }
         },
       },
     });
@@ -187,6 +195,12 @@ export class Sidecar {
     if (!set) this.listeners.set(type, (set = new Set()));
     set.add(fn as Listener);
     return () => set!.delete(fn as Listener);
+  }
+
+  /** Avisa quando o helper desconecta (caiu ou foi morto): o `ready` acabou de virar `undefined` (T914). */
+  onClose(fn: () => void): () => void {
+    this.closeListeners.add(fn);
+    return () => this.closeListeners.delete(fn);
   }
 
   /** Manda um comando e espera o `result`. Rejeita com `SidecarError` quando o `ok` é `false`. */

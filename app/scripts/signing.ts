@@ -132,15 +132,50 @@ export function resealBundles(tarZsts: string[]): string[] {
   return resealed;
 }
 
+export interface DetachOptions {
+  tries?: number;
+  waitMs?: number;
+  exec?: (cmd: string, args: string[]) => unknown;
+  sleep?: (ms: number) => void;
+  warn?: (message: string) => void;
+}
+
+/**
+ * `hdiutil detach`, com novas tentativas: logo depois de montar, o Spotlight ou outro `hdiutil` pode segurar o volume
+ * (T914, `detach … -force failed` depois de todas as conferências ok). Se não sair, avisa e devolve `false` em vez de
+ * derrubar o build: a conferência já passou, e o volume se ejeta à mão.
+ */
+export function detach(mount: string, options: DetachOptions = {}): boolean {
+  const { tries = 5, waitMs = 1000, exec = run, sleep = Bun.sleepSync, warn = console.warn } = options;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      exec("hdiutil", ["detach", mount, "-force"]);
+      return true;
+    } catch (e) {
+      if (i === tries) {
+        warn(`verify-signature: couldn't detach ${mount} after ${tries} tries; eject it by hand (${String(e).split("\n")[0]})`);
+        return false;
+      }
+      sleep(waitMs);
+    }
+  }
+  return false;
+}
+
 /** O app montado de um .dmg, só leitura e sem abrir janela no Finder. */
-export function withDmg<T>(dmg: string, fn: (mount: string) => T): T {
-  return withTemp((dir) => {
-    const mount = path.join(dir, "mnt");
-    run("hdiutil", ["attach", dmg, "-readonly", "-nobrowse", "-noautoopen", "-noverify", "-mountpoint", mount]);
+export function withDmg<T>(dmg: string, fn: (mount: string) => T, options: DetachOptions = {}): T {
+  const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-sign-"));
+  const mount = path.join(dir, "mnt");
+  let detached = true;
+  try {
+    (options.exec ?? run)("hdiutil", ["attach", dmg, "-readonly", "-nobrowse", "-noautoopen", "-noverify", "-mountpoint", mount]);
     try {
       return fn(mount);
     } finally {
-      run("hdiutil", ["detach", mount, "-force"]);
+      detached = detach(mount, options);
     }
-  });
+  } finally {
+    // Com o volume ainda montado, a pasta fica: apagar recursivamente entraria nele.
+    if (detached) rmSync(dir, { recursive: true, force: true });
+  }
 }

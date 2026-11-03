@@ -38,6 +38,16 @@ export function Window({ title, end, children }: { title: string; end?: ReactNod
   // Se a entrada começasse ali, a janela ficaria parada em opacity 0. Então ela
   // só toca quando o documento está visível; se abriu oculta, toca ao aparecer.
   const [entry, setEntry] = useState(() => (document.visibilityState === "visible" ? 1 : 0));
+  const ref = useRef<HTMLDivElement>(null);
+  // Ao voltar para a frente, a animação toca de novo sem remontar a árvore: uma `key` nova apagava a edição em
+  // andamento no Dicionário e nos Snippets, e o autosave que ainda não tinha disparado (T914).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || entry <= 1) return;
+    el.dataset.entering = "false";
+    void el.offsetWidth;
+    el.dataset.entering = "true";
+  }, [entry]);
   useEffect(() => {
     document.title = title;
     const replay = () => setEntry((n) => n + 1);
@@ -54,7 +64,7 @@ export function Window({ title, end, children }: { title: string; end?: ReactNod
     };
   }, [title]);
   return (
-    <div className="kn-window" data-entering={entry > 0} key={entry}>
+    <div className="kn-window" data-entering={entry > 0} ref={ref}>
       <header className="kn-titlebar electrobun-webkit-app-region-drag">
         <h1>{title}</h1>
         {end ? <div className="kn-titlebar-end electrobun-webkit-app-region-no-drag">{end}</div> : null}
