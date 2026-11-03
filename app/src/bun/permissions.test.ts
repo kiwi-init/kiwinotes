@@ -117,6 +117,21 @@ describe("PermissionFlow", () => {
     expect(asked).toEqual(["accessibility"]);
   });
 
+  test("with auto off (KIWI_DEBUG=1), nothing is asked on its own, only from the menu item (#551)", async () => {
+    const { sidecar, asked, emit } = fake();
+    const store = memoryStore();
+    const flow = new PermissionFlow(sidecar, store, () => {}, false);
+    flow.attach();
+    await emit(ready(perms({})));
+    await emit(changed(perms({ inputMonitoring: "granted" })));
+    await emit({ type: "record.error", reason: "hotkey", error: "microphone_undetermined", microphone: "undetermined" });
+    expect(asked).toEqual([]);
+    expect(store.saved).toEqual([]);
+    expect(flow.missing()).toEqual(["accessibility", "microphone"]);
+    expect(await flow.askNext()).toBe("accessibility");
+    expect(asked).toEqual(["accessibility"]);
+  });
+
   test("missing() lists what isn't granted, in the asking order", () => {
     expect(missing(perms({ accessibility: "granted" }))).toEqual(["inputMonitoring", "microphone"]);
     expect(missing(perms({ microphone: "granted", accessibility: "granted", inputMonitoring: "granted" }))).toEqual([]);

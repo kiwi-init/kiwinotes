@@ -55,10 +55,15 @@ export class PermissionFlow {
   private chain: Promise<unknown> = Promise.resolve();
   private offs: (() => void)[] = [];
 
+  /**
+   * @param auto pedir sozinho (na abertura e no primeiro ditado). `false` com `KIWI_DEBUG=1`: um agente nunca faz o
+   *   macOS abrir um diálogo na tela da pessoa (AGENTS.md, #537); só o item do menu pede.
+   */
   constructor(
     private readonly sidecar: PermissionsSidecar,
     private readonly store: AskedStore,
     private readonly log: (m: string) => void = (m) => console.log(`[permissions] ${m}`),
+    private readonly auto = true,
   ) {}
 
   attach(): void {
@@ -67,7 +72,7 @@ export class PermissionFlow {
       this.sidecar.on("permissions.changed", (e) => this.enqueue(e.permissions)),
       // O macOS ainda não perguntou do microfone: pergunta agora, no ditado que precisou dele.
       this.sidecar.on("record.error", (e) => {
-        if (e.microphone === "undetermined") void this.request("microphone");
+        if (this.auto && e.microphone === "undetermined") void this.request("microphone");
       }),
     );
   }
@@ -95,6 +100,7 @@ export class PermissionFlow {
 
   /** A cada estado novo: na primeira vez do app, pede a próxima que falta e que ainda não foi pedida sozinha. */
   private async update(permissions: Permissions) {
+    if (!this.auto) return;
     this.asked ??= await this.store.load().catch(() => []);
     if (this.asking) return;
     const next = ON_LAUNCH.find((p) => permissions[p] !== "granted" && !this.asked!.includes(p));
