@@ -148,6 +148,9 @@ final class Helper {
             actions = gesture.keyUp(at: t)
         case .otherKey:
             actions = gesture.otherKeyDown()
+        case .notesShortcut:
+            emit("hotkey.notes", [:])
+            return
         }
         actions.forEach(apply)
         scheduleTick()
@@ -386,7 +389,8 @@ final class Helper {
         finishRecording(samples, reason: "debug", mode: "debug")
     }
 
-    /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?}` (ADR 0001). Hold and double tap share the one key.
+    /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, notesShortcut?}` (ADR 0001). Hold and double tap share
+    /// the one key. `notesShortcut`: "control+option+n", or null to turn it off (T1499).
     private func configure(_ message: InboundMessage) -> String? {
         // Check everything before changing anything: a bad value leaves the whole config as it was.
         let hold = message.double("holdThresholdMs"), doubleTap = message.double("doubleTapMs")
@@ -406,6 +410,15 @@ final class Helper {
             guard let flag = value as? Bool else { return "invalid_value" }
             vad = flag
         }
+        var notesCombo: KeyCombo??
+        if let value = message.fields["notesShortcut"] {
+            if value is NSNull {
+                notesCombo = .some(nil)
+            } else {
+                guard let spec = value as? String, let combo = KeyCombo(spec) else { return "invalid_value" }
+                notesCombo = .some(combo)
+            }
+        }
         var requested: HotkeyKey?
         if let name = message.string("hotkey") {
             guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
@@ -418,6 +431,7 @@ final class Helper {
             if audio.isRecording { cancelRecording(reason: "config") }
             tap.start()
         }
+        if let combo = notesCombo { tap.notesCombo = combo }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
         if language != nil || dictionary != nil || vad != nil {
