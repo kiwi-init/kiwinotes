@@ -31,5 +31,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 
 ## Testes
 - Lógica TS: `bun test`. Lógica Swift: `swift test` em `native/`.
-- Comportamento do app: rode com `ELECTROBUN_AGENT_CONTROL=1` e dirija pelo MCP do Livewire.
+- Comportamento do app: rode com `ELECTROBUN_AGENT_CONTROL=1` e dirija pelo MCP do Livewire, **só com horário combinado** com a pessoa do Mac (veja abaixo).
 - A máquina é compartilhada (M1 Pro, 16 GB): não rode benchmarks pesados em paralelo com outro agente. Pegue `kiwi lock bench` antes.
+- **Build novo no Mac de uma pessoa:** nunca deixe dois Kiwi Notes rodando. O agente só fecha o build que **ele mesmo** abriu, pelo caminho da worktree dele (`pkill -f "<sua worktree>/app/build/.*/Kiwi Notes.app/Contents/MacOS"`), e confere com `pgrep -fl "Kiwi Notes|kiwi-helper"`. O app da pessoa quem fecha é ela: todo roteiro de teste começa por "feche o app antigo (menu › Sair do Kiwi Notes)". Desde o T992, um build novo fecha o antigo sozinho; o risco que sobra é um build anterior ao T992.
+- **Rodar o app aparece na tela**, mesmo isolado (`KIWI_DATA_DIR` num tmp, `KIWI_DEBUG=1`) e pelo MCP: põe um 2º ícone na barra e abre janelas (#1267). Só com horário combinado. Sem combinar, teste por `bun test`/`swift test` e pelo helper falso.
