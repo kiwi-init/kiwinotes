@@ -12,6 +12,8 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 
+import { engineReady } from "../api.ts";
+
 declare global {
   interface Window {
     /** O processo principal chama ao trazer uma janela já aberta para a frente. */
@@ -19,11 +21,17 @@ declare global {
   }
 }
 
+/** Avisa o AppEngine que a UI subiu, depois do primeiro commit do React (não espera pintura: rAF para em janela oculta). */
+function Booted({ children }: { children: ReactNode }) {
+  useEffect(() => engineReady(), []);
+  return <>{children}</>;
+}
+
 /** Monta a janela em #root. */
 export function mount(node: ReactNode): void {
   const root = document.getElementById("root");
   if (!root) throw new Error("no #root");
-  createRoot(root).render(node);
+  createRoot(root).render(<Booted>{node}</Booted>);
 }
 
 // ---------------------------------------------------------------- Window
