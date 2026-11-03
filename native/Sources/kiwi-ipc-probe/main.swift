@@ -72,8 +72,18 @@ sigint.setEventHandler {
 sigint.resume()
 
 DispatchQueue.global().async {
+    var n = 0
     while let line = readLine() {
         guard !line.isEmpty else { continue }
+        // `:insert <text>` waits 3 s (time to click into another app) and sends insert.text, for testing T55.
+        if line.hasPrefix(":insert ") {
+            n += 1
+            let text = String(line.dropFirst(":insert ".count))
+            let command = (try? IPC.encode("insert.text", id: "insert-\(n)", ["text": text, "restoreClipboard": true])) ?? Data()
+            FileHandle.standardError.write(Data("insert.text in 3 s: click into the app now\n".utf8))
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3) { connection.send(command) }
+            continue
+        }
         connection.send(Data((line + "\n").utf8))
     }
     connection.close()

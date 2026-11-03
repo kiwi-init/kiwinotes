@@ -9,6 +9,7 @@ final class Helper {
     private let dumpDirectory: URL?
     private let audio = AudioCapture()
     private let overlay = Overlay()
+    private let inserter = Inserter()
     private var gesture = HotkeyGesture()
     private var tap: HotkeyTap!
     private var tickTimer: DispatchWorkItem?
@@ -282,7 +283,16 @@ final class Helper {
             }
             overlay.set(phase, message: message.string("message"))
             reply(id, ok: true)
-        case "insert.text", "notify":
+        case "insert.text":
+            guard let text = message.string("text") else { return reply(id, ok: false, error: "invalid_value") }
+            let restore = (message.fields["restoreClipboard"] as? Bool) ?? true
+            inserter.insert(text, restoreClipboard: restore) { [weak self] outcome in
+                var data: [String: Any] = ["pasted": outcome.pasted, "restored": outcome.restored]
+                if let reason = outcome.reason { data["reason"] = reason }
+                if let app = outcome.app { data["app"] = app }
+                self?.reply(id, ok: true, data)
+            }
+        case "notify":
             reply(id, ok: false, error: "not_implemented")
         default:
             reply(id, ok: false, error: "unknown_type")

@@ -27,7 +27,7 @@ describe("encode/parseLine", () => {
   test("round-trips a command, an event and a result", () => {
     const cmd: Message = { v: 1, id: "1", type: "insert.text", text: "olá", restoreClipboard: true };
     const ev: Message = { v: 1, type: "transcript.final", text: "oi", raw: "oi", lang: "pt", durationMs: 820, latencyMs: 160 };
-    const res: Message = { v: 1, type: "result", id: "1", ok: true, data: { pasted: true } };
+    const res: Message = { v: 1, type: "result", id: "1", ok: true, data: { pasted: true, restored: true } };
     const fail: Message = { v: 1, type: "result", id: "2", ok: false, error: "not_implemented" };
     for (const m of [cmd, ev, res, fail]) {
       const line = encode(m);

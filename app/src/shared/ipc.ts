@@ -95,8 +95,19 @@ export interface CommandResults {
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
-  /** `pasted: false` quando não havia campo de texto: o texto ficou no clipboard. */
-  "insert.text": { pasted: boolean };
+  /**
+   * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
+   * `no_focus` (nada em foco), `no_text_field` (o foco é um botão etc.) ou `no_accessibility` (falta a permissão).
+   * `pasted: true, restored: false, reason: "secure_input"`: o ⌘V foi, mas algum app segura o secure input e o
+   * macOS pode tê-lo descartado; o texto continua no clipboard, e o clipboard antigo não volta.
+   * `app` é o bundle id do app em foco.
+   */
+  "insert.text": {
+    pasted: boolean;
+    restored: boolean;
+    reason?: "no_focus" | "no_text_field" | "no_accessibility" | "secure_input";
+    app?: string;
+  };
   notify: Record<string, never>;
   "permissions.request": { permission: Permission; state: PermissionState };
   "llm.complete": { text: string; ms: number };
