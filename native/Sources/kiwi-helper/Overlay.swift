@@ -269,10 +269,25 @@ struct OverlayView: View {
             ThinkingDots(reduceMotion: reduceMotion)
                 .transition(.opacity)
         case .done:
-            Image(systemName: "checkmark")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(OverlayStyle.accent)
-                .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
+            if let message = state.message {
+                // Done, with something to know (secure input left the text on the clipboard, #224).
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(OverlayStyle.accent)
+                    Text(message)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(OverlayStyle.text)
+                        .lineLimit(1)
+                }
+                .fixedSize()
+                .transition(.opacity)
+            } else {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(OverlayStyle.accent)
+                    .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
+            }
         case .error:
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.circle.fill")
@@ -379,6 +394,7 @@ enum OverlaySnapshots {
             ("listening-speech", .listening, nil, listening([0.1, 0.5, 0.3, 0.8, 0.6, 1, 0.4])),
             ("processing", .processing, nil, []),
             ("done", .done, nil, []),
+            ("done-message", .done, "O texto também ficou no clipboard", []),
             ("error", .error, OverlayText.error("no_input_device"), []),
         ]
         for (name, phase, message, bars) in samples {

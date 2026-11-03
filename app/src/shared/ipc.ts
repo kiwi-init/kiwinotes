@@ -44,10 +44,10 @@ export type OverlayState = "hidden" | "listening" | "processing" | "done" | "err
 
 /** Quem começou ou terminou a gravação. `config`: o atalho mudou no meio. */
 /** `overlay`: o ✕ (cancelar) ou o ✓ (terminar) da pílula. */
-export type RecordReason = "hotkey" | "command" | "config" | "overlay";
+export type RecordReason = "hotkey" | "command" | "config" | "overlay" | "debug";
 
 /** Como a gravação terminou: soltou a tecla, bateu de novo no toggle, ou pelo app. */
-export type StopMode = "ptt" | "toggle" | "command";
+export type StopMode = "ptt" | "toggle" | "command" | "debug";
 
 // ---------------------------------------------------------- Bun → sidecar
 
@@ -72,6 +72,7 @@ export type Command =
     }
   | { type: "record.start" }
   | { type: "record.stop" }
+  /** `message` vale no `error` e no `done` (secure input, #224): com mensagem, o `done` fica 2,5 s em vez de 0,7 s. */
   | { type: "overlay.state"; state: OverlayState; message?: string }
   | { type: "insert.text"; text: string; restoreClipboard: boolean }
   | { type: "notify"; title: string; body: string }
@@ -84,7 +85,13 @@ export type Command =
    */
   | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number; temperature?: number; timeoutMs?: number }
   /** Aquece o modelo com estas instruções. O Bun manda no `record.started`, antes da transcrição chegar. */
-  | { type: "llm.prewarm"; system: string };
+  | { type: "llm.prewarm"; system: string }
+  /**
+   * Só com `KIWI_DEBUG=1` no sidecar (sem isso, `unknown_type`), e só com áudio sintético (`say`): o arquivo faz o
+   * caminho de uma gravação que terminou (`record.started`/`record.stopped` com `reason: "debug"`, a pílula, o
+   * `transcript.final`), para testar o app sem o mic. `invalid_value` se o arquivo não abre; `already_recording`.
+   */
+  | { type: "debug.transcribe"; path: string };
 
 export type CommandType = Command["type"];
 
@@ -112,6 +119,7 @@ export interface CommandResults {
   "permissions.request": { permission: Permission; state: PermissionState };
   "llm.complete": { text: string; ms: number };
   "llm.prewarm": Record<string, never>;
+  "debug.transcribe": Record<string, never>;
 }
 
 // ---------------------------------------------------------- sidecar → Bun
@@ -135,7 +143,8 @@ export type Event =
   | { type: "hotkey.up"; key: HotkeyKey }
   | { type: "hotkey.toggle"; on: boolean }
   /** O sidecar começa a gravar sozinho no hotkey.down, para não perder a primeira sílaba. */
-  | { type: "record.started"; reason: RecordReason }
+  /** `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). */
+  | { type: "record.started"; reason: RecordReason; app?: { bundleId: string; name: string } }
   | { type: "record.stopped"; reason: RecordReason; mode: StopMode; durationMs: number; samples: number; audioPath?: string }
   /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
   | { type: "record.cancelled"; reason: RecordReason }
@@ -146,8 +155,11 @@ export type Event =
   | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState }
   /** Nível RMS de 0 a 1, ~30 Hz enquanto grava. Alimenta a onda do overlay. */
   | { type: "audio.level"; rms: number }
-  /** App em foco, para ajustar o tom da limpeza. */
-  | { type: "app.active"; bundleId: string; name: string }
+  /**
+   * O app da frente, para o tom da limpeza: logo depois do `ready` e a cada troca. Nunca o próprio Kiwi, nem o mesmo
+   * app duas vezes seguidas.
+   */
+  | { type: "app.active"; bundleId: string; name: string; pid: number }
   | { type: "transcript.partial"; text: string }
   /**
    * O texto de uma gravação, na ordem em que terminaram. `text` já passou pelo pós-processamento do VoiceInk
@@ -189,6 +201,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "permissions.request",
   "llm.complete",
   "llm.prewarm",
+  "debug.transcribe",
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
