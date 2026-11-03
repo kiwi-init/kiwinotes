@@ -3,7 +3,9 @@
 // - na primeira vez que o app abre, uma por vez: o Monitoramento de Entrada (sem ele o atalho não chega) e depois a
 //   Acessibilidade (para colar). A próxima só sai quando a anterior foi dada, para não empilhar janelas;
 // - o microfone no primeiro ditado, quando o macOS ainda não perguntou (`record.error` com `undetermined`);
-// - e sempre que a pessoa clicar em "Permitir acesso…" no menu da barra, enquanto faltar alguma.
+// - e sempre que a pessoa clicar em "Permitir acesso…" no menu da barra, enquanto faltar alguma. Esse clique pede com
+//   `reset`: se a permissão já foi pedida e segue faltando (a chave ligada nos Ajustes que não vale, T658), o helper
+//   apaga a entrada e pede de novo, em vez de abrir os Ajustes onde a chave já está ligada.
 // O que já foi pedido sozinho fica em <dados>/permissions.json, para não abrir os Ajustes a cada vez que o app sobe.
 
 import path from "node:path";
@@ -58,12 +60,15 @@ export class PermissionFlow {
   /**
    * @param auto pedir sozinho (na abertura e no primeiro ditado). `false` com `KIWI_DEBUG=1`: um agente nunca faz o
    *   macOS abrir um diálogo na tela da pessoa (AGENTS.md, #537); só o item do menu pede.
+   * @param resetOnClick o clique no menu pode apagar a entrada da permissão (`tccutil reset`). `false` com
+   *   `KIWI_DEBUG=1`: um agente nunca mexe nas permissões da pessoa (#666).
    */
   constructor(
     private readonly sidecar: PermissionsSidecar,
     private readonly store: AskedStore,
     private readonly log: (m: string) => void = (m) => console.log(`[permissions] ${m}`),
     private readonly auto = true,
+    private readonly resetOnClick = auto,
   ) {}
 
   attach(): void {
@@ -89,7 +94,7 @@ export class PermissionFlow {
   /** O clique em "Permitir acesso…": pede a primeira que falta (o helper abre o diálogo ou os Ajustes). */
   async askNext(): Promise<Permission | undefined> {
     const next = this.missing()[0];
-    if (next) await this.request(next);
+    if (next) await this.request(next, this.resetOnClick);
     return next;
   }
 
@@ -113,10 +118,10 @@ export class PermissionFlow {
     await this.request(next);
   }
 
-  private async request(permission: Permission) {
+  private async request(permission: Permission, reset = false) {
     this.asking = true;
     try {
-      const result = await this.sidecar.send({ type: "permissions.request", permission });
+      const result = await this.sidecar.send({ type: "permissions.request", permission, ...(reset ? { reset } : {}) });
       this.log(`${permission}: ${result.ok ? result.data.state : result.error}`);
     } catch (e) {
       this.log(`${permission}: ${String(e)}`);
