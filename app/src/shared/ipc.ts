@@ -171,12 +171,25 @@ export type Event =
   /** O sidecar começa a gravar sozinho no hotkey.down, para não perder a primeira sílaba. */
   /** `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). */
   | { type: "record.started"; reason: RecordReason; app?: AppRef }
-  | { type: "record.stopped"; reason: RecordReason; mode: StopMode; durationMs: number; samples: number; audioPath?: string }
+  /**
+   * `lost`: a gravação acabou porque o mic caiu (`no_audio` ou `device_changed`), e o que ele ouviu até ali segue para
+   * a transcrição como num fim normal (T883). Com menos de 0,3 s, vem `record.error` no lugar.
+   */
+  | {
+      type: "record.stopped";
+      reason: RecordReason;
+      mode: StopMode;
+      durationMs: number;
+      samples: number;
+      audioPath?: string;
+      lost?: "no_audio" | "device_changed";
+    }
   /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
   | { type: "record.cancelled"; reason: RecordReason }
   /**
    * Não deu para gravar: sem microfone, sem permissão, `device_changed` (o mic trocou no meio e o novo não subiu)
-   * ou `no_audio` (o mic parou de mandar áudio, mesmo depois de um engine novo; T590).
+   * ou `no_audio` (o mic parou de mandar áudio, mesmo depois de um engine novo; T590). Nesses dois, só quando havia
+   * menos de 0,3 s gravado; com mais, vem `record.stopped` com `lost` (T883).
    * Pode vir logo depois do `record.started`, que sai antes de o mic subir.
    */
   | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState }
