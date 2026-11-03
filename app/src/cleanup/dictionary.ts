@@ -4,6 +4,7 @@ import type { DictionaryEntry } from "./types.ts";
 export const WORD_START = "(?<![\\p{L}\\p{N}])";
 export const WORD_END = "(?![\\p{L}\\p{N}])";
 
+const HAS_WORD = /[\p{L}\p{N}]/u;
 // O termo do dicionário só casa como palavra solta, nunca dentro de URL, caminho, e-mail, nome de arquivo ou
 // `nome:tag` (T896): não encosta em `_ / \ @ ~`, nem num `.` ou `:` grudado em outra letra ou número.
 // "o DICOM." e "GitHub: …" continuam valendo, porque ali o `.` e o `:` não seguem de letra.
@@ -22,8 +23,10 @@ interface Compiled {
   re: RegExp;
   /** Casa só a grafia do termo, sem diferença de maiúscula (não um alias). */
   same: RegExp;
-  /** A posição no dicionário da pessoa (a lista é reordenada pelo tamanho do termo). */
+  /** A posição no dicionário da pessoa (a lista é reordenada pela forma falada mais longa). */
   order: number;
+  /** A forma falada mais longa (termo ou alias): quem tem a mais longa casa primeiro. */
+  longest: number;
 }
 
 /** Uma forma falada vira regex: sem diferença de maiúscula, e espaço ou hífen entre as palavras. */
@@ -40,15 +43,18 @@ export function compileDictionary(entries: DictionaryEntry[] = []): Compiled[] {
   const out: Compiled[] = [];
   for (const [order, entry] of entries.entries()) {
     const term = typeof entry === "string" ? entry : entry.term;
-    if (!term.trim()) continue;
-    const forms = [term, ...(typeof entry === "string" ? [] : (entry.aliases ?? []))].filter((f) => f.trim());
+    // Sem letra nem número ("-", "."), a forma vira uma regex que casa em todo canto e enche o texto (T913).
+    if (!HAS_WORD.test(term)) continue;
+    const forms = [term, ...(typeof entry === "string" ? [] : (entry.aliases ?? []))].filter((f) => HAS_WORD.test(f));
     // Formas mais longas primeiro, para "Healthcare API" ganhar de "API".
     forms.sort((a, b) => b.length - a.length);
     const re = new RegExp(`${TERM_START}(?:${forms.map(pattern).join("|")})${TERM_END}`, "giu");
     const same = new RegExp(`^(?:${pattern(term)})$`, "iu");
-    out.push({ term: term.trim(), re, same, order });
+    out.push({ term: term.trim(), re, same, order, longest: forms[0]!.trim().length });
   }
-  out.sort((a, b) => b.term.length - a.term.length);
+  // Pela forma falada, não pelo termo: com {kubectl: ["kube control"]} e {Kubernetes: ["kube"]}, "kube control" tem
+  // que ganhar de "kube" (T913).
+  out.sort((a, b) => b.longest - a.longest);
   return out;
 }
 

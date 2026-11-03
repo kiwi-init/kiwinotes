@@ -55,8 +55,12 @@ export function cleanupWithRules(input: CleanupInput): { text: string; tone: Ton
   const tone = input.tone ?? toneFor(input.bundleId);
   const dictionary = compileDictionary(input.dictionary);
   const protectedText = protect(input.raw, dictionary);
-  let marked = applyRules(protectedText.text, tone);
-  if (rulesDroppedTooMuch(input.raw, protectedText.restore(marked))) {
+  // Comando ou não, decidido com os termos de volta: "kubectl get pods ." com `kubectl` no dicionário é comando.
+  const code = tone === "literal" && looksLikeCode(protectedText.restoreAsTyped(protectedText.text));
+  let marked = applyRules(protectedText.text, tone, code);
+  // Um comando só perde espaços repetidos: a trava não vale ali, e o alias trocado pelo termo ("cube control" →
+  // "kubectl") contaria como palavras perdidas e passaria o comando pelo `tidyPunctuation`.
+  if (!code && rulesDroppedTooMuch(input.raw, protectedText.restore(marked))) {
     marked = capitalize(tidyPunctuation(protectedText.text));
   }
   // Num comando, o termo dito com outra maiúscula fica como veio (`kubectl -n pacs`, T896); o alias vira o termo.
