@@ -114,6 +114,33 @@ export const fixtures: Fixture[] = [
   { name: "terminal: prosa para o Claude Code ganha pontuação", raw: "corrige o teste que tá quebrando no ci", bundleId: TERMINAL, expected: "Corrige o teste que tá quebrando no ci." },
   { name: "terminal: prosa não vira lista", raw: "primeiro, roda os testes, segundo, abre o PR", bundleId: TERMINAL, expected: "Primeiro, roda os testes, segundo, abre o PR." },
 
+  // ---------------------------------------------------------------- o que as regras não podem tirar (T913)
+  { name: "não quer dizer verbo fica", raw: "Ele não quer dizer a verdade.", expected: "Ele não quer dizer a verdade." },
+  { name: "não quer dizer verbo não vira pergunta", raw: "ele não quer dizer onde mora", expected: "Ele não quer dizer onde mora." },
+  { name: "então assim que é conjunção", raw: "Então assim que chegar em casa eu te ligo.", expected: "Então assim que chegar em casa eu te ligo." },
+  { name: "tipo substantivo depois de preposição", raw: "Deu erro de tipo no build.", expected: "Deu erro de tipo no build." },
+  { name: "primeiro lugar é colocação, não lista", raw: "Primeiro lugar foi o Brasil, segundo lugar a Argentina.", expected: "Primeiro lugar foi o Brasil, segundo lugar a Argentina." },
+  { name: "em primeiro lugar ainda é lista", raw: "em primeiro lugar, revisar o backup, em segundo lugar, subir o deploy", expected: "1. Revisar o backup\n2. Subir o deploy" },
+  { name: "quando puder é pedido, não pergunta", raw: "Quando puder me manda o arquivo", expected: "Quando puder me manda o arquivo." },
+  { name: "Assim, conector fica", raw: "Assim, o projeto ficou pronto.", expected: "Assim, o projeto ficou pronto." },
+  { name: "repetição com vírgula e ! é ênfase", raw: "Vai, vai, vai!", expected: "Vai, vai, vai!" },
+  { name: "gagueira com vírgula ainda sai", raw: "eu, eu acho que dá", expected: "Eu acho que dá." },
+  { name: "ghostty: git add . fica", raw: "git add .", bundleId: GHOSTTY, expected: "git add ." },
+  { name: "ghostty: cd .. fica", raw: "cd ..", bundleId: GHOSTTY, expected: "cd .." },
+  { name: "ghostty: cd ../src fica", raw: "cd ../src", bundleId: GHOSTTY, expected: "cd ../src" },
+  { name: "ghostty: ./gradlew fica", raw: "./gradlew build", bundleId: GHOSTTY, expected: "./gradlew build" },
+  { name: "ghostty: rm -rf ./dist fica", raw: "rm -rf ./dist", bundleId: GHOSTTY, expected: "rm -rf ./dist" },
+  { name: "ghostty: sudo !! fica", raw: "sudo !!", bundleId: GHOSTTY, expected: "sudo !!" },
+  { name: "ghostty: prosa com nome de CLI é prosa", raw: "Docker tá fora do ar, reinicia ele.", bundleId: GHOSTTY, expected: "Docker tá fora do ar, reinicia ele." },
+  { name: "ghostty: número de versão não é código", raw: "a versão 2.1 saiu ontem.", bundleId: GHOSTTY, expected: "A versão 2.1 saiu ontem." },
+  {
+    name: "dicionário: a forma falada mais longa ganha",
+    raw: "kube control get pods",
+    dictionary: [{ term: "kubectl", aliases: ["kube control"] }, { term: "Kubernetes", aliases: ["kube"] }],
+    expected: "kubectl get pods.",
+  },
+  { name: "dicionário: termo sem letra é ignorado", raw: "sim, claro. e você?", dictionary: [{ term: "-", aliases: ["."] }], expected: "Sim, claro. E você?" },
+
   // ---------------------------------------------------------------- casos de borda
   { name: "vazio", raw: "", expected: "" },
   { name: "só muleta", raw: "hum", expected: "" },

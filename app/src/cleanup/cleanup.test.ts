@@ -210,6 +210,21 @@ describe("guarda da saída do LLM", () => {
   test("vazio", () => {
     expect(rejectReason(input, "  ", dict)).toBe("empty");
   });
+
+  test("um preâmbulo com acento também é resposta, não revisão (T913)", () => {
+    expect(rejectReason("me manda o arquivo", "Aqui está: me manda o arquivo.", dict)).toBe("answered");
+    expect(rejectReason("aqui está o arquivo que você pediu", "Aqui está o arquivo que você pediu.", dict)).toBeNull();
+  });
+
+  test("tirar ou pôr uma negação reprova, mesmo sendo palavra curta (T913)", () => {
+    expect(rejectReason("eu não vou mandar o relatório amanhã", "Eu vou mandar o relatório amanhã.", dict)).toBe("negation:não");
+    expect(rejectReason("eu vou mandar o relatório amanhã", "Eu não vou mandar o relatório amanhã.", dict)).toBe("negation:não");
+    expect(rejectReason("I will never ship this on Friday", "I will ship this on Friday.", dict)).toBe("negation:never");
+    expect(rejectReason("it doesn't build on main", "It builds on main.", dict)).toBe("negation:not");
+    // A mesma negação, só arrumada, passa; e o "no" de "no servidor" não conta.
+    expect(rejectReason("eu não vou mandar o relatório amanhã", "Eu não vou mandar o relatório amanhã.", dict)).toBeNull();
+    expect(rejectReason("o erro tá no servidor de produção", "O erro está no servidor de produção.", dict)).toBeNull();
+  });
 });
 
 describe("backend do sidecar", () => {
