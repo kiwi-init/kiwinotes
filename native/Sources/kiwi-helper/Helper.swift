@@ -287,7 +287,7 @@ final class Helper {
             guard let text = message.string("text") else { return reply(id, ok: false, error: "invalid_value") }
             let restore = (message.fields["restoreClipboard"] as? Bool) ?? true
             inserter.insert(text, restoreClipboard: restore) { [weak self] outcome in
-                var data: [String: Any] = ["pasted": outcome.pasted]
+                var data: [String: Any] = ["pasted": outcome.pasted, "restored": outcome.restored]
                 if let reason = outcome.reason { data["reason"] = reason }
                 if let app = outcome.app { data["app"] = app }
                 self?.reply(id, ok: true, data)

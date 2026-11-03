@@ -13,6 +13,8 @@ final class Inserter {
 
     struct Outcome {
         let pasted: Bool
+        /// Whether the person's clipboard goes back after the paste.
+        let restored: Bool
         let reason: String?
         let app: String?
     }
@@ -21,31 +23,31 @@ final class Inserter {
     func insert(_ text: String, restoreClipboard: Bool, completion: @escaping (Outcome) -> Void) {
         let app = NSWorkspace.shared.frontmostApplication
         let plan = InsertPlan.decide(accessibilityGranted: AXIsProcessTrusted(),
-                                     secureInput: Self.secureInputBlocks && IsSecureEventInputEnabled(), focus: Self.focus())
+                                     secureInput: IsSecureEventInputEnabled(), focus: Self.focus())
         let pasteboard = NSPasteboard.general
 
-        guard case .paste = plan else {
+        let reason: String?
+        switch plan {
+        case .clipboardOnly(let why):
             // No field: the text stays on the clipboard for the person to paste, and the app tells them.
             ClipboardSnapshot.put(text, on: pasteboard, transient: false)
-            if case .clipboardOnly(let reason) = plan {
-                completion(Outcome(pasted: false, reason: reason, app: app?.bundleIdentifier))
-            }
-            return
+            return completion(Outcome(pasted: false, restored: false, reason: why, app: app?.bundleIdentifier))
+        case .pasteKeepingText(let why):
+            reason = why
+        case .paste:
+            reason = nil
         }
 
-        let snapshot = restoreClipboard ? ClipboardSnapshot.take(pasteboard) : nil
-        let ours = ClipboardSnapshot.put(text, on: pasteboard, transient: restoreClipboard)
+        let restore = restoreClipboard && reason == nil
+        let snapshot = restore ? ClipboardSnapshot.take(pasteboard) : nil
+        let ours = ClipboardSnapshot.put(text, on: pasteboard, transient: restore)
         Self.postCommandV()
-        completion(Outcome(pasted: true, reason: nil, app: app?.bundleIdentifier))
+        completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier))
         guard let snapshot else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.restoreDelay) {
             snapshot.restore(to: pasteboard, ifStill: ours)
         }
     }
-
-    /// `KIWI_PASTE_THROUGH_SECURE_INPUT=1` skips the secure-input refusal, to check live whether macOS really
-    /// drops a posted ⌘V while some app holds Secure Event Input (review #215). Remove once settled.
-    static let secureInputBlocks = ProcessInfo.processInfo.environment["KIWI_PASTE_THROUGH_SECURE_INPUT"] != "1"
 
     /// How long an Accessibility call may block. The default is ~6 s, on the main thread: a frozen app in front
     /// would freeze the hotkey, the overlay and the IPC with it.

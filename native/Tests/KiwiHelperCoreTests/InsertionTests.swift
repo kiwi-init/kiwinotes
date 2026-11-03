@@ -17,8 +17,10 @@ final class InsertionTests: XCTestCase {
                        .clipboardOnly(reason: "no_text_field"))
         // An app too busy to answer Accessibility still has focus somewhere: paste.
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: .unanswered), .paste)
-        // Secure input drops a synthetic ⌘V: keep the text on the clipboard instead.
-        XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, secureInput: true, focus: field), .clipboardOnly(reason: "secure_input"))
+        // Secure input may drop a synthetic ⌘V: paste anyway, but leave the text on the clipboard.
+        XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, secureInput: true, focus: field), .pasteKeepingText(reason: "secure_input"))
+        // No field still wins over secure input.
+        XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, secureInput: true, focus: nil), .clipboardOnly(reason: "no_focus"))
         // A caret beats the role (a combo box or a custom control that takes text).
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: FocusInfo(role: "AXButton", hasSelectedTextRange: true)), .paste)
     }

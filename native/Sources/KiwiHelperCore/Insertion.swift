@@ -20,6 +20,9 @@ public struct FocusInfo: Equatable, Sendable {
 public enum InsertPlan: Equatable, Sendable {
     /// ⌘V into the focused app, with the text briefly on the clipboard.
     case paste
+    /// ⌘V, but the text stays on the clipboard afterwards (no restore). For when the paste may be dropped:
+    /// if it is, the person can still paste by hand; if it lands, the cost is only the old clipboard not coming back.
+    case pasteKeepingText(reason: String)
     /// No place for the text (or no permission to type): leave it on the clipboard, and the app tells the person.
     case clipboardOnly(reason: String)
 
@@ -32,14 +35,14 @@ public enum InsertPlan: Equatable, Sendable {
     ]
 
     /// `focus` is nil when no app has a focused element (the desktop, or nothing frontmost).
-    /// `secureInput`: some app holds Secure Event Input (a password field, Terminal's Secure Keyboard Entry),
-    /// and macOS drops a synthetic ⌘V. Pasting would "succeed" and then the clipboard restore would erase the text.
+    /// `secureInput`: some app holds Secure Event Input (a password field, Terminal's Secure Keyboard Entry).
+    /// macOS may drop a synthetic ⌘V then, and the flag is global (an app in the background can leak it on),
+    /// so the paste still goes, but the text stays on the clipboard (#219).
     public static func decide(accessibilityGranted: Bool, secureInput: Bool = false, focus: FocusInfo?) -> InsertPlan {
         guard accessibilityGranted else { return .clipboardOnly(reason: "no_accessibility") }
-        guard !secureInput else { return .clipboardOnly(reason: "secure_input") }
         guard let focus, let role = focus.role else { return .clipboardOnly(reason: "no_focus") }
-        if focus.hasSelectedTextRange { return .paste }
-        return nonTextRoles.contains(role) ? .clipboardOnly(reason: "no_text_field") : .paste
+        guard focus.hasSelectedTextRange || !nonTextRoles.contains(role) else { return .clipboardOnly(reason: "no_text_field") }
+        return secureInput ? .pasteKeepingText(reason: "secure_input") : .paste
     }
 }
 
