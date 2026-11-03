@@ -1,0 +1,334 @@
+// T1192: o AppEngine do Kiwi Notes, com o contrato, o canal local e a UI de fábrica. Sem janela e sem app: o `show`
+// é de mentira e o canal é um Bun.serve em 127.0.0.1, como o canal local de dev.
+
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import {
+  type AppEngine,
+  type AppEngineEvent,
+  buildUipack,
+  contractRefusal,
+  generateSigningKey,
+  type HostUi,
+  signManifest,
+  type UiManifest,
+  uipackFileName,
+} from "electrobun/bun/appengine";
+
+import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
+import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
+import { uiCapabilities } from "./ui-capabilities.ts";
+import { builtInFrom, channelUrl, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
+
+const key = generateSigningKey();
+const trustedKeys = { [key.keyId]: key.publicKey };
+const encode = (s: string) => new TextEncoder().encode(s);
+const decode = (b: Uint8Array) => new TextDecoder().decode(b);
+const BUILT_IN_SEQ = 1_000;
+
+function fakeDeps() {
+  const calls: string[] = [];
+  const copied: string[] = [];
+  let t = 0;
+  return {
+    calls,
+    copied,
+    tick: (ms: number) => void (t += ms),
+    deps: {
+      dictionary: {
+        load: async () => (calls.push("dictionary.load"), [{ term: "DICOM", aliases: [] }]),
+        save: async (terms: { term: string; aliases: string[] }[]) => (calls.push(`dictionary.save:${terms.length}`), terms),
+      },
+      snippets: { load: async () => [], save: async (s: { trigger: string; text: string }[]) => s },
+      history: {
+        search: async (p: object) => (calls.push(`history.search:${JSON.stringify(p)}`), { entries: [] }),
+        delete: async (id: string) => (calls.push(`history.delete:${id}`), true),
+      },
+      clipboardWrite: (text: string) => void copied.push(text),
+      now: () => t,
+    },
+  };
+}
+
+// ---------------------------------------------------------------- canal local de mentira
+
+function startChannel() {
+  const sites = new Map<string, { manifest: UiManifest | null; bundles: Map<string, Uint8Array> }>();
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const [, window, name] = new URL(request.url).pathname.split("/");
+      const site = sites.get(window ?? "");
+      if (!site) return new Response("none", { status: 404 });
+      if (name === "manifest.json") return site.manifest ? Response.json(site.manifest) : new Response("none", { status: 404 });
+      const bundle = site.bundles.get(name ?? "");
+      return bundle ? new Response(new Blob([bundle as Uint8Array<ArrayBuffer>])) : new Response("not found", { status: 404 });
+    },
+  });
+  return {
+    base: `http://127.0.0.1:${server.port}`,
+    publish(window: string, seq: number, index: string, options: { requiresContract?: string } = {}) {
+      const site = sites.get(window) ?? { manifest: null, bundles: new Map() };
+      sites.set(window, site);
+      const uiVersion = `0.2.${seq}`;
+      const { bytes, sha256 } = buildUipack(uiVersion, new Map([["index.html", encode(index)], ["assets/app.js", encode(`app(${seq})`)]]));
+      const name = uipackFileName(uiVersion, sha256);
+      site.bundles.set(name, bytes);
+      site.manifest = signManifest(
+        {
+          format: "livewire-manifest/1",
+          keyId: key.keyId,
+          seq,
+          uiVersion,
+          bundleUrl: name,
+          sha256,
+          requiresContract: options.requiresContract ?? "^1.0.0",
+          dataSchema: 1,
+          publishedAt: Date.now(),
+        },
+        key.privateKeyPem,
+      );
+      return site.manifest;
+    },
+    stop: () => server.stop(true),
+  };
+}
+
+// ---------------------------------------------------------------- engine montado como no app
+
+const cleanups: (() => void)[] = [];
+afterEach(() => {
+  for (const fn of cleanups.splice(0)) fn();
+});
+
+function rig(manifestUrl: string | null, opts: { readyTimeoutMs?: number } = {}) {
+  const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-ui-engine-test-"));
+  const shown: HostUi[] = [];
+  const events: AppEngineEvent[] = [];
+  const { deps } = fakeDeps();
+  const engine: AppEngine = createUiEngine({
+    name: "settings",
+    dir,
+    builtIn: { uiVersion: "0.1.0", seq: BUILT_IN_SEQ, files: () => new Map([["index.html", encode("<p>fábrica</p>")]]) },
+    trustedKeys,
+    capabilities: uiCapabilities(deps),
+    manifestUrl,
+    show: (ui) => void shown.push(ui),
+    readyTimeoutMs: opts.readyTimeoutMs ?? 2_000,
+    probationMs: 50,
+  });
+  engine.on((e) => void events.push(e));
+  cleanups.push(() => {
+    engine.stop();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return {
+    engine,
+    shown,
+    events,
+    last: () => decode(shown.at(-1)!.index),
+    until: (pred: (e: AppEngineEvent) => boolean) => waitFor(() => events.find(pred)),
+  };
+}
+
+async function waitFor<T>(probe: () => T | undefined | null | false, timeoutMs = 3_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = probe();
+    if (value) return value;
+    if (Date.now() > deadline) throw new Error("timed out");
+    await Bun.sleep(5);
+  }
+}
+
+// ---------------------------------------------------------------- contrato
+
+describe("contrato 1.0.0 (T1192)", () => {
+  test("só os nomes da lista: o resto é E_NO_CAPABILITY, até os herdados", async () => {
+    const r = rig(null);
+    for (const cap of ["fs.read", "shell.run", "constructor", "toString", "__proto__", ""]) {
+      const out = await r.engine.invoke(cap, {});
+      expect(out).toMatchObject({ ok: false, code: "E_NO_CAPABILITY" });
+    }
+    expect([...r.engine.contract.capabilities].sort()).toEqual([...UI_CAPABILITIES, "engine.info", "session.takeHandoff"].sort());
+    expect(r.engine.contract.version).toBe(UI_CONTRACT_VERSION);
+  });
+
+  test("argumentos ruins dão E_BAD_ARGS, e os bons chegam ao app", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    expect(await call("dictionary.get", {})).toMatchObject({ ok: true, value: [{ term: "DICOM" }] });
+    expect(await call("dictionary.get", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("dictionary.set", { terms: "DICOM" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("dictionary.set", { terms: [{ term: " PACS ", aliases: [] }, { term: "" }] })).toMatchObject({
+      ok: true,
+      value: [{ term: "PACS", aliases: [] }],
+    });
+    expect(await call("history.search", { limit: 0 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("history.search", { query: 42 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("history.search", { query: "reunião", limit: 10 })).toMatchObject({ ok: true });
+    expect(await call("history.delete", {})).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("history.delete", { id: "abc" })).toMatchObject({ ok: true, value: true });
+    expect(await call("history.search", [])).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(f.calls).toEqual(["dictionary.load", "dictionary.save:1", 'history.search:{"query":"reunião","limit":10}', "history.delete:abc"]);
+  });
+
+  test("clipboard.write: só texto, com limite de tamanho e de ritmo (#1199)", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (args: unknown) => directInvoke(caps, "clipboard.write", args);
+    expect(await call({ text: 7 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call({ text: "x".repeat(100_001) })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call({ text: "oi" })).toMatchObject({ ok: true });
+    expect(await call({ text: "de novo" })).toMatchObject({ ok: false, code: "E_RATE" });
+    f.tick(400);
+    expect(await call({ text: "depois" })).toMatchObject({ ok: true });
+    expect(f.copied).toEqual(["oi", "depois"]);
+  });
+
+  test("uma UI que pede outro contrato é recusada antes de baixar", async () => {
+    const ok = { requiresContract: "^1.0.0", uiVersion: "x" } as UiManifest;
+    expect(contractRefusal(UI_CONTRACT_VERSION, ok)).toBeNull();
+    expect(contractRefusal(UI_CONTRACT_VERSION, { ...ok, requiresContract: "^2.0.0" })).toContain("requires contract");
+    expect(contractRefusal(UI_CONTRACT_VERSION, { ...ok, requiresContract: "banana" })).toContain("isn't a semver range");
+
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const r = rig(channelUrl(channel.base, "settings"));
+    await r.engine.start();
+    channel.publish("settings", BUILT_IN_SEQ + 1, "<p>pede 2.0</p>", { requiresContract: "^2.0.0" });
+    expect(await r.engine.channel.check()).toMatchObject({ result: "refused" });
+    expect(r.shown.map((ui) => decode(ui.index))).toEqual(["<p>fábrica</p>"]);
+  });
+});
+
+// ---------------------------------------------------------------- troca e rollback
+
+describe("troca e rollback pelo canal local (T1192)", () => {
+  test("sem canal: a UI de fábrica, e o canal desligado não consulta nada", async () => {
+    const fetchSpy = spyOn(globalThis, "fetch");
+    try {
+      const r = rig(null);
+      await r.engine.start();
+      await r.until((e) => e.type === "built-in");
+      expect(r.last()).toBe("<p>fábrica</p>");
+      expect(await r.engine.channel.check()).toMatchObject({ result: "offline" });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("uma UI nova entra sem rebuild; uma quebrada volta para a boa", async () => {
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const r = rig(channelUrl(channel.base, "settings"));
+    await r.engine.start();
+    await r.until((e) => e.type === "built-in");
+
+    // Uma UI nova pelo canal: troca na hora, sobe (ready) e passa da prova.
+    channel.publish("settings", BUILT_IN_SEQ + 1, "<p>nova</p>");
+    expect(await r.engine.channel.check()).toMatchObject({ result: "available" });
+    await waitFor(() => r.last() === "<p>nova</p>");
+    r.engine.ready();
+    await r.until((e) => e.type === "promoted");
+
+    // Uma UI quebrada: erro antes do ready() → falha, banida, e volta para a nova.
+    channel.publish("settings", BUILT_IN_SEQ + 2, "<p>quebrada</p>");
+    expect(await r.engine.channel.check()).toMatchObject({ result: "available" });
+    await waitFor(() => r.last() === "<p>quebrada</p>");
+    r.engine.error("TypeError: boom");
+    const failed = await r.until((e) => e.type === "failed");
+    expect(failed).toMatchObject({ banned: true });
+    await waitFor(() => r.last() === "<p>nova</p>");
+    r.engine.ready();
+    await waitFor(() => r.engine.showing?.uiVersion === `0.2.${BUILT_IN_SEQ + 1}`);
+  });
+
+  test("uma UI que nunca chama ready() volta para a de fábrica no prazo", async () => {
+    const channel = startChannel();
+    cleanups.push(channel.stop);
+    const r = rig(channelUrl(channel.base, "settings"), { readyTimeoutMs: 100 });
+    await r.engine.start();
+    await r.until((e) => e.type === "built-in");
+    channel.publish("settings", BUILT_IN_SEQ + 1, "<p>muda</p>");
+    await r.engine.channel.check();
+    await waitFor(() => r.last() === "<p>muda</p>");
+    await r.until((e) => e.type === "failed");
+    await waitFor(() => r.last() === "<p>fábrica</p>");
+  });
+});
+
+// ---------------------------------------------------------------- partes do app
+
+describe("partes do app", () => {
+  test("o canal só aceita endereço local; sem a variável, desligado", () => {
+    expect(channelUrl(undefined, "settings")).toBeNull();
+    expect(channelUrl("http://127.0.0.1:5179", "history")).toBe("http://127.0.0.1:5179/history/manifest.json");
+    expect(channelUrl("http://localhost:5179/", "settings")).toBe("http://localhost:5179/settings/manifest.json");
+    for (const bad of ["https://ui.kiwinit.com", "http://192.168.0.10:5179", "file:///tmp/x", "nada"]) {
+      expect(() => channelUrl(bad, "settings")).toThrow();
+    }
+  });
+
+  test("o HMR pelo localhost só existe no canal dev, nunca no stable (#1199)", () => {
+    expect(devServerAllowed("dev")).toBe(true);
+    for (const ch of ["stable", "canary", "beta", ""]) expect(devServerAllowed(ch)).toBe(false);
+  });
+
+  test("o preload leva o contrato e depois o window.engine", () => {
+    const js = enginePreload(UI_CAPABILITIES, "/*page*/");
+    expect(js.startsWith(`globalThis.${ENGINE_CONTRACT_GLOBAL} = `)).toBe(true);
+    expect(js.endsWith("/*page*/")).toBe(true);
+    const contract = JSON.parse(js.slice(js.indexOf("=") + 1, js.indexOf(";\n")));
+    expect(contract.version).toBe(UI_CONTRACT_VERSION);
+    expect(contract.capabilities).toContain("clipboard.write");
+  });
+
+  test("abrir a janela: dois cliques seguidos abrem uma só, e um erro não vira rejeição (#1277)", async () => {
+    const pending = new Map<string, Promise<void>>();
+    const errors: unknown[] = [];
+    let runs = 0;
+    let release!: () => void;
+    const open = () =>
+      oneAtATime(pending, "history", async () => {
+        runs++;
+        await new Promise<void>((r) => (release = r));
+      }, (e) => void errors.push(e));
+    const first = open();
+    const second = open();
+    expect(second).toBe(first);
+    release();
+    await first;
+    expect(runs).toBe(1);
+    expect(pending.size).toBe(0);
+
+    // Um erro ao abrir (sem ui.json, mkdir sem permissão): vai para o log, e a promessa resolve.
+    const failing = oneAtATime(pending, "history", async () => {
+      throw new Error("no ui.json");
+    }, (e) => void errors.push(e));
+    await expect(failing).resolves.toBeUndefined();
+    expect(String(errors[0])).toContain("no ui.json");
+    // Depois do erro, o próximo clique tenta de novo.
+    await oneAtATime(pending, "history", async () => void runs++, (e) => void errors.push(e));
+    expect(runs).toBe(2);
+  });
+
+  test("a UI de fábrica vem do ui.json e da pasta do bundle", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-builtin-test-"));
+    cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+    mkdirSync(path.join(dir, "assets"));
+    writeFileSync(path.join(dir, "index.html"), "<p>x</p>");
+    writeFileSync(path.join(dir, "assets", "a.js"), "a()");
+    writeFileSync(path.join(dir, "ui.json"), JSON.stringify({ uiVersion: "0.1.0", seq: 42 }));
+    const b = builtInFrom(dir);
+    expect(b.uiVersion).toBe("0.1.0");
+    expect(b.seq).toBe(42);
+    expect([...b.files().keys()].sort()).toEqual(["assets/a.js", "index.html", "ui.json"]);
+  });
+});

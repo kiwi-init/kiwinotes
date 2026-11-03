@@ -1,53 +1,67 @@
-// O lado da janela do RPC (src/shared/rpc.ts). Fora do app (Vite no navegador),
-// não há Electrobun: as chamadas falham e as telas mostram o estado vazio.
+// O lado da UI do contrato do AppEngine (src/shared/ui-contract.ts, T1192). A UI só fala com o main por
+// `window.engine.invoke(cap, args)`, que o preload da janela põe na página. Fora do app (Vite no navegador) não há
+// `window.engine`: as chamadas falham e as telas mostram o estado vazio.
 
-import { Electroview } from "electrobun/view";
+import type { HistoryEntry, UiCapabilities, UiCapability, UiEvents } from "../../src/shared/ui-contract.ts";
 
-import type { HistoryEntry, KiwiRPC } from "../../src/shared/rpc.ts";
+export type { DictionaryTerm, HistoryEntry, HistoryPage, Snippet } from "../../src/shared/ui-contract.ts";
 
-export type { DictionaryTerm, HistoryEntry, HistoryPage, Snippet } from "../../src/shared/rpc.ts";
+interface Engine {
+  invoke(cap: string, args?: unknown): Promise<unknown>;
+  has(cap: string): boolean;
+  ready(info?: unknown): void;
+  reportError(error: unknown): void;
+  on(name: string, listener: (payload: unknown) => void): () => void;
+}
 
-const added = new Set<(e: HistoryEntry) => void>();
-
-function connect() {
-  try {
-    const rpc = Electroview.defineRPC<KiwiRPC>({
-      maxRequestTime: 10_000,
-      handlers: { messages: { historyAdded: (e) => added.forEach((fn) => fn(e)) } },
-    });
-    new Electroview({ rpc });
-    return rpc;
-  } catch {
-    return null;
+declare global {
+  interface Window {
+    /** O `window.engine` do AppEngine (browser/appengine/page.ts do devkit), pelo preload. */
+    engine?: Engine;
   }
 }
 
-const rpc = connect();
+function need(): Engine {
+  if (!window.engine) throw new Error("sem o app (AppEngine) por perto");
+  return window.engine;
+}
 
-function need() {
-  if (!rpc) throw new Error("sem o app (Electrobun) por perto");
-  return rpc.request;
+function invoke<C extends UiCapability>(cap: C, args: UiCapabilities[C]["args"]): Promise<UiCapabilities[C]["result"]> {
+  return need().invoke(cap, args) as Promise<UiCapabilities[C]["result"]>;
+}
+
+function on<E extends keyof UiEvents>(name: E, fn: (payload: UiEvents[E]) => void): () => void {
+  return window.engine?.on(name, (payload) => fn(payload as UiEvents[E])) ?? (() => {});
+}
+
+/** A UI pode ser usada: o engine conta o boot como bom (até aqui, uma falha volta para a UI anterior). */
+export function engineReady(): void {
+  window.engine?.ready();
+}
+
+/** Erros que não chegam ao window.onerror (os que um error boundary pegou). */
+export function reportError(error: unknown): void {
+  window.engine?.reportError(error);
 }
 
 export const api = {
   dictionary: {
-    get: () => need().dictionaryGet({}),
-    set: (terms: Parameters<NonNullable<typeof rpc>["request"]["dictionarySet"]>[0]["terms"]) => need().dictionarySet({ terms }),
-    check: (terms: Parameters<NonNullable<typeof rpc>["request"]["dictionaryCheck"]>[0]["terms"]) => need().dictionaryCheck({ terms }),
+    get: () => invoke("dictionary.get", {}),
+    set: (terms: UiCapabilities["dictionary.set"]["args"]["terms"]) => invoke("dictionary.set", { terms }),
+    check: (terms: UiCapabilities["dictionary.check"]["args"]["terms"]) => invoke("dictionary.check", { terms }),
   },
   snippets: {
-    get: () => need().snippetsGet({}),
-    set: (snippets: Parameters<NonNullable<typeof rpc>["request"]["snippetsSet"]>[0]["snippets"]) => need().snippetsSet({ snippets }),
+    get: () => invoke("snippets.get", {}),
+    set: (snippets: UiCapabilities["snippets.set"]["args"]["snippets"]) => invoke("snippets.set", { snippets }),
   },
   history: {
-    search: (params: { query?: string; limit?: number; before?: string }) => need().historySearch(params),
-    delete: (id: string) => need().historyDelete({ id }),
-    onAdded(fn: (e: HistoryEntry) => void) {
-      added.add(fn);
-      return () => {
-        added.delete(fn);
-      };
-    },
+    search: (params: UiCapabilities["history.search"]["args"]) => invoke("history.search", params),
+    delete: (id: string) => invoke("history.delete", { id }),
+    onAdded: (fn: (e: HistoryEntry) => void) => on("history.added", fn),
   },
-  copy: (text: string) => need().clipboardWrite({ text }),
+  /** Só num gesto da pessoa (o clique em copiar): nenhuma UI escreve no clipboard sozinha (#1199). */
+  copy: async (text: string) => {
+    if (navigator.userActivation && !navigator.userActivation.isActive) throw new Error("copiar só com um clique");
+    return invoke("clipboard.write", { text });
+  },
 };

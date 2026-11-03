@@ -10,8 +10,11 @@ bun install
 bun dev        # builda a UI, abre o app na barra de menu, com ELECTROBUN_AGENT_CONTROL=1
 bun dev:hmr    # igual, mas as janelas carregam do Vite (porta 5178) com HMR
 bun test       # lógica TS (IPC etc.)
-bun run typecheck
+bun run typecheck   # pede o devkit: numa worktree nova, rode antes `bun run prepare:eb` (ou um build)
+bun run ui:build    # as UIs do AppEngine, uma por janela, em dist/<janela> (ADR 0006)
 ```
+
+As janelas são UIs do AppEngine (ADR 0006). Para testar uma troca de UI sem rebuild, num canal **local**: `bun run ui:publish settings --ui-version 0.1.1-local`, `bun run ui:serve` e o app com `KIWI_UI_CHANNEL=http://127.0.0.1:5179`. Nunca abra janela do app na tela de outra pessoa sem combinar (AGENTS.md).
 
 Na primeira vez, `scripts/hutch.ts` baixa o Hutch fixado em `hutch-pin.json` (confere o sha256) para `~/.hutch/kiwinotes/`, e o Hutch baixa o Livewire 2026.10.2 de `kiwi-init/electrobun-livewire`.
 
