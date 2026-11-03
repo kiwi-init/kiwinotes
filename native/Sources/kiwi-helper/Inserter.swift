@@ -20,7 +20,8 @@ final class Inserter {
     /// Main thread. `completion` runs once the paste is posted; the clipboard goes back `restoreDelay` later.
     func insert(_ text: String, restoreClipboard: Bool, completion: @escaping (Outcome) -> Void) {
         let app = NSWorkspace.shared.frontmostApplication
-        let plan = InsertPlan.decide(accessibilityGranted: AXIsProcessTrusted(), focus: Self.focus())
+        let plan = InsertPlan.decide(accessibilityGranted: AXIsProcessTrusted(),
+                                     secureInput: IsSecureEventInputEnabled(), focus: Self.focus())
         let pasteboard = NSPasteboard.general
 
         guard case .paste = plan else {
@@ -42,15 +43,26 @@ final class Inserter {
         }
     }
 
-    /// The focused element of the frontmost app, as Accessibility sees it; nil when nothing has focus.
+    /// How long an Accessibility call may block. The default is ~6 s, on the main thread: a frozen app in front
+    /// would freeze the hotkey, the overlay and the IPC with it.
+    static let axTimeout: Float = 0.25
+
+    /// The focused element of the frontmost app, as Accessibility sees it; nil when nothing has focus,
+    /// `.unanswered` when the app didn't reply within `axTimeout`.
     static func focus() -> FocusInfo? {
         let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, axTimeout)
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value) == .success,
-              let element = value, CFGetTypeID(element) == AXUIElementGetTypeID() else { return nil }
+        switch AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value) {
+        case .success: break
+        case .cannotComplete: return .unanswered
+        default: return nil
+        }
+        guard let element = value, CFGetTypeID(element) == AXUIElementGetTypeID() else { return nil }
         let focused = element as! AXUIElement
+        AXUIElementSetMessagingTimeout(focused, axTimeout)
         var role: CFTypeRef?
-        AXUIElementCopyAttributeValue(focused, kAXRoleAttribute as CFString, &role)
+        if AXUIElementCopyAttributeValue(focused, kAXRoleAttribute as CFString, &role) == .cannotComplete { return .unanswered }
         var range: CFTypeRef?
         let hasRange = AXUIElementCopyAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, &range) == .success
         return FocusInfo(role: role as? String, hasSelectedTextRange: hasRange)

@@ -10,6 +10,10 @@ public struct FocusInfo: Equatable, Sendable {
         self.role = role
         self.hasSelectedTextRange = hasSelectedTextRange
     }
+
+    /// The frontmost app didn't answer Accessibility in time (busy Electron, GC pause). Something has focus,
+    /// we just can't see what: treat it as a field.
+    public static let unanswered = FocusInfo(role: "AXUnanswered", hasSelectedTextRange: false)
 }
 
 /// How `insert.text` puts the text in.
@@ -28,8 +32,11 @@ public enum InsertPlan: Equatable, Sendable {
     ]
 
     /// `focus` is nil when no app has a focused element (the desktop, or nothing frontmost).
-    public static func decide(accessibilityGranted: Bool, focus: FocusInfo?) -> InsertPlan {
+    /// `secureInput`: some app holds Secure Event Input (a password field, Terminal's Secure Keyboard Entry),
+    /// and macOS drops a synthetic ⌘V. Pasting would "succeed" and then the clipboard restore would erase the text.
+    public static func decide(accessibilityGranted: Bool, secureInput: Bool = false, focus: FocusInfo?) -> InsertPlan {
         guard accessibilityGranted else { return .clipboardOnly(reason: "no_accessibility") }
+        guard !secureInput else { return .clipboardOnly(reason: "secure_input") }
         guard let focus, let role = focus.role else { return .clipboardOnly(reason: "no_focus") }
         if focus.hasSelectedTextRange { return .paste }
         return nonTextRoles.contains(role) ? .clipboardOnly(reason: "no_text_field") : .paste

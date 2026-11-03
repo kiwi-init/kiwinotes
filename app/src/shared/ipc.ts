@@ -97,10 +97,11 @@ export interface CommandResults {
   "overlay.state": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
-   * `no_focus` (nada em foco), `no_text_field` (o foco é um botão etc.) ou `no_accessibility` (falta a permissão).
+   * `no_focus` (nada em foco), `no_text_field` (o foco é um botão etc.), `no_accessibility` (falta a permissão)
+   * ou `secure_input` (campo de senha ou Secure Keyboard Entry: o macOS descarta o ⌘V).
    * `app` é o bundle id do app em foco.
    */
-  "insert.text": { pasted: boolean; reason?: "no_focus" | "no_text_field" | "no_accessibility"; app?: string };
+  "insert.text": { pasted: boolean; reason?: "no_focus" | "no_text_field" | "no_accessibility" | "secure_input"; app?: string };
   notify: Record<string, never>;
   "permissions.request": { permission: Permission; state: PermissionState };
   "llm.complete": { text: string; ms: number };

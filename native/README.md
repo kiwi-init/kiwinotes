@@ -39,7 +39,8 @@ On the T51 clips, a short sentence takes ~80 to 150 ms from the end of the recor
 - Pastes with ⌘V in every app (Cocoa, Electron, terminals, browsers). Typing through Accessibility (`AXSelectedText`) is ignored by Electron and terminals, so it isn't used.
 - The person's clipboard (every item, every type) goes back 300 ms after the paste, unless they copied something new meanwhile. The dictation is marked transient, so clipboard managers skip it.
 - ⌘V uses the key that types "v" in the current layout (Dvorak, etc.) and only the ⌘ flag.
-- No focused element, a focused button, or no Accessibility: `pasted: false` with a `reason`, and the text stays on the clipboard.
+- No focused element, a focused button, no Accessibility, or Secure Event Input on (password field, Terminal's Secure Keyboard Entry: macOS drops a synthetic ⌘V): `pasted: false` with a `reason`, and the text stays on the clipboard.
+- Accessibility calls time out after 250 ms (the default is ~6 s on the main thread). An app that doesn't answer in time gets the paste.
 - In the probe, `:insert some text` waits 3 s (click into another app) and sends `insert.text`.
 
 ## Permissions
