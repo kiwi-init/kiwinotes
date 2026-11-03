@@ -2,6 +2,17 @@ import Foundation
 import KiwiHelperCore
 #if canImport(FoundationModels)
 import FoundationModels
+
+/// Greedy, com o rótulo de cada SDK: o do macOS 27 (Xcode 27, Swift 6.4) é `samplingMode:` e o do 26 é `sampling:`,
+/// que no 27 só dá aviso de deprecado. O CI do release roda no Xcode 26.6 (T1074, run 41739366026).
+@available(macOS 26, *)
+func greedyOptions(maximumResponseTokens: Int?) -> GenerationOptions {
+    #if compiler(>=6.4)
+    GenerationOptions(samplingMode: .greedy, maximumResponseTokens: maximumResponseTokens)
+    #else
+    GenerationOptions(sampling: .greedy, maximumResponseTokens: maximumResponseTokens)
+    #endif
+}
 #endif
 
 /// `llm.complete` and `llm.prewarm` (ADR 0001) on Apple Foundation Models, on-device only:
@@ -94,7 +105,7 @@ final class LLM {
         }
         warm = nil
         let options: GenerationOptions = (temperature ?? 0) <= 0
-            ? GenerationOptions(samplingMode: .greedy, maximumResponseTokens: maxTokens)
+            ? greedyOptions(maximumResponseTokens: maxTokens)
             : GenerationOptions(temperature: temperature, maximumResponseTokens: maxTokens)
 
         let started = ProcessInfo.processInfo.systemUptime
