@@ -187,7 +187,8 @@ export class Dictation {
     if (!insert.ok) await this.overlay("error", "Não deu para colar o texto");
     else if (insert.data.dryRun) await this.overlay("done");
     else if (!insert.data.pasted) await this.overlay("error", NOT_PASTED[insert.data.reason ?? ""] ?? NOT_PASTED.no_focus);
-    else if (insert.data.reason === "secure_input") await this.overlay("done", SECURE_INPUT_NOTICE);
+    // Colou, mas o texto ficou também no clipboard: secure input, ou um foco que não parece campo de texto (T984).
+    else if (insert.data.reason) await this.overlay("done", SECURE_INPUT_NOTICE);
     else if (lost) await this.overlay("done", MIC_LOST_NOTICE);
     else await this.overlay("done");
     const appMs = Math.round(performance.now() - started);

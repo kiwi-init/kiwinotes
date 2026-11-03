@@ -13,8 +13,9 @@ final class InsertionTests: XCTestCase {
         // Electron editors and terminals show up as groups or web areas: paste anyway.
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: FocusInfo(role: "AXGroup", hasSelectedTextRange: false)), .paste)
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: FocusInfo(role: "AXWebArea", hasSelectedTextRange: false)), .paste)
+        // A button: the paste still goes, and the text stays on the clipboard in case it lands nowhere (T984).
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: FocusInfo(role: "AXButton", hasSelectedTextRange: false)),
-                       .clipboardOnly(reason: "no_text_field"))
+                       .pasteKeepingText(reason: "no_text_field"))
         // An app too busy to answer Accessibility still has focus somewhere: paste.
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: .unanswered), .paste)
         // Secure input may drop a synthetic ⌘V: paste anyway, but leave the text on the clipboard.
@@ -23,6 +24,29 @@ final class InsertionTests: XCTestCase {
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, secureInput: true, focus: nil), .clipboardOnly(reason: "no_focus"))
         // A caret beats the role (a combo box or a custom control that takes text).
         XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: FocusInfo(role: "AXButton", hasSelectedTextRange: true)), .paste)
+    }
+
+    /// T984, harry's #978: in the new Teams (a WebView) the dictation didn't go in. With an app in front, the paste
+    /// goes whatever Accessibility shows: no focused element, a focus with no role, a web area or a group.
+    func testWebViewAppsGetThePaste() {
+        let teams: [FocusInfo?] = [
+            nil,
+            FocusInfo(role: nil, hasSelectedTextRange: false),
+            FocusInfo(role: "AXWebArea", hasSelectedTextRange: false),
+            FocusInfo(role: "AXGroup", hasSelectedTextRange: false),
+            FocusInfo(role: "AXWebArea", hasSelectedTextRange: true),
+            .unanswered,
+        ]
+        for focus in teams {
+            XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: focus, frontApp: true), .paste, "\(String(describing: focus))")
+            // Secure input still keeps the text on the clipboard.
+            XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, secureInput: true, focus: focus, frontApp: true),
+                           .pasteKeepingText(reason: "secure_input"))
+        }
+        // Nothing in front (the desktop): the text waits on the clipboard, as before.
+        XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: nil, frontApp: false), .clipboardOnly(reason: "no_focus"))
+        // Without Accessibility there is no ⌘V at all.
+        XCTAssertEqual(InsertPlan.decide(accessibilityGranted: false, focus: nil, frontApp: true), .clipboardOnly(reason: "no_accessibility"))
     }
 
     private func scratchPasteboard() -> NSPasteboard {

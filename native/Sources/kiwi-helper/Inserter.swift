@@ -60,8 +60,9 @@ final class Inserter {
     private func perform(_ text: String, restoreClipboard: Bool, autoSpace: Bool, completion: @escaping (Outcome) -> Void) {
         let app = NSWorkspace.shared.frontmostApplication
         let trusted = AXIsProcessTrusted()
-        let focused = trusted ? Self.focus() : (info: nil, element: nil)
-        let plan = InsertPlan.decide(accessibilityGranted: trusted, secureInput: IsSecureEventInputEnabled(), focus: focused.info)
+        let focused = trusted ? Self.focus(app: app?.processIdentifier) : (info: nil, element: nil)
+        let plan = InsertPlan.decide(accessibilityGranted: trusted, secureInput: IsSecureEventInputEnabled(), focus: focused.info,
+                                     frontApp: app != nil)
         let pasteboard = NSPasteboard.general
 
         let reason: String?
@@ -103,14 +104,24 @@ final class Inserter {
 
     /// The focused element of the frontmost app, as Accessibility sees it: `info` is nil when nothing has focus,
     /// `.unanswered` when the app didn't reply within `axTimeout`. `element` is there only when it has a caret.
-    static func focus() -> (info: FocusInfo?, element: AXUIElement?) {
+    /// `app`: the frontmost app's pid. When the system-wide lookup finds no focused element, the app itself is asked:
+    /// the new Teams (a WebView) answers only there (T984, #997). Read-only: nothing is switched on in the app.
+    static func focus(app: pid_t? = nil) -> (info: FocusInfo?, element: AXUIElement?) {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, axTimeout)
         var value: CFTypeRef?
         switch AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value) {
         case .success: break
         case .cannotComplete: return (.unanswered, nil)
-        default: return (nil, nil)
+        default:
+            guard let app else { return (nil, nil) }
+            let element = AXUIElementCreateApplication(app)
+            AXUIElementSetMessagingTimeout(element, axTimeout)
+            switch AXUIElementCopyAttributeValue(element, kAXFocusedUIElementAttribute as CFString, &value) {
+            case .success: break
+            case .cannotComplete: return (.unanswered, nil)
+            default: return (nil, nil)
+            }
         }
         guard let element = value, CFGetTypeID(element) == AXUIElementGetTypeID() else { return (nil, nil) }
         let focused = element as! AXUIElement

@@ -177,6 +177,13 @@ describe("Dictation", () => {
     expect(added).toHaveLength(1);
   });
 
+  test("a focus that isn't a text field: pasted, and the pill says the text is on the clipboard too (T984)", async () => {
+    const { sidecar, d, overlays } = setup(() => ok({ pasted: true, restored: false, reason: "no_text_field" }));
+    sidecar.emit(transcript("teste"));
+    await d.idle();
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: SECURE_INPUT_NOTICE }]);
+  });
+
   test("secure input: done with the short notice (#224)", async () => {
     const { sidecar, d, overlays } = setup(() => ok({ pasted: true, restored: false, reason: "secure_input" }));
     sidecar.emit(transcript("teste"));
