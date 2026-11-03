@@ -17,6 +17,8 @@ export default {
     copy: {
       dist: "views/ui",
       assets: "assets",
+      // O helper Swift, compilado pelo preBuild (scripts/build-helper.ts). O app sobe ele de bin/kiwi-helper.
+      ".helper": "bin",
     },
     watchIgnore: ["dist/**"],
     mac: {
@@ -25,6 +27,12 @@ export default {
       codesign: false,
       notarize: false,
     },
+  },
+  scripts: {
+    preBuild: "./scripts/build-helper.ts",
+    // NSMicrophoneUsageDescription no Info.plist (o Electrobun não tem campo para isso).
+    postBuild: "./scripts/info-plist.ts",
+    postWrap: "./scripts/info-plist.ts",
   },
   runtime: {
     // A menu bar app: closing the last window keeps it running.

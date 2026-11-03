@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { AgentControl, PATHS, Tray, Utils } from "electrobun/bun";
 
+import { Session, session, type SessionStatus } from "./session.ts";
 import { stores } from "./stores.ts";
 import { openWindows, showWindow, type WindowName } from "./windows.ts";
 
@@ -16,12 +17,32 @@ const tray = new Tray({
   height: 18,
 });
 
-tray.setMenu([
-  { type: "normal", label: "Histórico…", action: "history" },
-  { type: "normal", label: "Configurações…", action: "settings" },
-  { type: "divider" },
-  { type: "normal", label: "Sair do Kiwi Notes", action: "quit" },
-]);
+/** A primeira linha do menu diz se dá para ditar agora, e por que não. */
+export function statusLabel(s: SessionStatus): string {
+  if (!s.connected) return "Iniciando…";
+  if (!s.hotkeyActive) return "Atalho desligado: falta permissão";
+  if (s.stt === "loading" || s.stt === "starting") return "Preparando o modelo de voz…";
+  if (s.stt === "unavailable") return "Modelo de voz indisponível";
+  return "Pronto para ditar";
+}
+
+function setMenu(s: SessionStatus) {
+  tray.setMenu([
+    { type: "normal", label: statusLabel(s), action: "status", enabled: false },
+    { type: "divider" },
+    { type: "normal", label: "Histórico…", action: "history" },
+    { type: "normal", label: "Configurações…", action: "settings" },
+    { type: "divider" },
+    { type: "normal", label: "Sair do Kiwi Notes", action: "quit" },
+  ]);
+}
+
+// O sidecar (atalho, mic, STT, overlay, colagem) e o fluxo do ditado (T58).
+const dictation = new Session(PATHS.VIEWS_FOLDER);
+session.set(dictation);
+setMenu(dictation.status());
+dictation.onStatus(setMenu);
+dictation.start();
 
 tray.on("tray-clicked", (event) => {
   const action = (event as { data?: { action?: string } }).data?.action;
@@ -31,6 +52,7 @@ tray.on("tray-clicked", (event) => {
       void showWindow(action);
       break;
     case "quit":
+      dictation.stop();
       tray.remove();
       process.exit(0);
   }
@@ -50,7 +72,7 @@ AgentControl.registerAction("open-window", {
   },
 });
 
-// Põe um ditado no histórico sem microfone (testes e agentes), até o T58 ligar o fluxo real:
+// Põe um ditado no histórico sem microfone nem colagem (testes da janela Histórico):
 //   bun run agent call actions.invoke '{"name":"history-add","params":{"raw":"hum oi","text":"Oi.","app":"Slack"}}'
 AgentControl.registerAction("history-add", {
   description: "Adiciona um ditado ao histórico (para testar a janela Histórico)",
@@ -62,5 +84,32 @@ AgentControl.registerAction("history-add", {
     return { id: entry.id };
   },
 });
+
+// Com KIWI_DEBUG=1, um áudio sintético (do `say`, nunca gravação de alguém) faz o caminho inteiro de um ditado:
+// STT → limpeza → `insert.text` em dryRun (nada é colado nem vai para o clipboard) → histórico. É o teste de ponta a
+// ponta dos agentes, sem microfone (T457, #490):
+//   bun run agent call actions.invoke '{"name":"debug-transcribe","params":{"path":"/tmp/frase.aiff"}}'
+if (process.env.KIWI_DEBUG === "1") {
+  AgentControl.registerAction("debug-transcribe", {
+    description: "Passa um arquivo de áudio sintético pelo fluxo do ditado, em dryRun (só com KIWI_DEBUG=1)",
+    params: { path: "caminho absoluto do áudio (WAV, AIFF…; o helper converte)" },
+    handler: async (params) => {
+      // Resolve com o ditado (também o vazio e o com erro), ou desiste em 60 s.
+      let timer: Timer | undefined;
+      const done = new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("no transcript in 60 s")), 60_000);
+        dictation.dictation.onDone = resolve;
+      });
+      try {
+        await dictation.sidecar.request({ type: "debug.transcribe", path: String(params.path ?? "") });
+        return await done;
+      } finally {
+        clearTimeout(timer);
+        dictation.dictation.onDone = undefined;
+        done.catch(() => {});
+      }
+    },
+  });
+}
 
 console.log("Kiwi Notes is running in the menu bar");

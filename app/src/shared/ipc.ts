@@ -49,6 +49,12 @@ export type RecordReason = "hotkey" | "command" | "config" | "overlay" | "debug"
 /** Como a gravação terminou: soltou a tecla, bateu de novo no toggle, ou pelo app. */
 export type StopMode = "ptt" | "toggle" | "command" | "debug";
 
+/** Um app do Mac, pelo bundle id. */
+export interface AppRef {
+  bundleId: string;
+  name: string;
+}
+
 // ---------------------------------------------------------- Bun → sidecar
 
 export type Command =
@@ -150,7 +156,7 @@ export type Event =
   | { type: "hotkey.toggle"; on: boolean }
   /** O sidecar começa a gravar sozinho no hotkey.down, para não perder a primeira sílaba. */
   /** `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). */
-  | { type: "record.started"; reason: RecordReason; app?: { bundleId: string; name: string } }
+  | { type: "record.started"; reason: RecordReason; app?: AppRef }
   | { type: "record.stopped"; reason: RecordReason; mode: StopMode; durationMs: number; samples: number; audioPath?: string }
   /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
   | { type: "record.cancelled"; reason: RecordReason }

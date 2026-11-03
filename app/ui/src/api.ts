@@ -33,6 +33,7 @@ export const api = {
   dictionary: {
     get: () => need().dictionaryGet({}),
     set: (terms: Parameters<NonNullable<typeof rpc>["request"]["dictionarySet"]>[0]["terms"]) => need().dictionarySet({ terms }),
+    check: (terms: Parameters<NonNullable<typeof rpc>["request"]["dictionaryCheck"]>[0]["terms"]) => need().dictionaryCheck({ terms }),
   },
   snippets: {
     get: () => need().snippetsGet({}),
