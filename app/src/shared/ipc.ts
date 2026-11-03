@@ -60,8 +60,15 @@ export type Command =
       holdThresholdMs?: number;
       /** Janela das duas batidas do toggle. */
       doubleTapMs?: number;
+      /** Dica de idioma para o Parakeet (`auto`: nenhuma). */
       language?: "auto" | "pt" | "en";
-      dictionary?: string[];
+      /**
+       * O vocabulário do STT (T256): a grafia certa vai para o vocabulary boosting e para a correção
+       * fonética; os `aliases` viram o termo depois (as substituições do VoiceInk). Uma string vale `{term}`.
+       */
+      dictionary?: (string | { term: string; aliases?: string[] })[];
+      /** VAD (Silero) antes do modelo: só a fala vai para o STT, e áudio sem fala dá `text: ""`. Padrão: `false`. */
+      vad?: boolean;
     }
   | { type: "record.start" }
   | { type: "record.stop" }
@@ -131,7 +138,19 @@ export type Event =
   /** App em foco, para ajustar o tom da limpeza. */
   | { type: "app.active"; bundleId: string; name: string }
   | { type: "transcript.partial"; text: string }
-  | { type: "transcript.final"; text: string; lang: string; durationMs: number; audioPath?: string }
+  /**
+   * O texto de uma gravação, na ordem em que terminaram. `text` já passou pelo pós-processamento do VoiceInk
+   * (filtro, correção fonética, aliases); `raw` é o do modelo. `lang`: `pt`, `en`, `mix`, ou `""` sem texto.
+   * `latencyMs`: do fim da gravação até aqui.
+   */
+  | { type: "transcript.final"; text: string; raw: string; lang: "pt" | "en" | "mix" | ""; durationMs: number; latencyMs: number; audioPath?: string }
+  /**
+   * O modelo de STT: `loading` logo depois do `ready` (a primeira carga pode levar um minuto: download, ou o
+   * CoreML compilando depois de atualizar o macOS), depois `ready` ou `unavailable`.
+   */
+  | { type: "stt.status"; state: "loading" | "ready" | "unavailable"; loadMs?: number; error?: "model_unavailable" }
+  /** A gravação não virou texto: `model_unavailable` (sem modelo, ex.: offline na primeira vez) ou `stt_failed`. */
+  | { type: "transcript.error"; error: "model_unavailable" | "stt_failed" }
   | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string };
 
 export type EventType = Event["type"];
@@ -175,6 +194,8 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "app.active",
   "transcript.partial",
   "transcript.final",
+  "transcript.error",
+  "stt.status",
   "log",
 ]);
 
