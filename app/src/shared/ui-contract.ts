@@ -8,11 +8,13 @@ import type { AliasWarning } from "../store/aliasCheck.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { Snippet } from "../store/snippets.ts";
+import type { Backlink, Note, NoteMeta, SaveResult, SearchHit } from "../notes/vault.ts";
 
-export type { AliasWarning, DictionaryTerm, HistoryEntry, HistoryPage, Snippet };
+export type { AliasWarning, Backlink, DictionaryTerm, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
-export const UI_CONTRACT_VERSION = "1.0.0";
+// 1.1.0 (T1316): as capacidades `notes.*` e o evento `notes.changed`, só acréscimos.
+export const UI_CONTRACT_VERSION = "1.1.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -34,6 +36,24 @@ export interface UiCapabilities {
   "history.delete": { args: { id: string }; result: boolean };
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
+
+  // ---------------------------------------------------------------- notas (1.1.0, T1316)
+  // `path` é sempre relativo ao vault, POSIX, terminando em `.md`. Fora do vault (`..`, absoluto, link simbólico,
+  // pasta com ponto) dá E_OUTSIDE_VAULT; nota que não existe, E_NOT_FOUND; destino que já existe, E_EXISTS.
+  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[] } };
+  "notes.get": { args: { path: string }; result: Note };
+  /** Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. */
+  "notes.save": { args: { path: string; content: string; baseVersion: string }; result: SaveResult };
+  /** Título repetido vira "Título 2". */
+  "notes.create": { args: { folder?: string; title: string; content?: string }; result: Note };
+  /** Renomeia ou move, e atualiza os [[links]] das outras notas. */
+  "notes.rename": { args: { path: string; newPath: string }; result: { meta: NoteMeta; updatedLinks: number } };
+  /** Vai para a Lixeira do macOS: não apaga. */
+  "notes.delete": { args: { path: string }; result: true };
+  "notes.search": { args: { query: string; limit?: number }; result: SearchHit[] };
+  "notes.backlinks": { args: { path: string }; result: Backlink[] };
+  /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
+  "notes.resolve": { args: { link: string }; result: string | null };
 }
 
 export type UiCapability = keyof UiCapabilities;
@@ -47,12 +67,23 @@ export const UI_CAPABILITIES = [
   "history.search",
   "history.delete",
   "clipboard.write",
+  "notes.list",
+  "notes.get",
+  "notes.save",
+  "notes.create",
+  "notes.rename",
+  "notes.delete",
+  "notes.search",
+  "notes.backlinks",
+  "notes.resolve",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
 export interface UiEvents {
   /** Um ditado novo entrou no histórico. */
   "history.added": HistoryEntry;
+  /** Notas criadas, mudadas, apagadas ou renomeadas, inclusive fora do app (o watcher do vault). */
+  "notes.changed": { paths: string[] };
 }
 
 /** As janelas que viram UI do AppEngine. A Notas entra aqui quando nascer. */

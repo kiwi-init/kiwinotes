@@ -1,0 +1,256 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { parseLinks, resolveLink, rewriteLinks } from "../shared/wikilinks.ts";
+import { Vault, versionOf } from "./vault.ts";
+
+const dirs: string[] = [];
+const vaults: Vault[] = [];
+afterEach(() => {
+  for (const v of vaults.splice(0)) v.close();
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+function tmp(): string {
+  const d = mkdtempSync(path.join(tmpdir(), "kiwinotes-vault-test-"));
+  dirs.push(d);
+  return d;
+}
+
+async function vault(files: Record<string, string> = {}) {
+  const root = path.join(tmp(), "KiwiNotes");
+  for (const [rel, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    writeFileSync(path.join(root, rel), content);
+  }
+  const trashed: string[] = [];
+  const v = new Vault({
+    root,
+    debounceMs: 20,
+    trash: async (abs) => {
+      trashed.push(path.relative(root, abs));
+      rmSync(abs);
+    },
+  });
+  vaults.push(v);
+  await v.open();
+  return { v, root, trashed };
+}
+
+const code = async (p: Promise<unknown>) => {
+  try {
+    await p;
+    return "ok";
+  } catch (e) {
+    return (e as { code?: string }).code ?? String(e);
+  }
+};
+
+async function waitFor<T>(probe: () => T | undefined | null | false, ms = 3000): Promise<T> {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = probe();
+    if (v) return v;
+    if (Date.now() > end) throw new Error("timed out");
+    await Bun.sleep(10);
+  }
+}
+
+describe("[[links]] com a regra do Obsidian (T1316)", () => {
+  const paths = ["Projetos/Kiwi.md", "Kiwi.md", "Diário/2026-11-03.md", "Arquivo/Velho/Kiwi.md", "Ideias.md"];
+
+  test("parse: alvo, seção, apelido e embed", () => {
+    expect(parseLinks("ver [[Kiwi]], [[Projetos/Kiwi#Fase 1|a fase]] e ![[Ideias]]")).toMatchObject([
+      { target: "Kiwi", heading: "", alias: "", embed: false },
+      { target: "Projetos/Kiwi", heading: "#Fase 1", alias: "|a fase", embed: false },
+      { target: "Ideias", embed: true },
+    ]);
+  });
+
+  test("resolve: nome sem pasta, sem maiúscula nem acento; com dois iguais, o caminho mais curto", () => {
+    expect(resolveLink("Kiwi", paths)).toBe("Kiwi.md");
+    expect(resolveLink("kiwi", paths)).toBe("Kiwi.md");
+    expect(resolveLink("ideias.md", paths)).toBe("Ideias.md");
+    expect(resolveLink("diario/2026-11-03", paths)).toBe("Diário/2026-11-03.md");
+    expect(resolveLink("Velho/Kiwi", paths)).toBe("Arquivo/Velho/Kiwi.md");
+    expect(resolveLink("Projetos/Kiwi", paths)).toBe("Projetos/Kiwi.md");
+    expect(resolveLink("Nada", paths)).toBeNull();
+  });
+
+  test("rewrite: troca só os links da nota renomeada, mantendo seção, apelido e embed", () => {
+    const before = ["A.md", "Pasta/B.md", "C.md"];
+    const after = ["A.md", "Pasta/Novo.md", "C.md"];
+    const out = rewriteLinks("[[B]] [[Pasta/B#x|y]] ![[B]] [[C]] [[A]]", "Pasta/B.md", "Pasta/Novo.md", before, after);
+    expect(out).toEqual({ content: "[[Novo]] [[Novo#x|y]] ![[Novo]] [[C]] [[A]]", count: 3 });
+    // O nome novo fica ambíguo: vai o caminho.
+    const amb = rewriteLinks("[[B]]", "Pasta/B.md", "Pasta/A.md", ["A.md", "Pasta/B.md"], ["A.md", "Pasta/A.md"]);
+    expect(amb.content).toBe("[[Pasta/A]]");
+  });
+});
+
+describe("Vault (T1316)", () => {
+  test("lista pastas e notas, sem as pastas com ponto (.obsidian) e sem o que não é .md", async () => {
+    const { v } = await vault({
+      "Kiwi.md": "# Kiwi\n#projeto",
+      "Projetos/Fase 1.md": "---\ntags: [kiwi, notas]\n---\ntexto",
+      ".obsidian/workspace.md": "x",
+      "imagem.png": "x",
+    });
+    const { folders, notes } = v.list();
+    expect(folders).toEqual(["Projetos"]);
+    expect(notes.map((n) => n.path)).toEqual(["Kiwi.md", "Projetos/Fase 1.md"]);
+    expect(notes[1]).toMatchObject({ title: "Fase 1", folder: "Projetos", tags: ["kiwi", "notas"] });
+    expect(notes[0]!.tags).toEqual(["projeto"]);
+    expect(notes[0]!.version).toBe(versionOf("# Kiwi\n#projeto"));
+  });
+
+  test("get, create (nome repetido vira 'Título 2') e o arquivo fica byte a byte", async () => {
+    const { v, root } = await vault({ "Ideias.md": "---\ntitle: X\n---\n[[Kiwi]] é *legal*\r\n" });
+    expect((await v.get("Ideias.md")).content).toBe("---\ntitle: X\n---\n[[Kiwi]] é *legal*\r\n");
+    const a = await v.create("Projetos", "Reunião: sexta?", "oi");
+    expect(a.path).toBe("Projetos/Reunião sexta.md");
+    const b = await v.create("Projetos", "Reunião: sexta?");
+    expect(b.path).toBe("Projetos/Reunião sexta 2.md");
+    expect(readFileSync(path.join(root, "Projetos/Reunião sexta.md"), "utf8")).toBe("oi");
+    expect(await code(v.get("Nada.md"))).toBe("E_NOT_FOUND");
+  });
+
+  test("save com a versão certa salva; com a versão velha devolve a de agora e não escreve", async () => {
+    const { v, root } = await vault({ "Nota.md": "um" });
+    const note = await v.get("Nota.md");
+    const ok = await v.save("Nota.md", "dois", note.version);
+    expect(ok).toMatchObject({ saved: true, meta: { version: versionOf("dois") } });
+    // Mudou fora (no Obsidian): o save com a versão antiga não sobrescreve.
+    writeFileSync(path.join(root, "Nota.md"), "três, do Obsidian");
+    const conflict = await v.save("Nota.md", "quatro", versionOf("dois"));
+    expect(conflict).toMatchObject({ saved: false, current: { content: "três, do Obsidian", version: versionOf("três, do Obsidian") } });
+    expect(readFileSync(path.join(root, "Nota.md"), "utf8")).toBe("três, do Obsidian");
+  });
+
+  test("rename move a nota e atualiza os [[links]] das outras", async () => {
+    const { v, root } = await vault({
+      "Kiwi.md": "a nota",
+      "Diário.md": "hoje: [[Kiwi]] e [[Kiwi#Fase|fase]]",
+      "Outra.md": "nada aqui",
+    });
+    const out = await v.rename("Kiwi.md", "Projetos/Kiwi Notes.md");
+    expect(out).toMatchObject({ meta: { path: "Projetos/Kiwi Notes.md" }, updatedLinks: 2 });
+    expect(existsSync(path.join(root, "Kiwi.md"))).toBe(false);
+    expect(readFileSync(path.join(root, "Diário.md"), "utf8")).toBe("hoje: [[Kiwi Notes]] e [[Kiwi Notes#Fase|fase]]");
+    expect(readFileSync(path.join(root, "Outra.md"), "utf8")).toBe("nada aqui");
+    expect(await code(v.rename("Outra.md", "Diário.md"))).toBe("E_EXISTS");
+  });
+
+  test("delete manda para a Lixeira (não apaga direto)", async () => {
+    const { v, trashed } = await vault({ "Velha.md": "x" });
+    expect(await v.delete("Velha.md")).toBe(true);
+    expect(trashed).toEqual(["Velha.md"]);
+    expect(v.list().notes).toEqual([]);
+    expect(await code(v.delete("Velha.md"))).toBe("E_NOT_FOUND");
+  });
+
+  test("search: título vale mais, sem acento nem maiúscula, com o trecho; backlinks e resolve", async () => {
+    const { v } = await vault({
+      "Reunião.md": "pauta da semana",
+      "Diário.md": "hoje teve reuniao com o time, ver [[Reunião]]",
+      "Compras.md": "pão",
+    });
+    const hits = v.search("REUNIÃO");
+    expect(hits.map((h) => h.path)).toEqual(["Reunião.md", "Diário.md"]);
+    expect(hits[1]!.snippet).toContain("reuniao com o time");
+    expect(v.search("reuniao time").map((h) => h.path)).toEqual(["Diário.md"]);
+    expect(v.search("")).toEqual([]);
+    expect(v.backlinks("Reunião.md")).toEqual([{ path: "Diário.md", title: "Diário", context: "hoje teve reuniao com o time, ver [[Reunião]]" }]);
+    expect(v.resolve("reuniao")).toBe("Reunião.md");
+    expect(v.resolve("[[Compras|lista]]")).toBe("Compras.md");
+    expect(v.resolve("Nada")).toBeNull();
+  });
+
+  test("nada sai do vault: .., absoluto, link simbólico, pasta com ponto", async () => {
+    const { v, root } = await vault({ "A.md": "a" });
+    const outside = tmp();
+    writeFileSync(path.join(outside, "segredo.md"), "não");
+    symlinkSync(outside, path.join(root, "atalho"));
+    for (const bad of ["../segredo.md", "/etc/passwd.md", "~/x.md", "atalho/segredo.md", ".obsidian/x.md", "a/./b.md", "a//b.md", "pasta\\x.md"]) {
+      expect(await code(v.get(bad))).toBe("E_OUTSIDE_VAULT");
+    }
+    for (const bad of ["A", "A.txt", "", 42, null]) expect(await code(v.get(bad))).toBe("E_BAD_ARGS");
+    expect(await code(v.create("../fora", "x"))).toBe("E_OUTSIDE_VAULT");
+    expect(await code(v.rename("A.md", "../A.md"))).toBe("E_OUTSIDE_VAULT");
+    expect(await code(v.save("atalho/segredo.md", "x", "v"))).toBe("E_OUTSIDE_VAULT");
+    // O link simbólico não entra na lista nem na busca.
+    expect(v.list().notes.map((n) => n.path)).toEqual(["A.md"]);
+    expect(readFileSync(path.join(outside, "segredo.md"), "utf8")).toBe("não");
+  });
+
+  test("o watcher pega o que muda fora do app e avisa", async () => {
+    const { v, root } = await vault({ "Nota.md": "um" });
+    const seen: string[][] = [];
+    v.onChanged((p) => void seen.push(p));
+    v.watch();
+    await Bun.sleep(50);
+    writeFileSync(path.join(root, "Nota.md"), "editada no Obsidian");
+    writeFileSync(path.join(root, "Nova.md"), "criada fora");
+    await waitFor(() => v.list().notes.length === 2 && v.search("Obsidian").length === 1);
+    rmSync(path.join(root, "Nova.md"));
+    await waitFor(() => v.list().notes.length === 1);
+    expect(seen.flat()).toEqual(expect.arrayContaining(["Nota.md", "Nova.md"]));
+  });
+
+  test("1.000 notas: abrir e buscar dentro da meta (< ~200 ms por busca no M1 Pro)", async () => {
+    const files: Record<string, string> = {};
+    const words = "kiwi nota reunião projeto ditado vault obsidian markdown índice busca semana time pauta ideia".split(" ");
+    for (let i = 0; i < 1000; i++) {
+      const body = Array.from({ length: 200 }, (_, k) => words[(i * 7 + k * 3) % words.length]).join(" ");
+      files[`Pasta ${i % 20}/Nota ${i}.md`] = `---\ntags: [t${i % 10}]\n---\n# Nota ${i}\n${body}\n[[Nota ${(i + 1) % 1000}]]`;
+    }
+    const { v } = await vault(files);
+    expect(v.list().notes.length).toBe(1000);
+    const t0 = performance.now();
+    const hits = v.search("reunião projeto", 20);
+    const ms = performance.now() - t0;
+    expect(hits.length).toBe(20);
+    expect(ms).toBeLessThan(200);
+    expect(v.backlinks("Pasta 1/Nota 1.md").map((b) => b.path)).toEqual(["Pasta 0/Nota 0.md"]);
+  });
+});
+
+describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
+  test("validação, códigos de erro e o conflito do save chegam à UI como estão", async () => {
+    const { uiCapabilities } = await import("../bun/ui-capabilities.ts");
+    const { directInvoke } = await import("../bun/ui-engine.ts");
+    const { UI_CONTRACT_VERSION, UI_CAPABILITIES } = await import("../shared/ui-contract.ts");
+    const { v, root } = await vault({ "Kiwi.md": "oi [[Ideias]]", "Ideias.md": "x" });
+    const caps = uiCapabilities({
+      dictionary: { load: async () => [], save: async (t) => t },
+      snippets: { load: async () => [], save: async (s) => s },
+      history: { search: async () => ({ entries: [] }), delete: async () => true },
+      clipboardWrite: () => {},
+      notes: v,
+    });
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+
+    expect(UI_CONTRACT_VERSION).toBe("1.1.0");
+    expect(UI_CAPABILITIES).toContain("notes.resolve");
+    expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
+    expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("notes.get", { path: "../fora.md" })).toMatchObject({ ok: false, code: "E_OUTSIDE_VAULT" });
+    expect(await call("notes.get", { path: "Nada.md" })).toMatchObject({ ok: false, code: "E_NOT_FOUND" });
+    expect(await call("notes.get", { path: "Kiwi.md", pth: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("notes.search", { query: "oi", limit: 0 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("notes.resolve", { link: "ideias" })).toEqual({ ok: true, value: "Ideias.md" });
+    expect(await call("notes.backlinks", { path: "Ideias.md" })).toMatchObject({ ok: true, value: [{ path: "Kiwi.md" }] });
+
+    const note = await call("notes.get", { path: "Kiwi.md" });
+    const version = (note as { value: { version: string } }).value.version;
+    writeFileSync(path.join(root, "Kiwi.md"), "mudou fora");
+    expect(await call("notes.save", { path: "Kiwi.md", content: "meu texto", baseVersion: version })).toMatchObject({
+      ok: true,
+      value: { saved: false, current: { content: "mudou fora" } },
+    });
+    expect(await call("notes.create", { title: "Kiwi" })).toMatchObject({ ok: true, value: { path: "Kiwi 2.md" } });
+    expect(await call("notes.rename", { path: "Ideias.md", newPath: "Kiwi.md" })).toMatchObject({ ok: false, code: "E_EXISTS" });
+  });
+});

@@ -7,6 +7,7 @@ import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapab
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
+import type { Vault } from "../notes/vault.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
@@ -20,6 +21,8 @@ export interface CapabilityDeps {
   dictionaryChanged?(terms: DictionaryTerm[]): void;
   snippetsChanged?(snippets: Snippet[]): void;
   clipboardWrite(text: string): void;
+  /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
+  notes: Pick<Vault, "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve">;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
@@ -66,6 +69,18 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
   // O main não vê o clique: a UI só chama no gesto (navigator.userActivation), e aqui vai um limite de ritmo para uma
   // UI que tente encher o clipboard sozinha.
   let lastCopy = -Infinity;
+
+  const vault = async () => {
+    await deps.notes.open();
+    return deps.notes;
+  };
+  /** Os argumentos de uma capacidade de notas: só os campos conhecidos, para um typo não passar calado. */
+  const fields = (args: unknown, cap: string, allowed: string[]) => {
+    const a = object(args, cap);
+    const extra = Object.keys(a).find((k) => !allowed.includes(k));
+    if (extra) throw bad(`${cap}: unknown field ${extra}`);
+    return a;
+  };
 
   const handlers: { [K in UiCapability]: (args: unknown) => Promise<UiCapabilities[K]["result"]> | UiCapabilities[K]["result"] } = {
     "dictionary.get": (args) => {
@@ -116,6 +131,31 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       deps.clipboardWrite(text);
       return true;
     },
+    // O vault valida caminho, conteúdo e limites (E_OUTSIDE_VAULT, E_BAD_ARGS); aqui, os campos.
+    "notes.list": async (args) => {
+      noArgs(args, "notes.list");
+      return (await vault()).list();
+    },
+    "notes.get": async (args) => (await vault()).get(fields(args, "notes.get", ["path"]).path),
+    "notes.save": async (args) => {
+      const a = fields(args, "notes.save", ["path", "content", "baseVersion"]);
+      return (await vault()).save(a.path, a.content, a.baseVersion);
+    },
+    "notes.create": async (args) => {
+      const a = fields(args, "notes.create", ["folder", "title", "content"]);
+      return (await vault()).create(a.folder, a.title, a.content ?? "");
+    },
+    "notes.rename": async (args) => {
+      const a = fields(args, "notes.rename", ["path", "newPath"]);
+      return (await vault()).rename(a.path, a.newPath);
+    },
+    "notes.delete": async (args) => (await vault()).delete(fields(args, "notes.delete", ["path"]).path),
+    "notes.search": async (args) => {
+      const a = fields(args, "notes.search", ["query", "limit"]);
+      return (await vault()).search(a.query, a.limit);
+    },
+    "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
+    "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),
   };
   // A lista do contrato e os handlers andam juntos.
   for (const cap of UI_CAPABILITIES) if (!handlers[cap]) throw new Error(`no handler for ${cap}`);

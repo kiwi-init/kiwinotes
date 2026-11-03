@@ -39,6 +39,8 @@ Só estes nomes. Qualquer outro, inclusive os herdados (`constructor`, `toString
 
 E o evento `history.added`, que o engine manda ao Histórico aberto a cada ditado novo.
 
+**1.1.0 (T1316):** as notas, só acréscimos. São `notes.list`, `notes.get`, `notes.save` (com `baseVersion`: se a nota mudou fora, devolve a de agora em vez de escrever), `notes.create`, `notes.rename` (atualiza os `[[links]]`), `notes.delete` (para a Lixeira), `notes.search`, `notes.backlinks` e `notes.resolve`, mais o evento `notes.changed`. Tudo fica restrito ao vault (ADR 0007): fora dele dá `E_OUTSIDE_VAULT`.
+
 - **Não há capacidade genérica**: nada de rodar comando nem de ler um arquivo qualquer.
 - **O `clipboard.write`:** o main não vê o clique. Então a UI só chama com `navigator.userActivation.isActive`, e o main limita o tamanho e o ritmo (uma cópia a cada 300 ms, senão `E_RATE`).
 - **As versões:** tirar ou mudar uma capacidade é versão major; acrescentar é minor, e a UI testa com `engine.has(cap)`. Uma UI cujo `requiresContract` o engine não satisfaz é recusada antes do download.
