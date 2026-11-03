@@ -29,17 +29,20 @@ final class Inserter {
         let restored: Bool
         let reason: String?
         let app: String?
+        /// A space went in front of the text, because it landed right after other text (T733).
+        var spaced = false
     }
 
     private let keeper = ClipboardKeeper()
     private let keys = DispatchQueue(label: "kiwi.insert.keys", qos: .userInteractive)
-    private var jobs: [(text: String, restore: Bool, completion: (Outcome) -> Void)] = []
+    private var jobs: [(text: String, restore: Bool, autoSpace: Bool, completion: (Outcome) -> Void)] = []
     private var busy = false
 
     /// Main thread. One insert at a time, in order: a second dictation waits for the first one's ⌘V (not for its
     /// restore). `completion` runs once the paste is posted; the clipboard goes back `restoreDelay` later.
-    func insert(_ text: String, restoreClipboard: Bool, completion: @escaping (Outcome) -> Void) {
-        jobs.append((text, restoreClipboard, completion))
+    /// `autoSpace`: a space in front when the text lands right after other text (off for the literal tone, T733).
+    func insert(_ text: String, restoreClipboard: Bool, autoSpace: Bool = true, completion: @escaping (Outcome) -> Void) {
+        jobs.append((text, restoreClipboard, autoSpace, completion))
         runNext()
     }
 
@@ -47,17 +50,18 @@ final class Inserter {
         guard !busy, !jobs.isEmpty else { return }
         busy = true
         let job = jobs.removeFirst()
-        perform(job.text, restoreClipboard: job.restore) { [weak self] outcome in
+        perform(job.text, restoreClipboard: job.restore, autoSpace: job.autoSpace) { [weak self] outcome in
             job.completion(outcome)
             self?.busy = false
             self?.runNext()
         }
     }
 
-    private func perform(_ text: String, restoreClipboard: Bool, completion: @escaping (Outcome) -> Void) {
+    private func perform(_ text: String, restoreClipboard: Bool, autoSpace: Bool, completion: @escaping (Outcome) -> Void) {
         let app = NSWorkspace.shared.frontmostApplication
-        let plan = InsertPlan.decide(accessibilityGranted: AXIsProcessTrusted(),
-                                     secureInput: IsSecureEventInputEnabled(), focus: Self.focus())
+        let trusted = AXIsProcessTrusted()
+        let focused = trusted ? Self.focus() : (info: nil, element: nil)
+        let plan = InsertPlan.decide(accessibilityGranted: trusted, secureInput: IsSecureEventInputEnabled(), focus: focused.info)
         let pasteboard = NSPasteboard.general
 
         let reason: String?
@@ -72,13 +76,18 @@ final class Inserter {
             reason = nil
         }
 
+        // Only the two characters before the caret are read, and they go nowhere (no log, no reply). Never in a
+        // password field or with Secure Event Input on (`mayRead`).
+        let spaced = autoSpace && LeadingSpace.mayRead(plan: plan, role: focused.info?.role)
+            && LeadingSpace.needed(before: focused.element.flatMap(Self.textBeforeCaret), text: text)
         let restore = restoreClipboard && reason == nil
-        let ours = keeper.put(text, on: pasteboard, keepOriginal: restore)
+        let ours = keeper.put(spaced ? " " + text : text, on: pasteboard, keepOriginal: restore)
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys, keeper] in
             keys.async {
                 Self.postCommandV()
                 DispatchQueue.main.async {
-                    completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier))
+                    completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier,
+                                       spaced: spaced))
                     guard restore else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + Self.restoreDelay) {
                         keeper.restore(on: pasteboard, ifStill: ours)
@@ -92,25 +101,54 @@ final class Inserter {
     /// would freeze the hotkey, the overlay and the IPC with it.
     static let axTimeout: Float = 0.25
 
-    /// The focused element of the frontmost app, as Accessibility sees it; nil when nothing has focus,
-    /// `.unanswered` when the app didn't reply within `axTimeout`.
-    static func focus() -> FocusInfo? {
+    /// The focused element of the frontmost app, as Accessibility sees it: `info` is nil when nothing has focus,
+    /// `.unanswered` when the app didn't reply within `axTimeout`. `element` is there only when it has a caret.
+    static func focus() -> (info: FocusInfo?, element: AXUIElement?) {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, axTimeout)
         var value: CFTypeRef?
         switch AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value) {
         case .success: break
-        case .cannotComplete: return .unanswered
-        default: return nil
+        case .cannotComplete: return (.unanswered, nil)
+        default: return (nil, nil)
         }
-        guard let element = value, CFGetTypeID(element) == AXUIElementGetTypeID() else { return nil }
+        guard let element = value, CFGetTypeID(element) == AXUIElementGetTypeID() else { return (nil, nil) }
         let focused = element as! AXUIElement
         AXUIElementSetMessagingTimeout(focused, axTimeout)
         var role: CFTypeRef?
-        if AXUIElementCopyAttributeValue(focused, kAXRoleAttribute as CFString, &role) == .cannotComplete { return .unanswered }
+        if AXUIElementCopyAttributeValue(focused, kAXRoleAttribute as CFString, &role) == .cannotComplete {
+            return (.unanswered, nil)
+        }
         var range: CFTypeRef?
         let hasRange = AXUIElementCopyAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, &range) == .success
-        return FocusInfo(role: role as? String, hasSelectedTextRange: hasRange)
+        return (FocusInfo(role: role as? String, hasSelectedTextRange: hasRange), hasRange ? focused : nil)
+    }
+
+    /// Up to the two characters before the caret (or the selection, which the paste replaces); "" at the start of
+    /// the field; nil when the app doesn't say (T733). `AXStringForRange` first, so a long document isn't copied
+    /// whole; `AXValue` for fields that only answer that.
+    static func textBeforeCaret(_ element: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var selection = CFRange()
+        guard AXValueGetValue(value as! AXValue, .cfRange, &selection), selection.location >= 0 else { return nil }
+        if selection.location == 0 { return "" }
+        let start = max(0, selection.location - 2)
+        var wanted = CFRange(location: start, length: selection.location - start)
+        if let range = AXValueCreate(.cfRange, &wanted) {
+            var text: CFTypeRef?
+            if AXUIElementCopyParameterizedAttributeValue(
+                element, kAXStringForRangeParameterizedAttribute as CFString, range, &text) == .success,
+               let text = text as? String, !text.isEmpty {
+                // Empty with the caret past the start is an app that doesn't really answer: try `AXValue` (#787).
+                return text
+            }
+        }
+        var whole: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &whole) == .success,
+              let whole = whole as? String else { return nil }
+        return LeadingSpace.tail(of: whole, caret: selection.location)
     }
 
     /// ⌘V as if typed, the way VoiceInk posts it: ⌘ down, V down, V up, ⌘ up, 10 ms apart, from a private event

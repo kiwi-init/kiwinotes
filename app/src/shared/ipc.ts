@@ -84,8 +84,11 @@ export type Command =
   /**
    * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
    * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.
+   * `autoSpace` (padrão `true`, T733): se o cursor está logo depois de um texto (letra, número, pontuação), o sidecar
+   * põe um espaço na frente, para dois ditados seguidos não saírem grudados. Ele lê só os dois caracteres antes do
+   * cursor, pela Acessibilidade; se o campo não diz, não põe nada. O app manda `false` no tom literal (terminal).
    */
-  | { type: "insert.text"; text: string; restoreClipboard: boolean; dryRun?: boolean }
+  | { type: "insert.text"; text: string; restoreClipboard: boolean; autoSpace?: boolean; dryRun?: boolean }
   | { type: "notify"; title: string; body: string }
   /**
    * Pede a permissão: o diálogo do macOS na primeira vez, os Ajustes depois. `reset: true` (só no clique de uma pessoa no
@@ -132,6 +135,8 @@ export interface CommandResults {
     restored: boolean;
     reason?: "no_focus" | "no_text_field" | "no_accessibility" | "secure_input";
     app?: string;
+    /** Um espaço foi na frente do texto, porque ele entrou logo depois de outro texto (T733). */
+    spaced?: true;
     /** Só no `dryRun`: nada foi colado nem copiado. */
     dryRun?: true;
   };

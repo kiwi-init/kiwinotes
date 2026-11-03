@@ -329,8 +329,10 @@ final class Helper {
                 return reply(id, ok: true, data)
             }
             let restore = (message.fields["restoreClipboard"] as? Bool) ?? true
-            inserter.insert(text, restoreClipboard: restore) { [weak self] outcome in
+            let autoSpace = (message.fields["autoSpace"] as? Bool) ?? true
+            inserter.insert(text, restoreClipboard: restore, autoSpace: autoSpace) { [weak self] outcome in
                 var data: [String: Any] = ["pasted": outcome.pasted, "restored": outcome.restored]
+                if outcome.spaced { data["spaced"] = true }
                 if let reason = outcome.reason { data["reason"] = reason }
                 if let app = outcome.app { data["app"] = app }
                 self?.reply(id, ok: true, data)
