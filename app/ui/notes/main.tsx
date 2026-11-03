@@ -10,6 +10,7 @@ import { flushSync } from "react-dom";
 import { Button, Empty, mount } from "../src/kit/index.tsx";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
+import { type Draft, Drafts } from "./drafts.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { linkTextFor, plainContext } from "./links.ts";
 import { focusEditor, NoteEditor } from "./NoteEditor.tsx";
@@ -56,6 +57,10 @@ function Notes({ api }: { api: NotesApi }) {
   const current = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const links = useMemo(() => new LinkCache((t) => api.resolve(t)), [api]);
+  const drafts = useMemo(() => new Drafts(), []);
+  /** O rascunho achado ao abrir a nota, enquanto a pessoa não escolhe: ele não é sobrescrito nem apagado até lá. */
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const undecided = useRef<Draft | null>(null);
 
   const refresh = useCallback(
     () =>
@@ -82,10 +87,20 @@ function Notes({ api }: { api: NotesApi }) {
       setDocKey(`${n.path}@${n.version}`);
       setConflict(null);
       setSaveFailed(false);
+      // Um rascunho que não foi gravado (a janela fechou com conflito ou erro na tela): oferece de volta.
+      const d = drafts.get(n.path);
+      if (d && d.body !== split.body) {
+        undecided.current = d;
+        setDraft(d);
+      } else {
+        if (d) drafts.remove(n.path);
+        undecided.current = null;
+        setDraft(null);
+      }
       setOpenFolders((open) => new Set([...open, ...ancestors(n.path)]));
       api.backlinks(n.path).then(setBacklinks, () => setBacklinks([]));
     },
-    [api],
+    [api, drafts],
   );
 
   /**
@@ -114,13 +129,16 @@ function Notes({ api }: { api: NotesApi }) {
       version.current = r.meta.version;
       setSaveFailed(false);
       // Só limpa se nada foi digitado enquanto gravava.
-      if (pending.current === text) pending.current = null;
+      if (pending.current === text) {
+        pending.current = null;
+        if (!undecided.current) drafts.remove(path);
+      }
       setNote((old) => (old && old.path === path ? { ...old, ...r.meta, content: frontmatter.current + text } : old));
       return "saved";
     };
     queue.current = queue.current.then(once, once);
     return queue.current;
-  }, [api]);
+  }, [api, drafts]);
 
   /**
    * Antes de sair da nota (abrir outra, criar, renomear): grava, e só deixa sair com tudo gravado. Com conflito ou erro,
@@ -144,12 +162,13 @@ function Notes({ api }: { api: NotesApi }) {
     const path = current.current;
     pending.current = null;
     if (!path) return;
+    drafts.remove(path);
     api.get(path).then(show, () => {
       current.current = null;
       setNote(null);
       setSaveFailed(false);
     });
-  }, [api, show]);
+  }, [api, drafts, show]);
 
   const open = useCallback(
     async (path: string) => {
@@ -177,8 +196,9 @@ function Notes({ api }: { api: NotesApi }) {
     [api, leave, refresh, show],
   );
 
-  // Abre o vault e a primeira nota (a Caixa de entrada, se existir).
+  // Abre o vault e a primeira nota (a Caixa de entrada, se existir). Tira os rascunhos velhos.
   useEffect(() => {
+    drafts.prune();
     api.list().then(
       (l) => {
         setListing(l);
@@ -239,6 +259,8 @@ function Notes({ api }: { api: NotesApi }) {
 
   const onChange = (doc: string) => {
     pending.current = doc;
+    // O rascunho anda junto com a edição, para sobreviver a um fechamento que o save não alcançou.
+    if (current.current && !undecided.current) drafts.set({ path: current.current, body: doc, baseVersion: version.current });
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_AFTER_MS);
   };
@@ -259,6 +281,30 @@ function Notes({ api }: { api: NotesApi }) {
     const n = await api.get(r.meta.path).catch(() => null);
     if (n) show(n);
     void refresh();
+  };
+
+  const takeTheirs = (n: Note) => {
+    drafts.remove(n.path);
+    show(n);
+  };
+
+  /** "Recuperar": o rascunho volta ao editor e grava por cima do que está no disco (a pessoa escolheu). */
+  const recoverDraft = () => {
+    const d = undecided.current;
+    if (!d) return;
+    undecided.current = null;
+    setDraft(null);
+    pending.current = d.body;
+    setBody(d.body);
+    setDocKey(`${d.path}@rascunho@${d.at}`);
+    void save();
+  };
+
+  const dropDraft = () => {
+    const d = undecided.current;
+    undecided.current = null;
+    setDraft(null);
+    if (d) drafts.remove(d.path);
   };
 
   const keepMine = () => {
@@ -335,7 +381,7 @@ function Notes({ api }: { api: NotesApi }) {
               <div className="kn-conflict kn-save-alert" role="alert">
                 Esta nota mudou fora do Kiwi Notes enquanto você editava.
                 <span className="kn-conflict-actions">
-                  <button type="button" className="kn-bt" onClick={() => show(conflict)}>
+                  <button type="button" className="kn-bt" onClick={() => takeTheirs(conflict)}>
                     Usar a de fora
                   </button>
                   <button type="button" className="kn-bt kn-bt-acc" onClick={keepMine}>
@@ -352,6 +398,20 @@ function Notes({ api }: { api: NotesApi }) {
                   </button>
                   <button type="button" className="kn-bt kn-bt-acc" onClick={() => void save()}>
                     Tentar de novo
+                  </button>
+                </span>
+              </div>
+            ) : draft ? (
+              <div className="kn-conflict kn-draft" role="alert">
+                {`Esta nota tem uma edição das ${new Date(draft.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${
+                  isToday(draft.at) ? "" : ` de ${new Date(draft.at).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}`
+                } que não foi gravada${draft.baseVersion !== note.version ? ", e a nota mudou depois disso" : ""}.`}
+                <span className="kn-conflict-actions">
+                  <button type="button" className="kn-bt" onClick={dropDraft}>
+                    Descartar
+                  </button>
+                  <button type="button" className="kn-bt kn-bt-acc" onClick={recoverDraft}>
+                    Recuperar
                   </button>
                 </span>
               </div>
@@ -389,6 +449,8 @@ function Notes({ api }: { api: NotesApi }) {
     </div>
   );
 }
+
+const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
