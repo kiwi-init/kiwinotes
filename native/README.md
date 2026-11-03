@@ -1,6 +1,6 @@
 # native: the Swift helper (sidecar)
 
-`kiwi-helper` handles the parts of dictation that need macOS APIs: the global hotkey, the microphone and the permissions. It also turns each recording into text (T256). Later tasks add text insertion (T55), the overlay and notifications. The Bun app listens on a unix socket and starts the helper with `--socket <path>`. They talk NDJSON v1; the contract is in `docs/adr/0001-ipc.md` and `app/src/shared/ipc.ts`.
+`kiwi-helper` handles the parts of dictation that need macOS APIs: the global hotkey, the microphone and the permissions. It also turns each recording into text (T256), shows the dictation pill (T56) and pastes the text (T55); notifications come later. The Bun app listens on a unix socket and starts the helper with `--socket <path>`. They talk NDJSON v1; the contract is in `docs/adr/0001-ipc.md` and `app/src/shared/ipc.ts`.
 
 ```sh
 swift build              # .build/debug/kiwi-helper and kiwi-ipc-probe
@@ -30,10 +30,10 @@ On the T51 clips, a short sentence takes ~80 to 150 ms from the end of the recor
 - For Fn: set **System Settings → Keyboard → "Press 🌐 key to" → Do Nothing**, otherwise macOS opens the emoji picker or its own dictation.
 
 ## Events (helper → app)
-`ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}` (also `device_changed`; may follow `record.started`, which goes out before the mic is up), `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `transcript.final {text, raw, lang, durationMs, latencyMs, audioPath?}`, `transcript.error {error}`, `stt.status {state, loadMs?}`, `permissions.changed`, `log`.
+`ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason, app?}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}` (also `device_changed`; may follow `record.started`, which goes out before the mic is up), `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `transcript.final {text, raw, lang, durationMs, latencyMs, audioPath?}`, `transcript.error {error}`, `stt.status {state, loadMs?}`, `app.active {bundleId, name, pid}` (the app in front, not Kiwi itself; for the cleanup's tone), `permissions.changed`, `log`.
 
 ## Commands (app → helper)
-`ping`, `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, language?, dictionary?, vad?}`, `record.start`, `record.stop`, `permissions.request {permission}`, `insert.text {text, restoreClipboard}`, `llm.prewarm {system}` and `llm.complete {system, prompt, maxTokens?, temperature?, timeoutMs?}` (Apple Foundation Models, on-device only, fresh session per call; `ready` says `llm: {available, reason?}`). `overlay.state {state, message?}` drives the dictation pill (ADR 0005); its ✕ and ✓ end a recording with `reason: "overlay"`. `kiwi-helper --overlay-snapshot <dir>` renders it in each state as PNGs. `notify` returns `not_implemented` until its task lands.
+`ping`, `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, language?, dictionary?, vad?}`, `record.start`, `record.stop`, `permissions.request {permission}`, `insert.text {text, restoreClipboard}`, `llm.prewarm {system}` and `llm.complete {system, prompt, maxTokens?, temperature?, timeoutMs?}` (Apple Foundation Models, on-device only, fresh session per call; `ready` says `llm: {available, reason?}`). `overlay.state {state, message?}` drives the dictation pill (ADR 0005); its ✕ and ✓ end a recording with `reason: "overlay"`. `kiwi-helper --overlay-snapshot <dir>` renders it in each state as PNGs. `notify` returns `not_implemented` until its task lands. With `KIWI_DEBUG=1` there is also `debug.transcribe {path}`: an audio file (synthetic, from `say`) takes the path of a finished recording, so the app can be tested end to end without the mic.
 
 ## Inserting text (`insert.text`)
 - Pastes with ⌘V in every app (Cocoa, Electron, terminals, browsers). Typing through Accessibility (`AXSelectedText`) is ignored by Electron and terminals, so it isn't used.

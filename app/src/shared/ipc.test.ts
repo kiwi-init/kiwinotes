@@ -40,6 +40,11 @@ describe("encode/parseLine", () => {
     expect(isResult(res)).toBe(true);
   });
 
+  test("debug.transcribe is a command (it needs an id)", () => {
+    const cmd: Message = { v: 1, id: "9", type: "debug.transcribe", path: "/tmp/frase.aiff" };
+    expect(isCommand(parseLine(encode(cmd).toString().trim()))).toBe(true);
+  });
+
   test("rejects bad JSON, wrong version, unknown type and commands without id", () => {
     const code = (line: string) => {
       try {
@@ -73,6 +78,11 @@ test("parses lines exactly as the Swift sidecar (T50) emits them", () => {
     `{"v":1,"type":"record.stopped","reason":"hotkey","mode":"ptt","durationMs":1200,"samples":19200}`,
     `{"v":1,"type":"result","id":"7","ok":false,"error":"hotkeys_must_match"}`,
     `{"v":1,"type":"result","id":"8","ok":true,"data":{"hotkey":"rightOption","hotkeyActive":true}}`,
+    // T457, from a `--stdio` run with `debug.transcribe` (KIWI_DEBUG=1) on a `say` clip.
+    `{"bundleId":"com.apple.mail","name":"Mail","pid":4009,"type":"app.active","v":1}`,
+    `{"app":{"bundleId":"com.apple.mail","name":"Mail"},"reason":"debug","type":"record.started","v":1}`,
+    `{"durationMs":3634,"mode":"debug","reason":"debug","samples":58158,"type":"record.stopped","v":1}`,
+    `{"state":"ready","type":"stt.status","v":1}`,
   ];
   expect(lines.map((l) => parseLine(l).type)).toEqual([
     "ready",
@@ -82,6 +92,10 @@ test("parses lines exactly as the Swift sidecar (T50) emits them", () => {
     "record.stopped",
     "result",
     "result",
+    "app.active",
+    "record.started",
+    "record.stopped",
+    "stt.status",
   ]);
 });
 

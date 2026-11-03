@@ -20,6 +20,7 @@ A pílula do ditado aparece ao gravar, mostra a onda ao vivo e os estados gravan
 | `record.started` | `listening` (✕, onda, ✓) | não, mesmo num toggle longo |
 | `record.stopped` | `processing` (três pontos) | depois de 10 s sem notícia do app |
 | `overlay.state done` (Bun, depois de inserir) | `done` (✓) | 0,7 s |
+| `overlay.state done` com `message` (ex.: secure input, #224) | `done` (✓ e a mensagem) | 2,5 s |
 | `record.error` ou `overlay.state error` | `error` (mensagem de até 38 caracteres) | 2,5 s |
 | `record.cancelled` ou `overlay.state hidden` | some | — |
 

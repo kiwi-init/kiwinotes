@@ -91,10 +91,25 @@ final class OverlayModelTests: XCTestCase {
         XCTAssertEqual(m.message, "Curta")
     }
 
-    func testMessageOnlyForErrors() {
+    func testMessageOnlyForErrorAndDone() {
         var m = OverlayModel()
-        m.set(.done, message: "ignored", at: 0)
+        m.set(.processing, message: "ignored", at: 0)
         XCTAssertNil(m.message)
+        m.set(.listening, message: "ignored", at: 0)
+        XCTAssertNil(m.message)
+    }
+
+    /// #224: with secure input, `done` says the text also stayed on the clipboard, and stays long enough to read.
+    func testDoneWithAMessageStaysAsLongAsAnError() {
+        var m = OverlayModel()
+        m.set(.done, message: "O texto também ficou no clipboard", at: 0)
+        XCTAssertEqual(m.message, "O texto também ficou no clipboard")
+        XCTAssertFalse(m.tick(now: OverlayModel.doneLinger))
+        XCTAssertTrue(m.tick(now: OverlayModel.errorLinger))
+        // Without one (or a blank one), it is the short check mark.
+        m.set(.done, message: "  ", at: 10)
+        XCTAssertNil(m.message)
+        XCTAssertTrue(m.tick(now: 10 + OverlayModel.doneLinger))
     }
 
     func testFrameSitsAboveTheDock() {

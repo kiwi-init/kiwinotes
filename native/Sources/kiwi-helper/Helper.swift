@@ -20,6 +20,11 @@ final class Helper {
     private let stt = Transcriber()
     /// The previous transcription: each one waits for it, so transcripts come out in recording order.
     private var sttChain: Task<Void, Never>?
+    /// The last `stt.status` sent, so a model that loads after an `unavailable` gets its `ready` (#383).
+    private var sttStatus = STTStatus()
+    private let frontApp = FrontApp()
+    /// `debug.transcribe` exists only with `KIWI_DEBUG=1` (development; never in a release build's environment).
+    private let debugCommands = ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1"
 
     init(connection: SocketConnection, dumpDirectory: URL?) {
         self.connection = connection
@@ -73,6 +78,14 @@ final class Helper {
         if Permission.microphone.status == "granted" { audio.warmUp() }
         schedulePermissionPoll()
         prepareSTT()
+        frontApp.onChange = { [weak self] app in self?.emit("app.active", app.fields) }
+        frontApp.start()
+    }
+
+    /// `stt.status`, only when it changes. Main thread.
+    private func setSTT(_ state: STTStatus.State, _ fields: [String: Any] = [:]) {
+        guard sttStatus.update(state) else { return }
+        emit("stt.status", fields.merging(["state": state.rawValue]) { _, new in new })
     }
 
     /// Loads the model while nobody is waiting for it (the first run downloads it), so the first dictation
@@ -81,16 +94,16 @@ final class Helper {
         let started = ProcessInfo.processInfo.systemUptime
         // The first load can take a minute (download, or CoreML compiling for the Neural Engine after a macOS
         // update): the app shows "preparing" until `ready`.
-        emit("stt.status", ["state": "loading"])
+        setSTT(.loading)
         let previous = sttChain
         sttChain = Task { [stt, weak self] in
             await previous?.value
             do {
                 try await stt.warmUp()
                 let ms = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
-                self?.emit("stt.status", ["state": "ready", "loadMs": ms])
+                DispatchQueue.main.async { self?.setSTT(.ready, ["loadMs": ms]) }
             } catch {
-                self?.emit("stt.status", ["state": "unavailable", "error": Transcriber.Failure.modelUnavailable.rawValue])
+                DispatchQueue.main.async { self?.setSTT(.unavailable, ["error": Transcriber.Failure.modelUnavailable.rawValue]) }
             }
         }
     }
@@ -159,7 +172,9 @@ final class Helper {
         guard !audio.isRecording else { return nil }
         // Tell the app first, so the overlay shows up while the engine comes up. If the mic then fails,
         // record.error follows record.started (ADR 0001).
-        emit("record.started", ["reason": reason])
+        var started: [String: Any] = ["reason": reason]
+        if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
+        emit("record.started", started)
         overlay.set(.listening)
         let t0 = ProcessInfo.processInfo.systemUptime
         do {
@@ -183,7 +198,11 @@ final class Helper {
 
     private func stopRecording(reason: String, mode: String) {
         guard audio.isRecording else { return }
-        let samples = audio.stop()
+        finishRecording(audio.stop(), reason: reason, mode: mode)
+    }
+
+    /// The end of a recording, from the mic or from `debug.transcribe`: `record.stopped`, the pill, the transcript.
+    private func finishRecording(_ samples: [Float], reason: String, mode: String) {
         var fields: [String: Any] = [
             "reason": reason,
             "mode": mode,
@@ -218,9 +237,14 @@ final class Helper {
                 ]
                 if let audioPath { fields["audioPath"] = audioPath }
                 self?.emit("transcript.final", fields)
+                // The model loaded now, after a failed start (offline on the first run, #383).
+                DispatchQueue.main.async { self?.setSTT(.ready) }
             } catch {
                 let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
                 self?.emit("transcript.error", ["error": code])
+                if code == Transcriber.Failure.modelUnavailable.rawValue {
+                    DispatchQueue.main.async { self?.setSTT(.unavailable, ["error": code]) }
+                }
             }
         }
     }
@@ -292,11 +316,33 @@ final class Helper {
                 if let app = outcome.app { data["app"] = app }
                 self?.reply(id, ok: true, data)
             }
+        case "debug.transcribe" where debugCommands:
+            debugTranscribe(id, message)
         case "notify":
             reply(id, ok: false, error: "not_implemented")
         default:
             reply(id, ok: false, error: "unknown_type")
         }
+    }
+
+    /// `debug.transcribe {path}` (KIWI_DEBUG=1): a WAV takes the path of a recording that just ended, so the app can
+    /// be tested end to end without the mic. Synthetic audio only (`say`).
+    private func debugTranscribe(_ id: String?, _ message: InboundMessage) {
+        guard let path = message.string("path") else { return reply(id, ok: false, error: "invalid_value") }
+        if let error = Rules.recordStart(isRecording: audio.isRecording) { return reply(id, ok: false, error: error) }
+        let samples: [Float]
+        do {
+            samples = try AudioFile.samples16k(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+        } catch {
+            return reply(id, ok: false, error: "invalid_value")
+        }
+        reply(id, ok: true)
+        // The same events as a dictation: started (with the app in front), stopped, then the transcript.
+        var started: [String: Any] = ["reason": "debug"]
+        if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
+        emit("record.started", started)
+        overlay.set(.listening)
+        finishRecording(samples, reason: "debug", mode: "debug")
     }
 
     /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?}` (ADR 0001). Hold and double tap share the one key.

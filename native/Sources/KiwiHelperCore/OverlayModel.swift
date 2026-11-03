@@ -15,7 +15,7 @@ public enum OverlayPhase: String, CaseIterable, Sendable {
 public struct OverlayModel: Sendable {
     /// How long `done` stays before it fades out.
     public static let doneLinger: TimeInterval = 0.7
-    /// How long an error stays: long enough to read a short message.
+    /// How long an error, or a `done` with a message, stays: long enough to read a short message.
     public static let errorLinger: TimeInterval = 2.5
     /// `processing` with no news from the app (no STT yet, or the app went quiet) hides after this.
     public static let processingTimeout: TimeInterval = 10
@@ -55,9 +55,11 @@ public struct OverlayModel: Sendable {
     public mutating func set(_ phase: OverlayPhase, message: String? = nil, at now: TimeInterval) {
         if phase == .listening, self.phase != .listening { levels = Array(repeating: 0, count: levels.count) }
         self.phase = phase
-        self.message = phase == .error ? message.map(Self.clip) : nil
+        // `error` and `done` show a message ("O texto também ficou no clipboard", #224); the others don't.
+        let shown = phase == .error || phase == .done ? message.map(Self.clip).flatMap { $0.isEmpty ? nil : $0 } : nil
+        self.message = shown
         switch phase {
-        case .done: hideAt = now + Self.doneLinger
+        case .done: hideAt = now + (shown == nil ? Self.doneLinger : Self.errorLinger)
         case .error: hideAt = now + Self.errorLinger
         case .processing: hideAt = now + Self.processingTimeout
         case .hidden, .listening: hideAt = nil
