@@ -4,7 +4,7 @@
 import { compileDictionary, protect } from "./dictionary.ts";
 import { polish, vocabularyOf } from "./llm.ts";
 import { systemMessage } from "./prompts.ts";
-import { applyRules, capitalize, finishRules, tidyPunctuation } from "./rules.ts";
+import { applyRules, capitalize, finishRules, looksLikeCode, tidyPunctuation } from "./rules.ts";
 import { toneFor } from "./tone.ts";
 import type { CleanupInput, CleanupOptions, CleanupResult, DictionaryEntry, LlmMode, Tone } from "./types.ts";
 
@@ -55,10 +55,13 @@ export function cleanupWithRules(input: CleanupInput): { text: string; tone: Ton
   const tone = input.tone ?? toneFor(input.bundleId);
   const dictionary = compileDictionary(input.dictionary);
   const protectedText = protect(input.raw, dictionary);
-  let ruled = protectedText.restore(applyRules(protectedText.text, tone));
-  if (rulesDroppedTooMuch(input.raw, ruled)) {
-    ruled = protectedText.restore(capitalize(tidyPunctuation(protectedText.text)));
+  let marked = applyRules(protectedText.text, tone);
+  if (rulesDroppedTooMuch(input.raw, protectedText.restore(marked))) {
+    marked = capitalize(tidyPunctuation(protectedText.text));
   }
+  // Num comando, o termo dito com outra maiúscula fica como veio (`kubectl -n pacs`, T896); o alias vira o termo.
+  const typed = protectedText.restoreAsTyped(marked);
+  const ruled = tone === "literal" && looksLikeCode(typed) ? typed : protectedText.restore(marked);
   return { text: finishRules(ruled, input.raw, tone), tone };
 }
 
