@@ -146,6 +146,15 @@ export const fixtures: Fixture[] = [
   { name: "ghostty: ./gradlew fica", raw: "./gradlew build", bundleId: GHOSTTY, expected: "./gradlew build" },
   { name: "ghostty: rm -rf ./dist fica", raw: "rm -rf ./dist", bundleId: GHOSTTY, expected: "rm -rf ./dist" },
   { name: "ghostty: sudo !! fica", raw: "sudo !!", bundleId: GHOSTTY, expected: "sudo !!" },
+  { name: "ghostty: comando com termo do dicionário fica", raw: "kubectl get pods .", bundleId: GHOSTTY, dictionary: ["kubectl"], expected: "kubectl get pods ." },
+  { name: "terminal: docker build . com Docker no dicionário", raw: "docker build .", bundleId: TERMINAL, dictionary: ["Docker"], expected: "docker build ." },
+  {
+    name: "ghostty: alias do dicionário num comando",
+    raw: "cube control config use-context ..",
+    bundleId: GHOSTTY,
+    dictionary: [{ term: "kubectl", aliases: ["cube control"] }],
+    expected: "kubectl config use-context ..",
+  },
   { name: "ghostty: prosa com nome de CLI é prosa", raw: "Docker tá fora do ar, reinicia ele.", bundleId: GHOSTTY, expected: "Docker tá fora do ar, reinicia ele." },
   { name: "ghostty: número de versão não é código", raw: "a versão 2.1 saiu ontem.", bundleId: GHOSTTY, expected: "A versão 2.1 saiu ontem." },
   {

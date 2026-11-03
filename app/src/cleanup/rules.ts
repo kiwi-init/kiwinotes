@@ -343,10 +343,14 @@ export function asCommand(text: string): string {
 // ------------------------------------------------------------ pipeline
 
 /** Tudo que as regras fazem, na ordem. O texto já vem com o dicionário protegido. */
-export function applyRules(text: string, tone: Tone): string {
+/**
+ * `code`: no tom `literal`, se o texto é comando. Quem chama decide em cima do texto com os termos do dicionário de
+ * volta: aqui o `kubectl` já virou marcador, e o `looksLikeCode` não o reconheceria (review do T913).
+ */
+export function applyRules(text: string, tone: Tone, code = tone === "literal" && looksLikeCode(text)): string {
   // No terminal, um comando sai como foi dito: o `tidyPunctuation` e as muletas quebravam "git add ." e "cd ../src"
   // (T913, regressão do T684). Só os espaços repetidos saem.
-  if (tone === "literal" && looksLikeCode(text)) return asCommand(text.replace(/\s+/g, " "));
+  if (code) return asCommand(text.replace(/\s+/g, " "));
   let out = spokenCommands(text);
   out = selfCorrections(out);
   out = removeFillers(out);
