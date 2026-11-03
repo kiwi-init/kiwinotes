@@ -1,6 +1,6 @@
 # ADR 0002: limpeza do ditado com regras primeiro e LLM local opcional
 
-- Status: proposto (T52). O caminho principal espera a decisão do @harry em #146.
+- Status: aceito (T52). O @harry escolheu a opção A em #171: regras primeiro, LLM só onde há folga.
 - Código: [`app/src/cleanup/`](../../app/src/cleanup/). Contrato do LLM: [ADR 0001](0001-ipc.md) (`llm.complete`, `llm.prewarm`).
 
 ## Contexto
@@ -18,5 +18,5 @@ Um texto que muda de sentido, colado direto no app da pessoa, é pior que um tex
 
 ## Consequências
 - A frase curta sai na hora e sempre igual, e as fixtures (`fixtures.ts`) descrevem exatamente o que a limpeza faz.
-- O que precisa de entender a frase (gramática, "tipo" sem vírgula depois de nome, reescrita de tom) só melhora onde o LLM entra. Se o @harry escolher a opção B ou C do #146, muda só a política do `wantsLlm`, não a arquitetura.
+- O que precisa de entender a frase (gramática, "tipo" sem vírgula depois de nome, reescrita de tom) só melhora onde o LLM entra. Para mudar onde ele entra, basta mexer na política do `wantsLlm`, sem tocar na arquitetura.
 - `rulesText` vai para o histórico (T57) junto com o texto final, para comparar o que o LLM mudou.
