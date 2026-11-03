@@ -1,4 +1,4 @@
-// Portado de VoiceInk/VoiceInk/Features/Dictionary/Workflows/PhoneticVocabularyMatcher.swift @ 19546d2 (GPL-3.0). Mudanças: `public` na API (init e correct); a primeira letra pode ser c, k ou q quando as duas abrem com o som de K (`sameOpeningSound`, T591); o resto igual.
+// Portado de VoiceInk/VoiceInk/Features/Dictionary/Workflows/PhoneticVocabularyMatcher.swift @ 19546d2 (GPL-3.0). Mudanças: `public` na API (init e correct); a primeira letra pode ser c, k ou q quando as duas abrem com o som de K (`sameOpeningSound`, T591); um trecho com mais palavras que um alias não engole um conectivo (`strict`, `connectives`, T711); o resto igual.
 
 import Foundation
 
@@ -27,6 +27,8 @@ public struct PhoneticVocabularyMatcher: Sendable {
         let key: String
         let phone: String
         let wordPhones: [String]
+        /// May not take in a connective it doesn't have (an alias, T711).
+        let strict: Bool
     }
 
     private struct Token {
@@ -49,7 +51,8 @@ public struct PhoneticVocabularyMatcher: Sendable {
     private let exact: Set<String>
     private let maximumSpan: Int
 
-    public init(vocabulary: [String]) {
+    /// - Parameter strict: entries that may not take in a neighboring connective (the dictionary's aliases, T711).
+    public init(vocabulary: [String], strict: Set<String> = []) {
         var prepared: [Term] = []
         var phones: [String: [Int]] = [:]
         var grams: [String: [Int]] = [:]
@@ -66,7 +69,8 @@ public struct PhoneticVocabularyMatcher: Sendable {
             guard key.count >= 3, key.count <= 64, seen.insert(text).inserted else { continue }
             let wordPhones = words.map(VocabularyPhonetics.key)
             let term = Term(text: text, words: words, key: key,
-                phone: VocabularyPhonetics.phraseKeyFromCodes(wordPhones), wordPhones: wordPhones)
+                phone: VocabularyPhonetics.phraseKeyFromCodes(wordPhones), wordPhones: wordPhones,
+                strict: strict.contains(text))
             let id = prepared.count
             prepared.append(term)
             phones[term.phone, default: []].append(id)
@@ -248,6 +252,13 @@ public struct PhoneticVocabularyMatcher: Sendable {
                 if Array(words[start..<(start + term.words.count)]) == term.words { return nil }
             }
         }
+        // A stretch with more words than an alias may not take in a connective: "cubo de controle" is not the alias
+        // "cube control" (T711). Terms still may, because there the connective is often a piece of the split name
+        // ("de com" is DICOM, "PAC se" is PACS, "service A conte" is service account in the T51 clips).
+        if term.strict && words.count > term.words.count
+            && words.contains(where: { Self.connectives.contains($0) && !term.words.contains($0) }) {
+            return nil
+        }
         let length = max(key.count, term.key.count)
         guard Double(min(key.count, term.key.count)) / Double(length) >= 0.65 else { return nil }
         // A canonical word must not be fuzzily changed into another vocabulary
@@ -302,6 +313,13 @@ public struct PhoneticVocabularyMatcher: Sendable {
         let boundaryPenalty = 0.012 * Double(abs(words.count - term.words.count))
         return 0.55 * spelling + 0.45 * sound + boundaryPenalty
     }
+
+    /// Short Portuguese and English words that tie others together: never part of a term they aren't in (T711).
+    private static let connectives: Set<String> = [
+        "a", "o", "as", "os", "e", "é", "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
+        "um", "uma", "pra", "pro", "por", "com", "que", "se", "ao",
+        "the", "an", "and", "of", "to", "in", "on", "at", "for", "or", "is",
+    ]
 
     /// Both words open with the hard K sound, spelled c, k or q ("cubectl", "kubectl"). Only K: with the soft c
     /// too, "century" became "Sentry" in a probe over 48 thousand English words (T591).

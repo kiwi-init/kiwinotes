@@ -44,7 +44,7 @@ public struct TranscriptDictionary: Sendable {
         // The aliases are matched by sound too, so a near form of what the person said ("Daikon Stor") still
         // lands on the alias, and the replacement below turns it into the term (T591).
         let aliases = entries.flatMap(\.aliases).filter { seen.insert($0.lowercased()).inserted }
-        matcher = PhoneticVocabularyMatcher(vocabulary: terms + aliases)
+        matcher = PhoneticVocabularyMatcher(vocabulary: terms + aliases, strict: Set(aliases))
         replacements = WordReplacements(entries.filter { !$0.aliases.isEmpty }.map {
             WordReplacements.Rule(original: $0.aliases.joined(separator: ", "), replacement: $0.term)
         })
