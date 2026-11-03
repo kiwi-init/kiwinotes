@@ -7,7 +7,8 @@ final class Helper {
 
     private let connection: SocketConnection
     private let dumpDirectory: URL?
-    private let audio = AudioCapture()
+    private let audio = AudioCapture(makeEngine: { AVMicEngine() })
+    private let defaultInput = DefaultInputWatcher()
     private let overlay = Overlay()
     private let inserter = Inserter()
     private var gesture = HotkeyGesture()
@@ -37,7 +38,10 @@ final class Helper {
         }
         overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
-        audio.onDeviceLost = { [weak self] code in
+        // Touching the input before the mic is granted can bring up the system prompt.
+        audio.mayWarmUp = { Permission.microphone.status == "granted" }
+        audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "mic: \(message)"]) }
+        audio.onLost = { [weak self] code in
             guard let self else { return }
             self.gesture.reset()
             self.recordingStartedAt = nil
@@ -78,7 +82,9 @@ final class Helper {
         // Who macOS checks the permissions against, and what it says (T658). No dialog: these only read.
         let tcc = Responsible.current()?.summary ?? "responsible process unknown"
         emit("log", ["level": "info", "message": "tcc: \(tcc); \(Permission.snapshot().sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))"])
-        if Permission.microphone.status == "granted" { audio.warmUp() }
+        // `mayWarmUp` checks the mic permission (T590).
+        audio.warmUp()
+        defaultInput.start { [weak self] in self?.audio.inputChanged("default input device") }
         schedulePermissionPoll()
         prepareSTT()
         frontApp.onChange = { [weak self] app in self?.emit("app.active", app.fields) }

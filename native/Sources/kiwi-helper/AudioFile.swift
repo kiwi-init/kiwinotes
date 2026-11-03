@@ -1,4 +1,5 @@
 import AVFoundation
+import KiwiHelperCore
 
 /// An audio file as the mic delivers it: 16 kHz mono Float. For `debug.transcribe` and `--transcribe`.
 enum AudioFile {

@@ -276,11 +276,36 @@ export function casualEnding(text: string): string {
 // ------------------------------------------------------------ código no terminal
 
 const CLI = "git|cd|ls|npm|npx|bun|bunx|yarn|pnpm|kubectl|docker|swift|gcloud|gsutil|make|python3?|pip3?|ssh|scp|cat|grep|rg|curl|brew|sudo|mkdir|rm|mv|cp|echo|export|go|cargo|node|deno|kiwi|claude|code|open|cat|tail|head";
-const CODE = re(`[/\\\\=<>{}\\[\\]\`$|&]|(?:^|\\s)--?[\\p{L}]|\\w\\.\\w|\\w_\\w|^(?:${CLI})${E}`, "iu");
+// Sinais de código em qualquer lugar do texto: path, flag, `=`, `.` ou `_` dentro de palavra.
+const CODE_SIGN = re(`[/\\\\=<>{}\\[\\]\`$|&]|(?:^|\\s)--?[\\p{L}]|\\w\\.\\w|\\w_\\w`, "iu");
+const CLI_FIRST = re(`^(?:${CLI})${E}`, "iu");
+/** Comandos que também começam frase em inglês ("Make sure…", "Open the file…", "Go ahead…"), comum no Claude Code. */
+const PROSE_START = new Set("make open go code echo export head tail cat node claude kiwi".split(" "));
+/** Até quantas palavras um desses, sem outro sinal de código, ainda é comando ("make build", "tail log"). */
+const SHORT_COMMAND_WORDS = 2;
 
-/** Parece comando ou código: no tom `literal`, isso sai sem maiúscula e sem ponto. */
+/**
+ * Parece comando ou código: no tom `literal`, isso sai sem maiúscula e sem ponto. Um comando que também começa
+ * frase em inglês só conta com outro sinal de código, ou no texto curto (T684, #691).
+ */
 export function looksLikeCode(text: string): boolean {
-  return CODE.test(text.trim());
+  const t = text.trim();
+  if (CODE_SIGN.test(t)) return true;
+  const first = t.match(CLI_FIRST)?.[0];
+  if (!first) return false;
+  return !PROSE_START.has(first.toLowerCase()) || t.split(/\s+/).length <= SHORT_COMMAND_WORDS;
+}
+
+/**
+ * O STT escreve o comando como frase ("Git status."); no tom `literal` ele volta a ser comando ("git status",
+ * T684). Só sai a maiúscula da 1ª palavra, quando ela é um comando conhecido escrito como "Git" (não "GIT"),
+ * e o ponto final colado numa palavra ("arquivo.txt." → "arquivo.txt"; "..." fica).
+ */
+export function asCommand(text: string): string {
+  let out = text.trim().replace(/(?<=[\p{L}\p{N}])\.$/u, "");
+  const first = out.match(CLI_FIRST)?.[0];
+  if (first && /^\p{Lu}[\p{Ll}\p{N}]*$/u.test(first)) out = first.toLowerCase() + out.slice(first.length);
+  return out;
 }
 
 // ------------------------------------------------------------ pipeline
@@ -292,7 +317,7 @@ export function applyRules(text: string, tone: Tone): string {
   out = removeFillers(out);
   out = removeStutter(out);
   out = tidyPunctuation(out);
-  if (tone === "literal" && looksLikeCode(out)) return out;
+  if (tone === "literal" && looksLikeCode(out)) return asCommand(out);
   if (tone !== "literal") out = lists(out);
   out = tidyPunctuation(out);
   out = capitalize(out);
@@ -301,7 +326,7 @@ export function applyRules(text: string, tone: Tone): string {
 
 /** O que só pode rodar depois de voltar os termos do dicionário (precisa ver o fim real do texto). */
 export function finishRules(text: string, raw: string, tone: Tone): string {
-  if (tone === "literal" && looksLikeCode(text)) return text;
+  if (tone === "literal" && looksLikeCode(text)) return asCommand(text);
   let out = finalPunctuation(text, raw);
   if (tone === "casual") out = casualEnding(out);
   return out;
