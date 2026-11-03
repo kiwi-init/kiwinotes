@@ -48,6 +48,13 @@ const capabilities = uiCapabilities({
   dictionaryChanged: (terms) => void session.get()?.dictionaryChanged(terms),
   snippetsChanged: (snippets) => session.get()?.snippetsChanged(snippets),
   clipboardWrite: (text) => Utils.clipboardWriteText(text),
+  notes: stores.notes,
+});
+
+/** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */
+const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();
+stores.notes.onChanged((paths) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "notes.changed", payload: { paths } });
 });
 
 const preload = enginePreload(UI_CAPABILITIES, appEnginePageScript);
@@ -143,11 +150,13 @@ async function openWindow(name: WindowName): Promise<void> {
     win = created;
   }
   open.set(name, win);
+  rpcs.set(name, rpc);
 
   // O Histórico aberto recebe cada ditado novo na hora.
   const off = name === "history" ? stores.history.onAdded((entry) => rpc.send.event({ name: "history.added", payload: entry })) : undefined;
   win.on("close", () => {
     log(name, "window closed");
+    rpcs.delete(name);
     off?.();
     engine?.stop();
     open.delete(name);

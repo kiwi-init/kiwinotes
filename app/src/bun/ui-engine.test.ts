@@ -29,6 +29,22 @@ const encode = (s: string) => new TextEncoder().encode(s);
 const decode = (b: Uint8Array) => new TextDecoder().decode(b);
 const BUILT_IN_SEQ = 1_000;
 
+/** As notas têm testes próprios (src/notes/vault.test.ts); aqui só precisam existir. */
+const notesStub = {
+  open: async () => {},
+  list: () => ({ folders: [], notes: [] }),
+  get: async () => {
+    throw new Error("not in this test");
+  },
+  save: async () => ({ saved: false as const, current: null as never }),
+  create: async () => null as never,
+  rename: async () => null as never,
+  delete: async () => true as const,
+  search: () => [],
+  backlinks: () => [],
+  resolve: () => null,
+};
+
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
@@ -49,6 +65,7 @@ function fakeDeps() {
       },
       clipboardWrite: (text: string) => void copied.push(text),
       now: () => t,
+      notes: notesStub,
     },
   };
 }

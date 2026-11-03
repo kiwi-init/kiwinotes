@@ -14,7 +14,8 @@
     "test": "bun test src scripts",
     "ui:build": "bun scripts/ui-build.ts",
     "ui:publish": "bun scripts/ui-publish.ts",
-    "ui:serve": "bun scripts/ui-serve.ts"
+    "ui:serve": "bun scripts/ui-serve.ts",
+    "notes:bench": "bun scripts/notes-bench.ts"
   },
   "dependencies": {
     "react": "^19.2.0",
