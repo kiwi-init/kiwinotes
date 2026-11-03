@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { compileDictionary } from "./dictionary.ts";
 import { fixtures } from "./fixtures.ts";
-import { cleanup, cleanupWithRules, toneFor } from "./index.ts";
+import { cleanup, cleanupWithRules, rulesDroppedTooMuch, toneFor } from "./index.ts";
 import { rejectReason } from "./llm.ts";
 import { sidecarLlm } from "./sidecar.ts";
 import type { LlmBackend, LlmRequest } from "./types.ts";
@@ -13,6 +13,20 @@ describe("fixtures (só regras)", () => {
       expect(cleanupWithRules({ raw: f.raw, bundleId: f.bundleId, tone: f.tone, dictionary: f.dictionary }).text).toBe(f.expected);
     });
   }
+});
+
+describe("trava das regras (#241)", () => {
+  test("perder mais de 40% das palavras de conteúdo dispara", () => {
+    expect(rulesDroppedTooMuch("Se não for usar, apaga isso do servidor.", "")).toBe(true);
+    expect(rulesDroppedTooMuch("O desempenho ficou igual ou melhor que antes.", "O desempenho ficou que antes.")).toBe(true);
+  });
+  test("muletas e correções não contam", () => {
+    expect(rulesDroppedTooMuch("me encontra às três, não, quer dizer, às quatro", "Me encontra às quatro.")).toBe(false);
+    expect(rulesDroppedTooMuch("first, buy milk, second, call mom", "1. Buy milk\n2. Call mom")).toBe(false);
+  });
+  test("frase curta não dispara", () => {
+    expect(rulesDroppedTooMuch("hum ok", "Ok.")).toBe(false);
+  });
 });
 
 describe("tom pelo app", () => {

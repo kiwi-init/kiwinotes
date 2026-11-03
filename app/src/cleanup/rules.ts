@@ -14,7 +14,9 @@ const norm = (w: string) => w.toLocaleLowerCase("pt-BR").replace(/^[^\p{L}\p{N}�
 // O ponto antes do comando fica: "pensando. Novo parágrafo." → "pensando.\n\n".
 const PARAGRAPH = re(`[\\s,;]*${B}(?:novo parágrafo|próximo parágrafo|new paragraph)${E}[\\s,.;:]*`);
 const NEWLINE = re(`[\\s,;]*${B}(?:nova linha|quebra de linha|new line)${E}[\\s,.;:]*`);
-const SCRATCH = re(`${B}(?:apaga isso|esquece isso|scratch that|delete that)${E}[\\s,.;:!]*`, "iu");
+// Só comandos que não são conteúdo de mensagem: "apaga isso do servidor" e "esquece isso, já
+// resolvi" são frases normais (#241). O resto fica para o LLM.
+const SCRATCH = re(`${B}(?:scratch that|apaga a (?:última|ultima) frase|apaga a frase anterior)${E}[\\s,.;:!]*`, "iu");
 
 /** "nova linha", "novo parágrafo" e "apaga isso" (apaga a frase de antes). */
 export function spokenCommands(text: string): string {
@@ -41,9 +43,12 @@ const CORRECTION_MARKERS: Marker[] = [
   // "não quer dizer que…" é negação ("isso não quer dizer nada"), não correção.
   { re: re(`[\\s,;]*${B}não\\s*[,.]\\s*(?:quer dizer|digo|pera|espera)${E}[\\s,.:]*`, "iu") },
   { re: re(`[\\s,;]*${B}não\\s+quer dizer${E}(?!\\s+(?:que|nada|isso|muito|muita|necessariamente|tanto|grande)${E})[\\s,.:]*`, "iu") },
-  { re: re(`[\\s,;]*${B}ou melhor${E}[\\s,.:]*`, "iu") },
+  // Só entre vírgulas, e nunca "ou melhor que", "ou melhor ainda" (comparação, #241).
+  { re: re(`\\s*,\\s*${B}ou melhor${E}\\s*,(?!\\s*(?:que|do que|ainda)${E})\\s*`, "iu") },
   { re: re(`\\s*,\\s*digo${E}[\\s,.:]*`, "iu") },
-  { re: re(`[\\s,;]*${B}(?:no[,.]?\\s+wait|wait[,.]?\\s+no|or rather|(?:no[,.]?\\s+|sorry[,.]?\\s+)?i mean)${E}[\\s,.:]*`, "iu") },
+  { re: re(`[\\s,;]*${B}(?:no[,.]?\\s+wait|wait[,.]?\\s+no|or rather)${E}[\\s,.:]*`, "iu") },
+  // "I mean" só com vírgula depois, e no começo da frase ou depois de vírgula: "that's what I mean" é conteúdo.
+  { re: re(`(?:(?<=^|[.!?]\\s*)|\\s*,\\s*)${B}(?:(?:no|sorry)[,.]?\\s+)?i mean\\s*,\\s*`, "iu") },
 ];
 
 const SENTENCE_END = /[.!?\n]/;
@@ -139,8 +144,7 @@ export function removeFillers(text: string): string {
   out = out.replace(re(`(^|[.!?\\n]\\s*)é[\\s,.…]+(?=${HESITATION}${E})`), "$1");
   // A vírgula de antes vai junto: "acho que, ahn, dá" → "acho que dá".
   out = out.replace(re(`\\s*,?\\s*${B}${HESITATION}${E}[,.…]*`), " ");
-  // "é..." e "é, é" são hesitação; "é" sozinho é verbo.
-  out = out.replace(re(`${B}é(?:\\.{3}|…)\\s*`), "");
+  // "é, é" é hesitação. "é..." fica: o verbo seguido de pausa é comum ("o problema é... complicado", #241).
   out = out.replace(re(`${B}é[\\s,]+(?=é${E})`), "");
   // "né?" vira só "?": continua pergunta. "né" no resto do texto é muleta.
   out = out.replace(re(`[\\s,]*${B}né${E}\\s*\\?`), "?");
@@ -167,7 +171,7 @@ export function removeFillers(text: string): string {
 }
 
 // Repetidas de propósito, para dar ênfase: ficam.
-const EMPHASIS = new Set("muito mais bem não sim very really so no yes ha haha rs".split(" "));
+const EMPHASIS = new Set("muito mais bem não sim very really so no yes ha haha rs had that".split(" "));
 
 /** "eu eu acho" → "eu acho". */
 export function removeStutter(text: string): string {
@@ -178,13 +182,14 @@ export function removeStutter(text: string): string {
 
 // ------------------------------------------------------------ listas
 
+// Só as formas masculinas: "segunda", "quarta", "quinta" e "sexta" também são dias da semana.
 const ORDINALS = [
-  ["primeiro", "primeira", "first", "em primeiro lugar"],
-  ["segundo", "segunda", "second", "em segundo lugar"],
-  ["terceiro", "terceira", "third", "em terceiro lugar"],
-  ["quarto", "quarta", "fourth"],
-  ["quinto", "quinta", "fifth"],
-  ["sexto", "sexta", "sixth"],
+  ["primeiro", "first", "em primeiro lugar"],
+  ["segundo", "second", "em segundo lugar"],
+  ["terceiro", "third", "em terceiro lugar"],
+  ["quarto", "fourth"],
+  ["quinto", "fifth"],
+  ["sexto", "sixth"],
 ];
 
 /**
@@ -197,7 +202,11 @@ export function lists(text: string): string {
   let from = 0;
   for (const forms of ORDINALS) {
     const alt = forms.join("|").replace(/ /g, "\\s+");
-    const r = re(`(^|[.!?\\n,;:]\\s*)(${B}(?:${alt})${E}(?:\\s+lugar)?)(?!\\s+(?:ele|ela|eles|elas|o|a|os|as|fulano)${E})[\\s,:]*`, "iu");
+    // O hífen é parte da palavra ("segunda-feira"), e "primeiro de maio" ou "segundo ele" não são itens.
+    const r = re(
+      `(^|[.!?\\n,;:]\\s*)(${B}(?:${alt})(?![\\p{L}\\p{N}-])(?:\\s+lugar)?)(?!\\s+(?:ele|ela|eles|elas|o|a|os|as|de|do|da|fulano)${E})[\\s,:]*`,
+      "iu",
+    );
     const m = r.exec(text.slice(from));
     if (!m) break;
     const index = from + m.index + m[1]!.length;
@@ -223,7 +232,7 @@ export function tidyPunctuation(text: string): string {
     .replace(/ +([,.;:!?…])/g, "$1")
     .replace(/,(?:\s*,)+/g, ",")
     .replace(/[,;:]+(?=\s*[.!?])/g, "")
-    .replace(/([.!?])\s*\.(?!\.)/g, "$1")
+    .replace(/(?<!\.)([.!?])\s*\.(?!\.)/g, "$1") // "?." → "?", mas "..." fica
     .replace(/[ \t]*\n[ \t]*/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/(^|\n)[ \t,.;:]+(?=\S)/g, "$1")
@@ -238,12 +247,13 @@ function capitalizeFirst(s: string): string {
 /** Maiúscula no começo e depois de ., !, ? e quebra de linha. Não pula marcador do dicionário. */
 export function capitalize(text: string): string {
   return capitalizeFirst(text)
-    .replace(/([.!?]\s+|\n["'(“]?)(\p{Ll})/gu, (_, pre: string, c: string) => pre + c.toLocaleUpperCase("pt-BR"))
+    // Depois de reticências não: "é... complicado" continua a mesma frase.
+    .replace(/((?:(?<!\.)\.|[!?])\s+|\n["'(“]?)(\p{Ll})/gu, (_, pre: string, c: string) => pre + c.toLocaleUpperCase("pt-BR"))
     .replace(re(`${B}i${E}(?=\\s+\\p{L})`, "gu"), "I");
 }
 
 const QUESTION_START = re(
-  `^(?:o que|que (?:tipo|horas|hora|dia)|qual|quais|quando|onde|por que|quem|quanto|quantos|quantas|será que|what|when|where|why|who|how|is|are|do|does|did|can|could|would|will|should)${E}`,
+  `^(?:o que|que (?:tipo|horas|hora|dia)|qual|quais|quando|onde|por que|quem|quanto|quantos|quantas|será que|what|when|where|why|who|how|does|did|can|could|would|will|should)${E}`,
   "iu",
 );
 

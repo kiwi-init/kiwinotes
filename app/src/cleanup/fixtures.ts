@@ -22,7 +22,7 @@ export const fixtures: Fixture[] = [
   { name: "hesitações somem", raw: "hum, eu acho que, ahn, dá pra entregar amanhã", expected: "Eu acho que dá pra entregar amanhã." },
   { name: "é hesitante colado num hum", raw: "é hum me manda o relatório amanhã de manhã", expected: "Me manda o relatório amanhã de manhã." },
   { name: "é verbo fica", raw: "isso é importante pra gente", expected: "Isso é importante pra gente." },
-  { name: "é... com reticências some", raw: "a gente precisa é... revisar o contrato", expected: "A gente precisa revisar o contrato." },
+  { name: "é... fica (verbo com pausa)", raw: "O problema é... complicado.", expected: "O problema é... complicado." },
   { name: "é, é repetido", raw: "é, é, vamos fazer assim então", expected: "É, vamos fazer assim então." },
   { name: "tipo muleta no meio", raw: "me manda o relatório amanhã tipo de manhã", expected: "Me manda o relatório amanhã de manhã." },
   { name: "tipo substantivo fica", raw: "que tipo de arquivo você precisa", expected: "Que tipo de arquivo você precisa?" },
@@ -51,7 +51,13 @@ export const fixtures: Fixture[] = [
   { name: "I mean no começo é muleta", raw: "I mean, it works fine", expected: "It works fine." },
   { name: "a correção não atravessa frase", raw: "Fechei o PR. Amanhã às nove, não, quer dizer, às dez eu reviso.", expected: "Fechei o PR. Amanhã às dez eu reviso." },
   { name: "correção logo depois do ponto do STT", raw: "Vamos marcar sexta. Não, quer dizer, segunda.", expected: "Vamos marcar segunda." },
-  { name: "apaga isso", raw: "Manda pro time. O prazo é sexta. Apaga isso. O prazo é segunda.", expected: "Manda pro time. O prazo é segunda." },
+  { name: "apaga a última frase", raw: "Manda pro time. O prazo é sexta. Apaga a última frase. O prazo é segunda.", expected: "Manda pro time. O prazo é segunda." },
+  { name: "scratch that", raw: "Ship it Friday. Scratch that. Ship it Monday.", expected: "Ship it Monday." },
+  { name: "apaga isso é conteúdo", raw: "Se não for usar, apaga isso.", expected: "Se não for usar, apaga isso." },
+  { name: "esquece isso é conteúdo", raw: "Fechei o PR. Ah, esquece isso, já resolvi.", expected: "Fechei o PR. Ah, esquece isso, já resolvi." },
+  { name: "ou melhor que é comparação", raw: "O desempenho ficou igual ou melhor que antes.", expected: "O desempenho ficou igual ou melhor que antes." },
+  { name: "ou melhor ainda é ênfase", raw: "Ou melhor ainda, a gente faz isso amanhã.", expected: "Ou melhor ainda, a gente faz isso amanhã." },
+  { name: "what I mean é conteúdo", raw: "That's what I mean.", expected: "That's what I mean." },
 
   // ---------------------------------------------------------------- comandos e listas
   { name: "nova linha e novo parágrafo", raw: "oi pessoal nova linha segue o resumo novo parágrafo abraço", expected: "Oi pessoal\nSegue o resumo\n\nAbraço." },
@@ -66,6 +72,9 @@ export const fixtures: Fixture[] = [
   { name: "lista em inglês", raw: "first, buy milk, second, call mom", expected: "1. Buy milk\n2. Call mom" },
   { name: "segundo ele não é item", raw: "primeiro eu liguei pro suporte, segundo ele o problema é na rede", expected: "Primeiro eu liguei pro suporte, segundo ele o problema é na rede." },
   { name: "primeiro sozinho não é lista", raw: "primeiro eu vou almoçar", expected: "Primeiro eu vou almoçar." },
+  { name: "primeiro de maio e segunda-feira não são lista", raw: "Primeiro de maio, segunda-feira, é feriado.", expected: "Primeiro de maio, segunda-feira, é feriado." },
+  { name: "segunda é dia da semana", raw: "primeiro eu falo com o João, segunda tem reunião", expected: "Primeiro eu falo com o João, segunda tem reunião." },
+  { name: "do no começo não é pergunta", raw: "do jeito que ficou tá bom", expected: "Do jeito que ficou tá bom." },
 
   // ---------------------------------------------------------------- pontuação
   { name: "pergunta sem pontuação do STT", raw: "quando sai o próximo release", expected: "Quando sai o próximo release?" },
