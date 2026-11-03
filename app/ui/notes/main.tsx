@@ -10,9 +10,9 @@ import { flushSync } from "react-dom";
 import { Button, Empty, mount } from "../src/kit/index.tsx";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
-import { type Draft, Drafts } from "./drafts.ts";
+import { type Draft, Drafts, forgetDraftOnDelete } from "./drafts.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
-import { linkTextFor, plainContext } from "./links.ts";
+import { linkTextFor, noteName, plainContext } from "./links.ts";
 import { focusEditor, NoteEditor } from "./NoteEditor.tsx";
 import { Palette } from "./Palette.tsx";
 import { Sidebar } from "./Sidebar.tsx";
@@ -20,6 +20,9 @@ import { ancestors, buildTree, editedLabel } from "./tree.ts";
 import type { Backlink, Note, NotesApi, SaveResult, VaultListing } from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
+
+/** Onde entram as notas que não têm lugar ainda: a nota rápida do A3 (#1509) e o rascunho órfão recuperado. */
+const INBOX = "Caixa de entrada";
 
 /** Quanto esperar depois da última tecla para gravar. */
 const SAVE_AFTER_MS = 500;
@@ -35,7 +38,7 @@ function useEnterAnimation() {
   return n;
 }
 
-function Notes({ api }: { api: NotesApi }) {
+function Notes({ api, drafts }: { api: NotesApi; drafts: Drafts }) {
   const [listing, setListing] = useState<VaultListing | null>(null);
   const [failed, setFailed] = useState(false);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
@@ -57,10 +60,14 @@ function Notes({ api }: { api: NotesApi }) {
   const current = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const links = useMemo(() => new LinkCache((t) => api.resolve(t)), [api]);
-  const drafts = useMemo(() => new Drafts(), []);
   /** O rascunho achado ao abrir a nota, enquanto a pessoa não escolhe: ele não é sobrescrito nem apagado até lá. */
   const [draft, setDraft] = useState<Draft | null>(null);
   const undecided = useRef<Draft | null>(null);
+  /**
+   * Rascunhos de notas que não existem mais quando a janela abre: a nota foi renomeada ou apagada fora com a janela
+   * fechada. Um por vez, para recuperar como nota nova na Caixa de entrada ou descartar (#1525).
+   */
+  const [orphans, setOrphans] = useState<Draft[]>([]);
 
   const refresh = useCallback(
     () =>
@@ -68,8 +75,12 @@ function Notes({ api }: { api: NotesApi }) {
         (l) => {
           setListing(l);
           setFailed(false);
+          return l;
         },
-        () => setFailed(true),
+        () => {
+          setFailed(true);
+          return null;
+        },
       ),
     [api],
   );
@@ -202,6 +213,8 @@ function Notes({ api }: { api: NotesApi }) {
     api.list().then(
       (l) => {
         setListing(l);
+        const have = new Set(l.notes.map((n) => n.path));
+        setOrphans(drafts.all().filter((d) => !have.has(d.path)));
         // `?note=` (Vite no navegador, testes): abre essa nota. No app a página carrega sem query.
         const asked = new URLSearchParams(location.search).get("note");
         const first =
@@ -220,7 +233,13 @@ function Notes({ api }: { api: NotesApi }) {
   useEffect(
     () =>
       api.onChanged((paths) => {
-        void refresh();
+        void refresh().then((l) => {
+          if (!l) return;
+          // Nota que sumiu (apagada ou renomeada fora) leva o rascunho junto (#1525). A aberta com edição pendente fica:
+          // o texto ainda está no editor, e o aviso de erro do save deixa a pessoa decidir.
+          const have = new Set(l.notes.map((n) => n.path));
+          for (const p of paths) if (!have.has(p) && !(p === current.current && pending.current !== null)) drafts.remove(p);
+        });
         links.clear();
         const path = current.current;
         if (!path) return;
@@ -235,7 +254,7 @@ function Notes({ api }: { api: NotesApi }) {
           },
         );
       }),
-    [api, links, refresh, show],
+    [api, drafts, links, refresh, show],
   );
 
   // ⌘K busca, ⌘N cria. Ao esconder a janela, grava o que estiver pendente.
@@ -307,6 +326,20 @@ function Notes({ api }: { api: NotesApi }) {
     if (d) drafts.remove(d.path);
   };
 
+  const recoverOrphan = async (d: Draft) => {
+    const n = await api.create(noteName(d.path), INBOX, d.body).catch(() => null);
+    if (!n) return; // o aviso fica: dá para tentar de novo
+    drafts.remove(d.path);
+    setOrphans((o) => o.filter((x) => x !== d));
+    await refresh();
+    await open(n.path);
+  };
+
+  const dropOrphan = (d: Draft) => {
+    drafts.remove(d.path);
+    setOrphans((o) => o.filter((x) => x !== d));
+  };
+
   const keepMine = () => {
     if (!conflict) return;
     version.current = conflict.version;
@@ -357,6 +390,19 @@ function Notes({ api }: { api: NotesApi }) {
             </button>
           </span>
         </div>
+        {orphans[0] ? (
+          <div className="kn-conflict kn-orphan" role="alert">
+            {`Há um rascunho de “${noteName(orphans[0].path)}”, uma nota que não existe mais (renomeada ou apagada fora do Kiwi Notes).`}
+            <span className="kn-conflict-actions">
+              <button type="button" className="kn-bt" onClick={() => dropOrphan(orphans[0]!)}>
+                Descartar
+              </button>
+              <button type="button" className="kn-bt kn-bt-acc" onClick={() => void recoverOrphan(orphans[0]!)}>
+                Recuperar como nota nova
+              </button>
+            </span>
+          </div>
+        ) : null}
         {note ? (
           <article className="kn-page">
             <input
@@ -462,7 +508,11 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const api = useMemo(notesApi, []);
+  const drafts = useMemo(() => new Drafts(), []);
+  const api = useMemo(() => {
+    const a = notesApi();
+    return a && forgetDraftOnDelete(a, drafts);
+  }, [drafts]);
   if (!api) {
     return (
       <Shell>
@@ -470,7 +520,7 @@ function App() {
       </Shell>
     );
   }
-  return <Notes api={api} />;
+  return <Notes api={api} drafts={drafts} />;
 }
 
 document.title = "Notas";
