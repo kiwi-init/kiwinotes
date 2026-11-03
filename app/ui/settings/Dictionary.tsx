@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { api, type DictionaryTerm } from "../src/api.ts";
 import { RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
@@ -28,6 +28,22 @@ export function DictionarySection() {
   }, []);
 
   const status = useAutosave(rows, (r) => api.dictionary.set(toTerms(r)), loaded);
+  // Aliases que trocariam texto de verdade ("New York" → IAM, #434): avisa embaixo do termo, sem bloquear.
+  const [warnings, setWarnings] = useState<Map<string, string[]>>(new Map());
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => {
+      api.dictionary.check(toTerms(rows)).then(
+        (list) => {
+          const byTerm = new Map<string, string[]>();
+          for (const w of list) byTerm.set(w.term, [...(byTerm.get(w.term) ?? []), w.text]);
+          setWarnings(byTerm);
+        },
+        () => {},
+      );
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [rows, loaded]);
   const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
   return (
@@ -36,35 +52,42 @@ export function DictionarySection() {
         <div className="kn-list-empty">Termos do seu trabalho, como DICOM, PACS ou nomes de pessoas, saem sempre com esta grafia.</div>
       ) : (
         rows.map((r) => (
-          <div className="kn-list-row" key={r.key} data-new={r.isNew}>
-            <input
-              className="kn-input"
-              data-strong="true"
-              style={{ width: 170 }}
-              value={r.term}
-              placeholder="Grafia certa"
-              aria-label="Termo"
-              autoFocus={r.isNew}
-              onChange={(e) => update(r.key, { term: e.target.value })}
-            />
-            <input
-              className="kn-input"
-              style={{ flex: 1 }}
-              value={r.aliases}
-              placeholder="Outras formas de dizer, separadas por vírgula"
-              aria-label={`Outras formas de dizer ${r.term}`}
-              onChange={(e) => update(r.key, { aliases: e.target.value })}
-            />
-            <button
-              type="button"
-              className="kn-icon-button"
-              data-tone="danger"
-              aria-label={`Remover ${r.term || "termo"}`}
-              onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
-            >
-              <RemoveIcon />
-            </button>
-          </div>
+          <Fragment key={r.key}>
+            <div className="kn-list-row" data-new={r.isNew}>
+              <input
+                className="kn-input"
+                data-strong="true"
+                style={{ width: 170 }}
+                value={r.term}
+                placeholder="Grafia certa"
+                aria-label="Termo"
+                autoFocus={r.isNew}
+                onChange={(e) => update(r.key, { term: e.target.value })}
+              />
+              <input
+                className="kn-input"
+                style={{ flex: 1 }}
+                value={r.aliases}
+                placeholder="Outras formas de dizer, separadas por vírgula"
+                aria-label={`Outras formas de dizer ${r.term}`}
+                onChange={(e) => update(r.key, { aliases: e.target.value })}
+              />
+              <button
+                type="button"
+                className="kn-icon-button"
+                data-tone="danger"
+                aria-label={`Remover ${r.term || "termo"}`}
+                onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
+              >
+                <RemoveIcon />
+              </button>
+            </div>
+            {(warnings.get(r.term.trim()) ?? []).map((text) => (
+              <div className="kn-list-warning" role="note" key={text}>
+                {text}
+              </div>
+            ))}
+          </Fragment>
         ))
       )}
       <div className="kn-list-footer">

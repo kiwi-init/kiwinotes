@@ -43,10 +43,17 @@ function dayOf(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/** O arquivo do dia de um id (`<ISO UTC>-<hex>`), no fuso local como os arquivos. */
-function cursorFile(id: string): string | undefined {
+/** A maior diferença entre dois fusos (UTC−12 a UTC+14). */
+const MAX_TZ_SPREAD_MS = 26 * 3600_000;
+
+/**
+ * O arquivo de dia mais novo que ainda pode ter ditados de antes do cursor (`<ISO UTC>-<hex>`). O arquivo leva o
+ * dia no fuso de quando a pessoa ditou, e o cursor é lido no fuso de agora: quem viajou para o oeste teria um dia
+ * pulado (#416). A margem do maior desvio entre fusos custa ler um arquivo a mais e nunca pula nada.
+ */
+export function cursorFile(id: string): string | undefined {
   const at = new Date(id.slice(0, 24));
-  return Number.isNaN(at.getTime()) ? undefined : `${dayOf(at)}.jsonl`;
+  return Number.isNaN(at.getTime()) ? undefined : `${dayOf(new Date(at.getTime() + MAX_TZ_SPREAD_MS))}.jsonl`;
 }
 
 export class HistoryStore {

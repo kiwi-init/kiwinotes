@@ -3,6 +3,8 @@
 import { BrowserView, Utils } from "electrobun/bun";
 
 import type { KiwiRPC } from "../shared/rpc.ts";
+import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
+import { sanitizeTerms } from "../store/dictionary.ts";
 import { session } from "./session.ts";
 import { stores } from "./stores.ts";
 
@@ -18,6 +20,7 @@ export function createRpc() {
           void session.get()?.dictionaryChanged(saved);
           return saved;
         },
+        dictionaryCheck: ({ terms }) => aliasWarnings(sanitizeTerms(terms)).map((w) => ({ ...w, text: aliasWarningText(w) })),
         snippetsGet: () => stores.snippets.load(),
         snippetsSet: async ({ snippets }) => {
           const saved = await stores.snippets.save(snippets);

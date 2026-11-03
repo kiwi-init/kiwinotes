@@ -189,6 +189,20 @@ describe("histórico", () => {
     expect(page.entries.map((e) => e.text)).toEqual(["mais antigo"]);
   });
 
+  test("com before, não pula o dia de um ditado feito noutro fuso (#416)", async () => {
+    const h = new HistoryStore(dir);
+    // Ditado às 10h (hora daqui), mas gravado num fuso 20 h à frente: o arquivo dele é o do dia seguinte.
+    const at = new Date(2026, 9, 1, 10);
+    const ahead = new Date(at.getTime() + 20 * 3600_000);
+    const p = (n: number) => String(n).padStart(2, "0");
+    const file = `${ahead.getFullYear()}-${p(ahead.getMonth() + 1)}-${p(ahead.getDate())}.jsonl`;
+    const entry = { id: `${at.toISOString()}-abcd`, at: at.toISOString(), raw: "v", text: "da viagem" };
+    await h.add({ raw: "x", text: "cursor", at: new Date(at.getTime() + 3600_000) });
+    await writeFile(path.join(dir, "history", file), `${JSON.stringify(entry)}\n`);
+    const cursor = (await h.search()).entries.find((e) => e.text === "cursor")!;
+    expect((await h.search({ before: cursor.id })).entries.map((e) => e.text)).toEqual(["da viagem"]);
+  });
+
   test("avisa quem está ouvindo", async () => {
     const h = new HistoryStore(dir);
     const seen: string[] = [];

@@ -89,6 +89,17 @@
 .kn-saved[data-show="true"] {
   opacity: 1;
 }
+/* Aviso embaixo de um termo do dicionário (alias que troca texto de verdade, #434). Não bloqueia. */
+.kn-list-warning {
+  padding: 0 var(--space-3) var(--space-2) calc(var(--space-3) + 170px + var(--space-2));
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+.kn-list-warning::before {
+  content: "⚠︎ ";
+  color: var(--danger);
+}
+
 .kn-list-empty {
   padding: var(--space-3);
   color: var(--text-3);
