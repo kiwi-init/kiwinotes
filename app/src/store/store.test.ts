@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { DictionaryStore, sanitizeTerms, sttVocabulary } from "./dictionary.ts";
+import { DictionaryStore, MAX_ALIASES, sanitizeTerms, sttVocabulary } from "./dictionary.ts";
 import { HistoryStore } from "./history.ts";
 import { expandSnippets, sanitizeSnippets, SnippetStore } from "./snippets.ts";
 import { fold, foldWithMap } from "./text.ts";
@@ -275,4 +275,11 @@ describe("histórico", () => {
     await h.add({ raw: "y", text: "Y." });
     expect(seen).toEqual(["X."]);
   });
+});
+
+test("um termo guarda no máximo 50 aliases (T1378)", () => {
+  const aliases = Array.from({ length: 80 }, (_, i) => `forma ${i}`);
+  const [t] = sanitizeTerms([{ term: "kubectl", aliases }]);
+  expect(MAX_ALIASES).toBe(50);
+  expect(t!.aliases).toEqual(aliases.slice(0, 50));
 });

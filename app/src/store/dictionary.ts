@@ -20,6 +20,8 @@ interface DictionaryFile {
 
 export const MAX_TERM_LENGTH = 60;
 export const MAX_TERMS = 1000;
+/** Aliases por termo: dá para todas as formas que o STT erra, e um termo não vira uma lista sem fim (T1378). */
+export const MAX_ALIASES = 50;
 
 /** Limpa o que vem da UI ou do arquivo: apara, tira vazios e repetidos (sem diferença de maiúscula e acento). */
 export function sanitizeTerms(input: unknown): DictionaryTerm[] {
@@ -39,6 +41,7 @@ export function sanitizeTerms(input: unknown): DictionaryTerm[] {
       if (alias && !aliasSeen.has(fold(alias))) {
         aliasSeen.add(fold(alias));
         aliases.push(alias);
+        if (aliases.length >= MAX_ALIASES) break;
       }
     }
     out.push({ term, aliases });

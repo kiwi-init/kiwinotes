@@ -13,8 +13,9 @@ import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
 import { session } from "./session.ts";
 import { stores } from "./stores.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
-import { builtInFrom, channelUrl, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
+import { builtInFrom, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
+import { windowSecurity } from "./window-security.ts";
 
 export type WindowName = UiWindow;
 
@@ -105,6 +106,8 @@ async function openWindow(name: WindowName): Promise<void> {
     frame: { width: spec.width, height: spec.height },
     titleBarStyle: "hiddenInset" as const,
     rpc,
+    // Só a UI dentro da janela, link externo no navegador, CSP nas views (T1378).
+    ...windowSecurity(dev),
   };
   let win: BrowserWindow;
   if (dev) {
@@ -119,7 +122,7 @@ async function openWindow(name: WindowName): Promise<void> {
       builtIn: builtInFrom(path.join(PATHS.VIEWS_FOLDER, "ui", name)),
       trustedKeys: UI_TRUSTED_KEYS,
       capabilities,
-      manifestUrl: channelUrl(process.env.KIWI_UI_CHANNEL, name),
+      manifestUrl: channelUrlOrOff(process.env.KIWI_UI_CHANNEL, name, (m) => log(name, m)),
       show: (ui) => {
         log(name, `showing UI ${ui.uiVersion}${ui.manifest ? "" : " (built-in)"}`);
         const html = decoder.decode(ui.index);
