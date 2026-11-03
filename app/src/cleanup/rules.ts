@@ -18,8 +18,38 @@ const NEWLINE = re(`[\\s,;]*${B}(?:nova linha|quebra de linha|new line)${E}[\\s,
 // resolvi" são frases normais (#241). O resto fica para o LLM.
 const SCRATCH = re(`${B}(?:scratch that|apaga a (?:última|ultima) frase|apaga a frase anterior)${E}[\\s,.;:!]*`, "iu");
 
-/** "nova linha", "novo parágrafo" e "apaga isso" (apaga a frase de antes). */
-export function spokenCommands(text: string): string {
+// "apaga isso" colado no meio da frase, como o STT entrega sem vírgula (T1229). É comando só quando a pessoa segue
+// ditando a mesma coisa de outro jeito: o que vem depois repete uma palavra de conteúdo do que veio antes, tem pelo
+// menos 3 palavras e não começa como continuação ("apaga isso do servidor", "apaga isso e me avisa", "apaga isso agora").
+const SCRATCH_INLINE = re(
+  `(?<=[\\p{L}\\p{N}])\\s+${B}apaga isso${E}\\s+(?!(?:do|da|de|dos|das|no|na|nos|nas|aí|ali|lá|aqui|agora|logo|pra|pro|para|por|porque|que|e|também|depois|quando|se|antes|já|tudo|todo|toda|mesmo)${E})`,
+  "iu",
+);
+
+/** Palavras de conteúdo (mais de 3 letras), para ver se o trecho depois repete o de antes. */
+const contentOf = (s: string) => words(s).map(norm).filter((w) => w.length > 3);
+
+function scratchInline(text: string): string {
+  let out = text;
+  for (let from = 0, m = SCRATCH_INLINE.exec(out); m; m = SCRATCH_INLINE.exec(out.slice(from))) {
+    const at = from + m.index;
+    const before = out.slice(0, at);
+    const boundary = Math.max(before.lastIndexOf("."), before.lastIndexOf("!"), before.lastIndexOf("?"), before.lastIndexOf("\n"));
+    const after = out.slice(at + m[0].length);
+    const sentenceAfter = after.split(/[.!?\n]/u)[0]!;
+    const left = new Set(contentOf(before.slice(boundary + 1)));
+    if (words(sentenceAfter).length >= 3 && contentOf(sentenceAfter).some((w) => left.has(w))) {
+      out = before.slice(0, boundary + 1) + (boundary >= 0 ? " " : "") + after;
+      from = 0;
+    } else {
+      from = at + m[0].length;
+    }
+  }
+  return out;
+}
+
+/** "nova linha", "novo parágrafo" e "apaga isso" (apaga a frase de antes). `prose`: fora do tom literal. */
+export function spokenCommands(text: string, prose = false): string {
   let out = text.replace(PARAGRAPH, "\n\n").replace(NEWLINE, "\n");
   for (let m = SCRATCH.exec(out); m; m = SCRATCH.exec(out)) {
     // O ponto que fecha a frase apagada não conta como o começo dela.
@@ -28,7 +58,7 @@ export function spokenCommands(text: string): string {
     out = before.slice(0, boundary + 1) + (boundary >= 0 ? " " : "") + out.slice(m.index + m[0].length);
     SCRATCH.lastIndex = 0;
   }
-  return out;
+  return prose ? scratchInline(out) : out;
 }
 
 // ------------------------------------------------------------ autocorreção falada
@@ -40,7 +70,21 @@ interface Marker {
    * é o verbo: "Ele não quer dizer a verdade" (T913).
    */
   needsMatch?: boolean;
+  /**
+   * Também vale quando a correção repete uma palavra do fim da frase em outra posição ("cem reais digo duzentos
+   * reais"): troca o trecho alinhado por ela.
+   */
+  align?: boolean;
+  /** Não é correção depois destas palavras: é o verbo ("eu digo", "ele não espera"). */
+  notAfter?: Set<string>;
+  /**
+   * Só fora do tom literal (T1229): no terminal e na IDE nada muda. Sem a vírgula, a correção troca no máximo as 2
+   * últimas palavras ("dia dez", "pro João"): "esse plano é bom ou melhor plano que já vi" fica.
+   */
+  prose?: boolean;
 }
+
+const set = (s: string) => new Set(s.split(" "));
 
 // Só os marcadores que quase sempre são correção. "quer dizer" sozinho também é "ou seja",
 // e "na verdade" é ênfase: ficam para o LLM.
@@ -55,6 +99,29 @@ const CORRECTION_MARKERS: Marker[] = [
   { re: re(`\\s*,\\s*${B}ou melhor${E}\\s*,(?!\\s*(?:que|do que|ainda)${E})\\s*`, "iu") },
   { re: re(`\\s*,\\s*digo${E}[\\s,.:]*`, "iu") },
   { re: re(`[\\s,;]*${B}(?:no[,.]?\\s+wait|wait[,.]?\\s+no|or rather)${E}[\\s,.:]*`, "iu") },
+  // Sem vírgula, como o STT entrega (T1229): sempre com `needsMatch`, porque sem a vírgula o verbo e a comparação se
+  // parecem com a correção. "igual ou melhor que", "eu digo que", "ele não espera ninguém" ficam.
+  {
+    re: re(`\\s+${B}ou melhor${E}\\s+(?!(?:que|do|da|dos|das|ainda)${E})`, "iu"),
+    needsMatch: true,
+    prose: true,
+  },
+  {
+    re: re(`\\s+${B}digo${E}\\s+(?!(?:que|isso|isto|aquilo|pra|pro|para|a|ao|o|os|as|nada|sempre|não|sim|assim|logo|mais|tudo|um|uma)${E})`, "iu"),
+    needsMatch: true,
+    align: true,
+    notAfter: set("eu te lhe me nos vos lhes já só não que como sempre também você vocês isso"),
+    prose: true,
+  },
+  {
+    re: re(
+      `\\s+${B}não\\s+(?:espera|pera)${E}\\s+(?!(?:que|nada|ninguém|muito|mais|menos|isso|o|a|os|as|um|uma|eu|ele|ela|você|nós|eles|elas|por|pelo|pela|até)${E})`,
+      "iu",
+    ),
+    needsMatch: true,
+    notAfter: set("eu ele ela você nós eles elas gente quem que se ninguém"),
+    prose: true,
+  },
   // "I mean" só com vírgula depois, e no começo da frase ou depois de vírgula: "that's what I mean" é conteúdo.
   { re: re(`(?:(?<=^|[.!?]\\s*)|\\s*,\\s*)${B}(?:(?:no|sorry)[,.]?\\s+)?i mean\\s*,\\s*`, "iu") },
 ];
@@ -66,16 +133,20 @@ const SENTENCE_END = /[.!?\n]/;
  * substitui o trecho de antes que começa com a mesma palavra (ou uma parecida, "pro"/"pra");
  * sem nada parecido, substitui só a última palavra.
  */
-export function selfCorrections(text: string): string {
+export function selfCorrections(text: string, prose = false): string {
   let out = text;
-  for (const { re: marker, needsMatch } of CORRECTION_MARKERS) {
+  for (const { re: marker, needsMatch, align, notAfter, prose: proseOnly } of CORRECTION_MARKERS) {
+    if (proseOnly && !prose) continue;
     let from = 0;
     for (let guard = 0; guard < 20; guard++) {
       marker.lastIndex = 0;
       const m = new RegExp(marker.source, "iu").exec(out.slice(from));
       if (!m) break;
       const at = from + m.index;
-      const corrected = replaceCorrected(out.slice(0, at), out.slice(at + m[0].length), needsMatch);
+      const prev = norm(words(out.slice(0, at)).at(-1) ?? "");
+      const corrected = notAfter?.has(prev)
+        ? null
+        : replaceCorrected(out.slice(0, at), out.slice(at + m[0].length), needsMatch, align, proseOnly ? 2 : Infinity);
       if (corrected === null) {
         from = at + m[0].length; // não é correção: segue procurando depois dele
         continue;
@@ -88,7 +159,7 @@ export function selfCorrections(text: string): string {
 }
 
 /** `null` quando `needsMatch` e nada da frase corresponde ao começo da correção. */
-function replaceCorrected(left: string, right: string, needsMatch = false): string | null {
+function replaceCorrected(left: string, right: string, needsMatch = false, align = false, maxSpan = Infinity): string | null {
   // Só olha a frase atual: a correção nunca atravessa um ponto final.
   let start = -1;
   for (let i = left.length - 1; i >= 0; i--) {
@@ -117,7 +188,7 @@ function replaceCorrected(left: string, right: string, needsMatch = false): stri
   if (sentence.length === 0 || fix.length === 0) return needsMatch ? null : joinParts(head, sentence, right);
 
   const first = norm(fix[0]!);
-  const window = Math.max(0, sentence.length - 8);
+  const window = Math.max(0, sentence.length - Math.min(8, maxSpan));
   let cut = -1;
   for (let i = sentence.length - 1; i >= window; i--) {
     if (norm(sentence[i]!) === first) {
@@ -134,11 +205,31 @@ function replaceCorrected(left: string, right: string, needsMatch = false): stri
       }
     }
   }
+  if (cut < 0 && align) cut = alignedCut(sentence, fix);
+  if (cut >= 0 && sentence.length - cut > maxSpan) cut = -1;
   if (cut < 0) {
     if (needsMatch) return null;
     cut = sentence.length - 1;
   }
   return joinParts(head, sentence.slice(0, cut), right);
+}
+
+/**
+ * "cem reais digo duzentos reais": a 2ª ou 3ª palavra da correção ("reais") repete uma das últimas da frase, então a
+ * correção troca o trecho na mesma posição ("cem reais"). O trecho trocado nunca é maior que a correção até ali mais
+ * uma palavra. -1 quando nada alinha.
+ */
+function alignedCut(sentence: string[], fix: string[]): number {
+  for (let j = 1; j < Math.min(3, fix.length); j++) {
+    const w = norm(fix[j]!);
+    if (w.length < 3) continue;
+    for (let i = sentence.length - 1; i >= Math.max(0, sentence.length - 3); i--) {
+      if (norm(sentence[i]!) !== w) continue;
+      const cut = i - j;
+      if (cut >= 0 && sentence.length - cut <= j + 2) return cut;
+    }
+  }
+  return -1;
 }
 
 function joinParts(head: string, kept: string[], right: string): string {
@@ -249,6 +340,44 @@ export function lists(text: string): string {
   return intro ? `${intro}:\n${body}` : body;
 }
 
+// Antes do ordinal, estas palavras fazem dele adjetivo ("o primeiro passo", "the first one"), não item.
+const ORDINAL_DETERMINER = "o|a|os|as|do|da|dos|das|no|na|nos|nas|ao|um|uma|em|pelo|pela|seu|sua|meu|minha|nosso|nossa|este|esse|esta|essa|the|its|my|your|our|his|her|their|this|that";
+
+/**
+ * Sem vírgula, como o STT entrega (T1229): "primeiro X segundo Y terceiro Z" vira lista só com pelo menos três ordinais
+ * em sequência, no mesmo parágrafo, nenhum depois de artigo, e "segundo ele" nunca é item. Com dois fica como foi dito:
+ * sem a vírgula, "primeiro eu almoço segundo o Pedro" pode ser "de acordo com".
+ */
+export function inlineLists(text: string): string {
+  const found: { index: number; length: number }[] = [];
+  let from = 0;
+  for (const forms of ORDINALS) {
+    const alt = forms.join("|").replace(/ /g, "\\s+");
+    const r = re(
+      `(?<!(?:^|[^\\p{L}])(?:${ORDINAL_DETERMINER})\\s+)(?<![\\p{L}\\p{N}])(?:${alt})(?![\\p{L}\\p{N}-])(?!\\s+(?:ele|ela|eles|elas|fulano|lugar|de|do|da)${E})[\\s,:]*`,
+      "iu",
+    );
+    const rest = text.slice(from);
+    const m = r.exec(rest);
+    if (!m || (found.length > 0 && rest.slice(0, m.index).includes("\n"))) break;
+    found.push({ index: from + m.index, length: m[0].length });
+    from = from + m.index + m[0].length;
+  }
+  if (found.length < 3) return text;
+  const intro = text.slice(0, found[0]!.index).replace(/[\s,.;:]+$/u, "");
+  const items = found.map((f, i) => {
+    const end = i + 1 < found.length ? found[i + 1]!.index : text.length;
+    return text
+      .slice(f.index + f.length, end)
+      .replace(/^[\s,.;:]+|[\s,.;:]+$/gu, "")
+      .replace(re(`\\s+(?:e|and)$`, "iu"), "");
+  });
+  // Item de uma palavra só é o ordinal com substantivo ("primeiro dia segundo dia terceiro dia"), não lista.
+  if (items.some((item) => words(item).length < 2)) return text;
+  const body = items.map((item, i) => `${i + 1}. ${capitalizeFirst(item)}`).join("\n");
+  return intro ? `${intro}:\n${body}` : body;
+}
+
 // ------------------------------------------------------------ pontuação e maiúsculas
 
 /** Arruma o que as outras regras deixaram: vírgula solta, espaço antes de ponto, linha vazia. */
@@ -351,13 +480,17 @@ export function applyRules(text: string, tone: Tone, code = tone === "literal" &
   // No terminal, um comando sai como foi dito: o `tidyPunctuation` e as muletas quebravam "git add ." e "cd ../src"
   // (T913, regressão do T684). Só os espaços repetidos saem.
   if (code) return asCommand(text.replace(/\s+/g, " "));
-  let out = spokenCommands(text);
-  out = selfCorrections(out);
+  const prose = tone !== "literal";
+  let out = spokenCommands(text, prose);
+  out = selfCorrections(out, prose);
   out = removeFillers(out);
   out = removeStutter(out);
   out = tidyPunctuation(out);
   if (tone === "literal" && looksLikeCode(out)) return asCommand(out);
-  if (tone !== "literal") out = lists(out);
+  if (prose) {
+    const listed = lists(out);
+    out = listed === out ? inlineLists(out) : listed;
+  }
   out = tidyPunctuation(out);
   out = capitalize(out);
   return out;

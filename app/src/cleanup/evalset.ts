@@ -1,6 +1,6 @@
 // Conjunto de avaliação do LLM da limpeza (T270, #297): as fixtures do T52, as 7 frases do round 3, os casos que os
-// reviews acharam e as frases sintéticas do T1208. Inventado, sem transcrição real. Só entra o que passa pelo LLM
-// (tom não literal).
+// reviews acharam e as frases sintéticas do T1208. Inventado, sem transcrição real. Os casos do tom literal (terminal,
+// IDE) também entram, para conferir as regras, mas o `eval.ts` pula esses: nunca passam pelo LLM.
 
 import { fixtures } from "./fixtures.ts";
 import type { DictionaryEntry } from "./types.ts";
