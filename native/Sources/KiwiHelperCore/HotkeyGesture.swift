@@ -134,6 +134,14 @@ public struct HotkeyGesture: Sendable {
         return [.cancelRecording]
     }
 
+    /// The overlay's ✕ or ✓ ended the recording. Returns how it was recording. A key still held goes to
+    /// `releasing`, so letting it go afterwards does nothing.
+    public mutating func endedFromOverlay() -> StopMode {
+        let mode: StopMode = state == .latched ? .toggle : .pushToTalk
+        if case .pressed = state { state = .releasing } else { state = .idle }
+        return mode
+    }
+
     /// Recording started or stopped from outside (a `record.start`/`record.stop` command).
     public mutating func reset(latched: Bool = false) {
         state = latched ? .latched : .idle

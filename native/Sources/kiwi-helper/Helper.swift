@@ -26,6 +26,8 @@ final class Helper {
             self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
             self?.overlay.push(level: level)
         }
+        overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
+        overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
     }
 
     func run() {
@@ -89,6 +91,19 @@ final class Helper {
             stopRecording(reason: "hotkey", mode: mode.rawValue)
         case .cancelRecording:
             cancelRecording(reason: "hotkey")
+        }
+    }
+
+    /// The pill's ✕ (cancel) or ✓ (finish, like letting go of the key).
+    private func endFromOverlay(finish: Bool) {
+        guard audio.isRecording else { return }
+        let mode = gesture.endedFromOverlay()
+        tickTimer?.cancel()
+        if finish {
+            if mode == .toggle { emit("hotkey.toggle", ["on": false]) }
+            stopRecording(reason: "overlay", mode: mode.rawValue)
+        } else {
+            cancelRecording(reason: "overlay")
         }
     }
 

@@ -2,17 +2,31 @@ import AppKit
 import KiwiHelperCore
 import SwiftUI
 
-/// The dictation pill (T56, ADR 0004): a non-activating NSPanel at the top of the screen, under the
-/// notch. It never becomes key or main and ignores the mouse, so the app being dictated into keeps
-/// the focus and the keyboard. Call everything on the main thread.
+/// The dictation pill (T56, ADR 0005): a non-activating NSPanel at the bottom of the screen, above the
+/// Dock. While listening it has ✕ (cancel) and ✓ (finish) buttons. It never becomes key or main, so the
+/// app being dictated into keeps the focus and the keyboard, even after a click on a button.
+/// Call everything on the main thread.
 final class Overlay {
     static let panelSize = CGSize(width: 360, height: 64)
+    /// Transparent room under the pill for its shadow.
+    static let pillBottom: CGFloat = 14
+
+    /// ✕: throw the recording away.
+    var onCancel: (() -> Void)?
+    /// ✓: stop and transcribe, like letting go of the key.
+    var onFinish: (() -> Void)?
 
     private let state = OverlayViewState()
     private var panel: NSPanel?
     private var model = OverlayModel()
     private var hideTimer: Timer?
     private var orderOutWork: DispatchWorkItem?
+    private var mouseTimer: Timer?
+
+    init() {
+        state.onCancel = { [weak self] in self?.onCancel?() }
+        state.onFinish = { [weak self] in self?.onFinish?() }
+    }
 
     /// `overlay.state` from the app, or the sidecar's own recording events.
     func set(_ phase: OverlayPhase, message: String? = nil) {
@@ -22,6 +36,7 @@ final class Overlay {
         if model.isVisible, !wasVisible { show() }
         if !model.isVisible, wasVisible { hide() }
         scheduleHide()
+        trackMouse(model.phase == .listening)
     }
 
     /// `audio.level`; any thread.
@@ -51,7 +66,40 @@ final class Overlay {
             guard let self, self.model.tick(now: ProcessInfo.processInfo.systemUptime + 0.001) else { return }
             self.publish()
             self.hide()
+            self.trackMouse(false)
         }
+    }
+
+    // MARK: Clicks
+
+    /// The panel is wider and taller than the pill (room for an error message and the shadow). Taking
+    /// clicks on all of it would block a strip of whatever is underneath, the Dock included, so it only
+    /// takes them while the mouse is over the pill itself, and only while the buttons are there.
+    private func trackMouse(_ on: Bool) {
+        guard on else {
+            mouseTimer?.invalidate()
+            mouseTimer = nil
+            panel?.ignoresMouseEvents = true
+            return
+        }
+        guard mouseTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.updateMouse() }
+        RunLoop.main.add(timer, forMode: .common) // keeps running while a button is being pressed
+        mouseTimer = timer
+        updateMouse()
+    }
+
+    private func updateMouse() {
+        guard let panel, let pill = state.pillFrame else { return }
+        // SwiftUI's frame is top-left based inside the panel; the screen is bottom-left based.
+        let onScreen = CGRect(
+            x: panel.frame.minX + pill.minX,
+            y: panel.frame.maxY - pill.maxY,
+            width: pill.width,
+            height: pill.height
+        )
+        let over = onScreen.contains(NSEvent.mouseLocation)
+        if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
     }
 
     // MARK: Panel
@@ -63,7 +111,7 @@ final class Overlay {
         if let screen = Self.targetScreen() {
             let frame = OverlayLayout.frame(
                 screen: screen.frame, visible: screen.visibleFrame,
-                safeTop: screen.safeAreaInsets.top, size: Self.panelSize
+                size: Self.panelSize, pillBottom: Self.pillBottom
             )
             panel.setFrame(frame, display: false)
         }
@@ -95,16 +143,16 @@ final class Overlay {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false // the pill draws its own, so the transparent area has none
-        panel.ignoresMouseEvents = true
+        panel.ignoresMouseEvents = true // until the mouse is over the pill (trackMouse)
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
-        // Above normal windows and the menu bar, on every Space and over full-screen apps.
+        // Above normal windows and the Dock, on every Space and over full-screen apps.
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
-        let host = NSHostingView(rootView: OverlayView(state: state))
+        let host = FirstClickHostingView(rootView: OverlayView(state: state))
         host.frame = CGRect(origin: .zero, size: Self.panelSize)
         panel.contentView = host
         return panel
@@ -114,9 +162,15 @@ final class Overlay {
 private final class OverlayPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
-    /// AppKit pushes windows below where a menu bar could be (~30 pt down on a screen whose menu
-    /// bar is hidden). `OverlayLayout` already placed the pill; keep that.
+    /// AppKit keeps windows clear of where the Dock and the menu bar could be. `OverlayLayout` already
+    /// placed the pill; keep that.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+/// The panel is never key, so without this the first click would only "focus" it and the button
+/// would need a second one.
+private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 // MARK: - SwiftUI
@@ -126,22 +180,38 @@ final class OverlayViewState: ObservableObject {
     @Published var phase: OverlayPhase = .hidden
     @Published var message: String?
     @Published var bars: [Float] = Array(repeating: 0, count: 13)
+    /// Where the pill is inside the panel (top-left based), for `Overlay.updateMouse`. Not published:
+    /// nothing on screen depends on it.
+    var pillFrame: CGRect?
+    var onCancel: () -> Void = {}
+    var onFinish: () -> Void = {}
 }
 
-/// Colors and motion from `app/ui/src/styles/tokens.css` (the dark set: the pill floats over anything).
+/// Colors and motion. The pill is dark over anything, like the reference harry picked (#262); the
+/// accent and danger colors and the springs come from `app/ui/src/styles/tokens.css`.
 enum OverlayStyle {
     static let accent = Color(red: 0x8C / 255, green: 0xC4 / 255, blue: 0x6A / 255) // --accent (dark)
     static let danger = Color(red: 1, green: 0x69 / 255, blue: 0x61 / 255) // --danger (dark)
     static let text = Color(red: 0xF5 / 255, green: 0xF5 / 255, blue: 0xF7 / 255)
-    static let fill = Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255).opacity(0.92) // --bg (dark)
-    static let border = Color.white.opacity(0.1)
+    static let fill = Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x14 / 255).opacity(0.94)
+    static let border = Color.white.opacity(0.14)
+    static let wave = Color.white
+    static let cancelFill = Color.white.opacity(0.22)
+    static let finishFill = Color.white
+    static let finishMark = Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x14 / 255)
     /// --pop: a lively spring with a little overshoot, for showing up and for marks.
     static let pop = Animation.spring(response: 0.35, dampingFraction: 0.68)
     /// --glide: the pill changing width between states.
     static let glide = Animation.spring(response: 0.48, dampingFraction: 0.82)
     /// --fast with --ease, for fading out.
     static let fade = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.16)
-    static let height: CGFloat = 36
+    static let height: CGFloat = 40
+    static let button: CGFloat = 28
+}
+
+private struct PillFrameKey: PreferenceKey {
+    static var defaultValue: CGRect?
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
 }
 
 struct OverlayView: View {
@@ -150,36 +220,51 @@ struct OverlayView: View {
 
     var body: some View {
         VStack {
+            Spacer(minLength: 0)
             pill
                 .opacity(state.visible ? 1 : 0)
-                .scaleEffect(state.visible || reduceMotion ? 1 : 0.86, anchor: .top)
-                .offset(y: state.visible || reduceMotion ? 0 : -6)
+                .scaleEffect(state.visible || reduceMotion ? 1 : 0.86, anchor: .bottom)
+                .offset(y: state.visible || reduceMotion ? 0 : 6)
                 .animation(state.visible ? (reduceMotion ? OverlayStyle.fade : OverlayStyle.pop) : OverlayStyle.fade, value: state.visible)
-            Spacer(minLength: 0)
+                .padding(.bottom, Overlay.pillBottom)
         }
         .frame(width: Overlay.panelSize.width, height: Overlay.panelSize.height)
+        .coordinateSpace(name: "panel")
+        .onPreferenceChange(PillFrameKey.self) { state.pillFrame = $0 }
     }
 
     private var pill: some View {
         content
-            .padding(.horizontal, 14)
+            .padding(.horizontal, state.phase == .listening ? 6 : 14)
             .frame(height: OverlayStyle.height)
             .background(
                 Capsule(style: .continuous)
                     .fill(OverlayStyle.fill)
                     .overlay(Capsule(style: .continuous).strokeBorder(OverlayStyle.border, lineWidth: 0.5))
-                    .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+                    .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
             )
+            .background(GeometryReader { g in
+                Color.clear.preference(key: PillFrameKey.self, value: g.frame(in: .named("panel")))
+            })
             .animation(reduceMotion ? nil : OverlayStyle.glide, value: state.phase)
-            .padding(.top, 2)
     }
 
     @ViewBuilder
     private var content: some View {
         switch state.phase {
         case .listening, .hidden:
-            Waveform(bars: state.bars, reduceMotion: reduceMotion)
-                .transition(.opacity)
+            HStack(spacing: 10) {
+                RoundButton(
+                    symbol: "xmark", fill: OverlayStyle.cancelFill, mark: .white,
+                    label: "Cancelar ditado", action: state.onCancel
+                )
+                Waveform(bars: state.bars, reduceMotion: reduceMotion)
+                RoundButton(
+                    symbol: "checkmark", fill: OverlayStyle.finishFill, mark: OverlayStyle.finishMark,
+                    label: "Terminar ditado", action: state.onFinish
+                )
+            }
+            .transition(.opacity)
         case .processing:
             ThinkingDots(reduceMotion: reduceMotion)
                 .transition(.opacity)
@@ -204,7 +289,38 @@ struct OverlayView: View {
     }
 }
 
-/// Bars that scroll left as the voice comes in, mirrored around the middle line.
+/// ✕ and ✓: round, one tap.
+struct RoundButton: View {
+    let symbol: String
+    let fill: Color
+    let mark: Color
+    let label: String
+    let action: () -> Void
+    @State private var pressed = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(mark)
+                .frame(width: OverlayStyle.button, height: OverlayStyle.button)
+                .background(Circle().fill(fill))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressScale())
+        .accessibilityLabel(label)
+    }
+}
+
+private struct PressScale: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+/// White bars, mirrored around the middle one (`OverlayModel.bars`).
 struct Waveform: View {
     let bars: [Float]
     let reduceMotion: Bool
@@ -213,11 +329,11 @@ struct Waveform: View {
         HStack(alignment: .center, spacing: 3) {
             ForEach(bars.indices, id: \.self) { i in
                 Capsule(style: .continuous)
-                    .fill(OverlayStyle.accent.opacity(0.55 + 0.45 * Double(i + 1) / Double(bars.count)))
-                    .frame(width: 3, height: max(3, CGFloat(bars[i]) * 20))
+                    .fill(OverlayStyle.wave)
+                    .frame(width: 3, height: max(4, CGFloat(bars[i]) * 22))
             }
         }
-        .frame(height: 20)
+        .frame(height: 22)
         .animation(reduceMotion ? nil : .spring(response: 0.18, dampingFraction: 0.8), value: bars)
     }
 }
@@ -231,7 +347,7 @@ struct ThinkingDots: View {
         HStack(spacing: 5) {
             ForEach(0..<3) { i in
                 Circle()
-                    .fill(OverlayStyle.accent)
+                    .fill(OverlayStyle.wave)
                     .frame(width: 6, height: 6)
                     .opacity(reduceMotion ? 0.8 : (phase ? 1 : 0.3))
                     .scaleEffect(reduceMotion ? 1 : (phase ? 1 : 0.7))
@@ -252,9 +368,15 @@ enum OverlaySnapshots {
     /// pill without a microphone or Screen Recording permission.
     @MainActor
     static func write(to dir: URL) throws {
+        func listening(_ levels: [Float]) -> [Float] {
+            var m = OverlayModel()
+            m.set(.listening, at: 0)
+            levels.forEach { m.push(level: $0) }
+            return m.bars
+        }
         let samples: [(String, OverlayPhase, String?, [Float])] = [
-            ("listening-quiet", .listening, nil, (0..<13).map { _ in OverlayModel.shape(0.02) }),
-            ("listening-speech", .listening, nil, [0.05, 0.2, 0.5, 0.3, 0.8, 0.6, 1, 0.4, 0.7, 0.3, 0.55, 0.2, 0.1].map(OverlayModel.shape)),
+            ("listening-quiet", .listening, nil, listening(Array(repeating: 0.02, count: 7))),
+            ("listening-speech", .listening, nil, listening([0.1, 0.5, 0.3, 0.8, 0.6, 1, 0.4])),
             ("processing", .processing, nil, []),
             ("done", .done, nil, []),
             ("error", .error, OverlayText.error("no_input_device"), []),

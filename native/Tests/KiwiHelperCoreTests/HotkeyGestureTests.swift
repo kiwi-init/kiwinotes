@@ -42,6 +42,34 @@ final class HotkeyGestureTests: XCTestCase {
         XCTAssertEqual(g.state, .idle)
     }
 
+    func testOverlayEndsALatchedRecording() {
+        var g = HotkeyGesture()
+        _ = g.keyDown(at: 0)
+        _ = g.keyUp(at: 0.1)
+        _ = g.keyDown(at: 0.3)
+        _ = g.keyUp(at: 0.4)
+        XCTAssertEqual(g.endedFromOverlay(), .toggle)
+        XCTAssertEqual(g.state, .idle)
+        XCTAssertEqual(g.keyDown(at: 5), [.startRecording], "the next press starts a new recording")
+    }
+
+    func testOverlayEndsWhileTheKeyIsHeld() {
+        var g = HotkeyGesture()
+        _ = g.keyDown(at: 0)
+        XCTAssertEqual(g.endedFromOverlay(), .pushToTalk)
+        XCTAssertFalse(g.isRecording)
+        XCTAssertEqual(g.keyUp(at: 2), [], "letting the key go afterwards does nothing")
+        XCTAssertEqual(g.state, .idle)
+    }
+
+    func testOverlayEndsInsideTheDoubleTapWindow() {
+        var g = HotkeyGesture()
+        _ = g.keyDown(at: 0)
+        _ = g.keyUp(at: 0.1)
+        XCTAssertEqual(g.endedFromOverlay(), .pushToTalk)
+        XCTAssertEqual(g.tick(now: 1), [], "no late cancel after the overlay already ended it")
+    }
+
     func testSecondTapTooLateStartsOver() {
         var g = HotkeyGesture(holdThreshold: 0.25, doubleTapWindow: 0.35)
         _ = g.keyDown(at: 0)

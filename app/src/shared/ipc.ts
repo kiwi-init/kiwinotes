@@ -43,7 +43,8 @@ export interface LlmStatus {
 export type OverlayState = "hidden" | "listening" | "processing" | "done" | "error";
 
 /** Quem começou ou terminou a gravação. `config`: o atalho mudou no meio. */
-export type RecordReason = "hotkey" | "command" | "config";
+/** `overlay`: o ✕ (cancelar) ou o ✓ (terminar) da pílula. */
+export type RecordReason = "hotkey" | "command" | "config" | "overlay";
 
 /** Como a gravação terminou: soltou a tecla, bateu de novo no toggle, ou pelo app. */
 export type StopMode = "ptt" | "toggle" | "command";
