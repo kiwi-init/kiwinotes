@@ -360,6 +360,45 @@ await step("rascunho órfão ao abrir: 'Recuperar como nota nova' cria na Caixa 
   if (await page.$(".kn-orphan")) throw new Error("o aviso ficou");
 });
 
+await step("rascunho órfão recuperado volta com o frontmatter (tags e propriedades)", async () => {
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "kiwi.notes.draft.v1:Projetos/Com Tags.md",
+      JSON.stringify({ path: "Projetos/Com Tags.md", body: "Corpo do rascunho.\n", frontmatter: "---\ntags: [projeto]\nstatus: ativo\n---\n", baseVersion: "1", at: new Date().toISOString() }),
+    ),
+  );
+  await page.goto(URL);
+  await page.waitForSelector(".kn-orphan >> text=Com Tags");
+  await page.click(".kn-orphan >> text=Recuperar como nota nova");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Com Tags");
+  expectEq(await content("Caixa de entrada/Com Tags.md"), "---\ntags: [projeto]\nstatus: ativo\n---\nCorpo do rascunho.\n");
+  if (!(await page.textContent(".kn-meta"))?.includes("#projeto")) throw new Error("a tag não apareceu");
+});
+
+await step("o rascunho escrito pela janela leva o frontmatter da nota", async () => {
+  await page.goto(`${URL}?note=${encodeURIComponent("Projetos/Mudança de escritório.md")}`);
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Mudança de escritório");
+  await page.evaluate(() => {
+    (window as any).__kiwiNotesMock.save = async () => {
+      throw new Error("E_FAILED");
+    };
+  });
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type(" x");
+  await page.waitForSelector(".kn-save-alert");
+  const d = await page.evaluate(() => {
+    const k = Object.keys(localStorage).find((k) => k.includes("Mudança"))!;
+    return JSON.parse(localStorage.getItem(k)!).frontmatter as string;
+  });
+  expectEq(d, "---\ntags: [projeto]\n---\n");
+  await page.click("text=Descartar a edição");
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.save = m.__save ?? m.save;
+  });
+});
+
 await step("rascunho órfão: 'Descartar' apaga sem criar nada", async () => {
   await putDraft("Sumida.md", "texto que a pessoa não quer mais");
   await page.goto(URL);
