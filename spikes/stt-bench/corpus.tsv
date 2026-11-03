@@ -1,0 +1,19 @@
+# id	lang	size	text   (lang: pt|en|mix; size: short|long). Sintético: lido pelo `say`, nada de voz real.
+pt01	pt	short	Marca uma reunião com o time de segurança amanhã às 10.
+pt02	pt	short	Não esquece de mandar o relatório para a Juliana hoje.
+pt03	pt	short	O deploy de produção ficou para sexta-feira.
+pt04	pt	short	Preciso revisar a proposta antes do almoço.
+pt05	pt	short	Anota aí que o cliente aprovou o orçamento.
+pt06	pt	short	Vamos começar a migração na semana que vem.
+pt07	pt	long	Na reunião de hoje com a arquitetura, ficou decidido que a gente vai separar o serviço de anonimização do gateway, porque o volume de exames cresceu muito e o processo atual não está dando conta. O próximo passo é desenhar a fila e combinar com a infraestrutura quem cuida do monitoramento.
+pt08	pt	long	Oi pessoal, só para registrar o que conversamos: o prazo da primeira entrega continua sendo o fim do mês, mas a parte de relatórios vai para a segunda fase. Se alguém tiver alguma objeção, me avisa até quinta-feira para a gente ajustar o cronograma.
+en01	en	short	Can you send me the meeting notes after lunch?
+en02	en	short	The build is failing on the main branch again.
+en03	en	short	Let's push the release to next Tuesday.
+en04	en	long	Quick update on the migration: we moved about 40% of the studies last week, the error rate is below 1%, and the remaining work is mostly the older archives, which need a different export path.
+mix01	mix	short	O StudyInstanceUID veio vazio no retorno do QIDO.
+mix02	mix	short	Sobe o DICOM store novo na Healthcare API de homologação.
+mix03	mix	short	O PACS legado não respondeu o C-FIND de novo.
+mix04	mix	short	Abre um pull request com o fix do storage class.
+mix05	mix	short	Precisa liberar o bucket no IAM para a service account.
+mix06	mix	long	Hoje o STOW-RS devolveu vários conflitos 409, porque os exames já existiam no DICOM store. Vou ajustar o script para checar o SOPInstanceUID antes de enviar e rodar o backfill de novo no BigQuery.
