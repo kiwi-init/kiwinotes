@@ -12,6 +12,7 @@ import {
   dictationBlock,
   dictationMark,
   dictationNote,
+  dictationRef,
   DictationNotes,
   FALLBACK_TITLE,
   INBOX,
@@ -46,17 +47,28 @@ async function vault(files: Record<string, string> = {}) {
 
 /** 3 de novembro de 2026, 14:30, no fuso local (a legenda e o frontmatter usam o fuso de quem ditou). */
 const AT = new Date(2026, 10, 3, 14, 30, 12);
+/** Ids de ditado como os do Histórico (`<ISO>-<4 hex>`). */
+const ID = "2026-11-03T17:30:12.000Z-ab12";
+const ID2 = "2026-11-03T17:30:40.000Z-cd34";
+const MARK = `*🎙 ditado às 14:30* %%dictation:${ID}%%`;
 
 describe("o formato do trecho ditado (T1320)", () => {
-  test("a legenda do B v4 numa linha em itálico, embaixo do texto", () => {
+  test("a legenda do B v4 numa linha em itálico, embaixo do texto, com o id do ditado num comentário do Obsidian", () => {
     expect(dictationMark(AT)).toBe("*🎙 ditado às 14:30*");
-    expect(dictationBlock("  Ficou decidido começar pela tomografia.  ", AT)).toBe("Ficou decidido começar pela tomografia.\n*🎙 ditado às 14:30*");
-    expect(DICTATION_MARK.test(dictationBlock("oi", AT))).toBe(true);
+    expect(dictationBlock("  Ficou decidido começar pela tomografia.  ", AT, ID)).toBe(`Ficou decidido começar pela tomografia.\n${MARK}`);
+    expect(DICTATION_MARK.test(dictationBlock("oi", AT, ID))).toBe(true);
+    expect(DICTATION_MARK.test("*🎙 ditado às 14:30*")).toBe(true); // as notas do T1320, sem id
     expect(dictationMark(new Date(2026, 0, 1, 9, 5))).toBe("*🎙 ditado às 09:05*");
   });
 
+  test("o id não fecha o comentário nem quebra a linha (T1565)", () => {
+    expect(dictationRef(ID)).toBe(`%%dictation:${ID}%%`);
+    expect(dictationRef("a%%b\nc d")).toBe("%%dictation:abcd%%");
+    expect(() => dictationRef("%%")).toThrow();
+  });
+
   test("a nota nova tem o frontmatter com a data e source: dictation", () => {
-    expect(dictationNote("Oi.", AT)).toBe("---\ndate: 2026-11-03T14:30\nsource: dictation\n---\n\nOi.\n*🎙 ditado às 14:30*\n");
+    expect(dictationNote("Oi.", AT, ID)).toBe(`---\ndate: 2026-11-03T14:30\nsource: dictation\n---\n\nOi.\n${MARK}\n`);
   });
 
   test("o título é a 1ª frase, sem pontuação no fim e sem o que um nome de arquivo não leva", () => {
@@ -88,37 +100,75 @@ describe("DictationNotes (T1320)", () => {
   test("nota nova: em Caixa de entrada/, com título da 1ª frase, e a 2ª vez não duplica", async () => {
     const { v, root, notes } = await vault();
     const text = "Comprar café. E açúcar também.";
-    const a = await notes.toNew(text, AT);
+    const a = await notes.toNew(text, AT, ID);
     expect(a).toMatchObject({ created: true, already: false, note: { path: `${INBOX}/Comprar café.md`, title: "Comprar café" } });
-    expect(readFileSync(path.join(root, a.note.path), "utf8")).toBe(dictationNote(text, AT));
-    const b = await notes.toNew(text, AT);
+    expect(readFileSync(path.join(root, a.note.path), "utf8")).toBe(dictationNote(text, AT, ID));
+    const b = await notes.toNew(text, AT, ID);
     expect(b).toMatchObject({ created: false, already: true, note: { path: a.note.path } });
     expect(v.list().notes).toHaveLength(1);
   });
 
   test("dois envios ao mesmo tempo fazem uma nota só", async () => {
     const { v, notes } = await vault();
-    const results = await Promise.all([notes.toNew("Oi.", AT), notes.toNew("Oi.", AT), notes.toNew("Oi.", AT)]);
+    const results = await Promise.all([notes.toNew("Oi.", AT, ID), notes.toNew("Oi.", AT, ID), notes.toNew("Oi.", AT, ID)]);
     expect(results.filter((r) => r.created)).toHaveLength(1);
     expect(v.list().notes).toHaveLength(1);
   });
 
   test("outro ditado com a mesma 1ª frase é outra nota (Título 2), não some", async () => {
     const { v, notes } = await vault();
-    await notes.toNew("Reunião. Primeira.", AT);
+    await notes.toNew("Reunião. Primeira.", AT, ID);
     const later = new Date(AT.getTime() + 60_000);
-    const b = await notes.toNew("Reunião. Segunda.", later);
+    const b = await notes.toNew("Reunião. Segunda.", later, ID2);
     expect(b.note.path).toBe(`${INBOX}/Reunião 2.md`);
     expect(v.list().notes).toHaveLength(2);
   });
 
+  test("dois ditados iguais no mesmo minuto são dois trechos: o id decide, não o texto e a hora (T1565)", async () => {
+    const { v, root, notes } = await vault({ "Compras.md": "# Compras\n" });
+    const sameMinute = new Date(AT.getTime() + 20_000);
+    expect((await notes.toNew("Comprar pão.", AT, ID)).created).toBe(true);
+    const b = await notes.toNew("Comprar pão.", sameMinute, ID2);
+    expect(b).toMatchObject({ created: true, already: false, note: { path: `${INBOX}/Comprar pão 2.md` } });
+    expect(v.list().notes.filter((n) => n.folder === INBOX)).toHaveLength(2);
+    // No acréscimo, o mesmo: os dois entram na nota.
+    await notes.append("Compras.md", "Comprar pão.", AT, ID);
+    expect((await notes.append("Compras.md", "Comprar pão.", sameMinute, ID2)).already).toBe(false);
+    expect((await notes.append("Compras.md", "Comprar pão.", sameMinute, ID2)).already).toBe(true);
+    expect(readFileSync(path.join(root, "Compras.md"), "utf8").match(/Comprar pão\./g)).toHaveLength(2);
+  });
+
+  test("o índice atrasado não decide: a nota candidata é relida do disco (T1565)", async () => {
+    const { v, root, notes } = await vault();
+    const a = await notes.toNew("Ligar para a Ana.", AT, ID);
+    // No Obsidian, a pessoa apaga o trecho; o watcher (desligado aqui) ainda não viu, e o índice segue com o id.
+    writeFileSync(path.join(root, a.note.path), "---\nsource: dictation\n---\n\nOutra coisa.\n");
+    expect(v.notesContaining(dictationRef(ID)).map((n) => n.path)).toEqual([a.note.path]);
+    const b = await notes.toNew("Ligar para a Ana.", AT, ID);
+    expect(b).toMatchObject({ created: true, already: false, note: { path: `${INBOX}/Ligar para a Ana 2.md` } });
+    // E uma candidata que sumiu do disco também não conta.
+    const { notes: notes2, root: root2 } = await vault();
+    const c = await notes2.toNew("Oi.", AT, ID);
+    rmSync(path.join(root2, c.note.path));
+    expect((await notes2.toNew("Oi.", AT, ID)).created).toBe(true);
+  });
+
+  test("nota rápida (fresh): não procura nada, e cria", async () => {
+    const { v, notes } = await vault();
+    const calls: string[] = [];
+    const original = v.notesContaining.bind(v);
+    v.notesContaining = (t: string) => (calls.push(t), original(t));
+    expect((await notes.toNew("Oi.", AT, ID, { fresh: true })).created).toBe(true);
+    expect(calls).toEqual([]);
+  });
+
   test("acrescentar numa nota que existe: o trecho vai no fim, e a 2ª vez não repete", async () => {
     const { root, notes } = await vault({ "Projetos/PACS.md": "# PACS\n\nMover os estudos.\n" });
-    const a = await notes.append("Projetos/PACS.md", "Começar pela tomografia.", AT);
+    const a = await notes.append("Projetos/PACS.md", "Começar pela tomografia.", AT, ID);
     expect(a).toMatchObject({ created: false, already: false, note: { path: "Projetos/PACS.md" } });
     const after = readFileSync(path.join(root, "Projetos/PACS.md"), "utf8");
-    expect(after).toBe("# PACS\n\nMover os estudos.\n\nComeçar pela tomografia.\n*🎙 ditado às 14:30*\n");
-    expect((await notes.append("Projetos/PACS.md", "Começar pela tomografia.", AT)).already).toBe(true);
+    expect(after).toBe(`# PACS\n\nMover os estudos.\n\nComeçar pela tomografia.\n${MARK}\n`);
+    expect((await notes.append("Projetos/PACS.md", "Começar pela tomografia.", AT, ID)).already).toBe(true);
     expect(readFileSync(path.join(root, "Projetos/PACS.md"), "utf8")).toBe(after);
   });
 
@@ -130,7 +180,7 @@ describe("DictationNotes (T1320)", () => {
     const racing = {
       open: () => v.open(),
       create: v.create.bind(v),
-      findContaining: v.findContaining.bind(v),
+      notesContaining: v.notesContaining.bind(v),
       get: async (p: unknown) => {
         const note = await v.get(p);
         if (!raced) {
@@ -141,18 +191,18 @@ describe("DictationNotes (T1320)", () => {
       },
       save: v.save.bind(v),
     };
-    const r = await new DictationNotes(racing).append("Ideias.md", "Três.", AT);
+    const r = await new DictationNotes(racing).append("Ideias.md", "Três.", AT, ID);
     expect(r.already).toBe(false);
-    expect(readFileSync(abs, "utf8")).toBe("Uma.\nDuas, do Obsidian.\n\nTrês.\n*🎙 ditado às 14:30*\n");
+    expect(readFileSync(abs, "utf8")).toBe(`Uma.\nDuas, do Obsidian.\n\nTrês.\n${MARK}\n`);
   });
 
   test("nota que não existe ou fora do vault: o erro do vault, sem criar nada", async () => {
     const { v, notes } = await vault();
-    await expect(notes.append("Nada.md", "x", AT)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
-    await expect(notes.append("../fora.md", "x", AT)).rejects.toMatchObject({ code: "E_OUTSIDE_VAULT" });
+    await expect(notes.append("Nada.md", "x", AT, ID)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    await expect(notes.append("../fora.md", "x", AT, ID)).rejects.toMatchObject({ code: "E_OUTSIDE_VAULT" });
     expect(v.list().notes).toHaveLength(0);
     // Depois de um erro, a fila segue andando.
-    expect((await notes.toNew("Oi.", AT)).created).toBe(true);
+    expect((await notes.toNew("Oi.", AT, ID)).created).toBe(true);
   });
 });
 
@@ -186,7 +236,7 @@ describe("history.toNote, a capacidade do Histórico (T1320)", () => {
     const { root, history, call } = await rig();
     const entry = await history.add({ raw: "x", text: "Começar pela tomografia.", at: AT });
     expect(await call({ id: entry.id, path: "Projetos/PACS.md" })).toMatchObject({ ok: true, value: { already: false } });
-    expect(readFileSync(path.join(root, "Projetos/PACS.md"), "utf8")).toBe("# PACS\n\nComeçar pela tomografia.\n*🎙 ditado às 14:30*\n");
+    expect(readFileSync(path.join(root, "Projetos/PACS.md"), "utf8")).toBe(`# PACS\n\nComeçar pela tomografia.\n*🎙 ditado às 14:30* %%dictation:${entry.id}%%\n`);
   });
 
   test("argumentos ruins e ditado que não existe", async () => {

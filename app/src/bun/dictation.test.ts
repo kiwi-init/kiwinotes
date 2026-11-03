@@ -333,15 +333,15 @@ describe("Dictation", () => {
   function noteSetup(toNew?: (text: string, at: Date) => Promise<any>) {
     const sidecar = fakeSidecar();
     const added: NewHistoryEntry[] = [];
-    const made: { text: string; at: Date }[] = [];
+    const made: { text: string; at: Date; id: string; fresh?: boolean }[] = [];
     const d = new Dictation({
       sidecar: sidecar as unknown as DictationSidecar,
       history: { add: async (e) => (added.push(e), { ...e, id: "id", at: (e.at ?? new Date()).toISOString() } as any) },
       notes: {
         toNew:
           toNew ??
-          (async (text, at) => {
-            made.push({ text, at });
+          (async (text, at, id, options) => {
+            made.push({ text, at, id, fresh: options?.fresh });
             return { note: { path: "Caixa de entrada/Comprar café.md", title: "Comprar café" }, created: true, already: false } as any;
           }),
       },
@@ -366,6 +366,8 @@ describe("Dictation", () => {
     expect(added).toHaveLength(1);
     expect(added[0]!.text).toBe("Comprar café e açúcar.");
     expect(added[0]!.at).toBe(made[0]!.at);
+    // A nota leva o id do ditado no Histórico (T1565), e não procura nada: o id acabou de nascer.
+    expect(made[0]).toMatchObject({ id: "id", fresh: true });
     expect(added[0]!.app).toEqual({ bundleId: "com.apple.Terminal", name: "Terminal" });
   });
 

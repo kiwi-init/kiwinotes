@@ -225,11 +225,13 @@ export class Vault {
       .map(({ e, score }) => ({ path: e.meta.path, title: e.meta.title, snippet: snippetAround(e.content, terms[0]!), score }));
   }
 
-  /** A 1ª nota cujo texto tem `text` exato, ou null (T1320: um ditado mandado duas vezes não vira duas notas). */
-  findContaining(text: string): NoteMeta | null {
-    if (!text) return null;
-    for (const e of this.notes.values()) if (e.content.includes(text)) return e.meta;
-    return null;
+  /**
+   * As notas cujo texto, pelo índice em memória, tem `text` exato (T1320, T1565: achar um ditado já mandado). O índice
+   * pode estar atrasado com o que o watcher ainda não viu: quem decide relê a nota do disco.
+   */
+  notesContaining(text: string): NoteMeta[] {
+    if (!text) return [];
+    return [...this.notes.values()].filter((e) => e.content.includes(text)).map((e) => e.meta);
   }
 
   backlinks(input: unknown): Backlink[] {

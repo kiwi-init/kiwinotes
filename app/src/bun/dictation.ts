@@ -35,7 +35,7 @@ export interface DictationOptions {
   dryRun?: boolean;
   log?: (message: string) => void;
   /** A nota rápida (T1320): um ditado com `target: "note"` vira uma nota nova, em vez de ser colado. */
-  notes?: { toNew(text: string, at: Date): Promise<ToNoteResult> };
+  notes?: { toNew(text: string, at: Date, id: string, options?: { fresh?: boolean }): Promise<ToNoteResult> };
 }
 
 /** O que a pílula diz quando o texto não foi colado (ele ficou no clipboard). */
@@ -242,15 +242,7 @@ export class Dictation {
       return this.onDone?.({ text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
     }
     const at = new Date();
-    let note: ToNoteResult | undefined;
-    try {
-      note = await this.options.notes!.toNew(text, at);
-      await this.overlay("done", noteCreated(note.note.title));
-    } catch (e) {
-      this.log(`quick note failed: ${String(e)}`);
-      await this.overlay("error", NOTE_FAILED);
-    }
-    const appMs = Math.round(performance.now() - started);
+    // Primeiro o Histórico, para a nota levar o id do ditado (T1565): um "Enviar para nota" depois reconhece o trecho.
     let entry: HistoryEntry | undefined;
     try {
       entry = await this.options.history.add({
@@ -266,6 +258,17 @@ export class Dictation {
     } catch (e) {
       this.log(`history add failed: ${String(e)}`);
     }
+    let note: ToNoteResult | undefined;
+    try {
+      // Sem o Histórico, um id só desta nota: ela não tem como ser mandada de novo.
+      const id = entry?.id ?? `note-${at.toISOString()}-${Math.random().toString(16).slice(2, 6)}`;
+      note = await this.options.notes!.toNew(text, at, id, { fresh: true });
+      await this.overlay("done", noteCreated(note.note.title));
+    } catch (e) {
+      this.log(`quick note failed: ${String(e)}`);
+      await this.overlay("error", NOTE_FAILED);
+    }
+    const appMs = Math.round(performance.now() - started);
     this.log(`quick note: stt ${t.latencyMs} ms + app ${appMs} ms · ${note ? `${note.created ? "created" : "already in"} ${note.note.path}` : "failed"}`);
     this.onDone?.({ entry, text, tone: result.tone, pasted: false, appMs, note });
   }

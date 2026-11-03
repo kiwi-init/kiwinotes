@@ -21,8 +21,8 @@ export interface CapabilityDeps {
   };
   /** O ditado vira nota (T1320): uma por vez, sem duplicar. */
   dictationNotes: {
-    toNew(text: string, at: Date): Promise<ToNoteResult>;
-    append(path: string, text: string, at: Date): Promise<ToNoteResult>;
+    toNew(text: string, at: Date, id: string): Promise<ToNoteResult>;
+    append(path: string, text: string, at: Date, id: string): Promise<ToNoteResult>;
   };
   /** O STT e a limpeza passam a usar o dicionário e os snippets novos já no próximo ditado. */
   dictionaryChanged?(terms: DictionaryTerm[]): void;
@@ -136,7 +136,7 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const entry = await deps.history.get(id);
       if (!entry) throw new CapabilityError("E_NOT_FOUND", `history.toNote: no dictation ${id}`);
       const at = new Date(entry.at);
-      return path ? deps.dictationNotes.append(path, entry.text, at) : deps.dictationNotes.toNew(entry.text, at);
+      return path ? deps.dictationNotes.append(path, entry.text, at, entry.id) : deps.dictationNotes.toNew(entry.text, at, entry.id);
     },
     "clipboard.write": (args) => {
       const text = object(args, "clipboard.write").text;
