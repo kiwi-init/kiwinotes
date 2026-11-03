@@ -11,13 +11,23 @@
     "prepare:eb": "bun scripts/hutch.ts electrobun prepare",
     "agent": "bun .hutch/devkit/api/sdks/main/agent/cli.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test src scripts",
+    "test": "bun test src scripts ui",
     "ui:build": "bun scripts/ui-build.ts",
     "ui:publish": "bun scripts/ui-publish.ts",
     "ui:serve": "bun scripts/ui-serve.ts",
     "notes:bench": "bun scripts/notes-bench.ts"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@lezer/common": "^1.5.5",
+    "@lezer/highlight": "^1.2.5",
+    "@lezer/markdown": "^1.8.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -27,6 +37,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
     "concurrently": "^9.2.1",
+    "playwright-core": "^1.64.1",
     "typescript": "~5.9.3",
     "vite": "^7.1.0"
   }

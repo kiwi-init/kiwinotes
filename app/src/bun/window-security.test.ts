@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { UI_WINDOWS } from "../shared/ui-contract.ts";
 import { VIEWS_CSP, windowSecurity } from "./window-security.ts";
 
 /** As regras do Electrobun: em ordem, a última que casa vale; `^` bloqueia, `*` é qualquer coisa. */
@@ -79,7 +80,7 @@ describe("trava das janelas (T1378)", () => {
 
   test("o HTML das UIs cabe na CSP: nada de script inline", () => {
     const ui = path.resolve(import.meta.dirname, "../../ui");
-    for (const window of ["settings", "history"]) {
+    for (const window of UI_WINDOWS) {
       const html = readFileSync(path.join(ui, window, "index.html"), "utf8");
       for (const [, attrs, body] of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
         expect(attrs).toContain("src=");
