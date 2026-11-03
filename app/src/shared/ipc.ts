@@ -126,7 +126,9 @@ export interface CommandResults {
   "overlay.state": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
-   * `no_focus` (nada em foco), `no_text_field` (o foco é um botão etc.) ou `no_accessibility` (falta a permissão).
+   * `no_focus` (nenhum app na frente) ou `no_accessibility` (falta a permissão). Com um app na frente o ⌘V vai sempre,
+   * mesmo sem foco visível pela Acessibilidade (o Teams novo, T984); `pasted: true, restored: false, reason:
+   * "no_text_field"`: colou, mas o foco não parecia campo de texto (um botão), então o texto ficou também no clipboard.
    * `pasted: true, restored: false, reason: "secure_input"`: o ⌘V foi, mas algum app segura o secure input e o
    * macOS pode tê-lo descartado; o texto continua no clipboard, e o clipboard antigo não volta.
    * `app` é o bundle id do app em foco.
@@ -138,6 +140,8 @@ export interface CommandResults {
     app?: string;
     /** Um espaço foi na frente do texto, porque ele entrou logo depois de outro texto (T733). */
     spaced?: true;
+    /** Onde a Acessibilidade achou o foco: no pedido ao sistema, no pedido ao app da frente (T984) ou em nenhum. */
+    focusVia?: "system" | "app" | "none";
     /** Só no `dryRun`: nada foi colado nem copiado. */
     dryRun?: true;
   };

@@ -34,14 +34,28 @@ public enum InsertPlan: Equatable, Sendable {
         "AXImage", "AXSlider", "AXIncrementor", "AXDisclosureTriangle", "AXTabGroup", "AXToolbar", "AXDockItem",
     ]
 
-    /// `focus` is nil when no app has a focused element (the desktop, or nothing frontmost).
+    /// `focus` is nil when Accessibility shows no focused element. `frontApp`: some app is in front (T984).
     /// `secureInput`: some app holds Secure Event Input (a password field, Terminal's Secure Keyboard Entry).
     /// macOS may drop a synthetic ⌘V then, and the flag is global (an app in the background can leak it on),
     /// so the paste still goes, but the text stays on the clipboard (#219).
-    public static func decide(accessibilityGranted: Bool, secureInput: Bool = false, focus: FocusInfo?) -> InsertPlan {
+    ///
+    /// The paste goes whenever an app is in front (T984): the new Teams, a WebView, shows Accessibility no focused
+    /// element (or one with no role) while its message box has the caret, and Wispr Flow and VoiceInk paste there all
+    /// the same. Only with nothing in front, or without Accessibility, does the text stay on the clipboard alone.
+    /// When the focus can't be seen (`no_focus`) or is clearly not a place for text (`no_text_field`, a button), the
+    /// paste still goes but the text stays on the clipboard too: the same branch also catches the desktop with the
+    /// Finder in front or an app with no window, where the ⌘V lands nowhere, and then nothing is lost (review #1007).
+    public static func decide(
+        accessibilityGranted: Bool, secureInput: Bool = false, focus: FocusInfo?, frontApp: Bool = false
+    ) -> InsertPlan {
         guard accessibilityGranted else { return .clipboardOnly(reason: "no_accessibility") }
-        guard let focus, let role = focus.role else { return .clipboardOnly(reason: "no_focus") }
-        guard focus.hasSelectedTextRange || !nonTextRoles.contains(role) else { return .clipboardOnly(reason: "no_text_field") }
+        guard let focus, let role = focus.role else {
+            guard frontApp else { return .clipboardOnly(reason: "no_focus") }
+            return .pasteKeepingText(reason: secureInput ? "secure_input" : "no_focus")
+        }
+        guard focus.hasSelectedTextRange || !nonTextRoles.contains(role) else {
+            return .pasteKeepingText(reason: "no_text_field")
+        }
         return secureInput ? .pasteKeepingText(reason: "secure_input") : .paste
     }
 }

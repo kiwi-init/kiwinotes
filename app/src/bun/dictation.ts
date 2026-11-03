@@ -187,7 +187,8 @@ export class Dictation {
     if (!insert.ok) await this.overlay("error", "Não deu para colar o texto");
     else if (insert.data.dryRun) await this.overlay("done");
     else if (!insert.data.pasted) await this.overlay("error", NOT_PASTED[insert.data.reason ?? ""] ?? NOT_PASTED.no_focus);
-    else if (insert.data.reason === "secure_input") await this.overlay("done", SECURE_INPUT_NOTICE);
+    // Colou, mas o texto ficou também no clipboard: secure input, ou um foco que não parece campo de texto (T984).
+    else if (insert.data.reason) await this.overlay("done", SECURE_INPUT_NOTICE);
     else if (lost) await this.overlay("done", MIC_LOST_NOTICE);
     else await this.overlay("done");
     const appMs = Math.round(performance.now() - started);
@@ -207,7 +208,7 @@ export class Dictation {
       this.log(`history add failed: ${String(e)}`);
     }
     this.log(
-      `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? "pasted" : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}`,
+      `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? `pasted${insert.ok && insert.data.reason ? ` (${insert.data.reason})` : ""}` : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}${insert.ok && insert.data.focusVia ? ` · focus ${insert.data.focusVia}` : ""}`,
     );
     this.onDone?.({ entry, text, tone: result.tone, pasted, appMs });
   }
