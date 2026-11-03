@@ -33,3 +33,5 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - Lógica TS: `bun test`. Lógica Swift: `swift test` em `native/`.
 - Comportamento do app: rode com `ELECTROBUN_AGENT_CONTROL=1` e dirija pelo MCP do Livewire.
 - A máquina é compartilhada (M1 Pro, 16 GB): não rode benchmarks pesados em paralelo com outro agente. Pegue `kiwi lock bench` antes.
+- **Build novo no Mac de uma pessoa:** antes de abrir um build novo (seu ou para alguém testar), feche o Kiwi Notes que estiver rodando (menu › Sair do Kiwi Notes, ou `pkill -f "Kiwi Notes.app/Contents/MacOS"` quando a pessoa não estiver usando) e confira com `pgrep -fl "Kiwi Notes|kiwi-helper"` que não sobrou nenhum. Nunca deixe dois apps rodando no Mac de alguém. Ao pedir um teste, o roteiro começa por "feche o app antigo".
+- **Não abra janela do app na tela de uma pessoa** sem combinar antes: teste por `bun test`/`swift test`, pelo MCP do Livewire ou com o helper falso.
