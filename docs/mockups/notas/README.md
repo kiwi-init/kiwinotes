@@ -8,8 +8,10 @@ Para ver: `open docs/mockups/notas/index.html`. O modo escuro abre com `#dark` n
 ## Princípios (#1203, #1214, #1222)
 - **Nenhuma linha nem borda.** A separação e a hierarquia vêm do espaço, do tamanho e do peso do texto.
 - **Uma superfície só:** a barra lateral, a nota e o contexto não têm fundo próprio nem cartão.
-- **Cor só em botão e controle:** Buscar ⌘K, Ditar (a ação principal, em verde), Abrir no BonsAI, os checkboxes e a
-  área onde soltar o ditado.
+- **Cor de fundo só em botão e controle:** Buscar ⌘K, Ditar (a ação principal, em verde), Abrir no BonsAI, os
+  checkboxes e a área onde soltar o ditado. Nenhuma área da janela tem fundo próprio.
+- **O verde também marca, sem fundo:** os links (`[[nota]]` e "Citada em"), a marca "🎙 ditado às 14:30", o cursor da
+  busca e o que é novo no board do BonsAI (o card e a ligação até ele).
 - **Pouca coisa na tela:** a barra lateral só com pastas e notas, a nota com título, meta e texto, e à direita só
   "Citada em" e o board do BonsAI.
 
