@@ -13,8 +13,12 @@ const nativeDir = path.resolve(appDir, "..", "native");
 const config = process.env.ELECTROBUN_BUILD_ENV === "dev" ? "debug" : "release";
 
 function swift(args: string[]): string {
-  const r = spawnSync("swift", args, { cwd: nativeDir, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
-  if (r.status !== 0) throw new Error(`build-helper: swift ${args.join(" ")} failed`);
+  const r = spawnSync("swift", args, { cwd: nativeDir, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) {
+    // O compilador escreve os erros no stdout: sem isto, uma falha no CI só dizia "failed" (T1074).
+    process.stderr.write(r.stdout ?? "");
+    throw new Error(`build-helper: swift ${args.join(" ")} failed`);
+  }
   return r.stdout.trim();
 }
 

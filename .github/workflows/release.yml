@@ -52,7 +52,9 @@ jobs:
         run: |
           v=$(bun -e 'console.log(JSON.parse(await Bun.file("package.json").text()).version)')
           # v0.1.0, ou um teste antes dele: v0.1.0-rc1 (sai como pré-release).
-          [[ "$GITHUB_REF_NAME" =~ ^v${v//./\.}(-[0-9A-Za-z.]+)?$ ]] || { echo "app/package.json says $v, the tag is $GITHUB_REF_NAME"; exit 1; }
+          # A versão antes do "-" tem que ser igual, como texto (sem regex, então o "." não é curinga, #1480).
+          base="${GITHUB_REF_NAME#v}"; base="${base%%-*}"
+          [[ "$base" == "$v" && "$GITHUB_REF_NAME" =~ ^v[0-9.]+(-[0-9A-Za-z.]+)?$ ]] || { echo "app/package.json says $v, the tag is $GITHUB_REF_NAME"; exit 1; }
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -62,6 +64,11 @@ jobs:
       - name: Electrobun toolchain
         timeout-minutes: 5
         run: for i in 1 2 3; do bun run prepare:eb && exit 0; echo "electrobun prepare failed ($i of 3)"; [ "$i" -lt 3 ] && sleep 20; done; exit 1
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Test
         run: bun test
