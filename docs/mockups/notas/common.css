@@ -1,0 +1,111 @@
+/* Mockups da janela Notas (#1133). Usa os tokens do app (app/ui/src/styles/tokens.css); o escuro vem por classe. */
+@import url("tokens.css");
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+html { background: #e9e7e2; }
+html.dark { background: #121214; }
+body {
+  font: var(--text-md) / var(--leading) var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  /* um "papel de parede" atrás das janelas, para a translucidez aparecer */
+  background:
+    radial-gradient(1200px 700px at 12% 0%, #c9dcc0 0%, transparent 60%),
+    radial-gradient(900px 700px at 100% 100%, #d9d3e8 0%, transparent 55%),
+    #e9e7e2;
+  padding: 40px 44px 48px;
+  width: 1680px;
+}
+html.dark body {
+  background:
+    radial-gradient(1200px 700px at 12% 0%, #24331d 0%, transparent 60%),
+    radial-gradient(900px 700px at 100% 100%, #2a2538 0%, transparent 55%),
+    #121214;
+}
+
+/* ------------------------------------------------ cabeçalho do quadro */
+.board-head { display: flex; gap: 36px; align-items: flex-start; margin-bottom: 26px; }
+.board-head .tag {
+  display: inline-block; font: 600 11px/1 var(--font); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent-text); background: var(--accent-soft); padding: 5px 8px; border-radius: var(--radius-pill);
+}
+.board-head h1 { font: 700 30px/1.1 var(--font-display); letter-spacing: -0.02em; margin: 10px 0 6px; }
+.board-head .idea { font-size: 15px; color: var(--text-2); max-width: 640px; margin: 0; }
+.proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; margin-top: 4px; }
+.proscons div { background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: var(--radius-md); padding: 12px 14px; box-shadow: var(--shadow-1); }
+.proscons h3 { font: 600 12px/1 var(--font); margin: 0 0 8px; color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; }
+.proscons ul { margin: 0; padding-left: 16px; font-size: 13px; }
+.proscons li { margin: 2px 0; }
+
+/* ------------------------------------------------ janela macOS */
+.win {
+  position: relative; border-radius: 12px; overflow: hidden;
+  background: var(--bg);
+  box-shadow: 0 30px 80px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.18);
+}
+html.dark .win { box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 .5px rgba(255,255,255,.12); }
+.lights { position: absolute; top: 18px; left: 18px; display: flex; gap: 8px; z-index: 5; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lights i:nth-child(2) { background: #febc2e; }
+.lights i:nth-child(3) { background: #28c840; }
+.vibrant {
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  backdrop-filter: blur(30px) saturate(1.6);
+}
+.frame-label { font: 600 12px/1 var(--font); color: var(--text-2); margin: 0 0 10px 4px; letter-spacing: .02em; }
+.row { display: grid; gap: 28px; margin-top: 30px; }
+
+/* ------------------------------------------------ peças comuns */
+.muted { color: var(--text-2); }
+.faint { color: var(--text-3); }
+.mono { font-family: var(--font-mono); font-size: 12px; }
+.ico { display: inline-block; width: 14px; text-align: center; color: var(--text-3); }
+.kbd { font: 500 11px/1 var(--font); padding: 3px 6px; border-radius: 5px; background: var(--surface); box-shadow: var(--shadow-1); color: var(--text-2); }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-2); }
+.chip.accent { background: var(--accent-soft); color: var(--accent-text); }
+.wikilink { color: var(--accent-text); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent); text-underline-offset: 2px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/1 var(--font); padding: 7px 11px; border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-1); color: var(--text); }
+.btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+
+/* editor */
+.doc h1 { font: 700 26px/1.2 var(--font-display); letter-spacing: -0.02em; margin: 0 0 6px; }
+.doc h2 { font: 600 16px/1.3 var(--font-display); margin: 22px 0 8px; }
+.doc p { margin: 0 0 10px; font-size: 14px; line-height: 1.6; }
+.doc .meta { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 18px; }
+.check { display: flex; gap: 9px; align-items: flex-start; font-size: 14px; margin: 5px 0; }
+.check b { flex: none; width: 15px; height: 15px; margin-top: 3px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--border-strong); }
+.check.done b { background: var(--accent); box-shadow: none; position: relative; }
+.check.done b::after { content: "✓"; position: absolute; inset: 0; color: var(--on-accent); font: 700 11px/15px var(--font); text-align: center; }
+.check.done span { color: var(--text-3); text-decoration: line-through; }
+table.md { border-collapse: collapse; font-size: 13px; margin: 6px 0 12px; width: 100%; }
+table.md th, table.md td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+table.md th { font-weight: 600; color: var(--text-2); font-size: 12px; }
+table.md th.n { text-align: right; }
+table.md td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.dictated {
+  position: relative; border-radius: 8px; padding: 8px 12px 8px 30px; margin: 0 0 12px;
+  background: var(--accent-soft); font-size: 14px; line-height: 1.6;
+}
+.dictated::before { content: "🎙"; position: absolute; left: 9px; top: 8px; font-size: 13px; }
+.dictated small { display: block; color: var(--text-2); font-size: 11px; margin-top: 2px; }
+
+/* paleta ⌘K */
+.palette { width: 100%; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-pop); overflow: hidden; }
+.palette .q { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 16px; }
+.palette .q .caret { width: 1.5px; height: 18px; background: var(--accent); margin-left: -8px; }
+.palette .sec { font: 600 11px/1 var(--font); color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; padding: 12px 16px 6px; }
+.palette .it { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 13px; }
+.palette .it.sel { background: var(--accent-soft); }
+.palette .it .r { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.palette .it > span.l { display: inline; }
+.palette .it mark { background: transparent; color: var(--accent-text); font-weight: 600; }
+.palette .foot { display: flex; gap: 14px; padding: 9px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-3); }
+
+/* pílula do ditado (ADR 0005), para os quadros de ditado */
+.pill {
+  display: inline-flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: var(--radius-pill);
+  background: rgba(20,20,22,.88); color: #fff; font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+.pill .bars { display: flex; gap: 3px; align-items: center; height: 16px; }
+.pill .bars i { width: 3px; border-radius: 2px; background: #9fd47c; }

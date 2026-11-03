@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Opção B · v4</title>
+<link rel="stylesheet" href="common.css">
+<script>if (location.hash === "#dark") document.documentElement.classList.add("dark");</script>
+<style>
+  /* v3 (#1214): a v2 enxugada. Menos coisa na tela, menos fundo e menos peso; só espaço separa. */
+  .win { box-shadow: 0 30px 80px rgba(0,0,0,.14); }
+  html.dark .win { box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .m { height: 690px; display: grid; grid-template-columns: 220px 1fr 260px; background: var(--bg); }
+  .side { padding: 64px 0 20px 28px; font-size: 13px; }
+  .side .h { font-size: 11px; color: var(--text-3); margin: 0 0 12px; }
+  .side .i { padding: 5px 0; color: var(--text-2); }
+  .side .i.in { padding-left: 14px; }
+  .side .i.sel { color: var(--text); font-weight: 600; }
+  .side .gap { height: 28px; }
+  .center { margin: 14px 0; border-radius: 14px; background: var(--surface); position: relative; overflow: hidden; }
+  .top { position: absolute; top: 18px; left: 72px; right: 24px; display: flex; font-size: 12px; color: var(--text-3); }
+  .top .r { margin-left: auto; display: flex; gap: 18px; }
+  .page { padding: 76px 72px 0; max-width: 760px; }
+  .page h1 { font: 650 28px/1.15 var(--font-display); letter-spacing: -0.02em; margin: 0 0 8px; }
+  .page .meta { font-size: 12px; color: var(--text-3); margin: 0 0 30px; }
+  .page h2 { font: 600 14px/1.3 var(--font); margin: 34px 0 10px; }
+  .page p { font-size: 14px; line-height: 1.65; margin: 0 0 14px; }
+  .link { color: var(--accent-text); }
+  .said { font-size: 14px; line-height: 1.65; margin: 0 0 14px; }
+  .said small { display: block; font-size: 11px; color: var(--accent-text); }
+  .ck { display: flex; gap: 10px; font-size: 14px; margin: 6px 0; }
+  .ck i { flex: none; width: 13px; height: 13px; margin-top: 4px; border-radius: 4px; background: var(--surface-2); }
+  .ck.done i { background: var(--accent); }
+  .ck.done span { color: var(--text-3); text-decoration: line-through; }
+  .tb { display: grid; grid-template-columns: 1fr 90px 60px; font-size: 13px; row-gap: 8px; margin-top: 4px; }
+  .tb .th { font-size: 11px; color: var(--text-3); }
+  .tb .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .right { padding: 64px 28px 20px 26px; font-size: 12.5px; }
+  .right .h { font-size: 11px; color: var(--text-3); margin: 0 0 12px; display: flex; }
+  .right .h .r { margin-left: auto; color: var(--accent-text); }
+  .right .b { margin: 0 0 14px; }
+  .right .b span { display: block; color: var(--text-3); font-size: 12px; }
+  .right .gap { height: 30px; }
+  .bd { position: relative; height: 120px; border-radius: 12px; background: var(--surface); }
+  .bd svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .bd .c { position: absolute; white-space: nowrap; font-size: 10.5px; padding: 4px 7px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); }
+  .bd .c.new { background: var(--accent-soft); color: var(--accent-text); }
+  .mini { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .k { height: 330px; display: grid; place-items: start center; padding-top: 48px; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+  .pal { width: 520px; border-radius: 14px; background: var(--surface); box-shadow: 0 24px 60px rgba(0,0,0,.14); padding: 6px 0 10px; }
+  html.dark .pal { box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .pal .q { padding: 14px 22px 12px; font-size: 16px; }
+  .pal .q i { display: inline-block; width: 1.5px; height: 17px; background: var(--accent); vertical-align: -3px; margin-left: 1px; }
+  .pal .it { padding: 8px 22px; font-size: 13px; display: flex; color: var(--text-2); }
+  .pal .it.sel { color: var(--text); font-weight: 600; }
+  .pal .it .r { margin-left: auto; font-size: 12px; color: var(--text-3); font-weight: 400; }
+  .hist { height: 330px; display: grid; grid-template-columns: 1fr 1.2fr; }
+  .hist .l { padding: 52px 24px 20px 28px; font-size: 13px; }
+  .hist .l .h { font-size: 11px; color: var(--text-3); margin-bottom: 14px; }
+  .hist .l .e { margin: 0 0 16px; color: var(--text-2); }
+  .hist .l .e span { display: block; font-size: 11px; color: var(--text-3); }
+  .hist .l .e.ghost { opacity: .35; }
+  .hist .r { margin: 14px 14px 14px 0; border-radius: 14px; background: var(--surface); padding: 40px 28px; font-size: 13px; position: relative; }
+  .hist .r .drop { margin-top: 18px; padding: 14px 16px 44px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 12px; }
+  .hist .drag { position: absolute; left: 60px; top: 136px; width: 290px; padding: 10px 14px; border-radius: 10px; background: var(--surface); box-shadow: 0 16px 40px rgba(0,0,0,.16); font-size: 13px; transform: rotate(-2deg); }
+  .hist .drag span { display: block; font-size: 11px; color: var(--text-3); }
+
+  /* v4 (#1222): uma superfície só. Nenhuma área tem fundo próprio; só botão e controle têm cor. */
+  .m, .hist, .k { background: var(--surface); }
+  .center { background: transparent; margin: 0; border-radius: 0; }
+  .bd { background: transparent; height: 110px; }
+  .hist .r { background: transparent; margin: 0; border-radius: 0; }
+  .k { background: var(--surface); }
+  .pal { background: var(--surface); }
+  .bt { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); background: var(--surface-2); padding: 6px 11px; border-radius: 8px; }
+  .bt.acc { background: var(--accent); color: var(--on-accent); }
+  .top { top: 14px; }
+  .top .r { gap: 8px; }
+  .right .h .r { color: inherit; }
+</style>
+</head>
+<body>
+  <header class="board-head">
+    <div>
+      <span class="tag">Opção B · v4</span>
+      <h1>Oficina, uma superfície só</h1>
+      <p class="idea">Como o harry pediu (#1222): a janela inteira é uma superfície só, sem limite entre a barra lateral, a nota e o contexto. Só os botões têm outra cor. Base da v3 (#1214): a barra lateral só com pastas e notas, a nota com título, texto e nada mais em volta, e à direita só o que liga a nota a outras (backlinks e o board do BonsAI). Sem caixa, pílula nem contador; selecionado é só peso de texto.</p>
+    </div>
+    <div class="proscons">
+      <div><h3>Só botão tem cor</h3><ul><li>Buscar ⌘K, Ditar e Abrir no BonsAI</li><li>Checkbox e a área onde soltar o ditado</li><li>O resto é texto e espaço na mesma superfície</li></ul></div>
+      <div><h3>Saiu da v3</h3><ul><li>O "cartão" claro em volta da nota</li><li>O fundo do board do BonsAI</li><li>O painel claro do lado direito do Histórico</li></ul></div>
+    </div>
+  </header>
+
+  <p class="frame-label">Janela Notas</p>
+  <div class="win m">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <nav class="side">
+      <div class="h">Notas</div>
+      <div class="i">Caixa de entrada</div>
+      <div class="i">Projetos</div>
+      <div class="i in sel">Migração PACS Central</div>
+      <div class="i in">Anon gateway</div>
+      <div class="i">Reuniões</div>
+      <div class="i">Pessoas</div>
+      <div class="i">Diário</div>
+    </nav>
+    <main class="center">
+      <div class="top"><span>Projetos</span><span class="r"><span class="bt">⌕ Buscar <span class="faint">⌘K</span></span><span class="bt acc">🎙 Ditar</span></span></div>
+      <article class="page">
+        <h1>Migração PACS Central</h1>
+        <div class="meta">#projeto · editada hoje</div>
+        <p>Mover os estudos do PACS legado para o <span class="link">Healthcare API</span>, sem parar o atendimento. A ordem foi combinada na <span class="link">Reunião de Infra</span>.</p>
+        <div class="said">Ficou decidido começar pelos estudos de tomografia e deixar raio-x para a segunda semana.<small>🎙 ditado às 14:30</small></div>
+        <h2>Próximos passos</h2>
+        <div class="ck done"><i></i><span>Validar o STOW com 100 estudos</span></div>
+        <div class="ck"><i></i><span>Conferir o AccessionNumber duplicado</span></div>
+        <div class="ck"><i></i><span>Agendar a janela de corte</span></div>
+        <h2>Volume</h2>
+        <div class="tb">
+          <span class="th">Modalidade</span><span class="th n">Estudos</span><span class="th n">TB</span>
+          <span>CT</span><span class="n">182.400</span><span class="n">41,2</span>
+          <span>MR</span><span class="n">96.120</span><span class="n">22,8</span>
+          <span>CR/DX</span><span class="n">410.900</span><span class="n">6,1</span>
+        </div>
+      </article>
+    </main>
+    <aside class="right">
+      <div class="h">Citada em</div>
+      <div class="b"><span class="link">Reunião de Infra</span><span>…a ordem da migração…</span></div>
+      <div class="b"><span class="link">Riscos do Q4</span><span>…janela de corte do PACS…</span></div>
+      <div class="gap"></div>
+      <div class="h">BonsAI</div>
+      <div class="bd">
+        <svg><path d="M70 36 C 110 36, 100 84, 130 84" stroke="var(--accent)" stroke-width="1.4" fill="none"/></svg>
+        <div class="c" style="left:12px;top:22px">Migração PACS</div>
+        <div class="c new" style="left:96px;top:76px">Começar por CT</div>
+      </div>
+      <div style="margin-top:12px"><span class="bt">Abrir no BonsAI ↗</span></div>
+    </aside>
+  </div>
+
+  <div class="row mini">
+    <div>
+      <p class="frame-label">⌘K</p>
+      <div class="win k">
+        <div class="pal">
+          <div class="q">reuni<i></i></div>
+          <div class="it sel">Reunião de Infra<span class="r">ontem</span></div>
+          <div class="it">Reunião de kickoff<span class="r">28 out</span></div>
+          <div class="it">Ditar uma nova reunião<span class="r">⌥⌘N</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="frame-label">Ditado → nota</p>
+      <div class="win hist">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="l">
+          <div class="h">Histórico · hoje</div>
+          <div class="e ghost">Ficou decidido começar pelos estudos…<span>14:30</span></div>
+          <div class="e">Lembrar de pedir o acesso ao bucket de homologação.<span>11:02 · Slack</span></div>
+          <div class="e"><span class="mono">kubectl get pods -n pacs</span><span>09:41 · Terminal</span></div>
+        </div>
+        <div class="r">
+          <div class="drag">Ficou decidido começar pelos estudos de tomografia…<span>14:30</span></div>
+          <b style="font-weight:600">Migração PACS Central</b>
+          <p class="muted" style="margin:6px 0 0">…sem parar o atendimento.</p>
+          <div class="drop">Solte para inserir no cursor</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
