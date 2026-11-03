@@ -71,7 +71,8 @@ export type Command =
   /**
    * Uma resposta do Apple Foundation Models, sempre numa sessão nova (sem contexto entre chamadas).
    * `temperature: 0` é greedy. Passou de `timeoutMs`, o sidecar cancela e devolve `llm_timeout`.
-   * Erros: `llm_unavailable` (com `data.reason`), `llm_timeout`, `llm_refused` (guardrail).
+   * Erros: `llm_unavailable` (com `data.reason`), `llm_timeout`, `llm_refused` (guardrail),
+   * `llm_unsupported_language`, `llm_failed`. Só o modelo on-device (`SystemLanguageModel`), nunca o Private Cloud Compute.
    */
   | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number; temperature?: number; timeoutMs?: number }
   /** Aquece o modelo com estas instruções. O Bun manda no `record.started`, antes da transcrição chegar. */
@@ -138,7 +139,7 @@ export type EventMessage<E extends Event = Event> = E & { v: typeof IPC_VERSION 
 
 export type ResultMessage<T extends CommandType = CommandType> =
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: true; data: CommandResults[T] }
-  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`, `llm_unavailable`, `llm_timeout`, `llm_refused`… */
+  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`, `bad_message`, `llm_unavailable`, `llm_timeout`, `llm_refused`, `llm_unsupported_language`, `llm_failed`… */
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: false; error: string; data?: Record<string, unknown> };
 
 export type Message = CommandMessage | EventMessage | ResultMessage;
