@@ -56,6 +56,12 @@ export function cursorFile(id: string): string | undefined {
   return Number.isNaN(at.getTime()) ? undefined : `${dayOf(new Date(at.getTime() + MAX_TZ_SPREAD_MS))}.jsonl`;
 }
 
+/** O id mais novo que um arquivo de dia pode ter: o fim do dia no fuso mais a oeste, com folga (UTC−12). */
+function latestIn(file: string): string {
+  const start = Date.parse(`${file.slice(0, 10)}T00:00:00.000Z`);
+  return new Date(start + 24 * 3600_000 + MAX_TZ_SPREAD_MS).toISOString();
+}
+
 export class HistoryStore {
   readonly dir: string;
   private listeners = new Set<(e: HistoryEntry) => void>();
@@ -136,8 +142,8 @@ export class HistoryStore {
     const entries: HistoryEntry[] = [];
     // Com cursor, os dias mais novos que ele não têm nada para esta página.
     const cursorDay = before ? cursorFile(before) : undefined;
-    for (const day of await this.days()) {
-      if (cursorDay && day > cursorDay) continue;
+    const days = (await this.days()).filter((day) => !cursorDay || day <= cursorDay);
+    for (const [i, day] of days.entries()) {
       for (const e of await this.readDay(day)) {
         if (before && e.id >= before) continue;
         if (words.length) {
@@ -145,10 +151,16 @@ export class HistoryStore {
           if (!words.every((w) => hay.includes(w))) continue;
         }
         entries.push(e);
-        if (entries.length > max) return { entries: entries.slice(0, max), nextBefore: entries[max - 1]!.id };
       }
+      if (entries.length <= max) continue;
+      // O arquivo leva o dia local de quem ditou, então um dia mais velho ainda pode ter um ditado mais novo, de
+      // outro fuso (T914). Para quando nenhum dos próximos arquivos pode ter algo mais novo que o último da página.
+      entries.sort((a, b) => (a.id < b.id ? 1 : -1));
+      const next = days[i + 1];
+      if (!next || latestIn(next) < entries[max - 1]!.id) break;
     }
-    return { entries };
+    entries.sort((a, b) => (a.id < b.id ? 1 : -1));
+    return entries.length > max ? { entries: entries.slice(0, max), nextBefore: entries[max - 1]!.id } : { entries };
   }
 
   /** Apaga um ditado (e só ele) reescrevendo o arquivo do dia. */

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 
 import { api, type DictionaryTerm } from "../src/api.ts";
-import { RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
+import { LoadError, type LoadState, RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
 import { Button, Section } from "../src/kit/index.tsx";
 
 type Row = { key: string; term: string; aliases: string; isNew?: boolean };
@@ -15,19 +15,24 @@ const toTerms = (rows: Row[]): DictionaryTerm[] =>
 /** Termos que o STT deve reconhecer e que a limpeza nunca muda (DICOM, PACS, nomes de pessoas). */
 export function DictionarySection() {
   const [rows, setRows] = useState<Row[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<LoadState>("loading");
+  const loaded = state === "ready";
 
-  useEffect(() => {
+  const load = () => {
+    setState("loading");
     api.dictionary.get().then(
       (terms) => {
         setRows(toRows(terms));
-        setLoaded(true);
+        setState("ready");
       },
-      () => setLoaded(false),
+      // Um dictionary.json que não abre (editado à mão): avisa, e nada é salvo por cima dele (T914).
+      () => setState("error"),
     );
-  }, []);
+  };
+  useEffect(load, []);
 
   const status = useAutosave(rows, (r) => api.dictionary.set(toTerms(r)), loaded);
+  const incomplete = rows.filter((r) => !r.term.trim() && r.aliases.trim()).length;
   // Aliases que trocariam texto de verdade ("New York" → IAM, #434): avisa embaixo do termo, sem bloquear.
   const [warnings, setWarnings] = useState<Map<string, string[]>>(new Map());
   useEffect(() => {
@@ -48,7 +53,9 @@ export function DictionarySection() {
 
   return (
     <Section title="Dicionário">
-      {rows.length === 0 ? (
+      {state === "error" ? (
+        <LoadError file="dictionary.json" onRetry={load} />
+      ) : rows.length === 0 ? (
         <div className="kn-list-empty">Termos do seu trabalho, como DICOM, PACS ou nomes de pessoas, saem sempre com esta grafia.</div>
       ) : (
         rows.map((r) => (
@@ -94,7 +101,7 @@ export function DictionarySection() {
         <Button disabled={!loaded} onClick={() => setRows((rs) => [...rs, { key: rowKey(), term: "", aliases: "", isNew: true }])}>
           Adicionar termo
         </Button>
-        <SavedNote {...status} />
+        <SavedNote {...status} incomplete={incomplete} />
       </div>
     </Section>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api, type Snippet } from "../src/api.ts";
-import { RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
+import { LoadError, type LoadState, RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
 import { Button, Section } from "../src/kit/index.tsx";
 
 type Row = Snippet & { key: string; isNew?: boolean };
@@ -9,28 +9,35 @@ type Row = Snippet & { key: string; isNew?: boolean };
 /** Frases faladas que viram texto pronto: "meu e-mail" → o endereço. */
 export function SnippetsSection() {
   const [rows, setRows] = useState<Row[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<LoadState>("loading");
+  const loaded = state === "ready";
 
-  useEffect(() => {
+  const load = () => {
+    setState("loading");
     api.snippets.get().then(
       (snippets) => {
         setRows(snippets.map((s) => ({ ...s, key: rowKey() })));
-        setLoaded(true);
+        setState("ready");
       },
-      () => setLoaded(false),
+      // Um snippets.json que não abre (editado à mão): avisa, e nada é salvo por cima dele (T914).
+      () => setState("error"),
     );
-  }, []);
+  };
+  useEffect(load, []);
 
   const status = useAutosave(
     rows,
     (r) => api.snippets.set(r.filter((s) => s.trigger.trim() && s.text.trim()).map(({ trigger, text }) => ({ trigger, text }))),
     loaded,
   );
+  const incomplete = rows.filter((r) => !r.trigger.trim() !== !r.text.trim()).length;
   const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
   return (
     <Section title="Snippets">
-      {rows.length === 0 ? (
+      {state === "error" ? (
+        <LoadError file="snippets.json" onRetry={load} />
+      ) : rows.length === 0 ? (
         <div className="kn-list-empty">Fale "meu e-mail" e o endereço entra no lugar. Bom para assinaturas, links e respostas prontas.</div>
       ) : (
         rows.map((r) => (
@@ -70,7 +77,7 @@ export function SnippetsSection() {
         <Button disabled={!loaded} onClick={() => setRows((rs) => [...rs, { key: rowKey(), trigger: "", text: "", isNew: true }])}>
           Adicionar snippet
         </Button>
-        <SavedNote {...status} />
+        <SavedNote {...status} incomplete={incomplete} />
       </div>
     </Section>
   );

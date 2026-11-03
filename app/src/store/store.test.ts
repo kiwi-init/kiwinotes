@@ -77,6 +77,15 @@ describe("snippets", () => {
     expect(expandSnippets("Manda pro meu e-mail, por favor.", snippets)).toBe("Manda pro davi@example.com, por favor.");
   });
 
+  test("no meio da frase, o hífen ou o espaço dentro da palavra não importa (T914)", () => {
+    const plain = [{ trigger: "meu email", text: "davi@example.com" }];
+    expect(expandSnippets("Manda pro meu e-mail agora.", plain)).toBe("Manda pro davi@example.com agora.");
+    expect(expandSnippets("Manda pro meu e mail agora.", plain)).toBe("Manda pro davi@example.com agora.");
+    expect(expandSnippets("Manda pro meu email agora.", plain)).toBe("Manda pro davi@example.com agora.");
+    // Ainda só palavra inteira.
+    expect(expandSnippets("Manda pro meu emails agora.", plain)).toBe("Manda pro meu emails agora.");
+  });
+
   test("o gatilho mais longo ganha", () => {
     expect(expandSnippets("Usa o meu e-mail do trabalho.", snippets)).toBe("Usa o davi@empresa.com.");
   });
@@ -201,6 +210,23 @@ describe("histórico", () => {
     await writeFile(path.join(dir, "history", file), `${JSON.stringify(entry)}\n`);
     const cursor = (await h.search()).entries.find((e) => e.text === "cursor")!;
     expect((await h.search({ before: cursor.id })).entries.map((e) => e.text)).toEqual(["da viagem"]);
+  });
+
+  test("as páginas saem em ordem e não pulam nada quando um arquivo de dia tem um ditado de outro fuso (T914)", async () => {
+    const h = new HistoryStore(dir);
+    await h.add({ raw: "x", text: "cria a pasta", at: new Date(2026, 0, 1, 10) });
+    // 23h UTC de 03/11 ditado em UTC+2 (arquivo de 04/11) e 05h UTC de 04/11 ditado em UTC−8 (arquivo de 03/11).
+    const line = (iso: string, text: string) => `${JSON.stringify({ id: `${iso}-abcd`, at: iso, raw: text, text })}\n`;
+    await writeFile(path.join(dir, "history", "2026-11-04.jsonl"), line("2026-11-03T23:00:00.000Z", "leste"));
+    await writeFile(path.join(dir, "history", "2026-11-03.jsonl"), line("2026-11-04T05:00:00.000Z", "oeste"));
+    const seen: string[] = [];
+    let before: string | undefined;
+    do {
+      const page = await h.search({ limit: 1, before });
+      seen.push(...page.entries.map((e) => e.text));
+      before = page.nextBefore;
+    } while (before);
+    expect(seen).toEqual(["oeste", "leste", "cria a pasta"]);
   });
 
   test("avisa quem está ouvindo", async () => {

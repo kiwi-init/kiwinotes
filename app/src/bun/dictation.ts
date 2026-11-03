@@ -85,6 +85,11 @@ export class Dictation {
   attach(): void {
     const { sidecar } = this.options;
     this.offs.push(
+      // Um helper novo (restart depois de cair): as gravações do anterior não vão ter texto. Sem isso, cada ditado
+      // dali em diante sairia com o app e o tom do ditado anterior (T914).
+      sidecar.on("ready", () => {
+        this.recordings = [];
+      }),
       sidecar.on("app.active", (e) => {
         this.activeApp = { bundleId: e.bundleId, name: e.name };
       }),

@@ -80,8 +80,10 @@ export function expandSnippets(text: string, snippets: Snippet[]): string {
   const { folded, map } = foldWithMap(text);
   const found: { start: number; end: number; text: string }[] = [];
   for (const s of ordered) {
-    const words = normalizePhrase(s.trigger).split(" ").map(escape);
-    const re = new RegExp(words.join("[\\s\\-‐–—_]*"), "gu");
+    // Separador opcional entre quaisquer duas letras, como o `squash` do ditado inteiro: "meu email" casa com
+    // "meu e-mail" e "meu e mail" no meio da frase (T914).
+    const chars = [...normalizePhrase(s.trigger).replace(/ /g, "")].map(escape);
+    const re = new RegExp(chars.join("[\\s\\-‐–—_]*"), "gu");
     for (const m of folded.matchAll(re)) {
       const start = map[m.index!]!;
       const end = map[m.index! + m[0].length]!;

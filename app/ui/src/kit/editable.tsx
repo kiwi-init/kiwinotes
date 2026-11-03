@@ -3,30 +3,67 @@ import "./lists.css";
 
 import { useEffect, useRef, useState } from "react";
 
-/** Salva `value` 500 ms depois da última mudança. Devolve se acabou de salvar (para o "Salvo"). */
+import { Button } from "./index.tsx";
+
+/**
+ * Salva `value` 500 ms depois da última mudança. Devolve se acabou de salvar (para o "Salvo").
+ * O que ainda não foi salvo sai na hora quando a janela some, fecha ou o componente desmonta: antes, fechar a janela
+ * logo depois da última tecla perdia a edição (T914).
+ */
 export function useAutosave<T>(value: T, save: (v: T) => Promise<unknown>, enabled: boolean): { saved: boolean; error: boolean } {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(false);
   const first = useRef(true);
+  /** O valor que mudou e ainda não foi salvo. */
+  const pending = useRef<{ value: T } | null>(null);
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const alive = useRef(true);
+
+  const flush = useRef(() => {
+    const p = pending.current;
+    if (!p) return;
+    pending.current = null;
+    saveRef.current(p.value).then(
+      () => {
+        if (!alive.current) return;
+        setError(false);
+        setSaved(true);
+        setTimeout(() => alive.current && setSaved(false), 1400);
+      },
+      () => alive.current && setError(true),
+    );
+  }).current;
+
   useEffect(() => {
     if (!enabled) return;
     if (first.current) {
       first.current = false;
       return;
     }
-    const t = setTimeout(() => {
-      save(value).then(
-        () => {
-          setError(false);
-          setSaved(true);
-          setTimeout(() => setSaved(false), 1400);
-        },
-        () => setError(true),
-      );
-    }, 500);
+    pending.current = { value };
+    const t = setTimeout(flush, 500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, enabled]);
+
+  useEffect(() => {
+    alive.current = true;
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      flush();
+      alive.current = false;
+    };
+  }, [flush]);
+
   return { saved, error };
 }
 
@@ -59,10 +96,31 @@ export function TrashIcon() {
   );
 }
 
-export function SavedNote({ saved, error }: { saved: boolean; error: boolean }) {
+/** `incomplete`: linhas com algo escrito que ainda não valem (e não foram salvas), para o "Salvo" não enganar (T914). */
+export function SavedNote({ saved, error, incomplete = 0 }: { saved: boolean; error: boolean; incomplete?: number }) {
+  const text = error
+    ? "Não deu para salvar"
+    : incomplete
+      ? `Salvo, menos ${incomplete === 1 ? "a linha incompleta" : `as ${incomplete} linhas incompletas`}`
+      : "Salvo";
   return (
     <span className="kn-saved" data-show={saved || error} role="status" style={error ? { color: "var(--danger)" } : undefined}>
-      {error ? "Não deu para salvar" : "Salvo"}
+      {text}
     </span>
+  );
+}
+
+export type LoadState = "loading" | "ready" | "error";
+
+/** A lista não abriu (o arquivo editado à mão não é um JSON válido): diz qual, em vez de parecer vazia (T914). */
+export function LoadError({ file, onRetry }: { file: string; onRetry: () => void }) {
+  return (
+    <div className="kn-list-empty" role="alert">
+      <div style={{ color: "var(--danger)", marginBottom: 8 }}>
+        Não deu para ler o <code>{file}</code>. Corrija o arquivo (ou apague-o para começar do zero) e tente de novo. Até
+        lá, nada daqui é salvo.
+      </div>
+      <Button onClick={onRetry}>Tentar de novo</Button>
+    </div>
   );
 }

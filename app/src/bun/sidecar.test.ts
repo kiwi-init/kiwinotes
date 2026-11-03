@@ -149,4 +149,18 @@ describe("Sidecar", () => {
     expect(again.type).toBe("ready");
     expect(helper.procs).toHaveLength(2);
   });
+
+  test("onClose tells when the helper goes away, so the menu stops saying it's ready (T914)", async () => {
+    const helper = fakeHelper();
+    const s = make(helper);
+    await s.whenReady();
+    let closed = 0;
+    s.onClose(() => {
+      closed++;
+      expect(s.ready).toBeUndefined();
+    });
+    helper.procs[0]!.kill();
+    await Bun.sleep(30);
+    expect(closed).toBe(1);
+  });
 });
