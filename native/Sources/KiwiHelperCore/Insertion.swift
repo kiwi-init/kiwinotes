@@ -142,6 +142,13 @@ public enum LeadingSpace {
     /// Characters a dictation can start with that attach to what came before ("…, e depois", "…)").
     static let attaching: Set<Character> = [".", ",", ";", ":", "!", "?", "…", ")", "]", "}", "»", "”", "’", "%"]
 
+    /// Whether the text before the caret may be read at all. Only for a plain paste into a field that isn't a password
+    /// field: with Secure Event Input on (`.pasteKeepingText`) or an `AXSecureTextField`, Accessibility would read a
+    /// password, and a field that shows bullets would look like text and get a space pasted into the password (#787).
+    public static func mayRead(plan: InsertPlan, role: String?) -> Bool {
+        plan == .paste && role != "AXSecureTextField"
+    }
+
     /// Whether to put a space in front of `text`.
     /// - Parameter before: up to the two characters before the caret; "" at the start of the field; nil when the field
     ///   can't be read (no Accessibility text: Electron, some web fields). Nil and "" give no space, as before T733.

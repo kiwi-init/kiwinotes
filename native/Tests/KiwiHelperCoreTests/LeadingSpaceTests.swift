@@ -61,4 +61,17 @@ final class LeadingSpaceTests: XCTestCase {
         XCTAssertEqual(LeadingSpace.tail(of: "ok 🥝", caret: 5), "🥝")
         XCTAssertEqual(LeadingSpace.tail(of: "é.", caret: 2), "é.")
     }
+
+    /// The text before the caret is read only for a plain paste into a field that isn't a password field (#787).
+    func testNeverReadsAPasswordField() {
+        XCTAssertTrue(LeadingSpace.mayRead(plan: .paste, role: "AXTextArea"))
+        XCTAssertTrue(LeadingSpace.mayRead(plan: .paste, role: nil))
+        XCTAssertFalse(LeadingSpace.mayRead(plan: .paste, role: "AXSecureTextField"))
+        XCTAssertFalse(LeadingSpace.mayRead(plan: .pasteKeepingText(reason: "secure_input"), role: "AXTextField"))
+        XCTAssertFalse(LeadingSpace.mayRead(plan: .clipboardOnly(reason: "no_focus"), role: nil))
+        // The plan the helper actually makes with Secure Event Input on.
+        let secure = InsertPlan.decide(accessibilityGranted: true, secureInput: true,
+                                       focus: FocusInfo(role: "AXTextField", hasSelectedTextRange: true))
+        XCTAssertFalse(LeadingSpace.mayRead(plan: secure, role: "AXTextField"))
+    }
 }

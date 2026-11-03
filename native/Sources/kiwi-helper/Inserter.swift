@@ -76,8 +76,10 @@ final class Inserter {
             reason = nil
         }
 
-        // Only the two characters before the caret are read, and they go nowhere (no log, no reply).
-        let spaced = autoSpace && LeadingSpace.needed(before: focused.element.flatMap(Self.textBeforeCaret), text: text)
+        // Only the two characters before the caret are read, and they go nowhere (no log, no reply). Never in a
+        // password field or with Secure Event Input on (`mayRead`).
+        let spaced = autoSpace && LeadingSpace.mayRead(plan: plan, role: focused.info?.role)
+            && LeadingSpace.needed(before: focused.element.flatMap(Self.textBeforeCaret), text: text)
         let restore = restoreClipboard && reason == nil
         let ours = keeper.put(spaced ? " " + text : text, on: pasteboard, keepOriginal: restore)
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys, keeper] in
@@ -138,7 +140,8 @@ final class Inserter {
             var text: CFTypeRef?
             if AXUIElementCopyParameterizedAttributeValue(
                 element, kAXStringForRangeParameterizedAttribute as CFString, range, &text) == .success,
-               let text = text as? String {
+               let text = text as? String, !text.isEmpty {
+                // Empty with the caret past the start is an app that doesn't really answer: try `AXValue` (#787).
                 return text
             }
         }
