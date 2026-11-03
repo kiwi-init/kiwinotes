@@ -48,6 +48,11 @@ export class PermissionFlow {
   private current?: Permissions;
   private asked?: Permission[];
   private asking = false;
+  /**
+   * Um `update` por vez: com dois seguidos antes do `store.load()` terminar, os dois pediriam a mesma permissão, e o
+   * segundo pedido abriria os Ajustes junto com o diálogo (review #543).
+   */
+  private chain: Promise<unknown> = Promise.resolve();
   private offs: (() => void)[] = [];
 
   constructor(
@@ -58,8 +63,8 @@ export class PermissionFlow {
 
   attach(): void {
     this.offs.push(
-      this.sidecar.on("ready", (e) => void this.update(e.permissions)),
-      this.sidecar.on("permissions.changed", (e) => void this.update(e.permissions)),
+      this.sidecar.on("ready", (e) => this.enqueue(e.permissions)),
+      this.sidecar.on("permissions.changed", (e) => this.enqueue(e.permissions)),
       // O macOS ainda não perguntou do microfone: pergunta agora, no ditado que precisou dele.
       this.sidecar.on("record.error", (e) => {
         if (e.microphone === "undetermined") void this.request("microphone");
@@ -83,9 +88,13 @@ export class PermissionFlow {
     return next;
   }
 
+  private enqueue(permissions: Permissions) {
+    this.current = permissions;
+    this.chain = this.chain.then(() => this.update(permissions)).catch((e) => this.log(`update failed: ${String(e)}`));
+  }
+
   /** A cada estado novo: na primeira vez do app, pede a próxima que falta e que ainda não foi pedida sozinha. */
   private async update(permissions: Permissions) {
-    this.current = permissions;
     this.asked ??= await this.store.load().catch(() => []);
     if (this.asking) return;
     const next = ON_LAUNCH.find((p) => permissions[p] !== "granted" && !this.asked!.includes(p));

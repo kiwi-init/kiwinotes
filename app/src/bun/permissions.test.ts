@@ -75,6 +75,17 @@ describe("PermissionFlow", () => {
     expect(store.saved).toEqual(["inputMonitoring", "accessibility"]);
   });
 
+  test("two updates before the store loads ask only once (review #543)", async () => {
+    const { sidecar, asked, emit } = fake();
+    const store: AskedStore = { load: async () => (await Bun.sleep(5), []), save: async () => {} };
+    const flow = new PermissionFlow(sidecar, store, () => {});
+    flow.attach();
+    void emit(ready(perms({})));
+    void emit(changed(perms({})));
+    await Bun.sleep(50);
+    expect(asked).toEqual(["inputMonitoring"]);
+  });
+
   test("the microphone isn't asked at launch, only on the first dictation that needs it", async () => {
     const { sidecar, asked, emit } = fake();
     const flow = new PermissionFlow(sidecar, memoryStore(), () => {});
