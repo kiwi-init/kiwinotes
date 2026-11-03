@@ -77,6 +77,20 @@ describe("Dictation", () => {
     expect(added[0]).toMatchObject({ raw: "hum o dicom tá fora do ar", text: "O DICOM tá fora do ar", tone: "casual", app: { name: "Slack" } });
   });
 
+  test("the automatic space is asked for every tone but the literal one (T733)", async () => {
+    const { sidecar, d, added } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Notes", name: "Notas" } });
+    sidecar.emit(transcript("manda para o meu email"));
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Terminal", name: "Terminal" } });
+    sidecar.emit(transcript("git status"));
+    await d.idle();
+    const sent = sidecar.sent.flatMap((c) => (c.type === "insert.text" ? [c.autoSpace] : []));
+    expect(added.map((e) => e.tone)).toEqual(["default", "literal"]);
+    expect(sent).toEqual([true, false]);
+    // The history keeps the text without the space.
+    expect(added[1]!.text).toBe("git status");
+  });
+
   test("without record.started.app, the last app.active is the target", async () => {
     const { sidecar, d, added } = setup();
     sidecar.emit({ type: "app.active", bundleId: "com.apple.mail", name: "Mail", pid: 42 });

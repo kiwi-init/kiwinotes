@@ -154,7 +154,14 @@ export class Dictation {
 
     let insert: InsertResult;
     try {
-      const command = { type: "insert.text" as const, text, restoreClipboard: this.options.restoreClipboard ?? true };
+      // No terminal (tom literal), nada de espaço automático: o cursor da Acessibilidade não acompanha o do shell, e
+      // um comando que começa com espaço fica fora do histórico do zsh e do bash (HIST_IGNORE_SPACE, ignorespace).
+      const command = {
+        type: "insert.text" as const,
+        text,
+        restoreClipboard: this.options.restoreClipboard ?? true,
+        autoSpace: result.tone !== "literal",
+      };
       insert = await this.options.sidecar.send(this.options.dryRun ? { ...command, dryRun: true } : command);
     } catch (e) {
       insert = { v: 1, type: "result", id: "", ok: false, error: e instanceof Error ? e.message : String(e) };

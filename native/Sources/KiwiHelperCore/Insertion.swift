@@ -133,3 +133,35 @@ public final class ClipboardKeeper {
         return pending.snapshot.restore(to: pasteboard, ifStill: ours)
     }
 }
+
+/// The space in front of a dictation that lands right after other text (T733): two dictations in a row in the same
+/// field came out glued ("…sem acesso.Manda para…"). Wispr Flow and VoiceInk put one in too.
+public enum LeadingSpace {
+    /// Characters after which the text attaches with no space: an opening bracket or quote, a path or a handle.
+    static let opening: Set<Character> = ["(", "[", "{", "«", "“", "‘", "¿", "¡", "/", "\\", "@", "#"]
+    /// Characters a dictation can start with that attach to what came before ("…, e depois", "…)").
+    static let attaching: Set<Character> = [".", ",", ";", ":", "!", "?", "…", ")", "]", "}", "»", "”", "’", "%"]
+
+    /// Whether to put a space in front of `text`.
+    /// - Parameter before: up to the two characters before the caret; "" at the start of the field; nil when the field
+    ///   can't be read (no Accessibility text: Electron, some web fields). Nil and "" give no space, as before T733.
+    public static func needed(before: String?, text: String) -> Bool {
+        guard let before, let previous = before.last, let first = text.first else { return false }
+        if first.isWhitespace || attaching.contains(first) { return false }
+        if previous.isWhitespace || opening.contains(previous) { return false }
+        // A straight quote opens after a space or at the start ( ele disse "| ) and closes after text ( "Oi."| ).
+        if previous == "\"" || previous == "'" {
+            let earlier = before.dropLast().last
+            return earlier.map { !$0.isWhitespace && !opening.contains($0) } ?? false
+        }
+        return true
+    }
+
+    /// Up to the two characters before `caret` (a UTF-16 offset, as Accessibility counts) in a field's whole value.
+    /// For apps that answer `AXValue` but not `AXStringForRange`. Nil when the caret is past the end.
+    public static func tail(of value: String, caret: Int) -> String? {
+        let units = Array(value.utf16)
+        guard caret >= 0, caret <= units.count else { return nil }
+        return String(decoding: units[max(0, caret - 2)..<caret], as: UTF16.self)
+    }
+}
