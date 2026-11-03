@@ -161,7 +161,8 @@ export type Event =
   /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
   | { type: "record.cancelled"; reason: RecordReason }
   /**
-   * Não deu para gravar: sem microfone, sem permissão, ou `device_changed` (o mic trocou no meio).
+   * Não deu para gravar: sem microfone, sem permissão, `device_changed` (o mic trocou no meio e o novo não subiu)
+   * ou `no_audio` (o mic parou de mandar áudio, mesmo depois de um engine novo; T590).
    * Pode vir logo depois do `record.started`, que sai antes de o mic subir.
    */
   | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState }
