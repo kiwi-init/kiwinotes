@@ -5,7 +5,10 @@ import Foundation
 import WhisperKit
 
 // stt-bench <engine>        run the corpus and write results/<engine>.json
-//   engines: parakeet-v3 | parakeet-ultra | whisper:<model>, each with an optional +vocab (uses vocab.txt) (a name from argmaxinc/whisperkit-coreml, e.g. openai_whisper-small)
+//   engines: parakeet-v3 | parakeet-ultra | parakeet-unified | nemotron-unified | whisper:<model>
+//   (a name from argmaxinc/whisperkit-coreml, e.g. openai_whisper-small), then optionally:
+//     @<lang>  a language hint: Parakeet v3/Ultra filter tokens by script, Nemotron takes it as its prompt (pt, en, auto)
+//     +vocab   each engine's own way to use the dictionary in vocab.txt
 // stt-bench --list-whisper  list WhisperKit models
 // One engine per process, so the memory numbers are its own.
 
@@ -24,13 +27,15 @@ final class Parakeet: Engine {
     let name: String
     private let version: AsrModelVersion
     private let vocabulary: [String]?
+    private let language: Language?
     private var manager: AsrManager?
     private var boosting: VocabularyBoostingSession?
 
-    init(name: String, version: AsrModelVersion, vocabulary: [String]?) {
+    init(name: String, version: AsrModelVersion, vocabulary: [String]?, language: Language?) {
         self.name = name
         self.version = version
         self.vocabulary = vocabulary
+        self.language = language
     }
 
     func load() async throws {
@@ -52,10 +57,43 @@ final class Parakeet: Engine {
     func transcribe(_ samples: [Float]) async throws -> String {
         // Each dictation is its own utterance: a fresh decoder state, no context carried over.
         var state = TdtDecoderState.make(decoderLayers: await manager!.decoderLayerCount)
-        let result = try await manager!.transcribe(samples, decoderState: &state)
+        let result = try await manager!.transcribe(samples, decoderState: &state, language: language)
         guard let boosting else { return result.text }
         let rescored = await boosting.rescore(text: result.text, tokenTimings: result.tokenTimings ?? [], audioSamples: samples)
         return rescored?.text ?? result.text
+    }
+}
+
+/// The 0.6B "unified" checkpoints, run offline (whole clip, 15 s windows) the way VoiceInk runs them in batch.
+/// `parakeet-unified` is English only; `nemotron-unified` covers 25 European languages with a language prompt.
+final class Unified: Engine {
+    let name: String
+    private let family: UnifiedModelFamily
+    private let vocabulary: [String]?
+    private var manager: UnifiedAsrManager?
+
+    init(name: String, family: UnifiedModelFamily, vocabulary: [String]?) {
+        self.name = name
+        self.family = family
+        self.vocabulary = vocabulary
+    }
+
+    func load() async throws {
+        let manager = UnifiedAsrManager(config: UnifiedConfig(family: family), encoderPrecision: .int8)
+        try await manager.loadModels()
+        if let vocabulary {
+            let ctc = try await CtcModels.downloadAndLoad(variant: .ctc110m)
+            try await manager.configureVocabularyBoosting(
+                vocabulary: CustomVocabularyContext(terms: vocabulary.map { CustomVocabularyTerm(text: $0) }),
+                ctcModels: ctc,
+                thresholds: .init(cbw: 0, minSimilarity: 0.7))
+        }
+        self.manager = manager
+    }
+
+    func transcribe(_ samples: [Float]) async throws -> String {
+        try await manager!.reset()
+        return try await manager!.transcribe(samples)
     }
 }
 
@@ -199,12 +237,16 @@ if args.first == "--list-whisper" {
     exit(0)
 }
 guard let spec = args.first else {
-    print("usage: stt-bench parakeet-v3 | parakeet-ultra | whisper:<model> | --list-whisper")
+    print("usage: stt-bench <parakeet-v3|parakeet-ultra|parakeet-unified|nemotron-unified|whisper:<model>>[@lang][+vocab] | --list-whisper")
     exit(2)
 }
 // A "+vocab" suffix turns on each engine's own way to use the dictionary in vocab.txt.
 let useVocab = spec.hasSuffix("+vocab")
-let base = useVocab ? String(spec.dropLast("+vocab".count)) : spec
+let withoutVocab = useVocab ? String(spec.dropLast("+vocab".count)) : spec
+// An "@pt" / "@en" / "@auto" suffix is the language hint (VoiceInk passes the person's chosen language).
+let langParts = withoutVocab.split(separator: "@", maxSplits: 1).map(String.init)
+let base = langParts[0]
+let lang = langParts.count > 1 ? langParts[1] : nil
 let vocabulary: [String]? = useVocab
     ? try String(contentsOf: root.appendingPathComponent("vocab.txt"), encoding: .utf8)
         .split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
@@ -212,8 +254,15 @@ let vocabulary: [String]? = useVocab
     : nil
 let engine: Engine
 switch base {
-case "parakeet-v3": engine = Parakeet(name: spec, version: .v3, vocabulary: vocabulary)
-case "parakeet-ultra": engine = Parakeet(name: spec, version: .ultra, vocabulary: vocabulary)
+case "parakeet-v3", "parakeet-ultra":
+    let hint = lang.flatMap(Language.init(rawValue:))
+    guard lang == nil || hint != nil else { print("unknown language \(lang!)"); exit(2) }
+    engine = Parakeet(name: spec, version: base == "parakeet-v3" ? .v3 : .ultra, vocabulary: vocabulary, language: hint)
+case "parakeet-unified":
+    engine = Unified(name: spec, family: .parakeetEnglish, vocabulary: vocabulary)
+case "nemotron-unified":
+    guard let prompt = NemotronUnifiedLanguage(rawValue: lang ?? "auto") else { print("unknown language \(lang!)"); exit(2) }
+    engine = Unified(name: spec, family: .nemotronMultilingual(prompt), vocabulary: vocabulary)
 case _ where base.hasPrefix("whisper:"): engine = Whisper(model: String(base.dropFirst("whisper:".count)), vocabulary: vocabulary)
 default:
     print("unknown engine \(spec)")
