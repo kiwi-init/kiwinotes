@@ -63,6 +63,11 @@ jobs:
         timeout-minutes: 5
         run: for i in 1 2 3; do bun run prepare:eb && exit 0; echo "electrobun prepare failed ($i of 3)"; [ "$i" -lt 3 ] && sleep 20; done; exit 1
 
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
       - name: Test
         run: bun test
 
