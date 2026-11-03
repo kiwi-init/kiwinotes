@@ -6,3 +6,4 @@ artifacts/
 livewire-screenshot.png
 .cottontail-tmp/
 .helper/
+.ui-channel/
