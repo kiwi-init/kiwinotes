@@ -24,23 +24,24 @@
   <div class="seg" id="pages">
     <button data-p="overview.html">Visão geral</button>
     <button data-p="a-papel.html">A · Papel</button>
-    <button data-p="b-oficina-v3.html">B v3 · simples</button>
+    <button data-p="b-oficina-v4.html">B v4 · uma superfície</button>
+    <button data-p="b-oficina-v3.html">B v3</button>
     <button data-p="b-oficina-v2.html">B v2</button>
     <button data-p="b-oficina.html">B · Oficina</button>
     <button data-p="c-fluxo.html">C · Fluxo</button>
   </div>
   <div class="seg" id="theme"><button data-t="light" class="on">Claro</button><button data-t="dark">Escuro</button></div>
-  <span class="hint">teclas: 1–6 trocam a opção · D alterna claro/escuro · ⌘+ / ⌘− dão zoom</span>
+  <span class="hint">teclas: 1–7 trocam a opção · D alterna claro/escuro · ⌘+ / ⌘− dão zoom</span>
 </header>
 <div id="stage"><iframe id="f" scrolling="no"></iframe></div>
 <script>
   const f = document.getElementById("f");
-  let page = "b-oficina-v3.html", theme = "light";
+  let page = "b-oficina-v4.html", theme = "light";
   try { page = page; theme = localStorage.getItem("t") || theme; } catch {}
   function fit() {
     const s = Math.min(1, document.documentElement.clientWidth / 1768);
     f.style.transform = `scale(${s})`;
-    const h = { "b-oficina-v3.html": 1360, "b-oficina-v2.html": 1560, "overview.html": 560, "a-papel.html": 1620, "b-oficina.html": 1540, "c-fluxo.html": 1540 }[page] || 1620;
+    const h = { "b-oficina-v4.html": 1380, "b-oficina-v3.html": 1360, "b-oficina-v2.html": 1560, "overview.html": 560, "a-papel.html": 1620, "b-oficina.html": 1540, "c-fluxo.html": 1540 }[page] || 1620;
     f.style.height = h + "px";
     document.getElementById("stage").style.height = h * s + "px";
   }
@@ -56,9 +57,9 @@
   addEventListener("resize", fit);
   document.getElementById("pages").onclick = (e) => { if (e.target.dataset.p) { page = e.target.dataset.p; show(); } };
   document.getElementById("theme").onclick = (e) => { if (e.target.dataset.t) { theme = e.target.dataset.t; show(); } };
-  const order = ["b-oficina-v3.html", "b-oficina-v2.html", "overview.html", "a-papel.html", "b-oficina.html", "c-fluxo.html"];
+  const order = ["b-oficina-v4.html", "b-oficina-v3.html", "b-oficina-v2.html", "overview.html", "a-papel.html", "b-oficina.html", "c-fluxo.html"];
   addEventListener("keydown", (e) => {
-    if (e.key >= "1" && e.key <= "6") { page = order[e.key - 1]; show(); }
+    if (e.key >= "1" && e.key <= "7") { page = order[e.key - 1]; show(); }
     if (e.key.toLowerCase() === "d") { theme = theme === "dark" ? "light" : "dark"; show(); }
   });
   show();
