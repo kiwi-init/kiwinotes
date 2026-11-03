@@ -24,6 +24,9 @@ final class AudioCapture {
     /// Called on `levelQueue`, at a steady ~30 Hz while recording.
     var onLevel: ((Float) -> Void)?
 
+    /// The input device changed mid-recording (AirPods in or out) and capture could not go on. Main thread.
+    var onDeviceLost: ((String) -> Void)?
+
     private let engine = AVAudioEngine()
     private let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     private var converter: AVAudioConverter?
@@ -34,45 +37,107 @@ final class AudioCapture {
     private var levelTimer: DispatchSourceTimer?
     private let samplesQueue = DispatchQueue(label: "kiwi.audio.samples")
     private var samples: [Float] = []
+    /// Guarded by `samplesQueue`: buffers that arrive while not capturing are dropped.
+    private var capturing = false
+    private var tapInstalled = false
+    private var configObserver: NSObjectProtocol?
     private(set) var isRecording = false
+
+    init() {
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in self?.configurationChanged() }
+    }
+
+    deinit {
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
+    }
+
+    /// Gets the tap and the engine ready ahead of the next recording, so `start` only has to start the engine
+    /// (the first syllable is what's lost while it comes up). Doesn't start the device: no mic indicator.
+    /// Call only with the mic granted; touching the input node earlier can bring up the system prompt.
+    func warmUp() {
+        guard !isRecording else { return }
+        do {
+            try installTapIfNeeded()
+            engine.prepare()
+        } catch {
+            removeTap() // `start` tries again and reports the error
+        }
+    }
 
     func start() throws {
         guard !isRecording else { return }
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else { throw AudioCaptureError.noInputDevice }
-        guard let converter = AVAudioConverter(from: format, to: target) else { throw AudioCaptureError.converter }
-        self.converter = converter
+        try installTapIfNeeded()
+        converter?.reset()
         meter.reset()
         levelQueue.sync { pacer.reset() }
-        samplesQueue.sync { samples.removeAll(keepingCapacity: true) }
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.process(buffer)
+        samplesQueue.sync {
+            samples.removeAll(keepingCapacity: true)
+            capturing = true
         }
-        engine.prepare()
         do {
             try engine.start()
         } catch {
-            input.removeTap(onBus: 0)
+            samplesQueue.sync { capturing = false }
+            removeTap()
             throw error
         }
         isRecording = true
         startLevelTimer()
     }
 
-    /// Stops and hands back everything recorded since `start`.
+    /// Stops and hands back everything recorded since `start`. The tap stays, so the next `start` is quick.
     func stop() -> [Float] {
         guard isRecording else { return [] }
-        engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRecording = false
         levelTimer?.cancel()
         levelTimer = nil
         levelQueue.sync { pacer.reset() }
-        return samplesQueue.sync {
+        let out = samplesQueue.sync {
+            capturing = false
             let out = samples
             samples.removeAll()
             return out
+        }
+        engine.prepare()
+        return out
+    }
+
+    private func installTapIfNeeded() throws {
+        guard !tapInstalled else { return }
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else { throw AudioCaptureError.noInputDevice }
+        guard let converter = AVAudioConverter(from: format, to: target) else { throw AudioCaptureError.converter }
+        self.converter = converter
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            self?.process(buffer)
+        }
+        tapInstalled = true
+    }
+
+    private func removeTap() {
+        guard tapInstalled else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        tapInstalled = false
+    }
+
+    /// macOS stopped the engine because the input device or its format changed. The old tap has the old
+    /// format, so rebuild it; mid-recording, start again and keep what was already captured.
+    private func configurationChanged() {
+        removeTap()
+        guard isRecording else { return warmUp() }
+        do {
+            try installTapIfNeeded()
+            try engine.start()
+        } catch {
+            levelTimer?.cancel()
+            levelTimer = nil
+            isRecording = false
+            samplesQueue.sync { capturing = false }
+            onDeviceLost?("device_changed")
         }
     }
 
@@ -94,7 +159,12 @@ final class AudioCapture {
         }
         guard error == nil, let channel = out.floatChannelData?[0], out.frameLength > 0 else { return }
         let chunk = UnsafeBufferPointer(start: channel, count: Int(out.frameLength))
-        samplesQueue.sync { samples.append(contentsOf: chunk) }
+        let kept = samplesQueue.sync { () -> Bool in
+            guard capturing else { return false }
+            samples.append(contentsOf: chunk)
+            return true
+        }
+        guard kept else { return }
         // The tap calls back on one thread at a time, so `meter` needs no lock.
         let levels = meter.push(chunk)
         if !levels.isEmpty { levelQueue.async { self.pacer.push(levels) } }

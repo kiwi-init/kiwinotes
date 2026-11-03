@@ -121,7 +121,10 @@ export type Event =
   | { type: "record.stopped"; reason: RecordReason; mode: StopMode; durationMs: number; samples: number; audioPath?: string }
   /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
   | { type: "record.cancelled"; reason: RecordReason }
-  /** Não deu para gravar: sem microfone ou sem permissão. */
+  /**
+   * Não deu para gravar: sem microfone, sem permissão, ou `device_changed` (o mic trocou no meio).
+   * Pode vir logo depois do `record.started`, que sai antes de o mic subir.
+   */
   | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState }
   /** Nível RMS de 0 a 1, ~30 Hz enquanto grava. Alimenta a onda do overlay. */
   | { type: "audio.level"; rms: number }
@@ -140,7 +143,7 @@ export type EventMessage<E extends Event = Event> = E & { v: typeof IPC_VERSION 
 
 export type ResultMessage<T extends CommandType = CommandType> =
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: true; data: CommandResults[T] }
-  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`, `bad_message`, `llm_unavailable`, `llm_timeout`, `llm_refused`, `llm_unsupported_language`, `llm_failed`… */
+  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`, `bad_message`, `invalid_value`, `already_recording`, `llm_unavailable`, `llm_timeout`, `llm_refused`, `llm_unsupported_language`, `llm_failed`… */
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: false; error: string; data?: Record<string, unknown> };
 
 export type Message = CommandMessage | EventMessage | ResultMessage;

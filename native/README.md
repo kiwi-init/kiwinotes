@@ -18,7 +18,7 @@ The probe prints each line after the ms since it started, so you can read latenc
 - For Fn: set **System Settings → Keyboard → "Press 🌐 key to" → Do Nothing**, otherwise macOS opens the emoji picker or its own dictation.
 
 ## Events (helper → app)
-`ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}`, `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `permissions.changed`, `log`.
+`ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}` (also `device_changed`; may follow `record.started`, which goes out before the mic is up), `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `permissions.changed`, `log`.
 
 ## Commands (app → helper)
 `ping`, `config.set`, `record.start`, `record.stop`, `permissions.request {permission}`, `llm.prewarm {system}` and `llm.complete {system, prompt, maxTokens?, temperature?, timeoutMs?}` (Apple Foundation Models, on-device only, fresh session per call; `ready` says `llm: {available, reason?}`). `overlay.state {state, message?}` drives the dictation pill (ADR 0005); its ✕ and ✓ end a recording with `reason: "overlay"`. `kiwi-helper --overlay-snapshot <dir>` renders it in each state as PNGs. `insert.text` and `notify` return `not_implemented` until their tasks land.
