@@ -74,7 +74,11 @@ export type Command =
   | { type: "record.stop" }
   /** `message` vale no `error` e no `done` (secure input, #224): com mensagem, o `done` fica 2,5 s em vez de 0,7 s. */
   | { type: "overlay.state"; state: OverlayState; message?: string }
-  | { type: "insert.text"; text: string; restoreClipboard: boolean }
+  /**
+   * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
+   * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.
+   */
+  | { type: "insert.text"; text: string; restoreClipboard: boolean; dryRun?: boolean }
   | { type: "notify"; title: string; body: string }
   | { type: "permissions.request"; permission: Permission }
   /**
@@ -114,6 +118,8 @@ export interface CommandResults {
     restored: boolean;
     reason?: "no_focus" | "no_text_field" | "no_accessibility" | "secure_input";
     app?: string;
+    /** Só no `dryRun`: nada foi colado nem copiado. */
+    dryRun?: true;
   };
   notify: Record<string, never>;
   "permissions.request": { permission: Permission; state: PermissionState };

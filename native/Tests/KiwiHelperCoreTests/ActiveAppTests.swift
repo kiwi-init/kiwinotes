@@ -23,6 +23,14 @@ final class ActiveAppTests: XCTestCase {
         XCTAssertNil(filter.next(slack))
     }
 
+    /// #491: if Electrobun's windows are not the helper's direct parent, the bundle id still gives Kiwi away.
+    func testKiwiByBundleIdEvenFromAnotherProcess() {
+        var filter = ActiveAppFilter(ownPids: [])
+        XCTAssertNil(filter.next(ActiveApp(bundleId: "app.kiwinotes.desktop", name: "Kiwi Notes", pid: 900)))
+        XCTAssertNil(filter.next(ActiveApp(bundleId: "app.kiwinotes.desktop-dev", name: "Kiwi Notes (dev)", pid: 901)))
+        XCTAssertEqual(filter.next(ActiveApp(bundleId: "app.kiwinotesx", name: "Other", pid: 902))?.pid, 902)
+    }
+
     func testNoAppOrNoBundleIdStaysQuiet() {
         var filter = ActiveAppFilter(ownPids: [])
         XCTAssertNil(filter.next(nil))
