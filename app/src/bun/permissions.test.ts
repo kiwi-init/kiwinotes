@@ -151,6 +151,24 @@ describe("PermissionFlow", () => {
     expect(resets).toEqual(["accessibility"]);
   });
 
+  test("a stale asked list (tccutil reset, new build) doesn't block the click (T825)", async () => {
+    // harry's case (#819): permissions.json still has both from the old app, and the TCC entries were reset.
+    for (const state of ["denied", "undetermined"] as const) {
+      const { sidecar, asked, resets, emit } = fake();
+      const flow = new PermissionFlow(sidecar, memoryStore(["inputMonitoring", "accessibility"]), () => {});
+      flow.attach();
+      await emit(ready(perms({ inputMonitoring: state, accessibility: state })));
+      // Nothing on its own: they were asked before (no Settings opening at every launch).
+      expect(asked).toEqual([]);
+      // The click always reaches the helper as a click (reset), which ends in Settings (PermissionAsk, T825).
+      expect(await flow.askNext()).toBe("inputMonitoring");
+      expect(resets).toEqual(["inputMonitoring"]);
+      await emit(changed(perms({ inputMonitoring: "granted", accessibility: state })));
+      expect(await flow.askNext()).toBe("accessibility");
+      expect(resets).toEqual(["inputMonitoring", "accessibility"]);
+    }
+  });
+
   test("with KIWI_DEBUG=1 the menu click never resets (#666)", async () => {
     const { sidecar, asked, resets, emit } = fake();
     const flow = new PermissionFlow(sidecar, memoryStore(), () => {}, false, false);

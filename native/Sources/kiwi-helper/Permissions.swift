@@ -61,28 +61,39 @@ enum Permission: String, CaseIterable {
         }
     }
 
-    /// One window at a time: the system prompt the first time, System Settings after that (PermissionAsk).
-    /// `reset` comes only from a person's click in the app: it forgets this app's entry and prompts again (T658).
+    /// What `PermissionAsk` says, in order: reset, prompt, Settings. On its own, one window at a time; a person's click
+    /// (`reset`, only from the app's menu) always ends in something visible (T658, T825).
     func request(reset: Bool = false, completion: @escaping (String) -> Void) {
-        // Who macOS charges is looked up only for a reset: the decision (Kiwi Notes only) is in PermissionAsk.
+        // Who macOS charges is looked up only for a click: the decision (Kiwi Notes only) is in PermissionAsk.
         let responsible = reset ? Responsible.current()?.bundleId : nil
-        switch PermissionAsk.next(state: status, askedBefore: askedBefore, reset: reset, responsibleBundleId: responsible) {
-        case .none:
-            completion(status)
-        case .openSettings:
-            NSWorkspace.shared.open(settingsURL)
-            completion(status)
-        case .systemPrompt:
-            prompt(completion: completion)
-        case .resetAndPrompt:
-            guard resetEntry() else {
-                NSWorkspace.shared.open(settingsURL)
-                return completion(status)
+        let ask = PermissionAsk.next(permission: rawValue, state: status, askedBefore: askedBefore, reset: reset,
+                                     responsibleBundleId: responsible)
+        // A reset that fails still leaves the prompt and Settings to show.
+        if ask.reset { _ = resetEntry() }
+        guard ask.prompt else {
+            if ask.settings != .never { NSWorkspace.shared.open(settingsURL) }
+            return completion(status)
+        }
+        let started = Date()
+        prompt { state in
+            switch ask.settings {
+            case .never:
+                completion(state)
+            case .after:
+                DispatchQueue.main.asyncAfter(deadline: .now() + PermissionAsk.settingsDelay) {
+                    NSWorkspace.shared.open(self.settingsURL)
+                    completion(self.status)
+                }
+            case .ifNoPrompt:
+                if PermissionAsk.openSettings(granted: state == "granted", elapsed: Date().timeIntervalSince(started)) {
+                    NSWorkspace.shared.open(self.settingsURL)
+                }
+                completion(state)
             }
-            prompt(completion: completion)
         }
     }
 
+    /// The system prompt. The microphone's answers when the person clicks; the other two return at once.
     private func prompt(completion: @escaping (String) -> Void) {
         UserDefaults.standard.set(true, forKey: "asked.\(rawValue)")
         switch self {

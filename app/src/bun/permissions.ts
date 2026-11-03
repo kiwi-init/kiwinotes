@@ -5,7 +5,7 @@
 // - o microfone no primeiro ditado, quando o macOS ainda não perguntou (`record.error` com `undetermined`);
 // - e sempre que a pessoa clicar em "Permitir acesso…" no menu da barra, enquanto faltar alguma. Esse clique pede com
 //   `reset`: se a permissão já foi pedida e segue faltando (a chave ligada nos Ajustes que não vale, T658), o helper
-//   apaga a entrada e pede de novo, em vez de abrir os Ajustes onde a chave já está ligada.
+//   apaga a entrada e pede de novo, e depois abre os Ajustes, para o clique nunca terminar em nada (T825).
 // O que já foi pedido sozinho fica em <dados>/permissions.json, para não abrir os Ajustes a cada vez que o app sobe.
 
 import path from "node:path";
