@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { appsIn, verifyApp, verifyBundle, withDmg } from "./signing.ts";
+import { appsIn, findIdentity, type SigningIdentity, verifyApp, verifyBundle, verifyRequirement, withDmg } from "./signing.ts";
 
 function files(dir: string | undefined, ext: string): string[] {
   if (!dir || !existsSync(dir)) return [];
@@ -27,16 +27,17 @@ function checkAutoclose(app: string, where: string): void {
 }
 
 /** Os .app de `dir` e os de dentro dos .tar.zst que eles levam em Resources. */
-function checkApps(dir: string, where: string): number {
+function checkApps(dir: string, where: string, identity?: SigningIdentity): number {
   let count = 0;
   for (const app of appsIn(dir)) {
     verifyApp(app);
+    if (identity) verifyRequirement(app, identity);
     console.log(`verify-signature: ok ${where}: ${path.basename(app)}`);
     count++;
     const inner = files(path.join(app, "Contents", "Resources"), ".tar.zst");
     if (inner.length) checkAutoclose(app, where);
     for (const tar of inner) {
-      for (const inner of verifyBundle(tar)) console.log(`verify-signature: ok ${where}: ${inner} inside ${path.basename(tar)}`);
+      for (const inner of verifyBundle(tar, identity)) console.log(`verify-signature: ok ${where}: ${inner} inside ${path.basename(tar)}`);
       count++;
     }
   }
@@ -49,20 +50,23 @@ function checkApps(dir: string, where: string): number {
   const artifactDir = process.env.ELECTROBUN_ARTIFACT_DIR;
   const env = process.env.ELECTROBUN_BUILD_ENV;
   if (!buildDir) throw new Error("verify-signature: no ELECTROBUN_BUILD_DIR");
-  let count = checkApps(buildDir, "build");
+  // Com a identidade local (T1074), cada app tem que ter o requirement preso a ela, o que mantém o TCC entre builds.
+  const identity = findIdentity();
+  if (identity) console.log(`verify-signature: expecting "${identity.name}" (${identity.hash.slice(0, 8)}) on every app`);
+  let count = checkApps(buildDir, "build", identity);
   // O artifacts/ é um só para todos os envs: só o que este build fez. O build dev não faz wrapper nem artifacts. Um
   // build com wrapper (o .app em build/<env> leva o tar em Resources) fez o <env>-*.tar.zst e o .dmg do artifacts/.
   const wrapped = appsIn(buildDir).some((app) => files(path.join(app, "Contents", "Resources"), ".tar.zst").length > 0);
   const artifacts = wrapped ? files(artifactDir, ".tar.zst").filter((f) => path.basename(f).startsWith(`${env}-`)) : [];
   if (wrapped && !artifacts.length) throw new Error(`verify-signature: no ${env}-*.tar.zst in ${artifactDir}`);
   for (const tar of [...files(buildDir, ".tar.zst"), ...artifacts]) {
-    for (const inner of verifyBundle(tar)) console.log(`verify-signature: ok ${path.basename(tar)}: ${inner}`);
+    for (const inner of verifyBundle(tar, identity)) console.log(`verify-signature: ok ${path.basename(tar)}: ${inner}`);
     count++;
   }
   const dmgs = wrapped ? [...files(buildDir, ".dmg"), ...files(artifactDir, ".dmg")] : [];
   if (wrapped && !dmgs.length) throw new Error(`verify-signature: no .dmg in ${artifactDir}`);
   for (const dmg of dmgs) {
-    count += withDmg(dmg, (mount) => checkApps(mount, path.basename(dmg)));
+    count += withDmg(dmg, (mount) => checkApps(mount, path.basename(dmg), identity));
   }
   if (!count) throw new Error(`verify-signature: no .app to check in ${buildDir}`);
 }

@@ -1,5 +1,5 @@
 // postBuild e postWrap (electrobun.config.ts): põe no Info.plist do .app as frases que o macOS mostra ao pedir
-// permissão, e depois assina o .app inteiro ad hoc.
+// permissão, e depois assina o .app inteiro (com a identidade local, se existir, ou ad hoc).
 //
 // - As frases: o Electrobun não tem campo para elas, e sem o NSMicrophoneUsageDescription o macOS nega o mic ao helper,
 //   que roda como filho do app (#133).
@@ -7,8 +7,9 @@
 //   `Info.plist=not bound`, bundle sem selo). O TCC atribui o helper ao launcher, mas a Acessibilidade ligada nos
 //   Ajustes para o "Kiwi Notes.app" não valia para ele. Assinado aqui, o launcher fica com
 //   `Identifier=app.kiwinotes.desktop`, o Info.plist bound e os recursos selados. O custo: a assinatura ad hoc é o
-//   cdhash, que muda a cada build, então a cada build novo a permissão precisa ser dada de novo. Isso só some com uma
-//   Developer ID (decisão do harry, fora do T658).
+//   cdhash, que muda a cada build, então a cada build novo a permissão precisa ser dada de novo. Com a identidade local
+//   de `make-signing-identity.sh` (T1074), o requirement fica preso ao certificado e a permissão passa de um build
+//   para o outro; sem ela, segue ad hoc.
 // - A ordem importa: o `plutil` muda o Info.plist, então a assinatura vem depois dele. Com `codesign: true`, o Hutch
 //   assina depois disto (postWrap roda "before final packaging/signing"); confira com `codesign --verify --deep --strict`.
 // - No postWrap, o app de dentro do `KiwiNotes.app.tar.zst` é reassinado antes do wrapper (T762): o Electrobun mexe
@@ -25,7 +26,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { resealBundles, signAdHoc } from "./signing.ts";
+import { findIdentity, resealBundles, sign } from "./signing.ts";
 
 /** No Info.plist do wrapper: o ambiente que o LaunchServices passa ao extractor (T951). */
 const WRAPPER_ENVIRONMENT = { ELECTROBUN_INSTALLER_UI_AUTOCLOSE: "1" };
@@ -70,12 +71,14 @@ function setUsage(plist: string): void {
   // postWrap: o app de dentro do tar primeiro, porque o wrapper leva uma cópia do tar e o selo do wrapper cobre ela.
   const wrapper = process.env.ELECTROBUN_WRAPPER_BUNDLE_PATH;
   const buildDir = process.env.ELECTROBUN_BUILD_DIR;
+  // A identidade local (T1074), se existir: o requirement fica preso a ela e o TCC mantém as permissões entre builds.
+  const identity = findIdentity();
   if (wrapper && buildDir) {
     const resources = path.join(wrapper, "Contents", "Resources");
     const bundles = [buildDir, resources].flatMap((dir) =>
       existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith(".tar.zst")).map((n) => path.join(dir, n)) : []);
     if (!bundles.length) throw new Error(`info-plist: no .tar.zst in ${buildDir} or ${resources}`);
-    for (const file of resealBundles(bundles)) console.log(`info-plist: re-signed the app inside ${file}`);
+    for (const file of resealBundles(bundles, identity)) console.log(`info-plist: re-signed the app inside ${file}`);
   }
   for (const p of plists) {
     setUsage(p);
@@ -90,7 +93,7 @@ function setUsage(plist: string): void {
   // Assina depois de mexer em todos os Info.plist: o de dentro primeiro, se um .app estiver dentro do outro.
   const apps = [...plists].map((p) => path.dirname(path.dirname(p))).sort((a, b) => b.length - a.length);
   for (const app of apps) {
-    signAdHoc(app);
-    console.log(`info-plist: signed ad hoc ${app}`);
+    sign(app, identity);
+    console.log(`info-plist: signed ${identity ? `with "${identity.name}" (${identity.hash.slice(0, 8)})` : "ad hoc"} ${app}`);
   }
 }

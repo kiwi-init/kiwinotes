@@ -45,6 +45,30 @@ bun run agent call actions.invoke '{"name":"debug-transcribe","params":{"path":"
 
 A ação devolve o texto final, o tom e o tempo do lado do app; o ditado entra no histórico de teste.
 
+## Permissões que ficam entre builds (T1074)
+
+Assinado ad hoc, cada build é um app novo para o macOS, e a Acessibilidade, o Monitoramento de Entrada e o Microfone voltam a pedir permissão. Para elas ficarem, rode **uma vez**, no terminal:
+
+```sh
+app/scripts/make-signing-identity.sh
+```
+
+- Ele cria no seu Keychain de login um certificado de assinatura autoassinado, o "Kiwi Notes Local Signing". Nada sai do Mac e ele não pede Apple ID.
+- Ele pede a senha do seu login **no terminal**, para o `codesign` usar a chave sem perguntar. Nenhum diálogo do macOS abre. Se você pular esse passo, o 1º build mostra "codesign quer assinar usando a chave…": clique em **Permitir Sempre**.
+- Não precisa marcar o certificado como confiável. O `security find-identity` mostra ele como `CSSMERR_TP_NOT_TRUSTED`, e isso é esperado.
+- Daí em diante, o `bun run build` assina com ele (`info-plist: signed with "Kiwi Notes Local Signing"`), e o `verify-signature` confere que cada app tem o requirement `identifier "app.kiwinotes.desktop" and certificate leaf = H"…"`. Esse requirement é o mesmo em todo build, e é ele que o macOS guarda junto com a permissão. Para conferir num build: `codesign -d -r- build/stable-macos-arm64/"Kiwi Notes.app"`.
+- Depois de criar a identidade, a permissão precisa ser dada **mais uma vez**, porque o build ad hoc anterior era outro app para o macOS. Se nos Ajustes aparecer mais de um Kiwi Notes, tire os extras com o **−**. A partir daí, ela fica.
+
+Sem a identidade, o build sai ad hoc, como antes. Outras opções:
+
+- `KIWI_SIGN_IDENTITY=-`: ad hoc, mesmo com a identidade no Keychain.
+- `KIWI_SIGN_IDENTITY=<nome ou SHA-1>`: outra identidade. O build falha se ela não existir.
+- `KIWI_SIGN_KEYCHAIN=<arquivo>`: procura num keychain fora da lista de busca, como nos testes.
+
+Para desfazer, apague a identidade: `app/scripts/make-signing-identity.sh --remove`. O próximo build volta a ser ad hoc e as permissões voltam a ser pedidas.
+
+O teste com um keychain de verdade fica de fora do `bun test`, porque ele cria um keychain temporário: rode com `KIWI_SIGN_KEYCHAIN_TEST=1 bun test scripts/signing.test.ts`.
+
 ## Layout
 
 - `src/bun/`: processo principal (barra de menu, janelas, ações de agente, o sidecar e o fluxo do ditado).
