@@ -96,14 +96,15 @@ final class Helper {
         // update): the app shows "preparing" until `ready`.
         setSTT(.loading)
         let previous = sttChain
-        sttChain = Task { [stt, weak self] in
+        // On the main actor, like the rest of Helper: the awaits on `stt` leave it, and `setSTT` runs back on it.
+        sttChain = Task { @MainActor [stt, weak self] in
             await previous?.value
             do {
                 try await stt.warmUp()
                 let ms = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
-                await MainActor.run { self?.setSTT(.ready, ["loadMs": ms]) }
+                self?.setSTT(.ready, ["loadMs": ms])
             } catch {
-                await MainActor.run { self?.setSTT(.unavailable, ["error": Transcriber.Failure.modelUnavailable.rawValue]) }
+                self?.setSTT(.unavailable, ["error": Transcriber.Failure.modelUnavailable.rawValue])
             }
         }
     }
@@ -224,7 +225,7 @@ final class Helper {
     private func transcribe(_ samples: [Float], durationMs: Int, audioPath: String?) {
         let stoppedAt = ProcessInfo.processInfo.systemUptime
         let previous = sttChain
-        sttChain = Task { [stt, weak self] in
+        sttChain = Task { @MainActor [stt, weak self] in
             await previous?.value
             do {
                 let output = try await stt.transcribe(samples)
@@ -238,12 +239,12 @@ final class Helper {
                 if let audioPath { fields["audioPath"] = audioPath }
                 self?.emit("transcript.final", fields)
                 // The model loaded now, after a failed start (offline on the first run, #383).
-                await MainActor.run { self?.setSTT(.ready) }
+                self?.setSTT(.ready)
             } catch {
                 let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
                 self?.emit("transcript.error", ["error": code])
                 if code == Transcriber.Failure.modelUnavailable.rawValue {
-                    await MainActor.run { self?.setSTT(.unavailable, ["error": code]) }
+                    self?.setSTT(.unavailable, ["error": code])
                 }
             }
         }
