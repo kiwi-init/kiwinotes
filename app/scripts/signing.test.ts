@@ -14,6 +14,7 @@ import {
   expectedRequirement,
   findIdentity,
   IDENTITY_NAME,
+  keychainUnlocked,
   machOsIn,
   pack,
   parseIdentities,
@@ -169,10 +170,16 @@ Policy: Code Signing
 `;
 
 describe("signing identity (T1074)", () => {
-  const list = (output: string, seen: (string | undefined)[] = []) => (keychain?: string) => {
-    seen.push(keychain);
-    return output;
-  };
+  const LOGIN = "/Users/x/Library/Keychains/login.keychain-db";
+  const list = (output: string, seen: (string | undefined)[] = []) => ({
+    list: (keychain?: string) => {
+      seen.push(keychain);
+      return output;
+    },
+    keychainOf: () => LOGIN,
+    unlocked: () => true,
+    warn: () => {},
+  });
 
   test("parseIdentities keeps the untrusted self-signed one and lists each identity once", () => {
     expect(parseIdentities(FIND_IDENTITY)).toEqual([
@@ -204,6 +211,31 @@ describe("signing identity (T1074)", () => {
     const found = findIdentity({ KIWI_SIGN_KEYCHAIN: "/tmp/k.keychain-db" }, list(FIND_IDENTITY, seen));
     expect(seen).toEqual(["/tmp/k.keychain-db"]);
     expect(found?.keychain).toBe("/tmp/k.keychain-db");
+  });
+
+  test("a locked keychain never reaches codesign: the found identity falls back to ad hoc with a warning", () => {
+    const warnings: string[] = [];
+    const checked: string[] = [];
+    const lookup = { ...list(FIND_IDENTITY), unlocked: (k: string) => (checked.push(k), false), warn: (m: string) => warnings.push(m) };
+    expect(findIdentity({}, lookup)).toBeUndefined();
+    expect(checked).toEqual([LOGIN]);
+    expect(warnings[0]).toContain("is locked, signing ad hoc");
+  });
+
+  test("an identity asked for by name in a locked keychain fails the build instead", () => {
+    const lookup = { ...list(FIND_IDENTITY), unlocked: () => false };
+    expect(() => findIdentity({ KIWI_SIGN_IDENTITY: IDENTITY_NAME }, lookup)).toThrow(/is locked; unlock it/);
+  });
+
+  test("with KIWI_SIGN_KEYCHAIN, that keychain is the one checked for the lock", () => {
+    const checked: string[] = [];
+    const lookup = { ...list(FIND_IDENTITY), keychainOf: () => undefined, unlocked: (k: string) => (checked.push(k), true) };
+    expect(findIdentity({ KIWI_SIGN_KEYCHAIN: "/tmp/k.keychain-db" }, lookup)).toBeDefined();
+    expect(checked).toEqual(["/tmp/k.keychain-db"]);
+  });
+
+  test("keychainUnlocked answers without asking: a missing keychain is just locked", () => {
+    expect(keychainUnlocked(path.join(dir, "nao-existe.keychain-db"))).toBe(false);
   });
 
   test("the expected requirement is tied to the certificate, not to the build", () => {
@@ -241,6 +273,13 @@ describe.if(process.env.KIWI_SIGN_KEYCHAIN_TEST === "1")("signing with a real lo
   });
   afterEach(() => {
     spawnSync("security", ["delete-keychain", keychain]);
+  });
+
+  test("a locked keychain is seen as locked, and the identity in it isn't used", () => {
+    spawnSync("security", ["lock-keychain", keychain]);
+    const warnings: string[] = [];
+    expect(findIdentity({ KIWI_SIGN_KEYCHAIN: keychain }, { warn: (m) => warnings.push(m) })).toBeUndefined();
+    expect(warnings[0]).toContain("is locked");
   });
 
   test("two builds in a row keep the same designated requirement, while the code changes", () => {

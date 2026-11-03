@@ -54,7 +54,8 @@ app/scripts/make-signing-identity.sh
 ```
 
 - Ele cria no seu Keychain de login um certificado de assinatura autoassinado, o "Kiwi Notes Local Signing". Nada sai do Mac e ele não pede Apple ID.
-- Ele pede a senha do seu login **no terminal**, para o `codesign` usar a chave sem perguntar. Nenhum diálogo do macOS abre. Se você pular esse passo, o 1º build mostra "codesign quer assinar usando a chave…": clique em **Permitir Sempre**.
+- Ele pede a senha do seu Mac **no terminal**, para o `codesign` usar a chave sem perguntar. Nenhum diálogo do macOS abre. Se esse passo não der certo, o script apaga a identidade e sai com erro, porque sem ele todo build abriria um diálogo do codesign. Basta rodar de novo.
+- Com o Keychain trancado (depois de dormir, por exemplo), o build não arrisca o diálogo de senha: sai ad hoc, com o aviso `signing: … is locked`. Com `KIWI_SIGN_IDENTITY`, ele falha.
 - Não precisa marcar o certificado como confiável. O `security find-identity` mostra ele como `CSSMERR_TP_NOT_TRUSTED`, e isso é esperado.
 - Daí em diante, o `bun run build` assina com ele (`info-plist: signed with "Kiwi Notes Local Signing"`), e o `verify-signature` confere que cada app tem o requirement `identifier "app.kiwinotes.desktop" and certificate leaf = H"…"`. Esse requirement é o mesmo em todo build, e é ele que o macOS guarda junto com a permissão. Para conferir num build: `codesign -d -r- build/stable-macos-arm64/"Kiwi Notes.app"`.
 - Depois de criar a identidade, a permissão precisa ser dada **mais uma vez**, porque o build ad hoc anterior era outro app para o macOS. Se nos Ajustes aparecer mais de um Kiwi Notes, tire os extras com o **−**. A partir daí, ela fica.

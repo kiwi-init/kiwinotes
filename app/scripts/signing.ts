@@ -65,26 +65,92 @@ export function parseIdentities(output: string): { hash: string; name: string }[
   return out;
 }
 
+/** O que o `findIdentity` consulta no sistema; trocado nos testes. */
+export interface IdentityLookup {
+  /** `security find-identity -p codesigning [keychain]`. */
+  list: (keychain?: string) => string;
+  /** O keychain onde está o certificado da identidade (`security find-certificate -Z`, que não pede senha). */
+  keychainOf: (hash: string) => string | undefined;
+  /** Se o keychain está destrancado, sem pedir nada (`SecKeychainGetStatus`). */
+  unlocked: (keychain: string) => boolean;
+  warn: (message: string) => void;
+}
+
+const systemLookup: IdentityLookup = {
+  list: (keychain) => run("security", ["find-identity", "-p", "codesigning", ...(keychain ? [keychain] : [])]),
+  keychainOf: (hash) => {
+    const r = spawnSync("security", ["find-certificate", "-a", "-Z"], { encoding: "utf8" });
+    // Cada certificado vem como `SHA-1 hash: …` seguido de `keychain: "…"`.
+    for (const block of (r.stdout ?? "").split(/^(?=SHA-256 hash:)/m)) {
+      if (block.includes(`SHA-1 hash: ${hash}`)) return block.match(/^keychain: "(.+)"$/m)?.[1];
+    }
+    return undefined;
+  },
+  unlocked: keychainUnlocked,
+  warn: (message) => console.warn(message),
+};
+
+/**
+ * Se o keychain está destrancado, perguntando ao Security.framework (`SecKeychainGetStatus`), que não abre diálogo.
+ * O `security show-keychain-info` num keychain trancado pede a senha numa janela do macOS. Na dúvida (fora do macOS,
+ * erro no FFI), responde `false`, e o build sai ad hoc.
+ */
+export function keychainUnlocked(keychain: string): boolean {
+  try {
+    const { dlopen, FFIType, ptr } = require("bun:ffi") as typeof import("bun:ffi");
+    const lib = dlopen("/System/Library/Frameworks/Security.framework/Security", {
+      SecKeychainOpen: { args: [FFIType.cstring, FFIType.ptr], returns: FFIType.i32 },
+      SecKeychainGetStatus: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+      CFRelease: { args: [FFIType.ptr], returns: FFIType.void },
+    });
+    try {
+      const ref = new BigUint64Array(1);
+      if (lib.symbols.SecKeychainOpen(ptr(Buffer.from(`${keychain}\0`)), ptr(ref)) !== 0 || !ref[0]) return false;
+      const status = new Uint32Array(1);
+      const rc = lib.symbols.SecKeychainGetStatus(Number(ref[0]) as never, ptr(status));
+      lib.symbols.CFRelease(Number(ref[0]) as never);
+      // kSecUnlockStateStatus = 1.
+      return rc === 0 && (status[0]! & 1) === 1;
+    } finally {
+      lib.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Com que identidade assinar (T1074):
  * - `KIWI_SIGN_IDENTITY=-`: ad hoc, mesmo com a identidade no Keychain;
  * - `KIWI_SIGN_IDENTITY=<nome ou SHA-1>`: essa (e `KIWI_SIGN_KEYCHAIN`, se ela estiver num keychain fora da busca);
  * - senão, a "Kiwi Notes Local Signing", se existir;
  * - senão, `undefined`: ad hoc, como antes (o TCC pede a permissão de novo a cada build).
- * Lança se a identidade pedida não existe: um build que deveria manter as permissões não sai ad hoc calado.
+ *
+ * Nenhum build pode abrir diálogo do macOS (AGENTS.md): com o keychain trancado, o codesign pediria a senha numa
+ * janela. Então a identidade achada sozinha num keychain trancado vira ad hoc com um aviso, e a pedida pelo nome faz o
+ * build falhar. Lança também se a identidade pedida não existe: um build que deveria manter as permissões não sai ad
+ * hoc calado.
  */
 export function findIdentity(
   env: Record<string, string | undefined> = process.env,
-  list: (keychain?: string) => string = (keychain) =>
-    run("security", ["find-identity", "-p", "codesigning", ...(keychain ? [keychain] : [])]),
+  lookup: Partial<IdentityLookup> = {},
 ): SigningIdentity | undefined {
+  const { list, keychainOf, unlocked, warn } = { ...systemLookup, ...lookup };
   const wanted = env.KIWI_SIGN_IDENTITY?.trim();
   if (wanted === "-") return undefined;
   const keychain = env.KIWI_SIGN_KEYCHAIN || undefined;
   const all = parseIdentities(list(keychain));
   const found = all.find((i) => (wanted ? i.name === wanted || i.hash === wanted.toUpperCase() : i.name === IDENTITY_NAME));
   if (!found && wanted) throw new Error(`signing: no code signing identity "${wanted}"${keychain ? ` in ${keychain}` : ""}`);
-  return found && { ...found, ...(keychain ? { keychain } : {}) };
+  if (!found) return undefined;
+  const home = keychain ?? keychainOf(found.hash);
+  if (!home || !unlocked(home)) {
+    const where = home ?? "its keychain";
+    if (wanted) throw new Error(`signing: ${where} is locked; unlock it (security unlock-keychain) and build again`);
+    warn(`signing: ${where} is locked, signing ad hoc instead of "${found.name}" (the permissions will be asked again)`);
+    return undefined;
+  }
+  return { ...found, ...(keychain ? { keychain } : {}) };
 }
 
 /** O designated requirement que o TCC guarda: preso ao certificado, e não ao cdhash do build. */

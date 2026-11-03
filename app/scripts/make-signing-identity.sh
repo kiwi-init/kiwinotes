@@ -11,8 +11,9 @@
 # codesign e o TCC não precisam disso). A chave privada só existe numa pasta temporária (0700) até o import.
 #
 # Diálogos: nenhum do macOS. O `security set-key-partition-list` pede a senha do seu login no próprio terminal, para o
-# codesign usar a chave sem perguntar. Se você pular (Ctrl-C ali), o 1º build abre o diálogo
-# "codesign quer assinar usando a chave…": clique em "Permitir Sempre".
+# codesign usar a chave sem perguntar. Se esse passo não der certo (senha errada, Ctrl-C), o script apaga a identidade
+# que acabou de criar e sai com erro: uma identidade sem esse passo faria todo build abrir "codesign quer assinar
+# usando a chave…" (AGENTS.md: nenhum build abre diálogo). É só rodar de novo.
 #
 # Uso (pela pessoa, no terminal):   app/scripts/make-signing-identity.sh
 # Desfazer:                          app/scripts/make-signing-identity.sh --remove
@@ -46,6 +47,12 @@ if security find-certificate -c "$NAME" "$KEYCHAIN" >/dev/null 2>&1; then
   exit 0
 fi
 
+# A senha vai no terminal: sem um terminal (um agente, um script), nem começa, para não deixar a identidade pela metade.
+if [ -z "${KIWI_KEYCHAIN_PASSWORD:-}" ] && ! [ -t 0 ]; then
+  echo "Rode num terminal: o passo final pede a senha do seu Mac." >&2
+  exit 1
+fi
+
 umask 077
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -73,13 +80,18 @@ pass=$("$OPENSSL" rand -hex 16)
 security import "$tmp/id.p12" -k "$KEYCHAIN" -P "$pass" -T /usr/bin/codesign >/dev/null
 echo "Criei \"$NAME\" em $KEYCHAIN."
 
-echo "Agora o macOS pede a senha do seu login (a do Mac), aqui no terminal, para o codesign usar a chave sem perguntar:"
+echo "Agora digite a senha do seu Mac, aqui no terminal, para o codesign usar a chave sem perguntar:"
 # Só a chave desta identidade (-l): as outras chaves do Keychain ficam como estão.
 if [ -n "${KIWI_KEYCHAIN_PASSWORD:-}" ]; then
-  security set-key-partition-list -S apple-tool:,apple:,codesign: -s -l "$NAME" -k "$KIWI_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+  allowed() { security set-key-partition-list -S apple-tool:,apple:,codesign: -s -l "$NAME" -k "$KIWI_KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null; }
 else
-  security set-key-partition-list -S apple-tool:,apple:,codesign: -s -l "$NAME" "$KEYCHAIN" >/dev/null ||
-    echo "Sem a senha: no 1º build, clique em \"Permitir Sempre\" no diálogo do codesign."
+  allowed() { security set-key-partition-list -S apple-tool:,apple:,codesign: -s -l "$NAME" "$KEYCHAIN" >/dev/null; }
+fi
+if ! allowed; then
+  security delete-identity -c "$NAME" "$KEYCHAIN" >/dev/null 2>&1 || true
+  echo "Não deu certo, então apaguei \"$NAME\": sem esse passo, todo build abriria um diálogo do codesign." >&2
+  echo "Rode de novo e digite a senha do seu Mac." >&2
+  exit 1
 fi
 
 security find-identity -p codesigning "$KEYCHAIN" | grep "\"$NAME\"" || true
