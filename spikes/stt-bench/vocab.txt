@@ -1,0 +1,17 @@
+# Dicionário de teste (o T57 terá o dicionário de verdade). Um termo por linha.
+DICOM
+DICOM store
+PACS
+Healthcare API
+StudyInstanceUID
+SOPInstanceUID
+QIDO
+STOW-RS
+C-FIND
+IAM
+service account
+pull request
+storage class
+BigQuery
+backfill
+bucket

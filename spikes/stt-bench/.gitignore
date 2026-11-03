@@ -1,0 +1,5 @@
+audio/
+.build/
+results/
+# Transcrições de voz real (record.sh): nunca vão para o git.
+results-voz/
