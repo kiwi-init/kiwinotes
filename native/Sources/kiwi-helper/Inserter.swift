@@ -31,6 +31,8 @@ final class Inserter {
         let app: String?
         /// A space went in front of the text, because it landed right after other text (T733).
         var spaced = false
+        /// Where Accessibility found the focus: "system", "app" (asked the front app, T984) or "none". For the log.
+        var focusVia = "none"
     }
 
     private let keeper = ClipboardKeeper()
@@ -60,7 +62,7 @@ final class Inserter {
     private func perform(_ text: String, restoreClipboard: Bool, autoSpace: Bool, completion: @escaping (Outcome) -> Void) {
         let app = NSWorkspace.shared.frontmostApplication
         let trusted = AXIsProcessTrusted()
-        let focused = trusted ? Self.focus(app: app?.processIdentifier) : (info: nil, element: nil)
+        let focused = trusted ? Self.focus(app: app?.processIdentifier) : (info: nil, element: nil, via: "none")
         let plan = InsertPlan.decide(accessibilityGranted: trusted, secureInput: IsSecureEventInputEnabled(), focus: focused.info,
                                      frontApp: app != nil)
         let pasteboard = NSPasteboard.general
@@ -70,7 +72,8 @@ final class Inserter {
         case .clipboardOnly(let why):
             // No field: the text stays on the clipboard for the person to paste, and the app tells them.
             keeper.put(text, on: pasteboard, keepOriginal: false)
-            return completion(Outcome(pasted: false, restored: false, reason: why, app: app?.bundleIdentifier))
+            return completion(Outcome(pasted: false, restored: false, reason: why, app: app?.bundleIdentifier,
+                                      focusVia: focused.via))
         case .pasteKeepingText(let why):
             reason = why
         case .paste:
@@ -88,7 +91,7 @@ final class Inserter {
                 Self.postCommandV()
                 DispatchQueue.main.async {
                     completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier,
-                                       spaced: spaced))
+                                       spaced: spaced, focusVia: focused.via))
                     guard restore else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + Self.restoreDelay) {
                         keeper.restore(on: pasteboard, ifStill: ours)
@@ -106,33 +109,34 @@ final class Inserter {
     /// `.unanswered` when the app didn't reply within `axTimeout`. `element` is there only when it has a caret.
     /// `app`: the frontmost app's pid. When the system-wide lookup finds no focused element, the app itself is asked:
     /// the new Teams (a WebView) answers only there (T984, #997). Read-only: nothing is switched on in the app.
-    static func focus(app: pid_t? = nil) -> (info: FocusInfo?, element: AXUIElement?) {
+    static func focus(app: pid_t? = nil) -> (info: FocusInfo?, element: AXUIElement?, via: String) {
+        var via = "system"
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, axTimeout)
         var value: CFTypeRef?
         switch AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value) {
         case .success: break
-        case .cannotComplete: return (.unanswered, nil)
+        case .cannotComplete: return (.unanswered, nil, "system")
         default:
-            guard let app else { return (nil, nil) }
+            guard let app else { return (nil, nil, "none") }
             let element = AXUIElementCreateApplication(app)
             AXUIElementSetMessagingTimeout(element, axTimeout)
             switch AXUIElementCopyAttributeValue(element, kAXFocusedUIElementAttribute as CFString, &value) {
-            case .success: break
-            case .cannotComplete: return (.unanswered, nil)
-            default: return (nil, nil)
+            case .success: via = "app"
+            case .cannotComplete: return (.unanswered, nil, "app")
+            default: return (nil, nil, "none")
             }
         }
-        guard let element = value, CFGetTypeID(element) == AXUIElementGetTypeID() else { return (nil, nil) }
+        guard let element = value, CFGetTypeID(element) == AXUIElementGetTypeID() else { return (nil, nil, "none") }
         let focused = element as! AXUIElement
         AXUIElementSetMessagingTimeout(focused, axTimeout)
         var role: CFTypeRef?
         if AXUIElementCopyAttributeValue(focused, kAXRoleAttribute as CFString, &role) == .cannotComplete {
-            return (.unanswered, nil)
+            return (.unanswered, nil, via)
         }
         var range: CFTypeRef?
         let hasRange = AXUIElementCopyAttributeValue(focused, kAXSelectedTextRangeAttribute as CFString, &range) == .success
-        return (FocusInfo(role: role as? String, hasSelectedTextRange: hasRange), hasRange ? focused : nil)
+        return (FocusInfo(role: role as? String, hasSelectedTextRange: hasRange), hasRange ? focused : nil, via)
     }
 
     /// Up to the two characters before the caret (or the selection, which the paste replaces); "" at the start of

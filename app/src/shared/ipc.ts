@@ -140,6 +140,8 @@ export interface CommandResults {
     app?: string;
     /** Um espaço foi na frente do texto, porque ele entrou logo depois de outro texto (T733). */
     spaced?: true;
+    /** Onde a Acessibilidade achou o foco: no pedido ao sistema, no pedido ao app da frente (T984) ou em nenhum. */
+    focusVia?: "system" | "app" | "none";
     /** Só no `dryRun`: nada foi colado nem copiado. */
     dryRun?: true;
   };

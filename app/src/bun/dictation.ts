@@ -208,7 +208,7 @@ export class Dictation {
       this.log(`history add failed: ${String(e)}`);
     }
     this.log(
-      `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? "pasted" : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}`,
+      `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? `pasted${insert.ok && insert.data.reason ? ` (${insert.data.reason})` : ""}` : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}${insert.ok && insert.data.focusVia ? ` · focus ${insert.data.focusVia}` : ""}`,
     );
     this.onDone?.({ entry, text, tone: result.tone, pasted, appMs });
   }

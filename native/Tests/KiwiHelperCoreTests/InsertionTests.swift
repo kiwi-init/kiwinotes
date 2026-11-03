@@ -27,19 +27,25 @@ final class InsertionTests: XCTestCase {
     }
 
     /// T984, harry's #978: in the new Teams (a WebView) the dictation didn't go in. With an app in front, the paste
-    /// goes whatever Accessibility shows: no focused element, a focus with no role, a web area or a group.
+    /// goes whatever Accessibility shows: a web area or a group get the normal paste; no focused element, or a focus
+    /// with no role, get it too but keep the text on the clipboard, since that also covers the desktop or an app with
+    /// no window, where the ⌘V lands nowhere (review #1007).
     func testWebViewAppsGetThePaste() {
-        let teams: [FocusInfo?] = [
-            nil,
-            FocusInfo(role: nil, hasSelectedTextRange: false),
+        let seen: [FocusInfo] = [
             FocusInfo(role: "AXWebArea", hasSelectedTextRange: false),
             FocusInfo(role: "AXGroup", hasSelectedTextRange: false),
             FocusInfo(role: "AXWebArea", hasSelectedTextRange: true),
             .unanswered,
         ]
-        for focus in teams {
-            XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: focus, frontApp: true), .paste, "\(String(describing: focus))")
-            // Secure input still keeps the text on the clipboard.
+        for focus in seen {
+            XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: focus, frontApp: true), .paste, "\(focus)")
+        }
+        for focus in [nil, FocusInfo(role: nil, hasSelectedTextRange: false)] as [FocusInfo?] {
+            XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, focus: focus, frontApp: true),
+                           .pasteKeepingText(reason: "no_focus"), "\(String(describing: focus))")
+        }
+        // Secure input still keeps the text on the clipboard, whatever the focus.
+        for focus in seen + [nil] as [FocusInfo?] {
             XCTAssertEqual(InsertPlan.decide(accessibilityGranted: true, secureInput: true, focus: focus, frontApp: true),
                            .pasteKeepingText(reason: "secure_input"))
         }

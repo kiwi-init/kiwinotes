@@ -42,15 +42,16 @@ public enum InsertPlan: Equatable, Sendable {
     /// The paste goes whenever an app is in front (T984): the new Teams, a WebView, shows Accessibility no focused
     /// element (or one with no role) while its message box has the caret, and Wispr Flow and VoiceInk paste there all
     /// the same. Only with nothing in front, or without Accessibility, does the text stay on the clipboard alone.
-    /// A focus that is clearly not a place for text (a button) still gets the paste, but the text stays on the
-    /// clipboard too: if the ⌘V lands nowhere, nothing is lost.
+    /// When the focus can't be seen (`no_focus`) or is clearly not a place for text (`no_text_field`, a button), the
+    /// paste still goes but the text stays on the clipboard too: the same branch also catches the desktop with the
+    /// Finder in front or an app with no window, where the ⌘V lands nowhere, and then nothing is lost (review #1007).
     public static func decide(
         accessibilityGranted: Bool, secureInput: Bool = false, focus: FocusInfo?, frontApp: Bool = false
     ) -> InsertPlan {
         guard accessibilityGranted else { return .clipboardOnly(reason: "no_accessibility") }
         guard let focus, let role = focus.role else {
             guard frontApp else { return .clipboardOnly(reason: "no_focus") }
-            return secureInput ? .pasteKeepingText(reason: "secure_input") : .paste
+            return .pasteKeepingText(reason: secureInput ? "secure_input" : "no_focus")
         }
         guard focus.hasSelectedTextRange || !nonTextRoles.contains(role) else {
             return .pasteKeepingText(reason: "no_text_field")

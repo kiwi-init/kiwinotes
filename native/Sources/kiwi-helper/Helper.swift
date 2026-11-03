@@ -344,6 +344,7 @@ final class Helper {
                 if outcome.spaced { data["spaced"] = true }
                 if let reason = outcome.reason { data["reason"] = reason }
                 if let app = outcome.app { data["app"] = app }
+                data["focusVia"] = outcome.focusVia
                 self?.reply(id, ok: true, data)
             }
         case "debug.transcribe" where debugCommands:
