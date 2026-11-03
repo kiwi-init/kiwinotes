@@ -86,6 +86,6 @@ export interface UiEvents {
   "notes.changed": { paths: string[] };
 }
 
-/** As janelas que viram UI do AppEngine. A Notas entra aqui quando nascer. */
-export const UI_WINDOWS = ["settings", "history"] as const;
+/** As janelas que viram UI do AppEngine. */
+export const UI_WINDOWS = ["settings", "history", "notes"] as const;
 export type UiWindow = (typeof UI_WINDOWS)[number];

@@ -1,0 +1,98 @@
+// A busca rápida ⌘K (B v4): uma caixa só, sem borda, com o resultado selecionado em peso de texto.
+
+import { useEffect, useRef, useState } from "react";
+
+import { plainSnippet } from "./links.ts";
+import { type PaletteItem, paletteItems } from "./palette.ts";
+import type { NoteMeta, NotesApi, SearchHit } from "./types.ts";
+
+export interface PaletteProps {
+  api: NotesApi;
+  notes: NoteMeta[];
+  onOpen(path: string): void;
+  onCreate(title: string): void;
+  onClose(): void;
+}
+
+export function Palette({ api, notes, onOpen, onCreate, onClose }: PaletteProps) {
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [sel, setSel] = useState(0);
+  const seq = useRef(0);
+
+  // O texto vem do engine, um pouco depois de parar de digitar; uma resposta velha não sobrescreve a nova.
+  useEffect(() => {
+    const my = ++seq.current;
+    if (!query.trim()) return setHits([]);
+    const t = setTimeout(() => {
+      api.search(query, 20).then(
+        (h) => my === seq.current && setHits(h),
+        () => my === seq.current && setHits([]),
+      );
+    }, 120);
+    return () => clearTimeout(t);
+  }, [query, api]);
+
+  const items = paletteItems(notes, query, hits);
+  useEffect(() => setSel(0), [query]);
+
+  const choose = (item: PaletteItem | undefined) => {
+    if (!item) return;
+    if (item.kind === "note") onOpen(item.path);
+    else onCreate(item.title);
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") setSel((s) => Math.min(items.length - 1, s + 1));
+    else if (e.key === "ArrowUp") setSel((s) => Math.max(0, s - 1));
+    else if (e.key === "Enter") choose(items[sel]);
+    else if (e.key === "Escape") onClose();
+    else return;
+    e.preventDefault();
+  };
+
+  return (
+    <div className="kn-palette-scrim" onMouseDown={onClose}>
+      <div className="kn-palette" role="dialog" aria-label="Buscar notas" onMouseDown={(e) => e.stopPropagation()}>
+        <input
+          className="kn-palette-q"
+          autoFocus
+          placeholder="Buscar ou criar nota"
+          aria-label="Buscar ou criar nota"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onKey}
+        />
+        <div className="kn-palette-list" role="listbox">
+          {items.map((it, i) => (
+            <div
+              key={it.kind === "note" ? it.path : `create:${it.title}`}
+              className="kn-palette-it"
+              role="option"
+              aria-selected={i === sel}
+              // Só com o mouse andando: a lista que abre embaixo de um ponteiro parado não rouba a seleção do teclado.
+              onMouseMove={() => sel !== i && setSel(i)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                choose(it);
+              }}
+            >
+              {it.kind === "note" ? (
+                <>
+                  <span className="kn-palette-title">
+                    {it.title}
+                    {it.snippet ? <span className="kn-palette-snippet">{plainSnippet(it.snippet)}</span> : null}
+                  </span>
+                  <span className="kn-palette-r">{it.detail}</span>
+                </>
+              ) : (
+                <span className="kn-palette-title kn-palette-create">Criar “{it.title}”</span>
+              )}
+            </div>
+          ))}
+          {!items.length ? <div className="kn-palette-empty">Nenhuma nota ainda</div> : null}
+        </div>
+      </div>
+    </div>
+  );
+}

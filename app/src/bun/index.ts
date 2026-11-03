@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { AgentControl, PATHS, Tray, Utils } from "electrobun/bun";
 
+import { UI_WINDOWS } from "../shared/ui-contract.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
@@ -40,6 +41,7 @@ function setMenu(s: SessionStatus) {
       ? [{ type: "normal" as const, label: `Permitir acesso… (${PERMISSION_NAMES[s.missing[0]!]})`, action: "permissions" }]
       : []),
     { type: "divider" },
+    { type: "normal", label: "Notas…", action: "notes" },
     { type: "normal", label: "Histórico…", action: "history" },
     { type: "normal", label: "Configurações…", action: "settings" },
     { type: "divider" },
@@ -57,6 +59,7 @@ dictation.start();
 tray.on("tray-clicked", (event) => {
   const action = (event as { data?: { action?: string } }).data?.action;
   switch (action) {
+    case "notes":
     case "history":
     case "settings":
       void showWindow(action);
@@ -84,10 +87,10 @@ process.on("SIGTERM", () => quit());
 //   bun run agent call actions.invoke '{"name":"open-window","params":{"window":"settings"}}'
 AgentControl.registerAction("open-window", {
   description: "Abre ou traz para a frente uma janela do Kiwi Notes",
-  params: { window: "settings | history" },
+  params: { window: UI_WINDOWS.join(" | ") },
   handler: async (params) => {
     const name = params.window as WindowName;
-    if (name !== "settings" && name !== "history") throw new Error(`unknown window ${String(params.window)}`);
+    if (!(UI_WINDOWS as readonly string[]).includes(name)) throw new Error(`unknown window ${String(params.window)}`);
     await showWindow(name);
     return { open: openWindows() };
   },
