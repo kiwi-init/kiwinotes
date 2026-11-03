@@ -41,6 +41,11 @@ final class Helper {
         // Touching the input before the mic is granted can bring up the system prompt.
         audio.mayWarmUp = { Permission.microphone.status == "granted" }
         audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "mic: \(message)"]) }
+        // The time from the key to the first sound kept, per dictation (T985): only a number, no audio.
+        audio.onFirstBuffer = { [weak self] after in
+            let ms = Int((after * 1000).rounded())
+            DispatchQueue.main.async { self?.emit("log", ["level": "info", "message": "mic: first audio \(ms) ms after the key"]) }
+        }
         audio.onLost = { [weak self] code, samples in
             guard let self else { return }
             guard !samples.isEmpty else {
@@ -210,7 +215,7 @@ final class Helper {
         recordingStartedAt = ProcessInfo.processInfo.systemUptime
         // Sound before the engine is up is lost (the first syllable); this shows how long that is.
         let startMs = Int(((recordingStartedAt! - t0) * 1000).rounded())
-        emit("log", ["level": "debug", "message": "mic engine started in \(startMs) ms"])
+        emit("log", ["level": "info", "message": "mic: engine started in \(startMs) ms"])
         return nil
     }
 

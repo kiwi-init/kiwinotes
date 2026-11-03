@@ -151,6 +151,9 @@ public final class AudioCapture {
 
     /// What happened to the engine, for the app's log (no audio in it). Main thread.
     public var onLog: ((String) -> Void)?
+    /// How long after `start` the first audio arrived: speech before it is lost, and a short dictation that loses
+    /// its first syllable comes out wrong (T985). Called once per recording, on the engine's thread.
+    public var onFirstBuffer: ((_ afterStart: TimeInterval) -> Void)?
 
     /// Whether touching the input is allowed now: before the mic is granted it can bring up the system prompt.
     public var mayWarmUp: () -> Bool = { true }
@@ -176,6 +179,8 @@ public final class AudioCapture {
     private let resampler = Resampler(sampleRate: sampleRate)
     private var samples: [Float] = []
     private var capturing = false
+    /// When `start` was called, until the first buffer of the recording arrives (`onFirstBuffer`).
+    private var waitingFirstBufferSince: TimeInterval?
     private var watchdog = CaptureWatchdog()
     /// Bumped when the engine is replaced: a late buffer from the old one (old format) is dropped.
     private var generation = 0
@@ -221,6 +226,7 @@ public final class AudioCapture {
             resampler.reset()
             samples.removeAll(keepingCapacity: true)
             capturing = true
+            waitingFirstBufferSince = now()
             watchdog.start(at: now())
         }
         stallRestarts = 0
@@ -328,12 +334,20 @@ public final class AudioCapture {
     // MARK: Buffers
 
     private func process(_ buffer: AVAudioPCMBuffer, generation: Int) {
+        var firstAfter: TimeInterval?
         let chunk = samplesQueue.sync { () -> [Float]? in
             guard capturing, generation == self.generation, let out = resampler.convert(buffer) else { return nil }
-            watchdog.buffer(at: now())
+            let t = now()
+            watchdog.buffer(at: t)
+            if let since = waitingFirstBufferSince {
+                // The buffer covers the time before it was handed over: its start is the first sound kept.
+                firstAfter = max(0, t - since - Double(buffer.frameLength) / buffer.format.sampleRate)
+                waitingFirstBufferSince = nil
+            }
             samples.append(contentsOf: out)
             return out
         }
+        if let firstAfter { onFirstBuffer?(firstAfter) }
         guard let chunk, !chunk.isEmpty else { return }
         // The tap calls back on one thread at a time, and buffers from an old engine stop above, so `meter` needs no lock.
         let levels = meter.push(chunk)

@@ -344,4 +344,24 @@ final class CaptureTests: XCTestCase {
         w.stop()
         XCTAssertFalse(w.stalled(at: 10))
     }
+
+    /// T985: how much of the start of a dictation the engine misses is measured on every recording.
+    func testFirstBufferDelayIsReportedOncePerRecording() throws {
+        let rig = Rig()
+        var delays: [TimeInterval] = []
+        rig.capture.onFirstBuffer = { delays.append($0) }
+        rig.capture.warmUp()
+        try rig.capture.start()
+        // The device takes 120 ms to come up; the first 20 ms buffer arrives at 140 ms and holds 120–140 ms.
+        rig.clock.t += 0.12
+        rig.engine.feed(rate: 48_000, seconds: 0.2, clock: rig.clock)
+        _ = rig.capture.stop()
+        XCTAssertEqual(delays.count, 1)
+        XCTAssertEqual(delays[0], 0.12, accuracy: 0.001)
+        try rig.capture.start()
+        rig.engine.feed(rate: 48_000, seconds: 0.1, clock: rig.clock)
+        _ = rig.capture.stop()
+        XCTAssertEqual(delays.count, 2)
+        XCTAssertEqual(delays[1], 0, accuracy: 0.001)
+    }
 }
