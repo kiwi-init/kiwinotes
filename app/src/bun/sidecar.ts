@@ -46,7 +46,9 @@ export class SidecarError extends Error {
   }
 }
 
-type Socket = { write(data: string): number; end(): void };
+type Socket = { write(data: Uint8Array): number; end(): void };
+
+const encoder = new TextEncoder();
 
 export class Sidecar {
   private server?: { stop(closeActive?: boolean): void };
@@ -57,6 +59,11 @@ export class Sidecar {
   private nextId = 0;
   private stopped = false;
   private restarts = 0;
+  /**
+   * O que ainda não coube no socket. O `write` do Bun escreve só o que cabe no buffer e devolve quantos bytes
+   * foram; o resto sai no `drain`, na ordem (review #521: um `config.set` de 30 KB chegava cortado em 8 KB).
+   */
+  private outbox: Uint8Array[] = [];
   private connected?: { promise: Promise<Ready>; resolve(r: Ready): void };
   /** O último `ready`, com o `llm` atualizado pelos `permissions.changed`. */
   ready?: Ready;
@@ -93,7 +100,11 @@ export class Sidecar {
           // Um helper por vez: uma segunda conexão (um helper antigo que não morreu) é recusada.
           if (this.socket) return void s.end();
           this.socket = s;
+          this.outbox = [];
           current = decoder();
+        },
+        drain: (s) => {
+          if (s === this.socket) this.flush();
         },
         data: (s, chunk) => {
           if (s === this.socket) current?.push(chunk);
@@ -101,6 +112,7 @@ export class Sidecar {
         close: (s) => {
           if (s !== this.socket) return;
           this.socket = undefined;
+          this.outbox = [];
           this.ready = undefined;
           this.resetConnected();
           this.failPending("sidecar_closed");
@@ -117,15 +129,48 @@ export class Sidecar {
     const env = { ...(process.env as Record<string, string>), ...this.options.env };
     const spawn =
       this.options.spawn ?? ((a: string[], e: Record<string, string>) => Bun.spawn(a, { env: e, stdout: "inherit", stderr: "inherit" }));
-    const proc = spawn(argv, env);
+    let proc: ReturnType<typeof spawn>;
+    try {
+      proc = spawn(argv, env);
+    } catch (e) {
+      // Sem o executável (`bun dev` sem `swift build`, um KIWI_HELPER errado): o app fica de pé e tenta de novo.
+      this.log(`couldn't start the helper (${String(e)}); retrying`);
+      setTimeout(() => this.spawnHelper(), this.nextWait());
+      return;
+    }
     this.proc = proc;
     void proc.exited.then(() => {
       if (this.proc !== proc || this.stopped) return;
-      // Sobe de novo: 0,5 s, 1 s, 2 s… até 30 s. Um `ready` zera a conta.
-      const wait = Math.min(30_000, 500 * 2 ** this.restarts++);
+      const wait = this.nextWait();
       this.log(`sidecar exited; restarting in ${wait} ms`);
       setTimeout(() => this.spawnHelper(), wait);
     });
+  }
+
+  /** Sobe de novo: 0,5 s, 1 s, 2 s… até 30 s. Um `ready` zera a conta. */
+  private nextWait(): number {
+    return Math.min(30_000, 500 * 2 ** this.restarts++);
+  }
+
+  /** Escreve a linha inteira, agora ou no próximo `drain`. */
+  private write(line: string) {
+    this.outbox.push(encoder.encode(line));
+    if (this.outbox.length === 1) this.flush();
+  }
+
+  private flush() {
+    const socket = this.socket;
+    while (socket && this.outbox.length) {
+      const chunk = this.outbox[0]!;
+      const n = socket.write(chunk);
+      if (n >= chunk.length) {
+        this.outbox.shift();
+        continue;
+      }
+      // Coube só uma parte (ou nada, `n` ≤ 0): o resto espera o `drain`.
+      if (n > 0) this.outbox[0] = chunk.subarray(n);
+      return;
+    }
   }
 
   stop(): void {
@@ -162,7 +207,7 @@ export class Sidecar {
       this.pending.set(id, { resolve: resolve as (r: ResultMessage) => void, reject, timer });
       signal?.addEventListener("abort", () => this.settle(id, new SidecarError("aborted")), { once: true });
       try {
-        socket.write(encode({ ...command, v: IPC_VERSION, id } as Message));
+        this.write(encode({ ...command, v: IPC_VERSION, id } as Message));
       } catch (e) {
         this.settle(id, e instanceof Error ? e : new Error(String(e)));
       }

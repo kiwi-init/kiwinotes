@@ -1,6 +1,10 @@
 // postBuild e postWrap (electrobun.config.ts): põe no Info.plist do .app as frases que o macOS mostra ao pedir
 // permissão. O Electrobun não tem campo para elas, e sem o NSMicrophoneUsageDescription o macOS nega o mic
 // ao helper, que roda como filho do app (#133).
+//
+// Assinatura: hoje `codesign: false`. Pela doc do Electrobun, o `postWrap` roda "before final packaging/signing", mas
+// não está claro se o app de dentro já foi assinado antes. Quando ligarem a assinatura, confira com
+// `codesign --verify --deep --strict` nos dois .app; se quebrar, este passo vai para antes da assinatura (review #521).
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";

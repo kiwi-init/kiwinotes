@@ -87,6 +87,48 @@ describe("Dictation", () => {
     expect(added[0]!.app).toEqual({ bundleId: "com.apple.mail", name: "Mail" });
   });
 
+  test("a recording that starts before the last one's text arrives: each text keeps its own app (review #521)", async () => {
+    const { sidecar, d, added } = setup();
+    const mail = { bundleId: "com.apple.mail", name: "Mail" };
+    const slack = { bundleId: "com.tinyspeck.slackmacgap", name: "Slack" };
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: mail });
+    sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 900, samples: 14400 });
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: slack });
+    sidecar.emit(transcript("oi ana segue o relatório"));
+    sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 900, samples: 14400 });
+    sidecar.emit(transcript("beleza valeu"));
+    await d.idle();
+    expect(added.map((e) => [e.app?.name, e.tone])).toEqual([
+      ["Mail", "formal"],
+      ["Slack", "casual"],
+    ]);
+  });
+
+  test("a cancelled or failed recording has no text, so it doesn't take the next text's app", async () => {
+    const { sidecar, d, added } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.mail", name: "Mail" } });
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Terminal", name: "Terminal" } });
+    sidecar.emit({ type: "record.cancelled", reason: "hotkey" });
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Notes", name: "Notes" } });
+    sidecar.emit({ type: "record.error", reason: "hotkey", error: "device_changed", microphone: "granted" });
+    sidecar.emit(transcript("oi ana segue o relatório"));
+    await d.idle();
+    expect(added.map((e) => e.app?.name)).toEqual(["Mail"]);
+  });
+
+  test("onDone also fires for an empty transcript and for transcript.error", async () => {
+    const { sidecar, d } = setup();
+    const outcomes: unknown[] = [];
+    d.onDone = (o) => outcomes.push(o);
+    sidecar.emit(transcript(""));
+    sidecar.emit({ type: "transcript.error", error: "stt_failed" });
+    await d.idle();
+    expect(outcomes).toMatchObject([
+      { skipped: "empty", pasted: false },
+      { skipped: "error", error: "stt_failed", pasted: false },
+    ]);
+  });
+
   test("an empty transcript hides the pill and pastes nothing", async () => {
     const { sidecar, d, added, overlays, inserted } = setup();
     sidecar.emit(transcript("   ", { lang: "" }));

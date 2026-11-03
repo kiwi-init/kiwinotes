@@ -51,8 +51,11 @@ export const TRANSCRIPT_ERROR: Record<string, string> = {
 export interface DictationOutcome {
   entry?: HistoryEntry;
   text: string;
-  tone: Tone;
+  tone?: Tone;
   pasted: boolean;
+  /** `empty`: sem fala, nada colado nem guardado. `error`: o `transcript.error` (com o código em `error`). */
+  skipped?: "empty" | "error";
+  error?: string;
   /** Da chegada do transcript até a pílula em `done`. */
   appMs: number;
 }
@@ -60,12 +63,16 @@ export interface DictationOutcome {
 export class Dictation {
   private dictionary: DictionaryTerm[] = [];
   private snippets: Snippet[] = [];
-  /** O app da frente agora (`app.active`) e o da gravação em curso (`record.started`). */
+  /** O app da frente agora (`app.active`). */
   private activeApp?: AppRef;
-  private recordingApp?: AppRef;
+  /**
+   * O app de cada gravação que ainda espera o texto, na ordem (`record.started`). Uma gravação nova pode começar
+   * antes de chegar o texto da anterior, e cada texto sai com o tom do app em que foi ditado (review #521).
+   */
+  private recordings: (AppRef | undefined)[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private offs: (() => void)[] = [];
-  /** Avisa cada ditado terminado (testes e log). */
+  /** Avisa cada ditado terminado, inclusive o vazio e o que deu erro (testes, a ação `debug-transcribe`). */
   onDone?: (outcome: DictationOutcome) => void;
 
   constructor(private readonly options: DictationOptions) {}
@@ -77,17 +84,23 @@ export class Dictation {
         this.activeApp = { bundleId: e.bundleId, name: e.name };
       }),
       sidecar.on("record.started", (e) => {
-        this.recordingApp = e.app ?? this.activeApp;
-        this.prewarm();
+        const app = e.app ?? this.activeApp;
+        this.recordings.push(app);
+        this.prewarm(app);
       }),
+      // A gravação que acabou de começar não vai ter texto.
+      sidecar.on("record.cancelled", () => void this.recordings.pop()),
+      sidecar.on("record.error", () => void this.recordings.pop()),
       sidecar.on("transcript.final", (e) => {
-        const app = this.recordingApp ?? this.activeApp;
-        this.recordingApp = undefined;
-        this.enqueue(() => this.handle(e, app));
+        const app = this.recordings.length ? this.recordings.shift() : this.activeApp;
+        this.enqueue(() => this.handle(e, app ?? this.activeApp));
       }),
       sidecar.on("transcript.error", (e) => {
-        this.recordingApp = undefined;
-        this.enqueue(() => this.overlay("error", TRANSCRIPT_ERROR[e.error] ?? TRANSCRIPT_ERROR.stt_failed));
+        this.recordings.shift();
+        this.enqueue(async () => {
+          await this.overlay("error", TRANSCRIPT_ERROR[e.error] ?? TRANSCRIPT_ERROR.stt_failed);
+          this.onDone?.({ text: "", pasted: false, skipped: "error", error: e.error, appMs: 0 });
+        });
       }),
     );
   }
@@ -114,18 +127,22 @@ export class Dictation {
   }
 
   /** Com o LLM ligado, aquece o Foundation Models com o prompt certo enquanto a pessoa fala. */
-  private prewarm() {
+  private prewarm(app: AppRef | undefined) {
     const { llm, llmMode = "off" } = this.options;
     if (llmMode === "off" || !llm?.available() || llm.name !== "foundation-models") return;
-    const tone = toneFor(this.recordingApp?.bundleId);
+    const tone = toneFor(app?.bundleId);
     if (tone === "literal") return;
     void this.options.sidecar.send({ type: "llm.prewarm", system: llmSystemMessage(tone, this.dictionary) }).catch(() => {});
   }
 
   private async handle(t: Transcript, app: AppRef | undefined): Promise<void> {
     const started = performance.now();
+    const empty = async () => {
+      await this.overlay("hidden");
+      this.onDone?.({ text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
+    };
     // Sem fala (gravação vazia ou só ruído com o VAD): nada para colar nem guardar.
-    if (!t.text.trim()) return void (await this.overlay("hidden"));
+    if (!t.text.trim()) return empty();
 
     const result = await cleanup(
       { raw: t.text, bundleId: app?.bundleId, dictionary: this.dictionary },
@@ -133,7 +150,7 @@ export class Dictation {
     );
     // Os snippets entram depois da limpeza, para o texto deles sair exatamente como a pessoa escreveu.
     const text = expandSnippets(result.text, this.snippets);
-    if (!text.trim()) return void (await this.overlay("hidden"));
+    if (!text.trim()) return empty();
 
     let insert: InsertResult;
     try {

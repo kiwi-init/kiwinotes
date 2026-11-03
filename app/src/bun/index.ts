@@ -85,17 +85,29 @@ AgentControl.registerAction("history-add", {
   },
 });
 
-// Com KIWI_DEBUG=1, um WAV (áudio sintético do `say`, nunca gravação de alguém) faz o caminho inteiro de um
-// ditado: STT → limpeza → colagem no app da frente → histórico. É o teste de ponta a ponta sem microfone (T457):
-//   bun run agent call actions.invoke '{"name":"debug-transcribe","params":{"path":"/tmp/frase.wav"}}'
+// Com KIWI_DEBUG=1, um áudio sintético (do `say`, nunca gravação de alguém) faz o caminho inteiro de um ditado:
+// STT → limpeza → `insert.text` em dryRun (nada é colado nem vai para o clipboard) → histórico. É o teste de ponta a
+// ponta dos agentes, sem microfone (T457, #490):
+//   bun run agent call actions.invoke '{"name":"debug-transcribe","params":{"path":"/tmp/frase.aiff"}}'
 if (process.env.KIWI_DEBUG === "1") {
   AgentControl.registerAction("debug-transcribe", {
-    description: "Passa um WAV de 16 kHz pelo fluxo do ditado (só com KIWI_DEBUG=1)",
-    params: { path: "caminho absoluto do WAV" },
+    description: "Passa um arquivo de áudio sintético pelo fluxo do ditado, em dryRun (só com KIWI_DEBUG=1)",
+    params: { path: "caminho absoluto do áudio (WAV, AIFF…; o helper converte)" },
     handler: async (params) => {
-      const done = new Promise((resolve) => (dictation.dictation.onDone = resolve));
-      await dictation.sidecar.request({ type: "debug.transcribe", path: String(params.path ?? "") });
-      return await done;
+      // Resolve com o ditado (também o vazio e o com erro), ou desiste em 60 s.
+      let timer: Timer | undefined;
+      const done = new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("no transcript in 60 s")), 60_000);
+        dictation.dictation.onDone = resolve;
+      });
+      try {
+        await dictation.sidecar.request({ type: "debug.transcribe", path: String(params.path ?? "") });
+        return await done;
+      } finally {
+        clearTimeout(timer);
+        dictation.dictation.onDone = undefined;
+        done.catch(() => {});
+      }
     },
   });
 }

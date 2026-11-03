@@ -100,6 +100,37 @@ describe("Sidecar", () => {
     expect(s.ready?.hotkeyActive).toBe(false);
   });
 
+  test("a big message arrives whole, even when the socket takes it in pieces (review #521)", async () => {
+    // The fake helper answers with the size of what it got; 600 terms with aliases is ~30 KB, this is ~200 KB.
+    const helper = fakeHelper((m) => ({ ok: true, data: { bytes: JSON.stringify(m).length } }));
+    const s = make(helper, 5000);
+    await s.whenReady();
+    const dictionary = Array.from({ length: 4000 }, (_, i) => ({ term: `Termo${i}`, aliases: [`alias numero ${i}`] }));
+    const command = { type: "config.set" as const, dictionary };
+    const [big, small] = await Promise.all([s.send(command), s.send({ type: "ping" })]);
+    expect(big.ok).toBe(true);
+    expect((big as any).data.bytes).toBeGreaterThan(200_000);
+    expect(small.ok).toBe(true);
+  });
+
+  test("a helper that can't start (ENOENT) doesn't take the app down: it's tried again", async () => {
+    const helper = fakeHelper();
+    let attempts = 0;
+    dir = mkdtempSync(path.join(tmpdir(), "kiwi-sidecar-"));
+    sidecar = new Sidecar({
+      helper: "/no/such/kiwi-helper",
+      socketPath: path.join(dir, "s.sock"),
+      spawn: (argv) => {
+        if (attempts++ === 0) throw new Error("ENOENT: no such file or directory, posix_spawn");
+        return helper.spawn(argv);
+      },
+      log: () => {},
+    });
+    expect(() => sidecar!.start()).not.toThrow();
+    expect((await sidecar.whenReady()).type).toBe("ready");
+    expect(attempts).toBe(2);
+  });
+
   test("a request without an answer times out", async () => {
     const s = make(fakeHelper(() => undefined), 50);
     await s.whenReady();
