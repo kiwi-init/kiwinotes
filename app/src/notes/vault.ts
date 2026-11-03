@@ -122,6 +122,8 @@ export class Vault {
   private ready: Promise<void> | null = null;
   /** A resolução de [[links]] para as notas de agora; refeita quando uma nota entra, sai ou muda de nome. */
   private resolver: Resolver | null = null;
+  /** Só para os testes: roda entre gravar o arquivo temporário e conferir a versão (uma edição de fora bem ali). */
+  private beforeReplace?: () => void;
 
   constructor(o: VaultOptions) {
     this.root = o.root;
@@ -247,7 +249,9 @@ export class Vault {
     if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
     const current = await this.get(p);
     if (current.version !== baseVersion) return { saved: false, current };
-    const entry = await this.write(p, content);
+    // A escrita confere a versão de novo, logo antes de trocar o arquivo: uma edição de fora no meio não se perde.
+    const entry = await this.write(p, content, baseVersion);
+    if (!entry) return { saved: false, current: await this.get(p) };
     return { saved: true, meta: entry.meta };
   }
 
@@ -259,7 +263,8 @@ export class Vault {
       const p = notePath(`${dir ? `${dir}/` : ""}${n === 1 ? name : `${name} ${n}`}.md`);
       if (this.notes.has(p) || (await exists(inside(this.root, p)))) continue;
       await mkdir(path.dirname(inside(this.root, p)), { recursive: true });
-      const entry = await this.write(p, content);
+      const entry = await this.write(p, content, null); // null: só se o arquivo ainda não existe
+      if (!entry) continue;
       return { ...entry.meta, content };
     }
     throw new VaultError("E_EXISTS", `too many notes called ${name}`);
@@ -272,6 +277,9 @@ export class Vault {
     const fromAbs = inside(this.root, from);
     const toAbs = inside(this.root, to);
     if (!(await exists(fromAbs))) throw new VaultError("E_NOT_FOUND", `no note ${from}`);
+    // O índice pode estar atrás do disco (o debounce do watcher, um evento perdido, uma nota criada fora): o rename
+    // reescreve outras notas, então parte do disco, nunca do que está na memória (revisão #1397).
+    await this.scan();
     // Num disco sem diferença de maiúscula, "nota.md" → "Nota.md" é a mesma nota: vale.
     if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
     const before = [...this.notes.keys()];
@@ -290,10 +298,18 @@ export class Vault {
     const resolveAfter = makeResolver(after);
     for (const e of [...this.notes.values()]) {
       if (!e.links.some((t) => resolveBefore(t) === from)) continue;
-      const { content: next, count } = rewriteLinks(e.content, from, to, resolveBefore, resolveAfter);
-      if (!count) continue;
-      updatedLinks += count;
-      await this.write(e.meta.path, next);
+      // Do disco, e escrita condicional: se a nota mudar entre ler e escrever, lê de novo (até 3 vezes).
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const abs = inside(this.root, e.meta.path);
+        const disk = await readFile(abs, "utf8").catch(() => null);
+        if (disk === null) break;
+        const { content: next, count } = rewriteLinks(disk, from, to, resolveBefore, resolveAfter);
+        if (!count) break;
+        if (await this.write(e.meta.path, next, versionOf(disk))) {
+          updatedLinks += count;
+          break;
+        }
+      }
     }
     this.emit([from, to]);
     return { meta: (this.notes.get(to) ?? entry).meta, updatedLinks };
@@ -318,12 +334,24 @@ export class Vault {
     return this.resolver;
   }
 
-  private async write(p: string, content: string): Promise<Entry> {
+  /**
+   * Escreve ao lado e troca: o Obsidian, o watcher ou um crash nunca veem metade de uma nota. Com `expect`, só troca
+   * se o arquivo ainda está naquela versão (`null`: se ele ainda não existe), relida logo antes da troca; senão não
+   * escreve e devolve null. A janela que sobra é a do próprio `rename`, de microssegundos.
+   */
+  private async write(p: string, content: string, expect?: string | null): Promise<Entry | null> {
     const abs = inside(this.root, p);
-    // Escreve ao lado e troca: o Obsidian, o watcher ou um crash nunca veem metade de uma nota.
     const temp = path.join(path.dirname(abs), `.kiwi-${randomBytes(6).toString("hex")}.tmp`);
     await writeFile(temp, content);
     try {
+      this.beforeReplace?.();
+      if (expect !== undefined) {
+        const now = await readFile(abs, "utf8").catch(() => null);
+        if (expect === null ? now !== null : now === null || versionOf(now) !== expect) {
+          await rm(temp, { force: true });
+          return null;
+        }
+      }
       await rename(temp, abs);
     } catch (e) {
       await rm(temp, { force: true });

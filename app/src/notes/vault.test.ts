@@ -143,6 +143,30 @@ describe("Vault (T1316)", () => {
     expect(await code(v.rename("Outra.md", "Diário.md"))).toBe("E_EXISTS");
   });
 
+  test("rename não apaga o que mudou fora e o índice ainda não viu (revisão #1397)", async () => {
+    const { v, root } = await vault({ "A.md": "a", "B.md": "Veja [[A]].\n" });
+    // Editada no Obsidian depois do open, antes do watcher (ou sem ele): o índice ainda tem a versão velha.
+    writeFileSync(path.join(root, "B.md"), "Veja [[A]].\nUma linha nova escrita no Obsidian.\n");
+    await v.rename("A.md", "C.md");
+    expect(readFileSync(path.join(root, "B.md"), "utf8")).toBe("Veja [[C]].\nUma linha nova escrita no Obsidian.\n");
+    // E uma nota que ganhou o link fora do app também é atualizada.
+    writeFileSync(path.join(root, "D.md"), "nova, aponta para [[C]]");
+    await v.rename("C.md", "E.md");
+    expect(readFileSync(path.join(root, "D.md"), "utf8")).toBe("nova, aponta para [[E]]");
+  });
+
+  test("save não sobrescreve uma edição de fora que chega entre a leitura e a escrita (#1397)", async () => {
+    const { v, root } = await vault({ "N.md": "um" });
+    const base = (await v.get("N.md")).version;
+    // Simula o Obsidian salvando bem no meio: a escrita confere a versão de novo, logo antes de trocar o arquivo.
+    const original = (v as unknown as { beforeReplace?: () => void }).beforeReplace;
+    (v as unknown as { beforeReplace: () => void }).beforeReplace = () => writeFileSync(path.join(root, "N.md"), "do Obsidian");
+    const out = await v.save("N.md", "meu", base);
+    (v as unknown as { beforeReplace?: () => void }).beforeReplace = original;
+    expect(out).toMatchObject({ saved: false, current: { content: "do Obsidian" } });
+    expect(readFileSync(path.join(root, "N.md"), "utf8")).toBe("do Obsidian");
+  });
+
   test("delete manda para a Lixeira (não apaga direto)", async () => {
     const { v, trashed } = await vault({ "Velha.md": "x" });
     expect(await v.delete("Velha.md")).toBe(true);
