@@ -10,7 +10,12 @@
  *   preload entra pelo WebView, fora da CSP;
  * - `style-src` com `'unsafe-inline'`: o CodeMirror da janela Notas cai numa tag `<style>` quando não há
  *   `adoptedStyleSheets` (#1385). A UI não monta HTML (nada de `innerHTML`), então isso não abre script;
- * - `connect-src 'none'`: a UI só fala com o main pela ponte do RPC, nunca por rede;
+ * - `connect-src ws://127.0.0.1:*`: só o socket da ponte do RPC, que o preload do Electrobun abre em
+ *   `ws://127.0.0.1:<porta>` (a porta muda a cada vez). Com `'none'`, o WebKit lança `SecurityError` no
+ *   `new WebSocket`, a inicialização do preload para antes de pôr o transporte do RPC, e nenhuma janela sobe (#1419).
+ *   Nada de rede de verdade: nem `https:`, nem outro host;
+ * - sem `'unsafe-eval'`: o `evaluateJavascriptWithResponse` do preload (`new Function`) devolve o erro em vez de rodar.
+ *   O app usa o `executeJavascript`, que vem do WebView e não passa pela CSP;
  * - `object-src`, `frame-src`, `base-uri` e `form-action` em `'none'`: nada de plugin, iframe, `<base>` nem form que
  *   leve a outro lugar.
  */
@@ -20,7 +25,7 @@ export const VIEWS_CSP = [
   "style-src 'self' views: 'unsafe-inline'",
   "img-src 'self' views: data:",
   "font-src 'self' views: data:",
-  "connect-src 'none'",
+  "connect-src ws://127.0.0.1:*",
   "object-src 'none'",
   "frame-src 'none'",
   "base-uri 'none'",

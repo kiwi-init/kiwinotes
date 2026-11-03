@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { VIEWS_CSP, windowSecurity } from "./window-security.ts";
@@ -49,11 +49,32 @@ describe("trava das janelas (T1378)", () => {
     for (const dev of [null, "http://localhost:5178"]) expect(windowSecurity(dev).contentSecurityPolicy).toBe(VIEWS_CSP);
     const d = directives(VIEWS_CSP);
     expect(d.get("script-src")).toEqual(["'self'", "views:"]);
-    expect(d.get("connect-src")).toEqual(["'none'"]);
+    // Só o socket local da ponte do RPC (#1419): com 'none' o preload lança no `new WebSocket` e a janela não sobe.
+    expect(d.get("connect-src")).toEqual(["ws://127.0.0.1:*"]);
     expect(d.get("object-src")).toEqual(["'none'"]);
     expect(d.get("base-uri")).toEqual(["'none'"]);
     expect(VIEWS_CSP).not.toContain("unsafe-eval");
     expect(VIEWS_CSP).not.toMatch(/[\r\n\0]/); // o Electrobun recusa header com quebra de linha
+  });
+
+  test("connect-src aceita o socket do preload e recusa rede (#1419)", () => {
+    const sources = directives(VIEWS_CSP).get("connect-src")!;
+    // A regra de host-source da CSP para o que está aqui: esquema, host e porta, com `*` de porta.
+    const allows = (url: string) => {
+      const u = new URL(url);
+      return sources.some((src) => {
+        const m = /^(\w+):\/\/([^:/]+):(\*|\d+)$/.exec(src);
+        return !!m && u.protocol === `${m[1]}:` && u.hostname === m[2] && (m[3] === "*" || u.port === m[3]);
+      });
+    };
+    // O que o preload abre: `ws://127.0.0.1:${HOST_SOCKET_PORT}/socket?webviewId=…`.
+    // Confere no preload do devkit, quando ele já foi preparado (`bun run prepare:eb`; numa worktree nova ainda não).
+    const compiled = path.resolve(import.meta.dirname, "../../.hutch/devkit/api/preload/.generated/compiled.ts");
+    if (existsSync(compiled))
+      expect(readFileSync(compiled, "utf8")).toContain("new WebSocket(`ws://127.0.0.1:${HOST_SOCKET_PORT}/socket");
+    expect(allows("ws://127.0.0.1:50123/socket?webviewId=3")).toBe(true);
+    for (const url of ["https://example.com/", "ws://example.com:80/", "ws://localhost:50123/", "wss://127.0.0.1:443/", "http://127.0.0.1:5178/"])
+      expect(allows(url)).toBe(false);
   });
 
   test("o HTML das UIs cabe na CSP: nada de script inline", () => {
