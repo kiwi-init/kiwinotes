@@ -1,5 +1,5 @@
 {
-  "originHash" : "9dbc1648e32266d6ecd2021ec85bdf0e08f6a4af828fd25b0a93b635c3ffec0b",
+  "originHash" : "02515753113eda16031bb9e28d8200134f8acd33bf61073bf6f8600fbe10de09",
   "pins" : [
     {
       "identity" : "argmax-oss-swift",
@@ -71,6 +71,15 @@
       "state" : {
         "revision" : "150169bfba0889c229a2ce7494cf8949f18e6906",
         "version" : "1.1.9"
+      }
+    },
+    {
+      "identity" : "transcribe-cpp-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Beingpax/Transcribe-cpp-swift.git",
+      "state" : {
+        "revision" : "fb1c1ad99e8939a69fcfb613417d9635fb77ef42",
+        "version" : "0.2.0-dev.856d7c1"
       }
     },
     {

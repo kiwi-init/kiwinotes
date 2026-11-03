@@ -1,13 +1,17 @@
 import AVFoundation
+import CryptoKit
 import Darwin
 import FluidAudio
 import Foundation
+import TranscribeCpp
 import WhisperKit
 
 // stt-bench <engine>        run the corpus and write results/<engine>.json
 //   engines: parakeet-v3 | parakeet-ultra | parakeet-unified | nemotron-unified | whisper:<model>
-//   (a name from argmaxinc/whisperkit-coreml, e.g. openai_whisper-small), then optionally:
-//     @<lang>  a language hint: Parakeet v3/Ultra filter tokens by script, Nemotron takes it as its prompt (pt, en, auto)
+//   (a name from argmaxinc/whisperkit-coreml, e.g. openai_whisper-small) | tcpp:<model> (transcribe.cpp, a name
+//   from `tcppCatalog`), then optionally:
+//     @<lang>  a language hint: Parakeet v3/Ultra filter tokens by script, Nemotron takes it as its prompt (pt, en, auto),
+//              transcribe.cpp passes it to the model (Cohere needs one; Whisper detects without it)
 //     +vocab   each engine's own way to use the dictionary in vocab.txt
 // stt-bench --list-whisper  list WhisperKit models
 // One engine per process, so the memory numbers are its own.
@@ -138,6 +142,105 @@ final class Whisper: Engine {
     }
 }
 
+/// A GGUF from Hugging Face, pinned to a revision and checked by size and SHA-256 (VoiceInk's
+/// `TranscribeCppModelCatalog` does the same).
+struct GGUF {
+    let repository, revision, file, sha256: String
+    let size: Int64
+    /// What the model needs in `RunOptions.language`: Cohere has no language detection.
+    let needsLanguage: Bool
+}
+
+let tcppCatalog: [String: GGUF] = [
+    // The quantization VoiceInk ships (1.56 GB), and Q8_0, the one transcribe.cpp reports its WER on.
+    "cohere": GGUF(repository: "handy-computer/cohere-transcribe-03-2026-gguf",
+                   revision: "dfa4adebb64f3076b7b6b90b721275cc069cb421",
+                   file: "cohere-transcribe-03-2026-Q4_K_M.gguf",
+                   sha256: "0ea56826d8bd5d74b7143a4a04e022dc1bb75452cfae49d98b6acb0c1d16a1fb",
+                   size: 1_558_162_944, needsLanguage: true),
+    "cohere-q8": GGUF(repository: "handy-computer/cohere-transcribe-03-2026-gguf",
+                      revision: "7353b6040bdc1be9e5a3823d99d5fe12afe88264",
+                      file: "cohere-transcribe-03-2026-Q8_0.gguf",
+                      sha256: "931916663432fd895423a4291a8400221802b288967ca2d435fc5e3141c9e71e",
+                      size: 2_410_655_232, needsLanguage: true),
+    "whisper-turbo": GGUF(repository: "handy-computer/whisper-large-v3-turbo-gguf",
+                          revision: "18ada752005f5fddef499256f9a458d0b37a203a",
+                          file: "whisper-large-v3-turbo-Q8_0.gguf",
+                          sha256: "257aa7ec9121c22c167d5e2c49e3e76b4ba0e6e27ebc13074eba0a80f8190220",
+                          size: 886_381_728, needsLanguage: false),
+    // The same Parakeet Ultra as FluidAudio, to see what one runtime for everything would cost.
+    "parakeet-ultra": GGUF(repository: "handy-computer/parakeet-ultra-gguf",
+                           revision: "a1539be1b849ea7463b88343e5277b373d0c4ea9",
+                           file: "parakeet-ultra-Q8_0.gguf",
+                           sha256: "007a59761e9258779f189df396b50d12b83bb5b79e66df4b955c230d2f2a0a59",
+                           size: 740_363_168, needsLanguage: false),
+]
+
+final class TranscribeCppEngine: Engine {
+    let name: String
+    private let gguf: GGUF
+    private let language: String?
+    private let vocabulary: [String]?
+    private var model: TranscribeCpp.Model?
+    private var isWhisper = false
+
+    init(name: String, gguf: GGUF, language: String?, vocabulary: [String]?) {
+        self.name = name
+        self.gguf = gguf
+        self.language = language
+        self.vocabulary = vocabulary
+    }
+
+    var file: URL {
+        modelsBase.appendingPathComponent("transcribe-cpp/\(gguf.repository)", isDirectory: true)
+            .appendingPathComponent(gguf.file)
+    }
+
+    func load() async throws {
+        try await download()
+        try Transcribe.initBackends()
+        let loaded = try TranscribeCpp.Model(path: file.path, options: ModelOptions(backend: .metal))
+        isWhisper = loaded.arch.localizedCaseInsensitiveContains("whisper")
+        model = loaded
+    }
+
+    func transcribe(_ samples: [Float]) async throws -> String {
+        // A new session per dictation, as VoiceInk's `OfflineTranscribeCppService` does.
+        let session = try model!.session()
+        var options = RunOptions(timestamps: .none, language: language, keepSpecialTags: false)
+        if isWhisper, let vocabulary {
+            // Whisper's way to bias spelling, as in the WhisperKit engine: the terms as the initial prompt.
+            options.family = .whisper(WhisperRunOptions(initialPrompt: vocabulary.joined(separator: ", ")))
+        }
+        return try await session.run(samples, options: options).text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func download() async throws {
+        let fm = FileManager.default
+        let checked = file.appendingPathExtension("sha256")
+        if (try? String(contentsOf: checked, encoding: .utf8)) == gguf.sha256 { return }
+        try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if (try? fm.attributesOfItem(atPath: file.path)[.size] as? Int64) != gguf.size {
+            let url = URL(string: "https://huggingface.co/\(gguf.repository)/resolve/\(gguf.revision)/\(gguf.file)")!
+            print("downloading \(gguf.file) (\(gguf.size / 1_000_000) MB)")
+            let (tmp, response) = try await URLSession.shared.download(from: url)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            try? fm.removeItem(at: file)
+            try fm.moveItem(at: tmp, to: file)
+        }
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 8 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
+        let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        guard digest == gguf.sha256 else {
+            try? fm.removeItem(at: file)
+            throw NSError(domain: "stt-bench", code: 3, userInfo: [NSLocalizedDescriptionKey: "\(gguf.file): wrong SHA-256"])
+        }
+        try gguf.sha256.write(to: checked, atomically: true, encoding: .utf8)
+    }
+}
+
 // MARK: Measurements
 
 func physFootprintMB() -> Double {
@@ -237,7 +340,7 @@ if args.first == "--list-whisper" {
     exit(0)
 }
 guard let spec = args.first else {
-    print("usage: stt-bench <parakeet-v3|parakeet-ultra|parakeet-unified|nemotron-unified|whisper:<model>>[@lang][+vocab] | --list-whisper")
+    print("usage: stt-bench <parakeet-v3|parakeet-ultra|parakeet-unified|nemotron-unified|whisper:<model>|tcpp:<model>>[@lang][+vocab] | --list-whisper")
     exit(2)
 }
 // A "+vocab" suffix turns on each engine's own way to use the dictionary in vocab.txt.
@@ -264,6 +367,13 @@ case "nemotron-unified":
     guard let prompt = NemotronUnifiedLanguage(rawValue: lang ?? "auto") else { print("unknown language \(lang!)"); exit(2) }
     engine = Unified(name: spec, family: .nemotronMultilingual(prompt), vocabulary: vocabulary)
 case _ where base.hasPrefix("whisper:"): engine = Whisper(model: String(base.dropFirst("whisper:".count)), vocabulary: vocabulary)
+case _ where base.hasPrefix("tcpp:"):
+    let key = String(base.dropFirst("tcpp:".count))
+    guard let gguf = tcppCatalog[key] else { print("unknown transcribe.cpp model \(key): \(tcppCatalog.keys.sorted())"); exit(2) }
+    let hint = lang == "auto" ? nil : lang
+    guard hint != nil || !gguf.needsLanguage else { print("\(key) needs a language (@pt or @en)"); exit(2) }
+    guard vocabulary == nil || key.hasPrefix("whisper") else { print("\(key) takes no prompt: +vocab is Whisper only"); exit(2) }
+    engine = TranscribeCppEngine(name: spec, gguf: gguf, language: hint, vocabulary: vocabulary)
 default:
     print("unknown engine \(spec)")
     exit(2)
@@ -346,3 +456,7 @@ WER pt %.1f%%  en %.1f%%  mix %.1f%%  all %.1f%%
 """, engine.name, loadSeconds, firstInference, loadedMB - baseMB, peakFootprintMB(), cpuPercent,
        summary.latencyShortP50, summary.latencyShortP90, summary.latencyLongP50, summary.rtfMedian,
        summary.werPT, summary.werEN, summary.werMix, summary.werAll))
+// transcribe.cpp's Metal backend asserts in its exit-time teardown (ggml-metal-device.m:622, residency sets);
+// everything is written by now, so leave without running it.
+fflush(stdout)
+_exit(0)

@@ -10,7 +10,9 @@ for pass in cold warm; do
   # A literal list: no word splitting of a variable, which some shells don't do.
   for e in parakeet-v3 parakeet-v3+vocab parakeet-ultra parakeet-ultra+vocab parakeet-ultra@pt \
            nemotron-unified@auto nemotron-unified@pt nemotron-unified@pt+vocab parakeet-unified \
-           "$TURBO" whisper:openai_whisper-small whisper:openai_whisper-small+vocab whisper:openai_whisper-base; do
+           "$TURBO" whisper:openai_whisper-small whisper:openai_whisper-small+vocab whisper:openai_whisper-base \
+           tcpp:cohere@pt tcpp:cohere-q8@pt tcpp:whisper-turbo@auto tcpp:whisper-turbo@pt tcpp:whisper-turbo@auto+vocab \
+           tcpp:parakeet-ultra; do
     echo "=== $pass $e"
     .build/release/stt-bench "$e" 2>&1 | grep -v '^[[:space:]]*$' | tail -4
   done
