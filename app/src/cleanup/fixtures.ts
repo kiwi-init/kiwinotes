@@ -63,6 +63,26 @@ export const fixtures: Fixture[] = [
   { name: "ou melhor ainda é ênfase", raw: "Ou melhor ainda, a gente faz isso amanhã.", expected: "Ou melhor ainda, a gente faz isso amanhã." },
   { name: "what I mean é conteúdo", raw: "That's what I mean.", expected: "That's what I mean." },
 
+  // Sem vírgula, como o STT entrega (T1229). Só vale quando o que vem depois repete uma palavra da frase.
+  { name: "ou melhor sem vírgula", raw: "a entrega é dia dez ou melhor dia doze", expected: "A entrega é dia doze." },
+  { name: "ou melhor sem vírgula, pro/pra", raw: "manda pro joão ou melhor pra maria o relatório", expected: "Manda pra maria o relatório." },
+  { name: "ou melhor sem nada que repita fica", raw: "dá pra fazer hoje ou melhor amanhã", expected: "Dá pra fazer hoje ou melhor amanhã." },
+  { name: "ou melhor sem vírgula troca no máximo 2 palavras", raw: "esse plano é bom ou melhor plano que já vi", expected: "Esse plano é bom ou melhor plano que já vi." },
+  { name: "ou melhor do que é comparação", raw: "o novo ficou igual ou melhor do que o antigo", expected: "O novo ficou igual ou melhor do que o antigo." },
+  { name: "digo sem vírgula", raw: "o custo foi de cem reais digo duzentos reais", expected: "O custo foi de duzentos reais." },
+  { name: "digo sem vírgula com a mesma palavra", raw: "chego às três digo às quatro", expected: "Chego às quatro." },
+  { name: "eu digo e aí fica", raw: "e aí eu digo e aí ele riu", expected: "E aí eu digo e aí ele riu." },
+  { name: "te digo fica", raw: "como eu te digo sempre ele chega cedo", expected: "Como eu te digo sempre ele chega cedo." },
+  { name: "o que eu digo fica", raw: "ele faz o que eu digo e o que eu faço", expected: "Ele faz o que eu digo e o que eu faço." },
+  { name: "não espera sem vírgula", raw: "a reunião é na quinta não espera na sexta de manhã", expected: "A reunião é na sexta de manhã." },
+  { name: "não espera verbo com palavra repetida fica", raw: "ele não espera ele chegar", expected: "Ele não espera ele chegar." },
+  { name: "não espera que fica", raw: "o time não espera que a entrega atrase", expected: "O time não espera que a entrega atrase." },
+  { name: "não espera sem nada que repita fica", raw: "vamos usar postgres não espera mysql", expected: "Vamos usar postgres não espera mysql." },
+  { name: "apaga isso no meio da frase", raw: "liga pra ela amanhã apaga isso manda um email pra ela amanhã", expected: "Manda um email pra ela amanhã." },
+  { name: "apaga isso do servidor fica", raw: "se não for usar apaga isso do servidor amanhã", expected: "Se não for usar apaga isso do servidor amanhã." },
+  { name: "apaga isso e continua fica", raw: "terminou o teste apaga isso e me avisa", expected: "Terminou o teste apaga isso e me avisa." },
+  { name: "apaga isso sem repetir fica", raw: "o arquivo velho tá na pasta apaga isso agora mesmo", expected: "O arquivo velho tá na pasta apaga isso agora mesmo." },
+
   // ---------------------------------------------------------------- comandos e listas
   { name: "nova linha e novo parágrafo", raw: "oi pessoal nova linha segue o resumo novo parágrafo abraço", expected: "Oi pessoal\nSegue o resumo\n\nAbraço." },
   { name: "novo parágrafo mantém o ponto de antes", raw: "Eu tava, hum, pensando. Novo parágrafo. A gente podia mudar a API.", expected: "Eu tava pensando.\n\nA gente podia mudar a API." },
@@ -79,6 +99,24 @@ export const fixtures: Fixture[] = [
   { name: "primeiro de maio e segunda-feira não são lista", raw: "Primeiro de maio, segunda-feira, é feriado.", expected: "Primeiro de maio, segunda-feira, é feriado." },
   { name: "segunda é dia da semana", raw: "primeiro eu falo com o João, segunda tem reunião", expected: "Primeiro eu falo com o João, segunda tem reunião." },
   { name: "do no começo não é pergunta", raw: "do jeito que ficou tá bom", expected: "Do jeito que ficou tá bom." },
+  // Sem vírgula, só com os três primeiros ordinais em sequência (T1229).
+  {
+    name: "lista sem vírgula",
+    raw: "as tarefas de hoje são primeiro revisar o pr segundo atualizar a doc terceiro responder o cliente",
+    expected: "As tarefas de hoje são:\n1. Revisar o pr\n2. Atualizar a doc\n3. Responder o cliente",
+  },
+  {
+    name: "lista sem vírgula com artigo e e",
+    raw: "pra viagem precisamos de primeiro o passaporte segundo o seguro e terceiro as passagens",
+    expected: "Pra viagem precisamos de:\n1. O passaporte\n2. O seguro\n3. As passagens",
+  },
+  { name: "lista sem vírgula em inglês", raw: "first update the readme second bump the version third tag the release", expected: "1. Update the readme\n2. Bump the version\n3. Tag the release" },
+  { name: "lista sem vírgula depois de uma linha", raw: "oi pessoal nova linha hoje tem primeiro revisar o pr segundo rodar os testes terceiro subir o deploy", expected: "Oi pessoal\nHoje tem:\n1. Revisar o pr\n2. Rodar os testes\n3. Subir o deploy" },
+  { name: "ordinais em parágrafos diferentes não são lista", raw: "primeiro eu revisei o pr nova linha segundo ele tá bom terceiro dia de testes", expected: "Primeiro eu revisei o pr\nSegundo ele tá bom terceiro dia de testes." },
+  { name: "dois ordinais sem vírgula não são lista", raw: "primeiro revisar o pr segundo atualizar a doc", expected: "Primeiro revisar o pr segundo atualizar a doc." },
+  { name: "ordinal com substantivo não é lista", raw: "primeiro dia segundo dia terceiro dia foi tudo igual", expected: "Primeiro dia segundo dia terceiro dia foi tudo igual." },
+  { name: "ordinais com artigo não são lista", raw: "o primeiro passo é revisar o segundo é testar e o terceiro é subir", expected: "O primeiro passo é revisar o segundo é testar e o terceiro é subir." },
+  { name: "segundo ele no meio não é item", raw: "primeiro eu liguei segundo ele o problema é na rede terceiro dia seguido", expected: "Primeiro eu liguei segundo ele o problema é na rede terceiro dia seguido." },
 
   // ---------------------------------------------------------------- pontuação
   { name: "pergunta sem pontuação do STT", raw: "quando sai o próximo release", expected: "Quando sai o próximo release?" },
@@ -128,6 +166,8 @@ export const fixtures: Fixture[] = [
   { name: "terminal: echo com variável é comando", raw: "Echo $HOME.", bundleId: TERMINAL, expected: "echo $HOME" },
   { name: "terminal: prosa para o Claude Code ganha pontuação", raw: "corrige o teste que tá quebrando no ci", bundleId: TERMINAL, expected: "Corrige o teste que tá quebrando no ci." },
   { name: "terminal: prosa não vira lista", raw: "primeiro, roda os testes, segundo, abre o PR", bundleId: TERMINAL, expected: "Primeiro, roda os testes, segundo, abre o PR." },
+  { name: "terminal: lista sem vírgula fica prosa", raw: "primeiro roda os testes segundo abre o pr terceiro faz o merge", bundleId: TERMINAL, expected: "Primeiro roda os testes segundo abre o pr terceiro faz o merge." },
+  { name: "terminal: correção sem vírgula fica", raw: "a reunião é na quinta não espera na sexta", bundleId: TERMINAL, expected: "A reunião é na quinta não espera na sexta." },
 
   // ---------------------------------------------------------------- o que as regras não podem tirar (T913)
   { name: "não quer dizer verbo fica", raw: "Ele não quer dizer a verdade.", expected: "Ele não quer dizer a verdade." },
