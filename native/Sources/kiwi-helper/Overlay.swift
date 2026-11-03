@@ -34,6 +34,9 @@ final class Overlay {
     }
 
     private func publish() {
+        // Hiding keeps the last visible phase on screen while it fades: switching to `.hidden` here would
+        // swap the ✓ (or the error) for the waveform for the length of the fade.
+        guard model.phase != .hidden else { return }
         state.phase = model.phase
         state.message = model.message
         state.bars = model.bars

@@ -103,6 +103,8 @@ public enum OverlayText {
         switch code {
         case "no_input_device": return "Nenhum microfone encontrado"
         case "microphone_denied", "not_authorized": return "Sem permissão do microfone"
+        case "microphone_undetermined": return "Permita o microfone e tente de novo"
+        case "device_changed": return "O microfone mudou"
         case "engine_start_failed", "audio_converter": return "Não deu para usar o microfone"
         default: return "Algo deu errado"
         }

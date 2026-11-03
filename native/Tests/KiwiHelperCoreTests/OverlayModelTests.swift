@@ -107,6 +107,8 @@ final class OverlayModelTests: XCTestCase {
 
     func testErrorTextForKnownCodes() {
         XCTAssertEqual(OverlayText.error("no_input_device"), "Nenhum microfone encontrado")
+        XCTAssertEqual(OverlayText.error("microphone_undetermined"), "Permita o microfone e tente de novo")
+        XCTAssertEqual(OverlayText.error("device_changed"), "O microfone mudou")
         XCTAssertEqual(OverlayText.error("whatever"), "Algo deu errado")
     }
 }

@@ -118,7 +118,8 @@ final class Helper {
             let code = (error as? AudioCaptureError)?.description ?? "engine_start_failed"
             let microphone = Permission.microphone.status
             emit("record.error", ["reason": reason, "error": code, "microphone": microphone])
-            overlay.set(.error, message: OverlayText.error(microphone == "granted" ? code : "microphone_denied"))
+            let shown = microphone == "granted" ? code : microphone == "undetermined" ? "microphone_undetermined" : "microphone_denied"
+            overlay.set(.error, message: OverlayText.error(shown))
             return code
         }
         recordingStartedAt = ProcessInfo.processInfo.systemUptime
@@ -142,7 +143,9 @@ final class Helper {
         if let path = dump(samples) { fields["audioPath"] = path }
         recordingStartedAt = nil
         emit("record.stopped", fields)
-        overlay.set(.processing) // the app moves it on with overlay.state done|error
+        // The app moves it on with overlay.state done|error. With nothing recorded (the mic prompt was up,
+        // or the engine never delivered) there is nothing to transcribe, so no `done` would come: hide now.
+        overlay.set(samples.isEmpty ? .hidden : .processing)
         // T51 hooks the STT in here and emits transcript.final.
     }
 
