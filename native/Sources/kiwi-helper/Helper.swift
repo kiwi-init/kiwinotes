@@ -13,6 +13,8 @@ final class Helper {
     private var tickTimer: DispatchWorkItem?
     private var recordingStartedAt: TimeInterval?
     private var lastPermissions: [String: String] = [:]
+    private let llm = LLM()
+    private var lastLlm = ""
 
     init(connection: SocketConnection, dumpDirectory: URL?) {
         self.connection = connection
@@ -41,6 +43,7 @@ final class Helper {
         }
         tap.start()
         lastPermissions = Permission.snapshot()
+        lastLlm = Self.key(llm.status)
         emit("ready", [
             "version": Self.version,
             "pid": Int(getpid()),
@@ -48,6 +51,7 @@ final class Helper {
             "hotkeyActive": hotkeyActive,
             "permissions": lastPermissions,
             "permissionHelp": Permission.explanations(),
+            "llm": llm.status,
         ])
         // Read only after `ready` is queued, so it is always the first line the app sees.
         connection.start()
@@ -185,7 +189,9 @@ final class Helper {
                 self?.reply(id, ok: true, ["permission": name, "state": status])
                 self?.pollPermissions()
             }
-        case "overlay.state", "insert.text", "notify", "llm.complete":
+        case "llm.complete", "llm.prewarm":
+            llm.handle(message) { [weak self] ok, error, fields in self?.reply(id, ok: ok, error: error, fields) }
+        case "overlay.state", "insert.text", "notify":
             reply(id, ok: false, error: "not_implemented")
         default:
             reply(id, ok: false, error: "unknown_type")
@@ -222,7 +228,10 @@ final class Helper {
 
     private func pollPermissions() {
         let now = Permission.snapshot()
-        guard now != lastPermissions else { return }
+        // Apple Intelligence can be turned on, or the model finish downloading, while we run.
+        let llmStatus = llm.status
+        guard now != lastPermissions || Self.key(llmStatus) != lastLlm else { return }
+        lastLlm = Self.key(llmStatus)
         let key = Permission.inputMonitoring.rawValue
         if now[key] == "granted", lastPermissions[key] != "granted" {
             // A tap made before the grant stays filtered; make a new one.
@@ -230,7 +239,11 @@ final class Helper {
             tap.start()
         }
         lastPermissions = now
-        emit("permissions.changed", ["permissions": now, "hotkeyActive": hotkeyActive])
+        emit("permissions.changed", ["permissions": now, "hotkeyActive": hotkeyActive, "llm": llmStatus])
+    }
+
+    private static func key(_ status: [String: Any]) -> String {
+        "\(status["available"] ?? false)|\(status["reason"] ?? "")"
     }
 
     /// The tap exists and macOS actually delivers key events to it (a listen-only tap is created
