@@ -77,6 +77,49 @@ Para ligar, falta:
 - (b) a guarda pegar troca de idioma e verbo trocado;
 - (c) tirar os espaços no fim da linha da saída.
 
+### Foundation Models com aquecimento, nos modos `auto` e `always` (T1208)
+- **Conjunto:** o `evalset.ts` com as 25 frases sintéticas do T1208 (`synthCases`: muletas, autocorreção no meio da frase, listas e tom por app). São 153 casos; os 35 do tom literal nunca passam pelo LLM.
+- **Como rodou:**
+  - Um probe que só chama o FoundationModels, em stdio. O `kiwi-helper` ficou fora porque liga o hotkey tap e o overlay.
+  - Cada caso faz o que o app faz: `llm.prewarm` com a mensagem de sistema, 2 s de "fala" e o `llm.complete`.
+  - Usa o prompt de produção, a geração greedy e a guarda, com limite de 30 s para medir a latência inteira.
+  - M1 Pro, macOS 27.2, com o `kiwi lock bench`. A 1ª chamada fria levou 5 s.
+- **Latência depois de soltar a tecla:**
+
+| | p50 | p95 | Dentro de 1,5 s |
+|---|---|---|---|
+| Só regras | ~0,01 ms | < 0,02 ms | todos |
+| Regras + FM, `always` (118 casos) | 1,54 s | 3,11 s | 51 de 118 |
+| Regras + FM, `auto` (24: tom formal ou ≥ 40 palavras) | 1,73 s | 3,39 s | **3 de 24** |
+
+  No `auto`, com o limite padrão de 1,5 s, 21 de 24 ditados esperariam 1,5 s e sairiam com o texto das regras mesmo.
+- **Qualidade (`always`):** revisão manual das 50 saídas que mexeram no texto das regras.
+  - **23 melhoram, 19 pioram e 8 ficam iguais.** Outras 64 saíram idênticas às regras, e a guarda descartou 2.
+  - No `auto` sozinho, 11 melhoram, 6 pioram e 1 fica igual.
+  - **Melhora:**
+    - vírgulas e frases no ditado longo e no e-mail;
+    - maiúscula em nome próprio (Maria, Carlos, Friday, São Paulo);
+    - tira o "sabe" e o "like";
+    - "primeiro… segundo… terceiro" sem vírgula vira 1. 2. 3.
+  - **Piora: 15 mudam o sentido e passaram pela guarda.**
+    - Traduziu para o inglês 4 vezes: "kubectl tá fora do path", "abre um PR", "Meu email é…" e "cem reais digo duzentos" → "The cost was 100 reais, I say 200".
+    - Trocou o verbo: segue → siga/segure, me encontra → me encontro.
+    - Inventou ou trocou: "às quatro" → "às 16h", segunda → depois, "Ou melhor ainda" → "O melhor ainda é que".
+    - Tirou "Ana" e "já resolvi" e inverteu quinta/sexta.
+    - Escreveu "20,000" e "10,000" em PT e passou nome de arquivo para maiúscula (`DICOM_STORE.py`).
+  - A guarda descartou um acerto: "dez ou melhor dia doze" → "A entrega é dia 12." caiu no `shrank`.
+
+**Decisão (#1228): o `llmMode` continua `off` por padrão, e o FM não ganha liga/desliga nas Configurações.**
+- O `auto` quase nunca chega a tempo.
+- O FM muda o sentido em 1 de cada 8 casos, e o texto vai colado direto no app da pessoa.
+- O fallback para as regras no timeout já existe (`polish`).
+
+O que o FM acerta aqui é, quase tudo, uma lacuna das regras: autocorreção no meio da frase ("ou melhor", "digo", "não espera", "apaga isso") e lista sem vírgula. Isso vai para as regras (T1229).
+
+Se um LLM for ligado, a guarda precisa pegar:
+- a troca de idioma em texto curto, porque a conta de palavras novas só vale com 3 ou mais;
+- o número com separador en-US num texto em PT.
+
 ## Consequências
 - A frase curta sai na hora e sempre igual, e as fixtures (`fixtures.ts`) descrevem exatamente o que a limpeza faz.
 - O que precisa de entender a frase (gramática, "tipo" sem vírgula depois de nome, reescrita de tom) só melhora onde o LLM entra. Para mudar onde ele entra, basta mexer na política do `wantsLlm`, sem tocar na arquitetura.
