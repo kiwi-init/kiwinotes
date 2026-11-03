@@ -29,6 +29,54 @@ Um texto que muda de sentido, colado direto no app da pessoa, é pior que um tex
 
 Por isso o modo continua `off` por padrão, e o T270 compara os modelos nas mesmas frases.
 
+### Foundation Models vs. modelos abertos no MLX (T270)
+- **Conjunto:** as fixtures do T52 e as 7 frases do round 3 (#297), com os casos dos reviews (`evalset.ts`). São 75 casos que passam pelo LLM; o tom literal fica fora.
+- **Como rodou:** pelo `eval.ts`, com o prompt de produção, `llmMode: "always"` e a guarda, num M1 Pro (16 GB) com o `kiwi lock bench`.
+  - O FM roda pelo sidecar (`llm.complete`).
+  - O MLX roda pelo `mlx_lm.server` 0.32.2 em 127.0.0.1, com temperatura 0,3 e `enable_thinking: false`, como no VoiceInk.
+  - É o mesmo MLX do mlx-swift-lm, mas pelo Python, então a latência do app pode sair um pouco diferente.
+- **Fidelidade:** revisão manual das saídas que a guarda deixou passar. Conta como "erro" o que muda o sentido ou o que foi ditado: um verbo trocado, uma palavra trocada ou tirada, uma tradução, uma resposta, um "Output:" que vazou ou um parágrafo perdido.
+
+| | FM (sidecar) | Qwen3-1.7B-4bit | Qwen3.5-2B-4bit | SmolLM3-3B-4bit |
+|---|---|---|---|---|
+| 1ª chamada (fria) | 3,7 s | 1,7 s | 5,5 s (carrega o modelo) | 2,8 s |
+| Depois: p50 / p90 / máx | 2,0 / 2,3 / 3,5 s | 0,23 / 0,42 / 0,90 s | 0,19 / 0,42 / 1,75 s | 0,37 / 1,0 / 4,9 s |
+| Dentro de 1,5 s | 0 de 75 | 74 de 75 | 71 de 75 | 71 de 75 |
+| Memória (RSS do servidor, pico) | fora do processo do Kiwi | 1,16 GB | 0,80 GB | 1,99 GB |
+| Mexeu no texto das regras | 28 | 18 | 27 | 36 |
+| Erros que passaram pela guarda | **9** | **6** | **5** | **~20** |
+| Guarda descartou | 1 | 0 | 5 (traduções) | 14 |
+| Traduziu PT → EN | 1 (passou) | 0 | 6 (1 passou) | 6 (2 passaram, 1 para FR) |
+| Respondeu em vez de limpar | 0 | 0 | 0 | 1 ("Canberra", passou) |
+
+- **FM:** são os mesmos erros do #144 e do round 3, agora em mais casos.
+  - Troca de palavra: "segue" → "siga"/"segure", "me encontra" → "me encontro", "segunda" → "depois".
+  - Uma autocorreção virou "O melhor ainda é que".
+  - Tirou "Ana" e "já resolvi" e escreveu "20,000" em PT.
+  - Nunca chega no limite de 1,5 s.
+- **Qwen3-1.7B:** é o mais conservador e o único que nunca traduz nem responde.
+  - Os erros: "Fechei" → "Feche" (2×), "seguro" → "segredo" numa lista, uma oração cortada no e-mail longo, um "Esse" inventado e um parágrafo ditado juntado.
+  - Termina as linhas de lista com dois espaços (quebra do Markdown).
+  - Quase não limpa: deixou o "é" no r3-relatorio.
+- **Qwen3.5-2B:** é o que melhor pontua e limpa, mas traduz para o inglês (6 de 75).
+  - A guarda pega quase todas as traduções; "É difícil explicar" → "It's difficult to explain" passou.
+  - Fora isso: "time" → "tempo", "esquece" → "esqueci", "segundo ele" perdeu o "ele" e tirou "Ana".
+- **SmolLM3-3B:** fica fora.
+  - Vaza "Output:", responde pergunta, escreve poema quando pedido, traduz para EN e FR e cria frases ("Relatório: Amanhã de manhã.").
+
+**Escolha do backend padrão para o `llm.complete`: Qwen3-1.7B-4bit no MLX** (Apache-2.0), quando o modo estiver ligado.
+- Por quê:
+  - É o único que cabe no limite de 1,5 s com folga (p90 0,42 s).
+  - Erra menos que o FM.
+  - Nunca traduz nem responde, que são os erros que a guarda não sabe pegar.
+- O FM fica como reserva: não baixa nada e não ocupa a memória do Kiwi.
+- **O modo continua `off` por padrão**, porque 6 erros em 75 ainda são demais para colar direto no app da pessoa.
+
+Para ligar, falta:
+- (a) o MLX no sidecar (mlx-swift-lm) e o download do modelo (~1 GB), em task própria;
+- (b) a guarda pegar troca de idioma e verbo trocado;
+- (c) tirar os espaços no fim da linha da saída.
+
 ## Consequências
 - A frase curta sai na hora e sempre igual, e as fixtures (`fixtures.ts`) descrevem exatamente o que a limpeza faz.
 - O que precisa de entender a frase (gramática, "tipo" sem vírgula depois de nome, reescrita de tom) só melhora onde o LLM entra. Para mudar onde ele entra, basta mexer na política do `wantsLlm`, sem tocar na arquitetura.
