@@ -28,6 +28,13 @@ final class Helper {
         }
         overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
+        audio.onDeviceLost = { [weak self] code in
+            guard let self else { return }
+            self.gesture.reset()
+            self.recordingStartedAt = nil
+            self.emit("record.error", ["reason": "hotkey", "error": code, "microphone": Permission.microphone.status])
+            self.overlay.set(.error, message: OverlayText.error(code))
+        }
     }
 
     func run() {
@@ -59,6 +66,7 @@ final class Helper {
         ])
         // Read only after `ready` is queued, so it is always the first line the app sees.
         connection.start()
+        if Permission.microphone.status == "granted" { audio.warmUp() }
         schedulePermissionPoll()
     }
 
@@ -124,6 +132,10 @@ final class Helper {
     @discardableResult
     private func startRecording(reason: String) -> String? {
         guard !audio.isRecording else { return nil }
+        // Tell the app first, so the overlay shows up while the engine comes up. If the mic then fails,
+        // record.error follows record.started (ADR 0001).
+        emit("record.started", ["reason": reason])
+        overlay.set(.listening)
         let t0 = ProcessInfo.processInfo.systemUptime
         do {
             try audio.start()
@@ -138,8 +150,6 @@ final class Helper {
             return code
         }
         recordingStartedAt = ProcessInfo.processInfo.systemUptime
-        emit("record.started", ["reason": reason])
-        overlay.set(.listening)
         // Sound before the engine is up is lost (the first syllable); this shows how long that is.
         let startMs = Int(((recordingStartedAt! - t0) * 1000).rounded())
         emit("log", ["level": "debug", "message": "mic engine started in \(startMs) ms"])
@@ -174,8 +184,7 @@ final class Helper {
 
     private func dump(_ samples: [Float]) -> String? {
         guard let dumpDirectory, !samples.isEmpty else { return nil }
-        let name = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
-        let url = dumpDirectory.appendingPathComponent("\(name).wav")
+        let url = dumpDirectory.appendingPathComponent(WAV.dumpName(at: Date()))
         do {
             try WAV.encode(samples: samples, sampleRate: Int(AudioCapture.sampleRate)).write(to: url)
             return url.path
@@ -196,6 +205,7 @@ final class Helper {
             if let error = configure(message) { return reply(id, ok: false, error: error) }
             reply(id, ok: true, ["hotkey": tap.key.rawValue, "hotkeyActive": hotkeyActive])
         case "record.start":
+            if let error = Rules.recordStart(isRecording: audio.isRecording) { return reply(id, ok: false, error: error) }
             if let error = startRecording(reason: "command") {
                 reply(id, ok: false, error: error)
             } else {
@@ -231,6 +241,9 @@ final class Helper {
 
     /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?}` (ADR 0001). Hold and double tap share the one key.
     private func configure(_ message: InboundMessage) -> String? {
+        // Check everything before changing anything: a bad value leaves the whole config as it was.
+        let hold = message.double("holdThresholdMs"), doubleTap = message.double("doubleTapMs")
+        if let error = Rules.timing(hold) ?? Rules.timing(doubleTap) { return error }
         var requested: HotkeyKey?
         if let name = message.string("hotkey") {
             guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
@@ -243,8 +256,8 @@ final class Helper {
             if audio.isRecording { cancelRecording(reason: "config") }
             tap.start()
         }
-        if let ms = message.double("holdThresholdMs") { gesture.holdThreshold = ms / 1000 }
-        if let ms = message.double("doubleTapMs") { gesture.doubleTapWindow = ms / 1000 }
+        if let ms = hold { gesture.holdThreshold = ms / 1000 }
+        if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
         return nil
     }
 
@@ -269,6 +282,8 @@ final class Helper {
             tap.stop()
             tap.start()
         }
+        let mic = Permission.microphone.rawValue
+        if now[mic] == "granted", lastPermissions[mic] != "granted" { audio.warmUp() }
         lastPermissions = now
         emit("permissions.changed", ["permissions": now, "hotkeyActive": hotkeyActive, "llm": llmStatus])
     }

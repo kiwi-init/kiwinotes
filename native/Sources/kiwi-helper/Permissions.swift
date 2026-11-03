@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import KiwiHelperCore
 
 /// The three permissions dictation needs. Names match the IPC fields.
 enum Permission: String, CaseIterable {
@@ -17,7 +18,8 @@ enum Permission: String, CaseIterable {
             case .denied: return "denied"
             case .restricted: return "restricted"
             case .notDetermined: return "undetermined"
-            @unknown default: return "unknown"
+            // A state from a future macOS: treat it as not asked yet, the one PermissionState that offers a prompt.
+            @unknown default: return "undetermined"
             }
         case .accessibility:
             return AXIsProcessTrusted() ? "granted" : "denied"
@@ -48,24 +50,40 @@ enum Permission: String, CaseIterable {
         return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!
     }
 
-    /// Shows the system prompt when macOS still allows one; otherwise opens the right pane of System Settings.
-    func request(completion: @escaping (String) -> Void) {
+    /// Whether this app already showed the system prompt. macOS shows each prompt once; after that the call is
+    /// silent, so the next ask has to open Settings. The mic's state says it directly; the other two report
+    /// "denied" before and after the prompt alike, so the helper remembers.
+    private var askedBefore: Bool {
         switch self {
-        case .microphone:
-            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+        case .microphone: return AVCaptureDevice.authorizationStatus(for: .audio) != .notDetermined
+        default: return UserDefaults.standard.bool(forKey: "asked.\(rawValue)")
+        }
+    }
+
+    /// One window at a time: the system prompt the first time, System Settings after that (PermissionAsk).
+    func request(completion: @escaping (String) -> Void) {
+        switch PermissionAsk.next(state: status, askedBefore: askedBefore) {
+        case .none:
+            completion(status)
+        case .openSettings:
+            NSWorkspace.shared.open(settingsURL)
+            completion(status)
+        case .systemPrompt:
+            UserDefaults.standard.set(true, forKey: "asked.\(rawValue)")
+            switch self {
+            case .microphone:
                 AVCaptureDevice.requestAccess(for: .audio) { _ in
                     DispatchQueue.main.async { completion(self.status) }
                 }
-                return
+            case .accessibility:
+                let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+                _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+                completion(status)
+            case .inputMonitoring:
+                _ = CGRequestListenEventAccess()
+                completion(status)
             }
-        case .accessibility:
-            let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-            if AXIsProcessTrustedWithOptions([key: true] as CFDictionary) { return completion(status) }
-        case .inputMonitoring:
-            if CGRequestListenEventAccess() { return completion(status) }
         }
-        if status != "granted" { NSWorkspace.shared.open(settingsURL) }
-        completion(status)
     }
 
     static func snapshot() -> [String: String] {
