@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Opção B · Oficina, v2</title>
+<link rel="stylesheet" href="common.css">
+<script>if (location.hash === "#dark") document.documentElement.classList.add("dark");</script>
+<style>
+  /* B: três painéis, como o Obsidian. Barra lateral com árvore, abas no editor, painel direito com contexto. */
+  .b-main { height: 800px; display: grid; grid-template-columns: 250px 1fr 300px; }
+  .b-side { padding: 52px 10px 12px; font-size: 13px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .b-side .search { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 7px; background: var(--surface-hover); color: var(--text-3); font-size: 12px; margin-bottom: 12px; }
+  .b-side .search .kbd { margin-left: auto; }
+  .b-side h4 { font: 600 11px/1 var(--font); text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 12px 8px 6px; }
+  .tree div { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--text); }
+  .tree div .c { margin-left: auto; color: var(--text-3); font-size: 11px; }
+  .tree div.sel { background: var(--accent-soft); color: var(--accent-text); font-weight: 500; }
+  .tree .in { padding-left: 24px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 8px; }
+  .b-center { display: flex; flex-direction: column; min-width: 0; }
+  .tabs { height: 52px; display: flex; align-items: flex-end; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+  .tabs span { font-size: 12px; padding: 8px 14px; border-radius: 8px 8px 0 0; color: var(--text-2); display: flex; gap: 8px; align-items: center; }
+  .tabs span.on { background: var(--surface); color: var(--text); box-shadow: 0 -0.5px 0 var(--border), 0.5px 0 0 var(--border), -0.5px 0 0 var(--border); }
+  .tabs .x { color: var(--text-3); font-size: 11px; }
+  .tabs .tools { margin-left: auto; align-self: center; display: flex; gap: 6px; }
+  .b-doc { background: var(--surface); flex: 1; padding: 30px 48px; overflow: hidden; }
+  .b-doc .doc { max-width: 720px; }
+  .fm { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); background: var(--surface-2); border-radius: 8px; padding: 8px 12px; margin: 4px 0 16px; line-height: 1.7; }
+  .fm b { color: var(--accent-text); font-weight: 500; }
+  .status { height: 28px; display: flex; align-items: center; gap: 14px; padding: 0 14px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--border); background: var(--surface); }
+  .status .rec { color: var(--accent-text); }
+  .b-right { padding: 52px 14px 12px; border-left: 1px solid var(--border); font-size: 12px; overflow: hidden; }
+  .b-right h4 { font: 600 11px/1 var(--font); text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 4px 0 8px; display: flex; }
+  .b-right h4 .c { margin-left: auto; }
+  .bl { padding: 7px 9px; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-1); margin-bottom: 6px; }
+  .bl b { display: block; font-size: 12px; color: var(--accent-text); font-weight: 500; }
+  .bl span { color: var(--text-2); }
+  .outline div { padding: 3px 0 3px 8px; border-left: 2px solid var(--border); color: var(--text-2); }
+  .outline div.on { border-color: var(--accent); color: var(--text); }
+  .board { height: 150px; border-radius: 10px; position: relative; background: var(--surface); box-shadow: var(--shadow-1); overflow: hidden; margin-bottom: 8px;
+    background-image: radial-gradient(var(--border-strong) 1px, transparent 1px); background-size: 14px 14px; }
+  .board .cd { position: absolute; font-size: 10px; padding: 5px 7px; border-radius: 6px; background: var(--surface); box-shadow: var(--shadow-2); max-width: 110px; line-height: 1.3; }
+  .board svg { position: absolute; inset: 0; }
+  .b-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-k { height: 380px; padding: 40px 0 0; display: grid; place-items: start center; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+  .b-k .palette { width: 600px; }
+  .b-hist { height: 380px; display: grid; grid-template-columns: 1fr 1fr; }
+  .b-hist .pane { padding: 46px 14px 14px; font-size: 12px; }
+  .b-hist .pane + .pane { border-left: 1px solid var(--border); background: var(--surface); }
+  .b-hist h4 { font: 600 11px/1 var(--font); text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 0 0 10px; }
+  .hrow { padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; background: var(--surface); box-shadow: var(--shadow-1); }
+  .hrow .t { font-size: 11px; color: var(--text-3); margin-bottom: 2px; }
+  .hrow.drag { position: absolute; left: 430px; top: 126px; width: 330px; transform: rotate(-2deg); box-shadow: var(--shadow-pop); outline: 2px solid var(--accent); z-index: 3; }
+  .hrow.ghost { box-shadow: none; outline: 1.5px dashed var(--border-strong); background: transparent; color: var(--text-3); }
+  .drop { min-height: 150px; display: flex; flex-direction: column; justify-content: flex-end; margin-top: 8px; border: 1.5px dashed var(--accent); border-radius: 8px; padding: 10px; color: var(--accent-text); font-size: 12px; background: var(--accent-soft); }
+
+  /* v2 (#1203, #1207): nada de linha nem borda. Separação e hierarquia só por espaço, tamanho, peso e um tom de fundo. */
+  .b-main { height: 820px; grid-template-columns: 264px 1fr 312px; background: var(--bg); }
+  .b-side, .b-right { border: 0 !important; background: transparent; backdrop-filter: none; }
+  .b-side { padding: 60px 18px 18px 18px; }
+  .b-right { padding: 60px 22px 18px 6px; }
+  .b-side .search { background: var(--surface-hover); margin-bottom: 26px; padding: 8px 11px; border-radius: 9px; }
+  .b-side h4, .b-right h4 { margin: 26px 10px 10px; letter-spacing: .04em; }
+  .b-right h4 { margin-left: 0; }
+  .tree div { padding: 6px 10px; border-radius: 8px; }
+  .b-center { margin: 12px 0 12px; border-radius: 16px; background: var(--surface); box-shadow: none; overflow: hidden; }
+  .tabs { border: 0 !important; height: 56px; padding: 0 20px; align-items: center; gap: 4px; }
+  .tabs span { border-radius: 8px; padding: 7px 12px; }
+  .tabs span.on { background: var(--surface-2); box-shadow: none; }
+  .tabs .btn, .btn { box-shadow: none !important; background: var(--surface-2); }
+  .b-doc { background: transparent; padding: 18px 64px 30px; }
+  .doc h2 { margin: 34px 0 12px; }
+  .doc p { margin-bottom: 14px; }
+  .fm { background: transparent; padding: 0; margin: 6px 0 26px; display: flex; gap: 8px; flex-wrap: wrap; font-family: var(--font); font-size: 12px; line-height: 1; }
+  .fm .p { background: var(--surface-2); border-radius: var(--radius-pill); padding: 6px 10px; color: var(--text-2); }
+  .fm .p b { color: var(--text); font-weight: 500; }
+  .dictated { background: var(--accent-soft); border-radius: 12px; padding: 12px 16px 12px 36px; }
+  .dictated::before { left: 13px; top: 12px; }
+  .check b { box-shadow: none; background: var(--surface-2); border-radius: 5px; }
+  table.md th, table.md td { border: 0 !important; padding: 9px 12px; }
+  table.md th { padding-bottom: 6px; }
+  table.md tr:nth-child(even) td { background: transparent; }
+  .status { border: 0 !important; background: transparent; padding: 0 22px 14px; height: auto; }
+  .bl { box-shadow: none; background: var(--surface); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .outline div { border: 0 !important; padding: 5px 0; }
+  .outline div.on { color: var(--accent-text); font-weight: 500; }
+  .board { box-shadow: none; background-color: var(--surface); border-radius: 14px; background-image: radial-gradient(color-mix(in srgb, var(--text-3) 35%, transparent) 1px, transparent 1px); }
+  .board .cd { box-shadow: none; background: var(--surface-2); }
+  .win { box-shadow: 0 30px 80px rgba(0,0,0,.16); }
+  html.dark .win { box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+  .palette { box-shadow: 0 24px 60px rgba(0,0,0,.16); }
+  html.dark .palette { box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .palette .q { border: 0 !important; padding: 18px 20px 10px; font-size: 17px; }
+  .palette .sec { padding: 16px 20px 6px; }
+  .palette .it { padding: 9px 20px; margin: 0 8px; border-radius: 9px; }
+  .palette .foot { border: 0 !important; padding: 14px 20px 16px; }
+  .b-hist .pane + .pane { border: 0 !important; background: var(--surface); border-radius: 14px; margin: 12px 12px 12px 0; }
+  .b-hist .pane { padding-top: 50px; }
+  .hrow { box-shadow: none; background: var(--surface); }
+  .hrow.drag { outline: 0; box-shadow: 0 18px 40px rgba(0,0,0,.18); }
+  .hrow.ghost { outline: 0; background: var(--surface-hover); }
+  .drop { border: 0 !important; background: var(--accent-soft); border-radius: 12px; }
+  .proscons div { box-shadow: none; }
+  .wikilink { text-decoration: none; font-weight: 500; }
+</style>
+</head>
+<body>
+  <header class="board-head">
+    <div>
+      <span class="tag">Opção B · v2</span>
+      <h1>Oficina, só com espaço</h1>
+      <p class="idea">A mesma Oficina, sem nenhuma linha ou borda (#1203): os painéis, as listas e a tabela se separam pelo espaço e por um tom de fundo, e a hierarquia vem do tamanho e do peso do texto. Três painéis, perto do Obsidian: a árvore de pastas e tags à esquerda, abas no editor e um painel de contexto à direita, com os backlinks, o sumário e uma <b>prévia viva do board do BonsAI</b>. O Histórico abre ao lado da nota, e o ditado é arrastado para dentro dela.</p>
+    </div>
+    <div class="proscons">
+      <div><h3>Prós</h3><ul><li>Tudo à vista: navegar, ligar e revisar sem trocar de tela</li><li>Familiar para quem já usa o Obsidian</li><li>Bom para reuniões e projetos grandes</li></ul></div>
+      <div><h3>Contras</h3><ul><li>Denso: pede tela grande e muita coisa para fazer</li><li>O ditado vira "mais um painel", não o centro</li><li>Mais trabalho de UI antes de ficar usável</li></ul></div>
+    </div>
+  </header>
+
+  <p class="frame-label">Janela Notas · três painéis</p>
+  <div class="win b-main">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <aside class="b-side vibrant">
+      <div class="search">⌕ Buscar<span class="kbd">⌘K</span></div>
+      <h4>Vault · ~/KiwiNotes</h4>
+      <div class="tree">
+        <div>📥 Caixa de entrada<span class="c">4</span></div>
+        <div>▾ 📁 Projetos</div>
+        <div class="in sel">✎ Migração PACS Central</div>
+        <div class="in">✎ Anon gateway</div>
+        <div>▸ 📁 Reuniões<span class="c">23</span></div>
+        <div>▸ 📁 Pessoas</div>
+        <div>▸ 📁 Diário</div>
+      </div>
+      <h4>Tags</h4>
+      <div class="tags"><span class="chip accent">#projeto</span><span class="chip">#dicom</span><span class="chip">#reunião</span><span class="chip">#todo</span></div>
+      <h4>Recentes</h4>
+      <div class="tree"><div>✎ Riscos do Q4</div><div>✎ Reunião 2026-11-03 Infra</div></div>
+      <div style="margin-top:auto" class="tree"><div class="muted">⚙︎ Configurações</div></div>
+    </aside>
+    <section class="b-center">
+      <div class="tabs">
+        <span class="on">✎ Migração PACS Central <span class="x">✕</span></span>
+        <span>✎ Reunião 2026-11-03 Infra <span class="x">✕</span></span>
+        <span>＋</span>
+        <span class="tools"><span class="btn">🎙 Ditar aqui</span><span class="btn">⧉ Histórico</span></span>
+      </div>
+      <div class="b-doc">
+        <article class="doc">
+          <h1>Migração PACS Central</h1>
+          <div class="fm"><span class="p">#projeto</span><span class="p">#dicom</span><span class="p">status <b>em andamento</b></span><span class="p">dono <b class="wikilink">Equipe de TI</b></span><span class="p">BonsAI <b>migracao-pacs</b></span></div>
+          <p>Mover os estudos do PACS legado para o <span class="wikilink">Healthcare API</span>, sem parar o atendimento. A ordem foi combinada na <span class="wikilink">Reunião 2026-11-03 Infra</span>.</p>
+          <div class="dictated">Ficou decidido começar pelos estudos de tomografia, que são os mais pesados, e deixar raio-x para a segunda semana.<small>ditado às 14:30 · 9 s · arrastado do Histórico</small></div>
+          <h2>Próximos passos</h2>
+          <div class="check done"><b></b><span>Validar o STOW com 100 estudos de teste</span></div>
+          <div class="check"><b></b><span>Conferir o AccessionNumber duplicado com a <span class="wikilink">Equipe de TI</span></span></div>
+          <div class="check"><b></b><span>Agendar a janela de corte</span></div>
+          <h2>Volume por modalidade</h2>
+          <table class="md"><tr><th>Modalidade</th><th class="n">Estudos</th><th class="n">TB</th><th>Semana</th></tr>
+            <tr><td>CT</td><td class="n">182.400</td><td class="n">41,2</td><td>1</td></tr>
+            <tr><td>MR</td><td class="n">96.120</td><td class="n">22,8</td><td>1</td></tr>
+            <tr><td>CR/DX</td><td class="n">410.900</td><td class="n">6,1</td><td>2</td></tr></table>
+        </article>
+      </div>
+      <div class="status"><span>Projetos/Migração PACS Central.md</span><span>412 palavras</span><span>3 links · 2 backlinks</span><span class="rec" style="margin-left:auto">● Pronto para ditar</span></div>
+    </section>
+    <aside class="b-right vibrant">
+      <h4>Board no BonsAI <span class="c wikilink">abrir ↗</span></h4>
+      <div class="board">
+        <svg><path d="M70 40 C 120 40, 120 95, 170 95" stroke="var(--accent)" stroke-width="1.5" fill="none"/><path d="M70 40 C 100 80, 90 120, 120 125" stroke="var(--border-strong)" stroke-width="1.5" fill="none"/></svg>
+        <div class="cd" style="left:12px;top:22px">Migração PACS</div>
+        <div class="cd" style="left:150px;top:80px;background:var(--accent-soft);color:var(--accent-text);font-weight:500">Começar por CT</div>
+        <div class="cd" style="left:64px;top:112px">Janela de corte</div>
+      </div>
+      <p class="faint" style="margin:0 0 16px">O card verde veio do ditado das 14:30.</p>
+      <h4>Backlinks <span class="c">2</span></h4>
+      <div class="bl"><b>Reunião 2026-11-03 Infra</b><span>…a ordem da migração PACS Central…</span></div>
+      <div class="bl"><b>Riscos do Q4</b><span>…janela de corte do PACS…</span></div>
+      <h4 style="margin-top:16px">Sumário</h4>
+      <div class="outline"><div class="on">Migração PACS Central</div><div>Próximos passos</div><div>Volume por modalidade</div></div>
+    </aside>
+  </div>
+
+  <div class="row b-mini">
+    <div>
+      <p class="frame-label">⌘K · paleta de comandos (notas e ações)</p>
+      <div class="win b-k">
+        <div class="palette">
+          <div class="q"><span class="ico">⌕</span>reuni<span class="caret"></span></div>
+          <div class="sec">Notas</div>
+          <div class="it sel"><span class="ico">✎</span><span class="l"><mark>Reuni</mark>ão 2026-11-03 Infra</span><span class="r">Reuniões · ontem</span></div>
+          <div class="it"><span class="ico">✎</span><span class="l"><mark>Reuni</mark>ão 2026-10-28 Kickoff</span><span class="r">Reuniões</span></div>
+          <div class="sec">Comandos</div>
+          <div class="it"><span class="ico">🎙</span><span class="l">Ditar uma nova <mark>reuni</mark>ão</span><span class="r">⌥⌘N</span></div>
+          <div class="it"><span class="ico">⧉</span><span class="l">Abrir no BonsAI as <mark>reuni</mark>ões desta semana</span><span class="r"></span></div>
+          <div class="foot"><span>↑↓ mover</span><span>↩ abrir</span><span>⌘↩ abrir em nova aba</span><span>⇥ filtrar por tipo</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="frame-label">Ditado → nota · Histórico ao lado, arrastar para a nota</p>
+      <div class="win b-hist">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="pane vibrant">
+          <h4>Histórico · hoje</h4>
+          <div class="hrow ghost"><div class="t">🎙 14:30 · Notas · 9 s</div>arrastando…</div>
+          <div class="hrow"><div class="t">🎙 11:02 · Slack</div>Lembrar de pedir o acesso ao bucket de homologação.</div>
+          <div class="hrow"><div class="t">🎙 09:41 · Terminal</div><span class="mono">kubectl get pods -n pacs</span></div>
+        </div>
+        <div class="hrow drag"><div class="t">🎙 14:30 · Notas · 9 s</div>Ficou decidido começar pelos estudos de tomografia…</div>
+        <div class="pane">
+          <h4>Migração PACS Central</h4>
+          <p style="margin:0 0 6px;font-size:12px">…sem parar o atendimento. A ordem foi combinada na <span class="wikilink">Reunião 2026-11-03 Infra</span>.</p>
+          <div class="drop">Solte aqui para inserir o ditado no cursor<br><span class="muted">ou clique com o botão direito › Enviar para nota…</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
