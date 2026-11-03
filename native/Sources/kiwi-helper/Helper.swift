@@ -75,6 +75,9 @@ final class Helper {
         ])
         // Read only after `ready` is queued, so it is always the first line the app sees.
         connection.start()
+        // Who macOS checks the permissions against, and what it says (T658). No dialog: these only read.
+        let tcc = Responsible.current()?.summary ?? "responsible process unknown"
+        emit("log", ["level": "info", "message": "tcc: \(tcc); \(Permission.snapshot().sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))"])
         if Permission.microphone.status == "granted" { audio.warmUp() }
         schedulePermissionPoll()
         prepareSTT()
@@ -296,7 +299,7 @@ final class Helper {
             guard let name = message.string("permission"), let permission = Permission(rawValue: name) else {
                 return reply(id, ok: false, error: "unknown_permission")
             }
-            permission.request { [weak self] status in
+            permission.request(reset: message.fields["reset"] as? Bool == true) { [weak self] status in
                 self?.reply(id, ok: true, ["permission": name, "state": status])
                 self?.pollPermissions()
             }

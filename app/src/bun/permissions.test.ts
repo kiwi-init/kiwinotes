@@ -8,10 +8,15 @@ type Listener = (e: EventMessage) => void;
 /** Um helper de mentira: só registra os `permissions.request` (nenhum diálogo de verdade abre, #533). */
 function fake() {
   const asked: Permission[] = [];
+  /** Os pedidos que vieram com `reset` (o `tccutil reset` do helper). */
+  const resets: Permission[] = [];
   const listeners = new Map<string, Set<Listener>>();
   const sidecar = {
     async send<C extends Command>(c: C): Promise<ResultMessage<C["type"]>> {
-      if (c.type === "permissions.request") asked.push(c.permission);
+      if (c.type === "permissions.request") {
+        asked.push(c.permission);
+        if (c.reset) resets.push(c.permission);
+      }
       return { v: 1, type: "result", id: "x", ok: true, data: { permission: "x", state: "denied" } } as any;
     },
     on(type: string, fn: Listener) {
@@ -24,7 +29,7 @@ function fake() {
     for (const fn of listeners.get(e.type) ?? []) fn({ ...e, v: 1 } as EventMessage);
     await Bun.sleep(1);
   };
-  return { sidecar: sidecar as unknown as PermissionsSidecar, asked, emit };
+  return { sidecar: sidecar as unknown as PermissionsSidecar, asked, resets, emit };
 }
 
 function memoryStore(initial: Permission[] = []): AskedStore & { saved: Permission[] } {
@@ -130,6 +135,30 @@ describe("PermissionFlow", () => {
     expect(flow.missing()).toEqual(["accessibility", "microphone"]);
     expect(await flow.askNext()).toBe("accessibility");
     expect(asked).toEqual(["accessibility"]);
+  });
+
+  test("the menu click asks with reset; the automatic asks never do (T658, #666)", async () => {
+    const { sidecar, asked, resets, emit } = fake();
+    const flow = new PermissionFlow(sidecar, memoryStore(), () => {});
+    flow.attach();
+    await emit(ready(perms({})));
+    await emit(changed(perms({ inputMonitoring: "granted" })));
+    await emit({ type: "record.error", reason: "hotkey", error: "microphone_undetermined", microphone: "undetermined" });
+    expect(asked).toEqual(["inputMonitoring", "accessibility", "microphone"]);
+    expect(resets).toEqual([]);
+    // Accessibility is on in Settings but doesn't count: the person clicks "Permitir acesso… (Acessibilidade)".
+    expect(await flow.askNext()).toBe("accessibility");
+    expect(resets).toEqual(["accessibility"]);
+  });
+
+  test("with KIWI_DEBUG=1 the menu click never resets (#666)", async () => {
+    const { sidecar, asked, resets, emit } = fake();
+    const flow = new PermissionFlow(sidecar, memoryStore(), () => {}, false, false);
+    flow.attach();
+    await emit(ready(perms({ inputMonitoring: "granted" })));
+    expect(await flow.askNext()).toBe("accessibility");
+    expect(asked).toEqual(["accessibility"]);
+    expect(resets).toEqual([]);
   });
 
   test("missing() lists what isn't granted, in the asking order", () => {

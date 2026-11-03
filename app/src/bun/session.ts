@@ -64,7 +64,8 @@ export class Session {
     const dryRun = process.env.KIWI_DEBUG === "1";
     this.dictation = new Dictation({ sidecar: this.sidecar, history: stores.history, llm, llmMode, dryRun });
     // Com KIWI_DEBUG=1 (agentes), nada é pedido sozinho: nenhum diálogo do macOS abre (#537, #551).
-    this.permissions = new PermissionFlow(this.sidecar, fileAskedStore(stores.dir), undefined, !dryRun);
+    // Nem o reset do clique no menu (#666).
+    this.permissions = new PermissionFlow(this.sidecar, fileAskedStore(stores.dir), undefined, !dryRun, !dryRun);
   }
 
   start(): void {

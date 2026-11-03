@@ -1,10 +1,16 @@
 // postBuild e postWrap (electrobun.config.ts): põe no Info.plist do .app as frases que o macOS mostra ao pedir
-// permissão. O Electrobun não tem campo para elas, e sem o NSMicrophoneUsageDescription o macOS nega o mic
-// ao helper, que roda como filho do app (#133).
+// permissão, e depois assina o .app inteiro ad hoc.
 //
-// Assinatura: hoje `codesign: false`. Pela doc do Electrobun, o `postWrap` roda "before final packaging/signing", mas
-// não está claro se o app de dentro já foi assinado antes. Quando ligarem a assinatura, confira com
-// `codesign --verify --deep --strict` nos dois .app; se quebrar, este passo vai para antes da assinatura (review #521).
+// - As frases: o Electrobun não tem campo para elas, e sem o NSMicrophoneUsageDescription o macOS nega o mic ao helper,
+//   que roda como filho do app (#133).
+// - A assinatura (T658): com `codesign: false`, o launcher sai só com a assinatura do linker (`Identifier=launcher`,
+//   `Info.plist=not bound`, bundle sem selo). O TCC atribui o helper ao launcher, mas a Acessibilidade ligada nos
+//   Ajustes para o "Kiwi Notes.app" não valia para ele. Assinado aqui, o launcher fica com
+//   `Identifier=app.kiwinotes.desktop`, o Info.plist bound e os recursos selados. O custo: a assinatura ad hoc é o
+//   cdhash, que muda a cada build, então a cada build novo a permissão precisa ser dada de novo. Isso só some com uma
+//   Developer ID (decisão do harry, fora do T658).
+// - A ordem importa: o `plutil` muda o Info.plist, então a assinatura vem depois dele. Com `codesign: true`, o Hutch
+//   assina depois disto (postWrap roda "before final packaging/signing"); confira com `codesign --verify --deep --strict`.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
@@ -30,6 +36,17 @@ function infoPlists(dir: string, depth = 4): string[] {
   return out;
 }
 
+function run(cmd: string, args: string[]): void {
+  const r = spawnSync(cmd, args, { stdio: "inherit" });
+  if (r.status !== 0) throw new Error(`info-plist: ${cmd} ${args.join(" ")} failed`);
+}
+
+/** Ad hoc, o bundle inteiro (o código dentro dele também), e confere do jeito estrito. */
+function sign(app: string): void {
+  run("codesign", ["--force", "--deep", "--sign", "-", app]);
+  run("codesign", ["--verify", "--deep", "--strict", app]);
+}
+
 function setUsage(plist: string): void {
   for (const [key, value] of Object.entries(USAGE)) {
     // -replace cria a chave quando ela não existe.
@@ -50,5 +67,11 @@ function setUsage(plist: string): void {
   for (const p of plists) {
     setUsage(p);
     console.log(`info-plist: usage descriptions in ${p}`);
+  }
+  // Assina depois de mexer em todos os Info.plist: o de dentro primeiro, se um .app estiver dentro do outro.
+  const apps = [...plists].map((p) => path.dirname(path.dirname(p))).sort((a, b) => b.length - a.length);
+  for (const app of apps) {
+    sign(app);
+    console.log(`info-plist: signed ad hoc ${app}`);
   }
 }

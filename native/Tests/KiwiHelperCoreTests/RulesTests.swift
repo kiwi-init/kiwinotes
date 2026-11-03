@@ -27,6 +27,33 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true), .openSettings)
     }
 
+    func testResetOnlyWhenAskedForAndStillMissing() {
+        // T658: the switch is on in Settings, but the permission doesn't count. A click can start over.
+        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true), .resetAndPrompt)
+        // Never asked: the plain prompt is enough. Granted, restricted or not asked yet: nothing to reset.
+        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: false, reset: true), .systemPrompt)
+        XCTAssertEqual(PermissionAsk.next(state: "granted", askedBefore: true, reset: true), PermissionAsk.none)
+        XCTAssertEqual(PermissionAsk.next(state: "restricted", askedBefore: true, reset: true), PermissionAsk.none)
+        XCTAssertEqual(PermissionAsk.next(state: "undetermined", askedBefore: true, reset: true), .systemPrompt)
+    }
+
+    func testTCCServiceNames() {
+        XCTAssertEqual(TCCService.name(for: "accessibility"), "Accessibility")
+        XCTAssertEqual(TCCService.name(for: "inputMonitoring"), "ListenEvent")
+        XCTAssertEqual(TCCService.name(for: "microphone"), "Microphone")
+        XCTAssertNil(TCCService.name(for: "camera"))
+    }
+
+    func testResponsibleAppBundle() {
+        XCTAssertEqual(
+            ResponsibleApp.bundlePath(executable: "/a/b/Kiwi Notes.app/Contents/MacOS/launcher"), "/a/b/Kiwi Notes.app")
+        XCTAssertEqual(
+            ResponsibleApp.bundlePath(executable: "/A/Outer.app/Contents/Resources/Inner.app/Contents/MacOS/x"),
+            "/A/Outer.app")
+        XCTAssertNil(ResponsibleApp.bundlePath(executable: "/usr/local/bin/kiwi-ipc-probe"))
+        XCTAssertNil(ResponsibleApp.bundlePath(executable: "/a/Weird.app"))
+    }
+
     func testDumpNameHasMilliseconds() {
         let a = Date(timeIntervalSince1970: 1_700_000_000.120)
         let b = Date(timeIntervalSince1970: 1_700_000_000.870)

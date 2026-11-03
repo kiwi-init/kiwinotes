@@ -24,16 +24,43 @@ public enum PermissionAsk: Equatable, Sendable {
     case systemPrompt
     /// The right pane of System Settings, where the person flips the switch.
     case openSettings
+    /// Forget this app's entry (`tccutil reset`) and show the system prompt again. For a switch that is on in
+    /// Settings but doesn't count for this copy of the app (T658): flipping it again doesn't help, a new entry does.
+    case resetAndPrompt
 
     /// `state` is the permission's IPC state; `askedBefore` says whether this app already showed the system prompt.
     /// The first ask shows only the system prompt; later asks go to Settings, since the prompt won't come back.
     /// A `restricted` permission (MDM, parental controls) can't be changed by the person, so nothing opens.
-    public static func next(state: String, askedBefore: Bool) -> PermissionAsk {
+    /// `reset` (only from a person's click in the app, never on its own) starts over instead of opening Settings.
+    public static func next(state: String, askedBefore: Bool, reset: Bool = false) -> PermissionAsk {
         switch state {
         case "granted", "restricted": return .none
         case "undetermined": return .systemPrompt
-        default: return askedBefore ? .openSettings : .systemPrompt
+        default: return !askedBefore ? .systemPrompt : reset ? .resetAndPrompt : .openSettings
         }
+    }
+}
+
+/// The names `tccutil reset` takes for each permission.
+public enum TCCService {
+    public static func name(for permission: String) -> String? {
+        switch permission {
+        case "accessibility": return "Accessibility"
+        case "inputMonitoring": return "ListenEvent"
+        case "microphone": return "Microphone"
+        default: return nil
+        }
+    }
+}
+
+/// The app macOS charges for the helper's permissions: the `.app` around the responsible process (the app's launcher).
+public enum ResponsibleApp {
+    /// `/x/Kiwi Notes.app/Contents/MacOS/launcher` → `/x/Kiwi Notes.app`. The outermost `.app`, so a helper app nested
+    /// inside another still points at the one in Settings. Nil for a bare binary (a terminal, the probe).
+    public static func bundlePath(executable: String) -> String? {
+        let parts = executable.split(separator: "/", omittingEmptySubsequences: false)
+        guard let i = parts.firstIndex(where: { $0.hasSuffix(".app") }), parts.count > i + 1 else { return nil }
+        return parts[...i].joined(separator: "/")
     }
 }
 
