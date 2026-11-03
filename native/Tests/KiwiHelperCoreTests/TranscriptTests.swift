@@ -22,6 +22,38 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(TranscriptPostProcessor.process("check the helthcare api quota", dictionary: work), "check the Healthcare API quota")
     }
 
+    /// harry's dictionary and Parakeet's text from his first real test (#589, T591).
+    let harry = TranscriptDictionary(["kubectl", "DICOM", "PACS", "Healthcare API", "homologação"].map { DictionaryEntry(term: $0) })
+
+    func testHarrysMissesT591() {
+        XCTAssertEqual(TranscriptPostProcessor.process("Roda o cubectl getpods no cluster de homologação e me fala o que deu.", dictionary: harry),
+                       "Roda o kubectl getpods no cluster de homologação e me fala o que deu.")
+        XCTAssertEqual(TranscriptPostProcessor.process("cubectl apply", dictionary: harry), "kubectl apply")
+        // Too far from the spelling for the phonetic correction: that is what the aliases are for.
+        let daikon = "O Daikon Store está sem acesso no Rafker API."
+        XCTAssertEqual(TranscriptPostProcessor.process(daikon, dictionary: harry), daikon)
+        let withAliases = TranscriptDictionary([DictionaryEntry(term: "DICOM", aliases: ["Daikon"]),
+                                                DictionaryEntry(term: "Healthcare API", aliases: ["Rafker API"])])
+        XCTAssertEqual(TranscriptPostProcessor.process(daikon, dictionary: withAliases), "O DICOM Store está sem acesso no Healthcare API.")
+    }
+
+    /// An alias also catches a near form of itself: what the person says changes from one take to the next.
+    func testAliasesAreMatchedBySoundToo() {
+        let d = TranscriptDictionary([DictionaryEntry(term: "DICOM store", aliases: ["Daikon Store"]),
+                                      DictionaryEntry(term: "kubectl", aliases: ["cube control"])])
+        XCTAssertEqual(TranscriptPostProcessor.process("o Daikon Stor caiu", dictionary: d), "o DICOM store caiu")
+        XCTAssertEqual(TranscriptPostProcessor.process("roda o cube controle", dictionary: d), "roda o kubectl")
+        XCTAssertEqual(TranscriptPostProcessor.process("a loja fechou", dictionary: d), "a loja fechou")
+    }
+
+    /// The first letter may differ only for the K sound (c, k, q); the soft c stays out.
+    func testOpeningSoundOnlyForK() {
+        let d = TranscriptDictionary(["Sentry", "Kafka", "Kubernetes"].map { DictionaryEntry(term: $0) })
+        XCTAssertEqual(TranscriptPostProcessor.process("o century inteiro", dictionary: d), "o century inteiro")
+        XCTAssertEqual(TranscriptPostProcessor.process("sobe o cubernetes", dictionary: d), "sobe o Kubernetes")
+        XCTAssertEqual(TranscriptPostProcessor.process("a casa e a calça", dictionary: d), "a casa e a calça")
+    }
+
     func testPortugueseWithoutTermsIsLeftAlone() {
         let text = "Não esquece de mandar o relatório para a Juliana hoje, às 10."
         XCTAssertEqual(TranscriptPostProcessor.process(text, dictionary: work), text)

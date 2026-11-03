@@ -70,7 +70,8 @@ export type Command =
       language?: "auto" | "pt" | "en";
       /**
        * O vocabulário do STT (T256): a grafia certa vai para o vocabulary boosting e para a correção
-       * fonética; os `aliases` viram o termo depois (as substituições do VoiceInk). Uma string vale `{term}`.
+       * fonética. Os `aliases` também entram na correção fonética, que pega uma forma parecida com o alias, e
+       * depois viram o termo (as substituições do VoiceInk; T591). Uma string vale `{term}`.
        */
       dictionary?: (string | { term: string; aliases?: string[] })[];
       /** VAD (Silero) antes do modelo: só a fala vai para o STT, e áudio sem fala dá `text: ""`. Padrão: `false`. */
