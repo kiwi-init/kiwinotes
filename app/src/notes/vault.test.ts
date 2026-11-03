@@ -250,13 +250,14 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
     const caps = uiCapabilities({
       dictionary: { load: async () => [], save: async (t) => t },
       snippets: { load: async () => [], save: async (s) => s },
-      history: { search: async () => ({ entries: [] }), delete: async () => true },
+      history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+      dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
       clipboardWrite: () => {},
       notes: v,
     });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
 
-    expect(UI_CONTRACT_VERSION).toBe("1.1.0");
+    expect(UI_CONTRACT_VERSION).toBe("1.2.0");
     expect(UI_CAPABILITIES).toContain("notes.resolve");
     expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
     expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });

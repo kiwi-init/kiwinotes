@@ -225,6 +225,13 @@ export class Vault {
       .map(({ e, score }) => ({ path: e.meta.path, title: e.meta.title, snippet: snippetAround(e.content, terms[0]!), score }));
   }
 
+  /** A 1ª nota cujo texto tem `text` exato, ou null (T1320: um ditado mandado duas vezes não vira duas notas). */
+  findContaining(text: string): NoteMeta | null {
+    if (!text) return null;
+    for (const e of this.notes.values()) if (e.content.includes(text)) return e.meta;
+    return null;
+  }
+
   backlinks(input: unknown): Backlink[] {
     const p = notePath(input);
     const resolve = this.resolve_();

@@ -6,7 +6,8 @@ import KiwiHelperCore
 /// Needs Input Monitoring only (a tap that swallows events would need Accessibility).
 final class HotkeyTap {
     enum Event {
-        case down(TimeInterval)
+        /// `note`: ⌥ was held as the key went down (the quick note, T1320).
+        case down(TimeInterval, note: Bool)
         case up(TimeInterval)
         case otherKey
     }
@@ -16,6 +17,8 @@ final class HotkeyTap {
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var keyIsDown = false
+    /// This press started with ⌥ held: ⌥ going up or down meanwhile is part of the gesture.
+    private var noteHeld = false
 
     init(key: HotkeyKey, onEvent: @escaping (Event) -> Void) {
         self.key = key
@@ -58,6 +61,7 @@ final class HotkeyTap {
         tap = nil
         source = nil
         keyIsDown = false
+        noteHeld = false
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
@@ -73,7 +77,15 @@ final class HotkeyTap {
                 guard down != keyIsDown else { return }
                 keyIsDown = down
                 let now = ProcessInfo.processInfo.systemUptime
-                onEvent(down ? .down(now) : .up(now))
+                if down {
+                    noteHeld = key.noteModifierHeld(flags: event.flags.rawValue)
+                    onEvent(.down(now, note: noteHeld))
+                } else {
+                    noteHeld = false
+                    onEvent(.up(now))
+                }
+            } else if keyIsDown, noteHeld, key.isNoteModifier(keyCode: code) {
+                return // letting go of ⌥ in a quick note
             } else if keyIsDown {
                 onEvent(.otherKey) // e.g. ⌥ right + ⇧: used as a modifier
             }

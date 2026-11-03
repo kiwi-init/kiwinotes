@@ -176,3 +176,65 @@
   justify-content: center;
   padding: var(--space-3);
 }
+
+/* "Enviar para nota…" no Histórico (T1320) */
+.kn-tonote {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  animation: kn-row-in var(--glide) both;
+}
+.kn-tonote-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.kn-tonote-item {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+.kn-tonote-item:hover,
+.kn-tonote-item:focus-visible {
+  background: var(--surface-hover);
+}
+.kn-tonote-item:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.kn-tonote-item[data-kind="new"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+.kn-tonote-item small {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+.kn-tonote-error {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+.kn-entry-sent {
+  font-size: var(--text-xs);
+  color: var(--accent);
+}

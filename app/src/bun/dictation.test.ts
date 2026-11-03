@@ -8,6 +8,8 @@ import {
   MIC_LOST_EMPTY,
   MIC_LOST_NOTICE,
   NOT_PASTED,
+  NOTE_FAILED,
+  noteCreated,
   SECURE_INPUT_NOTICE,
   TRANSCRIPT_ERROR,
 } from "./dictation.ts";
@@ -324,5 +326,87 @@ describe("Dictation", () => {
     sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.mail", name: "Mail" } });
     const warm = sidecar.sent.find((c) => c.type === "llm.prewarm");
     expect(warm && "system" in warm && warm.system).toContain("TONE");
+  });
+
+  // ---------------------------------------------------------------- nota rápida (T1320)
+
+  function noteSetup(toNew?: (text: string, at: Date) => Promise<any>) {
+    const sidecar = fakeSidecar();
+    const added: NewHistoryEntry[] = [];
+    const made: { text: string; at: Date }[] = [];
+    const d = new Dictation({
+      sidecar: sidecar as unknown as DictationSidecar,
+      history: { add: async (e) => (added.push(e), { ...e, id: "id", at: (e.at ?? new Date()).toISOString() } as any) },
+      notes: {
+        toNew:
+          toNew ??
+          (async (text, at) => {
+            made.push({ text, at });
+            return { note: { path: "Caixa de entrada/Comprar café.md", title: "Comprar café" }, created: true, already: false } as any;
+          }),
+      },
+      log: () => {},
+    });
+    d.attach();
+    const overlays = () => sidecar.sent.filter((c) => c.type === "overlay.state");
+    const inserted = () => sidecar.sent.filter((c) => c.type === "insert.text");
+    return { sidecar, d, added, made, overlays, inserted };
+  }
+
+  test("nota rápida: o ditado vira nota, não é colado, e vai para o Histórico com a mesma hora", async () => {
+    const { sidecar, d, added, made, overlays, inserted } = noteSetup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", target: "note", app: { bundleId: "com.apple.Terminal", name: "Terminal" } });
+    sidecar.emit(transcript("comprar café e açúcar"));
+    await d.idle();
+    expect(inserted()).toEqual([]);
+    expect(made).toHaveLength(1);
+    // O tom padrão, não o literal do terminal que estava na frente: a nota é texto, não comando.
+    expect(made[0]!.text).toBe("Comprar café e açúcar.");
+    expect(overlays().at(-1)).toMatchObject({ state: "done", message: noteCreated("Comprar café") });
+    expect(added).toHaveLength(1);
+    expect(added[0]!.text).toBe("Comprar café e açúcar.");
+    expect(added[0]!.at).toBe(made[0]!.at);
+    expect(added[0]!.app).toEqual({ bundleId: "com.apple.Terminal", name: "Terminal" });
+  });
+
+  test("nota rápida que falha: a pílula avisa, nada é colado, e o texto fica no Histórico", async () => {
+    const { sidecar, d, added, overlays, inserted } = noteSetup(async () => {
+      throw new Error("disk full");
+    });
+    sidecar.emit({ type: "record.started", reason: "hotkey", target: "note" });
+    sidecar.emit(transcript("uma ideia"));
+    await d.idle();
+    expect(inserted()).toEqual([]);
+    expect(overlays().at(-1)).toMatchObject({ state: "error", message: NOTE_FAILED });
+    expect(added.map((e) => e.text)).toEqual(["Uma ideia."]);
+  });
+
+  test("nota rápida sem fala: nada de nota nem de Histórico", async () => {
+    const { sidecar, d, added, made, overlays } = noteSetup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", target: "note" });
+    sidecar.emit(transcript("   "));
+    await d.idle();
+    expect(made).toEqual([]);
+    expect(added).toEqual([]);
+    expect(overlays().at(-1)).toMatchObject({ state: "hidden" });
+  });
+
+  test("só a gravação marcada vira nota: a seguinte, sem ⌥, é colada como sempre", async () => {
+    const { sidecar, d, made, inserted } = noteSetup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", target: "note" });
+    sidecar.emit({ type: "record.started", reason: "hotkey" });
+    sidecar.emit(transcript("primeira"));
+    sidecar.emit(transcript("segunda"));
+    await d.idle();
+    expect(made.map((m) => m.text)).toEqual(["Primeira."]);
+    expect(inserted().map((c) => (c.type === "insert.text" ? c.text : ""))).toEqual(["Segunda."]);
+  });
+
+  test("sem o vault por perto, target: note cai no ditado normal (colado)", async () => {
+    const { sidecar, d, inserted } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", target: "note" });
+    sidecar.emit(transcript("oi"));
+    await d.idle();
+    expect(inserted()).toEqual(["Oi."]);
   });
 });

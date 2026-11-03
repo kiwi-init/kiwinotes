@@ -34,6 +34,26 @@ public enum HotkeyKey: String, CaseIterable, Sendable {
     }
 }
 
+/// The quick note (T1320): ⌥ held when the dictation key goes down turns that dictation into a note instead of
+/// pasting it. Either ⌥ counts, except the one that is the dictation key itself.
+extension HotkeyKey {
+    /// Key codes of the two ⌥ keys (kVK_Option, kVK_RightOption).
+    public static let optionKeyCodes: Set<Int64> = [58, 61]
+    /// NX_DEVICELALTKEYMASK and NX_DEVICERALTKEYMASK: which ⌥ is down, one bit each.
+    static let optionMasks: UInt64 = 0x20 | 0x40
+
+    /// Whether ⌥ (not this key) is held in these flags, when this key goes down.
+    public func noteModifierHeld(flags: UInt64) -> Bool {
+        flags & (Self.optionMasks & ~flagMask) != 0
+    }
+
+    /// A ⌥ key that, while a quick note records, is part of the gesture and not "another key" (letting go of ⌥
+    /// before the dictation key mustn't cancel the note).
+    public func isNoteModifier(keyCode: Int64) -> Bool {
+        keyCode != self.keyCode && Self.optionKeyCodes.contains(keyCode)
+    }
+}
+
 public enum StopMode: String, Sendable {
     case pushToTalk = "ptt"
     case toggle

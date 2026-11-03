@@ -4,7 +4,7 @@
 
 import type { HistoryEntry, UiCapabilities, UiCapability, UiEvents } from "../../src/shared/ui-contract.ts";
 
-export type { DictionaryTerm, HistoryEntry, HistoryPage, Snippet } from "../../src/shared/ui-contract.ts";
+export type { DictionaryTerm, HistoryEntry, HistoryPage, NoteMeta, SearchHit, Snippet } from "../../src/shared/ui-contract.ts";
 
 interface Engine {
   invoke(cap: string, args?: unknown): Promise<unknown>;
@@ -44,6 +44,9 @@ export function reportError(error: unknown): void {
   window.engine?.reportError(error);
 }
 
+/** O engine tem esta capacidade (uma UI nova num engine velho esconde o que ele não sabe fazer). */
+export const has = (cap: UiCapability) => window.engine?.has(cap) ?? false;
+
 export const api = {
   dictionary: {
     get: () => invoke("dictionary.get", {}),
@@ -58,6 +61,12 @@ export const api = {
     search: (params: UiCapabilities["history.search"]["args"]) => invoke("history.search", params),
     delete: (id: string) => invoke("history.delete", { id }),
     onAdded: (fn: (e: HistoryEntry) => void) => on("history.added", fn),
+    /** "Enviar para nota…" (T1320): sem `path`, uma nota nova em Caixa de entrada/. */
+    toNote: (id: string, path?: string) => invoke("history.toNote", path ? { id, path } : { id }),
+  },
+  notes: {
+    list: () => invoke("notes.list", {}),
+    search: (query: string) => invoke("notes.search", { query, limit: 12 }),
   },
   /** Só num gesto da pessoa (o clique em copiar): nenhuma UI escreve no clipboard sozinha (#1199). */
   copy: async (text: string) => {

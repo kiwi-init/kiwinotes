@@ -8,6 +8,7 @@ import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import type { Vault } from "../notes/vault.ts";
+import type { ToNoteResult } from "../notes/fromDictation.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
@@ -16,6 +17,12 @@ export interface CapabilityDeps {
   history: {
     search(params: { query?: string; limit?: number; before?: string }): Promise<HistoryPage>;
     delete(id: string): Promise<boolean>;
+    get(id: string): Promise<HistoryEntry | null>;
+  };
+  /** O ditado vira nota (T1320): uma por vez, sem duplicar. */
+  dictationNotes: {
+    toNew(text: string, at: Date): Promise<ToNoteResult>;
+    append(path: string, text: string, at: Date): Promise<ToNoteResult>;
   };
   /** O STT e a limpeza passam a usar o dicionário e os snippets novos já no próximo ditado. */
   dictionaryChanged?(terms: DictionaryTerm[]): void;
@@ -120,6 +127,16 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const id = optionalString(object(args, "history.delete").id, "id", 128);
       if (!id) throw bad("id is required");
       return deps.history.delete(id);
+    },
+    "history.toNote": async (args) => {
+      const a = fields(args, "history.toNote", ["id", "path"]);
+      const id = optionalString(a.id, "id", 128);
+      if (!id) throw bad("id is required");
+      const path = optionalString(a.path, "path", 1024);
+      const entry = await deps.history.get(id);
+      if (!entry) throw new CapabilityError("E_NOT_FOUND", `history.toNote: no dictation ${id}`);
+      const at = new Date(entry.at);
+      return path ? deps.dictationNotes.append(path, entry.text, at) : deps.dictationNotes.toNew(entry.text, at);
     },
     "clipboard.write": (args) => {
       const text = object(args, "clipboard.write").text;

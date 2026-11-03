@@ -12,6 +12,8 @@ final class Helper {
     private let overlay = Overlay()
     private let inserter = Inserter()
     private var gesture = HotkeyGesture()
+    /// ⌥ was held when the dictation key last went down: the recording it starts is a quick note (T1320).
+    private var nextIsNote = false
     private var tap: HotkeyTap!
     private var tickTimer: DispatchWorkItem?
     private var recordingStartedAt: TimeInterval?
@@ -136,8 +138,10 @@ final class Helper {
     private func onHotkey(_ event: HotkeyTap.Event) {
         let actions: [GestureAction]
         switch event {
-        case .down(let t):
+        case .down(let t, let note):
             emit("hotkey.down", ["key": tap.key.rawValue])
+            // A recording this press starts is a quick note (T1320); the 2nd tap of a double tap keeps the 1st's.
+            nextIsNote = note
             actions = gesture.keyDown(at: t)
         case .up(let t):
             emit("hotkey.up", ["key": tap.key.rawValue])
@@ -152,7 +156,7 @@ final class Helper {
     private func apply(_ action: GestureAction) {
         switch action {
         case .startRecording:
-            startRecording(reason: "hotkey")
+            startRecording(reason: "hotkey", note: nextIsNote)
         case .latch:
             emit("hotkey.toggle", ["on": true])
         case .stopRecording(let mode):
@@ -191,11 +195,12 @@ final class Helper {
     // MARK: Recording
 
     @discardableResult
-    private func startRecording(reason: String) -> String? {
+    private func startRecording(reason: String, note: Bool = false) -> String? {
         guard !audio.isRecording else { return nil }
         // Tell the app first, so the overlay shows up while the engine comes up. If the mic then fails,
         // record.error follows record.started (ADR 0001).
         var started: [String: Any] = ["reason": reason]
+        if note { started["target"] = "note" }
         if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
         emit("record.started", started)
         overlay.set(.listening)

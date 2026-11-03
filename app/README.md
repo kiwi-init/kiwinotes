@@ -35,6 +35,8 @@ As janelas têm CSP sem `'unsafe-eval'` (T1378): um eval com resposta pela ponte
 
 O app sobe o helper Swift (`native/`) e fala com ele por um socket unix (`src/bun/sidecar.ts`, [ADR 0001](../docs/adr/0001-ipc.md)). Um ditado faz `transcript.final` → limpeza (regras, LLM local opcional, tom do app em que a pessoa ditou) → snippets → `insert.text` → histórico → pílula em `done` (`src/bun/dictation.ts`).
 
+**Ditado vira nota (T1320).** Com ⌥ segurado ao apertar o atalho, o ditado vira uma nota nova em `~/KiwiNotes/Caixa de entrada/`, em vez de ser colado. O título sai da 1ª frase, e o frontmatter leva `date` e `source: dictation`. No Histórico, o ícone de nota de cada ditado ("Enviar para nota…") manda o texto para uma nota nova ou para o fim de uma que existe. O trecho entra com a legenda `*🎙 ditado às HH:MM*`, e mandar de novo não duplica. Para conferir o Histórico sem abrir o app: `bun run ui:build && bun scripts/history-ui-check.ts`, que usa o WebKit headless com a CSP das views.
+
 - `bun run build` e `bun dev` compilam o helper antes (`scripts/build-helper.ts`) e o põem dentro do app, em `bin/kiwi-helper`. O `scripts/info-plist.ts` põe o `NSMicrophoneUsageDescription` no Info.plist.
 - `KIWI_DATA_DIR=<pasta>`: dicionário, snippets e histórico fora dos reais.
 - `KIWI_HELPER=<caminho>`: outro build do helper. `KIWI_LLM_MODE=auto|always` liga o LLM (o padrão é `off`, [ADR 0002](../docs/adr/0002-limpeza.md)).

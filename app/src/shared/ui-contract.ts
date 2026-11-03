@@ -14,7 +14,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, HistoryEntry, HistoryPage,
 
 /** A versão do contrato que este engine implementa (semver estrito). */
 // 1.1.0 (T1316): as capacidades `notes.*` e o evento `notes.changed`, só acréscimos.
-export const UI_CONTRACT_VERSION = "1.1.0";
+// 1.2.0 (T1320): `history.toNote`, o ditado vira nota. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.2.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -34,6 +35,12 @@ export interface UiCapabilities {
   "snippets.set": { args: { snippets: Snippet[] }; result: Snippet[] };
   "history.search": { args: { query?: string; limit?: number; before?: string }; result: HistoryPage };
   "history.delete": { args: { id: string }; result: boolean };
+  /**
+   * "Enviar para nota…" (1.2.0, T1320): o ditado vai para o fim da nota `path` ou, sem `path`, para uma nota nova em
+   * `Caixa de entrada/`. Mandar de novo não duplica: `already` diz que o trecho já estava lá. Ditado que não existe
+   * dá E_NOT_FOUND.
+   */
+  "history.toNote": { args: { id: string; path?: string }; result: { note: NoteMeta; created: boolean; already: boolean } };
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
 
@@ -66,6 +73,7 @@ export const UI_CAPABILITIES = [
   "snippets.set",
   "history.search",
   "history.delete",
+  "history.toNote",
   "clipboard.write",
   "notes.list",
   "notes.get",

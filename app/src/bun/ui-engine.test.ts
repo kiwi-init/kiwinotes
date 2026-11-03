@@ -62,7 +62,9 @@ function fakeDeps() {
       history: {
         search: async (p: object) => (calls.push(`history.search:${JSON.stringify(p)}`), { entries: [] }),
         delete: async (id: string) => (calls.push(`history.delete:${id}`), true),
+        get: async () => null,
       },
+      dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
       clipboardWrite: (text: string) => void copied.push(text),
       now: () => t,
       notes: notesStub,
