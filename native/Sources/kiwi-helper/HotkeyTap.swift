@@ -50,6 +50,8 @@ final class HotkeyTap {
         return true
     }
 
+    private static let ownPID = Int64(getpid())
+
     func stop() {
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         if let tap { CFMachPortInvalidate(tap) }
@@ -59,6 +61,9 @@ final class HotkeyTap {
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
+        // Our own ⌘V (Inserter.postCommandV) passes through this tap too. With the hotkey already held for the
+        // next dictation, its ⌘↓ and V↓ would count as "another key" and cancel that recording (review #300).
+        if event.getIntegerValueField(.eventSourceUnixProcessID) == Self.ownPID { return }
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }

@@ -9,6 +9,10 @@ export const WINDOWS = ["settings", "history"] as const;
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // O lado da janela do RPC do Electrobun (Electroview), da cópia fixada pelo Hutch.
+    alias: { "electrobun/view": resolve(__dirname, ".hutch/devkit/api/browser/index.ts") },
+  },
   root: resolve(__dirname, "ui"),
   base: "./",
   build: {

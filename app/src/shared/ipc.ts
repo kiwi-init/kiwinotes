@@ -32,11 +32,19 @@ export type Permission = "microphone" | "accessibility" | "inputMonitoring";
 export type PermissionState = "granted" | "denied" | "restricted" | "undetermined";
 export type Permissions = Record<Permission, PermissionState>;
 
+/** Por que o LLM local (Apple Foundation Models) não está disponível. */
+export type LlmUnavailableReason = "appleIntelligenceNotEnabled" | "deviceNotEligible" | "modelNotReady";
+export interface LlmStatus {
+  available: boolean;
+  reason?: LlmUnavailableReason;
+}
+
 /** O que o overlay mostra. `level` vem do próprio sidecar (audio.level). */
 export type OverlayState = "hidden" | "listening" | "processing" | "done" | "error";
 
 /** Quem começou ou terminou a gravação. `config`: o atalho mudou no meio. */
-export type RecordReason = "hotkey" | "command" | "config";
+/** `overlay`: o ✕ (cancelar) ou o ✓ (terminar) da pílula. */
+export type RecordReason = "hotkey" | "command" | "config" | "overlay";
 
 /** Como a gravação terminou: soltou a tecla, bateu de novo no toggle, ou pelo app. */
 export type StopMode = "ptt" | "toggle" | "command";
@@ -52,8 +60,15 @@ export type Command =
       holdThresholdMs?: number;
       /** Janela das duas batidas do toggle. */
       doubleTapMs?: number;
+      /** Dica de idioma para o Parakeet (`auto`: nenhuma). */
       language?: "auto" | "pt" | "en";
-      dictionary?: string[];
+      /**
+       * O vocabulário do STT (T256): a grafia certa vai para o vocabulary boosting e para a correção
+       * fonética; os `aliases` viram o termo depois (as substituições do VoiceInk). Uma string vale `{term}`.
+       */
+      dictionary?: (string | { term: string; aliases?: string[] })[];
+      /** VAD (Silero) antes do modelo: só a fala vai para o STT, e áudio sem fala dá `text: ""`. Padrão: `false`. */
+      vad?: boolean;
     }
   | { type: "record.start" }
   | { type: "record.stop" }
@@ -61,7 +76,15 @@ export type Command =
   | { type: "insert.text"; text: string; restoreClipboard: boolean }
   | { type: "notify"; title: string; body: string }
   | { type: "permissions.request"; permission: Permission }
-  | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number };
+  /**
+   * Uma resposta do Apple Foundation Models, sempre numa sessão nova (sem contexto entre chamadas).
+   * `temperature: 0` é greedy. Passou de `timeoutMs`, o sidecar cancela e devolve `llm_timeout`.
+   * Erros: `llm_unavailable` (com `data.reason`), `llm_timeout`, `llm_refused` (guardrail),
+   * `llm_unsupported_language`, `llm_failed`. Só o modelo on-device (`SystemLanguageModel`), nunca o Private Cloud Compute.
+   */
+  | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number; temperature?: number; timeoutMs?: number }
+  /** Aquece o modelo com estas instruções. O Bun manda no `record.started`, antes da transcrição chegar. */
+  | { type: "llm.prewarm"; system: string };
 
 export type CommandType = Command["type"];
 
@@ -72,11 +95,23 @@ export interface CommandResults {
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
-  /** `pasted: false` quando não havia campo de texto: o texto ficou no clipboard. */
-  "insert.text": { pasted: boolean };
+  /**
+   * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
+   * `no_focus` (nada em foco), `no_text_field` (o foco é um botão etc.) ou `no_accessibility` (falta a permissão).
+   * `pasted: true, restored: false, reason: "secure_input"`: o ⌘V foi, mas algum app segura o secure input e o
+   * macOS pode tê-lo descartado; o texto continua no clipboard, e o clipboard antigo não volta.
+   * `app` é o bundle id do app em foco.
+   */
+  "insert.text": {
+    pasted: boolean;
+    restored: boolean;
+    reason?: "no_focus" | "no_text_field" | "no_accessibility" | "secure_input";
+    app?: string;
+  };
   notify: Record<string, never>;
   "permissions.request": { permission: Permission; state: PermissionState };
-  "llm.complete": { text: string };
+  "llm.complete": { text: string; ms: number };
+  "llm.prewarm": Record<string, never>;
 }
 
 // ---------------------------------------------------------- sidecar → Bun
@@ -92,8 +127,10 @@ export type Event =
       permissions: Permissions;
       /** Texto para explicar cada permissão na UI. */
       permissionHelp?: Partial<Record<Permission, string>>;
+      /** Se o LLM local está pronto. Opcional até o sidecar mandar (T52). */
+      llm?: LlmStatus;
     }
-  | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean }
+  | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean; llm?: LlmStatus }
   | { type: "hotkey.down"; key: HotkeyKey }
   | { type: "hotkey.up"; key: HotkeyKey }
   | { type: "hotkey.toggle"; on: boolean }
@@ -102,14 +139,29 @@ export type Event =
   | { type: "record.stopped"; reason: RecordReason; mode: StopMode; durationMs: number; samples: number; audioPath?: string }
   /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
   | { type: "record.cancelled"; reason: RecordReason }
-  /** Não deu para gravar: sem microfone ou sem permissão. */
+  /**
+   * Não deu para gravar: sem microfone, sem permissão, ou `device_changed` (o mic trocou no meio).
+   * Pode vir logo depois do `record.started`, que sai antes de o mic subir.
+   */
   | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState }
   /** Nível RMS de 0 a 1, ~30 Hz enquanto grava. Alimenta a onda do overlay. */
   | { type: "audio.level"; rms: number }
   /** App em foco, para ajustar o tom da limpeza. */
   | { type: "app.active"; bundleId: string; name: string }
   | { type: "transcript.partial"; text: string }
-  | { type: "transcript.final"; text: string; lang: string; durationMs: number; audioPath?: string }
+  /**
+   * O texto de uma gravação, na ordem em que terminaram. `text` já passou pelo pós-processamento do VoiceInk
+   * (filtro, correção fonética, aliases); `raw` é o do modelo. `lang`: `pt`, `en`, `mix`, ou `""` sem texto.
+   * `latencyMs`: do fim da gravação até aqui.
+   */
+  | { type: "transcript.final"; text: string; raw: string; lang: "pt" | "en" | "mix" | ""; durationMs: number; latencyMs: number; audioPath?: string }
+  /**
+   * O modelo de STT: `loading` logo depois do `ready` (a primeira carga pode levar um minuto: download, ou o
+   * CoreML compilando depois de atualizar o macOS), depois `ready` ou `unavailable`.
+   */
+  | { type: "stt.status"; state: "loading" | "ready" | "unavailable"; loadMs?: number; error?: "model_unavailable" }
+  /** A gravação não virou texto: `model_unavailable` (sem modelo, ex.: offline na primeira vez) ou `stt_failed`. */
+  | { type: "transcript.error"; error: "model_unavailable" | "stt_failed" }
   | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string };
 
 export type EventType = Event["type"];
@@ -121,7 +173,7 @@ export type EventMessage<E extends Event = Event> = E & { v: typeof IPC_VERSION 
 
 export type ResultMessage<T extends CommandType = CommandType> =
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: true; data: CommandResults[T] }
-  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`… */
+  /** `error` é um código curto: `not_implemented`, `unknown_type`, `unknown_hotkey`, `unknown_permission`, `bad_message`, `invalid_value`, `already_recording`, `llm_unavailable`, `llm_timeout`, `llm_refused`, `llm_unsupported_language`, `llm_failed`… */
   | { v: typeof IPC_VERSION; type: "result"; id: string; ok: false; error: string; data?: Record<string, unknown> };
 
 export type Message = CommandMessage | EventMessage | ResultMessage;
@@ -136,6 +188,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "notify",
   "permissions.request",
   "llm.complete",
+  "llm.prewarm",
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
@@ -152,6 +205,8 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "app.active",
   "transcript.partial",
   "transcript.final",
+  "transcript.error",
+  "stt.status",
   "log",
 ]);
 

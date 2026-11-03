@@ -1,10 +1,11 @@
 # Kiwi Notes: regras para agentes e pessoas
 
-O trabalho é coordenado no canal **kiwinote** do Kiwi Channels. Toda mudança nasce de uma task (`T<n>`) filed sob um spec aprovado.
+O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança nasce de uma task (`T<n>`) filed sob um spec aprovado.
 
 ## Privacidade (inegociável)
 - Nada sai do Mac: sem telemetria, sem analytics, sem STT nem LLM na nuvem. A única exceção é o Claude Code (decisão #34), e só onde um spec disser.
 - Nunca commite áudio, transcrições reais, modelos baixados ou credenciais.
+- **Agente não usa o microfone real.** Nada que ligue o mic: `record.start`, o atalho, ou uma ação do app (agent control) que grave, mesmo que o Terminal já tenha a permissão. Para ver o overlay, use `overlay.state`, que não liga o mic. Diagnóstico com áudio sintético (`say`) ou com os arquivos que o harry gravar para isso. Teste com o mic real é só do harry, e quem pede é o lead (#320).
 
 ## Branches e PRs
 - `main` só muda por PR e está sempre buildável. Nunca faça force-push nela.
@@ -16,6 +17,10 @@ O trabalho é coordenado no canal **kiwinote** do Kiwi Channels. Toda mudança n
 - Vários agentes dividem esta máquina. A pasta principal (`kiwinotes/`) fica **sempre em `main`**: ninguém troca de branch nela.
 - Cada task tem o próprio worktree: `git worktree add ../kiwinotes-wt/T<n> -b kn/T<n>-<slug> origin/main`. Trabalhe, faça os commits e o push dali.
 - Depois do merge: `git worktree remove ../kiwinotes-wt/T<n>`.
+
+## Código do VoiceInk (GPL-3.0)
+- O Kiwi porta o motor local do VoiceInk (ADR 0004). Todo arquivo portado, em Swift ou TS, leva no topo: `// Portado de VoiceInk/<caminho> @ <commit> (GPL-3.0). Mudanças: …`.
+- Só a parte local: nada de provedores de nuvem, Sparkle, RemoteConfig ou anúncios.
 
 ## Layout
 - `app/`: o app Electrobun Livewire (main em Bun) com a UI em React + TS + Vite (`app/ui/`).

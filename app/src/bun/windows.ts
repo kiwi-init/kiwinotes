@@ -1,5 +1,8 @@
 import { BrowserWindow, Updater } from "electrobun/bun";
 
+import { createRpc } from "./rpc.ts";
+import { stores } from "./stores.ts";
+
 export type WindowName = "settings" | "history";
 
 const SPECS: Record<WindowName, { title: string; width: number; height: number }> = {
@@ -43,14 +46,21 @@ export async function showWindow(name: WindowName): Promise<void> {
     return;
   }
   const spec = SPECS[name];
+  const rpc = createRpc();
   const win = new BrowserWindow({
     title: spec.title,
     url: `${await viewsBase()}/${name}/index.html`,
     frame: { width: spec.width, height: spec.height },
     titleBarStyle: "hiddenInset",
+    rpc,
   });
   open.set(name, win);
-  win.on("close", () => open.delete(name));
+  // O Histórico aberto recebe cada ditado novo na hora.
+  const off = name === "history" ? stores.history.onAdded((entry) => rpc.send.historyAdded(entry)) : undefined;
+  win.on("close", () => {
+    off?.();
+    open.delete(name);
+  });
   win.activate();
 }
 
