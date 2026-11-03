@@ -3,10 +3,15 @@ import path from "node:path";
 
 import { AgentControl, PATHS, Tray, Utils } from "electrobun/bun";
 
+import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
 import { stores } from "./stores.ts";
 import { openWindows, showWindow, type WindowName } from "./windows.ts";
+
+// Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
+// velho de pé é substituído. Com KIWI_DEBUG=1 nunca derruba outro.
+if (claimInstance({ dir: stores.dir, mayReplace: process.env.KIWI_DEBUG !== "1" }).action === "exit") process.exit(0);
 
 Utils.setDockIconVisible(false);
 
@@ -60,11 +65,19 @@ tray.on("tray-clicked", (event) => {
       void dictation.permissions.askNext();
       break;
     case "quit":
-      dictation.stop();
-      tray.remove();
-      process.exit(0);
+      quit();
   }
 });
+
+function quit(): never {
+  dictation.stop();
+  tray.remove();
+  releaseInstance(stores.dir);
+  process.exit(0);
+}
+
+// Um build novo pede para este sair (T992): sai limpo, parando o helper e soltando o socket.
+process.on("SIGTERM", () => quit());
 
 // Com ELECTROBUN_AGENT_CONTROL=1 (o `bun dev` liga), agentes abrem as janelas
 // sem clicar na barra de menu:
