@@ -3,13 +3,25 @@ import ApplicationServices
 import Carbon.HIToolbox
 import KiwiHelperCore
 
+// Partes portadas de VoiceInk/VoiceInk/Infrastructure/SystemIntegration/Paste/CursorPaster.swift @ 19546d2 (GPL-3.0).
+// Mudanças: só o caminho do ⌘V por CGEvent (sem AppleScript, digitação direta ou remota, SmartPunctuation e
+// AutoLearn); os tempos (`prePasteDelay`, `restoreDelay`) e a sequência ⌘↓ V↓ V↑ ⌘↑ com a fonte privada vêm
+// de lá. A tecla do V segue o layout atual com ⌘ apertado, e não a física fixa. A decisão por foco, o secure
+// input e o `changeCount` como dono do clipboard são nossos.
+
 /// `insert.text`: puts the dictated text into the focused field with ⌘V and gives the person's clipboard back.
 /// Pasting works the same in every app (Cocoa, Electron, terminals, browsers); typing through Accessibility
 /// (`AXSelectedText`) is ignored by Electron and terminals, so it isn't used.
 final class Inserter {
-    /// How long the text stays on the clipboard after ⌘V before the old content goes back. Apps read the
-    /// pasteboard when they handle the key, but Electron apps do it asynchronously; 300 ms covers them.
-    static let restoreDelay: TimeInterval = 0.3
+    /// Between putting the text on the clipboard and the ⌘V (VoiceInk's `prePasteDelay`): the focus and the
+    /// pasteboard settle first, so the target app reads our text and not the previous content.
+    static let prePasteDelay: TimeInterval = 0.2
+    /// How long the text stays on the clipboard after ⌘V before the person's content goes back. Electron apps
+    /// (Teams, Slack) read the pasteboard asynchronously, sometimes well after the key; 2 s is VoiceInk's default.
+    /// A copy made in the meantime is never overwritten (`changeCount`).
+    static let restoreDelay: TimeInterval = 2.0
+    /// Between the four key events, so apps that track the modifier state see ⌘ down before V.
+    static let keyEventGap: useconds_t = 10_000
 
     struct Outcome {
         let pasted: Bool
@@ -19,8 +31,30 @@ final class Inserter {
         let app: String?
     }
 
-    /// Main thread. `completion` runs once the paste is posted; the clipboard goes back `restoreDelay` later.
+    private let keeper = ClipboardKeeper()
+    private let keys = DispatchQueue(label: "kiwi.insert.keys", qos: .userInteractive)
+    private var jobs: [(text: String, restore: Bool, completion: (Outcome) -> Void)] = []
+    private var busy = false
+
+    /// Main thread. One insert at a time, in order: a second dictation waits for the first one's ⌘V (not for its
+    /// restore). `completion` runs once the paste is posted; the clipboard goes back `restoreDelay` later.
     func insert(_ text: String, restoreClipboard: Bool, completion: @escaping (Outcome) -> Void) {
+        jobs.append((text, restoreClipboard, completion))
+        runNext()
+    }
+
+    private func runNext() {
+        guard !busy, !jobs.isEmpty else { return }
+        busy = true
+        let job = jobs.removeFirst()
+        perform(job.text, restoreClipboard: job.restore) { [weak self] outcome in
+            job.completion(outcome)
+            self?.busy = false
+            self?.runNext()
+        }
+    }
+
+    private func perform(_ text: String, restoreClipboard: Bool, completion: @escaping (Outcome) -> Void) {
         let app = NSWorkspace.shared.frontmostApplication
         let plan = InsertPlan.decide(accessibilityGranted: AXIsProcessTrusted(),
                                      secureInput: IsSecureEventInputEnabled(), focus: Self.focus())
@@ -30,7 +64,7 @@ final class Inserter {
         switch plan {
         case .clipboardOnly(let why):
             // No field: the text stays on the clipboard for the person to paste, and the app tells them.
-            ClipboardSnapshot.put(text, on: pasteboard, transient: false)
+            keeper.put(text, on: pasteboard, keepOriginal: false)
             return completion(Outcome(pasted: false, restored: false, reason: why, app: app?.bundleIdentifier))
         case .pasteKeepingText(let why):
             reason = why
@@ -39,13 +73,18 @@ final class Inserter {
         }
 
         let restore = restoreClipboard && reason == nil
-        let snapshot = restore ? ClipboardSnapshot.take(pasteboard) : nil
-        let ours = ClipboardSnapshot.put(text, on: pasteboard, transient: restore)
-        Self.postCommandV()
-        completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier))
-        guard let snapshot else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.restoreDelay) {
-            snapshot.restore(to: pasteboard, ifStill: ours)
+        let ours = keeper.put(text, on: pasteboard, keepOriginal: restore)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys, keeper] in
+            keys.async {
+                Self.postCommandV()
+                DispatchQueue.main.async {
+                    completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier))
+                    guard restore else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.restoreDelay) {
+                        keeper.restore(on: pasteboard, ifStill: ours)
+                    }
+                }
+            }
         }
     }
 
@@ -74,30 +113,38 @@ final class Inserter {
         return FocusInfo(role: role as? String, hasSelectedTextRange: hasRange)
     }
 
-    /// ⌘V as if typed. Uses the key that types "v" in the current layout (on Dvorak it isn't the QWERTY V key),
-    /// and sets only ⌘, so a modifier still held from the hotkey doesn't turn it into ⌥⌘V.
+    /// ⌘V as if typed, the way VoiceInk posts it: ⌘ down, V down, V up, ⌘ up, 10 ms apart, from a private event
+    /// source, so a modifier still held from the hotkey (🌐, ⌥) doesn't mix in and turn it into ⌥⌘V. Off the main
+    /// thread (it sleeps between events).
     static func postCommandV() {
-        let key = keyCode(for: "v") ?? CGKeyCode(kVK_ANSI_V)
-        let source = CGEventSource(stateID: .combinedSessionState)
-        for down in [true, false] {
-            guard let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: down) else { continue }
-            event.flags = .maskCommand
+        let v = keyCode(for: "v") ?? CGKeyCode(kVK_ANSI_V)
+        let source = CGEventSource(stateID: .privateState)
+        let steps: [(key: CGKeyCode, down: Bool, flags: CGEventFlags)] = [
+            (CGKeyCode(kVK_Command), true, .maskCommand), (v, true, .maskCommand),
+            (v, false, .maskCommand), (CGKeyCode(kVK_Command), false, []),
+        ]
+        for (i, step) in steps.enumerated() {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: step.key, keyDown: step.down) else { continue }
+            event.flags = step.flags
             event.post(tap: .cghidEventTap)
+            if i < steps.count - 1 { usleep(keyEventGap) }
         }
     }
 
-    /// The virtual key that types `character` in the current keyboard layout, without modifiers.
+    /// The virtual key that types `character` in the current keyboard layout with ⌘ held: on Dvorak it isn't the
+    /// QWERTY V key, and on the "… – QWERTY ⌘" layouts ⌘ switches to QWERTY, so it is again.
     static func keyCode(for character: Character) -> CGKeyCode? {
         guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
               let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
         return data.withUnsafeBytes { raw -> CGKeyCode? in
             guard let layout = raw.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return nil }
+            let commandState = UInt32((cmdKey >> 8) & 0xFF)
             for code in 0..<128 {
                 var deadKeys: UInt32 = 0
                 var length = 0
                 var chars = [UniChar](repeating: 0, count: 4)
-                let status = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), 0, UInt32(LMGetKbdType()),
+                let status = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), commandState, UInt32(LMGetKbdType()),
                                             OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeys, chars.count, &length, &chars)
                 if status == noErr, length == 1, String(utf16CodeUnits: chars, count: 1) == String(character) {
                     return CGKeyCode(code)

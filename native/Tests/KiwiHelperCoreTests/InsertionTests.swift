@@ -75,4 +75,48 @@ final class InsertionTests: XCTestCase {
         XCTAssertTrue(snapshot.restore(to: pb, ifStill: ours))
         XCTAssertNil(pb.string(forType: .string), "the dictation doesn't stay behind")
     }
+
+    func testTwoDictationsInARowGiveTheOriginalBack() {
+        let pb = scratchPasteboard()
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("da pessoa", forType: .string)
+        let keeper = ClipboardKeeper()
+        let first = keeper.put("ditado 1", on: pb, keepOriginal: true)
+        let second = keeper.put("ditado 2", on: pb, keepOriginal: true) // before the first restore
+        XCTAssertFalse(keeper.restore(on: pb, ifStill: first), "a later dictation took over")
+        XCTAssertEqual(pb.string(forType: .string), "ditado 2")
+        XCTAssertTrue(keeper.restore(on: pb, ifStill: second))
+        XCTAssertEqual(pb.string(forType: .string), "da pessoa")
+    }
+
+    func testKeeperLetsANewCopyWin() {
+        let pb = scratchPasteboard()
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("antigo", forType: .string)
+        let keeper = ClipboardKeeper()
+        let ours = keeper.put("ditado", on: pb, keepOriginal: true)
+        pb.clearContents()
+        pb.setString("copiado agora", forType: .string)
+        // The next dictation snapshots the new copy, not the old one.
+        let next = keeper.put("ditado 2", on: pb, keepOriginal: true)
+        XCTAssertFalse(keeper.restore(on: pb, ifStill: ours))
+        XCTAssertTrue(keeper.restore(on: pb, ifStill: next))
+        XCTAssertEqual(pb.string(forType: .string), "copiado agora")
+    }
+
+    func testTextThatStaysDropsThePendingRestore() {
+        let pb = scratchPasteboard()
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("da pessoa", forType: .string)
+        let keeper = ClipboardKeeper()
+        let first = keeper.put("ditado 1", on: pb, keepOriginal: true)
+        keeper.put("sem campo", on: pb, keepOriginal: false) // no_focus: the text stays for the person
+        XCTAssertFalse(keeper.restore(on: pb, ifStill: first))
+        XCTAssertEqual(pb.string(forType: .string), "sem campo")
+        XCTAssertNil(pb.data(forType: ClipboardSnapshot.transient), "clipboard managers keep it")
+        XCTAssertEqual(pb.string(forType: ClipboardSnapshot.source), ClipboardSnapshot.sourceID)
+    }
 }
