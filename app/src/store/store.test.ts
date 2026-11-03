@@ -86,6 +86,43 @@ describe("snippets", () => {
     expect(expandSnippets("Manda pro meu emails agora.", plain)).toBe("Manda pro meu emails agora.");
   });
 
+  test("o STT errou o gatilho por pouco: dispara pela forma falada (T985)", () => {
+    for (const trigger of ["meu email", "meu e-mail"]) {
+      const snip = [{ trigger, text: "davi@example.com" }];
+      expect(expandSnippets("Manda para meu imeio.", snip)).toBe("Manda para davi@example.com.");
+      expect(expandSnippets("Manda para meu emeio agora.", snip)).toBe("Manda para davi@example.com agora.");
+      expect(expandSnippets("Meu imeio.", snip)).toBe("davi@example.com");
+    }
+  });
+
+  test("o que só parece o gatilho não dispara (T985)", () => {
+    const snip = [{ trigger: "meu e-mail", text: "davi@example.com" }];
+    for (const text of [
+      "O meu emprego é longe.",
+      "O meu mais bonito.",
+      "O meu e mais o seu.",
+      "Meu irmão chegou.",
+      "No meio do caminho.",
+      "Meu meio de transporte.",
+      "Meu mel é doce.",
+      "Manda um e-mail para mim.",
+    ]) {
+      expect(expandSnippets(text, snip)).toBe(text);
+    }
+    // Uma palavra só: nada de forma aproximada ("assinaturas" não é "assinatura").
+    const one = [{ trigger: "assinatura", text: "Abraço, Davi" }];
+    expect(expandSnippets("Revisa as assinaturas.", one)).toBe("Revisa as assinaturas.");
+    expect(expandSnippets("Põe a assinatura.", one)).toBe("Põe a Abraço, Davi.");
+  });
+
+  test("o gatilho certo ganha do aproximado", () => {
+    const snips = [
+      { trigger: "meu e-mail", text: "davi@example.com" },
+      { trigger: "meu emeio", text: "outro" },
+    ];
+    expect(expandSnippets("Manda para meu emeio.", snips)).toBe("Manda para outro.");
+  });
+
   test("o gatilho mais longo ganha", () => {
     expect(expandSnippets("Usa o meu e-mail do trabalho.", snippets)).toBe("Usa o davi@empresa.com.");
   });

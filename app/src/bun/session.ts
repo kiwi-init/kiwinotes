@@ -102,6 +102,11 @@ export class Session {
       this.emitStatus();
     });
     this.sidecar.on("permissions.changed", () => this.emitStatus());
+    // O que o mic fez (engine novo, quanto tempo até o primeiro áudio depois do atalho, T985): só números e nomes
+    // de evento, nunca áudio nem texto. Os outros logs do helper ficam de fora (o dryRun loga o texto).
+    this.sidecar.on("log", (e) => {
+      if (e.message.startsWith("mic: ")) console.log(`[sidecar] ${e.message}`);
+    });
     // O helper caiu: o menu sai de "Pronto para ditar" até o próximo `ready` (T914).
     this.sidecar.onClose(() => this.emitStatus());
     if (process.env.KIWI_DEBUG === "1") {
