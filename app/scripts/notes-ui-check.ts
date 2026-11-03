@@ -287,6 +287,58 @@ await step("dois saves seguidos (o do timer e o da troca de nota) não dão conf
   });
 });
 
+// T1506: fechar a janela com o save falhando não perde a edição (rascunho no localStorage da janela).
+const draftKeys = () => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("kiwi.notes.draft.")));
+async function typeWithSaveFailing(text: string) {
+  await sideClick("Ana");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ana");
+  await page.evaluate(() => {
+    (window as any).__kiwiNotesMock.save = async () => {
+      throw new Error("E_FAILED");
+    };
+  });
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type(text);
+  await page.waitForSelector(".kn-save-alert");
+  // "Fecha a janela": a página some sem o save passar (e o vault de mentira volta ao começo).
+  await page.goto(`${URL}?note=${encodeURIComponent("Pessoas/Ana.md")}`);
+  await page.waitForSelector(".kn-title");
+}
+
+await step("rascunho: edição que não gravou volta ao reabrir, e 'Recuperar' grava", async () => {
+  await typeWithSaveFailing("\nRASCUNHO QUE NÃO GRAVOU");
+  await page.waitForSelector(".kn-draft >> text=não foi gravada");
+  if ((await editorText()).includes("RASCUNHO")) throw new Error("o editor já abriu com o rascunho, sem perguntar");
+  await page.click(".kn-draft >> text=Recuperar");
+  await settle();
+  if (!(await editorText()).includes("RASCUNHO QUE NÃO GRAVOU")) throw new Error("o rascunho não voltou ao editor");
+  if (!(await content("Pessoas/Ana.md")).includes("RASCUNHO QUE NÃO GRAVOU")) throw new Error("não gravou");
+  expectEq(await draftKeys(), []);
+});
+
+await step("rascunho: 'Descartar' fica com o que está no disco e apaga o rascunho", async () => {
+  await typeWithSaveFailing(" OUTRO RASCUNHO");
+  await page.waitForSelector(".kn-draft");
+  await page.click(".kn-draft >> text=Descartar");
+  await page.waitForTimeout(200);
+  if (await page.$(".kn-draft")) throw new Error("o aviso ficou");
+  if ((await editorText()).includes("OUTRO RASCUNHO")) throw new Error("o rascunho entrou");
+  expectEq(await draftKeys(), []);
+});
+
+await step("rascunho: edição que gravou não deixa rascunho", async () => {
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type(" gravou");
+  await settle();
+  expectEq(await draftKeys(), []);
+  await page.goto(`${URL}?note=${encodeURIComponent("Pessoas/Ana.md")}`);
+  await page.waitForSelector(".kn-title");
+  await page.waitForTimeout(300);
+  if (await page.$(".kn-draft")) throw new Error("ofereceu rascunho de algo que gravou");
+});
+
 await step("⌘K cria nota nova quando não há título igual", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ideia nova");
