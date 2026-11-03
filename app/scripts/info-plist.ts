@@ -13,12 +13,22 @@
 //   assina depois disto (postWrap roda "before final packaging/signing"); confira com `codesign --verify --deep --strict`.
 // - No postWrap, o app de dentro do `KiwiNotes.app.tar.zst` é reassinado antes do wrapper (T762): o Electrobun mexe
 //   no `version.json` dele depois do postBuild. Ver `signing.ts`. O postPackage (`verify-signature.ts`) confere tudo.
+// - Só no wrapper, o `LSEnvironment` com `ELECTROBUN_INSTALLER_UI_AUTOCLOSE=1` (T951). No 1º `open` de um build novo,
+//   o wrapper (o extractor do Electrobun) desempacota, relança o app com `open -n` e fica com a janela "Installation
+//   complete" aberta, esperando o "Close". Essa janela tem o mesmo bundle id e o mesmo caminho do app novo. Sair dela
+//   pelo Dock ou com ⌘Q manda o Quit para todas as instâncias do Kiwi Notes, e o app recém-aberto sai junto (no log de
+//   14:45:22 e de 12:07:38: o app sobe, recebe "Quit AppleEvent" 9 a 12 s depois, e o wrapper sai 5 s depois disso).
+//   Com a variável, o extractor fecha a janela sozinho logo depois de relançar. Vai pelo Info.plist porque o
+//   LaunchServices não passa o ambiente do shell para o app.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { resealBundles, signAdHoc } from "./signing.ts";
+
+/** No Info.plist do wrapper: o ambiente que o LaunchServices passa ao extractor (T951). */
+const WRAPPER_ENVIRONMENT = { ELECTROBUN_INSTALLER_UI_AUTOCLOSE: "1" };
 
 const USAGE: Record<string, string> = {
   NSMicrophoneUsageDescription: "O Kiwi Notes ouve o microfone só enquanto você segura o atalho, e transcreve tudo no seu Mac.",
@@ -70,6 +80,12 @@ function setUsage(plist: string): void {
   for (const p of plists) {
     setUsage(p);
     console.log(`info-plist: usage descriptions in ${p}`);
+  }
+  if (wrapper) {
+    const plist = path.join(wrapper, "Contents", "Info.plist");
+    const r = spawnSync("plutil", ["-replace", "LSEnvironment", "-json", JSON.stringify(WRAPPER_ENVIRONMENT), plist], { stdio: "inherit" });
+    if (r.status !== 0) throw new Error(`info-plist: plutil failed on ${plist}`);
+    console.log(`info-plist: installer window closes on its own (LSEnvironment) in ${plist}`);
   }
   // Assina depois de mexer em todos os Info.plist: o de dentro primeiro, se um .app estiver dentro do outro.
   const apps = [...plists].map((p) => path.dirname(path.dirname(p))).sort((a, b) => b.length - a.length);
