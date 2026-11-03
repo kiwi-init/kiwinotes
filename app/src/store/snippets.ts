@@ -76,21 +76,30 @@ export function expandSnippets(text: string, snippets: Snippet[]): string {
   const whole = squash(text.replace(/[\s.!?…,;:]+$/u, ""));
   for (const s of ordered) if (squash(s.trigger) === whole) return s.text;
 
-  let out = text;
+  // Uma passada só, sobre o texto original: o texto que um snippet insere nunca dispara outro.
+  const { folded, map } = foldWithMap(text);
+  const found: { start: number; end: number; text: string }[] = [];
   for (const s of ordered) {
     const words = normalizePhrase(s.trigger).split(" ").map(escape);
     const re = new RegExp(words.join("[\\s\\-‐–—_]*"), "gu");
-    const { folded, map } = foldWithMap(out);
-    let result = "";
-    let last = 0;
     for (const m of folded.matchAll(re)) {
       const start = map[m.index!]!;
       const end = map[m.index! + m[0].length]!;
-      if (isWordChar(out[start - 1]) || isWordChar(out[end])) continue;
-      result += out.slice(last, start) + s.text;
-      last = end;
+      if (isWordChar(text[start - 1]) || isWordChar(text[end])) continue;
+      found.push({ start, end, text: s.text });
     }
-    out = result + out.slice(last);
   }
-  return out;
+  // Nas sobreposições ganha o trecho mais longo; depois, o que vem primeiro.
+  found.sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start);
+  const chosen: typeof found = [];
+  for (const f of found) if (chosen.every((c) => f.end <= c.start || f.start >= c.end)) chosen.push(f);
+  chosen.sort((a, b) => a.start - b.start);
+
+  let out = "";
+  let last = 0;
+  for (const c of chosen) {
+    out += text.slice(last, c.start) + c.text;
+    last = c.end;
+  }
+  return out + text.slice(last);
 }

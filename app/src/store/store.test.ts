@@ -81,6 +81,15 @@ describe("snippets", () => {
     expect(expandSnippets("Usa o meu e-mail do trabalho.", snippets)).toBe("Usa o davi@empresa.com.");
   });
 
+  test("o texto de um snippet não dispara outro (uma passada só)", () => {
+    const nested = [
+      { trigger: "assinatura", text: "Abraço, Davi. Meu e-mail segue." },
+      { trigger: "meu e-mail", text: "davi@x.com" },
+    ];
+    expect(expandSnippets("manda a assinatura", nested)).toBe("manda a Abraço, Davi. Meu e-mail segue.");
+    expect(expandSnippets("assinatura e meu e-mail", nested)).toBe("Abraço, Davi. Meu e-mail segue. e davi@x.com");
+  });
+
   test("não dispara dentro de outra palavra", () => {
     expect(expandSnippets("A assinaturas do contrato.", snippets)).toBe("A assinaturas do contrato.");
   });
@@ -154,6 +163,30 @@ describe("histórico", () => {
     expect(await h.delete(a.id)).toBe(true);
     expect(await h.delete("não existe")).toBe(false);
     expect((await h.search()).entries.map((e) => e.text)).toEqual(["B."]);
+  });
+
+  test("apagar ao mesmo tempo que chegam ditados não perde nenhum", async () => {
+    const h = new HistoryStore(dir);
+    const first = await h.add({ raw: "x", text: "x" });
+    for (let i = 0; i < 30; i++) await h.add({ raw: `${i}`, text: `${i}` });
+    await Promise.all([h.delete(first.id), ...Array.from({ length: 20 }, (_, i) => h.add({ raw: `n${i}`, text: `n${i}` }))]);
+    expect((await h.search({ limit: 500 })).entries).toHaveLength(50);
+  });
+
+  test("uma escrita que falha não trava as próximas", async () => {
+    const h = new HistoryStore(dir);
+    await expect(h.add({ raw: null as unknown as string, text: "x" })).rejects.toThrow();
+    await h.add({ raw: "ok", text: "Ok." });
+    expect((await h.search()).entries.map((e) => e.text)).toEqual(["Ok."]);
+  });
+
+  test("com before, pula os dias mais novos que o cursor", async () => {
+    const h = new HistoryStore(dir);
+    const old = await h.add({ raw: "a", text: "antigo", at: new Date(2026, 9, 1, 10) });
+    await h.add({ raw: "b", text: "novo", at: new Date(2026, 10, 2, 10) });
+    await h.add({ raw: "c", text: "mais antigo", at: new Date(2026, 8, 1, 10) });
+    const page = await h.search({ before: old.id });
+    expect(page.entries.map((e) => e.text)).toEqual(["mais antigo"]);
   });
 
   test("avisa quem está ouvindo", async () => {

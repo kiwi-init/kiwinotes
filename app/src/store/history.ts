@@ -43,9 +43,26 @@ function dayOf(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/** O arquivo do dia de um id (`<ISO UTC>-<hex>`), no fuso local como os arquivos. */
+function cursorFile(id: string): string | undefined {
+  const at = new Date(id.slice(0, 24));
+  return Number.isNaN(at.getTime()) ? undefined : `${dayOf(at)}.jsonl`;
+}
+
 export class HistoryStore {
   readonly dir: string;
   private listeners = new Set<(e: HistoryEntry) => void>();
+  /**
+   * Uma escrita por vez. O `delete` lê, filtra e troca o arquivo do dia; um `add` no meio disso
+   * (um ditado chegando enquanto a pessoa apaga outro) sumiria no rename.
+   */
+  private writes: Promise<unknown> = Promise.resolve();
+
+  private serialize<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.writes.then(fn, fn);
+    this.writes = run.catch(() => {});
+    return run;
+  }
 
   constructor(dataDir: string) {
     this.dir = path.join(dataDir, "history");
@@ -57,7 +74,11 @@ export class HistoryStore {
     return () => this.listeners.delete(fn);
   }
 
-  async add(input: NewHistoryEntry): Promise<HistoryEntry> {
+  add(input: NewHistoryEntry): Promise<HistoryEntry> {
+    return this.serialize(() => this.append(input));
+  }
+
+  private async append(input: NewHistoryEntry): Promise<HistoryEntry> {
     const when = input.at ?? new Date();
     const { at: _ignored, ...rest } = input;
     const entry: HistoryEntry = {
@@ -106,7 +127,10 @@ export class HistoryStore {
     const words = fold(query).split(/\s+/).filter(Boolean);
     const max = Math.min(Math.max(1, limit), 500);
     const entries: HistoryEntry[] = [];
+    // Com cursor, os dias mais novos que ele não têm nada para esta página.
+    const cursorDay = before ? cursorFile(before) : undefined;
     for (const day of await this.days()) {
+      if (cursorDay && day > cursorDay) continue;
       for (const e of await this.readDay(day)) {
         if (before && e.id >= before) continue;
         if (words.length) {
@@ -121,7 +145,11 @@ export class HistoryStore {
   }
 
   /** Apaga um ditado (e só ele) reescrevendo o arquivo do dia. */
-  async delete(id: string): Promise<boolean> {
+  delete(id: string): Promise<boolean> {
+    return this.serialize(() => this.remove(id));
+  }
+
+  private async remove(id: string): Promise<boolean> {
     for (const day of await this.days()) {
       const file = path.join(this.dir, day);
       const lines = (await readFile(file, "utf8")).split("\n").filter((l) => l.trim());
