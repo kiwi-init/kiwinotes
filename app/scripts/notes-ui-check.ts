@@ -339,6 +339,38 @@ await step("rascunho: edição que gravou não deixa rascunho", async () => {
   if (await page.$(".kn-draft")) throw new Error("ofereceu rascunho de algo que gravou");
 });
 
+// T1530: rascunho de nota que sumiu.
+const putDraft = (path: string, body: string) =>
+  page.evaluate(([p, b]) => localStorage.setItem(`kiwi.notes.draft.v1:${p}`, JSON.stringify({ path: p, body: b, baseVersion: "1", at: new Date().toISOString() })), [path, body]);
+
+await step("nota apagada com a janela aberta leva o rascunho junto", async () => {
+  await putDraft("Projetos/Site novo.md", "rascunho de uma nota que vai sumir");
+  await page.evaluate(() => (window as any).__kiwiNotesMock.delete("Projetos/Site novo.md"));
+  await page.waitForFunction(() => !localStorage.getItem("kiwi.notes.draft.v1:Projetos/Site novo.md"), undefined, { timeout: 3000 });
+});
+
+await step("rascunho órfão ao abrir: 'Recuperar como nota nova' cria na Caixa de entrada", async () => {
+  await putDraft("Projetos/Nome Antigo.md", "TEXTO DE UMA NOTA RENOMEADA FORA");
+  await page.goto(URL);
+  await page.waitForSelector(".kn-orphan >> text=Nome Antigo");
+  await page.click(".kn-orphan >> text=Recuperar como nota nova");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Nome Antigo");
+  if (!(await content("Caixa de entrada/Nome Antigo.md")).includes("TEXTO DE UMA NOTA RENOMEADA FORA")) throw new Error("não criou");
+  expectEq(await draftKeys(), []);
+  if (await page.$(".kn-orphan")) throw new Error("o aviso ficou");
+});
+
+await step("rascunho órfão: 'Descartar' apaga sem criar nada", async () => {
+  await putDraft("Sumida.md", "texto que a pessoa não quer mais");
+  await page.goto(URL);
+  await page.waitForSelector(".kn-orphan >> text=Sumida");
+  await page.click(".kn-orphan >> text=Descartar");
+  await page.waitForTimeout(200);
+  if (await page.$(".kn-orphan")) throw new Error("o aviso ficou");
+  expectEq(await draftKeys(), []);
+  if (await page.evaluate(() => (window as any).__kiwiNotesMock.notes.has("Caixa de entrada/Sumida.md"))) throw new Error("criou nota");
+});
+
 await step("⌘K cria nota nova quando não há título igual", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ideia nova");

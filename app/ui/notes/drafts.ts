@@ -62,6 +62,21 @@ export class Drafts {
     } catch {}
   }
 
+  /** Todos os rascunhos válidos (para achar os órfãos: o de uma nota que não existe mais). */
+  all(): Draft[] {
+    const s = this.storage;
+    const out: Draft[] = [];
+    if (!s) return out;
+    try {
+      for (let i = 0; i < s.length; i++) {
+        const k = s.key(i);
+        const d = k?.startsWith(PREFIX) ? this.get(k.slice(PREFIX.length)) : null;
+        if (d) out.push(d);
+      }
+    } catch {}
+    return out.sort((a, b) => a.at.localeCompare(b.at));
+  }
+
   /** Tira os rascunhos velhos ou estragados. */
   prune(): void {
     const s = this.storage;
@@ -75,4 +90,15 @@ export class Drafts {
       for (const k of keys) if (!this.get(k.slice(PREFIX.length))) s.removeItem(k);
     } catch {}
   }
+}
+
+/** O `notes.delete` que também apaga o rascunho da nota: o texto não fica num 2º lugar depois de ir para a Lixeira (#1525). */
+export function forgetDraftOnDelete<A extends { delete(path: string): Promise<true> }>(api: A, drafts: Drafts): A {
+  return Object.assign(Object.create(api) as A, {
+    delete: async (path: string) => {
+      const r = await api.delete(path);
+      drafts.remove(path);
+      return r;
+    },
+  });
 }

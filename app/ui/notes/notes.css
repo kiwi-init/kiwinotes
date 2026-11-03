@@ -181,6 +181,12 @@ body {
   color: var(--text-2);
 }
 
+/* o aviso do rascunho órfão é da janela, não de uma nota: fica no alto da coluna, alinhado com a nota */
+.kn-orphan {
+  margin: 0 72px 8px;
+  max-width: 616px;
+}
+
 .kn-conflict-actions {
   display: inline-flex;
   gap: 8px;
