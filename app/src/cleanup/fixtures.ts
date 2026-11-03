@@ -15,6 +15,7 @@ export interface Fixture {
 const SLACK = "com.tinyspeck.slackmacgap";
 const MAIL = "com.apple.mail";
 const TERMINAL = "com.apple.Terminal";
+const GHOSTTY = "com.mitchellh.ghostty";
 const WORK: DictionaryEntry[] = ["DICOM", "PACS", "Healthcare API", { term: "kubectl", aliases: ["cube control", "kube control"] }, "Kiwi Notes"];
 
 export const fixtures: Fixture[] = [
@@ -96,6 +97,20 @@ export const fixtures: Fixture[] = [
   { name: "terminal: comando fica literal", raw: "git status", bundleId: TERMINAL, expected: "git status" },
   { name: "terminal: comando com muleta", raw: "hum git checkout main", bundleId: TERMINAL, expected: "git checkout main" },
   { name: "terminal: alias vira o comando", raw: "cube control get pods -n kiwi", bundleId: TERMINAL, dictionary: WORK, expected: "kubectl get pods -n kiwi" },
+  // Como o Parakeet entrega: maiúscula e ponto de frase (T684, teste G do harry).
+  { name: "terminal: comando do STT perde a maiúscula e o ponto", raw: "Git status.", bundleId: TERMINAL, expected: "git status" },
+  { name: "ghostty: comando do STT perde a maiúscula e o ponto", raw: "Git checkout main.", bundleId: GHOSTTY, expected: "git checkout main" },
+  { name: "terminal: comando com número", raw: "Python3 script.py.", bundleId: TERMINAL, expected: "python3 script.py" },
+  { name: "terminal: alias no começo, com ponto", raw: "Cube control get pods.", bundleId: TERMINAL, dictionary: WORK, expected: "kubectl get pods" },
+  { name: "terminal: sigla em maiúsculas fica", raw: "GIT status.", bundleId: TERMINAL, expected: "GIT status" },
+  { name: "terminal: frase que não é comando continua frase", raw: "roda o git status", bundleId: TERMINAL, expected: "Roda o git status." },
+  // Prosa em inglês para o Claude Code: comando que também começa frase só vale com outro sinal de código (#691).
+  { name: "ghostty: Make sure… é frase", raw: "Make sure the tests pass.", bundleId: GHOSTTY, expected: "Make sure the tests pass." },
+  { name: "terminal: Open the file… é frase", raw: "Open the file and fix the bug.", bundleId: TERMINAL, expected: "Open the file and fix the bug." },
+  { name: "ghostty: Go ahead… é frase", raw: "Go ahead and run it.", bundleId: GHOSTTY, expected: "Go ahead and run it." },
+  { name: "terminal: open com arquivo é comando", raw: "Open README.md.", bundleId: TERMINAL, expected: "open README.md" },
+  { name: "terminal: make curto é comando", raw: "Make build.", bundleId: TERMINAL, expected: "make build" },
+  { name: "terminal: echo com variável é comando", raw: "Echo $HOME.", bundleId: TERMINAL, expected: "echo $HOME" },
   { name: "terminal: prosa para o Claude Code ganha pontuação", raw: "corrige o teste que tá quebrando no ci", bundleId: TERMINAL, expected: "Corrige o teste que tá quebrando no ci." },
   { name: "terminal: prosa não vira lista", raw: "primeiro, roda os testes, segundo, abre o PR", bundleId: TERMINAL, expected: "Primeiro, roda os testes, segundo, abre o PR." },
 
