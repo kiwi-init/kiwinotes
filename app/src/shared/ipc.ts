@@ -95,8 +95,12 @@ export interface CommandResults {
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
-  /** `pasted: false` quando não havia campo de texto: o texto ficou no clipboard. */
-  "insert.text": { pasted: boolean };
+  /**
+   * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
+   * `no_focus` (nada em foco), `no_text_field` (o foco é um botão etc.) ou `no_accessibility` (falta a permissão).
+   * `app` é o bundle id do app em foco.
+   */
+  "insert.text": { pasted: boolean; reason?: "no_focus" | "no_text_field" | "no_accessibility"; app?: string };
   notify: Record<string, never>;
   "permissions.request": { permission: Permission; state: PermissionState };
   "llm.complete": { text: string; ms: number };

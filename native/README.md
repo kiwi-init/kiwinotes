@@ -33,7 +33,14 @@ On the T51 clips, a short sentence takes ~80 to 150 ms from the end of the recor
 `ready`, `hotkey.down|up`, `hotkey.toggle {on}`, `record.started {reason}`, `record.stopped {reason, mode, durationMs, samples, audioPath?}`, `record.cancelled {reason}`, `record.error {error, microphone}` (also `device_changed`; may follow `record.started`, which goes out before the mic is up), `audio.level {rms 0..1}` (dBFS scaled from -60 to 0) (~30 Hz while recording), `transcript.final {text, raw, lang, durationMs, latencyMs, audioPath?}`, `transcript.error {error}`, `stt.status {state, loadMs?}`, `permissions.changed`, `log`.
 
 ## Commands (app → helper)
-`ping`, `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, language?, dictionary?, vad?}`, `record.start`, `record.stop`, `permissions.request {permission}`, `llm.prewarm {system}` and `llm.complete {system, prompt, maxTokens?, temperature?, timeoutMs?}` (Apple Foundation Models, on-device only, fresh session per call; `ready` says `llm: {available, reason?}`). `overlay.state {state, message?}` drives the dictation pill (ADR 0005); its ✕ and ✓ end a recording with `reason: "overlay"`. `kiwi-helper --overlay-snapshot <dir>` renders it in each state as PNGs. `insert.text` and `notify` return `not_implemented` until their tasks land.
+`ping`, `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, language?, dictionary?, vad?}`, `record.start`, `record.stop`, `permissions.request {permission}`, `insert.text {text, restoreClipboard}`, `llm.prewarm {system}` and `llm.complete {system, prompt, maxTokens?, temperature?, timeoutMs?}` (Apple Foundation Models, on-device only, fresh session per call; `ready` says `llm: {available, reason?}`). `overlay.state {state, message?}` drives the dictation pill (ADR 0005); its ✕ and ✓ end a recording with `reason: "overlay"`. `kiwi-helper --overlay-snapshot <dir>` renders it in each state as PNGs. `notify` returns `not_implemented` until its task lands.
+
+## Inserting text (`insert.text`)
+- Pastes with ⌘V in every app (Cocoa, Electron, terminals, browsers). Typing through Accessibility (`AXSelectedText`) is ignored by Electron and terminals, so it isn't used.
+- The person's clipboard (every item, every type) goes back 300 ms after the paste, unless they copied something new meanwhile. The dictation is marked transient, so clipboard managers skip it.
+- ⌘V uses the key that types "v" in the current layout (Dvorak, etc.) and only the ⌘ flag.
+- No focused element, a focused button, or no Accessibility: `pasted: false` with a `reason`, and the text stays on the clipboard.
+- In the probe, `:insert some text` waits 3 s (click into another app) and sends `insert.text`.
 
 ## Permissions
 | Permission | Why | Checked with |
