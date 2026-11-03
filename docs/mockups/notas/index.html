@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notas · mockups</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f6f6f4; --bar:#ffffffd9; --text:#1d1d1f; --text2:#6e6e73; --acc:#5d9e3a; --accsoft:rgba(93,158,58,.14); --border:rgba(0,0,0,.1); }
+  html.dark { --bg:#1c1c1e; --bar:#262628d9; --text:#f5f5f7; --text2:#a1a1a6; --acc:#8cc46a; --accsoft:rgba(140,196,106,.16); --border:rgba(255,255,255,.1); }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13px -apple-system, BlinkMacSystemFont, sans-serif; }
+  header { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--bar); backdrop-filter:blur(20px); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  header b { font-size:14px; margin-right:8px; }
+  .seg { display:flex; gap:3px; padding:3px; border-radius:9px; background:var(--accsoft); }
+  .seg button { border:0; background:transparent; color:var(--text2); font:500 13px -apple-system, sans-serif; padding:6px 12px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--bg); color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.15); }
+  .hint { margin-left:auto; color:var(--text2); font-size:12px; }
+  #stage { overflow:hidden; }
+  iframe { border:0; width:1768px; transform-origin:0 0; display:block; }
+</style>
+</head>
+<body>
+<header>
+  <b>Janela Notas · mockups</b>
+  <div class="seg" id="pages">
+    <button data-p="overview.html">Visão geral</button>
+    <button data-p="a-papel.html" class="on">A · Papel</button>
+    <button data-p="b-oficina.html">B · Oficina</button>
+    <button data-p="c-fluxo.html">C · Fluxo</button>
+  </div>
+  <div class="seg" id="theme"><button data-t="light" class="on">Claro</button><button data-t="dark">Escuro</button></div>
+  <span class="hint">teclas: 1 2 3 4 trocam a opção · D alterna claro/escuro · ⌘+ / ⌘− dão zoom</span>
+</header>
+<div id="stage"><iframe id="f" scrolling="no"></iframe></div>
+<script>
+  const f = document.getElementById("f");
+  let page = "a-papel.html", theme = "light";
+  try { page = localStorage.getItem("p") || page; theme = localStorage.getItem("t") || theme; } catch {}
+  function fit() {
+    const s = Math.min(1, document.documentElement.clientWidth / 1768);
+    f.style.transform = `scale(${s})`;
+    const h = { "overview.html": 560, "a-papel.html": 1620, "b-oficina.html": 1540, "c-fluxo.html": 1540 }[page] || 1620;
+    f.style.height = h + "px";
+    document.getElementById("stage").style.height = h * s + "px";
+  }
+  function show() {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    f.src = page + "?" + theme + (theme === "dark" ? "#dark" : "");
+    fit();
+    for (const b of document.querySelectorAll("#pages button")) b.classList.toggle("on", b.dataset.p === page);
+    for (const b of document.querySelectorAll("#theme button")) b.classList.toggle("on", b.dataset.t === theme);
+    try { localStorage.setItem("p", page); localStorage.setItem("t", theme); } catch {}
+  }
+  f.addEventListener("load", fit);
+  addEventListener("resize", fit);
+  document.getElementById("pages").onclick = (e) => { if (e.target.dataset.p) { page = e.target.dataset.p; show(); } };
+  document.getElementById("theme").onclick = (e) => { if (e.target.dataset.t) { theme = e.target.dataset.t; show(); } };
+  const order = ["overview.html", "a-papel.html", "b-oficina.html", "c-fluxo.html"];
+  addEventListener("keydown", (e) => {
+    if (e.key >= "1" && e.key <= "4") { page = order[e.key - 1]; show(); }
+    if (e.key.toLowerCase() === "d") { theme = theme === "dark" ? "light" : "dark"; show(); }
+  });
+  show();
+</script>
+</body>
+</html>

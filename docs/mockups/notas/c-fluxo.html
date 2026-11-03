@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Opção C · Fluxo</title>
+<link rel="stylesheet" href="common.css">
+<script>if (location.hash === "#dark") document.documentElement.classList.add("dark");</script>
+<style>
+  /* C: o dia em ditados à esquerda (timeline); a nota nasce deles no meio; o board do BonsAI fica lado a lado. */
+  .c-main { height: 800px; display: grid; grid-template-columns: 330px 1fr 380px; }
+  .c-time { padding: 52px 14px 14px; border-right: 1px solid var(--border); overflow: hidden; }
+  .c-time .day { display: flex; align-items: baseline; gap: 8px; margin: 0 4px 10px; }
+  .c-time .day b { font: 700 18px/1 var(--font-display); }
+  .c-time .day span { font-size: 12px; color: var(--text-3); }
+  .seg { display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: var(--surface-hover); margin: 0 4px 14px; font-size: 12px; }
+  .seg span { flex: 1; text-align: center; padding: 4px; border-radius: 6px; color: var(--text-2); }
+  .seg span.on { background: var(--surface); box-shadow: var(--shadow-1); color: var(--text); }
+  .ev { position: relative; padding: 0 0 12px 22px; }
+  .ev::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: -6px; width: 1.5px; background: var(--border-strong); }
+  .ev:last-child::before { display: none; }
+  .ev .dot { position: absolute; left: 2px; top: 4px; width: 11px; height: 11px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 2px var(--text-3); }
+  .ev.on .dot { box-shadow: inset 0 0 0 3px var(--accent); }
+  .ev .t { font-size: 11px; color: var(--text-3); display: flex; gap: 6px; }
+  .ev .body { margin-top: 3px; padding: 8px 10px; border-radius: 9px; background: var(--surface); box-shadow: var(--shadow-1); font-size: 12.5px; line-height: 1.45; }
+  .ev.on .body { outline: 1.5px solid var(--accent); }
+  .ev .sugg { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .ev.meet .body { background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface); }
+  .c-note { position: relative; padding: 52px 40px 0; overflow: hidden; background: var(--surface); }
+  .c-note .bar { position: absolute; top: 14px; left: 40px; right: 16px; display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-3); }
+  .c-note .bar .right { margin-left: auto; display: flex; gap: 6px; }
+  .src { font-size: 11px; color: var(--text-3); margin: -4px 0 8px; display: flex; gap: 6px; align-items: center; }
+  .block { border-left: 2px solid var(--accent); padding-left: 12px; margin: 0 0 12px; }
+  .block.typed { border-color: transparent; }
+  .mic-dock { position: absolute; left: 0; right: 0; bottom: 18px; display: flex; justify-content: center; }
+  .mic-dock .big { display: flex; align-items: center; gap: 12px; padding: 10px 18px 10px 10px; border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--shadow-pop); font-size: 13px; }
+  .mic-dock .big i { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-style: normal; }
+  .c-board { position: relative; border-left: 1px solid var(--border); overflow: hidden;
+    background-color: var(--bg); background-image: radial-gradient(var(--border-strong) 1px, transparent 1px); background-size: 18px 18px; }
+  .c-board .hd { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; align-items: center; gap: 8px; font-size: 12px; z-index: 2; }
+  .c-board .hd .right { margin-left: auto; }
+  .c-board svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .card { position: absolute; width: 150px; padding: 9px 10px; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-2); font-size: 11.5px; line-height: 1.35; }
+  .card .k { font-size: 10px; color: var(--text-3); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .card.new { outline: 2px solid var(--accent); }
+  .c-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .c-k { height: 380px; padding-top: 40px; display: grid; place-items: start center; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+  .c-k .palette { width: 600px; }
+  .listening { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--accent-text); margin-left: auto; }
+  .listening .bars { display: flex; gap: 2px; align-items: center; height: 14px; }
+  .listening .bars i { width: 3px; border-radius: 2px; background: var(--accent); }
+  .c-birth { height: 380px; padding: 46px 28px 20px; display: grid; grid-template-columns: 1fr 34px 1fr; align-items: center; gap: 10px; }
+  .c-birth .arrow { font-size: 22px; color: var(--accent); text-align: center; }
+  .c-birth .newnote { background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-2); padding: 14px 16px; font-size: 12.5px; }
+  .c-birth .newnote h3 { font: 700 16px/1.2 var(--font-display); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+  <header class="board-head">
+    <div>
+      <span class="tag">Opção C</span>
+      <h1>Fluxo</h1>
+      <p class="idea">O ditado no centro. À esquerda fica o seu dia como uma <b>linha do tempo de ditados e reuniões</b>; cada um vira nota, ou entra numa, com um toque, e o app sugere onde ele cabe (pelos links, tudo local). A nota é feita de blocos ditados e digitados, e o <b>board do BonsAI</b> fica aberto ao lado, ganhando um card a cada decisão.</p>
+    </div>
+    <div class="proscons">
+      <div><h3>Prós</h3><ul><li>É o que diferencia o Kiwi: notas que nascem da voz</li><li>Liga direto com as reuniões (fase 2)</li><li>O BonsAI vira parte do fluxo, não um link</li></ul></div>
+      <div><h3>Contras</h3><ul><li>Menos familiar; precisa de um bom onboarding</li><li>As sugestões de "onde cabe" têm que acertar</li><li>Para escrever longo, a timeline atrapalha (dá para recolher)</li></ul></div>
+    </div>
+  </header>
+
+  <p class="frame-label">Janela Notas · timeline, nota e board lado a lado</p>
+  <div class="win c-main">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <aside class="c-time vibrant">
+      <div class="day"><b>Hoje</b><span>terça, 3 de novembro</span></div>
+      <div class="seg"><span class="on">Tudo</span><span>Ditados</span><span>Reuniões</span><span>Notas</span></div>
+      <div class="ev meet"><span class="dot"></span><div class="t">15:00 · Reunião · 32 min</div><div class="body"><b>Infra semanal</b><br><span class="muted">3 decisões · 5 todos · transcrição local</span></div></div>
+      <div class="ev on"><span class="dot"></span><div class="t">14:30 · 🎙 Notas · 9 s</div><div class="body">Ficou decidido começar pelos estudos de tomografia…</div>
+        <div class="sugg"><span class="chip accent">✓ em Migração PACS Central</span></div></div>
+      <div class="ev"><span class="dot"></span><div class="t">11:02 · 🎙 Slack</div><div class="body">Lembrar de pedir o acesso ao bucket de homologação.</div>
+        <div class="sugg"><span class="chip">Virar nota</span><span class="chip">Cabe em: Anon gateway?</span></div></div>
+      <div class="ev"><span class="dot"></span><div class="t">09:41 · 🎙 Terminal</div><div class="body"><span class="mono">kubectl get pods -n pacs</span></div></div>
+    </aside>
+    <section class="c-note">
+      <div class="bar">Projetos › <b class="muted" style="font-weight:500">Migração PACS Central</b><span class="right"><span class="kbd">⌘K</span><span class="btn">⧉ Board</span></span></div>
+      <article class="doc">
+        <h1>Migração PACS Central</h1>
+        <div class="meta"><span class="chip accent">#projeto</span><span class="chip">#dicom</span><span class="chip">4 ditados · 2 reuniões</span></div>
+        <div class="block typed"><p>Mover os estudos do PACS legado para o <span class="wikilink">Healthcare API</span>, sem parar o atendimento.</p></div>
+        <div class="src">🎙 14:30 · do ditado</div>
+        <div class="block"><p>Ficou decidido começar pelos estudos de tomografia, que são os mais pesados, e deixar raio-x para a segunda semana.</p></div>
+        <div class="src">👥 da <span class="wikilink">Reunião 2026-11-03 Infra</span></div>
+        <div class="block">
+          <div class="check done"><b></b><span>Validar o STOW com 100 estudos de teste</span></div>
+          <div class="check"><b></b><span>Conferir o AccessionNumber duplicado com a <span class="wikilink">Equipe de TI</span></span></div>
+          <div class="check"><b></b><span>Agendar a janela de corte</span></div>
+        </div>
+        <div class="block typed">
+          <table class="md"><tr><th>Modalidade</th><th class="n">Estudos</th><th class="n">TB</th></tr>
+            <tr><td>CT</td><td class="n">182.400</td><td class="n">41,2</td></tr>
+            <tr><td>CR/DX</td><td class="n">410.900</td><td class="n">6,1</td></tr></table>
+        </div>
+        <p class="faint" style="font-size:12px">Citada em <span class="wikilink">Riscos do Q4</span> e <span class="wikilink">Reunião 2026-11-03 Infra</span></p>
+      </article>
+      <div class="mic-dock"><span class="big"><i>🎙</i><span>Segure <span class="kbd">fn</span> para continuar ditando nesta nota</span></span></div>
+    </section>
+    <aside class="c-board">
+      <div class="hd"><b>BonsAI</b><span class="muted">· Migração PACS · mapa</span><span class="right btn">Abrir ↗</span></div>
+      <svg>
+        <path d="M180 112 C 200 112, 175 250, 200 250" stroke="var(--accent)" stroke-width="1.8" fill="none"/>
+        <path d="M100 136 C 100 250, 115 300, 115 370" stroke="var(--border-strong)" stroke-width="1.5" fill="none"/>
+        <path d="M275 288 C 275 380, 265 400, 265 470" stroke="var(--border-strong)" stroke-width="1.5" fill="none"/>
+      </svg>
+      <div class="card" style="left:30px;top:90px"><div class="k">Projeto</div>Migração PACS Central</div>
+      <div class="card new" style="left:200px;top:220px"><div class="k">Decisão · agora</div>Começar por CT; raio-x na 2ª semana</div>
+      <div class="card" style="left:44px;top:370px"><div class="k">Todo</div>Conferir AccessionNumber duplicado</div>
+      <div class="card" style="left:190px;top:470px"><div class="k">Risco</div>Janela de corte com o atendimento</div>
+    </aside>
+  </div>
+
+  <div class="row c-mini">
+    <div>
+      <p class="frame-label">⌘K · digite ou segure fn e fale a busca</p>
+      <div class="win c-k">
+        <div class="palette">
+          <div class="q"><span class="ico">🎙</span>o que decidimos sobre tomografia<span class="caret"></span><span class="listening"><span class="bars"><i style="height:5px"></i><i style="height:11px"></i><i style="height:14px"></i><i style="height:8px"></i></span>ouvindo</span></div>
+          <div class="sec">Nos ditados e reuniões</div>
+          <div class="it sel"><span class="ico">🎙</span><span class="l">“Ficou decidido começar pelos estudos de <mark>tomografia</mark>…”</span><span class="r">hoje 14:30</span></div>
+          <div class="it"><span class="ico">👥</span><span class="l">Infra semanal · <mark>decisão</mark>: CT primeiro</span><span class="r">hoje 15:00</span></div>
+          <div class="sec">Notas</div>
+          <div class="it"><span class="ico">✎</span><span class="l">Migração PACS Central</span><span class="r">Projetos</span></div>
+          <div class="foot"><span>↩ abrir</span><span>⌘↩ citar na nota atual</span><span>busca local, nada sai do Mac</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="frame-label">Ditado → nota · a nota nasce do ditado</p>
+      <div class="win c-birth">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="ev on" style="padding-bottom:0"><span class="dot"></span><div class="t">11:02 · 🎙 Slack</div><div class="body">Lembrar de pedir o acesso ao bucket de homologação pro anon gateway.</div>
+          <div class="sugg"><span class="chip accent">＋ Virar nota</span><span class="chip">Cabe em: Anon gateway</span></div></div>
+        <div class="arrow">→</div>
+        <div class="newnote"><div class="src" style="margin:0 0 6px">📥 Caixa de entrada · nova</div><h3>Acesso ao bucket de homologação</h3>
+          <div class="meta" style="margin:4px 0 8px"><span class="chip">#todo</span><span class="chip">ligada a <span class="wikilink">Anon gateway</span></span></div>
+          <div class="check"><b></b><span>Pedir o acesso ao bucket de homologação</span></div>
+          <p class="faint" style="margin:8px 0 0;font-size:11px">Título e todo sugeridos pelas regras locais; dá para editar antes de salvar.</p></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Opção A · Papel</title>
+<link rel="stylesheet" href="common.css">
+<script>if (location.hash === "#dark") document.documentElement.classList.add("dark");</script>
+<style>
+  /* A: uma coluna de texto, nada em volta. A barra lateral é um trilho fino que abre por cima. */
+  .a-main { height: 905px; display: grid; grid-template-columns: 56px 1fr; }
+  .a-rail { padding-top: 52px; display: flex; flex-direction: column; align-items: center; gap: 18px; border-right: 1px solid var(--border); }
+  .a-rail span { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--text-2); font-size: 15px; }
+  .a-rail span.on { background: var(--accent-soft); color: var(--accent-text); }
+  .a-top { position: absolute; top: 14px; left: 90px; right: 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-3); }
+  .a-top .crumbs b { color: var(--text-2); font-weight: 500; }
+  .a-top .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .a-page { overflow: hidden; padding: 64px 0 0; display: flex; justify-content: center; }
+  .a-doc { width: 640px; }
+  .a-doc h1 { font-size: 32px; }
+  .a-backlinks { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .a-backlinks h4 { font: 600 11px/1 var(--font); text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 0 0 10px; }
+  .a-backlinks .bl { display: flex; gap: 10px; font-size: 13px; margin: 6px 0; }
+  .a-backlinks .bl .muted { font-size: 12px; }
+  .bonsai-card { display: flex; gap: 12px; align-items: center; padding: 10px; margin: 8px 0 14px; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-1); }
+  .bonsai-card .thumb { width: 92px; height: 56px; border-radius: 7px; background:
+      radial-gradient(circle at 20% 30%, var(--accent) 0 6px, transparent 7px),
+      radial-gradient(circle at 70% 25%, #b59ad8 0 6px, transparent 7px),
+      radial-gradient(circle at 50% 75%, #e2a25b 0 6px, transparent 7px),
+      linear-gradient(135deg, var(--surface-2), var(--bg)); box-shadow: inset 0 0 0 1px var(--border); }
+  .bonsai-card b { display: block; font-size: 13px; }
+  .bonsai-card span { font-size: 12px; color: var(--text-2); }
+  .bonsai-card .btn { margin-left: auto; }
+  .a-mini { display: grid; grid-template-columns: 1fr 1fr; }
+  .a-k { height: 360px; display: grid; place-items: start center; padding-top: 46px; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+  .a-k .palette { width: 520px; }
+  .a-quick { height: 360px; padding: 26px 30px; position: relative; }
+  .a-quick .inbox h4 { font: 600 11px/1 var(--font); text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); margin: 18px 0 8px; }
+  .a-quick .card { background: var(--surface); border-radius: 10px; box-shadow: var(--shadow-1); padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+  .a-quick .card .t { display: flex; gap: 8px; font-size: 11px; color: var(--text-3); margin-bottom: 3px; }
+  .a-quick .card .acts { display: flex; gap: 6px; margin-top: 8px; }
+  .a-quick .pillwrap { position: absolute; left: 0; right: 0; bottom: 22px; display: flex; justify-content: center; }
+</style>
+</head>
+<body>
+  <header class="board-head">
+    <div>
+      <span class="tag">Opção A</span>
+      <h1>Papel</h1>
+      <p class="idea">O texto no centro e nada em volta, no estilo do Bear e do iA Writer. As pastas e as tags ficam num trilho fino que abre por cima; os backlinks e o board do BonsAI aparecem no fim da nota, como parte dela. O ditado cai numa <b>Caixa de entrada</b> e vira nota com um clique.</p>
+    </div>
+    <div class="proscons">
+      <div><h3>Prós</h3><ul><li>Mais calma e foco para escrever e ditar</li><li>Fácil de fazer bem; pouca coisa para errar</li><li>Funciona bem numa tela pequena (MacBook)</li></ul></div>
+      <div><h3>Contras</h3><ul><li>Navegar em muitas notas pede o ⌘K o tempo todo</li><li>Backlinks e outline escondidos no fim</li><li>Menos "painel de trabalho" para reuniões</li></ul></div>
+    </div>
+  </header>
+
+  <p class="frame-label">Janela Notas · nota aberta</p>
+  <div class="win a-main">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <nav class="a-rail vibrant">
+      <span class="on">✎</span><span>▤</span><span>#</span><span>⌕</span><span>🎙</span><span style="margin-top:auto;margin-bottom:16px">⚙︎</span>
+    </nav>
+    <div style="position:relative">
+      <div class="a-top">
+        <span class="crumbs">Projetos / <b>Migração PACS Central</b></span>
+        <span class="right"><span class="faint">Salvo</span><span class="kbd">⌘K</span><span class="btn">🎙 Ditar</span></span>
+      </div>
+      <div class="a-page">
+        <article class="doc a-doc">
+          <h1>Migração PACS Central</h1>
+          <div class="meta"><span class="chip accent">#projeto</span><span class="chip">#dicom</span><span class="chip">atualizada hoje, 14:32</span></div>
+          <p>Mover os estudos do PACS legado para o <span class="wikilink">Healthcare API</span>, sem parar o atendimento. A ordem foi combinada na <span class="wikilink">Reunião 2026-11-03 Infra</span>.</p>
+          <div class="dictated">Ficou decidido começar pelos estudos de tomografia, que são os mais pesados, e deixar raio-x para a segunda semana.<small>ditado às 14:30 · 9 s</small></div>
+          <h2>Próximos passos</h2>
+          <div class="check done"><b></b><span>Validar o STOW com 100 estudos de teste</span></div>
+          <div class="check"><b></b><span>Conferir o AccessionNumber duplicado com a <span class="wikilink">Equipe de TI</span></span></div>
+          <div class="check"><b></b><span>Agendar a janela de corte</span></div>
+          <h2>Volume por modalidade</h2>
+          <table class="md"><tr><th>Modalidade</th><th class="n">Estudos</th><th class="n">TB</th></tr>
+            <tr><td>CT</td><td class="n">182.400</td><td class="n">41,2</td></tr>
+            <tr><td>MR</td><td class="n">96.120</td><td class="n">22,8</td></tr>
+            <tr><td>CR/DX</td><td class="n">410.900</td><td class="n">6,1</td></tr></table>
+          <div class="a-backlinks">
+            <h4>Board no BonsAI</h4>
+            <div class="bonsai-card"><div class="thumb"></div><div><b>Migração PACS · mapa</b><span>12 cards · 3 vindos desta nota</span></div><span class="btn">Abrir no BonsAI ↗</span></div>
+            <h4>Citada em 3 notas</h4>
+            <div class="bl"><span class="wikilink">Reunião 2026-11-03 Infra</span><span class="muted">“…a ordem da migração PACS Central…”</span></div>
+            <div class="bl"><span class="wikilink">Riscos do Q4</span><span class="muted">“…janela de corte do PACS…”</span></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="row a-mini" style="grid-template-columns:1fr 1fr">
+    <div>
+      <p class="frame-label">⌘K · busca rápida, no meio da janela</p>
+      <div class="win a-k">
+        <div class="palette">
+          <div class="q"><span class="ico">⌕</span>pacs<span class="caret"></span></div>
+          <div class="sec">Notas</div>
+          <div class="it sel"><span class="ico">✎</span><span class="l">Migração <mark>PACS</mark> Central</span><span class="r">Projetos</span></div>
+          <div class="it"><span class="ico">✎</span><span class="l">Riscos do Q4 <span class="faint">· “janela de corte do <mark>PACS</mark>”</span></span><span class="r">Notas</span></div>
+          <div class="sec">Ações</div>
+          <div class="it"><span class="ico">＋</span><span class="l">Nova nota “pacs”</span><span class="r">⌘↩</span></div>
+          <div class="foot"><span>↑↓ mover</span><span>↩ abrir</span><span>⌘↩ criar</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="frame-label">Ditado → nota · a Caixa de entrada</p>
+      <div class="win a-quick">
+        <div class="doc"><h1 style="font-size:22px">Caixa de entrada</h1><p class="muted" style="font-size:13px">Cada ditado com o atalho em “nota rápida” cai aqui. Um clique e ele vira nota, ou entra numa existente.</p></div>
+        <div class="inbox">
+          <h4>Hoje</h4>
+          <div class="card"><div class="t">🎙 14:30 · Notas</div>Ficou decidido começar pelos estudos de tomografia…<div class="acts"><span class="btn primary">Nova nota</span><span class="btn">Enviar para… Migração PACS</span></div></div>
+          <div class="card"><div class="t">🎙 11:02 · Slack</div>Lembrar de pedir o acesso ao bucket de homologação.</div>
+        </div>
+        <div class="pillwrap"><span class="pill"><span class="bars"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:10px"></i><i style="height:5px"></i></span>Nota rápida · ouvindo</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Notas · 3 opções</title>
+<link rel="stylesheet" href="common.css">
+<script>if (location.hash === "#dark") document.documentElement.classList.add("dark");</script>
+<style>
+  body { width: 1680px; }
+  h1 { font: 700 28px/1.1 var(--font-display); margin: 0 0 6px; letter-spacing: -0.02em; }
+  .sub { color: var(--text-2); margin: 0 0 24px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 512px); gap: 28px; }
+  .opt .shot { width: 512px; }
+  .opt { }
+  .opt .shot { height: 296px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.16), 0 0 0 .5px rgba(0,0,0,.15); background-repeat: no-repeat; background-size: 541px auto; }
+  .opt h2 { font: 700 18px/1.2 var(--font-display); margin: 14px 0 4px; }
+  .opt h2 span { color: var(--accent-text); font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; margin-right: 6px; }
+  .opt p { margin: 0; color: var(--text-2); font-size: 13px; }
+</style></head><body>
+<h1>Janela Notas · 3 opções</h1>
+<p class="sub">Mesma nota nas três. Detalhes de cada uma (⌘K, ditado → nota, BonsAI, claro e escuro) nas imagens A, B e C.</p>
+<div class="grid">
+  <div class="opt"><div class="shot" style="background-image:url(a-light.png);height:292px;background-position:-14px -71px"></div><h2><span>A</span>Papel</h2><p>Só o texto. Trilho fino, backlinks e board no fim da nota, ditado na Caixa de entrada.</p></div>
+  <div class="opt"><div class="shot" style="background-image:url(b-light.png);height:258px;background-position:-14px -71px"></div><h2><span>B</span>Oficina</h2><p>Três painéis, como o Obsidian. Abas, contexto à direita com prévia do BonsAI, arrastar ditado do Histórico.</p></div>
+  <div class="opt"><div class="shot" style="background-image:url(c-light.png);height:258px;background-position:-14px -79px"></div><h2><span>C</span>Fluxo</h2><p>O dia em ditados e reuniões; a nota nasce deles, e o board do BonsAI cresce ao lado.</p></div>
+</div>
+</body></html>
