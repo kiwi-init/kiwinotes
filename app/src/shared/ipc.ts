@@ -89,7 +89,9 @@ export type Command =
   /**
    * Pede a permissão: o diálogo do macOS na primeira vez, os Ajustes depois. `reset: true` (só no clique de uma pessoa no
    * menu, nunca sozinho nem com KIWI_DEBUG=1) apaga a entrada do app (`tccutil reset`) e pede de novo, para a chave que
-   * aparece ligada nos Ajustes mas não vale (T658). O sidecar só faz isso se a permissão já foi pedida e segue faltando.
+   * aparece ligada nos Ajustes mas não vale (T658). O sidecar só faz isso se a permissão já foi pedida e segue faltando,
+   * e recusa o reset (abre os Ajustes) quando o app responsável não é o Kiwi Notes.app (`app.kiwinotes.desktop`): pelo
+   * probe num terminal, o reset tiraria a permissão do terminal (review #693).
    */
   | { type: "permissions.request"; permission: Permission; reset?: boolean }
   /**

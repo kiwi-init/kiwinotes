@@ -28,13 +28,32 @@ final class RulesTests: XCTestCase {
     }
 
     func testResetOnlyWhenAskedForAndStillMissing() {
+        let kiwi = KiwiApp.bundleId
         // T658: the switch is on in Settings, but the permission doesn't count. A click can start over.
-        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true), .resetAndPrompt)
+        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true, responsibleBundleId: kiwi),
+                       .resetAndPrompt)
         // Never asked: the plain prompt is enough. Granted, restricted or not asked yet: nothing to reset.
-        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: false, reset: true), .systemPrompt)
-        XCTAssertEqual(PermissionAsk.next(state: "granted", askedBefore: true, reset: true), PermissionAsk.none)
-        XCTAssertEqual(PermissionAsk.next(state: "restricted", askedBefore: true, reset: true), PermissionAsk.none)
-        XCTAssertEqual(PermissionAsk.next(state: "undetermined", askedBefore: true, reset: true), .systemPrompt)
+        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: false, reset: true, responsibleBundleId: kiwi),
+                       .systemPrompt)
+        XCTAssertEqual(PermissionAsk.next(state: "granted", askedBefore: true, reset: true, responsibleBundleId: kiwi),
+                       PermissionAsk.none)
+        XCTAssertEqual(PermissionAsk.next(state: "restricted", askedBefore: true, reset: true, responsibleBundleId: kiwi),
+                       PermissionAsk.none)
+        XCTAssertEqual(PermissionAsk.next(state: "undetermined", askedBefore: true, reset: true, responsibleBundleId: kiwi),
+                       .systemPrompt)
+        // No reset asked: Settings, as before.
+        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, responsibleBundleId: kiwi), .openSettings)
+    }
+
+    func testNeverResetsAnotherAppsPermission() {
+        // Review #693: the probe in Ghostty sends `reset: true`; the responsible app is the terminal, not Kiwi Notes.
+        for other in ["com.mitchellh.ghostty", "com.apple.Terminal", "app.kiwinotes.desktop.evil", ""] {
+            XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true, responsibleBundleId: other),
+                           .openSettings, other)
+        }
+        XCTAssertEqual(PermissionAsk.next(state: "denied", askedBefore: true, reset: true, responsibleBundleId: nil),
+                       .openSettings)
+        XCTAssertEqual(KiwiApp.bundleId, "app.kiwinotes.desktop")
     }
 
     func testTCCServiceNames() {

@@ -31,14 +31,27 @@ public enum PermissionAsk: Equatable, Sendable {
     /// `state` is the permission's IPC state; `askedBefore` says whether this app already showed the system prompt.
     /// The first ask shows only the system prompt; later asks go to Settings, since the prompt won't come back.
     /// A `restricted` permission (MDM, parental controls) can't be changed by the person, so nothing opens.
-    /// `reset` (only from a person's click in the app, never on its own) starts over instead of opening Settings.
-    public static func next(state: String, askedBefore: Bool, reset: Bool = false) -> PermissionAsk {
+    /// `reset` (only from a person's click in the app, never on its own) starts over instead of opening Settings, and
+    /// only when the app macOS charges is Kiwi Notes itself (`responsibleBundleId`). From the probe in a terminal, the
+    /// responsible app is the terminal, and a reset would take *its* permission away (review #693).
+    public static func next(
+        state: String, askedBefore: Bool, reset: Bool = false, responsibleBundleId: String? = nil
+    ) -> PermissionAsk {
         switch state {
         case "granted", "restricted": return .none
         case "undetermined": return .systemPrompt
-        default: return !askedBefore ? .systemPrompt : reset ? .resetAndPrompt : .openSettings
+        default:
+            guard askedBefore else { return .systemPrompt }
+            return reset && responsibleBundleId == KiwiApp.bundleId ? .resetAndPrompt : .openSettings
         }
     }
+}
+
+/// The Kiwi Notes app, as macOS knows it.
+public enum KiwiApp {
+    /// `app.identifier` in `app/electrobun.config.ts` (the dev build has the same one). The only entry the helper may
+    /// reset with `tccutil`.
+    public static let bundleId = "app.kiwinotes.desktop"
 }
 
 /// The names `tccutil reset` takes for each permission.

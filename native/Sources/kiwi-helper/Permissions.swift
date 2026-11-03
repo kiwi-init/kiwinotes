@@ -64,7 +64,9 @@ enum Permission: String, CaseIterable {
     /// One window at a time: the system prompt the first time, System Settings after that (PermissionAsk).
     /// `reset` comes only from a person's click in the app: it forgets this app's entry and prompts again (T658).
     func request(reset: Bool = false, completion: @escaping (String) -> Void) {
-        switch PermissionAsk.next(state: status, askedBefore: askedBefore, reset: reset) {
+        // Who macOS charges is looked up only for a reset: the decision (Kiwi Notes only) is in PermissionAsk.
+        let responsible = reset ? Responsible.current()?.bundleId : nil
+        switch PermissionAsk.next(state: status, askedBefore: askedBefore, reset: reset, responsibleBundleId: responsible) {
         case .none:
             completion(status)
         case .openSettings:
@@ -98,11 +100,12 @@ enum Permission: String, CaseIterable {
         }
     }
 
-    /// `tccutil reset <service> <bundle id>` for the app macOS charges (only this app's entry, nothing else).
+    /// `tccutil reset <service> app.kiwinotes.desktop`: Kiwi Notes' own entry, never another app's (review #693).
     private func resetEntry() -> Bool {
-        guard let service = TCCService.name(for: rawValue), let bundleId = Responsible.current()?.bundleId else {
+        guard let service = TCCService.name(for: rawValue), Responsible.current()?.bundleId == KiwiApp.bundleId else {
             return false
         }
+        let bundleId = KiwiApp.bundleId
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
         process.arguments = ["reset", service, bundleId]
