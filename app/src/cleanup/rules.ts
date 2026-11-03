@@ -283,6 +283,20 @@ export function looksLikeCode(text: string): boolean {
   return CODE.test(text.trim());
 }
 
+const CLI_FIRST = re(`^(?:${CLI})${E}`, "iu");
+
+/**
+ * O STT escreve o comando como frase ("Git status."); no tom `literal` ele volta a ser comando ("git status",
+ * T684). Só sai a maiúscula da 1ª palavra, quando ela é um comando conhecido escrito como "Git" (não "GIT"),
+ * e o ponto final colado numa palavra ("arquivo.txt." → "arquivo.txt"; "..." fica).
+ */
+export function asCommand(text: string): string {
+  let out = text.trim().replace(/(?<=[\p{L}\p{N}])\.$/u, "");
+  const first = out.match(CLI_FIRST)?.[0];
+  if (first && /^\p{Lu}[\p{Ll}\p{N}]*$/u.test(first)) out = first.toLowerCase() + out.slice(first.length);
+  return out;
+}
+
 // ------------------------------------------------------------ pipeline
 
 /** Tudo que as regras fazem, na ordem. O texto já vem com o dicionário protegido. */
@@ -292,7 +306,7 @@ export function applyRules(text: string, tone: Tone): string {
   out = removeFillers(out);
   out = removeStutter(out);
   out = tidyPunctuation(out);
-  if (tone === "literal" && looksLikeCode(out)) return out;
+  if (tone === "literal" && looksLikeCode(out)) return asCommand(out);
   if (tone !== "literal") out = lists(out);
   out = tidyPunctuation(out);
   out = capitalize(out);
@@ -301,7 +315,7 @@ export function applyRules(text: string, tone: Tone): string {
 
 /** O que só pode rodar depois de voltar os termos do dicionário (precisa ver o fim real do texto). */
 export function finishRules(text: string, raw: string, tone: Tone): string {
-  if (tone === "literal" && looksLikeCode(text)) return text;
+  if (tone === "literal" && looksLikeCode(text)) return asCommand(text);
   let out = finalPunctuation(text, raw);
   if (tone === "casual") out = casualEnding(out);
   return out;
