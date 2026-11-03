@@ -11,7 +11,7 @@
     "prepare:eb": "bun scripts/hutch.ts electrobun prepare",
     "agent": "bun .hutch/devkit/api/sdks/main/agent/cli.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test src"
+    "test": "bun test src scripts"
   },
   "dependencies": {
     "react": "^19.2.0",

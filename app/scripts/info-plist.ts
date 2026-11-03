@@ -11,10 +11,14 @@
 //   Developer ID (decisão do harry, fora do T658).
 // - A ordem importa: o `plutil` muda o Info.plist, então a assinatura vem depois dele. Com `codesign: true`, o Hutch
 //   assina depois disto (postWrap roda "before final packaging/signing"); confira com `codesign --verify --deep --strict`.
+// - No postWrap, o app de dentro do `KiwiNotes.app.tar.zst` é reassinado antes do wrapper (T762): o Electrobun mexe
+//   no `version.json` dele depois do postBuild. Ver `signing.ts`. O postPackage (`verify-signature.ts`) confere tudo.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+
+import { resealBundles, signAdHoc } from "./signing.ts";
 
 const USAGE: Record<string, string> = {
   NSMicrophoneUsageDescription: "O Kiwi Notes ouve o microfone só enquanto você segura o atalho, e transcreve tudo no seu Mac.",
@@ -36,17 +40,6 @@ function infoPlists(dir: string, depth = 4): string[] {
   return out;
 }
 
-function run(cmd: string, args: string[]): void {
-  const r = spawnSync(cmd, args, { stdio: "inherit" });
-  if (r.status !== 0) throw new Error(`info-plist: ${cmd} ${args.join(" ")} failed`);
-}
-
-/** Ad hoc, o bundle inteiro (o código dentro dele também), e confere do jeito estrito. */
-function sign(app: string): void {
-  run("codesign", ["--force", "--deep", "--sign", "-", app]);
-  run("codesign", ["--verify", "--deep", "--strict", app]);
-}
-
 function setUsage(plist: string): void {
   for (const [key, value] of Object.entries(USAGE)) {
     // -replace cria a chave quando ela não existe.
@@ -64,6 +57,16 @@ function setUsage(plist: string): void {
     for (const p of infoPlists(root)) plists.add(p);
   }
   if (!plists.size) throw new Error(`info-plist: no .app under ${roots.join(", ") || "(no build dir)"}`);
+  // postWrap: o app de dentro do tar primeiro, porque o wrapper leva uma cópia do tar e o selo do wrapper cobre ela.
+  const wrapper = process.env.ELECTROBUN_WRAPPER_BUNDLE_PATH;
+  const buildDir = process.env.ELECTROBUN_BUILD_DIR;
+  if (wrapper && buildDir) {
+    const resources = path.join(wrapper, "Contents", "Resources");
+    const bundles = [buildDir, resources].flatMap((dir) =>
+      existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith(".tar.zst")).map((n) => path.join(dir, n)) : []);
+    if (!bundles.length) throw new Error(`info-plist: no .tar.zst in ${buildDir} or ${resources}`);
+    for (const file of resealBundles(bundles)) console.log(`info-plist: re-signed the app inside ${file}`);
+  }
   for (const p of plists) {
     setUsage(p);
     console.log(`info-plist: usage descriptions in ${p}`);
@@ -71,7 +74,7 @@ function setUsage(plist: string): void {
   // Assina depois de mexer em todos os Info.plist: o de dentro primeiro, se um .app estiver dentro do outro.
   const apps = [...plists].map((p) => path.dirname(path.dirname(p))).sort((a, b) => b.length - a.length);
   for (const app of apps) {
-    sign(app);
+    signAdHoc(app);
     console.log(`info-plist: signed ad hoc ${app}`);
   }
 }
