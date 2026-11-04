@@ -11,6 +11,7 @@
 // Controle: um socket unix (0600) em <data>/control.sock, com um JSON por linha (o protocolo do #1745).
 
 import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { LineWriter } from "./lineWriter.ts";
 import path from "node:path";
 import type { Socket } from "bun";
 
@@ -70,13 +71,20 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
 
   // ---------------------------------------------------------------- saídas: eventos e logs, com histórico curto
   const subscribers = new Map<Socket<unknown>, Set<Topic>>();
+  /** Um escritor por conexão: as linhas grandes esperam o drain em vez de se perder (T2594). */
+  const writers = new Map<Socket<unknown>, LineWriter>();
+  const out = (s: Socket<unknown>) => {
+    let w = writers.get(s);
+    if (!w) writers.set(s, (w = new LineWriter(s as unknown as { write(d: Uint8Array): number })));
+    return w;
+  };
   const backlog: Record<Topic, Line[]> = { events: [], logs: [] };
   const logFile = path.join(data, "headless.log");
   const publish = (topic: Topic, line: Line) => {
     backlog[topic].push(line);
     if (backlog[topic].length > RING) backlog[topic].shift();
     if (topic === "logs") appendFileSync(logFile, `${JSON.stringify(line)}\n`);
-    for (const [s, topics] of subscribers) if (topics.has(topic)) s.write(`${JSON.stringify(line)}\n`);
+    for (const [s, topics] of subscribers) if (topics.has(topic)) out(s).line(JSON.stringify(line));
   };
   const event = (name: string, payload: unknown) => publish("events", { event: name, payload, at: new Date().toISOString() });
   const original = { log: console.log, warn: console.warn, error: console.error };
@@ -94,6 +102,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     snippets: stores.snippets,
     history: stores.history,
     notes: stores.notes,
+    attachments: stores.attachments,
     dictionaryChanged: (terms) => void session?.dictionaryChanged(terms),
     snippetsChanged: (snippets) => session?.snippetsChanged(snippets),
     settings: stores.settings,
@@ -152,7 +161,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       }
       case "subscribe": {
         const topics = new Set((Array.isArray(msg.topics) ? msg.topics : ["events"]).filter((t): t is Topic => t === "events" || t === "logs"));
-        if (msg.backlog !== false) for (const t of topics) for (const line of backlog[t]) s.write(`${JSON.stringify(line)}\n`);
+        if (msg.backlog !== false) for (const t of topics) for (const line of backlog[t]) out(s).line(JSON.stringify(line));
         if (msg.follow !== false) subscribers.set(s, topics);
         return { id, ok: true, value: { topics: [...topics] } };
       }
@@ -180,16 +189,21 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
           try {
             msg = JSON.parse(line) as Line;
           } catch {
-            s.write(`${JSON.stringify({ id: null, ok: false, code: "E_BAD_JSON", message: "not a JSON line" })}\n`);
+            out(s).line(JSON.stringify({ id: null, ok: false, code: "E_BAD_JSON", message: "not a JSON line" }));
             continue;
           }
-          void handle(s, msg).then((reply) => s.write(`${JSON.stringify(reply)}\n`));
+          void handle(s, msg).then((reply) => out(s).line(JSON.stringify(reply)));
         }
         buffers.set(s, buf);
+      },
+      // O resto de uma linha grande (um anexo, o data: URL de volta) sai aqui (T2594).
+      drain(s) {
+        writers.get(s)?.flush();
       },
       close(s) {
         subscribers.delete(s);
         buffers.delete(s);
+        writers.delete(s);
       },
     },
   });

@@ -892,7 +892,17 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
                 </span>
               </div>
             ) : null}
-            <NoteEditor docKey={docKey} doc={body} links={links} onChange={onChange} onOpenLink={(t) => void onOpenLink(t)} onOpenTag={openTag} linkTargets={linkTargets} />
+            <NoteEditor
+              docKey={docKey}
+              doc={body}
+              links={links}
+              onChange={onChange}
+              onOpenLink={(t) => void onOpenLink(t)}
+              onOpenTag={openTag}
+              linkTargets={linkTargets}
+              attachments={api.attachments}
+              onError={(t) => say(t)}
+            />
           </article>
         ) : listing && !listing.notes.length ? (
           <Empty title="Nenhuma nota ainda">

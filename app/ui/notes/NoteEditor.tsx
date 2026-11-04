@@ -4,6 +4,7 @@
 import { EditorView } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 
+import type { AttachmentSource } from "./editor/attachments.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor } from "./editor/index.ts";
 
 export interface NoteEditorProps {
@@ -16,14 +17,17 @@ export interface NoteEditorProps {
   /** Clique numa `#tag` (T2619). */
   onOpenTag?(tag: string): void;
   linkTargets(): LinkTarget[];
+  /** Os anexos (T2594); sem eles, colar e arrastar arquivo não faz nada de especial. Fixo durante a vida da janela. */
+  attachments?: AttachmentSource;
+  onError?(text: string): void;
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, linkTargets }: NoteEditorProps) {
+export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, linkTargets, attachments, onError }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
-  const latest = useRef({ onChange, onOpenLink, onOpenTag, linkTargets });
-  latest.current = { onChange, onOpenLink, onOpenTag, linkTargets };
+  const latest = useRef({ onChange, onOpenLink, onOpenTag, linkTargets, onError });
+  latest.current = { onChange, onOpenLink, onOpenTag, linkTargets, onError };
 
   const extensions = useRef(
     editorExtensions(
@@ -34,6 +38,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
         // Abre fora (no navegador padrão), com a política `newWindow: "external"` da janela; nunca navega a janela.
         onOpenUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
         linkTargets: () => latest.current.linkTargets(),
+        ...(attachments ? { attachments, onError: (t: string) => latest.current.onError?.(t) } : {}),
       },
       links,
     ),

@@ -9,6 +9,7 @@ import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
+import { type Attachments, attachmentsFolder } from "../notes/attachments.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
@@ -69,6 +70,8 @@ export interface CapabilityDeps {
   >;
   /** Abre o Lixo do macOS no Finder (T2593). Sem isto (headless, testes, KIWI_DEBUG), o `trash.reveal` não faz nada. */
   revealTrash?(): void;
+  /** Os anexos das notas (T2594): sem eles (um host antigo), as capacidades `attachments.*` dão E_NO_ATTACHMENTS. */
+  attachments?: Pick<Attachments, "save" | "read" | "rename">;
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
    * o `notes.reveal` só confere que o item existe.
@@ -162,6 +165,10 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
   };
   const followPins = (r: ExternalMoves) => changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()));
   /** Os argumentos de uma capacidade de notas: só os campos conhecidos, para um typo não passar calado. */
+  const attachments = () => {
+    if (!deps.attachments) throw new CapabilityError("E_NO_ATTACHMENTS", "this host has no attachments");
+    return deps.attachments;
+  };
   const fields = (args: unknown, cap: string, allowed: string[]) => {
     const a = object(args, cap);
     const extra = Object.keys(a).find((k) => !allowed.includes(k));
@@ -265,6 +272,13 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           }
           if (!dir) throw bad("dailyFolder must name a folder of the vault");
           patch.dailyFolder = dir;
+        } else if (key === "attachmentsFolder") {
+          // A pasta dos anexos (1.11.0, T2594): relativa ao vault, sem sair dele.
+          try {
+            patch.attachmentsFolder = attachmentsFolder(value);
+          } catch (e) {
+            throw bad(`settings.set: ${e instanceof Error ? e.message : String(e)}`);
+          }
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);
@@ -404,6 +418,21 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       noArgs(args, "notes.templates");
       const folder = (await deps.settings.load()).templatesFolder;
       return { folder, templates: (await vault()).templates(folder) };
+    },
+    "attachments.save": async (args) => {
+      const a = fields(args, "attachments.save", ["name", "data"]);
+      await vault();
+      return attachments().save(a.name, a.data);
+    },
+    "attachments.read": async (args) => {
+      const a = fields(args, "attachments.read", ["link"]);
+      await vault();
+      return attachments().read(a.link);
+    },
+    "attachments.rename": async (args) => {
+      const a = fields(args, "attachments.rename", ["path", "newPath"]);
+      await vault();
+      return attachments().rename(a.path, a.newPath);
     },
   };
   // A lista do contrato e os handlers andam juntos.

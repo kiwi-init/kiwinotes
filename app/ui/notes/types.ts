@@ -2,6 +2,7 @@
 // de pastas do contrato 1.7.0 (T2468): `folders.*`, `notes.move|duplicate|restore|reveal`, o `ctime` e o `pinned`.
 
 import type { UiCapabilities } from "../../src/shared/ui-contract.ts";
+import type { AttachmentSource } from "./editor/attachments.ts";
 
 export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode } from "../../src/shared/ui-contract.ts";
 import type { TagNode } from "../../src/shared/ui-contract.ts";
@@ -48,6 +49,8 @@ export interface NotesApi {
   pins?: { list(): Promise<string[]>; set(paths: string[]): Promise<string[]> };
   /** A nota do dia, o link que cria a nota, "Mencionada sem link" e a Lixeira (T2593, contrato 1.8.0). */
   extras?: ExtrasApi;
+  /** Os anexos (T2594, contrato 1.11.0). Num engine sem eles, colar e arrastar arquivo não faz nada de especial. */
+  attachments?: AttachmentSource;
 }
 
 export type TrashItem = UiCapabilities["trash.list"]["result"]["items"][number];

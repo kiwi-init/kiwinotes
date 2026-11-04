@@ -12,6 +12,7 @@ import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 
 import { externalUrl, linkAt } from "../links.ts";
+import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { tableEnter, tableTab } from "./table.ts";
 import { linkFromPaste, listIndent } from "./text.ts";
@@ -39,6 +40,10 @@ export interface EditorOptions {
   linkTargets(): LinkTarget[];
   /** `notes.resolve`: para desenhar o link que ainda não existe de outro jeito. */
   resolve(target: string): Promise<string | null>;
+  /** Os anexos (T2594): colar e arrastar imagem e PDF, e desenhar o `![[…]]`. Sem isto (um engine antigo), nada muda. */
+  attachments?: AttachmentSource;
+  /** Um aviso curto para a pessoa (o anexo que não entrou). */
+  onError?(text: string): void;
 }
 
 // ---------------------------------------------------------------- [[link]] no parser
@@ -278,6 +283,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     tagPreview,
     tablePreview,
     commentPreview,
+    ...(opts.attachments ? [attachmentPreview(opts.attachments), attachmentInput(opts.attachments, (t) => opts.onError?.(t)), attachmentTheme] : []),
     autocompletion({ override: [linkCompletion(opts.linkTargets)], icons: false, closeOnBlur: true }),
     tableKeys,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
