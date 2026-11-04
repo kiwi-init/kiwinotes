@@ -7,7 +7,7 @@ import { EditorState } from "@codemirror/state";
 
 import { wikiLinkSyntax } from "./index.ts";
 import { mermaidCode, linksApart, picturesOff } from "./mermaid.tsx";
-import { fullTree, imageSource, linkAction, mermaidUnderCursor, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
+import { fullTree, imagesUnderCursor, imageSource, linkAction, mermaidUnderCursor, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
 
 const md = markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] });
 const stateOf = (doc: string, cursor = 0) => EditorState.create({ doc, selection: { anchor: cursor }, extensions: [md] });
@@ -205,5 +205,26 @@ describe("mermaid (T2984)", () => {
       '<a target="_blank" rel="noopener noreferrer">x</a><a xlink:href="https://kiwi.dev" target="_blank" rel="noopener noreferrer">y</a>',
     );
     expect(picturesOff('<image href="https://x.com/a.png"/><img src="data:image/png;base64,A">')).toBe('<image/><img src="data:image/png;base64,A">');
+  });
+});
+
+describe("as imagens do bloco do cursor", () => {
+  const under = (doc: string, at: number) => imagesUnderCursor(stateOf(doc, at), true);
+
+  test("o parágrafo do cursor fica cru e as imagens dele aparecem logo abaixo, na ordem", () => {
+    const doc = "Veja ![[planta.png|120]] e ![foto](anexo.png) e ![](https://x.com/a.png)\n\noutro ![x](b.png)";
+    expect(under(doc, 2)).toEqual([{ to: doc.indexOf("\n"), markdown: "![planta.png](kiwi-attachment:planta.png) ![foto](anexo.png) ![](https://x.com/a.png)" }]);
+  });
+
+  test("sem foco, nada; sem imagem, nada; ![[Nota]] não é imagem", () => {
+    expect(imagesUnderCursor(stateOf("a ![x](b.png)", 0), false)).toEqual([]);
+    expect(under("só texto", 0)).toEqual([]);
+    expect(under("ver ![[Nota]] aqui", 0)).toEqual([]);
+  });
+
+  test("o anexo sozinho na linha fica com o widget dele; imagem em código não conta", () => {
+    expect(under("![[planta.png]]", 0)).toEqual([]);
+    expect(under("```\n![x](b.png)\n```", 0)).toEqual([]);
+    expect(under("a `![x](b.png)`", 0)).toEqual([]);
   });
 });

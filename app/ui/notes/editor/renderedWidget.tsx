@@ -30,6 +30,7 @@ import {
   linkAction,
   LOAD_IMAGE_LINK,
   MISSING_LINK,
+  imagesUnderCursor,
   mermaidUnderCursor,
   NOTE_LINK,
   renderedBlocks,
@@ -486,6 +487,46 @@ class MermaidUnderWidget extends WidgetType {
   }
 }
 
+/** As imagens do bloco onde está o cursor, logo abaixo da fonte crua (`imagesUnderCursor`). */
+class ImagesUnderWidget extends WidgetType {
+  constructor(
+    readonly markdown: string,
+    readonly actions: RenderedActions,
+  ) {
+    super();
+  }
+  eq(other: ImagesUnderWidget) {
+    return other.markdown === this.markdown;
+  }
+  toDOM(view: EditorView) {
+    const dom = document.createElement("div");
+    dom.className = "cm-rendered cm-images-under";
+    // O clique aqui não mexe no cursor (que está no texto de cima): o navegador nem chega a mudar a seleção.
+    dom.addEventListener("mousedown", (e) => e.preventDefault());
+    const root = createRoot(dom);
+    roots.set(dom, root);
+    const callbacks = {
+      onLinkPress: ({ url }: { url: string }) => {
+        const act = linkAction(url);
+        if (act?.kind === "loadImage") allowRemote(act.url);
+        else if (act?.kind === "url") {
+          const safe = externalUrl(act.url);
+          if (safe) this.actions.onOpenUrl(safe);
+        }
+      },
+    };
+    root.render(<Block markdown={this.markdown} source={this.markdown} callbacks={callbacks} attachments={this.actions.attachments} onShown={() => view.requestMeasure()} />);
+    watchSize(dom, view);
+    return dom;
+  }
+  destroy(dom: HTMLElement) {
+    unmount(dom);
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
 function buildRendered(state: EditorState, resolver: LinkResolver, actions: RenderedActions): DecorationSet {
   const focused = state.field(editorFocused, false) ?? false;
   const tree = fullTree(state);
@@ -493,6 +534,9 @@ function buildRendered(state: EditorState, resolver: LinkResolver, actions: Rend
   for (const b of renderedBlocks(state, focused, tree)) {
     const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t));
     out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions), block: true }).range(b.from, b.to));
+  }
+  for (const m of imagesUnderCursor(state, focused, tree)) {
+    out.push(Decoration.widget({ widget: new ImagesUnderWidget(m.markdown, actions), block: true, side: 1 }).range(m.to));
   }
   for (const m of mermaidUnderCursor(state, focused, tree)) {
     const code = mermaidCode(m.source);
@@ -536,6 +580,7 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered img[style*='inline']": { display: "inline", width: "auto !important", borderRadius: "6px" },
   // Os diagramas (T2984), como no Channels: o desenho rola de lado quando não cabe; os botões ficam discretos.
   ".kn-mermaid": { padding: "2px 0" },
+  ".cm-images-under": { padding: "6px 0 2px", cursor: "default" },
   ".cm-mermaid-under": { padding: "6px 0 2px", cursor: "default" },
   ".kn-mermaid-drawn": { margin: "0", padding: "12px", overflowX: "auto", borderRadius: "10px", background: "var(--surface-2)" },
   ".kn-mermaid-drawn svg": { display: "block", maxWidth: "none" },

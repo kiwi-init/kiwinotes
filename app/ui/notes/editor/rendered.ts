@@ -271,6 +271,41 @@ export function mermaidUnderCursor(state: EditorState, focused: boolean, tree: T
   return out;
 }
 
+// ---------------------------------------------------------------- as imagens do bloco do cursor
+
+/**
+ * As imagens do bloco onde está o cursor (`![](foto.png)`, `![[foto.png]]` no meio do texto, a de fora): o bloco fica
+ * cru para editar, e as imagens continuam à vista logo abaixo dele, no Markdown que a lib desenha. O anexo sozinho na
+ * linha não entra: ele já tem o widget dele (`attachmentPreview`).
+ */
+export function imagesUnderCursor(state: EditorState, focused: boolean, tree: Tree = fullTree(state)): { to: number; markdown: string }[] {
+  if (!focused) return [];
+  const out: { to: number; markdown: string }[] = [];
+  for (let n = tree.topNode.firstChild; n; n = n.nextSibling) {
+    if (!RENDERED.has(n.name) || CODE.has(n.name)) continue;
+    const from = state.doc.lineAt(n.from).from;
+    const to = state.doc.lineAt(n.to).to;
+    if (!touches(state, from, to)) continue;
+    const pics: string[] = [];
+    tree.iterate({
+      from: n.from,
+      to: n.to,
+      enter: (c) => {
+        if (c.name !== "Image") return;
+        const text = state.doc.sliceString(c.from, c.to);
+        if (!text.startsWith("![[")) pics.push(text);
+        else if (!embedLine(state.doc.lineAt(c.from).text)) {
+          const link = parseLinks(text.slice(1))[0];
+          if (link && isAttachmentName(link.target)) pics.push(`![${escapeLabel(link.target.split("/").at(-1)!)}](${ATTACHMENT_LINK}${encodeURIComponent(link.target)})`);
+        }
+        return false;
+      },
+    });
+    if (pics.length) out.push({ to, markdown: pics.join(" ") });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- as tarefas
 
 /** Onde está o caractere de dentro do `[ ]` de cada tarefa do bloco, na ordem: o mesmo índice que a lib dá. */

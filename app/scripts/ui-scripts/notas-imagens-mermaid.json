@@ -78,6 +78,25 @@
       "name": "e a imagem continua à vista, embaixo da linha"
     },
     {
+      "click": ".kn-note-editor .cm-rendered :text('no meio e')",
+      "name": "clicar no texto do parágrafo com imagens"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-line:has-text('![remota](https://example.com/a.png)')",
+      "name": "o parágrafo fica cru para editar"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-images-under img[src^='data:image/png']",
+      "name": "e a imagem do anexo continua à vista embaixo dele"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-images-under img[src='https://example.com/a.png']",
+      "name": "a de fora também (já carregada pelo clique)"
+    },
+    {
+      "screenshot": "imagens-paragrafo.png"
+    },
+    {
       "click": ".kn-note-editor .kn-mermaid-drawn",
       "name": "clicar no diagrama"
     },
