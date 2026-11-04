@@ -1,5 +1,5 @@
 // Mede, no intro.html congelado aos 2,5 s (os três prismas abertos), o ângulo NA TELA da borda de cima de cada
-// lâmina, do topo da pilha para baixo. O roteiro pede 24°, 21° e 17° (o leque), e a rotação em X do pose() achata o
+// lâmina, de baixo para cima (a ordem dos .ly.face no DOM). O roteiro pede 17°, 21° e 24°, e a rotação em X do pose() achata o
 // ângulo aplicado no plano, então o intro.js compensa; isto é a conferência (T3898, #3973).
 //
 //   bun docs/brand/intro/medir-prisma.ts      (usa o Playwright do app/; sai com 1 se algum ângulo passar de 2° do alvo)
@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 const here = import.meta.dirname;
-const ALVO = [24, 21, 17];
+const ALVO = [17, 21, 24]; // de baixo para cima
 const APP = [path.join(here, "../../../app"), path.join(here, "../../../../../kiwinotes/app")].find((d) => existsSync(path.join(d, "node_modules/playwright-core/index.mjs")));
 if (!APP) throw new Error("medir-prisma: playwright-core não encontrado; rode `bun install` em app/");
 const { webkit } = await import(path.join(APP, "node_modules/playwright-core/index.mjs"));
@@ -30,5 +30,5 @@ const angulos: number[] = await page.evaluate(`(() => {
 })()`);
 await browser.close();
 let ok = true;
-angulos.forEach((a, i) => { const d = Math.abs(a - ALVO[i]!); if (d > 2) ok = false; console.log(`medir-prisma: lâmina ${["de cima", "do meio", "de baixo"][i]}: ${a.toFixed(1)}° na tela (alvo ${ALVO[i]}°)${d > 2 ? "  ← fora" : ""}`); });
+angulos.forEach((a, i) => { const d = Math.abs(a - ALVO[i]!); if (d > 2) ok = false; console.log(`medir-prisma: lâmina ${["de baixo", "do meio", "de cima"][i]}: ${a.toFixed(1)}° na tela (alvo ${ALVO[i]}°)${d > 2 ? "  ← fora" : ""}`); });
 if (!ok) process.exit(1);
