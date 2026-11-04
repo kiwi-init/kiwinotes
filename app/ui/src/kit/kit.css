@@ -125,12 +125,12 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  height: 28px;
+  height: calc(var(--ctl) - 4px);
   padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  box-shadow: var(--shadow-1);
+  border-radius: var(--r-row);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
   font-weight: 500;
   transition:
     transform var(--pop),
@@ -138,7 +138,17 @@
 }
 
 .kn-button:hover {
-  background: color-mix(in srgb, var(--surface-2), var(--text) 5%);
+  background: var(--float-2);
+}
+
+.kn-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-float), var(--focus-ring);
+}
+
+.kn-button:disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .kn-button:active {
@@ -149,10 +159,11 @@
 .kn-button[data-variant="primary"] {
   background: var(--accent);
   color: var(--on-accent);
+  box-shadow: none;
 }
 
 .kn-button[data-variant="primary"]:hover {
-  background: color-mix(in srgb, var(--accent), #000 8%);
+  background: color-mix(in srgb, var(--accent), var(--ink) 10%);
 }
 
 /* ---------------------------------------------------------- segmentado */
@@ -163,8 +174,9 @@
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
 }
 
 .kn-segmented-pill {
@@ -172,9 +184,8 @@
   top: 2px;
   bottom: 2px;
   left: 0;
-  border-radius: 5px;
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
+  border-radius: var(--r-row);
+  background: var(--wash-2, var(--surface-hover));
   transition:
     transform var(--glide),
     width var(--glide);
@@ -183,7 +194,8 @@
 .kn-segmented button {
   position: relative;
   z-index: 1;
-  height: 24px;
+  height: calc(var(--ctl) - 4px);
+  border-radius: var(--r-row);
   padding: 0 var(--space-3);
   border: 0;
   background: none;
@@ -193,8 +205,14 @@
   transition: color var(--fast) var(--ease);
 }
 
-.kn-segmented button[aria-checked="true"] {
-  color: var(--text);
+.kn-segmented button[aria-checked="true"],
+.kn-segmented button:hover {
+  color: var(--ink);
+}
+
+.kn-segmented button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* ---------------------------------------------------------- switch */
@@ -218,9 +236,14 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  background: var(--knob);
+  box-shadow: var(--shadow-1);
   transition: transform var(--pop);
+}
+
+.kn-switch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .kn-switch[aria-checked="true"] {
@@ -277,11 +300,13 @@
 
 .kn-search {
   width: 220px;
-  height: 28px;
+  height: var(--ctl);
   padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+  outline: none;
   font-size: var(--text-sm);
   -webkit-user-select: text;
   user-select: text;
@@ -292,6 +317,11 @@
 
 .kn-search:focus {
   width: 260px;
+  box-shadow: var(--shadow-float), var(--focus-ring);
+}
+
+.kn-search::placeholder {
+  color: var(--ink-3, var(--text-3));
 }
 
 /* ---------------------------------------------------------- a barra de cima e os botões que flutuam (T2502)
@@ -320,19 +350,19 @@
 }
 
 .kn-float {
-  height: var(--ctl, 32px);
-  min-width: var(--ctl, 32px);
+  height: var(--ctl);
+  min-width: var(--ctl);
   padding: 0 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   border: 0;
-  border-radius: var(--r-ctl, 10px);
-  background: var(--float, var(--surface));
-  box-shadow: var(--shadow-float, var(--shadow-1));
-  color: var(--ink, var(--text));
-  font: 500 13px / 1 var(--ui, var(--font));
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  font: 500 var(--t-ui) / 1 var(--ui);
   white-space: nowrap;
   cursor: default;
   transition: background var(--fast) var(--ease);
@@ -340,12 +370,12 @@
 
 .kn-float:hover,
 .kn-float[aria-expanded="true"] {
-  background: var(--float-2, var(--surface-hover));
+  background: var(--float-2);
 }
 
 .kn-float:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-float, var(--shadow-1)), var(--focus-ring);
+  box-shadow: var(--shadow-float), var(--focus-ring);
 }
 
 .kn-float svg {
@@ -358,18 +388,18 @@
   display: inline-flex;
   padding: 2px;
   gap: 2px;
-  border-radius: var(--r-ctl, 10px);
-  background: var(--float, var(--surface));
-  box-shadow: var(--shadow-float, var(--shadow-1));
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
 }
 
 .kn-float-group > button {
-  width: calc(var(--ctl, 32px) - 4px);
-  height: calc(var(--ctl, 32px) - 4px);
+  width: calc(var(--ctl) - 4px);
+  height: calc(var(--ctl) - 4px);
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: var(--r-row, 8px);
+  border-radius: var(--r-row);
   background: none;
   color: var(--ink-2, var(--text-2));
   cursor: default;
@@ -377,7 +407,7 @@
 
 .kn-float-group > button:hover {
   background: var(--wash-2, var(--surface-hover));
-  color: var(--ink, var(--text));
+  color: var(--ink);
 }
 
 .kn-float-group > button:focus-visible {

@@ -959,7 +959,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
             />
           </article>
         ) : listing && !listing.notes.length ? (
-          <Empty title="Nenhuma nota ainda">
+          <Empty icon={<NoNotesIcon />} title="Nenhuma nota ainda">
             <Button variant="primary" onClick={() => void create("Sem título", true)}>
               Nova nota
             </Button>
@@ -1079,6 +1079,16 @@ function SearchIcon() {
     <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
       <circle cx="7" cy="7" r="4.5" />
       <path d="m10.5 10.5 3 3" />
+    </svg>
+  );
+}
+
+/** O glifo do vazio das Notas, no tom dos outros vazios: 44 px, na cor de destaque (T2778). */
+function NoNotesIcon() {
+  return (
+    <svg width="44" height="44" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: "var(--accent)" }}>
+      <path d="M9 5h12l7 7v19H9z" />
+      <path d="M21 5v7h7M14 19h9M14 24h6" />
     </svg>
   );
 }

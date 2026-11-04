@@ -22,14 +22,14 @@
 
 .kn-about-name {
   margin: 0;
-  font: 650 24px/1.2 var(--font-display);
+  font: 650 var(--t-display)/1.2 var(--font-display);
   letter-spacing: var(--tracking-display, 0);
   color: var(--text);
 }
 
 .kn-about-version {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
@@ -38,7 +38,7 @@
   padding: 2px 4px;
   border: 0;
   background: none;
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--accent-text);
   cursor: default;
 }
@@ -59,7 +59,7 @@
 
 .kn-about-line {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--text-2);
 }
 

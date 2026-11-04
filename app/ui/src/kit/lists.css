@@ -168,7 +168,7 @@
 .kn-mark {
   background: var(--accent-soft);
   color: inherit;
-  border-radius: 3px;
+  border-radius: var(--r-tick);
   padding: 0 1px;
 }
 .kn-more {

@@ -40,7 +40,9 @@ function Pane({ section, active }: { section: HubSection; active: boolean }) {
     case "meetings":
       return (
         <div className="kn-hub-soon">
-          <Empty title="Reuniões, em breve">Gravar e resumir reuniões no Mac, sem nada sair dele.</Empty>
+          <Empty icon={<MeetingIcon />} title="Reuniões, em breve">
+            Gravar e resumir reuniões no Mac, sem nada sair dele.
+          </Empty>
         </div>
       );
   }
@@ -100,6 +102,17 @@ function Tabs({ section, onGo }: { section: HubSection; onGo(s: HubSection): voi
         </button>
       ))}
     </div>
+  );
+}
+
+/** O glifo do vazio de Reuniões, no tom dos outros vazios (o do Ditado): 44 px, na cor de destaque (T2778). */
+function MeetingIcon() {
+  return (
+    <svg width="44" height="44" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ color: "var(--accent)" }}>
+      <circle cx="12" cy="13" r="4.5" />
+      <circle cx="24" cy="13" r="4.5" />
+      <path d="M4.5 28c.8-4.6 3.8-7 7.5-7s6.7 2.4 7.5 7M16.5 28c.8-4.6 3.8-7 7.5-7s6.7 2.4 7.5 7" />
+    </svg>
   );
 }
 

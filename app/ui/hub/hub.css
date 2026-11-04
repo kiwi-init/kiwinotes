@@ -8,7 +8,7 @@
   height: 100%;
   display: grid;
   grid-template-rows: var(--kn-bar) minmax(0, 1fr);
-  background: var(--bg, var(--surface));
+  background: var(--bg);
 }
 
 .kn-hub[data-entering="true"] {
@@ -51,17 +51,17 @@
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--r-ctl, 10px);
-  background: var(--float, var(--surface));
-  box-shadow: var(--shadow-float, var(--shadow-1));
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
 }
 
 .kn-tabs-pill {
   position: absolute;
   top: 2px;
   left: 0;
-  height: calc(var(--ctl, 32px) - 4px);
-  border-radius: var(--r-row, 8px);
+  height: calc(var(--ctl) - 4px);
+  border-radius: var(--r-row);
   background: var(--wash-2, var(--surface-hover));
   transition:
     transform var(--glide),
@@ -71,16 +71,16 @@
 
 .kn-tab {
   position: relative;
-  height: calc(var(--ctl, 32px) - 4px);
+  height: calc(var(--ctl) - 4px);
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border: 0;
-  border-radius: var(--r-row, 8px);
+  border-radius: var(--r-row);
   background: none;
   color: var(--ink-2, var(--text-2));
-  font: 500 13px / 1 var(--ui, var(--font));
+  font: 500 var(--t-ui) / 1 var(--ui);
   white-space: nowrap;
   cursor: default;
   transition: color var(--fast) var(--ease);
@@ -88,7 +88,7 @@
 
 .kn-tab:hover,
 .kn-tab[aria-selected="true"] {
-  color: var(--ink, var(--text));
+  color: var(--ink);
 }
 
 .kn-tab:focus-visible {
@@ -97,7 +97,7 @@
 }
 
 .kn-tab-soon {
-  font: 11px / 1 var(--mono, var(--font-mono));
+  font: var(--t-stamp) / 1 var(--mono);
   color: var(--ink-3, var(--text-3));
 }
 
@@ -143,8 +143,9 @@
   animation: none;
 }
 
+/* O vazio de Reuniões fica onde ficam os outros vazios (o do Ditado, o das Notas): no alto da coluna (T2778). */
 .kn-hub-soon {
-  height: 100%;
   display: grid;
-  place-items: center;
+  justify-items: center;
+  padding-top: var(--space-2);
 }
