@@ -26,7 +26,7 @@ São 11 texturas lossless, cerca de 1,1 MB antes de base64. O app recebe imagens
 
 A emenda ocorre aos 3,7 s; a animação do gato dura 8 s, com poses amostradas a 60 Hz (f0–f480).
 A pose final v2 e a geometria vêm da T3747. Após #4031/#4035, as poses intermediárias foram revistas: cabeça arredondada, orelhas mais lentas e formação contínua. O conjunto deriva suavemente, sem deformar o corpo.
-A cabeça e o anel giratório usam máscaras escuras preparadas pela prancha; as orelhas giram pelos mesmos pivôs.
+O círculo é a própria cabeça (#4063): a mesma camada permanece opaca e muda de forma. As antigas camadas de cabeça intermediária e fundo ficam ocultas. As orelhas giram pelos mesmos pivôs. A transformação contínua da aura em corpo (#4071) ainda está em preparação.
 Os olhos são dois círculos vetoriais, com crescimento e piscadas por olho.
 O corpo revela densidade por opacidade, sem a varredura horizontal anterior. A máscara móvel saiu da animação: ela provocava repintura e limitava a fluidez.
 A cena final acende como uma composição opaca sobre a inicial: os retângulos compensadores das seis peças originais não aparecem separadamente.

@@ -1,59 +1,65 @@
 {
-  "status": "candidate after owner feedback #4031/#4035; not visually approved",
+  "status": "work in progress after #4063/#4071; aura morph still pending",
   "changes": [
     "rounded intermediate head",
     "slower ears",
     "whole density dissolve, no moving body mask",
-    "gentle whole composition drift"
+    "gentle whole composition drift",
+    "one persistent circle transforms into the head; former intermediate head/backdrop hidden"
   ],
   "final_source_files_unchanged": [
     "camadas/final-fundo.webp",
     "camadas/final-corpo.webp"
   ],
   "headless_recording": {
-    "milliseconds": 8105,
-    "frames": 459,
+    "milliseconds": 8115,
+    "frames": 487,
     "median": 17,
-    "p95": 26,
-    "worst": 103,
+    "p95": 22,
+    "worst": 29,
     "animationTimes": [
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120,
+      8120
     ]
   },
   "headless_without_recording": {
-    "milliseconds": 8113,
-    "frames": 474,
+    "milliseconds": 8105,
+    "frames": 486,
     "median": 17,
-    "p95": 19,
-    "worst": 88,
+    "p95": 18,
+    "worst": 24,
     "animationTimes": [
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000,
-      8000
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105,
+      8105
     ]
+  },
+  "checks": {
+    "typecheck": "passed",
+    "headless_cli_intro_fim": "passed; ready=true,intro.done=1,problems/blocked/clipboard empty",
+    "headless_cli_intro_pular": "passed; ready=true,intro.done=1,problems/blocked/clipboard empty"
   }
 }
