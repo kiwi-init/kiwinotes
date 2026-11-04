@@ -2,7 +2,7 @@
 // headless do Playwright (fora da tela) contra um engine de mentira, e pula se o WebKit não estiver instalado
 // (`bunx playwright-core install webkit`).
 
-import { afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,28 +80,31 @@ describe("o --note confere o caminho exato, como a janela (#1864)", () => {
 describe("o carimbo do build (#1835)", () => {
   test("muda quando um arquivo muda, entra ou sai; teste não conta", () => {
     const root = mkdtempSync(join(tmpdir(), "kn-stamp-"));
-    mkdirSync(join(root, "ui"));
-    writeFileSync(join(root, "ui/a.ts"), "a");
-    writeFileSync(join(root, "ui/b.ts"), "b");
-    writeFileSync(join(root, "bun.lock"), "v1");
-    const stamp = () => buildStamp([join(root, "ui"), join(root, "bun.lock")], root);
-    const s0 = stamp();
-    expect(stamp()).toBe(s0);
-    // Apagar o arquivo mais velho não mexe no mtime mais novo: o carimbo antigo não via isto.
-    utimesSync(join(root, "ui/a.ts"), new Date(1000), new Date(1000));
-    const s1 = stamp();
-    rmSync(join(root, "ui/a.ts"));
-    expect(stamp()).not.toBe(s1);
-    const s2 = stamp();
-    writeFileSync(join(root, "ui/c.ts"), "c");
-    expect(stamp()).not.toBe(s2);
-    const s3 = stamp();
-    writeFileSync(join(root, "bun.lock"), "v2 com outra dependência");
-    expect(stamp()).not.toBe(s3);
-    const s4 = stamp();
-    writeFileSync(join(root, "ui/c.test.ts"), "teste");
-    expect(stamp()).toBe(s4);
-    rmSync(root, { recursive: true, force: true });
+    try {
+      mkdirSync(join(root, "ui"));
+      writeFileSync(join(root, "ui/a.ts"), "a");
+      writeFileSync(join(root, "ui/b.ts"), "b");
+      writeFileSync(join(root, "bun.lock"), "v1");
+      const stamp = () => buildStamp([join(root, "ui"), join(root, "bun.lock")], root);
+      const s0 = stamp();
+      expect(stamp()).toBe(s0);
+      // Apagar o arquivo mais velho não mexe no mtime mais novo: o carimbo antigo não via isto.
+      utimesSync(join(root, "ui/a.ts"), new Date(1000), new Date(1000));
+      const s1 = stamp();
+      rmSync(join(root, "ui/a.ts"));
+      expect(stamp()).not.toBe(s1);
+      const s2 = stamp();
+      writeFileSync(join(root, "ui/c.ts"), "c");
+      expect(stamp()).not.toBe(s2);
+      const s3 = stamp();
+      writeFileSync(join(root, "bun.lock"), "v2 com outra dependência");
+      expect(stamp()).not.toBe(s3);
+      const s4 = stamp();
+      writeFileSync(join(root, "ui/c.test.ts"), "teste");
+      expect(stamp()).toBe(s4);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -196,6 +199,10 @@ function capture() {
 
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "kn-cli-ui-"));
+});
+// Os prints e as páginas de teste não ficam no $TMPDIR depois do `bun test` (T1958).
+afterAll(() => {
+  if (dir) rmSync(dir, { recursive: true, force: true });
 });
 afterEach(() => {
   spy?.mockRestore();
