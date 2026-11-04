@@ -81,9 +81,13 @@
     const up = seg(t, 1.55, 0.5, ease), turn = seg(t, 2.0, 0.6, ease);
     const out = seg(t, 2.0, 0.6, pop) * (1 - seg(t, 2.68, 0.28, implode));
     const degrau = (1 - slab) * out;
+    // O leque é o ângulo NA TELA. A rotação em X (58°·up) deita a pilha e achata o ângulo aplicado no plano (y vira
+    // y·cos φ), então o ângulo no plano é atan(tan(alvo) / cos φ) (#3973: 17/21/24 saíam como 7/8/11).
+    const phi = (58 * up * Math.PI) / 180, alvo = (ANG[slab] * turn * Math.PI) / 180;
+    const giro = (Math.atan(Math.tan(alvo) / Math.max(0.2, Math.cos(phi))) * 180) / Math.PI;
     const z = (slab === 0 ? GAP * out : slab === 2 ? -1 - (GAP - 1) * out : 0) - DEPTH * k;
     const sy = 1 + (FINA * SHORT[slab] - 1) * out;
-    return `translate(${(STEP.x * degrau).toFixed(2)}px, ${(-STEP.y * degrau).toFixed(2)}px) perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(58 * up).toFixed(3)}deg) rotateZ(${(-ANG[slab] * turn).toFixed(3)}deg) scale(${(1 - 0.18 * up).toFixed(4)}, ${((1 - 0.18 * up) * sy).toFixed(4)}) translateZ(${z.toFixed(2)}px) translateX(${(-2 * k).toFixed(1)}px)`;
+    return `translate(${(STEP.x * degrau).toFixed(2)}px, ${(-STEP.y * degrau).toFixed(2)}px) perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(58 * up).toFixed(3)}deg) rotateZ(${(-giro).toFixed(3)}deg) scale(${(1 - 0.18 * up).toFixed(4)}, ${((1 - 0.18 * up) * sy).toFixed(4)}) translateZ(${z.toFixed(2)}px) translateX(${(-2 * k).toFixed(1)}px)`;
   };
   const scene = document.getElementById("scene");
   const layers = [];
