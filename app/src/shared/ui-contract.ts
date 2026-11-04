@@ -7,15 +7,19 @@
 import type { AliasWarning } from "../store/aliasCheck.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
+import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { Backlink, Note, NoteMeta, SaveResult, SearchHit } from "../notes/vault.ts";
 
+export type { AppSettings };
+export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
 export type { AliasWarning, Backlink, DictionaryTerm, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
 // 1.1.0 (T1316): as capacidades `notes.*` e o evento `notes.changed`, só acréscimos.
 // 1.2.0 (T1320): `history.toNote`, o ditado vira nota. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.2.0";
+// 1.3.0 (T1499): `settings.get|set`, com o atalho da janela Notas. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.3.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -41,6 +45,10 @@ export interface UiCapabilities {
    * dá E_NOT_FOUND.
    */
   "history.toNote": { args: { id: string; path?: string }; result: { note: NoteMeta; created: boolean; already: boolean } };
+  /** As Configurações que o engine guarda (1.3.0, T1499). */
+  "settings.get": { args: Record<string, never>; result: AppSettings };
+  /** Muda só os campos dados e devolve tudo. Um valor que não existe dá E_INVALID, sem mudar nada. */
+  "settings.set": { args: Partial<AppSettings>; result: AppSettings };
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
 
@@ -74,6 +82,8 @@ export const UI_CAPABILITIES = [
   "history.search",
   "history.delete",
   "history.toNote",
+  "settings.get",
+  "settings.set",
   "clipboard.write",
   "notes.list",
   "notes.get",

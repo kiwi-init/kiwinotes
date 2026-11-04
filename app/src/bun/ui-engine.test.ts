@@ -18,7 +18,7 @@ import {
   uipackFileName,
 } from "electrobun/bun/appengine";
 
-import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
+import { UI_CAPABILITIES, UI_CONTRACT_VERSION, type AppSettings } from "../shared/ui-contract.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrl, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
@@ -48,6 +48,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
+  const settings: AppSettings = { notesShortcut: "control+option+n" };
   let t = 0;
   return {
     calls,
@@ -65,6 +66,11 @@ function fakeDeps() {
         get: async () => null,
       },
       dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
+      settings: {
+        load: async () => ({ ...settings }),
+        save: async (patch: Partial<AppSettings>) => (calls.push(`settings.save:${JSON.stringify(patch)}`), Object.assign(settings, patch), { ...settings }),
+      },
+      settingsChanged: (s: AppSettings) => void calls.push(`settingsChanged:${s.notesShortcut}`),
       clipboardWrite: (text: string) => void copied.push(text),
       now: () => t,
       notes: notesStub,
@@ -195,6 +201,27 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(await call("history.delete", { id: "abc" })).toMatchObject({ ok: true, value: true });
     expect(await call("history.search", [])).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(f.calls).toEqual(["dictionary.load", "dictionary.save:1", 'history.search:{"query":"reunião","limit":10}', "history.delete:abc"]);
+  });
+
+  test("settings: o atalho da janela Notas, só um dos oferecidos ou null (T1499)", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    expect(await call("settings.get", {})).toMatchObject({ ok: true, value: { notesShortcut: "control+option+n" } });
+    expect(await call("settings.get", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    for (const bad of ["n", "control+option+q", "CONTROL+OPTION+N", 7, {}]) {
+      expect(await call("settings.set", { notesShortcut: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    }
+    expect(await call("settings.set", { theme: "dark" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("settings.set", { notesShortcut: "option+command+n" })).toMatchObject({ ok: true, value: { notesShortcut: "option+command+n" } });
+    expect(await call("settings.set", { notesShortcut: null })).toMatchObject({ ok: true, value: { notesShortcut: null } });
+    // Os ruins não chegaram a gravar nem a avisar o helper.
+    expect(f.calls).toEqual([
+      'settings.save:{"notesShortcut":"option+command+n"}',
+      "settingsChanged:option+command+n",
+      'settings.save:{"notesShortcut":null}',
+      "settingsChanged:null",
+    ]);
   });
 
   test("clipboard.write: só texto, com limite de tamanho e de ritmo (#1199)", async () => {

@@ -6,6 +6,7 @@ import path from "node:path";
 import { DictionaryStore } from "../store/dictionary.ts";
 import { dataDir } from "../store/files.ts";
 import { HistoryStore } from "../store/history.ts";
+import { SettingsStore } from "../store/settings.ts";
 import { SnippetStore } from "../store/snippets.ts";
 import { DictationNotes } from "../notes/fromDictation.ts";
 import { Vault } from "../notes/vault.ts";
@@ -20,6 +21,8 @@ export const stores = {
   dictionary: new DictionaryStore(dir),
   snippets: new SnippetStore(dir),
   history: new HistoryStore(dir),
+  /** As Configurações que o engine guarda (T1499: o atalho da janela Notas). */
+  settings: new SettingsStore(dir),
   /**
    * As notas (T1316): Markdown puro em ~/KiwiNotes, que abre no Obsidian. `KIWI_VAULT_DIR` troca a pasta (testes e
    * agentes, sem mexer nas notas reais). A pasta só nasce na 1ª vez que alguém usa as notas.

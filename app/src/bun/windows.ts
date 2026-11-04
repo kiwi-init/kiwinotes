@@ -50,6 +50,8 @@ const capabilities = uiCapabilities({
   history: stores.history,
   dictionaryChanged: (terms) => void session.get()?.dictionaryChanged(terms),
   snippetsChanged: (snippets) => session.get()?.snippetsChanged(snippets),
+  settings: stores.settings,
+  settingsChanged: (settings) => void session.get()?.settingsChanged(settings),
   clipboardWrite: (text) => Utils.clipboardWriteText(text),
   notes: stores.notes,
   dictationNotes: stores.dictationNotes,

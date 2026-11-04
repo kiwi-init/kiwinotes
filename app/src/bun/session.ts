@@ -9,6 +9,7 @@ import { sidecarLlm } from "../cleanup/index.ts";
 import type { LlmMode } from "../cleanup/types.ts";
 import { defaultSocketPath, type Event, type Permission } from "../shared/ipc.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
+import { DEFAULT_SETTINGS, type AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import { Dictation } from "./dictation.ts";
 import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
@@ -142,11 +143,21 @@ export class Session {
     for (const fn of this.statusListeners) fn(s);
   }
 
-  /** Lê o dicionário e os snippets dos arquivos e manda o vocabulário para o STT. */
+  /** Lê o dicionário, os snippets e as Configurações dos arquivos e manda ao helper o vocabulário e o atalho. */
   async syncAll(): Promise<void> {
     const { terms, snippets } = await loadLists(stores);
     this.dictation.setSnippets(snippets);
-    await this.dictionaryChanged(terms);
+    const settings = await stores.settings.load().catch((e) => {
+      console.warn(`[session] couldn't read settings.json (${e instanceof Error ? e.message : String(e)}); using the defaults`);
+      return DEFAULT_SETTINGS;
+    });
+    await Promise.all([this.dictionaryChanged(terms), this.settingsChanged(settings)]);
+  }
+
+  /** O helper vigia o atalho da janela Notas que está nas Configurações (T1499); null desliga. */
+  async settingsChanged(settings: AppSettings): Promise<void> {
+    const result = await this.sidecar.send({ type: "config.set", notesShortcut: settings.notesShortcut }).catch(() => undefined);
+    if (result && !result.ok) console.warn(`[session] config.set notesShortcut: ${result.error}`);
   }
 
   async dictionaryChanged(terms: DictionaryTerm[]): Promise<void> {

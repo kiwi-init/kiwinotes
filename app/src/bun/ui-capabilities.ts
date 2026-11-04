@@ -7,6 +7,8 @@ import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapab
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
+import type { AppSettings } from "../store/settings.ts";
+import { isNotesShortcut } from "../shared/shortcuts.ts";
 import type { Vault } from "../notes/vault.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 
@@ -24,6 +26,10 @@ export interface CapabilityDeps {
     toNew(text: string, at: Date, id: string): Promise<ToNoteResult>;
     append(path: string, text: string, at: Date, id: string): Promise<ToNoteResult>;
   };
+  /** As Configurações (T1499). */
+  settings: { load(): Promise<AppSettings>; save(patch: Partial<AppSettings>): Promise<AppSettings> };
+  /** O helper passa a vigiar o atalho novo (T1499). */
+  settingsChanged?(settings: AppSettings): void;
   /** O STT e a limpeza passam a usar o dicionário e os snippets novos já no próximo ditado. */
   dictionaryChanged?(terms: DictionaryTerm[]): void;
   snippetsChanged?(snippets: Snippet[]): void;
@@ -137,6 +143,22 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       if (!entry) throw new CapabilityError("E_NOT_FOUND", `history.toNote: no dictation ${id}`);
       const at = new Date(entry.at);
       return path ? deps.dictationNotes.append(path, entry.text, at, entry.id) : deps.dictationNotes.toNew(entry.text, at, entry.id);
+    },
+    "settings.get": (args) => {
+      noArgs(args, "settings.get");
+      return deps.settings.load();
+    },
+    "settings.set": async (args) => {
+      const a = object(args, "settings.set");
+      const patch: Partial<AppSettings> = {};
+      for (const [key, value] of Object.entries(a)) {
+        if (key !== "notesShortcut") throw bad(`settings.set: unknown setting ${key}`);
+        if (!isNotesShortcut(value)) throw bad("notesShortcut must be one of the offered shortcuts, or null");
+        patch.notesShortcut = value;
+      }
+      const saved = await deps.settings.save(patch);
+      deps.settingsChanged?.(saved);
+      return saved;
     },
     "clipboard.write": (args) => {
       const text = object(args, "clipboard.write").text;
