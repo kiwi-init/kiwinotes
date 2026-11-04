@@ -47,19 +47,16 @@ const origin=(name: string, point: number[])=>point.map((v,i)=>`${v-cam.recortes
 const catHtml = `<div id="cat-float" class="L"><div id="cat-settle" class="L">
   <div id="cat-inicial" class="L">
     ${auraHtml}
-    ${layer("fundo-cabeca")}
     ${layer("orelha-esquerda")}${layer("orelha-direita")}
     ${layer("vidro")}
-    <div id="cabeca" class="L">${layer("cabeca-complemento")}${layer("cabeca", "cabeca-base")}</div>
   </div>
   <div id="cat-final" class="L">
-    ${layer("final-fundo")}${layer("final-corpo", "corpo-final", "body-reveal")}
+    ${layer("final-fundo")}${layer("final-corpo", "corpo-final")}
   </div>
   <div id="olhos" class="L">${cam.olhos.map((_eye, i) => `<b class="olho" id="olho-${i ? "dir" : "esq"}"></b>`).join("")}</div>
 </div></div>${auraPoses}`;
 const handoff = layer("vidro", "handoff");
 const px = (value: number) => `${Math.round(value*1e4)/1e4}px`;
-const mask = readFileSync(path.join(camDir, cam.mascara)).toString("base64");
 const geometry = `
   .K { position:absolute; inset:0; width:100%; height:100%; user-select:none; -webkit-user-drag:none; }
   #cat-final { background:#000; }
@@ -68,17 +65,12 @@ const geometry = `
   #handoff { transform-origin:${origin("vidro",[512,430])}; }
   #orelha-esquerda { transform-origin:${origin("orelha-esquerda",cam.pivos["orelha-esquerda"])}; }
   #orelha-direita { transform-origin:${origin("orelha-direita",cam.pivos["orelha-direita"])}; }
-  .body-reveal {
-    -webkit-mask-image:url(data:image/png;base64,${mask}); mask-image:url(data:image/png;base64,${mask});
-    -webkit-mask-size:100% 2048px; mask-size:100% 2048px;
-    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
-  }
   .olho { position:absolute; border-radius:50%; background:#fff; transform-origin:center; will-change:transform; }
   ${cam.olhos.map((eye, i) => `#olho-${i ? "dir" : "esq"} { left:${px(eye.x-eye.r)}; top:${px(eye.y-eye.r)}; width:${px(eye.r*2)}; height:${px(eye.r*2)}; }`).join("\n  ")}
 </style>`;
 const html = template.replace("</style>", geometry).replace("<!--CAT-->", catHtml)
   .replace("<!--HANDOFF-->", handoff).replace("<!--DEFS-->", "");
-for (const id of ["cat-inicial", "cat-final", "aura", "aura-poses", "corpo-final", "cabeca", "orelha-esquerda", "orelha-direita", "vidro", "handoff", "olhos"]) {
+for (const id of ["cat-inicial", "cat-final", "aura", "aura-poses", "corpo-final", "orelha-esquerda", "orelha-direita", "vidro", "handoff", "olhos"]) {
   if (!html.includes(`id="${id}"`)) throw new Error(`gerar: falta ${id}`);
 }
 writeFileSync(path.join(here, "intro.html"), html.replace("<!--SCRIPT-->", `<script>\n${script}\n</script>`));

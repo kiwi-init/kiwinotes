@@ -202,7 +202,6 @@
       catAnimations.push(animation);
     };
     const head = f => smooth(112,208,f);
-    const formed = f => smooth(270,410,f);
     // A aura nasce em f6–48 e gira até parar em f96: a pose 00 já vem girada +30°, e o canvas vai de −30° a 0° com
     // derivada zero no fim (θ = 30·(2u−u²) − 30). Daí em diante só o morph, sem rotação.
     poses("aura", f => {
@@ -211,17 +210,12 @@
     });
     auraDriver = catAnimations.at(-1);
     auraDrawn = "";
-    poses("fundo-cabeca", () => ({opacity:0}));
-    poses("cabeca", () => ({opacity:0}));
-    poses("cabeca-complemento", f => ({opacity:formed(f)}));
     // #4063: the circle IS the head. One persistent face changes shape;
     // a second head never fades in behind it.
     poses("vidro", f => {
       const p=head(f);
       return {opacity:1, transform:`translate(${2*p}px,${-11*p}px) scale(${1-p/15},${1-p*(1-354/450)})`};
     });
-    // O brilho do corpo agora é a própria aura; o corpo final só entra com a cena final.
-    document.getElementById("corpo-final").classList.remove("body-reveal");
     for (const [id,start,sign] of [["orelha-esquerda",96,-1],["orelha-direita",112,1]]) {
       poses(id, f => {
         const t=Math.max(0,(f-start)/54);
