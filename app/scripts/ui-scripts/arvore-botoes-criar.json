@@ -1,0 +1,105 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "",
+        "title": "Inbox",
+        "content": "Coisas soltas.\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Projetos",
+        "title": "Plano",
+        "content": "O plano.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-new[data-new='folder'][title='Nova pasta na raiz']",
+      "name": "com a Inbox (na raiz) aberta, o botão diz que cria na raiz"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-new[data-new='folder']",
+      "name": "+ Pasta"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-rename",
+      "name": "a pasta nova já entra em renomear"
+    },
+    {
+      "press": "Meta+a"
+    },
+    {
+      "type": "Ideias"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-selected]:has-text('Ideias')",
+      "name": "a pasta Ideias foi criada na raiz e ficou escolhida"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')",
+      "name": "escolhe Projetos"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-new[data-new='note'][aria-label='Nova nota em Projetos']"
+    },
+    {
+      "screenshot": "botoes-criar.png"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-new[data-new='note']",
+      "name": "+ Nota em Projetos"
+    },
+    {
+      "waitFor": ".kn-crumb-bt:has-text('Projetos')",
+      "name": "a nota nova abre dentro de Projetos"
+    },
+    {
+      "expectText": ".kn-title",
+      "text": "",
+      "name": "com o título"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Sem título')",
+      "name": "a nota nova está na árvore"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-new[data-new='folder'][title='Nova pasta em Projetos']",
+      "count": 1,
+      "name": "com a nota aberta, a pasta dela é a escolhida"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-new[data-new='folder']",
+      "name": "+ Pasta dentro de Projetos"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-rename"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-selected]:has-text('Nova pasta')",
+      "name": "a subpasta nova fica com o nome padrão"
+    },
+    {
+      "screenshot": "botoes-criar-depois.png"
+    }
+  ]
+}

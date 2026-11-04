@@ -411,10 +411,49 @@ body {
 
 /* ---------------------------------------------------------- o básico (T2469): busca, contadores, renomear, arrastar */
 
+/* T3371: a busca e os botões + Nota e + Pasta ficam presos no topo da árvore, mesmo rolando */
+.kn-side-top {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -8px -10px 18px;
+  padding: 8px 10px 6px;
+  background: var(--bg-2, var(--surface));
+}
+.kn-side-new {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-2);
+  cursor: default;
+}
+.kn-side-new:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.kn-side-new:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.kn-side-new .kn-side-icon {
+  color: inherit;
+}
+
 .kn-side-search {
   display: block;
+  flex: 1;
+  min-width: 0;
   width: 100%;
-  margin: 0 0 18px;
+  margin: 0;
   padding: 6px 10px;
   border: 0;
   border-radius: var(--radius-sm);

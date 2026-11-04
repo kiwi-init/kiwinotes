@@ -58,7 +58,16 @@ export interface SidebarProps {
   showExtensions?: boolean;
   /** A pasta da nota do dia: as `AAAA-MM-DD.md` de lá ganham o ícone dela. */
   dailyFolder?: string;
+  /**
+   * Os botões fixos do topo (T3371): criam na pasta escolhida (a da nota aberta, ou a pasta clicada) ou, sem nada
+   * escolhido, na raiz. A nota nova abre com o título selecionado; a pasta nova entra em renomear na árvore.
+   */
+  onNewNote?(folder: string): void;
+  onNewFolder?(folder: string): void;
 }
+
+/** "na raiz" ou "em Projetos": onde os botões do topo criam. */
+export const whereLabel = (folder: string) => (folder ? `em ${folder.slice(folder.lastIndexOf("/") + 1)}` : "na raiz");
 
 /** Uma nota do dia: `AAAA-MM-DD.md` na pasta das notas do dia. */
 export const isDailyNote = (path: string, dailyFolder: string | undefined) =>
@@ -238,6 +247,7 @@ export function Sidebar(p: SidebarProps) {
       onClick={(e) => e.target === e.currentTarget && p.onSelectFolder("")}
       {...dropZone("")}
     >
+      <div className="kn-side-top">
       <input
         className="kn-side-search"
         type="search"
@@ -255,6 +265,31 @@ export function Sidebar(p: SidebarProps) {
           }
         }}
       />
+      {p.onNewNote ? (
+        <button
+          type="button"
+          className="kn-side-new"
+          data-new="note"
+          title={`Nova nota ${whereLabel(p.selectedFolder)} (⌘N)`}
+          aria-label={`Nova nota ${whereLabel(p.selectedFolder)}`}
+          onClick={() => p.onNewNote?.(p.selectedFolder)}
+        >
+          <TreeIcon name="note-plus" />
+        </button>
+      ) : null}
+      {p.onNewFolder ? (
+        <button
+          type="button"
+          className="kn-side-new"
+          data-new="folder"
+          title={`Nova pasta ${whereLabel(p.selectedFolder)}`}
+          aria-label={`Nova pasta ${whereLabel(p.selectedFolder)}`}
+          onClick={() => p.onNewFolder?.(p.selectedFolder)}
+        >
+          <TreeIcon name="folder-plus" />
+        </button>
+      ) : null}
+      </div>
       {!searching && p.onDaily ? (
         <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title="Nota do dia (⇧⌘D)">
           <TreeIcon name="today" />
