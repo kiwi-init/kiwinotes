@@ -9,6 +9,7 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
 
   --socket <path>   connect to the app's unix socket (the app listens; NDJSON v1, see docs/adr/0001-ipc.md)
   --stdio           talk NDJSON over stdin/stdout instead, for manual testing
+  --headless        for the agents' CLI (T1739): no hotkey tap, no pill, no mic, no permission asks, dry-run inserts
   --dump-wav <dir>  also save each recording as 16 kHz WAV there (for the STT benchmark; never inside the repo)
   --overlay-snapshot <dir>  render the dictation pill in each state as PNGs there, then exit
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
@@ -23,6 +24,7 @@ func fail(_ message: String) -> Never {
 
 var socketPath: String?
 var useStdio = false
+var headless = ProcessInfo.processInfo.environment["KIWI_HEADLESS"] == "1"
 var dumpDirectory: URL?
 var transcribeFiles: [String] = []
 var dictionaryFile: String?
@@ -36,6 +38,7 @@ while let arg = args.next() {
         guard let path = args.next() else { fail("--socket needs a path") }
         socketPath = path
     case "--stdio": useStdio = true
+    case "--headless": headless = true
     case "--dump-wav":
         guard let path = args.next() else { fail("--dump-wav needs a folder") }
         let dir = URL(fileURLWithPath: path, isDirectory: true)
@@ -101,8 +104,9 @@ if let socketPath {
 
 // AppKit for the overlay panel. Accessory: no Dock icon, no menu bar, never activates by itself.
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
+// Headless (T1739): prohibited, so it never shows anything on screen.
+app.setActivationPolicy(headless ? .prohibited : .accessory)
 
-let helper = Helper(connection: connection, dumpDirectory: dumpDirectory)
+let helper = Helper(connection: connection, dumpDirectory: dumpDirectory, headless: headless)
 helper.run()
 app.run()

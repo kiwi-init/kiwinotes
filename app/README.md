@@ -20,6 +20,31 @@ As janelas são UIs do AppEngine (ADR 0006). Para testar uma troca de UI sem reb
 
 Na primeira vez, `scripts/hutch.ts` baixa o Hutch fixado em `hutch-pin.json` (confere o sha256) para `~/.hutch/kiwinotes/`, e o Hutch baixa o Livewire 2026.10.2 de `kiwi-init/electrobun-livewire`.
 
+## Testar sem tela: a CLI headless (agentes, T1739)
+
+O jeito padrão de um agente testar o app inteiro. Roda o motor do app (o `Session`, o helper Swift e as capacidades do contrato do AppEngine) no **Bun puro, fora do Electrobun**: não existe ícone na barra, janela nem pílula. Fica forçado:
+- `KIWI_DEBUG=1`: todo `insert.text` é dryRun e nenhuma permissão é pedida;
+- `KIWI_HEADLESS=1`: o helper sobe com `--headless`, sem tap do atalho, sem pílula e sem mic, e recusa `permissions.request` e `record.start`;
+- os dados e o vault em `--data`: nunca o `~/Library/Application Support/KiwiNotes` nem o `~/KiwiNotes`.
+
+```sh
+cd app
+bun run prepare:eb                         # uma vez por worktree (o contrato do AppEngine vem do devkit)
+(cd ../native && swift build)              # o helper; ou use --no-helper para só as capacidades
+bun run cli start --data /tmp/kn-test      # sobe em segundo plano e espera ficar de pé
+bun run cli invoke notes.create '{"title":"Oi","content":"texto"}' --data /tmp/kn-test
+bun run cli invoke notes.list --data /tmp/kn-test
+bun run cli events --data /tmp/kn-test     # notes.changed, history.added, dictation.done, status, helper.event
+bun run cli logs --follow --data /tmp/kn-test
+bun run cli dictate …                      # T1740: ditar um wav ou um texto, com dryRun
+bun run cli screenshot … / ui …            # T1742: prints e roteiros das janelas
+bun run cli stop --data /tmp/kn-test
+```
+
+- **Saída e exit codes:** a saída é JSON. O exit code é 0 se deu certo, 1 se a capacidade respondeu erro (o JSON traz o `code`: `E_BAD_ARGS`, `E_NO_CAPABILITY`, `E_OUTSIDE_VAULT`…), 2 para uso errado e 3 quando não há headless de pé.
+- **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`.
+- **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
+
 ## Dirigir o app (agentes)
 
 Com o app de pé:

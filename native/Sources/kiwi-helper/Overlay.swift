@@ -28,8 +28,12 @@ final class Overlay {
         state.onFinish = { [weak self] in self?.onFinish?() }
     }
 
+    /// False in `--headless` (T1739): the pill never shows, nothing reaches the screen.
+    var enabled = true
+
     /// `overlay.state` from the app, or the sidecar's own recording events.
     func set(_ phase: OverlayPhase, message: String? = nil) {
+        guard enabled else { return }
         let wasVisible = model.isVisible
         model.set(phase, message: message, at: ProcessInfo.processInfo.systemUptime)
         publish()

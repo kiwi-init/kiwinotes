@@ -28,10 +28,14 @@ final class Helper {
     private let frontApp = FrontApp()
     /// `debug.transcribe` exists only with `KIWI_DEBUG=1` (development; never in a release build's environment).
     private let debugCommands = ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1"
+    /// `--headless` (T1739): for the agents' CLI. No hotkey tap, no overlay, no mic, no permission asks, and every
+    /// insert is a dry run. Nothing reaches the screen or the person's keyboard, clipboard or microphone.
+    private let headless: Bool
 
-    init(connection: SocketConnection, dumpDirectory: URL?) {
+    init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false) {
         self.connection = connection
         self.dumpDirectory = dumpDirectory
+        self.headless = headless
         tap = HotkeyTap(key: .fn) { [weak self] event in self?.onHotkey(event) }
         audio.onLevel = { [weak self] level in
             // Level queue: send straight away, the write queue serializes it.
@@ -41,7 +45,7 @@ final class Helper {
         overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
         // Touching the input before the mic is granted can bring up the system prompt.
-        audio.mayWarmUp = { Permission.microphone.status == "granted" }
+        audio.mayWarmUp = { [headless] in !headless && Permission.microphone.status == "granted" }
         audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "mic: \(message)"]) }
         // The time from the key to the first sound kept, per dictation (T985): only a number, no audio.
         audio.onFirstBuffer = { [weak self] after in
@@ -80,7 +84,8 @@ final class Helper {
                 exit(0)
             }
         }
-        tap.start()
+        if !headless { tap.start() }
+        overlay.enabled = !headless
         lastPermissions = Permission.snapshot()
         lastLlm = Self.key(llm.status)
         emit("ready", [
@@ -91,6 +96,7 @@ final class Helper {
             "permissions": lastPermissions,
             "permissionHelp": Permission.explanations(),
             "llm": llm.status,
+            "headless": headless,
         ])
         // Read only after `ready` is queued, so it is always the first line the app sees.
         connection.start()
@@ -98,8 +104,10 @@ final class Helper {
         let tcc = Responsible.current()?.summary ?? "responsible process unknown"
         emit("log", ["level": "info", "message": "tcc: \(tcc); \(Permission.snapshot().sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))"])
         // `mayWarmUp` checks the mic permission (T590).
-        audio.warmUp()
-        defaultInput.start { [weak self] in self?.audio.inputChanged("default input device") }
+        if !headless {
+            audio.warmUp()
+            defaultInput.start { [weak self] in self?.audio.inputChanged("default input device") }
+        }
         schedulePermissionPoll()
         prepareSTT()
         frontApp.onChange = { [weak self] app in self?.emit("app.active", app.fields) }
@@ -311,6 +319,10 @@ final class Helper {
         case "config.set":
             if let error = configure(message) { return reply(id, ok: false, error: error) }
             reply(id, ok: true, ["hotkey": tap.key.rawValue, "hotkeyActive": hotkeyActive])
+        case "record.start" where headless:
+            reply(id, ok: false, error: "headless_no_mic") // dictate a WAV with debug.transcribe instead
+        case "permissions.request" where headless:
+            reply(id, ok: false, error: "headless")
         case "record.start":
             if let error = Rules.recordStart(isRecording: audio.isRecording) { return reply(id, ok: false, error: error) }
             if let error = startRecording(reason: "command") {
@@ -341,7 +353,7 @@ final class Helper {
             reply(id, ok: true)
         case "insert.text":
             guard let text = message.string("text") else { return reply(id, ok: false, error: "invalid_value") }
-            if message.fields["dryRun"] as? Bool == true {
+            if headless || message.fields["dryRun"] as? Bool == true {
                 // Agents' tests (#490): nothing touches the person's clipboard or keyboard. The text only reaches the
                 // log in a debug run; otherwise its length, so no real dictation ends up in a log.
                 let shown = debugCommands ? "\"\(text)\"" : "\(text.count) chars"
@@ -429,7 +441,7 @@ final class Helper {
             tap.key = key
             gesture.reset()
             if audio.isRecording { cancelRecording(reason: "config") }
-            tap.start()
+            if !headless { tap.start() }
         }
         if let combo = notesCombo { tap.notesCombo = combo }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
@@ -468,10 +480,10 @@ final class Helper {
         if now[key] == "granted", lastPermissions[key] != "granted" {
             // A tap made before the grant stays filtered; make a new one.
             tap.stop()
-            tap.start()
+            if !headless { tap.start() }
         }
         let mic = Permission.microphone.rawValue
-        if now[mic] == "granted", lastPermissions[mic] != "granted" { audio.warmUp() }
+        if now[mic] == "granted", lastPermissions[mic] != "granted", !headless { audio.warmUp() }
         lastPermissions = now
         emit("permissions.changed", ["permissions": now, "hotkeyActive": hotkeyActive, "llm": llmStatus])
     }
