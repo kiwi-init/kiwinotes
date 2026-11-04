@@ -28,7 +28,7 @@ function render(src: string, marked: string, SX: number, SY: number): Promise<Re
       const bg = [0, 0, 0];
       for (const [cx, cy] of [[4, 4], [w - 5, 4], [4, h - 5], [w - 5, h - 5]]) { const i = (cy * w + cx) * 4; for (let k = 0; k < 3; k++) bg[k] += ph[i + k] / 4 / 255; }
       const lum = (v: number[]) => 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
-      const A = new Float32Array(N), F = new Float32Array(N * 3);
+      let A = new Float32Array(N); const F = new Float32Array(N * 3);
       for (let p = 0; p < N; p++) {
         const c = [ph[p * 4] / 255, ph[p * 4 + 1] / 255, ph[p * 4 + 2] / 255];
         const chroma = Math.max(...c) - Math.min(...c), neutral = sm((chroma - 0.05) / 0.08);
@@ -94,7 +94,29 @@ function render(src: string, marked: string, SX: number, SY: number): Promise<Re
         }
         return { A: A2, F: F2 };
       };
-      const wp = warp(st.A, st.F);
+      // O buraco de luz à esquerda, abaixo do olho (#3677): na foto a bochecha esquerda recua ali e a luz entra no
+      // corpo. Preenche só essa janela (x 90–235, y 325–450, borda macia) com o alfa do lado direito espelhado, que
+      // desce liso; as cores (F) ficam as da própria foto.
+      const fillLeft = (Aa: Float32Array) => {
+        // A borda-alvo: a reta entre a borda real na bochecha (y=322) e no corpo (y=452), medida no próprio alfa.
+        const edge = (y: number) => { for (let x = 40; x < 256; x++) if (Aa[y * w + x] > 0.5) return x; return 256; };
+        const y0 = 322, y1 = 452, e0 = edge(y0), e1 = edge(y1);
+        const out = Float32Array.from(Aa);
+        for (let y = y0; y <= y1; y++) {
+          const t = (y - y0) / (y1 - y0), xt = e0 + (e1 - e0) * t;
+          const wy = sm((y - y0) / 30) * (1 - sm((y - y1 + 30) / 30));
+          // Só o bolsão (o max não mexe no que já é gato). O alfa de preenchimento fica no do miolo da foto
+          // (0,93, o #101010 sobre o cinza), não em 1, senão sai mais preto que o gato.
+          for (let x = Math.max(0, Math.floor(xt) - 24); x < 256; x++) {
+            const a = Aa[y * w + x];
+            const prof = Math.min(0.93, sm((x - xt + 4) / 12));
+            out[y * w + x] = Math.max(a, a + (prof - a) * wy);
+          }
+        }
+        return out;
+      };
+      A = fillLeft(A);
+      const wp = warp(st.A, st.F); wp.A = fillLeft(wp.A);
       const near4 = boxBlur(wp.A, 28), wide4 = boxBlur(wp.A, 70);
       const luz4 = (p: number) => { const g = Math.min(1, 1.15 * (0.9 * near4[p] + 0.9 * wide4[p])); return LAV.map((v) => v * g); };
       // 4. A inversão que o harry descreveu (#3622): a rampa escuro→claro da foto vira claro→escuro. O miolo fica preto,
