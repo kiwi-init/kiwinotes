@@ -147,17 +147,23 @@ final class MicSelection {
         return now.device == nil && whatChanged == "default input device"
     }
 
-    /// `audio.inputs` (agreed in #3248): the mics, which one is the default, and the output now. Only reads.
-    static func inputs() -> [String: Any] {
+    /// `audio.inputs` (agreed in #3248): the mics, which one is the default, the output now, and `using`: the mic a
+    /// dictation would record from now, with this choice, the lid and the devices (T3344: the Settings hint says it).
+    /// Only reads.
+    func inputs() -> [String: Any] {
         let devices = AudioDevices.all()
         let defaultInput = AudioDevices.defaultInput
         let inputs: [[String: Any]] = devices.filter(\.hasInput).map {
             ["uid": $0.uid, "name": $0.name, "transport": $0.transport.rawValue, "isDefault": $0.id == defaultInput]
         }
         let output = devices.first { $0.id == AudioDevices.defaultOutput }
+        var using = peek().fields
+        // With the system default, name the device it is now.
+        if using["systemDefault"] as? Bool == true, let d = devices.first(where: { $0.id == defaultInput }) { using["name"] = d.name }
         return [
             "inputs": inputs,
             "output": output.map { ["name": $0.name, "transport": $0.transport.rawValue] as [String: Any] } ?? NSNull(),
+            "using": using,
         ]
     }
 }

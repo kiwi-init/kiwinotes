@@ -369,7 +369,7 @@ final class Helper {
         case "llm.complete", "llm.prewarm":
             llm.handle(message) { [weak self] ok, error, fields in self?.reply(id, ok: ok, error: error, fields) }
         case "audio.inputs":
-            reply(id, ok: true, MicSelection.inputs())
+            reply(id, ok: true, mic.inputs())
         case "overlay.state":
             guard let name = message.string("state"), let phase = OverlayPhase(rawValue: name) else {
                 return reply(id, ok: false, error: "unknown_state")

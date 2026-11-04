@@ -31,6 +31,8 @@ const HEADLESS_AUDIO_INPUTS: AudioInputs = {
     { uid: "AppleUSBAudioEngine:Blue:Yeti:1", name: "Yeti Stereo Microphone", transport: "usb", isDefault: false },
   ],
   output: { name: "AirPods Pro", transport: "bluetooth" },
+  // O automático com o AirPods na saída e a tampa aberta: o mic do Mac (T3344).
+  using: { name: "Microfone (MacBook Pro)", transport: "builtin", systemDefault: false, fellBack: false, reason: "Bluetooth output: built-in mic" },
 };
 
 export interface HeadlessOptions {

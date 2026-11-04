@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { type AudioInputs, isMicrophoneChoice, sanitizeAudioInputs } from "../shared/microphone.ts";
+import { type AudioInputs, isMicrophoneChoice, sanitizeAudioInputs, sanitizeMicInUse } from "../shared/microphone.ts";
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { DEFAULT_SETTINGS, type SettingsPatch, sanitizeSettings } from "../store/settings.ts";
 import { listAudioInputs } from "./audio-inputs.ts";
@@ -56,6 +56,21 @@ describe("o que o helper manda no audio.inputs", () => {
     expect(sanitizeAudioInputs({ inputs: [] })).toEqual({ inputs: [], output: null });
   });
 
+  test("o using (T3344): por qual mic gravaria, só com o que vale; um helper antigo não manda e não quebra", () => {
+    const using = { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "lid closed: usb", extra: 1 };
+    expect(sanitizeAudioInputs({ inputs: [], output: null, using })).toEqual({
+      inputs: [],
+      output: null,
+      using: { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "lid closed: usb" },
+    });
+    expect(sanitizeAudioInputs({ inputs: [], output: null })).not.toHaveProperty("using");
+    expect(sanitizeMicInUse({ transport: "thunderbolt", fellBack: "sim" })).toEqual({
+      name: "", transport: null, systemDefault: false, fellBack: false, reason: "",
+    });
+    expect(sanitizeMicInUse("lixo")).toBeNull();
+    expect(sanitizeMicInUse(undefined)).toBeNull();
+  });
+
   test("helper de pé responde a lista; antigo (unknown_type) ou fora do ar dá null", async () => {
     const sent: unknown[] = [];
     expect(await listAudioInputs(async (c) => (sent.push(c), { ok: true, data: INPUTS }))).toEqual(INPUTS);
@@ -82,8 +97,8 @@ describe("as capacidades (contrato 1.18.0)", () => {
     return { call: (cap: string, args: unknown) => directInvoke(c, cap, args), saved, changed };
   }
 
-  test("o contrato tem o audio.inputs e subiu para 1.18.0", () => {
-    expect(UI_CONTRACT_VERSION).toBe("1.18.0");
+  test("o contrato tem o audio.inputs (1.18.0) e o using (1.19.0)", () => {
+    expect(UI_CONTRACT_VERSION).toBe("1.19.0");
     expect(UI_CAPABILITIES).toContain("audio.inputs");
   });
 

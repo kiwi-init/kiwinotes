@@ -29,8 +29,13 @@ export function micOptions(choice: MicrophoneChoice, inputs: AudioInputs | null)
   return out;
 }
 
-/** A linha de baixo do "Microfone": o que a escolha faz agora, com o fone que está na saída. */
+/**
+ * A linha de baixo do "Microfone": o que a escolha faz agora, com o fone que está na saída. Com o `using` do helper
+ * (T3344), diz o mic de verdade: com a tampa fechada o mic do Mac não grava, e o automático vai para outro.
+ */
 export function micHint(choice: MicrophoneChoice, inputs: AudioInputs | null): string {
+  const live = inputs?.using ? liveHint(choice, inputs) : null;
+  if (live) return live;
   const out = inputs?.output;
   if (choice === "auto") {
     return out?.transport === "bluetooth"
@@ -44,4 +49,21 @@ export function micHint(choice: MicrophoneChoice, inputs: AudioInputs | null): s
   if (inputs && !found) return "Desconectado. Até ele voltar, o ditado usa o Automático.";
   if (found?.transport === "bluetooth") return "Um microfone Bluetooth: enquanto você dita, o som do fone abaixa.";
   return "O ditado grava sempre por este microfone. Se ele sair, volta para o Automático.";
+}
+
+/** O texto a partir do mic que o helper usaria agora; null quando o texto de sempre já diz certo. */
+function liveHint(choice: MicrophoneChoice, inputs: AudioInputs): string | null {
+  const using = inputs.using!;
+  const bluetoothOut = inputs.output?.transport === "bluetooth";
+  const transport = using.transport ?? inputs.inputs.find((i) => i.isDefault)?.transport ?? null;
+  // O caso comum já tem o texto dele: o automático (ou o Mic do Mac) gravando pelo mic do Mac.
+  if (!using.fellBack && transport === "builtin" && !using.systemDefault && (choice === "auto" || choice === "builtin")) return null;
+  // O automático sem fone Bluetooth: o padrão do macOS, como sempre.
+  if (choice === "auto" && !bluetoothOut && !using.fellBack) return null;
+  if (choice === "system") return null;
+  const name = using.name || "microfone padrão do macOS";
+  const lid = using.reason.includes("lid closed") ? "Com a tampa fechada, o mic do Mac não grava. " : "";
+  const gone = using.fellBack ? "Desconectado. Até ele voltar, " : "Agora ";
+  const drop = transport === "bluetooth" && bluetoothOut ? ": enquanto você dita, o som do fone abaixa." : ".";
+  return `${lid}${gone}o ditado grava pelo ${name}${drop}`;
 }

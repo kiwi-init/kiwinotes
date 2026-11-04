@@ -9,6 +9,7 @@
 import { cleanup, llmSystemMessage } from "../cleanup/index.ts";
 import type { LlmBackend, LlmMode, Tone } from "../cleanup/types.ts";
 import type { AppRef, Command, Event, EventMessage, InsertSimulation, ResultMessage } from "../shared/ipc.ts";
+import { sanitizeMicInUse } from "../shared/microphone.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, NewHistoryEntry } from "../store/history.ts";
 import { expandSnippets, type Snippet } from "../store/snippets.ts";
@@ -48,6 +49,8 @@ export const NOT_PASTED: Record<string, string> = {
 export const SECURE_INPUT_NOTICE = "O texto também ficou no clipboard";
 /** O mic caiu no meio do ditado: o que ele ouviu até ali foi transcrito, em vez de ir para o lixo (T883). */
 export const MIC_LOST_NOTICE = "O microfone caiu: transcrevi até aqui";
+/** O mic escolhido nos Ajustes não estava conectado, e o ditado gravou por outro (T3344, spec #3202). */
+export const micFellBackNotice = (name: string) => `O microfone escolhido não está conectado: gravei pelo ${name}`;
 /** O mic caiu e o que ele ouviu não tinha fala. */
 export const MIC_LOST_EMPTY = "Sem áudio do microfone";
 /** A nota rápida deu certo: a pílula diz o título. */
@@ -87,7 +90,15 @@ export interface SimulatedDictation {
   simulate?: InsertSimulation;
 }
 
-type Recording = { app?: AppRef; lost?: string; note?: boolean; simulate?: InsertSimulation; done?: (o: DictationOutcome) => void };
+type Recording = {
+  app?: AppRef;
+  lost?: string;
+  note?: boolean;
+  simulate?: InsertSimulation;
+  /** O mic salvo não estava conectado e gravou por este (T3344): o fim avisa. */
+  fellBackTo?: string;
+  done?: (o: DictationOutcome) => void;
+};
 
 /** Um ditado que não chegou a texto (a gravação caiu, o STT falhou, o helper reiniciou). */
 const failed = (error: string): DictationOutcome => ({ text: "", pasted: false, skipped: "error", error, appMs: 0 });
@@ -129,7 +140,9 @@ export class Dictation {
         const app = e.app ?? this.activeApp;
         const note = e.target === "note" && !!this.options.notes;
         const cli = e.reason === "debug" ? this.pendingWav.shift() : undefined;
-        this.recordings.push({ app, note, simulate: cli?.simulate, done: cli?.done });
+        const mic = sanitizeMicInUse(e.microphone);
+        const fellBackTo = mic?.fellBack ? mic.name || "o microfone padrão" : undefined;
+        this.recordings.push({ app, note, simulate: cli?.simulate, done: cli?.done, ...(fellBackTo ? { fellBackTo } : {}) });
         // A nota não leva o tom do app da frente (um terminal daria o tom literal): o prewarm é o do tom padrão.
         this.prewarm(note ? undefined : app);
       }),
@@ -145,7 +158,7 @@ export class Dictation {
         const recording = this.recordings.shift();
         const app = recording?.app ?? this.activeApp;
         this.enqueue(async () => {
-          const outcome = await (recording?.note ? this.handleNote(e, app, recording.lost) : this.handle(e, app, recording?.lost, recording?.simulate));
+          const outcome = await (recording?.note ? this.handleNote(e, app, recording.lost) : this.handle(e, app, recording?.lost, recording?.simulate, recording?.fellBackTo));
           recording?.done?.(outcome);
         });
       }),
@@ -235,7 +248,7 @@ export class Dictation {
     void this.options.sidecar.send({ type: "llm.prewarm", system: llmSystemMessage(tone, this.dictionary) }).catch(() => {});
   }
 
-  private async handle(t: Transcript, app: AppRef | undefined, lost?: string, simulate?: InsertSimulation): Promise<DictationOutcome> {
+  private async handle(t: Transcript, app: AppRef | undefined, lost?: string, simulate?: InsertSimulation, fellBackTo?: string): Promise<DictationOutcome> {
     const started = performance.now();
     const empty = async () => {
       // Sem fala depois de o mic cair: o mesmo aviso de antes do T883, em vez de sumir sem dizer nada.
@@ -271,11 +284,13 @@ export class Dictation {
     // Um dryRun conta como colado: o teste segue o caminho de um ditado que deu certo.
     const pasted = insert.ok && (insert.data.pasted || insert.data.dryRun === true);
     if (!insert.ok) await this.overlay("error", "Não deu para colar o texto");
-    else if (insert.data.dryRun) await this.overlay("done");
+    // O mic escolhido não estava conectado (T3344): avisa por qual gravou. Também no dryRun, para o teste ver.
+    else if (insert.data.dryRun) await this.overlay("done", fellBackTo && micFellBackNotice(fellBackTo));
     else if (!insert.data.pasted) await this.overlay("error", NOT_PASTED[insert.data.reason ?? ""] ?? NOT_PASTED.no_focus);
     // Colou, mas o texto ficou também no clipboard: secure input, ou um foco que não parece campo de texto (T984).
     else if (insert.data.reason) await this.overlay("done", SECURE_INPUT_NOTICE);
     else if (lost) await this.overlay("done", MIC_LOST_NOTICE);
+    else if (fellBackTo) await this.overlay("done", micFellBackNotice(fellBackTo));
     else await this.overlay("done");
     const appMs = Math.round(performance.now() - started);
 

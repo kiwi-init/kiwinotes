@@ -44,7 +44,11 @@ export function MicrophoneRow() {
     setChoice(next);
     setFailed(false);
     api.settings.set({ microphone: next }).then(
-      (s) => setChoice(s.microphone),
+      (s) => {
+        setChoice(s.microphone);
+        // A dica diz o mic que o helper usaria com a escolha nova (T3344): pergunta de novo.
+        list();
+      },
       () => {
         setChoice(before);
         setFailed(true);

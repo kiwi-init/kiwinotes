@@ -213,7 +213,17 @@ export type Event =
    * `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). `target: "note"`: a nota
    * rápida (⌥ segurado ao apertar o atalho, T1320). O texto vira uma nota em vez de ser colado.
    */
-  | { type: "record.started"; reason: RecordReason; app?: AppRef; target?: "note" }
+  | {
+      type: "record.started";
+      reason: RecordReason;
+      app?: AppRef;
+      target?: "note";
+      /**
+       * Por qual mic grava (T3229): o que o helper escolheu, com `fellBack` quando o mic salvo não estava conectado e
+       * valeu o automático (o fim do ditado avisa, T3344). Um helper de antes do T3229 não manda.
+       */
+      microphone?: { uid?: string; name?: string; transport?: string; systemDefault?: boolean; fellBack?: boolean; reason?: string };
+    }
   /**
    * `lost`: a gravação acabou porque o mic caiu (`no_audio` ou `device_changed`), e o que ele ouviu até ali segue para
    * a transcrição como num fim normal (T883). Com menos de 0,3 s, vem `record.error` no lugar.
