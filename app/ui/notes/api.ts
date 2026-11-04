@@ -5,14 +5,41 @@
 import "../src/api.ts"; // o tipo do `window.engine`
 
 import { MockVault } from "./mock.ts";
-import type { NotesApi } from "./types.ts";
+import type { FoldersApi, NotesApi } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
 
 /** As capacidades pelo `window.engine.invoke`, com os nomes e os argumentos do contrato. */
-export function engineNotes(invoke: Invoke, on: (name: string, fn: (payload: unknown) => void) => () => void): NotesApi {
+export function engineNotes(
+  invoke: Invoke,
+  on: (name: string, fn: (payload: unknown) => void) => () => void,
+  has: (cap: string) => boolean = () => false,
+): NotesApi {
   const call = <T>(cap: string, args: object = {}) => invoke(cap, args) as Promise<T>;
+  // As de pastas e as fixadas vêm juntas no contrato 1.7.0 (T2468, #2493). Num engine antigo, a janela esconde o que
+  // depende delas; o `pinned` também, porque um campo desconhecido no settings.set dá E_INVALID.
+  const withFolders = has("folders.create");
+  const folders: FoldersApi | undefined = withFolders
+    ? {
+        create: (path) => call("folders.create", { path }),
+        rename: (path, newPath) => call("folders.rename", { path, newPath }),
+        move: (path, parent) => call("folders.move", { path, parent }),
+        delete: (path) => call("folders.delete", { path }),
+        moveNote: (path, folder) => call("notes.move", { path, folder }),
+        duplicateNote: (path) => call("notes.duplicate", { path }),
+        restore: (path) => call("notes.restore", { path }),
+        reveal: (path) => call("notes.reveal", { path }),
+      }
+    : undefined;
+  const pins = withFolders
+    ? {
+        list: () => call<{ pinned?: string[] }>("settings.get").then((s) => s.pinned ?? []),
+        set: (pinned: string[]) => call<{ pinned?: string[] }>("settings.set", { pinned }).then((s) => s.pinned ?? []),
+      }
+    : undefined;
   return {
+    ...(folders ? { folders } : {}),
+    ...(pins ? { pins } : {}),
     list: () => call("notes.list"),
     get: (path) => call("notes.get", { path }),
     save: (path, content, baseVersion) => call("notes.save", { path, content, baseVersion }),
@@ -29,7 +56,11 @@ export function engineNotes(invoke: Invoke, on: (name: string, fn: (payload: unk
 /** O vault desta janela, ou `null` quando o engine não tem as capacidades das notas. */
 export function notesApi(): NotesApi | null {
   const engine = window.engine;
-  if (engine) return engine.has("notes.list") ? engineNotes((c, a) => engine.invoke(c, a), (n, f) => engine.on(n, f)) : null;
+  if (engine) return engine.has("notes.list") ? engineNotes(
+          (c, a) => engine.invoke(c, a),
+          (n, f) => engine.on(n, f),
+          (c) => engine.has(c),
+        ) : null;
   if (!import.meta.env?.DEV) return null;
   // Só no Vite do navegador: os testes de interação simulam por aqui uma edição feita fora (no Obsidian).
   const mock = new MockVault();

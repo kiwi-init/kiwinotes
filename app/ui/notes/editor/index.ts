@@ -14,6 +14,7 @@ import type { MarkdownConfig } from "@lezer/markdown";
 import { externalUrl, linkAt } from "../links.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview } from "./livePreview.ts";
 import { tableEnter, tableTab } from "./table.ts";
+import { linkFromPaste, listIndent } from "./text.ts";
 
 export interface LinkTarget {
   /** O título da nota (o que aparece na lista). */
@@ -115,11 +116,39 @@ function tableCommand(step: (text: string, offset: number) => ReturnType<typeof 
   };
 }
 
+/** Tab e ⇧Tab num item de lista (T2469): desce ou sobe um nível, com os filhos (`listIndent`). */
+function listCommand(dir: 1 | -1) {
+  return (view: EditorView): boolean => {
+    const { state } = view;
+    const sel = state.selection.main;
+    const first = state.doc.lineAt(sel.from).number;
+    const last = state.doc.lineAt(sel.to).number;
+    const lines = state.doc.toString().split("\n");
+    const changes = listIndent(lines, first - 1, last - 1, dir);
+    if (!changes) return false;
+    if (!changes.length) return true;
+    view.dispatch(
+      state.update({
+        changes: changes.map((c) => {
+          const line = state.doc.line(c.line + 1);
+          return { from: line.from, to: line.from + c.remove, insert: " ".repeat(c.add) };
+        }),
+        scrollIntoView: true,
+        userEvent: "input.indent",
+      }),
+    );
+    return true;
+  };
+}
+
 const tableKeys = Prec.high(
   keymap.of([
     { key: "Tab", run: tableCommand((x, o) => tableTab(x, o, 1)) },
     { key: "Shift-Tab", run: tableCommand((x, o) => tableTab(x, o, -1)) },
     { key: "Enter", run: tableCommand(tableEnter) },
+    // Fora de tabela, num item de lista.
+    { key: "Tab", run: listCommand(1) },
+    { key: "Shift-Tab", run: listCommand(-1) },
   ]),
 );
 
@@ -232,7 +261,8 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
   return [
     history(),
     closeBrackets(),
-    markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax], addKeymap: true }),
+    // O colar-link é o nosso (o `paste` abaixo): o do lang-markdown não escapa "(" nem ")" do endereço nem "[" do texto.
+    markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax], addKeymap: true, pasteURLAsLink: false }),
     syntaxHighlighting(highlight),
     inlinePreview(links),
     tablePreview,
@@ -247,6 +277,16 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
       if (u.docChanged) opts.onChange(u.state.doc.toString());
     }),
     EditorView.domEventHandlers({
+      // Colar um link com texto selecionado vira [texto](link).
+      paste(e, view) {
+        const sel = view.state.selection.main;
+        if (sel.empty || view.state.selection.ranges.length > 1) return false;
+        const link = linkFromPaste(view.state.sliceDoc(sel.from, sel.to), e.clipboardData?.getData("text/plain") ?? "");
+        if (!link) return false;
+        e.preventDefault();
+        view.dispatch(view.state.replaceSelection(link), { userEvent: "input.paste", scrollIntoView: true });
+        return true;
+      },
       mousedown(e, view) {
         const el = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
         // Link mostrado como link: um clique abre. Com o cursor dentro (o link cru), só o ⌘-clique abre.

@@ -5,12 +5,19 @@
 import { splitFrontmatter, tagsOf } from "./frontmatter.ts";
 import { makeResolver, parseLinks as sharedLinks, resolveLink, rewriteLinks } from "../../src/shared/wikilinks.ts";
 import { folderOf, noteName } from "./links.ts";
-import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, SearchHit, VaultListing } from "./types.ts";
+import type { Backlink, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, VaultListing } from "./types.ts";
 
 interface Stored {
   content: string;
   version: number;
   mtime: string;
+  ctime: string;
+}
+
+/** O que foi para o `.kiwi-trash` de mentira, pelo caminho original: as notas e as pastas, para o `restore` (T2469). */
+interface InTrash {
+  notes: Map<string, Stored>;
+  dirs: string[];
 }
 
 const fold = (s: string) =>
@@ -21,8 +28,11 @@ const fold = (s: string) =>
 
 export class MockVault implements NotesApi {
   private notes = new Map<string, Stored>();
-  private folders = new Set<string>();
+  private dirs = new Set<string>();
   private listeners = new Set<(paths: string[]) => void>();
+  private trash = new Map<string, InTrash>();
+  /** O último "Mostrar no Finder" (para os testes). */
+  revealed: string | null = null;
   private clock: () => Date;
 
   constructor(seed: Record<string, string> = SAMPLE, options: { folders?: string[]; now?: () => Date } = {}) {
@@ -32,12 +42,13 @@ export class MockVault implements NotesApi {
   }
 
   private addFolder(folder: string) {
-    for (let f = folder; f; f = folderOf(f)) this.folders.add(f);
+    for (let f = folder; f; f = folderOf(f)) this.dirs.add(f);
   }
 
   private write(path: string, content: string): Stored {
     const old = this.notes.get(path);
-    const stored = { content, version: (old?.version ?? 0) + 1, mtime: this.clock().toISOString() };
+    const now = this.clock().toISOString();
+    const stored = { content, version: (old?.version ?? 0) + 1, mtime: now, ctime: old?.ctime ?? now };
     this.notes.set(path, stored);
     this.addFolder(folderOf(path));
     return stored;
@@ -51,7 +62,7 @@ export class MockVault implements NotesApi {
       title: noteName(path),
       folder: folderOf(path),
       mtime: s.mtime,
-      ctime: s.mtime,
+      ctime: s.ctime,
       size: new TextEncoder().encode(s.content).length,
       version: String(s.version),
       tags: tagsOf(s.content),
@@ -76,7 +87,7 @@ export class MockVault implements NotesApi {
 
   async list(): Promise<VaultListing> {
     return {
-      folders: [...this.folders].sort((a, b) => a.localeCompare(b, "pt-BR")),
+      folders: [...this.dirs].sort((a, b) => a.localeCompare(b, "pt-BR")),
       notes: [...this.notes.keys()].map((p) => this.meta(p)),
     };
   }
@@ -125,14 +136,128 @@ export class MockVault implements NotesApi {
     this.notes.delete(path);
     this.notes.set(newPath, { ...s, version: s.version + 1, mtime: this.clock().toISOString() });
     this.addFolder(folderOf(newPath));
+    this.repin((p) => (p === path ? newPath : p));
     this.emit(changed);
     return { meta: this.meta(newPath), updatedLinks };
   }
 
   async delete(path: string): Promise<true> {
-    if (!this.notes.delete(path)) throw new Error(`E_NOT_FOUND: ${path}`);
+    const s = this.notes.get(path);
+    if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
+    this.notes.delete(path);
+    this.trash.set(path, { notes: new Map([[path, s]]), dirs: [] });
+    this.unpin((p) => p === path);
     this.emit([path]);
     return true;
+  }
+
+  /** Como o engine (#2493): as fixadas seguem a nota que mudou de path e saem quando ela some. */
+  private repin(swap: (p: string) => string) {
+    this.pinned = this.pinned.map(swap);
+  }
+  private unpin(gone: (p: string) => boolean) {
+    this.pinned = this.pinned.filter((p) => !gone(p));
+  }
+
+  /** Muda o path de várias notas de uma vez (renomear ou mover uma pasta), reescrevendo os [[links]] de quem cita. */
+  private movePaths(moves: [string, string][]): number {
+    let updated = 0;
+    for (const [from, to] of moves) {
+      const before = [...this.notes.keys()];
+      const after = before.map((p) => (p === from ? to : p));
+      for (const p of before) {
+        if (p === from) continue;
+        const r = rewriteLinks(this.notes.get(p)!.content, from, to, before, after);
+        if (r.count) {
+          updated += r.count;
+          this.write(p, r.content);
+        }
+      }
+      const s = this.notes.get(from)!;
+      this.notes.delete(from);
+      this.notes.set(to, { ...s, version: s.version + 1 });
+      this.addFolder(folderOf(to));
+      this.repin((p) => (p === from ? to : p));
+    }
+    return updated;
+  }
+
+  private pinned: string[] = [];
+  /** As fixadas (nas settings, #2475). Como o engine, o mock tira o que não existe mais. */
+  readonly pins = {
+    list: async () => (this.pinned = this.pinned.filter((p) => this.notes.has(p))),
+    set: async (paths: string[]) => (this.pinned = [...new Set(paths)].filter((p) => this.notes.has(p))),
+  };
+
+  /** As de pastas (T2468), na forma de #2475. */
+  readonly folders: FoldersApi = {
+    create: async (path) => {
+      const clean = path.replace(/^\/+|\/+$/g, "");
+      if (!clean || clean.split("/").some((p) => !p || p.startsWith(".") || p === "..")) throw new Error("E_BAD_ARGS");
+      if (this.dirs.has(clean)) throw new Error(`E_EXISTS: ${clean}`);
+      this.addFolder(clean);
+      this.emit([clean]);
+      return { path: clean };
+    },
+    rename: async (path, newPath) => this.moveFolder(path, newPath),
+    move: async (path, parent) => {
+      const name = path.slice(path.lastIndexOf("/") + 1);
+      return this.moveFolder(path, parent ? `${parent}/${name}` : name);
+    },
+    delete: async (path) => {
+      if (!this.dirs.has(path)) throw new Error(`E_NOT_FOUND: ${path}`);
+      const inside = (p: string) => p === path || p.startsWith(`${path}/`);
+      const notes = new Map([...this.notes].filter(([p]) => inside(folderOf(p))));
+      const dirs = [...this.dirs].filter(inside);
+      for (const p of notes.keys()) this.notes.delete(p);
+      for (const d of dirs) this.dirs.delete(d);
+      this.trash.set(path, { notes, dirs });
+      this.unpin((p) => notes.has(p));
+      this.emit([path, ...notes.keys()]);
+      return true as const;
+    },
+    moveNote: async (path, folder) => {
+      const name = path.slice(path.lastIndexOf("/") + 1);
+      return this.rename(path, folder ? `${folder}/${name}` : name);
+    },
+    duplicateNote: async (path) => {
+      const n = this.note(path);
+      return this.create(n.title, n.folder, n.content);
+    },
+    restore: async (path) => {
+      const t = this.trash.get(path);
+      if (!t) throw new Error(`E_NOT_FOUND: ${path}`);
+      for (const p of t.notes.keys()) if (this.notes.has(p)) throw new Error(`E_EXISTS: ${p}`);
+      for (const d of t.dirs) this.dirs.add(d);
+      for (const [p, s] of t.notes) {
+        this.notes.set(p, s);
+        this.addFolder(folderOf(p));
+      }
+      this.trash.delete(path);
+      this.emit([path, ...t.notes.keys()]);
+      return { path };
+    },
+    reveal: async (path) => {
+      if (!this.notes.has(path) && !this.dirs.has(path)) throw new Error(`E_NOT_FOUND: ${path}`);
+      this.revealed = path;
+      return true as const;
+    },
+  };
+
+  private async moveFolder(path: string, newPath: string): Promise<FolderMoved> {
+    if (!this.dirs.has(path)) throw new Error(`E_NOT_FOUND: ${path}`);
+    if (newPath === path) return { path, moved: 0, updatedLinks: 0 };
+    if (newPath.startsWith(`${path}/`)) throw new Error("E_BAD_ARGS: para dentro de si mesma");
+    if (this.dirs.has(newPath)) throw new Error(`E_EXISTS: ${newPath}`);
+    const inside = (p: string) => p === path || p.startsWith(`${path}/`);
+    const swap = (p: string) => newPath + p.slice(path.length);
+    const moves = [...this.notes.keys()].filter((p) => inside(folderOf(p))).map((p): [string, string] => [p, swap(p)]);
+    const dirs = [...this.dirs].filter(inside);
+    for (const d of dirs) this.dirs.delete(d);
+    for (const d of dirs) this.addFolder(swap(d));
+    const updatedLinks = this.movePaths(moves);
+    this.emit([path, newPath, ...moves.flat()]);
+    return { path: newPath, moved: moves.length, updatedLinks };
   }
 
   async search(query: string, limit = 20): Promise<SearchHit[]> {
