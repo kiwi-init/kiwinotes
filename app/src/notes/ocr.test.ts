@@ -154,6 +154,9 @@ describe("a busca acha a nota pelo texto do anexo", () => {
     // Os filtros da busca (T2660): a frase exata, o "-" que exclui, e o path: que é da nota.
     expect((await attachmentHits(ocr, vault, '"medidas 3x4"', [], 20)).map((h) => h.path)).toEqual(["Casa.md"]);
     expect(await attachmentHits(ocr, vault, '"3x4 medidas"', [], 20)).toEqual([]);
+    // Uma frase que atravessa a quebra de linha da imagem ("…sala" / "Medidas…") casa (T2789).
+    expect((await attachmentHits(ocr, vault, '"da sala medidas"', [], 20)).map((h) => h.path)).toEqual(["Casa.md"]);
+    expect((await attachmentHits(ocr, vault, '"sala  medidas"', [], 20)).map((h) => h.path)).toEqual(["Casa.md"]);
     expect(await attachmentHits(ocr, vault, "planta -medidas", [], 20)).toEqual([]);
     expect(await attachmentHits(ocr, vault, "planta path:Casa", [], 20)).toEqual([]);
     expect(await attachmentHits(ocr, vault, "inexistente", [], 20)).toEqual([]);

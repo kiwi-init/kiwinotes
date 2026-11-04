@@ -18,7 +18,7 @@ import { listAttachments, resolveAttachment } from "./attachments.ts";
 import { inside } from "./paths.ts";
 import type { NoteMeta, SearchHit } from "./vault.ts";
 import { parseLinks } from "../shared/wikilinks.ts";
-import { parseQuery } from "../shared/query.ts";
+import { oneSpace, parseQuery } from "../shared/query.ts";
 
 /** O que o helper devolve por arquivo. */
 export interface OcrLine {
@@ -231,7 +231,9 @@ export class OcrIndex {
     for (const [p, v] of this.byPath) {
       const text = v.entry?.text;
       if (!text) continue;
-      const folded = fold(text);
+      // O OCR devolve uma linha por linha lida: uma "frase" que atravessa duas linhas da imagem tem que casar, então
+      // as quebras viram um espaço, como no `inText` das notas (#98, T2789).
+      const folded = oneSpace(fold(text));
       if (terms.every((t) => folded.includes(t)) && !not.some((t) => folded.includes(t))) out.push({ path: p, snippet: snippetOf(text, terms[0]!) });
     }
     return out.sort((a, b) => a.path.localeCompare(b.path));
