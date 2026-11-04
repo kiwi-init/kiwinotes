@@ -1,13 +1,14 @@
 // Kiwi Notes: processo principal. Vive na barra de menu, sem ícone no Dock.
 import path from "node:path";
 
-import { AgentControl, PATHS, Tray, Utils } from "electrobun/bun";
+import { AgentControl, PATHS, Tray, Updater, Utils } from "electrobun/bun";
 
 import { UI_WINDOWS } from "../shared/ui-contract.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
 import { stores } from "./stores.ts";
+import { AppUpdates, updateMenuLabel } from "./updates.ts";
 import { openWindows, showWindow, type WindowName } from "./windows.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
@@ -33,7 +34,14 @@ export function statusLabel(s: SessionStatus): string {
   return "Pronto para ditar";
 }
 
+// A atualização automática (T1969): o menu ganha "Atualizar e reiniciar" quando uma versão nova, já conferida, está
+// pronta. Nada reinicia sem o clique.
+const updates = new AppUpdates({ updater: Updater });
+let appVersion = "";
+void Updater.getLocalInfo().then((i) => (appVersion = i.version));
+
 function setMenu(s: SessionStatus) {
+  const update = updateMenuLabel(updates.status(), appVersion);
   tray.setMenu([
     { type: "normal", label: statusLabel(s), action: "status", enabled: false },
     // Enquanto faltar alguma permissão: pede a próxima (o diálogo do macOS, ou os Ajustes no lugar certo).
@@ -45,6 +53,7 @@ function setMenu(s: SessionStatus) {
     { type: "normal", label: "Histórico…", action: "history" },
     { type: "normal", label: "Configurações…", action: "settings" },
     { type: "divider" },
+    ...(update ? [{ type: "normal" as const, label: update, action: "update", enabled: updates.status().kind === "ready" }] : []),
     { type: "normal", label: "Sair do Kiwi Notes", action: "quit" },
   ]);
 }
@@ -57,6 +66,8 @@ dictation.onStatus(setMenu);
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
 dictation.sidecar.on("hotkey.notes", () => void showWindow("notes"));
 dictation.start();
+updates.onChange(() => setMenu(dictation.status()));
+void updates.start();
 
 tray.on("tray-clicked", (event) => {
   const action = (event as { data?: { action?: string } }).data?.action;
@@ -69,12 +80,17 @@ tray.on("tray-clicked", (event) => {
     case "permissions":
       void dictation.permissions.askNext();
       break;
+    case "update":
+      // O Electrobun sai do processo, troca o .app e reabre o novo; o helper e a trava saem no "exit", abaixo.
+      void updates.apply();
+      break;
     case "quit":
       quit();
   }
 });
 
 function quit(): never {
+  updates.stop();
   dictation.stop();
   tray.remove();
   releaseInstance(stores.dir);
@@ -83,6 +99,12 @@ function quit(): never {
 
 // Um build novo pede para este sair (T992): sai limpo, parando o helper e soltando o socket.
 process.on("SIGTERM", () => quit());
+// Qualquer saída, inclusive a do Updater (T1969), que sai sem passar pelo quit(): o helper não fica órfão e a trava
+// de instância é solta para o app novo.
+process.on("exit", () => {
+  dictation.stop();
+  releaseInstance(stores.dir);
+});
 
 // Com ELECTROBUN_AGENT_CONTROL=1 (o `bun dev` liga), agentes abrem as janelas
 // sem clicar na barra de menu:

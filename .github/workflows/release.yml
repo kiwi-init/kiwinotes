@@ -95,10 +95,23 @@ jobs:
       - name: Test
         run: bun test
 
+      # O feed da atualização automática (T1969, ADR 0008): versão final no `releases/latest`, rc no release fixo
+      # `updates-rc`. Fora de um tag (ensaio), vazio: o app sai sem baseUrl e nunca checa.
+      - name: Update feed
+        id: feed
+        run: |
+          echo "url=$(bun scripts/update-feed.ts url "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY")" >> "$GITHUB_OUTPUT"
+          echo "version=$(bun scripts/update-feed.ts version "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
+
       - name: Build
         env:
           KIWI_HELPER_CACHED: ${{ steps.helper.outputs.cache-hit == 'true' && '1' || '' }}
-        run: bun run build
+          KIWI_UPDATE_URL: ${{ steps.feed.outputs.url }}
+          # A versão do tag (`0.1.0-rc3`): o app compara por ela antes de oferecer uma atualização (T1969).
+          KIWI_VERSION: ${{ steps.feed.outputs.version }}
+        run: |
+          echo "update feed: ${KIWI_UPDATE_URL:-(none)}, version: ${KIWI_VERSION:-(package.json)}"
+          bun run build
 
       - name: Sign, notarize and package
         shell: bash
@@ -149,7 +162,11 @@ jobs:
         with:
           name: ${{ (github.event_name == 'workflow_dispatch' && inputs.rehearsal) && 'rehearsal' || 'release' }}-mac
           retention-days: ${{ (github.event_name == 'workflow_dispatch' && inputs.rehearsal) && 3 || 30 }}
-          path: app/out/*.dmg
+          # O .dmg, e o que o Updater baixa: o mesmo app num .tar.zst e o manifesto (T1969).
+          path: |
+            app/out/*.dmg
+            app/out/*.tar.zst
+            app/out/*-update.json
           if-no-files-found: error
 
   # Compila só o helper num push na `main` e guarda o app/.helper no cache da `main`, de onde o run do tag restaura
@@ -205,5 +222,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pre=""; [[ "$GITHUB_REF_NAME" == *-* ]] && pre="--prerelease"
-          gh release create "$GITHUB_REF_NAME" out/*.dmg --repo "$GITHUB_REPOSITORY" --title "Kiwi Notes $GITHUB_REF_NAME" --generate-notes $pre
+          set -euo pipefail
+          shopt -s nullglob
+          dmg=(out/*.dmg); tar=(out/*.tar.zst); manifest=(out/*-update.json)
+          [[ ${#dmg[@]} == 1 && ${#tar[@]} == 1 && ${#manifest[@]} == 1 ]] || { echo "expected 1 dmg, 1 tar.zst and 1 update.json in out/"; ls -la out; exit 1; }
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            gh release create "$GITHUB_REF_NAME" "${dmg[@]}" "${tar[@]}" "${manifest[@]}" --repo "$GITHUB_REPOSITORY" --title "Kiwi Notes $GITHUB_REF_NAME" --generate-notes --prerelease
+          else
+            # Uma versão final vira o "latest": é dali que as versões finais instaladas leem o feed.
+            gh release create "$GITHUB_REF_NAME" "${dmg[@]}" "${tar[@]}" "${manifest[@]}" --repo "$GITHUB_REPOSITORY" --title "Kiwi Notes $GITHUB_REF_NAME" --generate-notes --latest
+          fi
+
+      # O feed das rc (T1969): um release fixo, sobrescrito a cada rc e a cada versão final, para quem testa as rc
+      # receber a próxima e, no fim, a final. O tar sobe antes do manifesto: quem lê o manifesto novo já acha o tar.
+      - name: Update the rc feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view updates-rc --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create updates-rc --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --title "Feed de atualização (rc)" \
+              --notes "Não instale daqui. É o feed da atualização automática das versões de teste (rc), sobrescrito a cada release (T1969). Os instaladores ficam nos releases de cada versão."
+          fi
+          gh release upload updates-rc out/*.tar.zst --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload updates-rc out/*-update.json --repo "$GITHUB_REPOSITORY" --clobber

@@ -6,7 +6,9 @@ export default {
   app: {
     name: "Kiwi Notes",
     identifier: "app.kiwinotes.desktop",
-    version: pkg.version,
+    // A versão do tag (`0.1.0-rc3`), que o CI passa em KIWI_VERSION (T1969): é por ela que o app sabe se o que o feed
+    // oferece é mais novo. Fora do CI, a do package.json.
+    version: process.env.KIWI_VERSION || pkg.version,
   },
   build: {
     mainProcess: "bun",
@@ -35,6 +37,14 @@ export default {
     postWrap: "./scripts/info-plist.ts",
     // Falha o build se algum .app que sai dele (build/, artifacts/, .dmg) não passa no codesign --verify --strict (T762).
     postPackage: "./scripts/verify-signature.ts",
+  },
+  // A atualização automática (T1969, ADR 0008): o feed do Updater é o GitHub Releases. Quem diz o endereço é o CI
+  // (`KIWI_UPDATE_URL`, pelo tag): sem ele (build local, ensaio sem tag) o app sai sem baseUrl e nunca checa.
+  release: {
+    baseUrl: process.env.KIWI_UPDATE_URL ?? "",
+    // Sem patch: o do Electrobun sairia do app antes do release.ts assinar e notarizar, e o app baixado não seria o do
+    // .dmg. O Updater baixa o app inteiro, o mesmo do .dmg, e o app confere a assinatura antes de oferecer.
+    generatePatch: false,
   },
   runtime: {
     // A menu bar app: closing the last window keeps it running.
