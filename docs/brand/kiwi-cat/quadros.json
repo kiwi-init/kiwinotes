@@ -1,0 +1,82 @@
+[
+  {
+    "frame": 0,
+    "cat_seconds": 0.0,
+    "intro_seconds": 3.7,
+    "name": "A emenda",
+    "caption": "O prisma termina neste círculo de vidro.",
+    "file": "quadros/01-f000.png"
+  },
+  {
+    "frame": 48,
+    "cat_seconds": 0.8,
+    "intro_seconds": 4.5,
+    "name": "A névoa nasce",
+    "caption": "A nuvem redonda começa a girar.",
+    "file": "quadros/02-f048.png"
+  },
+  {
+    "frame": 112,
+    "cat_seconds": 1.8666666666666667,
+    "intro_seconds": 5.566666666666666,
+    "name": "As orelhas brotam",
+    "caption": "A esquerda levanta; a direita vem depois.",
+    "file": "quadros/03-f112.png"
+  },
+  {
+    "frame": 150,
+    "cat_seconds": 2.5,
+    "intro_seconds": 6.2,
+    "name": "As orelhas assentam",
+    "caption": "A cabeça toma a forma da referência.",
+    "file": "quadros/04-f150.png"
+  },
+  {
+    "frame": 176,
+    "cat_seconds": 2.933333333333333,
+    "intro_seconds": 6.633333333333333,
+    "name": "Olhos sonolentos",
+    "caption": "Duas frestas brancas, nítidas e sem brilho.",
+    "file": "quadros/05-f176.png"
+  },
+  {
+    "frame": 220,
+    "cat_seconds": 3.6666666666666665,
+    "intro_seconds": 7.366666666666667,
+    "name": "Acordando aos poucos",
+    "caption": "Depois de fechar, os olhos abrem mais.",
+    "file": "quadros/06-f220.png"
+  },
+  {
+    "frame": 268,
+    "cat_seconds": 4.466666666666667,
+    "intro_seconds": 8.166666666666668,
+    "name": "Olhos abertos",
+    "caption": "Os círculos chegam ao tamanho final.",
+    "file": "quadros/07-f268.png"
+  },
+  {
+    "frame": 336,
+    "cat_seconds": 5.6,
+    "intro_seconds": 9.3,
+    "name": "O corpo se forma",
+    "caption": "A névoa desce e ganha densidade.",
+    "file": "quadros/08-f336.png"
+  },
+  {
+    "frame": 390,
+    "cat_seconds": 6.5,
+    "intro_seconds": 10.2,
+    "name": "O aro acende",
+    "caption": "Ciano e púrpura surgem por dentro do topo.",
+    "file": "quadros/09-f390.png"
+  },
+  {
+    "frame": 480,
+    "cat_seconds": 8.0,
+    "intro_seconds": 11.7,
+    "name": "Pronto",
+    "caption": "A v2 assenta; a janela pode dar lugar ao hub.",
+    "file": "quadros/10-f480.png"
+  }
+]
