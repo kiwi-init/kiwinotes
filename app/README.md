@@ -88,7 +88,7 @@ bun run cli ui notes --script passos.json --out /tmp/prints --data DIR
 ] }
 ```
 
-Os roteiros prontos ficam em `scripts/ui-scripts/`. Por exemplo, `bun run cli ui hub --script scripts/ui-scripts/hub-notas-teclas.json` confere que o ⌘N e o ⌘K das Notas não agem com outra seção do hub na tela (T2200).
+Os roteiros prontos ficam em `scripts/ui-scripts/`. Por exemplo, `bun run cli ui hub --script scripts/ui-scripts/hub-notas-teclas.json` confere que o ⌘N e o ⌘K das Notas não agem com outra seção do hub na tela (T2200). A intro tem três: `intro-fim` (o padrão da CLI, Reduzir movimento, termina em menos de 8 s), `intro-pular` (um clique fecha) e `intro-movimento` (T4136), que toca a intro inteira com animação, uns 12 s, e por isso roda com `--motion`: `bun run cli ui intro --script scripts/ui-scripts/intro-movimento.json --motion`.
 
 Na primeira vez: `bunx playwright-core install webkit`. Num worktree novo: `bun run prepare:eb`, sem o qual o Vite não builda.
 
