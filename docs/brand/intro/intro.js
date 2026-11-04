@@ -7,7 +7,6 @@
   const stage = document.getElementById("stage");
   const fit = document.getElementById("fit");
   const cat = document.getElementById("cat-layer");
-  const orb = document.getElementById("orb");
   // O "Reduzir movimento" do macOS, ou o Movimento "Reduzido" da Aparência do app (T2503): a cópia que as janelas
   // guardam, na hora, e o valor do engine antes de a linha do tempo começar.
   let reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -17,7 +16,6 @@
   // No app: a UI subiu (o AppEngine conta o boot como bom; sem isso, em 5 s ele volta para a UI anterior).
   const engine = window.engine;
   engine?.ready();
-  const catSpeed = Number(params.get("gato")) || 1;
 
   const resize = () => fit.style.transform = `scale(${Math.min(innerWidth, innerHeight) * 0.86 / 1024})`;
   addEventListener("resize", resize);
@@ -66,7 +64,7 @@
     }
     return 3 * y1 * u * (1 - u) ** 2 + 3 * y2 * u * u * (1 - u) + u ** 3;
   };
-  const ease = bezier(.45, 0, .2, 1), pop = bezier(.3, 1.35, .5, 1), implode = bezier(.6, 0, .9, .4);
+  const ease = bezier(.45, 0, .2, 1), pop = bezier(.3, 1.35, .5, 1);
   const seg = (t, from, dur, f) => f(Math.min(1, Math.max(0, (t - from) / dur)));
   // As três lâminas abrem como o logo da Kiwi Init (T3898, roteiro.md › "A emenda com o prisma"): em escada na
   // diagonal para a direita e para cima (14 e 17 unidades por lâmina, no viewBox de 96 do logo, uns 51° da
@@ -77,11 +75,14 @@
   // (FINA) enquanto a pilha abre. A pilha fica centrada na lâmina do meio.
   // O harry quer 1:1 com o ícone do Channels (#3988): nele as três lâminas são paralelas, com a borda longa descendo
   // para a direita a ~28° na tela, e finas (uns 4,5:1). ANG é o ângulo na tela (negativo = desce para a direita).
-  const GAP = 26, DEPTH = 11, END = 3.35, UNIT = 520 / 80, FINA = 0.45;
+  const GAP = 26, DEPTH = 11, END = 3.4, UNIT = 520 / 80, FINA = 0.45;
   const STEP = { x: 14 * UNIT, y: 17 * UNIT }, ANG = [-28, -28, -28], SHORT = [22.2 / 27.7, 24.9 / 27.7, 1];
   const pose = (t, slab, k) => {
     const up = seg(t, 1.55, 0.5, ease), turn = seg(t, 2.0, 0.6, ease);
-    const out = seg(t, 2.0, 0.6, pop) * (1 - seg(t, 2.68, 0.28, implode));
+    // Sem implosão (#4240): depois de abrir, a pilha se expande no ícone do Channels (2,6–3,1 s) e fica; a intro
+    // termina nela, e o app abre.
+    const out = seg(t, 2.0, 0.6, pop);
+    const expand = 1 + 0.22 * seg(t, 2.6, 0.5, pop);
     const degrau = (1 - slab) * out;
     const sy = 1 + (FINA * SHORT[slab] - 1) * out;
     // O leque é o ângulo NA TELA. A rotação em X (58°·up) deita a pilha e achata o ângulo aplicado no plano (y vira
@@ -112,7 +113,7 @@
     for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (proj(mid) < alvo) lo = mid; else hi = mid; }
     const giro = (lo + hi) / 2;
     const z = (slab === 0 ? GAP * out : slab === 2 ? -1 - (GAP - 1) * out : 0) - DEPTH * k;
-    return `translate(${(STEP.x * degrau).toFixed(2)}px, ${(-STEP.y * degrau).toFixed(2)}px) perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(TILT * up).toFixed(3)}deg) rotateY(${(YAW * up).toFixed(3)}deg) rotateZ(${(-giro).toFixed(3)}deg) scale(${(1 - 0.06 * up).toFixed(4)}, ${((1 - 0.06 * up) * sy).toFixed(4)}) translateZ(${z.toFixed(2)}px) translateX(${(-2 * k).toFixed(1)}px)`;
+    return `scale(${expand.toFixed(4)}) translate(${(STEP.x * degrau).toFixed(2)}px, ${(-STEP.y * degrau).toFixed(2)}px) perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(TILT * up).toFixed(3)}deg) rotateY(${(YAW * up).toFixed(3)}deg) rotateZ(${(-giro).toFixed(3)}deg) scale(${(1 - 0.06 * up).toFixed(4)}, ${((1 - 0.06 * up) * sy).toFixed(4)}) translateZ(${z.toFixed(2)}px) translateX(${(-2 * k).toFixed(1)}px)`;
   };
   const scene = document.getElementById("scene");
   const layers = [];
@@ -147,15 +148,9 @@
   let timers = [];
   const later = (s, fn) => timers.push(setTimeout(fn, s * 1000));
 
-  // O Kiwi-cat do Rive (T3154): na janela do app, com o `kiwi-cat.riv` no pack, o app/ui/intro/rive.ts põe aqui o gato
-  // do Rive, que toca no lugar do gato em SVG e avisa quando acaba. Sem ele (o protótipo, ou o pack sem o .riv), nada
-  // muda. No "Reduzir movimento" e no `?t=` fica o SVG.
-  const riveCat = !params.has("t") && window.kiwiRiveCat;
-
-  function startCat() {
-    cat.classList.remove("paused");
-    if (catSpeed !== 1) for (const a of cat.getAnimations({ subtree: true })) a.playbackRate = catSpeed;
-  }
+  // A intro é só a do Kiwi Init (#4240): o prisma abre e se expande no ícone do Channels, e o app abre. O gato
+  // (o #cat-layer que o gerar.ts embute) fica desligado; a intro dele está pausada (T3720).
+  const FIM = 3.6;
 
   function play() {
     for (const t of timers) clearTimeout(t);
@@ -164,40 +159,24 @@
     document.body.classList.remove("done");
     stage.classList.remove("out");
     cat.classList.add("off", "paused");
-    orb.classList.remove("grow");
     stage.classList.remove("play");
     for (const el of outline.children) el.style.animation = "none";
     void stage.offsetWidth; // recomeça as animações do zero
-    cat.classList.remove("off");
     for (const el of outline.children) el.style.animation = el.dataset.anim;
+    animatePrism();
     if (reduced) {
-      startCat();
-      later(2.5, finish);
+      // Reduzir movimento: o ícone pronto (a pose final do prisma), com o fade do palco, e o app abre.
+      for (const a of prism) { a.pause(); a.currentTime = END * 1000; }
+      later(1.5, finish);
       return;
     }
     stage.classList.add("play");
-    animatePrism();
-    // 3,7 s: a bola cresce junto com o círculo do gato (o circleIn dele), e o gato começa.
-    if (riveCat) {
-      later(3.7, () => {
-        orb.classList.add("grow");
-        riveCat.start(finish).then((ok) => {
-          if (ok) { cat.classList.add("off"); return; }
-          if (ending) return; // pulou enquanto o Rive carregava
-          // O Rive não carregou: fica o gato em SVG, no tempo dele.
-          startCat();
-          later(8.4 / catSpeed, finish);
-        });
-      });
-      return;
-    }
-    later(3.7, () => { orb.classList.add("grow"); startCat(); });
-    // O gato termina a abertura em ~7,8 s (no ritmo dele) e fica um instante pronto.
-    later(3.7 + 8.4 / catSpeed, finish);
+    // O prisma termina expandido no ícone, e a intro acaba nele.
+    later(FIM, finish);
   }
 
   let finished = false;
-  // O fim vem uma vez por vez que toca: do último frame, do clique para pular ou do limite do gato do Rive.
+  // O fim vem uma vez por vez que toca: do último frame ou do clique para pular.
   let ending = false;
   function finish() {
     if (ending) return;
@@ -233,13 +212,9 @@
     const t = Number(params.get("t"));
     for (const x of timers) clearTimeout(x);
     timers = [];
-    if (t >= 3.7 && !reduced) { orb.classList.add("grow"); startCat(); }
     for (const a of document.getAnimations()) {
       a.pause();
-      const target = a.effect && a.effect.target;
-      const inCat = cat.contains(target);
-      const late = t >= 3.7 && (inCat || target === orb);
-      a.currentTime = inCat && t < 3.7 ? 0 : Math.max(0, (late ? (t - 3.7) * (inCat ? catSpeed : 1) : t) * 1000);
+      a.currentTime = Math.max(0, t * 1000);
     }
   }
 })();

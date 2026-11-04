@@ -4,7 +4,7 @@ A animação de abertura do spec #2078, aprovado pelo harry (#2111): Kiwi init �
 em HTML para o harry aprovar. A janela `intro` no app vem numa task própria, ligada ao hub (`HubDeps.intro`, T2121).
 
 **Para ver:** abra `intro.html` no Safari. Um clique pula, e "De novo" toca outra vez.
-- `?gato=2`: a abertura do gato no dobro da velocidade.
+- `?t=2.5`: congela o frame daquele instante (o `?gato=` saiu com a intro do gato).
 - `?t=2.5`: congela o frame daquele instante.
 
 ![Os 6 tempos](prancha.png)
@@ -77,13 +77,11 @@ A janela `intro` do app sai daqui também: o `gerar.ts` escreve `app/ui/intro/in
 - `intro.html`: o gerado, o protótipo que abre sozinho no navegador. A janela do app é `app/ui/intro/`, gerada junto.
 - `prancha.png`: os 6 tempos.
 
-## O Kiwi-cat do Rive (T3154, spec #3133)
-A janela do app já sabe tocar o gato feito no Rive. **A troca é pôr o `kiwi-cat.riv` em `app/ui/intro/`**, e só com o
-ok do harry na animação. Sem o arquivo, a intro é esta, e o runtime nem entra no pack.
-- `app/ui/intro/rive.ts` carrega o `.riv` durante o prisma e, aos 3,7 s, toca ele no lugar do gato em SVG.
-- O runtime é o `@rive-app/canvas-single` (o WASM vem dentro do JS, ~3 MB): a VIEWS_CSP não deixa `fetch`, então o
-  `.wasm` e o `.riv` não podem ser baixados à parte.
-- **O combinado com o arquivo (T3151):** o artboard padrão, a state machine `intro` e, no view model padrão, um trigger
-  `done` no fim da abertura, e as fontes e imagens **embutidas** ("Embedded" no export). O runtime não busca nada no CDN
-  do Rive (`enableRiveAssetCDN: false`). Sem o trigger, a intro segue em 8,4 s, como o gato em SVG.
-- No "Reduzir movimento", no `?t=` e se o Rive não carregar em 1,5 s, fica o gato em SVG.
+## A intro é só a do Kiwi Init (T3898, #4240)
+O harry pausou a intro do gato (T3720, PR #127, sem merge). A intro agora termina no prisma: as três lâminas de vidro
+abrem em escada diagonal como o ícone do Channels (paralelas, a borda longa a −28° na tela, com o arco-íris pelas
+três), a pilha se expande no ícone (2,6–3,1 s) e fica, e aos 3,6 s a intro acaba e o app abre. Não há mais a
+implosão no círculo nem a emenda aos 3,7 s. O `#cat-layer` que o `gerar.ts` embute fica desligado.
+- `medir-prisma.ts` confere o ângulo das lâminas na tela aos 2,5 s (sai com 1 se passar de 2° do alvo).
+- Reduzir movimento: o ícone pronto (a pose final do prisma), com o fade do palco, e o app abre em 1,5 s.
+- O que a seção dos 6 tempos e a medida dizem do gato vale para o `intro.html` de antes; a parte do prisma segue igual.
