@@ -7,6 +7,7 @@ import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
 
+import { isAttachmentName } from "../../../src/shared/attachments.ts";
 import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
 import { embedLine } from "./attachments.ts";
@@ -50,24 +51,15 @@ function touches(state: EditorState, from: number, to: number): boolean {
   return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
 }
 
-function hasNode(node: SyntaxNode, names: Set<string>): boolean {
-  const c = node.cursor();
-  do if (names.has(c.name)) return true;
-  while (c.next() && c.from < node.to);
-  return false;
-}
-
-const LEFT_RAW = new Set(["Image"]);
 
 /**
- * Fica cru (com o preview de hoje) o que outra parte do editor já desenha ou que a lib não sabe mostrar: os anexos
- * `![[…]]` e as imagens (T2984), os comentários `%%` (o `commentPreview` os esconde) e a legenda do ditado.
+ * Fica cru (com o preview de hoje) o que outra parte do editor já desenha: a linha que é só um anexo `![[…]]` (o
+ * widget do anexo), os comentários `%%` (o `commentPreview` os esconde) e a legenda do ditado.
  */
 export function keepsRaw(node: SyntaxNode, source: string): boolean {
   if (CODE.has(node.name)) return false;
-  if (source.includes("%%") || source.includes("![[")) return true;
-  if (source.split("\n").some((l) => DICTATION_CAPTION.test(l) || embedLine(l))) return true;
-  return hasNode(node, LEFT_RAW);
+  if (source.includes("%%")) return true;
+  return source.split("\n").some((l) => DICTATION_CAPTION.test(l) || embedLine(l));
 }
 
 /**
@@ -94,6 +86,8 @@ export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree 
 export const NOTE_LINK = "kiwi-note:";
 export const MISSING_LINK = "kiwi-note-missing:";
 export const TAG_LINK = "kiwi-tag:";
+/** A imagem que é um anexo do vault (`![[foto.png]]` no meio do texto): a janela lê pelo engine (`attachments.read`). */
+export const ATTACHMENT_LINK = "kiwi-attachment:";
 
 export type LinkStatusOf = (target: string) => "ok" | "missing" | "unknown";
 
@@ -119,8 +113,16 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
       const a = lineStart + link.from;
       if (inAny(tree, offset + a + 2, CODE_INLINE)) continue;
       const shown = link.alias || link.target;
+      const embed = line[link.from - 1] === "!";
+      if (embed && isAttachmentName(link.target)) {
+        // `![[foto.png]]` no meio do texto: a imagem, lida do vault.
+        const name = link.target.split("/").at(-1)!;
+        edits.push({ from: a - 1, to: lineStart + link.to, insert: `![${escapeLabel(name)}](${ATTACHMENT_LINK}${encodeURIComponent(link.target)})` });
+        continue;
+      }
+      // `![[Nota]]` (a nota embutida, do Obsidian) aparece como o link para ela.
       const scheme = status(link.target) === "missing" ? MISSING_LINK : NOTE_LINK;
-      edits.push({ from: a, to: lineStart + link.to, insert: `[${escapeLabel(shown)}](${scheme}${encodeURIComponent(link.target)})` });
+      edits.push({ from: embed ? a - 1 : a, to: lineStart + link.to, insert: `[${escapeLabel(shown)}](${scheme}${encodeURIComponent(link.target)})` });
     }
     const callout = calloutHead(line);
     if (callout && !inAny(tree, offset + lineStart, CODE_INLINE)) {
@@ -216,6 +218,51 @@ export function linkAction(url: string): LinkAction | null {
     return tag ? { kind: "tag", tag } : null;
   }
   return { kind: "url", url };
+}
+
+// ---------------------------------------------------------------- as imagens
+
+export type ImageSource = { kind: "attachment"; target: string } | { kind: "data" } | { kind: "remote"; url: string } | { kind: "none" };
+
+/**
+ * De onde vem a imagem de um `![alt](endereço)`. Anexo: `kiwi-attachment:` ou um caminho relativo (`anexos/foto.png`),
+ * lidos do vault pelo engine. `data:` aparece como está. `http(s)://` é de fora: nunca carrega sozinha.
+ */
+export function imageSource(url: string): ImageSource {
+  const u = url.trim();
+  if (u.startsWith(ATTACHMENT_LINK)) {
+    try {
+      return { kind: "attachment", target: decodeURIComponent(u.slice(ATTACHMENT_LINK.length)) };
+    } catch {
+      return { kind: "none" };
+    }
+  }
+  if (/^data:image\//i.test(u)) return { kind: "data" };
+  if (/^https?:\/\//i.test(u)) return { kind: "remote", url: u };
+  if (/^[a-z][a-z0-9+.-]*:/i.test(u) || u.startsWith("/") || u.startsWith("//")) return { kind: "none" };
+  let path = u;
+  try {
+    path = decodeURIComponent(u);
+  } catch {
+    // Um % solto: fica como foi escrito.
+  }
+  return isAttachmentName(path) ? { kind: "attachment", target: path } : { kind: "none" };
+}
+
+// ---------------------------------------------------------------- os diagramas
+
+/** Os blocos ```mermaid onde está o cursor: o código fica cru, e o diagrama continua à vista logo abaixo. */
+export function mermaidUnderCursor(state: EditorState, focused: boolean, tree: Tree = fullTree(state)): { to: number; source: string }[] {
+  if (!focused) return [];
+  const out: { to: number; source: string }[] = [];
+  for (let n = tree.topNode.firstChild; n; n = n.nextSibling) {
+    if (n.name !== "FencedCode") continue;
+    const from = state.doc.lineAt(n.from).from;
+    const to = state.doc.lineAt(n.to).to;
+    if (!touches(state, from, to)) continue;
+    out.push({ to, source: state.doc.sliceString(from, to) });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- as tarefas

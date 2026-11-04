@@ -9,7 +9,7 @@ import "./enrichedEnv.ts";
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { MarkdownStyle } from "react-native-enriched-markdown/lib/module/index.web.js";
 import { normalizeMarkdownStyle } from "react-native-enriched-markdown/lib/module/normalizeMarkdownStyle.web.js";
@@ -21,8 +21,22 @@ import { indexTaskItems } from "react-native-enriched-markdown/lib/module/web/ut
 import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/web/types";
 
 import { externalUrl } from "../links.ts";
+import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
 import { editorFocused, type LinkResolver, linksChanged } from "./livePreview.ts";
-import { fullTree, linkAction, MISSING_LINK, NOTE_LINK, renderedBlocks, sourceOffset, TAG_LINK, taskMarks, toRenderable } from "./rendered.ts";
+import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
+import {
+  fullTree,
+  imageSource,
+  linkAction,
+  MISSING_LINK,
+  mermaidUnderCursor,
+  NOTE_LINK,
+  renderedBlocks,
+  sourceOffset,
+  TAG_LINK,
+  taskMarks,
+  toRenderable,
+} from "./rendered.ts";
 
 // ---------------------------------------------------------------- o estilo do Channels, com os tokens das Notas
 
@@ -79,6 +93,7 @@ const STYLE: MarkdownStyle = {
   strikethrough: { color: "var(--text-3)" },
   code: { fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-2)", backgroundColor: "var(--surface-2)", borderColor: "transparent" },
   thematicBreak: { color: "var(--border)", height: 1, marginTop: 11, marginBottom: 11 },
+  image: { maxHeight: 480, borderRadius: 10, marginTop: 2, marginBottom: 2, resizeMode: "contain" },
   taskList: { checkedColor: "var(--accent)", borderColor: "var(--border-strong)", checkmarkColor: "var(--on-accent)", checkedTextColor: "var(--text-3)" },
 };
 
@@ -103,7 +118,6 @@ function parse(markdown: string): Promise<ASTNode> {
   const next = parseMarkdown(markdown, FLAGS)
     .then((ast) => {
       indexTaskItems(ast);
-      noPictures(ast);
       parsed.set(markdown, ast);
       if (parsed.size > LIMIT) parsed.delete(parsed.keys().next().value!);
       return ast;
@@ -113,19 +127,87 @@ function parse(markdown: string): Promise<ASTNode> {
   return next;
 }
 
-/** Imagem fica para o T2984 (os blocos com imagem não chegam aqui); se uma escapar, vira o texto dela: nada é baixado. */
-function noPictures(node: ASTNode): void {
-  if (node.type === "Image") {
-    const alt = textOf(node);
-    node.type = "Text";
-    node.content = alt;
-    node.children = [];
-    node.attributes = {};
+const textOf = (node: ASTNode): string => node.content ?? (node.children ?? []).map(textOf).join("");
+
+// ---------------------------------------------------------------- as imagens (T2984)
+
+/** Os anexos já lidos pelo engine (`attachments.read`), por alvo; `null` é o que não está no vault. */
+const files = new Map<string, AttachmentFile | null>();
+const reading = new Set<string>();
+const waiting = new Set<() => void>();
+/** Sobe a cada anexo que chega: um bloco que desenhou antes e só se inscreveu depois não perde a chegada. */
+let arrivals = 0;
+
+function readImage(source: AttachmentSource | undefined, target: string): AttachmentFile | null | undefined {
+  const key = target.toLocaleLowerCase("pt-BR");
+  if (files.has(key)) return files.get(key);
+  if (!source) return null;
+  if (!reading.has(key)) {
+    reading.add(key);
+    const settle = (f: AttachmentFile | null) => {
+      reading.delete(key);
+      files.set(key, f);
+      arrivals++;
+      for (const wake of [...waiting]) wake();
+    };
+    source.read(target).then(settle, () => settle(null));
   }
-  for (const child of node.children ?? []) noPictures(child);
+  return undefined;
 }
 
-const textOf = (node: ASTNode): string => node.content ?? (node.children ?? []).map(textOf).join("");
+const text = (content: string): ASTNode => ({ type: "Text", content });
+
+/**
+ * A árvore com as imagens prontas para desenhar: o anexo vira o `data:` que o engine leu, e a imagem de fora vira um
+ * link para ela (abre no navegador: o app não baixa nada). O que não dá para mostrar fica como o texto dela.
+ */
+function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNode {
+  if (node.type === "Image") {
+    const alt = textOf(node);
+    const from = imageSource(node.attributes?.url ?? "");
+    if (from.kind === "data") return node;
+    if (from.kind === "remote") {
+      let host = from.url;
+      try {
+        host = new URL(from.url).host;
+      } catch {
+        // Fica o endereço inteiro.
+      }
+      return { type: "Link", attributes: { url: from.url }, children: [text(`🖼 ${alt || host}`)] };
+    }
+    if (from.kind === "attachment") {
+      const name = from.target.split("/").at(-1)!;
+      const file = readImage(source, from.target);
+      if (file === undefined) return text(alt || name);
+      if (file === null) return text(`${name} não está no vault`);
+      if (!file.mime.startsWith("image/")) return text(`${name} (${file.mime === "application/pdf" ? "PDF" : "arquivo"})`);
+      return { ...node, attributes: { ...node.attributes, url: file.dataUrl } };
+    }
+    return text(alt);
+  }
+  if (!node.children) return node;
+  return { ...node, children: node.children.map((c) => withImages(c, source)) };
+}
+
+const hasImage = (node: ASTNode): boolean => node.type === "Image" || (node.children ?? []).some(hasImage);
+
+/** Redesenha quando chega uma imagem que o bloco esperava. */
+function useImagesArriving(active: boolean): void {
+  const [, arrived] = useState(0);
+  const seen = arrivals;
+  useEffect(() => {
+    if (!active) return;
+    const wake = () => arrived((n) => n + 1);
+    waiting.add(wake);
+    // Chegou alguma entre o desenho e agora: desenha de novo.
+    if (arrivals !== seen) wake();
+    return () => {
+      waiting.delete(wake);
+    };
+  }, [active, seen]);
+}
+
+const isMermaid = (node: ASTNode) => node.type === "CodeBlock" && node.attributes?.language?.trim().toLowerCase() === "mermaid" && !!textOf(node).trim();
 
 // ---------------------------------------------------------------- o widget
 
@@ -133,16 +215,19 @@ export interface RenderedActions {
   onOpenLink(target: string): void;
   onOpenTag?(tag: string): void;
   onOpenUrl(url: string): void;
+  /** Os anexos do vault, para as imagens (T2984). */
+  attachments?: AttachmentSource;
 }
 
 interface BlockProps {
   markdown: string;
   source: string;
   callbacks: Parameters<typeof RenderNode>[0]["callbacks"];
+  attachments?: AttachmentSource;
   onShown(): void;
 }
 
-function Block({ markdown, source, callbacks, onShown }: BlockProps) {
+function Block({ markdown, source, callbacks, attachments, onShown }: BlockProps) {
   const [, parsedNow] = useState(0);
   const current = parsed.get(markdown) ?? null;
   useLayoutEffect(() => {
@@ -158,7 +243,10 @@ function Block({ markdown, source, callbacks, onShown }: BlockProps) {
       live = false;
     };
   }, [markdown, current]);
-  useLayoutEffect(onShown, [current, onShown]);
+  const pictures = !!current && hasImage(current);
+  useImagesArriving(pictures);
+  const ast = current && pictures ? withImages(current, attachments) : current;
+  useLayoutEffect(onShown);
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     // O link de URL abre só com ⌘-clique (#3044): a dica aparece no hover.
@@ -167,12 +255,14 @@ function Block({ markdown, source, callbacks, onShown }: BlockProps) {
     }
   });
   // Até o parse chegar (só na primeira vez de cada bloco), o texto cru, do mesmo tamanho.
-  if (!current) return <div className="cm-rendered-raw">{source}</div>;
+  if (!ast) return <div className="cm-rendered-raw">{source}</div>;
   return (
-    <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }}>
-      {(current.children ?? []).map((child, i) => (
-        <RenderNode key={`${child.type}-${i}`} node={child} style={NORMAL} styles={STYLES} callbacks={callbacks} capabilities={CAPABILITIES} />
-      ))}
+    <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }} onLoadCapture={onShown}>
+      {(ast.children ?? []).map((child, i) => {
+        const code = <RenderNode key={`${child.type}-${i}`} node={child} style={NORMAL} styles={STYLES} callbacks={callbacks} capabilities={CAPABILITIES} />;
+        if (!isMermaid(child)) return code;
+        return <MermaidBlock key={`mermaid-${i}`} source={textOf(child)} code={code} onLink={(url) => callbacks.onLinkPress?.({ url })} onShown={onShown} />;
+      })}
     </div>
   );
 }
@@ -253,7 +343,7 @@ class RenderedWidget extends WidgetType {
         view.dispatch({ changes: { from: pos, to: pos + 1, insert: checked ? " " : "x" } });
       },
     };
-    root.render(<Block markdown={this.markdown} source={this.source} callbacks={callbacks} onShown={() => view.requestMeasure()} />);
+    root.render(<Block markdown={this.markdown} source={this.source} callbacks={callbacks} attachments={this.actions.attachments} onShown={() => view.requestMeasure()} />);
   }
 
   /** Clique fora de link e de caixa: o cursor vai para o ponto do `.md` onde a pessoa clicou, e o bloco vira texto. */
@@ -317,6 +407,45 @@ class RenderedWidget extends WidgetType {
   }
 }
 
+/** O diagrama de um bloco ```mermaid com o cursor dentro: o código fica cru em cima, e o desenho continua embaixo. */
+class MermaidUnderWidget extends WidgetType {
+  constructor(
+    readonly code: string,
+    readonly actions: RenderedActions,
+  ) {
+    super();
+  }
+  eq(other: MermaidUnderWidget) {
+    return other.code === this.code;
+  }
+  toDOM(view: EditorView) {
+    const dom = document.createElement("div");
+    dom.className = "cm-mermaid-under";
+    const root = createRoot(dom);
+    roots.set(dom, root);
+    root.render(
+      <MermaidBlock
+        source={this.code}
+        code={null}
+        onLink={(url) => {
+          const safe = externalUrl(url);
+          if (safe) this.actions.onOpenUrl(safe);
+        }}
+        onShown={() => view.requestMeasure()}
+      />,
+    );
+    return dom;
+  }
+  destroy(dom: HTMLElement) {
+    const root = roots.get(dom);
+    roots.delete(dom);
+    if (root) queueMicrotask(() => root.unmount());
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
 function buildRendered(state: EditorState, resolver: LinkResolver, actions: RenderedActions): DecorationSet {
   const focused = state.field(editorFocused, false) ?? false;
   const tree = fullTree(state);
@@ -325,7 +454,11 @@ function buildRendered(state: EditorState, resolver: LinkResolver, actions: Rend
     const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t));
     out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions), block: true }).range(b.from, b.to));
   }
-  return Decoration.set(out);
+  for (const m of mermaidUnderCursor(state, focused, tree)) {
+    const code = mermaidCode(m.source);
+    if (code) out.push(Decoration.widget({ widget: new MermaidUnderWidget(code, actions), block: true, side: 1 }).range(m.to));
+  }
+  return Decoration.set(out, true);
 }
 
 /**
@@ -358,4 +491,22 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered a": { cursor: "pointer" },
   ".cm-rendered a[href^='kiwi-tag:']": { borderRadius: "4px", padding: "0 3px" },
   ".cm-rendered input[type=checkbox]": { cursor: "pointer" },
+  ".cm-rendered img": { display: "block", maxWidth: "100%" },
+  // Os diagramas (T2984), como no Channels: o desenho rola de lado quando não cabe; os botões ficam discretos.
+  ".kn-mermaid": { padding: "2px 0" },
+  ".cm-mermaid-under": { padding: "6px 0 2px", cursor: "default" },
+  ".kn-mermaid-drawn": { margin: "0", padding: "12px", overflowX: "auto", borderRadius: "10px", background: "var(--surface-2)" },
+  ".kn-mermaid-drawn svg": { display: "block", maxWidth: "none" },
+  ".kn-mermaid-tools": { display: "flex", gap: "4px", marginTop: "4px" },
+  ".kn-mermaid-tools button": {
+    border: "0",
+    borderRadius: "6px",
+    padding: "2px 8px",
+    background: "none",
+    color: "var(--text-3)",
+    font: "500 11px/1.6 var(--font)",
+    cursor: "pointer",
+  },
+  ".kn-mermaid-tools button:hover": { background: "var(--surface-hover)", color: "var(--text)" },
+  ".kn-mermaid-error": { margin: "4px 0 0", fontSize: "12px", color: "var(--danger)" },
 });

@@ -13,6 +13,13 @@ if (window && !(WINDOWS as readonly string[]).includes(window)) throw new Error(
 
 export default defineConfig({
   plugins: [react()],
+  // O mermaid das Notas (T2984), como no Channels: sem o KaTeX (fórmula dentro de diagrama) e sem o layout ELK.
+  resolve: {
+    alias: {
+      katex: resolve(__dirname, "ui/stubs/react-native/index.js"),
+      "elkjs/lib/elk.bundled.js": resolve(__dirname, "ui/stubs/no-elk.ts"),
+    },
+  },
   root: resolve(__dirname, "ui", window ?? ""),
   base: "./",
   build: {
