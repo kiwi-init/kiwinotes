@@ -5,7 +5,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { BrowserView, BrowserWindow, PATHS, Updater, Utils } from "electrobun/bun";
+import { BrowserView, BrowserWindow, PATHS, Screen, Updater, Utils } from "electrobun/bun";
 import type { AppEngine } from "electrobun/bun/appengine";
 
 import { type HubSection, UI_CAPABILITIES, type UiEvents, type UiWindow } from "../shared/ui-contract.ts";
@@ -44,12 +44,22 @@ const closeListeners = new Set<(name: WindowName) => void>();
 export function provideHubSection(fn: () => HubSection | null): void {
   hubSection = fn;
 }
+const introDoneListeners = new Set<() => void>();
+/** A página da intro avisou que terminou (`intro.done`, T2308). */
+export function onIntroDone(fn: () => void): () => void {
+  introDoneListeners.add(fn);
+  return () => introDoneListeners.delete(fn);
+}
+
 export function onWindowClosed(fn: (name: WindowName) => void): () => void {
   closeListeners.add(fn);
   return () => closeListeners.delete(fn);
 }
 
 const capabilities = uiCapabilities({
+  introDone: () => {
+    for (const fn of introDoneListeners) fn();
+  },
   dictionary: stores.dictionary,
   snippets: stores.snippets,
   history: stores.history,
@@ -121,8 +131,7 @@ async function openWindow(name: WindowName): Promise<void> {
   const options = {
     title: spec.title,
     preload,
-    frame: { width: spec.width, height: spec.height },
-    titleBarStyle: "hiddenInset" as const,
+    ...(name === "intro" ? introChrome(spec) : { frame: { width: spec.width, height: spec.height }, titleBarStyle: "hiddenInset" as const }),
     rpc,
     // Só a UI dentro da janela, link externo no navegador, CSP nas views (T1378).
     ...windowSecurity(dev),
@@ -180,6 +189,22 @@ async function openWindow(name: WindowName): Promise<void> {
 }
 
 export const openWindows = (): WindowName[] => [...open.keys()];
+
+/** Fecha a janela, se estiver aberta (a intro, quando termina). */
+export function closeWindow(name: WindowName): void {
+  open.get(name)?.close();
+}
+
+/**
+ * A janela da intro (T2308): sem barra, sem semáforos e sem fundo, só o ícone animado no meio da tela principal. A
+ * página tem fundo transparente; o palco é o ícone, de cantos arredondados.
+ */
+function introChrome(spec: { width: number; height: number }) {
+  const area = Screen.getPrimaryDisplay().workArea;
+  const x = Math.round(area.x + (area.width - spec.width) / 2);
+  const y = Math.round(area.y + (area.height - spec.height) / 2);
+  return { frame: { x, y, width: spec.width, height: spec.height }, titleBarStyle: "hidden" as const, transparent: true };
+}
 
 /** Manda um evento a uma janela aberta. Devolve se ela estava aberta. */
 export function sendToWindow<E extends keyof UiEvents>(name: WindowName, event: E, payload: UiEvents[E]): boolean {

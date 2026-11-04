@@ -1,0 +1,9 @@
+{
+  "window": "intro",
+  "steps": [
+    { "wait": 1200, "name": "a intro tocando (os prismas)" },
+    { "screenshot": "intro-prisma.png" },
+    { "click": "#stage", "name": "um clique pula" },
+    { "waitFor": "body.done", "state": "attached", "timeout": 1500, "name": "fecha em menos de 1,5 s" }
+  ]
+}

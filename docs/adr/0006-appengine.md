@@ -43,6 +43,14 @@ E o evento `history.added`, que o engine manda ao Histórico aberto a cada ditad
 
 **1.2.0 (T1320):** o ditado vira nota, só acréscimo. `history.toNote { id, path? }` manda um ditado do Histórico para o fim da nota `path` ou, sem `path`, para uma nota nova em `Caixa de entrada/`. Mandar de novo não duplica (`already`).
 
+**1.3.0 (T1499):** `settings.get` e `settings.set`, com o atalho da janela Notas. Só acréscimo.
+
+**1.4.0 (T2121):** o hub, a janela principal (#2100): `hub.section` (a seção pedida antes de o hub abrir) e o evento `hub.navigate` (com ele aberto). Só acréscimo.
+
+**1.5.0 (T2308):** a janela `intro`, a animação da abertura do zero (#2078), e o `intro.done`, que ela chama no fim, no clique para pular ou com "Reduzir movimento". O main fecha a janela e abre o hub (`src/bun/intro.ts`); sem o aviso, o hub abre em 20 s mesmo assim. Só acréscimo.
+- **A janela:** sem barra nem fundo (`titleBarStyle: "hidden"`, `transparent`), no meio da tela principal. O palco é o ícone, de cantos arredondados.
+- **O script** é um arquivo do pack (`ui/intro/intro.js`), porque a `VIEWS_CSP` não deixa script inline. Os dois saem do `docs/brand/intro/gerar.ts`, que também faz o protótipo.
+
 - **Não há capacidade genérica**: nada de rodar comando nem de ler um arquivo qualquer.
 - **O `clipboard.write`:** o main não vê o clique. Então a UI só chama com `navigator.userActivation.isActive`, e o main limita o tamanho e o ritmo (uma cópia a cada 300 ms, senão `E_RATE`).
 - **As versões:** tirar ou mudar uma capacidade é versão major; acrescentar é minor, e a UI testa com `engine.has(cap)`. Uma UI cujo `requiresContract` o engine não satisfaz é recusada antes do download.

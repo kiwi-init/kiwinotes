@@ -12,21 +12,30 @@
 //   quando a parte delas termina de se formar: o corpo e a cabeça (4,8 s), e o rabo (6,0 s), que balança com o
 //   #tail-wrap.
 //
-//   bun docs/brand/intro/gerar.ts      (usa o Playwright do app/: rode `bun install` em app/ antes)
+// Duas saídas (T2308): o intro.html (o protótipo, um arquivo só, com o script dentro) e a janela `intro` do app, em
+// app/ui/intro/ (index.html + intro.js): lá a CSP das views não deixa script inline, o fundo é transparente (a janela
+// não tem fundo; o palco é o ícone) e não há o "De novo".
+//
+//   bun docs/brand/intro/gerar.ts [--aura 8]      (usa o Playwright do app/: rode `bun install` em app/ antes)
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const here = import.meta.dirname;
 const svg = readFileSync(path.join(here, "../kiwi-cat-familia/kiwi-cat-1-aura-intro.svg"), "utf8");
 const template = readFileSync(path.join(here, "intro.template.html"), "utf8");
+const script = readFileSync(path.join(here, "intro.js"), "utf8");
+const appDir = path.join(here, "../../../app/ui/intro");
 
 const OUTLINE = "#14161f"; // o contorno escuro do T2025
 /**
- * O bitmap cobre o palco com 128 px de folga em volta (-128…1152), menor que ele: o blur é suave. A aura (desvio de
- * 38 a 62) vai a 1/12 (107 px); a luz de borda (desvio de 20) a 1/5 (256 px).
+ * O bitmap cobre o palco com 128 px de folga em volta (-128…1152), menor que ele: o blur é suave. A luz de borda
+ * (desvio de 20) vai a 1/5 (256 px). A aura (desvio de 38 a 62) vai a 1/8 (160 px): a 1/12 o quadro parado a 2x tinha
+ * degraus em cima da cabeça (revisão do T2113), e a 1/6 não muda nada a olho. Custa +37 KB (T2308). `--aura N` escolhe 1/N.
  */
-const BAKE = { stage: 1280, aura: 1 / 12, rim: 0.2 };
+const auraArg = process.argv.indexOf("--aura");
+const BAKE = { stage: 1280, aura: 1 / (auraArg > 0 ? Number(process.argv[auraArg + 1]) : 8), rim: 0.2 };
+if (!(BAKE.aura > 0 && BAKE.aura <= 1)) throw new Error("gerar: --aura N, com N de 1 a 12");
 
 function take(source: string, re: RegExp): [string, string] {
   const m = re.exec(source);
@@ -158,5 +167,18 @@ const html = template
   .replace(/<!--\n  A intro do Kiwi Notes[\s\S]*?-->\n/, "<!-- A intro do Kiwi Notes (T2113). Gerado por gerar.ts a partir de intro.template.html: leia o README.md e edite o modelo. -->\n");
 if (html.includes("A intro do Kiwi Notes (T2113), spec")) throw new Error("gerar: o comentário do modelo mudou");
 
-writeFileSync(path.join(here, "intro.html"), html);
-console.log(`gerar: docs/brand/intro/intro.html (${(Buffer.byteLength(html) / 1024).toFixed(1)} KB)`);
+const docs = html.replace("<!--SCRIPT-->", `<script>\n${script.replace(/^(?=.)/gm, "  ")}</script>`);
+writeFileSync(path.join(here, "intro.html"), docs);
+console.log(`gerar: docs/brand/intro/intro.html (${(Buffer.byteLength(docs) / 1024).toFixed(1)} KB)`);
+
+// A janela do app: o script num arquivo do pack (a VIEWS_CSP não deixa inline), sem fundo e sem o "De novo".
+const appCss = `\n  /* ---- a janela \`intro\` do app (T2308): sem fundo (só o ícone, no meio da tela) e sem o "De novo" ---- */\n  html, body { background: transparent; }\n  #again { display: none; }\n</style>`;
+const app = html
+  .replace(/<\/style>(?![\s\S]*<\/style>)/, appCss)
+  .replace("<!--SCRIPT-->", '<script type="module" src="./intro.js"></script>')
+  .replace("<title>Kiwi Notes: intro</title>", "<title>Kiwi Notes</title>");
+if (/<script>/.test(app)) throw new Error("gerar: sobrou script inline na janela do app");
+mkdirSync(appDir, { recursive: true });
+writeFileSync(path.join(appDir, "index.html"), app);
+writeFileSync(path.join(appDir, "intro.js"), `// Gerado por docs/brand/intro/gerar.ts a partir de docs/brand/intro/intro.js: edite lá.\n${script}`);
+console.log(`gerar: app/ui/intro/index.html (${(Buffer.byteLength(app) / 1024).toFixed(1)} KB) e intro.js`);

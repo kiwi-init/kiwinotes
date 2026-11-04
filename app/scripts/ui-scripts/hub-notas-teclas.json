@@ -2,8 +2,20 @@
   "window": "hub",
   "steps": [
     {
-      "waitFor": ".kn-title",
-      "name": "o hub abre nas Notas"
+      "waitFor": ".kn-hub-item",
+      "name": "o hub abre"
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Roteiro do hub",
+        "content": "Uma nota para o roteiro.\n"
+      },
+      "name": "uma nota no vault (o roteiro não depende do vault ter nota)"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Roteiro do hub')",
+      "name": "a nota aparece nas Notas"
     },
     {
       "click": ".kn-hub-item:has-text('Configurações')",

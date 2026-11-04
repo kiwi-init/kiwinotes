@@ -10,4 +10,6 @@ export const WINDOW_SPECS: Record<UiWindow, { title: string; width: number; heig
   notes: { title: "Notas", width: 1180, height: 760 },
   // O hub (T2121): a barra de seções de 200 mais as Notas inteiras.
   hub: { title: "Kiwi Notes", width: 1380, height: 820 },
+  // A intro (T2308): só o ícone animado, sem borda nem fundo, no meio da tela. O palco escala para 86% do lado menor.
+  intro: { title: "Kiwi Notes", width: 560, height: 560 },
 };
