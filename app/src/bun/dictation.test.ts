@@ -416,6 +416,27 @@ describe("Dictation", () => {
     expect(added[0]!.app).toEqual({ bundleId: "com.apple.Terminal", name: "Terminal" });
   });
 
+  test("nota rápida com o mic escolhido ausente: a pílula avisa por qual gravou, como no ditado comum (T3919)", async () => {
+    const { sidecar, d, made, overlays } = noteSetup();
+    sidecar.emit({
+      type: "record.started", reason: "hotkey", target: "note",
+      microphone: { name: "Microfone (MacBook Pro)", transport: "builtin", fellBack: true, reason: "chosen device not connected; auto" },
+    });
+    sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 4000, samples: 64_000 });
+    // A próxima, com o mic escolhido de volta: o título da nota, sem aviso.
+    sidecar.emit({ type: "record.started", reason: "hotkey", target: "note", microphone: { name: "Yeti", transport: "usb", fellBack: false } });
+    sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 4000, samples: 64_000 });
+    sidecar.emit(transcript("comprar café"));
+    sidecar.emit(transcript("comprar pão"));
+    await d.idle();
+    // A nota é criada do mesmo jeito: o aviso só troca o que a pílula diz.
+    expect(made.map((m) => m.text)).toEqual(["Comprar café.", "Comprar pão."]);
+    expect(overlays().filter((o) => o.state === "done")).toEqual([
+      { type: "overlay.state", state: "done", message: micFellBackNotice("do Mac") },
+      { type: "overlay.state", state: "done", message: noteCreated("Comprar café") },
+    ]);
+  });
+
   test("nota rápida que falha: a pílula avisa, nada é colado, e o texto fica no Histórico", async () => {
     const { sidecar, d, added, overlays, inserted } = noteSetup(async () => {
       throw new Error("disk full");
