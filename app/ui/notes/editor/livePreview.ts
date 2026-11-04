@@ -227,6 +227,31 @@ export const editorFocused = StateField.define<boolean>({
   update: (v, tr) => tr.effects.reduce((acc, e) => (e.is(focusChanged) ? e.value : acc), v),
 });
 
+/**
+ * O `editorFocused` igual ao foco de verdade. O CodeMirror monta a transação de foco quando o foco muda e a aplica um
+ * instante depois. Se o foco voltou nesse meio, ela chega com o valor velho, e ele não corrige mais. Foi o que
+ * aconteceu no /modelo, que insere com a paleta na frente e devolve o foco logo em seguida. Com o campo em `false` e o
+ * editor focado, o bloco do cursor continuava desenhado. O clique punha o cursor nele, mas o do navegador ia para a
+ * beira do desenho, e o texto digitado caía na linha de baixo (T3190). Quando os dois discordam, o campo é corrigido.
+ */
+const focusReconcile = ViewPlugin.define((view) => {
+  let queued = false;
+  const settle = () => {
+    queued = false;
+    const field = view.state.field(editorFocused, false);
+    if (field !== undefined && field !== view.hasFocus && view.dom.isConnected) view.dispatch({ effects: focusChanged.of(view.hasFocus) });
+  };
+  return {
+    update(u: ViewUpdate) {
+      const field = u.state.field(editorFocused, false);
+      if (queued || field === undefined || field === u.view.hasFocus) return;
+      // Fora do update: nada de dispatch no meio de outro.
+      queued = true;
+      queueMicrotask(settle);
+    },
+  };
+});
+
 function buildComments(state: EditorState): DecorationSet {
   const out: Range<Decoration>[] = [];
   const focused = state.field(editorFocused, false) ?? false;
@@ -265,6 +290,7 @@ function buildComments(state: EditorState): DecorationSet {
 export const commentPreview = [
   editorFocused,
   EditorView.focusChangeEffect.of((_state, focusing) => focusChanged.of(focusing)),
+  focusReconcile,
   StateField.define<DecorationSet>({
     create: buildComments,
     update(value, tr) {
