@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
+import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -284,6 +285,10 @@ export class Vault {
   private folders = new Set<string>();
   /** Os arquivos que não são nota (T3370), para a árvore. O conteúdo não é lido. */
   private files = new Map<string, VaultFile>();
+  /** Os documentos-pacote (`.pages`, `.key`… com a marca do formato) que o scan achou (T3371). */
+  private packages = new Set<string>();
+  /** Fechado (`close`): um `flush` que já estava rodando para no meio e não avisa ninguém (revisão #3499). */
+  private closed = false;
   private watcher: FSWatcher | null = null;
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -351,16 +356,18 @@ export class Vault {
   /** Começa a olhar o disco (o Obsidian, o Finder, um git pull). */
   watch(): void {
     if (this.watcher) return;
+    this.closed = false;
     this.watcher = watch(this.root, { recursive: true }, (_event, file) => {
       if (!file) return;
       const rel = String(file).split(path.sep).join("/").normalize("NFC");
       if (rel.split("/").some((s) => s.startsWith("."))) return;
       this.pendingPaths.add(rel);
-      this.flushTimer ??= setTimeout(() => void this.flush(), this.debounceMs);
+      this.flushTimer ??= setTimeout(() => void this.flush().catch((e) => console.error("[notes] watcher flush failed:", e)), this.debounceMs);
     });
   }
 
   close(): void {
+    this.closed = true;
     this.watcher?.close();
     this.watcher = null;
     if (this.flushTimer) clearTimeout(this.flushTimer);
@@ -386,6 +393,8 @@ export class Vault {
     const p = filePath(input);
     const abs = inside(this.root, p);
     const s = await lstat(abs).catch(() => null);
+    // Um pacote (`.pages`, `.numbers`, `.key`) é uma pasta: o bit "x" dela é o de entrar, não o de executar.
+    if (s?.isDirectory() && this.packages.has(p)) return { abs, mode: 0 };
     if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     return { abs, mode: s.mode };
   }
@@ -939,6 +948,15 @@ export class Vault {
   }
 
   private async index(p: string, content: string, abs: string): Promise<Entry> {
+    const entry = await this.entryFor(p, content, abs);
+    if (!this.notes.has(p)) this.resolver = null;
+    this.notes.set(p, entry);
+    for (let f = entry.meta.folder; f; f = parentOf(f)) this.folders.add(f);
+    return entry;
+  }
+
+  /** A entrada do índice de uma nota, sem pôr no índice (o `scan` monta um índice novo e troca de uma vez). */
+  private async entryFor(p: string, content: string, abs: string): Promise<Entry> {
     const s = await stat(abs);
     const title = noteName(p);
     const folder = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
@@ -959,46 +977,81 @@ export class Vault {
       content,
       ino: s.ino,
     };
-    if (!this.notes.has(p)) this.resolver = null;
-    this.notes.set(p, entry);
-    for (let f = folder; f; f = f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : "") this.folders.add(f);
     return entry;
   }
 
+  /**
+   * Relê o cofre inteiro. Monta o índice novo à parte e troca tudo de uma vez no fim: um `list()` ou uma busca no meio
+   * nunca veem um cofre pela metade (revisão #3499). Um item que some no meio (o Obsidian renomeando) só fica de fora.
+   */
   private async scan(): Promise<void> {
-    this.resolver = null;
-    this.notes = new Map();
-    this.folders = new Set();
-    this.files = new Map();
+    const notes = new Map<string, Entry>();
+    const folders = new Set<string>();
+    const files = new Map<string, VaultFile>();
+    const packages = new Set<string>();
     const walk = async (rel: string) => {
-      for (const name of await readdir(path.join(this.root, rel))) {
+      for (const name of await readdir(path.join(this.root, rel)).catch(() => [] as string[])) {
         if (name.startsWith(".")) continue;
         const child = rel ? `${rel}/${name}` : name;
+        const key = child.normalize("NFC");
         const abs = path.join(this.root, child);
-        const s = await lstat(abs);
-        if (s.isSymbolicLink()) continue;
-        if (s.isDirectory()) {
-          this.folders.add(child.normalize("NFC"));
+        const s = await lstat(abs).catch(() => null);
+        if (!s || s.isSymbolicLink()) continue;
+        if (s.isDirectory() && isPackageDir(name, await readdir(abs).catch(() => []))) {
+          // Um documento-pacote: arquivo, não pasta (T3371). Só com a marca do formato e sem nota dentro (#3476).
+          packages.add(key);
+          files.set(key, fileEntry(key, s));
+        } else if (s.isDirectory()) {
+          folders.add(key);
           await walk(child);
         } else if (s.isFile() && /\.md$/i.test(name)) {
-          await this.index(child.normalize("NFC"), await readFile(abs, "utf8"), abs);
+          const content = await readFile(abs, "utf8").catch(() => null);
+          const entry = content === null ? null : await this.entryFor(key, content, abs).catch(() => null);
+          if (entry) notes.set(key, entry);
         } else if (s.isFile()) {
-          this.keepFile(child.normalize("NFC"), s);
+          files.set(key, fileEntry(key, s));
         }
       }
     };
     await walk("");
+    if (this.closed) return;
+    this.notes = notes;
+    this.folders = folders;
+    this.files = files;
+    this.packages = packages;
+    this.resolver = null;
   }
 
   /** O que o watcher juntou: relê o que mudou, tira o que sumiu, e avisa. */
   private async flush(): Promise<void> {
     this.flushTimer = null;
+    if (this.closed) return;
     const paths = [...this.pendingPaths];
     this.pendingPaths.clear();
     const changed: string[] = [];
     const others: string[] = [];
     const before = this.snapshot();
     for (const rel of paths) {
+      // Uma pasta conhecida com nome de pacote que acabou de ganhar a marca (o Keynote cria a pasta e, um instante
+      // depois, o Index.zip): agora é documento, e a releitura a tira das pastas (revisão #3492).
+      if (await this.becamePackage(rel)) {
+        await this.scan();
+        changed.push(rel);
+        others.push(rel);
+        continue;
+      }
+      // Dentro de um documento-pacote (o Pages salvando): conta como o pacote inteiro mudando (T3371).
+      const pkg = this.packageOf(rel);
+      if (pkg) {
+        const ps = await lstat(path.join(this.root, pkg)).catch(() => null);
+        if (ps?.isDirectory() && !ps.isSymbolicLink()) this.keepFile(pkg, ps);
+        else {
+          this.files.delete(pkg);
+          this.packages.delete(pkg);
+        }
+        if (!others.includes(pkg)) others.push(pkg);
+        continue;
+      }
       const abs = path.join(this.root, rel);
       let s;
       try {
@@ -1022,6 +1075,15 @@ export class Vault {
         continue;
       }
       if (!/\.md$/i.test(rel)) {
+        // Um arquivo numa pasta que o índice ainda não conhece (uma pasta ou um pacote criados por fora, e o FSEvents só
+        // contou o de dentro): relê tudo, e o scan decide se é pasta ou documento-pacote (T3371).
+        const dir = parentOf(rel);
+        if (s && dir && !this.folders.has(dir)) {
+          await this.scan();
+          changed.push(rel);
+          others.push(rel);
+          continue;
+        }
         if (s?.isFile()) this.keepFile(rel, s);
         else this.files.delete(rel);
         others.push(rel);
@@ -1037,9 +1099,11 @@ export class Vault {
       const content = await readFile(abs, "utf8").catch(() => null);
       if (content === null) continue;
       if (this.notes.get(rel)?.meta.version === versionOf(content)) continue; // o próprio app escreveu
-      await this.index(rel, content, abs);
+      // Sumiu entre a leitura e o stat (renomeada de novo): o próximo evento do watcher conta como ficou.
+      if (!(await this.index(rel, content, abs).catch(() => null))) continue;
       changed.push(rel);
     }
+    if (this.closed) return; // fechou no meio: ninguém mais escuta (revisão #3499)
     if (changed.length) this.emit(changed);
     if (others.length) {
       for (const fn of this.otherListeners) {
@@ -1062,8 +1126,23 @@ export class Vault {
     }
   }
 
+  /** Se uma pasta conhecida acima de `rel`, com nome de pacote, agora tem a marca do formato e nenhuma nota. */
+  private async becamePackage(rel: string): Promise<boolean> {
+    for (let p = parentOf(rel); p; p = parentOf(p)) {
+      if (!this.folders.has(p) || !PACKAGE_MARKS[extOf(p)]) continue;
+      if (isPackageDir(p, await readdir(path.join(this.root, p)).catch(() => []))) return true;
+    }
+    return false;
+  }
+
+  /** O pacote conhecido que contém `rel` (ou é ele), ou null. Um pacote novo entra pelo scan (pasta nova relê tudo). */
+  private packageOf(rel: string): string | null {
+    for (let p = rel; p; p = parentOf(p)) if (this.packages.has(p)) return p;
+    return null;
+  }
+
   private keepFile(rel: string, s: { size: number; mtimeMs: number }) {
-    this.files.set(rel, { path: rel, size: s.size, mtime: new Date(s.mtimeMs).toISOString() });
+    this.files.set(rel, fileEntry(rel, s));
   }
 
   private snapshot(): Snapshot {
@@ -1091,6 +1170,8 @@ async function exists(abs: string): Promise<boolean> {
 }
 
 const parentOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+const fileEntry = (rel: string, s: { size: number; mtimeMs: number }): VaultFile => ({ path: rel, size: s.size, mtime: new Date(s.mtimeMs).toISOString() });
 
 /** A árvore das pastas a partir das listas: pastas vazias entram, e as filhas e as notas vêm em ordem. */
 export function buildTree(folders: readonly string[], notes: readonly { path: string; folder: string }[]): FolderNode {

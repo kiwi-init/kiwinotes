@@ -498,6 +498,13 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     links.clear();
     // O engine corrige as fixadas (renomear, mover, apagar); a janela só relê.
     pins?.list().then(setPinned, () => {});
+    // A pasta escolhida acompanha o renomear e o mover (T3371): a "Nova pasta" que virou "Ideias" continua sendo onde
+    // o + Nota e o + Pasta criam.
+    if (moved) {
+      const follow = (f: string) => (f === moved.from ? moved.to : f.startsWith(`${moved.from}/`) ? moved.to + f.slice(moved.from.length) : f);
+      setSelectedFolder(follow);
+      setOpenFolders((o) => new Set([...o].map(follow)));
+    }
     if (!moved || !current.current) return;
     const cur = current.current;
     const to = cur === moved.from ? moved.to : cur.startsWith(`${moved.from}/`) ? moved.to + cur.slice(moved.from.length) : null;
@@ -855,6 +862,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
                   }
                 : undefined
             }
+            onNewNote={(f) => void create("Sem título", true, f)}
+            onNewFolder={folders ? (f) => void newFolder(f) : undefined}
             showExtensions={prefs.showExtensions}
             dailyFolder={prefs.dailyFolder}
             onDaily={api.extras ? () => void openDaily() : undefined}

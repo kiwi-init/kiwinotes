@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 
 import type { FileType } from "./tree.ts";
 
-export type TreeIconName = "folder" | "folder-open" | "note" | "daily" | "today" | "search" | "tag" | "trash" | FileType;
+export type TreeIconName = "folder" | "folder-open" | "note" | "daily" | "today" | "search" | "tag" | "trash" | "note-plus" | "folder-plus" | FileType;
 
 const PATHS: Record<TreeIconName, ReactElement> = {
   folder: <path d="M2 4.5c0-.6.4-1 1-1h3.1l1.4 1.5H13c.6 0 1 .4 1 1v6c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1z" />,
@@ -33,6 +33,19 @@ const PATHS: Record<TreeIconName, ReactElement> = {
       <rect x="2.5" y="3.5" width="11" height="10" rx="1.5" />
       <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" />
       <rect x="5" y="8.5" width="2.5" height="2.5" rx=".4" />
+    </>
+  ),
+  // Os botões fixos do topo (T3371): nova nota e nova pasta.
+  "note-plus": (
+    <>
+      <path d="M8.5 14H4c-.3 0-.5-.2-.5-.5v-11c0-.3.2-.5.5-.5h5.5L12.5 5v3" />
+      <path d="M9.5 2v3h3M12 10.5v4M10 12.5h4" />
+    </>
+  ),
+  "folder-plus": (
+    <>
+      <path d="M8.5 12.5H3c-.6 0-1-.4-1-1v-7c0-.6.4-1 1-1h3.1l1.4 1.5H13c.6 0 1 .4 1 1V8.5" />
+      <path d="M12 10v4.5M9.75 12.25h4.5" />
     </>
   ),
   search: (
