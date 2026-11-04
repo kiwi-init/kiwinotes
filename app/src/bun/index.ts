@@ -4,15 +4,15 @@ import path from "node:path";
 
 import Electrobun, { AgentControl, ApplicationMenu, PATHS, Tray, Updater, Utils } from "electrobun/bun";
 
-import { type HubSection, UI_WINDOWS } from "../shared/ui-contract.ts";
+import { type AppChannel, type HubSection, releaseNotesUrl, UI_WINDOWS } from "../shared/ui-contract.ts";
 import { Hub } from "./hub.ts";
 import { makeIntro } from "./intro.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
 import { stores } from "./stores.ts";
-import { AppUpdates, updateMenuLabel } from "./updates.ts";
-import { closeWindow, onIntroDone, onWindowClosed, openWindows, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
+import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
+import { closeWindow, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
 // velho de pé é substituído. Com KIWI_DEBUG=1 nunca derruba outro.
@@ -94,7 +94,22 @@ export function statusLabel(s: SessionStatus): string {
 // pronta. Nada reinicia sem o clique.
 const updates = new AppUpdates({ updater: Updater });
 let appVersion = "";
-void Updater.getLocalInfo().then((i) => (appVersion = i.version));
+let appChannel: AppChannel = "dev";
+void Updater.getLocalInfo().then((i) => {
+  appVersion = i.version;
+  appChannel = channelOf(i.channel, i.version);
+});
+
+// A seção Sobre do hub (T2386): a versão, o canal, as notas da versão e o "Verificar atualizações", que roda a mesma
+// checagem do menu (com a conferência da assinatura). O hub aberto acompanha cada mudança pelo `updates.status`.
+const updatesNow = () => updatesView(updates.status(), updates.lastCheck());
+provideAbout({
+  info: () => ({ version: appVersion, channel: appChannel, releaseUrl: appChannel === "dev" ? null : releaseNotesUrl(appVersion) }),
+  view: updatesNow,
+  check: async () => (await updates.check(), updatesNow()),
+  apply: async () => (await updates.apply(), updatesNow()),
+});
+updates.onChange(() => void sendToWindow("hub", "updates.status", updatesNow()));
 
 function setMenu(s: SessionStatus) {
   const update = updateMenuLabel(updates.status(), appVersion);
@@ -111,6 +126,7 @@ function setMenu(s: SessionStatus) {
     { type: "normal", label: "Notas…", action: "notes" },
     { type: "normal", label: "Ditado…", action: "dictation" },
     { type: "normal", label: "Configurações…", action: "settings" },
+    { type: "normal", label: "Sobre o Kiwi Notes…", action: "about" },
     { type: "divider" },
     ...(update ? [{ type: "normal" as const, label: update, action: "update", enabled: updates.status().kind === "ready" }] : []),
     { type: "normal", label: "Sair do Kiwi Notes", action: "quit" },
@@ -137,6 +153,7 @@ tray.on("tray-clicked", (event) => {
     case "notes":
     case "dictation":
     case "settings":
+    case "about":
       openHub(action);
       break;
     case "permissions":

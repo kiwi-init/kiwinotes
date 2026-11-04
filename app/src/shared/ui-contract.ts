@@ -21,7 +21,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, HistoryEntry, HistoryPage,
 // 1.3.0 (T1499): `settings.get|set`, com o atalho da janela Notas. Só acréscimo.
 // 1.4.0 (T2121): o hub, a janela principal (#2100): `hub.section` e o evento `hub.navigate`. Só acréscimo.
 // 1.5.0 (T2308): a janela `intro` e o `intro.done`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.5.0";
+// 1.6.0 (T2386): a seção Sobre do hub: `app.about`, `updates.check`, `updates.apply` e o evento `updates.status`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.6.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -63,6 +64,16 @@ export interface UiCapabilities {
    * movimento". O main fecha a janela `intro` e abre o hub. Fora da intro, não faz nada.
    */
   "intro.done": { args: Record<string, never>; result: true };
+  /** A versão do app, o canal, o link das notas da versão e as atualizações agora (1.6.0, T2386). */
+  "app.about": { args: Record<string, never>; result: AppAbout };
+  /**
+   * Checa na hora, sem esperar as 6 h (o Updater do ADR 0008, com a conferência da assinatura), e devolve como ficou
+   * quando a checagem termina. Com a versão nova baixada e conferida, `state` é `ready`. Desligado (headless, dev,
+   * KIWI_DEBUG=1, build sem feed), responde `off` e não vai à rede.
+   */
+  "updates.check": { args: Record<string, never>; result: UpdatesView };
+  /** "Atualizar e reiniciar": só com `ready`. O app fecha, troca e reabre; se voltar, não reiniciou. */
+  "updates.apply": { args: Record<string, never>; result: UpdatesView };
 
   // ---------------------------------------------------------------- notas (1.1.0, T1316)
   // `path` é sempre relativo ao vault, POSIX, terminando em `.md`. Fora do vault (`..`, absoluto, link simbólico,
@@ -99,6 +110,9 @@ export const UI_CAPABILITIES = [
   "clipboard.write",
   "hub.section",
   "intro.done",
+  "app.about",
+  "updates.check",
+  "updates.apply",
   "notes.list",
   "notes.get",
   "notes.save",
@@ -118,10 +132,12 @@ export interface UiEvents {
   "notes.changed": { paths: string[] };
   /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */
   "hub.navigate": { section: HubSection };
+  /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */
+  "updates.status": UpdatesView;
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */
-export const HUB_SECTIONS = ["notes", "meetings", "dictation", "settings"] as const;
+export const HUB_SECTIONS = ["notes", "meetings", "dictation", "settings", "about"] as const;
 export type HubSection = (typeof HUB_SECTIONS)[number];
 export const isHubSection = (v: unknown): v is HubSection => (HUB_SECTIONS as readonly unknown[]).includes(v);
 
@@ -129,3 +145,31 @@ export const isHubSection = (v: unknown): v is HubSection => (HUB_SECTIONS as re
 // O `hub` (T2121) é a janela principal; as outras três seguem como UIs próprias (a CLI e quem tinha uma instalada).
 export const UI_WINDOWS = ["settings", "history", "notes", "hub", "intro"] as const;
 export type UiWindow = (typeof UI_WINDOWS)[number];
+
+/** O canal do build: as rc recebem as rc (o feed `updates-rc`), a estável só a estável, e o dev nunca checa. */
+export type AppChannel = "rc" | "stable" | "dev";
+
+/** A última checagem das atualizações e o que ela achou (`at` em ISO 8601). */
+export type UpdatesLastCheck =
+  | { at: string; result: "latest" }
+  | { at: string; result: "available"; version: string }
+  | { at: string; result: "error"; message: string };
+
+/** O estado das atualizações, como a seção Sobre mostra (T2386). */
+export type UpdatesView = { lastCheck: UpdatesLastCheck | null } & (
+  | { state: "off"; reason: string }
+  | { state: "idle" | "checking" | "applying" }
+  | { state: "downloading" | "ready"; version: string }
+);
+
+export interface AppAbout {
+  /** A versão do tag (`0.1.0-rc3`), ou a do package.json num build local. */
+  version: string;
+  channel: AppChannel;
+  /** As notas desta versão no GitHub Releases; null num build local. */
+  releaseUrl: string | null;
+  updates: UpdatesView;
+}
+
+/** As notas de uma versão no GitHub Releases (o tag é `v` + a versão). */
+export const releaseNotesUrl = (version: string) => `https://github.com/kiwi-init/kiwinotes/releases/tag/v${encodeURIComponent(version)}`;

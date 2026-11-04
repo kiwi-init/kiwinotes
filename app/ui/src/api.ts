@@ -72,6 +72,17 @@ export const api = {
     list: () => invoke("notes.list", {}),
     search: (query: string) => invoke("notes.search", { query, limit: 12 }),
   },
+  /** A seção Sobre (T2386): a versão, o canal e as atualizações. */
+  app: {
+    about: () => invoke("app.about", {}),
+  },
+  updates: {
+    /** Checa na hora; resolve quando a checagem termina (pronta, na última versão ou com erro). */
+    check: () => invoke("updates.check", {}),
+    /** "Atualizar e reiniciar": o app fecha, troca e reabre. Se resolver, é que não reiniciou. */
+    apply: () => invoke("updates.apply", {}),
+    onStatus: (fn: (v: UiEvents["updates.status"]) => void) => on("updates.status", fn),
+  },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {
     section: () => invoke("hub.section", {}),

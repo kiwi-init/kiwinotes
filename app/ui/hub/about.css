@@ -1,0 +1,70 @@
+/* A seção Sobre (T2386), no B v4: uma superfície só, sem linha nem borda; cor só no botão e no link. */
+.kn-about {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 48px 32px;
+  text-align: center;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.kn-about-icon {
+  width: 112px;
+  height: 112px;
+  margin-bottom: 14px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kn-about-name {
+  margin: 0;
+  font: 650 24px/1.2 var(--font-display);
+  letter-spacing: var(--tracking-display, 0);
+  color: var(--text);
+}
+
+.kn-about-version {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.kn-about-link {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  color: var(--accent-text);
+  cursor: default;
+}
+
+.kn-about-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kn-about-updates {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+  max-width: 420px;
+}
+
+.kn-about-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* Desligado ou ocupado (verificando, baixando): o botão fica claramente parado. */
+.kn-about-updates button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

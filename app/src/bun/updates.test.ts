@@ -6,11 +6,14 @@ import { spawnSync } from "node:child_process";
 
 import {
   AppUpdates,
+  channelOf,
+  checkErrorMessage,
   compareVersions,
   preparedTar,
   requirement,
   updateMenuLabel,
   updatesOff,
+  updatesView,
   verifyUpdateTar,
   type LocalInfo,
   type UpdateCheck,
@@ -104,7 +107,8 @@ describe("AppUpdates (T1969)", () => {
       expect(await u.check()).toEqual({ kind: "ready", version: "0.1.1", hash: "bbbb" });
       expect(calls).toEqual(["check", "download"]);
       expect(seen).toEqual(["bbbb.tar bbbb"]);
-      expect(states).toEqual(["checking", "ready"]);
+      // O "baixando" entre os dois é para a seção Sobre mostrar o progresso (T2386).
+      expect(states).toEqual(["checking", "downloading", "ready"]);
       // Pronto: não checa de novo até alguém aplicar.
       await u.check();
       expect(calls).toEqual(["check", "download"]);
@@ -285,4 +289,83 @@ describe("verifyUpdateTar (T1969): só aplica o que a Kiwi Init assinou", () => 
       };
       expect(verifyUpdateTar(tar, { hash: "bbbb" }, run)).toBeNull();
     }));
+});
+
+describe("a última checagem, para a seção Sobre (T2386)", () => {
+  const now = () => new Date("2026-11-04T12:00:00Z");
+  const at = "2026-11-04T12:00:00.000Z";
+
+  test("na última versão", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData });
+      const u = new AppUpdates({ updater, now, log: () => {} });
+      expect(u.lastCheck()).toBeNull();
+      await u.check();
+      expect(u.lastCheck()).toEqual({ at, result: "latest" });
+      expect(updatesView(u.status(), u.lastCheck())).toEqual({ state: "idle", lastCheck: { at, result: "latest" } });
+    }));
+
+  test("com versão nova: passa por baixando, fica pronta e registra a versão", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData, found: { version: "0.2.0", hash: "bbbb", updateAvailable: true } });
+      const u = new AppUpdates({ updater, now, log: () => {}, verify: () => null });
+      const states: string[] = [];
+      u.onChange((s) => states.push(s.kind));
+      await u.check();
+      expect(states).toEqual(["checking", "downloading", "ready"]);
+      expect(u.lastCheck()).toEqual({ at, result: "available", version: "0.2.0" });
+      expect(updatesView(u.status(), u.lastCheck())).toMatchObject({ state: "ready", version: "0.2.0" });
+    }));
+
+  test("os erros, ditos para a pessoa", () =>
+    withDir(async (appData) => {
+      const offline = new AppUpdates({ updater: fakeUpdater({ appData, found: { error: "Unable to connect. Is the computer able to access the url?" } }).updater, now, log: () => {} });
+      await offline.check();
+      expect(offline.lastCheck()).toEqual({ at, result: "error", message: "Sem internet: não deu para falar com o GitHub." });
+
+      const refused = new AppUpdates({
+        updater: fakeUpdater({ appData, found: { version: "0.2.0", hash: "cccc", updateAvailable: true } }).updater,
+        now,
+        log: () => {},
+        verify: () => "not signed by the Kiwi Init Developer ID",
+      });
+      await refused.check();
+      expect(refused.lastCheck()).toEqual({ at, result: "error", message: "A 0.2.0 foi recusada: a assinatura não confere." });
+      expect(refused.status().kind).toBe("idle");
+
+      const download = new AppUpdates({
+        updater: fakeUpdater({ appData, downloadOk: false, found: { version: "0.2.0", hash: "dddd", updateAvailable: true } }).updater,
+        now,
+        log: () => {},
+      });
+      await download.check();
+      expect(download.lastCheck()).toMatchObject({ result: "error", message: "O download da 0.2.0 falhou. Tente de novo." });
+    }));
+
+  test("uma exceção da rede também vira erro dito, e não trava", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData });
+      updater.checkForUpdate = async () => {
+        throw new Error("getaddrinfo ENOTFOUND github.com");
+      };
+      const u = new AppUpdates({ updater, now, log: () => {} });
+      expect((await u.check()).kind).toBe("idle");
+      expect(u.lastCheck()).toMatchObject({ result: "error", message: "Sem internet: não deu para falar com o GitHub." });
+    }));
+
+  test("as mensagens de erro e o canal", () => {
+    expect(checkErrorMessage("HTTP 503")).toBe("O servidor das atualizações não respondeu. Tente de novo mais tarde.");
+    expect(checkErrorMessage("request timed out")).toBe("O servidor das atualizações não respondeu. Tente de novo mais tarde.");
+    expect(checkErrorMessage("algo estranho")).toBe("Não deu para verificar agora. Tente de novo mais tarde.");
+    expect(channelOf("stable", "0.1.0-rc3")).toBe("rc");
+    expect(channelOf("stable", "0.2.0")).toBe("stable");
+    expect(channelOf("dev", "0.1.0-rc3")).toBe("dev");
+  });
+
+  test("desligado aparece com o motivo", () => {
+    expect(updatesView({ kind: "off", reason: "KIWI_DEBUG=1" }, null)).toEqual({ state: "off", reason: "modo de teste dos agentes", lastCheck: null });
+    expect(updatesView({ kind: "off", reason: "channel dev" }, null)).toMatchObject({ reason: "build de desenvolvimento" });
+    expect(updatesView({ kind: "off", reason: "no release.baseUrl in this build" }, null)).toMatchObject({ reason: "build local, sem o endereço das atualizações" });
+    expect(updatesView({ kind: "off", reason: "baseUrl isn't https: http://x" }, null)).toMatchObject({ reason: "o endereço das atualizações deste build não é válido" });
+  });
 });

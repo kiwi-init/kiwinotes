@@ -2,7 +2,7 @@
 // main (T1192). Cada handler valida os argumentos e responde `E_BAD_ARGS` quando eles não servem. Nada genérico: não
 // há "rodar comando" nem "ler arquivo qualquer".
 
-import type { DictionaryTerm, HistoryEntry, HistoryPage, HubSection, Snippet } from "../shared/ui-contract.ts";
+import type { AppAbout, DictionaryTerm, HistoryEntry, HistoryPage, HubSection, Snippet, UpdatesView } from "../shared/ui-contract.ts";
 import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapability } from "../shared/ui-contract.ts";
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
@@ -38,11 +38,24 @@ export interface CapabilityDeps {
   hubSection?(): HubSection | null;
   /** A intro avisou que terminou (T2308): o hub segue. */
   introDone?(): void;
+  /**
+   * A seção Sobre (T2386): a versão do app, o canal e as atualizações. Sem isto (o headless, os testes), o `app.about`
+   * diz "dev" e as atualizações respondem `off`, sem ir à rede.
+   */
+  about?: {
+    info(): Omit<AppAbout, "updates">;
+    view(): UpdatesView;
+    check(): Promise<UpdatesView>;
+    apply(): Promise<UpdatesView>;
+  };
   /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
   notes: Pick<Vault, "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve">;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
+
+/** As atualizações sem o Updater por perto (o headless, os testes): nada vai à rede. */
+const UPDATES_OFF: UpdatesView = { state: "off", reason: "sem o atualizador no headless e nos testes", lastCheck: null };
 
 /** Um erro com código, que o AppEngine passa à UI como está (`E_BAD_ARGS`). */
 export class CapabilityError extends Error {
@@ -167,6 +180,19 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "hub.section": (args) => {
       noArgs(args, "hub.section");
       return { section: deps.hubSection?.() ?? null };
+    },
+    "app.about": (args) => {
+      noArgs(args, "app.about");
+      if (!deps.about) return { version: "dev", channel: "dev", releaseUrl: null, updates: UPDATES_OFF } satisfies AppAbout;
+      return { ...deps.about.info(), updates: deps.about.view() } satisfies AppAbout;
+    },
+    "updates.check": async (args) => {
+      noArgs(args, "updates.check");
+      return deps.about ? deps.about.check() : UPDATES_OFF;
+    },
+    "updates.apply": async (args) => {
+      noArgs(args, "updates.apply");
+      return deps.about ? deps.about.apply() : UPDATES_OFF;
     },
     "intro.done": (args) => {
       noArgs(args, "intro.done");

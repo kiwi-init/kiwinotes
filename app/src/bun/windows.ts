@@ -13,7 +13,7 @@ import { WINDOW_SPECS as SPECS } from "../shared/window-specs.ts";
 import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
 import { session } from "./session.ts";
 import { stores } from "./stores.ts";
-import { uiCapabilities } from "./ui-capabilities.ts";
+import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
@@ -41,6 +41,12 @@ function devServerUrl(): Promise<string | null> {
 /** Quem sabe a seção pedida para o hub (src/bun/hub.ts), e quem quer saber que uma janela fechou. */
 let hubSection: () => HubSection | null = () => null;
 const closeListeners = new Set<(name: WindowName) => void>();
+let about: CapabilityDeps["about"];
+/** A seção Sobre: a versão e as atualizações, que o index.ts liga ao `AppUpdates` (T2386). */
+export function provideAbout(a: NonNullable<CapabilityDeps["about"]>): void {
+  about = a;
+}
+
 export function provideHubSection(fn: () => HubSection | null): void {
   hubSection = fn;
 }
@@ -71,6 +77,12 @@ const capabilities = uiCapabilities({
   notes: stores.notes,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),
+  about: {
+    info: () => about?.info() ?? { version: "dev", channel: "dev", releaseUrl: null },
+    view: () => about?.view() ?? { state: "off", reason: "o atualizador ainda não subiu", lastCheck: null },
+    check: () => about?.check() ?? Promise.resolve({ state: "off", reason: "o atualizador ainda não subiu", lastCheck: null }),
+    apply: () => about?.apply() ?? Promise.resolve({ state: "off", reason: "o atualizador ainda não subiu", lastCheck: null }),
+  },
 });
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */

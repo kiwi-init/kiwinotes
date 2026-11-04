@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" id="kiwi-cat" overflow="visible" role="img" aria-labelledby="kiwi-cat-title" xmlns:c2pa="http://c2pa.org/manifest">
+  <title id="kiwi-cat-title">Kiwi-cat 1: aura (mais fiel ao gato)</title>
+  <!--
+    ESTRUTURA (wrappers separados = intro e animações de loop não brigam pelo mesmo transform)
+    #bg ............................ fundo (oculte para transparente)
+    #aura
+      #aura-intro > #aura-intro-spin > #aura-intro-spread ... órbita redonda da intro (invisível na pose final)
+      #aura-blobs > #aura-grow > #aura-orbit ... manchas finais: #aura-cyan #aura-blue #aura-violet #aura-magenta
+      #aura-shape .................. #aura-silhouette + #aura-tail (brilho que segue o formato)
+    #cat-float > #cat .............. gato inteiro (luz de borda via filtro)
+      #tail-wrap > #tail ........... rabo (path com pathLength=1: dashoffset 1→0 "desenha" o rabo; rotate no wrap = balançar)
+      #body-rise > #body ........... corpo (subir/descer na intro; respirar no loop)
+      #head-spin > #head ........... cabeça (giro da intro; inclinar no loop)
+        #intro-circle .............. círculo inicial (invisível na pose final)
+        #ear-left-pop > #ear-left, #ear-right-pop > #ear-right
+        #head-shape
+        #eyes-wake > #eyes > #eye-left / #eye-right (.eye-halo, .eye-core)
+    #silhouette-outline ............ contorno para efeito de desenho
+  -->
+
+  <defs>
+    <clipPath id="clip-base"><rect width="1024" height="1024" rx="224"/></clipPath>
+    <path id="shape-silhouette" d="M286,127 C288.3,127.8 295,130 300,132 C305,134 310.7,136 316,139 C321.3,142 326.7,146.5 332,150 C337.3,153.5 342.7,156.3 348,160 C353.3,163.7 358.7,167.8 364,172 C369.3,176.2 374.7,180.3 380,185 C385.3,189.7 390.7,195.3 396,200 C401.3,204.7 407.3,208.8 412,213 C416.7,217.2 422,223 424,225 C428.7,223.8 442.3,219.8 452,218 C461.7,216.2 472,215 482,214 C492,213 502,212 512,212 C522,212 532,213 542,214 C552,215 562.3,216.2 572,218 C581.7,219.8 595.3,223.8 600,225 C602,223 607.3,217.2 612,213 C616.7,208.8 622.7,204.7 628,200 C633.3,195.3 638.7,189.7 644,185 C649.3,180.3 654.7,176.2 660,172 C665.3,167.8 670.7,163.7 676,160 C681.3,156.3 686.7,153.5 692,150 C697.3,146.5 702.7,142 708,139 C713.3,136 719,134 724,132 C729,130 735.7,127.8 738,127 C739.8,127.5 746.3,127.5 749,130 C751.7,132.5 752.8,137 754,142 C755.2,147 755.7,157 756,160 C756.2,166.7 757,187.5 757,200 C757,212.5 756.8,224.7 756,235 C755.2,245.3 753.7,252.5 752,262 C750.3,271.5 747,287 746,292 C744.8,297 740.7,313.2 739,322 C737.3,330.8 736.5,341.2 736,345 C736.8,348.8 739,360.2 741,368 C743,375.8 746,383 748,392 C750,401 751.8,412 753,422 C754.2,432 755,441.7 755,452 C755,462.3 753.3,478.7 753,484 C752.2,490 750,507.3 748,520 C746,532.7 742.5,545.7 741,560 C739.5,574.3 738.3,588 739,606 C739.7,624 741.5,646.5 745,668 C748.5,689.5 754.8,712.2 760,735 C765.2,757.8 772.3,782.8 776,805 C779.7,827.2 782.7,848.5 782,868 C781.3,887.5 779,906.3 772,922 C765,937.7 755.3,950.8 740,962 C724.7,973.2 704,982.3 680,989 C656,995.7 624,999.3 596,1002 C568,1004.7 526,1004.5 512,1005 C498,1004.5 456,1004.7 428,1002 C400,999.3 368,995.7 344,989 C320,982.3 299.3,973.2 284,962 C268.7,950.8 259,937.7 252,922 C245,906.3 242.7,887.5 242,868 C241.3,848.5 244.3,827.2 248,805 C251.7,782.8 258.8,757.8 264,735 C269.2,712.2 275.5,689.5 279,668 C282.5,646.5 284.3,624 285,606 C285.7,588 284.5,574.3 283,560 C281.5,545.7 278,532.7 276,520 C274,507.3 271.8,490 271,484 C270.7,478.7 269,462.3 269,452 C269,441.7 269.8,432 271,422 C272.2,412 274,401 276,392 C278,383 281,375.8 283,368 C285,360.2 287.2,348.8 288,345 C287.5,341.2 286.7,330.8 285,322 C283.3,313.2 279.2,297 278,292 C277,287 273.3,269 272,262 C270.7,255 270.3,252 270,250 C272.2,248.7 280,246.3 283,242 C286,237.7 288.3,229.8 288,224 C287.7,218.2 284.5,211.2 281,207 C277.5,202.8 269.3,200.3 267,199 C267,195.8 266.8,186.5 267,180 C267.2,173.5 267.8,163.3 268,160 C268.3,157 268.8,147 270,142 C271.2,137 272.3,132.5 275,130 C277.7,127.5 284.2,127.5 286,127 Z"/>
+    <path id="shape-tail" d="M660,985 C780,1002 892,962 904,868 C916,778 880,708 826,692 C790,682 764,700 772,728"/>
+
+    <linearGradient id="grad-cat-fill" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="1024">
+      <stop offset="0" stop-color="#0f505c"/>
+      <stop offset="0.07" stop-color="#083340"/>
+      <stop offset="0.15" stop-color="#021019"/>
+      <stop offset="0.26" stop-color="#000204"/>
+      <stop offset="0.55" stop-color="#000000"/>
+      <stop offset="0.78" stop-color="#090726"/>
+      <stop offset="1" stop-color="#1d1960"/>
+    </linearGradient>
+    <linearGradient id="grad-aura" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="1024">
+      <stop offset="0" stop-color="#45c9ff"/>
+      <stop offset="0.35" stop-color="#45c9ff"/>
+      <stop offset="0.52" stop-color="#7b61ff"/>
+      <stop offset="0.68" stop-color="#ff5fbf"/>
+      <stop offset="1" stop-color="#ffa53d"/>
+    </linearGradient>
+    <radialGradient id="grad-eye-halo">
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="0.75" stop-color="#dff6ff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#bfefff" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="fx-aura" filterUnits="userSpaceOnUse" x="-300" y="-300" width="1624" height="1624" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="38"/>
+    </filter>
+    <filter id="fx-orbit" filterUnits="userSpaceOnUse" x="-300" y="-300" width="1624" height="1624" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="62"/>
+    </filter>
+    <filter id="fx-blob" filterUnits="userSpaceOnUse" x="-300" y="-300" width="1624" height="1624" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="55"/>
+    </filter>
+    <!-- luz de borda: calculada da forma real do #cat a cada frame (segue cabeça, orelhas e rabo animados) -->
+    <filter id="fx-rim" filterUnits="userSpaceOnUse" x="-128" y="-128" width="1280" height="1280" color-interpolation-filters="sRGB">
+      <feOffset in="SourceAlpha" dy="34" result="aTop"/>
+      <feComposite in="SourceAlpha" in2="aTop" operator="out" result="edgeTop"/>
+      <feOffset in="SourceAlpha" dx="40" result="aLeft"/>
+      <feComposite in="SourceAlpha" in2="aLeft" operator="out" result="edgeLeft"/>
+      <feOffset in="SourceAlpha" dx="-36" result="aRight"/>
+      <feComposite in="SourceAlpha" in2="aRight" operator="out" result="edgeRight"/>
+      <feMerge result="edges"><feMergeNode in="edgeTop"/><feMergeNode in="edgeLeft"/><feMergeNode in="edgeRight"/></feMerge>
+      <feGaussianBlur in="edges" stdDeviation="20" result="edgesSoft"/>
+      <feFlood flood-color="#45c9ff" flood-opacity="0.8" x="0" y="0" width="1024" height="310" result="f1"/>
+      <feFlood flood-color="#7b61ff" x="0" y="310" width="1024" height="230" result="f2"/>
+      <feFlood flood-color="#ff5fbf" x="0" y="540" width="1024" height="310" result="f3"/>
+      <feFlood flood-color="#ffa53d" flood-opacity="0.45" x="0" y="850" width="1024" height="174" result="f4"/>
+      <feMerge x="0" y="0" width="1024" height="1024" result="bands"><feMergeNode in="f1"/><feMergeNode in="f2"/><feMergeNode in="f3"/><feMergeNode in="f4"/></feMerge>
+      <feGaussianBlur in="bands" stdDeviation="0 45" result="rimColor"/>
+      <feComposite in="rimColor" in2="edgesSoft" operator="in" result="rim"/>
+      <feComposite in="rim" in2="SourceAlpha" operator="in" result="rimIn"/>
+      <feComponentTransfer in="rimIn" result="rimFinal"><feFuncA type="linear" slope="0.62"/></feComponentTransfer>
+      
+      <feMorphology in="SourceAlpha" operator="dilate" radius="12" result="outerGrow"/>
+      <feComposite in="outerGrow" in2="SourceAlpha" operator="out" result="outerRing"/>
+      <feFlood flood-color="#14161f" flood-opacity="0.6"/>
+      <feComposite in2="outerRing" operator="in" result="darkEdge"/>
+      <feMorphology in="SourceAlpha" operator="erode" radius="6" result="faceInner"/>
+      <feComposite in="SourceAlpha" in2="faceInner" operator="out" result="faceRing"/>
+      <feFlood flood-color="#ffffff" flood-opacity="0.85"/>
+      <feComposite in2="faceRing" operator="in" result="glassEdge"/>
+      <feMerge><feMergeNode in="darkEdge"/><feMergeNode in="SourceGraphic"/><feMergeNode in="rimFinal"/><feMergeNode in="glassEdge"/></feMerge>
+    </filter>
+    <filter id="fx-eye-glow" x="-80%" y="-80%" width="260%" height="260%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <style>
+    #kiwi-cat * { transform-box: view-box; }
+    #cat, #cat-float { transform-origin: 512px 1004px; }
+    #aura, #aura-grow, #aura-orbit, #aura-blobs { transform-origin: 512px 480px; }
+    #aura-intro-spin, #aura-intro-spread { transform-origin: 512px 405px; }
+    #body-rise  { transform-origin: 512px 420px; }
+    #body       { transform-origin: 512px 1004px; }
+    #tail-wrap, #tail { transform-origin: 680px 985px; }
+    #head-spin  { transform-origin: 512px 405px; }
+    #head       { transform-origin: 512px 520px; }
+    #intro-circle { transform-origin: 512px 405px; }
+    #ear-left-pop, #ear-left   { transform-origin: 349px 290px; }
+    #ear-right-pop, #ear-right { transform-origin: 675px 290px; }
+    #eyes-wake, #eyes { transform-origin: 512px 409px; }
+    #eye-left   { transform-origin: 412.5px 409px; }
+    #eye-right  { transform-origin: 611.5px 409px; }
+  </style>
+
+  <rect id="bg" width="1024" height="1024" rx="224" fill="#000000"/>
+
+  <g clip-path="url(#clip-base)"><svg id="safe-area" x="0" y="0" width="1024" height="1024" viewBox="-128 -128 1280 1280">
+  <g id="aura">
+    <!-- órbita da intro: manchas redondas; o blur fica FORA da rotação/escala, então nunca perde suavidade -->
+    <g id="aura-intro" filter="url(#fx-orbit)" opacity="0">
+      <g id="aura-intro-spin">
+        <g id="aura-intro-spread" opacity="1">
+          <circle cx="512" cy="190" r="125" fill="#45c9ff"/>
+          <circle cx="727" cy="405" r="105" fill="#7b61ff" opacity="0.9"/>
+          <circle cx="512" cy="620" r="125" fill="#ff5fbf"/>
+          <circle cx="297" cy="405" r="105" fill="#ffa53d" opacity="0.9"/>
+        </g>
+      </g>
+    </g>
+    <!-- aura final: blur aplicado por fora de #aura-grow / #aura-orbit pelo mesmo motivo -->
+    <g id="aura-blobs" filter="url(#fx-blob)">
+      <g id="aura-grow">
+        <g id="aura-orbit">
+          <ellipse id="aura-cyan" cx="512" cy="215" rx="290" ry="140" fill="#45c9ff" opacity="0.95"/>
+          <ellipse id="aura-blue" cx="775" cy="390" rx="75" ry="140" fill="#7b61ff" opacity="0.55"/>
+          <ellipse id="aura-violet" cx="830" cy="740" rx="110" ry="200" fill="#ff5fbf" opacity="0.65" transform="rotate(-18 830 740)"/>
+          <ellipse id="aura-magenta" cx="250" cy="680" rx="95" ry="200" fill="#ff5fbf" opacity="0.80" transform="rotate(22 250 680)"/>
+        </g>
+      </g>
+    </g>
+    <g id="aura-shape">
+      <use id="aura-silhouette" opacity="1" href="#shape-silhouette" fill="url(#grad-aura)" filter="url(#fx-aura)" transform="translate(512 600) scale(1.06) translate(-512 -600)"/>
+      <use id="aura-tail" opacity="1" href="#shape-tail" fill="none" stroke="#ff5fbf" stroke-width="70" stroke-linecap="round" filter="url(#fx-aura)"/>
+    </g>
+  </g>
+
+  <g id="cat-float">
+  <g id="cat" filter="url(#fx-rim)">
+    <g id="tail-wrap">
+      <path id="tail" d="M660,985 C780,1002 892,962 904,868 C916,778 880,708 826,692 C790,682 764,700 772,728" pathLength="1" fill="none" stroke="url(#grad-cat-fill)" stroke-width="50" stroke-linecap="round"/>
+    </g>
+    <g id="body-rise">
+      <g id="body">
+        <path id="body-shape" d="M271,452 C289.2,446.7 339.8,427 380,420 C420.2,413 468,410 512,410 C556,410 603.8,413 644,420 C684.2,427 734.8,446.7 753,452 L753,484 C752.2,490 750,507.3 748,520 C746,532.7 742.5,545.7 741,560 C739.5,574.3 738.3,588 739,606 C739.7,624 741.5,646.5 745,668 C748.5,689.5 754.8,712.2 760,735 C765.2,757.8 772.3,782.8 776,805 C779.7,827.2 782.7,848.5 782,868 C781.3,887.5 779,906.3 772,922 C765,937.7 755.3,950.8 740,962 C724.7,973.2 704,982.3 680,989 C656,995.7 624,999.3 596,1002 C568,1004.7 526,1004.5 512,1005 C498,1004.5 456,1004.7 428,1002 C400,999.3 368,995.7 344,989 C320,982.3 299.3,973.2 284,962 C268.7,950.8 259,937.7 252,922 C245,906.3 242.7,887.5 242,868 C241.3,848.5 244.3,827.2 248,805 C251.7,782.8 258.8,757.8 264,735 C269.2,712.2 275.5,689.5 279,668 C282.5,646.5 284.3,624 285,606 C285.7,588 284.5,574.3 283,560 C281.5,545.7 278,532.7 276,520 C274,507.3 271.8,490 271,484 L271,452 Z" fill="url(#grad-cat-fill)"/>
+      </g>
+    </g>
+    <g id="head-spin">
+      <g id="head">
+        <circle id="intro-circle" cx="512" cy="405" r="240" fill="url(#grad-cat-fill)" opacity="0"/>
+        <g id="ear-left-pop"><path id="ear-left" d="M278,292 C277,287 273.3,269 272,262 C270.7,255 270.3,252 270,250 C272.2,248.7 280,246.3 283,242 C286,237.7 288.3,229.8 288,224 C287.7,218.2 284.5,211.2 281,207 C277.5,202.8 269.3,200.3 267,199 C267,195.8 266.8,186.5 267,180 C267.2,173.5 267.8,163.3 268,160 C268.3,157 268.8,147 270,142 C271.2,137 272.3,132.5 275,130 C277.7,127.5 284.2,127.5 286,127 C288.3,127.8 295,130 300,132 C305,134 310.7,136 316,139 C321.3,142 326.7,146.5 332,150 C337.3,153.5 342.7,156.3 348,160 C353.3,163.7 358.7,167.8 364,172 C369.3,176.2 374.7,180.3 380,185 C385.3,189.7 390.7,195.3 396,200 C401.3,204.7 407.3,208.8 412,213 C416.7,217.2 422,223 424,225 C422,231.2 420.7,249.5 412,262 C403.3,274.5 388,291.7 372,300 C356,308.3 331.7,313.3 316,312 C300.3,310.7 284.3,295.3 278,292 Z" fill="url(#grad-cat-fill)"/></g>
+        <g id="ear-right-pop"><path id="ear-right" d="M600,225 C602,223 607.3,217.2 612,213 C616.7,208.8 622.7,204.7 628,200 C633.3,195.3 638.7,189.7 644,185 C649.3,180.3 654.7,176.2 660,172 C665.3,167.8 670.7,163.7 676,160 C681.3,156.3 686.7,153.5 692,150 C697.3,146.5 702.7,142 708,139 C713.3,136 719,134 724,132 C729,130 735.7,127.8 738,127 C739.8,127.5 746.3,127.5 749,130 C751.7,132.5 752.8,137 754,142 C755.2,147 755.7,157 756,160 C756.2,166.7 757,187.5 757,200 C757,212.5 756.8,224.7 756,235 C755.2,245.3 753.7,252.5 752,262 C750.3,271.5 747,287 746,292 C739.7,295.3 723.7,310.7 708,312 C692.3,313.3 668,308.3 652,300 C636,291.7 620.7,274.5 612,262 C603.3,249.5 602,231.2 600,225 Z" fill="url(#grad-cat-fill)"/></g>
+        <path id="head-shape" d="M278,292 C286.7,284.3 313,256.5 330,246 C347,235.5 364.3,232.5 380,229 C395.7,225.5 416.7,225.7 424,225 C428.7,223.8 442.3,219.8 452,218 C461.7,216.2 472,215 482,214 C492,213 502,212 512,212 C522,212 532,213 542,214 C552,215 562.3,216.2 572,218 C581.7,219.8 595.3,223.8 600,225 C607.3,225.7 628.3,225.5 644,229 C659.7,232.5 677,235.5 694,246 C711,256.5 737.3,284.3 746,292 C744.8,297 740.7,313.2 739,322 C737.3,330.8 736.5,341.2 736,345 C736.8,348.8 739,360.2 741,368 C743,375.8 746,383 748,392 C750,401 751.8,412 753,422 C754.2,432 755,441.7 755,452 C755,462.3 753.8,474 753,484 C752.2,494 750.5,507.3 750,512 C735,518.7 699.7,543 660,552 C620.3,561 561.3,566 512,566 C462.7,566 403.7,561 364,552 C324.3,543 289,518.7 274,512 C273.5,507.3 271.8,494 271,484 C270.2,474 269,462.3 269,452 C269,441.7 269.8,432 271,422 C272.2,412 274,401 276,392 C278,383 281,375.8 283,368 C285,360.2 287.2,348.8 288,345 C287.5,341.2 286.7,330.8 285,322 C283.3,313.2 279.2,297 278,292 Z" fill="url(#grad-cat-fill)"/>
+        <g id="eyes-wake">
+        <g id="eyes">
+          <g id="eye-left">
+            <circle class="eye-halo" cx="412.5" cy="409" r="65" fill="url(#grad-eye-halo)"/>
+            <circle class="eye-core" cx="412.5" cy="409" r="51" fill="#ffffff" filter="url(#fx-eye-glow)"/>
+          </g>
+          <g id="eye-right">
+            <circle class="eye-halo" cx="611.5" cy="409" r="65" fill="url(#grad-eye-halo)"/>
+            <circle class="eye-core" cx="611.5" cy="409" r="51" fill="#ffffff" filter="url(#fx-eye-glow)"/>
+          </g>
+        </g>
+        </g>
+      </g>
+    </g>
+  </g>
+  </g>
+
+  <use id="silhouette-outline" href="#shape-silhouette" fill="none" stroke="#45c9ff" stroke-width="4" stroke-linejoin="round" opacity="0"/>
+  </svg></g>
+</svg>

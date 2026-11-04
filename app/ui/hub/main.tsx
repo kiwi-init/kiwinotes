@@ -8,6 +8,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "re
 import { HUB_SECTIONS, type HubSection, isHubSection } from "../../src/shared/ui-contract.ts";
 import { History } from "../history/History.tsx";
 import { NotesApp } from "../notes/NotesApp.tsx";
+import { About } from "./About.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { api, has } from "../src/api.ts";
 import { Empty, mount } from "../src/kit/index.tsx";
@@ -17,6 +18,7 @@ const LABELS: Record<HubSection, string> = {
   meetings: "Reuniões",
   dictation: "Ditado",
   settings: "Configurações",
+  about: "Sobre",
 };
 
 /** Seção que ainda não existe: aparece na barra, sem abrir nada. */
@@ -28,6 +30,7 @@ function Icon({ section }: { section: HubSection }) {
     meetings: <path d="M2.5 4.5h7v7h-7zM9.5 7l4-2.5v7l-4-2.5" />,
     dictation: <path d="M8 2.5a2 2 0 0 1 2 2v3a2 2 0 0 1-4 0v-3a2 2 0 0 1 2-2zM4.5 7.5a3.5 3.5 0 0 0 7 0M8 11v2.5" />,
     settings: <path d="M3 4.5h10M3 8h10M3 11.5h10M6 3v3M10 6.5v3M5 10v3" />,
+    about: <path d="M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM8 7.5v3.5M8 5.2v.1" />,
   };
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -45,6 +48,8 @@ function Pane({ section, active }: { section: HubSection; active: boolean }) {
       return <History />;
     case "settings":
       return <Settings />;
+    case "about":
+      return <About />;
     case "meetings":
       return (
         <div className="kn-hub-soon">
