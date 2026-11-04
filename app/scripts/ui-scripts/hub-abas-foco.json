@@ -89,31 +89,6 @@
       "name": "Esc fecha"
     },
     {
-      "click": ".kn-note-editor .cm-line:has-text('Abas em cima')",
-      "name": "o cursor numa linha da nota"
-    },
-    {
-      "press": "End"
-    },
-    {
-      "fill": ".kn-composer-input",
-      "text": "Ditado pela barra."
-    },
-    {
-      "press": "Enter",
-      "name": "Enter manda para a nota"
-    },
-    {
-      "expectText": ".kn-note-editor",
-      "text": "Abas em cima, no estilo do Channels. Ditado pela barra.",
-      "name": "o texto entra onde o cursor estava"
-    },
-    {
-      "expectText": ".kn-composer-input",
-      "text": "",
-      "name": "e o composer esvazia"
-    },
-    {
       "screenshot": "foco-nota.png"
     },
     {

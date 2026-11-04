@@ -1,4 +1,4 @@
-// T2502: o texto do composer entra no cursor do editor sem colar na palavra de antes.
+// O texto de fora do editor (o `/modelo`; antes, o composer do T2502) entra no cursor sem colar na palavra de antes.
 import { expect, test } from "bun:test";
 
 import { joinInsert } from "./NoteEditor.tsx";

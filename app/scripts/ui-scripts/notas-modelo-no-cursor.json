@@ -1,0 +1,73 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Modelos",
+        "title": "Assinatura",
+        "content": "Abraço, {{title}}."
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Inserir",
+        "content": "# Título\n\nUm dois três **quatro**.\n\nFim.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Inserir"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Inserir')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "expectCount": ".kn-composer-input",
+      "count": 0,
+      "name": "sem a barra de ditado embaixo da nota (T3144)"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered p:has-text('Um dois três')",
+      "name": "clica no parágrafo"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "type": " /modelo"
+    },
+    {
+      "waitFor": ".cm-tooltip-autocomplete li:has-text('Modelo')",
+      "name": "o /modelo no menu de blocos"
+    },
+    {
+      "wait": 150
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Assinatura')",
+      "name": "a lista dos modelos"
+    },
+    {
+      "press": "Enter",
+      "name": "escolhe o modelo"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-line:has-text('**quatro**. Abraço, Inserir.'), .kn-note-editor .cm-rendered p:has-text('quatro. Abraço, Inserir.')",
+      "name": "o texto de fora entra no cursor do editor, com as variáveis da nota (cru se o editor ficou com o foco, renderizado se não)"
+    }
+  ]
+}
