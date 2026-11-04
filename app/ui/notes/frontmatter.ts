@@ -1,6 +1,8 @@
 // O frontmatter YAML do topo da nota. O editor mostra só o corpo; o frontmatter volta intacto ao gravar, para a nota
 // abrir no Obsidian sem perder nada (spec #1107). Só o que a UI mostra é lido: as tags.
 
+import { bodyTags, uniqueTags } from "../../src/shared/tags.ts";
+
 export interface Split {
   /** O bloco `---\n…\n---\n` como estava, ou "". */
   frontmatter: string;
@@ -27,11 +29,7 @@ export function tagsOf(content: string): string[] {
   if (list) tags.push(...list[1]!.split(/\r?\n/).map((l) => l.replace(/^\s*-\s*/, "")));
   const single = /^tags:[ \t]*([^\[\s].*)$/m.exec(frontmatter);
   if (single) tags.push(...single[1]!.split(/[,\s]+/));
-  // `#tag` no corpo, fora de código e de títulos ("# Título" tem espaço depois do #).
-  const prose = body.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
-  for (const m of prose.matchAll(/(?:^|\s)#([\p{L}\p{N}_/-]+)/gu)) tags.push(m[1]!);
-  const seen = new Set<string>();
-  return tags
-    .map((t) => t.trim().replace(/^["']|["']$/g, "").replace(/^#/, ""))
-    .filter((t) => t && !seen.has(t) && seen.add(t));
+  // `#tag` no corpo, com as regras do engine (src/shared/tags.ts, T2619).
+  tags.push(...bodyTags(body));
+  return uniqueTags(tags.map((t) => t.trim().replace(/^["']|["']$/g, "")));
 }

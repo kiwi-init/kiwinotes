@@ -4,6 +4,7 @@
 import path from "node:path";
 
 import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shared/appearance.ts";
+import { DEFAULT_TEMPLATES_FOLDER } from "../shared/templates.ts";
 import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
 import { readJson, writeJson } from "./files.ts";
 
@@ -17,12 +18,21 @@ export interface AppSettings {
   pinned: string[];
   /** Modo, temas, texto, fonte e movimento, para todas as janelas (T2503). */
   appearance: Appearance;
+  /** A pasta dos modelos de nota, relativa ao vault (T2619). */
+  templatesFolder: string;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER };
+
+/** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
+export function sanitizeTemplatesFolder(input: unknown): string {
+  if (typeof input !== "string") return DEFAULT_TEMPLATES_FOLDER;
+  const p = input.trim().replace(/^\/+|\/+$/g, "");
+  return p && p.length <= 512 && p.split("/").every((s) => s && !s.startsWith(".")) ? p : DEFAULT_TEMPLATES_FOLDER;
+}
 
 /** A lista de fixadas que vale: strings curtas, sem repetir, até `MAX_PINNED` (a validação de caminho é de quem grava). */
 export function sanitizePinned(input: unknown): string[] {
@@ -44,6 +54,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     notesShortcut: "notesShortcut" in o && isNotesShortcut(o.notesShortcut) ? o.notesShortcut : DEFAULT_SETTINGS.notesShortcut,
     pinned: sanitizePinned(o.pinned),
     appearance: sanitizeAppearance(o.appearance),
+    templatesFolder: sanitizeTemplatesFolder(o.templatesFolder),
   };
 }
 

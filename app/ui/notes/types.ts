@@ -3,7 +3,8 @@
 
 import type { UiCapabilities } from "../../src/shared/ui-contract.ts";
 
-export type { Backlink, Note, NoteMeta, SaveResult, SearchHit } from "../../src/shared/ui-contract.ts";
+export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode } from "../../src/shared/ui-contract.ts";
+import type { TagNode } from "../../src/shared/ui-contract.ts";
 import type { Note, NoteMeta } from "../../src/shared/ui-contract.ts";
 
 /**
@@ -24,7 +25,11 @@ export interface NotesApi {
   /** Se a nota mudou fora (no Obsidian, por exemplo), não grava e devolve a versão do disco. */
   save(path: string, content: string, baseVersion: string): Result<"notes.save">;
   /** Título repetido vira "Título 2". */
-  create(title: string, folder?: string, content?: string): Promise<Note>;
+  create(title: string, folder?: string, content?: string, template?: string): Promise<Note>;
+  /** As tags em árvore (T2619). Num engine antes do 1.9.0, não existe. */
+  tags?(): Promise<TagNode[]>;
+  /** A pasta de modelos e as notas dela (T2619). Num engine antes do 1.9.0, não existe. */
+  templates?(): Promise<{ folder: string; templates: NoteMeta[] }>;
   rename(path: string, newPath: string): Result<"notes.rename">;
   /** Com o T2468, vai antes para `<vault>/.kiwi-trash/` por 10 min (o "Desfazer", `restore`), e depois para a Lixeira. */
   delete(path: string): Result<"notes.delete">;

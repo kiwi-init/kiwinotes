@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 
 import { linkFromPaste, listIndent, wordCount } from "./editor/text.ts";
 import { MockVault } from "./mock.ts";
+import { paletteItems } from "./palette.ts";
 import { buildTree, filterTree, recentNotes, type TreeNode } from "./tree.ts";
 import type { NoteMeta } from "./types.ts";
 
@@ -197,5 +198,30 @@ describe("Tab e ⇧Tab nas listas", () => {
     expect(listIndent(["texto"], 0, 0, 1)).toBeNull();
     expect(listIndent(["- a", "\t- b"], 1, 1, 1)).toBeNull();
     expect(listIndent(["- a", "parágrafo"], 0, 1, 1)).toBeNull();
+  });
+});
+
+describe("tags e modelos no ⌘K e no vault de mentira (T2619)", () => {
+  test("tag: no ⌘K: só o que o engine achou, sem Criar; os comandos aparecem sem busca e pelo nome", () => {
+    const n = [meta("A.md", "2026-11-01")];
+    const hit = { path: "A.md", title: "A", snippet: "", score: 1 };
+    expect(paletteItems(n, "tag:projeto", [hit]).map((i) => i.kind)).toEqual(["note"]);
+    const cmds = [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template" }];
+    expect(paletteItems(n, "", [], cmds).at(-1)).toEqual({ kind: "command", id: "template", title: "Nova nota a partir de modelo…" });
+    expect(paletteItems(n, "modelo", [], cmds).map((i) => i.kind)).toEqual(["command", "create"]);
+    expect(paletteItems(n, "zzz", [], cmds).map((i) => i.kind)).toEqual(["create"]);
+  });
+
+  test("o mock: tags em árvore, busca por tag e nota a partir de modelo", async () => {
+    const v = new MockVault(
+      { "Modelos/Ata.md": "# {{title}}\n{{date:DD/MM/AAAA}}", "A.md": "#projeto/kiwi texto", "B.md": "#Projeto" },
+      { now: () => new Date(2026, 10, 4, 9, 0) },
+    );
+    const tags = await v.tags();
+    expect(tags.map((t) => [t.tag.toLowerCase(), t.count])).toEqual([["projeto", 2]]);
+    expect((await v.search("tag:projeto/kiwi")).map((h) => h.path)).toEqual(["A.md"]);
+    expect((await v.templates()).templates.map((t) => t.path)).toEqual(["Modelos/Ata.md"]);
+    const n = await v.create("Ata", "Reuniões", "", "Modelos/Ata.md");
+    expect(n.content).toBe("# Ata\n04/11/2026");
   });
 });

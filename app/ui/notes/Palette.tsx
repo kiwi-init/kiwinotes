@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { plainSnippet } from "./links.ts";
-import { type PaletteItem, paletteItems } from "./palette.ts";
+import { type PaletteCommand, type PaletteItem, paletteItems } from "./palette.ts";
 import type { NoteMeta, NotesApi, SearchHit } from "./types.ts";
 
 export interface PaletteProps {
@@ -12,10 +12,14 @@ export interface PaletteProps {
   onOpen(path: string): void;
   onCreate(title: string): void;
   onClose(): void;
+  /** A busca já aberta com um texto (T2619: o clique numa #tag abre com `tag:…`). */
+  initialQuery?: string;
+  commands?: PaletteCommand[];
+  onCommand?(id: string): void;
 }
 
-export function Palette({ api, notes, onOpen, onCreate, onClose }: PaletteProps) {
-  const [query, setQuery] = useState("");
+export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = "", commands = [], onCommand }: PaletteProps) {
+  const [query, setQuery] = useState(initialQuery);
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [sel, setSel] = useState(0);
   const seq = useRef(0);
@@ -33,12 +37,13 @@ export function Palette({ api, notes, onOpen, onCreate, onClose }: PaletteProps)
     return () => clearTimeout(t);
   }, [query, api]);
 
-  const items = paletteItems(notes, query, hits);
+  const items = paletteItems(notes, query, hits, commands);
   useEffect(() => setSel(0), [query]);
 
   const choose = (item: PaletteItem | undefined) => {
     if (!item) return;
     if (item.kind === "note") onOpen(item.path);
+    else if (item.kind === "command") onCommand?.(item.id);
     else onCreate(item.title);
   };
 
@@ -66,7 +71,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose }: PaletteProps)
         <div className="kn-palette-list" role="listbox">
           {items.map((it, i) => (
             <div
-              key={it.kind === "note" ? it.path : `create:${it.title}`}
+              key={it.kind === "note" ? it.path : it.kind === "command" ? `cmd:${it.id}` : `create:${it.title}`}
               className="kn-palette-it"
               role="option"
               aria-selected={i === sel}
@@ -85,12 +90,14 @@ export function Palette({ api, notes, onOpen, onCreate, onClose }: PaletteProps)
                   </span>
                   <span className="kn-palette-r">{it.detail}</span>
                 </>
+              ) : it.kind === "command" ? (
+                <span className="kn-palette-title kn-palette-create">{it.title}</span>
               ) : (
                 <span className="kn-palette-title kn-palette-create">Criar “{it.title}”</span>
               )}
             </div>
           ))}
-          {!items.length ? <div className="kn-palette-empty">Nenhuma nota ainda</div> : null}
+          {!items.length ? <div className="kn-palette-empty">{query.trim() ? "Nenhuma nota com isso" : "Nenhuma nota ainda"}</div> : null}
         </div>
       </div>
     </div>

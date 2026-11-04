@@ -5,7 +5,7 @@
 import "../src/api.ts"; // o tipo do `window.engine`
 
 import { MockVault } from "./mock.ts";
-import type { FoldersApi, NotesApi } from "./types.ts";
+import type { FoldersApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
 
@@ -43,7 +43,14 @@ export function engineNotes(
     list: () => call("notes.list"),
     get: (path) => call("notes.get", { path }),
     save: (path, content, baseVersion) => call("notes.save", { path, content, baseVersion }),
-    create: (title, folder, content) => call("notes.create", { title, ...(folder ? { folder } : {}), ...(content ? { content } : {}) }),
+    create: (title, folder, content, template) =>
+      call("notes.create", { title, ...(folder ? { folder } : {}), ...(content ? { content } : {}), ...(template ? { template } : {}) }),
+    ...(has("notes.tags")
+      ? {
+          tags: () => call<{ tags: TagNode[] }>("notes.tags").then((r) => r.tags),
+          templates: () => call<{ folder: string; templates: NoteMeta[] }>("notes.templates"),
+        }
+      : {}),
     rename: (path, newPath) => call("notes.rename", { path, newPath }),
     delete: (path) => call("notes.delete", { path }),
     search: (query, limit) => call("notes.search", { query, ...(limit ? { limit } : {}) }),

@@ -19,14 +19,14 @@ import { LinkCache, type LinkTarget } from "./editor/index.ts";
 import { wordCount } from "./editor/text.ts";
 import { type Draft, Drafts, forgetDraftOnDelete } from "./drafts.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
-import { FolderPicker } from "./FolderPicker.tsx";
+import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
 import { focusEditor, NoteEditor } from "./NoteEditor.tsx";
 import { Palette } from "./Palette.tsx";
 import { type SideTarget, Sidebar } from "./Sidebar.tsx";
 import { ancestors, buildTree, editedLabel, filterTree, recentNotes, type SortBy } from "./tree.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
-import type { Backlink, Note, NotesApi, SaveResult, VaultListing } from "./types.ts";
+import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing } from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
@@ -79,6 +79,11 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [saveFailed, setSaveFailed] = useState(false);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [palette, setPalette] = useState(false);
+  /** O texto com que o ⌘K abre (T2619: `tag:…` vindo de um clique numa tag). */
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [tagList, setTagList] = useState<TagNode[]>([]);
+  /** "Nova nota a partir de modelo…": os modelos e a pasta onde a nota nasce. */
+  const [picking, setPicking] = useState<{ folder: string; templates: NoteMeta[] } | null>(null);
   // A árvore e o "Citada em" abrem em popover (C · Foco).
   const [treeOpen, setTreeOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
@@ -118,6 +123,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
         (l) => {
           setListing(l);
           setFailed(false);
+          // As tags andam com a lista (T2619): o mesmo notes.changed refaz as duas.
+          api.tags?.().then(setTagList, () => {});
           return l;
         },
         () => {
@@ -240,9 +247,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   );
 
   const create = useCallback(
-    async (wanted: string, focusTitle = false, folder?: string) => {
+    async (wanted: string, focusTitle = false, folder?: string, template?: string) => {
       if (!(await leave())) return;
-      const n = await api.create(wanted, folder || undefined).catch(() => null);
+      const n = await api.create(wanted, folder || undefined, undefined, template).catch(() => null);
       setPalette(false);
       setTreeOpen(false);
       if (!n) return;
@@ -325,7 +332,10 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current || !e.metaKey || e.altKey || e.ctrlKey) return;
       // Síncrono: a busca já está com o foco antes da próxima tecla (quem digita rápido não escreve na nota).
-      if (e.key === "k") flushSync(() => setPalette((p) => !p));
+      if (e.key === "k") {
+        setPaletteQuery("");
+        flushSync(() => setPalette((p) => !p));
+      }
       else if (e.key === "n") void create("Sem título", true, selectedFolderRef.current);
       else return;
       e.preventDefault();
@@ -561,6 +571,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     if (t.kind === "empty") {
       return [
         { label: "Nova nota", hint: "⌘N", onSelect: () => void create("Sem título", true, "") },
+        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate("") }] : []),
         ...(folders ? [{ label: "Nova pasta", onSelect: () => void newFolder("") }] : []),
         { kind: "separator" },
         ...sortItems,
@@ -569,6 +580,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     if (t.kind === "folder") {
       return [
         { label: "Nova nota aqui", onSelect: () => void create("Sem título", true, t.path) },
+        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(t.path) }] : []),
         { label: "Nova pasta aqui", onSelect: () => void newFolder(t.path), disabled: !folders },
         { kind: "separator" },
         { label: "Renomear", onSelect: () => setRenaming(`f:${t.path}`), disabled: !folders },
@@ -592,6 +604,32 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       { label: "Apagar", danger: true, onSelect: () => void remove(t) },
     ];
   };
+
+  // ---------------------------------------------------------------- tags e modelos (T2619)
+
+  const openPalette = (q = "") => {
+    setPaletteQuery(q);
+    setPalette(true);
+  };
+
+  const openTag = (tag: string) => {
+    setTreeOpen(false);
+    setBackOpen(false);
+    openPalette(`tag:${tag}`);
+  };
+
+  const fromTemplate = (folder: string) => {
+    setPalette(false);
+    api.templates?.().then(
+      (r) =>
+        r.templates.length
+          ? setPicking({ folder, templates: r.templates })
+          : say(`Nenhum modelo ainda. As notas da pasta “${r.folder}” viram modelos.`),
+      failed_("ler os modelos"),
+    );
+  };
+
+  const paletteCommands = api.templates ? [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template" }] : [];
 
   const linkTargets = (): LinkTarget[] => {
     const notes = listing?.notes ?? [];
@@ -639,7 +677,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
             <button type="button" title="Nova nota (⌘N)" aria-label="Nova nota" onClick={() => void create("Sem título", true, selectedFolderRef.current)}>
               <PenIcon />
             </button>
-            <button type="button" title="Buscar (⌘K)" aria-label="Buscar" onClick={() => setPalette(true)}>
+            <button type="button" title="Buscar (⌘K)" aria-label="Buscar" onClick={() => openPalette()}>
               <SearchIcon />
             </button>
           </span>
@@ -670,6 +708,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
               })
             }
             onOpen={(p) => void open(p)}
+            tags={tagList}
+            onTag={openTag}
           />
         </Popover>
       ) : null}
@@ -714,7 +754,12 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
               }}
             />
             <div className="kn-meta">
-              {[...note.tags.map((t) => `#${t}`), editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`].map((t) => (
+              {note.tags.map((t) => (
+                <button type="button" key={`#${t}`} className="kn-meta-bt" title={`Notas com #${t}`} onClick={() => openTag(t)}>
+                  #{t}
+                </button>
+              ))}
+              {[editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`].map((t) => (
                 <span key={t}>{t}</span>
               ))}
               <button
@@ -778,7 +823,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
                 </span>
               </div>
             ) : null}
-            <NoteEditor docKey={docKey} doc={body} links={links} onChange={onChange} onOpenLink={(t) => void onOpenLink(t)} linkTargets={linkTargets} />
+            <NoteEditor docKey={docKey} doc={body} links={links} onChange={onChange} onOpenLink={(t) => void onOpenLink(t)} onOpenTag={openTag} linkTargets={linkTargets} />
           </article>
         ) : listing && !listing.notes.length ? (
           <Empty title="Nenhuma nota ainda">
@@ -790,7 +835,16 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       </main>
       <Composer disabled={!note} />
       {palette ? (
-        <Palette api={api} notes={listing?.notes ?? []} onOpen={(p) => void open(p)} onCreate={(t) => void create(t)} onClose={() => setPalette(false)} />
+        <Palette
+          api={api}
+          notes={listing?.notes ?? []}
+          initialQuery={paletteQuery}
+          commands={paletteCommands}
+          onCommand={(id) => id === "template" && fromTemplate(selectedFolderRef.current)}
+          onOpen={(p) => void open(p)}
+          onCreate={(t) => void create(t)}
+          onClose={() => setPalette(false)}
+        />
       ) : null}
       {menu ? <ContextMenu x={menu.x} y={menu.y} items={menuFor(menu.target)} onClose={() => setMenu(null)} /> : null}
       {moving && moving.kind !== "empty" ? (
@@ -801,6 +855,19 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
           )}
           onPick={(f) => void moveItem(moving, f)}
           onClose={() => setMoving(null)}
+        />
+      ) : null}
+      {picking ? (
+        <ListPicker
+          title={`Nova nota${picking.folder ? ` em “${picking.folder.replace(/\//g, " / ")}”` : ""} a partir de…`}
+          items={picking.templates.map((m) => ({ value: m.path, label: m.title }))}
+          emptyText="Nenhum modelo com esse nome"
+          onPick={(path) => {
+            const m = picking.templates.find((x) => x.path === path);
+            setPicking(null);
+            if (m) void create(m.title, true, picking.folder, m.path);
+          }}
+          onClose={() => setPicking(null)}
         />
       ) : null}
       {toast ? <UndoToast toast={toast} onDone={() => setToast(null)} /> : null}

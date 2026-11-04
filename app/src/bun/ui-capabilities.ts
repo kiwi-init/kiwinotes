@@ -56,7 +56,7 @@ export interface CapabilityDeps {
     Vault,
     | "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve"
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
-    | "onExternalMoves" | "existing"
+    | "onExternalMoves" | "existing" | "tags" | "templates"
   >;
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
@@ -224,6 +224,16 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           const checked = checkAppearancePatch(value);
           if (!checked.ok) throw bad(`settings.set: ${checked.error}`);
           patch.appearance = checked.patch;
+        } else if (key === "templatesFolder") {
+          // Uma pasta do vault (T2619); a raiz não serve (todas as notas virariam modelo).
+          let p: string;
+          try {
+            p = folderPath(value);
+          } catch (e) {
+            throw e instanceof VaultError ? new CapabilityError(e.code, `templatesFolder: ${e.message}`) : e;
+          }
+          if (!p) throw bad("templatesFolder can't be the vault root");
+          patch.templatesFolder = p;
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);
@@ -273,8 +283,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       return (await vault()).save(a.path, a.content, a.baseVersion);
     },
     "notes.create": async (args) => {
-      const a = fields(args, "notes.create", ["folder", "title", "content"]);
-      return (await vault()).create(a.folder, a.title, a.content ?? "");
+      const a = fields(args, "notes.create", ["folder", "title", "content", "template"]);
+      return (await vault()).create(a.folder, a.title, a.content ?? "", a.template);
     },
     "notes.rename": async (args) => {
       const a = fields(args, "notes.rename", ["path", "newPath"]);
@@ -329,6 +339,15 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
     "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),
+    "notes.tags": async (args) => {
+      noArgs(args, "notes.tags");
+      return { tags: (await vault()).tags() };
+    },
+    "notes.templates": async (args) => {
+      noArgs(args, "notes.templates");
+      const folder = (await deps.settings.load()).templatesFolder;
+      return { folder, templates: (await vault()).templates(folder) };
+    },
   };
   // A lista do contrato e os handlers andam juntos.
   for (const cap of UI_CAPABILITIES) if (!handlers[cap]) throw new Error(`no handler for ${cap}`);
