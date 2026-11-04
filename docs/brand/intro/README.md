@@ -69,19 +69,22 @@ A janela `intro` do app sai daqui também: o `gerar.ts` escreve `app/ui/intro/in
 ## Arquivos
 - `intro.template.html`: o modelo, com o prisma e a linha do tempo. **Edite este.**
 - `intro.js`: o script da linha do tempo. **Edite este.**
-- `gerar.ts`: monta o `intro.html` a partir do modelo e de `../kiwi-cat-familia/kiwi-cat-1-aura-intro.svg`. Ele assa
-  os bitmaps no WebKit do Playwright do `app/`, então rode antes `bun install` em `app/`:
+- `gerar.ts`: monta o `intro.html` a partir do modelo, do `intro.js` e das camadas de `../kiwi-cat/camadas/`:
   `bun docs/brand/intro/gerar.ts`.
+- `frames.ts`: os frames-chave da intro, para aprovação.
 - `intro.html`: o gerado, o protótipo que abre sozinho no navegador. A janela do app é `app/ui/intro/`, gerada junto.
 - `prancha.png`: os 6 tempos.
 
-## O Kiwi-cat do Rive (T3154, spec #3133)
-A janela do app já sabe tocar o gato feito no Rive. **A troca é pôr o `kiwi-cat.riv` em `app/ui/intro/`**, e só com o
-ok do harry na animação. Sem o arquivo, a intro é esta, e o runtime nem entra no pack.
-- `app/ui/intro/rive.ts` carrega o `.riv` durante o prisma e, aos 3,7 s, toca ele no lugar do gato em SVG.
-- O runtime é o `@rive-app/canvas-single` (o WASM vem dentro do JS, ~3 MB): a VIEWS_CSP não deixa `fetch`, então o
-  `.wasm` e o `.riv` não podem ser baixados à parte.
-- **O combinado com o arquivo (T3151):** o artboard padrão, a state machine `intro` e, no view model padrão, um trigger
-  `done` no fim da abertura, e as fontes e imagens **embutidas** ("Embedded" no export). O runtime não busca nada no CDN
-  do Rive (`enableRiveAssetCDN: false`). Sem o trigger, a intro segue em 8,4 s, como o gato em SVG.
-- No "Reduzir movimento", no `?t=` e se o Rive não carregar em 1,5 s, fica o gato em SVG.
+## O Kiwi-cat em camadas (T3720, spec #3133)
+Desde o T3720 o gato da intro é a imagem aprovada pelo harry (`docs/brand/kiwi-cat/referencia-final.png`) em camadas,
+animada com CSS pelos beats do `docs/brand/kiwi-cat/roteiro.md` (8 s a 60 fps a partir da emenda com o prisma, aos 3,7 s).
+- **As camadas** (`docs/brand/kiwi-cat/camadas/`, WebP com alfa) entram como `<img>` embutidos, uma por camada do palco:
+  luz, luz da cabeça, corpo, cabeça, as duas orelhas e o aro. Os olhos são dois círculos em HTML. O `gerar.ts` encaixa
+  tudo pelo `camadas.json` e escreve a geometria (origens, olhos, o clip das orelhas) num `<style>`; a linha do tempo
+  (os `@keyframes` de cada beat) fica no modelo, na seção 6.
+- **Nada é borrado ao vivo:** as camadas já vêm macias, e o CSS só move, gira, escala e esmaece.
+- **O clip das orelhas** é o contorno da cabeça em `clip-path: path()`: o WebKit não aplica `clip-path: url(#id)` em
+  elementos HTML.
+- **Os frames-chave:** `bun docs/brand/intro/frames.ts` captura, do `intro.html` com o `?t=`, os frames f0, f48, f126,
+  f190, f230, f268, f390 e f480 e monta uma prancha (`frames/`). No app: `bun run cli ui intro --motion --query t=11.7`.
+- **O Rive saiu** (`app/ui/intro/rive.ts` e o `@rive-app/canvas-single`): o harry escolheu camadas + CSS/JS (#3718).

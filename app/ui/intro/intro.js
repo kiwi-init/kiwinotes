@@ -109,10 +109,9 @@
   let timers = [];
   const later = (s, fn) => timers.push(setTimeout(fn, s * 1000));
 
-  // O Kiwi-cat do Rive (T3154): na janela do app, com o `kiwi-cat.riv` no pack, o app/ui/intro/rive.ts põe aqui o gato
-  // do Rive, que toca no lugar do gato em SVG e avisa quando acaba. Sem ele (o protótipo, ou o pack sem o .riv), nada
-  // muda. No "Reduzir movimento" e no `?t=` fica o SVG.
-  const riveCat = !params.has("t") && window.kiwiRiveCat;
+  // O gato (T3720): as camadas da imagem aprovada, com os beats do roteiro em CSS (intro.template.html), 8 s a partir
+  // da emenda com o prisma (f0–f480 a 60 fps).
+  const CAT_S = 8.0;
 
   function startCat() {
     cat.classList.remove("paused");
@@ -139,27 +138,14 @@
     }
     stage.classList.add("play");
     animatePrism();
-    // 3,7 s: a bola cresce junto com o círculo do gato (o circleIn dele), e o gato começa.
-    if (riveCat) {
-      later(3.7, () => {
-        orb.classList.add("grow");
-        riveCat.start(finish).then((ok) => {
-          if (ok) { cat.classList.add("off"); return; }
-          if (ending) return; // pulou enquanto o Rive carregava
-          // O Rive não carregou: fica o gato em SVG, no tempo dele.
-          startCat();
-          later(8.4 / catSpeed, finish);
-        });
-      });
-      return;
-    }
+    // 3,7 s: a emenda. A bola cresce até o círculo de vidro do gato (R 225), e os beats começam.
     later(3.7, () => { orb.classList.add("grow"); startCat(); });
-    // O gato termina a abertura em ~7,8 s (no ritmo dele) e fica um instante pronto.
-    later(3.7 + 8.4 / catSpeed, finish);
+    // f480: o gato está na pose final, e a intro termina.
+    later(3.7 + CAT_S / catSpeed, finish);
   }
 
   let finished = false;
-  // O fim vem uma vez por vez que toca: do último frame, do clique para pular ou do limite do gato do Rive.
+  // O fim vem uma vez por vez que toca: do último frame ou do clique para pular.
   let ending = false;
   function finish() {
     if (ending) return;
