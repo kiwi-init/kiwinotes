@@ -9,11 +9,11 @@ import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
-import type { Backlink, Note, NoteMeta, SaveResult, SearchHit } from "../notes/vault.ts";
+import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit } from "../notes/vault.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
-export type { AliasWarning, Backlink, DictionaryTerm, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet };
+export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
 // 1.1.0 (T1316): as capacidades `notes.*` e o evento `notes.changed`, só acréscimos.
@@ -22,7 +22,10 @@ export type { AliasWarning, Backlink, DictionaryTerm, HistoryEntry, HistoryPage,
 // 1.4.0 (T2121): o hub, a janela principal (#2100): `hub.section` e o evento `hub.navigate`. Só acréscimo.
 // 1.5.0 (T2308): a janela `intro` e o `intro.done`. Só acréscimo.
 // 1.6.0 (T2386): a seção Sobre do hub: `app.about`, `updates.check`, `updates.apply` e o evento `updates.status`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.6.0";
+// 1.7.0 (T2468): as pastas (`folders.*`), `notes.move|duplicate|restore|reveal`, o `tree` no `notes.list`, o `ctime` no
+//   `NoteMeta` e o `pinned` nas settings. O `notes.delete` passa a esperar 10 min antes da Lixeira (o "Desfazer"). Só
+//   acréscimo.
+export const UI_CONTRACT_VERSION = "1.7.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -78,7 +81,8 @@ export interface UiCapabilities {
   // ---------------------------------------------------------------- notas (1.1.0, T1316)
   // `path` é sempre relativo ao vault, POSIX, terminando em `.md`. Fora do vault (`..`, absoluto, link simbólico,
   // pasta com ponto) dá E_OUTSIDE_VAULT; nota que não existe, E_NOT_FOUND; destino que já existe, E_EXISTS.
-  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[] } };
+  /** `tree` (1.7.0) é a mesma lista em árvore, com as pastas vazias. */
+  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode } };
   "notes.get": { args: { path: string }; result: Note };
   /** Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. */
   "notes.save": { args: { path: string; content: string; baseVersion: string }; result: SaveResult };
@@ -86,8 +90,31 @@ export interface UiCapabilities {
   "notes.create": { args: { folder?: string; title: string; content?: string }; result: Note };
   /** Renomeia ou move, e atualiza os [[links]] das outras notas. */
   "notes.rename": { args: { path: string; newPath: string }; result: { meta: NoteMeta; updatedLinks: number } };
-  /** Vai para a Lixeira do macOS: não apaga. */
+  /**
+   * Não apaga: espera 10 min (o `notes.restore`) numa pasta oculta do vault e então vai para a Lixeira do macOS (1.7.0;
+   * antes ia direto para a Lixeira).
+   */
   "notes.delete": { args: { path: string }; result: true };
+  /** Para outra pasta ("" é a raiz), com o mesmo nome; os [[links]] seguem. */
+  "notes.move": { args: { path: string; folder: string }; result: { meta: NoteMeta; updatedLinks: number } };
+  /** Uma cópia na mesma pasta: "Título 2". */
+  "notes.duplicate": { args: { path: string }; result: Note };
+  /** Desfaz um `notes.delete` ou `folders.delete` dos últimos 10 min, pelo caminho original. Lugar ocupado: E_EXISTS. */
+  "notes.restore": { args: { path: string }; result: { path: string } };
+  /** "Mostrar no Finder" (nota ou pasta). No headless e com KIWI_DEBUG=1, só registra. */
+  "notes.reveal": { args: { path: string }; result: true };
+
+  // ---------------------------------------------------------------- pastas (1.7.0, T2468)
+  // Pastas de verdade, como no Obsidian. Mover ou renomear atualiza os [[links]] de todas as notas. Pasta para dentro
+  // dela mesma: E_BAD_ARGS; pasta que não existe: E_NOT_FOUND; destino ocupado: E_EXISTS.
+  /** Cria a pasta e as de cima que faltarem. */
+  "folders.create": { args: { path: string }; result: { path: string } };
+  /** Renomeia ou move (o `newPath` pode estar em outro pai). */
+  "folders.rename": { args: { path: string; newPath: string }; result: { path: string; moved: number; updatedLinks: number } };
+  /** Para dentro de `parent` ("" é a raiz), com o mesmo nome. */
+  "folders.move": { args: { path: string; parent: string }; result: { path: string; moved: number; updatedLinks: number } };
+  /** Com o que tem dentro: espera o "Desfazer" (`notes.restore`) como a nota. */
+  "folders.delete": { args: { path: string }; result: true };
   "notes.search": { args: { query: string; limit?: number }; result: SearchHit[] };
   "notes.backlinks": { args: { path: string }; result: Backlink[] };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
@@ -122,6 +149,14 @@ export const UI_CAPABILITIES = [
   "notes.search",
   "notes.backlinks",
   "notes.resolve",
+  "notes.move",
+  "notes.duplicate",
+  "notes.restore",
+  "notes.reveal",
+  "folders.create",
+  "folders.rename",
+  "folders.move",
+  "folders.delete",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

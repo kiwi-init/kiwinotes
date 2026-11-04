@@ -51,6 +51,7 @@ export class MockVault implements NotesApi {
       title: noteName(path),
       folder: folderOf(path),
       mtime: s.mtime,
+      ctime: s.mtime,
       size: new TextEncoder().encode(s.content).length,
       version: String(s.version),
       tags: tagsOf(s.content),

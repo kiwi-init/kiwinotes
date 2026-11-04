@@ -7,7 +7,8 @@ import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapab
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
-import type { AppSettings } from "../store/settings.ts";
+import { type AppSettings, MAX_PINNED } from "../store/settings.ts";
+import { folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import type { Vault } from "../notes/vault.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
@@ -49,7 +50,16 @@ export interface CapabilityDeps {
     apply(): Promise<UpdatesView>;
   };
   /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
-  notes: Pick<Vault, "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve">;
+  notes: Pick<
+    Vault,
+    | "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve"
+    | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
+  >;
+  /**
+   * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
+   * o `notes.reveal` só confere que o item existe.
+   */
+  reveal?(abs: string): void;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
@@ -112,6 +122,22 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     return a;
   };
 
+  /**
+   * As fixadas seguem a nota ou a pasta (T2468): `map` diz para onde foi cada caminho (null: saiu). Uma pasta movida
+   * leva junto as fixadas de dentro dela.
+   */
+  const fixPinned = async (map: (p: string) => string | null) => {
+    const current = await deps.settings.load();
+    const next = [...new Set(current.pinned.map(map).filter((p): p is string => p !== null))];
+    if (next.length === current.pinned.length && next.every((p, i) => p === current.pinned[i])) return;
+    // Em duas linhas: num `settingsChanged?.(await save())`, sem o listener, o `?.` pula o argumento e nada é salvo.
+    const saved = await deps.settings.save({ pinned: next });
+    deps.settingsChanged?.(saved);
+  };
+  const under = (prefix: string, p: string) => p === prefix || p.startsWith(`${prefix}/`);
+  const moveUnder = (from: string, to: string) => (p: string) => (under(from, p) ? `${to}${p.slice(from.length)}` : p);
+  const dropUnder = (gone: string) => (p: string) => (under(gone, p) ? null : p);
+
   const handlers: { [K in UiCapability]: (args: unknown) => Promise<UiCapabilities[K]["result"]> | UiCapabilities[K]["result"] } = {
     "dictionary.get": (args) => {
       noArgs(args, "dictionary.get");
@@ -169,9 +195,12 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const a = object(args, "settings.set");
       const patch: Partial<AppSettings> = {};
       for (const [key, value] of Object.entries(a)) {
-        if (key !== "notesShortcut") throw bad(`settings.set: unknown setting ${key}`);
-        if (!isNotesShortcut(value)) throw bad("notesShortcut must be one of the offered shortcuts, or null");
-        patch.notesShortcut = value;
+        if (key === "notesShortcut") {
+          if (!isNotesShortcut(value)) throw bad("notesShortcut must be one of the offered shortcuts, or null");
+          patch.notesShortcut = value;
+        } else if (key === "pinned") {
+          patch.pinned = pinnedList(value);
+        } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);
       deps.settingsChanged?.(saved);
@@ -225,9 +254,51 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     },
     "notes.rename": async (args) => {
       const a = fields(args, "notes.rename", ["path", "newPath"]);
-      return (await vault()).rename(a.path, a.newPath);
+      const r = await (await vault()).rename(a.path, a.newPath);
+      await fixPinned(moveUnder(notePath(a.path), r.meta.path));
+      return r;
     },
-    "notes.delete": async (args) => (await vault()).delete(fields(args, "notes.delete", ["path"]).path),
+    "notes.delete": async (args) => {
+      const p = fields(args, "notes.delete", ["path"]).path;
+      const r = await (await vault()).delete(p);
+      await fixPinned(dropUnder(notePath(p)));
+      return r;
+    },
+    "notes.move": async (args) => {
+      const a = fields(args, "notes.move", ["path", "folder"]);
+      const r = await (await vault()).moveNote(a.path, a.folder);
+      await fixPinned(moveUnder(notePath(a.path), r.meta.path));
+      return r;
+    },
+    "notes.duplicate": async (args) => (await vault()).duplicate(fields(args, "notes.duplicate", ["path"]).path),
+    "notes.restore": async (args) => (await vault()).restore(fields(args, "notes.restore", ["path"]).path),
+    "notes.reveal": async (args) => {
+      const abs = await (await vault()).locate(fields(args, "notes.reveal", ["path"]).path);
+      deps.reveal?.(abs);
+      return true as const;
+    },
+    "folders.create": async (args) => (await vault()).createFolder(fields(args, "folders.create", ["path"]).path),
+    "folders.rename": async (args) => {
+      const a = fields(args, "folders.rename", ["path", "newPath"]);
+      const r = await (await vault()).moveFolder(a.path, a.newPath);
+      await fixPinned(moveUnder(folderPath(a.path), r.path));
+      return r;
+    },
+    "folders.move": async (args) => {
+      const a = fields(args, "folders.move", ["path", "parent"]);
+      const from = folderPath(a.path);
+      const parent = folderPath(a.parent ?? "");
+      const name = from.split("/").at(-1) ?? "";
+      const r = await (await vault()).moveFolder(from, parent ? `${parent}/${name}` : name);
+      await fixPinned(moveUnder(from, r.path));
+      return r;
+    },
+    "folders.delete": async (args) => {
+      const p = folderPath(fields(args, "folders.delete", ["path"]).path);
+      const r = await (await vault()).deleteFolder(p);
+      await fixPinned(dropUnder(p));
+      return r;
+    },
     "notes.search": async (args) => {
       const a = fields(args, "notes.search", ["query", "limit"]);
       return (await vault()).search(a.query, a.limit);
@@ -241,3 +312,21 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
 }
 
 export type { HistoryEntry };
+
+/** O `pinned` do `settings.set`: caminhos de nota ou pasta do vault, sem repetir, até `MAX_PINNED`. */
+function pinnedList(value: unknown): string[] {
+  if (!Array.isArray(value)) throw bad("pinned must be a list of note or folder paths");
+  if (value.length > MAX_PINNED) throw bad(`pinned has more than ${MAX_PINNED} items`);
+  const out: string[] = [];
+  for (const v of value) {
+    let p: string;
+    try {
+      p = typeof v === "string" && /\.md$/i.test(v) ? notePath(v) : folderPath(v);
+    } catch (e) {
+      throw e instanceof VaultError ? new CapabilityError(e.code, `pinned: ${e.message}`) : e;
+    }
+    if (!p) throw bad("pinned can't hold the vault root");
+    if (!out.includes(p)) out.push(p);
+  }
+  return out;
+}

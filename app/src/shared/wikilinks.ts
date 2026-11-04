@@ -102,3 +102,28 @@ export function rewriteLinks(
   });
   return { content: out, count };
 }
+
+/**
+ * Como o `rewriteLinks`, para muitas notas que mudaram de lugar de uma vez (uma pasta movida ou renomeada, T2468): numa
+ * passada só, cada link que apontava para uma nota de `moves` (antes) passa a apontar para o lugar novo. Conta só o
+ * que mudou no texto: um `[[Nota]]` pelo nome que continua achando a nota fica como está.
+ */
+export function rewriteLinksMany(
+  content: string,
+  moves: ReadonlyMap<string, string>,
+  before: Resolver,
+  after: Resolver,
+): { content: string; count: number } {
+  let count = 0;
+  const out = content.replace(LINK, (raw, bang: string, t: string, heading: string | undefined, alias: string | undefined) => {
+    const from = before(t);
+    const to = from === null ? undefined : moves.get(from);
+    if (!to) return raw;
+    const name = noteName(to);
+    const target = after(name) === to ? name : to.replace(/\.md$/i, "");
+    const next = `${bang}[[${target}${heading ?? ""}${alias ?? ""}]]`;
+    if (next !== raw) count++;
+    return next;
+  });
+  return { content: out, count };
+}

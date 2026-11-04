@@ -32,7 +32,7 @@ const BUILT_IN_SEQ = 1_000;
 /** As notas têm testes próprios (src/notes/vault.test.ts); aqui só precisam existir. */
 const notesStub = {
   open: async () => {},
-  list: () => ({ folders: [], notes: [] }),
+  list: () => ({ folders: [], notes: [], tree: { path: "", name: "", folders: [], notes: [] } }),
   get: async () => {
     throw new Error("not in this test");
   },
@@ -43,12 +43,19 @@ const notesStub = {
   search: () => [],
   backlinks: () => [],
   resolve: () => null,
+  moveNote: async () => null as never,
+  duplicate: async () => null as never,
+  restore: async () => null as never,
+  locate: async () => "",
+  createFolder: async () => null as never,
+  moveFolder: async () => null as never,
+  deleteFolder: async () => true as const,
 };
 
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n" };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [] };
   let t = 0;
   return {
     calls,

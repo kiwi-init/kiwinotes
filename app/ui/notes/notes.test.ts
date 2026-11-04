@@ -88,7 +88,7 @@ describe("árvore", () => {
         { path: "Projetos/Nota 10.md", title: "Nota 10" },
         { path: "Projetos/Nota 2.md", title: "Nota 2" },
         { path: "Alfa.md", title: "Alfa" },
-      ].map((n) => ({ ...n, folder: folderOf(n.path), mtime: "", size: 0, version: "1", tags: [] })),
+      ].map((n) => ({ ...n, folder: folderOf(n.path), mtime: "", ctime: "", size: 0, version: "1", tags: [] })),
     });
     expect(tree.map((n) => n.name)).toEqual(["Projetos", "Vazia", "Alfa", "Zeta"]);
     const projetos = tree[0]!;
@@ -224,7 +224,7 @@ describe("as capacidades pelo engine", () => {
 });
 
 describe("⌘K", () => {
-  const meta = (path: string, mtime: string) => ({ path, title: noteName(path), folder: folderOf(path), mtime, size: 0, version: "1", tags: [] });
+  const meta = (path: string, mtime: string) => ({ path, title: noteName(path), folder: folderOf(path), mtime, ctime: mtime, size: 0, version: "1", tags: [] });
   const notes = [
     meta("Ana.md", "2026-11-01"),
     meta("Pessoas/Anabela.md", "2026-11-03"),

@@ -5,7 +5,7 @@ import { sentText, targetItems } from "./toNote.ts";
 
 const note = (path: string, mtime: string): NoteMeta => {
   const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-  return { path, title: path.slice(path.lastIndexOf("/") + 1, -3), folder, mtime, size: 1, version: "v", tags: [] };
+  return { path, title: path.slice(path.lastIndexOf("/") + 1, -3), folder, mtime, ctime: mtime, size: 1, version: "v", tags: [] };
 };
 
 const notes = [note("Projetos/PACS.md", "2026-11-03T10:00:00Z"), note("Ideias.md", "2026-11-03T12:00:00Z"), note("Diário/Hoje.md", "2026-11-01T00:00:00Z")];
