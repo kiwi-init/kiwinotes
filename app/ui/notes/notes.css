@@ -765,6 +765,8 @@ body {
 }
 .kn-mention-link {
   flex: none;
+}
+
 /* ---------------------------------------------------------- as buscas salvas na árvore (T2660) */
 
 .kn-side-saved {
