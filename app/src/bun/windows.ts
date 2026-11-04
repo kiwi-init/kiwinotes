@@ -89,6 +89,7 @@ const capabilities = uiCapabilities({
     Bun.spawn(["/usr/bin/open", path.join(process.env.HOME ?? "", ".Trash")], { stdio: ["ignore", "ignore", "ignore"] });
   },
   notes: stores.notes,
+  attachments: stores.attachments,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),
   about: {

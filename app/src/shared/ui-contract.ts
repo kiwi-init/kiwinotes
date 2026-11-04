@@ -11,6 +11,7 @@ import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
 import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem } from "../notes/vault.ts";
+import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
@@ -33,7 +34,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `notes.create`) e o `templatesFolder` nas settings. Só acréscimo.
 // 1.10.0 (T2593): a nota do dia (`notes.daily`, `dailyFolder` nas settings), `notes.createFromLink`, "Mencionada sem
 //   link" (`notes.unlinkedMentions|linkMentions`) e a Lixeira (`trash.list|empty|reveal`). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.10.0";
+// 1.11.0 (T2594): os anexos (`attachments.save|read|rename`) e a `attachmentsFolder` nas settings. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.11.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -157,6 +159,13 @@ export interface UiCapabilities {
   "notes.tags": { args: Record<string, never>; result: { tags: TagNode[] } };
   /** As notas da pasta de modelos (`templatesFolder` das settings), por nome (1.9.0). */
   "notes.templates": { args: Record<string, never>; result: { folder: string; templates: NoteMeta[] } };
+  // ---------------------------------------------------------------- anexos (1.11.0, T2594)
+  /** Grava uma imagem ou um PDF (`data` em base64, até 25 MB) na pasta de anexos, com nome único; devolve o embed. */
+  "attachments.save": { args: { name: string; data: string }; result: SavedAttachment };
+  /** O anexo de um `![[…]]` (ou de um caminho) como `data:` URL, para o editor desenhar. Sem anexo, E_NOT_FOUND. */
+  "attachments.read": { args: { link: string }; result: AttachmentData };
+  /** Renomeia ou move o anexo e troca os links das notas que apontavam para ele. */
+  "attachments.rename": { args: { path: string; newPath: string }; result: { path: string; updatedLinks: number } };
 }
 
 export type UiCapability = keyof UiCapabilities;
@@ -189,6 +198,9 @@ export const UI_CAPABILITIES = [
   "notes.resolve",
   "notes.tags",
   "notes.templates",
+  "attachments.save",
+  "attachments.read",
+  "attachments.rename",
   "notes.move",
   "notes.duplicate",
   "notes.restore",

@@ -94,6 +94,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     snippets: stores.snippets,
     history: stores.history,
     notes: stores.notes,
+    attachments: stores.attachments,
     dictionaryChanged: (terms) => void session?.dictionaryChanged(terms),
     snippetsChanged: (snippets) => session?.snippetsChanged(snippets),
     settings: stores.settings,

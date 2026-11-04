@@ -3,6 +3,7 @@
 
 import path from "node:path";
 
+import { attachmentsFolder, DEFAULT_ATTACHMENTS_FOLDER } from "../notes/attachments.ts";
 import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shared/appearance.ts";
 import { DEFAULT_TEMPLATES_FOLDER } from "../shared/templates.ts";
 import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
@@ -23,12 +24,14 @@ export interface AppSettings {
   templatesFolder: string;
   /** A pasta da nota do dia (T2593), relativa ao vault. Como no Obsidian, configurável. */
   dailyFolder: string;
+  /** Onde os anexos colados e arrastados vão, relativo ao vault ("" é a raiz). Padrão: `Anexos` (T2594). */
+  attachmentsFolder: string;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário" };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -44,6 +47,15 @@ export function sanitizeDailyFolder(input: unknown): string {
     return p || DEFAULT_SETTINGS.dailyFolder;
   } catch {
     return DEFAULT_SETTINGS.dailyFolder;
+  }
+}
+
+/** A pasta de anexos que vale, ou o padrão (um valor editado à mão que sai do vault volta ao padrão). */
+function sanitizeAttachmentsFolder(input: unknown): string {
+  try {
+    return attachmentsFolder(input);
+  } catch {
+    return DEFAULT_ATTACHMENTS_FOLDER;
   }
 }
 
@@ -69,6 +81,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     appearance: sanitizeAppearance(o.appearance),
     templatesFolder: sanitizeTemplatesFolder(o.templatesFolder),
     dailyFolder: "dailyFolder" in o ? sanitizeDailyFolder(o.dailyFolder) : DEFAULT_SETTINGS.dailyFolder,
+    attachmentsFolder: "attachmentsFolder" in o ? sanitizeAttachmentsFolder(o.attachmentsFolder) : DEFAULT_ATTACHMENTS_FOLDER,
   };
 }
 
