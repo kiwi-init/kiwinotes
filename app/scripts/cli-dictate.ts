@@ -6,7 +6,7 @@
 //   dictate --batch <pasta|arquivo.jsonl>
 //
 // Sai um JSON no stdout: o relatório do ditado, ou o da bateria (`--batch`). Exit 0 é ok; 1, o app recusou ou um caso
-// da bateria não bateu com o `expect`; 2, uso errado. O "não está rodando" (3) é do `send` da CLI.
+// da bateria não bateu com o `expect`; 2, uso errado; 3, o headless não está rodando (o `send` lança E_NOT_RUNNING).
 //
 // A bateria: um .jsonl, um caso por linha, ou uma pasta de .wav (cada um com um .json do lado, opcional, com os mesmos
 // campos). Um caso é o pedido do `dictate` (`wav` ou `text`, `app`, `note`, `fieldBefore`, `field`) mais `name` e
@@ -89,6 +89,10 @@ export function parseArgs(argv: string[]): { batch: string } | { request: Record
         break;
       case "--batch":
         batch = value(i++, a);
+        break;
+      case "--data":
+        // O da CLI (a pasta do headless): já foi usado para achar o socket.
+        value(i++, a);
         break;
       default:
         if (a.startsWith("--")) throw new UsageError(`unknown flag ${a}`);
@@ -176,6 +180,16 @@ export async function runBatch(cases: BatchCase[], send: Send) {
 
 /** O subcomando `dictate` da CLI (T1739 chama isto). Devolve o exit code. */
 export async function runDictate(argv: string[], send: Send): Promise<number> {
+  try {
+    return await dictateOrBatch(argv, send);
+  } catch (e) {
+    if ((e as { code?: string }).code !== "E_NOT_RUNNING") throw e;
+    print({ ok: false, code: "E_NOT_RUNNING", message: (e as Error).message });
+    return 3;
+  }
+}
+
+async function dictateOrBatch(argv: string[], send: Send): Promise<number> {
   let parsed: ReturnType<typeof parseArgs>;
   let cases: BatchCase[] | undefined;
   try {

@@ -26,6 +26,8 @@ describe("cli dictate (T1740)", () => {
       request: { text: "-x", field: { role: null, secureInput: true, accessibility: false, hasCaret: false } },
     });
     expect(parseArgs(["--batch", "casos.jsonl"])).toEqual({ batch: "casos.jsonl" });
+    // O --data é da CLI (a pasta do headless), não do ditado.
+    expect(parseArgs(["a.wav", "--data", "/tmp/kn"])).toEqual({ request: { wav: "a.wav" } });
     for (const bad of [[], ["a.wav", "b.wav"], ["--text", "a", "--wav", "b"], ["--bogus"], ["--app"], ["--batch", "x", "--note"]]) {
       expect(() => parseArgs(bad)).toThrow();
     }
@@ -88,6 +90,10 @@ describe("cli dictate (T1740)", () => {
       expect(JSON.parse(log.mock.calls.at(-1)![0] as string)).toMatchObject({ text: "oi" });
       expect(await runDictate(["--text", "quebra"], send)).toBe(1);
       expect(await runDictate(["--bogus"], send)).toBe(2);
+      const down: Send = async () => {
+        throw Object.assign(new Error("no headless at /tmp/kn"), { code: "E_NOT_RUNNING" });
+      };
+      expect(await runDictate(["--text", "oi"], down)).toBe(3);
       const d = tmp();
       writeFileSync(path.join(d, "c.jsonl"), '{"text":"oi","expect":{"text":"oi"}}\n');
       expect(await runDictate(["--batch", path.join(d, "c.jsonl")], send)).toBe(0);
