@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
+import { isPackageName, packageOf } from "../shared/attachments.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -386,6 +387,8 @@ export class Vault {
     const p = filePath(input);
     const abs = inside(this.root, p);
     const s = await lstat(abs).catch(() => null);
+    // Um pacote (`.pages`, `.numbers`, `.key`) é uma pasta: o bit "x" dela é o de entrar, não o de executar.
+    if (s?.isDirectory() && isPackageName(p)) return { abs, mode: 0 };
     if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     return { abs, mode: s.mode };
   }
@@ -977,7 +980,9 @@ export class Vault {
         const abs = path.join(this.root, child);
         const s = await lstat(abs);
         if (s.isSymbolicLink()) continue;
-        if (s.isDirectory()) {
+        if (s.isDirectory() && isPackageName(name)) {
+          this.keepFile(child.normalize("NFC"), s); // um documento-pacote: arquivo, não pasta (T3371)
+        } else if (s.isDirectory()) {
           this.folders.add(child.normalize("NFC"));
           await walk(child);
         } else if (s.isFile() && /\.md$/i.test(name)) {
@@ -999,6 +1004,15 @@ export class Vault {
     const others: string[] = [];
     const before = this.snapshot();
     for (const rel of paths) {
+      // Dentro de um documento-pacote (o Pages salvando): conta como o pacote inteiro mudando (T3371).
+      const pkg = packageOf(rel);
+      if (pkg) {
+        const ps = await lstat(path.join(this.root, pkg)).catch(() => null);
+        if (ps?.isDirectory() && !ps.isSymbolicLink()) this.keepFile(pkg, ps);
+        else this.files.delete(pkg);
+        if (!others.includes(pkg)) others.push(pkg);
+        continue;
+      }
       const abs = path.join(this.root, rel);
       let s;
       try {

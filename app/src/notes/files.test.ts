@@ -90,6 +90,28 @@ describe("os arquivos que não são nota (T3370)", () => {
     await waitFor(() => !v.list().files.length && seen.flat().some((p) => p.startsWith("Fotos")));
   });
 
+  test("documento-pacote (.pages, .numbers, .key): arquivo na lista, sem virar pasta, e abre no app dele", async () => {
+    const { v, root } = await vault({ "Nota.md": "oi", "Relatório.pages/Index.zip": "zip", "Relatório.pages/Data/foto.png": "png", "Contas.numbers/Index.zip": "z" });
+    expect(v.list().files.map((f) => f.path)).toEqual(["Contas.numbers", "Relatório.pages"]);
+    expect(v.list().folders).toEqual([]);
+    expect(await v.locateFile("Relatório.pages")).toEqual({ abs: path.join(root, "Relatório.pages"), mode: 0 });
+    expect(openMode("Relatório.pages", 0)).toBe("app");
+    // Uma pasta comum continua não sendo arquivo.
+    mkdirSync(path.join(root, "Pasta"));
+    await expect(v.locateFile("Pasta")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    // O Pages salvando por dentro: o watcher vê o pacote, não os arquivos de dentro.
+    v.watch();
+    await watcherReady(root, v);
+    writeFileSync(path.join(root, "Relatório.pages/Index.zip"), "zip 2");
+    writeFileSync(path.join(root, "Novo.key"), "");
+    rmSync(path.join(root, "Novo.key"));
+    mkdirSync(path.join(root, "Novo.key"));
+    writeFileSync(path.join(root, "Novo.key/Index.zip"), "z");
+    await waitFor(() => v.list().files.some((f) => f.path === "Novo.key"));
+    expect(v.list().files.map((f) => f.path)).toEqual(["Contas.numbers", "Novo.key", "Relatório.pages"]);
+    expect(v.list().folders).not.toContain("Novo.key");
+  });
+
   test("locateFile: só arquivo do cofre que existe e não é nota", async () => {
     const { v, root } = await vault({ "Nota.md": "oi", "Anexos/a.pdf": "%PDF" });
     expect((await v.locateFile("Anexos/a.pdf")).abs).toBe(path.join(root, "Anexos/a.pdf"));

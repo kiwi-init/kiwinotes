@@ -51,3 +51,17 @@ export const isExecutable = (mode: number): boolean => (mode & 0o111) !== 0;
  */
 export const openMode = (name: string, mode = 0): "app" | "finder" =>
   OPENS_IN_APP.has(extOf(name)) && !isExecutable(mode) ? "app" : "finder";
+
+/**
+ * Documentos que o macOS guarda como pacote (uma pasta que o Finder mostra como arquivo): o vault lista como arquivo,
+ * sem entrar nem mostrar como pasta, e a árvore abre no app dele (T3371, nit da revisão #3466).
+ */
+export const PACKAGE_EXTS = new Set(["pages", "numbers", "key", "rtfd"]);
+export const isPackageName = (name: string): boolean => PACKAGE_EXTS.has(extOf(name));
+
+/** O pacote que contém `rel` (`Relatório.pages/Index.zip` → `Relatório.pages`), ou null. */
+export function packageOf(rel: string): string | null {
+  const parts = rel.split("/");
+  const i = parts.findIndex((p) => isPackageName(p));
+  return i < 0 ? null : parts.slice(0, i + 1).join("/");
+}
