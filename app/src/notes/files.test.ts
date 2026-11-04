@@ -143,6 +143,55 @@ describe("os arquivos que não são nota (T3370)", () => {
     expect(v.list().files.map((f) => f.path)).toEqual(["Chaves.pages/senhas.txt"]);
   });
 
+  test("o clique num pacote (T3918): files.open abre no app ou no Finder, nunca E_NOT_FOUND", async () => {
+    // As duas formas do iWork: o pacote antigo (`Index.zip`) e o de hoje (a pasta `Index/` com os `.iwa`).
+    const { v } = await vault({
+      "Projeto.key/Index.zip": "z",
+      "Projeto.key/Metadata/Properties.plist": "p",
+      "Notas.pages/Index/Document.iwa": "iwa",
+      "Notas.pages/Metadata/DocumentIdentifier": "id",
+      "Contas.numbers/Index/Document.iwa": "iwa",
+      "Texto.rtfd/TXT.rtf": "{\\rtf1}",
+    });
+    expect(v.list().files.map((f) => f.path)).toEqual(["Contas.numbers", "Notas.pages", "Projeto.key", "Texto.rtfd"]);
+    expect(v.list().folders).toEqual([]);
+    const opened: [string, string][] = [];
+    const caps = uiCapabilities({
+      dictionary: { load: async () => [], save: async (t) => t },
+      snippets: { load: async () => [], save: async (s) => s },
+      history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+      dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
+      settings: { load: async () => ({ ...DEFAULT_SETTINGS }), save: async () => ({ ...DEFAULT_SETTINGS }) },
+      clipboardWrite: () => {},
+      notes: v,
+      openFile: (abs, mode) => void opened.push([path.basename(abs), mode]),
+    });
+    for (const p of ["Projeto.key", "Notas.pages", "Contas.numbers", "Texto.rtfd"]) {
+      expect(await directInvoke(caps, "files.open", { path: p })).toEqual({ ok: true, value: true });
+    }
+    // O `.rtfd` não está na OPENS_IN_APP: só aparece no Finder.
+    expect(opened).toEqual([["Projeto.key", "app"], ["Notas.pages", "app"], ["Contas.numbers", "app"], ["Texto.rtfd", "finder"]]);
+  });
+
+  test("a marca do iWork de hoje é o Index/Document.iwa: uma pasta Index comum não esconde notas (T3918)", async () => {
+    const { v, root } = await vault({
+      "Livro.pages/Index/Capítulo 1.md": "era uma vez",
+      "Livro.pages/Index/Document.iwa": "iwa",
+      "Fotos.key/Index/foto.png": "png",
+    });
+    expect(v.list().notes.map((n) => n.path)).toEqual(["Livro.pages/Index/Capítulo 1.md"]);
+    expect(v.list().folders).toEqual(["Fotos.key", "Fotos.key/Index", "Livro.pages", "Livro.pages/Index"]);
+    expect(v.list().files.map((f) => f.path)).toEqual(["Fotos.key/Index/foto.png", "Livro.pages/Index/Document.iwa"]);
+    // O Keynote salvando um novo: a pasta e o `Index/` chegam antes do `Document.iwa`; com ele, vira documento.
+    v.watch();
+    await watcherReady(root, v);
+    mkdirSync(path.join(root, "Novo.key/Index"), { recursive: true });
+    await waitFor(() => v.list().folders.includes("Novo.key/Index"));
+    writeFileSync(path.join(root, "Novo.key/Index/Document.iwa"), "iwa");
+    await waitFor(() => v.list().files.some((f) => f.path === "Novo.key") && !v.list().folders.some((f) => f.startsWith("Novo.key")));
+    expect(await v.locateFile("Novo.key")).toMatchObject({ mode: 0 });
+  });
+
   test("locateFile: só arquivo do cofre que existe e não é nota", async () => {
     const { v, root } = await vault({ "Nota.md": "oi", "Anexos/a.pdf": "%PDF" });
     expect((await v.locateFile("Anexos/a.pdf")).abs).toBe(path.join(root, "Anexos/a.pdf"));
