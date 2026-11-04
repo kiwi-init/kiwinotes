@@ -63,9 +63,10 @@
   height: calc(var(--ctl) - 4px);
   border-radius: var(--r-row);
   background: var(--wash-2, var(--surface-hover));
+  /* T3821: o mesmo movimento do hover, que é quem mais move a pílula agora */
   transition:
-    transform var(--glide),
-    width var(--glide);
+    transform var(--hover-dur) var(--hover-ease),
+    width var(--hover-dur) var(--hover-ease);
   pointer-events: none;
 }
 

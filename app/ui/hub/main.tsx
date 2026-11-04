@@ -48,8 +48,17 @@ function Pane({ section, active }: { section: HubSection; active: boolean }) {
   }
 }
 
-/** Quanto a pílula espera para voltar à aba escolhida quando o mouse sai (o `--hover-out-delay` dos tokens, T3821). */
-export const HOVER_OUT_MS = 80;
+/**
+ * Quanto a pílula espera para voltar à aba escolhida quando o mouse sai: o `--hover-out-delay` dos tokens (T3821), e
+ * zero no "Reduzir movimento" (do sistema ou dos Ajustes).
+ */
+export function hoverOutMs(el: Element | null): number {
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.motion === "reduced";
+  if (reduced || !el) return 0;
+  const v = getComputedStyle(el).getPropertyValue("--hover-out-delay").trim();
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? (v.endsWith("ms") ? n : n * 1000) : 0;
+}
 
 /**
  * As abas, como as do Channels: um grupo que flutua, com a seleção deslizando de uma aba para a outra. ←/→ trocam,
@@ -73,14 +82,18 @@ function Tabs({ section, onGo }: { section: HubSection; onGo(s: HubSection): voi
     return () => ro.disconnect();
   }, [target]);
   useEffect(() => () => void (leaving.current && clearTimeout(leaving.current)), []);
-  const hover = (s: HubSection | null) => {
+  const hover = (s: HubSection | null, now = false) => {
     if (leaving.current) clearTimeout(leaving.current);
     leaving.current = null;
     if (s) return setHovered(s);
+    const delay = now ? 0 : hoverOutMs(group.current);
+    if (!delay) return setHovered(null);
     // Sai com um atraso curto: cruzar o grupo de passagem não faz a pílula ir e voltar.
-    leaving.current = setTimeout(() => setHovered(null), HOVER_OUT_MS);
+    leaving.current = setTimeout(() => setHovered(null), delay);
   };
   const move = (dir: 1 | -1) => {
+    // O teclado manda: a pílula vai para a aba escolhida, mesmo com o mouse parado em outra (revisão #3940).
+    hover(null, true);
     const i = HUB_SECTIONS.indexOf(section);
     const next = HUB_SECTIONS[(i + dir + HUB_SECTIONS.length) % HUB_SECTIONS.length]!;
     onGo(next);
