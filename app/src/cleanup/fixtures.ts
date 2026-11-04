@@ -78,6 +78,10 @@ export const fixtures: Fixture[] = [
   { name: "correção ancorada na palavra repetida, no meio da frase", raw: "comprei 2 cafés e 3 pães, não, quer dizer, 3 cafés", expected: "Comprei 3 cafés e 3 pães." },
   { name: "correção de número pelo jeito (15h, não o 2 da sala)", raw: "a reunião é às 15h na sala 2, não, quer dizer, 16h", expected: "A reunião é às 16h na sala 2." },
   { name: "correção de data pelo jeito", raw: "chego dia 12/11 com 2 malas, não, quer dizer, 13/11", expected: "Chego dia 13/11 com 2 malas." },
+  // Revisão #2009: o ponto do milhar não fecha a frase.
+  { name: "correção de valor com milhar", raw: "o total deu 1.500 reais, não, quer dizer, 1.700", expected: "O total deu 1.700 reais." },
+  { name: "correção de valor em reais com centavos", raw: "o total deu R$ 1.500,00, não, quer dizer, R$ 2.000,00", expected: "O total deu R$ 2.000,00." },
+  { name: "correção de decimal", raw: "a nota foi 7.5 na prova, não, quer dizer, 8.5", expected: "A nota foi 8.5 na prova." },
   { name: "correção de número sem o mesmo jeito troca o último", raw: "custa 100 reais por mês, não, quer dizer, 120", expected: "Custa 120 reais por mês." },
   { name: "correção sem âncora troca do começo dela até o fim, sem deixar resto", raw: "amanhã cedo eu vou ao escritório de carro, não, quer dizer, de ônibus", expected: "Amanhã cedo eu vou ao escritório de ônibus." },
   { name: "correção com âncora longa", raw: "manda pro João o relatório, ou melhor, pra Maria o relatório", expected: "Manda pra Maria o relatório." },

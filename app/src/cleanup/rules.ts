@@ -127,6 +127,9 @@ const CORRECTION_MARKERS: Marker[] = [
 ];
 
 const SENTENCE_END = /[.!?\n]/;
+/** O ponto entre dígitos é de milhar ou decimal ("1.500", "2.5"), não fecha frase (T1955, #2009). */
+const endsSentence = (s: string, i: number) =>
+  SENTENCE_END.test(s[i]!) && !(s[i] === "." && /\p{N}/u.test(s[i - 1] ?? "") && /\p{N}/u.test(s[i + 1] ?? ""));
 
 /**
  * "às três, não, quer dizer, às quatro" → "às quatro". O que vem depois do marcador
@@ -163,7 +166,7 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
   // Só olha a frase atual: a correção nunca atravessa um ponto final.
   let start = -1;
   for (let i = left.length - 1; i >= 0; i--) {
-    if (SENTENCE_END.test(left[i]!)) {
+    if (endsSentence(left, i)) {
       start = i;
       break;
     }
@@ -177,7 +180,7 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
     const prev = head.replace(/[.!?]\s*$/u, "");
     let prevStart = -1;
     for (let i = prev.length - 1; i >= 0; i--) {
-      if (SENTENCE_END.test(prev[i]!)) {
+      if (endsSentence(prev, i)) {
         prevStart = i;
         break;
       }
