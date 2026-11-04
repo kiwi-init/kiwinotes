@@ -28,6 +28,8 @@ export default {
       bundleWGPU: false,
       codesign: false,
       notarize: false,
+      // O ícone (T2467): cada tamanho renderizado do vetor por scripts/app-icon.ts, na grade do ícone do Channels.
+      icons: "build-config/icon.iconset",
     },
   },
   scripts: {
