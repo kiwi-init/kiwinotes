@@ -17,3 +17,14 @@
 {"name": "falado: mail formal com espaço", "say": "segue o relatório em anexo", "voice": "Luciana", "app": "mail", "fieldBefore": "Oi Ana.", "expect": {"tone": "formal", "spaced": true, "contains": ["Segue o relatório", "."]}}
 {"name": "falado: ghostty literal", "say": "git status", "voice": "Samantha", "app": "ghostty", "fieldBefore": "$ ", "expect": {"text": "git status", "tone": "literal", "spaced": false}}
 {"name": "falado: teams depois de um Oi.", "say": "tudo certo por aqui", "voice": "Luciana", "app": "teams", "fieldBefore": "Oi.", "expect": {"tone": "casual", "spaced": true}}
+// Trava de falso positivo do boosting e da correção fonética (T1973, #2097): frases sem termo nenhum, com sons parecidos.
+{"name": "sem termo: eu dei com ele no corredor", "say": "eu dei com ele no corredor", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: a paz voltou", "say": "a paz voltou", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: o pacote chegou", "say": "o pacote chegou", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: comprei um quiuí", "say": "comprei um quiuí", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: o sistema caiu de novo", "say": "o sistema caiu de novo", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: I get a hub of ideas", "say": "I get a hub of ideas", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: put the ice cube in the cup", "say": "put the ice cube in the cup", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: she packs her bags", "say": "she packs her bags", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: bring the comb", "say": "bring the comb", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: a reunião de amanhã", "say": "a reunião de amanhã", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}

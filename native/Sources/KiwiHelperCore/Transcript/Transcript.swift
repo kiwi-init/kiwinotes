@@ -155,7 +155,8 @@ public enum VocabularyRescoreGuard {
             var best: (start: Int, end: Int, distance: Double)?
             for (s, e) in [(start, end), (start - 1, end), (start, end + 1)] {
                 let stretch = (s...e).compactMap(word)
-                guard stretch.count == e - s + 1, let d = soundDistance(stretch, inserted) else { continue }
+                guard stretch.count == e - s + 1, opensAlike(stretch, inserted),
+                      let d = soundDistance(stretch, inserted) else { continue }
                 if best == nil || d < best!.distance { best = (s, e, d) }
             }
             guard let best else { continue }
@@ -169,6 +170,13 @@ public enum VocabularyRescoreGuard {
             replaced.insert(best.start)
         }
         return tokens.joined(separator: " ")
+    }
+
+    /// The stretch opens with the term's letter, or both open with the K sound (c, k, q): the matcher's conservative
+    /// rule. The sound key doesn't tell b from p or g from k, so without it "bags" became "PACS" (T1973, #2097).
+    static func opensAlike(_ removed: [String], _ inserted: [String]) -> Bool {
+        guard let a = removed.first?.first, let b = inserted.first?.first else { return false }
+        return a == b || (VocabularyPhonetics.phraseKey(removed).first == "K" && VocabularyPhonetics.phraseKey(inserted).first == "K")
     }
 
     /// The `VocabularyPhonetics.distance` between the stretch and its replacement, or nil when they may not swap.

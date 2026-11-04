@@ -56,6 +56,8 @@ final class TranscriptTests: XCTestCase {
         // Split names whose piece is a connective, from the T51 synthetic clips.
         XCTAssertEqual(TranscriptPostProcessor.process("Sobe o de com novo", dictionary: work), "Sobe o DICOM novo")
         XCTAssertEqual(TranscriptPostProcessor.process("O PAC se ligado não respondeu", dictionary: work), "O PACS ligado não respondeu")
+        // Review #2097: the connective's neighbor is a word of its own, not a piece of the term.
+        XCTAssertEqual(TranscriptPostProcessor.process("Eu dei com ele no corredor.", dictionary: work), "Eu dei com ele no corredor.")
     }
 
     /// The first letter may differ only for the K sound (c, k, q); the soft c stays out.
@@ -167,5 +169,15 @@ final class TranscriptTests: XCTestCase {
                        "Tá bom então, pode ir.")
         XCTAssertEqual(VocabularyRescoreGuard.apply(original: "manda o pax pro pax agora", swaps: [S(from: "nada", to: "PACS", margin: 2)]),
                        "manda o pax pro pax agora", "a stretch that isn't in the text changes nothing")
+        // Review #2097: what the rescorer proposed on sentences without any term (the margins it reported).
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "She packs her bags.", swaps: [S(from: "bags.", to: "PACS", margin: 0.71)]),
+                       "She packs her bags.", "bags and PACS share the sound key, not the opening letter")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Eu dei com ele no corredor.", swaps: [S(from: "Eu dei com", to: "DICOM", margin: 0.15)]),
+                       "Eu dei com ele no corredor.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "A paz voltou.", swaps: [S(from: "paz voltou.", to: "PACS", margin: 0.98)]), "A paz voltou.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "O pacote chegou.", swaps: [S(from: "O pacote", to: "PACS", margin: 1.34)]), "O pacote chegou.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "A reunião de amanhã.",
+                                                    swaps: [S(from: "de amanhã.", to: "DICOM", margin: 1.76), S(from: "A reunião", to: "PACS", margin: 0.44)]),
+                       "A reunião de amanhã.")
     }
 }
