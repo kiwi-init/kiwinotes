@@ -1,6 +1,6 @@
 // Notas (spec #1107, fase A, T1317): o vault em Markdown, "uma superfície só". Com o T2502 (#2457, versão C · Foco), a
 // nota ocupa a janela: a árvore de pastas abre pelo caminho na barra de cima, num popover, e o "Citada em" sai da linha
-// de meta. Embaixo, a barra de ditado (o composer do Channels). ⌘K busca, ⌘N cria.
+// de meta. ⌘K busca, ⌘N cria. A barra de ditado de baixo saiu no T3144 (#3140): o ditado cola direto no editor.
 // Tudo passa pelas capacidades `notes.*` do engine (contrato 1.1.0); nada sai do Mac.
 
 import "./notes.css";
@@ -11,7 +11,6 @@ import { flushSync } from "react-dom";
 import { api as appApi } from "../src/api.ts";
 import { Button, Empty } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
-import { Composer } from "./Composer.tsx";
 import { Popover } from "./Popover.tsx";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { notesApi } from "./api.ts";
@@ -1009,7 +1008,6 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
           </>
         )}
       </main>
-      <Composer disabled={!note} />
       {palette ? (
         <Palette
           api={api}

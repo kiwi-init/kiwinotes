@@ -1,7 +1,8 @@
 /* Notas no B v4, "uma superfície só" (docs/mockups/notas/, spec #1107), na versão C · Foco do T2502 (#2457):
    - a nota ocupa a janela, numa coluna de 760px; a árvore e o "Citada em" abrem em popover;
    - nenhuma linha nem borda: a separação vem do espaço, do tamanho e do peso do texto;
-   - os controles flutuam, como no Channels (kit.css: kn-float), e a barra de ditado é o composer dele.
+   - os controles flutuam, como no Channels (kit.css: kn-float). A barra de ditado (o composer) saiu no T3144: o ditado
+     cola direto no editor.
    Os tokens têm os nomes do Channels (T2503), cada um com o de hoje como reserva. */
 
 body {
@@ -608,82 +609,6 @@ body {
   color: var(--text);
   background: var(--surface-2);
   border-radius: var(--radius-sm);
-}
-
-/* ---------------------------------------------------------- a barra de ditado (o composer do Channels) */
-
-.kn-composer-wrap {
-  position: absolute;
-  z-index: 3;
-  inset: auto 0 0 0;
-  padding: 96px 0 6px;
-  /* o texto da nota some embaixo, em vez de ser cortado pela barra */
-  background: linear-gradient(to bottom, transparent, var(--bg) 96px);
-  pointer-events: none;
-}
-
-.kn-composer {
-  pointer-events: auto;
-  width: min(680px, calc(100% - 64px));
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 8px 8px 16px;
-  border-radius: var(--r-win);
-  background: var(--float);
-  box-shadow: var(--shadow-float);
-}
-
-.kn-composer-input {
-  flex: 1;
-  min-width: 0;
-  height: var(--ctl);
-  border: 0;
-  outline: none;
-  background: none;
-  font: var(--t-body) / 1.4 var(--ui);
-  color: var(--ink);
-  caret-color: var(--accent);
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.kn-composer-input::placeholder {
-  color: var(--ink-3, var(--text-3));
-}
-
-.kn-composer-input:focus-visible {
-  box-shadow: none;
-}
-
-.kn-composer-hint {
-  flex: none;
-  font: var(--t-stamp) / 1 var(--mono);
-  color: var(--ink-3, var(--text-3));
-}
-
-.kn-composer-input:placeholder-shown ~ .kn-composer-hint {
-  visibility: hidden;
-}
-
-.kn-composer-fn {
-  flex: none;
-  min-width: var(--ctl);
-  height: var(--ctl);
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-ctl);
-  background: var(--ink);
-  color: var(--bg);
-  font: 600 var(--t-meta) / 1 var(--mono);
-}
-
-.kn-composer-foot {
-  margin-top: 6px;
-  text-align: center;
-  font: var(--t-stamp) / 1 var(--mono);
-  color: var(--ink-3, var(--text-3));
 }
 
 /* ---- T2593: a nota do dia, a Lixeira e o "Mencionada sem link" ---- */

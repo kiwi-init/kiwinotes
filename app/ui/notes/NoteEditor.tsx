@@ -82,7 +82,7 @@ export function focusEditor(): void {
 }
 
 /**
- * O texto do composer (T2502) entra onde o cursor do editor ficou, como o ditado. Com um espaço antes se ele colaria
+ * O texto de fora do editor (o `/modelo`) entra onde o cursor dele ficou, como o ditado. Com um espaço antes se ele colaria
  * numa palavra. `false` quando não há nota aberta.
  */
 export function insertIntoEditor(text: string): boolean {
