@@ -273,7 +273,7 @@ export function History() {
             {g.items.map((e) => (
               <article className="kn-entry" key={e.id} data-new={fresh.has(e.id)}>
                 <div className="kn-entry-meta">
-                  <span>{time(e.at)}</span>
+                  <span className="kn-entry-time">{time(e.at)}</span>
                   {e.app?.name ? <span>· {e.app.name}</span> : null}
                   <span className="kn-entry-actions">
                     {canSend ? (

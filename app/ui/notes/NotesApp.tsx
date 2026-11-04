@@ -1,6 +1,7 @@
 // Notas (spec #1107, fase A, T1317): o vault em Markdown, "uma superfície só". Com o T2502 (#2457, versão C · Foco), a
 // nota ocupa a janela: a árvore de pastas abre pelo caminho na barra de cima, num popover, e o "Citada em" sai da linha
-// de meta. ⌘K busca, ⌘N cria. A barra de ditado de baixo saiu no T3144 (#3140): o ditado cola direto no editor.
+// de meta. Com o T3826 (#3816), a árvore abre pela borda, sobre a nota, sem mover o editor.
+// ⌘K busca, ⌘N cria. A barra de ditado de baixo saiu no T3144 (#3140): o ditado cola direto no editor.
 // Tudo passa pelas capacidades `notes.*` do engine (contrato 1.1.0); nada sai do Mac.
 
 import "./notes.css";
@@ -12,6 +13,7 @@ import { api as appApi } from "../src/api.ts";
 import { Button, Empty } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
 import { Popover } from "./Popover.tsx";
+import { HoverSidebar } from "./HoverSidebar.tsx";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
@@ -787,6 +789,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   );
   const openNow = useMemo(() => (query.trim() ? new Set([...openFolders, ...found.open]) : openFolders), [openFolders, found, query]);
   const byPath = useMemo(() => new Map((listing?.notes ?? []).map((n) => [n.path, n])), [listing]);
+  const fileTimes = useMemo(() => new Map((listing?.files ?? []).map((f) => [f.path, f.mtime])), [listing]);
   const pinnedNotes = pinned.map((p) => byPath.get(p)).filter((n) => n !== undefined);
   const recent = useMemo(() => recentNotes(listing?.notes ?? [], 5), [listing]);
 
@@ -829,65 +832,67 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
           </span>
         }
       />
-      {treeOpen ? (
-        <Popover className="kn-tree-pop" label="Pastas e notas" anchor={crumbRef} onClose={() => setTreeOpen(false)}>
-          <Sidebar
-            tree={found.tree}
-            open={openNow}
-            current={note?.path ?? null}
-            selectedFolder={selectedFolder}
-            query={query}
-            onQuery={setQuery}
-            pinned={pinnedNotes}
-            recent={recent}
-            renaming={renaming}
-            menuOn={menu && menu.target.kind !== "empty" ? `${menu.target.kind === "note" ? "n" : "f"}:${menu.target.path}` : null}
-            onRename={(t, name) => void renameItem(t, name)}
-            onSelectFolder={setSelectedFolder}
-            onMenu={(at, target) => setMenu({ ...at, target })}
-            onDrop={folders ? (what, folder) => void moveItem(what, folder) : undefined}
-            onToggle={(f) =>
-              setOpenFolders((s) => {
-                const next = new Set(s);
-                if (!next.delete(f)) next.add(f);
-                return next;
-              })
-            }
-            onOpen={(p) => void open(p)}
-            onOpenFile={
-              api.files
-                ? (p) => {
-                    setTreeOpen(false);
-                    api.files?.open(p).catch(failed_("abrir o arquivo"));
-                  }
-                : undefined
-            }
-            onNewNote={(f) => void create("Sem título", true, f)}
-            onNewFolder={folders ? (f) => void newFolder(f) : undefined}
-            showExtensions={prefs.showExtensions}
-            dailyFolder={prefs.dailyFolder}
-            onDaily={api.extras ? () => void openDaily() : undefined}
-            onTrash={
-              api.extras
-                ? () => {
-                    setTreeOpen(false);
-                    setView((v) => (v === "trash" ? "note" : "trash"));
-                  }
-                : undefined
-            }
-            trashCount={trashCount}
-            trashOpen={view === "trash"}
-            tags={tagList}
-            onTag={openTag}
-            saved={saved ?? undefined}
-            onSaved={(q) => {
-              setTreeOpen(false);
-              openPalette(q);
-            }}
-            onUnsave={(q) => saved && setSavedList(saved.filter((s) => s.query !== q))}
-          />
-        </Popover>
-      ) : null}
+      <HoverSidebar open={treeOpen} onOpenChange={setTreeOpen} anchor={crumbRef} busy={Boolean(renaming || menu || moving || picking)}>
+        <Sidebar
+          autoFocus={false}
+          metadata={byPath}
+          fileTimes={fileTimes}
+          onPin={pins ? togglePin : undefined}
+          tree={found.tree}
+          open={openNow}
+          current={note?.path ?? null}
+          selectedFolder={selectedFolder}
+          query={query}
+          onQuery={setQuery}
+          pinned={pinnedNotes}
+          recent={recent}
+          renaming={renaming}
+          menuOn={menu && menu.target.kind !== "empty" ? `${menu.target.kind === "note" ? "n" : "f"}:${menu.target.path}` : null}
+          onRename={(t, name) => void renameItem(t, name)}
+          onSelectFolder={setSelectedFolder}
+          onMenu={(at, target) => setMenu({ ...at, target })}
+          onDrop={folders ? (what, folder) => void moveItem(what, folder) : undefined}
+          onToggle={(f) =>
+            setOpenFolders((s) => {
+              const next = new Set(s);
+              if (!next.delete(f)) next.add(f);
+              return next;
+            })
+          }
+          onOpen={(p) => void open(p)}
+          onOpenFile={
+            api.files
+              ? (p) => {
+                  setTreeOpen(false);
+                  api.files?.open(p).catch(failed_("abrir o arquivo"));
+                }
+              : undefined
+          }
+          onNewNote={(f) => void create("Sem título", true, f)}
+          onNewFolder={folders ? (f) => void newFolder(f) : undefined}
+          showExtensions={prefs.showExtensions}
+          dailyFolder={prefs.dailyFolder}
+          onDaily={api.extras ? () => void openDaily() : undefined}
+          onTrash={
+            api.extras
+              ? () => {
+                  setTreeOpen(false);
+                  setView((v) => (v === "trash" ? "note" : "trash"));
+                }
+              : undefined
+          }
+          trashCount={trashCount}
+          trashOpen={view === "trash"}
+          tags={tagList}
+          onTag={openTag}
+          saved={saved ?? undefined}
+          onSaved={(q) => {
+            setTreeOpen(false);
+            openPalette(q);
+          }}
+          onUnsave={(q) => saved && setSavedList(saved.filter((s) => s.query !== q))}
+        />
+      </HoverSidebar>
       <main className="kn-center">
         {view === "trash" && api.extras ? (
           <TrashView

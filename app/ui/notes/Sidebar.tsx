@@ -3,7 +3,8 @@
 // pasta para outra pasta (ou para a raiz, na área vazia) e o menu de botão direito. Com o T3370 (spec #3272): um ícone
 // por tipo, a seta das pastas, os outros arquivos do cofre (abrem no app padrão do Mac) e a extensão, se a pessoa quiser.
 
-import { type DragEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type DragEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import "./hover-rows.css";
 
 import { Highlight } from "./Highlight.tsx";
 import { folderOf } from "./links.ts";
@@ -18,6 +19,11 @@ import type { NoteMeta, TagNode } from "./types.ts";
 export type SideTarget = { kind: "note"; path: string } | { kind: "folder"; path: string } | { kind: "empty" };
 
 export interface SidebarProps {
+  /** Hover não deve mover o cursor de quem está escrevendo. */
+  autoFocus?: boolean;
+  metadata?: ReadonlyMap<string, NoteMeta>;
+  fileTimes?: ReadonlyMap<string, string>;
+  onPin?(path: string): void | Promise<void>;
   tree: TreeNode[];
   open: Set<string>;
   current: string | null;
@@ -64,6 +70,16 @@ export interface SidebarProps {
    */
   onNewNote?(folder: string): void;
   onNewFolder?(folder: string): void;
+}
+
+function ModifiedAt({ value }: { value?: string }) {
+  if (!value || Number.isNaN(Date.parse(value))) return null;
+  const date = new Date(value);
+  return (
+    <time dateTime={value} title={date.toLocaleString("pt-BR")}>
+      {date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+    </time>
+  );
 }
 
 /** "na raiz" ou "em Projetos": onde os botões do topo criam. */
@@ -150,55 +166,98 @@ export function Sidebar(p: SidebarProps) {
         }
       : {};
 
+  const pinned = new Set(p.pinned.map((note) => note.path));
+  const rowStyle = (date: boolean, pin: boolean): CSSProperties => ({
+    "--row-tools": `${28 + (date ? 44 : 0) + (pin ? 26 : 0)}px`,
+  } as CSSProperties);
+  const tools = (target: Exclude<SideTarget, { kind: "empty" }>, name: string, mtime?: string) => (
+    <span className="kn-side-tools" onContextMenu={(event) => menu(event, target)}>
+      <ModifiedAt value={mtime} />
+      {target.kind === "note" && p.onPin ? (
+        <button type="button" className="kn-side-action" aria-label={`${pinned.has(target.path) ? "Desafixar" : "Fixar"} “${name}”`} aria-pressed={pinned.has(target.path)} onClick={async (event) => {
+          if (event.ctrlKey) return; // ⌃-clique no Mac é menu, não fixar (#2693).
+          const button = event.currentTarget;
+          const nav = button.closest("nav");
+          const restoreFocus = document.activeElement === button;
+          await p.onPin?.(target.path);
+          if (restoreFocus) requestAnimationFrame(() => {
+            // Desafixar pode remover esta cópia da linha. O teclado continua
+            // na mesma nota (recentes/árvore), ou na busca se ela está recolhida.
+            if (button.isConnected) return;
+            const next = [...(nav?.querySelectorAll<HTMLButtonElement>('.kn-side-item[data-kind="note"]') ?? [])]
+              .find((item) => item.dataset.path === target.path) ?? nav?.querySelector<HTMLInputElement>(".kn-side-search");
+            next?.focus();
+          });
+        }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true"><path d="M5 2h6l-1 5 2 3H4l2-3-1-5ZM8 10v4" /></svg>
+        </button>
+      ) : null}
+      <button type="button" className="kn-side-action" aria-label={`Mais ações para “${name}”`} aria-haspopup="menu" aria-expanded={p.menuOn === `${target.kind === "note" ? "n" : "f"}:${target.path}`} onClick={(event) => {
+        if (event.ctrlKey) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        p.onMenu({ x: rect.left, y: rect.bottom }, target);
+      }}>…</button>
+    </span>
+  );
+
+  // Ações são irmãs do botão de abrir: teclado/click nunca abrem a nota ao fixar.
   // Renomear só no lugar da árvore: a mesma nota nas fixadas e nas recentes segue como botão.
   const searching = p.query.trim().length > 0;
   const noteItem = (n: { path: string; name: string }, depth: number, key: string, inTree = true) =>
     inTree && p.renaming === `n:${n.path}` ? (
       <RenameInput key={key} initial={n.name} depth={depth} onDone={(name) => p.onRename({ kind: "note", path: n.path }, name)} />
     ) : (
-      <button
-        type="button"
-        key={key}
-        className="kn-side-item"
-        data-kind="note"
-        aria-current={n.path === p.current ? "page" : undefined}
-        data-menu={(inTree && p.menuOn === `n:${n.path}`) || undefined}
-        style={{ paddingLeft: depth * 14 }}
-        // No Mac, ⌃-clique é o clique secundário: abre só o menu (o onContextMenu). O WebKit também manda um `click`, e
-        // a nota abria e fechava a árvore por baixo do menu (T2693).
-        onClick={(e) => !e.ctrlKey && p.onOpen(n.path)}
-        onContextMenu={(e) => menu(e, { kind: "note", path: n.path })}
-        {...drag({ kind: "note", path: n.path })}
-      >
-        {inTree ? <Twisty /> : null}
-        <TreeIcon name={isDailyNote(n.path, p.dailyFolder) ? "daily" : "note"} />
-        <span className="kn-side-name">{inTree && searching ? <Highlight text={n.name} ranges={titleRanges(n.name, p.query)} /> : n.name}</span>
-        {p.showExtensions ? <Ext ext="md" /> : null}
-      </button>
+      <div key={key} className="kn-side-row" data-menu={p.menuOn === `n:${n.path}` || undefined} style={rowStyle(Boolean(p.metadata?.get(n.path)?.mtime), Boolean(p.onPin))}>
+        <button
+          type="button"
+          className="kn-side-item"
+          data-kind="note"
+          data-path={n.path}
+          title={n.name}
+          aria-current={n.path === p.current ? "page" : undefined}
+          data-menu={(inTree && p.menuOn === `n:${n.path}`) || undefined}
+          style={{ paddingLeft: depth * 14 }}
+          // No Mac, ⌃-clique é o clique secundário: abre só o menu (o onContextMenu). O WebKit também manda um `click`, e
+          // a nota abria e fechava a árvore por baixo do menu (T2693).
+          onClick={(e) => !e.ctrlKey && p.onOpen(n.path)}
+          onContextMenu={(e) => menu(e, { kind: "note", path: n.path })}
+          {...drag({ kind: "note", path: n.path })}
+        >
+          {inTree ? <Twisty /> : null}
+          <TreeIcon name={isDailyNote(n.path, p.dailyFolder) ? "daily" : "note"} />
+          <span className="kn-side-name">{inTree && searching ? <Highlight text={n.name} ranges={titleRanges(n.name, p.query)} /> : n.name}</span>
+          {p.showExtensions ? <Ext ext="md" /> : null}
+        </button>
+        {tools({ kind: "note", path: n.path }, n.name, p.metadata?.get(n.path)?.mtime)}
+      </div>
     );
 
   // Um arquivo que não é nota (T3370): o clique abre no app padrão do Mac. Sem menu nem arrastar: renomear e mover
   // um anexo é pelo Finder (os links das notas a ele não seriam reescritos aqui).
   const fileItem = (f: FileNode, depth: number) => (
-    <button
-      type="button"
-      key={`a:${f.path}`}
-      className="kn-side-item"
-      data-kind="file"
-      data-type={f.type}
-      style={{ paddingLeft: depth * 14 }}
-      title={`${f.path} · abre no app padrão do Mac`}
-      onClick={(e) => !e.ctrlKey && p.onOpenFile?.(f.path)}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-    >
-      <Twisty />
-      <TreeIcon name={f.type} />
-      <span className="kn-side-name">{searching ? <Highlight text={f.name} ranges={titleRanges(f.name, p.query)} /> : f.name}</span>
-      {p.showExtensions ? <Ext ext={f.ext} /> : null}
-    </button>
+    <div key={`a:${f.path}`} className="kn-side-row" style={{ "--row-tools": p.fileTimes?.has(f.path) ? "44px" : "0px" } as CSSProperties} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+      <button
+        type="button"
+        className="kn-side-item"
+        data-kind="file"
+        data-type={f.type}
+        style={{ paddingLeft: depth * 14 }}
+        title={`${f.path} · abre no app padrão do Mac`}
+        onClick={(e) => !e.ctrlKey && p.onOpenFile?.(f.path)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <Twisty />
+        <TreeIcon name={f.type} />
+        <span className="kn-side-name">{searching ? <Highlight text={f.name} ranges={titleRanges(f.name, p.query)} /> : f.name}</span>
+        {p.showExtensions ? <Ext ext={f.ext} /> : null}
+      </button>
+      <span className="kn-side-tools">
+        <ModifiedAt value={p.fileTimes?.get(f.path)} />
+      </span>
+    </div>
   );
 
   const items = (nodes: TreeNode[], depth: number): ReactElement[] =>
@@ -210,30 +269,32 @@ export function Sidebar(p: SidebarProps) {
         p.renaming === `f:${n.path}` ? (
           <RenameInput key={`f:${n.path}`} initial={n.name} depth={depth} onDone={(name) => p.onRename({ kind: "folder", path: n.path }, name)} />
         ) : (
-          <button
-            type="button"
-            key={`f:${n.path}`}
-            className="kn-side-item"
-            data-kind="folder"
-            data-selected={p.selectedFolder === n.path || undefined}
-            data-menu={p.menuOn === `f:${n.path}` || undefined}
-            data-drop={dropOn === n.path || undefined}
-            aria-expanded={expanded}
-            style={{ paddingLeft: depth * 14 }}
-            onClick={(e) => {
-              if (e.ctrlKey) return; // o ⌃-clique é o menu, não abrir ou fechar a pasta (T2693)
-              p.onSelectFolder(n.path);
-              p.onToggle(n.path);
-            }}
-            onContextMenu={(e) => menu(e, { kind: "folder", path: n.path })}
-            {...drag({ kind: "folder", path: n.path })}
-            {...dropZone(n.path)}
-          >
-            <Twisty open={expanded} />
-            <TreeIcon name={expanded ? "folder-open" : "folder"} />
-            <span className="kn-side-name">{n.name}</span>
-            {n.count ? <span className="kn-side-count">{n.count}</span> : null}
-          </button>
+          <div key={`f:${n.path}`} className="kn-side-row" data-menu={p.menuOn === `f:${n.path}` || undefined} style={rowStyle(false, false)}>
+            <button
+              type="button"
+              className="kn-side-item"
+              data-kind="folder"
+              data-selected={p.selectedFolder === n.path || undefined}
+              data-menu={p.menuOn === `f:${n.path}` || undefined}
+              data-drop={dropOn === n.path || undefined}
+              aria-expanded={expanded}
+              style={{ paddingLeft: depth * 14 }}
+              onClick={(e) => {
+                if (e.ctrlKey) return; // o ⌃-clique é o menu, não abrir ou fechar a pasta (T2693)
+                p.onSelectFolder(n.path);
+                p.onToggle(n.path);
+              }}
+              onContextMenu={(e) => menu(e, { kind: "folder", path: n.path })}
+              {...drag({ kind: "folder", path: n.path })}
+              {...dropZone(n.path)}
+            >
+              <Twisty open={expanded} />
+              <TreeIcon name={expanded ? "folder-open" : "folder"} />
+              <span className="kn-side-name">{n.name}</span>
+              {n.count ? <span className="kn-side-count">{n.count}</span> : null}
+            </button>
+            {tools({ kind: "folder", path: n.path }, n.name)}
+          </div>
         );
       return [row, ...(expanded ? items(n.children, depth + 1) : [])];
     });
@@ -254,7 +315,7 @@ export function Sidebar(p: SidebarProps) {
         {...NO_TEXT_ASSIST}
         placeholder="Ir para uma nota ou pasta"
         aria-label="Ir para uma nota ou pasta"
-        autoFocus
+        autoFocus={p.autoFocus ?? true}
         value={p.query}
         onChange={(e) => p.onQuery(e.target.value)}
         onKeyDown={(e) => {
