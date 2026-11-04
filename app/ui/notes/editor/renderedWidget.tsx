@@ -9,7 +9,7 @@ import "./enrichedEnv.ts";
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { MarkdownStyle } from "react-native-enriched-markdown/lib/module/index.web.js";
 import { normalizeMarkdownStyle } from "react-native-enriched-markdown/lib/module/normalizeMarkdownStyle.web.js";
@@ -159,10 +159,17 @@ function Block({ markdown, source, callbacks, onShown }: BlockProps) {
     };
   }, [markdown, current]);
   useLayoutEffect(onShown, [current, onShown]);
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    // O link de URL abre só com ⌘-clique (#3044): a dica aparece no hover.
+    for (const a of box.current?.querySelectorAll<HTMLAnchorElement>("a[href]") ?? []) {
+      if (opensOutside(a.getAttribute("href") ?? "")) a.title = `${a.getAttribute("href")} · ⌘-clique para abrir`;
+    }
+  });
   // Até o parse chegar (só na primeira vez de cada bloco), o texto cru, do mesmo tamanho.
   if (!current) return <div className="cm-rendered-raw">{source}</div>;
   return (
-    <div className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }}>
+    <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }}>
       {(current.children ?? []).map((child, i) => (
         <RenderNode key={`${child.type}-${i}`} node={child} style={NORMAL} styles={STYLES} callbacks={callbacks} capabilities={CAPABILITIES} />
       ))}
@@ -174,8 +181,14 @@ const roots = new WeakMap<HTMLElement, Root>();
 /** O widget de agora de cada DOM: o CodeMirror reaproveita o DOM (`updateDOM`) com outro widget, de outro texto. */
 const widgets = new WeakMap<HTMLElement, RenderedWidget>();
 
-/** Um ⌥-clique num link desenhado põe o cursor (para editar), como no editor; o clique que vem depois não abre. */
-let altClick = false;
+/**
+ * O clique que só põe o cursor num link desenhado (o ⌥-clique, ou o clique simples num link de URL, que abre só com
+ * ⌘, decisão do lead no #3044): o `click` que vem depois não abre.
+ */
+let placingOnly = false;
+
+/** Link para fora (http, https, mailto): abre só com ⌘-clique, como no editor. */
+const opensOutside = (href: string) => /^(?:https?:|mailto:)/i.test(href);
 
 class RenderedWidget extends WidgetType {
   constructor(
@@ -218,8 +231,8 @@ class RenderedWidget extends WidgetType {
     const at = () => view.posAtDOM(dom);
     const callbacks = {
       onLinkPress: ({ url }: { url: string }) => {
-        if (altClick) {
-          altClick = false;
+        if (placingOnly) {
+          placingOnly = false;
           return;
         }
         const act = linkAction(url);
@@ -251,8 +264,11 @@ class RenderedWidget extends WidgetType {
   place(e: MouseEvent, view: EditorView, dom: HTMLElement) {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    altClick = e.altKey && !!target.closest("a");
-    if (target.closest("input, button") || (target.closest("a") && !e.altKey)) return;
+    const link = target.closest("a");
+    const href = link?.getAttribute("href") ?? "";
+    // Link de nota, de tag ou o cartão da imagem: o clique abre (ou carrega). URL: só com ⌘. Com ⌥, nenhum abre.
+    placingOnly = !!link && (e.altKey || (opensOutside(href) && !e.metaKey));
+    if (target.closest("input, button") || (link && !placingOnly)) return;
     e.preventDefault();
     const at = view.posAtDOM(dom) + this.offsetAt(dom, e.clientX, e.clientY);
     const anchor = e.shiftKey ? view.state.selection.main.anchor : at;

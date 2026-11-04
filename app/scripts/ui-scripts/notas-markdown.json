@@ -136,6 +136,22 @@
       "name": "o cursor volta para o título (o parágrafo renderiza de novo)"
     },
     {
+      "waitFor": ".kn-note-editor .cm-rendered a[href='https://kiwi.dev'][title*='⌘-clique para abrir']",
+      "name": "o link de URL mostra a dica do ⌘-clique"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered a[href='https://kiwi.dev']",
+      "name": "clique simples no link de URL"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-line:has-text('[Kiwi](https://kiwi.dev)')",
+      "name": "só põe o cursor: o bloco vira texto e nada abre (#3044)"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered h1",
+      "name": "o cursor volta para o título"
+    },
+    {
       "click": ".kn-note-editor .cm-rendered a[href='kiwi-note:Ana']",
       "name": "clicar no [[Ana]]"
     },
