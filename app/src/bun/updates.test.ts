@@ -379,4 +379,58 @@ describe("a última checagem, para a seção Sobre (T2386)", () => {
       expect(u.lastCheck()).toMatchObject({ result: "error" });
       expect((u.lastCheck() as { message: string }).message).toContain("não deu para trocar o app");
     }));
+
+  test("a troca que falhou antes de abrir (o extractor reabriu a versão velha, #2423) aparece na seção Sobre", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData });
+      // O Updater depois de reconciliar o result.json da troca: o erro, a versão e a oferta sem estar pronta.
+      const reconciled = { version: "0.2.0", hash: "ffff", updateAvailable: true, updateReady: false, error: "Update failed: InvalidUpdateIdentity" };
+      updater.updateInfo = () => reconciled;
+      let onStatus: ((e: { status: string }) => void) | null = null;
+      updater.onStatusChange = (cb) => void (onStatus = cb);
+      const u = new AppUpdates({ updater, env: {}, now, log: () => {} });
+      const views: string[] = [];
+      u.onChange(() => views.push(u.lastCheck()?.result ?? "none"));
+      await u.start(60_000, 60_000);
+      u.stop();
+      expect(u.lastCheck()).toBeNull();
+      onStatus!({ status: "error" });
+      await Bun.sleep(5);
+      expect(u.lastCheck()).toEqual({ at, result: "error", message: "A 0.2.0 foi baixada, mas não deu para trocar o app. Tente de novo; se continuar, instale pelo .dmg do release." });
+      expect(views).toEqual(["error"]); // o hub aberto ficou sabendo
+      onStatus!({ status: "error" }); // uma vez só
+      await Bun.sleep(5);
+      expect(views).toEqual(["error"]);
+    }));
+
+  test("sem callback, a 1ª checagem pega a troca que falhou; um erro de download deste processo não vira troca", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData });
+      let info = { version: "0.2.0", hash: "ffff", updateAvailable: true, updateReady: false, error: "InvalidUpdateIdentity" };
+      updater.updateInfo = () => info;
+      updater.checkForUpdate = async () => {
+        info = { ...info, error: "", updateAvailable: false };
+        return info;
+      };
+      const u = new AppUpdates({ updater, now, log: () => {} });
+      await u.noteFailedSwap();
+      expect(u.lastCheck()).toMatchObject({ result: "error" });
+
+      // Outro processo: uma checagem já rodou, e o erro que sobra no updateInfo é de um download dele.
+      const v = new AppUpdates({ updater, now, log: () => {} });
+      await v.check();
+      info = { ...info, error: "Failed to download update: HTTP 404", updateAvailable: true };
+      await v.noteFailedSwap();
+      expect(v.lastCheck()).toEqual({ at, result: "latest" });
+    }));
+
+  test("uma versão que não é mais nova que esta não vira aviso de troca", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData });
+      updater.updateInfo = () => ({ version: "0.1.0", hash: "x", updateAvailable: true, updateReady: false, error: "InvalidUpdateIdentity" });
+      const u = new AppUpdates({ updater, now, log: () => {} });
+      await u.noteFailedSwap();
+      expect(u.lastCheck()).toBeNull();
+    }));
 });
+

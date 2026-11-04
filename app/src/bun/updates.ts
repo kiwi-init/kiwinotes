@@ -49,6 +49,11 @@ export interface UpdaterApi {
   applyUpdate(): Promise<void>;
   updateInfo(): UpdateCheck;
   appDataFolder(): Promise<string>;
+  /**
+   * O status do Updater. Ao abrir, ele reconcilia uma vez o resultado da última troca, feita pelo extractor com o app
+   * já fechado: se ela falhou, sai um `error`, e o `updateInfo()` fica com o erro (T2386, #2423).
+   */
+  onStatusChange?(callback: ((entry: { status: string }) => void) | null): void;
 }
 
 /**
@@ -177,6 +182,10 @@ export type UpdateState =
  */
 export type LastCheck = UpdatesLastCheck;
 
+/** A troca que falhou (o "Atualizar e reiniciar" que voltou para a versão de antes), dita para a pessoa. */
+export const swapFailedMessage = (version: string) =>
+  `A ${version} foi baixada, mas não deu para trocar o app. Tente de novo; se continuar, instale pelo .dmg do release.`;
+
 /** O erro da checagem, dito para a pessoa: sem internet, o servidor que não respondeu ou outro. */
 export function checkErrorMessage(error: string): string {
   if (/offline|network|internet|ENOTFOUND|ENETUNREACH|EAI_AGAIN|ECONNREFUSED|Unable to connect|could not resolve|getaddrinfo/i.test(error)) {
@@ -199,6 +208,10 @@ export interface UpdatesDeps {
 export class AppUpdates {
   private state: UpdateState = { kind: "idle" };
   private last: LastCheck | null = null;
+  /** A troca que falhou antes deste processo já foi registrada (vale uma vez: o Updater só reconcilia uma vez). */
+  private swapNoted = false;
+  /** Já houve uma checagem neste processo: daí em diante, um erro no `updateInfo()` é dela (um download), não da troca. */
+  private checkedHere = false;
   private listeners: ((s: UpdateState) => void)[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private running: Promise<UpdateState> | undefined;
@@ -249,6 +262,13 @@ export class AppUpdates {
       this.set({ kind: "off", reason: off });
       return;
     }
+    // A troca de versão é feita pelo extractor com o app fechado; se ela falha, ele reabre a versão de antes, e o erro só
+    // aparece aqui quando o Updater reconcilia o resultado, logo depois de abrir (#2423, o InvalidUpdateIdentity da rc3).
+    this.deps.updater.onStatusChange?.((e) => {
+      if (e.status === "error") void this.noteFailedSwap();
+    });
+    const late = setTimeout(() => void this.noteFailedSwap(), 3000);
+    (late as { unref?: () => void }).unref?.();
     const tick = (ms: number) => {
       this.timer = setTimeout(() => {
         void this.check().finally(() => tick(everyMs));
@@ -273,8 +293,27 @@ export class AppUpdates {
     return this.running;
   }
 
+  /**
+   * Se a última troca falhou (o Updater reconciliou com erro), registra na última checagem para a seção Sobre dizer, em
+   * vez de "Ainda não verificado". Uma vez por processo, e só para uma versão mais nova que esta.
+   */
+  async noteFailedSwap(): Promise<void> {
+    if (this.swapNoted || this.checkedHere) return;
+    const info = this.deps.updater.updateInfo();
+    if (!info.error || info.updateReady || !info.updateAvailable || !info.version) return;
+    const current = (await this.deps.updater.getLocalInfo()).version;
+    if (compareVersions(info.version, current) !== 1) return;
+    this.swapNoted = true;
+    this.log(`the swap to ${info.version} failed before this launch: ${info.error}`);
+    this.finish("error", { message: swapFailedMessage(info.version) });
+    this.set(this.state); // avisa o hub aberto (updates.status)
+  }
+
   private async round(): Promise<UpdateState> {
     const u = this.deps.updater;
+    // Antes de checar de novo: se a última troca falhou e o callback não pegou, registra agora.
+    await this.noteFailedSwap();
+    this.checkedHere = true;
     this.set({ kind: "checking" });
     try {
       const found = await u.checkForUpdate();
@@ -347,7 +386,7 @@ export class AppUpdates {
     const info = this.deps.updater.updateInfo();
     this.log(`update didn't restart the app${info.error ? `: ${info.error}` : ""}`);
     // A seção Sobre diz que a troca falhou (o InvalidUpdateIdentity da rc3, #2402), em vez de só voltar a "pronta".
-    this.finish("error", { message: `A ${ready.version} foi baixada, mas não deu para trocar o app. Tente de novo; se continuar, instale pelo .dmg do release.` });
+    this.finish("error", { message: swapFailedMessage(ready.version) });
     this.set(ready);
   }
 }
