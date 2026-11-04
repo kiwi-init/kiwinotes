@@ -78,8 +78,10 @@ A janela `intro` do app sai daqui também: o `gerar.ts` escreve `app/ui/intro/in
 ## O Kiwi-cat em camadas (T3720, spec #3133)
 Desde o T3720 o gato da intro é a imagem aprovada pelo harry (`docs/brand/kiwi-cat/referencia-final.png`) em camadas,
 animada com CSS pelos beats do `docs/brand/kiwi-cat/roteiro.md` (8 s a 60 fps a partir da emenda com o prisma, aos 3,7 s).
-- **As camadas** (`docs/brand/kiwi-cat/camadas/`, WebP com alfa) entram como `<img>` embutidos, uma por camada do palco:
-  luz, luz da cabeça, corpo, cabeça, as duas orelhas e o aro. Os olhos são dois círculos em HTML. O `gerar.ts` encaixa
+- **As camadas** (`docs/brand/kiwi-cat/camadas/`, WebP com alfa, geradas das da T3705 pelo `camadas.ts`) entram como
+  `<img>` embutidos, uma por camada do palco: a luz, o anel de luz do começo, a luz da cabeça, o corpo, a cabeça, as
+  duas orelhas, o aro em preto e o aro. Os olhos são dois círculos em HTML. A imagem (4:5) vai à largura do palco, com
+  os olhos em (512, 414): a luz termina nas bordas do palco, não numa caixa. O `gerar.ts` encaixa
   tudo pelo `camadas.json` e escreve a geometria (origens, olhos, o clip das orelhas) num `<style>`; a linha do tempo
   (os `@keyframes` de cada beat) fica no modelo, na seção 6.
 - **Nada é borrado ao vivo:** as camadas já vêm macias, e o CSS só move, gira, escala e esmaece.

@@ -39,7 +39,7 @@ const px = (v: number) => `${Math.round(v * 100) / 100}px`;
 /** Um ponto da foto no palco. */
 const at = (x: number, y: number) => [dx + x * S, dy + y * S] as const;
 
-const LAYERS = ["luz", "luz-cabeca", "corpo", "cabeca", "orelha-esquerda", "orelha-direita", "aro"];
+const LAYERS = ["luz", "luz-anel", "luz-cabeca", "corpo", "cabeca", "orelha-esquerda", "orelha-direita", "aro-escuro", "aro"];
 for (const n of LAYERS) if (!cam.camadas.includes(n)) throw new Error(`gerar: o camadas.json não lista a camada ${n}`);
 let total = 0;
 const img = (name: string) => {
@@ -49,11 +49,13 @@ const img = (name: string) => {
 };
 
 const catHtml = `<div id="cat-float" class="L"><div id="cat-settle" class="L">
+        <div id="luz-anel" class="L">${img("luz-anel")}</div>
         <div id="luz-cabeca" class="L">${img("luz-cabeca")}</div>
         <div id="luz" class="L">${img("luz")}</div>
         <div id="corpo" class="L">${img("corpo")}</div>
         <div id="cabeca" class="L">${img("cabeca")}</div>
         <div id="orelhas" class="L"><div id="orelha-esquerda" class="L">${img("orelha-esquerda")}</div><div id="orelha-direita" class="L">${img("orelha-direita")}</div></div>
+        <div id="aro-escuro" class="L">${img("aro-escuro")}</div>
         <div id="aro" class="L">${img("aro")}</div>
         <div id="olhos" class="L">${cam.olhos.map((o, i) => `<b class="olho" id="olho-${i ? "dir" : "esq"}"></b>`).join("")}</div>
       </div></div>`;
@@ -83,7 +85,7 @@ const html = template
   // O comentário longo fica no modelo e no README; o gerado só aponta para eles.
   .replace(/<!--\n  A intro do Kiwi Notes[\s\S]*?-->\n/, "<!-- A intro do Kiwi Notes (T2113). Gerado por gerar.ts a partir de intro.template.html: leia o README.md e edite o modelo. -->\n");
 if (html.includes("A intro do Kiwi Notes (T2113), spec")) throw new Error("gerar: o comentário do modelo mudou");
-for (const id of ["cat-float", "cat-settle", "luz-cabeca", "luz", "corpo", "cabeca", "orelhas", "aro", "olhos"]) {
+for (const id of ["cat-float", "cat-settle", "luz-anel", "luz-cabeca", "luz", "corpo", "cabeca", "orelhas", "aro-escuro", "aro", "olhos"]) {
   if (!html.includes(`id="${id}"`)) throw new Error(`gerar: falta a camada #${id}`);
 }
 
