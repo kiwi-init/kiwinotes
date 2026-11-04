@@ -267,6 +267,7 @@ export class Vault {
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly listeners = new Set<(paths: string[]) => void>();
+  private readonly otherListeners = new Set<(paths: string[]) => void>();
   private readonly moveListeners = new Set<(r: ExternalMoves) => void>();
   private ready: Promise<void> | null = null;
   /** A resolução de [[links]] para as notas de agora; refeita quando uma nota entra, sai ou muda de nome. */
@@ -315,6 +316,12 @@ export class Vault {
   }
 
   /** Avisa quando notas mudam, inclusive fora do app. */
+  /** Arquivos do vault que não são nota (um anexo trocado por fora, T2709): os caminhos, como o watcher viu. */
+  onOtherFiles(fn: (paths: string[]) => void): () => void {
+    this.otherListeners.add(fn);
+    return () => this.otherListeners.delete(fn);
+  }
+
   onChanged(fn: (paths: string[]) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -928,6 +935,7 @@ export class Vault {
     const paths = [...this.pendingPaths];
     this.pendingPaths.clear();
     const changed: string[] = [];
+    const others: string[] = [];
     const before = this.snapshot();
     for (const rel of paths) {
       const abs = path.join(this.root, rel);
@@ -950,7 +958,10 @@ export class Vault {
         changed.push(rel);
         continue;
       }
-      if (!/\.md$/i.test(rel)) continue;
+      if (!/\.md$/i.test(rel)) {
+        others.push(rel);
+        continue;
+      }
       if (!s || !s.isFile()) {
         if (this.notes.delete(rel)) {
           this.resolver = null;
@@ -965,6 +976,15 @@ export class Vault {
       changed.push(rel);
     }
     if (changed.length) this.emit(changed);
+    if (others.length) {
+      for (const fn of this.otherListeners) {
+        try {
+          fn(others);
+        } catch (e) {
+          console.error("[notes] file listener failed:", e);
+        }
+      }
+    }
     const r = reconcileMoves(before, this.snapshot());
     if (r.moves.size || r.gone.length) {
       for (const fn of this.moveListeners) {

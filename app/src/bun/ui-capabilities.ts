@@ -10,6 +10,7 @@ import { sanitizeSnippets } from "../store/snippets.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { type Attachments, attachmentsFolder } from "../notes/attachments.ts";
+import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
@@ -66,11 +67,13 @@ export interface CapabilityDeps {
     Vault,
     | "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve"
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
-    | "onExternalMoves" | "existing" | "tags" | "templates"
+    | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty"
   >;
   /** Abre o Lixo do macOS no Finder (T2593). Sem isto (headless, testes, KIWI_DEBUG), o `trash.reveal` não faz nada. */
   revealTrash?(): void;
+  /** O texto dos anexos para a busca (T2709). Sem ele, a busca é só nas notas. */
+  ocr?: Pick<OcrIndex, "scan" | "enqueue" | "match">;
   /** Os anexos das notas (T2594): sem eles (um host antigo), as capacidades `attachments.*` dão E_NO_ATTACHMENTS. */
   attachments?: Pick<Attachments, "save" | "read" | "rename">;
   /**
@@ -158,6 +161,12 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     await deps.notes.open();
     watchingPins ??= (async () => {
       deps.notes.onExternalMoves((r) => void followPins(r).catch((e) => console.error("[notes] pinned:", e)));
+      // O OCR (T2709): os anexos que mudam por fora, e uma passada em todos na abertura (o cache pula os já lidos).
+      if (deps.ocr) {
+        const ocr = deps.ocr;
+        deps.notes.onOtherFiles((paths) => ocr.enqueue(paths));
+        void ocr.scan().catch((e) => console.error("[ocr] scan:", e));
+      }
       // Best effort (revisão #2574): uma limpeza de fixadas que falha (o disco, o settings) nunca derruba as notas.
       await followPins({ moves: new Map(), gone: [] }).catch((e) => console.error("[notes] pinned:", e));
     })();
@@ -273,6 +282,11 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           }
           if (!dir) throw bad("dailyFolder must name a folder of the vault");
           patch.dailyFolder = dir;
+        } else if (key === "ocr") {
+          // O texto dos anexos na busca (T2709): ligar de novo lê o que faltou.
+          if (typeof value !== "boolean") throw bad("ocr must be true or false");
+          patch.ocr = value;
+          if (value) void deps.ocr?.scan().catch(() => {});
         } else if (key === "attachmentsFolder") {
           // A pasta dos anexos (1.11.0, T2594): relativa ao vault, sem sair dele.
           try {
@@ -413,7 +427,13 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     },
     "notes.search": async (args) => {
       const a = fields(args, "notes.search", ["query", "limit"]);
-      return (await vault()).search(a.query, a.limit);
+      const v = await vault();
+      const hits = v.search(a.query, a.limit);
+      // O texto das imagens e dos PDFs (T2709) completa a lista, depois do que achou nas notas.
+      if (!deps.ocr || !(await deps.settings.load()).ocr) return hits;
+      const max = typeof a.limit === "number" ? a.limit : 20;
+      if (hits.length >= max) return hits;
+      return [...hits, ...(await attachmentHits(deps.ocr, v, a.query as string, hits, max))];
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
     "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),

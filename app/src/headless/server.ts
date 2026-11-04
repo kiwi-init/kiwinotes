@@ -65,6 +65,12 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   }
 
   const { stores } = await import("../bun/stores.ts");
+  // O OCR (T2709) usa o helper só no `--ocr`, que lê e sai: sem sessão, sem mic e sem pedir permissão. Então vale
+  // também com --no-helper, quando o helper existe.
+  {
+    const ocrHelper = o.helperPath ?? process.env.KIWI_HELPER ?? defaultHelper(path.resolve(import.meta.dirname, "..", ".."));
+    if (ocrHelper && existsSync(ocrHelper)) stores.ocr.setRunner((await import("../notes/ocr.ts")).helperRunner(ocrHelper));
+  }
   const { uiCapabilities } = await import("../bun/ui-capabilities.ts");
   const { directInvoke } = await import("../bun/ui-engine.ts");
   const { dictate } = await import("../bun/dictate.ts");
@@ -103,6 +109,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     history: stores.history,
     notes: stores.notes,
     attachments: stores.attachments,
+    ocr: stores.ocr,
     dictionaryChanged: (terms) => void session?.dictionaryChanged(terms),
     snippetsChanged: (snippets) => session?.snippetsChanged(snippets),
     settings: stores.settings,

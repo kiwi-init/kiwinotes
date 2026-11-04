@@ -29,12 +29,14 @@ export interface AppSettings {
   attachmentsFolder: string;
   /** As buscas salvas, fixadas na árvore das Notas (T2660). */
   savedSearches: SavedSearch[];
+  /** Ler o texto das imagens e dos PDFs anexados para a busca, no Mac (T2709). Ligado por padrão. */
+  ocr: boolean;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, savedSearches: [] };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [] };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -86,6 +88,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     dailyFolder: "dailyFolder" in o ? sanitizeDailyFolder(o.dailyFolder) : DEFAULT_SETTINGS.dailyFolder,
     attachmentsFolder: "attachmentsFolder" in o ? sanitizeAttachmentsFolder(o.attachmentsFolder) : DEFAULT_ATTACHMENTS_FOLDER,
     savedSearches: sanitizeSavedSearches(o.savedSearches),
+    ocr: typeof o.ocr === "boolean" ? o.ocr : true,
   };
 }
 

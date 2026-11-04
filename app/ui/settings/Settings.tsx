@@ -6,6 +6,7 @@ import { Kbd, Row, Section, Segmented, Switch, Window } from "../src/kit/index.t
 import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
 import { NotesShortcutRow } from "./NotesShortcut.tsx";
+import { OcrRow } from "./OcrRow.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 
 export function Settings() {
@@ -56,6 +57,10 @@ export function Settings() {
 
       <DictionarySection />
       <SnippetsSection />
+
+      <Section title="Notas">
+        <OcrRow />
+      </Section>
 
       <Section title="Privacidade">
         <Row label="Tudo roda neste Mac" hint="Áudio, transcrição e texto nunca saem daqui.">

@@ -18,10 +18,12 @@ let package = Package(
         // Pure logic: IPC framing, hotkey gestures, levels, WAV, the transcript's post-processing.
         // Everything here is covered by `swift test`.
         .target(name: "KiwiHelperCore"),
+        // Local OCR (T2709): Vision for images and scanned pages, PDFKit for a PDF's own text. No model, no network.
+        .target(name: "KiwiOCR"),
         // The sidecar the Bun app starts with `--socket <path>`.
         .executableTarget(
             name: "kiwi-helper",
-            dependencies: ["KiwiHelperCore", .product(name: "FluidAudio", package: "FluidAudio")],
+            dependencies: ["KiwiHelperCore", "KiwiOCR", .product(name: "FluidAudio", package: "FluidAudio")],
             exclude: ["Info.plist"],
             linkerSettings: [
                 // Embeds Info.plist (NSMicrophoneUsageDescription) so macOS can ask for the mic.
@@ -32,5 +34,6 @@ let package = Package(
         // Dev tool that plays the Bun side: listens on the socket, starts kiwi-helper, prints what arrives.
         .executableTarget(name: "kiwi-ipc-probe", dependencies: ["KiwiHelperCore"]),
         .testTarget(name: "KiwiHelperCoreTests", dependencies: ["KiwiHelperCore"]),
+        .testTarget(name: "KiwiOCRTests", dependencies: ["KiwiOCR"]),
     ]
 )

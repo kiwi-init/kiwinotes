@@ -33,6 +33,9 @@ const BUILT_IN_SEQ = 1_000;
 
 /** As notas têm testes próprios (src/notes/vault.test.ts); aqui só precisam existir. */
 const notesStub = {
+  root: "/nao-usado",
+  notesContaining: () => [],
+  onOtherFiles: () => () => {},
   open: async () => {},
   list: () => ({ folders: [], notes: [], tree: { path: "", name: "", folders: [], notes: [] } }),
   get: async () => {
@@ -67,7 +70,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", savedSearches: [] };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [] };
   let t = 0;
   return {
     calls,
