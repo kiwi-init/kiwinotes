@@ -41,7 +41,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   trecho diz "na imagem foto.png: …"). Só acréscimo.
 // 1.14.0 (T2680): o histórico de versões das notas, fora do vault (`notes.versions|version|restoreVersion`). Só
 //   acréscimo.
-export const UI_CONTRACT_VERSION = "1.14.0";
+// 1.15.0 (T2684): exportar nota (`notes.export`) em Markdown com os anexos, em HTML com o tema e em PDF. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.15.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -135,6 +136,14 @@ export interface UiCapabilities {
    * viram versões também, então dá para desfazer o restaurar.
    */
   "notes.restoreVersion": { args: { path: string; id: string }; result: SaveResult };
+
+  // ---------------------------------------------------------------- exportar (1.15.0, T2684)
+  /**
+   * Exporta a nota para uma pasta que a pessoa escolhe no seletor do macOS (o diálogo abre aqui, só no clique). Sai
+   * `<Título>.md` (com os anexos em `<Título> anexos/`), `.html` (um arquivo só, com o tema de `theme`, as variáveis CSS
+   * da janela) ou `.pdf`; "Título 2" se já existe. Cancelar dá E_CANCELED. Sem o helper, o PDF dá E_NO_PDF.
+   */
+  "notes.export": { args: { path: string; format: "md" | "html" | "pdf"; theme?: Record<string, string> }; result: { file: string } };
 
   // ---------------------------------------------------------------- nota do dia, links e Lixeira (1.10.0, T2593)
   /** `<dailyFolder>/AAAA-MM-DD.md`, criada vazia se não existe. Sem `date`, a de hoje (no relógio do Mac). */
@@ -242,6 +251,7 @@ export const UI_CAPABILITIES = [
   "notes.versions",
   "notes.version",
   "notes.restoreVersion",
+  "notes.export",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

@@ -9,6 +9,7 @@ import { HistoryStore } from "../store/history.ts";
 import { SettingsStore } from "../store/settings.ts";
 import { SnippetStore } from "../store/snippets.ts";
 import { Attachments } from "../notes/attachments.ts";
+import { NoteExporter } from "../notes/export.ts";
 import { OcrIndex } from "../notes/ocr.ts";
 import { DictationNotes } from "../notes/fromDictation.ts";
 import { Vault } from "../notes/vault.ts";
@@ -46,4 +47,6 @@ export const stores = {
   ocr,
   /** O histórico de versões das notas (T2680): fora do vault, para não sujar o Obsidian. */
   versions: new NoteVersions({ dir: path.join(dir, "history", "notes") }),
+  /** Exportar nota (T2684): Markdown, HTML e, com o helper, PDF. */
+  exporter: new NoteExporter({ vault: notes }),
 };

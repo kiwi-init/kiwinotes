@@ -1,0 +1,95 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "o hub abre nas Notas"
+    },
+    {
+      "invoke": "attachments.save",
+      "args": {
+        "name": "ponto.png",
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Relatório",
+        "content": "# Resumo\n\nO **plano** e a ![[ponto.png]].\n\n- [x] feito\n- [ ] falta\n"
+      }
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Relatório')",
+      "modifiers": [
+        "Control"
+      ],
+      "name": "menu da nota"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Exportar')",
+      "name": "Exportar…"
+    },
+    {
+      "waitFor": ".kn-palette[aria-label*='Exportar'] .kn-palette-it:has-text('PDF')",
+      "name": "a lista dos formatos"
+    },
+    {
+      "screenshot": "exportar-formatos.png"
+    },
+    {
+      "click": ".kn-palette .kn-palette-it:has-text('PDF')",
+      "name": "PDF"
+    },
+    {
+      "waitFor": ".kn-toast:has-text('Exportada: Relatório.pdf')",
+      "name": "o PDF saiu"
+    },
+    {
+      "waitFor": ".kn-tree-pop",
+      "name": "a árvore continua aberta depois do exportar"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Relatório')",
+      "modifiers": [
+        "Control"
+      ]
+    },
+    {
+      "click": ".kn-menu-item:has-text('Exportar')"
+    },
+    {
+      "click": ".kn-palette .kn-palette-it:has-text('HTML')",
+      "name": "HTML"
+    },
+    {
+      "waitFor": ".kn-toast:has-text('Exportada: Relatório.html')",
+      "name": "o HTML saiu"
+    },
+    {
+      "waitFor": ".kn-tree-pop",
+      "name": "a árvore continua aberta depois do exportar"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Relatório')",
+      "modifiers": [
+        "Control"
+      ]
+    },
+    {
+      "click": ".kn-menu-item:has-text('Exportar')"
+    },
+    {
+      "click": ".kn-palette .kn-palette-it:has-text('Markdown')",
+      "name": "Markdown"
+    },
+    {
+      "waitFor": ".kn-toast:has-text('Exportada: Relatório.md')",
+      "name": "o Markdown saiu"
+    }
+  ]
+}

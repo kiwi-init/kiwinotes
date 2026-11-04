@@ -91,6 +91,14 @@ const capabilities = uiCapabilities({
   notes: stores.notes,
   attachments: stores.attachments,
   ocr: stores.ocr,
+  exporter: stores.exporter,
+  // Exportar (T2684): a pasta pelo seletor do macOS, só no clique da pessoa. Com KIWI_DEBUG=1 (os agentes), nenhum
+  // diálogo abre: a pasta é a de KIWI_EXPORT_DIR, ou o exportar dá E_CANCELED.
+  chooseExportFolder: async () => {
+    if (process.env.KIWI_DEBUG === "1") return process.env.KIWI_EXPORT_DIR ?? null;
+    const paths = await Utils.openFileDialog({ startingFolder: "~/Documents", canChooseFiles: false, canChooseDirectory: true, allowsMultipleSelection: false });
+    return paths.find((p) => p.trim()) ?? null;
+  },
   versions: stores.versions,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),

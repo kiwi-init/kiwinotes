@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import KiwiExport
 import KiwiHelperCore
 
 let usage = """
@@ -14,6 +15,8 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --overlay-snapshot <dir>  render the dictation pill in each state as PNGs there, then exit
   --ocr <file>…     read the text in images and PDFs with Vision and PDFKit (T2709), one JSON line each, and exit;
                     no session, no mic, no permission asks (for the app's OCR queue, which runs it at background priority)
+  --export-pdf <in.html> <out.pdf>  print a note's HTML to PDF in an off-screen WebKit view (T2684), then exit;
+                    no window, no network, no permission asks
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
                     (--dictionary: one term per line; --ctc: also the CTC rescoring, on in the app since
                     T1973; downloads the model the first time and waits for it)
@@ -30,6 +33,7 @@ var headless = ProcessInfo.processInfo.environment["KIWI_HEADLESS"] == "1"
 var dumpDirectory: URL?
 var transcribeFiles: [String] = []
 var ocrFiles: [String] = []
+var exportPDF: (String, String)?
 var dictionaryFile: String?
 var language = TranscriptionLanguage.auto
 var useVAD = false
@@ -63,6 +67,9 @@ while let arg = args.next() {
         }
         print("wrote overlay snapshots to \(dir.path)")
         exit(0)
+    case "--export-pdf":
+        guard let input = args.next(), let output = args.next() else { fail("--export-pdf needs <in.html> <out.pdf>") }
+        exportPDF = (input, output)
     case "--ocr":
         guard let path = args.next() else { fail("--ocr needs a file") }
         ocrFiles.append(path)
@@ -91,6 +98,22 @@ while let arg = args.next() {
 
 if !ocrFiles.isEmpty {
     exit(OCRFiles.run(ocrFiles))
+}
+
+if let (input, output) = exportPDF {
+    // Um app sem Dock nem janela: o WebKit precisa do run loop do AppKit, nada mais (T2684).
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    Task { @MainActor in
+        do {
+            let data = try await PDFExport.render(htmlFile: URL(fileURLWithPath: input))
+            try data.write(to: URL(fileURLWithPath: output), options: .withoutOverwriting)
+            exit(0)
+        } catch {
+            FileHandle.standardError.write(Data("kiwi-helper: export-pdf: \(error)\n".utf8))
+            exit(1)
+        }
+    }
+    NSApplication.shared.run()
 }
 
 if !transcribeFiles.isEmpty {

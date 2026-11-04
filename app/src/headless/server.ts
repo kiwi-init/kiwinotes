@@ -70,6 +70,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   {
     const ocrHelper = o.helperPath ?? process.env.KIWI_HELPER ?? defaultHelper(path.resolve(import.meta.dirname, "..", ".."));
     if (ocrHelper && existsSync(ocrHelper)) stores.ocr.setRunner((await import("../notes/ocr.ts")).helperRunner(ocrHelper));
+    // O PDF do exportar (T2684) também: o `--export-pdf` imprime fora da tela e sai.
+    if (ocrHelper && existsSync(ocrHelper)) stores.exporter.setPdf((await import("../notes/export.ts")).helperPdf(ocrHelper));
   }
   const { uiCapabilities } = await import("../bun/ui-capabilities.ts");
   const { directInvoke } = await import("../bun/ui-engine.ts");
@@ -110,6 +112,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     notes: stores.notes,
     attachments: stores.attachments,
     ocr: stores.ocr,
+    exporter: stores.exporter,
+    // O headless nunca abre diálogo: a pasta do exportar vem de KIWI_EXPORT_DIR (T2684), ou o exportar dá E_CANCELED.
+    chooseExportFolder: async () => process.env.KIWI_EXPORT_DIR ?? null,
     versions: stores.versions,
     dictionaryChanged: (terms) => void session?.dictionaryChanged(terms),
     snippetsChanged: (snippets) => session?.snippetsChanged(snippets),
