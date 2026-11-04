@@ -81,8 +81,29 @@ describe("de ponta a ponta, com o watcher", () => {
     });
     await directInvoke(caps, "notes.list", {}); // abre o vault e liga as fixadas
     v.watch();
+    await watcherReady(root, v);
     return { root, v, pinned: () => settings.pinned };
   }
+
+  /**
+   * Espera o watcher valer de verdade (T2792): no macOS o `fs.watch` vai pelo FSEvents, que leva um instante para
+   * começar a mandar eventos. Um rename feito nesse instante (o teste renomeia logo depois do `watch()`) se perdia, e a
+   * fixada ficava no caminho velho (#2790). Aqui um arquivo de prova é gravado até o watcher contar que viu.
+   */
+  const watcherReady = async (root: string, v: Vault) => {
+    let seen = false;
+    const off = v.onOtherFiles((paths) => (seen ||= paths.includes("prova-do-watcher.txt")));
+    const probe = path.join(root, "prova-do-watcher.txt");
+    for (let i = 0; i < 200 && !seen; i++) {
+      writeFileSync(probe, String(i));
+      await Bun.sleep(10);
+    }
+    off();
+    rmSync(probe, { force: true });
+    if (!seen) throw new Error("o watcher não começou a valer em 2 s");
+    // O rm da prova também passa pelo watcher: espera ele assentar antes do teste mexer nos arquivos.
+    await Bun.sleep(60);
+  };
 
   const until = async (ok: () => boolean) => {
     for (let i = 0; i < 100 && !ok(); i++) await Bun.sleep(20);
