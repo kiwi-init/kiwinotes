@@ -324,10 +324,11 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
     const until = Date.now() + readyTimeoutMs;
     while (!report.ready && Date.now() < until) await p.waitForTimeout(50);
     if (!report.ready) report.problems.push(`a UI não chamou engine.ready() em ${readyTimeoutMs} ms`);
-    // A janela Notas abre uma nota que não existe sem erro nenhum na página: o relatório avisa (#1835).
+    // A janela Notas abre a nota pelo caminho exato da lista (`n.path === asked`); uma que não está lá, ou que só bate
+    // ignorando maiúsculas (o APFS acha pelo notes.get), faz a janela cair em outra nota sem erro na página (#1835, #1864).
     if (opts.window === "notes" && opts.query.note) {
-      const r = (await ctx.send({ cmd: "invoke", cap: "notes.get", args: { path: opts.query.note } }).catch((e) => ({ ok: false, code: String(e?.code ?? "E_ENGINE") }))) as Reply | { ok: false; code: string };
-      if (!r.ok) report.problems.push(`--note ${opts.query.note}: a nota não abriu (${r.code})`);
+      const problem = noteProblem(opts.query.note, await ctx.send({ cmd: "invoke", cap: "notes.list", args: {} }).catch((e) => ({ ok: false, code: String(e?.code ?? "E_ENGINE") })));
+      if (problem) report.problems.push(problem);
     }
     await settle(p);
     return { page: p, report, url, close };
@@ -335,6 +336,15 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
     await close();
     throw e;
   }
+}
+
+/** O aviso de um `--note` que a janela não vai abrir, ou null quando o caminho está, exato, no `notes.list`. */
+export function noteProblem(asked: string, list: Record<string, unknown>): string | null {
+  if (list.ok !== true) return `--note ${asked}: não deu para conferir (notes.list: ${String(list.code ?? "E_FAILED")})`;
+  const paths = ((list.value as { notes?: { path: string }[] } | undefined)?.notes ?? []).map((n) => n.path);
+  if (paths.includes(asked)) return null;
+  const near = paths.find((p) => p.toLowerCase() === asked.toLowerCase());
+  return near ? `--note ${asked}: a nota não abriu (existe como ${near}; o caminho é exato)` : `--note ${asked}: a nota não abriu (E_NOT_FOUND)`;
 }
 
 /** Espera as fontes e dois quadros: o print sai com o layout e o texto assentados. */
