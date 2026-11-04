@@ -43,7 +43,7 @@
     },
     {
       "waitFor": ".kn-tree-pop .kn-side-search",
-      "name": "a árvore abre num popover, com o campo de ir para"
+      "name": "a árvore abre sobre a nota, com o campo de ir para"
     },
     {
       "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')"
@@ -59,8 +59,8 @@
       "name": "abre a nota pela árvore"
     },
     {
-      "expectCount": ".kn-tree-pop",
-      "count": 0,
+      "expectCount": ".kn-hover-sidebar:not([data-open]) .kn-tree-pop[inert]",
+      "count": 1,
       "name": "a árvore fecha ao abrir a nota"
     },
     {
