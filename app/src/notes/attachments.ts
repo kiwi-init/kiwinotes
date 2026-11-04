@@ -14,28 +14,12 @@ import { fold } from "../store/text.ts";
 import { inside, VaultError } from "./paths.ts";
 import type { Vault } from "./vault.ts";
 
-/** O maior anexo: 25 MB (uma foto do iPhone em HEIC tem uns 3 MB; um PDF escaneado, uns 10). */
-export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+import { ATTACHMENT_TYPES, DEFAULT_ATTACHMENTS_FOLDER, extOf, MAX_ATTACHMENT_BYTES } from "../shared/attachments.ts";
 
-/** A pasta de anexos quando a pessoa não escolheu outra. */
-export const DEFAULT_ATTACHMENTS_FOLDER = "Anexos";
-
-/** Os tipos aceitos, com o MIME do `data:` URL. SVG entra só como imagem (`<img>`), onde script não roda. */
-export const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  heic: "image/heic",
-  svg: "image/svg+xml",
-  pdf: "application/pdf",
-};
+export { ATTACHMENT_TYPES, DEFAULT_ATTACHMENTS_FOLDER, extOf, MAX_ATTACHMENT_BYTES };
 
 const MAX_PATH = 1024;
 const MAX_SEGMENT = 200;
-
-export const extOf = (name: string): string => (/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? "").toLowerCase();
 
 /** Um caminho de anexo: relativo ao vault, sem `..` nem pasta oculta, terminando num tipo aceito. */
 export function attachmentPath(input: unknown): string {

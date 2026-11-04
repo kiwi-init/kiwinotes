@@ -1,0 +1,98 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Casa",
+        "content": "Planta da sala.\n\nFim.\n"
+      },
+      "name": "uma nota para os anexos"
+    },
+    {
+      "waitFor": ".kn-tab",
+      "name": "o hub abre"
+    },
+    {
+      "click": ".kn-hub-start .kn-crumb-bt",
+      "name": "abre a árvore pelo caminho"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Casa')",
+      "name": "abre a nota"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-content",
+      "name": "o editor"
+    },
+    {
+      "drop": ".kn-note-editor .cm-line:nth-child(2)",
+      "file": "scripts/ui-scripts/fixtures/planta.png",
+      "name": "arrasta uma imagem para a linha vazia"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-line:has-text('planta.png')",
+      "name": "o embed entra, como texto (o cursor está nele)"
+    },
+    {
+      "invoke": "attachments.read",
+      "args": {
+        "link": "![[planta.png]]"
+      },
+      "name": "o arquivo foi para Anexos/"
+    },
+    {
+      "click": ".kn-note-editor .cm-line:has-text('Fim.')",
+      "name": "o cursor sai da linha do embed"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-attachment img[alt='planta.png']",
+      "name": "a linha vira a imagem"
+    },
+    {
+      "pasteFile": ".kn-note-editor .cm-content",
+      "file": "scripts/ui-scripts/fixtures/contrato.pdf",
+      "name": "cola um PDF no fim da nota"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-line:has-text('contrato.pdf')",
+      "name": "o embed do PDF entra"
+    },
+    {
+      "press": "Meta+ArrowUp",
+      "name": "o cursor vai para o começo"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-attachment-file:has-text('contrato.pdf')",
+      "name": "o PDF vira um cartão"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-attachment img[alt='planta.png']",
+      "count": 1,
+      "name": "e a imagem continua lá"
+    },
+    {
+      "pasteFile": ".kn-note-editor .cm-content",
+      "file": "scripts/ui-scripts/fixtures/notas.txt",
+      "name": "cola um arquivo que não é anexo"
+    },
+    {
+      "waitFor": ".kn-toast:has-text('só imagem ou PDF')",
+      "name": "a janela avisa, e nada entra"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-line:has-text('notas.txt')",
+      "count": 0
+    },
+    {
+      "wait": 1500,
+      "name": "o autosave grava a nota com os embeds"
+    },
+    {
+      "screenshot": "anexos.png"
+    }
+  ]
+}

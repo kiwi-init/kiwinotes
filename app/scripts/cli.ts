@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
+import { LineWriter } from "../src/headless/lineWriter.ts";
 import { controlSocket } from "../src/headless/server.ts";
 import { runDictate } from "./cli-dictate.ts";
 import { runScreenshot, runUi, type UiContext } from "./cli-ui.ts";
@@ -40,10 +41,15 @@ async function connect(data: string, onLine: (line: Reply) => void): Promise<{ w
   const sock = controlSocket(data);
   if (!existsSync(sock)) return null;
   let buf = "";
+  let out: LineWriter | null = null;
   try {
     const s = await Bun.connect({
       unix: sock,
       socket: {
+        // Uma linha grande (um anexo) não cabe de uma vez: o resto sai no drain (T2594).
+        drain() {
+          out?.flush();
+        },
         data(_s, chunk) {
           buf += new TextDecoder().decode(chunk);
           for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
@@ -54,7 +60,9 @@ async function connect(data: string, onLine: (line: Reply) => void): Promise<{ w
         },
       },
     });
-    return { write: (msg) => void s.write(`${JSON.stringify(msg)}\n`), close: () => s.end() };
+    out = new LineWriter(s);
+    const w = out;
+    return { write: (msg) => w.line(JSON.stringify(msg)), close: () => s.end() };
   } catch {
     return null;
   }

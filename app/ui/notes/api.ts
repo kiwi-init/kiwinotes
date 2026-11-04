@@ -5,6 +5,7 @@
 import "../src/api.ts"; // o tipo do `window.engine`
 
 import { MockVault } from "./mock.ts";
+import type { AttachmentSource } from "./editor/attachments.ts";
 import type { ExtrasApi, FoldersApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
@@ -49,10 +50,18 @@ export function engineNotes(
         trashReveal: () => call("trash.reveal"),
       }
     : undefined;
+  // Os anexos (1.11.0, T2594).
+  const attachments: AttachmentSource | undefined = has("attachments.save")
+    ? {
+        save: (name, data) => call("attachments.save", { name, data }),
+        read: (link) => call("attachments.read", { link }),
+      }
+    : undefined;
   return {
     ...(folders ? { folders } : {}),
     ...(extras ? { extras } : {}),
     ...(pins ? { pins } : {}),
+    ...(attachments ? { attachments } : {}),
     list: () => call("notes.list"),
     get: (path) => call("notes.get", { path }),
     save: (path, content, baseVersion) => call("notes.save", { path, content, baseVersion }),

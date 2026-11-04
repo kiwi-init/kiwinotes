@@ -11,6 +11,9 @@
 //   { "expectText": "SEL", "text": "…" }              o texto do elemento contém `text`
 //   { "expectCount": "SEL", "count": 3 }
 //   { "screenshot": "nome.png", "selector"?: "SEL" }  print da janela (ou só do elemento)
+//   { "drop": "SEL", "file": "caminho" }           arrasta um arquivo (imagem, PDF) e solta no meio do elemento (T2594)
+//   { "pasteFile": "SEL", "file": "caminho" }      cola um arquivo no elemento, como um ⌘V com uma imagem (T2594).
+//                                                     Só um evento na página: nunca o clipboard de verdade.
 //   { "invoke": "notes.save", "args": {…} }          uma capacidade direto no engine, "de fora" da janela (como uma
 //                                                     edição no Obsidian): a janela vê pelos eventos. Nunca clipboard.
 //                                                     No notes.save, `"baseVersion": "current"` usa a versão de agora.
@@ -19,6 +22,7 @@
 // `{"steps":[…]}` (com `window`, `scale`, `theme`, `size`, `browser` e `query` opcionais, que as flags sobrepõem)
 // ou só a lista de passos.
 
+import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import type { Page } from "playwright-core";
@@ -36,7 +40,9 @@ export type Step =
   | { expectText: string; text: string }
   | { expectCount: string; count: number }
   | { screenshot: string; selector?: string }
-  | { invoke: string; args?: Record<string, unknown> };
+  | { invoke: string; args?: Record<string, unknown> }
+  | { drop: string; file: string }
+  | { pasteFile: string; file: string };
 
 type Modifier = "Alt" | "Control" | "Meta" | "Shift";
 export type StepWithMeta = Step & { timeout?: number; name?: string };
@@ -51,7 +57,10 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "type", "press", "hover", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke"] as const;
+const ACTIONS = ["click", "fill", "type", "press", "hover", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
+
+/** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
+const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
 const MODIFIERS = new Set(["Alt", "Control", "Meta", "Shift"]);
 const STATES = new Set(["visible", "hidden", "attached", "detached"]);
 const MAX_STEPS = 500;
@@ -122,6 +131,11 @@ export function parseScript(json: unknown): ScriptFile {
       case "type":
         if (typeof s.type !== "string") throw new Error(`${at}: type precisa de um texto`);
         break;
+      case "drop":
+      case "pasteFile":
+        str(s[action], `${at}.${action}`);
+        if (typeof s.file !== "string" || !s.file) throw new Error(`${at}: ${action} precisa de file (o caminho do arquivo)`);
+        break;
       default:
         str(s[action], `${at}.${action}`);
     }
@@ -165,6 +179,32 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
       throw new Error(`notes.save ${String(args.path)}: não gravou, o baseVersion está velho (use "current")`);
     }
     return { value: r.value };
+  }
+  if ("drop" in s || "pasteFile" in s) {
+    const sel = "drop" in s ? s.drop : s.pasteFile;
+    const name = basename(s.file);
+    const bytes = [...readFileSync(s.file)];
+    const type = FILE_TYPES[name.split(".").at(-1)!.toLowerCase()] ?? "application/octet-stream";
+    const el = page.locator(sel).first();
+    await el.waitFor({ timeout });
+    const box = (await el.boundingBox())!;
+    await page.evaluate(
+      ({ sel, bytes, name, type, x, y, drop }) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([new Uint8Array(bytes)], name, { type }));
+        const target = (drop ? document.elementFromPoint(x, y) : null) ?? document.querySelector(sel)!;
+        if (drop) {
+          for (const t of ["dragenter", "dragover", "drop"]) {
+            target.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y }));
+          }
+        } else {
+          (target as HTMLElement).focus();
+          target.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+        }
+      },
+      { sel, bytes, name, type, x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 20), drop: "drop" in s },
+    );
+    return {};
   }
   if ("click" in s) await page.click(s.click, { timeout, modifiers: s.modifiers });
   else if ("fill" in s) await page.fill(s.fill, s.text, { timeout });
