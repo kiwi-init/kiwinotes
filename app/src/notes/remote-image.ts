@@ -20,7 +20,22 @@ export class RemoteImageError extends Error {
   }
 }
 
-/** Só `https:`, sem usuário e senha no endereço. */
+const MAX_REDIRECTS = 5;
+
+/** Um host da rede local (ou da própria máquina): o pedido sai do Mac da pessoa, e lá ele não tem o que buscar. */
+export function localHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal") || !h.includes(".") && !h.includes(":")) return true;
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  if (h.includes(":")) return h === "::1" || h === "::" || /^(fc|fd|fe8|fe9|fea|feb)/.test(h) || h.startsWith("::ffff:");
+  return false;
+}
+
+/** Só `https:`, sem usuário e senha no endereço, e fora da rede local. */
 export function remoteImageUrl(raw: string): URL {
   let url: URL;
   try {
@@ -30,27 +45,43 @@ export function remoteImageUrl(raw: string): URL {
   }
   if (url.protocol !== "https:") throw new RemoteImageError("E_BAD_URL", "only https images load");
   if (url.username || url.password) throw new RemoteImageError("E_BAD_URL", "no credentials in the URL");
+  if (localHost(url.hostname)) throw new RemoteImageError("E_BAD_URL", "no local network hosts");
   return url;
 }
 
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
-/** Baixa a imagem e devolve como `data:`. Sem cookie, sem referrer; o redirecionamento também precisa ser https. */
+/**
+ * Baixa a imagem e devolve como `data:`. Sem cookie, sem referrer. Cada redirecionamento (até 5) passa pela mesma
+ * conferência do endereço: https e fora da rede local.
+ */
 export async function fetchRemoteImage(raw: string, fetcher: Fetcher = fetch, max = MAX_REMOTE_IMAGE_BYTES): Promise<AttachmentData> {
-  const url = remoteImageUrl(raw);
+  let url = remoteImageUrl(raw);
+  const signal = AbortSignal.timeout(TIMEOUT_MS);
   let res: Response;
-  try {
-    res = await fetcher(url.href, {
-      redirect: "follow",
-      credentials: "omit",
-      referrerPolicy: "no-referrer",
-      headers: { accept: [...IMAGE_TYPES].join(",") },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new RemoteImageError("E_FETCH", e instanceof Error ? e.message : String(e));
+  for (let hop = 0; ; hop++) {
+    try {
+      res = await fetcher(url.href, {
+        redirect: "manual",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        headers: { accept: [...IMAGE_TYPES].join(",") },
+        signal,
+      });
+    } catch (e) {
+      throw new RemoteImageError("E_FETCH", e instanceof Error ? e.message : String(e));
+    }
+    if (res.status < 300 || res.status >= 400) break;
+    const next = res.headers.get("location");
+    if (!next) break;
+    if (hop >= MAX_REDIRECTS) throw new RemoteImageError("E_FETCH", "too many redirects");
+    try {
+      url = remoteImageUrl(new URL(next, url).href);
+    } catch (e) {
+      if (e instanceof RemoteImageError) throw new RemoteImageError("E_BAD_URL", `redirect refused: ${e.message}`);
+      throw e;
+    }
   }
-  if (res.url && !res.url.startsWith("https:")) throw new RemoteImageError("E_BAD_URL", "redirected off https");
   if (!res.ok) throw new RemoteImageError("E_FETCH", `HTTP ${res.status}`);
   const mime = (res.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
   if (!IMAGE_TYPES.has(mime)) throw new RemoteImageError("E_NOT_IMAGE", `not an image (${mime || "no type"})`);
@@ -72,5 +103,5 @@ export async function fetchRemoteImage(raw: string, fetcher: Fetcher = fetch, ma
     }
   }
   const bytes = Buffer.concat(chunks);
-  return { path: url.href, mime, size, dataUrl: `data:${mime};base64,${bytes.toString("base64")}` };
+  return { path: raw, mime, size, dataUrl: `data:${mime};base64,${bytes.toString("base64")}` };
 }

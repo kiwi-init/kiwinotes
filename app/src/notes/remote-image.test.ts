@@ -35,8 +35,36 @@ describe("a imagem de fora", () => {
     expect(seen).toHaveLength(0);
   });
 
-  test("redirecionado para http, erro HTTP ou outro tipo: recusa", async () => {
-    await expect(fetchRemoteImage("https://x.com/a.png", fake(PNG, { "content-type": "image/png" }, { url: "http://x.com/a.png" }).fetcher)).rejects.toThrow("off https");
+  test("cada redirecionamento é conferido: http ou rede local no meio recusa; https segue, até 5", async () => {
+    const chain = (hops: Record<string, string>) => {
+      const seen: string[] = [];
+      const fetcher = async (url: string, init: RequestInit) => {
+        seen.push(url);
+        expect(init.redirect).toBe("manual");
+        const to = hops[url];
+        return to ? new Response(null, { status: 302, headers: { location: to } }) : new Response(PNG as BodyInit, { headers: { "content-type": "image/png" } });
+      };
+      return { fetcher, seen };
+    };
+    const ok = chain({ "https://a.com/1.png": "/2.png", "https://a.com/2.png": "https://b.com/3.png" });
+    expect((await fetchRemoteImage("https://a.com/1.png", ok.fetcher)).mime).toBe("image/png");
+    expect(ok.seen).toEqual(["https://a.com/1.png", "https://a.com/2.png", "https://b.com/3.png"]);
+    const viaHttp = chain({ "https://a.com/1.png": "http://a.com/2.png", "http://a.com/2.png": "https://a.com/3.png" });
+    await expect(fetchRemoteImage("https://a.com/1.png", viaHttp.fetcher)).rejects.toThrow("redirect refused");
+    expect(viaHttp.seen).toEqual(["https://a.com/1.png"]);
+    await expect(fetchRemoteImage("https://a.com/1.png", chain({ "https://a.com/1.png": "https://192.168.0.1/x.png" }).fetcher)).rejects.toThrow("local network");
+    const loop = chain(Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`https://a.com/${i}.png`, `https://a.com/${i + 1}.png`])));
+    await expect(fetchRemoteImage("https://a.com/0.png", loop.fetcher)).rejects.toThrow("too many redirects");
+  });
+
+  test("rede local e a própria máquina: nem pede", () => {
+    for (const url of ["https://localhost/a.png", "https://127.0.0.1/a.png", "https://10.0.0.2/a.png", "https://172.20.1.1/a.png", "https://192.168.1.10/a.png", "https://169.254.169.254/a.png", "https://impressora.local/a.png", "https://[::1]/a.png", "https://[fd00::1]/a.png", "https://intranet/a.png"]) {
+      expect(() => remoteImageUrl(url)).toThrow("local network");
+    }
+    for (const url of ["https://example.com/a.png", "https://8.8.8.8/a.png", "https://172.32.0.1/a.png"]) expect(remoteImageUrl(url).href).toBe(url);
+  });
+
+  test("erro HTTP ou outro tipo: recusa", async () => {
     await expect(fetchRemoteImage("https://x.com/a.png", fake(PNG, { "content-type": "image/png" }, { status: 404 }).fetcher)).rejects.toThrow("HTTP 404");
     await expect(fetchRemoteImage("https://x.com/a.svg", fake(PNG, { "content-type": "image/svg+xml" }).fetcher)).rejects.toThrow("not an image");
     await expect(fetchRemoteImage("https://x.com/a", fake(PNG, { "content-type": "text/html" }).fetcher)).rejects.toThrow("not an image");
