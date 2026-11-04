@@ -95,7 +95,13 @@
   /* B2 f6–f190: a névoa nasce em volta do círculo (o anel), com um balanço leve que desacelera; some quando a cabeça
      entra (f130–f190), e a luz da própria cabeça toma o lugar, até o corpo chegar com a luz inteira (f300–f400). */
   #luz-anel { opacity: 0; transform-origin: 512px 430px; animation: luzAnel 3.067s linear .1s both, luzBalanca 3.067s ease-in-out .1s both; }
-  #luz-cabeca { opacity: 0; animation: luzCabeca 4.5s linear 2.167s both; }
+  /* f130–f400: a luz inteira se revela de cima para baixo por máscara (a cabeça primeiro, o corpo no B6), como nos
+     quadros da prancha. A máscara é 3× a altura: a posição 0 100% esconde tudo, 0 0 mostra tudo. */
+  #luz {
+    -webkit-mask-image: linear-gradient(180deg, #000 0 34%, transparent 66%); mask-image: linear-gradient(180deg, #000 0 34%, transparent 66%);
+    -webkit-mask-size: 100% 300%; mask-size: 100% 300%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    animation: luzRevela 4.5s cubic-bezier(.45, 0, .25, 1) 2.167s both;
+  }
   /* B3 f96–f156: as orelhas levantam de dentro da cabeça (o clip é o contorno dela), em mola, a direita 16 frames depois. */
   #orelha-esquerda { animation: orelhaEsq .5s cubic-bezier(.34, 1.56, .64, 1) 1.6s both, tremEsq .167s ease-in-out 2.433s; }
   #orelha-direita { animation: orelhaDir .5s cubic-bezier(.34, 1.56, .64, 1) 1.867s both; }
@@ -104,9 +110,8 @@
   /* B4 f160–f268: os olhos acordam (a tabela do roteiro), sonolentos e baixinhos; abrem de vez em f248–f268. */
   .olho { animation: olho 1.8s linear 2.667s both; }
   #olhos { animation: olhosSobem .333s cubic-bezier(.2, .8, .2, 1) 4.133s both; }
-  /* B6 f300–f390: o corpo se forma da névoa, e a luz inteira entra no lugar da luz só da cabeça. */
+  /* B6 f300–f390: o corpo se forma da névoa (a luz já desceu até ele). */
   #corpo { transform-origin: 512px 560px; animation: corpoIn 1.5s cubic-bezier(.2, .8, .2, 1) 5s both; }
-  #luz { animation: fade 1.667s ease-in-out 5s both; }
   /* B7 f350–f400: o aro acende por dentro do topo da cabeça, correndo do ciano à esquerda ao púrpura à direita. Até
      lá, o aro em preto (aro-escuro) ocupa o lugar dele na cabeça; ele se apaga enquanto o aro acende. */
   #aro-escuro { opacity: 0; animation: aroEscuro 4.5s linear 2.167s both; } /* entra com a cabeça (f130–f190), sai no B7 */
@@ -119,7 +124,7 @@
   @keyframes catSettle { from { transform: scale(1.03); } to { transform: none; } }
   @keyframes catFloat { 0%, 100% { transform: none; } 25% { transform: translateY(-12px); } 75% { transform: translateY(12px); } }
   @keyframes luzAnel { 0% { opacity: 0; } 22.8% { opacity: 1; } 67.4% { opacity: 1; } 100% { opacity: 0; } }
-  @keyframes luzCabeca { 0% { opacity: 0; } 22.2% { opacity: 1; } 63% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes luzRevela { from { -webkit-mask-position: 0 100%; mask-position: 0 100%; } to { -webkit-mask-position: 0 0; mask-position: 0 0; } }
   @keyframes luzBalanca {
     0% { transform: rotate(-6deg) scale(1.06); } 10.7% { transform: rotate(6deg) scale(1.02); } 25% { transform: rotate(-4deg); }
     44.2% { transform: rotate(2deg); } 70% { transform: rotate(-1deg); } 100% { transform: none; }
@@ -187,7 +192,7 @@
     #base { opacity: 1; }
     #stage { animation: fade .5s ease-out both; }
     #stage *, #stage.out { animation: none !important; }
-    #luz-anel, #luz-cabeca, #aro-escuro { opacity: 0; }
+    #luz-anel, #aro-escuro { opacity: 0; }
   }
 </style>
 </head>

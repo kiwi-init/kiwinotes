@@ -9,8 +9,8 @@
 // para o palco de 1024: 1,6 para 512, 0,4 para 2048), saidaAltura (a altura das camadas exportadas; padrão 1280) }.
 // Saída, em camadas/, no espaço exportado (reduzido para saidaAltura, porque o palco tem 1024 px):
 // - luz, corpo (as entradas, reduzidas), cabeca (sem as orelhas, com o preto por baixo do aro), orelha-esquerda e
-//   orelha-direita (cada uma com a sobra para dentro da cabeça), aro (o que tem cor), luz-cabeca (a luz só da cabeça,
-//   sem miolo, para o começo), todas WebP;
+//   orelha-direita (cada uma com a sobra para dentro da cabeça), aro (o que tem cor), aro-escuro (o aro em preto, só
+//   dentro da silhueta, até ele acender) e luz-anel (a névoa em volta do círculo de vidro, para o começo), todas WebP;
 // - camadas.json: o espaço, os olhos, os pivôs das orelhas, o encaixe no palco e o contorno da cabeça (o clip das
 //   orelhas, um path SVG).
 // cabeca + orelhas + aro empilhados com "over" dão a cabeca-inteira (o script mede o vão).
@@ -141,7 +141,8 @@ function split(src: Record<string, string>, P: { w: number; h: number; earL: num
       // pixels macios, orelha e cabeça somadas com "over" ficariam mais escuras que a inteira).
       // A cabeça: acima da base, só o que a orelha não cobre (a compensação do "over": juntas dão exatamente a inteira;
       // quando a orelha levanta, o lugar dela fica vazio); abaixo da base, inteira.
-      const earA = (cut: Float32Array, full: Float32Array) => (p: number) => headA(p) * (cut[p] + Math.max(0, full[p] - cut[p]) * solid(p));
+      // As orelhas levantam antes de o aro existir: por baixo do arco elas ficam opacas (alfa inteiro, preto da cabeça).
+      const earA = (cut: Float32Array, full: Float32Array) => (p: number) => A[p] * (cut[p] + Math.max(0, full[p] - cut[p]) * solid(p));
       const eL = earA(cutL, fullL), eR = earA(cutR, fullR);
       out["orelha-esquerda"] = layer(eL, underEar);
       out["orelha-direita"] = layer(eR, underEar);
@@ -149,42 +150,25 @@ function split(src: Record<string, string>, P: { w: number; h: number; earL: num
       out.cabeca = layer((p) => { const a = headA(p), c = Math.min(1, cutL[p] + cutR[p]); return a * (1 - c) + c * comp(a, Math.min(0.999, eL(p) + eR(p))); }, under);
       // O aro um pouco mais forte: sobre o preto ele perde o cinza que, na foto, aparecia por trás dele.
       out.aro = layer(aroA, rgbAt);
-      out["aro-escuro"] = layer(aroA, () => PRETO);
-      // A luz só da cabeça, para o começo (B2–B6, antes de o corpo existir e com as orelhas ainda baixas): a própria
-      // luz de entrada, limitada à região da cabeça (o corpo "desce" no B6, como no quadro 08 da prancha), com os
-      // vãos das orelhas preenchidos (ela traz o negativo da pose final: sem isso, orelhas fantasmas escuras
-      // apareceriam na luz antes de elas levantarem). O preenchimento é o máximo da luz numa vizinhança (dilatação),
-      // só dentro dos polígonos das orelhas.
-      const semOrelhas = new Float32Array(N); for (let p = 0; p < N; p++) semOrelhas[p] = black[p] * (1 - Math.min(1, cutL[p] + cutR[p]));
+      // O aro em preto só dentro da silhueta preta da cabeça: os brilhos laterais (fora dela) não escurecem nada.
+      const dentroPreto = boxBlur(black, Math.round(3 * k));
+      out["aro-escuro"] = layer((p) => aroA(p) * sm((dentroPreto[p] - 0.15) / 0.25), () => PRETO);
+      // A luz de entrada, com a janela da borda. Entre f130 e f400 a intro revela esta luz de cima para baixo por
+      // máscara (a cabeça primeiro, o corpo no B6), como nos quadros da prancha.
       const borda = (p: number) => { const x = p % w, y = (p - x) / w; const m = 0.14 * w; return sm(x / m) * sm((w - 1 - x) / m) * sm(y / m) * sm((h - 1 - y) / m); };
       const luzIn = await load(src.luz); const L = luzIn.data;
       const luzRgb = (p: number) => [L[p * 4] / 255, L[p * 4 + 1] / 255, L[p * 4 + 2] / 255];
-      const sm2 = (arr: Float32Array) => Float32Array.from(arr, (v) => sm((v - 0.3) / 0.2));
-      const dil = (() => { // o máximo da luz num quadrado de ±r (separável)
-        const r = Math.round(30 * k); const src = new Float32Array(N); for (let p = 0; p < N; p++) src[p] = L[p * 4 + 3] / 255;
-        const t = new Float32Array(N), o = new Float32Array(N);
-        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 0; for (let d = -r; d <= r; d++) { const xx = x + d; if (xx >= 0 && xx < w && src[y * w + xx] > m) m = src[y * w + xx]; } t[y * w + x] = m; }
-        for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) { let m = 0; for (let d = -r; d <= r; d++) { const yy = y + d; if (yy >= 0 && yy < h && t[yy * w + x] > m) m = t[yy * w + x]; } o[y * w + x] = m; }
-        return o;
-      })();
-      const earZone = boxBlur(Float32Array.from({ length: N }, (_, p) => Math.min(1, cutL[p] + cutR[p])), Math.round(6 * k));
-      // A região da cabeça: uma janela radial em volta do centro dela (até ~1,05 R, caindo em 0,45 R). Uma faixa
-      // horizontal deixava as luzes laterais do corpo como duas cortinas ao lado da cabeça (f190–f300).
-      const meioH = [(P.olhos[0].x + P.olhos[1].x) / 2, (P.olhos[0].y + P.olhos[1].y) / 2 + 0.07 * (225 / 1024) * w], RH = (225 / 1024) * w;
-      const radial = (p: number) => { const x = p % w, y = (p - x) / w; return 1 - sm((Math.hypot(x - meioH[0], y - meioH[1]) - 1.05 * RH) / (0.45 * RH)); };
-      out["luz-cabeca"] = layer((p) => { const la = L[p * 4 + 3] / 255, z = earZone[p]; return (la + (Math.max(la, dil[p]) - la) * z) * radial(p) * borda(p); }, luzRgb);
-      // O anel: a luz em volta do círculo de vidro (B2–B3, antes de a cabeça existir), sintetizada: um disco com o
-      // raio do círculo (R = 225 no palco; aqui, no espaço da imagem) no centro da cabeça, borrado, com a cor da luz
-      // medida logo fora da cabeça. Some quando a cabeça entra (f130–f190) e a luz-cabeca real toma o lugar.
+      // O anel: a névoa em volta do círculo de vidro (B2–B3, antes de a cabeça existir): um disco com o raio do
+      // círculo (R = 225 no palco) no centro da cabeça, borrado, do ciano (esquerda) ao azul (direita), como a
+      // roda de cor do roteiro começa e como os quadros 02–04 da prancha. Some quando a cabeça entra (f130–f190).
       const meio = [(P.olhos[0].x + P.olhos[1].x) / 2, (P.olhos[0].y + P.olhos[1].y) / 2];
-      const R = (225 / 1024) * w, cyR = meio[1] + 0.07 * R; // o centro da cabeça fica um pouco abaixo dos olhos (512, 430 ↔ olhos em 414)
+      const R = (225 / 1024) * w, cyR = meio[1] + 0.07 * R;
       const disco = new Float32Array(N); for (let p = 0; p < N; p++) { const x = p % w, y = (p - x) / w; disco[p] = 1 - sm((Math.hypot(x - meio[0], y - cyR) - R) / (0.04 * R)); }
       const dNear = boxBlur(disco, Math.round(16 * k)), dWide = boxBlur(disco, Math.round(40 * k));
-      let a0 = 0, n0 = 0; const cor = [0, 0, 0];
-      { const anel = boxBlur(sm2(A), Math.round(14 * k)); for (let p = 0; p < N; p++) if (anel[p] > 0.03 && A[p] < 0.05) { const la = L[p * 4 + 3] / 255; if (la <= 0.02) continue; a0 += la; n0++; for (let kk = 0; kk < 3; kk++) cor[kk] += L[p * 4 + kk] / 255; } }
-      if (n0) { for (let kk = 0; kk < 3; kk++) cor[kk] /= n0; a0 /= n0; } else { cor[0] = 0.74; cor[1] = 0.72; cor[2] = 0.82; }
-      out["luz-anel"] = layer((p) => Math.min(0.85, 1.4 * (0.4 * dNear[p] + 0.6 * dWide[p])) * (1 - disco[p]) * borda(p), () => cor);
-      out.__luz = JSON.stringify({ corte, k, cor, n0 });
+      const CIANO = [0x3f / 255, 0xd8 / 255, 1], AZUL = [0x2e / 255, 0x9b / 255, 1];
+      const corAnel = (p: number) => { const t = sm(((p % w) - meio[0]) / (2 * R) + 0.5); return [0, 1, 2].map((kk) => CIANO[kk] + (AZUL[kk] - CIANO[kk]) * t); };
+      out["luz-anel"] = layer((p) => Math.min(0.75, 1.3 * (0.4 * dNear[p] + 0.6 * dWide[p])) * (1 - disco[p]) * borda(p), corAnel);
+      out.__luz = JSON.stringify({ corte, k });
       // A luz de entrada cai a alfa 0 antes da borda da imagem (ela não cobre o palco; sem isso termina numa caixa).
       out.luz = layer((p) => (L[p * 4 + 3] / 255) * borda(p), luzRgb);
       // O contorno da cabeça inteira (nível 0,5), para o clip das orelhas: Moore + RDP, path fechado.
@@ -224,7 +208,7 @@ function split(src: Record<string, string>, P: { w: number; h: number; earL: num
         const corpoIn = await load(src.corpo); const B = corpoIn.data;
         out.corpo = layer((p) => { const hA = A[p], fa = hA < 0.999 ? Math.max(0, (Afull[p] - hA) / (1 - hA)) : 0; const ca = B[p * 4 + 3] / 255; return fa + ca * (1 - fa); },
           (p) => { const hA = A[p], fa = hA < 0.999 ? Math.max(0, (Afull[p] - hA) / (1 - hA)) : 0; const ca = B[p * 4 + 3] / 255, a = fa + ca * (1 - fa); if (a <= 0) return [0, 0, 0]; return [0, 1, 2].map((kk) => (C[p * 3 + kk] * fa + (B[p * 4 + kk] / 255) * ca * (1 - fa)) / a); });
-        Promise.all(["cabeca", "orelha-esquerda", "orelha-direita", "aro", "aro-escuro", "luz-cabeca", "luz-anel", "luz", "corpo"].map((n) => shrink(out[n]).then((u) => { out[n] = u; }))).then(() => resolve(out));
+        Promise.all(["cabeca", "orelha-esquerda", "orelha-direita", "aro", "aro-escuro", "luz-anel", "luz", "corpo"].map((n) => shrink(out[n]).then((u) => { out[n] = u; }))).then(() => resolve(out));
         return;
         { const p = wp; out.__dbg = JSON.stringify({ A: A[p], d: d[p * 4 + 3] / 255, aroW: aroW[p], solid: solid(p), inside: inside(p), headA: headA(p), cut: cutL[p] + cutR[p], eL: eL(p), eR: eR(p), stack: q[p * 4 + 3] / 255, C: rgbAt(p) }); }
         resolve(out);
@@ -249,10 +233,12 @@ const r: Record<string, string> = await page.evaluate(
 await browser.close();
 let total = 0;
 mkdirSync(dir, { recursive: true });
-for (const n of ["luz", "luz-anel", "corpo", "cabeca", "orelha-esquerda", "orelha-direita", "aro", "aro-escuro", "luz-cabeca"]) {
+// As camadas grandes e borradas (luz, anel, corpo, aro escuro) vão com menos qualidade: não se vê, e pesa metade.
+const Q: Record<string, string> = { luz: "80", "luz-anel": "80", corpo: "80", "aro-escuro": "80" };
+for (const n of ["luz", "luz-anel", "corpo", "cabeca", "orelha-esquerda", "orelha-direita", "aro", "aro-escuro"]) {
   const tmp = path.join(dir, `${n}.png`), file = path.join(dir, `${n}.webp`);
   writeFileSync(tmp, Buffer.from(r[n].split(",")[1]!, "base64"));
-  const res = spawnSync("cwebp", ["-quiet", "-q", "92", "-alpha_q", "100", "-exact", tmp, "-o", file]);
+  const res = spawnSync("cwebp", ["-quiet", "-q", Q[n] ?? "90", "-alpha_q", "100", "-exact", tmp, "-o", file]);
   rmSync(tmp);
   if (res.status !== 0) throw new Error(`camadas: cwebp falhou em ${n}`);
   total += statSync(file).size;
@@ -274,8 +260,8 @@ const json = {
   pivos: { earLeft: meta.pivots.earLeft.map(sc), earRight: meta.pivots.earRight.map(sc) },
   /** O encaixe no palco de 1024 ("cover"): a largura do palco, o meio dos olhos em (512, 414). */
   encaixe: { escala: Math.round(escala * 1e4) / 1e4, dx: Math.round((512 - meioX * escala) * 100) / 100, dy: Math.round((414 - olhoY * escala) * 100) / 100 },
-  camadas: ["luz", "luz-anel", "luz-cabeca", "corpo", "cabeca", "orelha-esquerda", "orelha-direita", "aro-escuro", "aro"],
+  camadas: ["luz", "luz-anel", "corpo", "cabeca", "orelha-esquerda", "orelha-direita", "aro-escuro", "aro"],
   clipCabeca: (meta.headClip as string).replace(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g, (_m, x, y) => `${sc(Number(x))} ${sc(Number(y))}`),
 };
 writeFileSync(path.join(dir, "camadas.json"), JSON.stringify(json, null, 2) + "\n");
-console.log(`camadas: 9 camadas em ${espacoSaida.w}×${espacoSaida.h} (${(total / 1024).toFixed(0)} KB), clip com ${meta.points} pontos; a pilha cabeça+orelhas+aro tem no máximo ${r.__worst}/255 de alfa a menos que a inteira (vão)`);
+console.log(`camadas: 8 camadas em ${espacoSaida.w}×${espacoSaida.h} (${(total / 1024).toFixed(0)} KB), clip com ${meta.points} pontos; a pilha cabeça+orelhas+aro tem no máximo ${r.__worst}/255 de alfa a menos que a inteira (vão)`);
