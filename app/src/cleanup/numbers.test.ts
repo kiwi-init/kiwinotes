@@ -64,6 +64,21 @@ describe("spokenNumbers (T1974)", () => {
       ["o primeiro lugar", "o primeiro lugar"],
     ]));
 
+  describe("hora contada para trás e fração ficam inteiras por extenso (#2344)", () =>
+    cases([
+      ["às quinze pra uma", "às quinze pra uma"],
+      ["quinze pra uma", "quinze pra uma"],
+      ["dez pras três", "dez pras três"],
+      ["cinco para as oito", "cinco para as oito"],
+      ["vinte e cinco pras duas", "vinte e cinco pras duas"],
+      ["vinte pro meio dia", "vinte pro meio dia"],
+      ["vinte pro meio-dia", "vinte pro meio-dia"],
+      ["dois terços dos exames", "dois terços dos exames"],
+      ["três quartos", "três quartos"],
+      // "pra" sem hora depois é número comum.
+      ["dez pra cada um", "10 pra cada um"],
+    ]));
+
   describe("o resto", () =>
     cases([
       // "os dois" com substantivo é quantidade.

@@ -107,7 +107,7 @@ function accept(s: State, p: Part, connector: string | null): State | null {
     case "zero":
       return empty && !connector ? { ...n, closed: true } : null;
     case "unit":
-      if (s.low === "none" || (s.low === "tens" && lang === "pt" ? true : s.low === "tens")) {
+      if (s.low === "none" || s.low === "tens") {
         if (s.low === "tens" && lang === "en" && connector) return null;
         return { ...n, group: s.group + p.value, low: "unit" };
       }
@@ -181,6 +181,46 @@ function format(value: number, lang: Lang, money: boolean): string {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, lang === "en" ? "," : ".");
 }
 
+/** "pra uma", "pras três", "para as oito", "pro meio-dia": o que vem depois de um número numa hora contada para trás. */
+const TO_HOUR = new Set(["pra", "pras", "pro", "para"]);
+const HOUR_ARTICLE = new Set(["a", "as", "à", "às", "o"]);
+const NAMED_HOUR = new Set(["meio-dia", "meia-noite"]);
+/** Fração: "dois terços", "três quartos". */
+const FRACTION = new Set(
+  "terço terços quarto quartos quinto quintos sexto sextos sétimo sétimos oitavo oitavos nono nonos décimo décimos avos".split(" "),
+);
+
+/**
+ * As palavras que ficam por extenso porque o número ali não é um número só (revisão do T1974, #2344):
+ * - a hora contada para trás, "X pra Y": "quinze pra uma" é 12h45, e converter pela metade ("15 pra uma", e com o
+ *   "às" na frente, "às 15h") troca a hora. Fica inteiro por extenso, os dois números;
+ * - a fração: "dois terços" não é "2 terços".
+ */
+function ambiguousSpans(words: Word[], spaced: (k: number) => boolean): Set<number> {
+  const keep = new Set<number>();
+  const at = (k: number) => (k < words.length && spaced(k) ? words[k]! : null);
+  for (let i = 0; i < words.length; i++) {
+    if (!words[i]!.parts) continue;
+    const next = at(i + 1);
+    if (!next) continue;
+    if (FRACTION.has(next.lower)) {
+      keep.add(i);
+      continue;
+    }
+    if (!TO_HOUR.has(next.lower)) continue;
+    let t = i + 2;
+    if (at(t) && HOUR_ARTICLE.has(at(t)!.lower)) t++;
+    const target = at(t);
+    if (!target) continue;
+    // "meio dia" e "meia noite" separados também.
+    const named = NAMED_HOUR.has(target.lower) || ((target.lower === "meio" || target.lower === "meia") && /^(?:dia|noite)$/.test(at(t + 1)?.lower ?? ""));
+    if (!target.parts && !named) continue;
+    keep.add(i);
+    if (target.parts) for (let k = t; k < words.length && words[k]!.parts && (k === t || spaced(k)); k++) keep.add(k);
+  }
+  return keep;
+}
+
 /** Converte as sequências de palavras-número de uma frase. */
 function convertWords(text: string): string {
   const tokens = text.match(TOKEN) ?? [];
@@ -193,6 +233,7 @@ function convertWords(text: string): string {
   /** Só espaço entre a palavra k-1 e a k (sem vírgula nem ponto). */
   const spaced = (k: number) => k > 0 && k < words.length && words[k]!.tok - words[k - 1]!.tok === 2 && /^[^\S\n]+$/.test(tokens[words[k]!.tok - 1]!);
   const replace = new Map<number, { end: number; text: string }>();
+  const keepWords = ambiguousSpans(words, spaced);
 
   let k = 0;
   while (k < words.length) {
@@ -204,6 +245,7 @@ function convertWords(text: string): string {
     const chunks = chunkRun(words, run);
     decide(words, chunks, spaced);
     for (const c of chunks) {
+      for (let w = c.from; w <= c.to; w++) if (keepWords.has(w)) c.keep = true;
       if (c.keep) continue;
       const start = words[c.from]!.tok;
       const end = words[c.to]!.tok;

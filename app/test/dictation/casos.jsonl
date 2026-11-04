@@ -88,5 +88,8 @@
 {"name": "número: fica por extenso, en one of them", "text": "one of them is broken", "expect": {"text": "One of them is broken."}}
 {"name": "número: terminal, prosa vira algarismo", "text": "pede para o claude criar três testes", "app": "terminal", "expect": {"text": "Pede para o claude criar 3 testes."}}
 {"name": "número: terminal, comando fica como foi dito", "text": "git checkout -b dois", "app": "terminal", "expect": {"text": "git checkout -b dois"}}
+{"name": "número: hora contada para trás fica por extenso (#2344)", "text": "me encontra às quinze pra uma", "expect": {"text": "Me encontra às quinze pra uma."}}
+{"name": "número: hora contada para trás, para as", "text": "chego cinco para as oito", "expect": {"text": "Chego cinco para as oito."}}
+{"name": "número: fração fica por extenso", "text": "dois terços dos exames", "expect": {"text": "Dois terços dos exames."}}
 // ---------------------------------------------------------------- borda
 {"name": "borda: só muleta não insere nada", "text": "hum", "expect": {"text": ""}}
