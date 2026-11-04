@@ -1,45 +1,175 @@
 {
   "window": "hub",
   "steps": [
-    { "invoke": "notes.create", "args": { "folder": "Projetos", "title": "Plano", "content": "o plano do ano" }, "name": "engine: Plano" },
-    { "invoke": "notes.create", "args": { "title": "Reunião", "content": "falamos do plano e de [[Projetos/Sub/Ata]]" }, "name": "engine: Reunião cita sem link" },
-    { "waitFor": ".kn-crumb-bt", "name": "o hub abre nas Notas" },
-    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
-    { "click": ".kn-side-daily", "name": "Hoje" },
-    { "waitFor": ".kn-page-crumbs:has-text('Diário')", "name": "a nota do dia abre, na pasta Diário" },
-    { "press": "Meta+Shift+d", "name": "⇧⌘D de novo: a mesma" },
-    { "expectCount": ".kn-title", "count": 1 },
-    { "click": ".kn-crumb-bt", "name": "abre a árvore de novo" },
-    { "click": ".kn-side-item:has-text('Reunião')", "name": "abre a Reunião" },
-    { "waitFor": ".kn-title", "name": "a Reunião abriu" },
-    { "click": ".cm-wikilink-missing", "name": "clique no [[Projetos/Sub/Ata]], que não existe" },
-    { "waitFor": ".kn-page-crumbs:has-text('Sub')", "name": "a Ata foi criada em Projetos/Sub e abriu" },
-    { "click": ".kn-crumb-bt", "name": "árvore" },
-    { "click": ".kn-side-item:has-text('Plano')", "name": "abre o Plano" },
-    { "click": ".kn-meta-bt", "name": "o citada em" },
-    { "waitFor": ".kn-mention:has-text('Reunião')", "name": "Mencionada sem link: a Reunião" },
-    { "screenshot": "mencionada.png" },
-    { "click": ".kn-mention-link", "name": "Linkar" },
-    { "expectCount": ".kn-mention", "count": 0, "name": "a menção virou link" },
-    { "press": "Escape" },
-    { "click": ".kn-crumb-bt", "name": "árvore" },
-    { "click": ".kn-side-item:has-text('Reunião')", "modifiers": ["Control"], "name": "menu da Reunião" },
-    { "click": ".kn-menu-item:has-text('Apagar')", "name": "apaga a Reunião" },
-    { "click": ".kn-crumb-bt", "name": "árvore" },
-    { "click": ".kn-side-trash", "name": "Lixeira" },
-    { "waitFor": ".kn-trash-item:has-text('Reunião')", "name": "a Reunião está na Lixeira, com o prazo" },
-    { "expectText": ".kn-trash-item[data-where='kiwi'] .kn-trash-meta", "text": "volta por mais" },
-    { "screenshot": "lixeira.png" },
-    { "click": ".kn-trash-item:has-text('Reunião') .kn-bt", "name": "Restaurar" },
-    { "waitFor": ".kn-title", "name": "volta para a nota restaurada" },
-    { "click": ".kn-crumb-bt", "name": "árvore" },
-    { "click": ".kn-side-trash", "name": "Lixeira de novo" },
-    { "click": ".kn-trash-actions .kn-bt:has-text('Mostrar o Lixo')", "name": "Mostrar o Lixo no Finder (headless: só log)" },
-    { "press": "Meta+k", "name": "com a Lixeira na tela, ⌘K" },
-    { "type": "Plano" },
-    { "press": "Enter", "name": "abre o Plano pela busca" },
-    { "expectText": ".kn-page-crumbs", "text": "Projetos", "name": "a nota aparece (a Lixeira sai do meio)" },
-    { "expectCount": ".kn-trash", "count": 0 },
-    { "screenshot": "lixeira-vazia.png" }
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Projetos",
+        "title": "Plano",
+        "content": "o plano do ano"
+      },
+      "name": "engine: Plano"
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Reunião",
+        "content": "falamos do plano e de [[Projetos/Sub/Ata]]"
+      },
+      "name": "engine: Reunião cita sem link"
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "o hub abre nas Notas"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-side-daily",
+      "name": "Hoje"
+    },
+    {
+      "waitFor": ".kn-page-crumbs:has-text('Diário')",
+      "name": "a nota do dia abre, na pasta Diário"
+    },
+    {
+      "press": "Meta+Shift+d",
+      "name": "⇧⌘D de novo: a mesma"
+    },
+    {
+      "expectCount": ".kn-title",
+      "count": 1
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore de novo"
+    },
+    {
+      "click": ".kn-side-item:has-text('Reunião')",
+      "name": "abre a Reunião"
+    },
+    {
+      "waitFor": ".kn-title",
+      "name": "a Reunião abriu"
+    },
+    {
+      "click": ".cm-wikilink-missing",
+      "name": "clique no [[Projetos/Sub/Ata]], que não existe"
+    },
+    {
+      "waitFor": ".kn-page-crumbs:has-text('Sub')",
+      "name": "a Ata foi criada em Projetos/Sub e abriu"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "árvore"
+    },
+    {
+      "click": ".kn-side-item:has-text('Plano')",
+      "name": "abre o Plano"
+    },
+    {
+      "click": ".kn-meta-bt",
+      "name": "o citada em"
+    },
+    {
+      "waitFor": ".kn-mention:has-text('Reunião')",
+      "name": "Mencionada sem link: a Reunião"
+    },
+    {
+      "screenshot": "mencionada.png"
+    },
+    {
+      "click": ".kn-mention-link",
+      "name": "Linkar"
+    },
+    {
+      "expectCount": ".kn-mention",
+      "count": 0,
+      "name": "a menção virou link"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "árvore"
+    },
+    {
+      "click": ".kn-side-item:has-text('Reunião')",
+      "modifiers": [
+        "Control"
+      ],
+      "name": "menu da Reunião"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Apagar')",
+      "name": "apaga a Reunião"
+    },
+    {
+      "expectCount": ".kn-tree-pop",
+      "count": 1,
+      "name": "a árvore continua aberta depois do menu (o ⌃-clique não abre a nota, T2693)"
+    },
+    {
+      "click": ".kn-side-trash",
+      "name": "Lixeira"
+    },
+    {
+      "waitFor": ".kn-trash-item:has-text('Reunião')",
+      "name": "a Reunião está na Lixeira, com o prazo"
+    },
+    {
+      "expectText": ".kn-trash-item[data-where='kiwi'] .kn-trash-meta",
+      "text": "volta por mais"
+    },
+    {
+      "screenshot": "lixeira.png"
+    },
+    {
+      "click": ".kn-trash-item:has-text('Reunião') .kn-bt",
+      "name": "Restaurar"
+    },
+    {
+      "waitFor": ".kn-title",
+      "name": "volta para a nota restaurada"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "árvore"
+    },
+    {
+      "click": ".kn-side-trash",
+      "name": "Lixeira de novo"
+    },
+    {
+      "click": ".kn-trash-actions .kn-bt:has-text('Mostrar o Lixo')",
+      "name": "Mostrar o Lixo no Finder (headless: só log)"
+    },
+    {
+      "press": "Meta+k",
+      "name": "com a Lixeira na tela, ⌘K"
+    },
+    {
+      "type": "Plano"
+    },
+    {
+      "press": "Enter",
+      "name": "abre o Plano pela busca"
+    },
+    {
+      "expectText": ".kn-page-crumbs",
+      "text": "Projetos",
+      "name": "a nota aparece (a Lixeira sai do meio)"
+    },
+    {
+      "expectCount": ".kn-trash",
+      "count": 0
+    },
+    {
+      "screenshot": "lixeira-vazia.png"
+    }
   ]
 }
