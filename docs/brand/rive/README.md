@@ -2,6 +2,7 @@
 
 - **`referencia.jpg`:** a imagem de referência do roteiro (cabeça, olhos, aro e névoa), enviada pelo harry (#3554).
 - **`roteiro.md`:** o roteiro da animação de abertura, escrito pelo harry (4 nov 2026). É a fonte do que o gato faz, quadro a quadro: a emenda com o prisma, a névoa em sprites assados, os beats da `intro` (f0–f480), o `idle` de 12 s, a paleta e o que evitar.
+- **`recortar-referencia.ts` e `referencia/`:** a referência em camadas (orelhas, cabeça, névoa de baixo, brilho e a luz de trás), sem o fundo cinza, para animar no Rive. É o caminho que o harry pediu (#3562): animar a própria imagem. Sobre o palco preto, a camada `luz` faz a silhueta aparecer (escolha C, #3570). `referencia/previa.png` compara com a foto.
 - **`assar-nevoa.ts` e `sprites/`:** os sprites da névoa (anel, manchas, corpo, ambiente, aro e brilho), assados no WebKit e salvos em WebP (196 KB). O roteiro pede névoa em sprites, sem blur ao vivo. Rode `bun docs/brand/rive/assar-nevoa.ts` (precisa do `cwebp`).
 - **`svg-para-rive.ts`:** converte um SVG da família (`docs/brand/kiwi-cat-familia/`) num SVG que o importador do Rive entende. Ele desfaz o `<svg>` aninhado e os `<use>` e tira os filtros.
   ```
