@@ -6,7 +6,7 @@ import { engineNotes } from "./api.ts";
 import { joinFrontmatter, splitFrontmatter, tagsOf } from "./frontmatter.ts";
 import { folderOf, linkAt, linkTextFor, noteName, parseLinks, plainContext, plainSnippet } from "./links.ts";
 import { MockVault, snippetAround } from "./mock.ts";
-import { paletteItems, titleMatches } from "./palette.ts";
+import { paletteItems, snippetRanges, titleMatches, titleRanges } from "./palette.ts";
 import { ancestors, buildTree, editedLabel } from "./tree.ts";
 
 describe("links", () => {
@@ -278,5 +278,39 @@ describe("⌘K", () => {
     expect(items.map((i) => (i.kind === "note" ? i.title : `+${i.title}`))).toEqual(["Ana", "Anabela", "Plano da Ana", "Diário"]);
     expect(items.at(-1)).toMatchObject({ kind: "note", snippet: "falei com a ana" });
     expect(paletteItems(notes, "Reunião nova", []).at(-1)).toEqual({ kind: "create", title: "Reunião nova" });
+  });
+
+  test("fuzzy (T2966): kg acha hgkjgkj, e o título exato fica acima do aproximado", () => {
+    const fuzzy = [...notes, meta("hgkjgkj.md", "2026-11-05"), meta("Peso em kg.md", "2026-10-01")];
+    // "Peso em kg" é exato (mais velho); "hgkjgkj" é só subsequência (mais novo) e vem depois.
+    expect(titleMatches(fuzzy, "kg").map((n) => n.title)).toEqual(["Peso em kg", "hgkjgkj"]);
+    const items = paletteItems(fuzzy, "kg", []);
+    expect(items.map((i) => (i.kind === "note" ? i.title : `+${i.title}`))).toEqual(["Peso em kg", "hgkjgkj", "+kg"]);
+  });
+
+  test("fuzzy (T2966): título exato, texto exato, título aproximado, texto aproximado", () => {
+    const fuzzy = ["Ata", "Pauta", "Agenda da tarde", "Diário", "Notas"].map((t, i) => meta(`${t}.md`, `2026-11-0${i + 1}`));
+    // "Ata" é exato no título; "Pauta" e "Agenda da tarde" casam "ata" só por subsequência.
+    // "Agenda da tarde" ganha o início do título e o início de "tarde"; "Pauta", não.
+    expect(titleMatches(fuzzy, "ata").map((n) => n.title)).toEqual(["Ata", "Agenda da tarde", "Pauta"]);
+    const hits = [
+      { path: "Diário.md", title: "Diário", snippet: "a ata saiu", score: 1 },
+      // aproximado no título, mas exato no texto: sobe para o texto exato
+      { path: "Pauta.md", title: "Pauta", snippet: "ler a ata", score: 1 },
+      { path: "Notas.md", title: "Notas", snippet: "atas", score: 0.5, approx: true },
+    ];
+    const items = paletteItems(fuzzy, "ata", hits);
+    expect(items.map((i) => (i.kind === "note" ? i.title : `+${i.title}`))).toEqual(["Ata", "Diário", "Pauta", "Agenda da tarde", "Notas"]);
+    expect(items[2]).toMatchObject({ snippet: "ler a ata" });
+  });
+
+  test("o destaque (T2966): as palavras exatas, as letras da subsequência e o erro no trecho", () => {
+    expect(titleRanges("Peso em kg", "kg")).toEqual([[8, 10]]);
+    expect(titleRanges("hgkjgkj", "kg")).toEqual([
+      [2, 3],
+      [4, 5],
+    ]);
+    expect(titleRanges("Reunião", "tag:x reuniao")).toEqual([[0, 7]]);
+    expect(snippetRanges("a reunião de terça", "reunaio")).toEqual([[2, 9]]);
   });
 });

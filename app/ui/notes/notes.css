@@ -381,6 +381,13 @@ body {
   text-overflow: ellipsis;
 }
 
+/* As letras que casaram com a busca (T2966), no ⌘K e na árvore. */
+.kn-hit {
+  background: none;
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
 .kn-palette-r {
   flex: none;
   font-size: var(--t-meta);

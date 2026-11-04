@@ -4,6 +4,8 @@
 
 import { type DragEvent, type ReactElement, useEffect, useRef, useState } from "react";
 
+import { Highlight } from "./Highlight.tsx";
+import { titleRanges } from "./palette.ts";
 import type { TreeNode } from "./tree.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
@@ -124,6 +126,7 @@ export function Sidebar(p: SidebarProps) {
       : {};
 
   // Renomear só no lugar da árvore: a mesma nota nas fixadas e nas recentes segue como botão.
+  const searching = p.query.trim().length > 0;
   const noteItem = (n: { path: string; name: string }, depth: number, key: string, inTree = true) =>
     inTree && p.renaming === `n:${n.path}` ? (
       <RenameInput key={key} initial={n.name} depth={depth} onDone={(name) => p.onRename({ kind: "note", path: n.path }, name)} />
@@ -142,7 +145,7 @@ export function Sidebar(p: SidebarProps) {
         onContextMenu={(e) => menu(e, { kind: "note", path: n.path })}
         {...drag({ kind: "note", path: n.path })}
       >
-        {n.name}
+        {inTree && searching ? <Highlight text={n.name} ranges={titleRanges(n.name, p.query)} /> : n.name}
       </button>
     );
 
@@ -180,7 +183,6 @@ export function Sidebar(p: SidebarProps) {
       return [row, ...(expanded ? items(n.children, depth + 1) : [])];
     });
 
-  const searching = p.query.trim().length > 0;
   return (
     <nav
       className="kn-side"

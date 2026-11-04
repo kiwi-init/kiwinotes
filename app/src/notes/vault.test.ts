@@ -199,6 +199,40 @@ describe("Vault (T1316)", () => {
     expect(v.resolve("Nada")).toBeNull();
   });
 
+  test("search fuzzy (T2966): erro de digitação no texto, o exato antes, e os filtros exatos", async () => {
+    const { v } = await vault({
+      "Ata.md": "A reunião de terça foi longa.",
+      "Pauta.md": "reuniao marcada para amanhã",
+      "Compras.md": "pão, café, 2026",
+      "Projetos/Plano.md": "---\ntags: [kiwi]\n---\nO projeto da reunião.",
+      "Velho.md": "#velho uma reunião antiga",
+    });
+    // "reuniao" (sem acento) é exato; "reunaio" (letras trocadas) acha pelo erro, com o trecho na palavra que casou.
+    expect(v.search("reuniao").every((h) => !h.approx)).toBe(true);
+    const typo = v.search("reunaio");
+    expect(typo.map((h) => h.path).sort()).toEqual(["Ata.md", "Pauta.md", "Projetos/Plano.md", "Velho.md"]);
+    expect(typo.every((h) => h.approx)).toBe(true);
+    expect(typo.find((h) => h.path === "Ata.md")!.snippet).toContain("reunião de terça");
+    // Duas palavras: "projeto" exata e "reunaio" aproximada. E o exato vem antes do aproximado.
+    expect(v.search("projeto reunaio").map((h) => [h.path, !!h.approx])).toEqual([["Projetos/Plano.md", true]]);
+    const mixed = [...v.search("marcada"), ...v.search("marcdaa")];
+    expect(mixed.map((h) => [h.path, !!h.approx])).toEqual([
+      ["Pauta.md", false],
+      ["Pauta.md", true],
+    ]);
+    // Palavra curta e número não aceitam erro.
+    expect(v.search("pai")).toEqual([]);
+    expect(v.search("2025")).toEqual([]);
+    // Os filtros continuam exatos: a "frase", o tag:, o path: e o "-".
+    expect(v.search('"reunaio"')).toEqual([]);
+    expect(v.search("reunaio tag:kiwi").map((h) => h.path)).toEqual(["Projetos/Plano.md"]);
+    expect(v.search("reunaio tag:kiwii")).toEqual([]);
+    expect(v.search("reunaio path:projetos").map((h) => h.path)).toEqual(["Projetos/Plano.md"]);
+    expect(v.search("reunaio path:projetoss")).toEqual([]);
+    expect(v.search("reunaio -tag:velho -terca -marcada").map((h) => h.path)).toEqual(["Projetos/Plano.md"]);
+    expect(v.search("reunaio -terxa").map((h) => h.path)).toContain("Ata.md");
+  });
+
   test("nada sai do vault: .., absoluto, link simbólico, pasta com ponto", async () => {
     const { v, root } = await vault({ "A.md": "a" });
     const outside = tmp();
@@ -265,7 +299,7 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
     });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
 
-    expect(UI_CONTRACT_VERSION).toBe("1.15.0");
+    expect(UI_CONTRACT_VERSION).toBe("1.16.0");
     expect(UI_CAPABILITIES).toContain("notes.resolve");
     expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
     expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });

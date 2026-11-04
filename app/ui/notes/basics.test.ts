@@ -61,6 +61,16 @@ describe("a árvore (T2469)", () => {
     expect(filterTree(buildTree(listing), "  ").tree).toHaveLength(4);
   });
 
+  test("a busca na árvore casa a nota por subsequência, a pasta não (T2966)", () => {
+    const fuzzy = { folders: ["Kilos"], notes: [meta("hgkjgkj.md", "2026-11-01"), meta("Kilos/Peso.md", "2026-11-02")] };
+    const { tree, open } = filterTree(buildTree(fuzzy), "kg");
+    // "Kilos" tem k e não tem g depois: a pasta não casa, e "Peso" também não; a nota "hgkjgkj" casa.
+    expect(names(tree)).toEqual(["hgkjgkj"]);
+    expect([...open]).toEqual([]);
+    // "ks" casa "Kilos" por subsequência, mas pasta só casa pelas palavras: só a nota dentro dela, se casar.
+    expect(names(filterTree(buildTree(fuzzy), "ks").tree)).toEqual([]);
+  });
+
   test("as recentes, pela última edição", () => {
     expect(recentNotes(listing.notes, 2).map((n) => n.title)).toEqual(["Plano", "alfa"]);
   });
