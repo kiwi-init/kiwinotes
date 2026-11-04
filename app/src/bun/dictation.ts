@@ -8,7 +8,7 @@
 
 import { cleanup, llmSystemMessage } from "../cleanup/index.ts";
 import type { LlmBackend, LlmMode, Tone } from "../cleanup/types.ts";
-import type { AppRef, Command, Event, EventMessage, ResultMessage } from "../shared/ipc.ts";
+import type { AppRef, Command, Event, EventMessage, InsertSimulation, ResultMessage } from "../shared/ipc.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, NewHistoryEntry } from "../store/history.ts";
 import { expandSnippets, type Snippet } from "../store/snippets.ts";
@@ -71,7 +71,26 @@ export interface DictationOutcome {
   appMs: number;
   /** A nota rápida: a nota que o ditado virou (T1320). */
   note?: ToNoteResult;
+  /** O que o STT deu (antes da limpeza) e quanto ele levou (T1740). */
+  raw?: string;
+  sttMs?: number;
+  /** O app do ditado (o tom sai dele). */
+  app?: AppRef;
+  /** O que o `insert.text` faria (T1740: só com `simulate`, no dryRun): o plano, o motivo e o espaço automático. */
+  insert?: { plan?: string; reason?: string; autoSpace: boolean; spaced?: boolean; error?: string };
 }
+
+/** Um ditado da CLI dos agentes (T1740): o app da frente, a nota rápida e o campo descrito. Nunca cola de verdade. */
+export interface SimulatedDictation {
+  app?: AppRef;
+  note?: boolean;
+  simulate?: InsertSimulation;
+}
+
+type Recording = { app?: AppRef; lost?: string; note?: boolean; simulate?: InsertSimulation; done?: (o: DictationOutcome) => void };
+
+/** Um ditado que não chegou a texto (a gravação caiu, o STT falhou, o helper reiniciou). */
+const failed = (error: string): DictationOutcome => ({ text: "", pasted: false, skipped: "error", error, appMs: 0 });
 
 export class Dictation {
   private dictionary: DictionaryTerm[] = [];
@@ -83,7 +102,9 @@ export class Dictation {
    * antes de chegar o texto da anterior, e cada texto sai com o tom do app em que foi ditado (review #521).
    */
   /** As gravações à espera do texto, na ordem: o app da frente e, se o mic caiu no meio, o código (T883). */
-  private recordings: { app?: AppRef; lost?: string; note?: boolean }[] = [];
+  private recordings: Recording[] = [];
+  /** Os `dictateWav` à espera do `record.started` do `debug.transcribe` deles, na ordem. */
+  private pendingWav: Recording[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private offs: (() => void)[] = [];
   /** Avisa cada ditado terminado, inclusive o vazio e o que deu erro (testes, a ação `debug-transcribe`). */
@@ -97,7 +118,9 @@ export class Dictation {
       // Um helper novo (restart depois de cair): as gravações do anterior não vão ter texto. Sem isso, cada ditado
       // dali em diante sairia com o app e o tom do ditado anterior (T914).
       sidecar.on("ready", () => {
+        for (const r of [...this.recordings, ...this.pendingWav]) r.done?.(failed("helper_restarted"));
         this.recordings = [];
+        this.pendingWav = [];
       }),
       sidecar.on("app.active", (e) => {
         this.activeApp = { bundleId: e.bundleId, name: e.name };
@@ -105,13 +128,14 @@ export class Dictation {
       sidecar.on("record.started", (e) => {
         const app = e.app ?? this.activeApp;
         const note = e.target === "note" && !!this.options.notes;
-        this.recordings.push({ app, note });
+        const cli = e.reason === "debug" ? this.pendingWav.shift() : undefined;
+        this.recordings.push({ app, note, simulate: cli?.simulate, done: cli?.done });
         // A nota não leva o tom do app da frente (um terminal daria o tom literal): o prewarm é o do tom padrão.
         this.prewarm(note ? undefined : app);
       }),
       // A gravação que acabou de começar não vai ter texto.
-      sidecar.on("record.cancelled", () => void this.recordings.pop()),
-      sidecar.on("record.error", () => void this.recordings.pop()),
+      sidecar.on("record.cancelled", () => void this.recordings.pop()?.done?.(failed("record_cancelled"))),
+      sidecar.on("record.error", () => void this.recordings.pop()?.done?.(failed("record_error"))),
       // O mic caiu, mas o que ele ouviu vai ser transcrito: a pílula avisa no fim.
       sidecar.on("record.stopped", (e) => {
         const last = this.recordings.at(-1);
@@ -120,13 +144,17 @@ export class Dictation {
       sidecar.on("transcript.final", (e) => {
         const recording = this.recordings.shift();
         const app = recording?.app ?? this.activeApp;
-        this.enqueue(() => (recording?.note ? this.handleNote(e, app, recording.lost) : this.handle(e, app, recording?.lost)));
+        this.enqueue(async () => {
+          const outcome = await (recording?.note ? this.handleNote(e, app, recording.lost) : this.handle(e, app, recording?.lost, recording?.simulate));
+          recording?.done?.(outcome);
+        });
       }),
       sidecar.on("transcript.error", (e) => {
-        this.recordings.shift();
+        const recording = this.recordings.shift();
         this.enqueue(async () => {
           await this.overlay("error", TRANSCRIPT_ERROR[e.error] ?? TRANSCRIPT_ERROR.stt_failed);
-          this.onDone?.({ text: "", pasted: false, skipped: "error", error: e.error, appMs: 0 });
+          const outcome = this.done(failed(e.error));
+          recording?.done?.(outcome);
         });
       }),
     );
@@ -153,6 +181,51 @@ export class Dictation {
     this.queue = this.queue.then(job).catch((e) => this.log(`dictation failed: ${String(e)}`));
   }
 
+  private done(outcome: DictationOutcome): DictationOutcome {
+    this.onDone?.(outcome);
+    return outcome;
+  }
+
+  /**
+   * A CLI dos agentes (T1740): um transcript dado, sem STT, pelo mesmo caminho de um ditado (limpeza, snippets,
+   * `insert.text` em dryRun, Histórico, nota rápida). Entra na fila como os outros.
+   */
+  dictateText(text: string, request: SimulatedDictation = {}): Promise<DictationOutcome> {
+    const t: Transcript = { type: "transcript.final", text, raw: text, lang: "", durationMs: 0, latencyMs: 0 };
+    return new Promise((resolve, reject) => {
+      this.enqueue(() =>
+        (request.note && this.options.notes ? this.handleNote(t, request.app) : this.handle(t, request.app, undefined, request.simulate ?? {})).then(
+          resolve,
+          reject,
+        ),
+      );
+    });
+  }
+
+  /**
+   * A CLI dos agentes (T1740): um WAV (áudio sintético) pelo `debug.transcribe` do helper, que faz o STT de verdade e
+   * manda os mesmos eventos de uma gravação. Resolve com o ditado dele.
+   */
+  async dictateWav(path: string, request: SimulatedDictation = {}): Promise<DictationOutcome> {
+    let recording!: Recording;
+    const outcome = new Promise<DictationOutcome>((resolve) => {
+      recording = { simulate: request.simulate ?? {}, done: resolve };
+    });
+    this.pendingWav.push(recording);
+    const command = {
+      type: "debug.transcribe" as const,
+      path,
+      ...(request.app ? { app: request.app } : {}),
+      ...(request.note ? { target: "note" as const } : {}),
+    };
+    const result = await this.options.sidecar.send(command).catch((e) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }));
+    if (!result.ok) {
+      this.pendingWav = this.pendingWav.filter((r) => r !== recording);
+      throw new Error(result.error);
+    }
+    return outcome;
+  }
+
   /** Com o LLM ligado, aquece o Foundation Models com o prompt certo enquanto a pessoa fala. */
   private prewarm(app: AppRef | undefined) {
     const { llm, llmMode = "off" } = this.options;
@@ -162,12 +235,12 @@ export class Dictation {
     void this.options.sidecar.send({ type: "llm.prewarm", system: llmSystemMessage(tone, this.dictionary) }).catch(() => {});
   }
 
-  private async handle(t: Transcript, app: AppRef | undefined, lost?: string): Promise<void> {
+  private async handle(t: Transcript, app: AppRef | undefined, lost?: string, simulate?: InsertSimulation): Promise<DictationOutcome> {
     const started = performance.now();
     const empty = async () => {
       // Sem fala depois de o mic cair: o mesmo aviso de antes do T883, em vez de sumir sem dizer nada.
       await (lost ? this.overlay("error", MIC_LOST_EMPTY) : this.overlay("hidden"));
-      this.onDone?.({ text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
+      return this.done({ text: "", raw: t.text, sttMs: t.latencyMs, app, pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
     };
     // Sem fala (gravação vazia ou só ruído com o VAD): nada para colar nem guardar.
     if (!t.text.trim()) return empty();
@@ -190,7 +263,8 @@ export class Dictation {
         restoreClipboard: this.options.restoreClipboard ?? true,
         autoSpace: result.tone !== "literal",
       };
-      insert = await this.options.sidecar.send(this.options.dryRun ? { ...command, dryRun: true } : command);
+      // Um ditado simulado (a CLI, T1740) nunca cola de verdade, nem num app sem dryRun.
+      insert = await this.options.sidecar.send(simulate ? { ...command, dryRun: true, simulate } : this.options.dryRun ? { ...command, dryRun: true } : command);
     } catch (e) {
       insert = { v: 1, type: "result", id: "", ok: false, error: e instanceof Error ? e.message : String(e) };
     }
@@ -222,24 +296,37 @@ export class Dictation {
     this.log(
       `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? `pasted${insert.ok && insert.data.reason ? ` (${insert.data.reason})` : ""}` : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}${insert.ok && insert.data.focusVia ? ` · focus ${insert.data.focusVia}` : ""}`,
     );
-    this.onDone?.({ entry, text, tone: result.tone, pasted, appMs });
+    return this.done({
+      entry,
+      text,
+      raw: t.text,
+      sttMs: t.latencyMs,
+      app,
+      tone: result.tone,
+      pasted,
+      appMs,
+      insert: insert.ok
+        ? { plan: insert.data.plan, reason: insert.data.reason, autoSpace: result.tone !== "literal", spaced: insert.data.spaced }
+        : { autoSpace: result.tone !== "literal", error: insert.error },
+    });
   }
 
   /**
    * A nota rápida (T1320): limpa e expande como um ditado normal, mas no tom padrão, e o texto vira uma nota nova em
    * `Caixa de entrada/` em vez de ser colado. Vai para o Histórico do mesmo jeito: se a nota falhar, nada se perde.
    */
-  private async handleNote(t: Transcript, app: AppRef | undefined, lost?: string): Promise<void> {
+  private async handleNote(t: Transcript, app: AppRef | undefined, lost?: string): Promise<DictationOutcome> {
     const started = performance.now();
+    const base = { raw: t.text, sttMs: t.latencyMs, app };
     if (!t.text.trim()) {
       await (lost ? this.overlay("error", MIC_LOST_EMPTY) : this.overlay("hidden"));
-      return this.onDone?.({ text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
+      return this.done({ ...base, text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
     }
     const result = await cleanup({ raw: t.text, dictionary: this.dictionary }, { llm: this.options.llm, llmMode: this.options.llmMode ?? "off" });
     const text = expandSnippets(result.text, this.snippets);
     if (!text.trim()) {
       await this.overlay("hidden");
-      return this.onDone?.({ text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
+      return this.done({ ...base, text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
     }
     const at = new Date();
     // Primeiro o Histórico, para a nota levar o id do ditado (T1565): um "Enviar para nota" depois reconhece o trecho.
@@ -270,7 +357,7 @@ export class Dictation {
     }
     const appMs = Math.round(performance.now() - started);
     this.log(`quick note: stt ${t.latencyMs} ms + app ${appMs} ms · ${note ? `${note.created ? "created" : "already in"} ${note.note.path}` : "failed"}`);
-    this.onDone?.({ entry, text, tone: result.tone, pasted: false, appMs, note });
+    return this.done({ ...base, entry, text, tone: result.tone, pasted: false, appMs, note });
   }
 
   private async overlay(state: "hidden" | "done" | "error", message?: string) {

@@ -93,7 +93,7 @@ export type Command =
    * põe um espaço na frente, para dois ditados seguidos não saírem grudados. Ele lê só os dois caracteres antes do
    * cursor, pela Acessibilidade; se o campo não diz, não põe nada. O app manda `false` no tom literal (terminal).
    */
-  | { type: "insert.text"; text: string; restoreClipboard: boolean; autoSpace?: boolean; dryRun?: boolean }
+  | { type: "insert.text"; text: string; restoreClipboard: boolean; autoSpace?: boolean; dryRun?: boolean; simulate?: InsertSimulation }
   | { type: "notify"; title: string; body: string }
   /**
    * Pede a permissão: o diálogo do macOS na primeira vez, os Ajustes depois. `reset: true` (só no clique de uma pessoa no
@@ -118,7 +118,21 @@ export type Command =
    * caminho de uma gravação que terminou (`record.started`/`record.stopped` com `reason: "debug"`, a pílula, o
    * `transcript.final`), para testar o app sem o mic. `invalid_value` se o arquivo não abre; `already_recording`.
    */
-  | { type: "debug.transcribe"; path: string };
+  /** `app` e `target` (T1740): a CLI dos agentes diz qual app está na frente e se é a nota rápida. */
+  | { type: "debug.transcribe"; path: string; app?: AppRef; target?: "note" };
+
+/**
+ * O campo descrito em vez de lido (T1740): com `insert.text {dryRun, simulate}`, o helper responde o plano e o espaço
+ * que o paste de verdade daria, pelas mesmas regras, sem perguntar nada à Acessibilidade. Tudo opcional: um campo de
+ * texto com cursor e todas as permissões. `role: null` é sem foco; `textBefore: null`, um campo que não diz.
+ */
+export interface InsertSimulation {
+  accessibility?: boolean;
+  secureInput?: boolean;
+  role?: string | null;
+  hasCaret?: boolean;
+  textBefore?: string | null;
+}
 
 export type CommandType = Command["type"];
 
@@ -144,11 +158,13 @@ export interface CommandResults {
     reason?: "no_focus" | "no_text_field" | "no_accessibility" | "secure_input";
     app?: string;
     /** Um espaço foi na frente do texto, porque ele entrou logo depois de outro texto (T733). */
-    spaced?: true;
+    spaced?: boolean;
     /** Onde a Acessibilidade achou o foco: no pedido ao sistema, no pedido ao app da frente (T984) ou em nenhum. */
     focusVia?: "system" | "app" | "none";
     /** Só no `dryRun`: nada foi colado nem copiado. */
     dryRun?: true;
+    /** Só no `dryRun` com `simulate` (T1740): o que o paste faria naquele campo. */
+    plan?: "paste" | "pasteKeepingText" | "clipboardOnly";
   };
   notify: Record<string, never>;
   "permissions.request": { permission: Permission; state: PermissionState };
