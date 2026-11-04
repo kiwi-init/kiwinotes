@@ -49,7 +49,7 @@
       <stop offset="1" stop-color="#bfefff" stop-opacity="0"/>
     </radialGradient>
 
-    <filter id="fx-aura" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+    <filter id="fx-aura" filterUnits="userSpaceOnUse" x="-300" y="-300" width="1624" height="1624" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="38"/>
     </filter>
     <filter id="fx-orbit" filterUnits="userSpaceOnUse" x="-300" y="-300" width="1624" height="1624" color-interpolation-filters="sRGB">
@@ -59,7 +59,7 @@
       <feGaussianBlur stdDeviation="55"/>
     </filter>
     <!-- luz de borda: calculada da forma real do #cat a cada frame (segue cabeça, orelhas e rabo animados) -->
-    <filter id="fx-rim" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024" color-interpolation-filters="sRGB">
+    <filter id="fx-rim" filterUnits="userSpaceOnUse" x="-128" y="-128" width="1280" height="1280" color-interpolation-filters="sRGB">
       <feOffset in="SourceAlpha" dy="34" result="aTop"/>
       <feComposite in="SourceAlpha" in2="aTop" operator="out" result="edgeTop"/>
       <feOffset in="SourceAlpha" dx="40" result="aLeft"/>
@@ -79,7 +79,10 @@
       <feComponentTransfer in="rimIn" result="rimFinal"><feFuncA type="linear" slope="0.00"/></feComponentTransfer>
       
       <feOffset in="SourceAlpha" dx="-8" dy="36" result="slabBack"/>
-      <feComposite in="slabBack" in2="SourceAlpha" operator="out" result="slabSide"/>
+      <feComposite in="slabBack" in2="SourceAlpha" operator="out" result="slabBackOut"/>
+      <!-- Só embaixo: deslocada, a orelha esquerda (que tem um entalhe) e o rabo vazavam lascas fora do contorno. -->
+      <feFlood flood-color="#ffffff" x="-200" y="700" width="1424" height="400" result="slabZone"/>
+      <feComposite in="slabBackOut" in2="slabZone" operator="in" result="slabSide"/>
       <feFlood flood-color="#1f4f66" x="0" y="0" width="1024" height="330" result="sb1"/>
       <feFlood flood-color="#382f72" x="0" y="330" width="1024" height="230" result="sb2"/>
       <feFlood flood-color="#6d2e58" x="0" y="560" width="1024" height="230" result="sb3"/>
@@ -87,7 +90,7 @@
       <feMerge x="0" y="0" width="1024" height="1024" result="sideBands"><feMergeNode in="sb1"/><feMergeNode in="sb2"/><feMergeNode in="sb3"/><feMergeNode in="sb4"/></feMerge>
       <feGaussianBlur in="sideBands" stdDeviation="0 40" result="sideColor"/>
       <feComposite in="sideColor" in2="slabSide" operator="in" result="sideFill"/>
-      <feMerge result="slabAll"><feMergeNode in="SourceAlpha"/><feMergeNode in="slabBack"/></feMerge>
+      <feMerge result="slabAll"><feMergeNode in="SourceAlpha"/><feMergeNode in="slabSide"/></feMerge>
       <feMorphology in="slabAll" operator="erode" radius="5" result="slabInner"/>
       <feComposite in="slabAll" in2="slabInner" operator="out" result="slabRing"/>
       <feFlood flood-color="#ffffff" flood-opacity="0.75"/>
@@ -128,7 +131,7 @@
 
   <rect id="bg" width="1024" height="1024" rx="224" fill="#000000"/>
 
-  <g clip-path="url(#clip-base)"><svg id="safe-area" x="102" y="102" width="820" height="820" viewBox="0 0 1024 1024" overflow="visible">
+  <g clip-path="url(#clip-base)"><svg id="safe-area" x="0" y="0" width="1024" height="1024" viewBox="-128 -128 1280 1280">
   <g id="aura">
     <!-- órbita da intro: manchas redondas; o blur fica FORA da rotação/escala, então nunca perde suavidade -->
     <g id="aura-intro" filter="url(#fx-orbit)" opacity="0">

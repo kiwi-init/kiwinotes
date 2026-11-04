@@ -19,6 +19,8 @@ const outDir = import.meta.dirname;
 const HOLO = { pink: "#ff5fbf", orange: "#ffa53d", yellow: "#fff27a", green: "#5cffb0", cyan: "#45c9ff", violet: "#7b61ff" };
 const GLASS = "#0b0d14"; // o vidro escuro das lâminas do Channels
 const OUTLINE = "#14161f"; // o contorno escuro por fora da borda branca
+/** A espessura da lâmina só aparece daqui para baixo (a base do corpo e o rabo). */
+const SLAB_FROM_Y = 700;
 
 /** Mistura `c` sobre o vidro escuro, com intensidade k (opaco: partes que se sobrepõem não marcam emenda). */
 function onGlass(c: string, k: number): string {
@@ -66,7 +68,10 @@ function glassEdge(v: Variant): { prims: string; under: string[]; over: string[]
     // A face de baixo da lâmina: a silhueta deslocada, fora da de cima, com a faixa holográfica em listras.
     prims += `
       <feOffset in="SourceAlpha" dx="${dx}" dy="${dy}" result="slabBack"/>
-      <feComposite in="slabBack" in2="SourceAlpha" operator="out" result="slabSide"/>
+      <feComposite in="slabBack" in2="SourceAlpha" operator="out" result="slabBackOut"/>
+      <!-- Só embaixo: deslocada, a orelha esquerda (que tem um entalhe) e o rabo vazavam lascas fora do contorno. -->
+      <feFlood flood-color="#ffffff" x="-200" y="${SLAB_FROM_Y}" width="1424" height="400" result="slabZone"/>
+      <feComposite in="slabBackOut" in2="slabZone" operator="in" result="slabSide"/>
       <feFlood flood-color="${onGlass(HOLO.cyan, 0.35)}" x="0" y="0" width="1024" height="330" result="sb1"/>
       <feFlood flood-color="${onGlass(HOLO.violet, 0.4)}" x="0" y="330" width="1024" height="230" result="sb2"/>
       <feFlood flood-color="${onGlass(HOLO.pink, 0.4)}" x="0" y="560" width="1024" height="230" result="sb3"/>
@@ -74,7 +79,7 @@ function glassEdge(v: Variant): { prims: string; under: string[]; over: string[]
       <feMerge x="0" y="0" width="1024" height="1024" result="sideBands"><feMergeNode in="sb1"/><feMergeNode in="sb2"/><feMergeNode in="sb3"/><feMergeNode in="sb4"/></feMerge>
       <feGaussianBlur in="sideBands" stdDeviation="0 40" result="sideColor"/>
       <feComposite in="sideColor" in2="slabSide" operator="in" result="sideFill"/>
-      <feMerge result="slabAll"><feMergeNode in="SourceAlpha"/><feMergeNode in="slabBack"/></feMerge>
+      <feMerge result="slabAll"><feMergeNode in="SourceAlpha"/><feMergeNode in="slabSide"/></feMerge>
       <feMorphology in="slabAll" operator="erode" radius="5" result="slabInner"/>
       <feComposite in="slabAll" in2="slabInner" operator="out" result="slabRing"/>
       <feFlood flood-color="#ffffff" flood-opacity="0.75"/>
@@ -102,10 +107,16 @@ function variant(svg: string, v: Variant): string {
 
   // A base do Channels: quadrado preto com raio 224, no lugar do fundo branco. O #bg segue com o mesmo id.
   s = replaceOnce(s, /<rect id="bg"[^>]*\/>/, `<rect id="bg" width="1024" height="1024" rx="224" fill="#000000"/>`);
-  // O gato vai para a área segura de 10%, como o conteúdo do Channels, num svg aninhado: o transform-box: view-box
-  // das animações passa a valer nesse viewport, então as origens (512px 1004px…) continuam certas. O brilho fica
-  // recortado pela base arredondada.
-  s = replaceOnce(s, `<g id="aura">`, `<g clip-path="url(#clip-base)"><svg id="safe-area" x="102" y="102" width="820" height="820" viewBox="0 0 1024 1024" overflow="visible">\n  <g id="aura">`);
+  // O gato vai para a área segura de 10%, como o conteúdo do Channels, num svg aninhado que cobre a base inteira: o
+  // viewBox -128…1152 encolhe o desenho a 80% (0…1024 cai em 102…922) sem recortar o brilho num retângulo, e o
+  // transform-box: view-box das animações mede a partir da origem desse viewBox, então as origens (512px 1004px…)
+  // continuam certas. Quem recorta é só a base arredondada.
+  s = replaceOnce(s, `<g id="aura">`, `<g clip-path="url(#clip-base)"><svg id="safe-area" x="0" y="0" width="1024" height="1024" viewBox="-128 -128 1280 1280">\n  <g id="aura">`);
+  // O brilho que segue o formato usava a região padrão do filtro (a caixa do elemento + 30%), que cortava o brilho do
+  // rabo numa linha reta. A região passa a cobrir tudo, como a dos outros brilhos.
+  s = replaceOnce(s, `<filter id="fx-aura" x="-30%" y="-30%" width="160%" height="160%"`, `<filter id="fx-aura" filterUnits="userSpaceOnUse" x="-300" y="-300" width="1624" height="1624"`);
+  // A borda de vidro e a espessura passam do fim do desenho (y 1024): a região da luz de borda cresce junto.
+  s = replaceOnce(s, `<filter id="fx-rim" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"`, `<filter id="fx-rim" filterUnits="userSpaceOnUse" x="-128" y="-128" width="1280" height="1280"`);
   s = replaceOnce(s, /(<use id="silhouette-outline"[^>]*\/>)/, `$1\n  </svg></g>`);
   s = replaceOnce(s, "<defs>", `<defs>\n    <clipPath id="clip-base"><rect width="1024" height="1024" rx="224"/></clipPath>`);
 
