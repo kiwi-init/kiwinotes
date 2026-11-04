@@ -45,18 +45,6 @@ bun run cli stop --data /tmp/kn-test
 - **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`.
 - **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
 
-## Dirigir o app (agentes)
-
-Com o app de pé:
-
-```sh
-bun run agent apps
-bun run agent call actions.invoke '{"name":"open-window","params":{"window":"settings"}}'
-bun run agent screenshot /tmp/settings.png 1
-```
-
-As janelas têm CSP sem `'unsafe-eval'` (T1378): um eval com resposta pela ponte (`evaluateJavascriptWithResponse`, que usa `new Function`) devolve erro, e não é bug do app. Para ler ou mexer na página, use o Agent Control (`bun run agent …`) ou o `executeJavascript`, que vem do WebView e não passa pela CSP.
-
 ### Ver as janelas pela CLI, fora da tela (T1742)
 
 Com o headless de pé (`bun run cli start --data DIR --no-helper`), as janelas de verdade abrem num WebKit headless, sem nada na tela de ninguém:
@@ -81,6 +69,18 @@ bun run cli ui notes --script passos.json --out /tmp/prints --data DIR
 ```
 
 Na primeira vez: `bunx playwright-core install webkit`. Num worktree novo: `bun run prepare:eb`, sem o qual o Vite não builda.
+
+## Dirigir o app (agentes)
+
+Com o app de pé:
+
+```sh
+bun run agent apps
+bun run agent call actions.invoke '{"name":"open-window","params":{"window":"settings"}}'
+bun run agent screenshot /tmp/settings.png 1
+```
+
+As janelas têm CSP sem `'unsafe-eval'` (T1378): um eval com resposta pela ponte (`evaluateJavascriptWithResponse`, que usa `new Function`) devolve erro, e não é bug do app. Para ler ou mexer na página, use o Agent Control (`bun run agent …`) ou o `executeJavascript`, que vem do WebView e não passa pela CSP.
 
 ## O ditado (T58)
 
