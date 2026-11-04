@@ -276,19 +276,19 @@ describe("Dictation", () => {
     sidecar.send = (async (c: Command) => {
       if (c.type === "insert.text") {
         order.push(`start ${c.text}`);
-        if (c.text.startsWith("Um")) await gate;
+        if (c.text.startsWith("Oi")) await gate;
         order.push(`end ${c.text}`);
       }
       return send(c);
     }) as typeof sidecar.send;
     const d = new Dictation({ sidecar: sidecar as unknown as DictationSidecar, history: { add: async (e) => e as any }, log: () => {} });
     d.attach();
-    sidecar.emit(transcript("um"));
-    sidecar.emit(transcript("dois"));
+    sidecar.emit(transcript("oi"));
+    sidecar.emit(transcript("tchau"));
     await Bun.sleep(5);
     release();
     await d.idle();
-    expect(order).toEqual(["start Um.", "end Um.", "start Dois.", "end Dois."]);
+    expect(order).toEqual(["start Oi.", "end Oi.", "start Tchau.", "end Tchau."]);
   });
 
   test("a helper restart drops the recording that died with it: the next dictation keeps its own app (T914)", async () => {

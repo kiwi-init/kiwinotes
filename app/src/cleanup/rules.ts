@@ -1,6 +1,7 @@
 // O motor de regras: o caminho principal da limpeza (ADR 0002). Determinístico e
 // conservador. Só tira o que não tem dúvida; o ambíguo fica como foi dito.
 
+import { spokenNumbers } from "./numbers.ts";
 import { WORD_END as E, WORD_START as B } from "./dictionary.ts";
 import type { Tone } from "./types.ts";
 
@@ -470,7 +471,8 @@ const QUESTION_START = re(
 
 /** Põe o ponto final que falta. Pergunta só quando o STT não pontuou nada e a frase abre como pergunta. */
 export function finalPunctuation(text: string, raw: string): string {
-  if (!/[\p{L}\p{N}]$/u.test(text)) return text;
+  // O "%" também fecha frase: "subiu 10%" (T1974, o número por extenso vira algarismo).
+  if (!/[\p{L}\p{N}%]$/u.test(text)) return text;
   const lastLine = text.split("\n").at(-1) ?? "";
   if (/^\d+\. /.test(lastLine)) return text; // termina num item de lista
   const unpunctuated = !/[.!?…]/.test(raw);
@@ -537,6 +539,8 @@ export function applyRules(text: string, tone: Tone, code = tone === "literal" &
   if (code) return asCommand(text.replace(/\s+/g, " "));
   const prose = tone !== "literal";
   let out = spokenCommands(text, prose);
+  // Antes da autocorreção: ela troca número por número com o mesmo jeito ("às 3h, não, quer dizer, às 4h"), T1955.
+  out = spokenNumbers(out);
   out = selfCorrections(out, prose);
   out = removeFillers(out);
   out = removeStutter(out);
