@@ -293,3 +293,95 @@
 .kn-search:focus {
   width: 260px;
 }
+
+/* ---------------------------------------------------------- a barra de cima e os botões que flutuam (T2502)
+   Como no Channels: controles soltos na barra, num fundo que flutua com sombra. No hub, a barra é dele (hub.css); numa
+   janela avulsa (as Notas), a seção desenha a própria `kn-bar`. */
+
+.kn-bar {
+  position: absolute;
+  z-index: 5;
+  inset: 0 0 auto 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px 0 84px; /* os semáforos */
+  pointer-events: none;
+}
+
+.kn-bar > * {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kn-float {
+  height: var(--ctl, 32px);
+  min-width: var(--ctl, 32px);
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--r-ctl, 10px);
+  background: var(--float, var(--surface));
+  box-shadow: var(--shadow-float, var(--shadow-1));
+  color: var(--ink, var(--text));
+  font: 500 13px / 1 var(--ui, var(--font));
+  white-space: nowrap;
+  cursor: default;
+  transition: background var(--fast) var(--ease);
+}
+
+.kn-float:hover,
+.kn-float[aria-expanded="true"] {
+  background: var(--float-2, var(--surface-hover));
+}
+
+.kn-float:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-float, var(--shadow-1)), var(--focus-ring);
+}
+
+.kn-float svg {
+  flex: none;
+  color: var(--ink-2, var(--text-2));
+}
+
+/* um grupo de botões só de ícone, juntos num flutuante */
+.kn-float-group {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-ctl, 10px);
+  background: var(--float, var(--surface));
+  box-shadow: var(--shadow-float, var(--shadow-1));
+}
+
+.kn-float-group > button {
+  width: calc(var(--ctl, 32px) - 4px);
+  height: calc(var(--ctl, 32px) - 4px);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: none;
+  color: var(--ink-2, var(--text-2));
+  cursor: default;
+}
+
+.kn-float-group > button:hover {
+  background: var(--wash-2, var(--surface-hover));
+  color: var(--ink, var(--text));
+}
+
+.kn-float-group > button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+

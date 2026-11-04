@@ -1,19 +1,17 @@
-/* Notas no B v4, "uma superfície só" (docs/mockups/notas/, spec #1107):
+/* Notas no B v4, "uma superfície só" (docs/mockups/notas/, spec #1107), na versão C · Foco do T2502 (#2457):
+   - a nota ocupa a janela, numa coluna de 760px; a árvore e o "Citada em" abrem em popover;
    - nenhuma linha nem borda: a separação vem do espaço, do tamanho e do peso do texto;
-   - a barra lateral, a nota e o "Citada em" ficam no mesmo fundo, sem cartão;
-   - fundo de cor só em botão e controle; o verde sem fundo marca link.
-   As medidas vêm do mockup; as cores, dos tokens do app (claro e escuro pelo sistema). */
+   - os controles flutuam, como no Channels (kit.css: kn-float), e a barra de ditado é o composer dele.
+   Os tokens têm os nomes do Channels (T2503), cada um com o de hoje como reserva. */
 
 body {
-  background: var(--surface);
+  background: var(--bg, var(--surface));
 }
 
 .kn-notes {
   position: relative;
   height: 100%;
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 260px;
-  background: var(--surface);
+  background: var(--bg, var(--surface));
   animation: window-in var(--slow) var(--pop-ease) both;
 }
 
@@ -27,7 +25,7 @@ body {
   place-items: center;
 }
 
-/* a faixa de cima arrasta a janela (os semáforos ficam em cima dela) */
+/* a faixa de cima arrasta a janela na tela vazia (sem vault); com notas, quem arrasta é a barra de cima */
 .kn-drag {
   position: absolute;
   inset: 0 0 auto 0;
@@ -35,20 +33,68 @@ body {
   z-index: 0;
 }
 
+/* ---------------------------------------------------------- o caminho na barra e os popovers */
+
+.kn-crumb-bt {
+  max-width: 100%;
+}
+
+.kn-crumb-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kn-pop {
+  position: absolute;
+  z-index: 8;
+  background: var(--bg-2, var(--surface));
+  border-radius: var(--r-ctl, 10px);
+  box-shadow: var(--shadow-pop);
+  animation: pop-in var(--fast) var(--pop-ease) both;
+}
+
+/* a árvore sai de baixo do caminho; no hub a nota começa logo abaixo da barra, na janela avulsa a barra é da nota */
+.kn-tree-pop {
+  top: 4px;
+  left: 84px;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kn-bar ~ .kn-tree-pop {
+  top: 50px;
+  max-height: calc(100% - 70px);
+}
+
+.kn-back-pop {
+  top: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 12px 14px 0;
+  font: 13px / 1.45 var(--ui, var(--font));
+  letter-spacing: normal;
+}
+
 /* ---------------------------------------------------------- barra lateral */
 
 .kn-side {
   position: relative;
-  z-index: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 64px 12px 20px 28px;
+  padding: 8px 10px 12px;
   font-size: 13px;
 }
 
 .kn-side-head {
-  font-size: 11px;
-  color: var(--text-3);
-  margin: 0 0 12px;
+  font: 11px / 1 var(--mono, var(--font-mono));
+  color: var(--ink-3, var(--text-3));
+  margin: 4px 0 8px;
 }
 
 .kn-side-item {
@@ -84,33 +130,14 @@ body {
 
 .kn-center {
   position: relative;
+  height: 100%;
   overflow-y: auto;
   min-width: 0;
 }
 
-.kn-top {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  height: 52px;
-  padding: 0 24px 0 72px;
-  font-size: 12px;
-  color: var(--text-3);
-  background: var(--surface);
-}
-
-.kn-crumb {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.kn-top-r {
-  margin-left: auto;
-  display: flex;
-  gap: 8px;
+/* na janela Notas avulsa, a barra é da nota e fica por cima */
+.kn-bar ~ .kn-center {
+  padding-top: 52px;
 }
 
 .kn-bt {
@@ -142,8 +169,23 @@ body {
 }
 
 .kn-page {
-  padding: 24px 72px 0;
   max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 40px 0;
+}
+
+.kn-page-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+  font: 11px / 1.4 var(--mono, var(--font-mono));
+  color: var(--ink-3, var(--text-3));
+}
+
+.kn-page-crumbs > span + span::before {
+  content: "›";
+  margin-right: 6px;
 }
 
 .kn-title {
@@ -166,9 +208,32 @@ body {
 }
 
 .kn-meta {
-  font-size: 12px;
-  color: var(--text-3);
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
   margin: 0 0 30px;
+  font: 11px / 1.4 var(--mono, var(--font-mono));
+  color: var(--ink-3, var(--text-3));
+}
+
+.kn-meta-bt {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent-text);
+  cursor: default;
+}
+
+.kn-meta-bt:disabled {
+  color: inherit;
+}
+
+.kn-meta-bt:not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .kn-conflict {
@@ -183,8 +248,9 @@ body {
 
 /* o aviso do rascunho órfão é da janela, não de uma nota: fica no alto da coluna, alinhado com a nota */
 .kn-orphan {
-  margin: 0 72px 8px;
-  max-width: 616px;
+  max-width: 680px;
+  margin: 16px auto 0;
+  padding: 0 40px;
 }
 
 .kn-conflict-actions {
@@ -205,21 +271,7 @@ body {
   outline: none;
 }
 
-/* ---------------------------------------------------------- Citada em */
-
-.kn-right {
-  position: relative;
-  z-index: 1;
-  overflow-y: auto;
-  padding: 64px 28px 20px 26px;
-  font-size: var(--text-aside);
-}
-
-.kn-right-h {
-  font-size: 11px;
-  color: var(--text-3);
-  margin: 0 0 12px;
-}
+/* ---------------------------------------------------------- Citada em (no popover da meta) */
 
 .kn-back {
   display: block;
@@ -548,4 +600,80 @@ body {
   color: var(--text);
   background: var(--surface-2);
   border-radius: var(--radius-sm);
+}
+
+/* ---------------------------------------------------------- a barra de ditado (o composer do Channels) */
+
+.kn-composer-wrap {
+  position: absolute;
+  z-index: 3;
+  inset: auto 0 0 0;
+  padding: 96px 0 6px;
+  /* o texto da nota some embaixo, em vez de ser cortado pela barra */
+  background: linear-gradient(to bottom, transparent, var(--bg, var(--surface)) 96px);
+  pointer-events: none;
+}
+
+.kn-composer {
+  pointer-events: auto;
+  width: min(680px, calc(100% - 64px));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--r-win, 18px);
+  background: var(--float, var(--surface));
+  box-shadow: var(--shadow-float, var(--shadow-1));
+}
+
+.kn-composer-input {
+  flex: 1;
+  min-width: 0;
+  height: var(--ctl, 32px);
+  border: 0;
+  outline: none;
+  background: none;
+  font: 15px / 1.4 var(--ui, var(--font));
+  color: var(--ink, var(--text));
+  caret-color: var(--accent);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.kn-composer-input::placeholder {
+  color: var(--ink-3, var(--text-3));
+}
+
+.kn-composer-input:focus-visible {
+  box-shadow: none;
+}
+
+.kn-composer-hint {
+  flex: none;
+  font: 11px / 1 var(--mono, var(--font-mono));
+  color: var(--ink-3, var(--text-3));
+}
+
+.kn-composer-input:placeholder-shown ~ .kn-composer-hint {
+  visibility: hidden;
+}
+
+.kn-composer-fn {
+  flex: none;
+  min-width: var(--ctl, 32px);
+  height: var(--ctl, 32px);
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-ctl, 10px);
+  background: var(--ink, var(--text));
+  color: var(--bg, var(--surface));
+  font: 600 12px / 1 var(--mono, var(--font-mono));
+}
+
+.kn-composer-foot {
+  margin-top: 6px;
+  text-align: center;
+  font: 11px / 1 var(--mono, var(--font-mono));
+  color: var(--ink-3, var(--text-3));
 }

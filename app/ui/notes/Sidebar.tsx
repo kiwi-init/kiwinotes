@@ -174,11 +174,18 @@ export function Sidebar(p: SidebarProps) {
       <input
         className="kn-side-search"
         type="search"
-        placeholder="Buscar nas notas"
-        aria-label="Buscar nas notas"
+        placeholder="Ir para uma nota ou pasta"
+        aria-label="Ir para uma nota ou pasta"
+        autoFocus
         value={p.query}
         onChange={(e) => p.onQuery(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && p.onQuery("")}
+        onKeyDown={(e) => {
+          // Com texto, o Esc limpa; vazio, ele sobe e fecha o popover da árvore.
+          if (e.key === "Escape" && p.query) {
+            e.preventDefault();
+            p.onQuery("");
+          }
+        }}
       />
       {!searching && p.pinned.length ? (
         <>

@@ -1,8 +1,8 @@
 {
   "window": "hub",
   "steps": [
-    { "waitFor": ".kn-hub-item", "name": "o hub abre" },
-    { "click": ".kn-hub-item:has-text('Sobre')", "name": "vai para Sobre" },
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": ".kn-tab:has-text('Sobre')", "name": "vai para Sobre" },
     { "expectText": ".kn-about-name", "text": "Kiwi Notes" },
     { "expectText": ".kn-about-version", "text": "Versão dev", "name": "a versão e o canal (no headless, dev)" },
     { "expectText": ".kn-about-line", "text": "desligadas", "name": "sem o atualizador, diz que está desligado" },

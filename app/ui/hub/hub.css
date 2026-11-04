@@ -1,11 +1,14 @@
-/* O hub (T2121, #2100): a barra de seções à esquerda, com os semáforos em cima, e a seção à direita. A barra é do
-   mesmo fundo da janela das Notas e só se separa pelo tom; cada seção traz o próprio conteúdo. */
+/* O hub (T2121, #2100) com as abas em cima (T2502, #2457 ponto 2, versão C · Foco): a barra de cima tem os semáforos,
+   o que a seção na tela pede à esquerda e à direita, e as abas no meio, num grupo que flutua com a seleção deslizando,
+   como no Channels. Os tokens têm os nomes do Channels (T2503); até eles chegarem, cada um tem o de hoje como reserva. */
 
 .kn-hub {
+  --kn-bar: 52px;
+  position: relative;
   height: 100%;
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  background: var(--surface);
+  grid-template-rows: var(--kn-bar) minmax(0, 1fr);
+  background: var(--bg, var(--surface));
 }
 
 .kn-hub[data-entering="true"] {
@@ -14,83 +17,124 @@
     fade var(--slow) var(--ease) both;
 }
 
-.kn-hub-rail {
+.kn-hub-top {
   position: relative;
-  background: var(--bg);
-  padding: var(--titlebar) var(--space-3) var(--space-4);
-  overflow-y: auto;
-}
-
-.kn-hub-drag {
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: var(--titlebar);
-}
-
-.kn-hub-rail ul {
-  list-style: none;
-  margin: var(--space-2) 0 0;
-  padding: 0;
+  z-index: 5;
   display: grid;
-  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  /* os semáforos ficam à esquerda */
+  padding: 0 14px 0 84px;
 }
 
-.kn-hub-item {
-  width: 100%;
+.kn-hub-slot {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 7px var(--space-2);
+  gap: 6px;
+  min-width: 0;
+}
+
+.kn-hub-end {
+  justify-content: flex-end;
+}
+
+/* Só o que a seção pôs ali deixa de arrastar a janela. */
+.kn-hub-slot > * {
+  -webkit-app-region: no-drag;
+}
+
+/* ---------------------------------------------------------- as abas */
+
+.kn-tabs {
+  position: relative;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-ctl, 10px);
+  background: var(--float, var(--surface));
+  box-shadow: var(--shadow-float, var(--shadow-1));
+}
+
+.kn-tabs-pill {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: calc(var(--ctl, 32px) - 4px);
+  border-radius: var(--r-row, 8px);
+  background: var(--wash-2, var(--surface-hover));
+  transition:
+    transform var(--glide),
+    width var(--glide);
+  pointer-events: none;
+}
+
+.kn-tab {
+  position: relative;
+  height: calc(var(--ctl, 32px) - 4px);
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--r-row, 8px);
   background: none;
-  color: var(--text-2);
-  font: 500 var(--text-md) / 1.2 var(--font);
-  text-align: left;
+  color: var(--ink-2, var(--text-2));
+  font: 500 13px / 1 var(--ui, var(--font));
+  white-space: nowrap;
   cursor: default;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  transition: color var(--fast) var(--ease);
 }
 
-.kn-hub-item:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+.kn-tab:hover,
+.kn-tab[aria-selected="true"] {
+  color: var(--ink, var(--text));
 }
 
-.kn-hub-item:focus-visible {
+.kn-tab:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
-.kn-hub-item[aria-current="page"] {
-  background: var(--accent-soft);
-  color: var(--accent-text);
+.kn-tab-soon {
+  font: 11px / 1 var(--mono, var(--font-mono));
+  color: var(--ink-3, var(--text-3));
 }
 
-.kn-hub-soon-tag {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--text-3);
+@media (prefers-reduced-motion: reduce) {
+  .kn-tabs-pill {
+    transition: none;
+  }
 }
+
+:root[data-motion="reduced"] .kn-tabs-pill {
+  transition: none;
+}
+
+/* ---------------------------------------------------------- as seções */
 
 .kn-hub-main {
   position: relative;
   min-width: 0;
-  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
 .kn-hub-pane {
   height: 100%;
   overflow: auto;
+  container: kn-window / inline-size;
 }
 
 .kn-hub-pane[hidden] {
   display: none;
 }
 
-/* Dentro do hub, os semáforos ficam na barra: a barra de título de cada seção não precisa abrir espaço para eles. */
-.kn-hub-main .kn-titlebar {
-  padding-left: var(--space-4);
+/* As outras seções (as janelas do kit) ficam numa coluna no meio, como as Configurações do Channels. */
+.kn-hub-pane .kn-content {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
 }
 
 /* A entrada é a do hub: a seção não anima de novo por cima. */

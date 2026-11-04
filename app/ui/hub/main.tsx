@@ -1,9 +1,10 @@
-// O hub (T2121, spec #2100): a janela principal do Kiwi Notes. É onde o app abre, com uma barra de seções à esquerda
-// (Notas, Reuniões, Ditado e Configurações) e, à direita, a mesma UI de cada janela de hoje. Uma seção visitada fica
+// O hub (T2121, spec #2100): a janela principal do Kiwi Notes. Com o T2502 (#2457 ponto 2, versão C · Foco), as seções
+// (Notas, Reuniões, Ditado, Configurações e Sobre) viram abas numa barra de cima, como no Channels; a barra lateral
+// saiu. Dos lados das abas, a seção na tela põe os botões dela (`TopBar`, por portal). Uma seção visitada fica
 // montada (só escondida), para a nota em edição e o autosave não se perderem ao trocar de seção.
 import "./hub.css";
 
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { HUB_SECTIONS, type HubSection, isHubSection } from "../../src/shared/ui-contract.ts";
 import { History } from "../history/History.tsx";
@@ -11,6 +12,7 @@ import { NotesApp } from "../notes/NotesApp.tsx";
 import { About } from "./About.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { api, has } from "../src/api.ts";
+import { HubBarContext } from "../src/topbar.tsx";
 import { Empty, mount } from "../src/kit/index.tsx";
 
 const LABELS: Record<HubSection, string> = {
@@ -23,21 +25,6 @@ const LABELS: Record<HubSection, string> = {
 
 /** Seção que ainda não existe: aparece na barra, sem abrir nada. */
 const SOON: ReadonlySet<HubSection> = new Set(["meetings"]);
-
-function Icon({ section }: { section: HubSection }) {
-  const paths: Record<HubSection, ReactNode> = {
-    notes: <path d="M4.5 2.5h5l3 3v8h-8zM9.5 2.5v3h3M6.5 8.5h4M6.5 11h4" />,
-    meetings: <path d="M2.5 4.5h7v7h-7zM9.5 7l4-2.5v7l-4-2.5" />,
-    dictation: <path d="M8 2.5a2 2 0 0 1 2 2v3a2 2 0 0 1-4 0v-3a2 2 0 0 1 2-2zM4.5 7.5a3.5 3.5 0 0 0 7 0M8 11v2.5" />,
-    settings: <path d="M3 4.5h10M3 8h10M3 11.5h10M6 3v3M10 6.5v3M5 10v3" />,
-    about: <path d="M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM8 7.5v3.5M8 5.2v.1" />,
-  };
-  return (
-    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {paths[section]}
-    </svg>
-  );
-}
 
 /** `active`: a seção está na tela. As outras ficam montadas e escondidas (o estado não se perde ao trocar). */
 function Pane({ section, active }: { section: HubSection; active: boolean }) {
@@ -57,6 +44,63 @@ function Pane({ section, active }: { section: HubSection; active: boolean }) {
         </div>
       );
   }
+}
+
+/**
+ * As abas, como as do Channels: um grupo que flutua, com a seleção deslizando de uma aba para a outra. ←/→ trocam,
+ * como num `tablist`.
+ */
+function Tabs({ section, onGo }: { section: HubSection; onGo(s: HubSection): void }) {
+  const group = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = group.current?.querySelector<HTMLElement>(`[data-section="${section}"]`);
+      if (el) setPill({ x: el.offsetLeft, w: el.offsetWidth });
+    };
+    measure();
+    // A fonte e o zoom do Tamanho do texto mudam a largura das abas.
+    const ro = new ResizeObserver(measure);
+    if (group.current) ro.observe(group.current);
+    return () => ro.disconnect();
+  }, [section]);
+  const move = (dir: 1 | -1) => {
+    const i = HUB_SECTIONS.indexOf(section);
+    const next = HUB_SECTIONS[(i + dir + HUB_SECTIONS.length) % HUB_SECTIONS.length]!;
+    onGo(next);
+    group.current?.querySelector<HTMLElement>(`[data-section="${next}"]`)?.focus();
+  };
+  return (
+    <div
+      className="kn-tabs electrobun-webkit-app-region-no-drag"
+      role="tablist"
+      aria-label="Seções"
+      ref={group}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          move(e.key === "ArrowRight" ? 1 : -1);
+        }
+      }}
+    >
+      {pill ? <span className="kn-tabs-pill" style={{ transform: `translateX(${pill.x}px)`, width: pill.w }} aria-hidden="true" /> : null}
+      {HUB_SECTIONS.map((s) => (
+        <button
+          type="button"
+          role="tab"
+          key={s}
+          data-section={s}
+          aria-selected={s === section}
+          tabIndex={s === section ? 0 : -1}
+          className="kn-tab"
+          onClick={() => onGo(s)}
+        >
+          {LABELS[s]}
+          {SOON.has(s) ? <span className="kn-tab-soon">breve</span> : null}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /** A seção inicial: `?section=` (a CLI e o print) ou Notas. */
@@ -102,31 +146,23 @@ function Hub() {
     el.dataset.entering = "true";
   }, [entry]);
 
+  // Os dois lados da barra, para a seção na tela pôr os botões dela.
+  const [start, setStart] = useState<HTMLElement | null>(null);
+  const [end, setEnd] = useState<HTMLElement | null>(null);
+
   return (
     <div className="kn-hub" data-entering="true" ref={ref}>
-      <nav className="kn-hub-rail" aria-label="Seções">
-        <div className="kn-hub-drag electrobun-webkit-app-region-drag" />
-        <ul>
-          {HUB_SECTIONS.map((s) => (
-            <li key={s}>
-              <button
-                type="button"
-                className="kn-hub-item"
-                aria-current={s === section ? "page" : undefined}
-                onClick={() => go(s)}
-              >
-                <Icon section={s} />
-                <span>{LABELS[s]}</span>
-                {SOON.has(s) ? <span className="kn-hub-soon-tag">em breve</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <header className="kn-hub-top electrobun-webkit-app-region-drag">
+        <div className="kn-hub-slot kn-hub-start" ref={setStart} />
+        <Tabs section={section} onGo={go} />
+        <div className="kn-hub-slot kn-hub-end" ref={setEnd} />
+      </header>
       <div className="kn-hub-main">
         {HUB_SECTIONS.filter((s) => visited.has(s)).map((s) => (
           <section key={s} className="kn-hub-pane" hidden={s !== section} aria-label={LABELS[s]}>
-            <Pane section={s} active={s === section} />
+            <HubBarContext.Provider value={{ start, end, active: s === section }}>
+              <Pane section={s} active={s === section} />
+            </HubBarContext.Provider>
           </section>
         ))}
       </div>
