@@ -112,8 +112,9 @@ describe("os arquivos que não são nota (T3370)", () => {
     rmSync(path.join(root, "Novo.key"));
     mkdirSync(path.join(root, "Novo.key"));
     writeFileSync(path.join(root, "Novo.key/Index.zip"), "z");
-    await waitFor(() => v.list().files.some((f) => f.path === "Novo.key"));
-    expect(v.list().files.map((f) => f.path)).toEqual(["Contas.numbers", "Novo.key", "Relatório.pages"]);
+    // A lista inteira de uma vez: o scan troca o índice todo no fim, mas o teste espera o estado final, não o primeiro.
+    const all = () => v.list().files.map((f) => f.path).join(",");
+    await waitFor(() => all() === "Contas.numbers,Novo.key,Relatório.pages");
     expect(v.list().folders).not.toContain("Novo.key");
   });
 
@@ -124,9 +125,7 @@ describe("os arquivos que não são nota (T3370)", () => {
     mkdirSync(path.join(root, "Novo.key"));
     await waitFor(() => v.list().folders.includes("Novo.key"));
     writeFileSync(path.join(root, "Novo.key/Index.zip"), "zip");
-    await waitFor(() => v.list().files.some((f) => f.path === "Novo.key"));
-    expect(v.list().files.map((f) => f.path)).toEqual(["Novo.key"]);
-    expect(v.list().folders).toEqual([]);
+    await waitFor(() => v.list().files.map((f) => f.path).join(",") === "Novo.key" && !v.list().folders.length);
   });
 
   test("uma pasta comum chamada Projeto.key continua pasta, com as notas de dentro (revisão #3476)", async () => {

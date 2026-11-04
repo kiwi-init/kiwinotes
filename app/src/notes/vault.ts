@@ -287,6 +287,8 @@ export class Vault {
   private files = new Map<string, VaultFile>();
   /** Os documentos-pacote (`.pages`, `.key`… com a marca do formato) que o scan achou (T3371). */
   private packages = new Set<string>();
+  /** Fechado (`close`): um `flush` que já estava rodando para no meio e não avisa ninguém (revisão #3499). */
+  private closed = false;
   private watcher: FSWatcher | null = null;
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -354,16 +356,18 @@ export class Vault {
   /** Começa a olhar o disco (o Obsidian, o Finder, um git pull). */
   watch(): void {
     if (this.watcher) return;
+    this.closed = false;
     this.watcher = watch(this.root, { recursive: true }, (_event, file) => {
       if (!file) return;
       const rel = String(file).split(path.sep).join("/").normalize("NFC");
       if (rel.split("/").some((s) => s.startsWith("."))) return;
       this.pendingPaths.add(rel);
-      this.flushTimer ??= setTimeout(() => void this.flush(), this.debounceMs);
+      this.flushTimer ??= setTimeout(() => void this.flush().catch((e) => console.error("[notes] watcher flush failed:", e)), this.debounceMs);
     });
   }
 
   close(): void {
+    this.closed = true;
     this.watcher?.close();
     this.watcher = null;
     if (this.flushTimer) clearTimeout(this.flushTimer);
@@ -944,6 +948,15 @@ export class Vault {
   }
 
   private async index(p: string, content: string, abs: string): Promise<Entry> {
+    const entry = await this.entryFor(p, content, abs);
+    if (!this.notes.has(p)) this.resolver = null;
+    this.notes.set(p, entry);
+    for (let f = entry.meta.folder; f; f = parentOf(f)) this.folders.add(f);
+    return entry;
+  }
+
+  /** A entrada do índice de uma nota, sem pôr no índice (o `scan` monta um índice novo e troca de uma vez). */
+  private async entryFor(p: string, content: string, abs: string): Promise<Entry> {
     const s = await stat(abs);
     const title = noteName(p);
     const folder = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
@@ -964,45 +977,55 @@ export class Vault {
       content,
       ino: s.ino,
     };
-    if (!this.notes.has(p)) this.resolver = null;
-    this.notes.set(p, entry);
-    for (let f = folder; f; f = f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : "") this.folders.add(f);
     return entry;
   }
 
+  /**
+   * Relê o cofre inteiro. Monta o índice novo à parte e troca tudo de uma vez no fim: um `list()` ou uma busca no meio
+   * nunca veem um cofre pela metade (revisão #3499). Um item que some no meio (o Obsidian renomeando) só fica de fora.
+   */
   private async scan(): Promise<void> {
-    this.resolver = null;
-    this.notes = new Map();
-    this.folders = new Set();
-    this.files = new Map();
-    this.packages = new Set();
+    const notes = new Map<string, Entry>();
+    const folders = new Set<string>();
+    const files = new Map<string, VaultFile>();
+    const packages = new Set<string>();
     const walk = async (rel: string) => {
-      for (const name of await readdir(path.join(this.root, rel))) {
+      for (const name of await readdir(path.join(this.root, rel)).catch(() => [] as string[])) {
         if (name.startsWith(".")) continue;
         const child = rel ? `${rel}/${name}` : name;
+        const key = child.normalize("NFC");
         const abs = path.join(this.root, child);
-        const s = await lstat(abs);
-        if (s.isSymbolicLink()) continue;
+        const s = await lstat(abs).catch(() => null);
+        if (!s || s.isSymbolicLink()) continue;
         if (s.isDirectory() && isPackageDir(name, await readdir(abs).catch(() => []))) {
           // Um documento-pacote: arquivo, não pasta (T3371). Só com a marca do formato e sem nota dentro (#3476).
-          this.packages.add(child.normalize("NFC"));
-          this.keepFile(child.normalize("NFC"), s);
+          packages.add(key);
+          files.set(key, fileEntry(key, s));
         } else if (s.isDirectory()) {
-          this.folders.add(child.normalize("NFC"));
+          folders.add(key);
           await walk(child);
         } else if (s.isFile() && /\.md$/i.test(name)) {
-          await this.index(child.normalize("NFC"), await readFile(abs, "utf8"), abs);
+          const content = await readFile(abs, "utf8").catch(() => null);
+          const entry = content === null ? null : await this.entryFor(key, content, abs).catch(() => null);
+          if (entry) notes.set(key, entry);
         } else if (s.isFile()) {
-          this.keepFile(child.normalize("NFC"), s);
+          files.set(key, fileEntry(key, s));
         }
       }
     };
     await walk("");
+    if (this.closed) return;
+    this.notes = notes;
+    this.folders = folders;
+    this.files = files;
+    this.packages = packages;
+    this.resolver = null;
   }
 
   /** O que o watcher juntou: relê o que mudou, tira o que sumiu, e avisa. */
   private async flush(): Promise<void> {
     this.flushTimer = null;
+    if (this.closed) return;
     const paths = [...this.pendingPaths];
     this.pendingPaths.clear();
     const changed: string[] = [];
@@ -1076,9 +1099,11 @@ export class Vault {
       const content = await readFile(abs, "utf8").catch(() => null);
       if (content === null) continue;
       if (this.notes.get(rel)?.meta.version === versionOf(content)) continue; // o próprio app escreveu
-      await this.index(rel, content, abs);
+      // Sumiu entre a leitura e o stat (renomeada de novo): o próximo evento do watcher conta como ficou.
+      if (!(await this.index(rel, content, abs).catch(() => null))) continue;
       changed.push(rel);
     }
+    if (this.closed) return; // fechou no meio: ninguém mais escuta (revisão #3499)
     if (changed.length) this.emit(changed);
     if (others.length) {
       for (const fn of this.otherListeners) {
@@ -1117,7 +1142,7 @@ export class Vault {
   }
 
   private keepFile(rel: string, s: { size: number; mtimeMs: number }) {
-    this.files.set(rel, { path: rel, size: s.size, mtime: new Date(s.mtimeMs).toISOString() });
+    this.files.set(rel, fileEntry(rel, s));
   }
 
   private snapshot(): Snapshot {
@@ -1145,6 +1170,8 @@ async function exists(abs: string): Promise<boolean> {
 }
 
 const parentOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+const fileEntry = (rel: string, s: { size: number; mtimeMs: number }): VaultFile => ({ path: rel, size: s.size, mtime: new Date(s.mtimeMs).toISOString() });
 
 /** A árvore das pastas a partir das listas: pastas vazias entram, e as filhas e as notas vêm em ordem. */
 export function buildTree(folders: readonly string[], notes: readonly { path: string; folder: string }[]): FolderNode {
