@@ -412,3 +412,105 @@ describe("Dictation", () => {
     expect(inserted()).toEqual(["Oi."]);
   });
 });
+
+describe("o ditado da CLI dos agentes (T1740)", () => {
+  /** O helper com `simulate`: responde o plano e o espaço como o `SimulatedField` do Swift. */
+  const simulated = () =>
+    ok({ pasted: false, restored: false, dryRun: true, plan: "paste", spaced: true });
+
+  test("um texto pula o STT, sai limpo com o tom do app, e o insert vai em dryRun com o campo descrito", async () => {
+    const { sidecar, d, added } = setup(simulated);
+    const out = await d.dictateText("hum manda o laudo pro joão", {
+      app: { bundleId: "com.tinyspeck.slackmacgap", name: "Slack" },
+      simulate: { textBefore: "Oi." },
+    });
+    const insert = sidecar.sent.find((c) => c.type === "insert.text")!;
+    expect(insert).toMatchObject({ dryRun: true, simulate: { textBefore: "Oi." }, autoSpace: true });
+    expect(out).toMatchObject({ raw: "hum manda o laudo pro joão", tone: "casual", pasted: true, app: { bundleId: "com.tinyspeck.slackmacgap" } });
+    expect(out.text).not.toContain("hum");
+    expect(out.insert).toEqual({ plan: "paste", reason: undefined, autoSpace: true, spaced: true });
+    expect(added).toHaveLength(1);
+  });
+
+  test("simulado nunca cola de verdade, nem num app sem dryRun; no terminal não há espaço automático", async () => {
+    const { sidecar, d } = setup(simulated);
+    const out = await d.dictateText("git status", { app: { bundleId: "com.mitchellh.ghostty", name: "Ghostty" } });
+    expect(sidecar.sent.find((c) => c.type === "insert.text")).toMatchObject({ dryRun: true, simulate: {}, autoSpace: false });
+    expect(out.tone).toBe("literal");
+    expect(out.insert?.autoSpace).toBe(false);
+  });
+
+  test("a nota rápida pela CLI vira nota e não chama o insert", async () => {
+    const sidecar = fakeSidecar();
+    const made: string[] = [];
+    const d = new Dictation({
+      sidecar: sidecar as unknown as DictationSidecar,
+      history: { add: async (e) => ({ ...e, id: "h1", at: "" }) as any },
+      notes: { toNew: async (text) => (made.push(text), { note: { path: "Caixa de entrada/Oi.md", title: "Oi" } as any, created: true, already: false }) },
+      log: () => {},
+    });
+    d.attach();
+    const out = await d.dictateText("Oi.", { note: true });
+    expect(made).toEqual(["Oi."]);
+    expect(out.note?.note.path).toBe("Caixa de entrada/Oi.md");
+    expect(sidecar.sent.some((c) => c.type === "insert.text")).toBe(false);
+  });
+
+  test("um wav vai ao debug.transcribe com o app e o target, e resolve com o ditado daquela gravação", async () => {
+    const { sidecar, d } = setup(simulated);
+    const pending = d.dictateWav("/tmp/x.wav", { app: { bundleId: "com.apple.mail", name: "Mail" }, simulate: { textBefore: "" } });
+    await Bun.sleep(0);
+    expect(sidecar.sent.find((c) => c.type === "debug.transcribe")).toEqual({
+      type: "debug.transcribe",
+      path: "/tmp/x.wav",
+      app: { bundleId: "com.apple.mail", name: "Mail" },
+    });
+    // O helper manda os eventos de uma gravação, como no `debug.transcribe` de verdade.
+    sidecar.emit({ type: "record.started", reason: "debug", app: { bundleId: "com.apple.mail", name: "Mail" } });
+    sidecar.emit(transcript("bom dia equipe", { latencyMs: 321 }));
+    const out = await pending;
+    expect(out).toMatchObject({ raw: "bom dia equipe", sttMs: 321, tone: "formal" });
+    expect(sidecar.sent.find((c) => c.type === "insert.text")).toMatchObject({ dryRun: true, simulate: { textBefore: "" } });
+  });
+
+  test("um ditado de verdade no meio não pega o campo simulado, e o STT que falha resolve com o erro", async () => {
+    const { sidecar, d } = setup(simulated);
+    const pending = d.dictateWav("/tmp/y.wav");
+    await Bun.sleep(0);
+    // Uma gravação pelo atalho (reason: hotkey) não consome o pedido da CLI.
+    sidecar.emit({ type: "record.started", reason: "hotkey" });
+    sidecar.emit({ type: "record.started", reason: "debug" });
+    sidecar.emit(transcript("um"));
+    sidecar.emit({ type: "transcript.error", error: "stt_failed" });
+    const out = await pending;
+    expect(out).toMatchObject({ skipped: "error", error: "stt_failed" });
+    await d.idle();
+    const inserts = sidecar.sent.filter((c) => c.type === "insert.text");
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).not.toHaveProperty("simulate");
+  });
+
+  test("o helper recusa o debug.transcribe: rejeita, e o próximo record.started não fica com o pedido", async () => {
+    const sidecar = fakeSidecar();
+    const original = sidecar.send.bind(sidecar);
+    (sidecar as any).send = async (c: Command) =>
+      c.type === "debug.transcribe" ? { v: 1, type: "result", id: "x", ok: false, error: "already_recording" } : original(c);
+    const d = new Dictation({ sidecar: sidecar as unknown as DictationSidecar, history: { add: async (e) => ({ ...e, id: "h", at: "" }) as any }, log: () => {} });
+    d.attach();
+    await expect(d.dictateWav("/tmp/z.wav")).rejects.toThrow("already_recording");
+    let done = 0;
+    d.onDone = () => void done++;
+    sidecar.emit({ type: "record.started", reason: "debug" });
+    sidecar.emit(transcript("dois"));
+    await d.idle();
+    expect(done).toBe(1);
+  });
+
+  test("o helper reinicia no meio: o pedido resolve com helper_restarted em vez de ficar pendurado", async () => {
+    const { sidecar, d } = setup(simulated);
+    const pending = d.dictateWav("/tmp/w.wav");
+    await Bun.sleep(0);
+    sidecar.emit({ type: "ready", version: "x", pid: 1, hotkey: "fn", hotkeyActive: false, permissions: {} } as any);
+    expect(await pending).toMatchObject({ skipped: "error", error: "helper_restarted" });
+  });
+});

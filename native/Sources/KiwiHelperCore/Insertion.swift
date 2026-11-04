@@ -186,3 +186,79 @@ public enum LeadingSpace {
         return String(decoding: units[max(0, caret - 2)..<caret], as: UTF16.self)
     }
 }
+
+/// What `insert.text` would do in a field that is described instead of read (T1740): the agents' CLI (`cli dictate
+/// --app … --field-before …`) gets the same plan and the same leading space as a real paste, from the same rules,
+/// without asking Accessibility about anyone's screen.
+public struct SimulatedField: Equatable, Sendable {
+    public var accessibilityGranted: Bool
+    public var secureInput: Bool
+    /// The focused element's role; nil: no focus at all.
+    public var role: String?
+    /// The field has a caret (AXSelectedTextRange).
+    public var hasCaret: Bool
+    /// The text before the caret (only its last two characters count); "" at the start; nil: the app doesn't say.
+    public var textBefore: String?
+
+    public init(accessibilityGranted: Bool = true, secureInput: Bool = false, role: String? = "AXTextArea", hasCaret: Bool = true,
+                textBefore: String? = nil) {
+        self.accessibilityGranted = accessibilityGranted
+        self.secureInput = secureInput
+        self.role = role
+        self.hasCaret = hasCaret
+        self.textBefore = textBefore
+    }
+
+    /// From `insert.text {simulate}`: `{accessibility?, secureInput?, role?, hasCaret?, textBefore?}`, every key
+    /// optional (a text area with the caret, all permissions); `role: null` is no focus, `textBefore: null` a field
+    /// that doesn't say. Nil when it isn't an object or a key has the wrong type.
+    public init?(_ value: Any?) {
+        guard let o = value as? [String: Any] else { return nil }
+        self.init()
+        func flag(_ key: String) -> Bool?? {
+            guard let v = o[key] else { return .some(nil) }
+            guard let b = v as? Bool, CFGetTypeID(v as CFTypeRef) == CFBooleanGetTypeID() else { return nil }
+            return .some(b)
+        }
+        func text(_ key: String) -> String??? {
+            guard let v = o[key] else { return .some(nil) }
+            if v is NSNull { return .some(.some(nil)) }
+            guard let s = v as? String else { return nil }
+            return .some(.some(s))
+        }
+        guard let ax = flag("accessibility"), let secure = flag("secureInput"), let caret = flag("hasCaret"),
+              let role = text("role"), let before = text("textBefore") else { return nil }
+        if let ax { accessibilityGranted = ax }
+        if let secure { secureInput = secure }
+        if let caret { hasCaret = caret }
+        if let role { self.role = role }
+        if let before { textBefore = before }
+    }
+
+    /// The plan and whether the text would go in with a space in front, as `Inserter.perform` decides them.
+    public func outcome(text: String, autoSpace: Bool) -> (plan: InsertPlan, spaced: Bool) {
+        let focus = role.map { FocusInfo(role: $0, hasSelectedTextRange: hasCaret) }
+        let plan = InsertPlan.decide(accessibilityGranted: accessibilityGranted, secureInput: secureInput, focus: focus, frontApp: true)
+        let before = hasCaret ? textBefore.map { String($0.suffix(2)) } : nil
+        let spaced = autoSpace && LeadingSpace.mayRead(plan: plan, role: role) && LeadingSpace.needed(before: before, text: text)
+        return (plan, spaced)
+    }
+}
+
+extension InsertPlan {
+    /// "paste", "pasteKeepingText" or "clipboardOnly", and the reason, for a reply.
+    public var name: String {
+        switch self {
+        case .paste: return "paste"
+        case .pasteKeepingText: return "pasteKeepingText"
+        case .clipboardOnly: return "clipboardOnly"
+        }
+    }
+
+    public var reason: String? {
+        switch self {
+        case .paste: return nil
+        case .pasteKeepingText(let reason), .clipboardOnly(let reason): return reason
+        }
+    }
+}

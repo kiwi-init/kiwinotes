@@ -16,6 +16,22 @@ bun run typecheck   # pede o devkit: numa worktree nova, rode antes `bun run pre
 bun run ui:build    # as UIs do AppEngine, uma por janela, em dist/<janela> (ADR 0006)
 ```
 
+### Ditar pela CLI (T1740)
+
+Com o modo headless de pé (`bun run cli start`, T1739), um ditado inteiro sai sem microfone nem colagem. O `insert.text`
+vai sempre em dryRun, e o campo é descrito, não lido:
+
+```
+bun run cli dictate /tmp/frase.wav --app slack             # STT de verdade (say -o /tmp/frase.wav --data-format=LEI16@16000 "…")
+bun run cli dictate --text "hum manda o laudo" --app teams --field-before "Oi."
+bun run cli dictate --text "git status" --app ghostty      # tom literal: sem espaço automático
+bun run cli dictate --text "comprar pão" --note            # a nota rápida
+bun run cli dictate --batch casos.jsonl                    # bateria: um caso por linha, com "expect"
+```
+
+O relatório traz `raw`, `text`, `tone`, `latencyMs` e `insert {plan, reason, autoSpace, spaced, typed}`. O `typed` é
+exatamente o que entraria no campo. A bateria sai com exit 1 se algum `expect` (`text`, `typed`, `tone`, `plan`,
+`spaced`, `contains`) não bater. Áudio só sintético.
 As janelas são UIs do AppEngine (ADR 0006). Para testar uma troca de UI sem rebuild, num canal **local**: `bun run ui:publish settings --ui-version 0.1.1-local`, `bun run ui:serve` e o app com `KIWI_UI_CHANNEL=http://127.0.0.1:5179`. Nunca abra janela do app na tela de outra pessoa sem combinar (AGENTS.md).
 
 Na primeira vez, `scripts/hutch.ts` baixa o Hutch fixado em `hutch-pin.json` (confere o sha256) para `~/.hutch/kiwinotes/`, e o Hutch baixa o Livewire 2026.10.2 de `kiwi-init/electrobun-livewire`.

@@ -359,7 +359,17 @@ final class Helper {
                 let shown = debugCommands ? "\"\(text)\"" : "\(text.count) chars"
                 emit("log", ["level": "info", "message": "insert.text dryRun: \(shown)"])
                 var data: [String: Any] = ["pasted": false, "restored": false, "dryRun": true]
-                if let app = FrontApp.current { data["app"] = app.bundleId }
+                // `simulate` (the agents' CLI, T1740): a described field instead of the real one. The plan and the space
+                // come from the same rules as a paste, and nothing about the app in front is read.
+                if let field = SimulatedField(message.fields["simulate"]) {
+                    let autoSpace = (message.fields["autoSpace"] as? Bool) ?? true
+                    let outcome = field.outcome(text: text, autoSpace: autoSpace)
+                    data["plan"] = outcome.plan.name
+                    if let reason = outcome.plan.reason { data["reason"] = reason }
+                    data["spaced"] = outcome.spaced
+                } else if let app = FrontApp.current {
+                    data["app"] = app.bundleId
+                }
                 return reply(id, ok: true, data)
             }
             let restore = (message.fields["restoreClipboard"] as? Bool) ?? true
@@ -392,10 +402,21 @@ final class Helper {
         } catch {
             return reply(id, ok: false, error: "invalid_value")
         }
-        reply(id, ok: true)
-        // The same events as a dictation: started (with the app in front), stopped, then the transcript.
+        // The same events as a dictation: started (with the app in front), stopped, then the transcript. The agents'
+        // CLI (T1740) can say which app it is (`app: {bundleId, name?}`) and make it a quick note (`target: "note"`).
         var started: [String: Any] = ["reason": "debug"]
-        if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
+        if let app = message.fields["app"] as? [String: Any], let bundleId = app["bundleId"] as? String, !bundleId.isEmpty {
+            started["app"] = ["bundleId": bundleId, "name": (app["name"] as? String) ?? bundleId]
+        } else if message.fields["app"] != nil {
+            return reply(id, ok: false, error: "invalid_value")
+        } else if let app = FrontApp.current {
+            started["app"] = ["bundleId": app.bundleId, "name": app.name]
+        }
+        if let target = message.string("target") {
+            guard target == "note" else { return reply(id, ok: false, error: "invalid_value") }
+            started["target"] = "note"
+        }
+        reply(id, ok: true)
         emit("record.started", started)
         overlay.set(.listening)
         finishRecording(samples, reason: "debug", mode: "debug")
