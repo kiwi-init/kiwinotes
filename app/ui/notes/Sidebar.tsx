@@ -34,6 +34,13 @@ export interface SidebarProps {
   onTag?(tag: string): void;
   /** Soltar o que foi arrastado numa pasta ("" é a raiz). Sem as capacidades de pastas, nada é arrastável. */
   onDrop?(what: SideTarget, folder: string): void;
+  /** A nota do dia (T2593): uma entrada no topo. Num engine sem ela, não aparece. */
+  onDaily?(): void;
+  /** A Lixeira do app (T2593): uma entrada no fim, com quantos itens. */
+  onTrash?(): void;
+  trashCount?: number;
+  /** A Lixeira está aberta no meio da janela. */
+  trashOpen?: boolean;
 }
 
 const DRAG = "application/x-kiwi-notes";
@@ -190,6 +197,12 @@ export function Sidebar(p: SidebarProps) {
           }
         }}
       />
+      {!searching && p.onDaily ? (
+        <button type="button" className="kn-side-item kn-side-daily" style={{ paddingLeft: 8 }} onClick={() => p.onDaily?.()} title="Nota do dia (⇧⌘D)">
+          <span className="kn-side-name">Hoje</span>
+          <span className="kn-side-count">⇧⌘D</span>
+        </button>
+      ) : null}
       {!searching && p.pinned.length ? (
         <>
           <div className="kn-side-head">Fixadas</div>
@@ -212,6 +225,21 @@ export function Sidebar(p: SidebarProps) {
           <div className="kn-side-gap" />
           <div className="kn-side-head">Tags</div>
           {tagItems(p.tags, 0, p.onTag)}
+        </>
+      ) : null}
+      {!searching && p.onTrash ? (
+        <>
+          <div className="kn-side-gap" />
+          <button
+            type="button"
+            className="kn-side-item kn-side-trash"
+            style={{ paddingLeft: 8 }}
+            aria-current={p.trashOpen || undefined}
+            onClick={() => p.onTrash?.()}
+          >
+            <span className="kn-side-name">Lixeira</span>
+            {p.trashCount ? <span className="kn-side-count">{p.trashCount}</span> : null}
+          </button>
         </>
       ) : null}
     </nav>

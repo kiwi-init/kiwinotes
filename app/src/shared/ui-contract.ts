@@ -10,12 +10,12 @@ import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
-import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit } from "../notes/vault.ts";
+import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem } from "../notes/vault.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
 export type { TagNode };
-export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet };
+export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet, TrashItem };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
 // 1.1.0 (T1316): as capacidades `notes.*` e o evento `notes.changed`, só acréscimos.
@@ -31,7 +31,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `settings.changed`, que vai a todas as janelas. Só acréscimo.
 // 1.9.0 (T2619): as tags (`notes.tags`, `tag:` no `notes.search`), os modelos (`notes.templates`, o `template` do
 //   `notes.create`) e o `templatesFolder` nas settings. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.9.0";
+// 1.10.0 (T2593): a nota do dia (`notes.daily`, `dailyFolder` nas settings), `notes.createFromLink`, "Mencionada sem
+//   link" (`notes.unlinkedMentions|linkMentions`) e a Lixeira (`trash.list|empty|reveal`). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.10.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -114,6 +116,28 @@ export interface UiCapabilities {
   /** "Mostrar no Finder" (nota ou pasta). No headless e com KIWI_DEBUG=1, só registra. */
   "notes.reveal": { args: { path: string }; result: true };
 
+  // ---------------------------------------------------------------- nota do dia, links e Lixeira (1.10.0, T2593)
+  /** `<dailyFolder>/AAAA-MM-DD.md`, criada vazia se não existe. Sem `date`, a de hoje (no relógio do Mac). */
+  "notes.daily": { args: { date?: string }; result: Note };
+  /**
+   * A nota de um `[[link]]`: a que ele acha, ou uma nova. `[[Pasta/Nota]]` cria em Pasta; `[[Nota]]`, na pasta de `from`
+   * (a nota onde o link está) ou na raiz. A `#seção` e o `|apelido` não entram no nome.
+   */
+  "notes.createFromLink": { args: { link: string; from?: string }; result: Note };
+  /** "Mencionada sem link": as notas que citam o título desta sem `[[ ]]` (sem acento nem maiúscula, palavra inteira). */
+  "notes.unlinkedMentions": { args: { path: string }; result: { path: string; title: string; context: string }[] };
+  /** Na nota `path`, as menções de `target` viram `[[Alvo]]` (ou `[[Alvo|texto]]`, se a grafia difere). */
+  "notes.linkMentions": { args: { path: string; target: string }; result: { meta: NoteMeta; count: number } };
+  /**
+   * A Lixeira do app: o que espera o Desfazer (`where: "kiwi"`, com `until`) e o que já foi para o Lixo do macOS
+   * (`"macos"`, só para mostrar: tirar de lá pede o Acesso Total ao Disco).
+   */
+  "trash.list": { args: Record<string, never>; result: { items: TrashItem[] } };
+  /** O que espera o Desfazer vai já para o Lixo do macOS. */
+  "trash.empty": { args: Record<string, never>; result: { trashed: number } };
+  /** Abre o Lixo do macOS no Finder. No headless e com KIWI_DEBUG=1, só registra. */
+  "trash.reveal": { args: Record<string, never>; result: true };
+
   // ---------------------------------------------------------------- pastas (1.7.0, T2468)
   // Pastas de verdade, como no Obsidian. Mover ou renomear atualiza os [[links]] de todas as notas. Pasta para dentro
   // dela mesma: E_BAD_ARGS; pasta que não existe: E_NOT_FOUND; destino ocupado: E_EXISTS.
@@ -173,6 +197,13 @@ export const UI_CAPABILITIES = [
   "folders.rename",
   "folders.move",
   "folders.delete",
+  "notes.daily",
+  "notes.createFromLink",
+  "notes.unlinkedMentions",
+  "notes.linkMentions",
+  "trash.list",
+  "trash.empty",
+  "trash.reveal",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

@@ -8,7 +8,8 @@ import { folderOf, noteName } from "./links.ts";
 import { hasTag, splitTagQuery, tagTree } from "../../src/shared/tags.ts";
 import { DEFAULT_TEMPLATES_FOLDER, fillTemplate } from "../../src/shared/templates.ts";
 import type { TagNode } from "./types.ts";
-import type { Backlink, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, VaultListing } from "./types.ts";
+import { linkSpans, unlinkedSpans, contextOf } from "../../src/notes/mentions.ts";
+import type { Backlink, ExtrasApi, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, TrashItem, VaultListing } from "./types.ts";
 
 interface Stored {
   content: string;
@@ -21,6 +22,8 @@ interface Stored {
 interface InTrash {
   notes: Map<string, Stored>;
   dirs: string[];
+  /** Quando foi apagado (a Lixeira do T2593). */
+  at?: string;
 }
 
 const fold = (s: string) =>
@@ -150,7 +153,7 @@ export class MockVault implements NotesApi {
     const s = this.notes.get(path);
     if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
     this.notes.delete(path);
-    this.trash.set(path, { notes: new Map([[path, s]]), dirs: [] });
+    this.trash.set(path, { notes: new Map([[path, s]]), dirs: [], at: this.clock().toISOString() });
     this.unpin((p) => p === path);
     this.emit([path]);
     return true;
@@ -229,7 +232,7 @@ export class MockVault implements NotesApi {
       const dirs = [...this.dirs].filter(inside);
       for (const p of notes.keys()) this.notes.delete(p);
       for (const d of dirs) this.dirs.delete(d);
-      this.trash.set(path, { notes, dirs });
+      this.trash.set(path, { notes, dirs, at: this.clock().toISOString() });
       this.unpin((p) => notes.has(p));
       this.emit([path, ...notes.keys()]);
       return true as const;
@@ -314,6 +317,72 @@ export class MockVault implements NotesApi {
     }
     return out.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
   }
+
+  /** O que já foi para o Lixo do macOS de mentira (o `trash.empty`), e se o Lixo foi aberto no Finder (T2593). */
+  private emptied: TrashItem[] = [];
+  revealedTrash = false;
+
+  /** A nota do dia, o link que cria, as menções e a Lixeira (T2593), como o engine (contrato 1.8.0). */
+  readonly extras: ExtrasApi = {
+    daily: async (date) => {
+      const d = date ?? this.clock().toISOString().slice(0, 10);
+      const path = `Diário/${d}.md`;
+      if (!this.notes.has(path)) {
+        this.write(path, "");
+        this.emit([path]);
+      }
+      return this.note(path);
+    },
+    createFromLink: async (link, from) => {
+      const target = link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!.trim();
+      const found = resolveLink(target, [...this.notes.keys()]);
+      if (found) return this.note(found);
+      const parts = target.split("/");
+      const name = parts.pop()!;
+      const folder = parts.length ? parts.join("/") : from ? folderOf(from) : "";
+      const path = `${folder ? `${folder}/` : ""}${name}.md`;
+      this.write(path, "");
+      this.emit([path]);
+      return this.note(path);
+    },
+    unlinkedMentions: async (path) => {
+      const title = noteName(path);
+      return [...this.notes]
+        .filter(([p]) => p !== path)
+        .flatMap(([p, st]) => {
+          const spans = unlinkedSpans(st.content, title);
+          return spans.length ? [{ path: p, title: noteName(p), context: contextOf(st.content, spans[0]!) }] : [];
+        });
+    },
+    linkMentions: async (path, target) => {
+      const st = this.notes.get(path);
+      if (!st) throw new Error(`E_NOT_FOUND: ${path}`);
+      const spans = unlinkedSpans(st.content, noteName(target));
+      if (spans.length) {
+        this.write(path, linkSpans(st.content, spans, noteName(target)));
+        this.emit([path]);
+      }
+      return { meta: this.meta(path), count: spans.length };
+    },
+    trashList: async () => {
+      const kiwi: TrashItem[] = [...this.trash].map(([p, t]) => {
+        const at = t.at ?? this.clock().toISOString();
+        return { path: p, kind: t.dirs.length ? "folder" : "note", deletedAt: at, where: "kiwi", until: new Date(Date.parse(at) + 600_000).toISOString() };
+      });
+      return [...kiwi, ...this.emptied].sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+    },
+    trashEmpty: async () => {
+      const items = await this.extras.trashList();
+      const n = this.trash.size;
+      this.emptied = items.map(({ until: _until, ...i }) => ({ ...i, where: "macos" as const }));
+      this.trash.clear();
+      return n;
+    },
+    trashReveal: async () => {
+      this.revealedTrash = true;
+      return true as const;
+    },
+  };
 
   async resolve(link: string): Promise<string | null> {
     return resolveLink(link, [...this.notes.keys()]);

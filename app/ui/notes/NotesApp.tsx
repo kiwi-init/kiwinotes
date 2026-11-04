@@ -25,7 +25,9 @@ import { focusEditor, NoteEditor } from "./NoteEditor.tsx";
 import { Palette } from "./Palette.tsx";
 import { type SideTarget, Sidebar } from "./Sidebar.tsx";
 import { ancestors, buildTree, editedLabel, filterTree, recentNotes, type SortBy } from "./tree.ts";
+import { TrashView } from "./TrashView.tsx";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
+import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing } from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
@@ -97,6 +99,11 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [menu, setMenu] = useState<{ x: number; y: number; target: SideTarget } | null>(null);
   const [moving, setMoving] = useState<SideTarget | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  /** O meio da janela: a nota, ou a Lixeira do app (T2593). */
+  const [view, setView] = useState<"note" | "trash">("note");
+  /** Sobe a cada mudança no vault: a Lixeira e o "Mencionada sem link" se refazem (T2593). */
+  const [vaultVersion, setVaultVersion] = useState(0);
+  const [trashCount, setTrashCount] = useState(0);
   const [pinned, setPinned] = useState<string[]>([]);
   const [words, setWords] = useState(0);
   const entered = useEnterAnimation();
@@ -136,7 +143,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   );
 
   const show = useCallback(
-    (n: Note) => {
+    /** Mostra a nota. `stay`: uma recarga por fora (a nota mudou no disco) não tira a Lixeira da tela (T2593). */
+    (n: Note, stay = false) => {
+      if (!stay) setView("note");
       const split = splitFrontmatter(n.content);
       frontmatter.current = split.frontmatter;
       version.current = n.version;
@@ -289,6 +298,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   useEffect(
     () =>
       api.onChanged((paths) => {
+        setVaultVersion((n) => n + 1);
         void refresh().then((l) => {
           if (!l) return;
           // Nota que sumiu (apagada ou renomeada fora) leva o rascunho junto (#1525). A aberta com edição pendente fica:
@@ -302,7 +312,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
         api.backlinks(path).then(setBacklinks, () => {});
         if (!paths.includes(path) || pending.current !== null) return;
         api.get(path).then(
-          (n) => n.version !== version.current && show(n),
+          (n) => n.version !== version.current && show(n, true),
           () => {
             // Apagada ou renomeada fora: a janela fica sem nota aberta.
             current.current = null;
@@ -326,13 +336,17 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
 
   const selectedFolderRef = useRef(selectedFolder);
   selectedFolderRef.current = selectedFolder;
+  /** A nota do dia pelo ⇧⌘D (o `openDaily` vem mais abaixo). */
+  const openDailyRef = useRef<() => Promise<void>>(async () => {});
 
   // ⌘K busca, ⌘N cria (na pasta escolhida). Ao esconder a janela, grava o que estiver pendente.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current || !e.metaKey || e.altKey || e.ctrlKey) return;
       // Síncrono: a busca já está com o foco antes da próxima tecla (quem digita rápido não escreve na nota).
-      if (e.key === "k") {
+      if (e.shiftKey && e.key.toLowerCase() === "d") void openDailyRef.current();
+      else if (e.shiftKey) return;
+      else if (e.key === "k") {
         setPaletteQuery("");
         flushSync(() => setPalette((p) => !p));
       }
@@ -362,10 +376,39 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
 
   const onOpenLink = async (target: string) => {
     const path = await api.resolve(target).catch(() => null);
-    // Como no Obsidian: clicar num link para uma nota que não existe cria a nota.
+    // Como no Obsidian: clicar num link para uma nota que não existe cria a nota. Com o engine que tem `notes.daily` (T2593), na pasta
+    // certa: `[[Pasta/Nota]]` em Pasta, `[[Nota]]` na pasta desta nota.
     if (path) await open(path);
-    else await create(target);
+    else if (api.extras) {
+      if (!(await leave())) return;
+      const n = await api.extras.createFromLink(target, current.current ?? undefined).catch(() => null);
+      if (!n) return;
+      setTreeOpen(false);
+      setBackOpen(false);
+      await refresh();
+      show(n);
+      requestAnimationFrame(() => focusEditor());
+    } else await create(target);
   };
+
+  /** A nota do dia (T2593): abre a de hoje, criando se ainda não existe. */
+  const openDaily = useCallback(async () => {
+    const extras = api.extras;
+    if (!extras || !(await leave())) return;
+    const n = await extras.daily().catch(() => null);
+    if (!n) return;
+    setTreeOpen(false);
+    setBackOpen(false);
+    await refresh();
+    show(n);
+    requestAnimationFrame(() => focusEditor());
+  }, [api, leave, refresh, show]);
+  openDailyRef.current = openDaily;
+
+  // O número da Lixeira, na lateral.
+  useEffect(() => {
+    api.extras?.trashList().then((items) => setTrashCount(items.length), () => {});
+  }, [api, vaultVersion]);
 
   const rename = async () => {
     const wanted = title.trim().replace(/[\\/:]/g, "-");
@@ -708,12 +751,35 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
               })
             }
             onOpen={(p) => void open(p)}
+            onDaily={api.extras ? () => void openDaily() : undefined}
+            onTrash={
+              api.extras
+                ? () => {
+                    setTreeOpen(false);
+                    setView((v) => (v === "trash" ? "note" : "trash"));
+                  }
+                : undefined
+            }
+            trashCount={trashCount}
+            trashOpen={view === "trash"}
             tags={tagList}
             onTag={openTag}
           />
         </Popover>
       ) : null}
       <main className="kn-center">
+        {view === "trash" && api.extras ? (
+          <TrashView
+            extras={api.extras}
+            folders={api.folders}
+            version={vaultVersion}
+            onRestored={(p, kind) => {
+              void refresh();
+              if (kind === "note") void open(p);
+            }}
+          />
+        ) : (
+          <>
         {orphans[0] ? (
           <div className="kn-conflict kn-orphan" role="alert">
             {`Há um rascunho de “${noteName(orphans[0].path)}”, uma nota que não existe mais (renomeada ou apagada fora do Kiwi Notes).`}
@@ -768,12 +834,12 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
                 className="kn-meta-bt"
                 aria-expanded={backOpen}
                 aria-haspopup="dialog"
-                disabled={!backlinks.length}
+                disabled={!backlinks.length && !api.extras}
                 onClick={() => setBackOpen((o) => !o)}
               >
                 {backlinks.length ? `citada em ${backlinks.length}` : "nenhuma nota cita esta"}
               </button>
-              {backOpen && backlinks.length ? (
+              {backOpen && (backlinks.length || api.extras) ? (
                 <Popover className="kn-back-pop" label="Citada em" anchor={backRef} onClose={() => setBackOpen(false)}>
                   {backlinks.map((b) => (
                     <button type="button" className="kn-back" key={b.path} onClick={() => void open(b.path)}>
@@ -781,6 +847,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
                       <span className="kn-back-ctx">{plainContext(b.context)}</span>
                     </button>
                   ))}
+                  {!backlinks.length ? <div className="kn-faint">Nenhuma nota cita esta com link.</div> : null}
+                  {/* "Mencionada sem link" (T2593): as que citam o título sem [[ ]], com o "Linkar". */}
+                  {api.extras ? <UnlinkedMentions extras={api.extras} path={note.path} version={vaultVersion} onOpen={(p) => void open(p)} /> : null}
                 </Popover>
               ) : null}
             </div>
@@ -832,6 +901,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
             </Button>
           </Empty>
         ) : null}
+          </>
+        )}
       </main>
       <Composer disabled={!note} />
       {palette ? (

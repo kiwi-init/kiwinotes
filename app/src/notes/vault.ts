@@ -13,6 +13,7 @@ import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewrit
 import { fold, foldWithMap } from "../store/text.ts";
 import { bodyTags, hasTag, splitTagQuery, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
+import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
 import { fileNameFor, folderPath, inside, notePath, VaultError } from "./paths.ts";
 
 export interface NoteMeta {
@@ -153,6 +154,42 @@ export const UNDO_DIR = ".kiwi-trash";
 /** 10 min para desfazer um apagar. */
 export const UNDO_MS = 10 * 60_000;
 
+/** O que foi apagado, para a Lixeira do app (T2593): no "Desfazer" (`kiwi`) ou já no Lixo do macOS (`macos`). */
+export interface TrashItem {
+  path: string;
+  kind: "note" | "folder";
+  deletedAt: string;
+  where: "kiwi" | "macos";
+  /** Até quando o `restore` vale (só no `kiwi`). */
+  until?: string;
+}
+
+/** Quantas entradas do Lixo do macOS o registro guarda, e por quanto tempo. */
+export const REGISTRY_MAX = 200;
+export const REGISTRY_DAYS = 30;
+const REGISTRY_FILE = "registry.json";
+/** Em cada caixa do `.kiwi-trash`: de onde o item veio, para uma sessão que caiu ainda saber (T2593). */
+const BOX_META = ".meta.json";
+
+interface RegistryEntry {
+  path: string;
+  kind: "note" | "folder";
+  deletedAt: string;
+}
+
+/** Um `AAAA-MM-DD` que existe no calendário. */
+export function isDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T12:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+/** A data local de `ms`, `AAAA-MM-DD` (a nota do dia é a do relógio da pessoa, não a do UTC). */
+export function localDate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 interface Staged {
   /** Onde o item está agora, dentro de `.kiwi-trash`. */
   abs: string;
@@ -222,6 +259,8 @@ export class Vault {
   private staged = new Map<string, Staged>();
   private readonly undoMs: number;
   private readonly now: () => number;
+  /** O que já foi para o Lixo do macOS (T2593), do `.kiwi-trash/registry.json`. */
+  private registry: RegistryEntry[] = [];
 
   constructor(o: VaultOptions) {
     this.root = o.root;
@@ -238,6 +277,7 @@ export class Vault {
       await mkdir(this.root, { recursive: true });
       // O que sobrou de um "Desfazer" de antes (o app fechou sem esvaziar): sem a memória de onde estava, vai para a
       // Lixeira do macOS, como teria ido.
+      await this.loadRegistry();
       await this.flushLeftoverUndo();
       await this.scan();
       if (this.watchOnOpen) this.watch();
@@ -586,6 +626,96 @@ export class Vault {
     return abs;
   }
 
+  // ---------------------------------------------------------------- T2593: nota do dia, link que cria, menções, Lixeira
+
+  /** A nota do dia (`<folder>/AAAA-MM-DD.md`), criada vazia se ainda não existe. Sem data, a de hoje (local). */
+  async daily(date: unknown, folder: unknown): Promise<Note> {
+    const day = date === undefined ? localDate(this.now()) : date;
+    if (!isDate(day)) throw new VaultError("E_BAD_ARGS", "date must be YYYY-MM-DD");
+    const dir = folderPath(folder ?? "");
+    return this.ensure(notePath(`${dir ? `${dir}/` : ""}${day}.md`));
+  }
+
+  /**
+   * A nota de um `[[link]]`: a que ele já acha, ou uma nova. Com pasta (`[[Pasta/Nota]]`), nela; sem pasta, na pasta de
+   * `from` (a nota onde o link está), ou na raiz. A `#seção` e o `|apelido` não entram no nome.
+   */
+  async createFromLink(link: unknown, from: unknown): Promise<Note> {
+    if (typeof link !== "string" || link.length > 1024) throw new VaultError("E_BAD_ARGS", "link must be a string");
+    const target = link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!.trim().replace(/\.md$/i, "");
+    if (!target) throw new VaultError("E_BAD_ARGS", "link is empty");
+    const found = this.resolve_()(target);
+    if (found) return this.get(found);
+    const parts = target.split("/").filter(Boolean);
+    const name = fileNameFor(parts.pop() ?? "");
+    const dir = parts.length ? folderPath(parts.join("/")) : from === undefined || from === null ? "" : noteFolder(notePath(from));
+    return this.ensure(notePath(`${dir ? `${dir}/` : ""}${name}.md`));
+  }
+
+  /** As notas que citam o título de `input` sem `[[ ]]`, com a linha de cada uma (a 1ª menção). */
+  unlinkedMentions(input: unknown): { path: string; title: string; context: string }[] {
+    const p = notePath(input);
+    const title = noteName(p);
+    const out: { path: string; title: string; context: string }[] = [];
+    for (const e of this.notes.values()) {
+      if (e.meta.path === p) continue;
+      const spans = unlinkedSpans(e.content, title);
+      if (spans.length) out.push({ path: e.meta.path, title: e.meta.title, context: contextOf(e.content, spans[0]!) });
+    }
+    return out.sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  /** Na nota `input`, as menções de `target` viram `[[link]]` (escrita condicional, do disco). */
+  async linkMentions(input: unknown, target: unknown): Promise<{ meta: NoteMeta; count: number }> {
+    const p = notePath(input);
+    const t = notePath(target);
+    if (!this.notes.has(t)) throw new VaultError("E_NOT_FOUND", `no note ${t}`);
+    const title = noteName(t);
+    const linkText = this.resolve_()(title) === t ? title : t.replace(/\.md$/i, "");
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const disk = await readFile(inside(this.root, p), "utf8").catch(() => null);
+      if (disk === null) throw new VaultError("E_NOT_FOUND", `no note ${p}`);
+      const spans = unlinkedSpans(disk, title);
+      if (!spans.length) {
+        const { content: _content, ...meta } = await this.get(p);
+        return { meta, count: 0 };
+      }
+      const entry = await this.write(p, linkSpans(disk, spans, linkText), versionOf(disk));
+      if (entry) return { meta: entry.meta, count: spans.length };
+    }
+    throw new VaultError("E_EXISTS", `${p} kept changing; try again`);
+  }
+
+  /** A Lixeira do app: o que espera o "Desfazer" e o que já foi para o Lixo do macOS, o mais novo primeiro. */
+  trashList(): { items: TrashItem[] } {
+    const kiwi: TrashItem[] = [...this.staged].map(([p, s]) => ({
+      path: p,
+      kind: s.kind,
+      deletedAt: new Date(s.at).toISOString(),
+      where: "kiwi",
+      until: new Date(s.at + this.undoMs).toISOString(),
+    }));
+    const macos: TrashItem[] = this.registry.map((r) => ({ ...r, where: "macos" }));
+    return { items: [...kiwi, ...macos].sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)) };
+  }
+
+  /** "Esvaziar": o que espera o "Desfazer" vai já para o Lixo do macOS. */
+  async trashEmpty(): Promise<{ trashed: number }> {
+    const n = this.staged.size;
+    await this.expireAll();
+    return { trashed: n };
+  }
+
+  /** A nota em `p`, criando vazia se não existe (sem numerar: é aquela nota). */
+  private async ensure(p: string): Promise<Note> {
+    const abs = inside(this.root, p);
+    if (!(await exists(abs))) {
+      await mkdir(path.dirname(abs), { recursive: true });
+      await this.write(p, "", null); // null: só se ainda não existe; se alguém criou no meio, fica a dele
+    }
+    return this.get(p);
+  }
+
   // ---------------------------------------------------------------- interno
 
   /** Troca os [[links]] de todas as notas para os lugares novos de `moves`, com escrita condicional (como o rename). */
@@ -615,8 +745,10 @@ export class Vault {
     const box = path.join(this.root, UNDO_DIR, `${this.now()}-${randomBytes(4).toString("hex")}`);
     await mkdir(box, { recursive: true });
     const staged = path.join(box, path.basename(abs));
+    const at = this.now();
+    await writeFile(path.join(box, BOX_META), JSON.stringify({ path: p, kind, deletedAt: new Date(at).toISOString() }));
     await rename(abs, staged);
-    const item: Staged = { abs: staged, kind, at: this.now(), timer: null };
+    const item: Staged = { abs: staged, kind, at, timer: null };
     item.timer = setTimeout(() => void this.expire(p, item), this.undoMs);
     (item.timer as { unref?: () => void }).unref?.();
     this.staged.set(p, item);
@@ -629,6 +761,7 @@ export class Vault {
     try {
       await this.trash(item.abs);
       await rm(path.dirname(item.abs), { recursive: true, force: true });
+      await this.remember({ path: p, kind: item.kind, deletedAt: new Date(item.at).toISOString() });
     } catch (e) {
       console.error(`[notes] couldn't move ${item.abs} to the Trash:`, e);
     }
@@ -648,11 +781,45 @@ export class Vault {
     }
     for (const box of boxes) {
       const boxAbs = path.join(dir, box);
+      // Só as caixas (o registry.json fica).
+      if (!(await lstat(boxAbs).catch(() => null))?.isDirectory()) continue;
+      const meta = await readFile(path.join(boxAbs, BOX_META), "utf8").then((t) => JSON.parse(t) as RegistryEntry, () => null);
+      let moved = false;
       for (const name of await readdir(boxAbs).catch(() => [] as string[])) {
-        await this.trash(path.join(boxAbs, name)).catch((e) => console.error(`[notes] couldn't move ${name} to the Trash:`, e));
+        if (name === BOX_META) continue;
+        await this.trash(path.join(boxAbs, name)).then(
+          () => (moved = true),
+          (e) => console.error(`[notes] couldn't move ${name} to the Trash:`, e),
+        );
       }
       await rm(boxAbs, { recursive: true, force: true });
+      if (moved && meta && typeof meta.path === "string") await this.remember(meta);
     }
+  }
+
+  private async loadRegistry(): Promise<void> {
+    const raw = await readFile(path.join(this.root, UNDO_DIR, REGISTRY_FILE), "utf8").catch(() => null);
+    let list: unknown = [];
+    try {
+      list = raw ? JSON.parse(raw) : [];
+    } catch {
+      list = [];
+    }
+    this.registry = (Array.isArray(list) ? list : []).filter(
+      (e): e is RegistryEntry =>
+        !!e && typeof e.path === "string" && (e.kind === "note" || e.kind === "folder") && typeof e.deletedAt === "string",
+    );
+  }
+
+  /** Anota no registro o que foi para o Lixo do macOS: as últimas `REGISTRY_MAX`, dos últimos `REGISTRY_DAYS` dias. */
+  private async remember(e: RegistryEntry): Promise<void> {
+    const oldest = this.now() - REGISTRY_DAYS * 86_400_000;
+    this.registry = [e, ...this.registry].filter((r) => Date.parse(r.deletedAt) >= oldest).slice(0, REGISTRY_MAX);
+    const dir = path.join(this.root, UNDO_DIR);
+    await mkdir(dir, { recursive: true });
+    const tmp = path.join(dir, `.registry-${randomBytes(4).toString("hex")}.tmp`);
+    await writeFile(tmp, JSON.stringify(this.registry));
+    await rename(tmp, path.join(dir, REGISTRY_FILE));
   }
 
   private resolve_(): Resolver {
@@ -840,3 +1007,5 @@ export function buildTree(folders: readonly string[], notes: readonly { path: st
   sort(root);
   return root;
 }
+
+const noteFolder = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");

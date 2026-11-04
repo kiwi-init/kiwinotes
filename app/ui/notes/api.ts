@@ -5,7 +5,7 @@
 import "../src/api.ts"; // o tipo do `window.engine`
 
 import { MockVault } from "./mock.ts";
-import type { FoldersApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
+import type { ExtrasApi, FoldersApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
 
@@ -37,8 +37,21 @@ export function engineNotes(
         set: (pinned: string[]) => call<{ pinned?: string[] }>("settings.set", { pinned }).then((s) => s.pinned ?? []),
       }
     : undefined;
+  // A nota do dia, os links e a Lixeira vêm no contrato 1.8.0 (T2593); num engine antigo, a janela esconde.
+  const extras: ExtrasApi | undefined = has("notes.daily")
+    ? {
+        daily: (date) => call("notes.daily", date ? { date } : {}),
+        createFromLink: (link, from) => call("notes.createFromLink", { link, ...(from ? { from } : {}) }),
+        unlinkedMentions: (path) => call("notes.unlinkedMentions", { path }),
+        linkMentions: (path, target) => call("notes.linkMentions", { path, target }),
+        trashList: () => call<{ items: never[] }>("trash.list").then((r) => r.items),
+        trashEmpty: () => call<{ trashed: number }>("trash.empty").then((r) => r.trashed),
+        trashReveal: () => call("trash.reveal"),
+      }
+    : undefined;
   return {
     ...(folders ? { folders } : {}),
+    ...(extras ? { extras } : {}),
     ...(pins ? { pins } : {}),
     list: () => call("notes.list"),
     get: (path) => call("notes.get", { path }),

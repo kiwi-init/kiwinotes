@@ -106,6 +106,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     clipboardWrite: (text) => console.log(`[headless] clipboard.write (not written): ${text.length} chars`),
     // O "Mostrar no Finder" nunca abre o Finder no headless: só o log (T2468).
     reveal: (abs) => console.log(`[headless] notes.reveal (not opened): ${abs}`),
+    revealTrash: () => console.log("[headless] trash.reveal (not opened)"),
   });
   const offs = [
     stores.notes.onChanged((paths) => event("notes.changed", { paths })),
