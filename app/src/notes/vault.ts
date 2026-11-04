@@ -243,7 +243,6 @@ export class Vault {
     return this.ready;
   }
 
-  /** Avisa quando notas mudam, inclusive fora do app. */
   /** Avisa quando notas mudam de lugar ou somem por fora do app (o Obsidian, o Finder), já reconhecidas (T2559). */
   onExternalMoves(fn: (r: ExternalMoves) => void): () => void {
     this.moveListeners.add(fn);
@@ -255,6 +254,7 @@ export class Vault {
     return { notes: new Set(this.notes.keys()), folders: new Set(this.folders) };
   }
 
+  /** Avisa quando notas mudam, inclusive fora do app. */
   onChanged(fn: (paths: string[]) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);

@@ -118,7 +118,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     await deps.notes.open();
     watchingPins ??= (async () => {
       deps.notes.onExternalMoves((r) => void followPins(r).catch((e) => console.error("[notes] pinned:", e)));
-      await followPins({ moves: new Map(), gone: [] });
+      // Best effort (revisão #2574): uma limpeza de fixadas que falha (o disco, o settings) nunca derruba as notas.
+      await followPins({ moves: new Map(), gone: [] }).catch((e) => console.error("[notes] pinned:", e));
     })();
     await watchingPins;
     return deps.notes;

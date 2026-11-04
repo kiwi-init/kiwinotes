@@ -88,6 +88,32 @@ describe("de ponta a ponta, com o watcher", () => {
     for (let i = 0; i < 100 && !ok(); i++) await Bun.sleep(20);
   };
 
+  test("a limpeza das fixadas falhando (o settings) não derruba as notas (revisão #2574)", async () => {
+    const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-pins-")), "V");
+    dirs.push(path.dirname(root));
+    mkdirSync(root, { recursive: true });
+    writeFileSync(path.join(root, "A.md"), "");
+    let fail = true;
+    const caps = uiCapabilities({
+      dictionary: { load: async () => [], save: async (t) => t },
+      snippets: { load: async () => [], save: async (s) => s },
+      history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+      dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
+      settings: {
+        load: async () => ({ notesShortcut: null, pinned: ["Sumiu.md"] }),
+        save: async () => {
+          if (fail) throw new Error("EIO: disk");
+          return { notesShortcut: null, pinned: [] };
+        },
+      },
+      clipboardWrite: () => {},
+      notes: new Vault({ root, trash: async () => {} }),
+    });
+    expect(await directInvoke(caps, "notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "A.md" }] } });
+    fail = false;
+    expect(await directInvoke(caps, "notes.get", { path: "A.md" })).toMatchObject({ ok: true });
+  });
+
   test("no 1º uso, sai o que já não existia (lixo de antes)", async () => {
     const { v, pinned } = await setup({ "A.md": "" }, ["A.md", "Sumiu.md", "PastaQueNaoExiste"]);
     expect(pinned()).toEqual(["A.md"]);
