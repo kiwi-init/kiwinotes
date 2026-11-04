@@ -7,9 +7,9 @@
     0,0  preto: a base do ícone aparece, e a borda de um prisma é desenhada, de frente
     0,8  "Kiwi init" aparece no meio, e o arco-íris passa pelo prisma na diagonal
     1,5  o nome some, e o prisma vira 3D, girando no próprio eixo para cima
-    2,0  ele se expande em três prismas (o logo), com o arco-íris passando pelo vidro dos três
-    2,9  os três voltam para dentro de si e viram um liquid glass circular, que vira uma bola preta
-    3,7  da bola começa a abertura do Kiwi-cat (a Aura, com a animação dela intacta)
+    2,0  ele se expande em três prismas de vidro (o logo), com o arco-íris pelo vidro dos três
+    2,6  a pilha se expande no ícone do Channels e fica; aos 3,6 s a intro acaba e o app abre (#4240: a intro do
+         gato está pausada, T3720; o #cat-layer fica desligado)
 
   Leve: tudo é camada que só muda `transform` e `opacity`. O blur da aura do gato é desenhado uma vez dentro da camada
   dele, e a camada gira e esmaece por cima (#2085). Um clique pula. "Reduzir movimento" mostra o gato pronto, com um fade.
@@ -42,19 +42,24 @@
      linha do tempo pelo script. Sem preserve-3d: a ordem de pintura é fixa (de trás para a frente) e cada camada é
      uma textura que só muda de transform na GPU. */
   #scene { position: absolute; inset: 0; transform-origin: 512px 470px; will-change: transform, opacity; }
-  .ly { position: absolute; left: 252px; top: 280px; width: 520px; height: 320px; border-radius: 52px; box-sizing: border-box; will-change: transform, opacity; }
-  .side { background: linear-gradient(to bottom, #123a52 0%, #2a2160 40%, #4a1c48 70%, #4a3018 100%); opacity: 0; }
-  .side.k4 { border: 2px solid rgba(255, 255, 255, .7); }
+  /* As lâminas são de vidro, como no logo (T3898): a face escura e translúcida com a aresta branca fina, a espessura
+     em vidro claro, e os cantos vivos. */
+  .ly { position: absolute; left: 252px; top: 280px; width: 520px; height: 320px; border-radius: 14px; box-sizing: border-box; will-change: transform, opacity; }
+  .side { background: linear-gradient(to bottom, rgba(255, 255, 255, .28) 0%, rgba(214, 226, 255, .16) 50%, rgba(255, 255, 255, .26) 100%); opacity: 0; }
+  .side.k4 { border: 2px solid rgba(255, 255, 255, .85); }
   .face {
-    background: linear-gradient(155deg, #26304a 0%, #0b0d14 38%, #0b0d14 72%, #1d2340 100%);
-    border: 3px solid rgba(255, 255, 255, .9);
+    background: linear-gradient(155deg, rgba(38, 48, 74, .62) 0%, rgba(11, 13, 20, .78) 38%, rgba(11, 13, 20, .78) 72%, rgba(29, 35, 64, .62) 100%);
+    border: 3px solid rgba(255, 255, 255, .92);
     overflow: hidden;
     opacity: 0;
   }
   .shine { position: absolute; left: 46px; top: 12px; width: 170px; height: 24px; border-radius: 40px / 14px; border-top: 3px solid rgba(255, 255, 255, .55); box-sizing: border-box; }
-  /* O arco-íris: uma faixa larga dentro da face, que anda na diagonal. */
+  /* O arco-íris: uma faixa larga dentro da face, que anda na diagonal e cruza a lâmina como no ícone do Channels
+     (quase perpendicular à borda longa, descendo para a esquerda; #4288). O ângulo aqui é no espaço da face: com a
+     rotação e a perspectiva da lâmina, −90° dá ~−46° (134°) NA TELA, a diagonal do ícone, e o gradiente corre do
+     canto de cima-esquerda da lâmina (rosa) para o de baixo-direita (azul), como no ícone. */
   .band {
-    position: absolute; left: 50%; top: 50%; width: 1400px; height: 230px; margin: -115px 0 0 -700px; opacity: 0;
+    position: absolute; left: 50%; top: 50%; width: 1400px; height: 300px; margin: -150px 0 0 -700px; opacity: 0;
     background: linear-gradient(to bottom, rgba(255, 95, 191, 0) 0%, rgba(255, 95, 191, .85) 18%, rgba(255, 165, 61, .85) 31%, rgba(255, 242, 122, .85) 44%,
       rgba(92, 255, 176, .8) 56%, rgba(69, 201, 255, .85) 68%, rgba(123, 97, 255, .85) 80%, rgba(255, 255, 255, .5) 88%, rgba(255, 255, 255, 0) 100%);
     will-change: transform, opacity;
@@ -108,17 +113,15 @@
   body.done #again { opacity: 1; pointer-events: auto; }
 
   /* --------------------------------------------------------------- a linha do tempo */
-  .play #scene { animation: sceneOut .28s cubic-bezier(.5, 0, .75, 0) 2.92s both; }
+  /* Sem implosão (#4240): o prisma termina expandido no ícone. */
   .play .face { animation: fade .3s ease-out .8s both; }
   .play .side { animation: fade .25s ease-out 1.6s both; }
   .play .ly.s1, .play .ly.s2 { animation: fade .15s linear 2.0s both; }
-  .play .s0 .band { animation: sweep .7s cubic-bezier(.45, 0, .55, 1) 1.0s both, sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.2s; }
-  .play .s1 .band { animation: sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.28s both; }
-  .play .s2 .band { animation: sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.36s both; }
+  .play .s0 .band { animation: sweep .7s cubic-bezier(.45, 0, .55, 1) 1.0s both, sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.2s forwards; }
+  .play .s1 .band { animation: sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.12s both; }
+  .play .s2 .band { animation: sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.04s both; }
   .play #title { animation: titleIn .4s cubic-bezier(.2, .8, .2, 1) .85s both, titleOut .22s ease-in 1.45s forwards; }
-  .play #orb { animation: orbIn .75s cubic-bezier(.2, .8, .2, 1) 3.0s both; }
-  .play #glass { animation: fadeOut .35s ease-in-out 3.4s both; }
-  .play #orb.grow { animation: orbGrow .9s cubic-bezier(.2, .8, .2, 1) both, fadeOut .01s linear .9s forwards; }
+  #orb { display: none; }
 
   @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
@@ -127,8 +130,9 @@
   @keyframes outlineOut { to { opacity: 0; } }
   @keyframes titleIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
   @keyframes titleOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-10px) scale(.98); } }
-  @keyframes sweep { 0% { opacity: 0; transform: rotate(-32deg) translateY(-470px); } 18%, 82% { opacity: 1; } 100% { opacity: 0; transform: rotate(-32deg) translateY(470px); } }
-  @keyframes sweep2 { 0% { opacity: 0; transform: rotate(-32deg) translateY(-470px); } 18%, 82% { opacity: 1; } 100% { opacity: 0; transform: rotate(-32deg) translateY(470px); } }
+  @keyframes sweep { 0% { opacity: 0; transform: rotate(-90deg) translateY(-470px); } 18%, 82% { opacity: 1; } 100% { opacity: 0; transform: rotate(-90deg) translateY(470px); } }
+  /* A segunda passada entra e fica: o arco-íris atravessa as três lâminas até a implosão, como no logo. */
+  @keyframes sweep2 { 0% { opacity: 0; transform: rotate(-90deg) translateY(-470px); } 60%, 100% { opacity: .9; transform: rotate(-90deg) translateY(40px); } }
   @keyframes sceneOut { 0% { opacity: 1; transform: none; } 60% { opacity: 1; } 100% { opacity: 0; transform: translateY(-44px) scale(.28); } }
   @keyframes orbIn {
     0% { opacity: 0; transform: scale(.12); }
@@ -140,15 +144,15 @@
   @keyframes orbGrow { from { opacity: 1; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 
   /* Reduzir movimento: o gato pronto, com um fade de 0,5 s. */
-  @media (prefers-reduced-motion: reduce) {
-    #outline, #scene, #title, #orb { display: none; }
-    #cat-layer { display: block; }
-    #base { opacity: 1; }
-    #stage { animation: fade .5s ease-out both; }
-    #stage *, #stage.out { animation: none !important; }
-    div#aura-intro { opacity: 0; }
-    #rim-body, #rim-tail { opacity: 1; }
-  }
+  /* Reduzir movimento: o ícone pronto (a pose final do prisma; o script põe as animações no fim). O estado é a classe
+     .reduced no palco, que o script põe tanto pelo macOS (prefers-reduced-motion) quanto pela Aparência do app
+     (T2503): só o @media deixava o ícone invisível no segundo caso (#4276). */
+  #stage.reduced #outline, #stage.reduced #title, #stage.reduced #orb, #stage.reduced #cat-layer { display: none; }
+  #stage.reduced #base { opacity: 1; }
+  #stage.reduced .face, #stage.reduced .side { opacity: 1; }
+  #stage.reduced .band { opacity: .9; transform: rotate(-90deg) translateY(40px); }
+  #stage.reduced { animation: fade .5s ease-out both; }
+  #stage.reduced *:not(.ly), #stage.reduced.out { animation: none !important; }
 </style>
 </head>
 <body>

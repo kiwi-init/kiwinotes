@@ -2,7 +2,7 @@
   "window": "intro",
   "steps": [
     { "waitFor": "#stage", "state": "attached", "name": "a intro abre" },
-    { "waitFor": "body.done", "state": "attached", "timeout": 8000, "name": "com movimento reduzido, termina sozinha (o gato pronto)" },
+    { "waitFor": "body.done", "state": "attached", "timeout": 8000, "name": "com movimento reduzido, termina sozinha (o ícone pronto)" },
     { "expectCount": "#again:visible", "count": 0, "name": "sem o \"De novo\" no app" },
     { "screenshot": "intro-fim.png" }
   ]
