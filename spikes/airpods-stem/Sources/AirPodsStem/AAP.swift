@@ -20,6 +20,14 @@ public enum AAP {
         [0x04, 0x00, 0x04, 0x00, 0x09, 0x00, id, data1, data2, 0x00, 0x00]
     }
 
+    /// O que mandar no 0x39 para o "segurar" chegar: o valor de antes com o bit do segurar. Nil quando não se sabe o
+    /// valor de antes (mandar um chute apagaria o que já estava ligado no fone, review da T3245) ou quando ele já está
+    /// ligado (nada a mudar, nada a devolver).
+    public static func gesturesToSend(before: UInt8?) -> UInt8? {
+        guard let before, before & StemPress.long.gestureBit == 0 else { return nil }
+        return before | StemPress.long.gestureBit
+    }
+
     public enum Packet: Equatable, Sendable {
         case handshakeAck
         /// Um evento da haste (opcode 0x19): o tipo e o lado, se o fone disse.

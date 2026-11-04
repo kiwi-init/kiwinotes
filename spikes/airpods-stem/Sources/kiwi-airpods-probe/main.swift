@@ -93,7 +93,12 @@ final class Probe: NSObject, IOBluetoothL2CAPChannelDelegate {
             case nil: if press == .long { say("   (o mesmo gesto, ignorado)") }
             }
         case .control(let id, let value) where id == AAP.rawGestures:
-            if gesturesSet { gesturesAck = value } else { gesturesBefore = value }
+            // O primeiro que chega, antes de o probe mandar o dele, é o de antes; depois, é a resposta.
+            if gesturesSet { gesturesAck = value } else if gesturesBefore == nil {
+                gesturesBefore = value
+                say("← 0x39 antes = \(String(format: "0x%02x", value)) (anote: é o valor para devolver, se precisar)")
+                return
+            }
             say("← 0x39 (Raw Gestures) = \(String(format: "0x%02x", value))")
         case .control(let id, _):
             others[String(format: "control 0x%02x", id), default: 0] += 1
@@ -108,17 +113,33 @@ final class Probe: NSObject, IOBluetoothL2CAPChannelDelegate {
         finish(code: 0)
     }
 
-    /// Abre a sessão, pede as notificações e liga o "segurar" no 0x39, sem desligar o que já estava ligado.
+    /// Abre a sessão, pede as notificações e liga o "segurar" no 0x39, sem desligar o que já estava ligado. Só mexe no
+    /// 0x39 com o valor de antes em mãos (espera até 5 s por ele); sem ele, não mexe e só escuta.
     func start() {
         send(AAP.handshake, "handshake")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
             send(AAP.requestNotifications, "pedir as notificações")
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in
+        waitForGestures(deadline: now() + 5.5)
+    }
+
+    var gesturesNote = ""
+
+    func waitForGestures(deadline: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+            guard !finishing else { return }
+            if gesturesBefore == nil, now() < deadline { return waitForGestures(deadline: deadline) }
             if !handshakeAck { say("o fone não respondeu ao handshake (segue assim mesmo)") }
-            let before = gesturesBefore ?? 0
-            gesturesSet = true
-            send(AAP.control(AAP.rawGestures, before | StemPress.long.gestureBit), "ligar o segurar no 0x39")
+            if let value = AAP.gesturesToSend(before: gesturesBefore) {
+                gesturesSet = true
+                send(AAP.control(AAP.rawGestures, value), "ligar o segurar no 0x39")
+            } else if gesturesBefore == nil {
+                gesturesNote = "não veio; não mexi"
+                say("o 0x39 de antes não veio: não mexo nele. Sigo escutando (o segurar só chega se o fone já mandar).")
+            } else {
+                gesturesNote = "o segurar já estava ligado; não mexi"
+                say("o segurar já estava ligado no 0x39: não mexo nele.")
+            }
             say("PRONTO: segure a haste, solte, segure de novo. Faça também um toque e um toque duplo.")
             say("Repare: o segurar ainda troca o modo de ruído (ou chama a Siri), além de aparecer aqui?")
         }
@@ -128,8 +149,9 @@ final class Probe: NSObject, IOBluetoothL2CAPChannelDelegate {
     func finish(code: Int32) {
         guard !finishing else { return }
         finishing = true
-        if gesturesSet, channel != nil {
-            send(AAP.control(AAP.rawGestures, gesturesBefore ?? 0), "devolver o 0x39 ao que era")
+        // Só devolve o que mudou, e só com o valor de antes conhecido (o gesturesSet exige os dois).
+        if gesturesSet, let before = gesturesBefore, channel != nil {
+            send(AAP.control(AAP.rawGestures, before), "devolver o 0x39 ao que era")
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
             channel?.close()
@@ -145,7 +167,7 @@ final class Probe: NSObject, IOBluetoothL2CAPChannelDelegate {
             ===== RESULTADO (pode colar no canal) =====
             canal AAP (PSM 0x1001): aberto
             resposta ao handshake: \(handshakeAck ? "sim" : "não")
-            0x39 antes: \(gesturesBefore.map { String(format: "0x%02x", $0) } ?? "não veio") · depois de ligar: \(gesturesAck.map { String(format: "0x%02x", $0) } ?? "não veio")
+            0x39 antes: \(gesturesBefore.map { String(format: "0x%02x", $0) } ?? "não veio") · \(gesturesSet ? "depois de ligar: \(gesturesAck.map { String(format: "0x%02x", $0) } ?? "não veio") · devolvido" : gesturesNote)
             haste: segurar \(count(.long)) · toque \(count(.single)) · duplo \(count(.double)) · triplo \(count(.triple))
             outros pacotes: \(others.isEmpty ? "nenhum" : others.sorted { $0.key < $1.key }.map { "\($0.key) ×\($0.value)" }.joined(separator: ", "))
             o Mac recebe o segurar: \(count(.long) > 0 ? "SIM" : "NÃO")

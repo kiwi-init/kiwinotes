@@ -8,7 +8,7 @@ Spike para o ditado pelo AirPods (spec #3222; o jow escolheu no #3335 **segurar 
 
 ## O que o protótipo faz (e não faz)
 
-- Abre o canal AAP, manda o handshake e pede as notificações. Lê o `0x39` de agora e liga o bit do segurar, sem desligar os outros.
+- Abre o canal AAP, manda o handshake e pede as notificações. Espera até 5 s pelo `0x39` de agora e liga o bit do segurar, sem desligar os outros. **Sem o valor de antes, não mexe no `0x39`** (só escuta) e diz isso no RESULTADO. O valor de antes sai na tela logo no início, para devolver à mão se o processo morrer.
 - A cada evento da haste, escreve o tipo e o lado. No segurar, escreve "começaria a ditar" ou "pararia".
 - **Não grava e não liga o microfone.** Não muda o modo de ruído, os toques nem nada além do `0x39`.
 - No fim (Ctrl-C, 2 minutos ou o fone desconectando), devolve o `0x39` ao valor de antes e fecha o canal.
@@ -32,4 +32,4 @@ Se o fone ficar estranho depois, guarde no estojo e tire de novo: ele volta ao q
 
 ## Testes
 
-`swift test` cobre os bytes (`AAP.parse`, `AAP.control`) e o segurar começa / segurar de novo para (`StemToggle`, que ignora um segundo segurar em menos de 0,8 s). O Bluetooth de verdade só o jow testa: o agente não pede permissão nem mexe no fone de ninguém (AGENTS.md).
+`swift test` cobre os bytes (`AAP.parse`, `AAP.control`), a regra de só mexer no `0x39` com o valor de antes (`AAP.gesturesToSend`) e o segurar começa / segurar de novo para (`StemToggle`, que ignora um segundo segurar em menos de 0,8 s). O Bluetooth de verdade só o jow testa: o agente não pede permissão nem mexe no fone de ninguém (AGENTS.md).

@@ -28,6 +28,15 @@ final class AAPTests: XCTestCase {
         XCTAssertEqual(AAP.parse([0x04, 0x00, 0x04, 0x00, 0x09, 0x00, 0x39]), .other(opcode: 0x09, length: 7))
     }
 
+    func testWritesTheGesturesOnlyKnowingTheValueBefore() {
+        // Sem o valor de antes, não mexe: um chute apagaria o toque, o duplo… que já estavam ligados.
+        XCTAssertNil(AAP.gesturesToSend(before: nil))
+        XCTAssertEqual(AAP.gesturesToSend(before: 0x00), 0x08)
+        XCTAssertEqual(AAP.gesturesToSend(before: 0x03), 0x0B)
+        // O segurar já ligado: nada a mandar.
+        XCTAssertNil(AAP.gesturesToSend(before: 0x0F))
+    }
+
     func testHoldStartsAndHoldAgainStops() {
         var t = StemToggle(debounce: 0.8)
         XCTAssertEqual(t.feed(.long, at: 10), .start)
