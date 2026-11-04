@@ -44,7 +44,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.15.0 (T2684): exportar nota (`notes.export`) em Markdown com os anexos, em HTML com o tema e em PDF. Só acréscimo.
 // 1.16.0 (T2966): o `notes.search` aceita erro de digitação nas palavras soltas (1 em 4+ letras, 2 em 7+), no texto
 //   das notas e dos anexos; o `SearchHit` achado assim vem com `approx: true`, e o exato vem antes. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.16.0";
+// 1.17.0 (T2984): a imagem de fora de uma nota pelo engine (`images.remote` → `data:`), só depois do clique. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.17.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -200,6 +201,11 @@ export interface UiCapabilities {
   "attachments.read": { args: { link: string }; result: AttachmentData };
   /** Renomeia ou move o anexo e troca os links das notas que apontavam para ele. */
   "attachments.rename": { args: { path: string; newPath: string }; result: { path: string; updatedLinks: number } };
+  /**
+   * A imagem de fora (https) de uma nota como `data:`, baixada pelo engine só depois do clique da pessoa no cartão
+   * (T2984, #3039). A janela não carrega nada da internet. E_BAD_URL, E_FETCH, E_NOT_IMAGE, E_TOO_BIG.
+   */
+  "images.remote": { args: { url: string }; result: AttachmentData };
 }
 
 export type UiCapability = keyof UiCapabilities;
@@ -235,6 +241,7 @@ export const UI_CAPABILITIES = [
   "attachments.save",
   "attachments.read",
   "attachments.rename",
+  "images.remote",
   "notes.move",
   "notes.duplicate",
   "notes.restore",

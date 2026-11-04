@@ -6,7 +6,8 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 
 import { wikiLinkSyntax } from "./index.ts";
-import { fullTree, linkAction, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
+import { linksApart, mermaidCode, picturesOff, shapesWithoutPictures } from "./mermaid.tsx";
+import { fullTree, imagesUnderCursor, imageSource, linkAction, mermaidUnderCursor, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
 
 const md = markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] });
 const stateOf = (doc: string, cursor = 0) => EditorState.create({ doc, selection: { anchor: cursor }, extensions: [md] });
@@ -61,9 +62,9 @@ describe("blocos renderizados", () => {
     expect(NOTE.slice(list.from, list.to)).toBe(list.source);
   });
 
-  test("um parágrafo com imagem ou com comentário fica com o preview de hoje", () => {
-    const doc = "Veja ![foto](https://x.com/a.png) aqui\n\ntexto %%nota%% fim\n\nnormal";
-    expect(renderedBlocks(stateOf(doc), false).map((b) => b.source)).toEqual(["normal"]);
+  test("um parágrafo com comentário fica com o preview de hoje; com imagem, renderiza (T2984)", () => {
+    const doc = "Veja ![foto](https://x.com/a.png) aqui\n\ntexto %%nota%% fim\n\nnormal ![[a.png]] no meio";
+    expect(renderedBlocks(stateOf(doc), false).map((b) => b.source)).toEqual(["Veja ![foto](https://x.com/a.png) aqui", "normal ![[a.png]] no meio"]);
   });
 });
 
@@ -159,5 +160,81 @@ describe("onde cai o clique", () => {
     expect(sourceOffset("**a**", "a", 0)).toBe(2);
     expect(sourceOffset("- item", "item", 0)).toBe(2);
     expect(sourceOffset("abc", "abc", 3)).toBe(3);
+  });
+});
+
+describe("imagens (T2984)", () => {
+  const render = (doc: string) => toRenderable(doc, 0, fullTree(stateOf(doc)), () => "ok");
+
+  test("![[foto.png]] no meio do texto vira a imagem do anexo; ![[Nota]] vira o link da nota", () => {
+    expect(render("veja ![[Anexos/foto 1.png]] e ![[Ana]]")).toBe("veja ![foto 1.png](kiwi-attachment:Anexos%2Ffoto%201.png) e [Ana](kiwi-note:Ana)");
+  });
+
+  test("de onde vem a imagem: anexo, data:, de fora (nunca carrega) ou nada", () => {
+    expect(imageSource("kiwi-attachment:Anexos%2Ffoto.png")).toEqual({ kind: "attachment", target: "Anexos/foto.png" });
+    expect(imageSource("anexos/foto%201.png")).toEqual({ kind: "attachment", target: "anexos/foto 1.png" });
+    expect(imageSource("data:image/png;base64,AAA")).toEqual({ kind: "data" });
+    expect(imageSource("https://x.com/a.png")).toEqual({ kind: "remote", url: "https://x.com/a.png" });
+    expect(imageSource("file:///etc/a.png")).toEqual({ kind: "none" });
+    expect(imageSource("/Users/x/a.png")).toEqual({ kind: "none" });
+    expect(imageSource("notas.md")).toEqual({ kind: "none" });
+  });
+});
+
+describe("mermaid (T2984)", () => {
+  const DOC = "texto\n\n```mermaid\ngraph TD\n  A --> B\n```\n\nfim";
+
+  test("o código do bloco ```mermaid; outro bloco ou vazio, nada", () => {
+    expect(mermaidCode("```mermaid\ngraph TD\n  A --> B\n```")).toBe("graph TD\n  A --> B");
+    expect(mermaidCode("~~~ Mermaid\nsequenceDiagram\n~~~")).toBe("sequenceDiagram");
+    expect(mermaidCode("```js\nx\n```")).toBeNull();
+    expect(mermaidCode("```mermaid\n\n```")).toBeNull();
+  });
+
+  test("com o cursor no bloco, ele fica cru e o diagrama fica embaixo; sem foco, nada embaixo", () => {
+    const at = DOC.indexOf("A -->");
+    const under = mermaidUnderCursor(stateOf(DOC, at), true);
+    expect(under).toHaveLength(1);
+    expect(DOC.slice(0, under[0]!.to).endsWith("```")).toBe(true);
+    expect(renderedBlocks(stateOf(DOC, at), true).map((b) => b.source)).toEqual(["texto", "fim"]);
+    expect(mermaidUnderCursor(stateOf(DOC, at), false)).toEqual([]);
+  });
+
+  test("o SVG sai sem link que não abre fora e sem imagem que não é data:", () => {
+    expect(linksApart('<a href="javascript:alert(1)">x</a><a xlink:href="https://kiwi.dev">y</a>')).toBe(
+      '<a target="_blank" rel="noopener noreferrer">x</a><a xlink:href="https://kiwi.dev" target="_blank" rel="noopener noreferrer">y</a>',
+    );
+    expect(picturesOff('<image href="https://x.com/a.png"/><img src="data:image/png;base64,A">')).toBe('<image/><img src="data:image/png;base64,A">');
+  });
+});
+
+describe("as imagens do bloco do cursor", () => {
+  const under = (doc: string, at: number) => imagesUnderCursor(stateOf(doc, at), true);
+
+  test("o parágrafo do cursor fica cru e as imagens dele aparecem logo abaixo, na ordem", () => {
+    const doc = "Veja ![[planta.png|120]] e ![foto](anexo.png) e ![](https://x.com/a.png)\n\noutro ![x](b.png)";
+    expect(under(doc, 2)).toEqual([{ to: doc.indexOf("\n"), markdown: "![planta.png](kiwi-attachment:planta.png) ![foto](anexo.png) ![](https://x.com/a.png)" }]);
+  });
+
+  test("sem foco, nada; sem imagem, nada; ![[Nota]] não é imagem", () => {
+    expect(imagesUnderCursor(stateOf("a ![x](b.png)", 0), false)).toEqual([]);
+    expect(under("só texto", 0)).toEqual([]);
+    expect(under("ver ![[Nota]] aqui", 0)).toEqual([]);
+  });
+
+  test("o anexo sozinho na linha fica com o widget dele; imagem em código não conta", () => {
+    expect(under("![[planta.png]]", 0)).toEqual([]);
+    expect(under("```\n![x](b.png)\n```", 0)).toEqual([]);
+    expect(under("a `![x](b.png)`", 0)).toEqual([]);
+  });
+});
+
+describe("a forma de imagem do mermaid (review do #109)", () => {
+  test("sai o img: de fora, fica o rótulo; data: fica", () => {
+    expect(shapesWithoutPictures('A@{ img: "https://x.com/a.png", label: "foto" } --> B')).toBe('A@{ label: "foto" } --> B');
+    expect(shapesWithoutPictures('A@{ label: "foto", img: "https://x.com/a.png", pos: "t" }')).toBe('A@{ label: "foto", pos: "t" }');
+    expect(shapesWithoutPictures("A@{ label: 'x', img: 'https://x.com/a.png' }")).toBe("A@{ label: 'x' }");
+    expect(shapesWithoutPictures('A@{ img: "data:image/png;base64,AA", label: "x" }')).toBe('A@{ img: "data:image/png;base64,AA", label: "x" }');
+    expect(shapesWithoutPictures("graph TD\n  A[img: x] --> B")).toBe("graph TD\n  A[img: x] --> B");
   });
 });

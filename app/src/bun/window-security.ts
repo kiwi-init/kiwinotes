@@ -17,6 +17,8 @@
  *   Nada de rede de verdade: nem `https:`, nem outro host;
  * - sem `'unsafe-eval'`: o `evaluateJavascriptWithResponse` do preload (`new Function`) devolve o erro em vez de rodar.
  *   O app usa o `executeJavascript`, que vem do WebView e não passa pela CSP;
+ * - `img-src` sem `https:`: a imagem de fora de uma nota é baixada pelo engine, só depois do clique da pessoa, e chega
+ *   como `data:` (T2984, #3039). Assim nenhum desenho (o Markdown, o mermaid, um CSS) baixa algo sozinho;
  * - `object-src`, `frame-src`, `base-uri` e `form-action` em `'none'`: nada de plugin, iframe, `<base>` nem form que
  *   leve a outro lugar.
  */

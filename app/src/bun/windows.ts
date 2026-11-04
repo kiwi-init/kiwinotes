@@ -17,6 +17,7 @@ import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
+import { fetchRemoteImage } from "../notes/remote-image.ts";
 
 export type WindowName = UiWindow;
 
@@ -90,6 +91,8 @@ const capabilities = uiCapabilities({
   },
   notes: stores.notes,
   attachments: stores.attachments,
+  // A imagem de fora de uma nota, só depois do clique no cartão (T2984, #3039).
+  remoteImage: (url) => fetchRemoteImage(url),
   ocr: stores.ocr,
   exporter: stores.exporter,
   // Exportar (T2684): a pasta pelo seletor do macOS, só no clique da pessoa. Com KIWI_DEBUG=1 (os agentes), nenhum

@@ -17,6 +17,8 @@ export interface AttachmentFile {
 export interface AttachmentSource {
   save(name: string, data: string): Promise<{ embed: string }>;
   read(link: string): Promise<AttachmentFile>;
+  /** A imagem de fora (https) como `data:`, baixada pelo engine depois do clique no cartão (T2984). */
+  remote?(url: string): Promise<AttachmentFile>;
 }
 
 // ---------------------------------------------------------------- funções puras (testadas)
@@ -132,7 +134,9 @@ class AttachmentWidget extends WidgetType {
     // Clicar no anexo põe o cursor na linha dele: o embed vira texto para editar (como a tabela).
     wrap.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      view.dispatch({ selection: { anchor: this.from } });
+      // No fim da linha: com o editor já focado, o começo dela caía no fim da linha de cima quando o navegador relia a
+      // seleção (o anexo muda de lugar no mesmo update).
+      view.dispatch({ selection: { anchor: view.state.doc.lineAt(this.from).to } });
       view.focus();
     });
     const name = this.target.split("/").at(-1)!;
@@ -180,15 +184,17 @@ function buildAttachments(state: EditorState, cache: AttachmentCache, view: Edit
     if (!line.text.includes("![[")) continue;
     const e = embedLine(line.text);
     if (!e) continue;
-    if (state.selection.ranges.some((r) => r.to >= line.from && r.from <= line.to)) continue;
     const file = cache.get(e.target, view);
-    out.push(Decoration.replace({ widget: new AttachmentWidget(e.target, e.width, file, line.from), block: true }).range(line.from, line.to));
+    const widget = new AttachmentWidget(e.target, e.width, file, line.from);
+    // Com o cursor na linha, o embed fica como texto para editar e o anexo continua à vista logo abaixo (T2984).
+    if (state.selection.ranges.some((r) => r.to >= line.from && r.from <= line.to)) out.push(Decoration.widget({ widget, block: true, side: 1 }).range(line.to));
+    else out.push(Decoration.replace({ widget, block: true }).range(line.from, line.to));
   }
   return Decoration.set(out);
 }
 
 /**
- * As linhas `![[anexo]]` aparecem como o anexo; com o cursor nelas, voltam a ser texto. Decoração de bloco, então
+ * As linhas `![[anexo]]` aparecem como o anexo; com o cursor nelas, voltam a ser texto, com o anexo embaixo. Decoração de bloco, então
  * vem de um StateField (como a tabela), que precisa da view para pedir o arquivo: ela chega pelo plugin abaixo.
  */
 export function attachmentPreview(source: AttachmentSource) {

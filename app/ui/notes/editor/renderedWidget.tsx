@@ -9,7 +9,7 @@ import "./enrichedEnv.ts";
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { MarkdownStyle } from "react-native-enriched-markdown/lib/module/index.web.js";
 import { normalizeMarkdownStyle } from "react-native-enriched-markdown/lib/module/normalizeMarkdownStyle.web.js";
@@ -17,12 +17,28 @@ import { ENRM_TEXT_CLASS } from "react-native-enriched-markdown/lib/module/web/g
 import { parseMarkdown } from "react-native-enriched-markdown/lib/module/web/parseMarkdown.js";
 import { RenderNode } from "react-native-enriched-markdown/lib/module/web/renderers/index.js";
 import { buildStyles, zeroTrailingMargins } from "react-native-enriched-markdown/lib/module/web/styles.js";
-import { indexTaskItems } from "react-native-enriched-markdown/lib/module/web/utils.js";
+import { indexTaskItems, markInlineImages } from "react-native-enriched-markdown/lib/module/web/utils.js";
 import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/web/types";
 
 import { externalUrl } from "../links.ts";
+import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
 import { editorFocused, type LinkResolver, linksChanged } from "./livePreview.ts";
-import { fullTree, linkAction, MISSING_LINK, NOTE_LINK, renderedBlocks, sourceOffset, TAG_LINK, taskMarks, toRenderable } from "./rendered.ts";
+import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
+import {
+  fullTree,
+  imageSource,
+  linkAction,
+  LOAD_IMAGE_LINK,
+  MISSING_LINK,
+  imagesUnderCursor,
+  mermaidUnderCursor,
+  NOTE_LINK,
+  renderedBlocks,
+  sourceOffset,
+  TAG_LINK,
+  taskMarks,
+  toRenderable,
+} from "./rendered.ts";
 
 // ---------------------------------------------------------------- o estilo do Channels, com os tokens das Notas
 
@@ -73,12 +89,16 @@ const STYLE: MarkdownStyle = {
     [`^${MISSING_LINK}`]: { color: "var(--text-3)", underline: false },
     [`^${NOTE_LINK}`]: { color: "var(--accent-text)", underline: false },
     [`^${TAG_LINK}`]: { color: "var(--accent-text)", backgroundColor: "var(--accent-soft)", underline: false },
+    [`^${LOAD_IMAGE_LINK}`]: { color: "var(--text-2)", backgroundColor: "var(--surface-2)", underline: false },
   },
   strong: { color: "var(--text)" },
   em: { color: "var(--text)" },
   strikethrough: { color: "var(--text-3)" },
   code: { fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-2)", backgroundColor: "var(--surface-2)", borderColor: "transparent" },
   thematicBreak: { color: "var(--border)", height: 1, marginTop: 11, marginBottom: 11 },
+  image: { maxHeight: 480, borderRadius: 10, marginTop: 2, marginBottom: 2, resizeMode: "contain" },
+  // A imagem no meio do texto: uma miniatura da altura de três linhas (a largura segue a proporção, no tema abaixo).
+  inlineImage: { size: 69 },
   taskList: { checkedColor: "var(--accent)", borderColor: "var(--border-strong)", checkmarkColor: "var(--on-accent)", checkedTextColor: "var(--text-3)" },
 };
 
@@ -103,7 +123,8 @@ function parse(markdown: string): Promise<ASTNode> {
   const next = parseMarkdown(markdown, FLAGS)
     .then((ast) => {
       indexTaskItems(ast);
-      noPictures(ast);
+      // Imagem no meio do texto fica na linha, como no Channels; sozinha no parágrafo, ocupa o bloco.
+      markInlineImages(ast);
       parsed.set(markdown, ast);
       if (parsed.size > LIMIT) parsed.delete(parsed.keys().next().value!);
       return ast;
@@ -113,19 +134,120 @@ function parse(markdown: string): Promise<ASTNode> {
   return next;
 }
 
-/** Imagem fica para o T2984 (os blocos com imagem não chegam aqui); se uma escapar, vira o texto dela: nada é baixado. */
-function noPictures(node: ASTNode): void {
-  if (node.type === "Image") {
-    const alt = textOf(node);
-    node.type = "Text";
-    node.content = alt;
-    node.children = [];
-    node.attributes = {};
-  }
-  for (const child of node.children ?? []) noPictures(child);
+const textOf = (node: ASTNode): string => node.content ?? (node.children ?? []).map(textOf).join("");
+
+// ---------------------------------------------------------------- as imagens (T2984)
+
+/** Os anexos já lidos pelo engine (`attachments.read`), por alvo; `null` é o que não está no vault. */
+const files = new Map<string, AttachmentFile | null>();
+const reading = new Set<string>();
+const waiting = new Set<() => void>();
+/** Sobe a cada anexo que chega: um bloco que desenhou antes e só se inscreveu depois não perde a chegada. */
+let arrivals = 0;
+/**
+ * As imagens de fora que a pessoa mandou carregar (com um clique no cartão), nesta janela: o engine baixa e devolve um
+ * `data:` (`images.remote`); a janela mesma não carrega nada da internet (a CSP não tem `https:`). `null`: não deu.
+ */
+const remote = new Map<string, AttachmentFile | null | "loading">();
+
+function arrived(): void {
+  arrivals++;
+  for (const wake of [...waiting]) wake();
 }
 
-const textOf = (node: ASTNode): string => node.content ?? (node.children ?? []).map(textOf).join("");
+function loadRemote(url: string, source: AttachmentSource | undefined): void {
+  if (remote.get(url) === "loading") return;
+  if (!source?.remote) {
+    remote.set(url, null);
+    return arrived();
+  }
+  remote.set(url, "loading");
+  arrived();
+  const settle = (f: AttachmentFile | null) => {
+    remote.set(url, f);
+    arrived();
+  };
+  source.remote(url).then(settle, () => settle(null));
+}
+
+function readImage(source: AttachmentSource | undefined, target: string): AttachmentFile | null | undefined {
+  const key = target.toLocaleLowerCase("pt-BR");
+  if (files.has(key)) return files.get(key);
+  if (!source) return null;
+  if (!reading.has(key)) {
+    reading.add(key);
+    const settle = (f: AttachmentFile | null) => {
+      reading.delete(key);
+      files.set(key, f);
+      arrivals++;
+      for (const wake of [...waiting]) wake();
+    };
+    source.read(target).then(settle, () => settle(null));
+  }
+  return undefined;
+}
+
+const text = (content: string): ASTNode => ({ type: "Text", content });
+
+/**
+ * A árvore com as imagens prontas para desenhar: o anexo vira o `data:` que o engine leu. A imagem de fora (https)
+ * vira um cartão, e só carrega depois do clique nele (decisão do jow no #3039); `http:` nunca carrega, só abre fora.
+ * O que não dá para mostrar fica como o texto dela.
+ */
+function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNode {
+  if (node.type === "Image") {
+    const alt = textOf(node);
+    const from = imageSource(node.attributes?.url ?? "");
+    if (from.kind === "data") return node;
+    if (from.kind === "remote") {
+      const got = remote.get(from.url);
+      if (got && got !== "loading") return { ...node, attributes: { ...node.attributes, url: got.dataUrl } };
+      let host = from.url;
+      try {
+        host = new URL(from.url).host;
+      } catch {
+        // Fica o endereço inteiro.
+      }
+      const label = `🖼 ${alt || "imagem"} · ${host}`;
+      // https: o clique carrega aqui. http: só abre no navegador (a CSP não deixa carregar sem TLS).
+      if (got === "loading") return text(`${label} · carregando…`);
+      const load = got === null ? "não deu para carregar · tentar de novo" : "carregar";
+      if (/^https:/i.test(from.url)) return { type: "Link", attributes: { url: `${LOAD_IMAGE_LINK}${encodeURIComponent(from.url)}` }, children: [text(`${label} · ${load}`)] };
+      return { type: "Link", attributes: { url: from.url }, children: [text(label)] };
+    }
+    if (from.kind === "attachment") {
+      const name = from.target.split("/").at(-1)!;
+      const file = readImage(source, from.target);
+      if (file === undefined) return text(alt || name);
+      if (file === null) return text(`${name} não está no vault`);
+      if (!file.mime.startsWith("image/")) return text(`${name} (${file.mime === "application/pdf" ? "PDF" : "arquivo"})`);
+      return { ...node, attributes: { ...node.attributes, url: file.dataUrl } };
+    }
+    return text(alt);
+  }
+  if (!node.children) return node;
+  return { ...node, children: node.children.map((c) => withImages(c, source)) };
+}
+
+const hasImage = (node: ASTNode): boolean => node.type === "Image" || (node.children ?? []).some(hasImage);
+
+/** Redesenha quando chega uma imagem que o bloco esperava. */
+function useImagesArriving(active: boolean): void {
+  const [, arrived] = useState(0);
+  const seen = arrivals;
+  useEffect(() => {
+    if (!active) return;
+    const wake = () => arrived((n) => n + 1);
+    waiting.add(wake);
+    // Chegou alguma entre o desenho e agora: desenha de novo.
+    if (arrivals !== seen) wake();
+    return () => {
+      waiting.delete(wake);
+    };
+  }, [active, seen]);
+}
+
+const isMermaid = (node: ASTNode) => node.type === "CodeBlock" && node.attributes?.language?.trim().toLowerCase() === "mermaid" && !!textOf(node).trim();
 
 // ---------------------------------------------------------------- o widget
 
@@ -133,16 +255,19 @@ export interface RenderedActions {
   onOpenLink(target: string): void;
   onOpenTag?(tag: string): void;
   onOpenUrl(url: string): void;
+  /** Os anexos do vault, para as imagens (T2984). */
+  attachments?: AttachmentSource;
 }
 
 interface BlockProps {
   markdown: string;
   source: string;
   callbacks: Parameters<typeof RenderNode>[0]["callbacks"];
+  attachments?: AttachmentSource;
   onShown(): void;
 }
 
-function Block({ markdown, source, callbacks, onShown }: BlockProps) {
+function Block({ markdown, source, callbacks, attachments, onShown }: BlockProps) {
   const [, parsedNow] = useState(0);
   const current = parsed.get(markdown) ?? null;
   useLayoutEffect(() => {
@@ -158,7 +283,10 @@ function Block({ markdown, source, callbacks, onShown }: BlockProps) {
       live = false;
     };
   }, [markdown, current]);
-  useLayoutEffect(onShown, [current, onShown]);
+  const pictures = !!current && hasImage(current);
+  useImagesArriving(pictures);
+  const ast = current && pictures ? withImages(current, attachments) : current;
+  useLayoutEffect(onShown);
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     // O link de URL abre só com ⌘-clique (#3044): a dica aparece no hover.
@@ -167,17 +295,40 @@ function Block({ markdown, source, callbacks, onShown }: BlockProps) {
     }
   });
   // Até o parse chegar (só na primeira vez de cada bloco), o texto cru, do mesmo tamanho.
-  if (!current) return <div className="cm-rendered-raw">{source}</div>;
+  if (!ast) return <div className="cm-rendered-raw">{source}</div>;
   return (
-    <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }}>
-      {(current.children ?? []).map((child, i) => (
-        <RenderNode key={`${child.type}-${i}`} node={child} style={NORMAL} styles={STYLES} callbacks={callbacks} capabilities={CAPABILITIES} />
-      ))}
+    <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }} onLoadCapture={onShown} onErrorCapture={onShown}>
+      {(ast.children ?? []).map((child, i) => {
+        const code = <RenderNode key={`${child.type}-${i}`} node={child} style={NORMAL} styles={STYLES} callbacks={callbacks} capabilities={CAPABILITIES} />;
+        if (!isMermaid(child)) return code;
+        return <MermaidBlock key={`mermaid-${i}`} source={textOf(child)} code={code} onLink={(url) => callbacks.onLinkPress?.({ url })} onShown={onShown} />;
+      })}
     </div>
   );
 }
 
 const roots = new WeakMap<HTMLElement, Root>();
+const sizes = new WeakMap<HTMLElement, ResizeObserver>();
+
+/**
+ * O bloco muda de altura depois de desenhado (uma imagem que carrega ou falha, o diagrama, a fonte): o editor mede de
+ * novo, senão o mapa de alturas fica velho e o clique de depois cai na linha errada.
+ */
+function watchSize(dom: HTMLElement, view: EditorView): void {
+  if (typeof ResizeObserver === "undefined") return;
+  const ro = new ResizeObserver(() => view.requestMeasure());
+  ro.observe(dom);
+  sizes.set(dom, ro);
+}
+
+function unmount(dom: HTMLElement): void {
+  sizes.get(dom)?.disconnect();
+  sizes.delete(dom);
+  const root = roots.get(dom);
+  roots.delete(dom);
+  // Fora do ciclo do React: desmontar no meio de um render dele dá aviso.
+  if (root) queueMicrotask(() => root.unmount());
+}
 /** O widget de agora de cada DOM: o CodeMirror reaproveita o DOM (`updateDOM`) com outro widget, de outro texto. */
 const widgets = new WeakMap<HTMLElement, RenderedWidget>();
 
@@ -214,6 +365,7 @@ class RenderedWidget extends WidgetType {
     roots.set(dom, root);
     widgets.set(dom, this);
     this.draw(root, view, dom);
+    watchSize(dom, view);
     // Lê o widget pelo DOM: depois de um `updateDOM`, o `this` daqui é o de antes.
     dom.addEventListener("mousedown", (e) => widgets.get(dom)?.place(e, view, dom));
     return dom;
@@ -236,7 +388,8 @@ class RenderedWidget extends WidgetType {
           return;
         }
         const act = linkAction(url);
-        if (act?.kind === "note") this.actions.onOpenLink(act.target);
+        if (act?.kind === "loadImage") loadRemote(act.url, this.actions.attachments);
+        else if (act?.kind === "note") this.actions.onOpenLink(act.target);
         else if (act?.kind === "tag") this.actions.onOpenTag?.(act.tag);
         else if (act?.kind === "url") {
           // Só o que pode abrir fora (http, https, mailto); o resto não faz nada, como no editor.
@@ -253,7 +406,7 @@ class RenderedWidget extends WidgetType {
         view.dispatch({ changes: { from: pos, to: pos + 1, insert: checked ? " " : "x" } });
       },
     };
-    root.render(<Block markdown={this.markdown} source={this.source} callbacks={callbacks} onShown={() => view.requestMeasure()} />);
+    root.render(<Block markdown={this.markdown} source={this.source} callbacks={callbacks} attachments={this.actions.attachments} onShown={() => view.requestMeasure()} />);
   }
 
   /** Clique fora de link e de caixa: o cursor vai para o ponto do `.md` onde a pessoa clicou, e o bloco vira texto. */
@@ -268,6 +421,8 @@ class RenderedWidget extends WidgetType {
     const href = link?.getAttribute("href") ?? "";
     // Link de nota, de tag ou o cartão da imagem: o clique abre (ou carrega). URL: só com ⌘. Com ⌥, nenhum abre.
     placingOnly = !!link && (e.altKey || (opensOutside(href) && !e.metaKey));
+    // Só vale para o `click` deste clique: se o bloco sair do DOM, esse `click` nem chega no link (review do T2983).
+    if (placingOnly) document.addEventListener("mouseup", () => setTimeout(() => (placingOnly = false)), { once: true });
     if (target.closest("input, button") || (link && !placingOnly)) return;
     e.preventDefault();
     const at = view.posAtDOM(dom) + this.offsetAt(dom, e.clientX, e.clientY);
@@ -305,14 +460,89 @@ class RenderedWidget extends WidgetType {
   }
 
   destroy(dom: HTMLElement) {
-    const root = roots.get(dom);
-    roots.delete(dom);
-    // Fora do ciclo do React: desmontar no meio de um render dele dá aviso.
-    if (root) queueMicrotask(() => root.unmount());
+    unmount(dom);
   }
 
   ignoreEvent() {
     // O widget cuida dos próprios cliques (link, caixa, pôr o cursor).
+    return true;
+  }
+}
+
+/** O diagrama de um bloco ```mermaid com o cursor dentro: o código fica cru em cima, e o desenho continua embaixo. */
+class MermaidUnderWidget extends WidgetType {
+  constructor(
+    readonly code: string,
+    readonly actions: RenderedActions,
+  ) {
+    super();
+  }
+  eq(other: MermaidUnderWidget) {
+    return other.code === this.code;
+  }
+  toDOM(view: EditorView) {
+    const dom = document.createElement("div");
+    dom.className = "cm-mermaid-under";
+    const root = createRoot(dom);
+    roots.set(dom, root);
+    root.render(
+      <MermaidBlock
+        source={this.code}
+        code={null}
+        onLink={(url) => {
+          const safe = externalUrl(url);
+          if (safe) this.actions.onOpenUrl(safe);
+        }}
+        onShown={() => view.requestMeasure()}
+      />,
+    );
+    watchSize(dom, view);
+    return dom;
+  }
+  destroy(dom: HTMLElement) {
+    unmount(dom);
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
+/** As imagens do bloco onde está o cursor, logo abaixo da fonte crua (`imagesUnderCursor`). */
+class ImagesUnderWidget extends WidgetType {
+  constructor(
+    readonly markdown: string,
+    readonly actions: RenderedActions,
+  ) {
+    super();
+  }
+  eq(other: ImagesUnderWidget) {
+    return other.markdown === this.markdown;
+  }
+  toDOM(view: EditorView) {
+    const dom = document.createElement("div");
+    dom.className = "cm-rendered cm-images-under";
+    // O clique aqui não mexe no cursor (que está no texto de cima): o navegador nem chega a mudar a seleção.
+    dom.addEventListener("mousedown", (e) => e.preventDefault());
+    const root = createRoot(dom);
+    roots.set(dom, root);
+    const callbacks = {
+      onLinkPress: ({ url }: { url: string }) => {
+        const act = linkAction(url);
+        if (act?.kind === "loadImage") loadRemote(act.url, this.actions.attachments);
+        else if (act?.kind === "url") {
+          const safe = externalUrl(act.url);
+          if (safe) this.actions.onOpenUrl(safe);
+        }
+      },
+    };
+    root.render(<Block markdown={this.markdown} source={this.markdown} callbacks={callbacks} attachments={this.actions.attachments} onShown={() => view.requestMeasure()} />);
+    watchSize(dom, view);
+    return dom;
+  }
+  destroy(dom: HTMLElement) {
+    unmount(dom);
+  }
+  ignoreEvent() {
     return true;
   }
 }
@@ -325,7 +555,14 @@ function buildRendered(state: EditorState, resolver: LinkResolver, actions: Rend
     const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t));
     out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions), block: true }).range(b.from, b.to));
   }
-  return Decoration.set(out);
+  for (const m of imagesUnderCursor(state, focused, tree)) {
+    out.push(Decoration.widget({ widget: new ImagesUnderWidget(m.markdown, actions), block: true, side: 1 }).range(m.to));
+  }
+  for (const m of mermaidUnderCursor(state, focused, tree)) {
+    const code = mermaidCode(m.source);
+    if (code) out.push(Decoration.widget({ widget: new MermaidUnderWidget(code, actions), block: true, side: 1 }).range(m.to));
+  }
+  return Decoration.set(out, true);
 }
 
 /**
@@ -357,5 +594,26 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered-raw": { whiteSpace: "pre-wrap" },
   ".cm-rendered a": { cursor: "pointer" },
   ".cm-rendered a[href^='kiwi-tag:']": { borderRadius: "4px", padding: "0 3px" },
+  ".cm-rendered a[href^='kiwi-load-image:']": { borderRadius: "6px", padding: "1px 6px", fontSize: "13px" },
   ".cm-rendered input[type=checkbox]": { cursor: "pointer" },
+  ".cm-rendered img": { display: "block", maxWidth: "100%" },
+  ".cm-rendered img[style*='inline']": { display: "inline", width: "auto !important", borderRadius: "6px" },
+  // Os diagramas (T2984), como no Channels: o desenho rola de lado quando não cabe; os botões ficam discretos.
+  ".kn-mermaid": { padding: "2px 0" },
+  ".cm-images-under": { padding: "6px 0 2px", cursor: "default" },
+  ".cm-mermaid-under": { padding: "6px 0 2px", cursor: "default" },
+  ".kn-mermaid-drawn": { margin: "0", padding: "12px", overflowX: "auto", borderRadius: "10px", background: "var(--surface-2)" },
+  ".kn-mermaid-drawn svg": { display: "block", maxWidth: "none" },
+  ".kn-mermaid-tools": { display: "flex", gap: "4px", marginTop: "4px" },
+  ".kn-mermaid-tools button": {
+    border: "0",
+    borderRadius: "6px",
+    padding: "2px 8px",
+    background: "none",
+    color: "var(--text-3)",
+    font: "500 11px/1.6 var(--font)",
+    cursor: "pointer",
+  },
+  ".kn-mermaid-tools button:hover": { background: "var(--surface-hover)", color: "var(--text)" },
+  ".kn-mermaid-error": { margin: "4px 0 0", fontSize: "12px", color: "var(--danger)" },
 });

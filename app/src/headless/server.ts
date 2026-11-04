@@ -17,6 +17,10 @@ import type { Socket } from "bun";
 
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { assertNotRealData } from "./guard.ts";
+import { remoteImageUrl } from "../notes/remote-image.ts";
+
+/** A imagem de fora do headless (um quadrado azul de 16 px): o roteiro testa o caminho do clique sem rede. */
+const HEADLESS_IMAGE = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGOw6blDEmIY1TCqYfhqAACorqQQpPjnMgAAAABJRU5ErkJggg==", "base64");
 
 export interface HeadlessOptions {
   /** A pasta dos dados (o vault fica em <data>/vault). */
@@ -111,6 +115,12 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     history: stores.history,
     notes: stores.notes,
     attachments: stores.attachments,
+    // O headless não sai para a rede: a imagem de fora é sempre esta, depois de conferir o endereço como o app confere.
+    remoteImage: async (url) => {
+      remoteImageUrl(url);
+      console.log(`[notes] remote image (headless, sem rede): ${url}`);
+      return { path: url, mime: "image/png", size: HEADLESS_IMAGE.length, dataUrl: `data:image/png;base64,${HEADLESS_IMAGE.toString("base64")}` };
+    },
     ocr: stores.ocr,
     exporter: stores.exporter,
     // O headless nunca abre diálogo: a pasta do exportar vem de KIWI_EXPORT_DIR (T2684), ou o exportar dá E_CANCELED.

@@ -5,7 +5,7 @@
 import "../src/api.ts"; // o tipo do `window.engine`
 
 import { MockVault } from "./mock.ts";
-import type { AttachmentSource } from "./editor/attachments.ts";
+import type { AttachmentFile, AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
 import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat } from "./types.ts";
 
@@ -56,6 +56,7 @@ export function engineNotes(
     ? {
         save: (name, data) => call("attachments.save", { name, data }),
         read: (link) => call("attachments.read", { link }),
+        ...(has("images.remote") ? { remote: (url: string) => call<AttachmentFile>("images.remote", { url }) } : {}),
       }
     : undefined;
   // As buscas salvas vivem nas settings: um engine que não as conhece não manda o campo (e recusa no set).
