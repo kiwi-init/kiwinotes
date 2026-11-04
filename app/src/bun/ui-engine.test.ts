@@ -50,6 +50,8 @@ const notesStub = {
   createFolder: async () => null as never,
   moveFolder: async () => null as never,
   deleteFolder: async () => true as const,
+  onExternalMoves: () => () => {},
+  existing: () => ({ notes: new Set<string>(), folders: new Set<string>() }),
 };
 
 function fakeDeps() {

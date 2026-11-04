@@ -10,7 +10,7 @@ import { sanitizeSnippets } from "../store/snippets.ts";
 import { type AppSettings, MAX_PINNED } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
-import type { Vault } from "../notes/vault.ts";
+import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
@@ -54,6 +54,7 @@ export interface CapabilityDeps {
     Vault,
     | "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve"
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
+    | "onExternalMoves" | "existing"
   >;
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
@@ -110,9 +111,25 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
   // UI que tente encher o clipboard sozinha.
   let lastCopy = -Infinity;
 
+  // As fixadas seguem também o que muda por fora (T2559): no 1º uso do vault, sai o que já não existe, e daí em diante
+  // um rename feito no Obsidian leva a fixada junto.
+  let watchingPins: Promise<void> | null = null;
   const vault = async () => {
     await deps.notes.open();
+    watchingPins ??= (async () => {
+      deps.notes.onExternalMoves((r) => void followPins(r).catch((e) => console.error("[notes] pinned:", e)));
+      // Best effort (revisão #2574): uma limpeza de fixadas que falha (o disco, o settings) nunca derruba as notas.
+      await followPins({ moves: new Map(), gone: [] }).catch((e) => console.error("[notes] pinned:", e));
+    })();
+    await watchingPins;
     return deps.notes;
+  };
+  const followPins = async (r: ExternalMoves) => {
+    const current = await deps.settings.load();
+    const next = followPinned(current.pinned, r, deps.notes.existing());
+    if (next.length === current.pinned.length && next.every((p, i) => p === current.pinned[i])) return;
+    const saved = await deps.settings.save({ pinned: next });
+    deps.settingsChanged?.(saved);
   };
   /** Os argumentos de uma capacidade de notas: só os campos conhecidos, para um typo não passar calado. */
   const fields = (args: unknown, cap: string, allowed: string[]) => {
