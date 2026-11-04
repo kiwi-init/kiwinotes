@@ -72,9 +72,9 @@ bun run cli ui notes --script passos.json --out /tmp/prints --data DIR
 
 - **O que roda:** o build da janela (o mesmo `vite build` do `ui:build`, guardado em `node_modules/.cache/kiwi-cli-ui/` e refeito quando `ui/` ou `src/` mudam), servido com a `VIEWS_CSP`. O `window.engine` imita o do preload e leva cada `invoke` ao headless, e os eventos do headless (`notes.changed`, `history.added`) chegam à página.
 - **O padrão:** WebKit, porque o Chromium headless ignora o `-webkit-font-smoothing` (#1765), em 2x, claro, no tamanho da janela (`src/shared/window-specs.ts`) e com reduced motion, sem animação no print. Para mudar: `--browser chromium`, `--size WxH`, `--motion`. Com `--dist DIR`, usa um build pronto, como o de outro worktree para o antes e depois.
-- **A saída:** JSON com os PNGs, se a UI chamou `engine.ready()`, os erros da página e de CSP (`problems`), o que tentou sair para a rede (`blocked`) e as capacidades chamadas. Qualquer problema dá exit 1, e o PNG sai assim mesmo.
-- **Isolamento:** a página não sai para a rede, e o `clipboard.write` nunca chega ao engine: o texto fica em `clipboard` no relatório.
-- **Os passos** (`scripts/ui-steps.ts`): `click`, `fill`, `type`, `press` (⌘K é `"Meta+k"`), `hover`, `waitFor`, `wait`, `expectText`, `expectCount`, `screenshot` e `invoke`, que é uma capacidade direto no engine, como uma edição no Obsidian. O script para no primeiro passo que falha e deixa `falhou-passo-N.png`.
+- **A saída:** JSON com os PNGs (um `--note` que não abre vira um aviso em `problems`), se a UI chamou `engine.ready()`, os erros da página e de CSP (`problems`), o que tentou sair para a rede (`blocked`) e as capacidades chamadas. Qualquer problema dá exit 1, e o PNG sai assim mesmo.
+- **Isolamento:** a página não sai para a rede, e o `clipboard.write` nunca chega ao engine: o texto fica em `clipboard` no relatório. O `blocked` não lista WebSocket, porque a rota do Playwright não pega esse tipo de conexão. Mesmo assim, nada sai do Mac: a CSP só deixa `ws://127.0.0.1:*`.
+- **Os passos** (`scripts/ui-steps.ts`): `click`, `fill`, `type`, `press` (⌘K é `"Meta+k"`), `hover`, `waitFor`, `wait`, `expectText`, `expectCount`, `screenshot` e `invoke`, que é uma capacidade direto no engine, como uma edição no Obsidian. No `notes.save`, `"baseVersion": "current"` usa a versão de agora; um save que não grava faz o passo falhar. O script para no primeiro passo que falha e deixa `falhou-passo-N.png`.
 
 ```json
 { "window": "notes", "theme": "dark", "steps": [

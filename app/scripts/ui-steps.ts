@@ -13,6 +13,7 @@
 //   { "screenshot": "nome.png", "selector"?: "SEL" }  print da janela (ou só do elemento)
 //   { "invoke": "notes.save", "args": {…} }          uma capacidade direto no engine, "de fora" da janela (como uma
 //                                                     edição no Obsidian): a janela vê pelos eventos. Nunca clipboard.
+//                                                     No notes.save, `"baseVersion": "current"` usa a versão de agora.
 //
 // Todo passo aceita `timeout` (ms, padrão 5000) e `name` (o rótulo no relatório). O arquivo é
 // `{"steps":[…]}` (com `window`, `scale`, `theme`, `size`, `browser` e `query` opcionais, que as flags sobrepõem)
@@ -149,8 +150,20 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
   const timeout = s.timeout ?? 5000;
   if ("invoke" in s) {
     if (s.invoke === "clipboard.write") throw new Error("clipboard.write não");
-    const r = await send({ cmd: "invoke", cap: s.invoke, args: s.args ?? {} });
+    const args = { ...s.args };
+    // `"baseVersion": "current"`: a versão de agora, lida antes pelo `notes.get`, para um roteiro editar "de fora"
+    // sem escrever a versão à mão (#1835).
+    if (s.invoke === "notes.save" && args.baseVersion === "current") {
+      const g = await send({ cmd: "invoke", cap: "notes.get", args: { path: args.path } });
+      if (g.ok !== true) throw new Error(`notes.get ${String(args.path)} (para o baseVersion): ${String(g.code ?? "E_FAILED")} ${String(g.message ?? "")}`.trim());
+      args.baseVersion = (g.value as { version: string }).version;
+    }
+    const r = await send({ cmd: "invoke", cap: s.invoke, args });
     if (r.ok !== true) throw new Error(`${s.invoke}: ${String(r.code ?? "E_FAILED")} ${String(r.message ?? "")}`.trim());
+    // Com a versão velha, o save não escreve e responde ok: no roteiro, isso é falha, não sucesso calado.
+    if (s.invoke === "notes.save" && (r.value as { saved?: boolean } | null)?.saved === false) {
+      throw new Error(`notes.save ${String(args.path)}: não gravou, o baseVersion está velho (use "current")`);
+    }
     return { value: r.value };
   }
   if ("click" in s) await page.click(s.click, { timeout, modifiers: s.modifiers });

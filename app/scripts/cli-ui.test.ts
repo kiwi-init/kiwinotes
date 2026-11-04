@@ -3,15 +3,15 @@
 // (`bunx playwright-core install webkit`).
 
 import { afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { webkit } from "playwright-core";
 
 import { parseArgs, runScreenshot, runUi } from "./cli-ui.ts";
-import type { UiContext } from "./ui-page.ts";
-import { parseScript } from "./ui-steps.ts";
+import { buildStamp, type UiContext } from "./ui-page.ts";
+import { parseScript, runStep } from "./ui-steps.ts";
 
 describe("flags", () => {
   test("janela, escalas e temas em lista, tamanho, nota; o --data é da CLI", () => {
@@ -64,6 +64,72 @@ describe("passos", () => {
 
   test("nenhum passo escreve no clipboard", () => {
     expect(() => parseScript([{ invoke: "clipboard.write", args: { text: "x" } }])).toThrow("clipboard");
+  });
+});
+
+describe("o carimbo do build (#1835)", () => {
+  test("muda quando um arquivo muda, entra ou sai; teste não conta", () => {
+    const root = mkdtempSync(join(tmpdir(), "kn-stamp-"));
+    mkdirSync(join(root, "ui"));
+    writeFileSync(join(root, "ui/a.ts"), "a");
+    writeFileSync(join(root, "ui/b.ts"), "b");
+    writeFileSync(join(root, "bun.lock"), "v1");
+    const stamp = () => buildStamp([join(root, "ui"), join(root, "bun.lock")], root);
+    const s0 = stamp();
+    expect(stamp()).toBe(s0);
+    // Apagar o arquivo mais velho não mexe no mtime mais novo: o carimbo antigo não via isto.
+    utimesSync(join(root, "ui/a.ts"), new Date(1000), new Date(1000));
+    const s1 = stamp();
+    rmSync(join(root, "ui/a.ts"));
+    expect(stamp()).not.toBe(s1);
+    const s2 = stamp();
+    writeFileSync(join(root, "ui/c.ts"), "c");
+    expect(stamp()).not.toBe(s2);
+    const s3 = stamp();
+    writeFileSync(join(root, "bun.lock"), "v2 com outra dependência");
+    expect(stamp()).not.toBe(s3);
+    const s4 = stamp();
+    writeFileSync(join(root, "ui/c.test.ts"), "teste");
+    expect(stamp()).toBe(s4);
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("invoke num roteiro (#1835)", () => {
+  function vault() {
+    let note = { path: "a.md", content: "um", version: "v1" };
+    const calls: Record<string, unknown>[] = [];
+    const send = async (msg: Record<string, unknown>) => {
+      calls.push(msg);
+      const args = msg.args as Record<string, string>;
+      if (msg.cap === "notes.get") return args.path === note.path ? { ok: true, value: note } : { ok: false, code: "E_NOT_FOUND", message: args.path };
+      if (msg.cap === "notes.save") {
+        if (args.baseVersion !== note.version) return { ok: true, value: { saved: false, current: note } };
+        note = { ...note, content: args.content!, version: `v${Number(note.version.slice(1)) + 1}` };
+        return { ok: true, value: { saved: true, meta: note } };
+      }
+      return { ok: false, code: "E_NO_CAPABILITY", message: String(msg.cap) };
+    };
+    return { send, calls, note: () => note };
+  }
+  const page = null as unknown as import("playwright-core").Page; // o invoke não usa a página
+
+  test("baseVersion \"current\" lê a versão de agora e grava", async () => {
+    const v = vault();
+    await runStep(page, { invoke: "notes.save", args: { path: "a.md", content: "dois", baseVersion: "current" } }, dir, v.send);
+    expect(v.note().content).toBe("dois");
+    expect(v.calls.map((c) => c.cap)).toEqual(["notes.get", "notes.save"]);
+    expect((v.calls[1]!.args as Record<string, string>).baseVersion).toBe("v1");
+  });
+
+  test("um save que não grava (versão velha) faz o passo falhar", async () => {
+    const v = vault();
+    await expect(runStep(page, { invoke: "notes.save", args: { path: "a.md", content: "x", baseVersion: "v0" } }, dir, v.send)).rejects.toThrow("não gravou");
+  });
+
+  test("current de uma nota que não existe diz qual", async () => {
+    const v = vault();
+    await expect(runStep(page, { invoke: "notes.save", args: { path: "b.md", content: "x", baseVersion: "current" } }, dir, v.send)).rejects.toThrow("E_NOT_FOUND");
   });
 });
 
@@ -189,6 +255,17 @@ describe.skipIf(!hasWebkit)("no WebKit headless", () => {
     expect(r.failedAt).toBe(2);
     expect(r.skipped).toBe(1);
     expect(existsSync(r.steps[1].shot)).toBe(true);
+  }, 60_000);
+
+  test("--note de uma nota que não existe vira aviso em problems (#1835)", async () => {
+    const page = join(dir, "pronta");
+    rmSync(page, { recursive: true, force: true });
+    await Bun.write(join(page, "index.html"), `<!doctype html><script type="module" src="./app.js"></script>`);
+    await Bun.write(join(page, "app.js"), `window.engine.ready();`);
+    const { ctx } = fakeCtx(dir);
+    capture();
+    expect(await runScreenshot(["notes", "--dist", page, "--note", "Sumida.md", "--out", join(dir, "n.png")], ctx)).toBe(1);
+    expect(lastJson().shots[0].problems).toEqual(["--note Sumida.md: a nota não abriu (E_NO_CAPABILITY)"]);
   }, 60_000);
 
   test("a página não sai para a rede e a CSP das views vale: tudo vira problema no relatório", async () => {

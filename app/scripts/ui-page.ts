@@ -17,7 +17,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 import { chromium, webkit, type Browser, type BrowserContext, type Page } from "playwright-core";
 
@@ -98,9 +98,13 @@ export const isWindow = (w: string): w is UiWindow => (UI_WINDOWS as readonly st
 
 // ---------------------------------------------------------------- o build da janela
 
-/** O arquivo mais novo (mtime em ms) sob as pastas dadas, sem node_modules nem testes. */
-function newest(paths: string[]): number {
-  let max = 0;
+/**
+ * O carimbo do build: o hash da lista de arquivos (caminho, mtime e tamanho) sob os caminhos dados, sem node_modules,
+ * pastas com ponto nem testes. Muda quando um arquivo muda, entra ou sai (uma troca de branch que só apaga arquivos,
+ * #1835), e com o `bun.lock` na lista, quando uma dependência muda.
+ */
+export function buildStamp(paths: string[], root = APP_DIR): string {
+  const lines: string[] = [];
   const walk = (p: string) => {
     let st;
     try {
@@ -110,11 +114,14 @@ function newest(paths: string[]): number {
     }
     if (st.isDirectory()) {
       for (const e of readdirSync(p)) if (e !== "node_modules" && !e.startsWith(".")) walk(join(p, e));
-    } else if (!/\.test\.tsx?$/.test(p)) max = Math.max(max, st.mtimeMs);
+    } else if (!/\.test\.tsx?$/.test(p)) lines.push(`${relative(root, p)}\t${st.mtimeMs}\t${st.size}`);
   };
   for (const p of paths) walk(p);
-  return max;
+  return new Bun.CryptoHasher("sha256").update(lines.sort().join("\n")).digest("hex");
 }
+
+/** O que entra no build de uma janela: as fontes, a config do Vite e as dependências. */
+const BUILD_INPUTS = ["ui", "src", "vite.config.ts", "package.json", "bun.lock", "tsconfig.json", "hutch-pin.json"];
 
 /**
  * O build da janela, refeito quando as fontes mudaram desde o último. Devolve a pasta com o index.html.
@@ -127,7 +134,7 @@ export function ensureBuild(window: UiWindow, log: (m: string) => void = () => {
   }
   const out = join(APP_DIR, "node_modules/.cache/kiwi-cli-ui", window);
   const stampFile = join(out, ".kiwi-stamp");
-  const stamp = String(newest([join(APP_DIR, "ui"), join(APP_DIR, "src"), join(APP_DIR, "vite.config.ts"), join(APP_DIR, "package.json")]));
+  const stamp = buildStamp(BUILD_INPUTS.map((p) => join(APP_DIR, p)));
   if (existsSync(join(out, "index.html")) && existsSync(stampFile) && readFileSync(stampFile, "utf8") === stamp) return out;
   log(`build da janela ${window}…`);
   mkdirSync(out, { recursive: true });
@@ -317,6 +324,11 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
     const until = Date.now() + readyTimeoutMs;
     while (!report.ready && Date.now() < until) await p.waitForTimeout(50);
     if (!report.ready) report.problems.push(`a UI não chamou engine.ready() em ${readyTimeoutMs} ms`);
+    // A janela Notas abre uma nota que não existe sem erro nenhum na página: o relatório avisa (#1835).
+    if (opts.window === "notes" && opts.query.note) {
+      const r = (await ctx.send({ cmd: "invoke", cap: "notes.get", args: { path: opts.query.note } }).catch((e) => ({ ok: false, code: String(e?.code ?? "E_ENGINE") }))) as Reply | { ok: false; code: string };
+      if (!r.ok) report.problems.push(`--note ${opts.query.note}: a nota não abriu (${r.code})`);
+    }
     await settle(p);
     return { page: p, report, url, close };
   } catch (e) {
