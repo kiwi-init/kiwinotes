@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 
 import { api, type DictionaryTerm } from "../src/api.ts";
 import { LoadError, type LoadState, RemoveIcon, rowKey, SavedNote, useAutosave } from "../src/kit/editable.tsx";
-import { Button, Section } from "../src/kit/index.tsx";
+import { Button, HoverLabel, Section } from "../src/kit/index.tsx";
 
 type Row = { key: string; term: string; aliases: string; isNew?: boolean };
 
@@ -81,12 +81,13 @@ export function DictionarySection() {
               />
               <button
                 type="button"
-                className="kn-icon-button"
+                className="kn-icon-button kn-expand"
                 data-tone="danger"
                 aria-label={`Remover ${r.term || "termo"}`}
                 onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
               >
                 <RemoveIcon />
+                <HoverLabel>Remover</HoverLabel>
               </button>
             </div>
             {(warnings.get(r.term.trim()) ?? []).map((text) => (

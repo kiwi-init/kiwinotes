@@ -63,9 +63,10 @@
   height: calc(var(--ctl) - 4px);
   border-radius: var(--r-row);
   background: var(--wash-2, var(--surface-hover));
+  /* T3821: o mesmo movimento do hover, que é quem mais move a pílula agora */
   transition:
-    transform var(--glide),
-    width var(--glide);
+    transform var(--hover-dur) var(--hover-ease),
+    width var(--hover-dur) var(--hover-ease);
   pointer-events: none;
 }
 
@@ -83,12 +84,24 @@
   font: 500 var(--t-ui) / 1 var(--ui);
   white-space: nowrap;
   cursor: default;
-  transition: color var(--fast) var(--ease);
+  /* T3821: a aba sob o mouse cresce um pouco e o rótulo ganha peso, com o mesmo movimento dos botões */
+  transition:
+    color var(--fast) var(--ease),
+    transform var(--hover-dur) var(--hover-ease) var(--hover-out-delay),
+    text-shadow var(--hover-dur) var(--ease) var(--hover-out-delay);
 }
 
 .kn-tab:hover,
 .kn-tab[aria-selected="true"] {
   color: var(--ink);
+}
+
+/* O peso vem de uma sombra da própria cor, e não do font-weight: a largura da aba não muda, e as vizinhas não pulam. */
+.kn-tab:hover,
+.kn-tab:focus-visible {
+  transform: scale(1.04);
+  text-shadow: 0 0 0.6px currentColor;
+  transition-delay: 0s, var(--hover-in-delay), var(--hover-in-delay);
 }
 
 .kn-tab:focus-visible {

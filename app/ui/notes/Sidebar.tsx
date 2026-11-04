@@ -10,6 +10,7 @@ import { Highlight } from "./Highlight.tsx";
 import { folderOf } from "./links.ts";
 import { titleRanges } from "./palette.ts";
 import type { FileNode, TreeNode } from "./tree.ts";
+import { HoverLabel } from "../src/kit/index.tsx";
 import { TreeIcon, Twisty } from "./treeIcons.tsx";
 import type { SavedSearch } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
@@ -329,25 +330,27 @@ export function Sidebar(p: SidebarProps) {
       {p.onNewNote ? (
         <button
           type="button"
-          className="kn-side-new"
+          className="kn-side-new kn-expand"
           data-new="note"
           title={`Nova nota ${whereLabel(p.selectedFolder)} (⌘N)`}
           aria-label={`Nova nota ${whereLabel(p.selectedFolder)}`}
           onClick={() => p.onNewNote?.(p.selectedFolder)}
         >
           <TreeIcon name="note-plus" />
+          <HoverLabel>Nota</HoverLabel>
         </button>
       ) : null}
       {p.onNewFolder ? (
         <button
           type="button"
-          className="kn-side-new"
+          className="kn-side-new kn-expand"
           data-new="folder"
           title={`Nova pasta ${whereLabel(p.selectedFolder)}`}
           aria-label={`Nova pasta ${whereLabel(p.selectedFolder)}`}
           onClick={() => p.onNewFolder?.(p.selectedFolder)}
         >
           <TreeIcon name="folder-plus" />
+          <HoverLabel>Pasta</HoverLabel>
         </button>
       ) : null}
       </div>

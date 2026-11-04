@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { api as appApi } from "../src/api.ts";
-import { Button, Empty } from "../src/kit/index.tsx";
+import { Button, Empty, HoverLabel } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
 import { Popover } from "./Popover.tsx";
 import { HoverSidebar } from "./HoverSidebar.tsx";
@@ -823,11 +823,13 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
         }
         end={
           <span className="kn-float-group">
-            <button type="button" title="Nova nota (⌘N)" aria-label="Nova nota" onClick={() => void create("Sem título", true, selectedFolderRef.current)}>
+            <button type="button" className="kn-expand" title="Nova nota (⌘N)" aria-label="Nova nota" onClick={() => void create("Sem título", true, selectedFolderRef.current)}>
               <PenIcon />
+              <HoverLabel>Nova nota</HoverLabel>
             </button>
-            <button type="button" title="Buscar (⌘K)" aria-label="Buscar" onClick={() => openPalette()}>
+            <button type="button" className="kn-expand" title="Buscar (⌘K)" aria-label="Buscar" onClick={() => openPalette()}>
               <SearchIcon />
+              <HoverLabel>Buscar</HoverLabel>
             </button>
           </span>
         }
