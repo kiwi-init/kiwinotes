@@ -53,6 +53,8 @@ describe("trava das janelas (T1378)", () => {
     expect(d.get("script-src")).toEqual(["'self'", "views:", "'wasm-unsafe-eval'"]);
     // Só o socket local da ponte do RPC (#1419): com 'none' o preload lança no `new WebSocket` e a janela não sobe.
     expect(d.get("connect-src")).toEqual(["ws://127.0.0.1:*"]);
+    // Imagem de fora só https, e só depois do clique no cartão (T2984); http nunca.
+    expect(d.get("img-src")).toEqual(["'self'", "views:", "data:", "https:"]);
     expect(d.get("object-src")).toEqual(["'none'"]);
     expect(d.get("base-uri")).toEqual(["'none'"]);
     expect(VIEWS_CSP).not.toContain("'unsafe-eval'");

@@ -88,6 +88,8 @@ export const MISSING_LINK = "kiwi-note-missing:";
 export const TAG_LINK = "kiwi-tag:";
 /** A imagem que é um anexo do vault (`![[foto.png]]` no meio do texto): a janela lê pelo engine (`attachments.read`). */
 export const ATTACHMENT_LINK = "kiwi-attachment:";
+/** O cartão da imagem de fora: o clique nele carrega a imagem na nota (só então o app pede ela à internet). */
+export const LOAD_IMAGE_LINK = "kiwi-load-image:";
 
 export type LinkStatusOf = (target: string) => "ok" | "missing" | "unknown";
 
@@ -196,7 +198,7 @@ export function calloutHead(line: string): { quote: string; from: number; titleA
   return { quote: m[1]!, from: m[1]!.length, titleAt: m[0].length, type, title: line.slice(m[0].length).trim() };
 }
 
-export type LinkAction = { kind: "note"; target: string } | { kind: "tag"; tag: string } | { kind: "url"; url: string };
+export type LinkAction = { kind: "note"; target: string } | { kind: "tag"; tag: string } | { kind: "url"; url: string } | { kind: "loadImage"; url: string };
 
 /** O que fazer com o clique num link desenhado pela lib. */
 export function linkAction(url: string): LinkAction | null {
@@ -212,6 +214,10 @@ export function linkAction(url: string): LinkAction | null {
       const target = decode(url.slice(scheme.length));
       return target ? { kind: "note", target } : null;
     }
+  }
+  if (url.startsWith(LOAD_IMAGE_LINK)) {
+    const image = decode(url.slice(LOAD_IMAGE_LINK.length));
+    return image && /^https:\/\//i.test(image) ? { kind: "loadImage", url: image } : null;
   }
   if (url.startsWith(TAG_LINK)) {
     const tag = decode(url.slice(TAG_LINK.length));

@@ -28,6 +28,7 @@ import {
   fullTree,
   imageSource,
   linkAction,
+  LOAD_IMAGE_LINK,
   MISSING_LINK,
   mermaidUnderCursor,
   NOTE_LINK,
@@ -87,6 +88,7 @@ const STYLE: MarkdownStyle = {
     [`^${MISSING_LINK}`]: { color: "var(--text-3)", underline: false },
     [`^${NOTE_LINK}`]: { color: "var(--accent-text)", underline: false },
     [`^${TAG_LINK}`]: { color: "var(--accent-text)", backgroundColor: "var(--accent-soft)", underline: false },
+    [`^${LOAD_IMAGE_LINK}`]: { color: "var(--text-2)", backgroundColor: "var(--surface-2)", underline: false },
   },
   strong: { color: "var(--text)" },
   em: { color: "var(--text)" },
@@ -137,6 +139,14 @@ const reading = new Set<string>();
 const waiting = new Set<() => void>();
 /** Sobe a cada anexo que chega: um bloco que desenhou antes e só se inscreveu depois não perde a chegada. */
 let arrivals = 0;
+/** As imagens de fora que a pessoa mandou carregar (com um clique no cartão), nesta janela. */
+const remoteAllowed = new Set<string>();
+
+function allowRemote(url: string): void {
+  remoteAllowed.add(url);
+  arrivals++;
+  for (const wake of [...waiting]) wake();
+}
 
 function readImage(source: AttachmentSource | undefined, target: string): AttachmentFile | null | undefined {
   const key = target.toLocaleLowerCase("pt-BR");
@@ -158,8 +168,9 @@ function readImage(source: AttachmentSource | undefined, target: string): Attach
 const text = (content: string): ASTNode => ({ type: "Text", content });
 
 /**
- * A árvore com as imagens prontas para desenhar: o anexo vira o `data:` que o engine leu, e a imagem de fora vira um
- * link para ela (abre no navegador: o app não baixa nada). O que não dá para mostrar fica como o texto dela.
+ * A árvore com as imagens prontas para desenhar: o anexo vira o `data:` que o engine leu. A imagem de fora (https)
+ * vira um cartão, e só carrega depois do clique nele (decisão do jow no #3039); `http:` nunca carrega, só abre fora.
+ * O que não dá para mostrar fica como o texto dela.
  */
 function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNode {
   if (node.type === "Image") {
@@ -167,13 +178,17 @@ function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNod
     const from = imageSource(node.attributes?.url ?? "");
     if (from.kind === "data") return node;
     if (from.kind === "remote") {
+      if (remoteAllowed.has(from.url)) return node;
       let host = from.url;
       try {
         host = new URL(from.url).host;
       } catch {
         // Fica o endereço inteiro.
       }
-      return { type: "Link", attributes: { url: from.url }, children: [text(`🖼 ${alt || host}`)] };
+      const label = `🖼 ${alt || "imagem"} · ${host}`;
+      // https: o clique carrega aqui. http: só abre no navegador (a CSP não deixa carregar sem TLS).
+      if (/^https:/i.test(from.url)) return { type: "Link", attributes: { url: `${LOAD_IMAGE_LINK}${encodeURIComponent(from.url)}` }, children: [text(`${label} · carregar`)] };
+      return { type: "Link", attributes: { url: from.url }, children: [text(label)] };
     }
     if (from.kind === "attachment") {
       const name = from.target.split("/").at(-1)!;
@@ -326,7 +341,8 @@ class RenderedWidget extends WidgetType {
           return;
         }
         const act = linkAction(url);
-        if (act?.kind === "note") this.actions.onOpenLink(act.target);
+        if (act?.kind === "loadImage") allowRemote(act.url);
+        else if (act?.kind === "note") this.actions.onOpenLink(act.target);
         else if (act?.kind === "tag") this.actions.onOpenTag?.(act.tag);
         else if (act?.kind === "url") {
           // Só o que pode abrir fora (http, https, mailto); o resto não faz nada, como no editor.
@@ -490,6 +506,7 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered-raw": { whiteSpace: "pre-wrap" },
   ".cm-rendered a": { cursor: "pointer" },
   ".cm-rendered a[href^='kiwi-tag:']": { borderRadius: "4px", padding: "0 3px" },
+  ".cm-rendered a[href^='kiwi-load-image:']": { borderRadius: "6px", padding: "1px 6px", fontSize: "13px" },
   ".cm-rendered input[type=checkbox]": { cursor: "pointer" },
   ".cm-rendered img": { display: "block", maxWidth: "100%" },
   // Os diagramas (T2984), como no Channels: o desenho rola de lado quando não cabe; os botões ficam discretos.
