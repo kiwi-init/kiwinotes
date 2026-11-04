@@ -68,12 +68,22 @@
   };
   const ease = bezier(.45, 0, .2, 1), pop = bezier(.3, 1.35, .5, 1), implode = bezier(.6, 0, .9, .4);
   const seg = (t, from, dur, f) => f(Math.min(1, Math.max(0, (t - from) / dur)));
-  const GAP = 78, DEPTH = 8, END = 3.35;
+  // As três lâminas abrem como o logo da Kiwi Init (T3898, roteiro.md › "A emenda com o prisma"): em escada na
+  // diagonal para a direita e para cima (14 e 17 unidades por lâmina, no viewBox de 96 do logo, uns 51° da
+  // horizontal), em leque (a borda longa a 17°, 21° e 24° da horizontal, de baixo para cima) e com a borda curta
+  // encurtando (27,7 → 24,9 → 22,2), como páginas abrindo. A lâmina 2 é a de baixo, a 0 a de cima. UNIT converte
+  // as unidades do logo para o palco (medido no ícone do Channels: o degrau é ~17% do comprimento da lâmina; a face aqui tem 520 px).
+  // A lâmina do logo é comprida e fina (a borda curta é ~1/4 da longa); a face aqui é 520×320, então ela afina
+  // (FINA) enquanto a pilha abre. A pilha fica centrada na lâmina do meio.
+  const GAP = 26, DEPTH = 8, END = 3.35, UNIT = 520 / 100, FINA = 0.6;
+  const STEP = { x: 14 * UNIT, y: 17 * UNIT }, ANG = [24, 21, 17], SHORT = [22.2 / 27.7, 24.9 / 27.7, 1];
   const pose = (t, slab, k) => {
     const up = seg(t, 1.55, 0.5, ease), turn = seg(t, 2.0, 0.6, ease);
     const out = seg(t, 2.0, 0.6, pop) * (1 - seg(t, 2.68, 0.28, implode));
+    const degrau = (1 - slab) * out;
     const z = (slab === 0 ? GAP * out : slab === 2 ? -1 - (GAP - 1) * out : 0) - DEPTH * k;
-    return `perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(58 * up).toFixed(3)}deg) rotateZ(${(-34 * turn).toFixed(3)}deg) scale(${(1 - 0.18 * up).toFixed(4)}) translateZ(${z.toFixed(2)}px)`;
+    const sy = 1 + (FINA * SHORT[slab] - 1) * out;
+    return `translate(${(STEP.x * degrau).toFixed(2)}px, ${(-STEP.y * degrau).toFixed(2)}px) perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(58 * up).toFixed(3)}deg) rotateZ(${(-ANG[slab] * turn).toFixed(3)}deg) scale(${(1 - 0.18 * up).toFixed(4)}, ${((1 - 0.18 * up) * sy).toFixed(4)}) translateZ(${z.toFixed(2)}px) translateX(${(-2 * k).toFixed(1)}px)`;
   };
   const scene = document.getElementById("scene");
   const layers = [];
