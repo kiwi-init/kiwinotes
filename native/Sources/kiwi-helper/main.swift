@@ -12,6 +12,8 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --headless        for the agents' CLI (T1739): no hotkey tap, no pill, no mic, no permission asks, dry-run inserts
   --dump-wav <dir>  also save each recording as 16 kHz WAV there (for the STT benchmark; never inside the repo)
   --overlay-snapshot <dir>  render the dictation pill in each state as PNGs there, then exit
+  --ocr <file>…     read the text in images and PDFs with Vision and PDFKit (T2709), one JSON line each, and exit;
+                    no session, no mic, no permission asks (for the app's OCR queue, which runs it at background priority)
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
                     (--dictionary: one term per line; --ctc: also the CTC rescoring, on in the app since
                     T1973; downloads the model the first time and waits for it)
@@ -27,6 +29,7 @@ var useStdio = false
 var headless = ProcessInfo.processInfo.environment["KIWI_HEADLESS"] == "1"
 var dumpDirectory: URL?
 var transcribeFiles: [String] = []
+var ocrFiles: [String] = []
 var dictionaryFile: String?
 var language = TranscriptionLanguage.auto
 var useVAD = false
@@ -60,6 +63,11 @@ while let arg = args.next() {
         }
         print("wrote overlay snapshots to \(dir.path)")
         exit(0)
+    case "--ocr":
+        guard let path = args.next() else { fail("--ocr needs a file") }
+        ocrFiles.append(path)
+    case _ where !arg.hasPrefix("-") && !ocrFiles.isEmpty:
+        ocrFiles.append(arg)
     case "--transcribe":
         guard let path = args.next() else { fail("--transcribe needs a file") }
         transcribeFiles.append(path)
@@ -79,6 +87,10 @@ while let arg = args.next() {
     default:
         fail("unknown option \(arg)\n\(usage)")
     }
+}
+
+if !ocrFiles.isEmpty {
+    exit(OCRFiles.run(ocrFiles))
 }
 
 if !transcribeFiles.isEmpty {

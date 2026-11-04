@@ -1,0 +1,18 @@
+{
+  "window": "hub",
+  "steps": [
+    { "invoke": "notes.create", "args": { "title": "Contas de casa", "content": "Pago em 05/11.\n\n" }, "name": "uma nota" },
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": ".kn-hub-start .kn-crumb-bt", "name": "abre a árvore pelo caminho" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Contas de casa')", "name": "abre a nota" },
+    { "waitFor": ".kn-note-editor .cm-content", "name": "o editor" },
+    { "pasteFile": ".kn-note-editor .cm-content", "file": "scripts/ui-scripts/fixtures/recibo.png", "name": "cola um recibo (imagem com texto)" },
+    { "waitFor": ".kn-note-editor .cm-line:has-text('recibo.png')", "name": "o embed entra" },
+    { "wait": 8000, "name": "o helper lê a imagem em segundo plano (Vision, no Mac)" },
+    { "press": "Meta+k", "name": "a busca" },
+    { "waitFor": ".kn-palette-q" },
+    { "type": "aluguel novembro", "name": "busca um texto que só está na imagem" },
+    { "waitFor": ".kn-palette-it:has-text('Contas de casa') .kn-palette-snippet:has-text('na imagem recibo.png')", "timeout": 8000, "name": "acha a nota, com o trecho da imagem" },
+    { "screenshot": "ocr-busca.png" }
+  ]
+}

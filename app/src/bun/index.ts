@@ -1,6 +1,7 @@
 // Kiwi Notes: processo principal. Abre no hub, a janela principal (T2121, #2100), e vive na barra de menu: com o hub
 // fechado, sai do Dock e segue rodando.
 import path from "node:path";
+import { existsSync } from "node:fs";
 
 import Electrobun, { AgentControl, ApplicationMenu, PATHS, Tray, Updater, Utils } from "electrobun/bun";
 
@@ -10,7 +11,8 @@ import { makeIntro } from "./intro.ts";
 import { repairInstallRegistry, runningBundle } from "./install-registry.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
-import { Session, session, type SessionStatus } from "./session.ts";
+import { helperPath, Session, session, type SessionStatus } from "./session.ts";
+import { helperRunner } from "../notes/ocr.ts";
 import { stores } from "./stores.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
 import { closeWindow, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
@@ -144,6 +146,8 @@ function setMenu(s: SessionStatus) {
 // O sidecar (atalho, mic, STT, overlay, colagem) e o fluxo do ditado (T58).
 const dictation = new Session(PATHS.VIEWS_FOLDER);
 session.set(dictation);
+// O texto dos anexos (T2709): o mesmo helper, no modo `--ocr` (lê e sai), em prioridade de fundo.
+if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.ocr.setRunner(helperRunner(helperPath(PATHS.VIEWS_FOLDER)));
 setMenu(dictation.status());
 dictation.onStatus(setMenu);
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.

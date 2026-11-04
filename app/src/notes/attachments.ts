@@ -161,6 +161,8 @@ export class Attachments {
     private readonly vault: Pick<Vault, "root" | "notesContaining" | "get" | "save">,
     /** A pasta de anexos de agora (das Configurações). */
     private readonly folder: () => Promise<string> | string = () => DEFAULT_ATTACHMENTS_FOLDER,
+    /** Um anexo novo ou de nome novo (T2709: o OCR lê o texto dele em segundo plano). */
+    private readonly onChanged: (path: string) => void = () => {},
   ) {}
 
   /** Grava o anexo com um nome que ainda não existe na pasta de anexos e devolve o embed para a nota. */
@@ -186,6 +188,7 @@ export class Attachments {
         throw e;
       }
       const files = await listAttachments(this.vault.root);
+      this.onChanged(rel);
       return { path: rel, embed: embedFor(rel, files), size: bytes.length };
     }
     throw new VaultError("E_EXISTS", `too many attachments named ${file}`);
@@ -247,6 +250,7 @@ export class Attachments {
         }
       }
     }
+    this.onChanged(to);
     return { path: to, updatedLinks };
   }
 }
