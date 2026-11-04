@@ -1,0 +1,62 @@
+// Bateria de regressão do ditado (T1908), modo texto: o transcript como o STT entrega → o que o app insere.
+// Roda com `bun run test:dictation` (ou `bun run cli dictate --batch test/dictation/casos.jsonl`, com o
+// dicionário e os snippets de config.json já postos). Inventado, sem transcrição real de ninguém.
+// `known`: um problema de verdade, já anotado. O caso roda e aparece no relatório, mas não falha a bateria; quando
+// passar, a bateria avisa para tirar o `known`.
+// ---------------------------------------------------------------- muletas
+{"name": "muleta: hum e ahn somem", "text": "hum, eu acho que, ahn, dá pra entregar amanhã", "expect": {"text": "Eu acho que dá pra entregar amanhã.", "tone": "default"}}
+{"name": "muleta: tipo no meio", "text": "me manda o relatório amanhã tipo de manhã", "expect": {"text": "Me manda o relatório amanhã de manhã."}}
+{"name": "muleta: tipo substantivo fica", "text": "que tipo de arquivo você precisa", "expect": {"text": "Que tipo de arquivo você precisa?"}}
+{"name": "muleta: né no fim some", "text": "a reunião foi boa né", "expect": {"text": "A reunião foi boa."}}
+{"name": "muleta: né? vira pergunta", "text": "você vem amanhã, né?", "expect": {"text": "Você vem amanhã?"}}
+{"name": "muleta: gagueira", "text": "eu eu acho que que dá", "expect": {"text": "Eu acho que dá."}}
+{"name": "muleta en: uh e you know", "text": "uh I think we should, you know, ship it on friday", "expect": {"text": "I think we should ship it on friday."}}
+{"name": "muleta en: like de muleta some", "text": "it was like really fast", "expect": {"text": "It was really fast."}, "known": "o like de muleta não sai (as regras não tratam like)"}
+{"name": "muleta en: like verbo fica", "text": "I like this approach", "expect": {"text": "I like this approach."}}
+// ---------------------------------------------------------------- pontuação e maiúsculas
+{"name": "pontuação: pergunta sem ponto do STT", "text": "quando sai o próximo release", "expect": {"text": "Quando sai o próximo release?"}}
+{"name": "pontuação: maiúscula depois do ponto", "text": "fechou. depois a gente vê", "expect": {"text": "Fechou. Depois a gente vê."}}
+{"name": "pontuação en: i vira I", "text": "yesterday i fixed the build", "expect": {"text": "Yesterday I fixed the build."}}
+{"name": "pontuação: a do STT é respeitada", "text": "Acho que sim. Vamos ver amanhã!", "expect": {"text": "Acho que sim. Vamos ver amanhã!"}}
+// ---------------------------------------------------------------- autocorreção falada
+{"name": "autocorreção: não, quer dizer", "text": "me encontra às três, não, quer dizer, às quatro", "expect": {"text": "Me encontra às quatro."}}
+{"name": "autocorreção: ou melhor", "text": "manda pro João, ou melhor, pra Maria", "expect": {"text": "Manda pra Maria."}}
+{"name": "autocorreção: não espera sem vírgula", "text": "a reunião é na quinta não espera na sexta de manhã", "expect": {"text": "A reunião é na sexta de manhã."}}
+{"name": "autocorreção: negação fica", "text": "isso não quer dizer que o projeto atrasou", "expect": {"text": "Isso não quer dizer que o projeto atrasou."}}
+{"name": "autocorreção en: I mean", "text": "let's meet on monday, I mean, on tuesday", "expect": {"text": "Let's meet on tuesday."}}
+{"name": "autocorreção en: scratch that", "text": "Ship it Friday. Scratch that. Ship it Monday.", "expect": {"text": "Ship it Monday."}}
+// ---------------------------------------------------------------- números e datas (como o STT entrega, em algarismos)
+{"name": "número: versão com ponto", "text": "a versão 2.1 saiu ontem", "expect": {"text": "A versão 2.1 saiu ontem."}}
+{"name": "data: dia e hora", "text": "a reunião é dia 12/11 às 15h", "expect": {"text": "A reunião é dia 12/11 às 15h."}}
+{"name": "número: dinheiro", "text": "custa R$ 1.500,00 por mês", "expect": {"text": "Custa R$ 1.500,00 por mês."}}
+{"name": "data: autocorreção com algarismo", "text": "o prazo é 3 de dezembro, não, quer dizer, 5 de dezembro", "expect": {"text": "O prazo é 5 de dezembro."}, "known": "a correção com algarismo embaralha a data: \"O prazo é 3 de 5 de dezembro.\""}
+{"name": "data en: hora e dia", "text": "the meeting is at 3pm on November 12", "expect": {"text": "The meeting is at 3pm on November 12."}}
+{"name": "número por extenso fica por extenso", "text": "são três arquivos", "expect": {"text": "São três arquivos."}}
+// ---------------------------------------------------------------- dicionário (config.json)
+{"name": "dicionário: grafia certa", "text": "o dicom store do pacs tá sem acesso", "expect": {"text": "O DICOM store do PACS tá sem acesso."}}
+{"name": "dicionário: alias", "text": "roda o cube control get pods", "expect": {"text": "Roda o kubectl get pods."}}
+{"name": "dicionário: GitHub", "text": "vou subir no github", "expect": {"text": "Vou subir no GitHub."}}
+{"name": "dicionário: nome com duas palavras", "text": "abri o kiwi notes", "expect": {"text": "Abri o Kiwi Notes."}}
+{"name": "dicionário: argumento no terminal fica", "text": "kubectl -n pacs get pods", "app": "terminal", "expect": {"text": "kubectl -n pacs get pods", "tone": "literal"}}
+// ---------------------------------------------------------------- snippets (config.json)
+{"name": "snippet: só o gatilho", "text": "meu email", "expect": {"text": "ana@example.com"}}
+{"name": "snippet: no meio da frase", "text": "manda pro meu email", "expect": {"contains": "ana@example.com", "excludes": "meu email"}}
+{"name": "snippet: texto com quebra de linha", "text": "obrigado pelo retorno minha assinatura", "app": "mail", "expect": {"contains": ["Obrigado pelo retorno", "Abraço,\nAna"]}}
+// ---------------------------------------------------------------- tom por app
+{"name": "tom slack: uma frase sem ponto", "text": "ok chego às quatro", "app": "slack", "expect": {"text": "Ok chego às quatro", "tone": "casual"}}
+{"name": "tom slack: duas frases mantêm os pontos", "text": "chego às quatro. me espera", "app": "slack", "expect": {"text": "Chego às quatro. Me espera.", "tone": "casual"}}
+{"name": "tom teams: casual", "text": "beleza, te mando o link já já", "app": "teams", "expect": {"text": "Beleza, te mando o link já já", "tone": "casual"}, "known": "o já já vira já: a regra da gagueira come a repetição de ênfase"}
+{"name": "tom mail: pontuação completa", "text": "oi Ana segue o relatório em anexo", "app": "mail", "expect": {"text": "Oi Ana segue o relatório em anexo.", "tone": "formal"}}
+{"name": "tom outlook: pergunta formal", "text": "quando você pode revisar o contrato", "app": "outlook", "expect": {"text": "Quando você pode revisar o contrato?", "tone": "formal"}}
+{"name": "tom ghostty: comando literal, sem espaço automático", "text": "Git status.", "app": "ghostty", "fieldBefore": "$ ", "expect": {"text": "git status", "tone": "literal", "typed": "git status", "spaced": false}}
+{"name": "tom terminal: muleta antes do comando", "text": "hum git checkout main", "app": "terminal", "expect": {"text": "git checkout main", "tone": "literal"}}
+{"name": "tom terminal: prosa para o Claude Code", "text": "corrige o teste que tá quebrando no ci", "app": "terminal", "expect": {"text": "Corrige o teste que tá quebrando no ci.", "tone": "literal"}}
+{"name": "tom vscode: comando literal", "text": "Python3 script.py.", "app": "vscode", "expect": {"text": "python3 script.py", "tone": "literal"}}
+// ---------------------------------------------------------------- espaço automático (--field-before)
+{"name": "espaço: depois de um ponto", "text": "segue o relatório", "app": "mail", "fieldBefore": "Oi Ana.", "expect": {"typed": " Segue o relatório.", "spaced": true, "plan": "paste"}}
+{"name": "espaço: o campo já termina em espaço", "text": "segue o relatório", "app": "mail", "fieldBefore": "Oi Ana. ", "expect": {"typed": "Segue o relatório.", "spaced": false}}
+{"name": "espaço: campo vazio", "text": "segue o relatório", "app": "mail", "fieldBefore": "", "expect": {"typed": "Segue o relatório.", "spaced": false}}
+{"name": "espaço: depois de abrir parêntese, não", "text": "veja o anexo", "fieldBefore": "Detalhes (", "expect": {"spaced": false}}
+{"name": "espaço: slack depois de exclamação", "text": "até amanhã", "app": "slack", "fieldBefore": "valeu!", "expect": {"typed": " Até amanhã", "spaced": true}}
+// ---------------------------------------------------------------- borda
+{"name": "borda: só muleta não insere nada", "text": "hum", "expect": {"text": ""}}
