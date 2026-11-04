@@ -13,7 +13,8 @@
 //
 // A bateria: um .jsonl, um caso por linha, ou uma pasta de .wav (cada um com um .json do lado, opcional, com os mesmos
 // campos). Um caso é o pedido do `dictate` (`wav` ou `text`, `app`, `note`, `fieldBefore`, `field`) mais `name` e
-// `expect`: `text`, `typed`, `tone`, `plan`, `spaced`, `contains` (um texto ou uma lista). Áudio só sintético (`say`).
+// `expect`: `text`, `typed`, `tone`, `plan`, `spaced`, `contains` e `excludes` (um texto ou uma lista). Áudio só
+// sintético (`say`).
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -48,6 +49,8 @@ export interface Expect {
   plan?: string;
   spaced?: boolean;
   contains?: string | string[];
+  /** O texto não pode ter isto (a muleta que tinha que sair, a palavra corrigida): T1908. */
+  excludes?: string | string[];
 }
 
 export interface BatchCase {
@@ -174,6 +177,9 @@ export function check(report: Report, expect: Expect | undefined): string[] {
   same("spaced", report.insert?.spaced, expect.spaced);
   for (const piece of expect.contains === undefined ? [] : [expect.contains].flat()) {
     if (!report.text.includes(piece)) out.push(`text: expected it to contain ${JSON.stringify(piece)}`);
+  }
+  for (const piece of expect.excludes === undefined ? [] : [expect.excludes].flat()) {
+    if (report.text.includes(piece)) out.push(`text: expected it not to contain ${JSON.stringify(piece)}, got ${JSON.stringify(report.text)}`);
   }
   return out;
 }

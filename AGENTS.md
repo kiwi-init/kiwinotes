@@ -32,6 +32,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 ## Testes
 - Lógica TS: `bun test`. Lógica Swift: `swift test` em `native/`.
 - **Teste pela CLI headless** (`bun run cli`, `app/README.md`): o app inteiro (as capacidades do AppEngine, o helper, o ditado com dryRun) sem nada na tela de ninguém e com os dados num tmp. É o padrão para testar comportamento.
+- **Mudou a limpeza, o tom ou a inserção do ditado?** Rode `bun run test:dictation` em `app/`, a bateria de regressão de `app/test/dictation/`. São casos de texto e casos falados (`say` → STT, sem mic), e ela sai com exit 1 se algum caso falhar. O modo falado usa o STT: pegue `kiwi lock bench` antes. Um caso novo que mostra um problema de verdade entra com `known` e a task do bug.
 - Comportamento do app: rode com `ELECTROBUN_AGENT_CONTROL=1` e dirija pelo MCP do Livewire, **só com horário combinado** com a pessoa do Mac (veja abaixo).
 - A máquina é compartilhada (M1 Pro, 16 GB): não rode benchmarks pesados em paralelo com outro agente. Pegue `kiwi lock bench` antes.
 - **Build novo no Mac de uma pessoa:** nunca deixe dois Kiwi Notes rodando. O agente só fecha o build que **ele mesmo** abriu, pelo caminho da worktree dele (`pkill -f "<sua worktree>/app/build/.*/Kiwi Notes.app/Contents/MacOS"`), e confere com `pgrep -fl "Kiwi Notes|kiwi-helper"`. O app da pessoa quem fecha é ela: todo roteiro de teste começa por "feche o app antigo (menu › Sair do Kiwi Notes)". Desde o T992, um build novo fecha o antigo sozinho; o risco que sobra é um build anterior ao T992.

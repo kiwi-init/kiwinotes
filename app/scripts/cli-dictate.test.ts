@@ -67,6 +67,12 @@ describe("cli dictate (T1740)", () => {
     ]);
   });
 
+  test("excludes: o que não pode sobrar no texto (T1908)", () => {
+    const r = reportFor("Oi, tudo bem?", { insert: { plan: "paste", spaced: false, typed: "Oi, tudo bem?" } });
+    expect(check(r as any, { excludes: ["hum", "tipo"] })).toEqual([]);
+    expect(check(r as any, { excludes: "tudo" })).toEqual(['text: expected it not to contain "tudo", got "Oi, tudo bem?"']);
+  });
+
   test("runBatch e runDictate: o relatório, e o exit code (0 ok, 1 falhou, 2 uso)", async () => {
     const sent: unknown[] = [];
     const send: Send = async (msg) => {

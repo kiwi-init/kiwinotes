@@ -1,0 +1,16 @@
+// Bateria do ditado (T1908), modo wav: de ponta a ponta, do áudio ao texto inserido. Cada caso diz o que o `say`
+// fala (`say`, com a voz de `voice`: Luciana em pt-BR, Samantha em en-US). O `scripts/dictation-fixtures.ts` gera os
+// WAV numa pasta temporária: áudio nunca entra no repo. O STT pontua do jeito dele, então o `expect` confere o que
+// importa (`contains`/`excludes`, tom, espaço) e não a vírgula. `known`: como em casos.jsonl.
+{"name": "falado: hum some", "say": "hum, eu acho que dá pra entregar amanhã", "voice": "Luciana", "expect": {"contains": ["acho que dá", "entregar amanhã"], "excludes": ["hum", "Hum"]}}
+{"name": "falado: tipo some", "say": "me manda o relatório amanhã, tipo, de manhã", "voice": "Luciana", "expect": {"contains": "relatório amanhã", "excludes": ["tipo", "Tipo"]}}
+{"name": "falado: autocorreção", "say": "me encontra às três, não, quer dizer, às quatro", "voice": "Luciana", "expect": {"contains": "quatro", "excludes": ["três", "quer dizer"]}}
+{"name": "falado: pergunta", "say": "quando sai o próximo release", "voice": "Luciana", "expect": {"contains": "?"}}
+{"name": "falado en: uh some", "say": "uh, I think we should ship it on Friday", "voice": "Samantha", "expect": {"contains": "ship it on Friday", "excludes": ["uh", "Uh"]}}
+{"name": "falado en: scratch that", "say": "Ship it Friday. Scratch that. Ship it Monday.", "voice": "Samantha", "expect": {"contains": "Monday", "excludes": ["Friday", "Scratch"]}}
+{"name": "falado: dicionário", "say": "o dicom do pacs caiu de novo", "voice": "Luciana", "expect": {"contains": ["DICOM", "PACS"]}, "known": "o STT ouve \"de condu Pax\" e a correção fonética do dicionário não chega a DICOM PACS (o boosting do CTC está desligado no app)"}
+{"name": "falado: snippet", "say": "manda pro meu email", "voice": "Luciana", "expect": {"contains": "ana@example.com"}}
+{"name": "falado: slack casual", "say": "ok, chego às quatro", "voice": "Luciana", "app": "slack", "expect": {"tone": "casual", "excludes": "."}}
+{"name": "falado: mail formal com espaço", "say": "segue o relatório em anexo", "voice": "Luciana", "app": "mail", "fieldBefore": "Oi Ana.", "expect": {"tone": "formal", "spaced": true, "contains": ["Segue o relatório", "."]}}
+{"name": "falado: ghostty literal", "say": "git status", "voice": "Samantha", "app": "ghostty", "fieldBefore": "$ ", "expect": {"text": "git status", "tone": "literal", "spaced": false}}
+{"name": "falado: teams depois de um Oi.", "say": "tudo certo por aqui", "voice": "Luciana", "app": "teams", "fieldBefore": "Oi.", "expect": {"tone": "casual", "spaced": true}}

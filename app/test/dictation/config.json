@@ -1,0 +1,13 @@
+{
+  "dictionary": [
+    { "term": "DICOM", "aliases": [] },
+    { "term": "PACS", "aliases": [] },
+    { "term": "GitHub", "aliases": [] },
+    { "term": "Kiwi Notes", "aliases": [] },
+    { "term": "kubectl", "aliases": ["cube control", "kube control"] }
+  ],
+  "snippets": [
+    { "trigger": "meu email", "text": "ana@example.com" },
+    { "trigger": "minha assinatura", "text": "Abraço,\nAna" }
+  ]
+}
