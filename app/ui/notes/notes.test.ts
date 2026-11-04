@@ -209,6 +209,34 @@ describe("as capacidades pelo engine", () => {
     ]);
   });
 
+  test("pastas e fixadas só num engine com o contrato 1.7.0 (T2468), com os nomes de #2493", async () => {
+    expect(engineNotes(async () => null, () => () => {}).folders).toBeUndefined();
+    expect(engineNotes(async () => null, () => () => {}, (c) => c === "notes.list").pins).toBeUndefined();
+    const calls: [string, unknown][] = [];
+    const api = engineNotes(
+      async (cap, args) => {
+        calls.push([cap, args]);
+        return cap.startsWith("settings.") ? { pinned: ["A.md"] } : true;
+      },
+      () => () => {},
+      () => true,
+    );
+    await api.folders!.create("Projetos/2026");
+    await api.folders!.move("Projetos", "");
+    await api.folders!.moveNote("A.md", "Projetos");
+    await api.folders!.restore("A.md");
+    expect(await api.pins!.list()).toEqual(["A.md"]);
+    expect(await api.pins!.set(["A.md"])).toEqual(["A.md"]);
+    expect(calls).toEqual([
+      ["folders.create", { path: "Projetos/2026" }],
+      ["folders.move", { path: "Projetos", parent: "" }],
+      ["notes.move", { path: "A.md", folder: "Projetos" }],
+      ["notes.restore", { path: "A.md" }],
+      ["settings.get", {}],
+      ["settings.set", { pinned: ["A.md"] }],
+    ]);
+  });
+
   test("o evento notes.changed chega com os paths", () => {
     let listener: ((p: unknown) => void) | undefined;
     const api = engineNotes(async () => null, (name, fn) => {

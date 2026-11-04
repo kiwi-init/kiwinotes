@@ -345,3 +345,207 @@ body {
   font-size: 13px;
   color: var(--text-3);
 }
+
+/* ---------------------------------------------------------- o básico (T2469): busca, contadores, renomear, arrastar */
+
+.kn-side-search {
+  display: block;
+  width: 100%;
+  margin: 0 0 18px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  caret-color: var(--accent);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.kn-side-search::placeholder {
+  color: var(--text-3);
+}
+
+.kn-side-search::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.kn-side-gap {
+  height: 14px;
+}
+
+.kn-side-item[data-kind="folder"] {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.kn-side-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kn-side-count {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* a pasta escolhida (a do ⌘N): peso de texto, como a nota aberta */
+.kn-side-item[data-selected] {
+  color: var(--text);
+}
+
+.kn-side-item[data-drop],
+.kn-side[data-drop] > .kn-side-head:last-of-type {
+  color: var(--accent-text);
+}
+
+.kn-side-item[data-drop] {
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+
+.kn-side-rename {
+  display: block;
+  width: calc(100% - 4px);
+  margin: 1px 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font: inherit;
+  color: var(--text);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.kn-side-empty {
+  padding: 5px 0;
+  color: var(--text-3);
+}
+
+/* ---------------------------------------------------------- o menu de botão direito */
+
+.kn-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 200px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  font-size: 13px;
+  outline: none;
+  animation: pop-in var(--fast) var(--pop-ease) both;
+}
+
+.kn-menu-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.kn-menu-item[data-active] {
+  background: var(--surface-hover);
+}
+
+.kn-menu-item[data-danger] {
+  color: var(--danger);
+}
+
+.kn-menu-item[aria-disabled] {
+  color: var(--text-3);
+}
+
+.kn-menu-item[aria-disabled][data-active] {
+  background: none;
+}
+
+.kn-menu-check {
+  flex: none;
+  width: 14px;
+  font-size: 11px;
+  color: var(--accent-text);
+}
+
+.kn-menu-label {
+  flex: 1;
+}
+
+.kn-menu-hint {
+  margin-left: 18px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* sem linha: o grupo se separa pelo espaço */
+.kn-menu-sep {
+  height: 7px;
+}
+
+.kn-menu-title {
+  padding: 4px 10px 3px 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ---------------------------------------------------------- o aviso de baixo, com Desfazer */
+
+.kn-toast {
+  position: fixed;
+  z-index: 15;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100% - 48px);
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  font-size: 13px;
+  color: var(--text);
+  animation: pop-in var(--fast) var(--pop-ease) both;
+}
+
+.kn-toast > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kn-toast:not(:has(button)) {
+  padding-right: 16px;
+}
+
+.kn-menu[data-checks] .kn-menu-item {
+  padding-left: 6px;
+}
+
+.kn-menu[data-checks] .kn-menu-title {
+  padding-left: 26px;
+}
+
+/* o item do botão direito fica marcado enquanto o menu está aberto, como no Finder */
+.kn-side-item[data-menu] {
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}

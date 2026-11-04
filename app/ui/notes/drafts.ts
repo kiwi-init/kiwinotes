@@ -98,7 +98,7 @@ export class Drafts {
 }
 
 /** O `notes.delete` que também apaga o rascunho da nota: o texto não fica num 2º lugar depois de ir para a Lixeira (#1525). */
-export function forgetDraftOnDelete<A extends { delete(path: string): Promise<true> }>(api: A, drafts: Drafts): A {
+export function forgetDraftOnDelete<A extends { delete(path: string): Promise<unknown> }>(api: A, drafts: Drafts): A {
   return Object.assign(Object.create(api) as A, {
     delete: async (path: string) => {
       const r = await api.delete(path);

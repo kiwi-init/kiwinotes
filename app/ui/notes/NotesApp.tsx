@@ -7,22 +7,46 @@ import "./notes.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
+import { api as appApi } from "../src/api.ts";
 import { Button, Empty } from "../src/kit/index.tsx";
+import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
+import { wordCount } from "./editor/text.ts";
 import { type Draft, Drafts, forgetDraftOnDelete } from "./drafts.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
-import { linkTextFor, noteName, plainContext } from "./links.ts";
+import { FolderPicker } from "./FolderPicker.tsx";
+import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
 import { focusEditor, NoteEditor } from "./NoteEditor.tsx";
 import { Palette } from "./Palette.tsx";
-import { Sidebar } from "./Sidebar.tsx";
-import { ancestors, buildTree, editedLabel } from "./tree.ts";
+import { type SideTarget, Sidebar } from "./Sidebar.tsx";
+import { ancestors, buildTree, editedLabel, filterTree, recentNotes, type SortBy } from "./tree.ts";
+import { type Toast, UndoToast } from "./UndoToast.tsx";
 import type { Backlink, Note, NotesApi, SaveResult, VaultListing } from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
 /** Onde entram as notas que não têm lugar ainda: a nota rápida do A3 (#1509) e o rascunho órfão recuperado. */
 const INBOX = "Caixa de entrada";
+
+/** A ordem da árvore fica no navegador da janela (uma conveniência de quem vê, T2469). */
+const SORT_KEY = "kiwi.notes.sort";
+const loadSort = (): SortBy => {
+  try {
+    const v = localStorage.getItem(SORT_KEY);
+    return v === "edited" || v === "created" ? v : "name";
+  } catch {
+    return "name";
+  }
+};
+
+/** Um nome que ainda não existe entre `taken`: "Nova pasta", "Nova pasta 2"… */
+export function freeName(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
+}
+
+const join = (folder: string, name: string) => (folder ? `${folder}/${name}` : name);
 
 /** Quanto esperar depois da última tecla para gravar. */
 const SAVE_AFTER_MS = 500;
@@ -51,6 +75,16 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [saveFailed, setSaveFailed] = useState(false);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [palette, setPalette] = useState(false);
+  // O básico de app de notas (T2469).
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>(loadSort);
+  const [selectedFolder, setSelectedFolder] = useState("");
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; target: SideTarget } | null>(null);
+  const [moving, setMoving] = useState<SideTarget | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [pinned, setPinned] = useState<string[]>([]);
+  const [words, setWords] = useState(0);
   const entered = useEnterAnimation();
 
   // O que ainda não foi gravado: o corpo da nota aberta, o frontmatter que volta com ele e a versão que o disco tem.
@@ -95,6 +129,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       setNote(n);
       setTitle(n.title);
       setBody(split.body);
+      setWords(wordCount(split.body));
+      // A pasta da nota aberta é a do próximo ⌘N.
+      setSelectedFolder(n.folder);
       setDocKey(`${n.path}@${n.version}`);
       setConflict(null);
       setSaveFailed(false);
@@ -192,9 +229,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   );
 
   const create = useCallback(
-    async (wanted: string, focusTitle = false) => {
+    async (wanted: string, focusTitle = false, folder?: string) => {
       if (!(await leave())) return;
-      const n = await api.create(wanted).catch(() => null);
+      const n = await api.create(wanted, folder || undefined).catch(() => null);
       setPalette(false);
       if (!n) return;
       await refresh();
@@ -264,13 +301,16 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     if (!active) setPalette(false);
   }, [active]);
 
-  // ⌘K busca, ⌘N cria. Ao esconder a janela, grava o que estiver pendente.
+  const selectedFolderRef = useRef(selectedFolder);
+  selectedFolderRef.current = selectedFolder;
+
+  // ⌘K busca, ⌘N cria (na pasta escolhida). Ao esconder a janela, grava o que estiver pendente.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current || !e.metaKey || e.altKey || e.ctrlKey) return;
       // Síncrono: a busca já está com o foco antes da próxima tecla (quem digita rápido não escreve na nota).
       if (e.key === "k") flushSync(() => setPalette((p) => !p));
-      else if (e.key === "n") void create("Sem título", true);
+      else if (e.key === "n") void create("Sem título", true, selectedFolderRef.current);
       else return;
       e.preventDefault();
     };
@@ -285,6 +325,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
 
   const onChange = (doc: string) => {
     pending.current = doc;
+    setWords(wordCount(doc));
     // O rascunho anda junto com a edição, para sobreviver a um fechamento que o save não alcançou.
     if (current.current && !undecided.current) {
       drafts.set({ path: current.current, body: doc, frontmatter: frontmatter.current, baseVersion: version.current });
@@ -357,13 +398,197 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     void save();
   };
 
+  // ---------------------------------------------------------------- o básico de app de notas (T2469)
+
+  const folders = api.folders;
+  const pins = api.pins;
+  useEffect(() => {
+    pins?.list().then(setPinned, () => {});
+  }, [pins]);
+
+  const say = (text: string, undo?: () => void) => setToast({ text, undo });
+  const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${/E_EXISTS/.test(String(e)) ? ": já existe um com esse nome" : ""}.`);
+
+  /** Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. */
+  const after = async (moved?: { from: string; to: string }) => {
+    await refresh();
+    links.clear();
+    // O engine corrige as fixadas (renomear, mover, apagar); a janela só relê.
+    pins?.list().then(setPinned, () => {});
+    if (!moved || !current.current) return;
+    const cur = current.current;
+    const to = cur === moved.from ? moved.to : cur.startsWith(`${moved.from}/`) ? moved.to + cur.slice(moved.from.length) : null;
+    if (to) {
+      current.current = null; // a nota velha não existe mais; o leave não tenta gravar nela
+      const n = await api.get(to).catch(() => null);
+      if (n) show(n);
+    }
+  };
+
+  const newFolder = async (parent: string) => {
+    if (!folders) return;
+    const taken = new Set((listing?.folders ?? []).filter((f) => folderOf(f) === parent).map((f) => f.slice(f.lastIndexOf("/") + 1)));
+    const r = await folders.create(join(parent, freeName("Nova pasta", taken))).catch(failed_("criar a pasta"));
+    if (!r) return;
+    await after();
+    setOpenFolders((o) => new Set([...o, ...ancestors(`${r.path}/x`)]));
+    setSelectedFolder(r.path);
+    setRenaming(`f:${r.path}`);
+  };
+
+  const renameItem = async (target: SideTarget, name: string | null) => {
+    setRenaming(null);
+    if (!name || target.kind === "empty") return;
+    const clean = name.replace(/[\\/:]/g, "-");
+    if (target.kind === "note") {
+      if (current.current === target.path && !(await leave())) return;
+      const r = await api.rename(target.path, `${join(folderOf(target.path), clean)}.md`).catch(failed_("renomear a nota"));
+      if (r) await after({ from: target.path, to: r.meta.path });
+    } else if (folders) {
+      if (current.current?.startsWith(`${target.path}/`) && !(await leave())) return;
+      const r = await folders.rename(target.path, join(folderOf(target.path), clean)).catch(failed_("renomear a pasta"));
+      if (r) await after({ from: target.path, to: r.path });
+    }
+  };
+
+  const moveItem = async (target: SideTarget, folder: string) => {
+    setMoving(null);
+    if (!folders || target.kind === "empty") return;
+    if (target.kind === "note") {
+      if (folderOf(target.path) === folder) return;
+      if (current.current === target.path && !(await leave())) return;
+      const r = await folders.moveNote(target.path, folder).catch(failed_("mover a nota"));
+      if (r) await after({ from: target.path, to: r.meta.path });
+    } else {
+      if (folder === target.path || folder.startsWith(`${target.path}/`) || folderOf(target.path) === folder) return;
+      if (current.current?.startsWith(`${target.path}/`) && !(await leave())) return;
+      const r = await folders.move(target.path, folder).catch(failed_("mover a pasta"));
+      if (r) await after({ from: target.path, to: r.path });
+    }
+  };
+
+  const duplicate = async (path: string) => {
+    const n = await folders?.duplicateNote(path).catch(failed_("duplicar a nota"));
+    if (!n) return;
+    await after();
+    await open(n.path);
+  };
+
+  /** Apagar vai para a Lixeira do macOS, com "Desfazer" no aviso de baixo. */
+  const remove = async (target: SideTarget) => {
+    if (target.kind === "empty") return;
+    const isOpen = current.current === target.path || (target.kind === "folder" && !!current.current?.startsWith(`${target.path}/`));
+    if (isOpen) {
+      // O que estava sendo editado grava antes; se não der, não apaga.
+      if (!(await leave())) return;
+      current.current = null;
+      setNote(null);
+    }
+    const name = target.path.slice(target.path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    // O engine tira das fixadas o que foi apagado; o Desfazer põe de volta.
+    const wasPinned = pinned.filter((p) => p === target.path || (target.kind === "folder" && p.startsWith(`${target.path}/`)));
+    const r =
+      target.kind === "note"
+        ? await api.delete(target.path).catch(failed_("apagar a nota"))
+        : await folders?.delete(target.path).catch(failed_("apagar a pasta"));
+    if (!r) return;
+    await after();
+    // O engine guarda o apagado por 10 min antes da Lixeira (#2493); o aviso dura 8 s, então o Desfazer sempre chega a tempo.
+    say(
+      `“${name}” foi para a Lixeira.`,
+      folders
+        ? () =>
+            void folders.restore(target.path).then(
+              async (back) => {
+                if (wasPinned.length && pins) {
+                  const now = await pins.list().catch(() => []);
+                  await pins.set([...new Set([...now, ...wasPinned])]).then(setPinned, () => {});
+                }
+                await after();
+                if (target.kind === "note") await open(back.path);
+              },
+              failed_("desfazer"),
+            )
+        : undefined,
+    );
+  };
+
+  const togglePin = async (path: string) => {
+    if (!pins) return;
+    const next = pinned.includes(path) ? pinned.filter((p) => p !== path) : [...pinned, path];
+    setPinned(await pins.set(next).catch(() => pinned));
+  };
+
+  const copyLink = (path: string) => {
+    const paths = (listing?.notes ?? []).map((n) => n.path);
+    void appApi.copy(`[[${linkTextFor(path, paths)}]]`).then(
+      () => say("Link copiado."),
+      () => say("Não deu para copiar o link."),
+    );
+  };
+
+  const sort = (by: SortBy) => {
+    setSortBy(by);
+    try {
+      localStorage.setItem(SORT_KEY, by);
+    } catch {}
+  };
+
+  /** O menu de botão direito, para uma nota, uma pasta ou a área vazia. */
+  const menuFor = (t: SideTarget): MenuItem[] => {
+    const sortItems: MenuItem[] = [
+      { kind: "title", label: "Ordenar por" },
+      { label: "Nome", checked: sortBy === "name", onSelect: () => sort("name") },
+      { label: "Edição", checked: sortBy === "edited", onSelect: () => sort("edited") },
+      { label: "Criação", checked: sortBy === "created", onSelect: () => sort("created") },
+    ];
+    if (t.kind === "empty") {
+      return [
+        { label: "Nova nota", hint: "⌘N", onSelect: () => void create("Sem título", true, "") },
+        ...(folders ? [{ label: "Nova pasta", onSelect: () => void newFolder("") }] : []),
+        { kind: "separator" },
+        ...sortItems,
+      ];
+    }
+    if (t.kind === "folder") {
+      return [
+        { label: "Nova nota aqui", onSelect: () => void create("Sem título", true, t.path) },
+        { label: "Nova pasta aqui", onSelect: () => void newFolder(t.path), disabled: !folders },
+        { kind: "separator" },
+        { label: "Renomear", onSelect: () => setRenaming(`f:${t.path}`), disabled: !folders },
+        { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders },
+        { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
+        { kind: "separator" },
+        { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !folders },
+      ];
+    }
+    const isPinned = pinned.includes(t.path);
+    return [
+      { label: "Abrir", onSelect: () => void open(t.path) },
+      { label: isPinned ? "Desafixar" : "Fixar", onSelect: () => void togglePin(t.path), disabled: !pins },
+      { kind: "separator" },
+      { label: "Renomear", onSelect: () => setRenaming(`n:${t.path}`) },
+      { label: "Duplicar", onSelect: () => void duplicate(t.path), disabled: !folders },
+      { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders },
+      { label: "Copiar link [[…]]", onSelect: () => copyLink(t.path) },
+      { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
+      { kind: "separator" },
+      { label: "Apagar", danger: true, onSelect: () => void remove(t) },
+    ];
+  };
+
   const linkTargets = (): LinkTarget[] => {
     const notes = listing?.notes ?? [];
     const paths = notes.map((n) => n.path);
     return notes.filter((n) => n.path !== note?.path).map((n) => ({ title: n.title, folder: n.folder, link: linkTextFor(n.path, paths) }));
   };
 
-  const tree = useMemo(() => (listing ? buildTree(listing) : []), [listing]);
+  const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy]);
+  const found = useMemo(() => filterTree(fullTree, query), [fullTree, query]);
+  const openNow = useMemo(() => (query.trim() ? new Set([...openFolders, ...found.open]) : openFolders), [openFolders, found, query]);
+  const byPath = useMemo(() => new Map((listing?.notes ?? []).map((n) => [n.path, n])), [listing]);
+  const pinnedNotes = pinned.map((p) => byPath.get(p)).filter((n) => n !== undefined);
+  const recent = useMemo(() => recentNotes(listing?.notes ?? [], 5), [listing]);
 
   if (failed && !listing) {
     return (
@@ -379,9 +604,20 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     <div className="kn-notes" data-entered={entered}>
       <div className="kn-drag electrobun-webkit-app-region-drag" />
       <Sidebar
-        tree={tree}
-        open={openFolders}
+        tree={found.tree}
+        open={openNow}
         current={note?.path ?? null}
+        selectedFolder={selectedFolder}
+        query={query}
+        onQuery={setQuery}
+        pinned={pinnedNotes}
+        recent={recent}
+        renaming={renaming}
+        menuOn={menu && menu.target.kind !== "empty" ? `${menu.target.kind === "note" ? "n" : "f"}:${menu.target.path}` : null}
+        onRename={(t, name) => void renameItem(t, name)}
+        onSelectFolder={setSelectedFolder}
+        onMenu={(at, target) => setMenu({ ...at, target })}
+        onDrop={folders ? (what, folder) => void moveItem(what, folder) : undefined}
         onToggle={(f) =>
           setOpenFolders((s) => {
             const next = new Set(s);
@@ -432,7 +668,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
                 }
               }}
             />
-            <div className="kn-meta">{[...note.tags.map((t) => `#${t}`), editedLabel(note)].join(" · ")}</div>
+            <div className="kn-meta">
+              {[...note.tags.map((t) => `#${t}`), editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`].join(" · ")}
+            </div>
             {conflict ? (
               <div className="kn-conflict kn-save-alert" role="alert">
                 Esta nota mudou fora do Kiwi Notes enquanto você editava.
@@ -502,6 +740,18 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       {palette ? (
         <Palette api={api} notes={listing?.notes ?? []} onOpen={(p) => void open(p)} onCreate={(t) => void create(t)} onClose={() => setPalette(false)} />
       ) : null}
+      {menu ? <ContextMenu x={menu.x} y={menu.y} items={menuFor(menu.target)} onClose={() => setMenu(null)} /> : null}
+      {moving && moving.kind !== "empty" ? (
+        <FolderPicker
+          title={`Mover “${moving.path.slice(moving.path.lastIndexOf("/") + 1).replace(/\.md$/, "")}” para…`}
+          folders={["", ...(listing?.folders ?? [])].filter(
+            (f) => f !== folderOf(moving.path) && (moving.kind === "note" || (f !== moving.path && !f.startsWith(`${moving.path}/`))),
+          )}
+          onPick={(f) => void moveItem(moving, f)}
+          onClose={() => setMoving(null)}
+        />
+      ) : null}
+      {toast ? <UndoToast toast={toast} onDone={() => setToast(null)} /> : null}
     </div>
   );
 }
