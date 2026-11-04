@@ -10,7 +10,7 @@ import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
-import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem } from "../notes/vault.ts";
+import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
 
@@ -50,7 +50,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   que o helper vê) e o evento `audio.inputs.changed`. Só acréscimo.
 // 1.19.0 (T3344): o `audio.inputs` diz também por qual mic o ditado gravaria agora (`using`: a tampa fechada, um salvo
 //   desconectado). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.19.0";
+// 1.20.0 (T3370): a árvore com todos os arquivos (`files` no `notes.list`), o `files.open` (no app padrão do Mac, só
+//   com o clique da pessoa), o evento `files.changed` e o `showExtensions` nas settings. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.20.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -106,8 +108,11 @@ export interface UiCapabilities {
   // ---------------------------------------------------------------- notas (1.1.0, T1316)
   // `path` é sempre relativo ao vault, POSIX, terminando em `.md`. Fora do vault (`..`, absoluto, link simbólico,
   // pasta com ponto) dá E_OUTSIDE_VAULT; nota que não existe, E_NOT_FOUND; destino que já existe, E_EXISTS.
-  /** `tree` (1.7.0) é a mesma lista em árvore, com as pastas vazias. */
-  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode } };
+  /**
+   * `tree` (1.7.0) é a mesma lista em árvore, com as pastas vazias. `files` (1.19.0) são os arquivos que não são nota
+   * (anexo, PDF, `.canvas`), fora os ocultos.
+   */
+  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode; files?: VaultFile[] } };
   "notes.get": { args: { path: string }; result: Note };
   /** Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. */
   "notes.save": { args: { path: string; content: string; baseVersion: string }; result: SaveResult };
@@ -132,6 +137,11 @@ export interface UiCapabilities {
   "notes.restore": { args: { path: string }; result: { path: string } };
   /** "Mostrar no Finder" (nota ou pasta). No headless e com KIWI_DEBUG=1, só registra. */
   "notes.reveal": { args: { path: string }; result: true };
+  /**
+   * Abre um arquivo do vault que não é nota no app padrão do Mac (1.19.0, T3370), só pelo clique da pessoa. Nota (`.md`)
+   * dá E_BAD_ARGS: abre no Kiwi. No headless e com KIWI_DEBUG=1, só registra.
+   */
+  "files.open": { args: { path: string }; result: true };
 
   // ---------------------------------------------------------------- histórico de versões (1.14.0, T2680)
   // Fora do vault, em `<dados do app>/history`: uma versão por save que muda o texto, no máximo uma a cada 2 min por
@@ -257,6 +267,7 @@ export const UI_CAPABILITIES = [
   "notes.duplicate",
   "notes.restore",
   "notes.reveal",
+  "files.open",
   "folders.create",
   "folders.rename",
   "folders.move",
@@ -280,6 +291,8 @@ export interface UiEvents {
   "history.added": HistoryEntry;
   /** Notas criadas, mudadas, apagadas ou renomeadas, inclusive fora do app (o watcher do vault). */
   "notes.changed": { paths: string[] };
+  /** Arquivos que não são nota apareceram, mudaram ou sumiram, inclusive fora do app (1.19.0): a árvore lista de novo. */
+  "files.changed": { paths: string[] };
   /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */
   "hub.navigate": { section: HubSection };
   /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */

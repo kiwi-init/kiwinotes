@@ -99,7 +99,10 @@ body {
 }
 
 .kn-side-item {
-  display: block;
+  /* T3370: cada item é uma linha com a seta (nas da árvore), o ícone, o nome, a extensão e o número à direita */
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   padding: 5px 0;
   border: 0;
@@ -437,11 +440,43 @@ body {
   height: 14px;
 }
 
-.kn-side-item[data-kind="folder"],
-.kn-side-item[data-kind="tag"] {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+/* ---- T3370: os ícones, a seta das pastas e a extensão ---- */
+.kn-side-icon,
+.kn-side-twisty {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--text-3);
+}
+.kn-side-twisty {
+  width: 12px;
+  height: 12px;
+  margin-right: -2px;
+  stroke-width: 1.6;
+  transition: transform 0.12s ease;
+}
+.kn-side-twisty[data-open] {
+  transform: rotate(90deg);
+}
+.kn-side-item:hover .kn-side-icon,
+.kn-side-item[aria-current] .kn-side-icon,
+.kn-side-item[data-selected] .kn-side-icon {
+  color: var(--text-2);
+}
+/* a pasta tem o ícone um pouco mais forte que o resto: é o que organiza a árvore */
+.kn-side-item[data-kind="folder"] > .kn-side-icon {
+  color: var(--text-2);
+}
+.kn-side-item[data-drop] .kn-side-icon {
+  color: inherit;
+}
+.kn-side-ext {
+  flex: none;
+  margin-left: -6px;
+  color: var(--text-3);
 }
 
 .kn-side-name {
@@ -612,6 +647,9 @@ body {
 }
 
 /* ---- T2593: a nota do dia, a Lixeira e o "Mencionada sem link" ---- */
+.kn-side-daily {
+  margin-bottom: 8px;
+}
 .kn-side-daily .kn-side-count,
 .kn-side-trash .kn-side-count {
   font-family: var(--mono);

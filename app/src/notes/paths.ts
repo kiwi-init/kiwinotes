@@ -42,6 +42,14 @@ export function notePath(input: unknown): string {
   return parts.join("/");
 }
 
+/** Um arquivo do vault que não é nota (T3370): relativo, com nome, e sem ser `.md`. */
+export function filePath(input: unknown): string {
+  const parts = segments(input, "path");
+  if (!parts.length) throw new VaultError("E_BAD_ARGS", "path must name a file");
+  if (/\.md$/i.test(parts.at(-1)!)) throw new VaultError("E_BAD_ARGS", "path names a note: open it in Kiwi");
+  return parts.join("/");
+}
+
 /** Um caminho de pasta: relativo, ou "" para a raiz. */
 export function folderPath(input: unknown): string {
   return segments(input ?? "", "folder").join("/");

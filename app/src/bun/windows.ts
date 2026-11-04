@@ -84,6 +84,12 @@ const capabilities = uiCapabilities({
     if (process.env.KIWI_DEBUG === "1") return void console.log(`[notes] reveal (dry run): ${abs}`);
     Bun.spawn(["/usr/bin/open", "-R", abs], { stdio: ["ignore", "ignore", "ignore"] });
   },
+  // Um arquivo do cofre que não é nota (T3370), no app padrão; o que rodaria algo, só no Finder. Com KIWI_DEBUG=1, só
+  // registra, como o reveal.
+  openFile: (abs, mode) => {
+    if (process.env.KIWI_DEBUG === "1") return void console.log(`[notes] open file (dry run, ${mode}): ${abs}`);
+    Bun.spawn(["/usr/bin/open", ...(mode === "finder" ? ["-R"] : []), abs], { stdio: ["ignore", "ignore", "ignore"] });
+  },
   // A Lixeira do app (T2593): o Lixo do macOS no Finder. Só abrir a pasta; nada sai de lá (o TCC, #2493).
   revealTrash: () => {
     if (process.env.KIWI_DEBUG === "1") return void console.log("[notes] reveal trash (dry run)");
@@ -119,6 +125,10 @@ const capabilities = uiCapabilities({
 const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();
 stores.notes.onChanged((paths) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "notes.changed", payload: { paths } });
+});
+// Os outros arquivos do cofre (T3370): a árvore mostra todos.
+stores.notes.onOtherFiles((paths) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "files.changed", payload: { paths } });
 });
 
 const preload = enginePreload(UI_CAPABILITIES, appEnginePageScript);

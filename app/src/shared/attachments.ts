@@ -22,3 +22,32 @@ export const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
 export const extOf = (name: string): string => (/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? "").toLowerCase();
 
 export const isAttachmentName = (name: string): boolean => Boolean(ATTACHMENT_TYPES[extOf(name)]);
+
+/**
+ * O que a árvore (T3370) abre no app padrão do Mac: só tipos de documento, que o `open` mostra e não executa (imagem,
+ * PDF, áudio, vídeo, o `.canvas` do Obsidian, texto e documentos de escritório). Todo o resto vai só para o Finder:
+ * um script, um instalador, um `.webloc`, um `.ics` que importa coisas, um tipo que ninguém lembrou. Lista do que abre,
+ * e não do que é perigoso, para que um tipo esquecido caia no lado seguro (revisão #3458).
+ */
+export const OPENS_IN_APP = new Set([
+  // imagem (o SVG fica de fora: abre no navegador, com script)
+  "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "avif", "bmp", "tif", "tiff",
+  // PDF e o canvas do Obsidian (JSON)
+  "pdf", "canvas",
+  // áudio e vídeo
+  "mp3", "m4a", "wav", "aac", "aiff", "aif", "flac", "caf", "mp4", "mov", "m4v",
+  // texto e dados simples
+  "txt", "csv", "tsv", "json", "log", "rtf",
+  // documentos de escritório (Pages, Numbers, Keynote, Office, LibreOffice)
+  "pages", "numbers", "key", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
+]);
+
+/** Com o bit de execução, o `open` roda o arquivo no Terminal, qualquer que seja a extensão. */
+export const isExecutable = (mode: number): boolean => (mode & 0o111) !== 0;
+
+/**
+ * O `open` de um arquivo do cofre (T3370): no app padrão só um tipo da `OPENS_IN_APP` sem o bit de execução; o resto
+ * só aparece no Finder. Um clique na árvore nunca roda nada.
+ */
+export const openMode = (name: string, mode = 0): "app" | "finder" =>
+  OPENS_IN_APP.has(extOf(name)) && !isExecutable(mode) ? "app" : "finder";

@@ -7,7 +7,7 @@ import "../src/api.ts"; // o tipo do `window.engine`
 import { MockVault } from "./mock.ts";
 import type { AttachmentFile, AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
-import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat } from "./types.ts";
+import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat, TreePrefs } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
 
@@ -74,7 +74,23 @@ export function engineNotes(
         restore: (path, id) => call("notes.restoreVersion", { path, id }),
       }
     : undefined;
+  // Os outros arquivos do cofre e as preferências da árvore (1.19.0, T3370).
+  const files: NotesApi["files"] = has("files.open")
+    ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", () => fn()) }
+    : undefined;
+  const treePrefs = (s: { showExtensions?: boolean; dailyFolder?: string }): TreePrefs => ({
+    showExtensions: s.showExtensions === true,
+    dailyFolder: typeof s.dailyFolder === "string" ? s.dailyFolder : "",
+  });
+  const prefs: NotesApi["prefs"] = has("settings.get")
+    ? {
+        get: () => call<{ showExtensions?: boolean; dailyFolder?: string }>("settings.get").then(treePrefs),
+        onChanged: (fn) => on("settings.changed", (s) => fn(treePrefs((s ?? {}) as { showExtensions?: boolean; dailyFolder?: string }))),
+      }
+    : undefined;
   return {
+    ...(files ? { files } : {}),
+    ...(prefs ? { prefs } : {}),
     ...(folders ? { folders } : {}),
     ...(versions ? { versions } : {}),
     ...(extras ? { extras } : {}),
