@@ -67,6 +67,69 @@ interface Entry {
   /** Os alvos dos [[links]] desta nota, como estão escritos. */
   links: string[];
   content: string;
+  /** O inode do arquivo: um rename feito fora (Obsidian, Finder) mantém, e é assim que a gente reconhece (T2559). */
+  ino: number;
+}
+
+/** O que mudou de lugar ou sumiu por fora do app, visto pelo watcher (T2559). */
+export interface ExternalMoves {
+  /** De onde para onde, nota a nota. */
+  moves: Map<string, string>;
+  /** As notas que sumiram sem aparecer em outro lugar. */
+  gone: string[];
+}
+
+type Snapshot = Map<string, { ino: number; version: string }>;
+
+/**
+ * As notas que sumiram de `before` e apareceram em `after`: a mesma pelo inode (um rename de fora); sem o inode, pelo
+ * mesmo conteúdo, quando só uma bate (um mover que copiou e apagou). O resto que sumiu é `gone`.
+ */
+export function reconcileMoves(before: Snapshot, after: Snapshot): ExternalMoves {
+  const vanished = [...before.keys()].filter((p) => !after.has(p));
+  const appeared = [...after.keys()].filter((p) => !before.has(p));
+  const moves = new Map<string, string>();
+  const taken = new Set<string>();
+  for (const from of vanished) {
+    const b = before.get(from)!;
+    let to = appeared.find((p) => !taken.has(p) && after.get(p)!.ino === b.ino);
+    if (!to) {
+      const same = appeared.filter((p) => !taken.has(p) && after.get(p)!.version === b.version);
+      if (same.length === 1) to = same[0];
+    }
+    if (to) {
+      moves.set(from, to);
+      taken.add(to);
+    }
+  }
+  return { moves, gone: vanished.filter((p) => !moves.has(p)) };
+}
+
+/**
+ * As fixadas depois de uma mudança por fora: a nota que mudou de lugar vai junto; a pasta que sumiu vai para onde as
+ * notas dela foram (pelo mesmo resto de caminho); o que sumiu de vez, ou não existe mais, sai.
+ */
+export function followPinned(pinned: readonly string[], r: ExternalMoves, now: { notes: ReadonlySet<string>; folders: ReadonlySet<string> }): string[] {
+  const out: string[] = [];
+  for (const p of pinned) {
+    let next: string | null = p;
+    if (/\.md$/i.test(p)) {
+      next = r.moves.get(p) ?? (now.notes.has(p) ? p : null);
+    } else if (!now.folders.has(p)) {
+      next = null;
+      for (const [from, to] of r.moves) {
+        if (!from.startsWith(`${p}/`)) continue;
+        const rest = from.slice(p.length);
+        if (to.endsWith(rest) && to.length > rest.length) {
+          next = to.slice(0, to.length - rest.length);
+          break;
+        }
+      }
+      if (next !== null && !now.folders.has(next)) next = null;
+    }
+    if (next !== null && !out.includes(next)) out.push(next);
+  }
+  return out;
 }
 
 export interface VaultOptions {
@@ -147,6 +210,7 @@ export class Vault {
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly listeners = new Set<(paths: string[]) => void>();
+  private readonly moveListeners = new Set<(r: ExternalMoves) => void>();
   private ready: Promise<void> | null = null;
   /** A resolução de [[links]] para as notas de agora; refeita quando uma nota entra, sai ou muda de nome. */
   private resolver: Resolver | null = null;
@@ -180,6 +244,17 @@ export class Vault {
   }
 
   /** Avisa quando notas mudam, inclusive fora do app. */
+  /** Avisa quando notas mudam de lugar ou somem por fora do app (o Obsidian, o Finder), já reconhecidas (T2559). */
+  onExternalMoves(fn: (r: ExternalMoves) => void): () => void {
+    this.moveListeners.add(fn);
+    return () => this.moveListeners.delete(fn);
+  }
+
+  /** O que existe agora no índice, para a limpeza das fixadas. */
+  existing(): { notes: Set<string>; folders: Set<string> } {
+    return { notes: new Set(this.notes.keys()), folders: new Set(this.folders) };
+  }
+
   onChanged(fn: (paths: string[]) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -595,6 +670,7 @@ export class Vault {
       foldedTitle: fold(title),
       links: parseLinks(content).map((l) => l.target),
       content,
+      ino: s.ino,
     };
     if (!this.notes.has(p)) this.resolver = null;
     this.notes.set(p, entry);
@@ -630,6 +706,7 @@ export class Vault {
     const paths = [...this.pendingPaths];
     this.pendingPaths.clear();
     const changed: string[] = [];
+    const before = this.snapshot();
     for (const rel of paths) {
       const abs = path.join(this.root, rel);
       let s;
@@ -643,6 +720,12 @@ export class Vault {
           await this.scan(); // uma pasta nova (copiada, puxada): mais simples reler tudo
           changed.push(rel);
         }
+        continue;
+      }
+      if (!s && this.folders.has(rel)) {
+        // Uma pasta que sumiu (renomeada ou apagada por fora): as notas de dentro também, e o mais simples é reler.
+        await this.scan();
+        changed.push(rel);
         continue;
       }
       if (!/\.md$/i.test(rel)) continue;
@@ -660,6 +743,20 @@ export class Vault {
       changed.push(rel);
     }
     if (changed.length) this.emit(changed);
+    const r = reconcileMoves(before, this.snapshot());
+    if (r.moves.size || r.gone.length) {
+      for (const fn of this.moveListeners) {
+        try {
+          fn(r);
+        } catch (e) {
+          console.error("[notes] move listener failed:", e);
+        }
+      }
+    }
+  }
+
+  private snapshot(): Snapshot {
+    return new Map([...this.notes].map(([p, e]) => [p, { ino: e.ino, version: e.meta.version }]));
   }
 
   private emit(paths: string[]) {
