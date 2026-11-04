@@ -21,11 +21,13 @@ import { type Draft, Drafts, forgetDraftOnDelete } from "./drafts.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
-import { focusEditor, NoteEditor } from "./NoteEditor.tsx";
+import { focusEditor, insertIntoEditor, NoteEditor } from "./NoteEditor.tsx";
+import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
 import { type SideTarget, Sidebar } from "./Sidebar.tsx";
-import { ancestors, buildTree, editedLabel, filterTree, recentNotes, type SortBy } from "./tree.ts";
+import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy } from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
+import { hasFilters, parseQuery, type SavedSearch } from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing } from "./types.ts";
@@ -84,8 +86,11 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   /** O texto com que o ⌘K abre (T2619: `tag:…` vindo de um clique numa tag). */
   const [paletteQuery, setPaletteQuery] = useState("");
   const [tagList, setTagList] = useState<TagNode[]>([]);
+  /** As buscas salvas (T2660); `null` num engine que ainda não as tem. */
+  const [saved, setSaved] = useState<SavedSearch[] | null>(null);
   /** "Nova nota a partir de modelo…": os modelos e a pasta onde a nota nasce. */
-  const [picking, setPicking] = useState<{ folder: string; templates: NoteMeta[] } | null>(null);
+  // `insert` (T2660, "/modelo"): o modelo entra no cursor da nota aberta, em vez de criar uma nota.
+  const [picking, setPicking] = useState<{ folder: string; templates: NoteMeta[]; insert?: boolean } | null>(null);
   // A árvore e o "Citada em" abrem em popover (C · Foco).
   const [treeOpen, setTreeOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
@@ -661,18 +666,41 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     openPalette(`tag:${tag}`);
   };
 
-  const fromTemplate = (folder: string) => {
+  const fromTemplate = (folder: string, insert = false) => {
     setPalette(false);
     api.templates?.().then(
       (r) =>
         r.templates.length
-          ? setPicking({ folder, templates: r.templates })
+          ? setPicking({ folder, templates: r.templates, insert })
           : say(`Nenhum modelo ainda. As notas da pasta “${r.folder}” viram modelos.`),
       failed_("ler os modelos"),
     );
   };
 
-  const paletteCommands = api.templates ? [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template" }] : [];
+  useEffect(() => {
+    api.savedSearches?.list().then(setSaved, () => {});
+  }, [api]);
+
+  const setSavedList = (list: SavedSearch[]) => {
+    const sv = api.savedSearches;
+    if (!sv) return;
+    sv.set(list).then(setSaved, failed_("guardar a busca"));
+  };
+
+  /** Guarda a busca do ⌘K na árvore (o nome é a própria busca; repetida, não duplica). */
+  const saveSearch = (query: string) => {
+    const q = query.trim();
+    if (!q || !saved) return;
+    setPalette(false);
+    if (saved.some((s) => s.query === q)) return say("Essa busca já está salva.");
+    setSavedList([...saved, { name: q, query: q }]);
+    say(`Busca salva: “${q}”. Ela fica na árvore.`);
+  };
+
+  const paletteCommands = [
+    ...(api.templates ? [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template" }] : []),
+    ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true }] : []),
+  ];
 
   const linkTargets = (): LinkTarget[] => {
     const notes = listing?.notes ?? [];
@@ -681,7 +709,26 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   };
 
   const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy]);
-  const found = useMemo(() => filterTree(fullTree, query), [fullTree, query]);
+  // Com filtros (T2660), quem decide é o engine (`notes.search`); sem, o nome na árvore basta, na hora.
+  const [queryPaths, setQueryPaths] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (!hasFilters(parseQuery(query))) return setQueryPaths(null);
+    let live = true;
+    const t = setTimeout(() => {
+      api.search(query, 100).then(
+        (hits) => live && setQueryPaths(new Set(hits.map((h) => h.path))),
+        () => live && setQueryPaths(new Set()),
+      );
+    }, 120);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [api, query, listing]);
+  const found = useMemo(
+    () => (queryPaths ? filterTreeToPaths(fullTree, queryPaths) : filterTree(fullTree, query)),
+    [fullTree, query, queryPaths],
+  );
   const openNow = useMemo(() => (query.trim() ? new Set([...openFolders, ...found.open]) : openFolders), [openFolders, found, query]);
   const byPath = useMemo(() => new Map((listing?.notes ?? []).map((n) => [n.path, n])), [listing]);
   const pinnedNotes = pinned.map((p) => byPath.get(p)).filter((n) => n !== undefined);
@@ -764,6 +811,12 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
             trashOpen={view === "trash"}
             tags={tagList}
             onTag={openTag}
+            saved={saved ?? undefined}
+            onSaved={(q) => {
+              setTreeOpen(false);
+              openPalette(q);
+            }}
+            onUnsave={(q) => saved && setSavedList(saved.filter((s) => s.query !== q))}
           />
         </Popover>
       ) : null}
@@ -899,6 +952,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
               onChange={onChange}
               onOpenLink={(t) => void onOpenLink(t)}
               onOpenTag={openTag}
+              onSlashTemplate={api.templates ? () => fromTemplate(note?.folder ?? "", true) : undefined}
               linkTargets={linkTargets}
               attachments={api.attachments}
               onError={(t) => say(t)}
@@ -921,7 +975,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
           notes={listing?.notes ?? []}
           initialQuery={paletteQuery}
           commands={paletteCommands}
-          onCommand={(id) => id === "template" && fromTemplate(selectedFolderRef.current)}
+          onCommand={(id, q) => (id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q) : undefined)}
           onOpen={(p) => void open(p)}
           onCreate={(t) => void create(t)}
           onClose={() => setPalette(false)}
@@ -940,13 +994,20 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       ) : null}
       {picking ? (
         <ListPicker
-          title={`Nova nota${picking.folder ? ` em “${picking.folder.replace(/\//g, " / ")}”` : ""} a partir de…`}
+          title={picking.insert ? "Pôr o modelo na nota…" : `Nova nota${picking.folder ? ` em “${picking.folder.replace(/\//g, " / ")}”` : ""} a partir de…`}
           items={picking.templates.map((m) => ({ value: m.path, label: m.title }))}
           emptyText="Nenhum modelo com esse nome"
           onPick={(path) => {
             const m = picking.templates.find((x) => x.path === path);
             setPicking(null);
-            if (m) void create(m.title, true, picking.folder, m.path);
+            if (!m) return;
+            if (!picking.insert) return void create(m.title, true, picking.folder, m.path);
+            // "/modelo": o corpo do modelo (sem o frontmatter dele) no cursor, com as variáveis da nota aberta.
+            api.get(m.path).then((t) => {
+              const body = splitFrontmatter(t.content).body;
+              insertIntoEditor(fillTemplate(body, { title: note?.title ?? "", now: new Date() }));
+              focusEditor();
+            }, failed_("ler o modelo"));
           }}
           onClose={() => setPicking(null)}
         />

@@ -117,3 +117,20 @@ export function filterTree(tree: TreeNode[], query: string): { tree: TreeNode[];
 export function recentNotes(notes: NoteMeta[], limit = 5): NoteMeta[] {
   return [...notes].sort((a, b) => b.mtime.localeCompare(a.mtime)).slice(0, limit);
 }
+
+/**
+ * A busca da árvore com filtros (T2660: `tag:`, `path:`, "frase", `-`): o engine diz quais notas passam, e a árvore
+ * mostra só elas, com as pastas até elas abertas.
+ */
+export function filterTreeToPaths(tree: TreeNode[], paths: ReadonlySet<string>): { tree: TreeNode[]; open: Set<string> } {
+  const open = new Set<string>();
+  const walk = (nodes: TreeNode[]): TreeNode[] =>
+    nodes.flatMap((n): TreeNode[] => {
+      if (n.kind === "note") return paths.has(n.path) ? [n] : [];
+      const children = walk(n.children);
+      if (!children.length) return [];
+      open.add(n.path);
+      return [{ ...n, children }];
+    });
+  return { tree: walk(tree), open };
+}

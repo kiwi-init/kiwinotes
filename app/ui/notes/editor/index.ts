@@ -2,12 +2,20 @@
 // vivo, `[[links]]` com autocomplete e clique, e tabela com Tab e Enter. Só o corpo da nota entra aqui: o frontmatter
 // fica com quem chama e volta intacto ao gravar.
 
-import { autocompletion, type Completion, type CompletionContext, type CompletionResult, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+  closeBrackets,
+  closeBracketsKeymap,
+  startCompletion,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { EditorState, type Extension, Prec } from "@codemirror/state";
-import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { EditorState, type Extension, Prec, StateField } from "@codemirror/state";
+import { EditorView, keymap, placeholder, showTooltip, type Tooltip } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 
@@ -15,7 +23,8 @@ import { externalUrl, linkAt } from "../links.ts";
 import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { tableEnter, tableTab } from "./table.ts";
-import { linkFromPaste, listIndent } from "./text.ts";
+import { slashInsert, slashMatches, slashTrigger } from "./slash.ts";
+import { linkFromPaste, listIndent, toggleHeading, toggleWrap, wrapLink } from "./text.ts";
 
 export interface LinkTarget {
   /** O título da nota (o que aparece na lista). */
@@ -36,6 +45,8 @@ export interface EditorOptions {
   onOpenUrl(url: string): void;
   /** Clique numa `#tag` do texto: a busca por ela (T2619). */
   onOpenTag?(tag: string): void;
+  /** "/modelo" (T2660): a janela abre a lista de modelos e põe o escolhido no cursor. */
+  onSlashTemplate?(): void;
   /** As notas para o autocomplete do `[[`. */
   linkTargets(): LinkTarget[];
   /** `notes.resolve`: para desenhar o link que ainda não existe de outro jeito. */
@@ -213,9 +224,27 @@ const theme = EditorView.theme({
   ".cm-md-table th": { fontSize: "11px", fontWeight: "400", color: "var(--text-3)", textAlign: "left", padding: "0 28px 8px 0" },
   ".cm-md-table td": { padding: "0 28px 4px 0", fontVariantNumeric: "tabular-nums" },
   ".cm-tooltip": { border: "none", borderRadius: "10px", background: "var(--surface)", boxShadow: "var(--shadow-pop)" },
-  ".cm-tooltip-autocomplete > ul": { fontFamily: "var(--font)", fontSize: "13px", padding: "4px 0" },
+  // Com as duas classes: o tema base do CodeMirror põe monospace em `.cm-tooltip.cm-tooltip-autocomplete > ul`.
+  ".cm-tooltip.cm-tooltip-autocomplete > ul": { fontFamily: "var(--ui, var(--font))", fontSize: "13px", padding: "4px 0" },
   ".cm-tooltip-autocomplete > ul > li": { padding: "5px 14px !important", color: "var(--text-2)" },
   ".cm-tooltip-autocomplete > ul > li[aria-selected]": { background: "transparent !important", color: "var(--text) !important", fontWeight: "600" },
+  // A barra de formatação (T2660): um grupo que flutua, como os do Channels.
+  ".cm-tooltip:has(> .kn-fmt)": { background: "var(--float, var(--surface))", boxShadow: "var(--shadow-float, var(--shadow-pop))", borderRadius: "10px" },
+  ".kn-fmt": { display: "flex", gap: "2px", padding: "2px" },
+  ".kn-fmt-bt": {
+    minWidth: "28px",
+    height: "28px",
+    padding: "0 8px",
+    border: "0",
+    borderRadius: "8px",
+    background: "none",
+    color: "var(--ink-2, var(--text-2))",
+    font: "600 13px/1 var(--ui, var(--font))",
+    cursor: "default",
+  },
+  ".kn-fmt-bt:hover": { background: "var(--wash-2, var(--surface-hover))", color: "var(--ink, var(--text))" },
+  ".kn-fmt-italic": { fontStyle: "italic", fontFamily: "Georgia, serif" },
+  ".kn-fmt-code": { fontFamily: "var(--mono, var(--font-mono))", fontSize: "11px" },
   ".cm-completionDetail": { marginLeft: "10px", fontStyle: "normal", color: "var(--text-3)", fontWeight: "400" },
   ".cm-completionMatchedText": { textDecoration: "none", color: "var(--accent-text)" },
 });
@@ -284,7 +313,8 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     tablePreview,
     commentPreview,
     ...(opts.attachments ? [attachmentPreview(opts.attachments), attachmentInput(opts.attachments, (t) => opts.onError?.(t)), attachmentTheme] : []),
-    autocompletion({ override: [linkCompletion(opts.linkTargets)], icons: false, closeOnBlur: true }),
+    autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets)], icons: false, closeOnBlur: true }),
+    formatBar,
     tableKeys,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
     EditorView.lineWrapping,
@@ -359,3 +389,119 @@ export function urlAt(state: EditorState, pos: number): string | null {
 export function stateFor(doc: string, extensions: Extension[]): EditorState {
   return EditorState.create({ doc, extensions });
 }
+
+// ---------------------------------------------------------------- o comando "/" (T2660)
+
+/** O menu do "/": no começo da linha ou depois de um espaço. O texto de cada item vem do slash.ts. */
+export function slashCompletion(opts: Pick<EditorOptions, "onSlashTemplate">) {
+  return (ctx: CompletionContext): CompletionResult | null => {
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const trig = slashTrigger(line.text.slice(0, ctx.pos - line.from));
+    if (!trig) return null;
+    // Dentro de código, "/" é só "/".
+    for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(ctx.state).resolveInner(ctx.pos, -1); n; n = n.parent) {
+      if (n.name === "FencedCode" || n.name === "InlineCode" || n.name === "CodeBlock") return null;
+    }
+    const from = line.from + trig.from;
+    const options: Completion[] = slashMatches(trig.typed).map((it, i) => ({
+      label: it.label,
+      detail: it.detail,
+      // A ordem do slash.ts, não a do filtro do CodeMirror.
+      boost: 100 - i,
+      apply: (view: EditorView, _c: Completion, a: number, b: number) => {
+        if (it.id === "template") {
+          view.dispatch({ changes: { from: a, to: b, insert: "" }, selection: { anchor: a } });
+          opts.onSlashTemplate?.();
+          return;
+        }
+        const r = slashInsert(it.id, trig.atLineStart, new Date());
+        if (!r) return;
+        view.dispatch({ changes: { from: a, to: b, insert: r.insert }, selection: { anchor: a + r.cursor }, userEvent: "input.complete" });
+        // "[[" abre a lista de notas, como se a pessoa tivesse digitado.
+        if (it.id === "link") startCompletion(view);
+      },
+    }));
+    return { from, to: ctx.pos, options, filter: false };
+  };
+}
+
+// ---------------------------------------------------------------- a barra de formatação (T2660)
+
+type FormatAction = "bold" | "italic" | "code" | "link" | "heading";
+
+/** Aplica uma ação da barra na seleção principal. */
+export function applyFormat(view: EditorView, action: FormatAction): void {
+  const { state } = view;
+  const sel = state.selection.main;
+  if (action === "heading") {
+    const line = state.doc.lineAt(sel.from);
+    const next = toggleHeading(line.text);
+    view.dispatch({ changes: { from: line.from, to: line.to, insert: next }, selection: { anchor: line.from, head: line.from + next.length } });
+    return;
+  }
+  const selected = state.sliceDoc(sel.from, sel.to);
+  if (action === "link") {
+    const r = wrapLink(selected);
+    view.dispatch({ changes: { from: sel.from, to: sel.to, insert: r.insert }, selection: { anchor: sel.from + r.cursor } });
+    view.focus();
+    return;
+  }
+  const marker = action === "bold" ? "**" : action === "italic" ? "*" : "`";
+  const before = state.sliceDoc(Math.max(0, sel.from - 3), sel.from);
+  const after = state.sliceDoc(sel.to, Math.min(state.doc.length, sel.to + 3));
+  const r = toggleWrap(before, selected, after, marker);
+  view.dispatch({
+    changes: { from: sel.from + r.from, to: sel.from + r.to, insert: r.insert },
+    selection: { anchor: sel.from + r.from + r.selFrom, head: sel.from + r.from + r.selTo },
+  });
+}
+
+const FORMAT_BUTTONS: { action: FormatAction; label: string; title: string }[] = [
+  { action: "bold", label: "B", title: "Negrito (⌘B)" },
+  { action: "italic", label: "I", title: "Itálico (⌘I)" },
+  { action: "code", label: "</>", title: "Código" },
+  { action: "link", label: "Link", title: "Link" },
+  { action: "heading", label: "H", title: "Cabeçalho" },
+];
+
+function formatTooltip(state: EditorState): Tooltip | null {
+  const sel = state.selection.main;
+  if (sel.empty || state.selection.ranges.length > 1) return null;
+  return {
+    pos: sel.from,
+    above: true,
+    strictSide: false,
+    arrow: false,
+    create: (view) => {
+      const dom = document.createElement("div");
+      dom.className = "kn-fmt";
+      dom.setAttribute("role", "toolbar");
+      dom.setAttribute("aria-label", "Formatação");
+      for (const b of FORMAT_BUTTONS) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `kn-fmt-bt kn-fmt-${b.action}`;
+        btn.textContent = b.label;
+        btn.title = b.title;
+        // O mousedown tiraria a seleção do editor: a barra age sem pegar o foco.
+        btn.addEventListener("mousedown", (e) => e.preventDefault());
+        btn.addEventListener("click", () => applyFormat(view, b.action));
+        dom.append(btn);
+      }
+      return { dom };
+    },
+  };
+}
+
+/** A barra aparece em cima de uma seleção, como a do Channels; some quando a seleção acaba. */
+const formatBar = [
+  StateField.define<Tooltip | null>({
+    create: (state) => formatTooltip(state),
+    update: (tip, tr) => (tr.docChanged || tr.selection ? formatTooltip(tr.state) : tip),
+    provide: (f) => showTooltip.from(f),
+  }),
+  keymap.of([
+    { key: "Mod-b", run: (v) => (v.state.selection.main.empty ? false : (applyFormat(v, "bold"), true)) },
+    { key: "Mod-i", run: (v) => (v.state.selection.main.empty ? false : (applyFormat(v, "italic"), true)) },
+  ]),
+];

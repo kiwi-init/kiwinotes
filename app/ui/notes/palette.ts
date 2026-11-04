@@ -1,7 +1,7 @@
 // A lógica da busca rápida (⌘K): o título casa na hora, sem ir ao engine; o texto vem do `notes.search`. Sem busca,
 // as notas mais recentes. Por último, "Criar" quando nenhum título é exatamente o que foi digitado.
 
-import { splitTagQuery } from "../../src/shared/tags.ts";
+import { hasFilters, parseQuery } from "../../src/shared/query.ts";
 import type { NoteMeta, SearchHit } from "./types.ts";
 
 export type PaletteItem =
@@ -15,6 +15,8 @@ export interface PaletteCommand {
   id: string;
   title: string;
   words?: string;
+  /** Aparece com qualquer busca, no fim (T2660: "Salvar esta busca"), e nunca sem busca. */
+  withQuery?: boolean;
 }
 
 export const fold = (s: string) =>
@@ -47,7 +49,7 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   const folderOf = (path: string) => notes.find((n) => n.path === path)?.folder ?? "";
   const cmds = (all: boolean): PaletteItem[] =>
     commands
-      .filter((c) => all || fold(`${c.title} ${c.words ?? ""}`).includes(fold(q)))
+      .filter((c) => (c.withQuery ? !all : all || fold(`${c.title} ${c.words ?? ""}`).includes(fold(q))))
       .map((c) => ({ kind: "command", id: c.id, title: c.title }));
   if (!q) {
     return [
@@ -58,9 +60,13 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
       ...cmds(true),
     ];
   }
-  // `tag:x` ou `#x` (T2619): só o que o engine achou pelas tags; o título não casa com "tag:" e não há "Criar".
-  if (splitTagQuery(q).tags.length) {
-    return textHits.slice(0, MAX).map((h) => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet }));
+  // Com filtros (`tag:`, `path:`, "frase", `-excluir`: T2619, T2660), só o que o engine achou: o título não casa com o
+  // operador, e não há "Criar". Os comandos que pedem a busca (Salvar) vêm no fim.
+  if (hasFilters(parseQuery(q))) {
+    return [
+      ...textHits.slice(0, MAX).map((h): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet })),
+      ...commands.filter((c) => c.withQuery).map((c): PaletteItem => ({ kind: "command", id: c.id, title: c.title })),
+    ];
   }
   const byTitle = titleMatches(notes, q);
   const seen = new Set(byTitle.map((n) => n.path));

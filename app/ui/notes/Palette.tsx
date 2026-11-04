@@ -15,7 +15,8 @@ export interface PaletteProps {
   /** A busca já aberta com um texto (T2619: o clique numa #tag abre com `tag:…`). */
   initialQuery?: string;
   commands?: PaletteCommand[];
-  onCommand?(id: string): void;
+  /** Um comando escolhido, com a busca de agora (o "Salvar esta busca" precisa dela). */
+  onCommand?(id: string, query: string): void;
 }
 
 export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = "", commands = [], onCommand }: PaletteProps) {
@@ -43,7 +44,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
   const choose = (item: PaletteItem | undefined) => {
     if (!item) return;
     if (item.kind === "note") onOpen(item.path);
-    else if (item.kind === "command") onCommand?.(item.id);
+    else if (item.kind === "command") onCommand?.(item.id, query);
     else onCreate(item.title);
   };
 

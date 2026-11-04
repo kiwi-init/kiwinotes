@@ -6,6 +6,7 @@ import { splitFrontmatter, tagsOf } from "./frontmatter.ts";
 import { makeResolver, parseLinks as sharedLinks, resolveLink, rewriteLinks } from "../../src/shared/wikilinks.ts";
 import { folderOf, noteName } from "./links.ts";
 import { hasTag, splitTagQuery, tagTree } from "../../src/shared/tags.ts";
+import { type SavedSearch, sanitizeSavedSearches } from "../../src/shared/query.ts";
 import { DEFAULT_TEMPLATES_FOLDER, fillTemplate } from "../../src/shared/templates.ts";
 import type { TagNode } from "./types.ts";
 import { linkSpans, unlinkedSpans, contextOf } from "../../src/notes/mentions.ts";
@@ -202,6 +203,13 @@ export class MockVault implements NotesApi {
     const templates = [...this.notes.keys()].filter((p) => folderOf(p) === folder).sort().map((p) => this.meta(p));
     return { folder, templates };
   }
+
+  private saved: SavedSearch[] = [];
+  /** As buscas salvas (T2660), como nas settings. */
+  readonly savedSearches = {
+    list: async () => this.saved,
+    set: async (list: SavedSearch[]) => (this.saved = sanitizeSavedSearches(list)),
+  };
 
   private pinned: string[] = [];
   /** As fixadas (nas settings, #2475). Como o engine, o mock tira o que não existe mais. */

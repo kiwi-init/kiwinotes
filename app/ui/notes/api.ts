@@ -6,6 +6,7 @@ import "../src/api.ts"; // o tipo do `window.engine`
 
 import { MockVault } from "./mock.ts";
 import type { AttachmentSource } from "./editor/attachments.ts";
+import type { SavedSearch } from "../../src/shared/query.ts";
 import type { ExtrasApi, FoldersApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
@@ -57,9 +58,17 @@ export function engineNotes(
         read: (link) => call("attachments.read", { link }),
       }
     : undefined;
+  // As buscas salvas vivem nas settings: um engine que não as conhece não manda o campo (e recusa no set).
+  const savedSearches = has("settings.get")
+    ? {
+        list: () => call<{ savedSearches?: SavedSearch[] }>("settings.get").then((s) => s.savedSearches ?? null),
+        set: (list: SavedSearch[]) => call<{ savedSearches?: SavedSearch[] }>("settings.set", { savedSearches: list }).then((s) => s.savedSearches ?? []),
+      }
+    : undefined;
   return {
     ...(folders ? { folders } : {}),
     ...(extras ? { extras } : {}),
+    ...(savedSearches ? { savedSearches } : {}),
     ...(pins ? { pins } : {}),
     ...(attachments ? { attachments } : {}),
     list: () => call("notes.list"),

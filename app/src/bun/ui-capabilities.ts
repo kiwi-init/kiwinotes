@@ -13,6 +13,7 @@ import { type Attachments, attachmentsFolder } from "../notes/attachments.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
+import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
@@ -279,6 +280,12 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           } catch (e) {
             throw bad(`settings.set: ${e instanceof Error ? e.message : String(e)}`);
           }
+        } else if (key === "savedSearches") {
+          // As buscas salvas (T2660): a lista inteira, cada uma com nome e busca.
+          if (!Array.isArray(value) || value.length > MAX_SAVED_SEARCHES) throw bad(`savedSearches must be a list of up to ${MAX_SAVED_SEARCHES}`);
+          const list = sanitizeSavedSearches(value);
+          if (list.length !== value.length) throw bad("savedSearches: each one needs a name and a query, without repeating a query");
+          patch.savedSearches = list;
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);

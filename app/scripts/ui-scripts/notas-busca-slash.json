@@ -1,0 +1,220 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Projetos",
+        "title": "Plano",
+        "content": "---\ntags: [projeto]\n---\nDecidimos o orçamento na reunião.\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Projetos",
+        "title": "Antigo",
+        "content": "#projeto #velho reunião antiga\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Pessoas",
+        "title": "Ana",
+        "content": "Reunião com a Ana.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "tag:projeto -tag:velho"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Plano')",
+      "name": "⌘K com filtros: só o que passa"
+    },
+    {
+      "expectCount": ".kn-palette .kn-palette-it:has-text('Antigo')",
+      "count": 0,
+      "name": "a excluída não aparece"
+    },
+    {
+      "expectCount": ".kn-palette .kn-palette-snippet:has-text('tags:')",
+      "count": 0,
+      "name": "o trecho não sai do frontmatter"
+    },
+    {
+      "click": ".kn-palette .kn-palette-it:has-text('Salvar esta busca')",
+      "name": "salvar a busca"
+    },
+    {
+      "waitFor": ".kn-toast:has-text('Busca salva')"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='search']:has-text('tag:projeto -tag:velho')",
+      "name": "a busca salva na árvore"
+    },
+    {
+      "fill": ".kn-tree-pop .kn-side-search",
+      "text": "reuniao -path:pessoas"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Antigo')",
+      "name": "a busca da árvore com filtros"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Ana')",
+      "count": 0,
+      "name": "-path: tira a pasta"
+    },
+    {
+      "screenshot": "busca-arvore.png"
+    },
+    {
+      "fill": ".kn-tree-pop .kn-side-search",
+      "text": ""
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='search']",
+      "name": "clique na busca salva"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Plano')",
+      "name": "abre o ⌘K com ela"
+    },
+    {
+      "press": "Enter",
+      "name": "abre a nota"
+    },
+    {
+      "waitFor": ".kn-title"
+    },
+    {
+      "click": ".kn-note-editor .cm-line:has-text('Decidimos')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "type": "/"
+    },
+    {
+      "waitFor": ".cm-tooltip-autocomplete li:has-text('Checklist')",
+      "name": "o / abre o menu de blocos"
+    },
+    {
+      "screenshot": "slash.png"
+    },
+    {
+      "type": "check"
+    },
+    {
+      "waitFor": ".cm-tooltip-autocomplete li[aria-selected]:has-text('Checklist')",
+      "name": "o filtro deixa só o Checklist"
+    },
+    {
+      "wait": 200,
+      "name": "o autocomplete só aceita o Enter 75 ms depois de mudar (interactionDelay)"
+    },
+    {
+      "press": "Enter",
+      "name": "Enter insere o bloco"
+    },
+    {
+      "type": "comprar café"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-line:has-text('comprar café') .cm-task-box",
+      "count": 1,
+      "name": "vira um item de checklist (o - [ ] do Markdown, com a caixa)"
+    },
+    {
+      "expectText": ".kn-note-editor",
+      "text": "comprar café"
+    },
+    {
+      "click": ".kn-note-editor .cm-line:has-text('Decidimos')",
+      "name": "volta para a linha de texto"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Shift+Home",
+      "name": "seleciona o texto da linha"
+    },
+    {
+      "waitFor": ".kn-fmt",
+      "name": "a barra de formatação aparece na seleção"
+    },
+    {
+      "screenshot": "barra.png"
+    },
+    {
+      "click": ".kn-fmt .kn-fmt-heading"
+    },
+    {
+      "expectText": ".kn-note-editor .cm-line:has-text('Decidimos o orçamento na reunião.')",
+      "text": "## Decidimos o orçamento na reunião.",
+      "name": "H põe o cabeçalho"
+    },
+    {
+      "click": ".kn-fmt .kn-fmt-heading"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-line:has-text('## Decidimos')",
+      "count": 0,
+      "name": "e tira"
+    },
+    {
+      "click": ".kn-fmt .kn-fmt-bold",
+      "name": "B põe negrito"
+    },
+    {
+      "expectText": ".kn-note-editor .cm-line:has-text('Decidimos o orçamento na reunião.')",
+      "text": "**Decidimos o orçamento na reunião.**"
+    },
+    {
+      "press": "Meta+b",
+      "name": "⌘B tira"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-line:has-text('**Decidimos')",
+      "count": 0
+    },
+    {
+      "press": "End"
+    },
+    {
+      "type": " /hoje"
+    },
+    {
+      "waitFor": ".cm-tooltip-autocomplete li[aria-selected]:has-text('Data de hoje')"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "press": "Enter",
+      "name": "/hoje põe a data"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-line:has-text('/hoje')",
+      "count": 0,
+      "name": "o /hoje some e a data entra"
+    }
+  ]
+}
