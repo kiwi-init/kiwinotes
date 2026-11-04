@@ -1,6 +1,6 @@
 // O "Microfone" dos Ajustes (spec #3202, T3230): por qual entrada o ditado grava. A lista vem do helper (`audio.inputs`,
 // que só lista e nunca abre o mic) e volta a ser lida quando um dispositivo entra ou sai, ou quando a lista abre.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AudioInputs, MicrophoneChoice } from "../../src/shared/microphone.ts";
 import { api, has } from "../src/api.ts";
@@ -12,10 +12,18 @@ export function MicrophoneRow() {
   const [inputs, setInputs] = useState<AudioInputs | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const list = useCallback(() => {
+  const chosen = useRef<MicrophoneChoice | null>(null);
+  chosen.current = choice;
+
+  const list = useCallback((again = true) => {
     if (!has("audio.inputs")) return;
     // Sem o helper (E_NO_HELPER), ficam as escolhas fixas.
-    api.audio.inputs().then(setInputs, () => setInputs(null));
+    api.audio.inputs().then((r) => {
+      setInputs(r);
+      // O `using` veio da escolha de antes (o helper ainda não recebeu a nova, T3344): pergunta mais uma vez.
+      const stale = r.using?.choice && chosen.current && r.using.choice !== chosen.current;
+      if (stale && again) setTimeout(() => list(false), 300);
+    }, () => setInputs(null));
   }, []);
 
   useEffect(() => {
@@ -26,7 +34,7 @@ export function MicrophoneRow() {
       () => setFailed(true),
     );
     list();
-    const offInputs = api.audio.onInputsChanged(list);
+    const offInputs = api.audio.onInputsChanged(() => list());
     // Mudou em outra janela (o hub e a janela de Ajustes), ou pelo engine: a lista acompanha.
     const offSettings = api.settings.onChanged((s) => {
       if (typeof s.microphone === "string") setChoice(s.microphone);
@@ -58,7 +66,7 @@ export function MicrophoneRow() {
 
   return (
     <Row label="Microfone" hint={failed ? "Não deu para salvar. Tente de novo." : micHint(choice, inputs)}>
-      <Select label="Microfone" value={choice} onChange={change} onOpen={list} options={micOptions(choice, inputs)} />
+      <Select label="Microfone" value={choice} onChange={change} onOpen={() => list()} options={micOptions(choice, inputs)} />
     </Row>
   );
 }

@@ -77,6 +77,14 @@ final class MicChoiceTests: XCTestCase {
         let byUID = closed(.device(uid: mac.uid), [mac, airpods, usb])
         XCTAssertEqual(byUID.device, usb)
         XCTAssertTrue(byUID.fellBack)
+        // T3344: the pick says the lid is why, without reading `reason`.
+        XCTAssertTrue(noUSB.lidClosed)
+        XCTAssertTrue(builtin.lidClosed)
+        XCTAssertTrue(byUID.lidClosed)
+        XCTAssertTrue(closed(.auto, [mac, airpods, usb]).lidClosed)
+        // The lid doesn't matter here: the USB mic chosen by UID, and the system default.
+        XCTAssertFalse(closed(.device(uid: usb.uid), [mac, airpods, usb]).lidClosed)
+        XCTAssertFalse(closed(.system, [mac, airpods]).lidClosed)
         // Lid open: as before.
         XCTAssertEqual(MicPicker.pick(.auto, devices: [mac, airpods, usb], defaultInput: airpods.id, defaultOutput: airpods.id, lidClosed: false).device, mac)
     }

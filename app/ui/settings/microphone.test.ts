@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import type { AudioInputs } from "../../src/shared/microphone.ts";
+import type { AudioInputs, MicInUse } from "../../src/shared/microphone.ts";
 import { micHint, micOptions } from "./microphone.ts";
 
 const AIRPODS: AudioInputs = {
@@ -61,46 +61,51 @@ describe("a dica", () => {
 });
 
 describe("a dica ao vivo (T3344), com o using do helper", () => {
-  const LID_CLOSED: AudioInputs = {
-    ...AIRPODS,
-    using: { name: "Yeti Stereo Microphone", transport: "usb", systemDefault: false, fellBack: false, reason: "lid closed, built-in mic off: usb" },
-  };
+  const using = (u: Partial<MicInUse> & { name: string; transport: MicInUse["transport"] }): MicInUse => ({
+    systemDefault: false, fellBack: false, lidClosed: false, reason: "", choice: "auto", ...u,
+  });
+  const MAC = using({ name: "Microfone (MacBook Pro)", transport: "builtin" });
+  const YETI = using({ name: "Yeti Stereo Microphone", transport: "usb" });
+  const AIRPODS_IN = using({ name: "AirPods Pro", transport: "bluetooth", systemDefault: true });
+  const at = (u: MicInUse): AudioInputs => ({ ...AIRPODS, using: u });
 
   test("o caso comum (Automático pelo mic do Mac) fica com o texto de sempre", () => {
-    const common: AudioInputs = {
-      ...AIRPODS,
-      using: { name: "Microfone (MacBook Pro)", transport: "builtin", systemDefault: false, fellBack: false, reason: "Bluetooth output: built-in mic" },
-    };
-    expect(micHint("auto", common)).toBe(micHint("auto", { ...AIRPODS }));
-    expect(micHint("builtin", common)).toBe("O ditado grava sempre pelo mic do Mac.");
+    expect(micHint("auto", at(MAC))).toBe(micHint("auto", AIRPODS));
+    expect(micHint("builtin", at({ ...MAC, choice: "builtin" }))).toBe("O ditado grava sempre pelo mic do Mac.");
   });
 
-  test("tampa fechada: o Automático diz que foi para o USB", () => {
-    expect(micHint("auto", LID_CLOSED)).toBe(
+  test("tampa fechada: diz para onde o ditado foi, e se o som do fone abaixa", () => {
+    expect(micHint("auto", at({ ...YETI, lidClosed: true }))).toBe(
       "Com a tampa fechada, o mic do Mac não grava. Agora o ditado grava pelo Yeti Stereo Microphone.",
     );
-  });
-
-  test("tampa fechada e só o AirPods: avisa que o som do fone abaixa", () => {
-    const onlyAirPods: AudioInputs = {
-      ...AIRPODS,
-      using: { name: "AirPods Pro", transport: "bluetooth", systemDefault: true, fellBack: false, reason: "lid closed, built-in mic off: system default" },
-    };
-    expect(micHint("auto", onlyAirPods)).toBe(
+    expect(micHint("builtin", at({ ...AIRPODS_IN, lidClosed: true, choice: "builtin" }))).toBe(
       "Com a tampa fechada, o mic do Mac não grava. Agora o ditado grava pelo AirPods Pro: enquanto você dita, o som do fone abaixa.",
     );
   });
 
-  test("um salvo desconectado diz por qual grava até ele voltar", () => {
-    const gone: AudioInputs = {
-      ...AIRPODS,
-      using: { name: "Microfone (MacBook Pro)", transport: "builtin", systemDefault: false, fellBack: true, reason: "chosen mic gone: auto" },
-    };
-    expect(micHint("uid:Sumiu", gone)).toBe("Desconectado. Até ele voltar, o ditado grava pelo Microfone (MacBook Pro).");
+  test("o Automático com outra entrada padrão no macOS (não Bluetooth) diz qual", () => {
+    expect(micHint("auto", at(YETI))).toBe("Agora o ditado grava pelo Yeti Stereo Microphone.");
+  });
+
+  test("um using de outra escolha (o helper ainda não recebeu a nova) não vale", () => {
+    expect(micHint("builtin", at(YETI))).toBe("O ditado grava sempre pelo mic do Mac.");
+    expect(micHint("auto", at({ ...MAC, lidClosed: true, choice: "builtin" }))).toBe(micHint("auto", AIRPODS));
+  });
+
+  test("um salvo fora da lista é desconectado, diga o using o que disser (o roteiro ajustes-microfone)", () => {
+    expect(micHint("uid:Sumiu", at(MAC))).toBe("Desconectado. Até ele voltar, o ditado usa o Automático.");
+    expect(micHint("uid:Sumiu", at({ ...MAC, choice: "uid:Sumiu", fellBack: true }))).toBe(
+      "Desconectado. Até ele voltar, o ditado grava pelo Microfone (MacBook Pro).",
+    );
+  });
+
+  test("um salvo conectado que é o usado fica com o texto de sempre (o \"se ele sair\")", () => {
+    expect(micHint("uid:Yeti", at({ ...YETI, choice: "uid:Yeti" }))).toContain("Se ele sair, volta para o Automático");
   });
 
   test("sem nome (helper não sabe): fala do padrão do macOS", () => {
-    const noName: AudioInputs = { ...AIRPODS, using: { name: "", transport: null, systemDefault: true, fellBack: true, reason: "" } };
-    expect(micHint("uid:Sumiu", noName)).toContain("o ditado grava pelo microfone padrão do macOS");
+    expect(micHint("builtin", at({ ...AIRPODS_IN, name: "", lidClosed: true, choice: "builtin" }))).toContain(
+      "o ditado grava pelo microfone padrão do macOS",
+    );
   });
 });

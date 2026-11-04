@@ -222,7 +222,7 @@ export type Event =
        * Por qual mic grava (T3229): o que o helper escolheu, com `fellBack` quando o mic salvo não estava conectado e
        * valeu o automático (o fim do ditado avisa, T3344). Um helper de antes do T3229 não manda.
        */
-      microphone?: { uid?: string; name?: string; transport?: string; systemDefault?: boolean; fellBack?: boolean; reason?: string };
+      microphone?: { uid?: string; name?: string; transport?: string; systemDefault?: boolean; fellBack?: boolean; reason?: string; lidClosed?: boolean };
     }
   /**
    * `lost`: a gravação acabou porque o mic caiu (`no_audio` ou `device_changed`), e o que ele ouviu até ali segue para

@@ -18,7 +18,7 @@ import type { Socket } from "bun";
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { assertNotRealData } from "./guard.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
-import type { AudioInputs } from "../shared/microphone.ts";
+import { type AudioInput, type AudioInputs, type MicInUse, type MicrophoneChoice, microphoneUid } from "../shared/microphone.ts";
 
 /** A imagem de fora do headless (um quadrado azul de 16 px): o roteiro testa o caminho do clique sem rede. */
 const HEADLESS_IMAGE = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGOw6blDEmIY1TCqYfhqAACorqQQpPjnMgAAAABJRU5ErkJggg==", "base64");
@@ -31,9 +31,30 @@ const HEADLESS_AUDIO_INPUTS: AudioInputs = {
     { uid: "AppleUSBAudioEngine:Blue:Yeti:1", name: "Yeti Stereo Microphone", transport: "usb", isDefault: false },
   ],
   output: { name: "AirPods Pro", transport: "bluetooth" },
-  // O automático com o AirPods na saída e a tampa aberta: o mic do Mac (T3344).
-  using: { name: "Microfone (MacBook Pro)", transport: "builtin", systemDefault: false, fellBack: false, reason: "Bluetooth output: built-in mic" },
 };
+
+/**
+ * O `using` do headless (T3344), pela escolha salva, como o helper faria com a tampa aberta e o AirPods na saída e como
+ * entrada padrão: o Automático e o Mic do Mac pelo mic do Mac, o Padrão pelo AirPods, um salvo fora da lista cai no
+ * Automático.
+ */
+export function headlessAudioInputs(choice: MicrophoneChoice): AudioInputs {
+  const { inputs } = HEADLESS_AUDIO_INPUTS;
+  const mac = inputs[0]!;
+  const base = { systemDefault: false, fellBack: false, lidClosed: false, choice };
+  const device = (d: AudioInput, reason: string, fellBack = false): MicInUse => ({ ...base, name: d.name, transport: d.transport, reason, fellBack });
+  const uid = microphoneUid(choice);
+  const chosen = uid ? inputs.find((i) => i.uid === uid) : undefined;
+  const using: MicInUse =
+    choice === "system"
+      ? { ...base, name: "AirPods Pro", transport: "bluetooth", systemDefault: true, reason: "system default" }
+      : chosen
+        ? device(chosen, "chosen device")
+        : uid
+          ? device(mac, "chosen device not connected; auto: Bluetooth output: built-in mic", true)
+          : device(mac, choice === "builtin" ? "built-in mic" : "Bluetooth output: built-in mic");
+  return { ...HEADLESS_AUDIO_INPUTS, using };
+}
 
 export interface HeadlessOptions {
   /** A pasta dos dados (o vault fica em <data>/vault). */
@@ -135,7 +156,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       return { path: url, mime: "image/png", size: HEADLESS_IMAGE.length, dataUrl: `data:image/png;base64,${HEADLESS_IMAGE.toString("base64")}` };
     },
     // Sem helper nem mic: uma lista fixa (a do #3202, AirPods na saída), para o seletor de microfone dos Ajustes (T3230).
-    audioInputs: async () => HEADLESS_AUDIO_INPUTS,
+    audioInputs: async () => headlessAudioInputs((await stores.settings.load()).microphone),
     ocr: stores.ocr,
     exporter: stores.exporter,
     // O headless nunca abre diálogo: a pasta do exportar vem de KIWI_EXPORT_DIR (T2684), ou o exportar dá E_CANCELED.

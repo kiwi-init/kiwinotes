@@ -50,7 +50,14 @@ export const SECURE_INPUT_NOTICE = "O texto também ficou no clipboard";
 /** O mic caiu no meio do ditado: o que ele ouviu até ali foi transcrito, em vez de ir para o lixo (T883). */
 export const MIC_LOST_NOTICE = "O microfone caiu: transcrevi até aqui";
 /** O mic escolhido nos Ajustes não estava conectado, e o ditado gravou por outro (T3344, spec #3202). */
-export const micFellBackNotice = (name: string) => `O microfone escolhido não está conectado: gravei pelo ${name}`;
+/**
+ * O mic escolhido não estava conectado e o ditado gravou por outro (T3344). A pílula tem uma linha de 38 letras
+ * (`OverlayModel.maxMessageLength`): o do Mac e o padrão cabem inteiros; o nome de outro mic pode sair cortado.
+ */
+export const micFellBackNotice = (mic: string) => `Mic escolhido ausente: usei o ${mic}`;
+/** Como o aviso chama o mic: "do Mac", "padrão" ou o nome. */
+export const micShortName = (m: { name: string; transport: string | null; systemDefault: boolean }) =>
+  m.transport === "builtin" ? "do Mac" : m.systemDefault || !m.name ? "padrão" : m.name;
 /** O mic caiu e o que ele ouviu não tinha fala. */
 export const MIC_LOST_EMPTY = "Sem áudio do microfone";
 /** A nota rápida deu certo: a pílula diz o título. */
@@ -141,7 +148,8 @@ export class Dictation {
         const note = e.target === "note" && !!this.options.notes;
         const cli = e.reason === "debug" ? this.pendingWav.shift() : undefined;
         const mic = sanitizeMicInUse(e.microphone);
-        const fellBackTo = mic?.fellBack ? mic.name || "o microfone padrão" : undefined;
+        // Com a tampa fechada o escolhido (o mic do Mac) está conectado, só não grava: a Ajustes explica, a pílula não.
+        const fellBackTo = mic?.fellBack && !mic.lidClosed ? micShortName(mic) : undefined;
         this.recordings.push({ app, note, simulate: cli?.simulate, done: cli?.done, ...(fellBackTo ? { fellBackTo } : {}) });
         // A nota não leva o tom do app da frente (um terminal daria o tom literal): o prewarm é o do tom padrão.
         this.prewarm(note ? undefined : app);

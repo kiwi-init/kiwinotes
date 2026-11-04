@@ -49,6 +49,10 @@ export interface MicInUse {
   fellBack: boolean;
   /** O porquê, em inglês, para o log ("lid closed, built-in mic off: system default"). */
   reason: string;
+  /** A tampa fechada é o motivo de não ser o mic do Mac: com ela aberta, a escolha pegaria ele. */
+  lidClosed: boolean;
+  /** Para qual escolha o helper calculou (só no `audio.inputs`): logo depois do `settings.set`, pode ser a de antes. */
+  choice?: MicrophoneChoice;
 }
 
 /** O que o `audio.inputs` devolve: as entradas e a saída padrão de agora (para dizer se o fone é Bluetooth). */
@@ -66,7 +70,9 @@ export function sanitizeMicInUse(x: unknown): MicInUse | null {
   const name = typeof o.name === "string" ? o.name.slice(0, 200) : "";
   const transport = typeof o.transport === "string" && TRANSPORTS.has(o.transport) ? (o.transport as AudioTransport) : null;
   const reason = typeof o.reason === "string" ? o.reason.slice(0, 200) : "";
-  return { name, transport, systemDefault: o.systemDefault === true, fellBack: o.fellBack === true, reason };
+  const out: MicInUse = { name, transport, systemDefault: o.systemDefault === true, fellBack: o.fellBack === true, reason, lidClosed: o.lidClosed === true };
+  if (isMicrophoneChoice(o.choice)) out.choice = o.choice;
+  return out;
 }
 
 const TRANSPORTS: ReadonlySet<string> = new Set<AudioTransport>(["builtin", "bluetooth", "usb", "virtual", "other"]);

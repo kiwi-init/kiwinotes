@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { type AudioInputs, isMicrophoneChoice, sanitizeAudioInputs, sanitizeMicInUse } from "../shared/microphone.ts";
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { DEFAULT_SETTINGS, type SettingsPatch, sanitizeSettings } from "../store/settings.ts";
+import { headlessAudioInputs } from "../headless/server.ts";
 import { listAudioInputs } from "./audio-inputs.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
 import { directInvoke } from "./ui-engine.ts";
@@ -57,18 +58,26 @@ describe("o que o helper manda no audio.inputs", () => {
   });
 
   test("o using (T3344): por qual mic gravaria, só com o que vale; um helper antigo não manda e não quebra", () => {
-    const using = { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "lid closed: usb", extra: 1 };
+    const using = { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "x", lidClosed: true, choice: "builtin", extra: 1 };
     expect(sanitizeAudioInputs({ inputs: [], output: null, using })).toEqual({
       inputs: [],
       output: null,
-      using: { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "lid closed: usb" },
+      using: { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "x", lidClosed: true, choice: "builtin" },
     });
+    expect(sanitizeMicInUse({ choice: "mic do mac" })).not.toHaveProperty("choice");
     expect(sanitizeAudioInputs({ inputs: [], output: null })).not.toHaveProperty("using");
     expect(sanitizeMicInUse({ transport: "thunderbolt", fellBack: "sim" })).toEqual({
-      name: "", transport: null, systemDefault: false, fellBack: false, reason: "",
+      name: "", transport: null, systemDefault: false, fellBack: false, reason: "", lidClosed: false,
     });
     expect(sanitizeMicInUse("lixo")).toBeNull();
     expect(sanitizeMicInUse(undefined)).toBeNull();
+  });
+
+  test("o headless calcula o using pela escolha salva (T3344)", () => {
+    expect(headlessAudioInputs("auto").using).toMatchObject({ transport: "builtin", fellBack: false, choice: "auto" });
+    expect(headlessAudioInputs("system").using).toMatchObject({ name: "AirPods Pro", systemDefault: true });
+    expect(headlessAudioInputs("uid:AppleUSBAudioEngine:Blue:Yeti:1").using).toMatchObject({ transport: "usb", fellBack: false });
+    expect(headlessAudioInputs("uid:Sumiu").using).toMatchObject({ transport: "builtin", fellBack: true, choice: "uid:Sumiu" });
   });
 
   test("helper de pé responde a lista; antigo (unknown_type) ou fora do ar dá null", async () => {

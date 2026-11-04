@@ -158,6 +158,8 @@ final class MicSelection {
         }
         let output = devices.first { $0.id == AudioDevices.defaultOutput }
         var using = peek().fields
+        // Which choice this is for: the Settings ask right after `settings.set`, maybe before the `config.set` arrives.
+        using["choice"] = choice.value
         // With the system default, name the device it is now.
         if using["systemDefault"] as? Bool == true, let d = devices.first(where: { $0.id == defaultInput }) { using["name"] = d.name }
         return [
@@ -171,7 +173,7 @@ final class MicSelection {
 extension MicPick {
     /// For `record.started` and the log: no audio, only which device.
     var fields: [String: Any] {
-        var out: [String: Any] = ["fellBack": fellBack, "reason": reason]
+        var out: [String: Any] = ["fellBack": fellBack, "reason": reason, "lidClosed": lidClosed]
         if let device {
             out["uid"] = device.uid
             out["name"] = device.name
