@@ -30,7 +30,7 @@
   /* O palco: 1024 px lógicos (as coordenadas do ícone), escalado para a janela pelo script. */
   #fit { position: absolute; left: 50%; top: 50%; width: 1024px; height: 1024px; margin: -512px 0 0 -512px; transform-origin: 50% 50%; }
   #stage { position: relative; width: 1024px; height: 1024px; border-radius: 224px; overflow: hidden; isolation: isolate; will-change: opacity; }
-  .L { position: absolute; left: 0; top: 0; width: 1024px; height: 1024px; will-change: transform, opacity; }
+  .L { position: absolute; left: 0; top: 0; width: 1024px; height: 1024px; }
 
   /* 1. A base preta e a borda desenhada. */
   #base { position: absolute; inset: 0; background: #000; opacity: 0; }
@@ -67,7 +67,7 @@
   }
 
   /* 5. O liquid glass e a bola preta (o círculo do começo do gato, em 0,55 do tamanho). */
-  #orb { position: absolute; left: 320px; top: 234.4px; width: 384px; height: 384px; opacity: 0; will-change: transform, opacity; }
+  #orb { position: absolute; left: 320px; top: 238px; width: 384px; height: 384px; opacity: 0; will-change: transform, opacity; }
   #orb > b { position: absolute; inset: 0; border-radius: 50%; }
   #ball { background: linear-gradient(to bottom, #0a3b48 0%, #083340 4%, #021019 19%, #000204 40%, #000 94%); }
   #glass { will-change: opacity; }
@@ -84,61 +84,15 @@
   }
   #glass i { position: absolute; left: 70px; top: 46px; width: 130px; height: 70px; border-radius: 50%; border-top: 7px solid rgba(255, 255, 255, .8); transform: rotate(-24deg); }
 
-  /* 6. O gato (T3720): as camadas da imagem aprovada, animadas com os beats do roteiro. Os tempos abaixo são em segundos
-     a partir da emenda com o prisma (3,7 s); f = frame a 60 fps. O gato está no palco desde o começo, parado e
-     invisível: pinta antes, e a passagem só solta as animações. Os estados-base são a pose final (o "Reduzir movimento"
-     mostra ela parada); cada animação começa do estado inicial pelo `from`, com `both`. */
-  #cat-layer.off { display: none; }
-  #cat-layer.paused, #cat-layer.paused * { animation-play-state: paused !important; }
-  #cat-settle { transform-origin: 512px 430px; animation: catSettle .3s cubic-bezier(.2, .8, .2, 1) both; }        /* B1 f0–f18 */
-  #cat-float { animation: catFloat 4s ease-in-out .3s infinite; }                                                 /* ±12 px, 4 s, de f18 */
-  /* B2 f6–f190: a névoa nasce em volta do círculo (o anel), com um balanço leve que desacelera; some quando a cabeça
-     entra (f130–f190), e a luz da própria cabeça toma o lugar, até o corpo chegar com a luz inteira (f300–f400). */
-  #luz-anel { opacity: 0; transform-origin: 512px 430px; animation: luzAnel 3.067s linear .1s both, luzBalanca 3.067s ease-in-out .1s both; }
-  /* f130–f400: a luz inteira se revela de cima para baixo por máscara (a cabeça primeiro, o corpo no B6), como nos
-     quadros da prancha. A máscara é 3× a altura: a posição 0 100% esconde tudo, 0 0 mostra tudo. */
-  #luz {
-    -webkit-mask-image: linear-gradient(180deg, #000 0 30%, transparent 70%); mask-image: linear-gradient(180deg, #000 0 30%, transparent 70%);
-    -webkit-mask-size: 100% 300%; mask-size: 100% 300%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-    animation: luzRevela 3.6s cubic-bezier(.2, .8, .2, 1) 2.167s both; /* f130–f346: começa com a cabeça; o corpo até o B6 */
-  }
-  /* B3 f96–f156: as orelhas levantam de dentro da cabeça (o clip é o contorno dela), em mola, a direita 16 frames depois. */
-  #orelha-esquerda { animation: orelhaEsq .5s cubic-bezier(.34, 1.56, .64, 1) 1.6s both, tremEsq .167s ease-in-out 2.433s; }
-  #orelha-direita { animation: orelhaDir .5s cubic-bezier(.34, 1.56, .64, 1) 1.867s both; }
-  /* f130–f190: o círculo de vidro vira a cabeça (o #orb some na mesma janela). */
-  #cabeca { animation: fade 1s ease-in-out 2.167s both; }
-  /* B4 f160–f268: os olhos acordam (a tabela do roteiro), sonolentos e baixinhos; abrem de vez em f248–f268. */
-  .olho { animation: olho 1.8s linear 2.667s both; }
-  #olhos { animation: olhosSobem .333s cubic-bezier(.2, .8, .2, 1) 4.133s both; }
-  /* B6 f300–f390: o corpo se forma da névoa (a luz já desceu até ele). */
-  #corpo { transform-origin: 512px 560px; animation: corpoIn 1.5s cubic-bezier(.2, .8, .2, 1) 5s both; }
-  /* B7 f350–f400: o aro acende por dentro do topo da cabeça (preta por baixo dele), correndo do ciano à esquerda ao
-     púrpura à direita. */
-  #aro {
-    -webkit-mask-image: linear-gradient(90deg, #000 0 34%, transparent 66%); mask-image: linear-gradient(90deg, #000 0 34%, transparent 66%);
-    -webkit-mask-size: 300% 100%; mask-size: 300% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-    animation: aroIn .833s ease-out 5.833s both;
-  }
-
-  @keyframes catSettle { from { transform: scale(1.03); } to { transform: none; } }
-  @keyframes catFloat { 0%, 100% { transform: none; } 25% { transform: translateY(-12px); } 75% { transform: translateY(12px); } }
-  @keyframes luzAnel { 0% { opacity: 0; } 22.8% { opacity: 1; } 67.4% { opacity: 1; } 100% { opacity: 0; } }
-  @keyframes luzRevela { from { -webkit-mask-position: 0 100%; mask-position: 0 100%; } to { -webkit-mask-position: 0 0; mask-position: 0 0; } }
-  @keyframes luzBalanca {
-    0% { transform: rotate(-6deg) scale(1.06); } 10.7% { transform: rotate(6deg) scale(1.02); } 25% { transform: rotate(-4deg); }
-    44.2% { transform: rotate(2deg); } 70% { transform: rotate(-1deg); } 100% { transform: none; }
-  }
-  @keyframes orelhaEsq { from { opacity: 0; transform: rotate(-75deg) scale(.6); } 15% { opacity: 1; } to { transform: none; } }
-  @keyframes orelhaDir { from { opacity: 0; transform: rotate(75deg) scale(.6); } 15% { opacity: 1; } to { transform: none; } }
-  @keyframes tremEsq { 50% { transform: rotate(-4deg); } }
-  @keyframes olho {
-    0% { transform: scaleY(0); } 2.8% { transform: scaleY(.06); } 19.4% { transform: scaleY(.22); } 33.3% { transform: scaleY(.22); }
-    40.7% { transform: scaleY(.04); } 48.1% { transform: scaleY(.04); } 63% { transform: scaleY(.45); } 68.5% { transform: scaleY(.45); }
-    73.1% { transform: scaleY(.05); } 77.8% { transform: scaleY(.45); } 81.5% { transform: scaleY(.45); } 94.4% { transform: scaleY(1.04); } 100% { transform: none; }
-  }
-  @keyframes olhosSobem { from { transform: translateY(8px) scale(.8); } to { transform: none; } }
-  @keyframes corpoIn { from { opacity: 0; transform: translateY(40px) scale(.96); } to { opacity: 1; transform: none; } }
-  @keyframes aroIn { from { opacity: 0; -webkit-mask-position: 100% 0; mask-position: 100% 0; } to { opacity: 1; -webkit-mask-position: 0 0; mask-position: 0 0; } }
+  /* T3720: poses da prancha em WAAPI (intro.js), com bitmaps já preparados.
+     O estado quase invisível pré-pinta as imagens sem mostrar o gato no prisma. */
+  #cat-layer { opacity:.003; }
+  #cat-layer.ready { opacity:1; }
+  #cat-layer.off { display:none; }
+  #handoff { opacity:0; transform-origin:512px 430px; }
+  .play #handoff { animation:handoff .28s cubic-bezier(.333333,0,.666667,1) 3.42s both; }
+  .cat-started #handoff, .cat-started #orb { visibility:hidden; }
+  @keyframes handoff { from { opacity:0; transform:scale(.469333); } to { opacity:1; transform:none; } }
 
   /* O fim: tudo some (no app, a janela fecha e o hub aparece). */
   #stage.out { animation: fadeOut .35s ease-in both; }
@@ -180,8 +134,8 @@
     78% { transform: scale(.575, .53); }
     100% { opacity: 1; transform: scale(.55); }
   }
-  @keyframes orbGrow { from { opacity: 1; transform: scale(.55); } to { opacity: 1; transform: scale(1.42); } }
-  @keyframes orbHold { from, to { opacity: 1; transform: scale(1.42); } }
+  @keyframes orbGrow { from { opacity: 1; transform: scale(.55); } to { opacity: 1; transform: scale(1.171875); } }
+  @keyframes orbHold { from, to { opacity: 1; transform: scale(1.171875); } }
 
   /* Reduzir movimento: o gato pronto, com um fade de 0,5 s. */
   @media (prefers-reduced-motion: reduce) {
@@ -202,6 +156,7 @@
     <div id="scene"></div>
     <div id="title">Kiwi init</div>
     <div id="orb"><b id="ball"></b><b id="glass"><i></i></b></div>
+    <!--HANDOFF-->
     <div id="cat-layer" class="paused">
       <!--CAT-->
     </div>

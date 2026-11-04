@@ -108,20 +108,79 @@
   let timers = [];
   const later = (s, fn) => timers.push(setTimeout(fn, s * 1000));
 
-  // O gato (T3720): as camadas da imagem aprovada, com os beats do roteiro em CSS (intro.template.html), 8 s a partir
-  // da emenda com o prisma (f0–f480 a 60 fps).
+  // T3720: the same pose functions as the approved T3747 storyboard. Assets
+  // are baked once; runtime changes only transform, opacity and mask position.
   const CAT_S = 8.0;
+  const smooth = (a, b, value) => {
+    const t = Math.min(1, Math.max(0, (value-a)/(b-a)));
+    return t*t*(3-2*t);
+  };
+  const interpolate = (x, points) => {
+    for (let i=1; i<points.length; i++) {
+      if (x <= points[i][0]) {
+        const [a, va] = points[i-1], [b, vb] = points[i];
+        return va+(vb-va)*Math.min(1, Math.max(0, (x-a)/(b-a)));
+      }
+    }
+    return points.at(-1)[1];
+  };
+  let catAnimations = [];
+  const animateCat = () => {
+    for (const a of catAnimations) a.cancel();
+    catAnimations = [];
+    const poses = (id, pose) => {
+      const frames = Array.from({length:481}, (_, f) => ({offset:f/480, ...pose(f)}));
+      const animation = document.getElementById(id).animate(frames, {duration:CAT_S*1000, fill:"both"});
+      animation.pause();
+      animation.currentTime = 0;
+      catAnimations.push(animation);
+    };
+    const head = f => smooth(130,190,f);
+    const formed = f => smooth(300,390,f);
+    poses("luz-anel", f => ({opacity:smooth(6,48,f)*(1-smooth(150,340,f)), transform:`rotate(${f*.62}deg)`}));
+    poses("luz-cabeca", f => ({opacity:smooth(6,48,f)*head(f)}));
+    poses("fundo-cabeca", f => ({opacity:head(f)}));
+    poses("cabeca", f => ({opacity:head(f)}));
+    poses("cabeca-complemento", f => ({opacity:formed(f)}));
+    poses("vidro", f => ({opacity:1-head(f)}));
+    for (const id of ["corpo", "corpo-final"]) poses(id, f => {
+      const y=Number(document.getElementById(id).dataset.y);
+      const p=formed(f), position=`0px ${430+594*p-1024-y}px`;
+      return {opacity:p, maskPosition:position, webkitMaskPosition:position};
+    });
+    for (const [id,start,sign] of [["orelha-esquerda",96,-1],["orelha-direita",112,1]]) {
+      poses(id, f => {
+        const t=Math.max(0,(f-start)/30);
+        const angle=interpolate(t,[[0,75],[.65,0],[.82,-8],[.94,3],[1,0]]);
+        const scale=.6+.4*smooth(0,1,t);
+        return {opacity:smooth(0,.3,t), transform:`rotate(${sign*angle}deg) scale(${scale})`};
+      });
+    }
+    poses("cat-final", f => ({opacity:smooth(350,400,f)}));
+    const eyes = [[0,0],[159,0],[160,0],[163,.06],[181,.22],[196,.22],[204,.04],[212,.04],
+      [228,.45],[234,.45],[239,.05],[244,.45],[248,.45],[262,1.04],[268,1],[480,1]];
+    for (const id of ["olho-esq","olho-dir"]) poses(id, f => {
+      const p=smooth(248,268,f), growth=.8+.2*p, open=interpolate(f,eyes);
+      return {opacity:open>0 ? 1 : 0, transform:`translateY(${(1-p)*8}px) scale(${growth},${growth*open})`};
+    });
+  };
 
   function startCat() {
-    cat.classList.remove("paused");
-    if (catSpeed !== 1) for (const a of cat.getAnimations({ subtree: true })) a.playbackRate = catSpeed;
+    cat.classList.add("ready");
+    document.body.classList.add("cat-started");
+    for (const a of catAnimations) {
+      a.playbackRate = catSpeed;
+      if (reduced) { a.pause(); a.currentTime=CAT_S*1000; }
+      else a.play();
+    }
   }
 
   function play() {
     for (const t of timers) clearTimeout(t);
     timers = [];
     ending = false;
-    document.body.classList.remove("done");
+    document.body.classList.remove("done", "cat-started");
+    cat.classList.remove("ready");
     stage.classList.remove("out");
     cat.classList.add("off", "paused");
     orb.classList.remove("grow");
@@ -129,8 +188,10 @@
     for (const el of outline.children) el.style.animation = "none";
     void stage.offsetWidth; // recomeça as animações do zero
     cat.classList.remove("off");
+    animateCat();
     for (const el of outline.children) el.style.animation = el.dataset.anim;
     if (reduced) {
+      document.getElementById("base").style.opacity="1";
       startCat();
       later(2.5, finish);
       return;

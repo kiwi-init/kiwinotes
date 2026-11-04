@@ -1,43 +1,115 @@
 {
   "espaco": {
     "w": 1024,
-    "h": 1280
+    "h": 1024
   },
   "olhos": [
     {
-      "x": 401.4,
-      "y": 639.7,
-      "r": 34.1
+      "x": 423.1292,
+      "y": 429.72920000000005,
+      "r": 27.300400000000003
     },
     {
-      "x": 621.7,
-      "y": 639.7,
-      "r": 34
+      "x": 599.3368,
+      "y": 429.7232,
+      "r": 27.176000000000002
     }
   ],
   "pivos": {
-    "earLeft": [
-      399,
-      464
+    "orelha-esquerda": [
+      398.0,
+      334.0
     ],
-    "earRight": [
-      629,
-      443
+    "orelha-direita": [
+      626.8000000000001,
+      334.0
     ]
   },
-  "encaixe": {
-    "escala": 1,
-    "dx": 0.45,
-    "dy": -225.7
-  },
   "camadas": [
-    "luz",
     "luz-anel",
-    "corpo",
+    "luz-cabeca",
+    "vidro",
+    "fundo-cabeca",
     "cabeca",
+    "cabeca-complemento",
     "orelha-esquerda",
     "orelha-direita",
-    "aro"
+    "corpo",
+    "final-fundo",
+    "final-corpo"
   ],
-  "clipCabeca": "M353 640 L347 554 L295 549 L283 532 L258 383 L259 348 L269 332 L316 335 L446 386 L463 402 L464 437 L472 445 L552 440 L561 432 L565 402 L584 389 L707 345 L761 341 L772 357 L772 392 L748 520 L748 590 L780 709 L839 797 L852 825 L852 850 L833 861 L329 859 L315 845 L313 815 L326 766 L362 700 Z"
+  "recortes": {
+    "luz-anel": [
+      137,
+      55,
+      888,
+      806
+    ],
+    "luz-cabeca": [
+      150,
+      28,
+      882,
+      744
+    ],
+    "vidro": [
+      280,
+      198,
+      745,
+      663
+    ],
+    "fundo-cabeca": [
+      290,
+      154,
+      743,
+      552
+    ],
+    "cabeca": [
+      319,
+      232,
+      729,
+      552
+    ],
+    "cabeca-complemento": [
+      336,
+      461,
+      708,
+      609
+    ],
+    "orelha-esquerda": [
+      291,
+      156,
+      536,
+      415
+    ],
+    "orelha-direita": [
+      482,
+      160,
+      742,
+      416
+    ],
+    "corpo": [
+      190,
+      369,
+      852,
+      870
+    ],
+    "final-fundo": [
+      102,
+      0,
+      921,
+      942
+    ],
+    "final-corpo": [
+      190,
+      369,
+      852,
+      870
+    ]
+  },
+  "mascara": "mascara-revela.png",
+  "referencia": "T3747 / prancha.py; source assets from T3705",
+  "queixo": [
+    458.4000000000001,
+    554.4000000000001
+  ]
 }

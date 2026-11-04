@@ -1,0 +1,94 @@
+{
+  "runtime_sha256": "870d364f6daceb1963940d20b930564097f024bb0aaf6f21d940cd440fb8fddb",
+  "reference_sha256": "6466a2098c1eb1243938691b2d538d916ebce6fefbe144c5b24900b14c857a61",
+  "stage": [
+    1024,
+    1024
+  ],
+  "frames": [
+    {
+      "frame": 0,
+      "mean_channel_error": 0.0008561802819890441,
+      "p99_channel_error": 0.0,
+      "max_channel_error": 8,
+      "pixels_over_16_percent": 0.0
+    },
+    {
+      "frame": 48,
+      "mean_channel_error": 0.14344468319339992,
+      "p99_channel_error": 1.0,
+      "max_channel_error": 8,
+      "pixels_over_16_percent": 0.0
+    },
+    {
+      "frame": 112,
+      "mean_channel_error": 0.1515837014046397,
+      "p99_channel_error": 1.0,
+      "max_channel_error": 9,
+      "pixels_over_16_percent": 0.0
+    },
+    {
+      "frame": 126,
+      "mean_channel_error": 0.15568487790643692,
+      "p99_channel_error": 1.0,
+      "max_channel_error": 8,
+      "pixels_over_16_percent": 0.0
+    },
+    {
+      "frame": 150,
+      "mean_channel_error": 0.215404613160373,
+      "p99_channel_error": 2.0,
+      "max_channel_error": 8,
+      "pixels_over_16_percent": 0.0
+    },
+    {
+      "frame": 176,
+      "mean_channel_error": 0.2845957184353985,
+      "p99_channel_error": 2.0,
+      "max_channel_error": 194,
+      "pixels_over_16_percent": 0.0191993951693128
+    },
+    {
+      "frame": 190,
+      "mean_channel_error": 0.19600825010279468,
+      "p99_channel_error": 2.0,
+      "max_channel_error": 202,
+      "pixels_over_16_percent": 0.0197962675579961
+    },
+    {
+      "frame": 220,
+      "mean_channel_error": 0.18393020572201663,
+      "p99_channel_error": 2.0,
+      "max_channel_error": 211,
+      "pixels_over_16_percent": 0.019597310095101666
+    },
+    {
+      "frame": 268,
+      "mean_channel_error": 0.14042848805592031,
+      "p99_channel_error": 1.0,
+      "max_channel_error": 161,
+      "pixels_over_16_percent": 0.03292746010902869
+    },
+    {
+      "frame": 336,
+      "mean_channel_error": 0.08098464048386456,
+      "p99_channel_error": 1.0,
+      "max_channel_error": 161,
+      "pixels_over_16_percent": 0.03292746010902869
+    },
+    {
+      "frame": 390,
+      "mean_channel_error": 0.4031508230207048,
+      "p99_channel_error": 5.0,
+      "max_channel_error": 159,
+      "pixels_over_16_percent": 0.03272850264613426
+    },
+    {
+      "frame": 480,
+      "mean_channel_error": 0.08454398949504596,
+      "p99_channel_error": 1.0,
+      "max_channel_error": 158,
+      "pixels_over_16_percent": 0.03292746010902869
+    }
+  ]
+}
