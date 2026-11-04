@@ -31,11 +31,12 @@ function Booted({ children }: { children: ReactNode }) {
 
 /** Monta a janela em #root. */
 export function mount(node: ReactNode): void {
-  // A Aparência antes do primeiro render: a janela já pinta no tema escolhido (T2503).
-  startAppearance();
   const root = document.getElementById("root");
   if (!root) throw new Error("no #root");
-  createRoot(root).render(<Booted>{node}</Booted>);
+  // A Aparência antes do primeiro render: a janela já pinta no tema escolhido (T2503). Espera o engine no máximo
+  // 300 ms; se ele demorar, pinta com a cópia local (ou o padrão) e troca quando a resposta chegar.
+  const appearance = Promise.race([startAppearance(), new Promise<void>((r) => setTimeout(r, 300))]);
+  void appearance.then(() => createRoot(root).render(<Booted>{node}</Booted>));
 }
 
 // ---------------------------------------------------------------- Window

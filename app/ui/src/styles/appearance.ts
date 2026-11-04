@@ -122,27 +122,28 @@ export function fromSettings(s: Partial<AppSettings> | null | undefined): Appear
 export const sameAppearance = (x: Appearance, y: Appearance): boolean =>
   (Object.keys(x) as (keyof Appearance)[]).every((k) => x[k] === y[k]);
 
-let started = false;
+let started: Promise<void> | null = null;
 
 /**
  * Liga a Aparência numa janela: aplica a cópia local na hora (antes do React), depois o valor do engine, e segue o
- * `settings.changed` e a troca de claro/escuro do sistema. Chamado uma vez pelo `mount()`.
+ * `settings.changed` e a troca de claro/escuro do sistema. Chamado uma vez pelo `mount()`, que espera a resposta do
+ * engine (até um limite) para a primeira pintura já sair no tema certo, mesmo sem a cópia local (a 1ª abertura).
  */
-export function startAppearance(): void {
-  if (started || typeof document === "undefined") return;
-  started = true;
+export function startAppearance(): Promise<void> {
+  if (started) return started;
+  if (typeof document === "undefined") return Promise.resolve();
   applyAppearance(cached() ?? DEFAULT_APPEARANCE);
   const engine = window.engine;
-  if (engine?.has("settings.get")) {
-    engine.invoke("settings.get", {}).then(
-      (s) => {
-        const a = fromSettings(s as AppSettings);
-        applyAppearance(a);
-        cache(a);
-      },
-      () => {},
-    );
-  }
+  started = engine?.has("settings.get")
+    ? engine.invoke("settings.get", {}).then(
+        (s) => {
+          const a = fromSettings(s as AppSettings);
+          if (!sameAppearance(a, current)) applyAppearance(a);
+          cache(a);
+        },
+        () => {},
+      )
+    : Promise.resolve();
   engine?.on("settings.changed", (payload) => {
     const a = fromSettings(payload as UiEvents["settings.changed"]);
     // O evento também vem quando muda outra coisa (as fixadas, o atalho): sem mudança na Aparência, nada a pintar.
@@ -155,6 +156,7 @@ export function startAppearance(): void {
       if (current.mode === "system") applyAppearance(current);
     });
   }
+  return started;
 }
 
 /** A Aparência de agora e um jeito de mudar parte dela (a tela de Configurações). */

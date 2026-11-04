@@ -13,11 +13,6 @@ body,
   margin: 0;
 }
 
-/* A largura de cada janela (ou da seção, no hub), para as telas se ajeitarem quando o Tamanho do texto aperta. */
-#root {
-  container: kn-window / inline-size;
-}
-
 body {
   background: var(--bg);
   color: var(--text);
@@ -98,7 +93,9 @@ textarea {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* Sem transição nenhuma, e não de 0.01ms: com a duração forçada, todo elemento ganha `transition: all`, e a cor
+       herdada ficava presa na do tema anterior ao trocar a Aparência (T2503). */
+    transition: none !important;
   }
 }
 
@@ -106,5 +103,5 @@ textarea {
 :root[data-motion="reduced"] *::before,
 :root[data-motion="reduced"] *::after {
   animation-duration: 0.01ms !important;
-  transition-duration: 0.01ms !important;
+  transition: none !important;
 }

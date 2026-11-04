@@ -15,26 +15,6 @@ body {
   animation: window-in var(--slow) var(--pop-ease) both;
 }
 
-/* Janela estreita, ou o Tamanho do texto grande (T2503: o zoom tira largura): "Citada em" sai primeiro, e a nota
-   fica com o resto. */
-@container kn-window (max-width: 860px) {
-  .kn-notes {
-    grid-template-columns: 200px minmax(0, 1fr);
-  }
-  .kn-right {
-    display: none;
-  }
-}
-
-@container kn-window (max-width: 560px) {
-  .kn-notes {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .kn-side {
-    display: none;
-  }
-}
-
 .kn-notes[data-entered]:not([data-entered="0"]) {
   animation: none;
 }
