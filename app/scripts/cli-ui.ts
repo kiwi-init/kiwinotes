@@ -119,7 +119,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   }
   if (rest.length > 1) throw new UsageError(`sobrou: ${rest.slice(1).join(" ")}`);
   if (rest[0] !== undefined) {
-    if (!isWindow(rest[0])) throw new UsageError(`${rest[0]} não é uma janela (notes, history, settings)`);
+    if (!isWindow(rest[0])) throw new UsageError(`${rest[0]} não é uma janela (hub, notes, history, settings)`);
     a.window = rest[0];
   }
   return a;

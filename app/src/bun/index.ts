@@ -1,21 +1,68 @@
-// Kiwi Notes: processo principal. Vive na barra de menu, sem ícone no Dock.
+// Kiwi Notes: processo principal. Abre no hub, a janela principal (T2121, #2100), e vive na barra de menu: com o hub
+// fechado, sai do Dock e segue rodando.
 import path from "node:path";
 
-import { AgentControl, PATHS, Tray, Updater, Utils } from "electrobun/bun";
+import Electrobun, { AgentControl, ApplicationMenu, PATHS, Tray, Updater, Utils } from "electrobun/bun";
 
-import { UI_WINDOWS } from "../shared/ui-contract.ts";
+import { type HubSection, UI_WINDOWS } from "../shared/ui-contract.ts";
+import { Hub } from "./hub.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
 import { stores } from "./stores.ts";
 import { AppUpdates, updateMenuLabel } from "./updates.ts";
-import { openWindows, showWindow, type WindowName } from "./windows.ts";
+import { onWindowClosed, openWindows, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
 // velho de pé é substituído. Com KIWI_DEBUG=1 nunca derruba outro.
 if (claimInstance({ dir: stores.dir, mayReplace: process.env.KIWI_DEBUG !== "1" }).action === "exit") process.exit(0);
 
 Utils.setDockIconVisible(false);
+
+// O hub: abrir do zero toca a intro (#2078, ainda não ligada) e abre; abrir de novo, só abre. O Dock acompanha.
+const hub = new Hub({
+  show: () => showWindow("hub"),
+  isOpen: () => openWindows().includes("hub"),
+  navigate: (section) => void sendToWindow("hub", "hub.navigate", { section }),
+  setDock: (visible) => Utils.setDockIconVisible(visible),
+});
+provideHubSection(() => hub.takeSection());
+onWindowClosed((name) => name === "hub" && hub.closed());
+const openHub = (section?: HubSection) => void hub.open(section);
+
+// Com o Dock, o app tem menu de app: ⌘Q sai pelo mesmo caminho do "Sair" da barra, ⌘W fecha o hub, e a edição
+// (⌘C, ⌘V, ⌘Z…) segue funcionando nas notas.
+ApplicationMenu.setApplicationMenu([
+  {
+    label: "Kiwi Notes",
+    submenu: [
+      { role: "hide" },
+      { role: "hideOthers" },
+      { role: "showAll" },
+      { type: "separator" },
+      { label: "Sair do Kiwi Notes", action: "quit", accelerator: "q" },
+    ],
+  },
+  {
+    label: "Editar",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "pasteAndMatchStyle" },
+      { role: "selectAll" },
+    ],
+  },
+  { label: "Janela", submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }, { type: "separator" }, { role: "bringAllToFront" }] },
+]);
+ApplicationMenu.on("application-menu-clicked", (event) => {
+  if ((event as { data?: { action?: string } }).data?.action === "quit") quit();
+});
+// Abrir o app com ele já rodando (Finder, Dock, Spotlight): o hub, sem a intro.
+Electrobun.events.on("reopen", () => openHub());
 
 const tray = new Tray({
   title: "",
@@ -43,14 +90,17 @@ void Updater.getLocalInfo().then((i) => (appVersion = i.version));
 function setMenu(s: SessionStatus) {
   const update = updateMenuLabel(updates.status(), appVersion);
   tray.setMenu([
+    { type: "normal", label: "Abrir o Kiwi Notes", action: "hub" },
+    { type: "divider" },
     { type: "normal", label: statusLabel(s), action: "status", enabled: false },
     // Enquanto faltar alguma permissão: pede a próxima (o diálogo do macOS, ou os Ajustes no lugar certo).
     ...(s.connected && s.missing.length
       ? [{ type: "normal" as const, label: `Permitir acesso… (${PERMISSION_NAMES[s.missing[0]!]})`, action: "permissions" }]
       : []),
     { type: "divider" },
+    // As janelas soltas de antes viraram seções do hub (#2100).
     { type: "normal", label: "Notas…", action: "notes" },
-    { type: "normal", label: "Histórico…", action: "history" },
+    { type: "normal", label: "Ditado…", action: "dictation" },
     { type: "normal", label: "Configurações…", action: "settings" },
     { type: "divider" },
     ...(update ? [{ type: "normal" as const, label: update, action: "update", enabled: updates.status().kind === "ready" }] : []),
@@ -64,7 +114,7 @@ session.set(dictation);
 setMenu(dictation.status());
 dictation.onStatus(setMenu);
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
-dictation.sidecar.on("hotkey.notes", () => void showWindow("notes"));
+dictation.sidecar.on("hotkey.notes", () => openHub("notes"));
 dictation.start();
 updates.onChange(() => setMenu(dictation.status()));
 void updates.start();
@@ -72,10 +122,13 @@ void updates.start();
 tray.on("tray-clicked", (event) => {
   const action = (event as { data?: { action?: string } }).data?.action;
   switch (action) {
+    case "hub":
+      openHub();
+      break;
     case "notes":
-    case "history":
+    case "dictation":
     case "settings":
-      void showWindow(action);
+      openHub(action);
       break;
     case "permissions":
       void dictation.permissions.askNext();
@@ -161,3 +214,5 @@ if (process.env.KIWI_DEBUG === "1") {
 }
 
 console.log("Kiwi Notes is running in the menu bar");
+// Abrir do zero: o hub (com a intro, quando ela entrar).
+openHub();

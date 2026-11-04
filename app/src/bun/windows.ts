@@ -8,7 +8,7 @@ import path from "node:path";
 import { BrowserView, BrowserWindow, PATHS, Updater, Utils } from "electrobun/bun";
 import type { AppEngine } from "electrobun/bun/appengine";
 
-import { UI_CAPABILITIES, type UiWindow } from "../shared/ui-contract.ts";
+import { type HubSection, UI_CAPABILITIES, type UiEvents, type UiWindow } from "../shared/ui-contract.ts";
 import { WINDOW_SPECS as SPECS } from "../shared/window-specs.ts";
 import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
 import { session } from "./session.ts";
@@ -38,6 +38,17 @@ function devServerUrl(): Promise<string | null> {
   return devServer;
 }
 
+/** Quem sabe a seção pedida para o hub (src/bun/hub.ts), e quem quer saber que uma janela fechou. */
+let hubSection: () => HubSection | null = () => null;
+const closeListeners = new Set<(name: WindowName) => void>();
+export function provideHubSection(fn: () => HubSection | null): void {
+  hubSection = fn;
+}
+export function onWindowClosed(fn: (name: WindowName) => void): () => void {
+  closeListeners.add(fn);
+  return () => closeListeners.delete(fn);
+}
+
 const capabilities = uiCapabilities({
   dictionary: stores.dictionary,
   snippets: stores.snippets,
@@ -49,6 +60,7 @@ const capabilities = uiCapabilities({
   clipboardWrite: (text) => Utils.clipboardWriteText(text),
   notes: stores.notes,
   dictationNotes: stores.dictationNotes,
+  hubSection: () => hubSection(),
 });
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */
@@ -162,8 +174,17 @@ async function openWindow(name: WindowName): Promise<void> {
     off?.();
     engine?.stop();
     open.delete(name);
+    for (const fn of closeListeners) fn(name);
   });
   win.activate();
 }
 
 export const openWindows = (): WindowName[] => [...open.keys()];
+
+/** Manda um evento a uma janela aberta. Devolve se ela estava aberta. */
+export function sendToWindow<E extends keyof UiEvents>(name: WindowName, event: E, payload: UiEvents[E]): boolean {
+  const rpc = rpcs.get(name);
+  if (!rpc) return false;
+  rpc.send.event({ name: event, payload });
+  return true;
+}

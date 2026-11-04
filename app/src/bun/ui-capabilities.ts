@@ -2,7 +2,7 @@
 // main (T1192). Cada handler valida os argumentos e responde `E_BAD_ARGS` quando eles não servem. Nada genérico: não
 // há "rodar comando" nem "ler arquivo qualquer".
 
-import type { DictionaryTerm, HistoryEntry, HistoryPage, Snippet } from "../shared/ui-contract.ts";
+import type { DictionaryTerm, HistoryEntry, HistoryPage, HubSection, Snippet } from "../shared/ui-contract.ts";
 import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapability } from "../shared/ui-contract.ts";
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
@@ -34,6 +34,8 @@ export interface CapabilityDeps {
   dictionaryChanged?(terms: DictionaryTerm[]): void;
   snippetsChanged?(snippets: Snippet[]): void;
   clipboardWrite(text: string): void;
+  /** A seção pedida para o hub que ainda vai abrir (T2121): devolve e esquece. Sem ela, null. */
+  hubSection?(): HubSection | null;
   /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
   notes: Pick<Vault, "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve">;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
@@ -159,6 +161,10 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const saved = await deps.settings.save(patch);
       deps.settingsChanged?.(saved);
       return saved;
+    },
+    "hub.section": (args) => {
+      noArgs(args, "hub.section");
+      return { section: deps.hubSection?.() ?? null };
     },
     "clipboard.write": (args) => {
       const text = object(args, "clipboard.write").text;

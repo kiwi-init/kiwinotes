@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 // Uma UI do AppEngine por janela (T1192): `KIWI_UI_WINDOW=settings vite build` faz dist/settings/index.html com os
 // assets ao lado, que é o pack da UI (index.html na raiz). O `scripts/ui-build.ts` roda um build por janela e escreve
 // o ui.json. Sem a variável (o `vite` do dev, com HMR), todas as janelas saem do mesmo servidor.
-export const WINDOWS = ["settings", "history", "notes"] as const;
+export const WINDOWS = ["settings", "history", "notes", "hub"] as const;
 
 const window = process.env.KIWI_UI_WINDOW;
 if (window && !(WINDOWS as readonly string[]).includes(window)) throw new Error(`KIWI_UI_WINDOW=${window}: not a window`);

@@ -19,7 +19,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, HistoryEntry, HistoryPage,
 // 1.1.0 (T1316): as capacidades `notes.*` e o evento `notes.changed`, só acréscimos.
 // 1.2.0 (T1320): `history.toNote`, o ditado vira nota. Só acréscimo.
 // 1.3.0 (T1499): `settings.get|set`, com o atalho da janela Notas. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.3.0";
+// 1.4.0 (T2121): o hub, a janela principal (#2100): `hub.section` e o evento `hub.navigate`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.4.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -51,6 +52,11 @@ export interface UiCapabilities {
   "settings.set": { args: Partial<AppSettings>; result: AppSettings };
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
+  /**
+   * A seção que o hub deve mostrar ao abrir (1.4.0, T2121): o menu da barra ou o atalho pediu "Notas", "Ditado"…
+   * Devolve e esquece; null é "a de sempre". Com o hub já aberto, o pedido chega pelo evento `hub.navigate`.
+   */
+  "hub.section": { args: Record<string, never>; result: { section: HubSection | null } };
 
   // ---------------------------------------------------------------- notas (1.1.0, T1316)
   // `path` é sempre relativo ao vault, POSIX, terminando em `.md`. Fora do vault (`..`, absoluto, link simbólico,
@@ -85,6 +91,7 @@ export const UI_CAPABILITIES = [
   "settings.get",
   "settings.set",
   "clipboard.write",
+  "hub.section",
   "notes.list",
   "notes.get",
   "notes.save",
@@ -102,8 +109,16 @@ export interface UiEvents {
   "history.added": HistoryEntry;
   /** Notas criadas, mudadas, apagadas ou renomeadas, inclusive fora do app (o watcher do vault). */
   "notes.changed": { paths: string[] };
+  /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */
+  "hub.navigate": { section: HubSection };
 }
 
+/** As seções do hub (#2100), na ordem da barra lateral. */
+export const HUB_SECTIONS = ["notes", "meetings", "dictation", "settings"] as const;
+export type HubSection = (typeof HUB_SECTIONS)[number];
+export const isHubSection = (v: unknown): v is HubSection => (HUB_SECTIONS as readonly unknown[]).includes(v);
+
 /** As janelas que viram UI do AppEngine. */
-export const UI_WINDOWS = ["settings", "history", "notes"] as const;
+// O `hub` (T2121) é a janela principal; as outras três seguem como UIs próprias (a CLI e quem tinha uma instalada).
+export const UI_WINDOWS = ["settings", "history", "notes", "hub"] as const;
 export type UiWindow = (typeof UI_WINDOWS)[number];

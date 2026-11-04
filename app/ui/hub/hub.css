@@ -1,0 +1,106 @@
+/* O hub (T2121, #2100): a barra de seções à esquerda, com os semáforos em cima, e a seção à direita. A barra é do
+   mesmo fundo da janela das Notas e só se separa pelo tom; cada seção traz o próprio conteúdo. */
+
+.kn-hub {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  background: var(--surface);
+}
+
+.kn-hub[data-entering="true"] {
+  animation:
+    window-in var(--glide) both,
+    fade var(--slow) var(--ease) both;
+}
+
+.kn-hub-rail {
+  position: relative;
+  background: var(--bg);
+  padding: var(--titlebar) var(--space-3) var(--space-4);
+  overflow-y: auto;
+}
+
+.kn-hub-drag {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--titlebar);
+}
+
+.kn-hub-rail ul {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.kn-hub-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-2);
+  font: 500 var(--text-md) / 1.2 var(--font);
+  text-align: left;
+  cursor: default;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.kn-hub-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.kn-hub-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.kn-hub-item[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.kn-hub-soon-tag {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.kn-hub-main {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.kn-hub-pane {
+  height: 100%;
+  overflow: auto;
+}
+
+.kn-hub-pane[hidden] {
+  display: none;
+}
+
+/* Dentro do hub, os semáforos ficam na barra: a barra de título de cada seção não precisa abrir espaço para eles. */
+.kn-hub-main .kn-titlebar {
+  padding-left: var(--space-4);
+}
+
+/* A entrada é a do hub: a seção não anima de novo por cima. */
+.kn-hub-main .kn-window[data-entering="true"],
+.kn-hub-main .kn-notes {
+  animation: none;
+}
+
+.kn-hub-soon {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
