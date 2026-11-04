@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / 'kiwi-cat-candidata-v2.png'
 W, H = 2048, 2560
-ORDER = ['luz', 'corpo-nevoa', 'cabeca', 'orelha-esquerda', 'orelha-direita', 'aro']
+ORDER = ['luz', 'corpo', 'cabeca', 'orelha-esquerda', 'orelha-direita', 'aro']
 
 
 def smooth(a, b, value):
@@ -140,10 +140,10 @@ def main():
     rest = 1 - ear_l - ear_r
     body_share = smooth(346 * 4, 403 * 4, yy)
     shares = {'orelha-esquerda': ear_l, 'orelha-direita': ear_r,
-              'cabeca': rest * (1 - body_share), 'corpo-nevoa': rest * body_share}
+              'cabeca': rest * (1 - body_share), 'corpo': rest * body_share}
     remaining = np.ones((H, W), dtype=np.float32)
     layers = {}
-    for name in ['orelha-esquerda', 'orelha-direita', 'cabeca', 'corpo-nevoa']:
+    for name in ['orelha-esquerda', 'orelha-direita', 'cabeca', 'corpo']:
         contribution = opacity * shares[name]
         alpha = np.divide(contribution, remaining, out=np.zeros_like(opacity), where=remaining > 1e-7)
         layers[name] = rgba(foreground, alpha)
@@ -159,13 +159,13 @@ def main():
     head_rgba[:, :, :3] = np.uint8(np.rint(np.clip(foreground, 0, 1) * 255))
     head_rgba[head_rgba[:, :, 3] == 0, :3] = 0
     layers['cabeca'] = Image.fromarray(head_rgba)
-    body_rgba = np.array(layers['corpo-nevoa'])
+    body_rgba = np.array(layers['corpo'])
     opaque_head = np.asarray(layers['cabeca'])[:, :, 3] == 255
     extra = np.uint8(np.rint(polygon(body, blur=12) * 255))
     body_rgba[:, :, 3] = np.maximum(body_rgba[:, :, 3], np.where(opaque_head, extra, 0))
     body_rgba[:, :, :3] = np.uint8(np.rint(np.clip(foreground, 0, 1) * 255))
     body_rgba[body_rgba[:, :, 3] == 0, :3] = 0
-    layers['corpo-nevoa'] = Image.fromarray(body_rgba)
+    layers['corpo'] = Image.fromarray(body_rgba)
     light_alpha = background.max(axis=2)
     light_colour = np.divide(background, light_alpha[:, :, None],
                               out=np.zeros_like(background), where=light_alpha[:, :, None] > 1e-7)
@@ -179,7 +179,6 @@ def main():
     for name in ['cabeca', 'orelha-esquerda', 'orelha-direita', 'aro']:
         entire_head = Image.alpha_composite(entire_head, layers[name])
     entire_head.save(ROOT / 'cabeca-inteira.png', optimize=True)
-    layers['corpo-nevoa'].save(ROOT / 'corpo.png', optimize=True)
 
     # Exact circle geometry is also shipped as SVG; raster here is QA only.
     vector = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2560">']
@@ -202,7 +201,7 @@ def main():
     error = np.abs(np.asarray(composite.convert('RGB'), dtype=np.int16) - np.asarray(source, dtype=np.int16))
     outside = error[~eye_exclusion]
     three = Image.new('RGBA', (W, H), 'black')
-    for image in [layers['luz'], layers['corpo-nevoa'], entire_head, white_eyes]:
+    for image in [layers['luz'], layers['corpo'], entire_head, white_eyes]:
         three = Image.alpha_composite(three, image)
     three_error = np.abs(np.asarray(three.convert('RGB'), dtype=np.int16) - np.asarray(source, dtype=np.int16))[~eye_exclusion]
     report = {'max_channel_error_outside_eyes': int(outside.max()),
@@ -221,7 +220,7 @@ def main():
                 'order_back_to_front': [f'{n}.png' for n in ORDER] + ['olhos.svg'],
                 'eyes': eyes,
                 'pivots': {'orelha-esquerda': [740, 1040], 'orelha-direita': [1312, 1040],
-                           'cabeca': [1024, 1280], 'corpo-nevoa': [1024, 1992], 'aro': [1024, 1280]},
+                           'cabeca': [1024, 1280], 'corpo': [1024, 1992], 'aro': [1024, 1280]},
                 'hidden_pixels': 'light inpaint and eye removal are estimates; visible pixels reconstruct approved source',
                 'resolution': 'generated 1122x1402, normalized to 2048x2560; not native 2K'}
     (ROOT / 'manifest.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n')

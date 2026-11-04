@@ -12,7 +12,7 @@
   "y": 0,
   "order_back_to_front": [
     "luz.png",
-    "corpo-nevoa.png",
+    "corpo.png",
     "cabeca.png",
     "orelha-esquerda.png",
     "orelha-direita.png",
@@ -44,7 +44,7 @@
       1024,
       1280
     ],
-    "corpo-nevoa": [
+    "corpo": [
       1024,
       1992
     ],

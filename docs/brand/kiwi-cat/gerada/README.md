@@ -1,7 +1,7 @@
 # Kiwi-cat aprovado — T3705
 
 A candidata v2 foi aprovada pelo harry em #3732. A imagem inteira foi gerada
-com o `imagegen` integrado a partir da `../referencia-final.png`; o prompt está
+com o `imagegen` integrado a partir da `docs/brand/rive/referencia-final.png` (main, `8d5f7e8`); o prompt está
 em `prompt-v2.txt`. A saída nativa de 1122×1402 foi normalizada com
 `sips -z 2560 2048` para 2048×2560: não é detalhe nativo de 2K.
 `kiwi-cat-candidata-v2.png` é essa fonte aprovada, sem substituição posterior.
@@ -20,7 +20,7 @@ pixels/alfa. O espaço e os pivôs estão em `manifest.json`.
 Ordem de trás para frente:
 
 1. `luz.png`
-2. `corpo-nevoa.png`
+2. `corpo.png`
 3. `cabeca.png`
 4. `orelha-esquerda.png`
 5. `orelha-direita.png`
@@ -29,7 +29,7 @@ Ordem de trás para frente:
 
 Para o consumidor que já separa a cabeça (#3739), há também o contrato de três
 entradas: **`luz.png` → `corpo.png` → `cabeca-inteira.png` → olhos**.
-`corpo.png` é idêntico a `corpo-nevoa.png`; `cabeca-inteira.png` é a composição
+`cabeca-inteira.png` é a composição
 da cabeça, orelhas e aro, sem olhos. `camadas.json` traz olhos, polígonos das
 orelhas, sobra, pivôs e encaixe no palco 1024. São **alternativas**: não empilhe
 `cabeca-inteira.png` junto das peças que ela agrupa.
@@ -40,7 +40,7 @@ não uma nova silhueta. Não redesenhe o gato a partir deles.
 
 ## Verificação e limites
 
-`recomposta.png` e `comparacao-camadas.png` mostram as seis camadas com olhos
+`comparacao-camadas.png` e o arquivo local gerado `recomposta.png` mostram as seis camadas com olhos
 vetoriais sobre preto. `camadas.png` mostra as peças sobre cinza para inspecionar
 o alfa. `verificacao.json` mede o erro de canal RGB (0–255) da pilha salva,
 comparada à fonte aprovada, tanto no contrato de seis como no de três camadas.
@@ -66,5 +66,6 @@ python3 -m venv /tmp/kiwi-cat-camadas
 ```
 
 Rode daqui. Não há API nem rede no `separar.py`; as dependências são somente
-ferramentas de preparação de assets, fora do runtime. Pillow 13.0.0 e NumPy
+ferramentas de preparação de assets, fora do runtime. Os PNGs de 2K são fontes de design nos docs; a T3720 os converte para WebP no app.
+Pillow 13.0.0 e NumPy
 2.5.4 foram usados na verificação original. O script não altera a fonte.
