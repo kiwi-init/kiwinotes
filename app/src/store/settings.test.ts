@@ -12,18 +12,18 @@ const fresh = () => (dir = mkdtempSync(path.join(tmpdir(), "kiwi-settings-")));
 
 test("sem arquivo, o padrão: ⌃⌥N abre a janela Notas (T1499)", async () => {
   fresh();
-  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: "control+option+n" });
+  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: "control+option+n", pinned: [] });
   expect(DEFAULT_SETTINGS.notesShortcut).toBe(DEFAULT_NOTES_SHORTCUT);
 });
 
 test("grava só o que mudou, só para o usuário, e lê de volta; null (desligado) fica", async () => {
   fresh();
   const store = new SettingsStore(dir);
-  expect(await store.save({ notesShortcut: null })).toEqual({ notesShortcut: null });
-  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: null });
-  expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual({ version: 1, notesShortcut: null });
+  expect(await store.save({ notesShortcut: null })).toEqual({ notesShortcut: null, pinned: [] });
+  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: null, pinned: [] });
+  expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual({ version: 1, notesShortcut: null, pinned: [] });
   expect(statSync(store.file).mode & 0o777).toBe(0o600);
-  expect(await store.save({})).toEqual({ notesShortcut: null });
+  expect(await store.save({})).toEqual({ notesShortcut: null, pinned: [] });
 });
 
 test("editado à mão com um valor que não existe: volta ao padrão, sem quebrar", async () => {
@@ -31,7 +31,7 @@ test("editado à mão com um valor que não existe: volta ao padrão, sem quebra
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: "command+q" }));
   expect(await new SettingsStore(dir).load()).toEqual(DEFAULT_SETTINGS);
   expect(sanitizeSettings(null)).toEqual(DEFAULT_SETTINGS);
-  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ notesShortcut: "option+command+n" });
+  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ notesShortcut: "option+command+n", pinned: [] });
 });
 
 test("as combinações oferecidas estão no formato que o helper entende (KeyCombo, ADR 0001)", () => {

@@ -9,9 +9,23 @@ import { readJson, writeJson } from "./files.ts";
 export interface AppSettings {
   /** O atalho global que abre a janela Notas, ou null (desligado). */
   notesShortcut: NotesShortcut | null;
+  /**
+   * As notas e pastas fixadas na janela Notas (T2468), relativas ao vault. Ficam aqui e não no frontmatter, para não
+   * mexer no arquivo da pessoa por uma preferência da UI; o engine corrige quando elas mudam de nome, de pasta ou somem.
+   */
+  pinned: string[];
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT };
+/** Até quantas fixadas. */
+export const MAX_PINNED = 200;
+
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [] };
+
+/** A lista de fixadas que vale: strings curtas, sem repetir, até `MAX_PINNED` (a validação de caminho é de quem grava). */
+export function sanitizePinned(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return [...new Set(input.filter((p): p is string => typeof p === "string" && p.length > 0 && p.length <= 1024))].slice(0, MAX_PINNED);
+}
 
 interface SettingsFile extends Partial<AppSettings> {
   version: 1;
@@ -20,7 +34,10 @@ interface SettingsFile extends Partial<AppSettings> {
 /** Só o que vale: um campo editado à mão com um valor que não existe volta ao padrão, sem derrubar os outros. */
 export function sanitizeSettings(input: unknown): AppSettings {
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return { notesShortcut: "notesShortcut" in o && isNotesShortcut(o.notesShortcut) ? o.notesShortcut : DEFAULT_SETTINGS.notesShortcut };
+  return {
+    notesShortcut: "notesShortcut" in o && isNotesShortcut(o.notesShortcut) ? o.notesShortcut : DEFAULT_SETTINGS.notesShortcut,
+    pinned: sanitizePinned(o.pinned),
+  };
 }
 
 export class SettingsStore {

@@ -9,7 +9,7 @@ import { type FSWatcher, watch } from "node:fs";
 import { lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks } from "../shared/wikilinks.ts";
+import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { fileNameFor, folderPath, inside, notePath, VaultError } from "./paths.ts";
 
@@ -22,6 +22,8 @@ export interface NoteMeta {
   folder: string;
   /** ISO 8601. */
   mtime: string;
+  /** Quando a nota nasceu (o birthtime do arquivo), ISO 8601 (T2468: "ordenar por criação"). */
+  ctime: string;
   size: number;
   /** Muda a cada mudança do conteúdo: é o `baseVersion` do `save`. */
   version: string;
@@ -40,6 +42,15 @@ export interface SearchHit {
   title: string;
   snippet: string;
   score: number;
+}
+
+/** Uma pasta do vault com o que tem dentro (T2468): a raiz tem `path` e `name` vazios. */
+export interface FolderNode {
+  path: string;
+  name: string;
+  folders: FolderNode[];
+  /** Os caminhos das notas desta pasta (não das de dentro das filhas). */
+  notes: string[];
 }
 
 export interface Backlink {
@@ -66,6 +77,23 @@ export interface VaultOptions {
   debounceMs?: number;
   /** Liga o watcher ao abrir (o app liga; os testes ligam na mão). */
   watch?: boolean;
+  /** Quanto o apagado espera em `.kiwi-trash` (o "Desfazer") antes de ir para a Lixeira do macOS. */
+  undoMs?: number;
+  /** Agora, em ms (os testes fixam). */
+  now?: () => number;
+}
+
+/** A pasta oculta do "Desfazer" (T2468): o vault ignora pontos, e o Obsidian também. */
+export const UNDO_DIR = ".kiwi-trash";
+/** 10 min para desfazer um apagar. */
+export const UNDO_MS = 10 * 60_000;
+
+interface Staged {
+  /** Onde o item está agora, dentro de `.kiwi-trash`. */
+  abs: string;
+  kind: "note" | "folder";
+  at: number;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 /** O `trash` do macOS (macOS 14+): a nota vai para a Lixeira, de onde dá para voltar. */
@@ -124,18 +152,27 @@ export class Vault {
   private resolver: Resolver | null = null;
   /** Só para os testes: roda entre gravar o arquivo temporário e conferir a versão (uma edição de fora bem ali). */
   private beforeReplace?: () => void;
+  /** O que foi apagado e ainda dá para desfazer, pelo caminho original (T2468). */
+  private staged = new Map<string, Staged>();
+  private readonly undoMs: number;
+  private readonly now: () => number;
 
   constructor(o: VaultOptions) {
     this.root = o.root;
     this.trash = o.trash ?? macTrash;
     this.debounceMs = o.debounceMs ?? 150;
     this.watchOnOpen = o.watch ?? false;
+    this.undoMs = o.undoMs ?? UNDO_MS;
+    this.now = o.now ?? Date.now;
   }
 
   /** Cria a pasta se não existe e monta o índice. Uma vez só. */
   open(): Promise<void> {
     this.ready ??= (async () => {
       await mkdir(this.root, { recursive: true });
+      // O que sobrou de um "Desfazer" de antes (o app fechou sem esvaziar): sem a memória de onde estava, vai para a
+      // Lixeira do macOS, como teria ido.
+      await this.flushLeftoverUndo();
       await this.scan();
       if (this.watchOnOpen) this.watch();
     })();
@@ -165,15 +202,16 @@ export class Vault {
     this.watcher = null;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = null;
+    // O que esperava o "Desfazer" vai para a Lixeira agora; se o processo sair antes, o próximo `open` termina.
+    void this.expireAll();
   }
 
   // ---------------------------------------------------------------- leitura
 
-  list(): { folders: string[]; notes: NoteMeta[] } {
-    return {
-      folders: [...this.folders].sort((a, b) => a.localeCompare(b)),
-      notes: [...this.notes.values()].map((e) => e.meta).sort((a, b) => a.path.localeCompare(b.path)),
-    };
+  list(): { folders: string[]; notes: NoteMeta[]; tree: FolderNode } {
+    const folders = [...this.folders].sort((a, b) => a.localeCompare(b));
+    const notes = [...this.notes.values()].map((e) => e.meta).sort((a, b) => a.path.localeCompare(b.path));
+    return { folders, notes, tree: buildTree(folders, notes) };
   }
 
   async get(input: unknown): Promise<Note> {
@@ -324,19 +362,186 @@ export class Vault {
     return { meta: (this.notes.get(to) ?? entry).meta, updatedLinks };
   }
 
-  /** Manda a nota para a Lixeira do macOS (não apaga). */
+  /**
+   * Apaga a nota: ela espera 10 min em `.kiwi-trash` (o "Desfazer", `restore`) e então vai para a Lixeira do macOS. Não
+   * vai direto para a Lixeira porque tirar de lá pede o Acesso Total ao Disco (o ~/.Trash é protegido pelo TCC).
+   */
   async delete(input: unknown): Promise<true> {
     const p = notePath(input);
     const abs = inside(this.root, p);
     if (!(await exists(abs))) throw new VaultError("E_NOT_FOUND", `no note ${p}`);
-    await this.trash(abs);
+    await this.stage(p, abs, "note");
     this.notes.delete(p);
     this.resolver = null;
     this.emit([p]);
     return true;
   }
 
+  /** Move a nota para outra pasta ("" é a raiz), com o mesmo nome; os [[links]] seguem, como no `rename`. */
+  async moveNote(input: unknown, folder: unknown): Promise<{ meta: NoteMeta; updatedLinks: number }> {
+    const p = notePath(input);
+    const dir = folderPath(folder ?? "");
+    const name = p.split("/").at(-1)!;
+    return this.rename(p, dir ? `${dir}/${name}` : name);
+  }
+
+  /** Uma cópia na mesma pasta, "Título 2" (ou o próximo número livre), com o mesmo conteúdo. */
+  async duplicate(input: unknown): Promise<Note> {
+    const note = await this.get(input);
+    return this.create(note.folder, note.title, note.content);
+  }
+
+  /** Cria a pasta e as de cima que faltarem. */
+  async createFolder(input: unknown): Promise<{ path: string }> {
+    const p = folderPath(input);
+    if (!p) throw new VaultError("E_BAD_ARGS", "path must name a folder");
+    const abs = inside(this.root, p);
+    if (await exists(abs)) throw new VaultError("E_EXISTS", `${p} already exists`);
+    await mkdir(abs, { recursive: true });
+    for (let f = p; f; f = parentOf(f)) this.folders.add(f);
+    this.emit([p]);
+    return { path: p };
+  }
+
+  /**
+   * Renomeia ou move a pasta inteira (`target` é o caminho novo dela), e atualiza os [[links]] de todas as notas que
+   * apontavam para alguma nota de dentro, inclusive os das que se moveram. Uma pasta não vai para dentro dela mesma.
+   */
+  async moveFolder(input: unknown, target: unknown): Promise<{ path: string; moved: number; updatedLinks: number }> {
+    const from = folderPath(input);
+    const to = folderPath(target);
+    if (!from || !to) throw new VaultError("E_BAD_ARGS", "path and the new path must name folders");
+    if (to === from) return { path: to, moved: 0, updatedLinks: 0 };
+    if (to.startsWith(`${from}/`)) throw new VaultError("E_BAD_ARGS", `${from} can't go inside itself`);
+    const fromAbs = inside(this.root, from);
+    const toAbs = inside(this.root, to);
+    const s = await lstat(fromAbs).catch(() => null);
+    if (!s?.isDirectory()) throw new VaultError("E_NOT_FOUND", `no folder ${from}`);
+    if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
+    // Do disco, como o rename de nota (revisão #1397): o índice pode estar atrás.
+    await this.scan();
+    const before = [...this.notes.keys()];
+    const moves = new Map<string, string>();
+    for (const p of before) if (p.startsWith(`${from}/`)) moves.set(p, `${to}${p.slice(from.length)}`);
+    const after = before.map((p) => moves.get(p) ?? p);
+    await mkdir(path.dirname(toAbs), { recursive: true });
+    await rename(fromAbs, toAbs);
+    await this.scan();
+    const updatedLinks = await this.rewriteAll(moves, makeResolver(before), makeResolver(after));
+    this.emit([from, to, ...moves.keys(), ...moves.values()]);
+    return { path: to, moved: moves.size, updatedLinks };
+  }
+
+  /** Apaga a pasta com o que tem dentro: espera o "Desfazer" em `.kiwi-trash`, como a nota. */
+  async deleteFolder(input: unknown): Promise<true> {
+    const p = folderPath(input);
+    if (!p) throw new VaultError("E_BAD_ARGS", "the vault itself can't be deleted");
+    const abs = inside(this.root, p);
+    const s = await lstat(abs).catch(() => null);
+    if (!s?.isDirectory()) throw new VaultError("E_NOT_FOUND", `no folder ${p}`);
+    const gone = [...this.notes.keys()].filter((n) => n.startsWith(`${p}/`));
+    await this.stage(p, abs, "folder");
+    await this.scan();
+    this.emit([p, ...gone]);
+    return true;
+  }
+
+  /** Desfaz um apagar dos últimos 10 min (nota ou pasta), de volta ao mesmo lugar, se ele ainda estiver livre. */
+  async restore(input: unknown): Promise<{ path: string }> {
+    if (typeof input !== "string") throw new VaultError("E_BAD_ARGS", "path must be a string");
+    const p = /\.md$/i.test(input) ? notePath(input) : folderPath(input);
+    const item = this.staged.get(p);
+    if (!item) throw new VaultError("E_NOT_FOUND", `nothing deleted at ${p} to restore`);
+    const abs = inside(this.root, p);
+    if (await exists(abs)) throw new VaultError("E_EXISTS", `${p} is taken again`);
+    await mkdir(path.dirname(abs), { recursive: true });
+    await rename(item.abs, abs);
+    if (item.timer) clearTimeout(item.timer);
+    this.staged.delete(p);
+    await rm(path.dirname(item.abs), { recursive: true, force: true });
+    await this.scan();
+    const back = item.kind === "note" ? [p] : [p, ...[...this.notes.keys()].filter((n) => n.startsWith(`${p}/`))];
+    this.emit(back);
+    return { path: p };
+  }
+
+  /** O caminho absoluto de uma nota ou pasta que existe, para o "Mostrar no Finder" (quem abre o Finder é o app). */
+  async locate(input: unknown): Promise<string> {
+    if (typeof input !== "string") throw new VaultError("E_BAD_ARGS", "path must be a string");
+    const p = /\.md$/i.test(input) ? notePath(input) : folderPath(input);
+    const abs = inside(this.root, p);
+    if (!(await exists(abs))) throw new VaultError("E_NOT_FOUND", `nothing at ${p}`);
+    return abs;
+  }
+
   // ---------------------------------------------------------------- interno
+
+  /** Troca os [[links]] de todas as notas para os lugares novos de `moves`, com escrita condicional (como o rename). */
+  private async rewriteAll(moves: ReadonlyMap<string, string>, before: Resolver, after: Resolver): Promise<number> {
+    if (!moves.size) return 0;
+    let updated = 0;
+    for (const e of [...this.notes.values()]) {
+      if (!e.links.some((t) => moves.has(before(t) ?? ""))) continue;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const disk = await readFile(inside(this.root, e.meta.path), "utf8").catch(() => null);
+        if (disk === null) break;
+        const { content: next, count } = rewriteLinksMany(disk, moves, before, after);
+        if (!count) break;
+        if (await this.write(e.meta.path, next, versionOf(disk))) {
+          updated += count;
+          break;
+        }
+      }
+    }
+    return updated;
+  }
+
+  /** Tira o item do vault para `.kiwi-trash/<id>/`, e marca a hora de ir para a Lixeira do macOS. */
+  private async stage(p: string, abs: string, kind: Staged["kind"]): Promise<void> {
+    const old = this.staged.get(p);
+    if (old) await this.expire(p, old); // o mesmo caminho apagado de novo: o de antes segue para a Lixeira
+    const box = path.join(this.root, UNDO_DIR, `${this.now()}-${randomBytes(4).toString("hex")}`);
+    await mkdir(box, { recursive: true });
+    const staged = path.join(box, path.basename(abs));
+    await rename(abs, staged);
+    const item: Staged = { abs: staged, kind, at: this.now(), timer: null };
+    item.timer = setTimeout(() => void this.expire(p, item), this.undoMs);
+    (item.timer as { unref?: () => void }).unref?.();
+    this.staged.set(p, item);
+  }
+
+  /** O "Desfazer" acabou: o item vai para a Lixeira do macOS. */
+  private async expire(p: string, item: Staged): Promise<void> {
+    if (item.timer) clearTimeout(item.timer);
+    if (this.staged.get(p) === item) this.staged.delete(p);
+    try {
+      await this.trash(item.abs);
+      await rm(path.dirname(item.abs), { recursive: true, force: true });
+    } catch (e) {
+      console.error(`[notes] couldn't move ${item.abs} to the Trash:`, e);
+    }
+  }
+
+  private async expireAll(): Promise<void> {
+    for (const [p, item] of [...this.staged]) await this.expire(p, item);
+  }
+
+  private async flushLeftoverUndo(): Promise<void> {
+    const dir = path.join(this.root, UNDO_DIR);
+    let boxes: string[];
+    try {
+      boxes = await readdir(dir);
+    } catch {
+      return;
+    }
+    for (const box of boxes) {
+      const boxAbs = path.join(dir, box);
+      for (const name of await readdir(boxAbs).catch(() => [] as string[])) {
+        await this.trash(path.join(boxAbs, name)).catch((e) => console.error(`[notes] couldn't move ${name} to the Trash:`, e));
+      }
+      await rm(boxAbs, { recursive: true, force: true });
+    }
+  }
 
   private resolve_(): Resolver {
     this.resolver ??= makeResolver([...this.notes.keys()]);
@@ -376,7 +581,16 @@ export class Vault {
     const title = noteName(p);
     const folder = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
     const entry: Entry = {
-      meta: { path: p, title, folder, mtime: s.mtime.toISOString(), size: s.size, version: versionOf(content), tags: tagsOf(content) },
+      meta: {
+        path: p,
+        title,
+        folder,
+        mtime: s.mtime.toISOString(),
+        ctime: s.birthtime.toISOString(),
+        size: s.size,
+        version: versionOf(content),
+        tags: tagsOf(content),
+      },
       folded: fold(content),
       foldedTitle: fold(title),
       links: parseLinks(content).map((l) => l.target),
@@ -466,4 +680,29 @@ async function exists(abs: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+const parentOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+/** A árvore das pastas a partir das listas: pastas vazias entram, e as filhas e as notas vêm em ordem. */
+export function buildTree(folders: readonly string[], notes: readonly { path: string; folder: string }[]): FolderNode {
+  const root: FolderNode = { path: "", name: "", folders: [], notes: [] };
+  const byPath = new Map<string, FolderNode>([["", root]]);
+  const node = (p: string): FolderNode => {
+    const found = byPath.get(p);
+    if (found) return found;
+    const n: FolderNode = { path: p, name: p.split("/").at(-1)!, folders: [], notes: [] };
+    byPath.set(p, n);
+    node(parentOf(p)).folders.push(n);
+    return n;
+  };
+  for (const f of folders) node(f);
+  for (const n of notes) node(n.folder).notes.push(n.path);
+  const sort = (n: FolderNode) => {
+    n.folders.sort((a, b) => a.name.localeCompare(b.name));
+    n.notes.sort((a, b) => a.localeCompare(b));
+    n.folders.forEach(sort);
+  };
+  sort(root);
+  return root;
 }

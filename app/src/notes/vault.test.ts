@@ -19,7 +19,7 @@ function tmp(): string {
   return d;
 }
 
-async function vault(files: Record<string, string> = {}) {
+async function vault(files: Record<string, string> = {}, undoMs?: number) {
   const root = path.join(tmp(), "KiwiNotes");
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -29,9 +29,10 @@ async function vault(files: Record<string, string> = {}) {
   const v = new Vault({
     root,
     debounceMs: 20,
+    undoMs,
     trash: async (abs) => {
       trashed.push(path.relative(root, abs));
-      rmSync(abs);
+      rmSync(abs, { recursive: true });
     },
   });
   vaults.push(v);
@@ -167,12 +168,17 @@ describe("Vault (T1316)", () => {
     expect(readFileSync(path.join(root, "N.md"), "utf8")).toBe("do Obsidian");
   });
 
-  test("delete manda para a Lixeira (não apaga direto)", async () => {
-    const { v, trashed } = await vault({ "Velha.md": "x" });
+  test("delete manda para a Lixeira (não apaga direto), depois do tempo do Desfazer (T2468)", async () => {
+    const { v, root, trashed } = await vault({ "Velha.md": "x" }, 40);
     expect(await v.delete("Velha.md")).toBe(true);
-    expect(trashed).toEqual(["Velha.md"]);
     expect(v.list().notes).toEqual([]);
+    expect(existsSync(path.join(root, "Velha.md"))).toBe(false);
     expect(await code(v.delete("Velha.md"))).toBe("E_NOT_FOUND");
+    expect(trashed).toEqual([]); // ainda dá para desfazer
+    await Bun.sleep(120);
+    expect(trashed).toHaveLength(1);
+    expect(trashed[0]).toMatch(/^\.kiwi-trash\/[^/]+\/Velha\.md$/);
+    expect(existsSync(path.join(root, ".kiwi-trash"))).toBe(true); // a pasta fica, vazia
   });
 
   test("search: título vale mais, sem acento nem maiúscula, com o trecho; backlinks e resolve", async () => {
@@ -252,13 +258,13 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
       snippets: { load: async () => [], save: async (s) => s },
       history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
       dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
-      settings: { load: async () => ({ notesShortcut: null }), save: async () => ({ notesShortcut: null }) },
+      settings: { load: async () => ({ notesShortcut: null, pinned: [] }), save: async () => ({ notesShortcut: null, pinned: [] }) },
       clipboardWrite: () => {},
       notes: v,
     });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
 
-    expect(UI_CONTRACT_VERSION).toBe("1.6.0");
+    expect(UI_CONTRACT_VERSION).toBe("1.7.0");
     expect(UI_CAPABILITIES).toContain("notes.resolve");
     expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
     expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });

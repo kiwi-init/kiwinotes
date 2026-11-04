@@ -101,6 +101,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     dictationNotes: stores.dictationNotes,
     // Headless nunca encosta no clipboard da pessoa: o texto vai só para o log, como o dryRun do insert.
     clipboardWrite: (text) => console.log(`[headless] clipboard.write (not written): ${text.length} chars`),
+    // O "Mostrar no Finder" nunca abre o Finder no headless: só o log (T2468).
+    reveal: (abs) => console.log(`[headless] notes.reveal (not opened): ${abs}`),
   });
   const offs = [
     stores.notes.onChanged((paths) => event("notes.changed", { paths })),

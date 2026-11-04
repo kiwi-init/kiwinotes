@@ -74,6 +74,11 @@ const capabilities = uiCapabilities({
   settings: stores.settings,
   settingsChanged: (settings) => void session.get()?.settingsChanged(settings),
   clipboardWrite: (text) => Utils.clipboardWriteText(text),
+  // "Mostrar no Finder" (T2468). Com KIWI_DEBUG=1 (os agentes), só registra: nada abre na tela de ninguém.
+  reveal: (abs) => {
+    if (process.env.KIWI_DEBUG === "1") return void console.log(`[notes] reveal (dry run): ${abs}`);
+    Bun.spawn(["/usr/bin/open", "-R", abs], { stdio: ["ignore", "ignore", "ignore"] });
+  },
   notes: stores.notes,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),
