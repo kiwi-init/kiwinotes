@@ -31,6 +31,10 @@ export const REF = {
   /** As orelhas: do contorno de fora até onde encostam no topo da cabeça. */
   earLeft: [[100, 150], [140, 140], [268, 196], [232, 222], [196, 246], [168, 286], [118, 300]],
   earRight: [[262, 192], [390, 150], [420, 170], [410, 280], [372, 286], [338, 240], [300, 214]],
+  /** O gato de frente (#3581): a metade esquerda da foto, espelhada no meio dos olhos. */
+  mirrorX: 256,
+  /** A orelha com sobra para dentro da cabeça (#3583): girada, a emenda não aparece. */
+  earLeftOver: [[100, 150], [140, 140], [268, 196], [262, 250], [214, 292], [176, 330], [118, 320]],
   /** A névoa de baixo começa a pesar mais que a cabeça nesta faixa. */
   mistFrom: 410,
   mistTo: 480,
@@ -73,6 +77,8 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
         return a;
       };
       const photo = canvas((x) => x.drawImage(img, 0, 0, w, h)).getContext("2d")!.getImageData(0, 0, w, h).data;
+      const mx = ref.mirrorX;
+      const mirror = (pts: readonly (readonly number[])[]) => pts.map(([px, py]) => [2 * mx - 1 - px, py]);
       // O cinza do fundo: a média dos quatro cantos.
       const bg = [0, 0, 0];
       for (const [cx, cy] of [[4, 4], [w - 5, 4], [4, h - 5], [w - 5, h - 5]]) {
@@ -85,15 +91,23 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
       for (let p = 0; p < w * h; p++) {
         const c = [photo[p * 4] / 255, photo[p * 4 + 1] / 255, photo[p * 4 + 2] / 255];
         let a = 0;
-        for (let k = 0; k < 3; k++) a = Math.max(a, c[k] > bg[k] ? (c[k] - bg[k]) / (1 - bg[k]) : (bg[k] - c[k]) / bg[k]);
-        a = Math.min(1, a);
+        // Pixel quase neutro (croma < 0,05) é preto translúcido: o alfa vem da luminância e a cor é a do gato. Dividir um
+        // canal um pouco mais baixo pelo alfa fazia o ruído de croma do JPEG virar pontos claros na borda (#3583).
+        const neutral = Math.max(...c) - Math.min(...c) < 0.05;
+        if (neutral) {
+          const L = (v: number[]) => 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+          a = Math.max(0, (L(bg) - L(c)) / L(bg));
+        } else for (let k = 0; k < 3; k++) a = Math.max(a, c[k] > bg[k] ? (c[k] - bg[k]) / (1 - bg[k]) : (bg[k] - c[k]) / bg[k]);
+        // O preto da foto chega a ~0,93 de alfa (o cinza do JPEG): sem o empurrão, a luz de trás vaza e a orelha fica
+        // cinza (#3590). Quase preto vira opaco.
+        a = Math.min(1, a / 0.9);
         // O que é mais claro que o fundo e sem cor é o halo do JPEG em volta do escuro, não o gato: sai.
         const lum = (v: number[]) => 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
         if (lum(c) > lum(bg) && Math.max(...c) - Math.min(...c) < 0.08) a = 0;
         // Ruído de JPEG no fundo vira transparência, com um corte macio (um corte seco deixava a borda pontilhada).
         const cut = Math.min(1, Math.max(0, (a - 0.03) / 0.07));
         a *= cut * cut * (3 - 2 * cut);
-        for (let k = 0; k < 3; k++) fg[p * 4 + k] = a > 0 ? Math.min(1, Math.max(0, (c[k] - bg[k]) / a + bg[k])) : 0;
+        for (let k = 0; k < 3; k++) fg[p * 4 + k] = neutral ? 0.07 : a > 0 ? Math.min(1, Math.max(0, (c[k] - bg[k]) / a + bg[k])) : 0;
         // Com alfa baixo, dividir por ele amplia o ruído do JPEG em pontos claros na borda. Ali a cor vai para o escuro
         // do gato, devagar: com alfa de 0,35 para cima, fica a cor que a conta deu (o brilho colorido mora acima disso).
         const keep = Math.min(1, Math.max(0, (a - 0.08) / 0.27));
@@ -129,7 +143,9 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
         x.fill();
       };
       const earL = mask(poly(ref.earLeft), 3);
-      const earR = mask(poly(ref.earRight), 3);
+      const earR = mask(poly(mirror(ref.earLeft)), 3);
+      const earLOver = mask(poly(ref.earLeftOver), 3);
+      const earROver = mask(poly(mirror(ref.earLeftOver)), 3);
       // A névoa: 0 em cima, 1 embaixo, numa faixa macia.
       const mist = new Float32Array(w * h);
       for (let y = 0; y < h; y++) {
@@ -147,13 +163,56 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
       const glowSoft = blur(glowRaw, 2);
       const glow = new Float32Array(w * h);
       for (let p = 0; p < w * h; p++) glow[p] = fg[p * 4 + 3] > 0.001 ? Math.min(1, glowSoft[p] / fg[p * 4 + 3]) : 0;
+      // De frente e com o corpo reto (#3581): a metade direita vira o espelho da esquerda, no meio dos olhos (x = mx).
+      // O brilho espelha de outro jeito: na foto a cabeça está virada, e o topo do arco fica à direita do meio dos olhos.
+      // Espelhar em mx deixava o arco com uma ponta no meio; a metade esquerda do arco, até o topo dele, é esticada até
+      // mx antes de espelhar, e o topo fica redondo. À direita, a cor gira do ciano para o púrpura, como na referência.
+      let apex = mx;
+      {
+        let best = h;
+        for (let x = mx - 40; x < Math.min(w, mx + 120); x++)
+          for (let y = 0; y < h; y++)
+            if (glowRaw[y * w + x]! > 0.25) {
+              if (y < best) [best, apex] = [y, x];
+              break;
+            }
+      }
+      const side = (x: number) => (x < mx ? x : 2 * mx - 1 - x);
+      const fgM = new Float32Array(w * h * 4);
+      const glowM = new Float32Array(w * h);
+      const glowC = new Float32Array(w * h * 3);
+      const hue = (rgb: number[], deg: number) => {
+        // Rotação de matiz em RGB (a matriz do feColorMatrix hueRotate).
+        const r = (deg * Math.PI) / 180, c = Math.cos(r), s2 = Math.sin(r);
+        const m = [
+          0.213 + c * 0.787 - s2 * 0.213, 0.715 - c * 0.715 - s2 * 0.715, 0.072 - c * 0.072 + s2 * 0.928,
+          0.213 - c * 0.213 + s2 * 0.143, 0.715 + c * 0.285 + s2 * 0.14, 0.072 - c * 0.072 - s2 * 0.283,
+          0.213 - c * 0.213 - s2 * 0.787, 0.715 - c * 0.715 + s2 * 0.715, 0.072 + c * 0.928 + s2 * 0.072,
+        ];
+        return [0, 1, 2].map((i) => Math.min(1, Math.max(0, m[i * 3]! * rgb[0]! + m[i * 3 + 1]! * rgb[1]! + m[i * 3 + 2]! * rgb[2]!)));
+      };
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const p = y * w + x;
+          const sb = y * w + side(x);
+          for (let k = 0; k < 4; k++) fgM[p * 4 + k] = fg[sb * 4 + k]!;
+          const sg = y * w + Math.min(w - 1, Math.round((side(x) * apex) / mx));
+          glowM[p] = glow[sg]!;
+          const col = [fg[sg * 4]!, fg[sg * 4 + 1]!, fg[sg * 4 + 2]!];
+          const turn = x < mx ? 0 : 95 * Math.min(1, (x - mx) / 170);
+          const out = turn ? hue(col, turn) : col;
+          for (let k = 0; k < 3; k++) glowC[p * 3 + k] = out[k]!;
+        }
+      // Dali em diante, tudo usa a versão de frente.
+      fg.set(fgM);
       const layer = (weight: (p: number) => number, eyesOut = false) => {
         const c = canvas();
         const x = c.getContext("2d")!;
         const id = x.createImageData(w, h);
         for (let p = 0; p < w * h; p++) {
           const a = fg[p * 4 + 3] * weight(p);
-          for (let k = 0; k < 3; k++) id.data[p * 4 + k] = fg[p * 4 + k] * 255;
+          // A base é o preto do gato: a cor fica toda no brilho (a base espelhada ainda tinha o arco com a ponta).
+          for (let k = 0; k < 3; k++) id.data[p * 4 + k] = 0.07 * 255;
           id.data[p * 4 + 3] = a * 255;
         }
         x.putImageData(id, 0, 0);
@@ -168,15 +227,24 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
         }
         return c.toDataURL("image/png");
       };
-      const notGlow = (p: number) => 1 - glow[p];
+      // O brilho vai por cima, como luz: a base (cabeça e orelhas) fica inteira e opaca embaixo dele. Tirar o brilho da
+      // base deixava a orelha translúcida e o brilho "dentro" dela (#3590).
+      // O preto da base: opaco onde é cabeça ou orelha (alfa alto), e some onde é só o halo colorido em volta.
+      const notGlow = (p: number) => {
+        const a = fg[p * 4 + 3]!;
+        return 1 - glowM[p]! * (1 - a ** 4);
+      };
       // A luz atrás do gato: o alfa da silhueta, borrado, em lavanda-acinzentado.
-      const luz = () => {
-        // A silhueta inteira, com os olhos (brancos na foto, transparentes no recorte) contando como gato.
+      // A luz atrás de cada peça (#3583): cada uma vai no mesmo osso da sua peça, atrás dela, e acompanha o giro. Uma luz
+      // só, parada, deixava um buraco quando a orelha gira.
+      const luz = (weight: (p: number) => number, withEyes: boolean) => {
+        // A silhueta da peça; os olhos (brancos na foto, transparentes no recorte) contam como gato.
         const sil = new Float32Array(w * h);
-        for (let p = 0; p < w * h; p++) sil[p] = fg[p * 4 + 3];
-        for (const e of ref.eyes)
-          for (let y = e.y - e.r - 4; y <= e.y + e.r + 4; y++)
-            for (let x = e.x - e.r - 4; x <= e.x + e.r + 4; x++) if ((x - e.x) ** 2 + (y - e.y) ** 2 <= (e.r + 4) ** 2) sil[y * w + x] = 1;
+        for (let p = 0; p < w * h; p++) sil[p] = fg[p * 4 + 3]! * weight(p);
+        if (withEyes)
+          for (const e of ref.eyes)
+            for (let y = e.y - e.r - 4; y <= e.y + e.r + 4; y++)
+              for (let x = e.x - e.r - 4; x <= e.x + e.r + 4; x++) if ((x - e.x) ** 2 + (y - e.y) ** 2 <= (e.r + 4) ** 2) sil[y * w + x] = 1;
         // Duas passadas: uma larga (o ar em volta) e uma mais justa (a borda), como o cinza da referência.
         const wide = blur(sil, 26);
         const near = blur(sil, 10);
@@ -184,7 +252,7 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
         const x = c.getContext("2d")!;
         const id = x.createImageData(w, h);
         for (let p = 0; p < w * h; p++) {
-          const a = 1 - (1 - wide[p] * 0.9) * (1 - near[p] * 0.55);
+          const a = 1 - (1 - wide[p]! * 0.9) * (1 - near[p]! * 0.55);
           id.data[p * 4] = 186;
           id.data[p * 4 + 1] = 178;
           id.data[p * 4 + 2] = 214;
@@ -193,13 +261,31 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
         x.putImageData(id, 0, 0);
         return c.toDataURL("image/png");
       };
+      // A cabeça perde só a orelha de verdade; a orelha leva a sobra para dentro da cabeça (#3583). Na emenda, as duas
+      // são o mesmo preto, então a sobra não aparece parada e tapa o buraco quando a orelha gira.
+      const head = (p: number) => (1 - earL[p]!) * (1 - earR[p]!) * (1 - mist[p]!);
+      const earLw = (p: number) => earLOver[p]! * (1 - mist[p]!);
+      const earRw = (p: number) => earROver[p]! * (1 - mist[p]!);
       resolve({
-        "orelha-esquerda": layer((p) => notGlow(p) * earL[p] * (1 - mist[p])),
-        "orelha-direita": layer((p) => notGlow(p) * earR[p] * (1 - mist[p])),
-        cabeca: layer((p) => notGlow(p) * (1 - earL[p]) * (1 - earR[p]) * (1 - mist[p]), true),
+        "orelha-esquerda": layer((p) => notGlow(p) * earLw(p)),
+        "orelha-direita": layer((p) => notGlow(p) * earRw(p)),
+        cabeca: layer((p) => notGlow(p) * head(p), true),
         "nevoa-baixo": layer((p) => notGlow(p) * mist[p]),
-        brilho: layer((p) => glow[p]),
-        luz: luz(),
+        brilho: (() => {
+          const c = canvas();
+          const x = c.getContext("2d")!;
+          const id = x.createImageData(w, h);
+          for (let p = 0; p < w * h; p++) {
+            for (let k = 0; k < 3; k++) id.data[p * 4 + k] = glowC[p * 3 + k]! * 255;
+            id.data[p * 4 + 3] = glowM[p]! * fg[p * 4 + 3]! * 255;
+          }
+          x.putImageData(id, 0, 0);
+          return c.toDataURL("image/png");
+        })(),
+        "luz-cabeca": luz(head, true),
+        "luz-orelha-esquerda": luz((p) => earL[p]! * (1 - mist[p]!), false),
+        "luz-orelha-direita": luz((p) => earR[p]! * (1 - mist[p]!), false),
+        "luz-nevoa": luz((p) => mist[p]!, false),
         inteira: layer(() => 1, true),
       });
     };
@@ -231,7 +317,7 @@ async function main() {
   const img = (n: string) => `<img src="data:image/webp;base64,${readFileSync(path.join(out, `${n}.webp`)).toString("base64")}" style="position:absolute;inset:0">`;
   const eyes = REF.eyes.map((e) => `<div style="position:absolute;left:${e.x - e.r}px;top:${e.y - e.r}px;width:${e.r * 2}px;height:${e.r * 2}px;border-radius:50%;background:#fff"></div>`).join("");
   await prev.setContent(`<body style="margin:0;display:flex;background:#000">
-    <div style="position:relative;width:512px;height:640px;background:#000">${["luz", "nevoa-baixo", "cabeca", "orelha-esquerda", "orelha-direita", "brilho"].map(img).join("")}${eyes}</div>
+    <div style="position:relative;width:512px;height:640px;background:#000">${["luz-nevoa", "luz-cabeca", "luz-orelha-esquerda", "luz-orelha-direita", "nevoa-baixo", "orelha-esquerda", "orelha-direita", "cabeca", "brilho"].map(img).join("")}${eyes}</div>
     <img src="data:image/jpeg;base64,${readFileSync(path.join(here, "referencia.jpg")).toString("base64")}" style="width:512px;height:640px"></body>`);
   await prev.screenshot({ path: path.join(out, "previa.png") });
   await browser.close();
