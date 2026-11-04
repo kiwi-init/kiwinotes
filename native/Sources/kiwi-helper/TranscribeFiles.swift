@@ -21,6 +21,7 @@ enum TranscribeFiles {
         let loadStart = ProcessInfo.processInfo.systemUptime
         do {
             try await stt.warmUp()
+            if ctc { await stt.waitForBoosting() }
         } catch {
             FileHandle.standardError.write(Data("stt not ready: \(error)\n".utf8))
             return 1

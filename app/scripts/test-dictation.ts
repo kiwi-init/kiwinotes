@@ -1,7 +1,7 @@
 // A bateria de regressão do ditado (T1908, spec #15): o texto sai sem muletas, pontuado, com as autocorreções
 // faladas e no tom do app. Um comando só, pela CLI headless (T1739), sem mic, sem colagem e sem nada na tela:
 //
-//   bun run test:dictation [--only text|wav] [--keep] [--json]
+//   bun run test:dictation [--only text|wav] [--no-boosting] [--keep] [--json]
 //
 // 1. sobe o headless (com o helper em --headless) numa pasta de dados temporária;
 // 2. põe o dicionário e os snippets de test/dictation/config.json pelo engine (`dictionary.set`, `snippets.set`);
@@ -33,11 +33,13 @@ interface BatchResult {
 }
 
 function parseArgs(argv: string[]) {
-  const a = { modes: ["text", "wav"] as ("text" | "wav")[], keep: false, json: false };
+  const a = { modes: ["text", "wav"] as ("text" | "wav")[], keep: false, json: false, boosting: true };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--keep") a.keep = true;
     else if (arg === "--json") a.json = true;
+    // Sem o boosting do vocabulário (T1973): para medir a diferença de latência.
+    else if (arg === "--no-boosting") a.boosting = false;
     else if (arg === "--only") {
       const m = argv[++i];
       if (m !== "text" && m !== "wav") throw new Error("--only text|wav");
@@ -57,6 +59,30 @@ function cli(data: string, ...args: string[]): { code: number; out: Json } {
     out = { ok: false, message: (r.stderr || r.stdout || "").trim().slice(-2000) };
   }
   return { code: r.status ?? 1, out };
+}
+
+/**
+ * O modelo CTC do boosting carrega em segundo plano depois do principal (T1973): os casos falados esperam por ele,
+ * senão os primeiros saem sem boosting. A primeira vez baixa 99 MB. Devolve o estado em que parou.
+ */
+async function waitBoosting(data: string, timeoutMs = 300_000): Promise<string> {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const b = cli(data, "status").out.value?.session?.boosting;
+    if (b === "ready" || b === "unavailable") return b;
+    await Bun.sleep(250);
+  }
+  return "timeout";
+}
+
+/** A latência do STT nos casos falados, do fim da gravação até o texto: a mediana e o pior. */
+function sttLatency(r: ModeResult): string | null {
+  const ms = r.cases
+    .map((c) => (c.report as { latencyMs?: { stt?: number } } | undefined)?.latencyMs?.stt)
+    .filter((n): n is number => typeof n === "number" && n > 0)
+    .sort((a, b) => a - b);
+  if (!ms.length) return null;
+  return `STT: mediana ${ms[Math.floor(ms.length / 2)]} ms, pior ${ms.at(-1)} ms (${ms.length} casos)`;
 }
 
 async function waitHelper(data: string, timeoutMs = 60_000): Promise<void> {
@@ -83,6 +109,8 @@ interface ModeResult {
   fixed: string[];
   cases: (BatchResult & { known?: string })[];
   error?: string;
+  /** Uma linha a mais no relatório (falado: o estado do boosting e a latência do STT). */
+  note?: string;
 }
 
 /** Os `known` de um .jsonl de casos (pelo nome), e o arquivo sem eles, que o `cli dictate --batch` aceita. */
@@ -115,6 +143,7 @@ function runBatch(data: string, file: string, known: Map<string, string>): ModeR
 
 function printMode(mode: string, r: ModeResult) {
   console.log(`\n${mode}: ${r.passed}/${r.cases.length} ok${r.known ? `, ${r.known} conhecido(s)` : ""}`);
+  if (r.note) console.log(`  ${r.note}`);
   if (r.error) console.log(`  FALHOU  a bateria não rodou: ${r.error}`);
   for (const name of r.fixed) console.log(`  PASSOU  ${name}: era conhecido e agora passa, tire o \`known\``);
   for (const c of r.cases.filter((c) => !c.ok)) {
@@ -131,7 +160,7 @@ async function main(): Promise<number> {
   try {
     a = parseArgs(process.argv.slice(2));
   } catch (e) {
-    console.error(`${(e as Error).message}\nusage: bun run test:dictation [--only text|wav] [--keep] [--json]`);
+    console.error(`${(e as Error).message}\nusage: bun run test:dictation [--only text|wav] [--no-boosting] [--keep] [--json]`);
     return 2;
   }
   const spoken = a.modes.includes("wav") ? loadSpoken() : [];
@@ -155,6 +184,8 @@ async function main(): Promise<number> {
     process.exit(130);
   });
   try {
+    // O helper herda o ambiente da CLI, que herda o deste processo.
+    if (!a.boosting) process.env.KIWI_STT_BOOSTING = "off";
     const s = cli(data, "start");
     if (s.code !== 0) throw new Error(`o headless não subiu: ${s.out.message ?? JSON.stringify(s.out)}`);
     started = true;
@@ -168,8 +199,10 @@ async function main(): Promise<number> {
       results.text = runBatch(data, batch, known);
     }
     if (a.modes.includes("wav")) {
+      const boosting = a.boosting ? await waitBoosting(data) : "off";
       const known = new Map(spoken.filter((c) => typeof c.known === "string").map((c) => [c.name, c.known as string]));
       results.wav = runBatch(data, makeFixtures(path.join(data, "wav"), spoken), known);
+      results.wav.note = [`boosting do vocabulário: ${boosting}`, sttLatency(results.wav)].filter(Boolean).join(" · ");
     }
   } catch (e) {
     console.error(`a bateria não rodou: ${(e as Error).message}`);

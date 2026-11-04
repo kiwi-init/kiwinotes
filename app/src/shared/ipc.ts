@@ -242,6 +242,12 @@ export type Event =
    * CoreML compilando depois de atualizar o macOS), depois `ready` ou `unavailable`.
    */
   | { type: "stt.status"; state: "loading" | "ready" | "unavailable"; loadMs?: number; error?: "model_unavailable" }
+  /**
+   * O modelo CTC do boosting do vocabulário (T1973), que carrega depois do principal e em segundo plano: `loading`
+   * (a primeira vez, baixando 99 MB), `ready`, ou `unavailable` (offline, por exemplo). O ditado não espera por ele:
+   * sem o modelo, sai sem boosting. Depois de um `unavailable`, tenta de novo num ditado, no mínimo 10 min depois.
+   */
+  | { type: "stt.boosting"; state: "loading" | "ready" | "unavailable" }
   /** A gravação não virou texto: `model_unavailable` (sem modelo, ex.: offline na primeira vez) ou `stt_failed`. */
   | { type: "transcript.error"; error: "model_unavailable" | "stt_failed" }
   | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string };
@@ -291,6 +297,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "transcript.final",
   "transcript.error",
   "stt.status",
+  "stt.boosting",
   "log",
 ]);
 

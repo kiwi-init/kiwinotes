@@ -8,7 +8,10 @@
 {"name": "falado: pergunta", "say": "quando sai o próximo release", "voice": "Luciana", "expect": {"contains": "?"}}
 {"name": "falado en: uh some", "say": "uh, I think we should ship it on Friday", "voice": "Samantha", "expect": {"contains": "ship it on Friday", "excludes": ["uh", "Uh"]}}
 {"name": "falado en: scratch that", "say": "Ship it Friday. Scratch that. Ship it Monday.", "voice": "Samantha", "expect": {"contains": "Monday", "excludes": ["Friday", "Scratch"]}}
-{"name": "falado: dicionário", "say": "o dicom do pacs caiu de novo", "voice": "Luciana", "expect": {"contains": ["DICOM", "PACS"]}, "known": "o STT ouve \"de condu Pax\" e a correção fonética do dicionário não chega a DICOM PACS (o boosting do CTC está desligado no app)"}
+{"name": "falado: dicionário DICOM PACS", "say": "o dicom do pacs caiu de novo", "voice": "Luciana", "expect": {"contains": ["DICOM", "PACS"]}}
+{"name": "falado: dicionário GitHub", "say": "abre um pull request no github", "voice": "Luciana", "expect": {"contains": "GitHub"}}
+{"name": "falado: dicionário Kiwi Notes", "say": "anota isso no kiwi notes", "voice": "Luciana", "expect": {"contains": "Kiwi Notes"}}
+{"name": "falado en: dicionário kubectl", "say": "run kube control get pods", "voice": "Samantha", "expect": {"contains": "kubectl get pods"}}
 {"name": "falado: snippet", "say": "manda pro meu email", "voice": "Luciana", "expect": {"contains": "ana@example.com"}}
 {"name": "falado: slack casual", "say": "ok, chego às quatro", "voice": "Luciana", "app": "slack", "expect": {"tone": "casual", "excludes": "."}}
 {"name": "falado: mail formal com espaço", "say": "segue o relatório em anexo", "voice": "Luciana", "app": "mail", "fieldBefore": "Oi Ana.", "expect": {"tone": "formal", "spaced": true, "contains": ["Segue o relatório", "."]}}

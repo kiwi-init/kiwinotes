@@ -20,7 +20,8 @@ final class Helper {
     private var lastPermissions: [String: String] = [:]
     private let llm = LLM()
     private var lastLlm = ""
-    private let stt = Transcriber()
+    /// The CTC vocabulary boosting is on (T1973); `KIWI_STT_BOOSTING=off` turns it off (to measure without it).
+    private let stt = Transcriber(vocabularyBoosting: ProcessInfo.processInfo.environment["KIWI_STT_BOOSTING"] != "off")
     /// The previous transcription: each one waits for it, so transcripts come out in recording order.
     private var sttChain: Task<Void, Never>?
     /// The last `stt.status` sent, so a model that loads after an `unavailable` gets its `ready` (#383).
@@ -131,6 +132,9 @@ final class Helper {
         // On the main actor, like the rest of Helper: the awaits on `stt` leave it, and `setSTT` runs back on it.
         sttChain = Task { @MainActor [stt, weak self] in
             await previous?.value
+            await stt.setBoostingHandler { [weak self] state in
+                Task { @MainActor in self?.emit("stt.boosting", ["state": state]) }
+            }
             do {
                 try await stt.warmUp()
                 let ms = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)

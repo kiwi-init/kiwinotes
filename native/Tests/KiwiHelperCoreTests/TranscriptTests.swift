@@ -112,25 +112,60 @@ final class TranscriptTests: XCTestCase {
 
     func testRescoreGuardKeepsTermsOutOfBackgroundSpeech() {
         // The shape of what the CTC rescoring did to background speech (made-up words, not the recording).
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "Vai lá.", rescored: "DICOM."))
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "Tá bom então.", rescored: "Kubectl bom então."))
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Vai lá.", swaps: [S(from: "Vai lá", to: "DICOM", margin: 2)]), "Vai lá.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Tá bom então.", swaps: [S(from: "Tá", to: "Kubectl", margin: 2)]),
+                       "Tá bom então.")
     }
 
     /// Review #335: clearly spoken words swapped for terms that don't sound like them.
     func testRescoreGuardRefusesSwapsThatDontSoundAlike() {
-        XCTAssertFalse(VocabularyRescoreGuard.accept(
-            original: "Roda o cubectuget pods no cluster de homologação e me fala o que deu.",
-            rescored: "Roda o PACS pods no DICOM e me fala o que deu."))
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "eu vou sair agora mesmo", rescored: "DICOM PACS sair BigQuery mesmo"))
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "vou rodar o script agora", rescored: "vou rodar o agora"), "no deletions")
+        typealias S = VocabularyRescoreGuard.Swap
+        let sentence = "Roda o cubectuget pods no cluster de homologação e me fala o que deu."
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: sentence, swaps: [
+            S(from: "cubectuget", to: "PACS", margin: 2), S(from: "cluster de homologação", to: "DICOM", margin: 2),
+        ]), sentence)
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "vou rodar o script agora", swaps: [S(from: "script", to: "", margin: 2)]),
+                       "vou rodar o script agora", "no deletions")
     }
 
     /// What it fixed in the T51 benchmark.
     func testRescoreGuardKeepsTermFixes() {
-        XCTAssertTrue(VocabularyRescoreGuard.accept(
-            original: "Vou rodar o backfield de novo no BigQuery", rescored: "Vou rodar o backfill de novo no BigQuery"))
-        XCTAssertTrue(VocabularyRescoreGuard.accept(
-            original: "O estudio instância o ide veio vazio no retorno do Kido.",
-            rescored: "O estudio instância o ide veio vazio no retorno do QIDO."))
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Vou rodar o backfield de novo no BigQuery",
+                                                    swaps: [S(from: "backfield", to: "backfill", margin: 1)]),
+                       "Vou rodar o backfill de novo no BigQuery")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "O estudio instância o ide veio vazio no retorno do Kido.",
+                                                    swaps: [S(from: "Kido.", to: "QIDO", margin: 1)]),
+                       "O estudio instância o ide veio vazio no retorno do QIDO.")
+    }
+
+    /// T1973: what the rescoring did to the battery's sentences, swap by swap, with the CTC margins it reported (the
+    /// CTC model is English, so on Portuguese the right swap and a wrong one come in the same answer).
+    func testRescoreAppliesOnlyTheSwapsThatPass() {
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(VocabularyRescoreGuard.apply(
+            original: "O de condu Pax caiu de novo.",
+            swaps: [S(from: "Pax", to: "PACS", margin: 0.39), S(from: "caiu de novo.", to: "Kiwi Notes", margin: 0.08),
+                    S(from: "condu", to: "DICOM", margin: 0.63)]),
+            "O DICOM PACS caiu de novo.", "\"condu\" alone doesn't sound like DICOM; \"de condu\" does")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(
+            original: "Anota isso no Q e notes.",
+            swaps: [S(from: "e notes.", to: "Kiwi Notes", margin: 1.77), S(from: "Anota isso no Q", to: "DICOM", margin: 0.12)]),
+            "Anota isso no Kiwi Notes.", "\"Q e notes\" sounds closer to Kiwi Notes than \"e notes\"")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Abre o github, por favor.", swaps: [S(from: "github,", to: "GitHub", margin: 1)]),
+                       "Abre o GitHub, por favor.", "the punctuation around the stretch stays")
+    }
+
+    func testRescoreApplyKeepsTheTextWhenNothingPasses() {
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Vai lá.", swaps: [S(from: "Vai lá.", to: "DICOM", margin: 2)]), "Vai lá.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "eu vou sair agora mesmo",
+                                                    swaps: [S(from: "eu vou", to: "DICOM PACS", margin: 2), S(from: "agora", to: "BigQuery", margin: 0.1)]),
+                       "eu vou sair agora mesmo", "agora ~ BigQuery by sound, but the CTC barely prefers it")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Tá bom então, pode ir.", swaps: [S(from: "Tá", to: "Kubectl", margin: 2)]),
+                       "Tá bom então, pode ir.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "manda o pax pro pax agora", swaps: [S(from: "nada", to: "PACS", margin: 2)]),
+                       "manda o pax pro pax agora", "a stretch that isn't in the text changes nothing")
     }
 }
