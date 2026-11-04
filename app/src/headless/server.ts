@@ -5,7 +5,8 @@
 // (`uiCapabilities`), chamadas pelo mesmo caminho validado da UI (a lista e os códigos de erro). Forçado:
 // - KIWI_DEBUG=1: o `insert.text` é sempre dryRun e nenhuma permissão é pedida (#490, #537);
 // - KIWI_HEADLESS=1: o helper não liga o tap do atalho, a pílula nem o mic, e recusa pedir permissão (`--headless`);
-// - os dados e o vault numa pasta própria: nunca ~/Library/Application Support/KiwiNotes nem ~/KiwiNotes.
+// - os dados e o vault numa pasta própria: nunca ~/Library/Application Support/KiwiNotes nem ~/KiwiNotes (recusado
+//   com E_REAL_DATA, T1827).
 //
 // Controle: um socket unix (0600) em <data>/control.sock, com um JSON por linha (o protocolo do #1745).
 
@@ -14,6 +15,7 @@ import path from "node:path";
 import type { Socket } from "bun";
 
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
+import { assertNotRealData } from "./guard.ts";
 
 export interface HeadlessOptions {
   /** A pasta dos dados (o vault fica em <data>/vault). */
@@ -49,6 +51,7 @@ export const stateFile = (data: string) => path.join(data, "headless.json");
  */
 export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promise<void>; socket: string }> {
   const data = path.resolve(o.data);
+  assertNotRealData(data); // T1827: nunca os dados nem o vault do app de verdade
   mkdirSync(data, { recursive: true, mode: 0o700 });
   process.env.KIWI_DEBUG = "1";
   process.env.KIWI_HEADLESS = "1";

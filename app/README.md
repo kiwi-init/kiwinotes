@@ -42,7 +42,7 @@ bun run cli stop --data /tmp/kn-test
 ```
 
 - **Saída e exit codes:** a saída é JSON. O exit code é 0 se deu certo, 1 se a capacidade respondeu erro (o JSON traz o `code`: `E_BAD_ARGS`, `E_NO_CAPABILITY`, `E_OUTSIDE_VAULT`…), 2 para uso errado e 3 quando não há headless de pé.
-- **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`.
+- **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`. Uma pasta que é (ou fica dentro de) `~/Library/Application Support/KiwiNotes`, `…/app.kiwinotes.desktop` ou `~/KiwiNotes`, symlinks resolvidos, é recusada com `E_REAL_DATA` (T1827).
 - **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
 
 ## Dirigir o app (agentes)
