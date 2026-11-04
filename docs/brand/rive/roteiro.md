@@ -6,7 +6,9 @@ Nov 4, 2026 · @Davi Vicente Ayres Gonçaves
 
 Esta é a abertura do Kiwi Notes. Na janela `intro` do app, o prisma da marca Kiwi Init toca primeiro e termina implodindo num círculo de vidro; nesse mesmo frame começa o gato. A névoa gira em volta do círculo, e o gato acorda parte por parte até o corpo se formar da própria névoa. Quando ele termina de assentar, a janela fecha e o hub abre. O estado de repouso (respirar, flutuar, olhar, piscar, mexer orelhas e rabo) vive fora da intro: no hub, no Sobre e no overlay do ditado. Sem som.
 
-O movimento se inspira no estilo do gato de Cheshire (surgir em partes, flutuar sem peso, cabeça independente do corpo), com beats próprios do Kiwi. O visual segue a imagem de referência: cabeça preta sólida, olhos brancos chapados, um aro prismático por dentro do topo da cabeça e o corpo se dissolvendo em névoa, sobre fundo preto.
+![A imagem de referência](referencia.jpg)
+
+O movimento se inspira no estilo do gato de Cheshire (surgir em partes, flutuar sem peso, cabeça independente do corpo), com beats próprios do Kiwi. O visual segue a [imagem de referência](referencia.jpg): cabeça preta sólida, olhos brancos chapados, um aro prismático por dentro do topo da cabeça e o corpo se dissolvendo em névoa, sobre fundo preto.
 
 Regras que valem para todos os frames:
 

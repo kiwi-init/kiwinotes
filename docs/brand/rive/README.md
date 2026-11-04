@@ -1,5 +1,6 @@
 # O Kiwi-cat no Rive (spec #3133)
 
+- **`referencia.jpg`:** a imagem de referência do roteiro (cabeça, olhos, aro e névoa), enviada pelo harry (#3554).
 - **`roteiro.md`:** o roteiro da animação de abertura, escrito pelo harry (4 nov 2026). É a fonte do que o gato faz, quadro a quadro: a emenda com o prisma, a névoa em sprites assados, os beats da `intro` (f0–f480), o `idle` de 12 s, a paleta e o que evitar.
 - **`svg-para-rive.ts`:** converte um SVG da família (`docs/brand/kiwi-cat-familia/`) num SVG que o importador do Rive entende. Ele desfaz o `<svg>` aninhado e os `<use>` e tira os filtros.
   ```
