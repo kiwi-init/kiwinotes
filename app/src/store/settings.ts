@@ -91,8 +91,19 @@ export class SettingsStore {
    * ficou. Uma por vez: duas trocas rápidas de janelas diferentes não perdem campo (T2503, revisão #2582).
    */
   save(patch: SettingsPatch): Promise<AppSettings> {
+    return this.update(() => patch);
+  }
+
+  /**
+   * Lê, decide e grava na mesma fila (T2639): `change` recebe as configurações de agora (depois de toda gravação que veio
+   * antes) e devolve o que mudar, ou null para não gravar. É o caminho das fixadas que seguem a nota (`fixPinned`): ler
+   * fora da fila deixava uma fixada nova da janela, gravada no meio, ser trocada pela lista velha.
+   */
+  update(change: (current: AppSettings) => SettingsPatch | null): Promise<AppSettings> {
     const run = this.queue.then(async () => {
       const current = await this.load();
+      const patch = change(current);
+      if (!patch) return current;
       const next: AppSettings = { ...current, ...patch, appearance: { ...current.appearance, ...patch.appearance } };
       await writeJson(this.file, { version: 1, ...next } satisfies SettingsFile);
       return next;
