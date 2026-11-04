@@ -19,6 +19,7 @@ export function HoverSidebar({ open, onOpenChange, anchor, busy, children }: {
   const pointer = useRef(false);
   const dragging = useRef(false);
   const focusRequested = useRef(false);
+  const wasBusy = useRef(busy);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const state = useRef({ open, busy, onOpenChange });
   state.current = { open, busy, onOpenChange };
@@ -54,6 +55,14 @@ export function HoverSidebar({ open, onOpenChange, anchor, busy, children }: {
     }
   }, [open, anchor]);
   useEffect(() => {
+    const ended = wasBusy.current && !busy;
+    wasBusy.current = busy;
+    // No Safari, escolher uma ação do menu pode deixar foco no body e o
+    // ponteiro fora do painel. A operação veio da árvore: devolva foco à busca
+    // antes de rearmar o fechamento, sem interferir em um clique no editor.
+    if (ended && state.current.open && document.activeElement === document.body) {
+      panel.current?.querySelector<HTMLInputElement>(".kn-side-search")?.focus({ preventScroll: true });
+    }
     if (!busy) leave();
   }, [busy]);
   useEffect(() => {

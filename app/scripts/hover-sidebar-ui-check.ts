@@ -182,6 +182,24 @@ try {
     assert.equal(await open(hub), 0);
     await hub.close();
   });
+  await check("menu fora do painel: apagar mantém a árvore para abrir a Lixeira", async () => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.evaluate(() => { document.documentElement.dataset.motion = "full"; });
+    await page.locator(".kn-crumb-bt").click();
+    const note = page.locator('.kn-side-item[data-kind="note"]').filter({ hasText: "Site novo" }).first();
+    const bounds = await note.boundingBox();
+    assert.ok(bounds);
+    await note.click({ modifiers: ["Control"], position: { x: bounds.width-6, y: 12 } });
+    const remove = page.locator('.kn-menu-item:has-text("Apagar")');
+    const item = await remove.boundingBox();
+    const panel = await page.locator(".kn-tree-pop").boundingBox();
+    assert.ok(item && panel && item.x+item.width/2 > panel.x+panel.width);
+    await remove.click();
+    await page.waitForTimeout(240);
+    assert.equal(await open(page), 1);
+    await page.locator('.kn-side-item:has-text("Lixeira")').click();
+    await page.waitForSelector(".kn-trash");
+  });
   assert.deepEqual(errors, []);
   await context.close();
 
