@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diretor do Kiwi-cat</title>
+<style>
+  :root {
+    --bg: #0b0a1f; --panel: #131130; --line: #262257; --ink: #e9ecff; --dim: #8d93c4;
+    --acc: #36f0ff; --mag: #ff5cf0; --sel: #ffd166; --pin: #ff3b6b; --bar: #3a3480;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  select { background: #221d4d; border: 1px solid var(--line); border-radius: 7px; padding: 4px 6px; }
+  button { background: #221d4d; border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: #4a43a0; }
+  button.on { background: var(--pin); border-color: var(--pin); color: #fff; }
+  button.pri { background: linear-gradient(90deg, var(--acc), var(--mag)); color: #07061a; font-weight: 600; border: 0; }
+  input[type=number] { width: 76px; background: #0e0c26; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
+  .stage { position: relative; display: grid; place-items: center; overflow: hidden; padding: 16px; }
+  .stage .frame { position: relative; width: min(100%, calc(100vh - 330px)); aspect-ratio: 1; }
+  .stage svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .stage.marcando .frame { cursor: crosshair; }
+  .hover { position: absolute; left: 16px; top: 12px; color: var(--dim); font: 12px ui-monospace, Menlo, monospace; }
+  .pin { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 3px solid var(--pin); border-radius: 50%;
+    pointer-events: none; box-shadow: 0 0 0 2px #0008; }
+  .pin span { position: absolute; left: 24px; top: -4px; white-space: nowrap; background: #000c; padding: 2px 6px; border-radius: 5px; font-size: 12px; }
+  .nova { position: absolute; z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; width: 260px; }
+  .nova textarea { width: 100%; height: 64px; background: #0e0c26; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  aside { grid-row: 1 / span 2; grid-column: 2; background: var(--panel); border-left: 1px solid var(--line); padding: 14px; overflow: auto; }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 18px 0 8px; }
+  aside h2:first-child { margin-top: 0; }
+  .campo { display: flex; align-items: center; justify-content: space-between; margin: 6px 0; }
+  .muted { color: var(--dim); }
+  .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
+  #curva { width: 100%; aspect-ratio: 1; background: #0e0c26; border: 1px solid var(--line); border-radius: 8px; touch-action: none; }
+  .presets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .presets button { padding: 3px 7px; font-size: 12px; }
+  .notas { list-style: none; padding: 0; margin: 0; }
+  .notas li { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; cursor: pointer; }
+  .notas li:hover { border-color: #4a43a0; }
+  .notas .x { float: right; padding: 0 6px; }
+  .mudancas { margin: 0; padding-left: 16px; }
+  .status { margin-top: 8px; min-height: 18px; color: var(--dim); }
+  .bottom { grid-column: 1; border-top: 1px solid var(--line); background: #0d0b24; padding: 8px 12px 12px; }
+  .transport { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+  .tempo { font: 600 14px ui-monospace, Menlo, monospace; min-width: 72px; }
+  .tl { position: relative; max-height: 240px; overflow-y: auto; overflow-x: hidden; }
+  .row { display: grid; grid-template-columns: 210px minmax(0, 1fr); align-items: center; height: 22px; }
+  .row .nome { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); font: 12px ui-monospace, Menlo, monospace; cursor: pointer; padding-right: 8px; }
+  .row.sel .nome { color: var(--sel); }
+  .row.mudou .nome::after { content: " •"; color: var(--mag); }
+  .trilha { position: relative; height: 16px; }
+  .barra { position: absolute; top: 2px; height: 12px; background: var(--bar); border-radius: 4px; cursor: grab; }
+  .barra.inf { background: repeating-linear-gradient(90deg, var(--bar) 0 8px, #2a2560 8px 12px); }
+  .row.sel .barra { background: #6b5cff; outline: 1px solid var(--sel); }
+  .barra .fim { position: absolute; right: -3px; top: 0; width: 8px; height: 100%; cursor: ew-resize; }
+  .regua { position: relative; height: 22px; margin-left: 210px; cursor: pointer; border-bottom: 1px solid var(--line); }
+  .regua .tick { position: absolute; top: 0; height: 100%; border-left: 1px solid var(--line); font-size: 10px; color: var(--dim); padding-left: 3px; }
+  .regua .mpin { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; background: var(--pin); border-radius: 50%; }
+  .cabeca { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--acc); pointer-events: none; z-index: 2; }
+  kbd { background: #221d4d; border-radius: 4px; padding: 0 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage">
+    <div class="hover mono" id="hover"></div>
+    <div class="frame" id="frame"></div>
+  </div>
+  <div class="bottom">
+    <div class="transport">
+      <button id="play" title="Espaço">▶︎ Tocar</button>
+      <button id="inicio" title="Voltar ao 0">⏮</button>
+      <span class="tempo" id="tempo">0.00 s</span>
+      <select id="velocidade" title="Velocidade">
+        <option value="0.25">0,25×</option><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option>
+      </select>
+      <button id="marcar" title="M">📍 Marcar um ponto</button>
+      <label class="muted"><input type="checkbox" id="filtros" checked> filtros (desligar deixa a prévia fluida)</label>
+      <span class="muted">· <kbd>espaço</kbd> toca · <kbd>←</kbd><kbd>→</kbd> 1 frame (<kbd>⇧</kbd> 0,5 s) · <kbd>⌘S</kbd> salva</span>
+    </div>
+    <div class="regua" id="regua"></div>
+    <div class="tl" id="tl"></div>
+  </div>
+  <aside>
+    <h2>Animação</h2>
+    <div id="insp" class="muted">Clique numa barra da linha do tempo, ou numa parte do gato, para ajustar o tempo e a curva.</div>
+    <h2>Notas no frame</h2>
+    <p class="muted" style="margin:0 0 8px">Use <b>📍 Marcar</b> e clique no gato: a nota guarda o instante, o ponto e a parte (o id), para o agente ver exatamente o que você apontou.</p>
+    <ul class="notas" id="notas"></ul>
+    <h2>Para salvar</h2>
+    <ol class="mudancas" id="mudancas"></ol>
+    <button class="pri" id="salvar" style="width:100%;margin-top:8px">Salvar direção</button>
+    <div class="status" id="status"></div>
+  </aside>
+</div>
+<script type="module" src="/diretor.js"></script>
+</body>
+</html>
