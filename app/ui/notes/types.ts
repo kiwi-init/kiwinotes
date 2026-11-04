@@ -52,6 +52,11 @@ export interface NotesApi {
   extras?: ExtrasApi;
   /** O histórico de versões (T2680). Num engine sem ele, o "Versões…" não aparece. */
   versions?: VersionsApi;
+  /**
+   * Exportar (T2684): o engine abre o seletor de pasta e grava `<Título>.md|.html|.pdf`. `theme` são as variáveis CSS da
+   * janela, para o HTML e o PDF saírem com o tema de agora. Cancelar dá E_CANCELED.
+   */
+  export?(path: string, format: ExportFormat, theme: Record<string, string>): Promise<{ file: string }>;
   /** Os anexos (T2594, contrato 1.11.0). Num engine sem eles, colar e arrastar arquivo não faz nada de especial. */
   attachments?: AttachmentSource;
   /**
@@ -91,6 +96,8 @@ export interface ExtrasApi {
 
 /** `moved`: quantas notas mudaram de path. */
 export type FolderMoved = UiCapabilities["folders.rename"]["result"];
+
+export type ExportFormat = "md" | "html" | "pdf";
 
 export interface FoldersApi {
   /** Cria a pasta (e os pais que faltarem). */

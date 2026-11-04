@@ -20,10 +20,12 @@ let package = Package(
         .target(name: "KiwiHelperCore"),
         // Local OCR (T2709): Vision for images and scanned pages, PDFKit for a PDF's own text. No model, no network.
         .target(name: "KiwiOCR"),
+        // Exportar nota em PDF (T2684): um WKWebView fora da tela, sem janela, imprime o HTML que o app gera.
+        .target(name: "KiwiExport"),
         // The sidecar the Bun app starts with `--socket <path>`.
         .executableTarget(
             name: "kiwi-helper",
-            dependencies: ["KiwiHelperCore", "KiwiOCR", .product(name: "FluidAudio", package: "FluidAudio")],
+            dependencies: ["KiwiHelperCore", "KiwiOCR", "KiwiExport", .product(name: "FluidAudio", package: "FluidAudio")],
             exclude: ["Info.plist"],
             linkerSettings: [
                 // Embeds Info.plist (NSMicrophoneUsageDescription) so macOS can ask for the mic.
@@ -35,5 +37,6 @@ let package = Package(
         .executableTarget(name: "kiwi-ipc-probe", dependencies: ["KiwiHelperCore"]),
         .testTarget(name: "KiwiHelperCoreTests", dependencies: ["KiwiHelperCore"]),
         .testTarget(name: "KiwiOCRTests", dependencies: ["KiwiOCR"]),
+        .testTarget(name: "KiwiExportTests", dependencies: ["KiwiExport"]),
     ]
 )

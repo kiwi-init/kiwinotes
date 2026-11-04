@@ -7,7 +7,7 @@ import "../src/api.ts"; // o tipo do `window.engine`
 import { MockVault } from "./mock.ts";
 import type { AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
-import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
+import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
 
@@ -80,6 +80,7 @@ export function engineNotes(
     ...(savedSearches ? { savedSearches } : {}),
     ...(pins ? { pins } : {}),
     ...(attachments ? { attachments } : {}),
+    ...(has("notes.export") ? { export: (path: string, format: ExportFormat, theme: Record<string, string>) => call<{ file: string }>("notes.export", { path, format, theme }) } : {}),
     list: () => call("notes.list"),
     get: (path) => call("notes.get", { path }),
     save: (path, content, baseVersion) => call("notes.save", { path, content, baseVersion }),

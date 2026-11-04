@@ -31,7 +31,7 @@ import { VersionsDialog } from "./VersionsDialog.tsx";
 import { hasFilters, parseQuery, type SavedSearch } from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
-import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing } from "./types.ts";
+import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat } from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
@@ -106,6 +106,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [menu, setMenu] = useState<{ x: number; y: number; target: SideTarget } | null>(null);
   const [moving, setMoving] = useState<SideTarget | null>(null);
   /** O "Versões…" aberto (T2680): a nota e o texto dela no disco, para a diferença. */
+  /** "Exportar…" (T2684): a nota cujo formato a pessoa está escolhendo. */
+  const [exporting, setExporting] = useState<string | null>(null);
   const [versionsOf, setVersionsOf] = useState<{ path: string; title: string; content: string } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   /** O meio da janela: a nota, ou a Lixeira do app (T2593). */
@@ -561,6 +563,30 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     if (n) setVersionsOf({ path, title: n.title, content: n.content });
   };
 
+  /**
+   * Exportar (T2684): grava o que estiver pendente, e o engine abre o seletor de pasta (só aqui, no clique). O HTML e
+   * o PDF saem com as cores de agora: as variáveis CSS que a Aparência pôs no <html>.
+   */
+  const exportNote = async (path: string, format: ExportFormat) => {
+    setExporting(null);
+    const ex = api.export;
+    if (!ex) return;
+    if (current.current === path && !(await leave())) return;
+    const theme: Record<string, string> = {};
+    const style = document.documentElement.style;
+    for (let i = 0; i < style.length; i++) {
+      const k = style.item(i);
+      if (k.startsWith("--")) theme[k] = style.getPropertyValue(k).trim();
+    }
+    try {
+      const { file } = await ex(path, format, theme);
+      say(`Exportada: ${file.slice(file.lastIndexOf("/") + 1)}`);
+    } catch (e) {
+      if (/E_CANCELED/.test(String((e as Error)?.message ?? e))) return;
+      failed_("exportar a nota")(e);
+    }
+  };
+
   /** Apagar vai para a Lixeira do macOS, com "Desfazer" no aviso de baixo. */
   const remove = async (target: SideTarget) => {
     if (target.kind === "empty") return;
@@ -661,6 +687,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders },
       { label: "Copiar link [[…]]", onSelect: () => copyLink(t.path) },
       ...(api.versions ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
+      ...(api.export ? [{ label: "Exportar…", onSelect: () => setExporting(t.path) }] : []),
       { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
       { kind: "separator" },
       { label: "Apagar", danger: true, onSelect: () => void remove(t) },
@@ -1040,6 +1067,19 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
             // A nota aberta é a restaurada: o editor mostra o texto de volta.
             if (current.current === p) api.get(p).then((n) => show(n), () => {});
           }}
+        />
+      ) : null}
+      {exporting ? (
+        <ListPicker
+          title={`Exportar “${noteName(exporting)}” como…`}
+          items={[
+            { value: "md", label: "Markdown (.md), com os anexos ao lado" },
+            { value: "html", label: "HTML (.html), com o tema de agora" },
+            { value: "pdf", label: "PDF (.pdf)" },
+          ]}
+          emptyText="Nenhum formato com esse nome"
+          onPick={(f) => void exportNote(exporting, f as ExportFormat)}
+          onClose={() => setExporting(null)}
         />
       ) : null}
       {toast ? <UndoToast toast={toast} onDone={() => setToast(null)} /> : null}

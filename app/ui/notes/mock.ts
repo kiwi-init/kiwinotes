@@ -340,6 +340,14 @@ export class MockVault implements NotesApi {
   }
 
   /** O histórico de versões (T2680), como o engine. */
+  /** O exportar de mentira (T2684): não grava nada, só diz onde gravaria. */
+  readonly exported: { path: string; format: string }[] = [];
+  async export(path: string, format: "md" | "html" | "pdf"): Promise<{ file: string }> {
+    this.note(path);
+    this.exported.push({ path, format });
+    return { file: `/Users/voce/Documents/${noteName(path)}.${format}` };
+  }
+
   readonly versions: VersionsApi = {
     list: async (path) => [...(this.versionsOf.get(path) ?? [])].reverse().map((v) => ({ id: v.id, at: v.at, size: v.content.length })),
     get: async (path, id) => {

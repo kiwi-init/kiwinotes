@@ -14,6 +14,7 @@ import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
 import type { NoteVersions } from "../notes/versions.ts";
+import { ExportError, type NoteExporter } from "../notes/export.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
@@ -76,6 +77,13 @@ export interface CapabilityDeps {
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
    */
   versions?: Pick<NoteVersions, "record" | "list" | "get" | "snapshot" | "flush" | "move">;
+  /** Exportar nota (T2684). Sem ele, o `notes.export` dá E_NO_EXPORT. */
+  exporter?: Pick<NoteExporter, "export">;
+  /**
+   * A pasta onde o exportar grava: o seletor de pasta do macOS no app, só no clique da pessoa; `KIWI_EXPORT_DIR` no
+   * headless e com KIWI_DEBUG. `null`: a pessoa cancelou.
+   */
+  chooseExportFolder?(): Promise<string | null>;
   /** Abre o Lixo do macOS no Finder (T2593). Sem isto (headless, testes, KIWI_DEBUG), o `trash.reveal` não faz nada. */
   revealTrash?(): void;
   /** O texto dos anexos para a busca (T2709). Sem ele, a busca é só nas notas. */
@@ -382,6 +390,20 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
         return await deps.versions.get(p, a.id);
       } catch (e) {
         throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message);
+      }
+    },
+    "notes.export": async (args) => {
+      const a = fields(args, "notes.export", ["path", "format", "theme"]);
+      if (!deps.exporter || !deps.chooseExportFolder) throw new CapabilityError("E_NO_EXPORT", "this host can't export");
+      const v = await vault();
+      // A nota primeiro (que ela existe), e só então o seletor de pasta: um clique numa nota que sumiu não abre diálogo.
+      await v.get(a.path);
+      const dir = await deps.chooseExportFolder();
+      if (!dir) throw new CapabilityError("E_CANCELED", "no folder chosen");
+      try {
+        return await deps.exporter.export(a.path, a.format, dir, a.theme);
+      } catch (e) {
+        throw e instanceof ExportError ? new CapabilityError(e.code, e.message) : e;
       }
     },
     "notes.restoreVersion": async (args) => {

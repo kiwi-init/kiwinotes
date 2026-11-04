@@ -13,6 +13,7 @@ import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { helperPath, Session, session, type SessionStatus } from "./session.ts";
 import { helperRunner } from "../notes/ocr.ts";
+import { helperPdf } from "../notes/export.ts";
 import { stores } from "./stores.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
 import { closeWindow, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
@@ -148,6 +149,8 @@ const dictation = new Session(PATHS.VIEWS_FOLDER);
 session.set(dictation);
 // O texto dos anexos (T2709): o mesmo helper, no modo `--ocr` (lê e sai), em prioridade de fundo.
 if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.ocr.setRunner(helperRunner(helperPath(PATHS.VIEWS_FOLDER)));
+// O PDF do exportar (T2684): o mesmo helper, no modo `--export-pdf` (imprime fora da tela e sai).
+if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.exporter.setPdf(helperPdf(helperPath(PATHS.VIEWS_FOLDER)));
 setMenu(dictation.status());
 dictation.onStatus(setMenu);
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
