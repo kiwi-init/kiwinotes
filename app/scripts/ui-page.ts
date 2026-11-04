@@ -175,7 +175,12 @@ function serve(dir: string) {
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, "") || "index.html";
+      let rel: string;
+      try {
+        rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, "") || "index.html";
+      } catch {
+        return new Response("not found", { status: 404 }); // um % malformado (#1816)
+      }
       const full = resolve(root, rel);
       if (full !== root && !full.startsWith(`${root}/`)) return new Response("not found", { status: 404 });
       const file = Bun.file(full);
