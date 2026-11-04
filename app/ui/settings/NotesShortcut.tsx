@@ -43,7 +43,7 @@ export function NotesShortcutRow() {
   return (
     <Row
       label="Abrir as notas"
-      hint={failed ? "Não deu para salvar o atalho. Tente de novo." : "De qualquer app, abre a janela Notas."}
+      hint={failed ? "Não deu para salvar o atalho. Tente de novo." : "De qualquer app, abre as Notas do Kiwi."}
     >
       <Segmented label="Atalho das notas" value={value ?? "off"} onChange={change} options={SHORTCUT_OPTIONS} />
     </Row>

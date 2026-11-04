@@ -72,6 +72,11 @@ export const api = {
     list: () => invoke("notes.list", {}),
     search: (query: string) => invoke("notes.search", { query, limit: 12 }),
   },
+  /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
+  hub: {
+    section: () => invoke("hub.section", {}),
+    onNavigate: (fn: (e: UiEvents["hub.navigate"]) => void) => on("hub.navigate", fn),
+  },
   /** Só num gesto da pessoa (o clique em copiar): nenhuma UI escreve no clipboard sozinha (#1199). */
   copy: async (text: string) => {
     if (navigator.userActivation && !navigator.userActivation.isActive) throw new Error("copiar só com um clique");
