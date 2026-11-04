@@ -41,10 +41,15 @@ export const REF = {
 } as const;
 
 /** O que roda na página: recebe a imagem e devolve as camadas em PNG (data URL). */
-function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
+function cut(src: string, ref: typeof REF, bodySrc: string, bodyBox: { x: number; y: number; w: number; h: number }): Promise<Record<string, string>> {
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => {
+    const body = new Image();
+    let loaded = 0;
+    const ready = () => ++loaded === 2 && go();
+    img.onload = ready;
+    body.onload = ready;
+    const go = () => {
       const { w, h } = ref;
       const canvas = (draw?: (c: CanvasRenderingContext2D) => void) => {
         const c = document.createElement("canvas");
@@ -237,30 +242,42 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
       // A luz atrás do gato: o alfa da silhueta, borrado, em lavanda-acinzentado.
       // A luz atrás de cada peça (#3583): cada uma vai no mesmo osso da sua peça, atrás dela, e acompanha o giro. Uma luz
       // só, parada, deixava um buraco quando a orelha gira.
-      const luz = (weight: (p: number) => number, withEyes: boolean) => {
-        // A silhueta da peça; os olhos (brancos na foto, transparentes no recorte) contam como gato.
-        const sil = new Float32Array(w * h);
-        for (let p = 0; p < w * h; p++) sil[p] = fg[p * 4 + 3]! * weight(p);
-        if (withEyes)
-          for (const e of ref.eyes)
-            for (let y = e.y - e.r - 4; y <= e.y + e.r + 4; y++)
-              for (let x = e.x - e.r - 4; x <= e.x + e.r + 4; x++) if ((x - e.x) ** 2 + (y - e.y) ** 2 <= (e.r + 4) ** 2) sil[y * w + x] = 1;
+      const glowOf = (sil: Float32Array) => {
         // Duas passadas: uma larga (o ar em volta) e uma mais justa (a borda), como o cinza da referência.
         const wide = blur(sil, 26);
         const near = blur(sil, 10);
+        const out = new Float32Array(w * h);
+        for (let p = 0; p < w * h; p++) out[p] = 1 - (1 - wide[p]! * 0.9) * (1 - near[p]! * 0.55);
+        return out;
+      };
+      const paintLuz = (alpha: (p: number) => number) => {
         const c = canvas();
         const x = c.getContext("2d")!;
         const id = x.createImageData(w, h);
         for (let p = 0; p < w * h; p++) {
-          const a = 1 - (1 - wide[p]! * 0.9) * (1 - near[p]! * 0.55);
           id.data[p * 4] = 186;
           id.data[p * 4 + 1] = 178;
           id.data[p * 4 + 2] = 214;
-          id.data[p * 4 + 3] = a * 255;
+          id.data[p * 4 + 3] = alpha(p) * 255;
         }
         x.putImageData(id, 0, 0);
         return c.toDataURL("image/png");
       };
+      const withEyes = (sil: Float32Array) => {
+        for (const e of ref.eyes)
+          for (let y = e.y - e.r - 4; y <= e.y + e.r + 4; y++)
+            for (let x = e.x - e.r - 4; x <= e.x + e.r + 4; x++) if ((x - e.x) ** 2 + (y - e.y) ** 2 <= (e.r + 4) ** 2) sil[y * w + x] = 1;
+        return sil;
+      };
+      // O corpo (a névoa do earnest-walrus, docs/brand/rive/nevoa/corpo.webp) no espaço da foto: a luz da cabeça e a do
+      // corpo saem da silhueta inteira (cabeça ∪ corpo) e se dividem na faixa da névoa, para não vazar nem dobrar no
+      // queixo, onde a cabeça se desfaz no corpo (#3601).
+      const bodyA = (() => {
+        const d = canvas((x) => x.drawImage(body, bodyBox.x, bodyBox.y, bodyBox.w, bodyBox.h)).getContext("2d")!.getImageData(0, 0, w, h).data;
+        const out = new Float32Array(w * h);
+        for (let p = 0; p < w * h; p++) out[p] = d[p * 4 + 3]! / 255;
+        return out;
+      })();
       // A cabeça perde só a orelha de verdade; a orelha leva a sobra para dentro da cabeça (#3583). Na emenda, as duas
       // são o mesmo preto, então a sobra não aparece parada e tapa o buraco quando a orelha gira.
       const head = (p: number) => (1 - earL[p]!) * (1 - earR[p]!) * (1 - mist[p]!);
@@ -270,7 +287,6 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
         "orelha-esquerda": layer((p) => notGlow(p) * earLw(p)),
         "orelha-direita": layer((p) => notGlow(p) * earRw(p)),
         cabeca: layer((p) => notGlow(p) * head(p), true),
-        "nevoa-baixo": layer((p) => notGlow(p) * mist[p]),
         brilho: (() => {
           const c = canvas();
           const x = c.getContext("2d")!;
@@ -282,14 +298,32 @@ function cut(src: string, ref: typeof REF): Promise<Record<string, string>> {
           x.putImageData(id, 0, 0);
           return c.toDataURL("image/png");
         })(),
-        "luz-cabeca": luz(head, true),
-        "luz-orelha-esquerda": luz((p) => earL[p]! * (1 - mist[p]!), false),
-        "luz-orelha-direita": luz((p) => earR[p]! * (1 - mist[p]!), false),
-        "luz-nevoa": luz((p) => mist[p]!, false),
+        ...(() => {
+          const union = new Float32Array(w * h);
+          for (let p = 0; p < w * h; p++) union[p] = Math.max(fg[p * 4 + 3]! * head(p), bodyA[p]!);
+          const all = glowOf(withEyes(union));
+          const ear = (m: Float32Array) => {
+            const sil = new Float32Array(w * h);
+            for (let p = 0; p < w * h; p++) sil[p] = fg[p * 4 + 3]! * m[p]! * (1 - mist[p]!);
+            return glowOf(sil);
+          };
+          const l = ear(earL), r = ear(earR);
+          return {
+            "luz-cabeca": paintLuz((p) => all[p]! * (1 - mist[p]!)),
+            // A luz do corpo some antes do fim da foto (y = 640): cortada ali, virava uma linha reta no palco.
+            "luz-corpo": paintLuz((p) => {
+              const t = Math.min(1, Math.max(0, (h - 8 - Math.floor(p / w)) / 90));
+              return all[p]! * mist[p]! * t * t * (3 - 2 * t);
+            }),
+            "luz-orelha-esquerda": paintLuz((p) => l[p]!),
+            "luz-orelha-direita": paintLuz((p) => r[p]!),
+          };
+        })(),
         inteira: layer(() => 1, true),
       });
     };
     img.src = src;
+    body.src = bodySrc;
   });
 }
 
@@ -299,7 +333,11 @@ async function main() {
   const browser = await webkit.launch();
   const page = await browser.newPage();
   const src = `data:image/jpeg;base64,${readFileSync(path.join(here, "referencia.jpg")).toString("base64")}`;
-  const layers: Record<string, string> = await page.evaluate(`(${cut.toString()})(${JSON.stringify(src)}, ${JSON.stringify(REF)})`);
+  // O corpo vem da névoa do earnest-walrus (nevoa.ts), no mesmo espaço da foto.
+  const nevoa = path.join(here, "nevoa");
+  const box = (JSON.parse(readFileSync(path.join(nevoa, "manifest.json"), "utf8")) as { name: string; x: number; y: number; w: number; h: number }[]).find((m) => m.name === "corpo")!;
+  const bodySrc = `data:image/webp;base64,${readFileSync(path.join(nevoa, "corpo.webp")).toString("base64")}`;
+  const layers: Record<string, string> = await page.evaluate(`(${cut.toString()})(${JSON.stringify(src)}, ${JSON.stringify(REF)}, ${JSON.stringify(bodySrc)}, ${JSON.stringify(box)})`);
   let total = 0;
   for (const [name, url] of Object.entries(layers)) {
     const tmp = path.join(out, `${name}.png`);
@@ -315,9 +353,11 @@ async function main() {
   // A prévia: as camadas juntas sobre o preto, com os olhos brancos, para comparar com a referência.
   const prev = await browser.newPage({ viewport: { width: 1024, height: 640 } });
   const img = (n: string) => `<img src="data:image/webp;base64,${readFileSync(path.join(out, `${n}.webp`)).toString("base64")}" style="position:absolute;inset:0">`;
+  const manifest = JSON.parse(readFileSync(path.join(nevoa, "manifest.json"), "utf8")) as { name: string; x: number; y: number; w: number; h: number }[];
+  const sprites = manifest.map((m) => `<img src="data:image/webp;base64,${readFileSync(path.join(nevoa, `${m.name}.webp`)).toString("base64")}" style="position:absolute;left:${m.x}px;top:${m.y}px;width:${m.w}px;height:${m.h}px">`).join("");
   const eyes = REF.eyes.map((e) => `<div style="position:absolute;left:${e.x - e.r}px;top:${e.y - e.r}px;width:${e.r * 2}px;height:${e.r * 2}px;border-radius:50%;background:#fff"></div>`).join("");
   await prev.setContent(`<body style="margin:0;display:flex;background:#000">
-    <div style="position:relative;width:512px;height:640px;background:#000">${["luz-nevoa", "luz-cabeca", "luz-orelha-esquerda", "luz-orelha-direita", "nevoa-baixo", "orelha-esquerda", "orelha-direita", "cabeca", "brilho"].map(img).join("")}${eyes}</div>
+    <div style="position:relative;width:512px;height:640px;background:#000">${["luz-corpo", "luz-cabeca", "luz-orelha-esquerda", "luz-orelha-direita"].map(img).join("")}${sprites}${["orelha-esquerda", "orelha-direita", "cabeca", "brilho"].map(img).join("")}${eyes}</div>
     <img src="data:image/jpeg;base64,${readFileSync(path.join(here, "referencia.jpg")).toString("base64")}" style="width:512px;height:640px"></body>`);
   await prev.screenshot({ path: path.join(out, "previa.png") });
   await browser.close();
