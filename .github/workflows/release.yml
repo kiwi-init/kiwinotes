@@ -66,7 +66,8 @@ jobs:
       # restore-key traz as dependências já compiladas e só o nosso código recompila.
       - name: Swift toolchain id
         id: swift
-        run: echo "id=$(swift --version 2>&1 | head -1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+        # O Xcode e o Swift: um Xcode novo com o mesmo Swift também não reaproveita objeto (#1714).
+        run: echo "id=$({ xcodebuild -version; swift --version 2>&1 | head -1; } | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
