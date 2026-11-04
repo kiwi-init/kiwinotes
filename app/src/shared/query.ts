@@ -46,6 +46,9 @@ function tokens(q: string): { neg: boolean; key: string; value: string; quoted: 
   return out;
 }
 
+/** Espaços, tabs e quebras de linha viram um espaço só: uma "frase" casa mesmo quebrada no meio da nota (T2751). */
+export const oneSpace = (s: string) => s.replace(/\s+/g, " ");
+
 export function parseQuery(query: string): ParsedQuery {
   const r: ParsedQuery = { words: [], phrases: [], tags: [], paths: [], notText: [], notTags: [], notPaths: [] };
   for (const t of tokens(query)) {
@@ -59,9 +62,9 @@ export function parseQuery(query: string): ParsedQuery {
       (t.neg ? r.notPaths : r.paths).push(fold(value.replace(/^\/+|\/+$/g, "")));
     } else if (t.neg) {
       // Um "-" sozinho (ou "--") não é exclusão de nada.
-      if (/[\p{L}\p{N}]/u.test(value)) r.notText.push(fold(value));
+      if (/[\p{L}\p{N}]/u.test(value)) r.notText.push(oneSpace(fold(value)));
     } else if (t.quoted) {
-      r.phrases.push(fold(value));
+      r.phrases.push(oneSpace(fold(value)));
     } else {
       r.words.push(fold(value));
     }

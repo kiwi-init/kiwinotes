@@ -50,6 +50,31 @@
     },
     {
       "click": ".kn-tree-pop .kn-side-item[data-kind='tag']:has-text('#kiwi')",
+      "modifiers": [
+        "Control"
+      ],
+      "name": "⌃-clique na tag (T2751)"
+    },
+    {
+      "expectCount": ".kn-palette",
+      "count": 0,
+      "name": "não abre a busca por baixo do menu"
+    },
+    {
+      "press": "Escape",
+      "name": "fecha o menu"
+    },
+    {
+      "expectCount": ".kn-menu",
+      "count": 0
+    },
+    {
+      "expectCount": ".kn-tree-pop",
+      "count": 1,
+      "name": "a árvore continua aberta"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='tag']:has-text('#kiwi')",
       "name": "um clique na tag"
     },
     {

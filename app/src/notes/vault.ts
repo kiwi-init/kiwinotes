@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
-import { hasPositive, parseQuery } from "../shared/query.ts";
+import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
@@ -230,6 +230,17 @@ function tagsOf(content: string): string[] {
   return uniqueTags(tags);
 }
 
+/** O texto da nota com cada sequência de espaços (inclusive quebra de linha) num espaço só, feito na 1ª busca por frase. */
+const flatText = new WeakMap<Entry, string>();
+
+/** O termo está no texto. Uma "frase" (com espaço) compara com os espaços juntados: casa mesmo quebrada (T2751). */
+function inText(e: Entry, t: string): boolean {
+  if (!t.includes(" ")) return e.folded.includes(t);
+  let flat = flatText.get(e);
+  if (flat === undefined) flatText.set(e, (flat = oneSpace(e.folded)));
+  return flat.includes(t);
+}
+
 /** O trecho em volta do termo, sem o frontmatter (revisão #2654): uma busca por tag não mostra o `--- tags: … ---`. */
 function snippetAround(content: string, term: string): string {
   const fm = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(content);
@@ -370,8 +381,8 @@ export class Vault {
       if (!q.tags.every((t) => hasTag(e.meta.tags, t)) || q.notTags.some((t) => hasTag(e.meta.tags, t))) continue;
       const foldedPath = fold(e.meta.path);
       if (!q.paths.every((p) => foldedPath.includes(p)) || q.notPaths.some((p) => foldedPath.includes(p))) continue;
-      if (q.notText.some((t) => e.foldedTitle.includes(t) || e.folded.includes(t))) continue;
-      if (!q.phrases.every((t) => e.foldedTitle.includes(t) || e.folded.includes(t))) continue;
+      if (q.notText.some((t) => e.foldedTitle.includes(t) || inText(e, t))) continue;
+      if (!q.phrases.every((t) => e.foldedTitle.includes(t) || inText(e, t))) continue;
       const terms = [...q.words, ...q.phrases];
       // Só filtros: todas as notas que passam, das mais recentes para as mais velhas.
       if (!terms.length) {
@@ -382,12 +393,12 @@ export class Vault {
       let all = true;
       for (const t of terms) {
         const inTitle = e.foldedTitle.includes(t);
-        const inText = e.folded.includes(t);
-        if (!inTitle && !inText) {
+        const inBody = inText(e, t);
+        if (!inTitle && !inBody) {
           all = false;
           break;
         }
-        score += (inTitle ? 10 : 0) + (inText ? 1 : 0) + (e.foldedTitle === t ? 20 : 0);
+        score += (inTitle ? 10 : 0) + (inBody ? 1 : 0) + (e.foldedTitle === t ? 20 : 0);
       }
       if (!all) continue;
       hits.push({ e, score });

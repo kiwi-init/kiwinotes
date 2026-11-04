@@ -223,7 +223,7 @@ export function Sidebar(p: SidebarProps) {
           <div className="kn-side-head">Buscas salvas</div>
           {p.saved.map((s) => (
             <div key={`s:${s.query}`} className="kn-side-saved">
-              <button type="button" className="kn-side-item" data-kind="search" title={s.query} onClick={() => p.onSaved?.(s.query)}>
+              <button type="button" className="kn-side-item" data-kind="search" title={s.query} onClick={(e) => !e.ctrlKey && p.onSaved?.(s.query)}>
                 <span className="kn-side-name">{s.name}</span>
               </button>
               {p.onUnsave ? (
@@ -282,7 +282,8 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void):
       data-kind="tag"
       style={{ paddingLeft: depth * 14 }}
       title={`Notas com #${t.tag}`}
-      onClick={() => onTag(t.tag)}
+      // ⌃-clique é o clique secundário do Mac: abre só o menu, não a busca por baixo dele (T2693, T2751).
+      onClick={(e) => !e.ctrlKey && onTag(t.tag)}
     >
       <span className="kn-side-name">#{t.name}</span>
       <span className="kn-side-count">{t.count}</span>

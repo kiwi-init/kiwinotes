@@ -31,3 +31,7 @@ test("buscas salvas: sem nome ou sem busca saem, e a busca não repete", () => {
   expect(sanitizeSavedSearches([{ name: "A", query: "tag:a" }, { name: "B", query: "tag:a" }, { name: "", query: "x" }, { name: "C" }, "x"])).toEqual([{ name: "A", query: "tag:a" }]);
   expect(sanitizeSavedSearches(null)).toEqual([]);
 });
+
+test("frases e exclusões com espaços juntados (T2751)", () => {
+  expect(parseQuery('"a   b\tc" -"x  y"')).toMatchObject({ phrases: ["a b c"], notText: ["x y"] });
+});
