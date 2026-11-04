@@ -4,6 +4,7 @@
 import { useState } from "react";
 
 import { fold } from "./palette.ts";
+import { NO_TEXT_ASSIST } from "./textAssist.ts";
 
 export interface PickItem {
   value: string;
@@ -22,6 +23,7 @@ export function ListPicker({ title, items, emptyText, onPick, onClose }: { title
         <input
           className="kn-palette-q"
           autoFocus
+          {...NO_TEXT_ASSIST}
           placeholder={title}
           aria-label={title}
           value={query}
