@@ -189,6 +189,12 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
 
   const first = norm(fix[0]!);
   const window = Math.max(0, sentence.length - Math.min(8, maxSpan));
+  // Com o marcador explícito (entre vírgulas), a correção é certa, e o trecho corrigido pode estar no meio da frase
+  // (T1955, #1989): troca só ele e mantém o resto.
+  if (!needsMatch) {
+    const span = anchoredSpan(sentence, fix, window) ?? (fix.length === 1 ? numberSpan(sentence, first, window) : null);
+    if (span) return joinParts(head, [...sentence.slice(0, span.from), ...fix, ...sentence.slice(span.to + 1)], "");
+  }
   let cut = -1;
   for (let i = sentence.length - 1; i >= window; i--) {
     if (norm(sentence[i]!) === first) {
@@ -205,24 +211,48 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
       }
     }
   }
-  // Com o marcador explícito (entre vírgulas), a correção é certa: antes de trocar só a última palavra, procura o
-  // trecho que ela corrige. Um número troca o último número da frase ("às 15h, não, quer dizer, 16h"), e uma palavra
-  // repetida mais adiante alinha o trecho ("3 de dezembro, não, quer dizer, 5 de dezembro"): T1955.
-  if (cut < 0 && !needsMatch && /\p{N}/u.test(first)) {
-    for (let i = sentence.length - 1; i >= window; i--) {
-      if (/\p{N}/u.test(norm(sentence[i]!))) {
-        cut = i;
-        break;
-      }
-    }
-  }
-  if (cut < 0 && (align || !needsMatch)) cut = alignedCut(sentence, fix);
+  if (cut < 0 && align) cut = alignedCut(sentence, fix);
   if (cut >= 0 && sentence.length - cut > maxSpan) cut = -1;
   if (cut < 0) {
     if (needsMatch) return null;
     cut = sentence.length - 1;
   }
   return joinParts(head, sentence.slice(0, cut), right);
+}
+
+/**
+ * A correção termina numa palavra que já está na frase ("2 cafés e 3 pães, não, quer dizer, 3 cafés"): o trecho do
+ * mesmo tamanho que acaba nela é o corrigido. A âncora tem pelo menos 3 letras e não é número. null sem âncora.
+ */
+function anchoredSpan(sentence: string[], fix: string[], window: number): { from: number; to: number } | null {
+  if (fix.length < 2) return null;
+  const anchor = norm(fix.at(-1)!);
+  if (anchor.length < 3 || /\p{N}/u.test(anchor)) return null;
+  for (let i = sentence.length - 1; i >= window; i--) {
+    if (norm(sentence[i]!) !== anchor) continue;
+    const from = i - (fix.length - 1);
+    return from >= window ? { from, to: i } : null;
+  }
+  return null;
+}
+
+/** O jeito de um número: "15h" → "0h", "12/11" → "0/0", "R$1.500" → "r$0.0". */
+const numberShape = (w: string) => w.toLocaleLowerCase("pt-BR").replace(/\p{N}+/gu, "0");
+
+/**
+ * A correção é um número só ("às 15h na sala 2, não, quer dizer, 16h"): troca o último número da frase com o mesmo
+ * jeito (o sufixo, a unidade, a data) e, sem nenhum assim, o último número. null sem número na frase.
+ */
+function numberSpan(sentence: string[], first: string, window: number): { from: number; to: number } | null {
+  if (!/\p{N}/u.test(first)) return null;
+  let any = -1;
+  for (let i = sentence.length - 1; i >= window; i--) {
+    const w = norm(sentence[i]!);
+    if (!/\p{N}/u.test(w)) continue;
+    if (numberShape(w) === numberShape(first)) return { from: i, to: i };
+    if (any < 0) any = i;
+  }
+  return any >= 0 ? { from: any, to: any } : null;
 }
 
 /**

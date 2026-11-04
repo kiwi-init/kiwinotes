@@ -74,6 +74,13 @@ export const fixtures: Fixture[] = [
   { name: "correção de número sozinho", raw: "a reunião é dia 12 às 15h, não, quer dizer, 16h", expected: "A reunião é dia 12 às 16h." },
   { name: "correção de quantidade com o substantivo", raw: "são 3 arquivos e 2 pastas, não, quer dizer, 4 pastas", expected: "São 3 arquivos e 4 pastas." },
   { name: "correção com digo e algarismo", raw: "custa 100 reais, digo, 200 reais", expected: "Custa 200 reais." },
+  // Revisão #1989: o trecho corrigido no meio da frase; o resto fica.
+  { name: "correção ancorada na palavra repetida, no meio da frase", raw: "comprei 2 cafés e 3 pães, não, quer dizer, 3 cafés", expected: "Comprei 3 cafés e 3 pães." },
+  { name: "correção de número pelo jeito (15h, não o 2 da sala)", raw: "a reunião é às 15h na sala 2, não, quer dizer, 16h", expected: "A reunião é às 16h na sala 2." },
+  { name: "correção de data pelo jeito", raw: "chego dia 12/11 com 2 malas, não, quer dizer, 13/11", expected: "Chego dia 13/11 com 2 malas." },
+  { name: "correção de número sem o mesmo jeito troca o último", raw: "custa 100 reais por mês, não, quer dizer, 120", expected: "Custa 120 reais por mês." },
+  { name: "correção sem âncora troca do começo dela até o fim, sem deixar resto", raw: "amanhã cedo eu vou ao escritório de carro, não, quer dizer, de ônibus", expected: "Amanhã cedo eu vou ao escritório de ônibus." },
+  { name: "correção com âncora longa", raw: "manda pro João o relatório, ou melhor, pra Maria o relatório", expected: "Manda pra Maria o relatório." },
   { name: "correção sem número nem repetição troca a última palavra", raw: "chama o Pedro, não, quer dizer, Paulo", expected: "Chama o Paulo." },
   { name: "a correção não atravessa frase", raw: "Fechei o PR. Amanhã às nove, não, quer dizer, às dez eu reviso.", expected: "Fechei o PR. Amanhã às dez eu reviso." },
   { name: "correção logo depois do ponto do STT", raw: "Vamos marcar sexta. Não, quer dizer, segunda.", expected: "Vamos marcar segunda." },
