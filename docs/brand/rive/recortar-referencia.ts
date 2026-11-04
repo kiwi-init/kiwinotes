@@ -172,17 +172,29 @@ function cut(src: string, ref: typeof REF, bodySrc: string, bodyBox: { x: number
       // O brilho espelha de outro jeito: na foto a cabeça está virada, e o topo do arco fica à direita do meio dos olhos.
       // Espelhar em mx deixava o arco com uma ponta no meio; a metade esquerda do arco, até o topo dele, é esticada até
       // mx antes de espelhar, e o topo fica redondo. À direita, a cor gira do ciano para o púrpura, como na referência.
+      // O topo do arco pela linha do meio da faixa (a média do brilho em cada coluna), não pelo primeiro pixel: um
+      // pixel solto em cima jogava o topo para o lado e deixava uma ponta (#3606).
       let apex = mx;
       {
         let best = h;
-        for (let x = mx - 40; x < Math.min(w, mx + 120); x++)
-          for (let y = 0; y < h; y++)
-            if (glowRaw[y * w + x]! > 0.25) {
-              if (y < best) [best, apex] = [y, x];
-              break;
+        for (let x = mx - 40; x < Math.min(w, mx + 120); x++) {
+          let sum = 0, ys = 0;
+          for (let y = 120; y < 330; y++) {
+            const g = glowRaw[y * w + x]!;
+            if (g > 0.15) {
+              sum += g;
+              ys += g * y;
             }
+          }
+          if (sum > 2 && ys / sum < best) [best, apex] = [ys / sum, x];
+        }
       }
       const side = (x: number) => (x < mx ? x : 2 * mx - 1 - x);
+      const glowHalo = (() => {
+        const a = new Float32Array(w * h);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) a[y * w + x] = fg[(y * w + side(x)) * 4 + 3]!;
+        return blur(a, 2);
+      })();
       const fgM = new Float32Array(w * h * 4);
       const glowM = new Float32Array(w * h);
       const glowC = new Float32Array(w * h * 3);
@@ -201,13 +213,34 @@ function cut(src: string, ref: typeof REF, bodySrc: string, bodyBox: { x: number
           const p = y * w + x;
           const sb = y * w + side(x);
           for (let k = 0; k < 4; k++) fgM[p * 4 + k] = fg[sb * 4 + k]!;
+          // O brilho sem espelhar (como sugeriu o #3606) perdia a metade direita do arco na cabeça de frente: fica o
+          // esticado. Só vale dentro da cabeça espelhada (o alfa dela, com folga para o halo): some o fio solto acima
+          // da cabeça, entre as orelhas.
           const sg = y * w + Math.min(w - 1, Math.round((side(x) * apex) / mx));
-          glowM[p] = glow[sg]!;
+          // Dentro da cabeça de verdade (alfa espelhado de 0,3 a 0,75): com folga de halo, a franja do arco acima do topo
+          // da cabeça, entre as orelhas, passava como dois pontos claros. O halo das laterais vem das manchas da névoa.
+          const hi = Math.min(1, Math.max(0, (glowHalo[p]! - 0.3) / 0.45));
+          const inside = hi * hi * (3 - 2 * hi);
+          glowM[p] = glow[sg]! * inside;
           const col = [fg[sg * 4]!, fg[sg * 4 + 1]!, fg[sg * 4 + 2]!];
           const turn = x < mx ? 0 : 95 * Math.min(1, (x - mx) / 170);
           const out = turn ? hue(col, turn) : col;
           for (let k = 0; k < 3; k++) glowC[p * 3 + k] = out[k]!;
+          // Brilho sem cor é a franja cinza da foto (os pontinhos acima da cabeça): sai.
+          const sat = Math.max(...out) - Math.min(...out);
+          const st = Math.min(1, Math.max(0, (sat - 0.12) / 0.18));
+          glowM[p] = glowM[p]! * st * st * (3 - 2 * st);
         }
+      // O topo do arco: no meio, onde as duas metades se encontram, um blur horizontal arredonda a ponta (#3606).
+      {
+        const soft = blur(glowM, 8);
+        for (let y = 0; y < h; y++)
+          for (let x = mx - 70; x < mx + 70; x++) {
+            const t = 1 - Math.abs(x - mx) / 70;
+            const p = y * w + x;
+            glowM[p] = glowM[p]! + (soft[p]! - glowM[p]!) * t;
+          }
+      }
       // Dali em diante, tudo usa a versão de frente.
       fg.set(fgM);
       const layer = (weight: (p: number) => number, eyesOut = false) => {
