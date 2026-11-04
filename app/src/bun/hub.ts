@@ -21,20 +21,35 @@ export class Hub {
   private cold = true;
   private pending: HubSection | null = null;
   private dock = false;
+  /** A abertura em andamento (a intro e o show). Uma 2ª abertura nesse meio espera esta, em vez de mostrar o hub antes
+   * do fim da intro (round 1 do T2121, T2308). */
+  private opening: Promise<void> | null = null;
 
   constructor(private readonly deps: HubDeps) {}
 
   /**
-   * Abre o hub, numa seção se ela vier. A 1ª vez no processo é a abertura do zero, com a intro; as outras, não. Uma
-   * abertura em andamento não toca a intro de novo: `cold` cai antes de esperar.
+   * Abre o hub, numa seção se ela vier. A 1ª vez no processo é a abertura do zero, com a intro; as outras, não. Com uma
+   * abertura em andamento (a intro tocando), uma 2ª espera a mesma: o hub só aparece no fim da intro, na seção pedida
+   * por último.
    */
   async open(section?: HubSection): Promise<void> {
+    if (section) this.pending = section;
+    if (this.opening) return this.opening;
     if (this.deps.isOpen()) {
-      if (section) this.deps.navigate(section);
+      if (section) {
+        this.pending = null;
+        this.deps.navigate(section);
+      }
       this.setDock(true);
       return this.deps.show();
     }
-    if (section) this.pending = section;
+    this.opening = this.openFresh().finally(() => {
+      this.opening = null;
+    });
+    return this.opening;
+  }
+
+  private async openFresh(): Promise<void> {
     const cold = this.cold;
     this.cold = false;
     this.setDock(true);

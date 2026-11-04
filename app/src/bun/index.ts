@@ -6,12 +6,13 @@ import Electrobun, { AgentControl, ApplicationMenu, PATHS, Tray, Updater, Utils 
 
 import { type HubSection, UI_WINDOWS } from "../shared/ui-contract.ts";
 import { Hub } from "./hub.ts";
+import { makeIntro } from "./intro.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
 import { stores } from "./stores.ts";
 import { AppUpdates, updateMenuLabel } from "./updates.ts";
-import { onWindowClosed, openWindows, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
+import { closeWindow, onIntroDone, onWindowClosed, openWindows, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
 // velho de pé é substituído. Com KIWI_DEBUG=1 nunca derruba outro.
@@ -19,8 +20,14 @@ if (claimInstance({ dir: stores.dir, mayReplace: process.env.KIWI_DEBUG !== "1" 
 
 Utils.setDockIconVisible(false);
 
-// O hub: abrir do zero toca a intro (#2078, ainda não ligada) e abre; abrir de novo, só abre. O Dock acompanha.
+// O hub: abrir do zero toca a intro (#2078, T2308) e abre; abrir de novo, só abre. O Dock acompanha.
 const hub = new Hub({
+  intro: makeIntro({
+    show: () => showWindow("intro"),
+    close: () => closeWindow("intro"),
+    onDone: onIntroDone,
+    onClosed: (fn) => onWindowClosed((name) => name === "intro" && fn()),
+  }),
   show: () => showWindow("hub"),
   isOpen: () => openWindows().includes("hub"),
   navigate: (section) => void sendToWindow("hub", "hub.navigate", { section }),
@@ -216,5 +223,5 @@ if (process.env.KIWI_DEBUG === "1") {
 }
 
 console.log("Kiwi Notes is running in the menu bar");
-// Abrir do zero: o hub (com a intro, quando ela entrar).
+// Abrir do zero: a intro e o hub.
 openHub();

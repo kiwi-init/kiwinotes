@@ -52,12 +52,25 @@ Medida no WebKit headless do Playwright (o mesmo do `cli screenshot`), numa jane
 | O gato do zip, sem mudança (512 pt, 2x) | 9 | 141 ms | 172 ms | 193 ms |
 
 - **O headless pinta em software.** No app, o WKWebView tem a GPU, então a medida aqui é o pior caso.
-- **Peso:** o `intro.html` tem 100 KB, com os bitmaps e o gato dentro, e não depende de nada de fora.
+- **Peso:** o `intro.html` tem 138 KB (com a aura a 1/8, T2308), com os bitmaps e o gato dentro, e não depende de nada de fora.
+
+## No app (T2308)
+A janela `intro` do app sai daqui também: o `gerar.ts` escreve `app/ui/intro/index.html` e `app/ui/intro/intro.js`.
+- **O script** vai num arquivo do pack, porque a CSP das janelas não deixa script inline.
+- **O fundo** é transparente, e o "De novo" sai.
+- **No app** (com o `window.engine`), o script avisa que subiu (`ready`) e, no fim, chama o `intro.done`; o main fecha a
+  janela e abre o hub. Isso vale para o último frame, o clique para pular e o "Reduzir movimento".
+- **A aura** vai a 1/8, e não mais a 1/12: a 1/12, o quadro parado a 2x tinha degraus em cima da cabeça. A 1/6 não muda
+  nada a olho, e 1/8 custa +37 KB (o `intro.html` vai a 138 KB e a janela do app, a 130 KB).
+- **Para conferir** sem abrir nada na tela (com o `kiwi lock bench`): `bun run cli ui intro --script
+  scripts/ui-scripts/intro-fim.json` (com movimento reduzido) e `bun run cli ui intro --motion --script
+  scripts/ui-scripts/intro-pular.json` (o clique para pular), em `app/`.
 
 ## Arquivos
-- `intro.template.html`: o modelo, com o prisma, a linha do tempo e o script. **Edite este.**
+- `intro.template.html`: o modelo, com o prisma e a linha do tempo. **Edite este.**
+- `intro.js`: o script da linha do tempo. **Edite este.**
 - `gerar.ts`: monta o `intro.html` a partir do modelo e de `../kiwi-cat-familia/kiwi-cat-1-aura-intro.svg`. Ele assa
   os bitmaps no WebKit do Playwright do `app/`, então rode antes `bun install` em `app/`:
   `bun docs/brand/intro/gerar.ts`.
-- `intro.html`: o gerado. É o que se abre, e o que vai para a janela `intro` do app.
+- `intro.html`: o gerado, o protótipo que abre sozinho no navegador. A janela do app é `app/ui/intro/`, gerada junto.
 - `prancha.png`: os 6 tempos.

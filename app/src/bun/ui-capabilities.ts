@@ -36,6 +36,8 @@ export interface CapabilityDeps {
   clipboardWrite(text: string): void;
   /** A seção pedida para o hub que ainda vai abrir (T2121): devolve e esquece. Sem ela, null. */
   hubSection?(): HubSection | null;
+  /** A intro avisou que terminou (T2308): o hub segue. */
+  introDone?(): void;
   /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
   notes: Pick<Vault, "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve">;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
@@ -165,6 +167,11 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "hub.section": (args) => {
       noArgs(args, "hub.section");
       return { section: deps.hubSection?.() ?? null };
+    },
+    "intro.done": (args) => {
+      noArgs(args, "intro.done");
+      deps.introDone?.();
+      return true as const;
     },
     "clipboard.write": (args) => {
       const text = object(args, "clipboard.write").text;
