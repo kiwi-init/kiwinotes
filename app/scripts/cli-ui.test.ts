@@ -1,0 +1,227 @@
+// O `cli screenshot` e o `cli ui --script` (T1742). As flags e os passos são lógica pura; o resto abre o WebKit
+// headless do Playwright (fora da tela) contra um engine de mentira, e pula se o WebKit não estiver instalado
+// (`bunx playwright-core install webkit`).
+
+import { afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { webkit } from "playwright-core";
+
+import { parseArgs, runScreenshot, runUi } from "./cli-ui.ts";
+import type { UiContext } from "./ui-page.ts";
+import { parseScript } from "./ui-steps.ts";
+
+describe("flags", () => {
+  test("janela, escalas e temas em lista, tamanho, nota; o --data é da CLI", () => {
+    const a = parseArgs(["notes", "--data", "/tmp/x", "--scale", "1,2", "--theme", "dark", "--size", "900x600", "--note", "Pessoas/Ana.md", "--query", "a=b=c"]);
+    expect(a.window).toBe("notes");
+    expect(a.scales).toEqual([1, 2]);
+    expect(a.themes).toEqual(["dark"]);
+    expect(a.size).toEqual({ width: 900, height: 600 });
+    expect(a.query).toEqual({ note: "Pessoas/Ana.md", a: "b=c" });
+    expect(a.browser).toBe("webkit");
+    expect(a.motion).toBe(false);
+  });
+
+  test("uso errado diz o quê", () => {
+    expect(() => parseArgs(["janela"])).toThrow("não é uma janela");
+    expect(() => parseArgs(["notes", "--scale", "3"])).toThrow("--scale: 3");
+    expect(() => parseArgs(["notes", "--size", "grande"])).toThrow("LARGURAxALTURA");
+    expect(() => parseArgs(["notes", "--size", "100x100"])).toThrow("de 200 a 4000");
+    expect(() => parseArgs(["notes", "--theme"])).toThrow("precisa de um valor");
+    expect(() => parseArgs(["notes", "--zoom", "2"])).toThrow("flag desconhecida");
+    expect(() => parseArgs(["notes", "history"])).toThrow("sobrou");
+  });
+});
+
+describe("passos", () => {
+  test("aceita a lista sozinha ou o objeto com as opções", () => {
+    expect(parseScript([{ press: "Meta+k" }]).steps).toHaveLength(1);
+    const f = parseScript({ window: "notes", scale: 1, theme: "dark", query: { note: "a.md" }, steps: [{ click: ".x", modifiers: ["Meta"] }, { wait: 10 }] });
+    expect(f.window).toBe("notes");
+  });
+
+  test("recusa o passo torto, dizendo qual", () => {
+    expect(() => parseScript([])).toThrow("não tem passos");
+    expect(() => parseScript([{ click: ".a", press: "x" }])).toThrow("passo 1: uma ação só");
+    expect(() => parseScript([{ wait: 1 }, { nada: 1 }])).toThrow("passo 2");
+    expect(() => parseScript([{ wait: 99_999 }])).toThrow("wait em ms");
+    expect(() => parseScript([{ fill: ".a" }])).toThrow("fill precisa de text");
+    expect(() => parseScript([{ expectCount: ".a" }])).toThrow("count");
+    expect(() => parseScript([{ click: ".a", modifiers: ["Hyper"] }])).toThrow("modifiers");
+    expect(() => parseScript([{ waitFor: ".a", state: "sumido" }])).toThrow("state");
+    expect(() => parseScript([{ click: ".a", timeout: 0 }])).toThrow("timeout");
+    expect(() => parseScript({ scale: 3, steps: [{ wait: 1 }] })).toThrow("scale");
+  });
+
+  test("o print é só um nome .png: nada de escrever fora da pasta de saída", () => {
+    expect(() => parseScript([{ screenshot: "../fora.png" }])).toThrow("sem pasta");
+    expect(() => parseScript([{ screenshot: "/tmp/x.png" }])).toThrow("sem pasta");
+    expect(() => parseScript([{ screenshot: "x.jpg" }])).toThrow(".png");
+  });
+
+  test("nenhum passo escreve no clipboard", () => {
+    expect(() => parseScript([{ invoke: "clipboard.write", args: { text: "x" } }])).toThrow("clipboard");
+  });
+});
+
+// ---------------------------------------------------------------- no navegador
+
+const hasWebkit = (() => {
+  try {
+    return existsSync(webkit.executablePath());
+  } catch {
+    return false;
+  }
+})();
+
+/** Um engine de mentira: as capacidades na memória, cada pedido anotado, e eventos que o teste solta. */
+function fakeCtx(data: string, running = true) {
+  const sent: Record<string, unknown>[] = [];
+  const listeners = new Set<(m: Record<string, unknown>) => void>();
+  const caps: Record<string, (args: any) => unknown> = {
+    "settings.get": () => ({ notesShortcut: "control+option+n" }),
+    "dictionary.get": () => [],
+    "snippets.get": () => [],
+    "history.search": () => ({
+      entries: [{ id: "2026-11-03T12:00:00.000Z-ab12", at: "2026-11-03T12:00:00.000Z", raw: "oi ana", text: "Oi, Ana.", app: { name: "Notas" } }],
+    }),
+    "notes.list": () => ({ folders: [], notes: [] }),
+  };
+  const ctx: UiContext = {
+    data,
+    send: async (msg) => {
+      sent.push(msg);
+      if (!running) throw Object.assign(new Error("no headless"), { code: "E_NOT_RUNNING" });
+      if (msg.cmd === "status") return { ok: true, value: { helper: "off" } };
+      const fn = caps[msg.cap as string];
+      if (!fn) return { ok: false, code: "E_NO_CAPABILITY", message: String(msg.cap) };
+      return { ok: true, value: fn(msg.args) };
+    },
+    subscribe: async (_topics, onMsg) => {
+      listeners.add(onMsg);
+      return () => listeners.delete(onMsg);
+    },
+  };
+  return { ctx, sent, emit: (event: string, payload: unknown) => listeners.forEach((l) => l({ event, payload })) };
+}
+
+let dir = "";
+let logs: string[] = [];
+let spy: ReturnType<typeof spyOn> | undefined;
+const lastJson = () => JSON.parse(logs.at(-1)!);
+
+function capture() {
+  logs = [];
+  spy = spyOn(console, "log").mockImplementation((m: unknown) => void logs.push(String(m)));
+}
+
+beforeAll(() => {
+  dir = mkdtempSync(join(tmpdir(), "kn-cli-ui-"));
+});
+afterEach(() => {
+  spy?.mockRestore();
+  spy = undefined;
+});
+
+describe("sem o headless", () => {
+  test("screenshot e ui saem com 3 e dizem como subir", async () => {
+    const { ctx } = fakeCtx(dir, false);
+    capture();
+    expect(await runScreenshot(["settings"], ctx)).toBe(3);
+    expect(lastJson().code).toBe("E_NOT_RUNNING");
+    expect(lastJson().message).toContain("bun run cli start");
+    writeFileSync(join(dir, "p.json"), JSON.stringify([{ wait: 1 }]));
+    expect(await runUi(["settings", "--script", join(dir, "p.json")], ctx)).toBe(3);
+  });
+
+  test("uso errado sai com 2 antes de procurar o headless", async () => {
+    const { ctx, sent } = fakeCtx(dir, false);
+    capture();
+    expect(await runScreenshot([], ctx)).toBe(2);
+    expect(await runUi(["notes"], ctx)).toBe(2);
+    expect(sent).toEqual([]);
+  });
+});
+
+describe.skipIf(!hasWebkit)("no WebKit headless", () => {
+  test("screenshot: o build de verdade com a CSP, em 1x e 2x, no tamanho da janela", async () => {
+    const { ctx } = fakeCtx(dir);
+    capture();
+    const code = await runScreenshot(["settings", "--scale", "1,2", "--theme", "dark", "--out", join(dir, "shots")], ctx);
+    const r = lastJson();
+    expect(r.problems ?? r.shots.flatMap((s: any) => s.problems)).toEqual([]);
+    expect(code).toBe(0);
+    expect(r.shots.map((s: any) => [s.scale, s.theme, s.ready])).toEqual([
+      [1, "dark", true],
+      [2, "dark", true],
+    ]);
+    // O PNG tem o tamanho da janela vezes a escala (largura nos bytes 16..19 do IHDR).
+    const width = (p: string) => readFileSync(p).readUInt32BE(16);
+    expect(width(r.shots[0].path)).toBe(640);
+    expect(width(r.shots[1].path)).toBe(1280);
+  }, 60_000);
+
+  test("ui: o copiar do Histórico não chega ao engine nem ao clipboard; fica no relatório", async () => {
+    const { ctx, sent } = fakeCtx(dir);
+    writeFileSync(
+      join(dir, "copiar.json"),
+      JSON.stringify({ window: "history", steps: [{ waitFor: "text=Oi, Ana." }, { click: "[aria-label='Copiar o texto']" }, { wait: 100 }, { screenshot: "h.png" }] }),
+    );
+    capture();
+    const code = await runUi(["--script", join(dir, "copiar.json"), "--out", join(dir, "ui")], ctx);
+    const r = lastJson();
+    expect(r.steps.filter((s: any) => !s.ok)).toEqual([]);
+    expect(code).toBe(0);
+    expect(r.clipboard).toEqual(["Oi, Ana."]);
+    expect(sent.some((m) => m.cap === "clipboard.write")).toBe(false);
+    expect(existsSync(join(dir, "ui/h.png"))).toBe(true);
+  }, 60_000);
+
+  test("ui: um passo que falha para o script, diz qual e deixa o print do momento", async () => {
+    const { ctx } = fakeCtx(dir);
+    writeFileSync(join(dir, "falha.json"), JSON.stringify([{ waitFor: ".kn-segmented" }, { click: ".nao-existe", timeout: 300 }, { wait: 1 }]));
+    capture();
+    expect(await runUi(["settings", "--script", join(dir, "falha.json"), "--out", join(dir, "falha")], ctx)).toBe(1);
+    const r = lastJson();
+    expect(r.failedAt).toBe(2);
+    expect(r.skipped).toBe(1);
+    expect(existsSync(r.steps[1].shot)).toBe(true);
+  }, 60_000);
+
+  test("a página não sai para a rede e a CSP das views vale: tudo vira problema no relatório", async () => {
+    const page = join(dir, "pagina");
+    rmSync(page, { recursive: true, force: true });
+    await Bun.write(
+      join(page, "index.html"),
+      `<!doctype html><script>window.__inline = 1</script><script type="module" src="./app.js"></script>`,
+    );
+    await Bun.write(
+      join(page, "app.js"),
+      `window.engine.on("notes.changed", (p) => { document.title = "mudou:" + p.paths[0]; });
+       fetch("https://example.com/x").catch(() => {});
+       window.open("https://example.com/aba");
+       window.engine.ready();`,
+    );
+    const { ctx, emit } = fakeCtx(dir);
+    writeFileSync(join(dir, "rede.json"), JSON.stringify([{ expectText: "title", text: "mudou:a.md", timeout: 3000 }]));
+    capture();
+    // O evento do engine chega à página.
+    const run = runUi(["notes", "--dist", page, "--script", join(dir, "rede.json"), "--out", join(dir, "rede")], ctx);
+    // A página assina só depois de o navegador subir: o evento vai de novo até o script acabar.
+    const tick = setInterval(() => emit("notes.changed", { paths: ["a.md"] }), 100);
+    const code = await run;
+    clearInterval(tick);
+    expect(code).toBe(1);
+    const r = lastJson();
+    expect(r.ready).toBe(true);
+    expect(r.steps[0].ok).toBe(true);
+    // O fetch para fora nem sai: a CSP das views (connect-src só ws://127.0.0.1) recusa antes da rota.
+    const problems = r.problems.join("\n");
+    expect(problems).toContain("CSP connect-src: https://example.com/x");
+    expect(problems).toMatch(/CSP script-src(-elem)?: inline/);
+    expect(r.blocked).toContain("https://example.com/aba");
+  }, 60_000);
+});

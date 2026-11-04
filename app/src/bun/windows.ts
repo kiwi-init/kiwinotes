@@ -9,6 +9,7 @@ import { BrowserView, BrowserWindow, PATHS, Updater, Utils } from "electrobun/bu
 import type { AppEngine } from "electrobun/bun/appengine";
 
 import { UI_CAPABILITIES, type UiWindow } from "../shared/ui-contract.ts";
+import { WINDOW_SPECS as SPECS } from "../shared/window-specs.ts";
 import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
 import { session } from "./session.ts";
 import { stores } from "./stores.ts";
@@ -18,13 +19,6 @@ import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
 
 export type WindowName = UiWindow;
-
-const SPECS: Record<WindowName, { title: string; width: number; height: number }> = {
-  settings: { title: "Configurações", width: 640, height: 520 },
-  history: { title: "Histórico", width: 760, height: 600 },
-  // B v4: barra lateral de 220, a nota com até 760 de texto e o "Citada em" de 260.
-  notes: { title: "Notas", width: 1180, height: 760 },
-};
 
 const DEV_SERVER = "http://localhost:5178";
 
