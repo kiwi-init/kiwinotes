@@ -19,8 +19,10 @@
   /* Tracking negativo só em tela densa (o @media no fim): em 1x ele junta as letras, que já saem serrilhadas (T1727). */
   --tracking-tight: 0;
   --tracking-display: 0;
-  /* Código em tamanho inteiro: em 1x, um 12.5px cai entre pixels e borra. */
+  /* O código e o painel da direita: 12.5px no desenho, mas em 1x um tamanho fracionado cai entre pixels e borra, então
+     em 1x é 13px. Os 12.5px voltam no @media do fim, e o Retina fica igual (T1727, #1988). */
   --text-code: 13px;
+  --text-aside: 13px;
 
   /* raios e espaços */
   --radius-sm: 6px;
@@ -97,5 +99,7 @@
   :root {
     --tracking-tight: -0.01em;
     --tracking-display: -0.02em;
+    --text-code: 12.5px;
+    --text-aside: 12.5px;
   }
 }
