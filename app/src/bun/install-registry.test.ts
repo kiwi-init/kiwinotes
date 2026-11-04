@@ -39,8 +39,9 @@ describe("o registro de instalação (T2399)", () => {
   const installed = app("Applications");
   const old = app("kiwinotes-wt/main-teste4/app/build/stable-macos-arm64");
 
-  test("runningBundle: o .app pelo executável; fora de um .app, null", () => {
+  test("runningBundle: o .app pelo executável, como o Updater calcula (léxico); fora de um .app, null", () => {
     expect(runningBundle(installed.exec)).toBe(installed.bundle);
+    expect(runningBundle("/Applications/Kiwi Notes.app/Contents/MacOS/bun")).toBe("/Applications/Kiwi Notes.app");
     expect(runningBundle("/opt/homebrew/bin/bun")).toBeNull();
   });
 
@@ -59,7 +60,7 @@ describe("o registro de instalação (T2399)", () => {
     expect(repairInstallRegistry({ channelRoot: root, bundle: installed.bundle }).state).toBe("moved");
   });
 
-  test("o registro deste app fica como está, mesmo por um link", () => {
+  test("o registro deste app fica como está; o mesmo app por um link sai, porque o extractor compara o texto (#2414)", () => {
     const root = channel(installed.bundle);
     expect(repairInstallRegistry({ channelRoot: root, bundle: installed.bundle })).toEqual({ state: "ok" });
     expect(existsSync(path.join(root, REGISTRY_NAME))).toBe(true);
@@ -67,7 +68,7 @@ describe("o registro de instalação (T2399)", () => {
     const link = path.join(home, "atalho.app");
     symlinkSync(installed.bundle, link);
     const viaLink = channel(link);
-    expect(repairInstallRegistry({ channelRoot: viaLink, bundle: installed.bundle })).toEqual({ state: "ok" });
+    expect(repairInstallRegistry({ channelRoot: viaLink, bundle: installed.bundle }).state).toBe("moved");
   });
 
   test("sem registro, sem .app ou com registro ilegível: nada é mexido", () => {
