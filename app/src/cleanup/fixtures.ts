@@ -42,6 +42,22 @@ export const fixtures: Fixture[] = [
   { name: "um em português é artigo", raw: "preciso de um minuto", expected: "Preciso de um minuto." },
   { name: "gagueira", raw: "eu eu acho que que dá", expected: "Eu acho que dá." },
   { name: "ênfase repetida fica", raw: "ficou muito muito bom", expected: "Ficou muito muito bom." },
+  // T1955: "like" de muleta sem vírgula sai; o verbo e a comparação ficam.
+  { name: "inglês: like de muleta antes de intensificador", raw: "it was like really fast", expected: "It was really fast." },
+  { name: "inglês: it's like so", raw: "it's like so much better now", expected: "It's so much better now." },
+  { name: "inglês: like verbo fica", raw: "I like this approach", expected: "I like this approach." },
+  { name: "inglês: I'd like really é verbo", raw: "I'd like really hot coffee", expected: "I'd like really hot coffee." },
+  { name: "inglês: looks like é comparação", raw: "it looks like rain today", expected: "It looks like rain today." },
+  { name: "inglês: is like com substantivo é comparação", raw: "this is like a puzzle", expected: "This is like a puzzle." },
+  { name: "inglês: like antes de número fica (é aproximação)", raw: "it was like 5 minutes", expected: "It was like 5 minutes." },
+  // T1955: repetição de ênfase fica; gagueira sai.
+  { name: "já já fica", raw: "te mando o link já já", expected: "Te mando o link já já." },
+  { name: "logo logo fica", raw: "logo logo a gente resolve", expected: "Logo logo a gente resolve." },
+  { name: "não não fica", raw: "não não, deixa comigo", expected: "Não não, deixa comigo." },
+  { name: "tchau tchau fica", raw: "tchau tchau", expected: "Tchau tchau." },
+  { name: "very very fica", raw: "it was very very slow", expected: "It was very very slow." },
+  { name: "gagueira no artigo sai", raw: "o o projeto atrasou", expected: "O projeto atrasou." },
+  { name: "gagueira com já no meio sai", raw: "a a gente já chegou", expected: "A gente já chegou." },
 
   // ---------------------------------------------------------------- autocorreções
   { name: "não, quer dizer", raw: "me encontra às três, não, quer dizer, às quatro", expected: "Me encontra às quatro." },
@@ -53,6 +69,12 @@ export const fixtures: Fixture[] = [
   { name: "não espera é verbo", raw: "ele não espera ninguém", expected: "Ele não espera ninguém." },
   { name: "inglês: I mean", raw: "let's meet on monday, I mean, on tuesday", expected: "Let's meet on tuesday." },
   { name: "I mean no começo é muleta", raw: "I mean, it works fine", expected: "It works fine." },
+  // T1955: com o marcador entre vírgulas, um número ou o trecho que se repete diz o que foi corrigido.
+  { name: "correção com algarismo e o resto repetido", raw: "o prazo é 3 de dezembro, não, quer dizer, 5 de dezembro", expected: "O prazo é 5 de dezembro." },
+  { name: "correção de número sozinho", raw: "a reunião é dia 12 às 15h, não, quer dizer, 16h", expected: "A reunião é dia 12 às 16h." },
+  { name: "correção de quantidade com o substantivo", raw: "são 3 arquivos e 2 pastas, não, quer dizer, 4 pastas", expected: "São 3 arquivos e 4 pastas." },
+  { name: "correção com digo e algarismo", raw: "custa 100 reais, digo, 200 reais", expected: "Custa 200 reais." },
+  { name: "correção sem número nem repetição troca a última palavra", raw: "chama o Pedro, não, quer dizer, Paulo", expected: "Chama o Paulo." },
   { name: "a correção não atravessa frase", raw: "Fechei o PR. Amanhã às nove, não, quer dizer, às dez eu reviso.", expected: "Fechei o PR. Amanhã às dez eu reviso." },
   { name: "correção logo depois do ponto do STT", raw: "Vamos marcar sexta. Não, quer dizer, segunda.", expected: "Vamos marcar segunda." },
   { name: "apaga a última frase", raw: "Manda pro time. O prazo é sexta. Apaga a última frase. O prazo é segunda.", expected: "Manda pro time. O prazo é segunda." },

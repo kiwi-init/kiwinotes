@@ -205,7 +205,18 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
       }
     }
   }
-  if (cut < 0 && align) cut = alignedCut(sentence, fix);
+  // Com o marcador explícito (entre vírgulas), a correção é certa: antes de trocar só a última palavra, procura o
+  // trecho que ela corrige. Um número troca o último número da frase ("às 15h, não, quer dizer, 16h"), e uma palavra
+  // repetida mais adiante alinha o trecho ("3 de dezembro, não, quer dizer, 5 de dezembro"): T1955.
+  if (cut < 0 && !needsMatch && /\p{N}/u.test(first)) {
+    for (let i = sentence.length - 1; i >= window; i--) {
+      if (/\p{N}/u.test(norm(sentence[i]!))) {
+        cut = i;
+        break;
+      }
+    }
+  }
+  if (cut < 0 && (align || !needsMatch)) cut = alignedCut(sentence, fix);
   if (cut >= 0 && sentence.length - cut > maxSpan) cut = -1;
   if (cut < 0) {
     if (needsMatch) return null;
@@ -278,11 +289,20 @@ export function removeFillers(text: string): string {
   out = out.replace(re(`(^|[.!?\\n]\\s*)então\\s+assim\\s+(?!que${E})`), "$1");
   out = out.replace(re(`[\\s,]*,\\s*(?:sabe|you know|like)${E}\\s*\\??(?=\\s*[,.!?]|\\s*$)`), "");
   out = out.replace(re(`,\\s*(?:you know|like),\\s*`), ", ");
+  // "it was like really fast": sem vírgula, "like" só é muleta entre um verbo de ligação e um intensificador (T1955).
+  // O verbo ("I like it", "I'd like really hot coffee") e a comparação ("looks like rain") ficam.
+  out = out.replace(re(`${B}(${LIKE_AFTER})\\s+like\\s+(?=(?:${LIKE_BEFORE})${E})`), "$1 ");
   return out;
 }
 
+/** Antes de um "like" de muleta: o verbo de ligação ("was", "it's", "is"). */
+const LIKE_AFTER = "was|were|is|are|am|be|been|being|it's|that's|he's|she's|they're|we're|you're|i'm";
+/** Depois dele: um intensificador, que nunca é o objeto do verbo "like". */
+const LIKE_BEFORE = "really|so|super|totally|very|literally|just|actually|completely|pretty|too|way|kind of|sort of";
+
 // Repetidas de propósito, para dar ênfase: ficam.
-const EMPHASIS = new Set("muito mais bem não sim very really so no yes ha haha rs had that".split(" "));
+// "já já" e "logo logo" são "daqui a pouco", e "tchau tchau" é despedida: tirar a repetição muda o sentido (T1955).
+const EMPHASIS = new Set("muito mais bem não sim já logo tchau very really so no yes bye ha haha rs had that".split(" "));
 
 /**
  * "eu eu acho" → "eu acho". Com vírgula, três vezes ou terminando em "!" é ênfase e fica: "Vai, vai, vai!" (T913).
