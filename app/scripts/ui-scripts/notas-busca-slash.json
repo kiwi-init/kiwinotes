@@ -104,7 +104,8 @@
       "waitFor": ".kn-title"
     },
     {
-      "click": ".kn-note-editor .cm-line:has-text('Decidimos')"
+      "click": ".kn-note-editor :is(.cm-line, .cm-rendered):has-text('Decidimos') >> nth=0",
+      "name": "clica na linha (renderizada fora do cursor, T2983)"
     },
     {
       "press": "End"
@@ -150,7 +151,7 @@
       "text": "comprar café"
     },
     {
-      "click": ".kn-note-editor .cm-line:has-text('Decidimos')",
+      "click": ".kn-note-editor :is(.cm-line, .cm-rendered):has-text('Decidimos') >> nth=0",
       "name": "volta para a linha de texto"
     },
     {

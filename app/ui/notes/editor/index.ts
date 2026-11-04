@@ -22,6 +22,7 @@ import type { MarkdownConfig } from "@lezer/markdown";
 import { externalUrl, linkAt } from "../links.ts";
 import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
+import { renderedPreview } from "./renderedWidget.tsx";
 import { tableEnter, tableTab } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger } from "./slash.ts";
 import { linkFromPaste, listIndent, toggleHeading, toggleWrap, wrapLink } from "./text.ts";
@@ -308,6 +309,8 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     // O colar-link é o nosso (o `paste` abaixo): o do lang-markdown não escapa "(" nem ")" do endereço nem "[" do texto.
     markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax], addKeymap: true, pasteURLAsLink: false }),
     syntaxHighlighting(highlight),
+    // Os blocos fora do cursor, desenhados pela lib do Channels (T2983); antes do resto, para cobrir o preview de linha.
+    renderedPreview(links, opts),
     inlinePreview(links),
     tagPreview,
     tablePreview,

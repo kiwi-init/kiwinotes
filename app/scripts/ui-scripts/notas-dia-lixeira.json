@@ -55,7 +55,7 @@
       "name": "a Reunião abriu"
     },
     {
-      "click": ".cm-wikilink-missing",
+      "click": ":is(.cm-wikilink-missing, a[href^='kiwi-note-missing:'])",
       "name": "clique no [[Projetos/Sub/Ata]], que não existe"
     },
     {
