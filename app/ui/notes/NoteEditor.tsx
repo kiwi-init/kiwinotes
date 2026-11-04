@@ -69,3 +69,28 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, linkTarge
 export function focusEditor(): void {
   (document.querySelector(".kn-note-editor .cm-content") as HTMLElement | null)?.focus();
 }
+
+/**
+ * O texto do composer (T2502) entra onde o cursor do editor ficou, como o ditado. Com um espaço antes se ele colaria
+ * numa palavra. `false` quando não há nota aberta.
+ */
+export function insertIntoEditor(text: string): boolean {
+  const dom = document.querySelector<HTMLElement>(".kn-note-editor .cm-editor");
+  const view = dom ? EditorView.findFromDOM(dom) : null;
+  if (!view || !text.trim()) return false;
+  const at = view.state.selection.main;
+  const before = view.state.sliceDoc(Math.max(0, at.from - 1), at.from);
+  const insert = joinInsert(before, text.trim());
+  view.dispatch({
+    changes: { from: at.from, to: at.to, insert },
+    selection: { anchor: at.from + insert.length },
+    scrollIntoView: true,
+    userEvent: "input.type",
+  });
+  return true;
+}
+
+/** O que entra depois de `before` (o caractere antes do cursor): um espaço quando colaria numa palavra. */
+export function joinInsert(before: string, text: string): string {
+  return before && !/\s/.test(before) ? ` ${text}` : text;
+}

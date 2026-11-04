@@ -2,7 +2,7 @@
   "window": "hub",
   "steps": [
     {
-      "waitFor": ".kn-hub-item",
+      "waitFor": ".kn-tab",
       "name": "o hub abre"
     },
     {
@@ -14,11 +14,19 @@
       "name": "uma nota no vault (o roteiro não depende do vault ter nota)"
     },
     {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore pelo caminho"
+    },
+    {
       "waitFor": ".kn-side-item:has-text('Roteiro do hub')",
       "name": "a nota aparece nas Notas"
     },
     {
-      "click": ".kn-hub-item:has-text('Configurações')",
+      "press": "Escape",
+      "name": "fecha a árvore"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')",
       "name": "vai para Configurações"
     },
     {
@@ -33,8 +41,12 @@
       "wait": 400
     },
     {
-      "click": ".kn-hub-item:has-text('Notas')",
+      "click": ".kn-tab:has-text('Notas')",
       "name": "volta para as Notas"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore pelo caminho"
     },
     {
       "expectCount": ".kn-side-item:has-text('Sem título')",
@@ -42,12 +54,16 @@
       "name": "o ⌘N escondido não criou nota"
     },
     {
+      "press": "Escape",
+      "name": "fecha a árvore"
+    },
+    {
       "expectCount": ".kn-palette",
       "count": 0,
       "name": "o ⌘K escondido não abriu a busca"
     },
     {
-      "click": ".kn-hub-item:has-text('Ditado')",
+      "click": ".kn-tab:has-text('Ditado')",
       "name": "vai para o Ditado"
     },
     {
@@ -62,13 +78,21 @@
       "wait": 400
     },
     {
-      "click": ".kn-hub-item:has-text('Notas')",
+      "click": ".kn-tab:has-text('Notas')",
       "name": "volta para as Notas de novo"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore pelo caminho"
     },
     {
       "expectCount": ".kn-side-item:has-text('Sem título')",
       "count": 0,
       "name": "o ⌘N no Ditado não criou nota"
+    },
+    {
+      "press": "Escape",
+      "name": "fecha a árvore"
     },
     {
       "expectCount": ".kn-palette",
@@ -84,11 +108,11 @@
       "name": "a busca abre"
     },
     {
-      "click": ".kn-hub-item:has-text('Ditado')",
+      "click": ".kn-tab:has-text('Ditado')",
       "name": "troca de seção com a busca aberta"
     },
     {
-      "click": ".kn-hub-item:has-text('Notas')",
+      "click": ".kn-tab:has-text('Notas')",
       "name": "volta para as Notas"
     },
     {

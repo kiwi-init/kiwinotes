@@ -1,5 +1,6 @@
-// Notas (spec #1107, fase A, T1317): o vault em Markdown no design B v4, "uma superfície só". Barra lateral com pastas e
-// notas, a nota (título, uma linha de meta e o editor ao vivo) e, à direita, "Citada em". ⌘K busca, ⌘N cria.
+// Notas (spec #1107, fase A, T1317): o vault em Markdown, "uma superfície só". Com o T2502 (#2457, versão C · Foco), a
+// nota ocupa a janela: a árvore de pastas abre pelo caminho na barra de cima, num popover, e o "Citada em" sai da linha
+// de meta. Embaixo, a barra de ditado (o composer do Channels). ⌘K busca, ⌘N cria.
 // Tudo passa pelas capacidades `notes.*` do engine (contrato 1.1.0); nada sai do Mac.
 
 import "./notes.css";
@@ -9,6 +10,9 @@ import { flushSync } from "react-dom";
 
 import { api as appApi } from "../src/api.ts";
 import { Button, Empty } from "../src/kit/index.tsx";
+import { TopBar } from "../src/topbar.tsx";
+import { Composer } from "./Composer.tsx";
+import { Popover } from "./Popover.tsx";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
@@ -75,6 +79,11 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [saveFailed, setSaveFailed] = useState(false);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [palette, setPalette] = useState(false);
+  // A árvore e o "Citada em" abrem em popover (C · Foco).
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [backOpen, setBackOpen] = useState(false);
+  const crumbRef = useRef<HTMLButtonElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
   // O básico de app de notas (T2469).
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>(loadSort);
@@ -224,6 +233,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       const n = await api.get(path).catch(() => null);
       if (n) show(n);
       setPalette(false);
+      setTreeOpen(false);
+      setBackOpen(false);
     },
     [api, leave, show],
   );
@@ -233,6 +244,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       if (!(await leave())) return;
       const n = await api.create(wanted, folder || undefined).catch(() => null);
       setPalette(false);
+      setTreeOpen(false);
       if (!n) return;
       await refresh();
       show(n);
@@ -298,7 +310,11 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const activeRef = useRef(active);
   activeRef.current = active;
   useEffect(() => {
-    if (!active) setPalette(false);
+    if (!active) {
+      setPalette(false);
+      setTreeOpen(false);
+      setBackOpen(false);
+    }
   }, [active]);
 
   const selectedFolderRef = useRef(selectedFolder);
@@ -602,40 +618,62 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
 
   return (
     <div className="kn-notes" data-entered={entered}>
-      <div className="kn-drag electrobun-webkit-app-region-drag" />
-      <Sidebar
-        tree={found.tree}
-        open={openNow}
-        current={note?.path ?? null}
-        selectedFolder={selectedFolder}
-        query={query}
-        onQuery={setQuery}
-        pinned={pinnedNotes}
-        recent={recent}
-        renaming={renaming}
-        menuOn={menu && menu.target.kind !== "empty" ? `${menu.target.kind === "note" ? "n" : "f"}:${menu.target.path}` : null}
-        onRename={(t, name) => void renameItem(t, name)}
-        onSelectFolder={setSelectedFolder}
-        onMenu={(at, target) => setMenu({ ...at, target })}
-        onDrop={folders ? (what, folder) => void moveItem(what, folder) : undefined}
-        onToggle={(f) =>
-          setOpenFolders((s) => {
-            const next = new Set(s);
-            if (!next.delete(f)) next.add(f);
-            return next;
-          })
+      <TopBar
+        start={
+          <button
+            ref={crumbRef}
+            type="button"
+            className="kn-float kn-crumb-bt"
+            aria-expanded={treeOpen}
+            aria-haspopup="dialog"
+            title="Pastas e notas"
+            onClick={() => setTreeOpen((o) => !o)}
+          >
+            <TreeIcon />
+            <span className="kn-crumb-label">{note?.folder ? note.folder.replace(/\//g, " / ") : "Notas"}</span>
+            <Chevron />
+          </button>
         }
-        onOpen={(p) => void open(p)}
-      />
-      <main className="kn-center">
-        <div className="kn-top">
-          <span className="kn-crumb">{note?.folder.replace(/\//g, " / ") ?? ""}</span>
-          <span className="kn-top-r electrobun-webkit-app-region-no-drag">
-            <button type="button" className="kn-bt" onClick={() => setPalette(true)}>
-              ⌕ Buscar <span className="kn-faint">⌘K</span>
+        end={
+          <span className="kn-float-group">
+            <button type="button" title="Nova nota (⌘N)" aria-label="Nova nota" onClick={() => void create("Sem título", true, selectedFolderRef.current)}>
+              <PenIcon />
+            </button>
+            <button type="button" title="Buscar (⌘K)" aria-label="Buscar" onClick={() => setPalette(true)}>
+              <SearchIcon />
             </button>
           </span>
-        </div>
+        }
+      />
+      {treeOpen ? (
+        <Popover className="kn-tree-pop" label="Pastas e notas" anchor={crumbRef} onClose={() => setTreeOpen(false)}>
+          <Sidebar
+            tree={found.tree}
+            open={openNow}
+            current={note?.path ?? null}
+            selectedFolder={selectedFolder}
+            query={query}
+            onQuery={setQuery}
+            pinned={pinnedNotes}
+            recent={recent}
+            renaming={renaming}
+            menuOn={menu && menu.target.kind !== "empty" ? `${menu.target.kind === "note" ? "n" : "f"}:${menu.target.path}` : null}
+            onRename={(t, name) => void renameItem(t, name)}
+            onSelectFolder={setSelectedFolder}
+            onMenu={(at, target) => setMenu({ ...at, target })}
+            onDrop={folders ? (what, folder) => void moveItem(what, folder) : undefined}
+            onToggle={(f) =>
+              setOpenFolders((s) => {
+                const next = new Set(s);
+                if (!next.delete(f)) next.add(f);
+                return next;
+              })
+            }
+            onOpen={(p) => void open(p)}
+          />
+        </Popover>
+      ) : null}
+      <main className="kn-center">
         {orphans[0] ? (
           <div className="kn-conflict kn-orphan" role="alert">
             {`Há um rascunho de “${noteName(orphans[0].path)}”, uma nota que não existe mais (renomeada ou apagada fora do Kiwi Notes).`}
@@ -651,6 +689,13 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
         ) : null}
         {note ? (
           <article className="kn-page">
+            {note.folder ? (
+              <div className="kn-page-crumbs" aria-label="Pasta">
+                {note.folder.split("/").map((part, i) => (
+                  <span key={i}>{part}</span>
+                ))}
+              </div>
+            ) : null}
             <input
               className="kn-title"
               aria-label="Título da nota"
@@ -669,7 +714,30 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
               }}
             />
             <div className="kn-meta">
-              {[...note.tags.map((t) => `#${t}`), editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`].join(" · ")}
+              {[...note.tags.map((t) => `#${t}`), editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`].map((t) => (
+                <span key={t}>{t}</span>
+              ))}
+              <button
+                ref={backRef}
+                type="button"
+                className="kn-meta-bt"
+                aria-expanded={backOpen}
+                aria-haspopup="dialog"
+                disabled={!backlinks.length}
+                onClick={() => setBackOpen((o) => !o)}
+              >
+                {backlinks.length ? `citada em ${backlinks.length}` : "nenhuma nota cita esta"}
+              </button>
+              {backOpen && backlinks.length ? (
+                <Popover className="kn-back-pop" label="Citada em" anchor={backRef} onClose={() => setBackOpen(false)}>
+                  {backlinks.map((b) => (
+                    <button type="button" className="kn-back" key={b.path} onClick={() => void open(b.path)}>
+                      <span className="kn-link">{b.title}</span>
+                      <span className="kn-back-ctx">{plainContext(b.context)}</span>
+                    </button>
+                  ))}
+                </Popover>
+              ) : null}
             </div>
             {conflict ? (
               <div className="kn-conflict kn-save-alert" role="alert">
@@ -720,23 +788,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
           </Empty>
         ) : null}
       </main>
-      <aside className="kn-right" aria-label="Citada em">
-        {note ? (
-          <>
-            <div className="kn-right-h">Citada em</div>
-            {backlinks.length ? (
-              backlinks.map((b) => (
-                <button type="button" className="kn-back" key={b.path} onClick={() => void open(b.path)}>
-                  <span className="kn-link">{b.title}</span>
-                  <span className="kn-back-ctx">{plainContext(b.context)}</span>
-                </button>
-              ))
-            ) : (
-              <div className="kn-faint">Nenhuma nota cita esta ainda.</div>
-            )}
-          </>
-        ) : null}
-      </aside>
+      <Composer disabled={!note} />
       {palette ? (
         <Palette api={api} notes={listing?.notes ?? []} onOpen={(p) => void open(p)} onCreate={(t) => void create(t)} onClose={() => setPalette(false)} />
       ) : null}
@@ -788,3 +840,36 @@ export function NotesApp({ active = true }: { active?: boolean } = {}) {
   return <Notes api={api} drafts={drafts} active={active} />;
 }
 
+
+function TreeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 3h4M3 3v10M3 8h4M3 13h4M9.5 3h3.5M9.5 8h3.5M9.5 13h3.5" />
+    </svg>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4.5 6.5 8 10l3.5-3.5" />
+    </svg>
+  );
+}
+
+function PenIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.5 3 13 5.5 6 12.5H3.5V10z" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="m10.5 10.5 3 3" />
+    </svg>
+  );
+}

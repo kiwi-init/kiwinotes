@@ -13,6 +13,7 @@ import {
 import { createRoot } from "react-dom/client";
 
 import { engineReady } from "../api.ts";
+import { TopBar, useInHub } from "../topbar.tsx";
 
 declare global {
   interface Window {
@@ -47,6 +48,7 @@ export function Window({ title, end, children }: { title: string; end?: ReactNod
   // só toca quando o documento está visível; se abriu oculta, toca ao aparecer.
   const [entry, setEntry] = useState(() => (document.visibilityState === "visible" ? 1 : 0));
   const ref = useRef<HTMLDivElement>(null);
+  const inHub = useInHub();
   // Ao voltar para a frente, a animação toca de novo sem remontar a árvore: uma `key` nova apagava a edição em
   // andamento no Dicionário e nos Snippets, e o autosave que ainda não tinha disparado (T914).
   useLayoutEffect(() => {
@@ -73,10 +75,15 @@ export function Window({ title, end, children }: { title: string; end?: ReactNod
   }, [title]);
   return (
     <div className="kn-window" data-entering={entry > 0} ref={ref}>
-      <header className="kn-titlebar electrobun-webkit-app-region-drag">
-        <h1>{title}</h1>
-        {end ? <div className="kn-titlebar-end electrobun-webkit-app-region-no-drag">{end}</div> : null}
-      </header>
+      {inHub ? (
+        // No hub, o nome da seção já está na aba (T2502): o que a janela tinha no canto vai para a barra de cima.
+        <TopBar end={end} />
+      ) : (
+        <header className="kn-titlebar electrobun-webkit-app-region-drag">
+          <h1>{title}</h1>
+          {end ? <div className="kn-titlebar-end electrobun-webkit-app-region-no-drag">{end}</div> : null}
+        </header>
+      )}
       <main className="kn-content kn-stagger">{children}</main>
     </div>
   );

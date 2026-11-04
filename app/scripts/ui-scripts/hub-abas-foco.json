@@ -1,0 +1,155 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "waitFor": ".kn-tab[aria-selected='true']:has-text('Notas')",
+      "name": "o hub abre nas Notas, com as abas em cima"
+    },
+    {
+      "expectCount": ".kn-tab",
+      "count": 5,
+      "name": "Notas, Reuniões, Ditado, Configurações e Sobre"
+    },
+    {
+      "expectCount": ".kn-hub-rail",
+      "count": 0,
+      "name": "a barra lateral saiu"
+    },
+    {
+      "invoke": "folders.create",
+      "args": {
+        "path": "Projetos/Kiwi Notes"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Roadmap",
+        "folder": "Projetos/Kiwi Notes",
+        "content": "Abas em cima, no estilo do Channels.\n\nVer [[Ideias]].\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Ideias",
+        "folder": "Projetos",
+        "content": "O [[Roadmap]] manda.\n"
+      }
+    },
+    {
+      "click": ".kn-hub-start .kn-crumb-bt",
+      "name": "o caminho na barra abre a árvore"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-search",
+      "name": "a árvore abre num popover, com o campo de ir para"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Kiwi Notes')"
+    },
+    {
+      "screenshot": "foco-arvore.png"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Roadmap')",
+      "name": "abre a nota pela árvore"
+    },
+    {
+      "expectCount": ".kn-tree-pop",
+      "count": 0,
+      "name": "a árvore fecha ao abrir a nota"
+    },
+    {
+      "expectText": ".kn-crumb-bt",
+      "text": "Projetos / Kiwi Notes",
+      "name": "o caminho mostra a pasta da nota"
+    },
+    {
+      "expectText": ".kn-meta-bt",
+      "text": "citada em 1",
+      "name": "o Citada em está na linha de meta"
+    },
+    {
+      "click": ".kn-meta-bt"
+    },
+    {
+      "waitFor": ".kn-back-pop .kn-back:has-text('Ideias')",
+      "name": "e abre a lista de quem cita"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "expectCount": ".kn-back-pop",
+      "count": 0,
+      "name": "Esc fecha"
+    },
+    {
+      "click": ".kn-note-editor .cm-line:has-text('Abas em cima')",
+      "name": "o cursor numa linha da nota"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "fill": ".kn-composer-input",
+      "text": "Ditado pela barra."
+    },
+    {
+      "press": "Enter",
+      "name": "Enter manda para a nota"
+    },
+    {
+      "expectText": ".kn-note-editor",
+      "text": "Abas em cima, no estilo do Channels. Ditado pela barra.",
+      "name": "o texto entra onde o cursor estava"
+    },
+    {
+      "expectText": ".kn-composer-input",
+      "text": "",
+      "name": "e o composer esvazia"
+    },
+    {
+      "screenshot": "foco-nota.png"
+    },
+    {
+      "click": ".kn-tab:has-text('Ditado')",
+      "name": "troca de aba"
+    },
+    {
+      "expectCount": ".kn-hub-start .kn-crumb-bt",
+      "count": 0,
+      "name": "os botões das Notas saem da barra"
+    },
+    {
+      "press": "ArrowRight",
+      "name": "→ vai para a próxima aba"
+    },
+    {
+      "waitFor": ".kn-tab[aria-selected='true']:has-text('Configurações')"
+    },
+    {
+      "expectCount": ".kn-tabs-pill",
+      "count": 1
+    },
+    {
+      "wait": 700,
+      "name": "a seleção termina de deslizar"
+    },
+    {
+      "screenshot": "foco-configuracoes.png"
+    },
+    {
+      "click": ".kn-tab:has-text('Notas')"
+    },
+    {
+      "expectText": ".kn-title",
+      "text": "Roadmap",
+      "name": "a nota continua aberta ao voltar"
+    }
+  ]
+}
