@@ -321,13 +321,33 @@
     }
     return points.at(-1)[1];
   };
+  // As poses são amostradas a 60 Hz (f0–f480), mas mandar 481 keyframes por camada ao compositor custa um engasgo de
+  // ~80 ms no play. Sai todo keyframe que a interpolação linear dos vizinhos já reproduz (cada número da pose com erro
+  // ≤ 0,001: opacidade, px, graus e escala), o que apaga sobretudo os trechos parados (T3720, fluidez).
+  const numbers = (frame) => Object.entries(frame).filter(([k]) => k !== "offset")
+    .flatMap(([, v]) => typeof v === "number" ? [v] : (String(v).match(/-?\d*\.?\d+(?:e-?\d+)?/g) || []).map(Number));
+  const simplify = (frames, tolerance = 1e-3) => {
+    const values = frames.map(numbers);
+    const fits = (a, b) => values[a].length === values[b].length && Array.from({length: b - a - 1}, (_, n) => a + 1 + n).every((j) => {
+      const t = (frames[j].offset - frames[a].offset) / (frames[b].offset - frames[a].offset);
+      return values[j].length === values[a].length
+        && values[j].every((v, n) => Math.abs(values[a][n] + (values[b][n] - values[a][n]) * t - v) <= tolerance);
+    });
+    const kept = [frames[0]];
+    let from = 0;
+    for (let i = 2; i < frames.length; i++) if (!fits(from, i)) { kept.push(frames[i - 1]); from = i - 1; }
+    kept.push(frames.at(-1));
+    return kept;
+  };
   let catAnimations = [];
   const animateCat = () => {
     for (const a of catAnimations) a.cancel();
     catAnimations = [];
     const poses = (id, pose) => {
-      const frames = Array.from({length:481}, (_, f) => ({offset:f/480, ...pose(f)}));
-      const animation = document.getElementById(id).animate(frames, {duration:CAT_S*1000, fill:"both"});
+      const frames = simplify(Array.from({length:481}, (_, f) => ({offset:f/480, ...pose(f)})));
+      // O endDelay: as animações só terminam depois que a intro acabou. Terminar no f480 tirava todas do compositor
+      // junto com o fade de saída, num engasgo de 60–140 ms. O fill segura a pose final do mesmo jeito.
+      const animation = document.getElementById(id).animate(frames, {duration:CAT_S*1000, endDelay:2000, fill:"both"});
       animation.pause();
       animation.currentTime = 0;
       catAnimations.push(animation);
