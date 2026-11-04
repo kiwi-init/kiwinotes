@@ -15,7 +15,16 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-export type Send = (msg: Record<string, unknown>) => Promise<{ ok: boolean; value?: unknown; code?: string; message?: string }>;
+/** O `send` da CLI (T1739): manda um comando ao socket e devolve a resposta como veio (`{id, ok, value}` ou `{ok: false, code, message}`). */
+export type Send = (msg: Record<string, unknown>) => Promise<Record<string, unknown>>;
+
+type Reply = { ok: boolean; value?: unknown; code?: string; message?: string };
+const asReply = (r: Record<string, unknown>): Reply => ({
+  ok: r.ok === true,
+  value: r.value,
+  code: typeof r.code === "string" ? r.code : undefined,
+  message: typeof r.message === "string" ? r.message : undefined,
+});
 
 type Report = {
   text: string;
@@ -166,7 +175,7 @@ export async function runBatch(cases: BatchCase[], send: Send) {
   const started = performance.now();
   const results: { name: string; ok: boolean; failures: string[]; report?: unknown; error?: { code?: string; message?: string } }[] = [];
   for (const c of cases) {
-    const r = await send({ cmd: "dictate", ...c.request });
+    const r = asReply(await send({ cmd: "dictate", ...c.request }));
     if (!r.ok) {
       results.push({ name: c.name, ok: false, failures: [`${r.code}: ${r.message}`], error: { code: r.code, message: r.message } });
       continue;
@@ -205,7 +214,7 @@ async function dictateOrBatch(argv: string[], send: Send): Promise<number> {
     print(result);
     return result.failed ? 1 : 0;
   }
-  const r = await send({ cmd: "dictate", ...(parsed as { request: Record<string, unknown> }).request });
+  const r = asReply(await send({ cmd: "dictate", ...(parsed as { request: Record<string, unknown> }).request }));
   print(r.ok ? r.value : { ok: false, code: r.code, message: r.message });
   return r.ok ? 0 : 1;
 }
