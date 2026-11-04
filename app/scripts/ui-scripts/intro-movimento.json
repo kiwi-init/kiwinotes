@@ -1,0 +1,13 @@
+{
+  "window": "intro",
+  "steps": [
+    { "waitFor": "#stage", "state": "attached", "name": "a intro abre" },
+    { "wait": 1200, "name": "com movimento: os prismas tocando" },
+    { "screenshot": "intro-movimento-prisma.png" },
+    { "wait": 5800, "name": "~7 s: o gato acordando" },
+    { "screenshot": "intro-movimento-gato.png" },
+    { "waitFor": "body.done", "state": "attached", "timeout": 15000, "name": "termina sozinha (a intro inteira leva ~12 s)" },
+    { "expectCount": "#again:visible", "count": 0, "name": "sem o \"De novo\" no app" },
+    { "screenshot": "intro-movimento-fim.png" }
+  ]
+}
