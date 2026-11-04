@@ -27,6 +27,7 @@ On the T51 clips, a short sentence takes ~80 to 150 ms from the end of the recor
 - A single short tap, or using the key as a modifier (Fn+F5, ⌥+letter), cancels the recording and discards the audio.
 - Recording starts on key down, before the gesture is known, so the first syllable isn't lost.
 - Defaults: Fn/🌐; also `rightOption`, `rightCommand` and `rightControl` (set with `config.set {hotkey}`; hold and double tap share that one key). Hold is 250 ms (`holdThresholdMs`) and the double-tap window is 350 ms (`doubleTapMs`).
+- Notes window shortcut (T1499, T1653): `config.set {notesShortcut: "control+option+n"}`, or null for off. The letter is the one the current layout types (on Dvorak, the key that types N), with the US position as the fallback on layouts without Latin letters. With the right ⌥ (or ⌘, ⌃) as the dictation key, press the other modifier first: ⌃ and then the right ⌥ is the start of ⌃⌥N, not a dictation. The other order (right ⌥, then ⌃) starts a recording that the N cancels, so the pill flashes. The left ⌥ never conflicts.
 - For Fn: set **System Settings → Keyboard → "Press 🌐 key to" → Do Nothing**, otherwise macOS opens the emoji picker or its own dictation.
 
 ## Events (helper → app)
