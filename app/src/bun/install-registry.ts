@@ -14,7 +14,7 @@
 // e a próxima troca segue pelo caminho antigo. Não reescrevemos o registro no formato do extractor (o token com o
 // nonce): um campo fora do que ele espera viraria `InvalidUninstallManifest`, e a troca falharia de novo.
 
-import { existsSync, readFileSync, realpathSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, renameSync } from "node:fs";
 import path from "node:path";
 
 export const REGISTRY_NAME = ".electrobun-uninstall.json";
@@ -29,15 +29,15 @@ export type RegistryState =
   /** Não é um app empacotado (o `bun` do dev), ou não deu para ler: nada foi mexido. */
   | { state: "skipped"; reason: string };
 
-/** O .app que está rodando, pelo executável (`<app>.app/Contents/MacOS/bun`), ou null fora de um .app. */
+/**
+ * O .app que está rodando, pelo executável (`<app>.app/Contents/MacOS/bun`), ou null fora de um .app. É o mesmo cálculo
+ * do Updater ao montar o plano da troca (`resolve(dirname(process.execPath), "..", "..")`, só léxico, sem realpath):
+ * o extractor compara o registro com esse texto, exato (revisão #2414).
+ */
 export function runningBundle(execPath: string): string | null {
-  const bundle = path.resolve(execPath, "..", "..", "..");
+  const bundle = path.resolve(path.dirname(execPath), "..", "..");
   if (!bundle.endsWith(".app") || path.basename(path.dirname(execPath)) !== "MacOS") return null;
-  try {
-    return realpathSync(bundle);
-  } catch {
-    return null;
-  }
+  return bundle;
 }
 
 /**
@@ -55,16 +55,8 @@ export function repairInstallRegistry(o: { channelRoot: string; bundle: string |
     return { state: "skipped", reason: `unreadable registry: ${e instanceof Error ? e.message : String(e)}` };
   }
   if (typeof recorded !== "string") return { state: "skipped", reason: "registry without app_bundle_path" };
-  // O extractor compara o caminho exato; o realpath só evita mexer quando é o mesmo app por um link.
-  let same = recorded === o.bundle;
-  if (!same) {
-    try {
-      same = realpathSync(recorded) === o.bundle;
-    } catch {
-      same = false; // o app do registro nem existe mais
-    }
-  }
-  if (same) return { state: "ok" };
+  // O extractor compara o texto exato (`std.mem.eql`): o mesmo app por um link ainda falharia, então também sai.
+  if (recorded === o.bundle) return { state: "ok" };
   const stamp = (o.now ?? new Date()).toISOString().replace(/[:.]/g, "-");
   const movedTo = path.join(o.channelRoot, `.electrobun-uninstall.stale-${stamp}.json`);
   try {
