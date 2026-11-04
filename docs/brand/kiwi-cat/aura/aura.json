@@ -1,0 +1,48 @@
+{
+  "poses": 24,
+  "tamanho": 512,
+  "palco": 1024,
+  "origem": [
+    0,
+    0
+  ],
+  "espacamento": "e = i/(poses-1)",
+  "rotacao": 30.0,
+  "centro": [
+    512,
+    430
+  ],
+  "grade": 96,
+  "eps": 0.0015,
+  "arquivos": [
+    "pose-00.webp",
+    "pose-01.webp",
+    "pose-02.webp",
+    "pose-03.webp",
+    "pose-04.webp",
+    "pose-05.webp",
+    "pose-06.webp",
+    "pose-07.webp",
+    "pose-08.webp",
+    "pose-09.webp",
+    "pose-10.webp",
+    "pose-11.webp",
+    "pose-12.webp",
+    "pose-13.webp",
+    "pose-14.webp",
+    "pose-15.webp",
+    "pose-16.webp",
+    "pose-17.webp",
+    "pose-18.webp",
+    "pose-19.webp",
+    "pose-20.webp",
+    "pose-21.webp",
+    "pose-22.webp",
+    "pose-23.webp"
+  ],
+  "deslocamento_px": {
+    "mediana": 169,
+    "p95": 259,
+    "max": 325
+  }
+}

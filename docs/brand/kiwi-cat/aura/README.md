@@ -9,7 +9,10 @@ O anel de luz em volta do círculo não apaga: escorre e vira o halo do corpo. O
 - `pose-NN.webp`: RGBA não pré-multiplicado, 512×512, cobrindo o palco 1024 inteiro (escala 2, origem 0,0). Igualmente
   espaçadas no morph: a pose i está em `e = i/(N−1)`. O tempo e o easing ficam com o runtime.
 - `--rotacao A`: a pose 00 sai com o anel girado A graus em volta de (512,430), para um anel que gira até o morph começar.
+- `aura.json`: o contrato (poses, tamanho, palco, espaçamento, rotação e o deslocamento medido).
 - `tira.png`: 8 das poses, para conferir de olho.
+- Hoje: `--rotacao 30`. O runtime gira o canvas por `θ(f) = 30·(2u−u²) − 30` com `u = clamp(f/96)`, e o morph vai de
+  f96 a f450 com smoothstep (calm-dingo, #4093).
 
 ## Runtime (medido)
 

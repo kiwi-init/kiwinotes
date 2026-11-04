@@ -1,7 +1,8 @@
-# Prototype (T3720, #4077): continuous morph of the aura ring into the final glow by optimal transport.
-# The light of the source and of the target becomes mass on a coarse grid; Sinkhorn gives where each bit of light
-# goes; pose t is that light moved along the way (displacement interpolation), splatted with a soft kernel, with the
-# colour going from source to target. Near t=0 and t=1 the exact bitmaps take over, where the shapes already agree.
+# A aura do Kiwi-cat (T3720, #4071): o anel de luz escorre até virar o halo do corpo, por transporte ótimo.
+# A luz da origem (luz-anel) e a do destino (final-fundo + final-corpo, sem a cabeça inteira) viram massa numa grade;
+# o Sinkhorn dá para onde cada pedaço vai. Cada pose é um morph de dois lados: a origem empurrada pelo campo de
+# deslocamento e o destino puxado pelo inverso, misturados por e. A pose 00 é a origem exata; a última, o destino.
+# Escreve pose-NN.webp e aura.json (o contrato com o runtime, #4088/#4093).
 #
 #   KIWI_IMAGE_PYTHON (Pillow, NumPy e SciPy): $KIWI_IMAGE_PYTHON docs/brand/kiwi-cat/aura/morph.py docs/brand/kiwi-cat/camadas docs/brand/kiwi-cat/aura [--poses 24] [--grid 96] [--rotacao 30]
 import argparse, json, os, time
@@ -53,7 +54,7 @@ hm = np.zeros((S, S))
 ha = np.asarray(head).astype(np.float64)[..., 3] / 255
 hm[0:942, 102:921] = ha[82:1024, :]
 glow = dst * (1 - hm)[..., None]
-Image.fromarray((np.clip(glow, 0, 1) * 255).astype(np.uint8)).save(os.path.join(args.out, "destino.png"))
+
 
 
 def masses(img, g):
@@ -142,7 +143,12 @@ for i in range(args.poses):
     alpha = np.clip(frame.max(2), 0, 1)
     rgba = np.dstack([frame / np.maximum(alpha[..., None], 1e-6), alpha])
     Image.fromarray((np.clip(rgba, 0, 1) * 255).astype(np.uint8), "RGBA").save(os.path.join(args.out, f"pose-{i:02d}.webp"), lossless=False, quality=88)
+json.dump({"poses": args.poses, "tamanho": N, "palco": S, "origem": [0, 0], "espacamento": "e = i/(poses-1)",
+           "rotacao": args.rotacao, "centro": [512, 430], "grade": args.grid, "eps": args.eps,
+           "arquivos": [f"pose-{i:02d}.webp" for i in range(args.poses)],
+           "deslocamento_px": {"mediana": round(float(np.median(shift))), "p95": round(float(np.percentile(shift, 95))),
+                               "max": round(float(shift.max()))}},
+          open(os.path.join(args.out, "aura.json"), "w"), indent=2, ensure_ascii=False)
 strip = np.concatenate([f[::2, ::2] for f in frames[:: max(1, args.poses // 8)]], 1)
 Image.fromarray((strip * 255).astype(np.uint8)).save(os.path.join(args.out, "tira.png"))
-np.save(os.path.join(args.out, "fluxo.npy"), np.hstack([pa * S, T * S, ma[:, None]]))
 print(f"poses {args.poses} at {N}px in {time.time()-t0:.1f}s; strip {os.path.join(args.out,'tira.png')}")
