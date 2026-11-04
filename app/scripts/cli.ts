@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, openSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
 import { controlSocket } from "../src/headless/server.ts";
 import { runDictate } from "./cli-dictate.ts";
 import { runScreenshot, runUi, type UiContext } from "./cli-ui.ts";
@@ -83,6 +84,13 @@ const notRunning = (data: string) => {
 };
 
 async function start(data: string, argv: string[]): Promise<number> {
+  try {
+    assertNotRealData(data);
+  } catch (e) {
+    if (!(e instanceof RealDataError)) throw e;
+    print({ ok: false, code: e.code, message: e.message });
+    return EXIT.failed;
+  }
   if (await request(data, { cmd: "status" }, 2000)) {
     print({ ok: true, value: { alreadyRunning: true, data } });
     return EXIT.ok;
