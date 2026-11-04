@@ -175,7 +175,7 @@ console.log(`gerar: docs/brand/intro/intro.html (${(Buffer.byteLength(docs) / 10
 const appCss = `\n  /* ---- a janela \`intro\` do app (T2308): sem fundo (só o ícone, no meio da tela) e sem o "De novo" ---- */\n  html, body { background: transparent; }\n  #again { display: none; }\n</style>`;
 const app = html
   .replace(/<\/style>(?![\s\S]*<\/style>)/, appCss)
-  .replace("<!--SCRIPT-->", '<script type="module" src="./intro.js"></script>')
+  .replace("<!--SCRIPT-->", '<script type="module" src="./rive.ts"></script>\n<script type="module" src="./intro.js"></script>')
   .replace("<title>Kiwi Notes: intro</title>", "<title>Kiwi Notes</title>");
 if (/<script>/.test(app)) throw new Error("gerar: sobrou script inline na janela do app");
 mkdirSync(appDir, { recursive: true });
