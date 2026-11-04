@@ -148,6 +148,39 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
   );
 }
 
+/**
+ * Uma lista que abre (T3230): o `<select>` do sistema, com a cara flutuante dos outros controles. Para escolhas que não
+ * cabem num segmentado (a lista de microfones). `onOpen` chega no foco e no clique, antes de a lista abrir.
+ */
+export function Select<T extends string>({
+  value,
+  options,
+  onChange,
+  onOpen,
+  label,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  onOpen?: () => void;
+  label: string;
+}) {
+  return (
+    <span className="kn-select">
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value as T)} onFocus={onOpen} onMouseDown={onOpen}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <svg className="kn-select-chevron" viewBox="0 0 12 12" aria-hidden>
+        <path d="M3 4.5 6 7.5 9 4.5" />
+      </svg>
+    </span>
+  );
+}
+
 export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="kn-kbd">{children}</kbd>;
 }

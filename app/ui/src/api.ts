@@ -56,6 +56,13 @@ export const api = {
   settings: {
     get: () => invoke("settings.get", {}),
     set: (patch: UiCapabilities["settings.set"]["args"]) => invoke("settings.set", patch),
+    /** Outra janela (ou o engine) mudou as Configurações (1.8.0). */
+    onChanged: (fn: (s: UiEvents["settings.changed"]) => void) => on("settings.changed", fn),
+  },
+  /** O microfone do ditado (T3230): as entradas que o helper vê, e o aviso quando uma entra ou sai. */
+  audio: {
+    inputs: () => invoke("audio.inputs", {}),
+    onInputsChanged: (fn: () => void) => on("audio.inputs.changed", fn),
   },
   snippets: {
     get: () => invoke("snippets.get", {}),

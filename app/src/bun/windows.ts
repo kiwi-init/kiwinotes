@@ -93,6 +93,8 @@ const capabilities = uiCapabilities({
   attachments: stores.attachments,
   // A imagem de fora de uma nota, só depois do clique no cartão (T2984, #3039).
   remoteImage: (url) => fetchRemoteImage(url),
+  // O seletor de microfone dos Ajustes (T3230): o helper lista as entradas, sem abrir nenhuma.
+  audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
   ocr: stores.ocr,
   exporter: stores.exporter,
   // Exportar (T2684): a pasta pelo seletor do macOS, só no clique da pessoa. Com KIWI_DEBUG=1 (os agentes), nenhum

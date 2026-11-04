@@ -70,7 +70,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [] };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto" };
   let t = 0;
   return {
     calls,

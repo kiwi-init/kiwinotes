@@ -12,6 +12,7 @@ import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
 import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
+import type { AudioInputs } from "./microphone.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
@@ -45,7 +46,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.16.0 (T2966): o `notes.search` aceita erro de digitação nas palavras soltas (1 em 4+ letras, 2 em 7+), no texto
 //   das notas e dos anexos; o `SearchHit` achado assim vem com `approx: true`, e o exato vem antes. Só acréscimo.
 // 1.17.0 (T2984): a imagem de fora de uma nota pelo engine (`images.remote` → `data:`), só depois do clique. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.17.0";
+// 1.18.0 (T3230): o `microphone` nas settings (por qual mic o ditado grava, spec #3202), o `audio.inputs` (as entradas
+//   que o helper vê) e o evento `audio.inputs.changed`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.18.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -206,6 +209,11 @@ export interface UiCapabilities {
    * (T2984, #3039). A janela não carrega nada da internet. E_BAD_URL, E_FETCH, E_NOT_IMAGE, E_TOO_BIG.
    */
   "images.remote": { args: { url: string }; result: AttachmentData };
+  /**
+   * As entradas de áudio e a saída padrão, pelo helper (1.18.0, T3230): o seletor de microfone dos Ajustes. Só lista,
+   * nunca abre o mic. E_NO_HELPER: o helper não está de pé, ou é antigo e não sabe listar.
+   */
+  "audio.inputs": { args: Record<string, never>; result: AudioInputs };
 }
 
 export type UiCapability = keyof UiCapabilities;
@@ -242,6 +250,7 @@ export const UI_CAPABILITIES = [
   "attachments.read",
   "attachments.rename",
   "images.remote",
+  "audio.inputs",
   "notes.move",
   "notes.duplicate",
   "notes.restore",
@@ -275,6 +284,8 @@ export interface UiEvents {
   "updates.status": UpdatesView;
   /** As Configurações mudaram (1.8.0): todas as janelas trocam a Aparência na hora, sem reiniciar. */
   "settings.changed": AppSettings;
+  /** Entrou ou saiu um microfone, ou mudou a saída padrão (1.18.0): os Ajustes listam de novo. */
+  "audio.inputs.changed": Record<string, never>;
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

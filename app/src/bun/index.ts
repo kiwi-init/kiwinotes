@@ -147,6 +147,10 @@ function setMenu(s: SessionStatus) {
 // O sidecar (atalho, mic, STT, overlay, colagem) e o fluxo do ditado (T58).
 const dictation = new Session(PATHS.VIEWS_FOLDER);
 session.set(dictation);
+// Entrou ou saiu um microfone (T3230): os Ajustes (no hub ou na janela deles) listam de novo.
+dictation.sidecar.on("audio.inputs.changed", () => {
+  for (const w of ["hub", "settings"] as const) sendToWindow(w, "audio.inputs.changed", {});
+});
 // O texto dos anexos (T2709): o mesmo helper, no modo `--ocr` (lê e sai), em prioridade de fundo.
 if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.ocr.setRunner(helperRunner(helperPath(PATHS.VIEWS_FOLDER)));
 // O PDF do exportar (T2684): o mesmo helper, no modo `--export-pdf` (imprime fora da tela e sai).

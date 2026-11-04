@@ -7,6 +7,7 @@ import { attachmentsFolder, DEFAULT_ATTACHMENTS_FOLDER } from "../notes/attachme
 import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shared/appearance.ts";
 import { type SavedSearch, sanitizeSavedSearches } from "../shared/query.ts";
 import { DEFAULT_TEMPLATES_FOLDER } from "../shared/templates.ts";
+import { DEFAULT_MICROPHONE, isMicrophoneChoice, type MicrophoneChoice } from "../shared/microphone.ts";
 import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
 import { folderPath } from "../notes/paths.ts";
 import { readJson, writeJson } from "./files.ts";
@@ -31,12 +32,14 @@ export interface AppSettings {
   savedSearches: SavedSearch[];
   /** Ler o texto das imagens e dos PDFs anexados para a busca, no Mac (T2709). Ligado por padrão. */
   ocr: boolean;
+  /** Por qual microfone o ditado grava (spec #3202, T3230). O helper recebe no `config.set`. Padrão: "auto". */
+  microphone: MicrophoneChoice;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [] };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -89,6 +92,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     attachmentsFolder: "attachmentsFolder" in o ? sanitizeAttachmentsFolder(o.attachmentsFolder) : DEFAULT_ATTACHMENTS_FOLDER,
     savedSearches: sanitizeSavedSearches(o.savedSearches),
     ocr: typeof o.ocr === "boolean" ? o.ocr : true,
+    microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
   };
 }
 

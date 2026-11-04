@@ -11,6 +11,8 @@
 import os from "node:os";
 import path from "node:path";
 
+import type { AudioInputs, MicrophoneChoice } from "./microphone.ts";
+
 export const IPC_VERSION = 1 as const;
 export const MAX_LINE_BYTES = 1024 * 1024;
 
@@ -81,6 +83,12 @@ export type Command =
       notesShortcut?: string | null;
       /** VAD (Silero) antes do modelo: só a fala vai para o STT, e áudio sem fala dá `text: ""`. Padrão: `false`. */
       vad?: boolean;
+      /**
+       * Por qual entrada gravar (spec #3202, T3229/T3230): "auto" (padrão; com a saída em Bluetooth, outro mic), "builtin",
+       * "system" (o padrão do macOS) ou "uid:<UID do CoreAudio>". Um UID que sumiu volta para o automático, com aviso
+       * no overlay. Vai num `config.set` só dele: um helper antigo que recusa o campo não derruba os outros.
+       */
+      microphone?: MicrophoneChoice;
     }
   | { type: "record.start" }
   | { type: "record.stop" }
@@ -113,6 +121,8 @@ export type Command =
   | { type: "llm.complete"; system: string; prompt: string; maxTokens?: number; temperature?: number; timeoutMs?: number }
   /** Aquece o modelo com estas instruções. O Bun manda no `record.started`, antes da transcrição chegar. */
   | { type: "llm.prewarm"; system: string }
+  /** As entradas de áudio e a saída padrão (T3229/T3230), para o seletor dos Ajustes. Só lista: não abre a entrada. */
+  | { type: "audio.inputs" }
   /**
    * Só com `KIWI_DEBUG=1` no sidecar (sem isso, `unknown_type`), e só com áudio sintético (`say`): o arquivo faz o
    * caminho de uma gravação que terminou (`record.started`/`record.stopped` com `reason: "debug"`, a pílula, o
@@ -170,6 +180,7 @@ export interface CommandResults {
   "permissions.request": { permission: Permission; state: PermissionState };
   "llm.complete": { text: string; ms: number };
   "llm.prewarm": Record<string, never>;
+  "audio.inputs": AudioInputs;
   "debug.transcribe": Record<string, never>;
 }
 
@@ -190,6 +201,8 @@ export type Event =
       llm?: LlmStatus;
     }
   | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean; llm?: LlmStatus }
+  /** Entrou ou saiu um dispositivo de áudio, ou mudou a saída padrão (T3229): os Ajustes listam de novo. */
+  | { type: "audio.inputs.changed" }
   | { type: "hotkey.down"; key: HotkeyKey }
   | { type: "hotkey.up"; key: HotkeyKey }
   | { type: "hotkey.toggle"; on: boolean }
@@ -277,12 +290,14 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "permissions.request",
   "llm.complete",
   "llm.prewarm",
+  "audio.inputs",
   "debug.transcribe",
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "ready",
   "permissions.changed",
+  "audio.inputs.changed",
   "hotkey.down",
   "hotkey.up",
   "hotkey.toggle",

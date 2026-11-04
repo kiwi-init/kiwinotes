@@ -3,6 +3,7 @@
 //
 //   { "click": "SEL", "modifiers"?: ["Meta"] }      clica
 //   { "fill": "SEL", "text": "…" }                    troca o valor de um input
+//   { "select": "SEL", "value": "…" }                 escolhe a opção de um <select> pelo value (T3230)
 //   { "type": "…" }                                   digita no foco
 //   { "press": "Meta+k" }                             uma tecla ou combinação (⌘K é "Meta+k")
 //   { "hover": "SEL" }
@@ -32,6 +33,8 @@ import { settle } from "./ui-page.ts";
 export type Step =
   | { click: string; modifiers?: Modifier[] }
   | { fill: string; text: string }
+  /** Escolhe a opção de um `<select>` pelo `value` (T3230). */
+  | { select: string; value: string }
   | { type: string }
   | { press: string }
   | { hover: string }
@@ -57,7 +60,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "type", "press", "hover", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
+const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -101,6 +104,10 @@ export function parseScript(json: unknown): ScriptFile {
       case "expectText":
         str(s[action], `${at}.${action}`);
         if (typeof s.text !== "string") throw new Error(`${at}: ${action} precisa de text`);
+        break;
+      case "select":
+        str(s.select, `${at}.select`);
+        if (typeof s.value !== "string") throw new Error(`${at}: select precisa de value (o value da opção)`);
         break;
       case "expectCount":
         str(s.expectCount, `${at}.expectCount`);
@@ -208,6 +215,7 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
   }
   if ("click" in s) await page.click(s.click, { timeout, modifiers: s.modifiers });
   else if ("fill" in s) await page.fill(s.fill, s.text, { timeout });
+  else if ("select" in s) await page.selectOption(s.select, s.value, { timeout });
   else if ("type" in s) await page.keyboard.type(s.type);
   else if ("press" in s) await page.keyboard.press(s.press);
   else if ("hover" in s) await page.hover(s.hover, { timeout });
