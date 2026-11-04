@@ -25,6 +25,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { identityKeys } from "./bundle-identity.ts";
 import { resealBundles, signAdHoc } from "./signing.ts";
 
 /** No Info.plist do wrapper: o ambiente que o LaunchServices passa ao extractor (T951). */
@@ -50,8 +51,10 @@ function infoPlists(dir: string, depth = 4): string[] {
   return out;
 }
 
-function setUsage(plist: string): void {
-  for (const [key, value] of Object.entries(USAGE)) {
+function setKeys(plist: string): void {
+  const read = spawnSync("plutil", ["-extract", "CFBundleVersion", "raw", plist], { encoding: "utf8" });
+  if (read.status !== 0) throw new Error(`info-plist: no CFBundleVersion in ${plist}`);
+  for (const [key, value] of Object.entries({ ...USAGE, ...identityKeys(read.stdout.trim()) })) {
     // -replace cria a chave quando ela não existe.
     const r = spawnSync("plutil", ["-replace", key, "-string", value, plist], { stdio: "inherit" });
     if (r.status !== 0) throw new Error(`info-plist: plutil failed on ${plist}`);
@@ -78,8 +81,8 @@ function setUsage(plist: string): void {
     for (const file of resealBundles(bundles)) console.log(`info-plist: re-signed the app inside ${file}`);
   }
   for (const p of plists) {
-    setUsage(p);
-    console.log(`info-plist: usage descriptions in ${p}`);
+    setKeys(p);
+    console.log(`info-plist: usage descriptions, display name and short version in ${p}`);
   }
   if (wrapper) {
     const plist = path.join(wrapper, "Contents", "Info.plist");

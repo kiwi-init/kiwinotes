@@ -7,6 +7,7 @@ import Electrobun, { AgentControl, ApplicationMenu, PATHS, Tray, Updater, Utils 
 import { type HubSection, UI_WINDOWS } from "../shared/ui-contract.ts";
 import { Hub } from "./hub.ts";
 import { makeIntro } from "./intro.ts";
+import { repairInstallRegistry, runningBundle } from "./install-registry.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { Session, session, type SessionStatus } from "./session.ts";
@@ -92,6 +93,13 @@ export function statusLabel(s: SessionStatus): string {
 
 // A atualização automática (T1969): o menu ganha "Atualizar e reiniciar" quando uma versão nova, já conferida, está
 // pronta. Nada reinicia sem o clique.
+// Antes do Updater: o registro de instalação do Electrobun que aponta para outro app (um build de teste velho) faz toda
+// troca de versão falhar com InvalidUpdateIdentity (T2399, a rc3 do harry). Ele sai do caminho, renomeado ao lado.
+{
+  const registry = repairInstallRegistry({ channelRoot: Utils.paths.userData, bundle: runningBundle(process.execPath) });
+  if (registry.state === "moved") console.warn(`[updates] install registry pointed at ${registry.recorded}; moved to ${registry.movedTo}`);
+  else if (registry.state === "skipped" && registry.reason !== "not a packaged .app") console.warn(`[updates] install registry: ${registry.reason}`);
+}
 const updates = new AppUpdates({ updater: Updater });
 let appVersion = "";
 void Updater.getLocalInfo().then((i) => (appVersion = i.version));
