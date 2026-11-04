@@ -368,4 +368,15 @@ describe("a última checagem, para a seção Sobre (T2386)", () => {
     expect(updatesView({ kind: "off", reason: "no release.baseUrl in this build" }, null)).toMatchObject({ reason: "build local, sem o endereço das atualizações" });
     expect(updatesView({ kind: "off", reason: "baseUrl isn't https: http://x" }, null)).toMatchObject({ reason: "o endereço das atualizações deste build não é válido" });
   });
+
+  test("a troca que falha (o InvalidUpdateIdentity da rc3, #2402) aparece na seção Sobre, e a oferta fica", () =>
+    withDir(async (appData) => {
+      const { updater } = fakeUpdater({ appData, found: { version: "0.2.0", hash: "eeee", updateAvailable: true } });
+      const u = new AppUpdates({ updater, now, log: () => {}, verify: () => null });
+      await u.check();
+      await u.apply();
+      expect(u.status()).toMatchObject({ kind: "ready", version: "0.2.0" });
+      expect(u.lastCheck()).toMatchObject({ result: "error" });
+      expect((u.lastCheck() as { message: string }).message).toContain("não deu para trocar o app");
+    }));
 });

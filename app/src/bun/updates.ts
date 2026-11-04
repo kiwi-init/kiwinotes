@@ -346,6 +346,8 @@ export class AppUpdates {
     }
     const info = this.deps.updater.updateInfo();
     this.log(`update didn't restart the app${info.error ? `: ${info.error}` : ""}`);
+    // A seção Sobre diz que a troca falhou (o InvalidUpdateIdentity da rc3, #2402), em vez de só voltar a "pronta".
+    this.finish("error", { message: `A ${ready.version} foi baixada, mas não deu para trocar o app. Tente de novo; se continuar, instale pelo .dmg do release.` });
     this.set(ready);
   }
 }

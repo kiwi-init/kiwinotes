@@ -21,6 +21,7 @@ describe("a linha do estado", () => {
     expect(line({ state: "checking", lastCheck: null })).toBe("Verificando…");
     expect(line({ state: "downloading", version: "0.1.0-rc4", lastCheck: null })).toBe("Baixando a 0.1.0-rc4…");
     expect(line({ state: "ready", version: "0.1.0-rc4", lastCheck: null })).toBe("A 0.1.0-rc4 está pronta.");
+    expect(line({ state: "ready", version: "0.1.0-rc4", lastCheck: { at, result: "error", message: "não deu para trocar" } })).toBe("não deu para trocar");
     expect(line({ state: "off", reason: "KIWI_DEBUG=1", lastCheck: null })).toBe("As atualizações estão desligadas neste build (KIWI_DEBUG=1).");
   });
 });

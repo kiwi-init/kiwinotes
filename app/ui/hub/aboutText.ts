@@ -20,7 +20,8 @@ export function statusLine(v: UpdatesView): string {
     case "downloading":
       return `Baixando a ${v.version}…`;
     case "ready":
-      return `A ${v.version} está pronta.`;
+      // Pronta, mas a troca já falhou uma vez (o "Atualizar e reiniciar" voltou): diz o porquê, e o botão segue lá.
+      return v.lastCheck?.result === "error" ? v.lastCheck.message : `A ${v.version} está pronta.`;
     case "applying":
       return "Atualizando: o Kiwi Notes vai fechar e abrir de novo.";
     case "idle": {
