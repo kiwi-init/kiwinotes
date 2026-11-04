@@ -30,7 +30,15 @@ export interface CapabilityDeps {
   };
   /** As Configurações (T1499). */
   /** O `save` mescla a Aparência dada com a que está gravada, uma gravação por vez. */
-  settings: { load(): Promise<AppSettings>; save(patch: SettingsPatch): Promise<AppSettings> };
+  settings: {
+    load(): Promise<AppSettings>;
+    save(patch: SettingsPatch): Promise<AppSettings>;
+    /**
+     * Ler, decidir e gravar na mesma fila (T2639). Sem ele (stubs de teste), as fixadas caem no `load` + `save`, que
+     * podem se atropelar.
+     */
+    update?(change: (current: AppSettings) => SettingsPatch | null): Promise<AppSettings>;
+  };
   /** O helper passa a vigiar o atalho novo (T1499). */
   settingsChanged?(settings: AppSettings): void;
   /** O STT e a limpeza passam a usar o dicionário e os snippets novos já no próximo ditado. */
@@ -116,6 +124,29 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
   // UI que tente encher o clipboard sozinha.
   let lastCopy = -Infinity;
 
+  /**
+   * Muda as fixadas a partir da lista de agora, na fila das configurações (T2639): a leitura e a gravação não deixam
+   * outra mudança (uma fixada nova da janela, outra correção) entrar no meio. Sem mudança, não grava nem avisa.
+   */
+  const changePinned = async (change: (pinned: string[]) => string[]) => {
+    const same = (a: string[], b: string[]) => a.length === b.length && a.every((p, i) => p === b[i]);
+    let changed = false;
+    const decide = (current: AppSettings) => {
+      const next = change(current.pinned);
+      changed = !same(next, current.pinned);
+      return changed ? { pinned: next } : null;
+    };
+    let saved: AppSettings;
+    if (deps.settings.update) saved = await deps.settings.update(decide);
+    else {
+      const patch = decide(await deps.settings.load());
+      if (!patch) return;
+      saved = await deps.settings.save(patch);
+    }
+    // Em duas linhas: num `settingsChanged?.(await save())`, sem o listener, o `?.` pula o argumento e nada é salvo.
+    if (changed) deps.settingsChanged?.(saved);
+  };
+
   // As fixadas seguem também o que muda por fora (T2559): no 1º uso do vault, sai o que já não existe, e daí em diante
   // um rename feito no Obsidian leva a fixada junto.
   let watchingPins: Promise<void> | null = null;
@@ -129,13 +160,7 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     await watchingPins;
     return deps.notes;
   };
-  const followPins = async (r: ExternalMoves) => {
-    const current = await deps.settings.load();
-    const next = followPinned(current.pinned, r, deps.notes.existing());
-    if (next.length === current.pinned.length && next.every((p, i) => p === current.pinned[i])) return;
-    const saved = await deps.settings.save({ pinned: next });
-    deps.settingsChanged?.(saved);
-  };
+  const followPins = (r: ExternalMoves) => changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()));
   /** Os argumentos de uma capacidade de notas: só os campos conhecidos, para um typo não passar calado. */
   const fields = (args: unknown, cap: string, allowed: string[]) => {
     const a = object(args, cap);
@@ -148,14 +173,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
    * As fixadas seguem a nota ou a pasta (T2468): `map` diz para onde foi cada caminho (null: saiu). Uma pasta movida
    * leva junto as fixadas de dentro dela.
    */
-  const fixPinned = async (map: (p: string) => string | null) => {
-    const current = await deps.settings.load();
-    const next = [...new Set(current.pinned.map(map).filter((p): p is string => p !== null))];
-    if (next.length === current.pinned.length && next.every((p, i) => p === current.pinned[i])) return;
-    // Em duas linhas: num `settingsChanged?.(await save())`, sem o listener, o `?.` pula o argumento e nada é salvo.
-    const saved = await deps.settings.save({ pinned: next });
-    deps.settingsChanged?.(saved);
-  };
+  const fixPinned = (map: (p: string) => string | null) =>
+    changePinned((pinned) => [...new Set(pinned.map(map).filter((p): p is string => p !== null))]);
   const under = (prefix: string, p: string) => p === prefix || p.startsWith(`${prefix}/`);
   const moveUnder = (from: string, to: string) => (p: string) => (under(from, p) ? `${to}${p.slice(from.length)}` : p);
   const dropUnder = (gone: string) => (p: string) => (under(gone, p) ? null : p);
