@@ -190,22 +190,25 @@ export function approxWord(word: string, words: Iterable<string>, memo?: Map<str
 }
 
 /**
- * Os trechos a destacar num texto (o título ou o trecho de um resultado): onde cada palavra da busca aparece exata,
- * e as palavras do texto que casam com ela por aproximação.
+ * Os trechos a destacar num texto (o título ou o trecho de um resultado): onde cada palavra da busca aparece exata; e,
+ * só para a palavra da busca que não tem o exato no texto, as palavras do texto que casam com ela por aproximação
+ * (T3013: com "nota" no texto, "rota" e "nora" não foram o motivo do resultado).
  */
 export function highlightRanges(text: string, queryWords: readonly string[]): Range[] {
   const qs = queryWords.map((w) => foldMap(w).folded).filter(Boolean);
   if (!qs.length || !text) return [];
   const { folded, map } = foldMap(text);
   const marks: Range[] = [];
+  const loose: string[] = [];
   for (const q of qs) {
+    const before = marks.length;
     for (let at = folded.indexOf(q); at >= 0; at = folded.indexOf(q, at + q.length)) marks.push([at, at + q.length]);
+    if (marks.length === before && typoBudget(q)) loose.push(q);
   }
-  const k = Math.max(0, ...qs.map(typoBudget));
-  if (k) {
+  if (loose.length) {
     for (const m of folded.matchAll(/[\p{L}\p{N}]+/gu)) {
       const w = m[0];
-      if (qs.some((q) => typoBudget(q) && w.length >= 3 && withinEdits(q, w, typoBudget(q)))) marks.push([m.index!, m.index! + w.length]);
+      if (loose.some((q) => w.length >= 3 && withinEdits(q, w, typoBudget(q)))) marks.push([m.index!, m.index! + w.length]);
     }
   }
   marks.sort((a, b) => a[0] - b[0]);

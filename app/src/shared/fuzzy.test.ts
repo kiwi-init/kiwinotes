@@ -79,4 +79,14 @@ describe("erros de digitação no texto (T2966)", () => {
     ]);
     expect(highlightRanges("nada aqui", ["reunaio"])).toEqual([]);
   });
+
+  test("com o exato no texto, não destaca os parecidos (T3013)", () => {
+    // "nota" está no texto: "rota" e "nora" não foram o motivo do resultado.
+    expect(highlightRanges("A nota, a rota e a nora", ["nota"])).toEqual([[2, 6]]);
+    // Cada palavra da busca decide por si: "nota" exata, "reunaio" só aproximada.
+    expect(highlightRanges("nota da reunião, rota", ["nota", "reunaio"])).toEqual([
+      [0, 4],
+      [8, 15],
+    ]);
+  });
 });
