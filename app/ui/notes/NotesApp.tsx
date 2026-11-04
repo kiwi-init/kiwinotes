@@ -38,7 +38,7 @@ function useEnterAnimation() {
   return n;
 }
 
-function Notes({ api, drafts }: { api: NotesApi; drafts: Drafts }) {
+function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active: boolean }) {
   const [listing, setListing] = useState<VaultListing | null>(null);
   const [failed, setFailed] = useState(false);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
@@ -257,10 +257,17 @@ function Notes({ api, drafts }: { api: NotesApi; drafts: Drafts }) {
     [api, drafts, links, refresh, show],
   );
 
+  // No hub (T2121) as Notas ficam montadas e escondidas nas outras seções: as teclas só valem com elas na tela (T2200).
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  useEffect(() => {
+    if (!active) setPalette(false);
+  }, [active]);
+
   // ⌘K busca, ⌘N cria. Ao esconder a janela, grava o que estiver pendente.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.altKey || e.ctrlKey) return;
+      if (!activeRef.current || !e.metaKey || e.altKey || e.ctrlKey) return;
       // Síncrono: a busca já está com o foco antes da próxima tecla (quem digita rápido não escreve na nota).
       if (e.key === "k") flushSync(() => setPalette((p) => !p));
       else if (e.key === "n") void create("Sem título", true);
@@ -510,8 +517,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** A janela Notas inteira: o vault, a nota e o "Citada em". A janela Notas e o hub (T2121) montam esta. */
-export function NotesApp() {
+/**
+ * A janela Notas inteira: o vault, a nota e o "Citada em". A janela Notas e o hub (T2121) montam esta. `active`: as
+ * Notas estão na tela. No hub, com outra seção à frente, elas ficam montadas e escondidas, e o ⌘N e o ⌘K não podem
+ * agir sem ninguém ver (T2200).
+ */
+export function NotesApp({ active = true }: { active?: boolean } = {}) {
   const drafts = useMemo(() => new Drafts(), []);
   const api = useMemo(() => {
     const a = notesApi();
@@ -524,6 +535,6 @@ export function NotesApp() {
       </Shell>
     );
   }
-  return <Notes api={api} drafts={drafts} />;
+  return <Notes api={api} drafts={drafts} active={active} />;
 }
 

@@ -1,0 +1,71 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "waitFor": ".kn-title",
+      "name": "o hub abre nas Notas"
+    },
+    {
+      "click": ".kn-hub-item:has-text('Configurações')",
+      "name": "vai para Configurações"
+    },
+    {
+      "press": "Meta+n",
+      "name": "⌘N com as Notas escondidas"
+    },
+    {
+      "press": "Meta+k",
+      "name": "⌘K com as Notas escondidas"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "click": ".kn-hub-item:has-text('Notas')",
+      "name": "volta para as Notas"
+    },
+    {
+      "expectCount": ".kn-side-item:has-text('Sem título')",
+      "count": 0,
+      "name": "o ⌘N escondido não criou nota"
+    },
+    {
+      "expectCount": ".kn-palette",
+      "count": 0,
+      "name": "o ⌘K escondido não abriu a busca"
+    },
+    {
+      "press": "Meta+k",
+      "name": "⌘K com as Notas na tela"
+    },
+    {
+      "waitFor": ".kn-palette",
+      "name": "a busca abre"
+    },
+    {
+      "click": ".kn-hub-item:has-text('Ditado')",
+      "name": "troca de seção com a busca aberta"
+    },
+    {
+      "click": ".kn-hub-item:has-text('Notas')",
+      "name": "volta para as Notas"
+    },
+    {
+      "expectCount": ".kn-palette",
+      "count": 0,
+      "name": "a busca fechou ao sair das Notas"
+    },
+    {
+      "press": "Meta+n",
+      "name": "⌘N com as Notas na tela"
+    },
+    {
+      "expectText": ".kn-title",
+      "text": "Sem título",
+      "name": "cria e abre a nota nova"
+    },
+    {
+      "screenshot": "hub-notas-depois.png"
+    }
+  ]
+}

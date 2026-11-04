@@ -88,6 +88,8 @@ bun run cli ui notes --script passos.json --out /tmp/prints --data DIR
 ] }
 ```
 
+Os roteiros prontos ficam em `scripts/ui-scripts/`. Por exemplo, `bun run cli ui hub --script scripts/ui-scripts/hub-notas-teclas.json` confere que o ⌘N e o ⌘K das Notas não agem com outra seção do hub na tela (T2200).
+
 Na primeira vez: `bunx playwright-core install webkit`. Num worktree novo: `bun run prepare:eb`, sem o qual o Vite não builda.
 
 ## Dirigir o app (agentes)

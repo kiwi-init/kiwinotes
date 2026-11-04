@@ -36,10 +36,11 @@ function Icon({ section }: { section: HubSection }) {
   );
 }
 
-function Pane({ section }: { section: HubSection }) {
+/** `active`: a seção está na tela. As outras ficam montadas e escondidas (o estado não se perde ao trocar). */
+function Pane({ section, active }: { section: HubSection; active: boolean }) {
   switch (section) {
     case "notes":
-      return <NotesApp />;
+      return <NotesApp active={active} />;
     case "dictation":
       return <History />;
     case "settings":
@@ -120,7 +121,7 @@ function Hub() {
       <div className="kn-hub-main">
         {HUB_SECTIONS.filter((s) => visited.has(s)).map((s) => (
           <section key={s} className="kn-hub-pane" hidden={s !== section} aria-label={LABELS[s]}>
-            <Pane section={s} />
+            <Pane section={s} active={s === section} />
           </section>
         ))}
       </div>
