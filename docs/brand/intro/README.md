@@ -25,10 +25,10 @@ São 11 texturas lossless, cerca de 1,1 MB antes de base64. O app recebe imagens
 ## O gato (T3720)
 
 A emenda ocorre aos 3,7 s; a animação do gato dura 8 s, com poses amostradas a 60 Hz (f0–f480).
-A prancha T3747 aprovada manda na geometria e nas poses, inclusive no corpo sem deslocamento, escala ou rotação.
+A pose final v2 e a geometria vêm da T3747. Após #4031/#4035, as poses intermediárias foram revistas: cabeça arredondada, orelhas mais lentas e formação contínua. O conjunto deriva suavemente, sem deformar o corpo.
 A cabeça e o anel giratório usam máscaras escuras preparadas pela prancha; as orelhas giram pelos mesmos pivôs.
 Os olhos são dois círculos vetoriais, com crescimento e piscadas por olho.
-O corpo só revela densidade, por opacidade e posição de uma máscara macia pronta.
+O corpo revela densidade por opacidade, sem a varredura horizontal anterior. A máscara móvel saiu da animação: ela provocava repintura e limitava a fluidez.
 A cena final acende como uma composição opaca sobre a inicial: os retângulos compensadores das seis peças originais não aparecem separadamente.
 A preparação verifica a recomposição final dos WebP codificados (erro máximo ≤2/255).
 Nada é borrado ao vivo. O Rive saiu do runtime e das dependências nesta task.
@@ -51,7 +51,7 @@ bun docs/brand/intro/gravar-gato.ts /tmp/kiwi-medida --sem-video
 bun docs/brand/intro/frames.ts /tmp/kiwi-frames
 ```
 
-`comparar.ts` captura os dez frames da prancha mais f126/f190, conferidos contra o renderer aprovado.
+`comparar.ts` captura os dez frames da prancha mais f126/f190 contra o renderer antigo. Seus limites das poses intermediárias são históricos e devem falhar para a nova direção do #4031; não são um critério de aprovação do movimento. `verificacao-gato.json` guarda somente a comparação anterior, identificada pelo hash do HTML daquela versão.
 `comparar.py` inclui olhos e orelhas na diferença; exclui apenas a borda arredondada do palco.
 Os olhos vetoriais e a rasterização/alpha do navegador podem diferir do Pillow.
 A amostragem da linha do tempo a 60 Hz não garante uma taxa de exibição de 60 fps: a medida headless é registrada separadamente.

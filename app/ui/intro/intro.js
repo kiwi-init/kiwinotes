@@ -136,28 +136,32 @@
       animation.currentTime = 0;
       catAnimations.push(animation);
     };
-    const head = f => smooth(130,190,f);
-    const formed = f => smooth(300,390,f);
+    const head = f => smooth(112,208,f);
+    const formed = f => smooth(270,410,f);
     poses("luz-anel", f => ({opacity:smooth(6,48,f)*(1-smooth(150,340,f)), transform:`rotate(${f*.62}deg)`}));
     poses("luz-cabeca", f => ({opacity:smooth(6,48,f)*head(f)}));
     poses("fundo-cabeca", f => ({opacity:head(f)}));
     poses("cabeca", f => ({opacity:head(f)}));
     poses("cabeca-complemento", f => ({opacity:formed(f)}));
     poses("vidro", f => ({opacity:1-head(f)}));
-    for (const id of ["corpo", "corpo-final"]) poses(id, f => {
-      const y=Number(document.getElementById(id).dataset.y);
-      const p=formed(f), position=`0px ${430+594*p-1024-y}px`;
-      return {opacity:p, maskPosition:position, webkitMaskPosition:position};
-    });
+    // Reveal density throughout the fog, without a horizontal scan edge.
+    for (const id of ["corpo", "corpo-final"]) {
+      const layer=document.getElementById(id);
+      layer.classList.remove("body-reveal");
+      poses(id, f => ({opacity:formed(f)}));
+    }
     for (const [id,start,sign] of [["orelha-esquerda",96,-1],["orelha-direita",112,1]]) {
       poses(id, f => {
-        const t=Math.max(0,(f-start)/30);
-        const angle=interpolate(t,[[0,75],[.65,0],[.82,-8],[.94,3],[1,0]]);
-        const scale=.6+.4*smooth(0,1,t);
-        return {opacity:smooth(0,.3,t), transform:`rotate(${sign*angle}deg) scale(${scale})`};
+        const t=Math.max(0,(f-start)/54);
+        const angle=interpolate(t,[[0,20],[.72,-2],[.9,1],[1,0]]);
+        const scale=.82+.18*smooth(0,1,t);
+        return {opacity:smooth(0,1,t), transform:`rotate(${sign*angle}deg) scale(${scale})`};
       });
     }
-    poses("cat-final", f => ({opacity:smooth(350,400,f)}));
+    poses("cat-final", f => ({opacity:smooth(325,450,f)}));
+    // #4031: drift through the formation rather than hold rigid intermediate
+    // poses. Move the whole composition together, preserving body proportions.
+    poses("cat-float", f => ({transform:`translateY(${-5*Math.sin(f/480*Math.PI*2)*Math.sin(f/480*Math.PI)}px)`}));
     const eyes = [[0,0],[159,0],[160,0],[163,.06],[181,.22],[196,.22],[204,.04],[212,.04],
       [228,.45],[234,.45],[239,.05],[244,.45],[248,.45],[262,1.04],[268,1],[480,1]];
     for (const id of ["olho-esq","olho-dir"]) poses(id, f => {

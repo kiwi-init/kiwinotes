@@ -10,7 +10,7 @@ import json
 import sys
 sys.dont_write_bytecode = True
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('kiwi_prancha', HERE / 'prancha.py')
@@ -31,6 +31,14 @@ def main():
     raw = {name: reference.stage_asset(name) for name in
            ['luz', 'corpo', 'cabeca', 'orelha-esquerda', 'orelha-direita', 'aro']}
     dark = reference.dark_parts()
+    # #4031: the intermediate face must stay rounded, without the polygonal
+    # shield/chin of the old storyboard. The final approved pixels stay intact.
+    face = Image.new('L', (SIZE, SIZE))
+    ImageDraw.Draw(face).ellipse((304, 242, 724, 596), fill=255)
+    face = face.filter(ImageFilter.GaussianBlur(7))
+    rounded = Image.new('RGBA', (SIZE, SIZE), (9, 9, 12, 0))
+    rounded.putalpha(face)
+    dark['dark-cabeca'] = rounded
     halo = reference.head_halo(dark)  # also prepares the soft backing mask
     head = dark['dark-cabeca']
     head_base = reference.mask_y(head, reference.CHIN_START, reference.CHIN_END)

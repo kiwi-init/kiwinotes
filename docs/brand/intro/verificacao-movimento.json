@@ -1,0 +1,59 @@
+{
+  "status": "candidate after owner feedback #4031/#4035; not visually approved",
+  "changes": [
+    "rounded intermediate head",
+    "slower ears",
+    "whole density dissolve, no moving body mask",
+    "gentle whole composition drift"
+  ],
+  "final_source_files_unchanged": [
+    "camadas/final-fundo.webp",
+    "camadas/final-corpo.webp"
+  ],
+  "headless_recording": {
+    "milliseconds": 8105,
+    "frames": 459,
+    "median": 17,
+    "p95": 26,
+    "worst": 103,
+    "animationTimes": [
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000
+    ]
+  },
+  "headless_without_recording": {
+    "milliseconds": 8113,
+    "frames": 474,
+    "median": 17,
+    "p95": 19,
+    "worst": 88,
+    "animationTimes": [
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000,
+      8000
+    ]
+  }
+}
