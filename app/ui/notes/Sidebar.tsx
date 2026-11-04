@@ -130,7 +130,9 @@ export function Sidebar(p: SidebarProps) {
         aria-current={n.path === p.current ? "page" : undefined}
         data-menu={(inTree && p.menuOn === `n:${n.path}`) || undefined}
         style={{ paddingLeft: depth * 14 }}
-        onClick={() => p.onOpen(n.path)}
+        // No Mac, ⌃-clique é o clique secundário: abre só o menu (o onContextMenu). O WebKit também manda um `click`, e
+        // a nota abria e fechava a árvore por baixo do menu (T2693).
+        onClick={(e) => !e.ctrlKey && p.onOpen(n.path)}
         onContextMenu={(e) => menu(e, { kind: "note", path: n.path })}
         {...drag({ kind: "note", path: n.path })}
       >
@@ -156,7 +158,8 @@ export function Sidebar(p: SidebarProps) {
             data-drop={dropOn === n.path || undefined}
             aria-expanded={expanded}
             style={{ paddingLeft: depth * 14 }}
-            onClick={() => {
+            onClick={(e) => {
+              if (e.ctrlKey) return; // o ⌃-clique é o menu, não abrir ou fechar a pasta (T2693)
               p.onSelectFolder(n.path);
               p.onToggle(n.path);
             }}
