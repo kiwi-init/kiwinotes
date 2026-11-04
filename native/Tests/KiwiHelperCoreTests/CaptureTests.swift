@@ -116,6 +116,37 @@ private final class Rig {
 }
 
 final class CaptureTests: XCTestCase {
+    /// T3229 (#3202): the mic is open only while recording. The warm-up prepares and never starts the device, and
+    /// every way a recording ends leaves no engine running: stop, a lost mic, an input change while idle.
+    func testNoInputIsOpenOutsideARecording() throws {
+        let rig = Rig()
+        let running = { rig.engines.filter(\.started).count }
+        rig.capture.warmUp()
+        XCTAssertTrue(rig.engine.isPrepared)
+        XCTAssertEqual(running(), 0, "the warm-up must not start the device")
+
+        try rig.capture.start()
+        XCTAssertEqual(running(), 1)
+        rig.engine.feed(rate: 48_000, seconds: 0.2, clock: rig.clock)
+        _ = rig.capture.stop()
+        XCTAssertEqual(running(), 0, "stop closes the input")
+
+        // The mic picked changes while idle (a new choice, AirPods connected): the new engine is prepared, not started.
+        rig.capture.inputChanged("microphone: builtin")
+        rig.settle()
+        XCTAssertTrue(rig.engine.isPrepared)
+        XCTAssertEqual(running(), 0)
+
+        // A recording that loses the mic ends with nothing running either.
+        try rig.capture.start()
+        rig.nextFailsStart = true
+        rig.capture.inputChanged("default input device")
+        rig.settle()
+        XCTAssertEqual(rig.lost, ["device_changed"])
+        XCTAssertFalse(rig.capture.isRecording)
+        XCTAssertEqual(running(), 0)
+    }
+
     func testResamplerFollowsTheFormatWhenTheDeviceChanges() {
         // #589: the built-in mic at 48 kHz, then a Bluetooth headset in HFP at 16 kHz. A converter built for 48 kHz
         // fails every 16 kHz buffer (OSStatus -1), and the old code dropped them in silence.
