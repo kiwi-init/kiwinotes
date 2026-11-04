@@ -35,6 +35,35 @@
       "name": "o ⌘K escondido não abriu a busca"
     },
     {
+      "click": ".kn-hub-item:has-text('Ditado')",
+      "name": "vai para o Ditado"
+    },
+    {
+      "press": "Meta+n",
+      "name": "⌘N no Ditado"
+    },
+    {
+      "press": "Meta+k",
+      "name": "⌘K no Ditado"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "click": ".kn-hub-item:has-text('Notas')",
+      "name": "volta para as Notas de novo"
+    },
+    {
+      "expectCount": ".kn-side-item:has-text('Sem título')",
+      "count": 0,
+      "name": "o ⌘N no Ditado não criou nota"
+    },
+    {
+      "expectCount": ".kn-palette",
+      "count": 0,
+      "name": "o ⌘K no Ditado não abriu a busca"
+    },
+    {
       "press": "Meta+k",
       "name": "⌘K com as Notas na tela"
     },
