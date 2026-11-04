@@ -126,15 +126,15 @@
   @keyframes orbGrow { from { opacity: 1; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
 
   /* Reduzir movimento: o gato pronto, com um fade de 0,5 s. */
-  @media (prefers-reduced-motion: reduce) {
-    /* O ícone pronto: a pose final do prisma (o script põe as animações no fim), sem o gato. */
-    #outline, #title, #orb, #cat-layer { display: none; }
-    #base { opacity: 1; }
-    .face, .side { opacity: 1; }
-    .band { opacity: .9; transform: rotate(-32deg) translateY(40px); }
-    #stage { animation: fade .5s ease-out both; }
-    #stage *:not(.ly), #stage.out { animation: none !important; }
-  }
+  /* Reduzir movimento: o ícone pronto (a pose final do prisma; o script põe as animações no fim). O estado é a classe
+     .reduced no palco, que o script põe tanto pelo macOS (prefers-reduced-motion) quanto pela Aparência do app
+     (T2503): só o @media deixava o ícone invisível no segundo caso (#4276). */
+  #stage.reduced #outline, #stage.reduced #title, #stage.reduced #orb, #stage.reduced #cat-layer { display: none; }
+  #stage.reduced #base { opacity: 1; }
+  #stage.reduced .face, #stage.reduced .side { opacity: 1; }
+  #stage.reduced .band { opacity: .9; transform: rotate(-32deg) translateY(40px); }
+  #stage.reduced { animation: fade .5s ease-out both; }
+  #stage.reduced *:not(.ly), #stage.reduced.out { animation: none !important; }
 
   /* ---- o Kiwi-cat Aura (T2025), sem mudança ---- */
 
@@ -468,13 +468,15 @@
       document.body.classList.remove("done");
       stage.classList.remove("out");
       cat.classList.add("off", "paused");
-      stage.classList.remove("play");
+      stage.classList.remove("play", "reduced");
       for (const el of outline.children) el.style.animation = "none";
       void stage.offsetWidth; // recomeça as animações do zero
       for (const el of outline.children) el.style.animation = el.dataset.anim;
       animatePrism();
       if (reduced) {
-        // Reduzir movimento: o ícone pronto (a pose final do prisma), com o fade do palco, e o app abre.
+        // Reduzir movimento (do macOS ou da Aparência do app): o ícone pronto (a pose final do prisma), com o fade do
+        // palco, e o app abre.
+        stage.classList.add("reduced");
         for (const a of prism) { a.pause(); a.currentTime = END * 1000; }
         later(1.5, finish);
         return;

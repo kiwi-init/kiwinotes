@@ -159,13 +159,15 @@
     document.body.classList.remove("done");
     stage.classList.remove("out");
     cat.classList.add("off", "paused");
-    stage.classList.remove("play");
+    stage.classList.remove("play", "reduced");
     for (const el of outline.children) el.style.animation = "none";
     void stage.offsetWidth; // recomeça as animações do zero
     for (const el of outline.children) el.style.animation = el.dataset.anim;
     animatePrism();
     if (reduced) {
-      // Reduzir movimento: o ícone pronto (a pose final do prisma), com o fade do palco, e o app abre.
+      // Reduzir movimento (do macOS ou da Aparência do app): o ícone pronto (a pose final do prisma), com o fade do
+      // palco, e o app abre.
+      stage.classList.add("reduced");
       for (const a of prism) { a.pause(); a.currentTime = END * 1000; }
       later(1.5, finish);
       return;
