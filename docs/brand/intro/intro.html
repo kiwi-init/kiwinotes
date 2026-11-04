@@ -40,7 +40,9 @@
   }
   .shine { position: absolute; left: 46px; top: 12px; width: 170px; height: 24px; border-radius: 40px / 14px; border-top: 3px solid rgba(255, 255, 255, .55); box-sizing: border-box; }
   /* O arco-íris: uma faixa larga dentro da face, que anda na diagonal e cruza a lâmina como no ícone do Channels
-     (quase perpendicular à borda longa, descendo para a esquerda; #4288). */
+     (quase perpendicular à borda longa, descendo para a esquerda; #4288). O ângulo aqui é no espaço da face: com a
+     rotação e a perspectiva da lâmina, −90° dá ~−46° (134°) NA TELA, a diagonal do ícone, e o gradiente corre do
+     canto de cima-esquerda da lâmina (rosa) para o de baixo-direita (azul), como no ícone. */
   .band {
     position: absolute; left: 50%; top: 50%; width: 1400px; height: 300px; margin: -150px 0 0 -700px; opacity: 0;
     background: linear-gradient(to bottom, rgba(255, 95, 191, 0) 0%, rgba(255, 95, 191, .85) 18%, rgba(255, 165, 61, .85) 31%, rgba(255, 242, 122, .85) 44%,
@@ -113,9 +115,9 @@
   @keyframes outlineOut { to { opacity: 0; } }
   @keyframes titleIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
   @keyframes titleOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-10px) scale(.98); } }
-  @keyframes sweep { 0% { opacity: 0; transform: rotate(62deg) translateY(-470px); } 18%, 82% { opacity: 1; } 100% { opacity: 0; transform: rotate(62deg) translateY(470px); } }
+  @keyframes sweep { 0% { opacity: 0; transform: rotate(-90deg) translateY(-470px); } 18%, 82% { opacity: 1; } 100% { opacity: 0; transform: rotate(-90deg) translateY(470px); } }
   /* A segunda passada entra e fica: o arco-íris atravessa as três lâminas até a implosão, como no logo. */
-  @keyframes sweep2 { 0% { opacity: 0; transform: rotate(62deg) translateY(-470px); } 60%, 100% { opacity: .9; transform: rotate(62deg) translateY(40px); } }
+  @keyframes sweep2 { 0% { opacity: 0; transform: rotate(-90deg) translateY(-470px); } 60%, 100% { opacity: .9; transform: rotate(-90deg) translateY(40px); } }
   @keyframes sceneOut { 0% { opacity: 1; transform: none; } 60% { opacity: 1; } 100% { opacity: 0; transform: translateY(-44px) scale(.28); } }
   @keyframes orbIn {
     0% { opacity: 0; transform: scale(.12); }
@@ -133,7 +135,7 @@
   #stage.reduced #outline, #stage.reduced #title, #stage.reduced #orb, #stage.reduced #cat-layer { display: none; }
   #stage.reduced #base { opacity: 1; }
   #stage.reduced .face, #stage.reduced .side { opacity: 1; }
-  #stage.reduced .band { opacity: .9; transform: rotate(62deg) translateY(40px); }
+  #stage.reduced .band { opacity: .9; transform: rotate(-90deg) translateY(40px); }
   #stage.reduced { animation: fade .5s ease-out both; }
   #stage.reduced *:not(.ly), #stage.reduced.out { animation: none !important; }
 
