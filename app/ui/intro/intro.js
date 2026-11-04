@@ -122,6 +122,7 @@
   function play() {
     for (const t of timers) clearTimeout(t);
     timers = [];
+    ending = false;
     document.body.classList.remove("done");
     stage.classList.remove("out");
     cat.classList.add("off", "paused");
@@ -144,6 +145,7 @@
         orb.classList.add("grow");
         riveCat.start(finish).then((ok) => {
           if (ok) { cat.classList.add("off"); return; }
+          if (ending) return; // pulou enquanto o Rive carregava
           // O Rive não carregou: fica o gato em SVG, no tempo dele.
           startCat();
           later(8.4 / catSpeed, finish);
@@ -157,7 +159,11 @@
   }
 
   let finished = false;
+  // O fim vem uma vez por vez que toca: do último frame, do clique para pular ou do limite do gato do Rive.
+  let ending = false;
   function finish() {
+    if (ending) return;
+    ending = true;
     stage.classList.add("out");
     later(0.4, () => {
       document.body.classList.add("done");

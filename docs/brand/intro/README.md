@@ -82,5 +82,6 @@ ok do harry na animação. Sem o arquivo, a intro é esta, e o runtime nem entra
 - O runtime é o `@rive-app/canvas-single` (o WASM vem dentro do JS, ~3 MB): a VIEWS_CSP não deixa `fetch`, então o
   `.wasm` e o `.riv` não podem ser baixados à parte.
 - **O combinado com o arquivo (T3151):** o artboard padrão, a state machine `intro` e, no view model padrão, um trigger
-  `done` no fim da abertura. Sem o trigger, a intro segue em 8,4 s, como o gato em SVG.
+  `done` no fim da abertura, e as fontes e imagens **embutidas** ("Embedded" no export). O runtime não busca nada no CDN
+  do Rive (`enableRiveAssetCDN: false`). Sem o trigger, a intro segue em 8,4 s, como o gato em SVG.
 - No "Reduzir movimento", no `?t=` e se o Rive não carregar em 1,5 s, fica o gato em SVG.

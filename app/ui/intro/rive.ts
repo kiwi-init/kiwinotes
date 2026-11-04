@@ -5,7 +5,8 @@
 //   (`'wasm-unsafe-eval'`), mas o `connect-src` não deixa `fetch`, e o `@rive-app/canvas` baixaria o `.wasm` à parte.
 // - O `.riv` também entra no pack (`?inline`) e chega ao runtime como `buffer`, sem `fetch`.
 // - O combinado com o arquivo (T3151): o artboard padrão, a state machine `intro` e, no view model padrão, um trigger
-//   `done` que dispara quando a abertura acaba. Sem o trigger, a intro segue depois de `RIVE_MAX_S`.
+//   `done` que dispara quando a abertura acaba, e os assets (fontes, imagens) embutidos. Sem o trigger, a intro segue
+//   depois de `RIVE_MAX_S`.
 // - O intro.js (gerado pelo docs/brand/intro/gerar.ts) pega isto em `window.kiwiRiveCat`. Se o runtime ou o arquivo
 //   falharem, a intro segue com o gato em SVG.
 
@@ -59,6 +60,9 @@ if (hasRiv && riv) {
           buffer: dataUrlBytes(riv),
           autoplay: false,
           autoBind: true,
+          // Nada sai do Mac: sem isto, uma fonte ou imagem "Hosted" do arquivo seria buscada no CDN do Rive (a CSP
+          // barraria, mas o runtime tentaria). Os assets do .riv vão embutidos ("Embedded" no export).
+          enableRiveAssetCDN: false,
           layout: new Layout({ fit: Fit.Contain, alignment: Alignment.Center }),
           onLoad: () => resolve(r),
           onLoadError: (e) => reject(new Error(`rive: ${String(e.data)}`)),
