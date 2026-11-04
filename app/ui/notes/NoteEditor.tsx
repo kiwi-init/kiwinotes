@@ -16,18 +16,20 @@ export interface NoteEditorProps {
   onOpenLink(target: string): void;
   /** Clique numa `#tag` (T2619). */
   onOpenTag?(tag: string): void;
+  /** "/modelo" (T2660). */
+  onSlashTemplate?(): void;
   linkTargets(): LinkTarget[];
   /** Os anexos (T2594); sem eles, colar e arrastar arquivo não faz nada de especial. Fixo durante a vida da janela. */
   attachments?: AttachmentSource;
   onError?(text: string): void;
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, linkTargets, attachments, onError }: NoteEditorProps) {
+export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
-  const latest = useRef({ onChange, onOpenLink, onOpenTag, linkTargets, onError });
-  latest.current = { onChange, onOpenLink, onOpenTag, linkTargets, onError };
+  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError });
+  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError };
 
   const extensions = useRef(
     editorExtensions(
@@ -35,6 +37,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
         onChange: (d) => latest.current.onChange(d),
         onOpenLink: (t) => latest.current.onOpenLink(t),
         onOpenTag: (t) => latest.current.onOpenTag?.(t),
+        onSlashTemplate: () => latest.current.onSlashTemplate?.(),
         // Abre fora (no navegador padrão), com a política `newWindow: "external"` da janela; nunca navega a janela.
         onOpenUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
         linkTargets: () => latest.current.linkTargets(),

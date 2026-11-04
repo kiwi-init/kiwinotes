@@ -765,4 +765,38 @@ body {
 }
 .kn-mention-link {
   flex: none;
+/* ---------------------------------------------------------- as buscas salvas na árvore (T2660) */
+
+.kn-side-saved {
+  display: flex;
+  align-items: center;
+}
+
+.kn-side-saved > .kn-side-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.kn-side-x {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--r-row, 6px);
+  background: none;
+  color: var(--ink-3, var(--text-3));
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  cursor: default;
+}
+
+.kn-side-saved:hover .kn-side-x,
+.kn-side-x:focus-visible {
+  opacity: 1;
+}
+
+.kn-side-x:hover {
+  background: var(--wash-2, var(--surface-hover));
+  color: var(--ink, var(--text));
 }

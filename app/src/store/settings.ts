@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { attachmentsFolder, DEFAULT_ATTACHMENTS_FOLDER } from "../notes/attachments.ts";
 import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shared/appearance.ts";
+import { type SavedSearch, sanitizeSavedSearches } from "../shared/query.ts";
 import { DEFAULT_TEMPLATES_FOLDER } from "../shared/templates.ts";
 import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
 import { folderPath } from "../notes/paths.ts";
@@ -26,12 +27,14 @@ export interface AppSettings {
   dailyFolder: string;
   /** Onde os anexos colados e arrastados vão, relativo ao vault ("" é a raiz). Padrão: `Anexos` (T2594). */
   attachmentsFolder: string;
+  /** As buscas salvas, fixadas na árvore das Notas (T2660). */
+  savedSearches: SavedSearch[];
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, savedSearches: [] };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -82,6 +85,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     templatesFolder: sanitizeTemplatesFolder(o.templatesFolder),
     dailyFolder: "dailyFolder" in o ? sanitizeDailyFolder(o.dailyFolder) : DEFAULT_SETTINGS.dailyFolder,
     attachmentsFolder: "attachmentsFolder" in o ? sanitizeAttachmentsFolder(o.attachmentsFolder) : DEFAULT_ATTACHMENTS_FOLDER,
+    savedSearches: sanitizeSavedSearches(o.savedSearches),
   };
 }
 

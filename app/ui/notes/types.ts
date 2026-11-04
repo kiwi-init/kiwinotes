@@ -6,6 +6,7 @@ import type { AttachmentSource } from "./editor/attachments.ts";
 
 export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode } from "../../src/shared/ui-contract.ts";
 import type { TagNode } from "../../src/shared/ui-contract.ts";
+import type { SavedSearch } from "../../src/shared/query.ts";
 import type { Note, NoteMeta } from "../../src/shared/ui-contract.ts";
 
 /**
@@ -51,6 +52,11 @@ export interface NotesApi {
   extras?: ExtrasApi;
   /** Os anexos (T2594, contrato 1.11.0). Num engine sem eles, colar e arrastar arquivo não faz nada de especial. */
   attachments?: AttachmentSource;
+  /**
+   * As buscas salvas (T2660, `savedSearches` nas settings). `list()` dá `null` num engine que ainda não as tem: a janela
+   * esconde o "Salvar esta busca".
+   */
+  savedSearches?: { list(): Promise<SavedSearch[] | null>; set(list: SavedSearch[]): Promise<SavedSearch[]> };
 }
 
 export type TrashItem = UiCapabilities["trash.list"]["result"]["items"][number];

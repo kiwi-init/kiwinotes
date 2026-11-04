@@ -11,7 +11,8 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
-import { bodyTags, hasTag, splitTagQuery, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
+import { hasPositive, parseQuery } from "../shared/query.ts";
+import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
 import { fileNameFor, folderPath, inside, notePath, VaultError } from "./paths.ts";
@@ -229,13 +230,19 @@ function tagsOf(content: string): string[] {
   return uniqueTags(tags);
 }
 
+/** O trecho em volta do termo, sem o frontmatter (revisão #2654): uma busca por tag não mostra o `--- tags: … ---`. */
 function snippetAround(content: string, term: string): string {
+  const fm = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(content);
+  const bodyAt = fm ? fm[0].length : 0;
   const { folded, map } = foldWithMap(content);
-  const at = folded.indexOf(term);
-  const start = at < 0 ? 0 : map[at]!;
-  const from = Math.max(0, start - 60);
+  // Onde o corpo começa no texto dobrado (o `map` leva do dobrado ao original).
+  let foldedBody = 0;
+  while (foldedBody < map.length && map[foldedBody]! < bodyAt) foldedBody++;
+  const at = term ? folded.indexOf(term, foldedBody) : -1;
+  const start = at < 0 ? bodyAt : map[at]!;
+  const from = Math.max(bodyAt, start - 60);
   const text = content.slice(from, start + 100).replace(/\s+/g, " ").trim();
-  return `${from > 0 ? "…" : ""}${text}${start + 100 < content.length ? "…" : ""}`;
+  return `${from > bodyAt ? "…" : ""}${text}${start + 100 < content.length ? "…" : ""}`;
 }
 
 export class Vault {
@@ -355,14 +362,18 @@ export class Vault {
     if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > 100) {
       throw new VaultError("E_BAD_ARGS", "limit must be an integer from 1 to 100");
     }
-    // `tag:x` e `#x` filtram pelas tags (T2619); o resto é a busca de sempre, no título e no texto.
-    const { tags, text } = splitTagQuery(query);
-    const terms = fold(text).split(/\s+/).filter(Boolean);
-    if (!terms.length && !tags.length) return [];
+    // Os filtros (T2660, src/shared/query.ts): palavras, "frases", tag:, path: e as exclusões com "-".
+    const q = parseQuery(query);
+    if (!hasPositive(q)) return [];
     const hits: { e: Entry; score: number }[] = [];
     for (const e of this.notes.values()) {
-      if (tags.length && !tags.every((t) => hasTag(e.meta.tags, t))) continue;
-      // Só tags: todas as notas com elas, das mais recentes para as mais velhas.
+      if (!q.tags.every((t) => hasTag(e.meta.tags, t)) || q.notTags.some((t) => hasTag(e.meta.tags, t))) continue;
+      const foldedPath = fold(e.meta.path);
+      if (!q.paths.every((p) => foldedPath.includes(p)) || q.notPaths.some((p) => foldedPath.includes(p))) continue;
+      if (q.notText.some((t) => e.foldedTitle.includes(t) || e.folded.includes(t))) continue;
+      if (!q.phrases.every((t) => e.foldedTitle.includes(t) || e.folded.includes(t))) continue;
+      const terms = [...q.words, ...q.phrases];
+      // Só filtros: todas as notas que passam, das mais recentes para as mais velhas.
       if (!terms.length) {
         hits.push({ e, score: Date.parse(e.meta.mtime) / 1e12 });
         continue;
@@ -382,15 +393,11 @@ export class Vault {
       hits.push({ e, score });
     }
     // O trecho só para os que voltam: montar para cada nota que casa custava mais que a busca (288 ms com 1.000 notas).
+    const first = q.phrases[0] ?? q.words[0] ?? (q.tags[0] ? `#${fold(q.tags[0])}` : "");
     return hits
       .sort((a, b) => b.score - a.score || a.e.meta.path.localeCompare(b.e.meta.path))
       .slice(0, max)
-      .map(({ e, score }) => ({
-        path: e.meta.path,
-        title: e.meta.title,
-        snippet: snippetAround(e.content, terms[0] ?? `#${fold(tags[0]!)}`),
-        score,
-      }));
+      .map(({ e, score }) => ({ path: e.meta.path, title: e.meta.title, snippet: snippetAround(e.content, first), score }));
   }
 
   /** A árvore das tags do vault, com quantas notas cada uma tem (T2619). */
@@ -451,7 +458,7 @@ export class Vault {
    * Cria a nota. Com `template` (o path de uma nota modelo, T2619), o conteúdo é o do modelo com `{{title}}`, `{{date}}`
    * e `{{time}}` trocados; o título trocado é o nome final ("Ata 2" se "Ata" já existe).
    */
-  async create(folder: unknown, title: unknown, content: unknown = "", template?: unknown, now: Date = new Date()): Promise<Note> {
+  async create(folder: unknown, title: unknown, content: unknown = "", template?: unknown, now: Date = new Date(this.now())): Promise<Note> {
     const dir = folderPath(folder ?? "");
     if (typeof content !== "string" || content.length > 5_000_000) throw new VaultError("E_BAD_ARGS", "content must be a string up to 5 MB");
     const model = template === undefined ? null : await this.get(template);

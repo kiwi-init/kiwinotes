@@ -89,3 +89,14 @@ test("modelos: a pasta das settings, e o notes.create com template troca as vari
   expect(await call("settings.set", { templatesFolder: "../fora" })).toMatchObject({ ok: false, code: "E_OUTSIDE_VAULT" });
   expect(await call("settings.set", { templatesFolder: "Coisas/Modelos" })).toMatchObject({ ok: true, value: { templatesFolder: "Coisas/Modelos" } });
 });
+
+test("settings.set { savedSearches } (T2660): nome e busca, sem repetir a busca", async () => {
+  const { call } = await setup({});
+  expect(await call("settings.set", { savedSearches: [{ name: "Projetos", query: "tag:projeto -tag:velho" }] })).toMatchObject({
+    ok: true,
+    value: { savedSearches: [{ name: "Projetos", query: "tag:projeto -tag:velho" }] },
+  });
+  expect(await call("settings.set", { savedSearches: [{ name: "", query: "x" }] })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+  expect(await call("settings.set", { savedSearches: [{ name: "a", query: "x" }, { name: "b", query: "x" }] })).toMatchObject({ ok: false });
+  expect(await call("settings.set", { savedSearches: "x" })).toMatchObject({ ok: false });
+});

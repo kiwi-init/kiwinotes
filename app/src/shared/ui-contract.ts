@@ -35,7 +35,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.10.0 (T2593): a nota do dia (`notes.daily`, `dailyFolder` nas settings), `notes.createFromLink`, "Mencionada sem
 //   link" (`notes.unlinkedMentions|linkMentions`) e a Lixeira (`trash.list|empty|reveal`). Só acréscimo.
 // 1.11.0 (T2594): os anexos (`attachments.save|read|rename`) e a `attachmentsFolder` nas settings. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.11.0";
+// 1.12.0 (T2660): a busca com filtros no `notes.search` ("frase", path:, - para excluir) e as `savedSearches` nas
+//   settings. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.12.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -151,6 +153,11 @@ export interface UiCapabilities {
   "folders.move": { args: { path: string; parent: string }; result: { path: string; moved: number; updatedLinks: number } };
   /** Com o que tem dentro: espera o "Desfazer" (`notes.restore`) como a nota. */
   "folders.delete": { args: { path: string }; result: true };
+  /**
+   * Palavras no título ou no texto, sem acento nem maiúscula. Com filtros (1.12.0, src/shared/query.ts): `"frase
+   * exata"`, `tag:x` ou `#x` (e as filhas), `path:pedaço` (ou `path:"com espaço"`), e `-` antes de qualquer um para
+   * excluir. Só filtros: as notas que passam, das mais recentes. Só exclusões: nada.
+   */
   "notes.search": { args: { query: string; limit?: number }; result: SearchHit[] };
   "notes.backlinks": { args: { path: string }; result: Backlink[] };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */

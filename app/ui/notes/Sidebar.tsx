@@ -5,6 +5,7 @@
 import { type DragEvent, type ReactElement, useEffect, useRef, useState } from "react";
 
 import type { TreeNode } from "./tree.ts";
+import type { SavedSearch } from "../../src/shared/query.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
 
 /** Em que o botão direito (ou o arrastar) caiu. */
@@ -29,6 +30,10 @@ export interface SidebarProps {
   onOpen(path: string): void;
   onSelectFolder(folder: string): void;
   onMenu(e: { x: number; y: number }, target: SideTarget): void;
+  /** As buscas salvas (T2660): um clique abre a busca; o × tira da lista. */
+  saved?: SavedSearch[];
+  onSaved?(query: string): void;
+  onUnsave?(query: string): void;
   /** As tags do vault em árvore (T2619); um clique busca as notas com ela. */
   tags?: TagNode[];
   onTag?(tag: string): void;
@@ -210,6 +215,24 @@ export function Sidebar(p: SidebarProps) {
         <>
           <div className="kn-side-head">Fixadas</div>
           {p.pinned.map((n) => noteItem({ path: n.path, name: n.title }, 0, `p:${n.path}`, false))}
+          <div className="kn-side-gap" />
+        </>
+      ) : null}
+      {!searching && p.saved?.length && p.onSaved ? (
+        <>
+          <div className="kn-side-head">Buscas salvas</div>
+          {p.saved.map((s) => (
+            <div key={`s:${s.query}`} className="kn-side-saved">
+              <button type="button" className="kn-side-item" data-kind="search" title={s.query} onClick={() => p.onSaved?.(s.query)}>
+                <span className="kn-side-name">{s.name}</span>
+              </button>
+              {p.onUnsave ? (
+                <button type="button" className="kn-side-x" aria-label={`Tirar a busca “${s.name}”`} title="Tirar da lista" onClick={() => p.onUnsave?.(s.query)}>
+                  ×
+                </button>
+              ) : null}
+            </div>
+          ))}
           <div className="kn-side-gap" />
         </>
       ) : null}

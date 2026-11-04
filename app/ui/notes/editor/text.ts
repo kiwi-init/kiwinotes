@@ -93,3 +93,40 @@ export function listIndent(lines: string[], first: number, last: number, dir: 1 
 }
 
 const indentOf = (line: string) => /^ */.exec(line)![0].length;
+
+/**
+ * A barra de formatação (T2660): põe ou tira o marcador em volta da seleção (`**` negrito, `*` itálico, `` ` ``
+ * código). Se a seleção já está entre os marcadores (dentro ou logo fora dela), tira. Devolve o trecho novo e onde a
+ * seleção fica, relativos ao começo dele.
+ */
+export function toggleWrap(
+  before: string,
+  selected: string,
+  after: string,
+  marker: string,
+): { from: number; to: number; insert: string; selFrom: number; selTo: number } {
+  const n = marker.length;
+  // Seleção que inclui os marcadores: "**texto**".
+  if (selected.length >= 2 * n && selected.startsWith(marker) && selected.endsWith(marker) && !(marker === "*" && selected.startsWith("**") && !selected.startsWith("***"))) {
+    const inner = selected.slice(n, -n);
+    return { from: 0, to: selected.length, insert: inner, selFrom: 0, selTo: inner.length };
+  }
+  // Marcadores logo fora da seleção: "**|texto|**".
+  if (before.endsWith(marker) && after.startsWith(marker) && !(marker === "*" && before.endsWith("**") && after.startsWith("**") && !before.endsWith("***"))) {
+    return { from: -n, to: selected.length + n, insert: selected, selFrom: 0, selTo: selected.length };
+  }
+  return { from: 0, to: selected.length, insert: `${marker}${selected}${marker}`, selFrom: n, selTo: n + selected.length };
+}
+
+/** O link da barra: `[texto]()`, com o cursor dentro dos parênteses para colar o endereço. */
+export function wrapLink(selected: string): { insert: string; cursor: number } {
+  const label = selected.replace(/([\[\]])/g, "\\$1");
+  return { insert: `[${label}]()`, cursor: label.length + 3 };
+}
+
+/** O cabeçalho da barra: a linha vira "## …"; se já é cabeçalho, volta a texto. */
+export function toggleHeading(line: string): string {
+  const m = /^(#{1,6})\s+/.exec(line);
+  if (m) return line.slice(m[0].length);
+  return `## ${line.replace(/^\s+/, "")}`;
+}
