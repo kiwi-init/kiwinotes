@@ -33,6 +33,10 @@
       "press": "Meta+k"
     },
     {
+      "waitFor": ".kn-palette-q[spellcheck='false'][autocorrect='off'][autocapitalize='off'][writingsuggestions='false']",
+      "name": "o campo do ⌘K sem o corretor do macOS (T2925)"
+    },
+    {
       "type": "tag:projeto -tag:velho"
     },
     {

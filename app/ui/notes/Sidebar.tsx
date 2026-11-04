@@ -6,6 +6,7 @@ import { type DragEvent, type ReactElement, useEffect, useRef, useState } from "
 
 import type { TreeNode } from "./tree.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
+import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
 
 /** Em que o botão direito (ou o arrastar) caiu. */
@@ -192,6 +193,7 @@ export function Sidebar(p: SidebarProps) {
       <input
         className="kn-side-search"
         type="search"
+        {...NO_TEXT_ASSIST}
         placeholder="Ir para uma nota ou pasta"
         aria-label="Ir para uma nota ou pasta"
         autoFocus

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { plainSnippet } from "./links.ts";
 import { type PaletteCommand, type PaletteItem, paletteItems } from "./palette.ts";
+import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { NoteMeta, NotesApi, SearchHit } from "./types.ts";
 
 export interface PaletteProps {
@@ -63,6 +64,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
         <input
           className="kn-palette-q"
           autoFocus
+          {...NO_TEXT_ASSIST}
           placeholder="Buscar ou criar nota"
           aria-label="Buscar ou criar nota"
           value={query}

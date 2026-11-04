@@ -9,6 +9,7 @@ import { fold } from "../notes/palette.ts";
 import { Row, Section, Segmented } from "../src/kit/index.tsx";
 import { useAppearance } from "../src/styles/appearance.ts";
 import { type ColorTheme, type ThemeAppearance, THEMES } from "../src/styles/themes.ts";
+import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 
 const SIDES: { side: ThemeAppearance; title: string }[] = [
   { side: "dark", title: "Escuros" },
@@ -111,6 +112,7 @@ export function AppearanceSection() {
             id="kn-theme-search"
             className="kn-themes-search"
             type="search"
+            {...NO_TEXT_ASSIST}
             placeholder="Buscar temas"
             aria-label="Buscar temas"
             value={query}
