@@ -55,3 +55,11 @@ test("o modelo usa o relógio do vault (revisão #2654)", async () => {
   await v.open();
   expect((await v.create("", "Dia", "", "Modelos/D.md")).content).toBe("2026-01-02");
 });
+
+test("uma frase quebrada no meio da nota casa, e a exclusão também (T2751)", async () => {
+  const v = await vault({ "A.md": "Decidimos o\norçamento   da obra.", "B.md": "orçamento da casa" });
+  const paths = (q: string) => v.search(q).map((h) => h.path).sort();
+  expect(paths('"decidimos o orcamento"')).toEqual(["A.md"]);
+  expect(paths('"orcamento da"')).toEqual(["A.md", "B.md"]);
+  expect(paths('orcamento -"o orcamento"')).toEqual(["B.md"]);
+});
