@@ -18,9 +18,20 @@ import type { Socket } from "bun";
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { assertNotRealData } from "./guard.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
+import type { AudioInputs } from "../shared/microphone.ts";
 
 /** A imagem de fora do headless (um quadrado azul de 16 px): o roteiro testa o caminho do clique sem rede. */
 const HEADLESS_IMAGE = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGOw6blDEmIY1TCqYfhqAACorqQQpPjnMgAAAABJRU5ErkJggg==", "base64");
+
+/** As entradas de áudio do headless (T3230): só nomes, nada é aberto. É o caso do #3202, com o AirPods na saída. */
+const HEADLESS_AUDIO_INPUTS: AudioInputs = {
+  inputs: [
+    { uid: "BuiltInMicrophoneDevice", name: "Microfone (MacBook Pro)", transport: "builtin", isDefault: false },
+    { uid: "AA-BB-CC-DD-EE-FF:input", name: "AirPods Pro", transport: "bluetooth", isDefault: true },
+    { uid: "AppleUSBAudioEngine:Blue:Yeti:1", name: "Yeti Stereo Microphone", transport: "usb", isDefault: false },
+  ],
+  output: { name: "AirPods Pro", transport: "bluetooth" },
+};
 
 export interface HeadlessOptions {
   /** A pasta dos dados (o vault fica em <data>/vault). */
@@ -121,6 +132,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       console.log(`[notes] remote image (headless, sem rede): ${url}`);
       return { path: url, mime: "image/png", size: HEADLESS_IMAGE.length, dataUrl: `data:image/png;base64,${HEADLESS_IMAGE.toString("base64")}` };
     },
+    // Sem helper nem mic: uma lista fixa (a do #3202, AirPods na saída), para o seletor de microfone dos Ajustes (T3230).
+    audioInputs: async () => HEADLESS_AUDIO_INPUTS,
     ocr: stores.ocr,
     exporter: stores.exporter,
     // O headless nunca abre diálogo: a pasta do exportar vem de KIWI_EXPORT_DIR (T2684), ou o exportar dá E_CANCELED.

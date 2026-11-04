@@ -8,6 +8,8 @@ import path from "node:path";
 import { sidecarLlm } from "../cleanup/index.ts";
 import type { LlmMode } from "../cleanup/types.ts";
 import { defaultSocketPath, type Event, type Permission } from "../shared/ipc.ts";
+import type { AudioInputs } from "../shared/microphone.ts";
+import { listAudioInputs } from "./audio-inputs.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import { DEFAULT_SETTINGS, type AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
@@ -166,6 +168,15 @@ export class Session {
   async settingsChanged(settings: AppSettings): Promise<void> {
     const result = await this.sidecar.send({ type: "config.set", notesShortcut: settings.notesShortcut }).catch(() => undefined);
     if (result && !result.ok) console.warn(`[session] config.set notesShortcut: ${result.error}`);
+    // O microfone vai num `config.set` só dele (T3230): um helper de antes do #3202 que recusar o campo não leva junto o
+    // atalho das notas.
+    const mic = await this.sidecar.send({ type: "config.set", microphone: settings.microphone }).catch(() => undefined);
+    if (mic && !mic.ok) console.warn(`[session] config.set microphone: ${mic.error}`);
+  }
+
+  /** As entradas de áudio para o seletor dos Ajustes (T3230); null sem o helper, ou com um que não sabe listar. */
+  audioInputs(): Promise<AudioInputs | null> {
+    return listAudioInputs((c) => this.sidecar.send(c));
   }
 
   async dictionaryChanged(terms: DictionaryTerm[]): Promise<void> {

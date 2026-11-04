@@ -11,6 +11,7 @@ import { type AppSettings, MAX_PINNED, type SettingsPatch } from "../store/setti
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { type AttachmentData, type Attachments, attachmentsFolder } from "../notes/attachments.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
+import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
@@ -93,6 +94,8 @@ export interface CapabilityDeps {
   attachments?: Pick<Attachments, "save" | "read" | "rename">;
   /** Baixa a imagem de fora depois do clique (T2984). Sem isto, o `images.remote` dá E_NO_REMOTE_IMAGES. */
   remoteImage?(url: string): Promise<AttachmentData>;
+  /** As entradas de áudio pelo helper (T3230). Sem isto, ou sem o helper de pé, o `audio.inputs` dá E_NO_HELPER. */
+  audioInputs?(): Promise<AudioInputs | null>;
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
    * o `notes.reveal` só confere que o item existe.
@@ -326,6 +329,10 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           const list = sanitizeSavedSearches(value);
           if (list.length !== value.length) throw bad("savedSearches: each one needs a name and a query, without repeating a query");
           patch.savedSearches = list;
+        } else if (key === "microphone") {
+          // Por qual mic o ditado grava (1.18.0, T3230): o helper recebe no `config.set`.
+          if (!isMicrophoneChoice(value)) throw bad('microphone must be "auto", "builtin", "system" or "uid:<device UID>"');
+          patch.microphone = value;
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);
@@ -554,6 +561,12 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
         if (e instanceof RemoteImageError) throw new CapabilityError(e.code, e.message);
         throw e;
       }
+    },
+    "audio.inputs": async (args) => {
+      noArgs(args, "audio.inputs");
+      const got = await deps.audioInputs?.();
+      if (!got) throw new CapabilityError("E_NO_HELPER", "the helper is not running, or does not list audio inputs");
+      return got;
     },
   };
   // A lista do contrato e os handlers andam juntos.

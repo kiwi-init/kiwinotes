@@ -1,0 +1,22 @@
+{
+  "window": "hub",
+  "steps": [
+    { "invoke": "settings.set", "args": { "microphone": "auto" }, "name": "começa no Automático" },
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "waitFor": ".kn-row:has-text('Microfone') select", "name": "a linha Microfone, em Transcrição" },
+    { "expectText": ".kn-row:has-text('Microfone') .kn-row-hint", "text": "Com AirPods Pro na saída, o ditado grava pelo mic do Mac", "name": "o Automático diz o que faz com o AirPods na saída" },
+    { "expectCount": ".kn-row:has-text('Microfone') option", "count": 5, "name": "Automático, Mic do Mac, AirPods, Yeti e Padrão do sistema" },
+    { "expectCount": ".kn-row:has-text('Microfone') option:has-text('Microfone (MacBook Pro)')", "count": 0, "name": "o mic do Mac não aparece duas vezes" },
+    { "screenshot": "microfone.png", "selector": ".kn-row:has-text('Microfone')" },
+    { "select": ".kn-row:has-text('Microfone') select", "value": "builtin", "name": "escolhe o Mic do Mac" },
+    { "expectText": ".kn-row:has-text('Microfone') .kn-row-hint", "text": "sempre pelo mic do Mac", "name": "a dica acompanha" },
+    { "invoke": "settings.get", "name": "o engine gravou" },
+    { "select": ".kn-row:has-text('Microfone') select", "value": "system", "name": "Padrão do sistema" },
+    { "expectText": ".kn-row:has-text('Microfone') .kn-row-hint", "text": "abaixa", "name": "avisa que o som do AirPods abaixa" },
+    { "invoke": "settings.set", "args": { "microphone": "uid:Sumiu" }, "name": "outra janela escolhe um microfone que já saiu" },
+    { "expectText": ".kn-row:has-text('Microfone') .kn-row-hint", "text": "Desconectado", "name": "aparece como desconectado" },
+    { "expectCount": ".kn-row:has-text('Microfone') option:has-text('Microfone salvo (desconectado)')", "count": 1, "name": "e continua escolhido na lista" },
+    { "invoke": "settings.set", "args": { "microphone": "auto" }, "name": "volta ao Automático" }
+  ]
+}

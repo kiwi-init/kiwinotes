@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Kbd, Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
 import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
+import { MicrophoneRow } from "./Microphone.tsx";
 import { NotesShortcutRow } from "./NotesShortcut.tsx";
 import { OcrRow } from "./OcrRow.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
@@ -38,6 +39,7 @@ export function Settings() {
       </Section>
 
       <Section title="Transcrição">
+        <MicrophoneRow />
         <Row label="Idioma" hint="Automático aceita português e inglês na mesma frase.">
           <Segmented
             label="Idioma"
