@@ -96,11 +96,11 @@
       "name": "abre a nota"
     },
     {
-      "waitFor": ".kn-note-editor .cm-tag[data-tag='projeto/kiwi']",
+      "waitFor": ".kn-note-editor :is(.cm-tag[data-tag='projeto/kiwi'], a[href='kiwi-tag:projeto%2Fkiwi'])",
       "name": "o editor destaca a #tag"
     },
     {
-      "expectCount": ".kn-note-editor .cm-tag[data-tag='codigo']",
+      "expectCount": ".kn-note-editor :is(.cm-tag[data-tag='codigo'], a[href='kiwi-tag:codigo'])",
       "count": 0,
       "name": "e não a de dentro do código"
     },
@@ -108,7 +108,7 @@
       "screenshot": "tags-nota.png"
     },
     {
-      "click": ".kn-note-editor .cm-tag[data-tag='projeto/kiwi']",
+      "click": ".kn-note-editor :is(.cm-tag[data-tag='projeto/kiwi'], a[href='kiwi-tag:projeto%2Fkiwi'])",
       "name": "clique na #tag do texto"
     },
     {
