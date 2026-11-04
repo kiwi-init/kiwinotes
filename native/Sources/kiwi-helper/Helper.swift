@@ -119,7 +119,7 @@ final class Helper {
         // Only reads Core Audio, so it runs headless too (the Settings list the mics there).
         devicesWatcher.start { [weak self] what in
             guard let self else { return }
-            if !self.headless { self.audio.inputChanged(what) }
+            if !self.headless, self.mic.isStale(after: what) { self.audio.inputChanged(what) }
             // Only to an app that knows the event: it sent `microphone` (T3230). An older app logs an unknown type.
             if self.appKnowsMicrophone { self.emit("audio.inputs.changed", [:]) }
         }
@@ -232,7 +232,10 @@ final class Helper {
         if note { started["target"] = "note" }
         if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
         // Which mic (T3229): the app tells the person when the chosen one wasn't connected (`fellBack`).
-        if let pick = mic.last { started["microphone"] = pick.fields }
+        // The lid closed (or opened) since the engine was made: `start` makes the new one right away (T3229, #3300).
+        let stale = !headless && mic.isStale()
+        if stale { audio.inputChanged("mic changed since the warm-up") }
+        if let pick = stale ? mic.peek() : mic.last { started["microphone"] = pick.fields }
         emit("record.started", started)
         overlay.set(.listening)
         let t0 = ProcessInfo.processInfo.systemUptime

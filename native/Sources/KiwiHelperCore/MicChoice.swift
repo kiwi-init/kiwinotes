@@ -85,20 +85,28 @@ public struct MicPick: Equatable, Sendable {
 
 public enum MicPicker {
     /// Picks the mic for `choice`, given the devices connected now and the system's defaults.
+    ///
+    /// `lidClosed`: a MacBook with the lid closed cuts its built-in mic off in hardware (Apple silicon and T2). The
+    /// device stays in Core Audio's list but only hands over silence, and the watchdog can't tell: buffers do come.
+    /// So with the lid closed the built-in mic is never picked (review of T3229, #3300).
     public static func pick(
-        _ choice: MicChoice, devices: [AudioDeviceInfo], defaultInput: UInt32?, defaultOutput: UInt32?
+        _ choice: MicChoice, devices: [AudioDeviceInfo], defaultInput: UInt32?, defaultOutput: UInt32?, lidClosed: Bool = false
     ) -> MicPick {
         let inputs = devices.filter(\.hasInput)
-        let builtIn = inputs.first { $0.transport == .builtIn }
+        let builtIn = lidClosed ? nil : inputs.first { $0.transport == .builtIn }
         switch choice {
         case .system:
             return MicPick(device: nil, reason: "system default")
         case .mac:
-            guard let builtIn else { return MicPick(device: nil, reason: "no built-in mic: system default") }
+            guard let builtIn else {
+                return MicPick(device: nil, reason: lidClosed ? "lid closed, built-in mic off: system default" : "no built-in mic: system default")
+            }
             return MicPick(device: builtIn, reason: "built-in mic")
         case .device(let uid):
-            if let d = inputs.first(where: { $0.uid == uid }) { return MicPick(device: d, reason: "chosen device") }
-            var pick = pick(.auto, devices: devices, defaultInput: defaultInput, defaultOutput: defaultOutput)
+            if let d = inputs.first(where: { $0.uid == uid }), !(lidClosed && d.transport == .builtIn) {
+                return MicPick(device: d, reason: "chosen device")
+            }
+            var pick = pick(.auto, devices: devices, defaultInput: defaultInput, defaultOutput: defaultOutput, lidClosed: lidClosed)
             pick.fellBack = true
             pick.reason = "chosen device not connected; auto: \(pick.reason)"
             return pick
@@ -111,8 +119,9 @@ public enum MicPicker {
                 return MicPick(device: nil, reason: "default input isn't Bluetooth: system default")
             }
             if let builtIn { return MicPick(device: builtIn, reason: "Bluetooth output: built-in mic") }
-            if let usb = inputs.first(where: { $0.transport == .usb }) { return MicPick(device: usb, reason: "Bluetooth output: USB mic") }
-            return MicPick(device: nil, reason: "Bluetooth output, no other mic: system default")
+            let why = lidClosed ? "Bluetooth output, lid closed" : "Bluetooth output"
+            if let usb = inputs.first(where: { $0.transport == .usb }) { return MicPick(device: usb, reason: "\(why): USB mic") }
+            return MicPick(device: nil, reason: "\(why), no other mic: system default")
         }
     }
 }

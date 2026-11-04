@@ -60,4 +60,24 @@ final class MicChoiceTests: XCTestCase {
         // A UID that names an output-only device isn't a mic.
         XCTAssertTrue(MicPicker.pick(.device(uid: speakers.uid), devices: [mac, speakers], defaultInput: mac.id, defaultOutput: speakers.id).fellBack)
     }
+
+    func testWithTheLidClosedTheBuiltInMicIsNeverPicked() {
+        // AirPods with the MacBook closed on an external monitor (#3300): the built-in mic only records silence.
+        let closed = { (choice: MicChoice, devices: [AudioDeviceInfo]) in
+            MicPicker.pick(choice, devices: devices, defaultInput: self.airpods.id, defaultOutput: self.airpods.id, lidClosed: true)
+        }
+        XCTAssertEqual(closed(.auto, [mac, airpods, usb]).device, usb)
+        let noUSB = closed(.auto, [mac, airpods])
+        XCTAssertNil(noUSB.device)
+        XCTAssertTrue(noUSB.reason.contains("lid closed"))
+        let builtin = closed(.mac, [mac, airpods])
+        XCTAssertNil(builtin.device)
+        XCTAssertTrue(builtin.reason.contains("lid closed"))
+        // The built-in mic chosen by its UID falls back too.
+        let byUID = closed(.device(uid: mac.uid), [mac, airpods, usb])
+        XCTAssertEqual(byUID.device, usb)
+        XCTAssertTrue(byUID.fellBack)
+        // Lid open: as before.
+        XCTAssertEqual(MicPicker.pick(.auto, devices: [mac, airpods, usb], defaultInput: airpods.id, defaultOutput: airpods.id, lidClosed: false).device, mac)
+    }
 }

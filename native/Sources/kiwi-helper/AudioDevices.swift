@@ -1,5 +1,6 @@
 import CoreAudio
 import Foundation
+import IOKit
 import KiwiHelperCore
 
 /// The audio devices as Core Audio sees them (T3229, spec #3202). Only reads properties: no device is opened, so no
@@ -18,6 +19,16 @@ enum AudioDevices {
     }
 
     static var defaultInput: AudioDeviceID? { systemDevice(kAudioHardwarePropertyDefaultInputDevice) }
+
+    /// The MacBook's lid is closed (`AppleClamshellState` of `IOPMrootDomain`): its built-in mic is off in hardware
+    /// (#3300). Only reads the registry, no permission. A Mac without a lid has no such property: false.
+    static var lidClosed: Bool {
+        let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard root != 0 else { return false }
+        defer { IOObjectRelease(root) }
+        let value = IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+        return (value as? Bool) ?? false
+    }
     static var defaultOutput: AudioDeviceID? { systemDevice(kAudioHardwarePropertyDefaultOutputDevice) }
 
     static func info(_ id: AudioDeviceID) -> AudioDeviceInfo? {
@@ -109,10 +120,31 @@ final class MicSelection {
     /// What the last engine got: the `record.started` says it, and the log too.
     private(set) var last: MicPick?
 
+    /// The mic for a new engine; remembered as `last`.
     func pick() -> MicPick {
-        let p = MicPicker.pick(choice, devices: AudioDevices.all(), defaultInput: AudioDevices.defaultInput, defaultOutput: AudioDevices.defaultOutput)
+        let p = peek()
         last = p
         return p
+    }
+
+    /// What `pick` would give now, without remembering it. The lid is read every time: closing it between two
+    /// dictations has no Core Audio notification of its own.
+    func peek() -> MicPick {
+        MicPicker.pick(
+            choice, devices: AudioDevices.all(), defaultInput: AudioDevices.defaultInput, defaultOutput: AudioDevices.defaultOutput,
+            lidClosed: AudioDevices.lidClosed
+        )
+    }
+
+    /// Whether the engine made with `last` is on the wrong mic now. `whatChanged` is the watcher's reason: with the
+    /// system default picked, a new default input is a new mic even though the pick stays "system default". Anything
+    /// else (a virtual device appearing when Zoom opens, the output changing) only matters if the pick changes: a new
+    /// engine mid-dictation loses a moment of audio (nit in #3300).
+    func isStale(after whatChanged: String? = nil) -> Bool {
+        guard let last else { return true }
+        let now = peek()
+        if now.device?.uid != last.device?.uid { return true }
+        return now.device == nil && whatChanged == "default input device"
     }
 
     /// `audio.inputs` (agreed in #3248): the mics, which one is the default, and the output now. Only reads.
