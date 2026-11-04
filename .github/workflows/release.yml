@@ -11,6 +11,10 @@ name: release
 on:
   push:
     tags: ["v*"]
+    # Só o job `helper-cache`: guarda na `main` o helper compilado, porque um run de tag só restaura cache do próprio
+    # tag ou da `main` (T1686). O GitHub não avalia `paths` num push de tag.
+    branches: [main]
+    paths: ["native/**", "app/scripts/build-helper.ts", ".github/workflows/release.yml"]
   workflow_dispatch:
     inputs:
       rehearsal:
@@ -29,6 +33,7 @@ concurrency:
 
 jobs:
   mac:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     timeout-minutes: 90
     defaults:
@@ -61,15 +66,25 @@ jobs:
           path: ~/.hutch
           key: hutch-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/hutch-pin.json') }}
 
-      # O Build compilava o helper e o FluidAudio do zero a cada run (7,8 min de ~10, #1682). A chave leva o Swift (um
-      # Xcode novo não reaproveita objeto de outro), o Package.resolved e o nosso código; sem acerto exato, o
-      # restore-key traz as dependências já compiladas e só o nosso código recompila.
+      # O Build compilava o helper e o FluidAudio do zero a cada run (7,8 min de ~10, #1682). Primeiro o helper pronto
+      # (app/.helper, ~22 MB): com os mesmos fontes e o mesmo toolchain, o `swift build` nem roda. O que vai para o
+      # cache nunca está assinado: a assinatura é feita na cópia de dentro do .app. Sem acerto, o cache do .build
+      # (~1 GB) traz as dependências já compiladas e só o nosso código recompila.
       - name: Swift toolchain id
         id: swift
         # O Xcode e o Swift: um Xcode novo com o mesmo Swift também não reaproveita objeto (#1714).
         run: echo "id=$({ xcodebuild -version; swift --version 2>&1 | head -1; } | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # A mesma chave do job `helper-cache`. Um run de tag só vê o cache do tag e o da `main`, nunca o de um branch.
+      - name: Helper cache
+        id: helper
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/.helper
+          key: helper-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.swift', 'native/Package.resolved', 'native/Sources/**', 'app/scripts/build-helper.ts') }}
+
+      - if: steps.helper.outputs.cache-hit != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             native/.build
@@ -91,6 +106,8 @@ jobs:
         run: bun test
 
       - name: Build
+        env:
+          KIWI_HELPER_CACHED: ${{ steps.helper.outputs.cache-hit == 'true' && '1' || '' }}
         run: bun run build
 
       - name: Sign, notarize and package
@@ -144,6 +161,53 @@ jobs:
           retention-days: ${{ (github.event_name == 'workflow_dispatch' && inputs.rehearsal) && 3 || 30 }}
           path: app/out/*.dmg
           if-no-files-found: error
+
+  # Compila só o helper num push na `main` e guarda o app/.helper no cache da `main`, de onde o run do tag restaura
+  # (#1805). Assim o cache que o release assina só nasce de código que já está na main: sem secret, sem `bun install`
+  # (nenhum script de dependência roda aqui), sem `pull_request`.
+  helper-cache:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      # Igual ao job `mac`: o id do toolchain e a chave precisam bater, senão o tag não acerta.
+      - name: Swift toolchain id
+        id: swift
+        run: echo "id=$({ xcodebuild -version; swift --version 2>&1 | head -1; } | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Helper cache
+        id: helper
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/.helper
+          key: helper-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.swift', 'native/Package.resolved', 'native/Sources/**', 'app/scripts/build-helper.ts') }}
+
+      - if: steps.helper.outputs.cache-hit != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            native/.build
+            ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved') }}-${{ hashFiles('native/Package.swift', 'native/Sources/**') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved') }}-
+
+      - name: Build the helper
+        if: steps.helper.outputs.cache-hit != 'true'
+        run: bun scripts/build-helper.ts
 
   publish:
     needs: mac
