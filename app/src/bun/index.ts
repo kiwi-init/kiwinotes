@@ -54,6 +54,8 @@ const dictation = new Session(PATHS.VIEWS_FOLDER);
 session.set(dictation);
 setMenu(dictation.status());
 dictation.onStatus(setMenu);
+// O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
+dictation.sidecar.on("hotkey.notes", () => void showWindow("notes"));
 dictation.start();
 
 tray.on("tray-clicked", (event) => {

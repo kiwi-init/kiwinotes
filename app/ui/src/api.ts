@@ -53,6 +53,10 @@ export const api = {
     set: (terms: UiCapabilities["dictionary.set"]["args"]["terms"]) => invoke("dictionary.set", { terms }),
     check: (terms: UiCapabilities["dictionary.check"]["args"]["terms"]) => invoke("dictionary.check", { terms }),
   },
+  settings: {
+    get: () => invoke("settings.get", {}),
+    set: (patch: UiCapabilities["settings.set"]["args"]) => invoke("settings.set", patch),
+  },
   snippets: {
     get: () => invoke("snippets.get", {}),
     set: (snippets: UiCapabilities["snippets.set"]["args"]["snippets"]) => invoke("snippets.set", { snippets }),

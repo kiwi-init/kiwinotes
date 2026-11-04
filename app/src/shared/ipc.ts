@@ -74,6 +74,11 @@ export type Command =
        * depois viram o termo (as substituições do VoiceInk; T591). Uma string vale `{term}`.
        */
       dictionary?: (string | { term: string; aliases?: string[] })[];
+      /**
+       * O atalho que abre a janela Notas (T1499): "control+option+n" (os modificadores e uma letra ou um dígito,
+       * com pelo menos ⌃, ⌥ ou ⌘), ou null para desligar. Sem ele, o helper não vigia combinação nenhuma.
+       */
+      notesShortcut?: string | null;
       /** VAD (Silero) antes do modelo: só a fala vai para o STT, e áudio sem fala dá `text: ""`. Padrão: `false`. */
       vad?: boolean;
     }
@@ -172,6 +177,8 @@ export type Event =
   | { type: "hotkey.down"; key: HotkeyKey }
   | { type: "hotkey.up"; key: HotkeyKey }
   | { type: "hotkey.toggle"; on: boolean }
+  /** O atalho do `notesShortcut` foi apertado: o app abre ou traz para a frente a janela Notas (T1499). */
+  | { type: "hotkey.notes" }
   /** O sidecar começa a gravar sozinho no hotkey.down, para não perder a primeira sílaba. */
   /**
    * `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). `target: "note"`: a nota
@@ -257,6 +264,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "hotkey.down",
   "hotkey.up",
   "hotkey.toggle",
+  "hotkey.notes",
   "record.started",
   "record.stopped",
   "record.cancelled",

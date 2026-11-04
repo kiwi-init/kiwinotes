@@ -11,6 +11,7 @@ bun dev        # builda a UI, abre o app na barra de menu, com ELECTROBUN_AGENT_
 bun dev:hmr    # igual, mas as janelas carregam do Vite (porta 5178) com HMR
 bun test       # lógica TS (IPC, limpeza, a lógica e o editor da janela Notas…)
 bun scripts/notes-ui-check.ts   # a janela Notas num Chromium headless (sem janela na tela), contra o vault de mentira
+bun scripts/settings-ui-check.ts   # o atalho das notas nas Configurações, num WebKit headless com a CSP das views
 bun run typecheck   # pede o devkit: numa worktree nova, rode antes `bun run prepare:eb` (ou um build)
 bun run ui:build    # as UIs do AppEngine, uma por janela, em dist/<janela> (ADR 0006)
 ```

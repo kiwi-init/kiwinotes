@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Kbd, mount, Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
+import { NotesShortcutRow } from "./NotesShortcut.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 
 function Settings() {
@@ -29,6 +30,7 @@ function Settings() {
         <Row label="Duas batidas travam a gravação" hint="Para ditados longos, sem segurar a tecla.">
           <Switch label="Duas batidas travam a gravação" checked={toggle} onChange={setToggle} />
         </Row>
+        <NotesShortcutRow />
       </Section>
 
       <Section title="Transcrição">

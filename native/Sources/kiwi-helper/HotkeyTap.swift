@@ -10,9 +10,13 @@ final class HotkeyTap {
         case down(TimeInterval, note: Bool)
         case up(TimeInterval)
         case otherKey
+        /// The combination that opens the Notes window was pressed (`hotkey.notes`, T1499).
+        case notesShortcut
     }
 
     var key: HotkeyKey
+    /// The combination that opens the Notes window; nil: off (until the app sends it in `config.set`).
+    var notesCombo: KeyCombo?
     private let onEvent: (Event) -> Void
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -91,6 +95,11 @@ final class HotkeyTap {
             }
         case .keyDown:
             if keyIsDown { onEvent(.otherKey) }
+            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            let repeated = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            if let combo = notesCombo, combo.matches(keyCode: code, flags: event.flags.rawValue, autorepeat: repeated) {
+                onEvent(.notesShortcut)
+            }
         default:
             break
         }

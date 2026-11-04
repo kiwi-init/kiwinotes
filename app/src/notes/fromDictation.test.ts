@@ -215,6 +215,7 @@ describe("history.toNote, a capacidade do Histórico (T1320)", () => {
       snippets: { load: async () => [], save: async (s) => s },
       history,
       dictationNotes: notes,
+      settings: { load: async () => ({ notesShortcut: null }), save: async () => ({ notesShortcut: null }) },
       clipboardWrite: () => {},
       notes: v,
     });
