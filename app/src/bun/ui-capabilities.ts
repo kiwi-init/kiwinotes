@@ -11,6 +11,7 @@ import { type AppSettings, MAX_PINNED } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
+import { checkAppearancePatch } from "../shared/appearance.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
@@ -217,6 +218,11 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           patch.notesShortcut = value;
         } else if (key === "pinned") {
           patch.pinned = pinnedList(value);
+        } else if (key === "appearance") {
+          // Só os campos dados (1.8.0, T2503): o resto da Aparência fica como estava.
+          const checked = checkAppearancePatch(value);
+          if (!checked.ok) throw bad(`settings.set: ${checked.error}`);
+          patch.appearance = { ...(await deps.settings.load()).appearance, ...checked.patch };
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);

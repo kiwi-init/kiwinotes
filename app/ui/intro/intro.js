@@ -9,7 +9,12 @@
   const fit = document.getElementById("fit");
   const cat = document.getElementById("cat-layer");
   const orb = document.getElementById("orb");
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // O "Reduzir movimento" do macOS, ou o Movimento "Reduzido" da Aparência do app (T2503): a cópia que as janelas
+  // guardam, na hora, e o valor do engine antes de a linha do tempo começar.
+  let reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  try {
+    if (JSON.parse(localStorage.getItem("kn-appearance") || "null")?.motion === "reduced") reduced = true;
+  } catch {}
   // No app: a UI subiu (o AppEngine conta o boot como bom; sem isso, em 5 s ele volta para a UI anterior).
   const engine = window.engine;
   engine?.ready();
@@ -152,8 +157,15 @@
   document.getElementById("again").addEventListener("click", play);
   // A linha do tempo começa depois do 1º frame: a carga (pintar o gato parado, decodificar os bitmaps) não come o
   // começo da animação.
+  // No app, pergunta antes ao engine pelo Movimento (no máximo 300 ms: a intro nunca espera mais que isso).
+  const prefs = engine && engine.has && engine.has("settings.get")
+    ? Promise.race([
+        engine.invoke("settings.get", {}).then((s) => { if (s && s.appearance && s.appearance.motion === "reduced") reduced = true; }, () => {}),
+        new Promise((r) => setTimeout(r, 300)),
+      ])
+    : Promise.resolve();
   if (params.has("t")) play();
-  else requestAnimationFrame(() => requestAnimationFrame(play));
+  else prefs.then(() => requestAnimationFrame(() => requestAnimationFrame(play)));
 
   // ?t=2.4: congela o frame daquele instante (para a prancha), sem depender do relógio.
   if (params.has("t")) {

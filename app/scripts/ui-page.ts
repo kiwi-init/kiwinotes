@@ -242,7 +242,7 @@ function engineShim(contract: { version: string; capabilities: string[] }) {
 }
 
 /** Os eventos do engine que vão à página (os `UiEvents` do contrato). */
-const PAGE_EVENTS = new Set(["notes.changed", "history.added"]);
+const PAGE_EVENTS = new Set(["notes.changed", "history.added", "settings.changed"]);
 
 /**
  * Abre a janela: build, servidor, contexto (escala, tema, tamanho, movimento), a ponte ao engine e a espera pelo

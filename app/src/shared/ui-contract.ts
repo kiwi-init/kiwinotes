@@ -25,7 +25,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.7.0 (T2468): as pastas (`folders.*`), `notes.move|duplicate|restore|reveal`, o `tree` no `notes.list`, o `ctime` no
 //   `NoteMeta` e o `pinned` nas settings. O `notes.delete` passa a esperar 10 min antes da Lixeira (o "Desfazer"). Só
 //   acréscimo.
-export const UI_CONTRACT_VERSION = "1.7.0";
+// 1.8.0 (T2503): a Aparência em `AppSettings.appearance` (o `settings.set` aceita só parte dela) e o evento
+//   `settings.changed`, que vai a todas as janelas. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.8.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -169,6 +171,8 @@ export interface UiEvents {
   "hub.navigate": { section: HubSection };
   /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */
   "updates.status": UpdatesView;
+  /** As Configurações mudaram (1.8.0): todas as janelas trocam a Aparência na hora, sem reiniciar. */
+  "settings.changed": AppSettings;
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

@@ -8,7 +8,7 @@ import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
-import type { AppSettings } from "../store/settings.ts";
+import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { followPinned, reconcileMoves, Vault } from "./vault.ts";
 
 const snap = (o: Record<string, [number, string]>) => new Map(Object.entries(o).map(([p, [ino, version]]) => [p, { ino, version }]));
@@ -69,7 +69,7 @@ describe("de ponta a ponta, com o watcher", () => {
       writeFileSync(path.join(root, rel), content);
     }
     const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
-    let settings: AppSettings = { notesShortcut: null, pinned };
+    let settings: AppSettings = { ...DEFAULT_SETTINGS, notesShortcut: null, pinned };
     const caps = uiCapabilities({
       dictionary: { load: async () => [], save: async (t) => t },
       snippets: { load: async () => [], save: async (s) => s },
@@ -100,10 +100,10 @@ describe("de ponta a ponta, com o watcher", () => {
       history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
       dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
       settings: {
-        load: async () => ({ notesShortcut: null, pinned: ["Sumiu.md"] }),
+        load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null, pinned: ["Sumiu.md"] }),
         save: async () => {
           if (fail) throw new Error("EIO: disk");
-          return { notesShortcut: null, pinned: [] };
+          return { ...DEFAULT_SETTINGS, notesShortcut: null, pinned: [] };
         },
       },
       clipboardWrite: () => {},

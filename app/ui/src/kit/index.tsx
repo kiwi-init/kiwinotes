@@ -14,6 +14,7 @@ import { createRoot } from "react-dom/client";
 
 import { engineReady } from "../api.ts";
 import { TopBar, useInHub } from "../topbar.tsx";
+import { startAppearance } from "../styles/appearance.ts";
 
 declare global {
   interface Window {
@@ -30,6 +31,8 @@ function Booted({ children }: { children: ReactNode }) {
 
 /** Monta a janela em #root. */
 export function mount(node: ReactNode): void {
+  // A Aparência antes do primeiro render: a janela já pinta no tema escolhido (T2503).
+  startAppearance();
   const root = document.getElementById("root");
   if (!root) throw new Error("no #root");
   createRoot(root).render(<Booted>{node}</Booted>);

@@ -1,4 +1,4 @@
-/* Kiwi Notes: tokens do design system. Claro por padrão, escuro pelo sistema.
+/* Kiwi Notes: tokens do design system. As cores são as do Channels (T2503): o tema da Aparência as troca em <html>.
    Movimento no estilo do Channels: duas velocidades e um ease para fades,
    duas springs (linear()) para o que se move. */
 
@@ -37,27 +37,60 @@
   --space-6: 32px;
   --titlebar: 52px;
 
-  /* cores (claro) */
-  --bg: #f6f6f4;
+  /* cores: os tokens do Kiwi tirados do Channels Light (T2503). O tema escolhido chega por ui/src/styles/appearance.ts,
+     que escreve todas as variáveis em <html>; estes valores só valem na primeira pintura. */
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f0f0ed;
-  --surface-hover: rgba(0, 0, 0, 0.04);
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
-  --text: #1d1d1f;
-  --text-2: #6e6e73;
-  --text-3: #a1a1a6;
-  --accent: #5d9e3a; /* kiwi */
-  --accent-soft: rgba(93, 158, 58, 0.12);
-  --accent-text: #3f7a22;
+  --surface-2: #efeff1;
+  --surface-hover: rgb(0 0 0 / 0.035);
+  --border: rgb(0 0 0 / 0.06);
+  --border-strong: rgb(0 0 0 / 0.13);
+  --text: #18181b;
+  --text-2: #56565e;
+  --text-3: #6c6c74;
+  --accent: #1a56db;
+  --accent-soft: rgb(26 86 219 / 0.08);
+  --accent-text: #1a56db;
   --on-accent: #ffffff;
-  --danger: #d9443b;
-  --focus-ring: 0 0 0 3px rgba(93, 158, 58, 0.28);
+  --danger: #d1342a;
+  --focus-ring: 0 0 0 3px rgb(26 86 219 / 0.3);
+  --text-scale: 1;
 
   /* sombras */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
   --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.07), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
   --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.14), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+
+  /* Os tokens fixos do Channels (T2503), com os nomes dele, para a UI nova. Em px: o Tamanho do texto é zoom no body.
+     Os tamanhos de texto são os do Channels no Pequeno, que batem com os de hoje do Kiwi (13px nas linhas). */
+  --ui: var(--font);
+  --sans: var(--font);
+  --mono: "Paper Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --t-stamp: 11px;
+  --t-meta: 12px;
+  --t-ui: 13px;
+  --t-body: 15px;
+  --t-title: 17px;
+  --t-display: 24px;
+  --r-tick: 2px;
+  --r-tag: 6px;
+  --r-row: 8px;
+  --r-ctl: 10px;
+  --r-card: 14px;
+  --r-win: 18px;
+  --ctl: 32px;
+  --ctl-sm: 24px;
+  --gutter: 24px;
+  --card-pad: 16px;
+  --top-h: 46px;
+  --side-w: 248px;
+  --col: 760px;
+  /* Até o tema chegar (appearance.ts escreve estes em <html>). */
+  --ink: var(--text);
+  --float: var(--bg);
+  --float-2: color-mix(in srgb, var(--float) 90%, var(--text));
+  --float-3: color-mix(in srgb, var(--float) 80%, var(--text));
+  --shadow-float: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 0.08), 0 4px 12px rgb(0 0 0 / 0.06);
 
   /* movimento */
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -71,27 +104,108 @@
   --pop: 0.35s var(--pop-ease);
 }
 
+/* Escuro antes do JS: o OLED Black do Channels. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1c1e;
-    --surface: #262628;
-    --surface-2: #2e2e31;
-    --surface-hover: rgba(255, 255, 255, 0.05);
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
-    --text: #f5f5f7;
-    --text-2: #a1a1a6;
-    --text-3: #6e6e73;
-    --accent: #8cc46a;
-    --accent-soft: rgba(140, 196, 106, 0.14);
-    --accent-text: #a6d987;
-    --on-accent: #10200a;
-    --danger: #ff6961;
-    --focus-ring: 0 0 0 3px rgba(140, 196, 106, 0.3);
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --surface: #000000;
+    --surface-2: #18181a;
+    --surface-hover: rgb(255 255 255 / 0.045);
+    --border: rgb(255 255 255 / 0.08);
+    --border-strong: rgb(255 255 255 / 0.15);
+    --text: #ececef;
+    --text-2: #a3a3ab;
+    --text-3: #808089;
+    --accent: #8ab4ff;
+    --accent-soft: rgb(138 180 255 / 0.14);
+    --accent-text: #8ab4ff;
+    --on-accent: #000000;
+    --danger: #ff6259;
+    --focus-ring: 0 0 0 3px rgb(138 180 255 / 0.3);
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
     --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
     --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
   }
+}
+
+/* Paper Mono (OFL): a fonte do Channels para as palavras da máquina (horas, contagens, atalhos, ids). */
+@font-face {
+  font-family: "Paper Mono";
+  src: url("../assets/fonts/PaperMono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* A Fonte da Aparência (T2503): as mesmas do Channels, que vêm no app (OFL, licenças em ../assets/fonts). Atrás de
+   cada uma, a do sistema. */
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/Inter.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/Inter-Italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-Bold.woff2") format("woff2");
+  font-weight: 500 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-BoldItalic.woff2") format("woff2");
+  font-weight: 500 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("../assets/fonts/Atkinson.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("../assets/fonts/Atkinson-Italic.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root[data-font="inter"] {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+:root[data-font="lato"] {
+  --font: "Lato", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: "Lato", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+:root[data-font="atkinson"] {
+  --font: "Atkinson Hyperlegible Next", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: "Atkinson Hyperlegible Next", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
 }
 
 /* Retina (2x ou mais): o desenho fino e o tracking apertado da SF ficam bonitos aqui, e só aqui (T1727). */

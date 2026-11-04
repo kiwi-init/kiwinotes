@@ -13,6 +13,11 @@ body,
   margin: 0;
 }
 
+/* A largura de cada janela (ou da seção, no hub), para as telas se ajeitarem quando o Tamanho do texto aperta. */
+#root {
+  container: kn-window / inline-size;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -27,6 +32,12 @@ body {
   user-select: none;
   cursor: default;
   overflow: hidden;
+  /* O Tamanho do texto da Aparência (T2503): a janela inteira cresce junto, como o rem do Channels. */
+  zoom: var(--text-scale, 1);
+}
+
+::selection {
+  background: var(--selection, rgb(128 128 128 / 0.3));
 }
 
 button,

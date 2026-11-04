@@ -2,6 +2,7 @@
 // é de mentira e o canal é um Bun.serve em 127.0.0.1, como o canal local de dev.
 
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -57,7 +58,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [] };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE } };
   let t = 0;
   return {
     calls,
@@ -231,6 +232,38 @@ describe("contrato 1.0.0 (T1192)", () => {
       'settings.save:{"notesShortcut":null}',
       "settingsChanged:null",
     ]);
+  });
+
+  test("settings: a Aparência muda só os campos dados, e um valor ruim não grava nada (T2503)", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    expect(await call("settings.get", {})).toMatchObject({ ok: true, value: { appearance: DEFAULT_APPEARANCE } });
+    for (const bad of [
+      "dark",
+      [],
+      { mode: "sepia" },
+      { darkTheme: "Abyssal Trench" },
+      { darkTheme: "../x" },
+      { textSize: 2 },
+      { font: "comic-sans" },
+      { motion: "none" },
+      { theme: "dark" },
+    ]) {
+      expect(await call("settings.set", { appearance: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    }
+    // Um campo ruim no meio de um bom: nada grava.
+    expect(await call("settings.set", { appearance: { mode: "dark", font: "x" } })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("settings.set", { appearance: { mode: "dark", darkTheme: "abyssal-trench" } })).toMatchObject({
+      ok: true,
+      value: { notesShortcut: "control+option+n", appearance: { ...DEFAULT_APPEARANCE, mode: "dark", darkTheme: "abyssal-trench" } },
+    });
+    // O resto fica: só a fonte muda.
+    expect(await call("settings.set", { appearance: { font: "inter" } })).toMatchObject({
+      ok: true,
+      value: { appearance: { ...DEFAULT_APPEARANCE, mode: "dark", darkTheme: "abyssal-trench", font: "inter" } },
+    });
+    expect(f.calls.filter((c) => c.startsWith("settings.save"))).toHaveLength(2);
   });
 
   test("clipboard.write: só texto, com limite de tamanho e de ritmo (#1199)", async () => {

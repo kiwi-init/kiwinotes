@@ -1,8 +1,9 @@
-// As Configurações que o engine guarda (T1499): `settings.json`, ao lado do dicionário e dos snippets. Por enquanto só o
-// atalho da janela Notas; o resto da tela de Configurações ainda é casca.
+// As Configurações que o engine guarda (T1499): `settings.json`, ao lado do dicionário e dos snippets. O atalho da janela
+// Notas e a Aparência (T2503); o resto da tela de Configurações ainda é casca.
 
 import path from "node:path";
 
+import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shared/appearance.ts";
 import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
 import { readJson, writeJson } from "./files.ts";
 
@@ -14,12 +15,14 @@ export interface AppSettings {
    * mexer no arquivo da pessoa por uma preferência da UI; o engine corrige quando elas mudam de nome, de pasta ou somem.
    */
   pinned: string[];
+  /** Modo, temas, texto, fonte e movimento, para todas as janelas (T2503). */
+  appearance: Appearance;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [] };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE };
 
 /** A lista de fixadas que vale: strings curtas, sem repetir, até `MAX_PINNED` (a validação de caminho é de quem grava). */
 export function sanitizePinned(input: unknown): string[] {
@@ -37,6 +40,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
   return {
     notesShortcut: "notesShortcut" in o && isNotesShortcut(o.notesShortcut) ? o.notesShortcut : DEFAULT_SETTINGS.notesShortcut,
     pinned: sanitizePinned(o.pinned),
+    appearance: sanitizeAppearance(o.appearance),
   };
 }
 

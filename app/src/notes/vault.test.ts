@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -258,13 +259,13 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
       snippets: { load: async () => [], save: async (s) => s },
       history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
       dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
-      settings: { load: async () => ({ notesShortcut: null, pinned: [] }), save: async () => ({ notesShortcut: null, pinned: [] }) },
+      settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
       clipboardWrite: () => {},
       notes: v,
     });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
 
-    expect(UI_CONTRACT_VERSION).toBe("1.7.0");
+    expect(UI_CONTRACT_VERSION).toBe("1.8.0");
     expect(UI_CAPABILITIES).toContain("notes.resolve");
     expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
     expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });

@@ -1,0 +1,136 @@
+/* Configurações › Aparência (T2503): a grade de temas do Channels, dentro do cartão da seção. */
+
+.kn-themes {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 0.5px solid var(--border);
+}
+
+.kn-themes-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.kn-themes-title {
+  flex: 1;
+  font-weight: 500;
+}
+
+.kn-themes-search {
+  width: 200px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  outline: none;
+}
+
+.kn-themes-search:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.kn-themes-search::placeholder {
+  color: var(--text-3);
+}
+
+.kn-themes-group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.kn-themes-sub {
+  font: var(--text-xs) / 1.4 var(--font-mono);
+  color: var(--text-3);
+}
+
+.kn-themes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--space-3);
+}
+
+.kn-theme {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  min-width: 0;
+}
+
+.kn-theme-preview {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  height: 56px;
+  padding: 10px;
+  border: 1px solid;
+  border-radius: var(--radius-md);
+  transition: box-shadow var(--fast) var(--ease);
+}
+
+.kn-theme-preview i {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+.kn-theme-preview b {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.kn-theme:hover .kn-theme-preview {
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+
+.kn-theme[aria-pressed="true"] .kn-theme-preview {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.kn-theme:focus-visible {
+  outline: none;
+}
+
+.kn-theme:focus-visible .kn-theme-preview {
+  box-shadow: var(--focus-ring);
+}
+
+.kn-theme:active .kn-theme-preview {
+  transform: scale(0.96);
+  transition: transform var(--pop);
+}
+
+.kn-theme-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.kn-theme[aria-pressed="true"] .kn-theme-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.kn-themes-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.kn-themes-empty {
+  margin: 0;
+  color: var(--text-3);
+}
