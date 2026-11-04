@@ -34,15 +34,37 @@ function trace(src: string, P: { EAR_L: number[][]; EXTEND: number }) {
       const lum = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const lb = lum(bg[0], bg[1], bg[2]);
       // O alfa (pela luminância: o que é mais escuro que o fundo), da metade esquerda espelhada.
-      const A = new Float32Array(N);
+      const A = new Float32Array(N), CH = new Float32Array(N);
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const xs = x < 256 ? x : 511 - x, q = (y * W + xs) * 4;
-        let a = Math.max(0, 1 - lum(ph[q] / 255, ph[q + 1] / 255, ph[q + 2] / 255) / lb);
+        const r = ph[q] / 255, g = ph[q + 1] / 255, b = ph[q + 2] / 255;
+        let a = Math.max(0, 1 - lum(r, g, b) / lb);
         a *= sm((a - 0.03) / 0.07);
         A[y * W + x] = a;
+        CH[y * W + x] = Math.max(r, g, b) - Math.min(r, g, b);
       }
       // A cabeça da referência termina no queixo; abaixo de y≈470 é só névoa, que não entra na silhueta.
-      const head = (p: number) => A[p] * (1 - sm(((p - (p % W)) / W - 440) / 40));
+      const head = (p: number) => A[p] * (1 - sm(((p - (p % W)) / W - 455) / 30));
+      // Binário no nível 0,75: o preto da cabeça (#101010) dá alfa 0,93; o arco e o halo coloridos ficam em 0,5 e
+      // saem. O arco por dentro do topo da cabeça deixaria um sulco: um fechamento morfológico (dilata e erode 10 px)
+      // tapa ele sem mudar a forma de fora.
+      const boxBlur = (src: Float32Array, r: number) => {
+        let a = Float32Array.from(src), b = new Float32Array(N);
+        for (let pass = 0; pass < 2; pass++) {
+          for (let y = 0; y < H; y++) { let acc = 0; for (let x = -r; x <= r; x++) acc += a[y * W + Math.min(W - 1, Math.max(0, x))];
+            for (let x = 0; x < W; x++) { b[y * W + x] = acc / (2 * r + 1); acc += a[y * W + Math.min(W - 1, x + r + 1)] - a[y * W + Math.max(0, x - r)]; } }
+          for (let x = 0; x < W; x++) { let acc = 0; for (let y = -r; y <= r; y++) acc += b[Math.min(H - 1, Math.max(0, y)) * W + x];
+            for (let y = 0; y < H; y++) { a[y * W + x] = acc / (2 * r + 1); acc += b[Math.min(H - 1, y + r + 1) * W + x] - b[Math.max(0, y - r) * W + x]; } }
+        }
+        return a;
+      };
+      const closing = (m: Float32Array, r: number) => {
+        const d = boxBlur(m, r).map((v) => (v > 0.01 ? 1 : 0));
+        return boxBlur(d, r).map((v) => (v > 0.99 ? 1 : 0));
+      };
+      // Abaixo dos olhos a referência já é meio névoa (alfa 0,6 a 0,8): o nível cai para 0,6 ali, senão o queixo vira um V.
+      const level = (p: number) => ((p - (p % W)) / W < 340 ? 0.75 : 0.6);
+      const headBin = closing(Float32Array.from({ length: N }, (_, p) => (head(p) > level(p) || (head(p) > 0.4 && CH[p] > 0.12) ? 1 : 0)), 14);
       const poly = (pts: number[][]) => {
         const c = canvas(); const x = c.getContext("2d")!; x.fillStyle = "#fff"; x.beginPath();
         pts.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath(); x.fill();
@@ -51,13 +73,18 @@ function trace(src: string, P: { EAR_L: number[][]; EXTEND: number }) {
         return m;
       };
       const mirror = (pts: number[][]) => pts.map(([x, y]) => [511 - x, y]);
-      const extend = (pts: number[][]) => pts.map(([x, y], i) => (i >= 3 ? [x, y + P.EXTEND] : [x, y]));
+      // A região da orelha é tudo acima da linha da base (pontos 3–6), com cantos bem para fora: assim a orelha inteira
+      // da máscara entra nela, e o que sobra para a cabeça termina na linha da base. A orelha em si desce EXTEND px.
+      const region = (base: number[][], ext: number) => [...base.map(([x, y]) => [x, y + ext]), [0, 340 + ext], [0, 0], [base[0][0] + 60, 0]];
       const earL = P.EAR_L, earR = mirror(P.EAR_L);
-      const cutL = poly(earL), cutR = poly(earR), fullL = poly(extend(earL)), fullR = poly(extend(earR));
+      const baseL = earL.slice(3), baseR = mirror(earL).slice(3);
+      const regionR = (base: number[][], ext: number) => region(mirror(base), ext).map(([x, y]) => [511 - x, y]);
+      const cutL = poly(region(baseL, 0)), cutR = poly(regionR(baseR, 0));
+      const fullL = poly(region(baseL, P.EXTEND)), fullR = poly(regionR(baseR, P.EXTEND));
       const bin = (w: (p: number) => number) => { const m = new Uint8Array(N); for (let p = 0; p < N; p++) m[p] = w(p) > 0.5 ? 1 : 0; return m; };
-      const mHead = bin((p) => head(p) * (1 - cutL[p]) * (1 - cutR[p]));
-      const mEarL = bin((p) => head(p) * fullL[p]);
-      const mEarR = bin((p) => head(p) * fullR[p]);
+      const mHead = bin((p) => headBin[p] * (1 - cutL[p]) * (1 - cutR[p]));
+      const mEarL = bin((p) => headBin[p] * fullL[p]);
+      const mEarR = bin((p) => headBin[p] * fullR[p]);
       // O contorno de uma máscara binária (Moore, sentido horário), do maior componente: começa no 1º pixel de cima.
       const contour = (m: Uint8Array) => {
         const at = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && m[y * W + x] === 1;
@@ -111,6 +138,7 @@ function trace(src: string, P: { EAR_L: number[][]; EXTEND: number }) {
         return d + " Z";
       };
       const simplify = (m: Uint8Array) => rdp([...contour(m), contour(m)[0]], 1.4).slice(0, -1);
+      const cHead = contour(mHead); if (cHead.length < 10) { resolve({ svg: `<!-- contorno vazio: ${cHead.length} -->`, png: "" }); return; }
       const pHead = pathOf(simplify(mHead)), pEarL = pathOf(simplify(mEarL)), pEarR = pathOf(simplify(mEarR));
       const pivot = (ear: number[][]) => { const b = ear.slice(3); const x = b.reduce((s, p) => s + p[0], 0) / b.length, y = b.reduce((s, p) => s + p[1], 0) / b.length; return [Math.round(x), Math.round(y)]; };
       const [plx, ply] = pivot(earL), [prx, pry] = pivot(earR);
@@ -126,9 +154,9 @@ function trace(src: string, P: { EAR_L: number[][]; EXTEND: number }) {
       // A prévia: o raster (o alfa espelhado, em #101010) e o vetor, lado a lado sobre preto, com os olhos.
       const prev = canvas(W * 2 + 16, H); const px = prev.getContext("2d")!;
       px.fillStyle = "#000"; px.fillRect(0, 0, prev.width, prev.height);
-      const ras = px.createImageData(W, H);
+      const rc = canvas(); const rx = rc.getContext("2d")!; const ras = rx.createImageData(W, H);
       for (let p = 0; p < N; p++) { ras.data[p * 4] = ras.data[p * 4 + 1] = ras.data[p * 4 + 2] = 16; ras.data[p * 4 + 3] = head(p) * 255; }
-      px.putImageData(ras, 0, 0);
+      rx.putImageData(ras, 0, 0); px.drawImage(rc, 0, 0);
       const vec = new Image();
       vec.onload = () => {
         px.drawImage(vec, W + 16, 0);
@@ -139,7 +167,8 @@ function trace(src: string, P: { EAR_L: number[][]; EXTEND: number }) {
         px.fillText("vetor (silhueta.svg, sem borda macia)", W + 16 + W / 2, H - 16);
         resolve({ svg, png: prev.toDataURL("image/png") });
       };
-      vec.src = `data:image/svg+xml;base64,${btoa(svg)}`;
+      vec.onerror = () => resolve({ svg, png: "" });
+      vec.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     };
     img.src = src;
   });
@@ -152,5 +181,5 @@ const src = `data:image/jpeg;base64,${readFileSync(path.join(here, "referencia.j
 const r: { svg: string; png: string } = await page.evaluate(`(${trace.toString()})(${JSON.stringify(src)}, ${JSON.stringify({ EAR_L, EXTEND })})`);
 await browser.close();
 writeFileSync(path.join(here, "silhueta.svg"), r.svg);
-writeFileSync(path.join(here, "silhueta.png"), Buffer.from(r.png.split(",")[1]!, "base64"));
+if (r.png) writeFileSync(path.join(here, "silhueta.png"), Buffer.from(r.png.split(",")[1]!, "base64"));
 console.log(`silhueta: ${r.svg.length} bytes em silhueta.svg; prévia em silhueta.png`);
