@@ -53,6 +53,7 @@ const geometry = `
   .K { position:absolute; inset:0; width:100%; height:100%; user-select:none; -webkit-user-drag:none; }
   #cat-final { background:#000; }
   #luz-anel { transform-origin:${origin("luz-anel",[512,430])}; }
+  #vidro { transform-origin:${origin("vidro",[512,430])}; }
   #handoff { transform-origin:${origin("vidro",[512,430])}; }
   #orelha-esquerda { transform-origin:${origin("orelha-esquerda",cam.pivos["orelha-esquerda"])}; }
   #orelha-direita { transform-origin:${origin("orelha-direita",cam.pivos["orelha-direita"])}; }

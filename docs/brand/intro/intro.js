@@ -139,10 +139,15 @@
     const formed = f => smooth(270,410,f);
     poses("luz-anel", f => ({opacity:smooth(6,48,f)*(1-smooth(150,340,f)), transform:`rotate(${f*.62}deg)`}));
     poses("luz-cabeca", f => ({opacity:smooth(6,48,f)*head(f)}));
-    poses("fundo-cabeca", f => ({opacity:head(f)}));
-    poses("cabeca", f => ({opacity:head(f)}));
+    poses("fundo-cabeca", () => ({opacity:0}));
+    poses("cabeca", () => ({opacity:0}));
     poses("cabeca-complemento", f => ({opacity:formed(f)}));
-    poses("vidro", f => ({opacity:1-head(f)}));
+    // #4063: the circle IS the head. One persistent face changes shape;
+    // a second head never fades in behind it.
+    poses("vidro", f => {
+      const p=head(f);
+      return {opacity:1, transform:`translate(${2*p}px,${-11*p}px) scale(${1-p/15},${1-p*(1-354/450)})`};
+    });
     // Reveal density throughout the fog, without a horizontal scan edge.
     for (const id of ["corpo", "corpo-final"]) {
       const layer=document.getElementById(id);
