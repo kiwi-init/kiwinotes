@@ -1,0 +1,58 @@
+{
+  "task": "T3705",
+  "approval": "#3732",
+  "canvas": {
+    "width": 2048,
+    "height": 2560
+  },
+  "source": "kiwi-cat-candidata-v2.png",
+  "blend": "source-over",
+  "opacity": 1,
+  "x": 0,
+  "y": 0,
+  "order_back_to_front": [
+    "luz.png",
+    "corpo-nevoa.png",
+    "cabeca.png",
+    "orelha-esquerda.png",
+    "orelha-direita.png",
+    "aro.png",
+    "olhos.svg"
+  ],
+  "eyes": [
+    {
+      "cx": 802.823,
+      "cy": 1279.323,
+      "r": 68.251
+    },
+    {
+      "cx": 1243.342,
+      "cy": 1279.308,
+      "r": 67.94
+    }
+  ],
+  "pivots": {
+    "orelha-esquerda": [
+      740,
+      1040
+    ],
+    "orelha-direita": [
+      1312,
+      1040
+    ],
+    "cabeca": [
+      1024,
+      1280
+    ],
+    "corpo-nevoa": [
+      1024,
+      1992
+    ],
+    "aro": [
+      1024,
+      1280
+    ]
+  },
+  "hidden_pixels": "light inpaint and eye removal are estimates; visible pixels reconstruct approved source",
+  "resolution": "generated 1122x1402, normalized to 2048x2560; not native 2K"
+}
