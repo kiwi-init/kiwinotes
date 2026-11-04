@@ -13,7 +13,7 @@
 // O `lsregister -dump Bundle` leva uns 2,5 s de CPU (11 MB de texto), então roda uma vez por versão, com `nice`, um
 // pouco depois da abertura. Só lê e desregistra: nada na tela, nenhum diálogo.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const LSREGISTER = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
@@ -43,10 +43,48 @@ export function registeredPaths(dump: string, bundleId: string): string[] {
   return out;
 }
 
-/** Os que saem: os caminhos que não existem mais. O app que está rodando nunca sai, nem se o teste disser que sumiu. */
-export function staleRegistrations(paths: readonly string[], running: string, exists: (p: string) => boolean = existsSync): string[] {
+/** Onde dá para olhar o disco sem o TCC pedir nada: a pasta de troca do update (em /Applications) e os temporários. */
+const SEM_TCC = ["/Applications/", "/private/tmp/", "/tmp/", "/private/var/folders/", "/var/folders/"];
+
+export interface Disco {
+  /** Só é chamado para caminhos de `SEM_TCC`. */
+  exists: (p: string) => boolean;
+  /** Os nomes montados em /Volumes (listar /Volumes não pede permissão). */
+  volumes: () => string[];
+}
+
+const discoReal: Disco = {
+  exists: existsSync,
+  volumes: () => {
+    try {
+      return readdirSync("/Volumes");
+    } catch {
+      return [];
+    }
+  },
+};
+
+/**
+ * Os que saem: os caminhos que sumiram, decididos **pelo lugar, sem olhar onde o TCC protege** (revisão do #117).
+ * Todo build usa o mesmo bundle id, e os dos agentes ficam em `~/Documents/…`. O Spotlight registra esses `.app` no
+ * LaunchServices, e um `stat` do app instalado num caminho de Documentos, Mesa, Downloads, iCloud ou num volume pode
+ * abrir o pedido de acesso do macOS na tela da pessoa. Por isso:
+ * - em `/Applications` e nos temporários, o `stat` decide (é ali que ficam as pastas de troca, a causa principal);
+ * - em `/Volumes/<nome>/…`, sai só se `<nome>` não está mais montado (o dmg que já foi ejetado), sem olhar dentro;
+ * - o resto fica como está. O `-f` do app que está rodando já o põe na frente dos outros.
+ * O app que está rodando nunca sai.
+ */
+export function staleRegistrations(paths: readonly string[], running: string, disco: Disco = discoReal): string[] {
   const atual = path.resolve(running);
-  return paths.filter((p) => path.resolve(p) !== atual && !exists(p));
+  let montados: Set<string> | null = null;
+  return paths.filter((p) => {
+    const abs = path.resolve(p);
+    if (abs === atual) return false;
+    if (SEM_TCC.some((raiz) => abs.startsWith(raiz))) return !disco.exists(abs);
+    const vol = /^\/Volumes\/([^/]+)\//.exec(abs)?.[1];
+    if (vol) return !(montados ??= new Set(disco.volumes())).has(vol);
+    return false;
+  });
 }
 
 export type CleanResult =
@@ -70,7 +108,7 @@ export async function cleanLaunchServices(o: {
   bundle: string | null;
   markerPath: string;
   ls: LsRegister;
-  exists?: (p: string) => boolean;
+  disco?: Disco;
   now?: Date;
 }): Promise<CleanResult> {
   if (!o.bundle) return { state: "skipped", reason: "not a packaged .app" };
@@ -85,10 +123,12 @@ export async function cleanLaunchServices(o: {
     return { state: "skipped", reason: `lsregister -dump failed: ${(e as Error).message}` };
   }
   const paths = registeredPaths(dump, o.bundleId);
-  const stale = staleRegistrations(paths, o.bundle, o.exists);
+  const stale = staleRegistrations(paths, o.bundle, o.disco);
   const removed: string[] = [];
   const failed: string[] = [];
   for (const p of stale) ((await o.ls.unregister(p)) ? removed : failed).push(p);
+  // Um -u que falhou não segura a marca, de propósito: ele volta a ser tentado na próxima versão, e não a cada
+  // abertura (o dump custa ~2,5 s). Ele fica no `failed` e no log.
   // O app que está rodando, registrado de novo: ele passa a ser o registro de que o Spotlight e o Raycast lembram.
   await o.ls.register(o.bundle);
 
