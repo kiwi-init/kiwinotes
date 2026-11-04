@@ -1,3 +1,4 @@
+import CoreAudio
 import Foundation
 import KiwiHelperCore
 
@@ -7,8 +8,12 @@ final class Helper {
 
     private let connection: SocketConnection
     private let dumpDirectory: URL?
-    private let audio = AudioCapture(makeEngine: { AVMicEngine() })
-    private let defaultInput = DefaultInputWatcher()
+    /// The mic the dictation records from (T3229, spec #3202): the Mac's when the output is a Bluetooth headset.
+    private let mic: MicSelection
+    private let audio: AudioCapture
+    private let devicesWatcher = AudioDevicesWatcher()
+    /// The app sent `microphone` in a `config.set`, so it knows `audio.inputs.changed`.
+    private var appKnowsMicrophone = false
     private let overlay = Overlay()
     private let inserter = Inserter()
     private var gesture = HotkeyGesture()
@@ -37,6 +42,9 @@ final class Helper {
         self.connection = connection
         self.dumpDirectory = dumpDirectory
         self.headless = headless
+        let mic = MicSelection()
+        self.mic = mic
+        audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
         tap = HotkeyTap(key: .fn) { [weak self] event in self?.onHotkey(event) }
         audio.onLevel = { [weak self] level in
             // Level queue: send straight away, the write queue serializes it.
@@ -107,7 +115,13 @@ final class Helper {
         // `mayWarmUp` checks the mic permission (T590).
         if !headless {
             audio.warmUp()
-            defaultInput.start { [weak self] in self?.audio.inputChanged("default input device") }
+        }
+        // Only reads Core Audio, so it runs headless too (the Settings list the mics there).
+        devicesWatcher.start { [weak self] what in
+            guard let self else { return }
+            if !self.headless { self.audio.inputChanged(what) }
+            // Only to an app that knows the event: it sent `microphone` (T3230). An older app logs an unknown type.
+            if self.appKnowsMicrophone { self.emit("audio.inputs.changed", [:]) }
         }
         schedulePermissionPoll()
         prepareSTT()
@@ -217,6 +231,8 @@ final class Helper {
         var started: [String: Any] = ["reason": reason]
         if note { started["target"] = "note" }
         if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
+        // Which mic (T3229): the app tells the person when the chosen one wasn't connected (`fellBack`).
+        if let pick = mic.last { started["microphone"] = pick.fields }
         emit("record.started", started)
         overlay.set(.listening)
         let t0 = ProcessInfo.processInfo.systemUptime
@@ -349,6 +365,8 @@ final class Helper {
             }
         case "llm.complete", "llm.prewarm":
             llm.handle(message) { [weak self] ok, error, fields in self?.reply(id, ok: ok, error: error, fields) }
+        case "audio.inputs":
+            reply(id, ok: true, MicSelection.inputs())
         case "overlay.state":
             guard let name = message.string("state"), let phase = OverlayPhase(rawValue: name) else {
                 return reply(id, ok: false, error: "unknown_state")
@@ -429,7 +447,8 @@ final class Helper {
         finishRecording(samples, reason: "debug", mode: "debug")
     }
 
-    /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, notesShortcut?}` (ADR 0001). Hold and double tap share
+    /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, notesShortcut?, microphone?}` (ADR 0001; `microphone`:
+    /// T3229, "auto" | "builtin" | "system" | "uid:<UID>"). Hold and double tap share
     /// the one key. `notesShortcut`: "control+option+n", or null to turn it off (T1499).
     private func configure(_ message: InboundMessage) -> String? {
         // Check everything before changing anything: a bad value leaves the whole config as it was.
@@ -449,6 +468,11 @@ final class Helper {
         if let value = message.fields["vad"] {
             guard let flag = value as? Bool else { return "invalid_value" }
             vad = flag
+        }
+        var microphone: MicChoice?
+        if let value = message.fields["microphone"] {
+            guard let name = value as? String, let choice = MicChoice(name) else { return "invalid_value" }
+            microphone = choice
         }
         var notesCombo: KeyCombo??
         if let value = message.fields["notesShortcut"] {
@@ -472,6 +496,12 @@ final class Helper {
             if !headless { tap.start() }
         }
         if let combo = notesCombo { tap.notesCombo = combo }
+        if microphone != nil { appKnowsMicrophone = true }
+        if let choice = microphone, choice != mic.choice {
+            mic.choice = choice
+            // A new engine for the new mic; mid-recording it switches and keeps what was captured.
+            if !headless { audio.inputChanged("microphone: \(choice.value)") }
+        }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
         if language != nil || dictionary != nil || vad != nil {
