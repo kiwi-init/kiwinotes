@@ -7,7 +7,8 @@
 // 2. põe o dicionário e os snippets de test/dictation/config.json pelo engine (`dictionary.set`, `snippets.set`);
 // 3. modo `text`: test/dictation/casos.jsonl pelo `cli dictate --batch` (da limpeza para a frente, rápido);
 // 4. modo `wav`: test/dictation/falados.jsonl vira WAV com o `say` (scripts/dictation-fixtures.ts) e vai de ponta a
-//    ponta, do STT ao texto. O áudio fica na pasta temporária, nunca no repo;
+//    ponta, do STT ao texto. O áudio fica na pasta temporária, nunca no repo. Junto, o conjunto de falso positivo
+//    (test/dictation/falsos-positivos.jsonl, T1973), à parte no relatório;
 // 5. para o headless e apaga a pasta (com `--keep`, deixa e diz onde).
 //
 // Exit 0 se todos os casos passam; 1 se algum falhou; 2 uso errado. O modo wav usa o STT de verdade: na máquina
@@ -18,7 +19,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { loadSpoken, makeFixtures, missingVoices } from "./dictation-fixtures.ts";
+import { FALSE_POSITIVE_CASES, loadSpoken, makeFixtures, missingVoices } from "./dictation-fixtures.ts";
 
 const APP = path.resolve(import.meta.dir, "..");
 const CASES = path.join(APP, "test/dictation/casos.jsonl");
@@ -141,6 +142,12 @@ function runBatch(data: string, file: string, known: Map<string, string>): ModeR
   };
 }
 
+const LABELS: Record<string, string> = {
+  text: "texto (casos.jsonl)",
+  wav: "falado (falados.jsonl, say → STT)",
+  fp: "falso positivo (falsos-positivos.jsonl, say → STT)",
+};
+
 function printMode(mode: string, r: ModeResult) {
   console.log(`\n${mode}: ${r.passed}/${r.cases.length} ok${r.known ? `, ${r.known} conhecido(s)` : ""}`);
   if (r.note) console.log(`  ${r.note}`);
@@ -164,7 +171,9 @@ async function main(): Promise<number> {
     return 2;
   }
   const spoken = a.modes.includes("wav") ? loadSpoken() : [];
-  const missing = missingVoices(spoken);
+  // O conjunto de falso positivo (T1973) roda junto do falado, e sai à parte no relatório.
+  const falsePositives = a.modes.includes("wav") ? loadSpoken(FALSE_POSITIVE_CASES) : [];
+  const missing = missingVoices([...spoken, ...falsePositives]);
   if (missing.length) {
     console.error(`faltam as vozes do say: ${missing.join(", ")} (Ajustes › Acessibilidade › Conteúdo falado › Gerenciar vozes), ou rode com --only text`);
     return 1;
@@ -202,6 +211,7 @@ async function main(): Promise<number> {
       const boosting = a.boosting ? await waitBoosting(data) : "off";
       const known = new Map(spoken.filter((c) => typeof c.known === "string").map((c) => [c.name, c.known as string]));
       results.wav = runBatch(data, makeFixtures(path.join(data, "wav"), spoken), known);
+      results.fp = runBatch(data, makeFixtures(path.join(data, "fp"), falsePositives), new Map());
       results.wav.note = [`boosting do vocabulário: ${boosting}`, sttLatency(results.wav)].filter(Boolean).join(" · ");
     }
   } catch (e) {
@@ -213,7 +223,7 @@ async function main(): Promise<number> {
   }
 
   if (a.json) console.log(JSON.stringify(results, null, 2));
-  else for (const [mode, r] of Object.entries(results)) printMode(mode === "text" ? "texto (casos.jsonl)" : "falado (falados.jsonl, say → STT)", r);
+  else for (const [mode, r] of Object.entries(results)) printMode(LABELS[mode] ?? mode, r);
   const failed = Object.values(results).reduce((n, r) => n + r.failed, 0);
   if (!a.json) console.log(failed ? `\n${failed} caso(s) falharam${a.keep ? ` (dados em ${data})` : ""}` : "\ntudo ok");
   return failed ? 1 : 0;

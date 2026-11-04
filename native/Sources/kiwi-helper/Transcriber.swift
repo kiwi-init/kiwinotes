@@ -155,7 +155,9 @@ actor Transcriber {
            let rescored = await session.rescore(text: raw, tokenTimings: result.tokenTimings ?? [], audioSamples: audio),
            rescored.wasModified {
             // Swap by swap (T1973): the rescorer's answer mixes right swaps with wrong ones on Portuguese.
-            raw = VocabularyRescoreGuard.apply(original: raw, swaps: rescored.replacements.compactMap { r in
+            let timings = result.tokenTimings ?? []
+            let confidence = VocabularyRescoreGuard.wordConfidence(tokens: timings.map { ($0.token, Double($0.confidence)) })
+            raw = VocabularyRescoreGuard.apply(original: raw, confidence: confidence, swaps: rescored.replacements.compactMap { r in
                 guard r.shouldReplace, let term = r.replacementWord, let score = r.replacementScore else { return nil }
                 return .init(from: r.originalWord, to: term, margin: Double(score - r.originalScore))
             })

@@ -108,7 +108,8 @@ public enum TranscriptionLanguage: String, Sendable {
 /// dictionary terms: background speech became a term (T256), and in review "cluster de homologação" became
 /// "DICOM" and "cubectuget" became "PACS" in a clearly spoken sentence (#335). So every stretch it changes has
 /// to sound like what replaced it, and may not swallow more words than the replacement has, plus one. Since T1973
-/// each swap is judged on its own, and also needs a lead in the CTC score (`minimumMargin`).
+/// each swap is judged on its own, needs a lead in the CTC score (`minimumMargin`), and only touches what the main
+/// model heard with low confidence (`maximumConfidence`).
 /// The phonetic correction still runs on the model's text either way.
 public enum VocabularyRescoreGuard {
     /// Below this many words there is too little text to tell a term from noise: no rescoring.
@@ -120,6 +121,25 @@ public enum VocabularyRescoreGuard {
     /// The CTC model is English, so on Portuguese every word scores low and any term wins by a little: on the
     /// battery's sentences the right swaps won by 0.39, 0.63 and 1.77, and the wrong ones by 0.08 and 0.12.
     public static let minimumMargin = 0.25
+
+    /// The CTC only swaps a stretch where the main model was unsure: a word with a token below this confidence
+    /// (T1973, #2139). On the battery's sentences every token of a real word came out at 0.92 or more ("pais",
+    /// "bags", "dei com", "pacote"), and the misheard terms below it ("con" 0.36, "Pa" 0.65, "Q" 0.76, "e" 0.71).
+    public static let maximumConfidence = 0.85
+
+    /// The main model's confidence per word of its text, split on spaces as `apply` splits it: the lowest of the
+    /// word's tokens. A token that opens with a space starts a word; one without (",", ".", "is") goes on the last.
+    /// Punctuation doesn't count: the model is often unsure of the final period ("comer." had "." at 0.71), and that
+    /// let "de comer" become DICOM.
+    public static func wordConfidence(tokens: [(text: String, confidence: Double)]) -> [Double] {
+        var words: [Double] = []
+        for (text, confidence) in tokens {
+            let spoken = text.contains(where: { $0.isLetter || $0.isNumber }) ? confidence : 1
+            if text.hasPrefix(" ") || words.isEmpty { words.append(spoken) }
+            else { words[words.count - 1] = min(words[words.count - 1], spoken) }
+        }
+        return words
+    }
 
     /// One swap the rescorer proposed: the words it replaces, the term, and by how much the term's CTC score beat theirs.
     public struct Swap: Equatable {
@@ -135,9 +155,12 @@ public enum VocabularyRescoreGuard {
     /// stretch. The model splits a term it doesn't know into words ("dicom" → "de condu", "kiwi" → "Q e") and the
     /// rescorer's stretch can miss one of them, so the stretch may take one word on either side when that sounds
     /// closer to the term. Punctuation around the stretch stays.
-    public static func apply(original: String, swaps: [Swap]) -> String {
+    public static func apply(original: String, confidence: [Double], swaps: [Swap]) -> String {
         guard words(original).count >= minimumWords else { return original }
         var tokens = original.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        // Without one confidence per word, nothing says where the model was unsure: no swap.
+        guard confidence.count == tokens.count else { return original }
+        var confidence = confidence
         var replaced = Set<Int>()
         for swap in swaps where swap.margin >= minimumMargin {
             let removed = words(swap.from), inserted = words(swap.to)
@@ -156,6 +179,7 @@ public enum VocabularyRescoreGuard {
             for (s, e) in [(start, end), (start - 1, end), (start, end + 1)] {
                 let stretch = (s...e).compactMap(word)
                 guard stretch.count == e - s + 1, opensAlike(stretch, inserted),
+                      confidence[s...e].contains(where: { $0 < maximumConfidence }),
                       let d = soundDistance(stretch, inserted) else { continue }
                 if best == nil || d < best!.distance { best = (s, e, d) }
             }
@@ -164,6 +188,7 @@ public enum VocabularyRescoreGuard {
             let trail = String(tokens[best.end].reversed().prefix { !$0.isLetter && !$0.isNumber }.reversed())
             let term = swap.to.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
             tokens.replaceSubrange(best.start...best.end, with: [lead + term + trail])
+            confidence.replaceSubrange(best.start...best.end, with: [1])
             // The indices after the swap moved by the words it took away.
             let shift = best.end - best.start
             replaced = Set(replaced.map { $0 > best.end ? $0 - shift : $0 })
