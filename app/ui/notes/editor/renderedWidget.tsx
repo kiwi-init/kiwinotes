@@ -7,7 +7,7 @@
 import "./enrichedEnv.ts";
 
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Range, StateField } from "@codemirror/state";
+import { EditorSelection, type EditorState, type Range, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { useLayoutEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -171,6 +171,11 @@ function Block({ markdown, source, callbacks, onShown }: BlockProps) {
 }
 
 const roots = new WeakMap<HTMLElement, Root>();
+/** O widget de agora de cada DOM: o CodeMirror reaproveita o DOM (`updateDOM`) com outro widget, de outro texto. */
+const widgets = new WeakMap<HTMLElement, RenderedWidget>();
+
+/** Um ⌥-clique num link desenhado põe o cursor (para editar), como no editor; o clique que vem depois não abre. */
+let altClick = false;
 
 class RenderedWidget extends WidgetType {
   constructor(
@@ -194,14 +199,17 @@ class RenderedWidget extends WidgetType {
     dom.className = "cm-rendered";
     const root = createRoot(dom);
     roots.set(dom, root);
+    widgets.set(dom, this);
     this.draw(root, view, dom);
-    dom.addEventListener("mousedown", (e) => this.place(e, view, dom));
+    // Lê o widget pelo DOM: depois de um `updateDOM`, o `this` daqui é o de antes.
+    dom.addEventListener("mousedown", (e) => widgets.get(dom)?.place(e, view, dom));
     return dom;
   }
 
   updateDOM(dom: HTMLElement, view: EditorView) {
     const root = roots.get(dom);
     if (!root) return false;
+    widgets.set(dom, this);
     this.draw(root, view, dom);
     return true;
   }
@@ -210,6 +218,10 @@ class RenderedWidget extends WidgetType {
     const at = () => view.posAtDOM(dom);
     const callbacks = {
       onLinkPress: ({ url }: { url: string }) => {
+        if (altClick) {
+          altClick = false;
+          return;
+        }
         const act = linkAction(url);
         if (act?.kind === "note") this.actions.onOpenLink(act.target);
         else if (act?.kind === "tag") this.actions.onOpenTag?.(act.tag);
@@ -232,22 +244,48 @@ class RenderedWidget extends WidgetType {
   }
 
   /** Clique fora de link e de caixa: o cursor vai para o ponto do `.md` onde a pessoa clicou, e o bloco vira texto. */
-  private place(e: MouseEvent, view: EditorView, dom: HTMLElement) {
+  /**
+   * O clique fora de link e de caixa (ou um ⌥-clique num link): o cursor vai para o ponto do `.md` onde a pessoa
+   * clicou e o bloco vira texto. Com ⇧, estende a seleção; arrastando, seleciona como no resto do editor.
+   */
+  place(e: MouseEvent, view: EditorView, dom: HTMLElement) {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest("a, input, button")) return;
+    altClick = e.altKey && !!target.closest("a");
+    if (target.closest("input, button") || (target.closest("a") && !e.altKey)) return;
     e.preventDefault();
-    const from = view.posAtDOM(dom);
-    let offset = 0;
-    const caret = document.caretRangeFromPoint?.(e.clientX, e.clientY);
-    if (caret && dom.contains(caret.startContainer)) {
+    const at = view.posAtDOM(dom) + this.offsetAt(dom, e.clientX, e.clientY);
+    const anchor = e.shiftKey ? view.state.selection.main.anchor : at;
+    // O foco antes da seleção: focado depois, o navegador põe o cursor dele e o editor lê esse no lugar do nosso.
+    view.focus();
+    view.dispatch({ selection: EditorSelection.single(anchor, at), userEvent: "select.pointer" });
+    // O bloco já é texto: arrastar daqui em diante usa a posição de verdade do editor.
+    const move = (m: MouseEvent) => {
+      const head = view.posAtCoords({ x: m.clientX, y: m.clientY }, false);
+      if (head !== view.state.selection.main.head) view.dispatch({ selection: EditorSelection.single(anchor, head), userEvent: "select.pointer" });
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+
+  /** Quantos caracteres do `.md` do bloco ficam antes do ponto clicado. */
+  private offsetAt(dom: HTMLElement, x: number, y: number): number {
+    try {
+      const caret = document.caretRangeFromPoint?.(x, y);
+      if (!caret || !dom.contains(caret.startContainer)) return 0;
       const before = document.createRange();
       before.setStart(dom, 0);
       before.setEnd(caret.startContainer, caret.startOffset);
-      offset = sourceOffset(this.source, before.toString(), before.toString().length);
+      const shown = before.toString();
+      return sourceOffset(this.source, shown, shown.length);
+    } catch {
+      // Um ponto que não dá para medir (dentro de um desenho): o começo do bloco.
+      return 0;
     }
-    view.dispatch({ selection: { anchor: from + offset } });
-    view.focus();
   }
 
   destroy(dom: HTMLElement) {

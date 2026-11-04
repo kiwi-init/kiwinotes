@@ -117,6 +117,25 @@
       "name": "o parágrafo voltou a renderizar"
     },
     {
+      "click": ".kn-note-editor .cm-rendered strong:has-text('muita')",
+      "modifiers": [
+        "Shift"
+      ],
+      "name": "⇧-clique no parágrafo (o cursor está no título)"
+    },
+    {
+      "waitFor": ".kn-fmt",
+      "name": "a seleção vai do título ao clique (a barra de formatação aparece)"
+    },
+    {
+      "press": "ArrowRight",
+      "name": "desfaz a seleção"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered h1",
+      "name": "o cursor volta para o título (o parágrafo renderiza de novo)"
+    },
+    {
       "click": ".kn-note-editor .cm-rendered a[href='kiwi-note:Ana']",
       "name": "clicar no [[Ana]]"
     },
