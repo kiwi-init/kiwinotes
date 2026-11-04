@@ -9,6 +9,7 @@ import { type AppChannel, type HubSection, releaseNotesUrl, UI_WINDOWS } from ".
 import { Hub } from "./hub.ts";
 import { makeIntro } from "./intro.ts";
 import { repairInstallRegistry, runningBundle } from "./install-registry.ts";
+import { cleanLaunchServices, realLsRegister } from "./launch-services.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
 import { helperPath, Session, session, type SessionStatus } from "./session.ts";
@@ -109,6 +110,26 @@ let appChannel: AppChannel = "dev";
 void Updater.getLocalInfo().then((i) => {
   appVersion = i.version;
   appChannel = channelOf(i.channel, i.version);
+  // Os registros velhos do Kiwi no LaunchServices (T3292): as pastas de troca de cada update, os dmg montados e os
+  // builds antigos faziam o Spotlight e o Raycast não acharem o app. Uma vez por versão (a abertura depois de um
+  // update), com o app já de pé; nada na tela. Fora do dev e do KIWI_DEBUG, que são os builds dos agentes.
+  if (appChannel === "dev" || process.env.KIWI_DEBUG === "1") return;
+  const bundle = runningBundle(process.execPath);
+  setTimeout(() => {
+    void cleanLaunchServices({
+      bundleId: i.identifier,
+      version: i.version,
+      bundle,
+      markerPath: path.join(stores.dir, "launch-services.json"),
+      ls: realLsRegister(),
+    })
+      .then((r) => {
+        if (r.state === "done" && (r.removed.length || r.failed.length)) {
+          console.log(`[launch-services] removed ${r.removed.length} stale registration(s)${r.failed.length ? `, ${r.failed.length} failed` : ""}`);
+        } else if (r.state === "skipped" && r.reason.startsWith("lsregister")) console.warn(`[launch-services] ${r.reason}`);
+      })
+      .catch((e) => console.warn(`[launch-services] ${(e as Error).message}`));
+  }, 20_000);
 });
 
 // A seção Sobre do hub (T2386): a versão, o canal, as notas da versão e o "Verificar atualizações", que roda a mesma
