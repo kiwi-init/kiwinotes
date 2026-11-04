@@ -107,7 +107,9 @@ public enum TranscriptionLanguage: String, Sendable {
 /// When the CTC vocabulary rescoring may change the model's text. The rescoring sometimes swaps real words for
 /// dictionary terms: background speech became a term (T256), and in review "cluster de homologação" became
 /// "DICOM" and "cubectuget" became "PACS" in a clearly spoken sentence (#335). So every stretch it changes has
-/// to sound like what replaced it, and may not swallow more words than the replacement has, plus one.
+/// to sound like what replaced it, and may not swallow more words than the replacement has, plus one. Since T1973
+/// each swap is judged on its own, needs a lead in the CTC score (`minimumMargin`), and only touches what the main
+/// model heard with low confidence (`maximumConfidence`).
 /// The phonetic correction still runs on the model's text either way.
 public enum VocabularyRescoreGuard {
     /// Below this many words there is too little text to tell a term from noise: no rescoring.
@@ -115,47 +117,104 @@ public enum VocabularyRescoreGuard {
     /// The largest `VocabularyPhonetics.distance` between a changed stretch and its replacement.
     public static let maximumSoundDistance = 0.5
 
-    public static func accept(original: String, rescored: String) -> Bool {
-        let before = words(original), after = words(rescored)
-        guard before.count >= minimumWords else { return false }
-        return changes(before, after).allSatisfy { removed, inserted in
-            guard !removed.isEmpty, !inserted.isEmpty, removed.count <= inserted.count + 1 else { return false }
-            let a = VocabularyPhonetics.phraseKey(removed), b = VocabularyPhonetics.phraseKey(inserted)
-            // Words with accents or digits have no sound key: nothing to compare, so no swap.
-            guard !a.isEmpty, !b.isEmpty else { return false }
-            return VocabularyPhonetics.distance(a, b) <= maximumSoundDistance
+    /// The smallest lead, in average CTC log-probability per token, a term needs over the words it replaces (T1973).
+    /// The CTC model is English, so on Portuguese every word scores low and any term wins by a little: on the
+    /// battery's sentences the right swaps won by 0.39, 0.63 and 1.77, and the wrong ones by 0.08 and 0.12.
+    public static let minimumMargin = 0.25
+
+    /// The CTC only swaps a stretch where the main model was unsure: a word with a token below this confidence
+    /// (T1973, #2139). On the battery's sentences every token of a real word came out at 0.92 or more ("pais",
+    /// "bags", "dei com", "pacote"), and the misheard terms below it ("con" 0.36, "Pa" 0.65, "Q" 0.76, "e" 0.71).
+    public static let maximumConfidence = 0.85
+
+    /// The main model's confidence per word of its text, split on spaces as `apply` splits it: the lowest of the
+    /// word's tokens. A token that opens with a space starts a word; one without (",", ".", "is") goes on the last.
+    /// Punctuation doesn't count: the model is often unsure of the final period ("comer." had "." at 0.71), and that
+    /// let "de comer" become DICOM.
+    public static func wordConfidence(tokens: [(text: String, confidence: Double)]) -> [Double] {
+        var words: [Double] = []
+        for (text, confidence) in tokens {
+            let spoken = text.contains(where: { $0.isLetter || $0.isNumber }) ? confidence : 1
+            if text.hasPrefix(" ") || words.isEmpty { words.append(spoken) }
+            else { words[words.count - 1] = min(words[words.count - 1], spoken) }
         }
+        return words
+    }
+
+    /// One swap the rescorer proposed: the words it replaces, the term, and by how much the term's CTC score beat theirs.
+    public struct Swap: Equatable {
+        public let from: String, to: String, margin: Double
+        public init(from: String, to: String, margin: Double) {
+            self.from = from; self.to = to; self.margin = margin
+        }
+    }
+
+    /// The model's text with only the swaps that pass on their own (T1973). On Portuguese the rescorer makes the
+    /// right swap ("Pax" → "PACS") next to a wrong one ("caiu de novo" → "Kiwi Notes") in the same answer, and judging
+    /// the whole text threw the right ones away with it. Each swap needs the acoustic margin and to sound like its
+    /// stretch. The model splits a term it doesn't know into words ("dicom" → "de condu", "kiwi" → "Q e") and the
+    /// rescorer's stretch can miss one of them, so the stretch may take one word on either side when that sounds
+    /// closer to the term. Punctuation around the stretch stays.
+    public static func apply(original: String, confidence: [Double], swaps: [Swap]) -> String {
+        guard words(original).count >= minimumWords else { return original }
+        var tokens = original.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        // Without one confidence per word, nothing says where the model was unsure: no swap.
+        guard confidence.count == tokens.count else { return original }
+        var confidence = confidence
+        var replaced = Set<Int>()
+        for swap in swaps where swap.margin >= minimumMargin {
+            let removed = words(swap.from), inserted = words(swap.to)
+            let keys = tokens.map { words($0) }
+            /// The single word of a token no swap has touched yet, or nil.
+            func word(_ i: Int) -> String? {
+                tokens.indices.contains(i) && !replaced.contains(i) && keys[i].count == 1 ? keys[i][0] : nil
+            }
+            // The first stretch of the text with these words.
+            guard !removed.isEmpty, let start = tokens.indices.first(where: { i in
+                (0..<removed.count).allSatisfy { word(i + $0) == removed[$0] }
+            }) else { continue }
+            let end = start + removed.count - 1
+            // The stretch itself, or with one more word before or after it: the one that sounds closest.
+            var best: (start: Int, end: Int, distance: Double)?
+            for (s, e) in [(start, end), (start - 1, end), (start, end + 1)] {
+                let stretch = (s...e).compactMap(word)
+                guard stretch.count == e - s + 1, opensAlike(stretch, inserted),
+                      confidence[s...e].contains(where: { $0 < maximumConfidence }),
+                      let d = soundDistance(stretch, inserted) else { continue }
+                if best == nil || d < best!.distance { best = (s, e, d) }
+            }
+            guard let best else { continue }
+            let lead = String(tokens[best.start].prefix { !$0.isLetter && !$0.isNumber })
+            let trail = String(tokens[best.end].reversed().prefix { !$0.isLetter && !$0.isNumber }.reversed())
+            let term = swap.to.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            tokens.replaceSubrange(best.start...best.end, with: [lead + term + trail])
+            confidence.replaceSubrange(best.start...best.end, with: [1])
+            // The indices after the swap moved by the words it took away.
+            let shift = best.end - best.start
+            replaced = Set(replaced.map { $0 > best.end ? $0 - shift : $0 })
+            replaced.insert(best.start)
+        }
+        return tokens.joined(separator: " ")
+    }
+
+    /// The stretch opens with the term's letter, or both open with the K sound (c, k, q): the matcher's conservative
+    /// rule. The sound key doesn't tell b from p or g from k, so without it "bags" became "PACS" (T1973, #2097).
+    static func opensAlike(_ removed: [String], _ inserted: [String]) -> Bool {
+        guard let a = removed.first?.first, let b = inserted.first?.first else { return false }
+        return a == b || (VocabularyPhonetics.phraseKey(removed).first == "K" && VocabularyPhonetics.phraseKey(inserted).first == "K")
+    }
+
+    /// The `VocabularyPhonetics.distance` between the stretch and its replacement, or nil when they may not swap.
+    static func soundDistance(_ removed: [String], _ inserted: [String]) -> Double? {
+        guard !removed.isEmpty, !inserted.isEmpty, removed.count <= inserted.count + 1 else { return nil }
+        let a = VocabularyPhonetics.phraseKey(removed), b = VocabularyPhonetics.phraseKey(inserted)
+        // Words with accents or digits have no sound key: nothing to compare, so no swap.
+        guard !a.isEmpty, !b.isEmpty else { return nil }
+        let d = VocabularyPhonetics.distance(a, b)
+        return d <= maximumSoundDistance ? d : nil
     }
 
     static func words(_ text: String) -> [String] {
         text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
-    }
-
-    /// The stretches that differ, as (removed, inserted), from a word-level LCS alignment.
-    static func changes(_ a: [String], _ b: [String]) -> [(removed: [String], inserted: [String])] {
-        var lcs = [[Int]](repeating: [Int](repeating: 0, count: b.count + 1), count: a.count + 1)
-        for i in stride(from: a.count - 1, through: 0, by: -1) {
-            for j in stride(from: b.count - 1, through: 0, by: -1) {
-                lcs[i][j] = a[i] == b[j] ? lcs[i + 1][j + 1] + 1 : max(lcs[i + 1][j], lcs[i][j + 1])
-            }
-        }
-        var result: [(removed: [String], inserted: [String])] = []
-        var removed: [String] = [], inserted: [String] = []
-        var i = 0, j = 0
-        func flush() {
-            if !removed.isEmpty || !inserted.isEmpty { result.append((removed, inserted)) }
-            removed = []; inserted = []
-        }
-        while i < a.count || j < b.count {
-            if i < a.count, j < b.count, a[i] == b[j] {
-                flush(); i += 1; j += 1
-            } else if j < b.count, i == a.count || lcs[i][j + 1] >= lcs[i + 1][j] {
-                inserted.append(b[j]); j += 1
-            } else {
-                removed.append(a[i]); i += 1
-            }
-        }
-        flush()
-        return result
     }
 }

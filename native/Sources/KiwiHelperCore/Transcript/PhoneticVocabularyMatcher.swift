@@ -1,4 +1,4 @@
-// Portado de VoiceInk/VoiceInk/Features/Dictionary/Workflows/PhoneticVocabularyMatcher.swift @ 19546d2 (GPL-3.0). Mudanças: `public` na API (init e correct); a primeira letra pode ser c, k ou q quando as duas abrem com o som de K (`sameOpeningSound`, T591); um trecho com mais palavras que um alias não engole um conectivo (`strict`, `connectives`, T711); o resto igual.
+// Portado de VoiceInk/VoiceInk/Features/Dictionary/Workflows/PhoneticVocabularyMatcher.swift @ 19546d2 (GPL-3.0). Mudanças: `public` na API (init e correct); a primeira letra pode ser c, k ou q quando as duas abrem com o som de K (`sameOpeningSound`, T591); um trecho com mais palavras que um alias não engole um conectivo (`strict`, `connectives`, T711); num termo, o trecho que engole um conectivo só tem, fora dele, pedaços da grafia do termo (T1973); o resto igual.
 
 import Foundation
 
@@ -255,10 +255,14 @@ public struct PhoneticVocabularyMatcher: Sendable {
         // A stretch with more words than an alias may not take in a connective: "cubo de controle" is not the alias
         // "cube control" (T711). Terms still may, because there the connective is often a piece of the split name
         // ("de com" is DICOM, "PAC se" is PACS, "service A conte" is service account in the T51 clips).
-        if term.strict && words.count > term.words.count
-            && words.contains(where: { Self.connectives.contains($0) && !term.words.contains($0) }) {
-            return nil
-        }
+        let swallowsConnective = words.count > term.words.count
+            && words.contains(where: { Self.connectives.contains($0) && !term.words.contains($0) })
+        if term.strict && swallowsConnective { return nil }
+        // With a term, the other words of that stretch must be pieces of its spelling ("PAC" in PACS): "dei com" is
+        // not DICOM, because "dei" is a word of its own (T1973, #2097).
+        if swallowsConnective && words.contains(where: {
+            !Self.connectives.contains($0) && !term.words.contains($0) && !term.key.contains($0)
+        }) { return nil }
         let length = max(key.count, term.key.count)
         guard Double(min(key.count, term.key.count)) / Double(length) >= 0.65 else { return nil }
         // A canonical word must not be fuzzily changed into another vocabulary

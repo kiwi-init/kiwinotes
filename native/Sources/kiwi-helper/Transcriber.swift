@@ -32,17 +32,61 @@ actor Transcriber {
     private var useVAD = false
     private var vad: VadManager?
     private var ctc: CtcModels?
+    /// The CTC model's download or load, in the background: no dictation waits for it (T1973).
+    private var ctcLoading: Task<CtcModels?, Never>?
+    /// When the CTC last failed to load (offline, disk full): it's tried again only after `ctcRetryAfter`.
+    private var ctcFailedAt: TimeInterval?
+    static let ctcRetryAfter: TimeInterval = 10 * 60
+    /// `loading`, `ready`, `unavailable`: for the `stt.boosting` event.
+    private var onBoosting: (@Sendable (String) -> Void)?
     private var boosting: (terms: [String], session: VocabularyBoostingSession)?
     private var warmedUp = false
 
-    /// The CTC rescoring before the phonetic correction. Off: with the guard that keeps it from swapping real
-    /// words for terms (#335), it gained 0.1 point of WER over VoiceInk's matcher alone on the T51 clips (9.2% →
-    /// 9.1%) for 150–250 ms more per sentence and a 99 MB model. `--ctc` turns it on to measure (T51 real voice).
+    /// The CTC rescoring before the phonetic correction. On in the app since T1973 (harry, #1967): the phonetic
+    /// correction alone doesn't reach terms the model mishears ("dicom do pacs" → "de condu Pax"). The 99 MB model
+    /// downloads once, in the background after the main one, from the same place (ADR 0003); until it's there, or
+    /// when it can't download, dictation runs without it. `KIWI_STT_BOOSTING=off` turns it off.
     let vocabularyBoosting: Bool
 
     init(version: AsrModelVersion = .ultra, vocabularyBoosting: Bool = false) {
         self.version = version
         self.vocabularyBoosting = vocabularyBoosting
+    }
+
+    func setBoostingHandler(_ handler: @escaping @Sendable (String) -> Void) {
+        onBoosting = handler
+    }
+
+    /// Starts loading the CTC model (downloading it the first time), without waiting. Once at a time, and after a
+    /// failure not again before `ctcRetryAfter`, so an offline Mac doesn't try on every dictation.
+    func prepareBoosting() {
+        guard vocabularyBoosting, ctc == nil, ctcLoading == nil else { return }
+        if let failed = ctcFailedAt, ProcessInfo.processInfo.systemUptime - failed < Self.ctcRetryAfter { return }
+        onBoosting?("loading")
+        ctcLoading = Task { try? await CtcModels.downloadAndLoad(variant: .ctc110m) }
+        Task { await self.finishBoosting() }
+    }
+
+    /// Waits for the CTC model: for `--transcribe --ctc`, which measures with it from the first file.
+    func waitForBoosting() async {
+        prepareBoosting()
+        await finishBoosting()
+    }
+
+    private func finishBoosting() async {
+        guard let loading = ctcLoading else { return }
+        let models = await loading.value
+        guard ctcLoading != nil else { return } // the other waiter got here first
+        ctcLoading = nil
+        if let models {
+            ctc = models
+            ctcFailedAt = nil
+            _ = await boostingSession() // the session for the current dictionary, before the next dictation
+            onBoosting?("ready")
+        } else {
+            ctcFailedAt = ProcessInfo.processInfo.systemUptime
+            onBoosting?("unavailable")
+        }
     }
 
     func configure(language: TranscriptionLanguage? = nil, dictionary: TranscriptDictionary? = nil, vad: Bool? = nil) {
@@ -80,6 +124,8 @@ actor Transcriber {
     /// current dictionary, and the first inference (CoreML specializes the model for the Neural Engine on it).
     func warmUp() async throws {
         let manager = try await prepare()
+        // The CTC model comes after the main one, in the background: being ready to dictate doesn't wait for it.
+        prepareBoosting()
         _ = await boostingSession()
         if useVAD, vad == nil { vad = try? await VadManager(config: VadConfig(defaultThreshold: 0.7)) }
         guard !warmedUp else { return }
@@ -107,8 +153,14 @@ actor Transcriber {
         var raw = result.text
         if let session = await boostingSession(),
            let rescored = await session.rescore(text: raw, tokenTimings: result.tokenTimings ?? [], audioSamples: audio),
-           VocabularyRescoreGuard.accept(original: raw, rescored: rescored.text) {
-            raw = rescored.text
+           rescored.wasModified {
+            // Swap by swap (T1973): the rescorer's answer mixes right swaps with wrong ones on Portuguese.
+            let timings = result.tokenTimings ?? []
+            let confidence = VocabularyRescoreGuard.wordConfidence(tokens: timings.map { ($0.token, Double($0.confidence)) })
+            raw = VocabularyRescoreGuard.apply(original: raw, confidence: confidence, swaps: rescored.replacements.compactMap { r in
+                guard r.shouldReplace, let term = r.replacementWord, let score = r.replacementScore else { return nil }
+                return .init(from: r.originalWord, to: term, margin: Double(score - r.originalScore))
+            })
         }
         let text = TranscriptPostProcessor.process(raw, dictionary: dictionary)
         return Output(raw: raw, text: text, lang: SpokenLanguage.detect(text))
@@ -132,12 +184,16 @@ actor Transcriber {
         let terms = dictionary.terms
         guard vocabularyBoosting, !terms.isEmpty else { return nil }
         if let boosting, boosting.terms == terms { return boosting.session }
+        // Never waits for the download: without the model yet, this dictation goes without boosting.
+        guard let ctc else {
+            prepareBoosting()
+            return nil
+        }
         do {
-            if ctc == nil { ctc = try await CtcModels.downloadAndLoad(variant: .ctc110m) }
             // Dictation thresholds (FluidAudio #967): a wrong replacement costs more than a miss.
             let session = try await VocabularyBoostingSession(
                 vocabulary: CustomVocabularyContext(terms: terms.map { CustomVocabularyTerm(text: $0) }),
-                ctcModels: ctc!,
+                ctcModels: ctc,
                 thresholds: .init(cbw: 0, minSimilarity: 0.7))
             boosting = (terms, session)
             return session

@@ -13,8 +13,8 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --dump-wav <dir>  also save each recording as 16 kHz WAV there (for the STT benchmark; never inside the repo)
   --overlay-snapshot <dir>  render the dictation pill in each state as PNGs there, then exit
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
-                    (--dictionary: one term per line; --ctc: also the CTC rescoring, off in the app;
-                    downloads the model the first time)
+                    (--dictionary: one term per line; --ctc: also the CTC rescoring, on in the app since
+                    T1973; downloads the model the first time and waits for it)
 """
 
 func fail(_ message: String) -> Never {

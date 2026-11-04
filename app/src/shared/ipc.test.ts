@@ -83,6 +83,7 @@ test("parses lines exactly as the Swift sidecar (T50) emits them", () => {
     `{"app":{"bundleId":"com.apple.mail","name":"Mail"},"reason":"debug","type":"record.started","v":1}`,
     `{"durationMs":3634,"mode":"debug","reason":"debug","samples":58158,"type":"record.stopped","v":1}`,
     `{"state":"ready","type":"stt.status","v":1}`,
+    `{"state":"loading","type":"stt.boosting","v":1}`,
     // T1499: the Notes window shortcut, emitted with no fields.
     `{"type":"hotkey.notes","v":1}`,
   ];
@@ -98,6 +99,7 @@ test("parses lines exactly as the Swift sidecar (T50) emits them", () => {
     "record.started",
     "record.stopped",
     "stt.status",
+    "stt.boosting",
     "hotkey.notes",
   ]);
 });

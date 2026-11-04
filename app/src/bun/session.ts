@@ -58,6 +58,8 @@ export type SttState = Extract<Event, { type: "stt.status" }>["state"] | "starti
 export interface SessionStatus {
   connected: boolean;
   stt: SttState;
+  /** O modelo do boosting do vocabulário (T1973); `undefined` até o helper dizer. */
+  boosting?: Extract<Event, { type: "stt.boosting" }>["state"];
   hotkeyActive: boolean;
   /** As permissões que faltam, na ordem em que o app pede (T532). */
   missing: Permission[];
@@ -68,6 +70,7 @@ export class Session {
   readonly dictation: Dictation;
   readonly permissions: PermissionFlow;
   private stt: SttState = "starting";
+  private boosting: SessionStatus["boosting"];
   private statusListeners = new Set<(s: SessionStatus) => void>();
 
   constructor(viewsFolder: string) {
@@ -95,11 +98,16 @@ export class Session {
     this.permissions.attach();
     this.sidecar.on("ready", () => {
       this.stt = "starting";
+      this.boosting = undefined;
       this.emitStatus();
       void this.syncAll();
     });
     this.sidecar.on("stt.status", (e) => {
       this.stt = e.state;
+      this.emitStatus();
+    });
+    this.sidecar.on("stt.boosting", (e) => {
+      this.boosting = e.state;
       this.emitStatus();
     });
     this.sidecar.on("permissions.changed", () => this.emitStatus());
@@ -115,7 +123,7 @@ export class Session {
       this.sidecar.on("*", (e) => {
         if (e.type === "audio.level") return;
         const app = e.type === "app.active" ? ` ${e.bundleId}` : e.type === "record.started" ? ` ${e.app?.bundleId ?? "-"}` : "";
-        const extra = e.type === "stt.status" ? ` ${e.state}` : e.type === "transcript.final" ? ` ${e.latencyMs} ms` : "";
+        const extra = e.type === "stt.status" || e.type === "stt.boosting" ? ` ${e.state}` : e.type === "transcript.final" ? ` ${e.latencyMs} ms` : "";
         console.log(`[sidecar] ${e.type}${app}${extra}`);
       });
     }
@@ -130,7 +138,7 @@ export class Session {
 
   status(): SessionStatus {
     const ready = this.sidecar.ready;
-    return { connected: !!ready, stt: this.stt, hotkeyActive: ready?.hotkeyActive ?? false, missing: missing(ready?.permissions) };
+    return { connected: !!ready, stt: this.stt, boosting: this.boosting, hotkeyActive: ready?.hotkeyActive ?? false, missing: missing(ready?.permissions) };
   }
 
   onStatus(fn: (s: SessionStatus) => void): () => void {

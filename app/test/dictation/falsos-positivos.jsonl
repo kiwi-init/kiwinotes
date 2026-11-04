@@ -1,0 +1,33 @@
+// Falso positivo do boosting e da correção fonética (T1973, #2139): frases sem termo nenhum, com palavras comuns que
+// soam perto de cada termo do config.json. Conjunto separado: não serve para calibrar as travas (as medidas do ADR 0003
+// vêm de falados.jsonl), só para conferir. Nenhum dos 5 termos pode aparecer.
+{"name": "fp: os meus pais vão viajar amanhã", "say": "os meus pais vão viajar amanhã", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: fizemos um pacto de silêncio", "say": "fizemos um pacto de silêncio", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: o pacote de dados acabou", "say": "o pacote de dados acabou", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: fiz as pazes com ela", "say": "fiz as pazes com ela", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: he packs a lunch every day", "say": "he packs a lunch every day", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: the pact was signed yesterday", "say": "the pact was signed yesterday", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: me dá uma dica boa", "say": "me dá uma dica boa", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: procura no dicionário", "say": "procura no dicionário", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: diga com quem andas", "say": "diga com quem andas", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: tem alguma coisa de comer", "say": "tem alguma coisa de comer", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: deixa comigo que eu resolvo", "say": "deixa comigo que eu resolvo", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: the deacon came early", "say": "the deacon came early", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: get up and go to work", "say": "get up and go to work", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: the city is a hub for music", "say": "the city is a hub for music", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: he plays the guitar every night", "say": "he plays the guitar every night", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: o hub de transportes fica no centro", "say": "o hub de transportes fica no centro", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: git is hard to learn", "say": "git is hard to learn", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: o cubo de gelo derreteu", "say": "o cubo de gelo derreteu", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: a viagem para cuba foi ótima", "say": "a viagem para cuba foi ótima", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: keep it under control", "say": "keep it under control", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: a cube of sugar please", "say": "a cube of sugar please", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: perdi o controle do carro", "say": "perdi o controle do carro", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: comprei kiwi na feira", "say": "comprei kiwi na feira", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: tirei notas altas na prova", "say": "tirei notas altas na prova", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: take some notes in class", "say": "take some notes in class", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: the kiwi is a small bird", "say": "the kiwi is a small bird", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: as notas fiscais chegaram", "say": "as notas fiscais chegaram", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: we need new notes for the meeting", "say": "we need new notes for the meeting", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: quem quis notas melhores estudou", "say": "quem quis notas melhores estudou", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "fp: o diretor do comitê falou", "say": "o diretor do comitê falou", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}

@@ -10,6 +10,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const SPOKEN_CASES = path.resolve(import.meta.dir, "../test/dictation/falados.jsonl");
+/** Frases sem termo nenhum, separadas das que calibram as travas do boosting (T1973). */
+export const FALSE_POSITIVE_CASES = path.resolve(import.meta.dir, "../test/dictation/falsos-positivos.jsonl");
 const VOICES = new Set(["Luciana", "Samantha"]);
 
 export interface SpokenCase {

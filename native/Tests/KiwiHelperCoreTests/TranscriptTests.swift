@@ -56,6 +56,8 @@ final class TranscriptTests: XCTestCase {
         // Split names whose piece is a connective, from the T51 synthetic clips.
         XCTAssertEqual(TranscriptPostProcessor.process("Sobe o de com novo", dictionary: work), "Sobe o DICOM novo")
         XCTAssertEqual(TranscriptPostProcessor.process("O PAC se ligado não respondeu", dictionary: work), "O PACS ligado não respondeu")
+        // Review #2097: the connective's neighbor is a word of its own, not a piece of the term.
+        XCTAssertEqual(TranscriptPostProcessor.process("Eu dei com ele no corredor.", dictionary: work), "Eu dei com ele no corredor.")
     }
 
     /// The first letter may differ only for the K sound (c, k, q); the soft c stays out.
@@ -110,27 +112,118 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(STTInput.padded([Float](repeating: 0.1, count: 20_000)).count, 20_000)
     }
 
+    /// The rescore guard with every word heard unsure, so each test sees one rule at a time.
+    private func unsure(original: String, swaps: [VocabularyRescoreGuard.Swap]) -> String {
+        VocabularyRescoreGuard.apply(original: original, confidence: Array(repeating: 0.5, count: original.split(separator: " ").count),
+                                     swaps: swaps)
+    }
+
+    /// T1973, #2139: the CTC only swaps what the main model heard unsure. The confidences are the ones Parakeet gave
+    /// on the battery's sentences (`say`, the lowest token of each word).
+    func testRescoreOnlyTouchesWhatTheModelHeardUnsure() {
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(VocabularyRescoreGuard.apply(
+            original: "O de condu Pax caiu de novo.", confidence: [0.99, 0.48, 0.36, 0.65, 1, 1, 1],
+            swaps: [S(from: "Pax", to: "PACS", margin: 0.39), S(from: "condu", to: "DICOM", margin: 0.63)]),
+            "O DICOM PACS caiu de novo.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(
+            original: "Anota isso no Q e notes.", confidence: [1, 1, 1, 0.76, 0.71, 0.74],
+            swaps: [S(from: "e notes.", to: "Kiwi Notes", margin: 1.77)]),
+            "Anota isso no Kiwi Notes.")
+        // Heard sure: every rule but this one lets "pais" become PACS.
+        let pais = [S(from: "pais", to: "PACS", margin: 0.84)]
+        XCTAssertEqual(unsure(original: "Os pais dele chegaram.", swaps: pais), "Os PACS dele chegaram.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Os pais dele chegaram.", confidence: [1, 1, 1, 1], swaps: pais),
+                       "Os pais dele chegaram.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Meus pais moram longe.", confidence: [1, 1, 1, 1],
+                                                    swaps: [S(from: "pais", to: "PACS", margin: 0.54)]),
+                       "Meus pais moram longe.")
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "O de condu Pax caiu de novo.", confidence: [1, 1],
+                                                    swaps: [S(from: "Pax", to: "PACS", margin: 0.39)]),
+                       "O de condu Pax caiu de novo.", "confidences that don't line up with the words: no swap")
+    }
+
+    func testWordConfidenceIsTheLowestTokenOfEachWord() {
+        XCTAssertEqual(VocabularyRescoreGuard.wordConfidence(tokens: [
+            (" O", 0.99), (" de", 0.48), (" con", 0.36), ("du", 0.8), (" Pa", 0.65), ("x", 0.74), (" caiu", 1), (".", 0.9),
+        ]), [0.99, 0.48, 0.36, 0.65, 1])
+        // "Tem alguma coisa de comer.": the model was unsure of the period, not of "comer" (T1973).
+        let comer = VocabularyRescoreGuard.wordConfidence(tokens: [
+            (" T", 0.83), ("em", 0.99), (" alg", 1), ("uma", 1), (" co", 1), ("isa", 1), (" de", 1), (" comer", 1), (".", 0.71),
+        ])
+        XCTAssertEqual(comer, [0.83, 1, 1, 1, 1])
+        XCTAssertEqual(VocabularyRescoreGuard.apply(original: "Tem alguma coisa de comer.", confidence: comer,
+                                                    swaps: [.init(from: "de comer.", to: "DICOM", margin: 0.49)]),
+                       "Tem alguma coisa de comer.")
+        XCTAssertEqual(VocabularyRescoreGuard.wordConfidence(tokens: [("Eu", 1), (" dei", 0.7)]), [1, 0.7], "the first token opens a word")
+    }
+
     func testRescoreGuardKeepsTermsOutOfBackgroundSpeech() {
         // The shape of what the CTC rescoring did to background speech (made-up words, not the recording).
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "Vai lá.", rescored: "DICOM."))
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "Tá bom então.", rescored: "Kubectl bom então."))
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(unsure(original: "Vai lá.", swaps: [S(from: "Vai lá", to: "DICOM", margin: 2)]), "Vai lá.")
+        XCTAssertEqual(unsure(original: "Tá bom então.", swaps: [S(from: "Tá", to: "Kubectl", margin: 2)]),
+                       "Tá bom então.")
     }
 
     /// Review #335: clearly spoken words swapped for terms that don't sound like them.
     func testRescoreGuardRefusesSwapsThatDontSoundAlike() {
-        XCTAssertFalse(VocabularyRescoreGuard.accept(
-            original: "Roda o cubectuget pods no cluster de homologação e me fala o que deu.",
-            rescored: "Roda o PACS pods no DICOM e me fala o que deu."))
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "eu vou sair agora mesmo", rescored: "DICOM PACS sair BigQuery mesmo"))
-        XCTAssertFalse(VocabularyRescoreGuard.accept(original: "vou rodar o script agora", rescored: "vou rodar o agora"), "no deletions")
+        typealias S = VocabularyRescoreGuard.Swap
+        let sentence = "Roda o cubectuget pods no cluster de homologação e me fala o que deu."
+        XCTAssertEqual(unsure(original: sentence, swaps: [
+            S(from: "cubectuget", to: "PACS", margin: 2), S(from: "cluster de homologação", to: "DICOM", margin: 2),
+        ]), sentence)
+        XCTAssertEqual(unsure(original: "vou rodar o script agora", swaps: [S(from: "script", to: "", margin: 2)]),
+                       "vou rodar o script agora", "no deletions")
     }
 
     /// What it fixed in the T51 benchmark.
     func testRescoreGuardKeepsTermFixes() {
-        XCTAssertTrue(VocabularyRescoreGuard.accept(
-            original: "Vou rodar o backfield de novo no BigQuery", rescored: "Vou rodar o backfill de novo no BigQuery"))
-        XCTAssertTrue(VocabularyRescoreGuard.accept(
-            original: "O estudio instância o ide veio vazio no retorno do Kido.",
-            rescored: "O estudio instância o ide veio vazio no retorno do QIDO."))
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(unsure(original: "Vou rodar o backfield de novo no BigQuery",
+                                                    swaps: [S(from: "backfield", to: "backfill", margin: 1)]),
+                       "Vou rodar o backfill de novo no BigQuery")
+        XCTAssertEqual(unsure(original: "O estudio instância o ide veio vazio no retorno do Kido.",
+                                                    swaps: [S(from: "Kido.", to: "QIDO", margin: 1)]),
+                       "O estudio instância o ide veio vazio no retorno do QIDO.")
+    }
+
+    /// T1973: what the rescoring did to the battery's sentences, swap by swap, with the CTC margins it reported (the
+    /// CTC model is English, so on Portuguese the right swap and a wrong one come in the same answer).
+    func testRescoreAppliesOnlyTheSwapsThatPass() {
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(unsure(
+            original: "O de condu Pax caiu de novo.",
+            swaps: [S(from: "Pax", to: "PACS", margin: 0.39), S(from: "caiu de novo.", to: "Kiwi Notes", margin: 0.08),
+                    S(from: "condu", to: "DICOM", margin: 0.63)]),
+            "O DICOM PACS caiu de novo.", "\"condu\" alone doesn't sound like DICOM; \"de condu\" does")
+        XCTAssertEqual(unsure(
+            original: "Anota isso no Q e notes.",
+            swaps: [S(from: "e notes.", to: "Kiwi Notes", margin: 1.77), S(from: "Anota isso no Q", to: "DICOM", margin: 0.12)]),
+            "Anota isso no Kiwi Notes.", "\"Q e notes\" sounds closer to Kiwi Notes than \"e notes\"")
+        XCTAssertEqual(unsure(original: "Abre o github, por favor.", swaps: [S(from: "github,", to: "GitHub", margin: 1)]),
+                       "Abre o GitHub, por favor.", "the punctuation around the stretch stays")
+    }
+
+    func testRescoreApplyKeepsTheTextWhenNothingPasses() {
+        typealias S = VocabularyRescoreGuard.Swap
+        XCTAssertEqual(unsure(original: "Vai lá.", swaps: [S(from: "Vai lá.", to: "DICOM", margin: 2)]), "Vai lá.")
+        XCTAssertEqual(unsure(original: "eu vou sair agora mesmo",
+                                                    swaps: [S(from: "eu vou", to: "DICOM PACS", margin: 2), S(from: "agora", to: "BigQuery", margin: 0.1)]),
+                       "eu vou sair agora mesmo", "agora ~ BigQuery by sound, but the CTC barely prefers it")
+        XCTAssertEqual(unsure(original: "Tá bom então, pode ir.", swaps: [S(from: "Tá", to: "Kubectl", margin: 2)]),
+                       "Tá bom então, pode ir.")
+        XCTAssertEqual(unsure(original: "manda o pax pro pax agora", swaps: [S(from: "nada", to: "PACS", margin: 2)]),
+                       "manda o pax pro pax agora", "a stretch that isn't in the text changes nothing")
+        // Review #2097: what the rescorer proposed on sentences without any term (the margins it reported).
+        XCTAssertEqual(unsure(original: "She packs her bags.", swaps: [S(from: "bags.", to: "PACS", margin: 0.71)]),
+                       "She packs her bags.", "bags and PACS share the sound key, not the opening letter")
+        XCTAssertEqual(unsure(original: "Eu dei com ele no corredor.", swaps: [S(from: "Eu dei com", to: "DICOM", margin: 0.15)]),
+                       "Eu dei com ele no corredor.")
+        XCTAssertEqual(unsure(original: "A paz voltou.", swaps: [S(from: "paz voltou.", to: "PACS", margin: 0.98)]), "A paz voltou.")
+        XCTAssertEqual(unsure(original: "O pacote chegou.", swaps: [S(from: "O pacote", to: "PACS", margin: 1.34)]), "O pacote chegou.")
+        XCTAssertEqual(unsure(original: "A reunião de amanhã.",
+                                                    swaps: [S(from: "de amanhã.", to: "DICOM", margin: 1.76), S(from: "A reunião", to: "PACS", margin: 0.44)]),
+                       "A reunião de amanhã.")
     }
 }
