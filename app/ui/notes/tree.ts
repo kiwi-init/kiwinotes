@@ -1,5 +1,6 @@
 // A barra lateral: as pastas e as notas do vault em árvore (B v4: só pastas e notas, sem contador nem ícone).
 
+import { subsequence } from "../../src/shared/fuzzy.ts";
 import { folderOf } from "./links.ts";
 import type { NoteMeta, VaultListing } from "./types.ts";
 
@@ -90,8 +91,9 @@ const fold = (s: string) =>
     .toLocaleLowerCase("pt-BR");
 
 /**
- * A busca na árvore (T2469): só as notas cujo título tem todas as palavras (sem acento nem maiúscula), com as pastas até
- * elas; e as pastas cujo nome casa, inteiras. Devolve a árvore filtrada e as pastas a abrir para ver o que achou.
+ * A busca na árvore (T2469): só as notas cujo título tem todas as palavras (sem acento nem maiúscula), ou as letras da
+ * busca em ordem (subsequência, T2966), com as pastas até elas; e as pastas cujo nome tem as palavras, inteiras (a
+ * pasta não casa por subsequência: abriria pastas inteiras por acaso). Devolve a árvore filtrada e as pastas a abrir.
  */
 export function filterTree(tree: TreeNode[], query: string): { tree: TreeNode[]; open: Set<string> } {
   const words = fold(query).split(/\s+/).filter(Boolean);
@@ -103,7 +105,7 @@ export function filterTree(tree: TreeNode[], query: string): { tree: TreeNode[];
   };
   const walk = (nodes: TreeNode[]): TreeNode[] =>
     nodes.flatMap((n): TreeNode[] => {
-      if (n.kind === "note") return hit(n.name) ? [n] : [];
+      if (n.kind === "note") return hit(n.name) || subsequence(query, n.name) ? [n] : [];
       if (hit(n.name)) return [n];
       const children = walk(n.children);
       if (!children.length) return [];

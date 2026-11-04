@@ -13,6 +13,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { isAttachmentName } from "../shared/attachments.ts";
+import { approxWord, wordsOf } from "../shared/fuzzy.ts";
 import { fold } from "../store/text.ts";
 import { listAttachments, resolveAttachment } from "./attachments.ts";
 import { inside } from "./paths.ts";
@@ -224,19 +225,39 @@ export class OcrIndex {
     return this.byPath.get(rel)?.entry?.text ?? null;
   }
 
-  /** Os anexos cujo texto tem todos os termos e nenhum dos excluídos, com o trecho do primeiro. */
-  match(terms: readonly string[], not: readonly string[] = []): { path: string; snippet: string }[] {
+  /**
+   * Os anexos cujo texto tem todos os termos e nenhum dos excluídos, com o trecho do primeiro. Os termos em `loose` (as
+   * palavras soltas, não as "frases") aceitam erro de digitação, como no `notes.search` (T2966); o anexo achado assim
+   * vem com `approx`.
+   */
+  match(terms: readonly string[], not: readonly string[] = [], loose: readonly string[] = []): { path: string; snippet: string; approx?: boolean }[] {
     if (!terms.length) return [];
-    const out: { path: string; snippet: string }[] = [];
+    const out: { path: string; snippet: string; approx?: boolean }[] = [];
+    const memos = new Map<string, Map<string, boolean>>();
     for (const [p, v] of this.byPath) {
       const text = v.entry?.text;
       if (!text) continue;
       // O OCR devolve uma linha por linha lida: uma "frase" que atravessa duas linhas da imagem tem que casar, então
       // as quebras viram um espaço, como no `inText` das notas (#98, T2789).
       const folded = oneSpace(fold(text));
-      if (terms.every((t) => folded.includes(t)) && !not.some((t) => folded.includes(t))) out.push({ path: p, snippet: snippetOf(text, terms[0]!) });
+      if (not.some((t) => folded.includes(t))) continue;
+      let approx = false;
+      let near: string | undefined;
+      let words: Set<string> | undefined;
+      const ok = terms.every((t, i) => {
+        if (folded.includes(t)) return true;
+        if (!loose.includes(t)) return false;
+        let memo = memos.get(t);
+        if (!memo) memos.set(t, (memo = new Map()));
+        const w = approxWord(t, (words ??= new Set(wordsOf(folded))), memo);
+        if (!w) return false;
+        approx = true;
+        if (i === 0) near = w;
+        return true;
+      });
+      if (ok) out.push({ path: p, snippet: snippetOf(text, near ?? terms[0]!), ...(approx ? { approx: true } : {}) });
     }
-    return out.sort((a, b) => a.path.localeCompare(b.path));
+    return out.sort((a, b) => Number(!!a.approx) - Number(!!b.approx) || a.path.localeCompare(b.path));
   }
 }
 
@@ -258,7 +279,7 @@ export async function attachmentHits(
   const terms = [...q.words, ...q.phrases].map((t) => fold(t));
   if (!terms.length) return [];
   const not = q.notText.map((t) => fold(t));
-  const matches = ocr.match(terms, not);
+  const matches = ocr.match(terms, not, q.words.map((t) => fold(t)));
   if (!matches.length) return [];
   const files = await listAttachments(vault.root);
   const seen = new Set(already.map((h) => h.path));
@@ -270,7 +291,7 @@ export async function attachmentHits(
       const note = await vault.get(meta.path).catch(() => null);
       if (!note || !parseLinks(note.content).some((l) => resolveAttachment(l.target, files) === m.path)) continue;
       seen.add(meta.path);
-      out.push({ path: meta.path, title: meta.title, snippet: `${whereLabel(m.path)}: ${m.snippet}`, score: 0.5 });
+      out.push({ path: meta.path, title: meta.title, snippet: `${whereLabel(m.path)}: ${m.snippet}`, score: 0.5, ...(m.approx ? { approx: true } : {}) });
     }
   }
   return out;

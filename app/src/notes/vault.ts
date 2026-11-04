@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
+import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
@@ -46,6 +47,8 @@ export interface SearchHit {
   title: string;
   snippet: string;
   score: number;
+  /** Achou só por aproximação (T2966): alguma palavra casou com erro de digitação. O exato vem antes. */
+  approx?: boolean;
 }
 
 /** Uma pasta do vault com o que tem dentro (T2468): a raiz tem `path` e `name` vazios. */
@@ -241,6 +244,15 @@ function inText(e: Entry, t: string): boolean {
   return flat.includes(t);
 }
 
+/** As palavras distintas do título e do texto, feitas na 1ª busca aproximada (T2966) e jogadas fora com a nota. */
+const wordSet = new WeakMap<Entry, Set<string>>();
+
+function wordsOfEntry(e: Entry): Set<string> {
+  let set = wordSet.get(e);
+  if (!set) wordSet.set(e, (set = new Set([...wordsOf(e.foldedTitle), ...wordsOf(e.folded)])));
+  return set;
+}
+
 /** O trecho em volta do termo, sem o frontmatter (revisão #2654): uma busca por tag não mostra o `--- tags: … ---`. */
 function snippetAround(content: string, term: string): string {
   const fm = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(content);
@@ -383,7 +395,9 @@ export class Vault {
     // Os filtros (T2660, src/shared/query.ts): palavras, "frases", tag:, path: e as exclusões com "-".
     const q = parseQuery(query);
     if (!hasPositive(q)) return [];
-    const hits: { e: Entry; score: number }[] = [];
+    const hits: { e: Entry; score: number; approx: boolean; near?: string }[] = [];
+    // Por palavra da busca, o que cada palavra do vault deu na conta de erros: a mesma palavra aparece em muitas notas.
+    const memos = new Map<string, Map<string, boolean>>();
     for (const e of this.notes.values()) {
       if (!q.tags.every((t) => hasTag(e.meta.tags, t)) || q.notTags.some((t) => hasTag(e.meta.tags, t))) continue;
       const foldedPath = fold(e.meta.path);
@@ -393,29 +407,51 @@ export class Vault {
       const terms = [...q.words, ...q.phrases];
       // Só filtros: todas as notas que passam, das mais recentes para as mais velhas.
       if (!terms.length) {
-        hits.push({ e, score: Date.parse(e.meta.mtime) / 1e12 });
+        hits.push({ e, score: Date.parse(e.meta.mtime) / 1e12, approx: false });
         continue;
       }
       let score = 0;
       let all = true;
+      let approx = false;
+      let near: string | undefined;
       for (const t of terms) {
         const inTitle = e.foldedTitle.includes(t);
         const inBody = inText(e, t);
-        if (!inTitle && !inBody) {
-          all = false;
-          break;
+        if (inTitle || inBody) {
+          score += (inTitle ? 10 : 0) + (inBody ? 1 : 0) + (e.foldedTitle === t ? 20 : 0);
+          continue;
         }
-        score += (inTitle ? 10 : 0) + (inBody ? 1 : 0) + (e.foldedTitle === t ? 20 : 0);
+        // Sem o exato, a palavra solta (não a "frase") aceita erro de digitação (T2966, spec #2934).
+        if (q.words.includes(t) && typoBudget(t)) {
+          let memo = memos.get(t);
+          if (!memo) memos.set(t, (memo = new Map()));
+          const w = approxWord(t, wordsOfEntry(e), memo);
+          if (w) {
+            approx = true;
+            near ??= t === terms[0] ? w : undefined;
+            score += wordsOf(e.foldedTitle).includes(w) ? 5 : 0.5;
+            continue;
+          }
+        }
+        all = false;
+        break;
       }
       if (!all) continue;
-      hits.push({ e, score });
+      hits.push({ e, score, approx, near });
     }
     // O trecho só para os que voltam: montar para cada nota que casa custava mais que a busca (288 ms com 1.000 notas).
+    // O exato antes do aproximado; o trecho do aproximado mostra a palavra que casou.
     const first = q.phrases[0] ?? q.words[0] ?? (q.tags[0] ? `#${fold(q.tags[0])}` : "");
     return hits
-      .sort((a, b) => b.score - a.score || a.e.meta.path.localeCompare(b.e.meta.path))
+      .sort((a, b) => Number(a.approx) - Number(b.approx) || b.score - a.score || a.e.meta.path.localeCompare(b.e.meta.path))
       .slice(0, max)
-      .map(({ e, score }) => ({ path: e.meta.path, title: e.meta.title, snippet: snippetAround(e.content, first), score }));
+      .map(({ e, score, approx, near }) => ({
+        path: e.meta.path,
+        title: e.meta.title,
+        snippet: snippetAround(e.content, near ?? first),
+        score,
+        ...(approx ? { approx: true } : {}),
+      }));
   }
 
   /** A árvore das tags do vault, com quantas notas cada uma tem (T2619). */

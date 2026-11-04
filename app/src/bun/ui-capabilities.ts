@@ -510,7 +510,9 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       if (!deps.ocr || !(await deps.settings.load()).ocr) return hits;
       const max = typeof a.limit === "number" ? a.limit : 20;
       if (hits.length >= max) return hits;
-      return [...hits, ...(await attachmentHits(deps.ocr, v, a.query as string, hits, max))];
+      // O exato antes do aproximado (T2966), nas notas e nos anexos juntos; o resto da ordem fica como veio.
+      const all = [...hits, ...(await attachmentHits(deps.ocr, v, a.query as string, hits, max))];
+      return [...all.filter((h) => !h.approx), ...all.filter((h) => h.approx)];
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
     "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),

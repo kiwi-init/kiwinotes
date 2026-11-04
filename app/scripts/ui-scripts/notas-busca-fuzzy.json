@@ -1,0 +1,29 @@
+{
+  "window": "notes",
+  "steps": [
+    { "invoke": "notes.create", "args": { "folder": "", "title": "hgkjgkj", "content": "Sem nada a ver.\n" } },
+    { "invoke": "notes.create", "args": { "folder": "Casa", "title": "Peso em kg", "content": "A balança.\n" } },
+    { "invoke": "notes.create", "args": { "folder": "Trabalho", "title": "Ata", "content": "A reunião de terça foi longa.\n" } },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre" },
+    { "press": "Meta+k" },
+    { "type": "kg" },
+    { "waitFor": ".kn-palette .kn-palette-it:has-text('hgkjgkj')", "name": "kg acha hgkjgkj por subsequência (T2966)" },
+    { "expectText": ".kn-palette .kn-palette-it >> nth=0", "text": "Peso em kg", "name": "o título exato fica acima do aproximado" },
+    { "expectText": ".kn-palette .kn-palette-it >> nth=1", "text": "hgkjgkj" },
+    { "expectCount": ".kn-palette .kn-palette-it:has-text('hgkjgkj') mark.kn-hit", "count": 2, "name": "as letras que casaram destacadas" },
+    { "screenshot": "fuzzy-titulo.png" },
+    { "fill": ".kn-palette-q", "text": "reunaio" },
+    { "waitFor": ".kn-palette .kn-palette-it:has-text('Ata')", "name": "reunaio acha reunião pelo erro de 1 letra" },
+    { "expectText": ".kn-palette .kn-palette-it:has-text('Ata') mark.kn-hit", "text": "reunião", "name": "a palavra que casou destacada no trecho" },
+    { "screenshot": "fuzzy-texto.png" },
+    { "fill": ".kn-palette-q", "text": "\"reunaio\"" },
+    { "wait": 600 },
+    { "expectCount": ".kn-palette .kn-palette-it:has-text('Ata')", "count": 0, "name": "a frase entre aspas continua exata" },
+    { "press": "Escape" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "fill": ".kn-tree-pop .kn-side-search", "text": "kg" },
+    { "waitFor": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('hgkjgkj')", "name": "a busca da árvore por subsequência" },
+    { "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'] mark.kn-hit", "count": 3, "name": "o destaque na árvore" },
+    { "screenshot": "fuzzy-arvore.png" }
+  ]
+}

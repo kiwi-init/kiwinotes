@@ -158,6 +158,11 @@ describe("a busca acha a nota pelo texto do anexo", () => {
     expect((await attachmentHits(ocr, vault, '"da sala medidas"', [], 20)).map((h) => h.path)).toEqual(["Casa.md"]);
     expect((await attachmentHits(ocr, vault, '"sala  medidas"', [], 20)).map((h) => h.path)).toEqual(["Casa.md"]);
     expect(await attachmentHits(ocr, vault, "planta -medidas", [], 20)).toEqual([]);
+    // Erro de digitação na palavra solta (T2966): acha, com `approx`; na "frase", não.
+    const typo = await attachmentHits(ocr, vault, "medidsa", [], 20);
+    expect(typo).toEqual([{ path: "Casa.md", title: "Casa", snippet: "na imagem planta.png: Planta da sala Medidas 3x4", score: 0.5, approx: true }]);
+    expect(await attachmentHits(ocr, vault, '"medidsa 3x4"', [], 20)).toEqual([]);
+    expect(await attachmentHits(ocr, vault, "planta -medidsa", [], 20)).toHaveLength(1);
     expect(await attachmentHits(ocr, vault, "planta path:Casa", [], 20)).toEqual([]);
     expect(await attachmentHits(ocr, vault, "inexistente", [], 20)).toEqual([]);
   });

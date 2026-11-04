@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { plainSnippet } from "./links.ts";
-import { type PaletteCommand, type PaletteItem, paletteItems } from "./palette.ts";
+import { Highlight } from "./Highlight.tsx";
+import { type PaletteCommand, type PaletteItem, paletteItems, snippetRanges, titleRanges } from "./palette.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { NoteMeta, NotesApi, SearchHit } from "./types.ts";
 
@@ -88,8 +89,8 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
               {it.kind === "note" ? (
                 <>
                   <span className="kn-palette-title">
-                    {it.title}
-                    {it.snippet ? <span className="kn-palette-snippet">{plainSnippet(it.snippet)}</span> : null}
+                    <Highlight text={it.title} ranges={titleRanges(it.title, query)} />
+                    {it.snippet ? <Snippet text={plainSnippet(it.snippet)} query={query} /> : null}
                   </span>
                   <span className="kn-palette-r">{it.detail}</span>
                 </>
@@ -104,5 +105,13 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
         </div>
       </div>
     </div>
+  );
+}
+
+function Snippet({ text, query }: { text: string; query: string }) {
+  return (
+    <span className="kn-palette-snippet">
+      <Highlight text={text} ranges={snippetRanges(text, query)} />
+    </span>
   );
 }

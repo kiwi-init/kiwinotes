@@ -2,6 +2,7 @@
 // engine (src/shared/wikilinks.ts). Serve para o Vite no navegador e para os testes; nunca para o app de verdade
 // (api.ts só usa fora do AppEngine, em dev). As notas são inventadas.
 
+import { approxWord, wordsOf } from "../../src/shared/fuzzy.ts";
 import { splitFrontmatter, tagsOf } from "./frontmatter.ts";
 import { makeResolver, parseLinks as sharedLinks, resolveLink, rewriteLinks } from "../../src/shared/wikilinks.ts";
 import { folderOf, noteName } from "./links.ts";
@@ -311,13 +312,17 @@ export class MockVault implements NotesApi {
       const ft = fold(title);
       const body = splitFrontmatter(s.content).body;
       const fb = fold(body);
-      if (!words.every((w) => ft.includes(w) || fb.includes(w))) continue;
+      // Como no engine (T2966): sem o exato, a palavra de 4 letras ou mais aceita erro de digitação.
+      const bodyWords = wordsOf(`${ft} ${fb}`);
+      const near = words.map((w) => (ft.includes(w) || fb.includes(w) ? w : approxWord(w, bodyWords)));
+      if (near.some((w) => w === null)) continue;
+      const approx = near.some((w, i) => w !== words[i]);
       const inTitle = words.filter((w) => ft.includes(w)).length;
       const score = (ft.startsWith(words[0]!) ? 4 : 0) + inTitle * 2;
-      const at = Math.max(0, ...words.map((w) => fb.indexOf(w)).filter((i) => i >= 0).slice(0, 1));
-      hits.push({ path, title, snippet: snippetAround(body, at), score });
+      const at = Math.max(0, ...near.map((w) => fb.indexOf(w!)).filter((i) => i >= 0).slice(0, 1));
+      hits.push({ path, title, snippet: snippetAround(body, at), score, ...(approx ? { approx: true } : {}) });
     }
-    hits.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, "pt-BR"));
+    hits.sort((a, b) => Number(!!a.approx) - Number(!!b.approx) || b.score - a.score || a.title.localeCompare(b.title, "pt-BR"));
     return hits.slice(0, limit);
   }
 
