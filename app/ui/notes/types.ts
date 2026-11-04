@@ -46,6 +46,26 @@ export interface NotesApi {
    * da pessoa por uma preferência da janela. O engine corrige os paths quando a nota muda de nome, de pasta ou some.
    */
   pins?: { list(): Promise<string[]>; set(paths: string[]): Promise<string[]> };
+  /** A nota do dia, o link que cria a nota, "Mencionada sem link" e a Lixeira (T2593, contrato 1.8.0). */
+  extras?: ExtrasApi;
+}
+
+export type TrashItem = UiCapabilities["trash.list"]["result"]["items"][number];
+export type Mention = UiCapabilities["notes.unlinkedMentions"]["result"][number];
+
+export interface ExtrasApi {
+  /** `<dailyFolder>/AAAA-MM-DD.md`, criada se não existe. */
+  daily(date?: string): Promise<Note>;
+  /** A nota de um `[[link]]`: a que ele acha, ou uma nova (`[[Pasta/Nota]]` em Pasta; senão na pasta de `from`). */
+  createFromLink(link: string, from?: string): Promise<Note>;
+  unlinkedMentions(path: string): Promise<Mention[]>;
+  /** Na nota `path`, as menções de `target` viram `[[link]]`. */
+  linkMentions(path: string, target: string): Promise<{ meta: NoteMeta; count: number }>;
+  trashList(): Promise<TrashItem[]>;
+  /** O que espera o Desfazer vai já para o Lixo do macOS. */
+  trashEmpty(): Promise<number>;
+  /** Abre o Lixo do macOS no Finder. */
+  trashReveal(): Promise<true>;
 }
 
 /** `moved`: quantas notas mudaram de path. */

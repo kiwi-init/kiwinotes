@@ -83,6 +83,11 @@ const capabilities = uiCapabilities({
     if (process.env.KIWI_DEBUG === "1") return void console.log(`[notes] reveal (dry run): ${abs}`);
     Bun.spawn(["/usr/bin/open", "-R", abs], { stdio: ["ignore", "ignore", "ignore"] });
   },
+  // A Lixeira do app (T2593): o Lixo do macOS no Finder. Só abrir a pasta; nada sai de lá (o TCC, #2493).
+  revealTrash: () => {
+    if (process.env.KIWI_DEBUG === "1") return void console.log("[notes] reveal trash (dry run)");
+    Bun.spawn(["/usr/bin/open", path.join(process.env.HOME ?? "", ".Trash")], { stdio: ["ignore", "ignore", "ignore"] });
+  },
   notes: stores.notes,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),

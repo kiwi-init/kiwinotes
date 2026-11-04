@@ -57,7 +57,10 @@ export interface CapabilityDeps {
     | "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve"
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
     | "onExternalMoves" | "existing" | "tags" | "templates"
+    | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty"
   >;
+  /** Abre o Lixo do macOS no Finder (T2593). Sem isto (headless, testes, KIWI_DEBUG), o `trash.reveal` não faz nada. */
+  revealTrash?(): void;
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
    * o `notes.reveal` só confere que o item existe.
@@ -234,6 +237,15 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           }
           if (!p) throw bad("templatesFolder can't be the vault root");
           patch.templatesFolder = p;
+        } else if (key === "dailyFolder") {
+          let dir: string;
+          try {
+            dir = folderPath(value);
+          } catch (e) {
+            throw e instanceof VaultError ? new CapabilityError(e.code, `dailyFolder: ${e.message}`) : e;
+          }
+          if (!dir) throw bad("dailyFolder must name a folder of the vault");
+          patch.dailyFolder = dir;
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);
@@ -309,6 +321,32 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "notes.reveal": async (args) => {
       const abs = await (await vault()).locate(fields(args, "notes.reveal", ["path"]).path);
       deps.reveal?.(abs);
+      return true as const;
+    },
+    "notes.daily": async (args) => {
+      const a = fields(args, "notes.daily", ["date"]);
+      return (await vault()).daily(a.date, (await deps.settings.load()).dailyFolder);
+    },
+    "notes.createFromLink": async (args) => {
+      const a = fields(args, "notes.createFromLink", ["link", "from"]);
+      return (await vault()).createFromLink(a.link, a.from);
+    },
+    "notes.unlinkedMentions": async (args) => (await vault()).unlinkedMentions(fields(args, "notes.unlinkedMentions", ["path"]).path),
+    "notes.linkMentions": async (args) => {
+      const a = fields(args, "notes.linkMentions", ["path", "target"]);
+      return (await vault()).linkMentions(a.path, a.target);
+    },
+    "trash.list": async (args) => {
+      noArgs(args, "trash.list");
+      return (await vault()).trashList();
+    },
+    "trash.empty": async (args) => {
+      noArgs(args, "trash.empty");
+      return (await vault()).trashEmpty();
+    },
+    "trash.reveal": (args) => {
+      noArgs(args, "trash.reveal");
+      deps.revealTrash?.();
       return true as const;
     },
     "folders.create": async (args) => (await vault()).createFolder(fields(args, "folders.create", ["path"]).path),

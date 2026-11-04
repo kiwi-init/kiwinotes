@@ -56,12 +56,18 @@ const notesStub = {
   existing: () => ({ notes: new Set<string>(), folders: new Set<string>() }),
   tags: () => [],
   templates: () => [],
+  daily: async () => null as never,
+  createFromLink: async () => null as never,
+  unlinkedMentions: () => [],
+  linkMentions: async () => null as never,
+  trashList: () => ({ items: [] }),
+  trashEmpty: async () => ({ trashed: 0 }),
 };
 
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos" };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário" };
   let t = 0;
   return {
     calls,
