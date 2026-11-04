@@ -106,8 +106,10 @@ describe("as capacidades (contrato 1.18.0)", () => {
     return { call: (cap: string, args: unknown) => directInvoke(c, cap, args), saved, changed };
   }
 
-  test("o contrato tem o audio.inputs (1.18.0) e o using (1.19.0)", () => {
-    expect(UI_CONTRACT_VERSION).toBe("1.19.0");
+  test("o contrato tem o audio.inputs (1.18.0) e o using (1.19.0), ou um minor depois", () => {
+    // O minor seguinte (T3370 e os outros) não quebra este teste: o que importa é o audio.inputs ter chegado.
+    expect(UI_CONTRACT_VERSION.startsWith("1.")).toBe(true);
+    expect(Number(UI_CONTRACT_VERSION.split(".")[1])).toBeGreaterThanOrEqual(19);
     expect(UI_CAPABILITIES).toContain("audio.inputs");
   });
 

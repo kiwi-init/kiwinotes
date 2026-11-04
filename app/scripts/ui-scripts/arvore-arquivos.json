@@ -1,0 +1,31 @@
+{
+  "window": "notes",
+  "steps": [
+    { "invoke": "notes.create", "args": { "folder": "Projetos", "title": "Plano", "content": "O plano.\n" } },
+    { "invoke": "notes.create", "args": { "folder": "", "title": "Inbox", "content": "Coisas soltas.\n" } },
+    { "invoke": "notes.daily", "args": {} },
+    { "invoke": "attachments.save", "args": { "name": "planta.png", "data": "iVBORw0KGgo=" } },
+    { "invoke": "attachments.save", "args": { "name": "contrato.pdf", "data": "JVBERi0xLjQK" } },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Anexos')", "name": "a pasta dos anexos aparece" },
+    { "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'] svg[data-icon='folder']", "count": 3, "name": "cada pasta fechada com o ícone de pasta" },
+    { "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'] .kn-side-twisty path", "count": 3, "name": "e com a seta" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Anexos')", "name": "abre a pasta Anexos" },
+    { "waitFor": ".kn-tree-pop .kn-side-item[data-kind='file'][data-type='image']:has-text('planta')", "name": "o PNG aparece na árvore, com o tipo" },
+    { "expectCount": ".kn-tree-pop .kn-side-item[data-kind='file'][data-type='pdf'] svg[data-icon='pdf']", "count": 1, "name": "o PDF com o ícone de PDF" },
+    { "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'] svg[data-icon='folder-open']", "count": 1, "name": "a pasta aberta troca de ícone" },
+    { "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'] svg[data-icon='daily']", "count": 1, "name": "a nota do dia tem o ícone dela (nas Recentes; a pasta Diário está fechada)" },
+    { "expectCount": ".kn-tree-pop .kn-side-ext", "count": 0, "name": "sem a extensão, por padrão" },
+    { "expectText": ".kn-tree-pop .kn-side-daily", "text": "⇧⌘D", "name": "o Hoje com o atalho" },
+    { "screenshot": "arvore-arquivos.png" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file'][data-type='pdf']", "name": "um clique no PDF pede ao engine para abrir (files.open)" },
+    { "invoke": "settings.set", "args": { "showExtensions": true } },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore de novo" },
+    { "waitFor": ".kn-tree-pop .kn-side-item[data-kind='file'] .kn-side-ext:has-text('.pdf')", "name": "com o ajuste ligado, a extensão aparece" },
+    { "expectText": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Inbox') .kn-side-ext", "text": ".md" },
+    { "fill": ".kn-tree-pop .kn-side-search", "text": "pdf" },
+    { "expectCount": ".kn-tree-pop .kn-side-item[data-kind='file']", "count": 1, "name": "a busca da árvore acha o arquivo pela extensão" },
+    { "screenshot": "arvore-extensao.png" }
+  ]
+}

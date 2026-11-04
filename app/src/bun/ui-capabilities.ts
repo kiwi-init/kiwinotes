@@ -10,6 +10,7 @@ import { sanitizeSnippets } from "../store/snippets.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { type AttachmentData, type Attachments, attachmentsFolder } from "../notes/attachments.ts";
+import { openMode } from "../shared/attachments.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
 import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
@@ -72,7 +73,7 @@ export interface CapabilityDeps {
     | "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve"
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
-    | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty"
+    | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile"
   >;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
@@ -101,6 +102,11 @@ export interface CapabilityDeps {
    * o `notes.reveal` só confere que o item existe.
    */
   reveal?(abs: string): void;
+  /**
+   * Abre um arquivo do vault que não é nota no app padrão do Mac (T3370); `finder` só mostra no Finder (um script, um
+   * instalador: `openMode`). Sem isto (o headless, os testes, KIWI_DEBUG), o `files.open` só confere que o arquivo existe.
+   */
+  openFile?(abs: string, mode: "app" | "finder"): void;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
@@ -311,6 +317,10 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           }
           if (!dir) throw bad("dailyFolder must name a folder of the vault");
           patch.dailyFolder = dir;
+        } else if (key === "showExtensions") {
+          // A extensão na árvore das Notas (1.19.0, T3370).
+          if (typeof value !== "boolean") throw bad("showExtensions must be true or false");
+          patch.showExtensions = value;
         } else if (key === "ocr") {
           // O texto dos anexos na busca (T2709): ligar de novo lê o que faltou.
           if (typeof value !== "boolean") throw bad("ocr must be true or false");
@@ -462,6 +472,11 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "notes.reveal": async (args) => {
       const abs = await (await vault()).locate(fields(args, "notes.reveal", ["path"]).path);
       deps.reveal?.(abs);
+      return true as const;
+    },
+    "files.open": async (args) => {
+      const abs = await (await vault()).locateFile(fields(args, "files.open", ["path"]).path);
+      deps.openFile?.(abs, openMode(abs));
       return true as const;
     },
     "notes.daily": async (args) => {

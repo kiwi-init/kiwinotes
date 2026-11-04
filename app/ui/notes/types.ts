@@ -16,6 +16,16 @@ import type { Note, NoteMeta } from "../../src/shared/ui-contract.ts";
 export interface VaultListing {
   folders: string[];
   notes: NoteMeta[];
+  /** Os arquivos que não são nota (T3370, contrato 1.19.0): a árvore mostra todos. Num engine antigo, não vem. */
+  files?: VaultFile[];
+}
+
+export type VaultFile = NonNullable<UiCapabilities["notes.list"]["result"]["files"]>[number];
+
+/** O que a árvore lê das settings (T3370): a extensão nos nomes e a pasta da nota do dia (o ícone dela). */
+export interface TreePrefs {
+  showExtensions: boolean;
+  dailyFolder: string;
 }
 
 type Result<C extends keyof UiCapabilities> = Promise<UiCapabilities[C]["result"]>;
@@ -64,6 +74,13 @@ export interface NotesApi {
    * esconde o "Salvar esta busca".
    */
   savedSearches?: { list(): Promise<SavedSearch[] | null>; set(list: SavedSearch[]): Promise<SavedSearch[]> };
+  /**
+   * Os arquivos que não são nota (T3370, contrato 1.19.0): abrir no app padrão do Mac, só pelo clique, e o aviso de que
+   * mudaram. Num engine antigo, a árvore só tem pastas e notas.
+   */
+  files?: { open(path: string): Promise<true>; onChanged(fn: () => void): () => void };
+  /** As preferências da árvore, e o aviso quando as settings mudam (de outra janela, os Ajustes). */
+  prefs?: { get(): Promise<TreePrefs>; onChanged(fn: (p: TreePrefs) => void): () => void };
 }
 
 export type TrashItem = UiCapabilities["trash.list"]["result"]["items"][number];

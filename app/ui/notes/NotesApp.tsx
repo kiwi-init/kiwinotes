@@ -30,7 +30,7 @@ import { VersionsDialog } from "./VersionsDialog.tsx";
 import { hasFilters, parseQuery, type SavedSearch } from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
-import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat } from "./types.ts";
+import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs } from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
@@ -89,6 +89,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [tagList, setTagList] = useState<TagNode[]>([]);
   /** As buscas salvas (T2660); `null` num engine que ainda não as tem. */
   const [saved, setSaved] = useState<SavedSearch[] | null>(null);
+  /** A extensão nos nomes e a pasta da nota do dia (T3370), das settings; segue quando os Ajustes mudam. */
+  const [prefs, setPrefs] = useState<TreePrefs>({ showExtensions: false, dailyFolder: "" });
   /** "Nova nota a partir de modelo…": os modelos e a pasta onde a nota nasce. */
   // `insert` (T2660, "/modelo"): o modelo entra no cursor da nota aberta, em vez de criar uma nota.
   const [picking, setPicking] = useState<{ folder: string; templates: NoteMeta[]; insert?: boolean } | null>(null);
@@ -721,6 +723,13 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     api.savedSearches?.list().then(setSaved, () => {});
   }, [api]);
 
+  // As preferências da árvore e os outros arquivos do cofre (T3370): um anexo novo ou apagado por fora refaz a lista.
+  useEffect(() => {
+    api.prefs?.get().then(setPrefs, () => {});
+    const offs = [api.prefs?.onChanged(setPrefs), api.files?.onChanged(() => void refresh())];
+    return () => offs.forEach((off) => off?.());
+  }, [api, refresh]);
+
   const setSavedList = (list: SavedSearch[]) => {
     const sv = api.savedSearches;
     if (!sv) return;
@@ -838,6 +847,16 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
               })
             }
             onOpen={(p) => void open(p)}
+            onOpenFile={
+              api.files
+                ? (p) => {
+                    setTreeOpen(false);
+                    api.files?.open(p).catch(failed_("abrir o arquivo"));
+                  }
+                : undefined
+            }
+            showExtensions={prefs.showExtensions}
+            dailyFolder={prefs.dailyFolder}
             onDaily={api.extras ? () => void openDaily() : undefined}
             onTrash={
               api.extras

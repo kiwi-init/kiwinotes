@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Kbd, Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
 import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
+import { ExtensionsRow } from "./ExtensionsRow.tsx";
 import { MicrophoneRow } from "./Microphone.tsx";
 import { NotesShortcutRow } from "./NotesShortcut.tsx";
 import { OcrRow } from "./OcrRow.tsx";
@@ -61,6 +62,7 @@ export function Settings() {
       <SnippetsSection />
 
       <Section title="Notas">
+        <ExtensionsRow />
         <OcrRow />
       </Section>
 

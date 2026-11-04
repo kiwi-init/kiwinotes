@@ -16,7 +16,7 @@ import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
-import { fileNameFor, folderPath, inside, notePath, VaultError } from "./paths.ts";
+import { fileNameFor, filePath, folderPath, inside, notePath, VaultError } from "./paths.ts";
 
 export interface NoteMeta {
   /** Relativo ao vault, POSIX, com `.md`. */
@@ -49,6 +49,13 @@ export interface SearchHit {
   score: number;
   /** Achou só por aproximação (T2966): alguma palavra casou com erro de digitação. O exato vem antes. */
   approx?: boolean;
+}
+
+/** Um arquivo do vault que não é nota (T3370): anexo, PDF, o `.canvas` do Obsidian. A árvore mostra todos. */
+export interface VaultFile {
+  path: string;
+  size: number;
+  mtime: string;
 }
 
 /** Uma pasta do vault com o que tem dentro (T2468): a raiz tem `path` e `name` vazios. */
@@ -275,6 +282,8 @@ export class Vault {
   private readonly watchOnOpen: boolean;
   private notes = new Map<string, Entry>();
   private folders = new Set<string>();
+  /** Os arquivos que não são nota (T3370), para a árvore. O conteúdo não é lido. */
+  private files = new Map<string, VaultFile>();
   private watcher: FSWatcher | null = null;
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -362,10 +371,20 @@ export class Vault {
 
   // ---------------------------------------------------------------- leitura
 
-  list(): { folders: string[]; notes: NoteMeta[]; tree: FolderNode } {
+  list(): { folders: string[]; notes: NoteMeta[]; tree: FolderNode; files: VaultFile[] } {
     const folders = [...this.folders].sort((a, b) => a.localeCompare(b));
     const notes = [...this.notes.values()].map((e) => e.meta).sort((a, b) => a.path.localeCompare(b.path));
-    return { folders, notes, tree: buildTree(folders, notes) };
+    const files = [...this.files.values()].sort((a, b) => a.path.localeCompare(b.path));
+    return { folders, notes, tree: buildTree(folders, notes), files };
+  }
+
+  /** O caminho absoluto de um arquivo que não é nota, para abrir no app padrão do Mac (T3370). */
+  async locateFile(input: unknown): Promise<string> {
+    const p = filePath(input);
+    const abs = inside(this.root, p);
+    const s = await lstat(abs).catch(() => null);
+    if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
+    return abs;
   }
 
   async get(input: unknown): Promise<Note> {
@@ -947,6 +966,7 @@ export class Vault {
     this.resolver = null;
     this.notes = new Map();
     this.folders = new Set();
+    this.files = new Map();
     const walk = async (rel: string) => {
       for (const name of await readdir(path.join(this.root, rel))) {
         if (name.startsWith(".")) continue;
@@ -959,6 +979,8 @@ export class Vault {
           await walk(child);
         } else if (s.isFile() && /\.md$/i.test(name)) {
           await this.index(child.normalize("NFC"), await readFile(abs, "utf8"), abs);
+        } else if (s.isFile()) {
+          this.keepFile(child.normalize("NFC"), s);
         }
       }
     };
@@ -995,6 +1017,8 @@ export class Vault {
         continue;
       }
       if (!/\.md$/i.test(rel)) {
+        if (s?.isFile()) this.keepFile(rel, s);
+        else this.files.delete(rel);
         others.push(rel);
         continue;
       }
@@ -1031,6 +1055,10 @@ export class Vault {
         }
       }
     }
+  }
+
+  private keepFile(rel: string, s: { size: number; mtimeMs: number }) {
+    this.files.set(rel, { path: rel, size: s.size, mtime: new Date(s.mtimeMs).toISOString() });
   }
 
   private snapshot(): Snapshot {

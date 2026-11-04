@@ -1,12 +1,15 @@
 // A barra lateral das Notas (B v4: só texto e espaço; selecionada é peso de texto). Com o T2469, o básico de app de notas:
 // a busca na árvore, as fixadas e as recentes, o contador discreto de cada pasta, renomear ali mesmo, arrastar nota ou
-// pasta para outra pasta (ou para a raiz, na área vazia) e o menu de botão direito.
+// pasta para outra pasta (ou para a raiz, na área vazia) e o menu de botão direito. Com o T3370 (spec #3272): um ícone
+// por tipo, a seta das pastas, os outros arquivos do cofre (abrem no app padrão do Mac) e a extensão, se a pessoa quiser.
 
 import { type DragEvent, type ReactElement, useEffect, useRef, useState } from "react";
 
 import { Highlight } from "./Highlight.tsx";
+import { folderOf } from "./links.ts";
 import { titleRanges } from "./palette.ts";
-import type { TreeNode } from "./tree.ts";
+import type { FileNode, TreeNode } from "./tree.ts";
+import { TreeIcon, Twisty } from "./treeIcons.tsx";
 import type { SavedSearch } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
@@ -49,7 +52,20 @@ export interface SidebarProps {
   trashCount?: number;
   /** A Lixeira está aberta no meio da janela. */
   trashOpen?: boolean;
+  /** Abre no app padrão do Mac um arquivo que não é nota (T3370). Sem isto, os arquivos aparecem sem abrir. */
+  onOpenFile?(path: string): void;
+  /** A extensão depois do nome (`.md`, `.pdf`), em cinza: o "Mostrar extensão dos arquivos" dos Ajustes (T3370). */
+  showExtensions?: boolean;
+  /** A pasta da nota do dia: as `AAAA-MM-DD.md` de lá ganham o ícone dela. */
+  dailyFolder?: string;
 }
+
+/** Uma nota do dia: `AAAA-MM-DD.md` na pasta das notas do dia. */
+export const isDailyNote = (path: string, dailyFolder: string | undefined) =>
+  dailyFolder !== undefined && folderOf(path) === dailyFolder && /(^|\/)\d{4}-\d{2}-\d{2}\.md$/i.test(path);
+
+/** A extensão em cinza depois do nome. */
+const Ext = ({ ext }: { ext: string }) => (ext ? <span className="kn-side-ext">.{ext}</span> : null);
 
 const DRAG = "application/x-kiwi-notes";
 
@@ -145,13 +161,41 @@ export function Sidebar(p: SidebarProps) {
         onContextMenu={(e) => menu(e, { kind: "note", path: n.path })}
         {...drag({ kind: "note", path: n.path })}
       >
-        {inTree && searching ? <Highlight text={n.name} ranges={titleRanges(n.name, p.query)} /> : n.name}
+        {inTree ? <Twisty /> : null}
+        <TreeIcon name={isDailyNote(n.path, p.dailyFolder) ? "daily" : "note"} />
+        <span className="kn-side-name">{inTree && searching ? <Highlight text={n.name} ranges={titleRanges(n.name, p.query)} /> : n.name}</span>
+        {p.showExtensions ? <Ext ext="md" /> : null}
       </button>
     );
+
+  // Um arquivo que não é nota (T3370): o clique abre no app padrão do Mac. Sem menu nem arrastar: renomear e mover
+  // um anexo é pelo Finder (os links das notas a ele não seriam reescritos aqui).
+  const fileItem = (f: FileNode, depth: number) => (
+    <button
+      type="button"
+      key={`a:${f.path}`}
+      className="kn-side-item"
+      data-kind="file"
+      data-type={f.type}
+      style={{ paddingLeft: depth * 14 }}
+      title={`${f.path} · abre no app padrão do Mac`}
+      onClick={(e) => !e.ctrlKey && p.onOpenFile?.(f.path)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <Twisty />
+      <TreeIcon name={f.type} />
+      <span className="kn-side-name">{searching ? <Highlight text={f.name} ranges={titleRanges(f.name, p.query)} /> : f.name}</span>
+      {p.showExtensions ? <Ext ext={f.ext} /> : null}
+    </button>
+  );
 
   const items = (nodes: TreeNode[], depth: number): ReactElement[] =>
     nodes.flatMap((n) => {
       if (n.kind === "note") return [noteItem(n, depth, `n:${n.path}`)];
+      if (n.kind === "file") return [fileItem(n, depth)];
       const expanded = p.open.has(n.path);
       const row =
         p.renaming === `f:${n.path}` ? (
@@ -176,6 +220,8 @@ export function Sidebar(p: SidebarProps) {
             {...drag({ kind: "folder", path: n.path })}
             {...dropZone(n.path)}
           >
+            <Twisty open={expanded} />
+            <TreeIcon name={expanded ? "folder-open" : "folder"} />
             <span className="kn-side-name">{n.name}</span>
             {n.count ? <span className="kn-side-count">{n.count}</span> : null}
           </button>
@@ -210,7 +256,8 @@ export function Sidebar(p: SidebarProps) {
         }}
       />
       {!searching && p.onDaily ? (
-        <button type="button" className="kn-side-item kn-side-daily" style={{ paddingLeft: 8 }} onClick={() => p.onDaily?.()} title="Nota do dia (⇧⌘D)">
+        <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title="Nota do dia (⇧⌘D)">
+          <TreeIcon name="today" />
           <span className="kn-side-name">Hoje</span>
           <span className="kn-side-count">⇧⌘D</span>
         </button>
@@ -228,6 +275,7 @@ export function Sidebar(p: SidebarProps) {
           {p.saved.map((s) => (
             <div key={`s:${s.query}`} className="kn-side-saved">
               <button type="button" className="kn-side-item" data-kind="search" title={s.query} onClick={(e) => !e.ctrlKey && p.onSaved?.(s.query)}>
+                <TreeIcon name="search" />
                 <span className="kn-side-name">{s.name}</span>
               </button>
               {p.onUnsave ? (
@@ -249,7 +297,7 @@ export function Sidebar(p: SidebarProps) {
       ) : null}
       <div className="kn-side-head">{searching ? "Resultado" : "Notas"}</div>
       {items(p.tree, 0)}
-      {searching && !p.tree.length ? <div className="kn-side-empty">Nenhuma nota com esse nome</div> : null}
+      {searching && !p.tree.length ? <div className="kn-side-empty">Nada com esse nome</div> : null}
       {!searching && p.tags?.length && p.onTag ? (
         <>
           <div className="kn-side-gap" />
@@ -263,10 +311,10 @@ export function Sidebar(p: SidebarProps) {
           <button
             type="button"
             className="kn-side-item kn-side-trash"
-            style={{ paddingLeft: 8 }}
             aria-current={p.trashOpen || undefined}
             onClick={() => p.onTrash?.()}
           >
+            <TreeIcon name="trash" />
             <span className="kn-side-name">Lixeira</span>
             {p.trashCount ? <span className="kn-side-count">{p.trashCount}</span> : null}
           </button>
@@ -289,6 +337,7 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void):
       // ⌃-clique é o clique secundário do Mac: abre só o menu, não a busca por baixo dele (T2693, T2751).
       onClick={(e) => !e.ctrlKey && onTag(t.tag)}
     >
+      <TreeIcon name="tag" />
       <span className="kn-side-name">#{t.name}</span>
       <span className="kn-side-count">{t.count}</span>
     </button>,

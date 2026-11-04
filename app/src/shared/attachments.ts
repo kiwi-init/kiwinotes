@@ -22,3 +22,16 @@ export const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
 export const extOf = (name: string): string => (/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? "").toLowerCase();
 
 export const isAttachmentName = (name: string): boolean => Boolean(ATTACHMENT_TYPES[extOf(name)]);
+
+/**
+ * Arquivos que o `open` do macOS executaria em vez de mostrar (um script no Terminal, um AppleScript, um instalador).
+ * O "abrir no app padrão" da árvore (T3370) só mostra esses no Finder: um clique num arquivo do cofre não roda nada.
+ */
+export const RUNS_ON_OPEN = new Set([
+  "app", "command", "tool", "sh", "zsh", "bash", "csh", "ksh", "fish", "terminal", "scpt", "scptd", "applescript",
+  "workflow", "action", "pkg", "mpkg", "dmg", "jar", "py", "pl", "rb", "php", "js", "mjs", "osascript", "shortcut",
+  "prefpane", "saver", "kext", "plugin", "webloc", "inetloc", "fileloc", "url", "mobileconfig", "configprofile",
+]);
+
+/** O `open` de um arquivo do cofre (T3370): no app padrão, ou só no Finder se ele rodaria algo. */
+export const openMode = (name: string): "app" | "finder" => (RUNS_ON_OPEN.has(extOf(name)) ? "finder" : "app");

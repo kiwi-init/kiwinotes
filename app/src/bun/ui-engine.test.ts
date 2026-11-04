@@ -37,7 +37,7 @@ const notesStub = {
   notesContaining: () => [],
   onOtherFiles: () => () => {},
   open: async () => {},
-  list: () => ({ folders: [], notes: [], tree: { path: "", name: "", folders: [], notes: [] } }),
+  list: () => ({ folders: [], notes: [], tree: { path: "", name: "", folders: [], notes: [] }, files: [] }),
   get: async () => {
     throw new Error("not in this test");
   },
@@ -52,6 +52,7 @@ const notesStub = {
   duplicate: async () => null as never,
   restore: async () => null as never,
   locate: async () => "",
+  locateFile: async () => "",
   createFolder: async () => null as never,
   moveFolder: async () => null as never,
   deleteFolder: async () => true as const,
@@ -70,7 +71,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto" };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false };
   let t = 0;
   return {
     calls,
