@@ -187,23 +187,8 @@ final class Inserter {
     /// The virtual key that types `character` in the current keyboard layout with ⌘ held: on Dvorak it isn't the
     /// QWERTY V key, and on the "… – QWERTY ⌘" layouts ⌘ switches to QWERTY, so it is again.
     static func keyCode(for character: Character) -> CGKeyCode? {
-        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
-        let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
-        return data.withUnsafeBytes { raw -> CGKeyCode? in
-            guard let layout = raw.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return nil }
-            let commandState = UInt32((cmdKey >> 8) & 0xFF)
-            for code in 0..<128 {
-                var deadKeys: UInt32 = 0
-                var length = 0
-                var chars = [UniChar](repeating: 0, count: 4)
-                let status = UCKeyTranslate(layout, UInt16(code), UInt16(kUCKeyActionDown), commandState, UInt32(LMGetKbdType()),
-                                            OptionBits(kUCKeyTranslateNoDeadKeysBit), &deadKeys, chars.count, &length, &chars)
-                if status == noErr, length == 1, String(utf16CodeUnits: chars, count: 1) == String(character) {
-                    return CGKeyCode(code)
-                }
-            }
-            return nil
-        }
+        KeyboardLayout.withCurrent { translate in
+            (0..<128).first { translate(UInt16($0), true) == character }.map { CGKeyCode($0) }
+        } ?? nil
     }
 }

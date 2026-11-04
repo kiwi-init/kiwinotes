@@ -23,6 +23,8 @@ final class HotkeyTap {
     private var keyIsDown = false
     /// This press started with ⌥ held: ⌥ going up or down meanwhile is part of the gesture.
     private var noteHeld = false
+    /// The dictation key went down as part of the Notes combination (T1653): neither its down nor its up is a gesture.
+    private var chordPress = false
 
     init(key: HotkeyKey, onEvent: @escaping (Event) -> Void) {
         self.key = key
@@ -66,6 +68,7 @@ final class HotkeyTap {
         source = nil
         keyIsDown = false
         noteHeld = false
+        chordPress = false
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
@@ -78,6 +81,14 @@ final class HotkeyTap {
         case .flagsChanged:
             let code = event.getIntegerValueField(.keyboardEventKeycode)
             if let down = key.isDown(keyCode: code, flags: event.flags.rawValue) {
+                if chordPress {
+                    if !down { chordPress = false }
+                    return
+                }
+                if down, !keyIsDown, notesCombo?.startsWith(key, flags: event.flags.rawValue) == true {
+                    chordPress = true
+                    return
+                }
                 guard down != keyIsDown else { return }
                 keyIsDown = down
                 let now = ProcessInfo.processInfo.systemUptime
@@ -97,7 +108,9 @@ final class HotkeyTap {
             if keyIsDown { onEvent(.otherKey) }
             let code = event.getIntegerValueField(.keyboardEventKeycode)
             let repeated = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-            if let combo = notesCombo, combo.matches(keyCode: code, flags: event.flags.rawValue, autorepeat: repeated) {
+            if let combo = notesCombo, combo.matches(keyCode: code, flags: event.flags.rawValue, autorepeat: repeated, typed: {
+                KeyboardLayout.character(forKeyCode: code, withCommand: combo.usesCommandLayer)
+            }) {
                 onEvent(.notesShortcut)
             }
         default:
