@@ -117,6 +117,18 @@ describe("os arquivos que não são nota (T3370)", () => {
     expect(v.list().folders).not.toContain("Novo.key");
   });
 
+  test("um pacote salvo com o app aberto (a pasta antes da marca) vira documento quando a marca chega (revisão #3492)", async () => {
+    const { v, root } = await vault({ "Nota.md": "oi" });
+    v.watch();
+    await watcherReady(root, v);
+    mkdirSync(path.join(root, "Novo.key"));
+    await waitFor(() => v.list().folders.includes("Novo.key"));
+    writeFileSync(path.join(root, "Novo.key/Index.zip"), "zip");
+    await waitFor(() => v.list().files.some((f) => f.path === "Novo.key"));
+    expect(v.list().files.map((f) => f.path)).toEqual(["Novo.key"]);
+    expect(v.list().folders).toEqual([]);
+  });
+
   test("uma pasta comum chamada Projeto.key continua pasta, com as notas de dentro (revisão #3476)", async () => {
     const { v, root } = await vault({ "Projeto.key/Ideia.md": "a ideia", "Chaves.pages/senhas.txt": "x", "Fora.md": "fora" });
     expect(v.list().notes.map((n) => n.path)).toEqual(["Fora.md", "Projeto.key/Ideia.md"]);

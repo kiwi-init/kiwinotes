@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
-import { isPackageDir } from "../shared/attachments.ts";
+import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -1009,6 +1009,14 @@ export class Vault {
     const others: string[] = [];
     const before = this.snapshot();
     for (const rel of paths) {
+      // Uma pasta conhecida com nome de pacote que acabou de ganhar a marca (o Keynote cria a pasta e, um instante
+      // depois, o Index.zip): agora é documento, e a releitura a tira das pastas (revisão #3492).
+      if (await this.becamePackage(rel)) {
+        await this.scan();
+        changed.push(rel);
+        others.push(rel);
+        continue;
+      }
       // Dentro de um documento-pacote (o Pages salvando): conta como o pacote inteiro mudando (T3371).
       const pkg = this.packageOf(rel);
       if (pkg) {
@@ -1091,6 +1099,15 @@ export class Vault {
         }
       }
     }
+  }
+
+  /** Se uma pasta conhecida acima de `rel`, com nome de pacote, agora tem a marca do formato e nenhuma nota. */
+  private async becamePackage(rel: string): Promise<boolean> {
+    for (let p = parentOf(rel); p; p = parentOf(p)) {
+      if (!this.folders.has(p) || !PACKAGE_MARKS[extOf(p)]) continue;
+      if (isPackageDir(p, await readdir(path.join(this.root, p)).catch(() => []))) return true;
+    }
+    return false;
   }
 
   /** O pacote conhecido que contém `rel` (ou é ele), ou null. Um pacote novo entra pelo scan (pasta nova relê tudo). */
