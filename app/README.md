@@ -45,6 +45,31 @@ bun run cli stop --data /tmp/kn-test
 - **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`.
 - **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
 
+### Ver as janelas pela CLI, fora da tela (T1742)
+
+Com o headless de pé (`bun run cli start --data DIR --no-helper`), as janelas de verdade abrem num WebKit headless, sem nada na tela de ninguém:
+
+```sh
+bun run cli screenshot notes --scale 1,2 --theme light,dark --note Pessoas/Ana.md --data DIR
+bun run cli ui notes --script passos.json --out /tmp/prints --data DIR
+```
+
+- **O que roda:** o build da janela (o mesmo `vite build` do `ui:build`, guardado em `node_modules/.cache/kiwi-cli-ui/` e refeito quando `ui/` ou `src/` mudam), servido com a `VIEWS_CSP`. O `window.engine` imita o do preload e leva cada `invoke` ao headless, e os eventos do headless (`notes.changed`, `history.added`) chegam à página.
+- **O padrão:** WebKit, porque o Chromium headless ignora o `-webkit-font-smoothing` (#1765), em 2x, claro, no tamanho da janela (`src/shared/window-specs.ts`) e com reduced motion, sem animação no print. Para mudar: `--browser chromium`, `--size WxH`, `--motion`. Com `--dist DIR`, usa um build pronto, como o de outro worktree para o antes e depois.
+- **A saída:** JSON com os PNGs, se a UI chamou `engine.ready()`, os erros da página e de CSP (`problems`), o que tentou sair para a rede (`blocked`) e as capacidades chamadas. Qualquer problema dá exit 1, e o PNG sai assim mesmo.
+- **Isolamento:** a página não sai para a rede, e o `clipboard.write` nunca chega ao engine: o texto fica em `clipboard` no relatório.
+- **Os passos** (`scripts/ui-steps.ts`): `click`, `fill`, `type`, `press` (⌘K é `"Meta+k"`), `hover`, `waitFor`, `wait`, `expectText`, `expectCount`, `screenshot` e `invoke`, que é uma capacidade direto no engine, como uma edição no Obsidian. O script para no primeiro passo que falha e deixa `falhou-passo-N.png`.
+
+```json
+{ "window": "notes", "theme": "dark", "steps": [
+  { "press": "Meta+k" }, { "type": "projeto" }, { "press": "Enter" },
+  { "expectText": ".kn-side-item[aria-current=page]", "text": "Projeto X" },
+  { "screenshot": "projeto.png" }
+] }
+```
+
+Na primeira vez: `bunx playwright-core install webkit`. Num worktree novo: `bun run prepare:eb`, sem o qual o Vite não builda.
+
 ## Dirigir o app (agentes)
 
 Com o app de pé:
