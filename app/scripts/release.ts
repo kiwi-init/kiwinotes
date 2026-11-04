@@ -15,7 +15,8 @@ import os from "node:os";
 import path from "node:path";
 
 import pkg from "../package.json" with { type: "json" };
-import { unpack } from "./signing.ts";
+import { pack, unpack } from "./signing.ts";
+import { updateManifest } from "./update-feed.ts";
 
 const IDENTIFIER = "app.kiwinotes.desktop";
 const appDir = path.resolve(import.meta.dirname, "..");
@@ -178,6 +179,16 @@ try {
     must("xcrun", ["stapler", "validate", dmg], "validating the dmg's ticket");
     must("spctl", ["--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=2", dmg], "Gatekeeper on the dmg");
   }
+  // O que o Updater baixa (T1969): o mesmo app do .dmg (assinado, notarizado e com o ticket), num .tar.zst com o nome
+  // que o manifesto do Electrobun dá, e o manifesto conferido contra o app.
+  const builtManifest = fs.readdirSync(artifacts).find((f) => /^stable-.*-update\.json$/.test(f));
+  if (!builtManifest) throw new Error(`release: no stable-*-update.json in ${artifacts}`);
+  const appVersion = JSON.parse(fs.readFileSync(path.join(app, "Contents", "Resources", "version.json"), "utf8")) as Record<string, unknown>;
+  const manifest = updateManifest(JSON.parse(fs.readFileSync(path.join(artifacts, builtManifest), "utf8")), appVersion);
+  const updateTar = path.join(out, manifest.artifact.file);
+  pack(stage, ["Kiwi Notes.app"], updateTar);
+  fs.writeFileSync(path.join(out, builtManifest), `${JSON.stringify(manifest)}\n`);
+  console.log(`release: ${path.relative(process.cwd(), updateTar)} (${(fs.statSync(updateTar).size / 1e6).toFixed(1)} MB) + ${builtManifest}`);
   console.log(`release: ${path.relative(process.cwd(), dmg)} (${(fs.statSync(dmg).size / 1e6).toFixed(1)} MB)`);
   console.log(signed ? "release: signed with the Developer ID, notarized and stapled" : "release: rehearsal: ad hoc, not notarized");
 } finally {

@@ -36,6 +36,14 @@ export default {
     // Falha o build se algum .app que sai dele (build/, artifacts/, .dmg) não passa no codesign --verify --strict (T762).
     postPackage: "./scripts/verify-signature.ts",
   },
+  // A atualização automática (T1969, ADR 0008): o feed do Updater é o GitHub Releases. Quem diz o endereço é o CI
+  // (`KIWI_UPDATE_URL`, pelo tag): sem ele (build local, ensaio sem tag) o app sai sem baseUrl e nunca checa.
+  release: {
+    baseUrl: process.env.KIWI_UPDATE_URL ?? "",
+    // Sem patch: o do Electrobun sairia do app antes do release.ts assinar e notarizar, e o app baixado não seria o do
+    // .dmg. O Updater baixa o app inteiro, o mesmo do .dmg, e o app confere a assinatura antes de oferecer.
+    generatePatch: false,
+  },
   runtime: {
     // A menu bar app: closing the last window keeps it running.
     exitOnLastWindowClosed: false,

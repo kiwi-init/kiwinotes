@@ -4,6 +4,7 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 
 ## Privacidade (inegociável)
 - Nada sai do Mac: sem telemetria, sem analytics, sem STT nem LLM na nuvem. A única exceção é o Claude Code (decisão #34), e só onde um spec disser.
+- O que o app baixa, decidido pelo harry: a atualização do app pelo GitHub Releases (ADR 0008, #1966) e os modelos de voz. São só downloads, e nada da pessoa vai junto.
 - Nunca commite áudio, transcrições reais, modelos baixados ou credenciais.
 - **Agente não usa o microfone real.** Nada que ligue o mic: `record.start`, o atalho, ou uma ação do app (agent control) que grave, mesmo que o Terminal já tenha a permissão. Para ver o overlay, use `overlay.state`, que não liga o mic. Diagnóstico com áudio sintético (`say`) ou com os arquivos que o harry gravar para isso. Teste com o mic real é só do harry, e quem pede é o lead (#320).
 - **Agente não mexe na sessão do harry.** Nos testes, nada de AppleScript (`osascript`), abrir ou controlar outro app, colar nem escrever no clipboard real: a colagem cai no app que estiver na frente, que pode ser uma conversa dele. O `insert.text` dos agentes vai sempre com `dryRun: true` (o app em `KIWI_DEBUG=1` faz isso sozinho). Colagem de verdade é teste do harry, pedido pelo lead (#489).
