@@ -127,6 +127,9 @@ const CORRECTION_MARKERS: Marker[] = [
 ];
 
 const SENTENCE_END = /[.!?\n]/;
+/** O ponto entre dígitos é de milhar ou decimal ("1.500", "2.5"), não fecha frase (T1955, #2009). */
+const endsSentence = (s: string, i: number) =>
+  SENTENCE_END.test(s[i]!) && !(s[i] === "." && /\p{N}/u.test(s[i - 1] ?? "") && /\p{N}/u.test(s[i + 1] ?? ""));
 
 /**
  * "às três, não, quer dizer, às quatro" → "às quatro". O que vem depois do marcador
@@ -163,7 +166,7 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
   // Só olha a frase atual: a correção nunca atravessa um ponto final.
   let start = -1;
   for (let i = left.length - 1; i >= 0; i--) {
-    if (SENTENCE_END.test(left[i]!)) {
+    if (endsSentence(left, i)) {
       start = i;
       break;
     }
@@ -177,7 +180,7 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
     const prev = head.replace(/[.!?]\s*$/u, "");
     let prevStart = -1;
     for (let i = prev.length - 1; i >= 0; i--) {
-      if (SENTENCE_END.test(prev[i]!)) {
+      if (endsSentence(prev, i)) {
         prevStart = i;
         break;
       }
@@ -189,6 +192,12 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
 
   const first = norm(fix[0]!);
   const window = Math.max(0, sentence.length - Math.min(8, maxSpan));
+  // Com o marcador explícito (entre vírgulas), a correção é certa, e o trecho corrigido pode estar no meio da frase
+  // (T1955, #1989): troca só ele e mantém o resto.
+  if (!needsMatch) {
+    const span = anchoredSpan(sentence, fix, window) ?? (fix.length === 1 ? numberSpan(sentence, first, window) : null);
+    if (span) return joinParts(head, [...sentence.slice(0, span.from), ...fix, ...sentence.slice(span.to + 1)], "");
+  }
   let cut = -1;
   for (let i = sentence.length - 1; i >= window; i--) {
     if (norm(sentence[i]!) === first) {
@@ -212,6 +221,41 @@ function replaceCorrected(left: string, right: string, needsMatch = false, align
     cut = sentence.length - 1;
   }
   return joinParts(head, sentence.slice(0, cut), right);
+}
+
+/**
+ * A correção termina numa palavra que já está na frase ("2 cafés e 3 pães, não, quer dizer, 3 cafés"): o trecho do
+ * mesmo tamanho que acaba nela é o corrigido. A âncora tem pelo menos 3 letras e não é número. null sem âncora.
+ */
+function anchoredSpan(sentence: string[], fix: string[], window: number): { from: number; to: number } | null {
+  if (fix.length < 2) return null;
+  const anchor = norm(fix.at(-1)!);
+  if (anchor.length < 3 || /\p{N}/u.test(anchor)) return null;
+  for (let i = sentence.length - 1; i >= window; i--) {
+    if (norm(sentence[i]!) !== anchor) continue;
+    const from = i - (fix.length - 1);
+    return from >= window ? { from, to: i } : null;
+  }
+  return null;
+}
+
+/** O jeito de um número: "15h" → "0h", "12/11" → "0/0", "R$1.500" → "r$0.0". */
+const numberShape = (w: string) => w.toLocaleLowerCase("pt-BR").replace(/\p{N}+/gu, "0");
+
+/**
+ * A correção é um número só ("às 15h na sala 2, não, quer dizer, 16h"): troca o último número da frase com o mesmo
+ * jeito (o sufixo, a unidade, a data) e, sem nenhum assim, o último número. null sem número na frase.
+ */
+function numberSpan(sentence: string[], first: string, window: number): { from: number; to: number } | null {
+  if (!/\p{N}/u.test(first)) return null;
+  let any = -1;
+  for (let i = sentence.length - 1; i >= window; i--) {
+    const w = norm(sentence[i]!);
+    if (!/\p{N}/u.test(w)) continue;
+    if (numberShape(w) === numberShape(first)) return { from: i, to: i };
+    if (any < 0) any = i;
+  }
+  return any >= 0 ? { from: any, to: any } : null;
 }
 
 /**
@@ -278,11 +322,20 @@ export function removeFillers(text: string): string {
   out = out.replace(re(`(^|[.!?\\n]\\s*)então\\s+assim\\s+(?!que${E})`), "$1");
   out = out.replace(re(`[\\s,]*,\\s*(?:sabe|you know|like)${E}\\s*\\??(?=\\s*[,.!?]|\\s*$)`), "");
   out = out.replace(re(`,\\s*(?:you know|like),\\s*`), ", ");
+  // "it was like really fast": sem vírgula, "like" só é muleta entre um verbo de ligação e um intensificador (T1955).
+  // O verbo ("I like it", "I'd like really hot coffee") e a comparação ("looks like rain") ficam.
+  out = out.replace(re(`${B}(${LIKE_AFTER})\\s+like\\s+(?=(?:${LIKE_BEFORE})${E})`), "$1 ");
   return out;
 }
 
+/** Antes de um "like" de muleta: o verbo de ligação ("was", "it's", "is"). */
+const LIKE_AFTER = "was|were|is|are|am|be|been|being|it's|that's|he's|she's|they're|we're|you're|i'm";
+/** Depois dele: um intensificador, que nunca é o objeto do verbo "like". */
+const LIKE_BEFORE = "really|so|super|totally|very|literally|just|actually|completely|pretty|too|way|kind of|sort of";
+
 // Repetidas de propósito, para dar ênfase: ficam.
-const EMPHASIS = new Set("muito mais bem não sim very really so no yes ha haha rs had that".split(" "));
+// "já já" e "logo logo" são "daqui a pouco", e "tchau tchau" é despedida: tirar a repetição muda o sentido (T1955).
+const EMPHASIS = new Set("muito mais bem não sim já logo tchau very really so no yes bye ha haha rs had that".split(" "));
 
 /**
  * "eu eu acho" → "eu acho". Com vírgula, três vezes ou terminando em "!" é ênfase e fica: "Vai, vai, vai!" (T913).

@@ -10,9 +10,12 @@
 {"name": "muleta: né no fim some", "text": "a reunião foi boa né", "expect": {"text": "A reunião foi boa."}}
 {"name": "muleta: né? vira pergunta", "text": "você vem amanhã, né?", "expect": {"text": "Você vem amanhã?"}}
 {"name": "muleta: gagueira", "text": "eu eu acho que que dá", "expect": {"text": "Eu acho que dá."}}
+{"name": "muleta: gagueira no artigo", "text": "o o projeto atrasou", "expect": {"text": "O projeto atrasou."}}
+{"name": "ênfase: logo logo fica", "text": "logo logo a gente resolve", "app": "slack", "expect": {"text": "Logo logo a gente resolve", "tone": "casual"}}
 {"name": "muleta en: uh e you know", "text": "uh I think we should, you know, ship it on friday", "expect": {"text": "I think we should ship it on friday."}}
-{"name": "muleta en: like de muleta some", "text": "it was like really fast", "expect": {"text": "It was really fast."}, "known": "o like de muleta não sai (as regras não tratam like)"}
+{"name": "muleta en: like de muleta some", "text": "it was like really fast", "expect": {"text": "It was really fast."}}
 {"name": "muleta en: like verbo fica", "text": "I like this approach", "expect": {"text": "I like this approach."}}
+{"name": "muleta en: like de comparação fica", "text": "it looks like rain today", "expect": {"text": "It looks like rain today."}}
 // ---------------------------------------------------------------- pontuação e maiúsculas
 {"name": "pontuação: pergunta sem ponto do STT", "text": "quando sai o próximo release", "expect": {"text": "Quando sai o próximo release?"}}
 {"name": "pontuação: maiúscula depois do ponto", "text": "fechou. depois a gente vê", "expect": {"text": "Fechou. Depois a gente vê."}}
@@ -29,7 +32,8 @@
 {"name": "número: versão com ponto", "text": "a versão 2.1 saiu ontem", "expect": {"text": "A versão 2.1 saiu ontem."}}
 {"name": "data: dia e hora", "text": "a reunião é dia 12/11 às 15h", "expect": {"text": "A reunião é dia 12/11 às 15h."}}
 {"name": "número: dinheiro", "text": "custa R$ 1.500,00 por mês", "expect": {"text": "Custa R$ 1.500,00 por mês."}}
-{"name": "data: autocorreção com algarismo", "text": "o prazo é 3 de dezembro, não, quer dizer, 5 de dezembro", "expect": {"text": "O prazo é 5 de dezembro."}, "known": "a correção com algarismo embaralha a data: \"O prazo é 3 de 5 de dezembro.\""}
+{"name": "data: autocorreção com algarismo", "text": "o prazo é 3 de dezembro, não, quer dizer, 5 de dezembro", "expect": {"text": "O prazo é 5 de dezembro."}}
+{"name": "data: correção só da hora", "text": "a reunião é dia 12 às 15h, não, quer dizer, 16h", "expect": {"text": "A reunião é dia 12 às 16h."}}
 {"name": "data en: hora e dia", "text": "the meeting is at 3pm on November 12", "expect": {"text": "The meeting is at 3pm on November 12."}}
 {"name": "número por extenso fica por extenso", "text": "são três arquivos", "expect": {"text": "São três arquivos."}}
 // ---------------------------------------------------------------- dicionário (config.json)
@@ -45,7 +49,7 @@
 // ---------------------------------------------------------------- tom por app
 {"name": "tom slack: uma frase sem ponto", "text": "ok chego às quatro", "app": "slack", "expect": {"text": "Ok chego às quatro", "tone": "casual"}}
 {"name": "tom slack: duas frases mantêm os pontos", "text": "chego às quatro. me espera", "app": "slack", "expect": {"text": "Chego às quatro. Me espera.", "tone": "casual"}}
-{"name": "tom teams: casual", "text": "beleza, te mando o link já já", "app": "teams", "expect": {"text": "Beleza, te mando o link já já", "tone": "casual"}, "known": "o já já vira já: a regra da gagueira come a repetição de ênfase"}
+{"name": "tom teams: casual", "text": "beleza, te mando o link já já", "app": "teams", "expect": {"text": "Beleza, te mando o link já já", "tone": "casual"}}
 {"name": "tom mail: pontuação completa", "text": "oi Ana segue o relatório em anexo", "app": "mail", "expect": {"text": "Oi Ana segue o relatório em anexo.", "tone": "formal"}}
 {"name": "tom outlook: pergunta formal", "text": "quando você pode revisar o contrato", "app": "outlook", "expect": {"text": "Quando você pode revisar o contrato?", "tone": "formal"}}
 {"name": "tom ghostty: comando literal, sem espaço automático", "text": "Git status.", "app": "ghostty", "fieldBefore": "$ ", "expect": {"text": "git status", "tone": "literal", "typed": "git status", "spaced": false}}
