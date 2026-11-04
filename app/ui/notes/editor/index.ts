@@ -12,7 +12,7 @@ import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 
 import { externalUrl, linkAt } from "../links.ts";
-import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview } from "./livePreview.ts";
+import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { tableEnter, tableTab } from "./table.ts";
 import { linkFromPaste, listIndent } from "./text.ts";
 
@@ -33,6 +33,8 @@ export interface EditorOptions {
   onOpenLink(target: string): void;
   /** ⌘-clique num link do Markdown que pode abrir fora (já passou pelo `externalUrl`). */
   onOpenUrl(url: string): void;
+  /** Clique numa `#tag` do texto: a busca por ela (T2619). */
+  onOpenTag?(tag: string): void;
   /** As notas para o autocomplete do `[[`. */
   linkTargets(): LinkTarget[];
   /** `notes.resolve`: para desenhar o link que ainda não existe de outro jeito. */
@@ -186,6 +188,14 @@ const theme = EditorView.theme({
   ".cm-task-box[data-checked=true]": { background: "var(--accent)" },
   ".cm-task-done": { color: "var(--text-3)", textDecoration: "line-through" },
   ".cm-wikilink": { color: "var(--accent-text)", cursor: "pointer" },
+  // A #tag como etiqueta (T2619): o mesmo verde do link, num fundo suave, e o clique busca por ela.
+  ".cm-tag": {
+    color: "var(--accent-text)",
+    backgroundColor: "var(--accent-soft)",
+    borderRadius: "4px",
+    padding: "0 3px",
+    cursor: "pointer",
+  },
   // O comentário do Obsidian, quando aparece (na linha do cursor), e a legenda do ditado (o `.said` do B v4).
   ".cm-comment": { color: "var(--text-3)", opacity: "0.7" },
   ".cm-said": { fontSize: "11px", lineHeight: "1.4", color: "var(--accent-text)" },
@@ -265,6 +275,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax], addKeymap: true, pasteURLAsLink: false }),
     syntaxHighlighting(highlight),
     inlinePreview(links),
+    tagPreview,
     tablePreview,
     commentPreview,
     autocompletion({ override: [linkCompletion(opts.linkTargets)], icons: false, closeOnBlur: true }),
@@ -288,6 +299,13 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
         return true;
       },
       mousedown(e, view) {
+        // Um clique na #tag abre a busca por ela; com ⌥, o clique só põe o cursor (para editar a tag).
+        const tagEl = (e.target as HTMLElement).closest<HTMLElement>(".cm-tag");
+        if (tagEl?.dataset.tag && e.button === 0 && !e.altKey && !e.shiftKey && opts.onOpenTag) {
+          e.preventDefault();
+          opts.onOpenTag(tagEl.dataset.tag);
+          return true;
+        }
         const el = (e.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
         // Link mostrado como link: um clique abre. Com o cursor dentro (o link cru), só o ⌘-clique abre.
         if (el && !el.classList.contains("cm-wikilink-raw") && el.dataset.target && e.button === 0) {

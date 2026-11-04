@@ -5,6 +5,9 @@
 import { splitFrontmatter, tagsOf } from "./frontmatter.ts";
 import { makeResolver, parseLinks as sharedLinks, resolveLink, rewriteLinks } from "../../src/shared/wikilinks.ts";
 import { folderOf, noteName } from "./links.ts";
+import { hasTag, splitTagQuery, tagTree } from "../../src/shared/tags.ts";
+import { DEFAULT_TEMPLATES_FOLDER, fillTemplate } from "../../src/shared/templates.ts";
+import type { TagNode } from "./types.ts";
 import type { Backlink, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, VaultListing } from "./types.ts";
 
 interface Stored {
@@ -105,12 +108,14 @@ export class MockVault implements NotesApi {
     return { saved: true, meta: this.meta(path) };
   }
 
-  async create(title: string, folder = "", content = ""): Promise<Note> {
+  async create(title: string, folder = "", content = "", template?: string): Promise<Note> {
     const clean = title.replace(/[\\/:]/g, "-").trim() || "Sem título";
     const base = folder ? `${folder}/${clean}` : clean;
     let path = `${base}.md`;
     for (let n = 2; this.notes.has(path); n++) path = `${base} ${n}.md`;
-    this.write(path, content);
+    if (template && content) throw new Error("E_BAD_ARGS: content e template juntos");
+    const text = template ? fillTemplate(this.note(template).content, { title: noteName(path), now: this.clock() }) : content;
+    this.write(path, text);
     this.emit([path]);
     return this.note(path);
   }
@@ -180,6 +185,19 @@ export class MockVault implements NotesApi {
       this.repin((p) => (p === from ? to : p));
     }
     return updated;
+  }
+
+  /** As tags em árvore (T2619). */
+  async tags(): Promise<TagNode[]> {
+    return tagTree([...this.notes.values()].map((s) => tagsOf(s.content)));
+  }
+
+  /** A pasta de modelos (T2619). */
+  templatesFolder = DEFAULT_TEMPLATES_FOLDER;
+  async templates(): Promise<{ folder: string; templates: NoteMeta[] }> {
+    const folder = this.templatesFolder;
+    const templates = [...this.notes.keys()].filter((p) => folderOf(p) === folder).sort().map((p) => this.meta(p));
+    return { folder, templates };
   }
 
   private pinned: string[] = [];
@@ -261,10 +279,17 @@ export class MockVault implements NotesApi {
   }
 
   async search(query: string, limit = 20): Promise<SearchHit[]> {
-    const words = fold(query).split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
+    // `tag:x` e `#x` filtram pelas tags, como no engine (T2619).
+    const { tags, text } = splitTagQuery(query);
+    const words = fold(text).split(/\s+/).filter(Boolean);
+    if (!words.length && !tags.length) return [];
     const hits: SearchHit[] = [];
     for (const [path, s] of this.notes) {
+      if (tags.length && !tags.every((t) => hasTag(tagsOf(s.content), t))) continue;
+      if (!words.length) {
+        hits.push({ path, title: noteName(path), snippet: snippetAround(splitFrontmatter(s.content).body, 0), score: Date.parse(s.mtime) / 1e12 });
+        continue;
+      }
       const title = noteName(path);
       const ft = fold(title);
       const body = splitFrontmatter(s.content).body;

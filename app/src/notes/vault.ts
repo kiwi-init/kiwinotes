@@ -11,6 +11,8 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
+import { bodyTags, hasTag, splitTagQuery, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
+import { fillTemplate } from "../shared/templates.ts";
 import { fileNameFor, folderPath, inside, notePath, VaultError } from "./paths.ts";
 
 export interface NoteMeta {
@@ -179,15 +181,15 @@ function tagsOf(content: string): string[] {
       const data = Bun.YAML.parse(fm[1]!) as Record<string, unknown> | null;
       const raw = data && typeof data === "object" ? (data.tags ?? data.tag) : undefined;
       for (const t of Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,\s]+/) : []) {
-        if (typeof t === "string" && t.trim()) tags.add(t.trim().replace(/^#/, ""));
+        if (typeof t === "string" && t.trim()) tags.add(t.trim());
       }
     } catch {
       // frontmatter que não é YAML: fica como texto, sem tags
     }
   }
-  const body = fm ? content.slice(fm[0].length) : content;
-  for (const m of body.matchAll(/(?:^|\s)#([\p{L}\p{N}_/-]+)/gu)) tags.add(m[1]!);
-  return [...tags];
+  // As do texto com as regras do Obsidian (T2619: fora de código, nada de número puro), sem repetir maiúscula.
+  for (const t of bodyTags(fm ? content.slice(fm[0].length) : content)) tags.add(t);
+  return uniqueTags(tags);
 }
 
 function snippetAround(content: string, term: string): string {
@@ -313,10 +315,18 @@ export class Vault {
     if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > 100) {
       throw new VaultError("E_BAD_ARGS", "limit must be an integer from 1 to 100");
     }
-    const terms = fold(query).split(/\s+/).filter(Boolean);
-    if (!terms.length) return [];
+    // `tag:x` e `#x` filtram pelas tags (T2619); o resto é a busca de sempre, no título e no texto.
+    const { tags, text } = splitTagQuery(query);
+    const terms = fold(text).split(/\s+/).filter(Boolean);
+    if (!terms.length && !tags.length) return [];
     const hits: { e: Entry; score: number }[] = [];
     for (const e of this.notes.values()) {
+      if (tags.length && !tags.every((t) => hasTag(e.meta.tags, t))) continue;
+      // Só tags: todas as notas com elas, das mais recentes para as mais velhas.
+      if (!terms.length) {
+        hits.push({ e, score: Date.parse(e.meta.mtime) / 1e12 });
+        continue;
+      }
       let score = 0;
       let all = true;
       for (const t of terms) {
@@ -335,7 +345,27 @@ export class Vault {
     return hits
       .sort((a, b) => b.score - a.score || a.e.meta.path.localeCompare(b.e.meta.path))
       .slice(0, max)
-      .map(({ e, score }) => ({ path: e.meta.path, title: e.meta.title, snippet: snippetAround(e.content, terms[0]!), score }));
+      .map(({ e, score }) => ({
+        path: e.meta.path,
+        title: e.meta.title,
+        snippet: snippetAround(e.content, terms[0] ?? `#${fold(tags[0]!)}`),
+        score,
+      }));
+  }
+
+  /** A árvore das tags do vault, com quantas notas cada uma tem (T2619). */
+  tags(): TagNode[] {
+    return tagTree([...this.notes.values()].map((e) => e.meta.tags));
+  }
+
+  /** As notas de uma pasta de modelos (T2619), por nome; a pasta pode não existir. */
+  templates(folder: unknown): NoteMeta[] {
+    const dir = folderPath(folder ?? "");
+    if (!dir) throw new VaultError("E_BAD_ARGS", "the templates folder can't be the vault root");
+    return [...this.notes.values()]
+      .filter((e) => e.meta.folder === dir)
+      .map((e) => e.meta)
+      .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
   }
 
   /**
@@ -377,17 +407,24 @@ export class Vault {
     return { saved: true, meta: entry.meta };
   }
 
-  async create(folder: unknown, title: unknown, content: unknown = ""): Promise<Note> {
+  /**
+   * Cria a nota. Com `template` (o path de uma nota modelo, T2619), o conteúdo é o do modelo com `{{title}}`, `{{date}}`
+   * e `{{time}}` trocados; o título trocado é o nome final ("Ata 2" se "Ata" já existe).
+   */
+  async create(folder: unknown, title: unknown, content: unknown = "", template?: unknown, now: Date = new Date()): Promise<Note> {
     const dir = folderPath(folder ?? "");
     if (typeof content !== "string" || content.length > 5_000_000) throw new VaultError("E_BAD_ARGS", "content must be a string up to 5 MB");
+    const model = template === undefined ? null : await this.get(template);
+    if (model && content) throw new VaultError("E_BAD_ARGS", "give content or template, not both");
     const name = fileNameFor(title);
     for (let n = 1; n < 1000; n++) {
       const p = notePath(`${dir ? `${dir}/` : ""}${n === 1 ? name : `${name} ${n}`}.md`);
       if (this.notes.has(p) || (await exists(inside(this.root, p)))) continue;
       await mkdir(path.dirname(inside(this.root, p)), { recursive: true });
-      const entry = await this.write(p, content, null); // null: só se o arquivo ainda não existe
+      const text = model ? fillTemplate(model.content, { title: noteName(p), now }) : content;
+      const entry = await this.write(p, text, null); // null: só se o arquivo ainda não existe
       if (!entry) continue;
-      return { ...entry.meta, content };
+      return { ...entry.meta, content: text };
     }
     throw new VaultError("E_EXISTS", `too many notes called ${name}`);
   }

@@ -54,12 +54,14 @@ const notesStub = {
   deleteFolder: async () => true as const,
   onExternalMoves: () => () => {},
   existing: () => ({ notes: new Set<string>(), folders: new Set<string>() }),
+  tags: () => [],
+  templates: () => [],
 };
 
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE } };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos" };
   let t = 0;
   return {
     calls,

@@ -5,7 +5,7 @@
 import { type DragEvent, type ReactElement, useEffect, useRef, useState } from "react";
 
 import type { TreeNode } from "./tree.ts";
-import type { NoteMeta } from "./types.ts";
+import type { NoteMeta, TagNode } from "./types.ts";
 
 /** Em que o botão direito (ou o arrastar) caiu. */
 export type SideTarget = { kind: "note"; path: string } | { kind: "folder"; path: string } | { kind: "empty" };
@@ -29,6 +29,9 @@ export interface SidebarProps {
   onOpen(path: string): void;
   onSelectFolder(folder: string): void;
   onMenu(e: { x: number; y: number }, target: SideTarget): void;
+  /** As tags do vault em árvore (T2619); um clique busca as notas com ela. */
+  tags?: TagNode[];
+  onTag?(tag: string): void;
   /** Soltar o que foi arrastado numa pasta ("" é a raiz). Sem as capacidades de pastas, nada é arrastável. */
   onDrop?(what: SideTarget, folder: string): void;
 }
@@ -204,6 +207,32 @@ export function Sidebar(p: SidebarProps) {
       <div className="kn-side-head">{searching ? "Resultado" : "Notas"}</div>
       {items(p.tree, 0)}
       {searching && !p.tree.length ? <div className="kn-side-empty">Nenhuma nota com esse nome</div> : null}
+      {!searching && p.tags?.length && p.onTag ? (
+        <>
+          <div className="kn-side-gap" />
+          <div className="kn-side-head">Tags</div>
+          {tagItems(p.tags, 0, p.onTag)}
+        </>
+      ) : null}
     </nav>
   );
+}
+
+/** As tags, com as filhas recuadas embaixo da mãe, e quantas notas cada uma tem. */
+function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void): ReactElement[] {
+  return tags.flatMap((t) => [
+    <button
+      type="button"
+      key={`t:${t.tag}`}
+      className="kn-side-item"
+      data-kind="tag"
+      style={{ paddingLeft: depth * 14 }}
+      title={`Notas com #${t.tag}`}
+      onClick={() => onTag(t.tag)}
+    >
+      <span className="kn-side-name">#{t.name}</span>
+      <span className="kn-side-count">{t.count}</span>
+    </button>,
+    ...tagItems(t.children, depth + 1, onTag),
+  ]);
 }

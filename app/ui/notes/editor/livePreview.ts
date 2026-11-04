@@ -7,6 +7,7 @@ import { type EditorState, type Range, StateEffect, StateField } from "@codemirr
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 
+import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
 import { parseTable } from "./table.ts";
 
@@ -364,3 +365,48 @@ export const tablePreview = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+
+// ---------------------------------------------------------------- tags (T2619)
+
+const TAG_SKIP = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText", "URL", "Link", "Autolink", "HTMLBlock", "Comment"]);
+
+function buildTags(view: EditorView): DecorationSet {
+  const out: Range<Decoration>[] = [];
+  const tree = syntaxTree(view.state);
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos <= to; ) {
+      const line = view.state.doc.lineAt(pos);
+      for (const t of tagsInLine(line.text)) {
+        const a = line.from + t.from;
+        let skip = false;
+        for (let n: SyntaxNode | null = tree.resolveInner(a, 1); n && !skip; n = n.parent) skip = TAG_SKIP.has(n.name);
+        // O frontmatter não é Markdown: lá a tag é do YAML, não do texto.
+        if (!skip && !inFrontmatter(view.state, a)) {
+          out.push(Decoration.mark({ class: "cm-tag", attributes: { "data-tag": t.tag } }).range(a, line.from + t.to));
+        }
+      }
+      pos = line.to + 1;
+    }
+  }
+  return Decoration.set(out, true);
+}
+
+function inFrontmatter(state: EditorState, pos: number): boolean {
+  if (!state.doc.sliceString(0, 4).startsWith("---")) return false;
+  const m = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(state.doc.sliceString(0, Math.min(state.doc.length, 20_000)));
+  return !!m && pos < m[0].length;
+}
+
+/** A `#tag` do texto aparece como etiqueta, e um clique abre a busca por ela (T2619). */
+export const tagPreview = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = buildTags(view);
+    }
+    update(u: ViewUpdate) {
+      if (u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) this.decorations = buildTags(u.view);
+    }
+  },
+  { decorations: (v) => v.decorations },
+);

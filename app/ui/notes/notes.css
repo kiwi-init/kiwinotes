@@ -429,7 +429,8 @@ body {
   height: 14px;
 }
 
-.kn-side-item[data-kind="folder"] {
+.kn-side-item[data-kind="folder"],
+.kn-side-item[data-kind="tag"] {
   display: flex;
   align-items: baseline;
   gap: 8px;

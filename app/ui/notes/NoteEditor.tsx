@@ -13,21 +13,24 @@ export interface NoteEditorProps {
   links: LinkCache;
   onChange(doc: string): void;
   onOpenLink(target: string): void;
+  /** Clique numa `#tag` (T2619). */
+  onOpenTag?(tag: string): void;
   linkTargets(): LinkTarget[];
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, linkTargets }: NoteEditorProps) {
+export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, linkTargets }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
-  const latest = useRef({ onChange, onOpenLink, linkTargets });
-  latest.current = { onChange, onOpenLink, linkTargets };
+  const latest = useRef({ onChange, onOpenLink, onOpenTag, linkTargets });
+  latest.current = { onChange, onOpenLink, onOpenTag, linkTargets };
 
   const extensions = useRef(
     editorExtensions(
       {
         onChange: (d) => latest.current.onChange(d),
         onOpenLink: (t) => latest.current.onOpenLink(t),
+        onOpenTag: (t) => latest.current.onOpenTag?.(t),
         // Abre fora (no navegador padrão), com a política `newWindow: "external"` da janela; nunca navega a janela.
         onOpenUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
         linkTargets: () => latest.current.linkTargets(),

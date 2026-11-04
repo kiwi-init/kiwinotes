@@ -9,10 +9,12 @@ import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
+import type { TagNode } from "./tags.ts";
 import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit } from "../notes/vault.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
+export type { TagNode };
 export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
@@ -27,7 +29,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   acréscimo.
 // 1.8.0 (T2503): a Aparência em `AppSettings.appearance` (o `settings.set` aceita só parte dela) e o evento
 //   `settings.changed`, que vai a todas as janelas. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.8.0";
+// 1.9.0 (T2619): as tags (`notes.tags`, `tag:` no `notes.search`), os modelos (`notes.templates`, o `template` do
+//   `notes.create`) e o `templatesFolder` nas settings. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.9.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -89,7 +93,11 @@ export interface UiCapabilities {
   /** Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. */
   "notes.save": { args: { path: string; content: string; baseVersion: string }; result: SaveResult };
   /** Título repetido vira "Título 2". */
-  "notes.create": { args: { folder?: string; title: string; content?: string }; result: Note };
+  /**
+   * Com `template` (1.9.0), o path de uma nota modelo: o conteúdo vem dela, com `{{title}}`, `{{date}}`, `{{time}}` e
+   * `{{date:AAAA-MM-DD}}` trocados. `content` e `template` juntos dão E_BAD_ARGS.
+   */
+  "notes.create": { args: { folder?: string; title: string; content?: string; template?: string }; result: Note };
   /** Renomeia ou move, e atualiza os [[links]] das outras notas. */
   "notes.rename": { args: { path: string; newPath: string }; result: { meta: NoteMeta; updatedLinks: number } };
   /**
@@ -121,6 +129,10 @@ export interface UiCapabilities {
   "notes.backlinks": { args: { path: string }; result: Backlink[] };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
+  /** As tags do vault em árvore (`#projeto/kiwi` dentro de `projeto`), com quantas notas cada uma tem (1.9.0). */
+  "notes.tags": { args: Record<string, never>; result: { tags: TagNode[] } };
+  /** As notas da pasta de modelos (`templatesFolder` das settings), por nome (1.9.0). */
+  "notes.templates": { args: Record<string, never>; result: { folder: string; templates: NoteMeta[] } };
 }
 
 export type UiCapability = keyof UiCapabilities;
@@ -151,6 +163,8 @@ export const UI_CAPABILITIES = [
   "notes.search",
   "notes.backlinks",
   "notes.resolve",
+  "notes.tags",
+  "notes.templates",
   "notes.move",
   "notes.duplicate",
   "notes.restore",
