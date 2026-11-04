@@ -99,6 +99,28 @@ describe("NoteVersions", () => {
     expect(existsSync(path.join(dir, "index.json"))).toBe(true);
   });
 
+  test("duas versões no mesmo milissegundo: a 2ª ordena depois (revisão #2826)", async () => {
+    const { v } = versions();
+    await v.snapshot("A.md", "um");
+    await v.snapshot("A.md", "dois");
+    const list = await v.list("A.md");
+    expect(list.length).toBe(2);
+    expect(list[0]!.id.endsWith("~2")).toBe(true);
+    expect((await v.get("A.md", list[0]!.id)).content).toBe("dois");
+  });
+
+  test("move para um caminho que já tinha histórico: fica o da nota que se moveu (revisão #2826)", async () => {
+    const { v, advance } = versions();
+    await v.snapshot("B.md", "a velha B, apagada");
+    advance(1000);
+    await v.snapshot("A.md", "a A");
+    await v.move((p) => (p === "A.md" ? "B.md" : p));
+    const list = await v.list("B.md");
+    expect(list.length).toBe(1);
+    expect((await v.get("B.md", list[0]!.id)).content).toBe("a A");
+    expect(await v.list("A.md")).toEqual([]);
+  });
+
   test("ids: o carimbo volta a ser a hora; um id inventado dá E_BAD_ARGS ou E_NOT_FOUND", async () => {
     const { v } = versions();
     expect(atOf("2026-11-04T05-10-00-000Z")).toBe("2026-11-04T05:10:00.000Z");

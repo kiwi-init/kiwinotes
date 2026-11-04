@@ -39,11 +39,11 @@ const hash = (s: string) => createHash("sha256").update(s).digest("hex").slice(0
 const stampOf = (ms: number) => new Date(ms).toISOString().replace(/[:.]/g, "-");
 /** De volta: `2026-11-04T05-10-00-000Z` → `2026-11-04T05:10:00.000Z`. */
 export function atOf(id: string): string {
-  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z(?:-\d+)?$/.exec(id);
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z(?:~\d+)?$/.exec(id);
   if (!m) throw new Error(`not a version id: ${id}`);
   return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`;
 }
-const isVersionId = (id: unknown): id is string => typeof id === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:-\d+)?$/.test(id);
+const isVersionId = (id: unknown): id is string => typeof id === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:~\d+)?$/.test(id);
 
 interface Pending {
   content: string;
@@ -163,11 +163,17 @@ export class NoteVersions {
       const index = await this.loadIndex();
       let changed = false;
       const next: Record<string, string> = {};
+      // Primeiro o que fica; depois o que se moveu, por cima. Se o caminho novo já tinha um histórico (uma nota apagada
+      // ali antes), vale o da nota que se moveu, que é a que existe (revisão #2826). O outro fica sem caminho no índice.
+      const moved: [string, string][] = [];
       for (const [p, id] of Object.entries(index)) {
         const to = map(p);
-        if (to !== p) changed = true;
-        next[to] = id;
+        if (to !== p) {
+          changed = true;
+          moved.push([to, id]);
+        } else next[p] = id;
       }
+      for (const [to, id] of moved) next[to] = id;
       for (const [p, item] of [...this.pending]) {
         const to = map(p);
         if (to !== p) {
@@ -258,8 +264,8 @@ export class NoteVersions {
     const dir = this.noteDir(id);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     let name = `${stampOf(at)}.md`;
-    // Duas no mesmo milissegundo (raro): um sufixo.
-    for (let n = 2; (await this.files(id)).includes(name); n++) name = `${stampOf(at)}-${n}.md`;
+    // Duas no mesmo milissegundo (raro): um sufixo que ordena depois da 1ª (o `~` vem depois do `.`, revisão #2826).
+    for (let n = 2; (await this.files(id)).includes(name); n++) name = `${stampOf(at)}~${n}.md`;
     const tmp = path.join(dir, `.v-${randomBytes(4).toString("hex")}.tmp`);
     await writeFile(tmp, content, { mode: 0o600 });
     await rename(tmp, path.join(dir, name));

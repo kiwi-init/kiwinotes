@@ -554,7 +554,6 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     await open(n.path);
   };
 
-  /** Apagar vai para a Lixeira do macOS, com "Desfazer" no aviso de baixo. */
   /** "Versões…" (T2680): grava o que estiver pendente (a versão de agora entra no histórico) e abre o diálogo. */
   const openVersions = async (path: string) => {
     if (current.current === path && !(await leave())) return;
@@ -562,6 +561,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     if (n) setVersionsOf({ path, title: n.title, content: n.content });
   };
 
+  /** Apagar vai para a Lixeira do macOS, com "Desfazer" no aviso de baixo. */
   const remove = async (target: SideTarget) => {
     if (target.kind === "empty") return;
     const isOpen = current.current === target.path || (target.kind === "folder" && !!current.current?.startsWith(`${target.path}/`));
