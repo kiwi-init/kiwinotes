@@ -4,7 +4,7 @@
 import { useState } from "react";
 
 import { fold } from "./palette.ts";
-import { NO_TEXT_ASSIST } from "./textAssist.ts";
+import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 
 export interface PickItem {
   value: string;

@@ -5,6 +5,7 @@ import { fold, foldWithMap } from "../../src/store/text.ts";
 import { api, has, type HistoryEntry, type NoteMeta, type SearchHit } from "../src/api.ts";
 import { CopyIcon, TrashIcon } from "../src/kit/editable.tsx";
 import { Button, Empty, Window } from "../src/kit/index.tsx";
+import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import { INBOX_LABEL, sentText, targetItems } from "./toNote.ts";
 
 const PAGE = 50;
@@ -77,6 +78,7 @@ function SendToNote({ entry, onClose, onSent }: { entry: HistoryEntry; onClose: 
       <input
         className="kn-search"
         type="search"
+        {...NO_TEXT_ASSIST}
         placeholder="Buscar nota"
         aria-label="Buscar nota"
         autoFocus
@@ -223,6 +225,7 @@ export function History() {
     <input
       className="kn-search"
       type="search"
+      {...NO_TEXT_ASSIST}
       placeholder="Buscar nos ditados"
       aria-label="Buscar nos ditados"
       value={query}
