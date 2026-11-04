@@ -378,13 +378,16 @@ export class Vault {
     return { folders, notes, tree: buildTree(folders, notes), files };
   }
 
-  /** O caminho absoluto de um arquivo que não é nota, para abrir no app padrão do Mac (T3370). */
-  async locateFile(input: unknown): Promise<string> {
+  /**
+   * O caminho absoluto de um arquivo que não é nota, para abrir no app padrão do Mac (T3370), e o `mode` dele: com o bit
+   * de execução, o `files.open` só mostra no Finder (revisão #3458).
+   */
+  async locateFile(input: unknown): Promise<{ abs: string; mode: number }> {
     const p = filePath(input);
     const abs = inside(this.root, p);
     const s = await lstat(abs).catch(() => null);
     if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
-    return abs;
+    return { abs, mode: s.mode };
   }
 
   async get(input: unknown): Promise<Note> {
@@ -1007,6 +1010,7 @@ export class Vault {
         if (!this.folders.has(rel)) {
           await this.scan(); // uma pasta nova (copiada, puxada): mais simples reler tudo
           changed.push(rel);
+          others.push(rel); // com os arquivos de dentro: a árvore relê (T3370)
         }
         continue;
       }
@@ -1014,6 +1018,7 @@ export class Vault {
         // Uma pasta que sumiu (renomeada ou apagada por fora): as notas de dentro também, e o mais simples é reler.
         await this.scan();
         changed.push(rel);
+        others.push(rel);
         continue;
       }
       if (!/\.md$/i.test(rel)) {

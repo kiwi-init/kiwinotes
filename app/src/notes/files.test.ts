@@ -2,7 +2,7 @@
 // `files.open` abre no app padrão do Mac (ou só no Finder, se o arquivo rodaria algo).
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -80,9 +80,19 @@ describe("os arquivos que não são nota (T3370)", () => {
     await waitFor(() => !v.list().files.some((f) => f.path === "foto.jpg"));
   });
 
+  test("uma pasta apagada por fora avisa também pelos arquivos (o files.changed)", async () => {
+    const { v, root } = await vault({ "Nota.md": "oi", "Fotos/a.png": "png" });
+    v.watch();
+    await watcherReady(root, v);
+    const seen: string[][] = [];
+    v.onOtherFiles((p) => void seen.push(p));
+    rmSync(path.join(root, "Fotos"), { recursive: true });
+    await waitFor(() => !v.list().files.length && seen.flat().some((p) => p.startsWith("Fotos")));
+  });
+
   test("locateFile: só arquivo do cofre que existe e não é nota", async () => {
     const { v, root } = await vault({ "Nota.md": "oi", "Anexos/a.pdf": "%PDF" });
-    expect(await v.locateFile("Anexos/a.pdf")).toBe(path.join(root, "Anexos/a.pdf"));
+    expect((await v.locateFile("Anexos/a.pdf")).abs).toBe(path.join(root, "Anexos/a.pdf"));
     const code = (p: Promise<unknown>) => p.then(() => "ok", (e: { code?: string }) => e.code);
     expect(await code(v.locateFile("Nota.md"))).toBe("E_BAD_ARGS");
     expect(await code(v.locateFile("Anexos/b.pdf"))).toBe("E_NOT_FOUND");
@@ -92,17 +102,24 @@ describe("os arquivos que não são nota (T3370)", () => {
     expect(await code(v.locateFile(""))).toBe("E_BAD_ARGS");
   });
 
-  test("openMode: o que rodaria algo no `open` só aparece no Finder", () => {
-    expect(openMode("/x/contrato.pdf")).toBe("app");
-    expect(openMode("/x/quadro.canvas")).toBe("app");
-    expect(openMode("/x/foto.HEIC")).toBe("app");
-    for (const f of ["instalar.command", "rodar.sh", "a.scpt", "Setup.pkg", "atalho.webloc", "x.app", "y.terminal"]) {
-      expect(openMode(`/x/${f}`)).toBe("finder");
+  test("openMode: só tipo de documento conhecido e sem o bit de execução abre no app; o resto, no Finder", () => {
+    for (const f of ["contrato.pdf", "quadro.canvas", "foto.HEIC", "reunião.m4a", "demo.mov", "notas.txt", "plano.docx", "conta.numbers"]) {
+      expect(openMode(`/x/${f}`, 0o644)).toBe("app");
     }
+    // O que o `open` executaria ou importaria, e o que ninguém pôs na lista (revisão #3458): Finder.
+    for (const f of ["instalar.command", "rodar.sh", "a.scpt", "Setup.pkg", "atalho.webloc", "evento.ics", "cartao.vcf", "x.itermcolors", "pagina.html", "desenho.svg", "foo.bin", "install", "LEIAME"]) {
+      expect(openMode(`/x/${f}`, 0o644)).toBe("finder");
+    }
+    // Com o bit de execução, nem um PDF abre no app: o `open` trataria como executável.
+    expect(openMode("/x/contrato.pdf", 0o755)).toBe("finder");
+    expect(openMode("/x/contrato.pdf", 0o644 | 0o100)).toBe("finder");
   });
 
   test("files.open pelo engine: o app abre no lugar certo, e o showExtensions é um booleano", async () => {
-    const { v, root } = await vault({ "Nota.md": "oi", "a.pdf": "%PDF", "rodar.command": "echo" });
+    const { v, root } = await vault({ "Nota.md": "oi", "a.pdf": "%PDF", "rodar.command": "echo", "install": "#!/bin/sh\necho oi\n", "b.pdf": "%PDF" });
+    // Um script sem extensão com +x (o caso da revisão #3458), e um "PDF" executável.
+    chmodSync(path.join(root, "install"), 0o755);
+    chmodSync(path.join(root, "b.pdf"), 0o755);
     const opened: [string, string][] = [];
     let settings = { ...DEFAULT_SETTINGS };
     const caps = uiCapabilities({
@@ -122,12 +139,14 @@ describe("os arquivos que não são nota (T3370)", () => {
     };
     expect(await call("files.open", { path: "a.pdf" })).toBe(true);
     expect(await call("files.open", { path: "rodar.command" })).toBe(true);
-    expect(opened).toEqual([["a.pdf", "app"], ["rodar.command", "finder"]]);
+    expect(await call("files.open", { path: "install" })).toBe(true);
+    expect(await call("files.open", { path: "b.pdf" })).toBe(true);
+    expect(opened).toEqual([["a.pdf", "app"], ["rodar.command", "finder"], ["install", "finder"], ["b.pdf", "finder"]]);
     await expect(call("files.open", { path: "Nota.md" })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
     await expect(call("files.open", { path: "sumiu.pdf" })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
-    expect(opened.length).toBe(2);
+    expect(opened.length).toBe(4);
 
-    expect(((await call("notes.list", {})) as { files: { path: string }[] }).files.map((f) => f.path)).toEqual(["a.pdf", "rodar.command"]);
+    expect(((await call("notes.list", {})) as { files: { path: string }[] }).files.map((f) => f.path)).toEqual(["a.pdf", "b.pdf", "install", "rodar.command"]);
     expect(DEFAULT_SETTINGS.showExtensions).toBe(false);
     expect(((await call("settings.set", { showExtensions: true })) as { showExtensions: boolean }).showExtensions).toBe(true);
     await expect(call("settings.set", { showExtensions: "sim" })).rejects.toMatchObject({ code: "E_BAD_ARGS" });

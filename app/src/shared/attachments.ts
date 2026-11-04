@@ -24,14 +24,30 @@ export const extOf = (name: string): string => (/\.([a-z0-9]+)$/i.exec(name)?.[1
 export const isAttachmentName = (name: string): boolean => Boolean(ATTACHMENT_TYPES[extOf(name)]);
 
 /**
- * Arquivos que o `open` do macOS executaria em vez de mostrar (um script no Terminal, um AppleScript, um instalador).
- * O "abrir no app padrão" da árvore (T3370) só mostra esses no Finder: um clique num arquivo do cofre não roda nada.
+ * O que a árvore (T3370) abre no app padrão do Mac: só tipos de documento, que o `open` mostra e não executa (imagem,
+ * PDF, áudio, vídeo, o `.canvas` do Obsidian, texto e documentos de escritório). Todo o resto vai só para o Finder:
+ * um script, um instalador, um `.webloc`, um `.ics` que importa coisas, um tipo que ninguém lembrou. Lista do que abre,
+ * e não do que é perigoso, para que um tipo esquecido caia no lado seguro (revisão #3458).
  */
-export const RUNS_ON_OPEN = new Set([
-  "app", "command", "tool", "sh", "zsh", "bash", "csh", "ksh", "fish", "terminal", "scpt", "scptd", "applescript",
-  "workflow", "action", "pkg", "mpkg", "dmg", "jar", "py", "pl", "rb", "php", "js", "mjs", "osascript", "shortcut",
-  "prefpane", "saver", "kext", "plugin", "webloc", "inetloc", "fileloc", "url", "mobileconfig", "configprofile",
+export const OPENS_IN_APP = new Set([
+  // imagem (o SVG fica de fora: abre no navegador, com script)
+  "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "avif", "bmp", "tif", "tiff",
+  // PDF e o canvas do Obsidian (JSON)
+  "pdf", "canvas",
+  // áudio e vídeo
+  "mp3", "m4a", "wav", "aac", "aiff", "aif", "flac", "caf", "mp4", "mov", "m4v",
+  // texto e dados simples
+  "txt", "csv", "tsv", "json", "log", "rtf",
+  // documentos de escritório (Pages, Numbers, Keynote, Office, LibreOffice)
+  "pages", "numbers", "key", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
 ]);
 
-/** O `open` de um arquivo do cofre (T3370): no app padrão, ou só no Finder se ele rodaria algo. */
-export const openMode = (name: string): "app" | "finder" => (RUNS_ON_OPEN.has(extOf(name)) ? "finder" : "app");
+/** Com o bit de execução, o `open` roda o arquivo no Terminal, qualquer que seja a extensão. */
+export const isExecutable = (mode: number): boolean => (mode & 0o111) !== 0;
+
+/**
+ * O `open` de um arquivo do cofre (T3370): no app padrão só um tipo da `OPENS_IN_APP` sem o bit de execução; o resto
+ * só aparece no Finder. Um clique na árvore nunca roda nada.
+ */
+export const openMode = (name: string, mode = 0): "app" | "finder" =>
+  OPENS_IN_APP.has(extOf(name)) && !isExecutable(mode) ? "app" : "finder";

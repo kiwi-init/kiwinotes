@@ -103,8 +103,8 @@ export interface CapabilityDeps {
    */
   reveal?(abs: string): void;
   /**
-   * Abre um arquivo do vault que não é nota no app padrão do Mac (T3370); `finder` só mostra no Finder (um script, um
-   * instalador: `openMode`). Sem isto (o headless, os testes, KIWI_DEBUG), o `files.open` só confere que o arquivo existe.
+   * Abre um arquivo do vault que não é nota no app padrão do Mac (T3370); `finder` só mostra no Finder (o que não é um
+   * tipo de documento conhecido, ou tem o bit de execução: `openMode`). Sem isto (o headless, os testes, KIWI_DEBUG), o `files.open` só confere que o arquivo existe.
    */
   openFile?(abs: string, mode: "app" | "finder"): void;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
@@ -475,8 +475,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       return true as const;
     },
     "files.open": async (args) => {
-      const abs = await (await vault()).locateFile(fields(args, "files.open", ["path"]).path);
-      deps.openFile?.(abs, openMode(abs));
+      const { abs, mode } = await (await vault()).locateFile(fields(args, "files.open", ["path"]).path);
+      deps.openFile?.(abs, openMode(abs, mode));
       return true as const;
     },
     "notes.daily": async (args) => {
