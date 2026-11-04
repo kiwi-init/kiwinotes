@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { aplicar, escreverItem, lerItem, mesmaCurva, pontos, regras, tempo } from "./animacao.ts";
+import { aplicar, curvaValida, escreverItem, lerItem, mesmaCurva, pontos, regras, tempo } from "./animacao.ts";
 
 const SVG = readFileSync(path.join(import.meta.dir, "../kiwi-cat-familia/kiwi-cat-1-aura-intro.svg"), "utf8");
 
@@ -94,5 +94,35 @@ describe("aplicar no SVG (T3065)", () => {
     ]);
     // Com --forcar, entra.
     expect(aplicar(SVG, r.recusadas.slice(1).map((x) => x.mudanca), true).aplicadas.length).toBe(1);
+  });
+
+  test("um json editado à mão com CSS no lugar da curva não entra no SVG, nem com --forcar (revisão do #110)", () => {
+    const injecao = "ease;} svg{background:url(https://example.com/x.png)} .z{x:y";
+    for (const forcar of [false, true]) {
+      const r = aplicar(SVG, [{ seletor: "#intro-circle", animacao: "circleIn", curva: injecao }], forcar);
+      expect(r.svg).toBe(SVG);
+      expect(r.recusadas[0]!.motivo).toStartWith("curva inválida");
+    }
+    const tempos = aplicar(SVG, [
+      { seletor: "#tail", animacao: "tailDraw", duracao: -1 },
+      { seletor: "#tail", animacao: "tailDraw", atraso: Number.NaN },
+      { seletor: "#tail{}", animacao: "tailDraw", atraso: 1 },
+    ]);
+    expect(tempos.svg).toBe(SVG);
+    expect(tempos.recusadas.map((x) => x.motivo)).toEqual(["duração inválida (de 0 a 120 s)", "atraso inválido (até 120 s)", "seletor inválido"]);
+  });
+});
+
+describe("quais curvas entram (revisão do #110)", () => {
+  test("os nomes, cubic-bezier com 4 números e steps", () => {
+    for (const ok of ["ease", "linear", "ease-in-out", "cubic-bezier(.34,1.56,.64,1)", "cubic-bezier(0, 0, 0.58, 1)", "steps(4)", "steps(3, jump-end)"]) {
+      expect([ok, curvaValida(ok)]).toEqual([ok, true]);
+    }
+  });
+
+  test("todo o resto, inclusive x fora de 0 a 1 e texto colado depois", () => {
+    for (const ruim of ["ease;}", "cubic-bezier(.3,.5,.2)", "cubic-bezier(1.5,0,.5,1)", "cubic-bezier(.2,.8,.2,1) url(x)", "linear(0, 1)", "steps(0)", "", 3, null]) {
+      expect([ruim, curvaValida(ruim)]).toEqual([ruim, false]);
+    }
   });
 });

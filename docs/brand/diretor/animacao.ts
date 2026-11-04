@@ -126,6 +126,31 @@ export function mesmaCurva(a: string, b: string): boolean {
   return !!pa && !!pb && pa.every((v, i) => Math.abs(v - pb[i]!) < 1e-6);
 }
 
+/**
+ * Uma curva que pode entrar no `animation:` (revisão do #110): só os nomes do CSS, `cubic-bezier` com 4 números (os x
+ * de 0 a 1) e `steps(n[, posição])`. Qualquer outro texto poderia fechar a regra e injetar CSS no SVG, que vai para o
+ * app pelo `gerar.ts`.
+ */
+export function curvaValida(curva: unknown): curva is string {
+  if (typeof curva !== "string" || curva.length > 80) return false;
+  if (CURVAS.has(curva)) return true;
+  if (/^cubic-bezier\(\s*-?[\d.]+\s*(,\s*-?[\d.]+\s*){3}\)$/.test(curva)) {
+    const p = pontos(curva);
+    return !!p && p.every(Number.isFinite) && p[0] >= 0 && p[0] <= 1 && p[2] >= 0 && p[2] <= 1;
+  }
+  return /^steps\(\s*[1-9]\d{0,3}\s*(,\s*(jump-start|jump-end|jump-none|jump-both|start|end)\s*)?\)$/.test(curva);
+}
+
+/** O motivo de recusar uma mudança (curva fora do formato, duração ou atraso que não são números válidos), ou `null`. */
+export function problema(m: Mudanca): string | null {
+  if (typeof m.seletor !== "string" || !m.seletor || /[{};<>]/.test(m.seletor)) return "seletor inválido";
+  if (typeof m.animacao !== "string" || !/^[A-Za-z_][\w-]*$/.test(m.animacao)) return "nome de animação inválido";
+  if (m.curva !== undefined && !curvaValida(m.curva)) return `curva inválida: ${JSON.stringify(String(m.curva).slice(0, 60))}`;
+  if (m.duracao !== undefined && !(typeof m.duracao === "number" && Number.isFinite(m.duracao) && m.duracao > 0 && m.duracao <= 120)) return "duração inválida (de 0 a 120 s)";
+  if (m.atraso !== undefined && !(typeof m.atraso === "number" && Number.isFinite(m.atraso) && Math.abs(m.atraso) <= 120)) return "atraso inválido (até 120 s)";
+  return null;
+}
+
 /** O item reescrito com os valores novos, mexendo só nos pedaços que mudaram. */
 export function escreverItem(item: Item, novo: { duracao?: number; atraso?: number; curva?: string }): string {
   const partes = [...item.partes];
@@ -215,6 +240,12 @@ export function aplicar(svg: string, mudancas: readonly Mudanca[], forcar = fals
   const trocas = new Map<Regra, Map<number, string>>();
   const lista = regras(svg);
   for (const m of mudancas) {
+    // O json pode ter sido editado à mão: a conferência vale aqui também, e não só no servidor.
+    const ruim = problema(m);
+    if (ruim) {
+      recusadas.push({ mudanca: m, motivo: ruim });
+      continue;
+    }
     const regra = lista.find((r) => r.seletor === normalizar(m.seletor) && r.itens.some((i) => i.nome === m.animacao));
     if (!regra) {
       recusadas.push({ mudanca: m, motivo: `não achei a animação ${m.animacao} em ${m.seletor}` });

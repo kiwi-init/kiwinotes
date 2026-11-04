@@ -83,7 +83,7 @@ A nota "esta orelha mais pontuda", como o agente a vê:
   ```sh
   bun test docs/brand/diretor
   ```
-- `servir.ts` é o servidor: só no `127.0.0.1`, e só a própria página pode gravar.
+- `servir.ts` é o servidor. Ele atende só pelo `127.0.0.1:<porta>`: o `Host` é conferido, o que barra DNS rebinding. Só a própria página grava, e só curvas e tempos válidos. Os testes estão em `servir.test.ts`.
 - `index.html` e `diretor.js` formam a página.
 - `aplicar.ts` grava o `direcao.json` no SVG.
 - `quadros.ts` monta a prancha de frames, que é o "olho" do agente.
