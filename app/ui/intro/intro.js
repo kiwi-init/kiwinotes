@@ -143,6 +143,51 @@
     kept.push(frames.at(-1));
     return kept;
   };
+  // A aura (T3720, #4071, #4093): o anel de luz não apaga, escorre até virar o halo do corpo. As poses vêm assadas
+  // (docs/brand/kiwi-cat/aura, igualmente espaçadas no morph), e o canvas de 512 desenha as duas vizinhas: a primeira
+  // com `copy` e 1−w, a segunda com `lighter` e w, a mistura linear exata da luz. O relógio é a animação WAAPI da
+  // própria aura: o `?t` congela, o "Reduzir movimento" vai ao fim, e o desenho segue. Nada de filter nem blur ao vivo.
+  const AURA_MORPH = [96, 440];
+  const auraCanvas = document.getElementById("aura");
+  const auraCtx = auraCanvas.getContext("2d");
+  const auraImgs = [...document.querySelectorAll("#aura-poses img")];
+  const auraBits = [];
+  let auraDriver = null;
+  let auraDrawn = "";
+  const auraReady = (src) => src && (typeof ImageBitmap !== "undefined" && src instanceof ImageBitmap || (src.complete && src.naturalWidth > 0));
+  const drawAura = () => {
+    if (!auraDriver || auraImgs.length < 2) return;
+    const f = Math.min(480, Math.max(0, (Number(auraDriver.currentTime) || 0) * 0.06));
+    const x = smooth(AURA_MORPH[0], AURA_MORPH[1], f) * (auraImgs.length - 1);
+    const i = Math.min(auraImgs.length - 2, Math.floor(x)), w = x - i;
+    const a = auraBits[i] || auraImgs[i], b = auraBits[i + 1] || auraImgs[i + 1];
+    if (!auraReady(a) || (w > 0 && !auraReady(b))) return;
+    const key = `${i}:${w.toFixed(4)}:${auraBits.length}`;
+    if (key === auraDrawn) return;
+    auraDrawn = key;
+    auraCtx.globalCompositeOperation = "copy";
+    auraCtx.globalAlpha = 1 - w;
+    auraCtx.drawImage(a, 0, 0);
+    if (w > 0) {
+      auraCtx.globalCompositeOperation = "lighter";
+      auraCtx.globalAlpha = w;
+      auraCtx.drawImage(b, 0, 0);
+    }
+  };
+  const auraLoop = () => { drawAura(); requestAnimationFrame(auraLoop); };
+  requestAnimationFrame(auraLoop);
+  // Desenha assim que as poses decodificam; depois troca por ImageBitmap e passa cada uma pelo canvas uma vez, antes
+  // do gato começar: o primeiro uso de cada textura não cai no meio do morph (um engasgo de 230 ms na medida).
+  Promise.all(auraImgs.map((img) => img.decode().catch(() => {})))
+    .then(() => { auraDrawn = ""; drawAura(); return Promise.all(auraImgs.map((img) => createImageBitmap(img))); })
+    .then((bits) => {
+      for (const bit of bits) { auraCtx.globalCompositeOperation = "copy"; auraCtx.globalAlpha = 1; auraCtx.drawImage(bit, 0, 0); }
+      bits.forEach((bit, k) => { auraBits[k] = bit; });
+      auraDrawn = "";
+      drawAura();
+    })
+    .catch(() => {});
+
   let catAnimations = [];
   const animateCat = () => {
     for (const a of catAnimations) a.cancel();
@@ -158,8 +203,14 @@
     };
     const head = f => smooth(112,208,f);
     const formed = f => smooth(270,410,f);
-    poses("luz-anel", f => ({opacity:smooth(6,48,f)*(1-smooth(150,340,f)), transform:`rotate(${f*.62}deg)`}));
-    poses("luz-cabeca", f => ({opacity:smooth(6,48,f)*head(f)}));
+    // A aura nasce em f6–48 e gira até parar em f96: a pose 00 já vem girada +30°, e o canvas vai de −30° a 0° com
+    // derivada zero no fim (θ = 30·(2u−u²) − 30). Daí em diante só o morph, sem rotação.
+    poses("aura", f => {
+      const u = Math.min(1, f/96);
+      return {opacity:smooth(6,48,f), transform:`rotate(${(30*(2*u-u*u)-30).toFixed(3)}deg)`};
+    });
+    auraDriver = catAnimations.at(-1);
+    auraDrawn = "";
     poses("fundo-cabeca", () => ({opacity:0}));
     poses("cabeca", () => ({opacity:0}));
     poses("cabeca-complemento", f => ({opacity:formed(f)}));
@@ -169,12 +220,8 @@
       const p=head(f);
       return {opacity:1, transform:`translate(${2*p}px,${-11*p}px) scale(${1-p/15},${1-p*(1-354/450)})`};
     });
-    // Reveal density throughout the fog, without a horizontal scan edge.
-    for (const id of ["corpo", "corpo-final"]) {
-      const layer=document.getElementById(id);
-      layer.classList.remove("body-reveal");
-      poses(id, f => ({opacity:formed(f)}));
-    }
+    // O brilho do corpo agora é a própria aura; o corpo final só entra com a cena final.
+    document.getElementById("corpo-final").classList.remove("body-reveal");
     for (const [id,start,sign] of [["orelha-esquerda",96,-1],["orelha-direita",112,1]]) {
       poses(id, f => {
         const t=Math.max(0,(f-start)/54);
@@ -183,7 +230,9 @@
         return {opacity:smooth(0,1,t), transform:`rotate(${sign*angle}deg) scale(${scale})`};
       });
     }
-    poses("cat-final", f => ({opacity:smooth(325,450,f)}));
+    // A cena final entra só quando o morph já chegou nela (f440): a aura e o halo final são a mesma luz, e o que muda
+    // nesses 40 frames é só a cabeça. Nunca há duas névoas diferentes ao mesmo tempo (#4071).
+    poses("cat-final", f => ({opacity:smooth(436,476,f)}));
     // #4031: drift through the formation rather than hold rigid intermediate
     // poses. Move the whole composition together, preserving body proportions.
     poses("cat-float", f => ({transform:`translateY(${-5*Math.sin(f/480*Math.PI*2)*Math.sin(f/480*Math.PI)}px)`}));
@@ -279,5 +328,7 @@
       const late = t >= 3.7 && (inCat || target === orb);
       a.currentTime = inCat && t < 3.7 ? 0 : Math.max(0, (late ? (t - 3.7) * (inCat ? catSpeed : 1) : t) * 1000);
     }
+    auraDrawn = "";
+    drawAura();
   }
 })();

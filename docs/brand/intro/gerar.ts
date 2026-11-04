@@ -30,12 +30,23 @@ const layer = (name: string, id = name, extra = "") => {
   const [x,y,right,bottom]=cam.recortes[name];
   return `<div id="${id}" class="L ${extra}" data-y="${y}" style="left:${x}px;top:${y}px;width:${right-x}px;height:${bottom-y}px">${img(name)}</div>`;
 };
+// A aura (T3720, #4071): uma só, do anel até o halo do corpo, em poses assadas por ../kiwi-cat/aura/morph.py. Ela
+// substitui o luz-anel, o luz-cabeca e o brilho do corpo. As poses vão como <img> escondidas (os scripts que esperam
+// as imagens decodificarem esperam por elas também) e o canvas desenha duas por frame.
+const auraDir = path.join(here, "../kiwi-cat/aura");
+const aura: { poses: number; tamanho: number; palco: number; arquivos: string[] } =
+  JSON.parse(readFileSync(path.join(auraDir, "aura.json"), "utf8"));
+if (aura.palco !== 1024 || aura.arquivos.length !== aura.poses) throw new Error("gerar: aura.json fora do contrato");
+const auraHtml = `<canvas id="aura" class="L" width="${aura.tamanho}" height="${aura.tamanho}"></canvas>`;
+const auraPoses = `<div id="aura-poses" hidden>${aura.arquivos.map((name) => {
+  const bytes = readFileSync(path.join(auraDir, name));
+  total += bytes.length;
+  return `<img alt="" src="data:image/webp;base64,${bytes.toString("base64")}">`;
+}).join("")}</div>`;
 const origin=(name: string, point: number[])=>point.map((v,i)=>`${v-cam.recortes[name][i]}px`).join(" ");
 const catHtml = `<div id="cat-float" class="L"><div id="cat-settle" class="L">
   <div id="cat-inicial" class="L">
-    ${layer("luz-anel")}
-    ${layer("luz-cabeca")}
-    ${layer("corpo", "corpo", "body-reveal")}
+    ${auraHtml}
     ${layer("fundo-cabeca")}
     ${layer("orelha-esquerda")}${layer("orelha-direita")}
     ${layer("vidro")}
@@ -45,14 +56,14 @@ const catHtml = `<div id="cat-float" class="L"><div id="cat-settle" class="L">
     ${layer("final-fundo")}${layer("final-corpo", "corpo-final", "body-reveal")}
   </div>
   <div id="olhos" class="L">${cam.olhos.map((_eye, i) => `<b class="olho" id="olho-${i ? "dir" : "esq"}"></b>`).join("")}</div>
-</div></div>`;
+</div></div>${auraPoses}`;
 const handoff = layer("vidro", "handoff");
 const px = (value: number) => `${Math.round(value*1e4)/1e4}px`;
 const mask = readFileSync(path.join(camDir, cam.mascara)).toString("base64");
 const geometry = `
   .K { position:absolute; inset:0; width:100%; height:100%; user-select:none; -webkit-user-drag:none; }
   #cat-final { background:#000; }
-  #luz-anel { transform-origin:${origin("luz-anel",[512,430])}; }
+  #aura { width:1024px; height:1024px; transform-origin:512px 430px; }
   #vidro { transform-origin:${origin("vidro",[512,430])}; }
   #handoff { transform-origin:${origin("vidro",[512,430])}; }
   #orelha-esquerda { transform-origin:${origin("orelha-esquerda",cam.pivos["orelha-esquerda"])}; }
@@ -67,7 +78,7 @@ const geometry = `
 </style>`;
 const html = template.replace("</style>", geometry).replace("<!--CAT-->", catHtml)
   .replace("<!--HANDOFF-->", handoff).replace("<!--DEFS-->", "");
-for (const id of ["cat-inicial", "cat-final", "corpo", "corpo-final", "cabeca", "orelha-esquerda", "orelha-direita", "vidro", "handoff", "olhos"]) {
+for (const id of ["cat-inicial", "cat-final", "aura", "aura-poses", "corpo-final", "cabeca", "orelha-esquerda", "orelha-direita", "vidro", "handoff", "olhos"]) {
   if (!html.includes(`id="${id}"`)) throw new Error(`gerar: falta ${id}`);
 }
 writeFileSync(path.join(here, "intro.html"), html.replace("<!--SCRIPT-->", `<script>\n${script}\n</script>`));

@@ -26,10 +26,10 @@ São 11 texturas lossless, cerca de 1,1 MB antes de base64. O app recebe imagens
 
 A emenda ocorre aos 3,7 s; a animação do gato dura 8 s, com poses amostradas a 60 Hz (f0–f480).
 A pose final v2 e a geometria vêm da T3747. Após #4031/#4035, as poses intermediárias foram revistas: cabeça arredondada, orelhas mais lentas e formação contínua. O conjunto deriva suavemente, sem deformar o corpo.
-O círculo é a própria cabeça (#4063): a mesma camada permanece opaca e muda de forma. As antigas camadas de cabeça intermediária e fundo ficam ocultas. As orelhas giram pelos mesmos pivôs. A transformação contínua da aura em corpo (#4071) ainda está em preparação.
+O círculo é a própria cabeça (#4063): a mesma camada permanece opaca e muda de forma. As antigas camadas de cabeça intermediária e fundo ficam ocultas. As orelhas giram pelos mesmos pivôs. A aura é uma só (#4071): o anel nasce em f6–48, gira até parar em f96 e escorre até virar o halo do corpo em f96–440. São 24 poses assadas por transporte ótimo (`../kiwi-cat/aura/`), desenhadas num canvas de 512, duas por frame (`copy` + `lighter`, a mistura linear exata). Ela substitui o `luz-anel`, o `luz-cabeca` e o brilho do corpo.
 Os olhos são dois círculos vetoriais, com crescimento e piscadas por olho.
-O corpo revela densidade por opacidade, sem a varredura horizontal anterior. A máscara móvel saiu da animação: ela provocava repintura e limitava a fluidez.
-A cena final acende como uma composição opaca sobre a inicial: os retângulos compensadores das seis peças originais não aparecem separadamente.
+O brilho do corpo é a própria aura. A máscara móvel saiu da animação, porque ela provocava repintura e limitava a fluidez.
+A cena final acende em f436–476 como uma composição opaca sobre a inicial, quando a aura já chegou no halo final: nunca há duas névoas diferentes na tela. Os retângulos compensadores das seis peças originais não aparecem separadamente.
 A preparação verifica a recomposição final dos WebP codificados (erro máximo ≤2/255).
 Nada é borrado ao vivo. O Rive saiu do runtime e das dependências nesta task.
 
