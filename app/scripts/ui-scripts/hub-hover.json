@@ -1,0 +1,17 @@
+{
+  "window": "hub",
+  "steps": [
+    { "waitFor": ".kn-tab[aria-selected='true']:has-text('Notas')", "name": "o hub abre nas Notas" },
+    { "expectCount": ".kn-float-group .kn-expand", "count": 2, "name": "Nova nota e Buscar viram botões que expandem (T3821)" },
+    { "expectCount": ".kn-float-group .kn-expand .kn-expand-label[aria-hidden='true']", "count": 2, "name": "o nome ao lado do ícone é só visual (o aria-label continua)" },
+    { "hover": ".kn-tab:has-text('Ditado')", "name": "mouse na aba Ditado" },
+    { "waitFor": ".kn-tab[data-hover]:has-text('Ditado')", "name": "a pílula vai para a aba sob o mouse" },
+    { "expectCount": ".kn-tab[aria-selected='true']:has-text('Notas')", "count": 1, "name": "e a escolhida continua sendo Notas" },
+    { "hover": ".kn-float-group .kn-expand[aria-label='Nova nota']", "name": "mouse no Nova nota" },
+    { "waitFor": ".kn-tabs:not(:has(.kn-tab[data-hover]))", "name": "fora das abas, a pílula volta para a escolhida (depois do atraso de saída)" },
+    { "screenshot": "nova-nota.png", "selector": ".kn-hub-top" },
+    { "hover": ".kn-tab:has-text('Sobre')" },
+    { "click": ".kn-tab:has-text('Sobre')", "name": "o clique continua trocando de seção" },
+    { "waitFor": ".kn-tab[aria-selected='true']:has-text('Sobre')" }
+  ]
+}

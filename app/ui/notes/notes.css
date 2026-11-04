@@ -442,7 +442,15 @@ body {
 }
 .kn-side-new:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--focus-ring);
+  /* o token já é a sombra inteira (antes, "0 0 0 2px var(--focus-ring)" era inválido e o foco não aparecia) */
+  box-shadow: var(--focus-ring);
+}
+/* T3821: + Nota e + Pasta mostram o nome no hover; a busca ao lado encolhe junto, sem pular. */
+.kn-side-new.kn-expand {
+  width: auto;
+  min-width: 28px;
+  padding: 0 6px;
+  display: inline-grid;
 }
 .kn-side-new .kn-side-icon {
   color: inherit;

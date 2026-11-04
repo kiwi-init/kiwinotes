@@ -464,3 +464,86 @@
   box-shadow: var(--focus-ring);
 }
 
+
+/* ---------------------------------------------------------- o botão que expande (T3821, spec #3816) */
+
+/*
+ * Em repouso, só o ícone; no hover (e no foco do teclado), o botão alarga e mostra o nome ao lado. A largura vem do
+ * grid: a coluna do nome vai de 0fr a 1fr, que o WebKit anima sem medir em JS. Os vizinhos deslizam junto.
+ * Uso: <button className="… kn-expand" aria-label="Nova nota"><Icone /><HoverLabel>Nova nota</HoverLabel></button>.
+ */
+.kn-expand {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 0fr);
+  place-items: center start;
+  justify-content: start;
+  transition: grid-template-columns var(--hover-dur) var(--hover-ease) var(--hover-out-delay);
+}
+
+.kn-expand:hover,
+.kn-expand:focus-visible {
+  grid-template-columns: auto minmax(0, 1fr);
+  transition-delay: var(--hover-in-delay);
+}
+
+.kn-expand > svg,
+.kn-expand > .kn-side-icon {
+  justify-self: center;
+}
+
+/* Os botões só de ícone que viram kn-expand: a largura sai do grid (o ícone fica no quadrado de antes). */
+.kn-float-group > button.kn-expand {
+  width: auto;
+  min-width: calc(var(--ctl) - 4px);
+  padding: 0 calc((var(--ctl) - 4px - 15px) / 2);
+  display: inline-grid;
+  place-items: center start;
+}
+
+.kn-float-group > button.kn-expand > .kn-expand-label > span {
+  padding-right: 2px;
+}
+
+.kn-expand-label {
+  /* Do tamanho da coluna, e não do texto: é o que faz o overflow cortar o nome enquanto a coluna encolhe. Com o
+     place-items do botão (start), o nome ficava do tamanho dele e vazava por cima do botão vizinho. */
+  justify-self: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.kn-expand-label > span {
+  display: block;
+  padding-left: 6px;
+  white-space: nowrap;
+  font: 500 var(--t-ui) / 1 var(--ui);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity var(--hover-dur) var(--ease) var(--hover-out-delay),
+    transform var(--hover-dur) var(--hover-ease) var(--hover-out-delay);
+}
+
+.kn-expand:hover .kn-expand-label > span,
+.kn-expand:focus-visible .kn-expand-label > span {
+  opacity: 1;
+  transform: none;
+  transition-delay: var(--hover-in-delay);
+}
+
+/* O × de remover das listas dos Ajustes (Dicionário, Snippets): o "Remover" aparece ao lado, no hover e no foco. */
+.kn-icon-button.kn-expand {
+  width: auto;
+  min-width: 26px;
+  padding: 0 6px;
+  display: inline-grid;
+}
+
+.kn-icon-button.kn-expand:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.kn-icon-button.kn-expand[data-tone="danger"]:focus-visible {
+  color: var(--danger);
+}

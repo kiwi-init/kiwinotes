@@ -181,6 +181,18 @@ export function Select<T extends string>({
   );
 }
 
+/**
+ * O nome que aparece ao lado do ícone no hover e no foco do teclado (T3821, spec #3816). O botão leva a classe
+ * `kn-expand` e um `aria-label` com o mesmo nome: este texto é só visual.
+ */
+export function HoverLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="kn-expand-label" aria-hidden="true">
+      <span>{children}</span>
+    </span>
+  );
+}
+
 export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="kn-kbd">{children}</kbd>;
 }
