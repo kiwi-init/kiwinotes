@@ -72,6 +72,8 @@ A janela `intro` do app sai daqui também: o `gerar.ts` escreve `app/ui/intro/in
 - `gerar.ts`: monta o `intro.html` a partir do modelo e de `../kiwi-cat-familia/kiwi-cat-1-aura-intro.svg`. Ele assa
   os bitmaps no WebKit do Playwright do `app/`, então rode antes `bun install` em `app/`:
   `bun docs/brand/intro/gerar.ts`.
+- `medir-prisma.ts`: confere o leque do prisma aos 2,5 s (o ângulo das lâminas na tela, 17°/21°/24° de baixo para cima;
+  T3898).
 - `intro.html`: o gerado, o protótipo que abre sozinho no navegador. A janela do app é `app/ui/intro/`, gerada junto.
 - `prancha.png`: os 6 tempos.
 
