@@ -7,7 +7,7 @@ import "../src/api.ts"; // o tipo do `window.engine`
 import { MockVault } from "./mock.ts";
 import type { AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
-import type { ExtrasApi, FoldersApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
+import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
 
@@ -65,8 +65,17 @@ export function engineNotes(
         set: (list: SavedSearch[]) => call<{ savedSearches?: SavedSearch[] }>("settings.set", { savedSearches: list }).then((s) => s.savedSearches ?? []),
       }
     : undefined;
+  // O histórico de versões (T2680), só num engine que tem.
+  const versions: VersionsApi | undefined = has("notes.versions")
+    ? {
+        list: (path) => call<{ versions: never[] }>("notes.versions", { path }).then((r) => r.versions),
+        get: (path, id) => call("notes.version", { path, id }),
+        restore: (path, id) => call("notes.restoreVersion", { path, id }),
+      }
+    : undefined;
   return {
     ...(folders ? { folders } : {}),
+    ...(versions ? { versions } : {}),
     ...(extras ? { extras } : {}),
     ...(savedSearches ? { savedSearches } : {}),
     ...(pins ? { pins } : {}),

@@ -50,6 +50,8 @@ export interface NotesApi {
   pins?: { list(): Promise<string[]>; set(paths: string[]): Promise<string[]> };
   /** A nota do dia, o link que cria a nota, "Mencionada sem link" e a Lixeira (T2593, contrato 1.8.0). */
   extras?: ExtrasApi;
+  /** O histórico de versões (T2680). Num engine sem ele, o "Versões…" não aparece. */
+  versions?: VersionsApi;
   /** Os anexos (T2594, contrato 1.11.0). Num engine sem eles, colar e arrastar arquivo não faz nada de especial. */
   attachments?: AttachmentSource;
   /**
@@ -61,6 +63,16 @@ export interface NotesApi {
 
 export type TrashItem = UiCapabilities["trash.list"]["result"]["items"][number];
 export type Mention = UiCapabilities["notes.unlinkedMentions"]["result"][number];
+
+export type VersionInfo = UiCapabilities["notes.versions"]["result"]["versions"][number];
+
+export interface VersionsApi {
+  /** A mais nova primeiro. */
+  list(path: string): Promise<VersionInfo[]>;
+  get(path: string, id: string): Promise<{ content: string; at: string }>;
+  /** Volta a nota para a versão (o texto de agora vira uma versão antes). */
+  restore(path: string, id: string): Result<"notes.restoreVersion">;
+}
 
 export interface ExtrasApi {
   /** `<dailyFolder>/AAAA-MM-DD.md`, criada se não existe. */

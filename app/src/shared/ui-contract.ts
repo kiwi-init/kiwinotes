@@ -39,7 +39,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   settings. Só acréscimo.
 // 1.13.0 (T2709): o `ocr` nas settings, e o `notes.search` acha também o texto das imagens e dos PDFs anexados (o
 //   trecho diz "na imagem foto.png: …"). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.13.0";
+// 1.14.0 (T2680): o histórico de versões das notas, fora do vault (`notes.versions|version|restoreVersion`). Só
+//   acréscimo.
+export const UI_CONTRACT_VERSION = "1.14.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -121,6 +123,18 @@ export interface UiCapabilities {
   "notes.restore": { args: { path: string }; result: { path: string } };
   /** "Mostrar no Finder" (nota ou pasta). No headless e com KIWI_DEBUG=1, só registra. */
   "notes.reveal": { args: { path: string }; result: true };
+
+  // ---------------------------------------------------------------- histórico de versões (1.14.0, T2680)
+  // Fora do vault, em `<dados do app>/history`: uma versão por save que muda o texto, no máximo uma a cada 2 min por
+  // nota, até 50 versões ou 30 dias. O histórico segue a nota quando ela muda de nome ou de pasta.
+  /** As versões da nota, a mais nova primeiro. `id` é o carimbo da hora. */
+  "notes.versions": { args: { path: string }; result: { versions: { id: string; at: string; size: number }[] } };
+  "notes.version": { args: { path: string; id: string }; result: { content: string; at: string } };
+  /**
+   * Volta a nota para a versão `id`, gravando por cima (condicionado à versão de agora). O texto de antes e o restaurado
+   * viram versões também, então dá para desfazer o restaurar.
+   */
+  "notes.restoreVersion": { args: { path: string; id: string }; result: SaveResult };
 
   // ---------------------------------------------------------------- nota do dia, links e Lixeira (1.10.0, T2593)
   /** `<dailyFolder>/AAAA-MM-DD.md`, criada vazia se não existe. Sem `date`, a de hoje (no relógio do Mac). */
@@ -225,6 +239,9 @@ export const UI_CAPABILITIES = [
   "trash.list",
   "trash.empty",
   "trash.reveal",
+  "notes.versions",
+  "notes.version",
+  "notes.restoreVersion",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

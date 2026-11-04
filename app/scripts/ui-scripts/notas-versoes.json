@@ -1,0 +1,31 @@
+{
+  "window": "hub",
+  "steps": [
+    {"invoke": "notes.create", "args": {"title": "Orçamento", "content": "linha original\nfica igual"}, "name": "engine: a nota"},
+    {"waitFor": ".kn-crumb-bt", "name": "o hub abre nas Notas"},
+    {"click": ".kn-crumb-bt", "name": "abre a árvore"},
+    {"click": ".kn-side-item:has-text('Orçamento')", "name": "abre o Orçamento"},
+    {"click": ".cm-content", "name": "o editor"},
+    {"press": "Meta+ArrowDown", "name": "o fim"},
+    {"type": "\nlinha nova", "name": "digita"},
+    {"wait": 1500, "name": "o autosave grava (e o histórico guarda o de antes e o novo)"},
+    {"click": ".kn-crumb-bt", "name": "árvore"},
+    {"click": ".kn-side-item:has-text('Orçamento')", "modifiers": ["Control"], "name": "menu da nota"},
+    {"click": ".kn-menu-item:has-text('Versões')", "name": "Versões…"},
+    {"waitFor": ".kn-versions", "name": "o diálogo abre"},
+    {"expectCount": ".kn-versions-it", "count": 2, "name": "duas versões: a original e a editada"},
+    {"click": ".kn-versions-it >> nth=1", "name": "a mais velha"},
+    {"expectText": ".kn-versions-stats", "text": "tira 1 linha", "name": "o Restaurar tira a linha nova"},
+    {"expectCount": ".kn-diff-del", "count": 1},
+    {"screenshot": "versoes.png"},
+    {"click": ".kn-versions-actions .kn-bt", "name": "Restaurar esta versão"},
+    {"expectCount": ".kn-versions", "count": 0, "name": "o diálogo fecha"},
+    {"waitFor": ".cm-content:has-text('linha nova')", "state": "detached", "name": "o editor voltou para a original"},
+    {"expectText": ".cm-content", "text": "linha original"},
+    {"expectCount": ".kn-tree-pop", "count": 1, "name": "a árvore continua aberta (o diálogo saiu por cima dela)"},
+    {"click": ".kn-side-item:has-text('Orçamento')", "modifiers": ["Control"], "name": "menu de novo"},
+    {"click": ".kn-menu-item:has-text('Versões')", "name": "Versões… de novo"},
+    {"waitFor": ".kn-versions-it >> nth=2", "name": "o restaurar também virou versão (dá para voltar dele)"},
+    {"press": "Escape"}
+  ]
+}

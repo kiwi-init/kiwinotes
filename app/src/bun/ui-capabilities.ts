@@ -13,6 +13,7 @@ import { type Attachments, attachmentsFolder } from "../notes/attachments.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
+import type { NoteVersions } from "../notes/versions.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
@@ -70,6 +71,11 @@ export interface CapabilityDeps {
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty"
   >;
+  /**
+   * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
+   * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
+   */
+  versions?: Pick<NoteVersions, "record" | "list" | "get" | "snapshot" | "flush" | "move">;
   /** Abre o Lixo do macOS no Finder (T2593). Sem isto (headless, testes, KIWI_DEBUG), o `trash.reveal` não faz nada. */
   revealTrash?(): void;
   /** O texto dos anexos para a busca (T2709). Sem ele, a busca é só nas notas. */
@@ -173,7 +179,11 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     await watchingPins;
     return deps.notes;
   };
-  const followPins = (r: ExternalMoves) => changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()));
+  const followPins = async (r: ExternalMoves) => {
+    // O histórico de versões segue a nota renomeada por fora (T2680), e as fixadas também (T2559).
+    await deps.versions?.move((p) => r.moves.get(p) ?? p);
+    await changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()));
+  };
   /** Os argumentos de uma capacidade de notas: só os campos conhecidos, para um typo não passar calado. */
   const attachments = () => {
     if (!deps.attachments) throw new CapabilityError("E_NO_ATTACHMENTS", "this host has no attachments");
@@ -192,6 +202,11 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
    */
   const fixPinned = (map: (p: string) => string | null) =>
     changePinned((pinned) => [...new Set(pinned.map(map).filter((p): p is string => p !== null))]);
+  /** A nota (ou a pasta) mudou de lugar pelo app: as fixadas e o histórico de versões vão junto. */
+  const followMove = async (map: (p: string) => string) => {
+    await deps.versions?.move(map);
+    await fixPinned(map);
+  };
   const under = (prefix: string, p: string) => p === prefix || p.startsWith(`${prefix}/`);
   const moveUnder = (from: string, to: string) => (p: string) => (under(from, p) ? `${to}${p.slice(from.length)}` : p);
   const dropUnder = (gone: string) => (p: string) => (under(gone, p) ? null : p);
@@ -346,7 +361,47 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "notes.get": async (args) => (await vault()).get(fields(args, "notes.get", ["path"]).path),
     "notes.save": async (args) => {
       const a = fields(args, "notes.save", ["path", "content", "baseVersion"]);
-      return (await vault()).save(a.path, a.content, a.baseVersion);
+      const v = await vault();
+      // O texto de antes, para a 1ª versão de uma nota sem histórico (T2680).
+      const before = deps.versions ? await v.get(a.path).then((n) => n.content, () => undefined) : undefined;
+      const r = await v.save(a.path, a.content, a.baseVersion);
+      if (r.saved && deps.versions && typeof a.content === "string") {
+        await deps.versions.record(r.meta.path, a.content, before).catch((e) => console.error("[notes] versions:", e));
+      }
+      return r;
+    },
+    "notes.versions": async (args) => {
+      const p = notePath(fields(args, "notes.versions", ["path"]).path);
+      return { versions: deps.versions ? await deps.versions.list(p) : [] };
+    },
+    "notes.version": async (args) => {
+      const a = fields(args, "notes.version", ["path", "id"]);
+      const p = notePath(a.path);
+      if (!deps.versions) throw new CapabilityError("E_NOT_FOUND", "no version history");
+      try {
+        return await deps.versions.get(p, a.id);
+      } catch (e) {
+        throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message);
+      }
+    },
+    "notes.restoreVersion": async (args) => {
+      const a = fields(args, "notes.restoreVersion", ["path", "id"]);
+      const p = notePath(a.path);
+      if (!deps.versions) throw new CapabilityError("E_NOT_FOUND", "no version history");
+      const v = await vault();
+      await deps.versions.flush(p);
+      let old: { content: string };
+      try {
+        old = await deps.versions.get(p, a.id);
+      } catch (e) {
+        throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message);
+      }
+      // O de agora vira uma versão antes (para dar para voltar do restaurar), e o restaurado também.
+      const current = await v.get(p);
+      await deps.versions.snapshot(p, current.content);
+      const r = await v.save(p, old.content, current.version);
+      if (r.saved) await deps.versions.snapshot(p, old.content);
+      return r;
     },
     "notes.create": async (args) => {
       const a = fields(args, "notes.create", ["folder", "title", "content", "template"]);
@@ -355,7 +410,7 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "notes.rename": async (args) => {
       const a = fields(args, "notes.rename", ["path", "newPath"]);
       const r = await (await vault()).rename(a.path, a.newPath);
-      await fixPinned(moveUnder(notePath(a.path), r.meta.path));
+      await followMove(moveUnder(notePath(a.path), r.meta.path));
       return r;
     },
     "notes.delete": async (args) => {
@@ -367,7 +422,7 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "notes.move": async (args) => {
       const a = fields(args, "notes.move", ["path", "folder"]);
       const r = await (await vault()).moveNote(a.path, a.folder);
-      await fixPinned(moveUnder(notePath(a.path), r.meta.path));
+      await followMove(moveUnder(notePath(a.path), r.meta.path));
       return r;
     },
     "notes.duplicate": async (args) => (await vault()).duplicate(fields(args, "notes.duplicate", ["path"]).path),
@@ -407,7 +462,7 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "folders.rename": async (args) => {
       const a = fields(args, "folders.rename", ["path", "newPath"]);
       const r = await (await vault()).moveFolder(a.path, a.newPath);
-      await fixPinned(moveUnder(folderPath(a.path), r.path));
+      await followMove(moveUnder(folderPath(a.path), r.path));
       return r;
     },
     "folders.move": async (args) => {
@@ -416,7 +471,7 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const parent = folderPath(a.parent ?? "");
       const name = from.split("/").at(-1) ?? "";
       const r = await (await vault()).moveFolder(from, parent ? `${parent}/${name}` : name);
-      await fixPinned(moveUnder(from, r.path));
+      await followMove(moveUnder(from, r.path));
       return r;
     },
     "folders.delete": async (args) => {

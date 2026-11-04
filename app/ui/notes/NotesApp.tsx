@@ -27,6 +27,7 @@ import { Palette } from "./Palette.tsx";
 import { type SideTarget, Sidebar } from "./Sidebar.tsx";
 import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy } from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
+import { VersionsDialog } from "./VersionsDialog.tsx";
 import { hasFilters, parseQuery, type SavedSearch } from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
@@ -76,6 +77,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
   const [note, setNote] = useState<Note | null>(null);
   const [docKey, setDocKey] = useState("");
+  const shown = useRef(0);
   const [body, setBody] = useState("");
   const [title, setTitle] = useState("");
   const [conflict, setConflict] = useState<Note | null>(null);
@@ -103,6 +105,8 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   const [renaming, setRenaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; target: SideTarget } | null>(null);
   const [moving, setMoving] = useState<SideTarget | null>(null);
+  /** O "Versões…" aberto (T2680): a nota e o texto dela no disco, para a diferença. */
+  const [versionsOf, setVersionsOf] = useState<{ path: string; title: string; content: string } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   /** O meio da janela: a nota, ou a Lixeira do app (T2593). */
   const [view, setView] = useState<"note" | "trash">("note");
@@ -162,7 +166,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       setWords(wordCount(split.body));
       // A pasta da nota aberta é a do próximo ⌘N.
       setSelectedFolder(n.folder);
-      setDocKey(`${n.path}@${n.version}`);
+      // Um número a cada nota mostrada (T2680): a versão é o hash do texto, e um autosave não troca a chave. Restaurar o texto
+      // de antes daria a mesma chave de quando a nota abriu, e o editor ficava com o texto editado na tela.
+      setDocKey(`${n.path}@${n.version}@${++shown.current}`);
       setConflict(null);
       setSaveFailed(false);
       // Um rascunho que não foi gravado (a janela fechou com conflito ou erro na tela): oferece de volta.
@@ -548,6 +554,13 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
     await open(n.path);
   };
 
+  /** "Versões…" (T2680): grava o que estiver pendente (a versão de agora entra no histórico) e abre o diálogo. */
+  const openVersions = async (path: string) => {
+    if (current.current === path && !(await leave())) return;
+    const n = await api.get(path).catch(() => null);
+    if (n) setVersionsOf({ path, title: n.title, content: n.content });
+  };
+
   /** Apagar vai para a Lixeira do macOS, com "Desfazer" no aviso de baixo. */
   const remove = async (target: SideTarget) => {
     if (target.kind === "empty") return;
@@ -647,6 +660,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       { label: "Duplicar", onSelect: () => void duplicate(t.path), disabled: !folders },
       { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders },
       { label: "Copiar link [[…]]", onSelect: () => copyLink(t.path) },
+      ...(api.versions ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
       { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
       { kind: "separator" },
       { label: "Apagar", danger: true, onSelect: () => void remove(t) },
@@ -1010,6 +1024,22 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
             }, failed_("ler o modelo"));
           }}
           onClose={() => setPicking(null)}
+        />
+      ) : null}
+      {versionsOf && api.versions ? (
+        <VersionsDialog
+          api={api.versions}
+          path={versionsOf.path}
+          title={versionsOf.title}
+          current={versionsOf.content}
+          onClose={() => setVersionsOf(null)}
+          onRestored={() => {
+            const p = versionsOf.path;
+            setVersionsOf(null);
+            void refresh();
+            // A nota aberta é a restaurada: o editor mostra o texto de volta.
+            if (current.current === p) api.get(p).then((n) => show(n), () => {});
+          }}
         />
       ) : null}
       {toast ? <UndoToast toast={toast} onDone={() => setToast(null)} /> : null}

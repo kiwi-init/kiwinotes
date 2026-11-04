@@ -110,6 +110,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     notes: stores.notes,
     attachments: stores.attachments,
     ocr: stores.ocr,
+    versions: stores.versions,
     dictionaryChanged: (terms) => void session?.dictionaryChanged(terms),
     snippetsChanged: (snippets) => session?.snippetsChanged(snippets),
     settings: stores.settings,
@@ -223,6 +224,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       for (const off of offs) off();
       session?.stop();
       stores.notes.close();
+      await stores.versions.close();
       server.stop(true);
       rmSync(sock, { force: true });
       rmSync(stateFile(data), { force: true });

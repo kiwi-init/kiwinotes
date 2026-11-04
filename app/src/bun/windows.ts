@@ -91,6 +91,7 @@ const capabilities = uiCapabilities({
   notes: stores.notes,
   attachments: stores.attachments,
   ocr: stores.ocr,
+  versions: stores.versions,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),
   about: {
