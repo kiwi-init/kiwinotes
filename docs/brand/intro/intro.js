@@ -75,19 +75,44 @@
   // as unidades do logo para o palco (medido no ícone do Channels: o degrau é ~17% do comprimento da lâmina; a face aqui tem 520 px).
   // A lâmina do logo é comprida e fina (a borda curta é ~1/4 da longa); a face aqui é 520×320, então ela afina
   // (FINA) enquanto a pilha abre. A pilha fica centrada na lâmina do meio.
-  const GAP = 26, DEPTH = 8, END = 3.35, UNIT = 520 / 100, FINA = 0.6;
-  const STEP = { x: 14 * UNIT, y: 17 * UNIT }, ANG = [24, 21, 17], SHORT = [22.2 / 27.7, 24.9 / 27.7, 1];
+  // O harry quer 1:1 com o ícone do Channels (#3988): nele as três lâminas são paralelas, com a borda longa descendo
+  // para a direita a ~28° na tela, e finas (uns 4,5:1). ANG é o ângulo na tela (negativo = desce para a direita).
+  const GAP = 26, DEPTH = 11, END = 3.35, UNIT = 520 / 80, FINA = 0.45;
+  const STEP = { x: 14 * UNIT, y: 17 * UNIT }, ANG = [-28, -28, -28], SHORT = [22.2 / 27.7, 24.9 / 27.7, 1];
   const pose = (t, slab, k) => {
     const up = seg(t, 1.55, 0.5, ease), turn = seg(t, 2.0, 0.6, ease);
     const out = seg(t, 2.0, 0.6, pop) * (1 - seg(t, 2.68, 0.28, implode));
     const degrau = (1 - slab) * out;
+    const sy = 1 + (FINA * SHORT[slab] - 1) * out;
     // O leque é o ângulo NA TELA. A rotação em X (58°·up) deita a pilha e achata o ângulo aplicado no plano (y vira
     // y·cos φ), então o ângulo no plano é atan(tan(alvo) / cos φ) (#3973: 17/21/24 saíam como 7/8/11).
-    const phi = (58 * up * Math.PI) / 180, alvo = (ANG[slab] * turn * Math.PI) / 180;
-    const giro = (Math.atan(Math.tan(alvo) / Math.max(0.2, Math.cos(phi))) * 180) / Math.PI;
+    // A vista do ícone: a pilha menos deitada (40° em X) e virada um pouco em Y, para a espessura sair para baixo e
+    // para a esquerda; e maior na tela (o logo ocupa ~60% do ícone).
+    const TILT = 40, YAW = -16;
+    // O ângulo da borda longa NA TELA, projetando os dois cantos de cima pela mesma cadeia do transform (rotateZ,
+    // depois rotateY, depois rotateX, depois a perspectiva de 1700), e o giro no plano achado por bissecção para
+    // dar o alvo: a inclinação em X e em Y achatam e torcem o que se aplica no plano (#3973).
+    const rad = (d) => (d * Math.PI) / 180;
+    const sc = 1 - 0.06 * up;
+    const proj = (giroDeg) => {
+      const tx = rad(TILT * up), ty = rad(YAW * up), tz = rad(-giroDeg);
+      const pt = (x0, y0) => {
+        const x = x0 * sc, y = y0 * sc * sy; // o scale(sx, sy) age antes do rotateZ
+        let [X, Y, Z] = [x * Math.cos(tz) - y * Math.sin(tz), x * Math.sin(tz) + y * Math.cos(tz), 0];
+        [X, Z] = [X * Math.cos(ty) + Z * Math.sin(ty), -X * Math.sin(ty) + Z * Math.cos(ty)];
+        [Y, Z] = [Y * Math.cos(tx) - Z * Math.sin(tx), Y * Math.sin(tx) + Z * Math.cos(tx)];
+        const wq = 1 - Z / 1700;
+        return [X / wq, Y / wq];
+      };
+      const a = pt(-260, -160), c = pt(260, -160);
+      return (Math.atan2(-(c[1] - a[1]), c[0] - a[0]) * 180) / Math.PI;
+    };
+    const alvo = ANG[slab] * turn;
+    let lo = -80, hi = 80;
+    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (proj(mid) < alvo) lo = mid; else hi = mid; }
+    const giro = (lo + hi) / 2;
     const z = (slab === 0 ? GAP * out : slab === 2 ? -1 - (GAP - 1) * out : 0) - DEPTH * k;
-    const sy = 1 + (FINA * SHORT[slab] - 1) * out;
-    return `translate(${(STEP.x * degrau).toFixed(2)}px, ${(-STEP.y * degrau).toFixed(2)}px) perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(58 * up).toFixed(3)}deg) rotateZ(${(-giro).toFixed(3)}deg) scale(${(1 - 0.18 * up).toFixed(4)}, ${((1 - 0.18 * up) * sy).toFixed(4)}) translateZ(${z.toFixed(2)}px) translateX(${(-2 * k).toFixed(1)}px)`;
+    return `translate(${(STEP.x * degrau).toFixed(2)}px, ${(-STEP.y * degrau).toFixed(2)}px) perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(TILT * up).toFixed(3)}deg) rotateY(${(YAW * up).toFixed(3)}deg) rotateZ(${(-giro).toFixed(3)}deg) scale(${(1 - 0.06 * up).toFixed(4)}, ${((1 - 0.06 * up) * sy).toFixed(4)}) translateZ(${z.toFixed(2)}px) translateX(${(-2 * k).toFixed(1)}px)`;
   };
   const scene = document.getElementById("scene");
   const layers = [];

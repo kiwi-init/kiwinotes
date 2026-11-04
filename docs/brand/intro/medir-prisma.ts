@@ -1,5 +1,6 @@
 // Mede, no intro.html congelado aos 2,5 s (os três prismas abertos), o ângulo NA TELA da borda de cima de cada
-// lâmina, de baixo para cima (a ordem dos .ly.face no DOM). O roteiro pede 17°, 21° e 24°, e a rotação em X do pose() achata o
+// lâmina, de baixo para cima (a ordem dos .ly.face no DOM). O alvo é o ícone do Channels (~−28°, #3988; o roteiro pedia o
+// leque 17°/21°/24°, trocado pelo harry), e a rotação em X do pose() achata o
 // ângulo aplicado no plano, então o intro.js compensa; isto é a conferência (T3898, #3973).
 //
 //   bun docs/brand/intro/medir-prisma.ts      (usa o Playwright do app/; sai com 1 se algum ângulo passar de 2° do alvo)
@@ -8,7 +9,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 const here = import.meta.dirname;
-const ALVO = [17, 21, 24]; // de baixo para cima
+const ALVO = [-28, -28, -28]; // de baixo para cima; negativo = a borda longa desce para a direita, como no ícone do Channels (#3988)
 const APP = [path.join(here, "../../../app"), path.join(here, "../../../../../kiwinotes/app")].find((d) => existsSync(path.join(d, "node_modules/playwright-core/index.mjs")));
 if (!APP) throw new Error("medir-prisma: playwright-core não encontrado; rode `bun install` em app/");
 const { webkit } = await import(path.join(APP, "node_modules/playwright-core/index.mjs"));
