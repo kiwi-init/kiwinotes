@@ -7,7 +7,8 @@
  * (`http://localhost`), e o HMR segue funcionando sem exceção nenhuma.
  *
  * - `script-src` sem `'unsafe-inline'` e sem `'unsafe-eval'`: a UI é um `<script type="module" src>` do build, e o
- *   preload entra pelo WebView, fora da CSP;
+ *   preload entra pelo WebView, fora da CSP. Com `'wasm-unsafe-eval'` (T2983): deixa compilar WebAssembly, e só isso
+ *   (nada de `eval` nem `new Function`). É o parser de Markdown do Channels (md4c), que vem embutido no build da UI;
  * - `style-src` com `'unsafe-inline'`: o CodeMirror da janela Notas cai numa tag `<style>` quando não há
  *   `adoptedStyleSheets` (#1385). A UI não monta HTML (nada de `innerHTML`), então isso não abre script;
  * - `connect-src ws://127.0.0.1:*`: só o socket da ponte do RPC, que o preload do Electrobun abre em
@@ -21,7 +22,7 @@
  */
 export const VIEWS_CSP = [
   "default-src 'self' views:",
-  "script-src 'self' views:",
+  "script-src 'self' views: 'wasm-unsafe-eval'",
   "style-src 'self' views: 'unsafe-inline'",
   "img-src 'self' views: data:",
   "font-src 'self' views: data:",

@@ -1,0 +1,128 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Pessoas",
+        "title": "Ana",
+        "content": "Contato da Ana.\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Markdown",
+        "content": "# Reunião do site\n\nFalei com **muita** calma e *cuidado* com a [[Ana]] sobre ~~o prazo~~ o `deploy`. Ver [[Nada]] e #projeto.\nLink: [Kiwi](https://kiwi.dev).\n\n## Tarefas\n\n- primeiro\n- segundo\n  - dentro\n\n1. um\n2. dois\n\n- [ ] revisar o texto\n- [x] mandar o convite\n\n> [!note] Ideia\n> Um callout como no Channels.\n\n> Citação simples.\n\n```js\nconst x = 1;\n```\n\n---\n\n| Item | Valor |\n| - | -: |\n| Café | 12 |\n\nFim.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Markdown"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Markdown')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered .enrm-text",
+      "name": "os blocos aparecem pela lib do Channels"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered strong:has-text('muita')",
+      "name": "negrito sem os **"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered a[href='kiwi-note:Ana']",
+      "name": "o [[link]] vira link da nota"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered a[href='kiwi-note-missing:Nada']",
+      "name": "o link que não existe tem o endereço de faltando"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered a[href='kiwi-tag:projeto']",
+      "name": "a #tag vira etiqueta"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered .enrm-admonition",
+      "name": "o callout do Obsidian aparece como o do Channels"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered blockquote",
+      "name": "a citação simples"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered pre",
+      "name": "bloco de código"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered hr",
+      "name": "linha horizontal"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-md-table",
+      "name": "a tabela continua com o widget editável dela"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-rendered input[type=checkbox]",
+      "count": 2,
+      "name": "as duas tarefas com caixa"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-rendered input[type=checkbox]:checked",
+      "count": 1,
+      "name": "só a tarefa [x] aparece marcada"
+    },
+    {
+      "screenshot": "markdown-renderizado.png"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered input[type=checkbox] >> nth=0",
+      "name": "marca a primeira tarefa"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered input[type=checkbox]:checked >> nth=1",
+      "name": "a caixa fica marcada (o .md mudou para [x])"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered strong:has-text('muita')",
+      "name": "clicar no parágrafo"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-line:has-text('**muita**')",
+      "name": "o parágrafo vira Markdown cru para editar"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered h1",
+      "name": "o título continua renderizado"
+    },
+    {
+      "screenshot": "markdown-editando.png"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered h1",
+      "name": "clicar no título"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered a[href='kiwi-note:Ana']",
+      "name": "o parágrafo voltou a renderizar"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered a[href='kiwi-note:Ana']",
+      "name": "clicar no [[Ana]]"
+    },
+    {
+      "waitFor": ".kn-crumb-bt:has-text('Pessoas')",
+      "name": "abre a nota da Ana"
+    }
+  ]
+}
