@@ -10,6 +10,7 @@
 //     final nunca recebe uma rc.
 //
 //   bun scripts/update-feed.ts url <tag> <owner/repo>     # o KIWI_UPDATE_URL do build
+//   bun scripts/update-feed.ts version <tag>              # o KIWI_VERSION do build (`v0.1.0-rc3` → `0.1.0-rc3`)
 
 export const RC_FEED_TAG = "updates-rc";
 
@@ -30,6 +31,11 @@ export function feedUrl(tag: string, repo: string): string {
   const m = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.exec(tag);
   if (!m) return "";
   return m[1] ? `https://github.com/${repo}/releases/download/${RC_FEED_TAG}` : `https://github.com/${repo}/releases/latest/download`;
+}
+
+/** A versão do app para o build de um tag (`v0.1.0-rc3` → `0.1.0-rc3`), ou "" fora de um tag de versão. */
+export function tagVersion(tag: string): string {
+  return /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(tag) ? tag.slice(1) : "";
 }
 
 /** O manifesto do build, conferido contra o version.json do app assinado. Lança se não bate. */
@@ -64,9 +70,10 @@ export function updateManifest(built: unknown, app: Record<string, unknown>): Up
 
 if (import.meta.main) {
   const [cmd, tag, repo] = process.argv.slice(2);
-  if (cmd !== "url" || tag === undefined || !repo) {
-    console.error("usage: bun scripts/update-feed.ts url <tag> <owner/repo>");
+  if (cmd === "version" && tag !== undefined) console.log(tagVersion(tag));
+  else if (cmd === "url" && tag !== undefined && repo) console.log(feedUrl(tag, repo));
+  else {
+    console.error("usage: bun scripts/update-feed.ts url <tag> <owner/repo> | version <tag>");
     process.exit(2);
   }
-  console.log(feedUrl(tag, repo));
 }

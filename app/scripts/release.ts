@@ -123,7 +123,10 @@ try {
   const id = plist(app, "CFBundleIdentifier");
   if (id !== IDENTIFIER) throw new Error(`release: the app is ${id}, not ${IDENTIFIER}`);
   const built = (JSON.parse(fs.readFileSync(path.join(app, "Contents", "Resources", "version.json"), "utf8")) as { version?: unknown }).version;
-  if (built !== pkg.version) throw new Error(`release: the app says ${String(built)}, package.json ${pkg.version}`);
+  // A versão do tag (`0.1.0-rc3`, T1969) tem a base do package.json; fora do CI, é a do package.json.
+  if (typeof built !== "string" || (built !== pkg.version && !built.startsWith(`${pkg.version}-`))) {
+    throw new Error(`release: the app says ${String(built)}, package.json ${pkg.version}`);
+  }
 
   const mainExe = path.join(app, "Contents", "MacOS", plist(app, "CFBundleExecutable"));
   const bun = path.join(app, "Contents", "MacOS", "bun");
@@ -144,7 +147,7 @@ try {
 
   const out = path.resolve(outArg);
   fs.mkdirSync(out, { recursive: true });
-  const dmg = path.join(out, `KiwiNotes-${pkg.version}-mac-arm64.dmg`);
+  const dmg = path.join(out, `KiwiNotes-${built}-mac-arm64.dmg`);
   fs.rmSync(dmg, { force: true });
   const dmgStage = path.join(tmp, "dmg");
   fs.mkdirSync(dmgStage);

@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 
 import {
   AppUpdates,
+  compareVersions,
   preparedTar,
   requirement,
   updateMenuLabel,
@@ -137,6 +138,31 @@ describe("AppUpdates (T1969)", () => {
       expect(await new AppUpdates({ updater: throws.updater, env: {}, log: (m) => logs.push(m) }).check()).toEqual({ kind: "idle" });
       expect(logs.at(-1)).toBe("check failed: offline");
     }));
+
+  test("uma versão mais velha ou igual não vira oferta, nem baixa (downgrade, #2057)", () =>
+    withDir(async (appData) => {
+      for (const version of ["0.0.9", "0.1.0", "0.1.0-rc9", "torta"]) {
+        const { updater, calls } = fakeUpdater({ appData, found: { version, hash: "bbbb", updateAvailable: true } });
+        const logs: string[] = [];
+        expect(await new AppUpdates({ updater, env: {}, log: (m) => logs.push(m), verify: () => null }).check()).toEqual({ kind: "idle" });
+        expect(calls).toEqual(["check"]);
+        expect(logs).toEqual([`skipped update ${version} (bbbb): not newer than 0.1.0`]);
+      }
+    }));
+
+  test("compareVersions: o semver das tags, com rc antes da final e números como números", () => {
+    expect(compareVersions("0.1.0-rc3", "0.1.0-rc2")).toBe(1);
+    expect(compareVersions("0.1.0-rc10", "0.1.0-rc9")).toBe(1);
+    expect(compareVersions("0.1.0", "0.1.0-rc10")).toBe(1);
+    expect(compareVersions("0.1.0-rc3", "0.1.0")).toBe(-1);
+    expect(compareVersions("0.2.1-rc1", "0.2.0")).toBe(1);
+    expect(compareVersions("0.10.0", "0.9.9")).toBe(1);
+    expect(compareVersions("1.0.0", "1.0.0")).toBe(0);
+    expect(compareVersions("1.0.0-rc.2", "1.0.0-rc.11")).toBe(-1);
+    expect(compareVersions("1.0.0-alpha", "1.0.0-beta")).toBe(-1);
+    expect(compareVersions("1.0", "1.0.0")).toBeNull();
+    expect(compareVersions("", "1.0.0")).toBeNull();
+  });
 
   test("duas checagens juntas viram uma", () =>
     withDir(async (appData) => {

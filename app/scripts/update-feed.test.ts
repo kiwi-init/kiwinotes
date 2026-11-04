@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { feedUrl, updateManifest } from "./update-feed.ts";
+import { feedUrl, tagVersion, updateManifest } from "./update-feed.ts";
 
 describe("update-feed (T1969)", () => {
   test("o feed vem do tag: final no latest, rc no updates-rc, ensaio sem feed", () => {
@@ -10,6 +10,13 @@ describe("update-feed (T1969)", () => {
     expect(feedUrl("", "kiwi-init/kiwinotes")).toBe("");
     expect(feedUrl("updates-rc", "kiwi-init/kiwinotes")).toBe("");
     expect(() => feedUrl("v1.0.0", "kiwi-init/kiwinotes/../x")).toThrow("isn't owner/repo");
+  });
+
+  test("a versão do build vem do tag", () => {
+    expect(tagVersion("v0.1.0-rc3")).toBe("0.1.0-rc3");
+    expect(tagVersion("v0.2.0")).toBe("0.2.0");
+    expect(tagVersion("main")).toBe("");
+    expect(tagVersion("updates-rc")).toBe("");
   });
 
   const built = {

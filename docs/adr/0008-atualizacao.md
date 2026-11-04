@@ -24,6 +24,7 @@ Esta é a **única** coisa que o app busca na rede (AGENTS.md, Privacidade), e �
   - o `codesign --verify --deep --strict` com o requisito `anchor apple generic and identifier "app.kiwinotes.desktop" and certificate leaf[subject.OU] = "57249C654W"`, que é o Developer ID da Kiwi Init.
 
   Um tar que não passa é apagado e não vira oferta. Quem publicar no release sem a nossa chave não troca o app de ninguém.
+- **Só sobe de versão.** O Updater do Electrobun decide pelo hash, e o feed `updates-rc` é sobrescrito pelo último release que terminar. Então o app só oferece uma versão **maior** que a dele, em semver: `0.2.0-rc3 < 0.2.0 < 0.2.1-rc1`, e na rc os números contam como números (`rc3 < rc10`). Para isso, o build leva a versão do tag (`KIWI_VERSION`, por exemplo `0.1.0-rc3`), e não só a do package.json.
 - **Nada reinicia sozinho.** A primeira checagem acontece 1 minuto depois de abrir, e depois de 6 em 6 horas. Com o download conferido, o menu ganha **Atualizar e reiniciar**. Só esse clique chama o `applyUpdate`, que fecha o app, troca o .app e abre o novo. O helper sai junto, no `exit` do processo.
 - **Desligada** no canal dev, sem `baseUrl`, com `KIWI_DEBUG=1` (agentes) e no headless, que nem importa o módulo. Os testes não vão à rede: o `bun test` usa um Updater de mentira e um .app de mentira assinado ad hoc, que a conferência recusa.
 

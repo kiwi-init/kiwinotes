@@ -1,5 +1,5 @@
 // Atualização automática (T1969, decisão do harry em #1966): o app inteiro (UI, ditado, helper) se atualiza pelo
-// Updater do Electrobun, a partir do GitHub Releases. É a única coisa que o app busca na rede, e só baixa (ADR 0009):
+// Updater do Electrobun, a partir do GitHub Releases. É a única coisa que o app busca na rede, e só baixa (ADR 0008):
 //
 // 1. de tempos em tempos, o `checkForUpdate` lê o `<canal>-macos-arm64-update.json` do `baseUrl` do build;
 // 2. com um hash novo, o `downloadUpdate` baixa o .tar.zst em segundo plano;
@@ -47,6 +47,39 @@ export interface UpdaterApi {
   applyUpdate(): Promise<void>;
   updateInfo(): UpdateCheck;
   appDataFolder(): Promise<string>;
+}
+
+/**
+ * Compara versões no formato do tag (`0.1.0`, `0.1.0-rc3`): -1, 0 ou 1. Como no semver, a pré-versão vem antes da
+ * final (`0.2.0-rc3 < 0.2.0 < 0.2.1-rc1`); na pré-versão, os números contam como números (`rc3 < rc10`). Uma versão
+ * fora do formato dá null: não dá para dizer se é mais nova.
+ */
+export function compareVersions(a: string, b: string): -1 | 0 | 1 | null {
+  const parse = (v: string) => {
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?$/.exec(v);
+    return m ? { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? "" } : null;
+  };
+  const x = parse(a);
+  const y = parse(b);
+  if (!x || !y) return null;
+  for (let i = 0; i < 3; i++) if (x.core[i] !== y.core[i]) return x.core[i]! < y.core[i]! ? -1 : 1;
+  if (x.pre === y.pre) return 0;
+  if (!x.pre) return 1;
+  if (!y.pre) return -1;
+  const chunks = (s: string) => s.match(/\d+|[^\d.]+/g) ?? [];
+  const p = chunks(x.pre);
+  const q = chunks(y.pre);
+  for (let i = 0; i < Math.max(p.length, q.length); i++) {
+    if (p[i] === undefined) return -1;
+    if (q[i] === undefined) return 1;
+    if (p[i] === q[i]) continue;
+    const pn = /^\d+$/.test(p[i]!);
+    const qn = /^\d+$/.test(q[i]!);
+    if (pn && qn) return Number(p[i]) < Number(q[i]) ? -1 : 1;
+    if (pn !== qn) return pn ? -1 : 1;
+    return p[i]! < q[i]! ? -1 : 1;
+  }
+  return 0;
 }
 
 /** Por que a atualização está desligada neste app, ou null se está ligada. */
@@ -213,6 +246,14 @@ export class AppUpdates {
         return this.state;
       }
       if (!found.updateAvailable) {
+        this.set({ kind: "idle" });
+        return this.state;
+      }
+      // O Updater decide pelo hash, não pela versão: um feed sobrescrito por um release mais velho (um re-run de tag
+      // antigo, uma correção numa linha velha) viraria um downgrade. Só sobe (revisão do T1969, #2057).
+      const current = (await u.getLocalInfo()).version;
+      if (compareVersions(found.version, current) !== 1) {
+        this.log(`skipped update ${found.version} (${found.hash}): not newer than ${current}`);
         this.set({ kind: "idle" });
         return this.state;
       }

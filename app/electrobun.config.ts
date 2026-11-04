@@ -6,7 +6,9 @@ export default {
   app: {
     name: "Kiwi Notes",
     identifier: "app.kiwinotes.desktop",
-    version: pkg.version,
+    // A versão do tag (`0.1.0-rc3`), que o CI passa em KIWI_VERSION (T1969): é por ela que o app sabe se o que o feed
+    // oferece é mais novo. Fora do CI, a do package.json.
+    version: process.env.KIWI_VERSION || pkg.version,
   },
   build: {
     mainProcess: "bun",
