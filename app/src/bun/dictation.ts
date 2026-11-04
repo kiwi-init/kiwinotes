@@ -166,7 +166,7 @@ export class Dictation {
         const recording = this.recordings.shift();
         const app = recording?.app ?? this.activeApp;
         this.enqueue(async () => {
-          const outcome = await (recording?.note ? this.handleNote(e, app, recording.lost) : this.handle(e, app, recording?.lost, recording?.simulate, recording?.fellBackTo));
+          const outcome = await (recording?.note ? this.handleNote(e, app, recording.lost, recording.fellBackTo) : this.handle(e, app, recording?.lost, recording?.simulate, recording?.fellBackTo));
           recording?.done?.(outcome);
         });
       }),
@@ -338,7 +338,7 @@ export class Dictation {
    * A nota rápida (T1320): limpa e expande como um ditado normal, mas no tom padrão, e o texto vira uma nota nova em
    * `Caixa de entrada/` em vez de ser colado. Vai para o Histórico do mesmo jeito: se a nota falhar, nada se perde.
    */
-  private async handleNote(t: Transcript, app: AppRef | undefined, lost?: string): Promise<DictationOutcome> {
+  private async handleNote(t: Transcript, app: AppRef | undefined, lost?: string, fellBackTo?: string): Promise<DictationOutcome> {
     const started = performance.now();
     const base = { raw: t.text, sttMs: t.latencyMs, app };
     if (!t.text.trim()) {
@@ -373,7 +373,9 @@ export class Dictation {
       // Sem o Histórico, um id só desta nota: ela não tem como ser mandada de novo.
       const id = entry?.id ?? `note-${at.toISOString()}-${Math.random().toString(16).slice(2, 6)}`;
       note = await this.options.notes!.toNew(text, at, id, { fresh: true });
-      await this.overlay("done", noteCreated(note.note.title));
+      // O mic escolhido não estava conectado (T3919): o mesmo aviso do ditado comum. A pílula tem uma linha só, então
+      // ele fica no lugar do título; a nota está criada do mesmo jeito.
+      await this.overlay("done", fellBackTo ? micFellBackNotice(fellBackTo) : noteCreated(note.note.title));
     } catch (e) {
       this.log(`quick note failed: ${String(e)}`);
       await this.overlay("error", NOTE_FAILED);
