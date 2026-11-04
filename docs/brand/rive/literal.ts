@@ -153,7 +153,7 @@ function render(src: string, marked: string, SX: number, SY: number): Promise<Re
 }
 // O playwright-core do app; numa worktree sem node_modules, o do checkout principal (kiwinotes/app).
 const { existsSync } = await import("node:fs");
-const pw = [path.join(APP, "node_modules/playwright-core/index.mjs"), path.join(OUT, "../../../../kiwinotes/app/node_modules/playwright-core/index.mjs")].find((f) => existsSync(f));
+const pw = [path.join(APP, "node_modules/playwright-core/index.mjs"), path.join(OUT, "../../../../../kiwinotes/app/node_modules/playwright-core/index.mjs")].find((f) => existsSync(f));
 if (!pw) throw new Error("literal: playwright-core não encontrado; rode `bun install` em app/");
 const { webkit } = await import(pw);
 const browser = await webkit.launch(); const page = await browser.newPage();
