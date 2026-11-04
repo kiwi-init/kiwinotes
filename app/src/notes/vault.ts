@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
-import { isPackageName, packageOf } from "../shared/attachments.ts";
+import { isPackageDir } from "../shared/attachments.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -285,6 +285,8 @@ export class Vault {
   private folders = new Set<string>();
   /** Os arquivos que não são nota (T3370), para a árvore. O conteúdo não é lido. */
   private files = new Map<string, VaultFile>();
+  /** Os documentos-pacote (`.pages`, `.key`… com a marca do formato) que o scan achou (T3371). */
+  private packages = new Set<string>();
   private watcher: FSWatcher | null = null;
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -388,7 +390,7 @@ export class Vault {
     const abs = inside(this.root, p);
     const s = await lstat(abs).catch(() => null);
     // Um pacote (`.pages`, `.numbers`, `.key`) é uma pasta: o bit "x" dela é o de entrar, não o de executar.
-    if (s?.isDirectory() && isPackageName(p)) return { abs, mode: 0 };
+    if (s?.isDirectory() && this.packages.has(p)) return { abs, mode: 0 };
     if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     return { abs, mode: s.mode };
   }
@@ -973,6 +975,7 @@ export class Vault {
     this.notes = new Map();
     this.folders = new Set();
     this.files = new Map();
+    this.packages = new Set();
     const walk = async (rel: string) => {
       for (const name of await readdir(path.join(this.root, rel))) {
         if (name.startsWith(".")) continue;
@@ -980,8 +983,10 @@ export class Vault {
         const abs = path.join(this.root, child);
         const s = await lstat(abs);
         if (s.isSymbolicLink()) continue;
-        if (s.isDirectory() && isPackageName(name)) {
-          this.keepFile(child.normalize("NFC"), s); // um documento-pacote: arquivo, não pasta (T3371)
+        if (s.isDirectory() && isPackageDir(name, await readdir(abs).catch(() => []))) {
+          // Um documento-pacote: arquivo, não pasta (T3371). Só com a marca do formato e sem nota dentro (#3476).
+          this.packages.add(child.normalize("NFC"));
+          this.keepFile(child.normalize("NFC"), s);
         } else if (s.isDirectory()) {
           this.folders.add(child.normalize("NFC"));
           await walk(child);
@@ -1005,11 +1010,14 @@ export class Vault {
     const before = this.snapshot();
     for (const rel of paths) {
       // Dentro de um documento-pacote (o Pages salvando): conta como o pacote inteiro mudando (T3371).
-      const pkg = packageOf(rel);
+      const pkg = this.packageOf(rel);
       if (pkg) {
         const ps = await lstat(path.join(this.root, pkg)).catch(() => null);
         if (ps?.isDirectory() && !ps.isSymbolicLink()) this.keepFile(pkg, ps);
-        else this.files.delete(pkg);
+        else {
+          this.files.delete(pkg);
+          this.packages.delete(pkg);
+        }
         if (!others.includes(pkg)) others.push(pkg);
         continue;
       }
@@ -1036,6 +1044,15 @@ export class Vault {
         continue;
       }
       if (!/\.md$/i.test(rel)) {
+        // Um arquivo numa pasta que o índice ainda não conhece (uma pasta ou um pacote criados por fora, e o FSEvents só
+        // contou o de dentro): relê tudo, e o scan decide se é pasta ou documento-pacote (T3371).
+        const dir = parentOf(rel);
+        if (s && dir && !this.folders.has(dir)) {
+          await this.scan();
+          changed.push(rel);
+          others.push(rel);
+          continue;
+        }
         if (s?.isFile()) this.keepFile(rel, s);
         else this.files.delete(rel);
         others.push(rel);
@@ -1074,6 +1091,12 @@ export class Vault {
         }
       }
     }
+  }
+
+  /** O pacote conhecido que contém `rel` (ou é ele), ou null. Um pacote novo entra pelo scan (pasta nova relê tudo). */
+  private packageOf(rel: string): string | null {
+    for (let p = rel; p; p = parentOf(p)) if (this.packages.has(p)) return p;
+    return null;
   }
 
   private keepFile(rel: string, s: { size: number; mtimeMs: number }) {

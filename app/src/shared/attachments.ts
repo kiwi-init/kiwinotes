@@ -54,14 +54,20 @@ export const openMode = (name: string, mode = 0): "app" | "finder" =>
 
 /**
  * Documentos que o macOS guarda como pacote (uma pasta que o Finder mostra como arquivo): o vault lista como arquivo,
- * sem entrar nem mostrar como pasta, e a árvore abre no app dele (T3371, nit da revisão #3466).
+ * sem entrar nem mostrar como pasta, e a árvore abre no app dele (T3371, nit da revisão #3466). O nome só não basta:
+ * uma pasta comum chamada "Projeto.key" esconderia as notas de dentro (revisão #3476). É pacote quando, além do nome,
+ * tem a marca do formato e nenhuma nota.
  */
-export const PACKAGE_EXTS = new Set(["pages", "numbers", "key", "rtfd"]);
-export const isPackageName = (name: string): boolean => PACKAGE_EXTS.has(extOf(name));
+export const PACKAGE_MARKS: Readonly<Record<string, readonly string[]>> = {
+  pages: ["Index.zip", "Index.xml", "index.xml.gz"],
+  numbers: ["Index.zip", "Index.xml", "index.xml.gz"],
+  key: ["Index.zip", "Index.xml", "index.apxl", "index.apxl.gz"],
+  rtfd: ["TXT.rtf"],
+};
 
-/** O pacote que contém `rel` (`Relatório.pages/Index.zip` → `Relatório.pages`), ou null. */
-export function packageOf(rel: string): string | null {
-  const parts = rel.split("/");
-  const i = parts.findIndex((p) => isPackageName(p));
-  return i < 0 ? null : parts.slice(0, i + 1).join("/");
+/** Se a pasta `name`, com estes itens de primeiro nível, é um documento-pacote. */
+export function isPackageDir(name: string, entries: readonly string[]): boolean {
+  const marks = PACKAGE_MARKS[extOf(name)];
+  if (!marks || entries.some((e) => /\.md$/i.test(e))) return false;
+  return entries.some((e) => marks.includes(e));
 }

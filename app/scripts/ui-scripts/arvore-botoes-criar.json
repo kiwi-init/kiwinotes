@@ -37,10 +37,8 @@
       "name": "a pasta nova já entra em renomear"
     },
     {
-      "press": "Meta+a"
-    },
-    {
-      "type": "Ideias"
+      "fill": ".kn-tree-pop .kn-side-rename",
+      "text": "Ideias"
     },
     {
       "press": "Enter"

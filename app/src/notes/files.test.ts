@@ -92,6 +92,11 @@ describe("os arquivos que não são nota (T3370)", () => {
 
   test("documento-pacote (.pages, .numbers, .key): arquivo na lista, sem virar pasta, e abre no app dele", async () => {
     const { v, root } = await vault({ "Nota.md": "oi", "Relatório.pages/Index.zip": "zip", "Relatório.pages/Data/foto.png": "png", "Contas.numbers/Index.zip": "z" });
+    const { isPackageDir } = await import("../shared/attachments.ts");
+    expect(isPackageDir("A.rtfd", ["TXT.rtf", "foto.png"])).toBe(true);
+    expect(isPackageDir("A.key", ["Index.zip", "Ideia.md"])).toBe(false);
+    expect(isPackageDir("A.key", ["Ideia.txt"])).toBe(false);
+    expect(isPackageDir("A.zip", ["Index.zip"])).toBe(false);
     expect(v.list().files.map((f) => f.path)).toEqual(["Contas.numbers", "Relatório.pages"]);
     expect(v.list().folders).toEqual([]);
     expect(await v.locateFile("Relatório.pages")).toEqual({ abs: path.join(root, "Relatório.pages"), mode: 0 });
@@ -110,6 +115,21 @@ describe("os arquivos que não são nota (T3370)", () => {
     await waitFor(() => v.list().files.some((f) => f.path === "Novo.key"));
     expect(v.list().files.map((f) => f.path)).toEqual(["Contas.numbers", "Novo.key", "Relatório.pages"]);
     expect(v.list().folders).not.toContain("Novo.key");
+  });
+
+  test("uma pasta comum chamada Projeto.key continua pasta, com as notas de dentro (revisão #3476)", async () => {
+    const { v, root } = await vault({ "Projeto.key/Ideia.md": "a ideia", "Chaves.pages/senhas.txt": "x", "Fora.md": "fora" });
+    expect(v.list().notes.map((n) => n.path)).toEqual(["Fora.md", "Projeto.key/Ideia.md"]);
+    expect(v.list().folders).toEqual(["Chaves.pages", "Projeto.key"]);
+    expect(v.list().files.map((f) => f.path)).toEqual(["Chaves.pages/senhas.txt"]);
+    await expect(v.locateFile("Projeto.key")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    expect(v.search("ideia").map((h) => h.path)).toEqual(["Projeto.key/Ideia.md"]);
+    // Editada por fora, a nota de dentro continua nota (o watcher não confunde com um pacote mudando).
+    v.watch();
+    await watcherReady(root, v);
+    writeFileSync(path.join(root, "Projeto.key/Ideia.md"), "a ideia mudou no Obsidian");
+    await waitFor(() => v.search("Obsidian").length === 1);
+    expect(v.list().files.map((f) => f.path)).toEqual(["Chaves.pages/senhas.txt"]);
   });
 
   test("locateFile: só arquivo do cofre que existe e não é nota", async () => {
