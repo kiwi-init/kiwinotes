@@ -180,12 +180,16 @@ tray.on("tray-clicked", (event) => {
   }
 });
 
-function quit(): never {
+function quit(): void {
   updates.stop();
   dictation.stop();
   tray.remove();
   releaseInstance(stores.dir);
-  process.exit(0);
+  // A versão pendente de uma nota editada há menos de 2 min (T2680) vai para o histórico antes de sair, com um teto:
+  // sair nunca espera mais que isso.
+  const exit = () => process.exit(0);
+  setTimeout(exit, 800);
+  void stores.versions.close().then(exit, exit);
 }
 
 // Um build novo pede para este sair (T992): sai limpo, parando o helper e soltando o socket.

@@ -12,6 +12,7 @@ import { Attachments } from "../notes/attachments.ts";
 import { OcrIndex } from "../notes/ocr.ts";
 import { DictationNotes } from "../notes/fromDictation.ts";
 import { Vault } from "../notes/vault.ts";
+import { NoteVersions } from "../notes/versions.ts";
 
 /** `KIWI_DATA_DIR` troca a pasta (testes e agentes, sem mexer nos dados reais). */
 const dir = process.env.KIWI_DATA_DIR || dataDir();
@@ -43,4 +44,6 @@ export const stores = {
   /** Os anexos colados e arrastados (T2594), na pasta das Configurações (`Anexos/` por padrão). */
   attachments: new Attachments(notes, async () => (await settings.load()).attachmentsFolder, (p) => ocr.enqueue([p])),
   ocr,
+  /** O histórico de versões das notas (T2680): fora do vault, para não sujar o Obsidian. */
+  versions: new NoteVersions({ dir: path.join(dir, "history", "notes") }),
 };

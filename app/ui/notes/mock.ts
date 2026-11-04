@@ -10,6 +10,7 @@ import { type SavedSearch, sanitizeSavedSearches } from "../../src/shared/query.
 import { DEFAULT_TEMPLATES_FOLDER, fillTemplate } from "../../src/shared/templates.ts";
 import type { TagNode } from "./types.ts";
 import { linkSpans, unlinkedSpans, contextOf } from "../../src/notes/mentions.ts";
+import type { VersionsApi } from "./types.ts";
 import type { Backlink, ExtrasApi, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, TrashItem, VaultListing } from "./types.ts";
 
 interface Stored {
@@ -107,6 +108,11 @@ export class MockVault implements NotesApi {
     const s = this.notes.get(path);
     if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
     if (String(s.version) !== baseVersion) return { saved: false, current: this.note(path) };
+    // O histórico de versões de mentira (T2680): o texto de antes na 1ª vez, e cada save (sem o intervalo de 2 min).
+    const h = this.versionsOf.get(path) ?? [];
+    if (!h.length && s.content !== content) h.push(this.version(s.content));
+    if (h.at(-1)?.content !== content) h.push(this.version(content));
+    this.versionsOf.set(path, h);
     this.write(path, content);
     this.emit([path]);
     return { saved: true, meta: this.meta(path) };
@@ -325,6 +331,27 @@ export class MockVault implements NotesApi {
     }
     return out.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
   }
+
+  private versionsOf = new Map<string, { id: string; at: string; content: string }[]>();
+  private versionSeq = 0;
+  private version(content: string) {
+    const at = new Date(this.clock().getTime() + this.versionSeq++).toISOString();
+    return { id: at.replace(/[:.]/g, "-"), at, content };
+  }
+
+  /** O histórico de versões (T2680), como o engine. */
+  readonly versions: VersionsApi = {
+    list: async (path) => [...(this.versionsOf.get(path) ?? [])].reverse().map((v) => ({ id: v.id, at: v.at, size: v.content.length })),
+    get: async (path, id) => {
+      const v = this.versionsOf.get(path)?.find((x) => x.id === id);
+      if (!v) throw new Error(`E_NOT_FOUND: ${id}`);
+      return { content: v.content, at: v.at };
+    },
+    restore: async (path, id) => {
+      const v = await this.versions.get(path, id);
+      return this.save(path, v.content, String(this.notes.get(path)?.version ?? ""));
+    },
+  };
 
   /** O que já foi para o Lixo do macOS de mentira (o `trash.empty`), e se o Lixo foi aberto no Finder (T2593). */
   private emptied: TrashItem[] = [];
