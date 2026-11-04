@@ -72,7 +72,11 @@ const capabilities = uiCapabilities({
   dictionaryChanged: (terms) => void session.get()?.dictionaryChanged(terms),
   snippetsChanged: (snippets) => session.get()?.snippetsChanged(snippets),
   settings: stores.settings,
-  settingsChanged: (settings) => void session.get()?.settingsChanged(settings),
+  settingsChanged: (settings) => {
+    void session.get()?.settingsChanged(settings);
+    // A Aparência vale para todas as janelas abertas (T2503).
+    for (const rpc of rpcs.values()) rpc.send.event({ name: "settings.changed", payload: settings });
+  },
   clipboardWrite: (text) => Utils.clipboardWriteText(text),
   // "Mostrar no Finder" (T2468). Com KIWI_DEBUG=1 (os agentes), só registra: nada abre na tela de ninguém.
   reveal: (abs) => {

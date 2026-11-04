@@ -27,6 +27,12 @@ body {
   user-select: none;
   cursor: default;
   overflow: hidden;
+  /* O Tamanho do texto da Aparência (T2503): a janela inteira cresce junto, como o rem do Channels. */
+  zoom: var(--text-scale, 1);
+}
+
+::selection {
+  background: var(--selection, rgb(128 128 128 / 0.3));
 }
 
 button,
@@ -87,7 +93,9 @@ textarea {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* Sem transição nenhuma, e não de 0.01ms: com a duração forçada, todo elemento ganha `transition: all`, e a cor
+       herdada ficava presa na do tema anterior ao trocar a Aparência (T2503). */
+    transition: none !important;
   }
 }
 
@@ -95,5 +103,5 @@ textarea {
 :root[data-motion="reduced"] *::before,
 :root[data-motion="reduced"] *::after {
   animation-duration: 0.01ms !important;
-  transition-duration: 0.01ms !important;
+  transition: none !important;
 }

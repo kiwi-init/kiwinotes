@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Kbd, Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
+import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
 import { NotesShortcutRow } from "./NotesShortcut.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
@@ -15,6 +16,8 @@ export function Settings() {
 
   return (
     <Window title="Configurações">
+      <AppearanceSection />
+
       <Section title="Atalho">
         <Row label="Segurar para ditar" hint="Segure, fale e solte: o texto entra onde está o cursor.">
           <Segmented

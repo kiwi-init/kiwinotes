@@ -8,7 +8,7 @@ import path from "node:path";
 
 import { directInvoke } from "./../bun/ui-engine.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
-import type { AppSettings } from "../store/settings.ts";
+import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { buildTree, UNDO_DIR, Vault } from "./vault.ts";
 
 const dirs: string[] = [];
@@ -183,14 +183,14 @@ describe("o Desfazer do apagar (T2468)", () => {
 describe("pelas capacidades (contrato 1.7.0)", () => {
   async function caps(files: Record<string, string>, pinned: string[] = []) {
     const { v, read } = await vault(files);
-    let settings: AppSettings = { notesShortcut: null, pinned };
+    let settings: AppSettings = { ...DEFAULT_SETTINGS, notesShortcut: null, pinned };
     const revealed: string[] = [];
     const c = uiCapabilities({
       dictionary: { load: async () => [], save: async (t) => t },
       snippets: { load: async () => [], save: async (s) => s },
       history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
       dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
-      settings: { load: async () => settings, save: async (patch) => (settings = { ...settings, ...patch }) },
+      settings: { load: async () => settings, save: async (patch) => (settings = { ...settings, ...patch, appearance: { ...settings.appearance, ...patch.appearance } }) },
       clipboardWrite: () => {},
       notes: v,
       reveal: (abs) => revealed.push(abs),

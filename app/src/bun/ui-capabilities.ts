@@ -7,10 +7,11 @@ import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapab
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
-import { type AppSettings, MAX_PINNED } from "../store/settings.ts";
+import { type AppSettings, MAX_PINNED, type SettingsPatch } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
+import { checkAppearancePatch } from "../shared/appearance.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
@@ -28,7 +29,8 @@ export interface CapabilityDeps {
     append(path: string, text: string, at: Date, id: string): Promise<ToNoteResult>;
   };
   /** As Configurações (T1499). */
-  settings: { load(): Promise<AppSettings>; save(patch: Partial<AppSettings>): Promise<AppSettings> };
+  /** O `save` mescla a Aparência dada com a que está gravada, uma gravação por vez. */
+  settings: { load(): Promise<AppSettings>; save(patch: SettingsPatch): Promise<AppSettings> };
   /** O helper passa a vigiar o atalho novo (T1499). */
   settingsChanged?(settings: AppSettings): void;
   /** O STT e a limpeza passam a usar o dicionário e os snippets novos já no próximo ditado. */
@@ -210,13 +212,18 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     },
     "settings.set": async (args) => {
       const a = object(args, "settings.set");
-      const patch: Partial<AppSettings> = {};
+      const patch: SettingsPatch = {};
       for (const [key, value] of Object.entries(a)) {
         if (key === "notesShortcut") {
           if (!isNotesShortcut(value)) throw bad("notesShortcut must be one of the offered shortcuts, or null");
           patch.notesShortcut = value;
         } else if (key === "pinned") {
           patch.pinned = pinnedList(value);
+        } else if (key === "appearance") {
+          // Só os campos dados (1.8.0, T2503): o resto da Aparência fica como estava.
+          const checked = checkAppearancePatch(value);
+          if (!checked.ok) throw bad(`settings.set: ${checked.error}`);
+          patch.appearance = checked.patch;
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
       const saved = await deps.settings.save(patch);

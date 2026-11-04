@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -215,7 +216,7 @@ describe("history.toNote, a capacidade do Histórico (T1320)", () => {
       snippets: { load: async () => [], save: async (s) => s },
       history,
       dictationNotes: notes,
-      settings: { load: async () => ({ notesShortcut: null, pinned: [] }), save: async () => ({ notesShortcut: null, pinned: [] }) },
+      settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
       clipboardWrite: () => {},
       notes: v,
     });

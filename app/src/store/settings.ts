@@ -1,8 +1,9 @@
-// As Configurações que o engine guarda (T1499): `settings.json`, ao lado do dicionário e dos snippets. Por enquanto só o
-// atalho da janela Notas; o resto da tela de Configurações ainda é casca.
+// As Configurações que o engine guarda (T1499): `settings.json`, ao lado do dicionário e dos snippets. O atalho da janela
+// Notas e a Aparência (T2503); o resto da tela de Configurações ainda é casca.
 
 import path from "node:path";
 
+import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shared/appearance.ts";
 import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
 import { readJson, writeJson } from "./files.ts";
 
@@ -14,18 +15,23 @@ export interface AppSettings {
    * mexer no arquivo da pessoa por uma preferência da UI; o engine corrige quando elas mudam de nome, de pasta ou somem.
    */
   pinned: string[];
+  /** Modo, temas, texto, fonte e movimento, para todas as janelas (T2503). */
+  appearance: Appearance;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [] };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE };
 
 /** A lista de fixadas que vale: strings curtas, sem repetir, até `MAX_PINNED` (a validação de caminho é de quem grava). */
 export function sanitizePinned(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   return [...new Set(input.filter((p): p is string => typeof p === "string" && p.length > 0 && p.length <= 1024))].slice(0, MAX_PINNED);
 }
+
+/** O que o `save` aceita: a Aparência pode vir em parte, e o resto dela fica como está. */
+export type SettingsPatch = Partial<Omit<AppSettings, "appearance">> & { appearance?: Partial<Appearance> };
 
 interface SettingsFile extends Partial<AppSettings> {
   version: 1;
@@ -37,6 +43,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
   return {
     notesShortcut: "notesShortcut" in o && isNotesShortcut(o.notesShortcut) ? o.notesShortcut : DEFAULT_SETTINGS.notesShortcut,
     pinned: sanitizePinned(o.pinned),
+    appearance: sanitizeAppearance(o.appearance),
   };
 }
 
@@ -51,10 +58,21 @@ export class SettingsStore {
     return sanitizeSettings(await readJson<SettingsFile>(this.file));
   }
 
-  /** Muda só os campos de `patch` (já validados por quem chama). Devolve tudo como ficou. */
-  async save(patch: Partial<AppSettings>): Promise<AppSettings> {
-    const next = { ...(await this.load()), ...patch };
-    await writeJson(this.file, { version: 1, ...next } satisfies SettingsFile);
-    return next;
+  /** As gravações, uma depois da outra: ler, mesclar e gravar sem outra no meio (o `fixPinned` e a Aparência). */
+  private queue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Muda só os campos de `patch` (já validados por quem chama), e da Aparência só os campos dados. Devolve tudo como
+   * ficou. Uma por vez: duas trocas rápidas de janelas diferentes não perdem campo (T2503, revisão #2582).
+   */
+  save(patch: SettingsPatch): Promise<AppSettings> {
+    const run = this.queue.then(async () => {
+      const current = await this.load();
+      const next: AppSettings = { ...current, ...patch, appearance: { ...current.appearance, ...patch.appearance } };
+      await writeJson(this.file, { version: 1, ...next } satisfies SettingsFile);
+      return next;
+    });
+    this.queue = run.catch(() => {});
+    return run;
   }
 }
