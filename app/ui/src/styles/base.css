@@ -17,7 +17,12 @@ body {
   background: var(--bg);
   color: var(--text);
   font: var(--text-md) / var(--leading) var(--font);
-  -webkit-font-smoothing: antialiased;
+  /* Em 1x (monitor externo sem Retina), o "auto" mantém o traço que o macOS dá à letra; o "antialiased" afinava e
+     serrilhava a SF (T1727, #1725). Em tela densa, o "antialiased" deixa o texto leve, como no resto do sistema. */
+  -webkit-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  font-kerning: normal;
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
@@ -35,6 +40,12 @@ textarea {
 :focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+@media (min-resolution: 2dppx) {
+  body {
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
 /* ---------------------------------------------------------- keyframes */

@@ -137,11 +137,11 @@ const theme = EditorView.theme({
   ".cm-placeholder": { color: "var(--text-3)" },
   // Títulos: hierarquia por tamanho, peso e espaço (B v4), nunca por linha.
   ".cm-h": { fontWeight: "600", lineHeight: "1.3" },
-  ".cm-h1": { fontSize: "20px", paddingTop: "22px !important", letterSpacing: "-0.01em" },
+  ".cm-h1": { fontSize: "20px", paddingTop: "22px !important", letterSpacing: "var(--tracking-tight)" },
   ".cm-h2": { fontSize: "14px", paddingTop: "20px !important", paddingBottom: "2px !important" },
   ".cm-h3, .cm-h4, .cm-h5, .cm-h6": { fontSize: "14px", color: "var(--text-2)", paddingTop: "14px !important" },
-  ".cm-inline-code": { fontFamily: "var(--font-mono)", fontSize: "12.5px", color: "var(--text-2)" },
-  ".cm-codeblock": { fontFamily: "var(--font-mono)", fontSize: "12.5px", color: "var(--text-2)", paddingLeft: "16px !important" },
+  ".cm-inline-code": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)" },
+  ".cm-codeblock": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)", paddingLeft: "16px !important" },
   ".cm-quote": { color: "var(--text-2)", paddingLeft: "16px !important" },
   ".cm-bullet": { color: "var(--text-3)", display: "inline-block", width: "10px" },
   ".cm-task-box": {
