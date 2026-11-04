@@ -155,7 +155,7 @@ body {
   background: none;
   outline: none;
   font: 650 28px/1.15 var(--font-display);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-display);
   color: var(--text);
   -webkit-user-select: text;
   user-select: text;
@@ -212,7 +212,7 @@ body {
   z-index: 1;
   overflow-y: auto;
   padding: 64px 28px 20px 26px;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .kn-right-h {

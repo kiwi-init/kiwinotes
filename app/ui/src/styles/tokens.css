@@ -16,7 +16,11 @@
   --text-xl: 20px;
   --text-2xl: 26px;
   --leading: 1.45;
-  --tracking-tight: -0.01em;
+  /* Tracking negativo só em tela densa (o @media no fim): em 1x ele junta as letras, que já saem serrilhadas (T1727). */
+  --tracking-tight: 0;
+  --tracking-display: 0;
+  /* Código em tamanho inteiro: em 1x, um 12.5px cai entre pixels e borra. */
+  --text-code: 13px;
 
   /* raios e espaços */
   --radius-sm: 6px;
@@ -85,5 +89,13 @@
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
     --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
     --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Retina (2x ou mais): o desenho fino e o tracking apertado da SF ficam bonitos aqui, e só aqui (T1727). */
+@media (min-resolution: 2dppx) {
+  :root {
+    --tracking-tight: -0.01em;
+    --tracking-display: -0.02em;
   }
 }
