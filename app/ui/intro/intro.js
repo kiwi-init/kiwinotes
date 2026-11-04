@@ -109,6 +109,11 @@
   let timers = [];
   const later = (s, fn) => timers.push(setTimeout(fn, s * 1000));
 
+  // O Kiwi-cat do Rive (T3154): na janela do app, com o `kiwi-cat.riv` no pack, o app/ui/intro/rive.ts põe aqui o gato
+  // do Rive, que toca no lugar do gato em SVG e avisa quando acaba. Sem ele (o protótipo, ou o pack sem o .riv), nada
+  // muda. No "Reduzir movimento" e no `?t=` fica o SVG.
+  const riveCat = !params.has("t") && window.kiwiRiveCat;
+
   function startCat() {
     cat.classList.remove("paused");
     if (catSpeed !== 1) for (const a of cat.getAnimations({ subtree: true })) a.playbackRate = catSpeed;
@@ -134,6 +139,18 @@
     stage.classList.add("play");
     animatePrism();
     // 3,7 s: a bola cresce junto com o círculo do gato (o circleIn dele), e o gato começa.
+    if (riveCat) {
+      later(3.7, () => {
+        orb.classList.add("grow");
+        riveCat.start(finish).then((ok) => {
+          if (ok) { cat.classList.add("off"); return; }
+          // O Rive não carregou: fica o gato em SVG, no tempo dele.
+          startCat();
+          later(8.4 / catSpeed, finish);
+        });
+      });
+      return;
+    }
     later(3.7, () => { orb.classList.add("grow"); startCat(); });
     // O gato termina a abertura em ~7,8 s (no ritmo dele) e fica um instante pronto.
     later(3.7 + 8.4 / catSpeed, finish);

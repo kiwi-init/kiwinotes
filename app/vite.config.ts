@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import react from "@vitejs/plugin-react";
@@ -13,6 +14,9 @@ if (window && !(WINDOWS as readonly string[]).includes(window)) throw new Error(
 
 export default defineConfig({
   plugins: [react()],
+  // O Kiwi-cat do Rive na intro (T3154): sem o `ui/intro/kiwi-cat.riv`, o runtime (3 MB) nem entra no pack.
+  define: { __KIWI_RIVE_CAT__: JSON.stringify(existsSync(resolve(__dirname, "ui/intro/kiwi-cat.riv"))) },
+  assetsInclude: ["**/*.riv"],
   // O mermaid das Notas (T2984), como no Channels: sem o KaTeX (fórmula dentro de diagrama) e sem o layout ELK.
   resolve: {
     alias: {
