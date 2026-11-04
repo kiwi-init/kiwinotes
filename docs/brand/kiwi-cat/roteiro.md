@@ -245,5 +245,7 @@ Em f720 tudo volta à pose de f0, e o loop recomeça. A pose de f0 do `idle` é 
 | Paleta | Cores da imagem de referência (seção de paleta) |
 | Cabeça | Formato da imagem de referência, sem entalhe na orelha |
 | Contorno | Nenhum: o gato é a nuvem |
+| Corpo (T3720) | Na imagem aprovada o corpo é escuro e sólido, com a névoa em volta e se desfazendo na base: a regra 1 e o B6 valem para essa névoa, não para um corpo só de partículas |
+| Cauda (T3720) | A imagem aprovada não tem cauda: o B5 fica de fora da intro |
 | Som | Sem som por enquanto |
 | Formato | Palco quadrado do ícone, fundo preto |

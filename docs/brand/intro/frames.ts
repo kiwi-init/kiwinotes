@@ -1,22 +1,22 @@
 // Os frames-chave da intro (T3720), capturados do intro.html no WebKit headless com o `?t=` (o frame congelado
 // daquele instante). Sai uma prancha com os frames lado a lado e um PNG por frame, para o harry aprovar.
 //
-//   bun docs/brand/intro/frames.ts [PASTA]      (padrão: docs/brand/intro/frames/; usa o Playwright do app/)
+//   bun docs/brand/intro/frames.ts [PASTA]      (padrão: uma pasta kiwi-intro-frames no tmp; usa o Playwright do app/)
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const here = import.meta.dirname;
-const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(here, "frames");
+const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join((await import("node:os")).tmpdir(), "kiwi-intro-frames");
 mkdirSync(out, { recursive: true });
 
 /** Os instantes (s) e o que o roteiro diz que está na tela. f = frame a 60 fps a partir da emenda (3,7 s). */
 const FRAMES: [string, number][] = [
+  ["3,6 s · o último frame do prisma", 3.6],
   ["f0 · a emenda: o círculo de vidro", 3.7],
   ["f48 · a névoa nasceu e gira", 3.7 + 48 / 60],
   ["f126 · a orelha esquerda levantou", 3.7 + 126 / 60],
   ["f190 · o círculo virou a cabeça", 3.7 + 190 / 60],
-  ["f230 · os olhos meio abertos", 3.7 + 230 / 60],
   ["f268 · os olhos abriram de vez", 3.7 + 268 / 60],
   ["f390 · o corpo se formou", 3.7 + 390 / 60],
   ["f480 · a pose final", 3.7 + 480 / 60],

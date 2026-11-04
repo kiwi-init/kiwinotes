@@ -189,6 +189,15 @@ const marked = `data:image/png;base64,${readFileSync(path.join(OUT, "rabisco-har
 const SX = Number(process.argv[2] ?? 1.6), SY = Number(process.argv[3] ?? 1.3);
 const r: Record<string, string> = await page.evaluate(`(${render.toString()})(${JSON.stringify(src)}, ${JSON.stringify(marked)}, ${SX}, ${SY})`);
 writeFileSync(path.join(OUT, "pose-previa.png"), Buffer.from(r.__previa.split(",")[1]!, "base64"));
+// O contrato de entrada do camadas.ts para estas camadas provisórias (o espaço da foto; o preto da foto é #101010, alfa 0,934).
+const { mkdirSync: mk } = await import("node:fs"); mk(path.join(OUT, "camadas"), { recursive: true });
+writeFileSync(path.join(OUT, "camadas/entrada.json"), JSON.stringify({
+  espaco: { w: 512, h: 640 },
+  olhos: [{ x: 201, y: 320, r: 17 }, { x: 311, y: 320, r: 17 }],
+  orelhaEsquerda: [[100, 150], [140, 140], [268, 196], [232, 222], [196, 246], [168, 286], [118, 300]],
+  orelhaDireita: [[262, 192], [390, 150], [420, 170], [410, 280], [372, 286], [338, 240], [300, 214]],
+  sobra: 40, pretoDaFoto: 0.934, encaixeEscala: 1.6, saidaAltura: 640, aroGanho: 1.25,
+}, null, 2) + "\n");
 const { spawnSync } = await import("node:child_process"); const { mkdirSync, rmSync, statSync } = await import("node:fs");
 const L = path.join(OUT, "camadas"); mkdirSync(L, { recursive: true });
 writeFileSync(path.join(L, "conferencia.png"), Buffer.from(r.__check.split(",")[1]!, "base64"));
