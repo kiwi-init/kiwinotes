@@ -11,6 +11,10 @@ name: release
 on:
   push:
     tags: ["v*"]
+    # Só o job `helper-cache`: guarda na `main` o helper compilado, porque um run de tag só restaura cache do próprio
+    # tag ou da `main` (T1686). O GitHub não avalia `paths` num push de tag.
+    branches: [main]
+    paths: ["native/**", "app/scripts/build-helper.ts", ".github/workflows/release.yml"]
   workflow_dispatch:
     inputs:
       rehearsal:
@@ -29,6 +33,7 @@ concurrency:
 
 jobs:
   mac:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     timeout-minutes: 90
     defaults:
@@ -61,6 +66,23 @@ jobs:
           path: ~/.hutch
           key: hutch-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/hutch-pin.json') }}
 
+      # O Build compilava o helper e o FluidAudio do zero a cada run (7,8 min de ~10, #1682). O helper pronto
+      # (app/.helper, ~22 MB) vai para o cache: com os mesmos fontes e o mesmo toolchain, o `swift build` nem roda. O que
+      # vai para o cache nunca está assinado: a assinatura é feita na cópia de dentro do .app. O cache do native/.build
+      # (~1 GB) saiu: no runner (Swift 6.3.3), mesmo restaurado, o FluidAudio recompilava inteiro (run 41752909679).
+      - name: Swift toolchain id
+        id: swift
+        # O Xcode e o Swift: um Xcode novo com o mesmo Swift também não reaproveita objeto (#1714).
+        run: echo "id=$({ xcodebuild -version; swift --version 2>&1 | head -1; } | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      # A mesma chave do job `helper-cache`. Um run de tag só vê o cache do tag e o da `main`, nunca o de um branch.
+      - name: Helper cache
+        id: helper
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/.helper
+          key: helper-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.swift', 'native/Package.resolved', 'native/Sources/**', 'app/scripts/build-helper.ts') }}
+
       - name: Electrobun toolchain
         timeout-minutes: 5
         run: for i in 1 2 3; do bun run prepare:eb && exit 0; echo "electrobun prepare failed ($i of 3)"; [ "$i" -lt 3 ] && sleep 20; done; exit 1
@@ -74,6 +96,8 @@ jobs:
         run: bun test
 
       - name: Build
+        env:
+          KIWI_HELPER_CACHED: ${{ steps.helper.outputs.cache-hit == 'true' && '1' || '' }}
         run: bun run build
 
       - name: Sign, notarize and package
@@ -97,8 +121,12 @@ jobs:
             security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -f pkcs12 \
               || { echo "the certificate didn't import: check MAC_CERT_P12_BASE64 and MAC_CERT_PASSWORD"; exit 1; }
             rm -f "$RUNNER_TEMP/cert.p12"
-            curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
-            security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$kc" -T /usr/bin/codesign || true
+            # O intermediário Developer ID G2 da Apple (o que assina o certificado do jow), do repo e conferido pelo
+            # SHA-256: sem depender da rede. Baixar derrubou o run do tag v0.1.0-rc1 (curl: (6), run 41744305634), e o
+            # sistema só tem o G1 (#1699), então ele não pode faltar.
+            echo "f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a  build-config/DeveloperIDG2CA.cer" | shasum -a 256 -c - \
+              || { echo "build-config/DeveloperIDG2CA.cer isn't Apple's Developer ID G2 intermediate"; exit 1; }
+            security import build-config/DeveloperIDG2CA.cer -k "$kc" -T /usr/bin/codesign || true
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpass" "$kc" > /dev/null
             security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
             ids=$(security find-identity -v -p codesigning "$kc")
@@ -123,6 +151,43 @@ jobs:
           retention-days: ${{ (github.event_name == 'workflow_dispatch' && inputs.rehearsal) && 3 || 30 }}
           path: app/out/*.dmg
           if-no-files-found: error
+
+  # Compila só o helper num push na `main` e guarda o app/.helper no cache da `main`, de onde o run do tag restaura
+  # (#1805). Assim o cache que o release assina só nasce de código que já está na main: sem secret, sem `bun install`
+  # (nenhum script de dependência roda aqui), sem `pull_request`.
+  helper-cache:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      # Igual ao job `mac`: o id do toolchain e a chave precisam bater, senão o tag não acerta.
+      - name: Swift toolchain id
+        id: swift
+        run: echo "id=$({ xcodebuild -version; swift --version 2>&1 | head -1; } | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Helper cache
+        id: helper
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/.helper
+          key: helper-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.swift', 'native/Package.resolved', 'native/Sources/**', 'app/scripts/build-helper.ts') }}
+
+      - name: Build the helper
+        if: steps.helper.outputs.cache-hit != 'true'
+        run: bun scripts/build-helper.ts
 
   publish:
     needs: mac
