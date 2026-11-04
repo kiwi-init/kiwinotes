@@ -28,6 +28,12 @@ Esta é a **única** coisa que o app busca na rede (AGENTS.md, Privacidade), e �
 - **Nada reinicia sozinho.** A primeira checagem acontece 1 minuto depois de abrir, e depois de 6 em 6 horas. Com o download conferido, o menu ganha **Atualizar e reiniciar**. Só esse clique chama o `applyUpdate`, que fecha o app, troca o .app e abre o novo. O helper sai junto, no `exit` do processo.
 - **Desligada** no canal dev, sem `baseUrl`, com `KIWI_DEBUG=1` (agentes) e no headless, que nem importa o módulo. Os testes não vão à rede: o `bun test` usa um Updater de mentira e um .app de mentira assinado ad hoc, que a conferência recusa.
 
+### A seção Sobre (T2386)
+- **"Verificar atualizações"** no hub roda a mesma checagem (o mesmo `check()`, com a conferência da assinatura), na hora, sem esperar as 6 h. Duas checagens juntas, a do relógio e a do botão, viram uma.
+- **O `AppUpdates` guarda a última checagem:** a hora e o resultado (na última versão, a versão nova ou o erro, dito para a pessoa: sem internet, o servidor que não respondeu, o download que falhou, a assinatura que não confere). Antes, tudo voltava a `idle` e o motivo só ia para o log.
+- **O estado `downloading`** aparece entre a checagem e a oferta, para a seção mostrar "Baixando a 0.1.0-rc4…".
+- **Continua um clique:** com a versão pronta, o botão vira "Atualizar e reiniciar". Nada reinicia sozinho (#2385).
+
 ## Consequências
 - **A rc1 não tem o Updater.** Quem está nela instala a rc2 à mão uma vez, e daí em diante atualiza pelo menu.
 - **O download é o app inteiro** (dezenas de MB) a cada versão. Ligar o patch delta exige gerar o patch a partir dos tars assinados, no CI, e isso fica para depois.

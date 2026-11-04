@@ -16,6 +16,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import type { AppChannel, UpdatesLastCheck, UpdatesView } from "../shared/ui-contract.ts";
+
 export const IDENTIFIER = "app.kiwinotes.desktop";
 /** O time do Developer ID que assina o Kiwi Notes (Jonatas Walker, T1349). */
 export const TEAM_ID = "57249C654W";
@@ -47,6 +49,11 @@ export interface UpdaterApi {
   applyUpdate(): Promise<void>;
   updateInfo(): UpdateCheck;
   appDataFolder(): Promise<string>;
+  /**
+   * O status do Updater. Ao abrir, ele reconcilia uma vez o resultado da última troca, feita pelo extractor com o app
+   * já fechado: se ela falhou, sai um `error`, e o `updateInfo()` fica com o erro (T2386, #2423).
+   */
+  onStatusChange?(callback: ((entry: { status: string }) => void) | null): void;
 }
 
 /**
@@ -165,19 +172,46 @@ export type UpdateState =
   | { kind: "off"; reason: string }
   | { kind: "idle" }
   | { kind: "checking" }
+  | { kind: "downloading"; version: string }
   | { kind: "ready"; version: string; hash: string }
   | { kind: "applying" };
+
+/**
+ * A última checagem e o que ela achou (T2386): a seção Sobre mostra "Você está na última versão", a versão nova ou o
+ * erro. O menu da barra só olha o `UpdateState`.
+ */
+export type LastCheck = UpdatesLastCheck;
+
+/** A troca que falhou (o "Atualizar e reiniciar" que voltou para a versão de antes), dita para a pessoa. */
+export const swapFailedMessage = (version: string) =>
+  `A ${version} foi baixada, mas não deu para trocar o app. Tente de novo; se continuar, instale pelo .dmg do release.`;
+
+/** O erro da checagem, dito para a pessoa: sem internet, o servidor que não respondeu ou outro. */
+export function checkErrorMessage(error: string): string {
+  if (/offline|network|internet|ENOTFOUND|ENETUNREACH|EAI_AGAIN|ECONNREFUSED|Unable to connect|could not resolve|getaddrinfo/i.test(error)) {
+    return "Sem internet: não deu para falar com o GitHub.";
+  }
+  if (/timed? ?out|ETIMEDOUT|\b5\d\d\b|\b4\d\d\b|status/i.test(error)) return "O servidor das atualizações não respondeu. Tente de novo mais tarde.";
+  return "Não deu para verificar agora. Tente de novo mais tarde.";
+}
 
 export interface UpdatesDeps {
   updater: UpdaterApi;
   env?: Record<string, string | undefined>;
   verify?: (tar: string, expected: Expected) => string | null;
   log?: (message: string) => void;
+  /** Agora (os testes fixam a hora da última checagem). */
+  now?: () => Date;
 }
 
 /** A atualização do app: checa, baixa, confere e oferece. Quem mostra a oferta é o menu (`onChange`). */
 export class AppUpdates {
   private state: UpdateState = { kind: "idle" };
+  private last: LastCheck | null = null;
+  /** A troca que falhou antes deste processo já foi registrada (vale uma vez: o Updater só reconcilia uma vez). */
+  private swapNoted = false;
+  /** Já houve uma checagem neste processo: daí em diante, um erro no `updateInfo()` é dela (um download), não da troca. */
+  private checkedHere = false;
   private listeners: ((s: UpdateState) => void)[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private running: Promise<UpdateState> | undefined;
@@ -192,6 +226,22 @@ export class AppUpdates {
   }
 
   status(): UpdateState {
+    return this.state;
+  }
+
+  /** A última checagem que terminou, ou null antes da 1ª. */
+  lastCheck(): LastCheck | null {
+    return this.last;
+  }
+
+  private finish(result: LastCheck["result"], extra: { version?: string; message?: string } = {}): UpdateState {
+    const at = (this.deps.now?.() ?? new Date()).toISOString();
+    this.last =
+      result === "available"
+        ? { at, result, version: extra.version ?? "" }
+        : result === "error"
+          ? { at, result, message: extra.message ?? "" }
+          : { at, result };
     return this.state;
   }
 
@@ -212,6 +262,13 @@ export class AppUpdates {
       this.set({ kind: "off", reason: off });
       return;
     }
+    // A troca de versão é feita pelo extractor com o app fechado; se ela falha, ele reabre a versão de antes, e o erro só
+    // aparece aqui quando o Updater reconcilia o resultado, logo depois de abrir (#2423, o InvalidUpdateIdentity da rc3).
+    this.deps.updater.onStatusChange?.((e) => {
+      if (e.status === "error") void this.noteFailedSwap();
+    });
+    const late = setTimeout(() => void this.noteFailedSwap(), 3000);
+    (late as { unref?: () => void }).unref?.();
     const tick = (ms: number) => {
       this.timer = setTimeout(() => {
         void this.check().finally(() => tick(everyMs));
@@ -229,23 +286,45 @@ export class AppUpdates {
   /** Uma rodada: checa, baixa e confere. Duas chamadas juntas viram uma. Nunca lança. */
   check(): Promise<UpdateState> {
     if (this.state.kind === "off" || this.state.kind === "ready" || this.state.kind === "applying") return Promise.resolve(this.state);
+    // Uma checagem já em andamento (inclusive baixando) responde à 2ª chamada, em vez de começar outra.
     this.running ??= this.round().finally(() => {
       this.running = undefined;
     });
     return this.running;
   }
 
+  /**
+   * Se a última troca falhou (o Updater reconciliou com erro), registra na última checagem para a seção Sobre dizer, em
+   * vez de "Ainda não verificado". Uma vez por processo, e só para uma versão mais nova que esta.
+   */
+  async noteFailedSwap(): Promise<void> {
+    if (this.swapNoted || this.checkedHere) return;
+    const info = this.deps.updater.updateInfo();
+    if (!info.error || info.updateReady || !info.updateAvailable || !info.version) return;
+    const current = (await this.deps.updater.getLocalInfo()).version;
+    if (compareVersions(info.version, current) !== 1) return;
+    this.swapNoted = true;
+    this.log(`the swap to ${info.version} failed before this launch: ${info.error}`);
+    this.finish("error", { message: swapFailedMessage(info.version) });
+    this.set(this.state); // avisa o hub aberto (updates.status)
+  }
+
   private async round(): Promise<UpdateState> {
     const u = this.deps.updater;
+    // Antes de checar de novo: se a última troca falhou e o callback não pegou, registra agora.
+    await this.noteFailedSwap();
+    this.checkedHere = true;
     this.set({ kind: "checking" });
     try {
       const found = await u.checkForUpdate();
       if (found.error) {
         this.log(`check failed: ${found.error}`);
+        this.finish("error", { message: checkErrorMessage(found.error) });
         this.set({ kind: "idle" });
         return this.state;
       }
       if (!found.updateAvailable) {
+        this.finish("latest");
         this.set({ kind: "idle" });
         return this.state;
       }
@@ -254,14 +333,17 @@ export class AppUpdates {
       const current = (await u.getLocalInfo()).version;
       if (compareVersions(found.version, current) !== 1) {
         this.log(`skipped update ${found.version} (${found.hash}): not newer than ${current}`);
+        this.finish("latest");
         this.set({ kind: "idle" });
         return this.state;
       }
       this.log(`update ${found.version} (${found.hash}) found, downloading`);
+      this.set({ kind: "downloading", version: found.version });
       await u.downloadUpdate();
       const after = u.updateInfo();
       if (!after.updateReady || after.error) {
         this.log(`download failed: ${after.error || "not ready"}`);
+        this.finish("error", { message: `O download da ${found.version} falhou. Tente de novo.` });
         this.set({ kind: "idle" });
         return this.state;
       }
@@ -271,13 +353,17 @@ export class AppUpdates {
         // Não oferece e apaga: um tar que não é nosso não fica esperando um clique.
         this.log(`refused update ${after.version} (${after.hash}): ${why}`);
         if (tar) rmSync(tar, { force: true });
+        this.finish("error", { message: `A ${after.version} foi recusada: a assinatura não confere.` });
         this.set({ kind: "idle" });
         return this.state;
       }
       this.log(`update ${after.version} (${after.hash}) verified and ready`);
+      this.finish("available", { version: after.version });
       this.set({ kind: "ready", version: after.version, hash: after.hash });
     } catch (e) {
-      this.log(`check failed: ${e instanceof Error ? e.message : String(e)}`);
+      const message = e instanceof Error ? e.message : String(e);
+      this.log(`check failed: ${message}`);
+      this.finish("error", { message: checkErrorMessage(message) });
       this.set({ kind: "idle" });
     }
     return this.state;
@@ -299,8 +385,16 @@ export class AppUpdates {
     }
     const info = this.deps.updater.updateInfo();
     this.log(`update didn't restart the app${info.error ? `: ${info.error}` : ""}`);
+    // A seção Sobre diz que a troca falhou (o InvalidUpdateIdentity da rc3, #2402), em vez de só voltar a "pronta".
+    this.finish("error", { message: swapFailedMessage(ready.version) });
     this.set(ready);
   }
+}
+
+/** O canal do build, para a seção Sobre: o dev nunca checa; uma versão com `-rc` lê o feed das rc. */
+export function channelOf(electrobunChannel: string, version: string): AppChannel {
+  if (electrobunChannel === "dev") return "dev";
+  return /-rc\d*$/i.test(version) ? "rc" : "stable";
 }
 
 /** A linha do menu para a atualização pronta, ou null. */
@@ -308,4 +402,28 @@ export function updateMenuLabel(s: UpdateState, currentVersion: string): string 
   if (s.kind === "applying") return "Atualizando…";
   if (s.kind !== "ready") return null;
   return s.version && s.version !== currentVersion ? `Atualizar e reiniciar (v${s.version})` : "Atualizar e reiniciar";
+}
+
+/** O motivo de estar desligado, para a pessoa (o do `updatesOff` é técnico e vai para o log). */
+export function offReasonText(reason: string): string {
+  if (reason.startsWith("KIWI_DEBUG")) return "modo de teste dos agentes";
+  if (reason.startsWith("channel dev")) return "build de desenvolvimento";
+  if (reason.startsWith("channel")) return "build fora dos canais de release";
+  if (reason.startsWith("no release.baseUrl")) return "build local, sem o endereço das atualizações";
+  return "o endereço das atualizações deste build não é válido";
+}
+
+/** O que a seção Sobre mostra das atualizações (o `UpdatesView` do contrato, T2386). */
+export function updatesView(state: UpdateState, last: LastCheck | null): UpdatesView {
+  const base = { lastCheck: last };
+  switch (state.kind) {
+    case "off":
+      return { ...base, state: "off", reason: offReasonText(state.reason) };
+    case "downloading":
+      return { ...base, state: "downloading", version: state.version };
+    case "ready":
+      return { ...base, state: "ready", version: state.version };
+    default:
+      return { ...base, state: state.kind };
+  }
 }
