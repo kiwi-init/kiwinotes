@@ -997,7 +997,7 @@ export class Vault {
         const abs = path.join(this.root, child);
         const s = await lstat(abs).catch(() => null);
         if (!s || s.isSymbolicLink()) continue;
-        if (s.isDirectory() && isPackageDir(name, await readdir(abs).catch(() => []))) {
+        if (s.isDirectory() && isPackageDir(name, await packageEntries(abs))) {
           // Um documento-pacote: arquivo, não pasta (T3371). Só com a marca do formato e sem nota dentro (#3476).
           packages.add(key);
           files.set(key, fileEntry(key, s));
@@ -1130,7 +1130,7 @@ export class Vault {
   private async becamePackage(rel: string): Promise<boolean> {
     for (let p = parentOf(rel); p; p = parentOf(p)) {
       if (!this.folders.has(p) || !PACKAGE_MARKS[extOf(p)]) continue;
-      if (isPackageDir(p, await readdir(path.join(this.root, p)).catch(() => []))) return true;
+      if (isPackageDir(p, await packageEntries(path.join(this.root, p)))) return true;
     }
     return false;
   }
@@ -1167,6 +1167,17 @@ async function exists(abs: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Os itens de uma pasta para o `isPackageDir`: os de primeiro nível e, com uma pasta `Index`, os de dentro dela como
+ * `Index/<nome>`. O iWork de hoje guarda o documento em `Index/Document.iwa`, sem `Index.zip` (T3918).
+ */
+async function packageEntries(abs: string): Promise<string[]> {
+  const top = await readdir(abs).catch(() => [] as string[]);
+  if (!top.includes("Index")) return top;
+  const inner = await readdir(path.join(abs, "Index")).catch(() => [] as string[]);
+  return [...top, ...inner.map((e) => `Index/${e}`)];
 }
 
 const parentOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
