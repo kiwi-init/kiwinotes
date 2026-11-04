@@ -361,7 +361,10 @@ final class Helper {
                 var data: [String: Any] = ["pasted": false, "restored": false, "dryRun": true]
                 // `simulate` (the agents' CLI, T1740): a described field instead of the real one. The plan and the space
                 // come from the same rules as a paste, and nothing about the app in front is read.
-                if let field = SimulatedField(message.fields["simulate"]) {
+                if message.fields["simulate"] != nil, SimulatedField(message.fields["simulate"]) == nil {
+                    // A described field that doesn't parse: an error, not a silent fall back to the real front app (T1853).
+                    return reply(id, ok: false, error: "invalid_value")
+                } else if let field = SimulatedField(message.fields["simulate"]) {
                     let autoSpace = (message.fields["autoSpace"] as? Bool) ?? true
                     let outcome = field.outcome(text: text, autoSpace: autoSpace)
                     data["plan"] = outcome.plan.name

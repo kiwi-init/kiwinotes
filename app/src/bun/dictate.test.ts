@@ -74,6 +74,9 @@ describe("o pedido do dictate (T1740)", () => {
       insert: { plan: "paste", reason: null, autoSpace: true, spaced: true, typed: " Manda o laudo." },
       historyId: "h1",
     });
+    // clipboardOnly: nada entraria no campo (T1853).
+    expect(report("text", false, { ...o, insert: { plan: "clipboardOnly", reason: "no_accessibility", autoSpace: true } }).insert?.typed).toBeNull();
+    expect(report("text", false, { ...o, insert: { autoSpace: true, error: "timeout" } }).insert?.typed).toBeNull();
     const note = report("wav", true, { ...o, insert: undefined, note: { note: { path: "Caixa de entrada/X.md", title: "X" } as any, created: true, already: false } });
     expect(note.insert).toBeNull();
     expect(note.createdNote).toEqual({ path: "Caixa de entrada/X.md", title: "X", created: true });
