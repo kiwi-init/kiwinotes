@@ -18,7 +18,9 @@ const reportFor = (text: string, extra: Record<string, unknown> = {}) => ({
 
 describe("cli dictate (T1740)", () => {
   test("os argumentos viram o cmd dictate", () => {
-    expect(parseArgs(["a.wav"])).toEqual({ request: { wav: "a.wav" } });
+    // O wav relativo é da pasta de quem chama, não da do headless (T1853).
+    expect(parseArgs(["a.wav"])).toEqual({ request: { wav: path.resolve("a.wav") } });
+    expect(parseArgs(["--wav", "/abs/b.wav"])).toEqual({ request: { wav: "/abs/b.wav" } });
     expect(parseArgs(["--text", "oi", "--app", "slack", "--note", "--field-before", ""])).toEqual({
       request: { text: "oi", app: "slack", note: true, fieldBefore: "" },
     });
@@ -27,7 +29,7 @@ describe("cli dictate (T1740)", () => {
     });
     expect(parseArgs(["--batch", "casos.jsonl"])).toEqual({ batch: "casos.jsonl" });
     // O --data é da CLI (a pasta do headless), não do ditado.
-    expect(parseArgs(["a.wav", "--data", "/tmp/kn"])).toEqual({ request: { wav: "a.wav" } });
+    expect(parseArgs(["a.wav", "--data", "/tmp/kn"])).toEqual({ request: { wav: path.resolve("a.wav") } });
     for (const bad of [[], ["a.wav", "b.wav"], ["--text", "a", "--wav", "b"], ["--bogus"], ["--app"], ["--batch", "x", "--note"]]) {
       expect(() => parseArgs(bad)).toThrow();
     }
@@ -70,6 +72,9 @@ describe("cli dictate (T1740)", () => {
     const send: Send = async (msg) => {
       sent.push(msg);
       if (msg.text === "quebra") return { ok: false, code: "E_HELPER", message: "no helper" };
+      // O STT falhou: a resposta é ok, mas o ditado não aconteceu (T1853).
+      if (msg.text === "stt") return { ok: true, value: { ...reportFor(""), skipped: "error", error: "stt_failed" } };
+      if (msg.text === "silencio") return { ok: true, value: { ...reportFor(""), skipped: "empty" } };
       return { ok: true, value: reportFor(String(msg.text)) };
     };
     const batch = await runBatch(
@@ -77,11 +82,20 @@ describe("cli dictate (T1740)", () => {
         { name: "ok", request: { text: "oi" }, expect: { text: "oi" } },
         { name: "errado", request: { text: "oi" }, expect: { text: "tchau" } },
         { name: "helper", request: { text: "quebra" } },
+        { name: "stt sem expect", request: { text: "stt" } },
+        { name: "silêncio", request: { text: "silencio" } },
       ],
       send,
     );
-    expect(batch).toMatchObject({ passed: 1, failed: 2 });
-    expect(batch.cases.map((c) => [c.name, c.ok])).toEqual([["ok", true], ["errado", false], ["helper", false]]);
+    expect(batch).toMatchObject({ passed: 2, failed: 3 });
+    expect(batch.cases.map((c) => [c.name, c.ok])).toEqual([
+      ["ok", true],
+      ["errado", false],
+      ["helper", false],
+      ["stt sem expect", false],
+      ["silêncio", true],
+    ]);
+    expect(batch.cases[3]!.failures).toEqual(["dictation failed: stt_failed"]);
     expect(sent[0]).toEqual({ cmd: "dictate", text: "oi" });
 
     const log = spyOn(console, "log").mockImplementation(() => {});
@@ -89,6 +103,8 @@ describe("cli dictate (T1740)", () => {
       expect(await runDictate(["--text", "oi"], send)).toBe(0);
       expect(JSON.parse(log.mock.calls.at(-1)![0] as string)).toMatchObject({ text: "oi" });
       expect(await runDictate(["--text", "quebra"], send)).toBe(1);
+      expect(await runDictate(["--text", "stt"], send)).toBe(1);
+      expect(await runDictate(["--text", "silencio"], send)).toBe(0);
       expect(await runDictate(["--bogus"], send)).toBe(2);
       const down: Send = async () => {
         throw Object.assign(new Error("no headless at /tmp/kn"), { code: "E_NOT_RUNNING" });

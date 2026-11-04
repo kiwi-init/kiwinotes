@@ -5,8 +5,11 @@
 //           [--field-role AXTextArea|none] [--secure-input] [--no-accessibility] [--no-caret]
 //   dictate --batch <pasta|arquivo.jsonl>
 //
-// Sai um JSON no stdout: o relatório do ditado, ou o da bateria (`--batch`). Exit 0 é ok; 1, o app recusou ou um caso
-// da bateria não bateu com o `expect`; 2, uso errado; 3, o headless não está rodando (o `send` lança E_NOT_RUNNING).
+// Sai um JSON no stdout: o relatório do ditado, ou o da bateria (`--batch`). Exit 0 é ok; 1, o app recusou, o ditado
+// falhou (`skipped: "error"`: o STT, a gravação, o helper que reiniciou) ou um caso da bateria não bateu com o
+// `expect`; 2, uso errado; 3, o headless não está rodando (o `send` lança E_NOT_RUNNING).
+//
+// Um WAV relativo é da pasta de onde a CLI roda (no `bun run cli`, a `app/`), não da do headless (T1853).
 //
 // A bateria: um .jsonl, um caso por linha, ou uma pasta de .wav (cada um com um .json do lado, opcional, com os mesmos
 // campos). Um caso é o pedido do `dictate` (`wav` ou `text`, `app`, `note`, `fieldBefore`, `field`) mais `name` e
@@ -29,9 +32,14 @@ const asReply = (r: Record<string, unknown>): Reply => ({
 type Report = {
   text: string;
   tone: string | null;
-  insert: { plan: string | null; spaced: boolean; typed: string } | null;
+  insert: { plan: string | null; spaced: boolean; typed: string | null } | null;
+  skipped?: "empty" | "error";
+  error?: string;
   [key: string]: unknown;
 };
+
+/** O ditado não chegou a texto por um erro (não por silêncio): para um agente, é falha. */
+const failedDictation = (r: Report) => (r.skipped === "error" ? [`dictation failed: ${r.error ?? "unknown"}`] : []);
 
 export interface Expect {
   text?: string;
@@ -66,7 +74,7 @@ export function parseArgs(argv: string[]): { batch: string } | { request: Record
     const a = argv[i]!;
     switch (a) {
       case "--wav":
-        request.wav = value(i++, a);
+        request.wav = path.resolve(value(i++, a));
         break;
       case "--text":
         request.text = argv[++i] ?? (() => { throw new UsageError("--text needs a value"); })();
@@ -106,7 +114,7 @@ export function parseArgs(argv: string[]): { batch: string } | { request: Record
       default:
         if (a.startsWith("--")) throw new UsageError(`unknown flag ${a}`);
         if (request.wav !== undefined) throw new UsageError(`one wav only (got ${a} too)`);
-        request.wav = a;
+        request.wav = path.resolve(a);
     }
   }
   if (batch !== undefined) {
@@ -180,7 +188,7 @@ export async function runBatch(cases: BatchCase[], send: Send) {
       results.push({ name: c.name, ok: false, failures: [`${r.code}: ${r.message}`], error: { code: r.code, message: r.message } });
       continue;
     }
-    const failures = check(r.value as Report, c.expect);
+    const failures = [...failedDictation(r.value as Report), ...check(r.value as Report, c.expect)];
     results.push({ name: c.name, ok: failures.length === 0, failures, report: r.value });
   }
   const failed = results.filter((r) => !r.ok).length;
@@ -216,5 +224,5 @@ async function dictateOrBatch(argv: string[], send: Send): Promise<number> {
   }
   const r = asReply(await send({ cmd: "dictate", ...(parsed as { request: Record<string, unknown> }).request }));
   print(r.ok ? r.value : { ok: false, code: r.code, message: r.message });
-  return r.ok ? 0 : 1;
+  return r.ok && !failedDictation(r.value as Report).length ? 0 : 1;
 }

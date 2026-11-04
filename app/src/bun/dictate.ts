@@ -49,8 +49,11 @@ export interface DictateReport {
   text: string;
   tone: string | null;
   latencyMs: { stt: number; app: number };
-  /** O que o paste faria (nulo na nota rápida). `typed` é exatamente o que entraria, com o espaço automático. */
-  insert: { plan: string | null; reason: string | null; autoSpace: boolean; spaced: boolean; typed: string; error?: string } | null;
+  /**
+   * O que o paste faria (nulo na nota rápida). `typed` é exatamente o que entraria no campo, com o espaço automático;
+   * null quando nada entraria (`clipboardOnly`: o texto só fica no clipboard; ou o insert falhou).
+   */
+  insert: { plan: string | null; reason: string | null; autoSpace: boolean; spaced: boolean; typed: string | null; error?: string } | null;
   /** A nota rápida: a nota que o ditado virou. */
   createdNote?: { path: string; title: string; created: boolean };
   historyId?: string;
@@ -133,7 +136,7 @@ export function report(input: "wav" | "text", note: boolean, o: DictationOutcome
             reason: o.insert.reason ?? null,
             autoSpace: o.insert.autoSpace,
             spaced: o.insert.spaced === true,
-            typed: `${o.insert.spaced ? " " : ""}${o.text}`,
+            typed: o.insert.plan === "clipboardOnly" || o.insert.error ? null : `${o.insert.spaced ? " " : ""}${o.text}`,
             ...(o.insert.error ? { error: o.insert.error } : {}),
           },
   };

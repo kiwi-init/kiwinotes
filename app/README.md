@@ -30,8 +30,11 @@ bun run cli dictate --batch casos.jsonl                    # bateria: um caso po
 ```
 
 O relatório traz `raw`, `text`, `tone`, `latencyMs` e `insert {plan, reason, autoSpace, spaced, typed}`. O `typed` é
-exatamente o que entraria no campo. A bateria sai com exit 1 se algum `expect` (`text`, `typed`, `tone`, `plan`,
-`spaced`, `contains`) não bater. Áudio só sintético.
+exatamente o que entraria no campo (null no `clipboardOnly`, quando nada entra). Um ditado que falhou
+(`skipped: "error"`) sai com exit 1, e a bateria também, se algum caso falhar ou algum `expect` (`text`, `typed`,
+`tone`, `plan`, `spaced`, `contains`) não bater. Um WAV relativo é da pasta de onde a CLI roda (no `bun run cli`, a
+`app/`). Áudio só sintético.
+
 As janelas são UIs do AppEngine (ADR 0006). Para testar uma troca de UI sem rebuild, num canal **local**: `bun run ui:publish settings --ui-version 0.1.1-local`, `bun run ui:serve` e o app com `KIWI_UI_CHANNEL=http://127.0.0.1:5179`. Nunca abra janela do app na tela de outra pessoa sem combinar (AGENTS.md).
 
 Na primeira vez, `scripts/hutch.ts` baixa o Hutch fixado em `hutch-pin.json` (confere o sha256) para `~/.hutch/kiwinotes/`, e o Hutch baixa o Livewire 2026.10.2 de `kiwi-init/electrobun-livewire`.
