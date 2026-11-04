@@ -1,7 +1,7 @@
 // O seletor de microfone dos Ajustes (spec #3202, T3230): as opções e a dica, sem DOM. Quem grava é o helper; aqui só
 // se escolhe por qual entrada.
 
-import { type AudioInputs, type MicrophoneChoice, microphoneUid } from "../../src/shared/microphone.ts";
+import { type AudioInputs, type MicInUse, type MicrophoneChoice, microphoneUid } from "../../src/shared/microphone.ts";
 
 export interface MicOption {
   value: MicrophoneChoice;
@@ -29,8 +29,23 @@ export function micOptions(choice: MicrophoneChoice, inputs: AudioInputs | null)
   return out;
 }
 
-/** A linha de baixo do "Microfone": o que a escolha faz agora, com o fone que está na saída. */
+/**
+ * A linha de baixo do "Microfone": o que a escolha faz agora, com o fone que está na saída. Com o `using` do helper
+ * (T3344), diz o mic de verdade quando ele não é o escolhido: com a tampa fechada o mic do Mac não grava, e o
+ * automático vai para outro. Um `using` calculado para outra escolha (o helper ainda não recebeu a nova) não vale.
+ */
 export function micHint(choice: MicrophoneChoice, inputs: AudioInputs | null): string {
+  const using = inputs?.using?.choice === choice ? inputs.using : undefined;
+  const uid = microphoneUid(choice);
+  const found = uid ? inputs?.inputs.find((i) => i.uid === uid) : undefined;
+  // Um salvo fora da lista está desconectado, diga o `using` o que disser.
+  if (uid && inputs && !found) {
+    return using?.fellBack && using.name && !using.lidClosed
+      ? `Desconectado. Até ele voltar, o ditado grava pelo ${using.name}.`
+      : "Desconectado. Até ele voltar, o ditado usa o Automático.";
+  }
+  const live = using && inputs ? liveHint(choice, using, inputs) : null;
+  if (live) return live;
   const out = inputs?.output;
   if (choice === "auto") {
     return out?.transport === "bluetooth"
@@ -39,9 +54,22 @@ export function micHint(choice: MicrophoneChoice, inputs: AudioInputs | null): s
   }
   if (choice === "builtin") return "O ditado grava sempre pelo mic do Mac.";
   if (choice === "system") return "O microfone padrão do macOS. Com AirPods, o som deles abaixa enquanto você dita.";
-  const uid = microphoneUid(choice);
-  const found = inputs?.inputs.find((i) => i.uid === uid);
-  if (inputs && !found) return "Desconectado. Até ele voltar, o ditado usa o Automático.";
   if (found?.transport === "bluetooth") return "Um microfone Bluetooth: enquanto você dita, o som do fone abaixa.";
   return "O ditado grava sempre por este microfone. Se ele sair, volta para o Automático.";
+}
+
+/**
+ * Só quando o mic que o helper usaria não é o que o texto de sempre diz: a tampa fechada, ou o Automático e o Mic do
+ * Mac indo para outro (o macOS com outra entrada padrão, um Mac sem microfone). Null nos outros casos.
+ */
+function liveHint(choice: MicrophoneChoice, using: MicInUse, inputs: AudioInputs): string | null {
+  const bluetoothOut = inputs.output?.transport === "bluetooth";
+  const transport = using.transport ?? inputs.inputs.find((i) => i.isDefault)?.transport ?? null;
+  const notTheMac = transport !== "builtin";
+  const applies = using.lidClosed || (choice === "builtin" && notTheMac) || (choice === "auto" && bluetoothOut && notTheMac);
+  if (!applies) return null;
+  const name = using.name || "microfone padrão do macOS";
+  const lid = using.lidClosed ? "Com a tampa fechada, o mic do Mac não grava. " : "";
+  const drop = transport === "bluetooth" && bluetoothOut ? ": enquanto você dita, o som do fone abaixa." : ".";
+  return `${lid}Agora o ditado grava pelo ${name}${drop}`;
 }

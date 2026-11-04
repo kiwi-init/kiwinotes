@@ -7,6 +7,8 @@ import {
   type DictationSidecar,
   MIC_LOST_EMPTY,
   MIC_LOST_NOTICE,
+  micFellBackNotice,
+  micShortName,
   NOT_PASTED,
   NOTE_FAILED,
   noteCreated,
@@ -222,6 +224,49 @@ describe("Dictation", () => {
     await d.idle();
     expect(inserted()).toEqual([]);
     expect(overlays()).toEqual([{ type: "overlay.state", state: "error", message: MIC_LOST_EMPTY }]);
+  });
+
+  test("the chosen mic was not connected: the pill says which one recorded (T3344)", async () => {
+    const { sidecar, d, overlays, inserted } = setup();
+    const stopped: Event = { type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 4000, samples: 64_000 };
+    sidecar.emit({
+      type: "record.started", reason: "hotkey",
+      microphone: { name: "Microfone (MacBook Pro)", transport: "builtin", fellBack: true, reason: "chosen device not connected; auto" },
+    });
+    sidecar.emit(stopped);
+    // The next one, with the chosen mic back: no notice.
+    sidecar.emit({ type: "record.started", reason: "hotkey", microphone: { name: "Yeti", transport: "usb", fellBack: false } });
+    sidecar.emit(stopped);
+    sidecar.emit(transcript("gravou pelo do mac"));
+    sidecar.emit(transcript("gravou pelo yeti"));
+    await d.idle();
+    expect(inserted()).toEqual(["Gravou pelo do mac.", "Gravou pelo yeti."]);
+    expect(overlays()).toEqual([
+      { type: "overlay.state", state: "done", message: "Mic escolhido ausente: usei o do Mac" },
+      { type: "overlay.state", state: "done" },
+    ]);
+  });
+
+  test("the fell-back notice fits the pill (38 letters) with the Mac's mic and the default; the lid is no notice (T3344)", async () => {
+    expect(micFellBackNotice(micShortName({ name: "Microfone (MacBook Pro)", transport: "builtin", systemDefault: false })).length).toBeLessThanOrEqual(38);
+    expect(micFellBackNotice(micShortName({ name: "", transport: null, systemDefault: true }))).toBe("Mic escolhido ausente: usei o padrão");
+    expect(micShortName({ name: "Yeti", transport: "usb", systemDefault: false })).toBe("Yeti");
+    const { sidecar, d, overlays } = setup();
+    // The Mac's mic chosen by UID, lid closed: it's connected, just silent. Settings explain; the pill says nothing.
+    sidecar.emit({ type: "record.started", reason: "hotkey", microphone: { name: "Yeti", transport: "usb", fellBack: true, lidClosed: true } });
+    sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 4000, samples: 64_000 });
+    sidecar.emit(transcript("tampa fechada"));
+    await d.idle();
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "done" }]);
+  });
+
+  test("fell back and the mic also dropped: the drop is the notice that matters (T3344)", async () => {
+    const { sidecar, d, overlays } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", microphone: { name: "", fellBack: true } });
+    sidecar.emit({ type: "record.stopped", reason: "hotkey", mode: "ptt", durationMs: 4000, samples: 64_000, lost: "no_audio" });
+    sidecar.emit(transcript("caiu"));
+    await d.idle();
+    expect(overlays()).toEqual([{ type: "overlay.state", state: "done", message: MIC_LOST_NOTICE }]);
   });
 
   test("insert.text failing still saves the dictation and shows an error", async () => {

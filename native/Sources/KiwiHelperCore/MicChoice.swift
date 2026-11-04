@@ -75,11 +75,15 @@ public struct MicPick: Equatable, Sendable {
     /// The chosen device isn't connected, so `auto` decided instead.
     public var fellBack: Bool
     public var reason: String
+    /// The lid is closed and that is why it isn't the built-in mic: with the lid open, this choice would pick it (T3344:
+    /// the Settings hint says so without reading `reason`).
+    public var lidClosed: Bool
 
-    public init(device: AudioDeviceInfo?, fellBack: Bool = false, reason: String) {
+    public init(device: AudioDeviceInfo?, fellBack: Bool = false, reason: String, lidClosed: Bool = false) {
         self.device = device
         self.fellBack = fellBack
         self.reason = reason
+        self.lidClosed = lidClosed
     }
 }
 
@@ -91,6 +95,17 @@ public enum MicPicker {
     /// So with the lid closed the built-in mic is never picked (review of T3229, #3300).
     public static func pick(
         _ choice: MicChoice, devices: [AudioDeviceInfo], defaultInput: UInt32?, defaultOutput: UInt32?, lidClosed: Bool = false
+    ) -> MicPick {
+        var pick = decide(choice, devices: devices, defaultInput: defaultInput, defaultOutput: defaultOutput, lidClosed: lidClosed)
+        if lidClosed, decide(choice, devices: devices, defaultInput: defaultInput, defaultOutput: defaultOutput, lidClosed: false)
+            .device?.transport == .builtIn {
+            pick.lidClosed = true
+        }
+        return pick
+    }
+
+    private static func decide(
+        _ choice: MicChoice, devices: [AudioDeviceInfo], defaultInput: UInt32?, defaultOutput: UInt32?, lidClosed: Bool
     ) -> MicPick {
         let inputs = devices.filter(\.hasInput)
         let builtIn = lidClosed ? nil : inputs.first { $0.transport == .builtIn }
@@ -106,7 +121,7 @@ public enum MicPicker {
             if let d = inputs.first(where: { $0.uid == uid }), !(lidClosed && d.transport == .builtIn) {
                 return MicPick(device: d, reason: "chosen device")
             }
-            var pick = pick(.auto, devices: devices, defaultInput: defaultInput, defaultOutput: defaultOutput, lidClosed: lidClosed)
+            var pick = decide(.auto, devices: devices, defaultInput: defaultInput, defaultOutput: defaultOutput, lidClosed: lidClosed)
             pick.fellBack = true
             pick.reason = "chosen device not connected; auto: \(pick.reason)"
             return pick

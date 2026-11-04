@@ -36,10 +36,43 @@ export interface AudioInput {
   isDefault: boolean;
 }
 
+/**
+ * O mic por onde o ditado gravaria agora (T3344), como o helper decide: com a escolha salva, a tampa (fechada, o mic
+ * do Mac não grava) e os dispositivos. `fellBack`: o escolhido não está conectado, e valeu o automático.
+ */
+export interface MicInUse {
+  /** O nome do dispositivo; no padrão do sistema, o da entrada padrão de agora. Vazio se o helper não sabe. */
+  name: string;
+  transport: AudioTransport | null;
+  /** Grava pela entrada padrão do macOS (o helper não fixou um dispositivo). */
+  systemDefault: boolean;
+  fellBack: boolean;
+  /** O porquê, em inglês, para o log ("lid closed, built-in mic off: system default"). */
+  reason: string;
+  /** A tampa fechada é o motivo de não ser o mic do Mac: com ela aberta, a escolha pegaria ele. */
+  lidClosed: boolean;
+  /** Para qual escolha o helper calculou (só no `audio.inputs`): logo depois do `settings.set`, pode ser a de antes. */
+  choice?: MicrophoneChoice;
+}
+
 /** O que o `audio.inputs` devolve: as entradas e a saída padrão de agora (para dizer se o fone é Bluetooth). */
 export interface AudioInputs {
   inputs: AudioInput[];
   output: { name: string; transport: AudioTransport } | null;
+  /** Por onde o ditado gravaria agora (T3344). Um helper de antes do T3344 não manda. */
+  using?: MicInUse;
+}
+
+/** O `microphone` do `record.started` e o `using` do `audio.inputs`, só com o que vale; null se não é um objeto. */
+export function sanitizeMicInUse(x: unknown): MicInUse | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as Record<string, unknown>;
+  const name = typeof o.name === "string" ? o.name.slice(0, 200) : "";
+  const transport = typeof o.transport === "string" && TRANSPORTS.has(o.transport) ? (o.transport as AudioTransport) : null;
+  const reason = typeof o.reason === "string" ? o.reason.slice(0, 200) : "";
+  const out: MicInUse = { name, transport, systemDefault: o.systemDefault === true, fellBack: o.fellBack === true, reason, lidClosed: o.lidClosed === true };
+  if (isMicrophoneChoice(o.choice)) out.choice = o.choice;
+  return out;
 }
 
 const TRANSPORTS: ReadonlySet<string> = new Set<AudioTransport>(["builtin", "bluetooth", "usb", "virtual", "other"]);
@@ -61,5 +94,6 @@ export function sanitizeAudioInputs(x: unknown): AudioInputs | null {
     inputs.push({ uid, name: text(d.name, 200) ?? uid, transport: transport(d.transport), isDefault: d.isDefault === true });
   }
   const out = o.output && typeof o.output === "object" ? (o.output as Record<string, unknown>) : null;
-  return { inputs, output: out ? { name: text(out.name, 200) ?? "", transport: transport(out.transport) } : null };
+  const using = sanitizeMicInUse(o.using);
+  return { inputs, output: out ? { name: text(out.name, 200) ?? "", transport: transport(out.transport) } : null, ...(using ? { using } : {}) };
 }

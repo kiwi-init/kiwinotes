@@ -147,17 +147,25 @@ final class MicSelection {
         return now.device == nil && whatChanged == "default input device"
     }
 
-    /// `audio.inputs` (agreed in #3248): the mics, which one is the default, and the output now. Only reads.
-    static func inputs() -> [String: Any] {
+    /// `audio.inputs` (agreed in #3248): the mics, which one is the default, the output now, and `using`: the mic a
+    /// dictation would record from now, with this choice, the lid and the devices (T3344: the Settings hint says it).
+    /// Only reads.
+    func inputs() -> [String: Any] {
         let devices = AudioDevices.all()
         let defaultInput = AudioDevices.defaultInput
         let inputs: [[String: Any]] = devices.filter(\.hasInput).map {
             ["uid": $0.uid, "name": $0.name, "transport": $0.transport.rawValue, "isDefault": $0.id == defaultInput]
         }
         let output = devices.first { $0.id == AudioDevices.defaultOutput }
+        var using = peek().fields
+        // Which choice this is for: the Settings ask right after `settings.set`, maybe before the `config.set` arrives.
+        using["choice"] = choice.value
+        // With the system default, name the device it is now.
+        if using["systemDefault"] as? Bool == true, let d = devices.first(where: { $0.id == defaultInput }) { using["name"] = d.name }
         return [
             "inputs": inputs,
             "output": output.map { ["name": $0.name, "transport": $0.transport.rawValue] as [String: Any] } ?? NSNull(),
+            "using": using,
         ]
     }
 }
@@ -165,7 +173,7 @@ final class MicSelection {
 extension MicPick {
     /// For `record.started` and the log: no audio, only which device.
     var fields: [String: Any] {
-        var out: [String: Any] = ["fellBack": fellBack, "reason": reason]
+        var out: [String: Any] = ["fellBack": fellBack, "reason": reason, "lidClosed": lidClosed]
         if let device {
             out["uid"] = device.uid
             out["name"] = device.name
