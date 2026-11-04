@@ -17,7 +17,7 @@ import { ENRM_TEXT_CLASS } from "react-native-enriched-markdown/lib/module/web/g
 import { parseMarkdown } from "react-native-enriched-markdown/lib/module/web/parseMarkdown.js";
 import { RenderNode } from "react-native-enriched-markdown/lib/module/web/renderers/index.js";
 import { buildStyles, zeroTrailingMargins } from "react-native-enriched-markdown/lib/module/web/styles.js";
-import { indexTaskItems } from "react-native-enriched-markdown/lib/module/web/utils.js";
+import { indexTaskItems, markInlineImages } from "react-native-enriched-markdown/lib/module/web/utils.js";
 import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/web/types";
 
 import { externalUrl } from "../links.ts";
@@ -96,6 +96,8 @@ const STYLE: MarkdownStyle = {
   code: { fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-2)", backgroundColor: "var(--surface-2)", borderColor: "transparent" },
   thematicBreak: { color: "var(--border)", height: 1, marginTop: 11, marginBottom: 11 },
   image: { maxHeight: 480, borderRadius: 10, marginTop: 2, marginBottom: 2, resizeMode: "contain" },
+  // A imagem no meio do texto: uma miniatura da altura de três linhas (a largura segue a proporção, no tema abaixo).
+  inlineImage: { size: 69 },
   taskList: { checkedColor: "var(--accent)", borderColor: "var(--border-strong)", checkmarkColor: "var(--on-accent)", checkedTextColor: "var(--text-3)" },
 };
 
@@ -120,6 +122,8 @@ function parse(markdown: string): Promise<ASTNode> {
   const next = parseMarkdown(markdown, FLAGS)
     .then((ast) => {
       indexTaskItems(ast);
+      // Imagem no meio do texto fica na linha, como no Channels; sozinha no parágrafo, ocupa o bloco.
+      markInlineImages(ast);
       parsed.set(markdown, ast);
       if (parsed.size > LIMIT) parsed.delete(parsed.keys().next().value!);
       return ast;
@@ -272,7 +276,7 @@ function Block({ markdown, source, callbacks, attachments, onShown }: BlockProps
   // Até o parse chegar (só na primeira vez de cada bloco), o texto cru, do mesmo tamanho.
   if (!ast) return <div className="cm-rendered-raw">{source}</div>;
   return (
-    <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }} onLoadCapture={onShown}>
+    <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }} onLoadCapture={onShown} onErrorCapture={onShown}>
       {(ast.children ?? []).map((child, i) => {
         const code = <RenderNode key={`${child.type}-${i}`} node={child} style={NORMAL} styles={STYLES} callbacks={callbacks} capabilities={CAPABILITIES} />;
         if (!isMermaid(child)) return code;
@@ -283,6 +287,27 @@ function Block({ markdown, source, callbacks, attachments, onShown }: BlockProps
 }
 
 const roots = new WeakMap<HTMLElement, Root>();
+const sizes = new WeakMap<HTMLElement, ResizeObserver>();
+
+/**
+ * O bloco muda de altura depois de desenhado (uma imagem que carrega ou falha, o diagrama, a fonte): o editor mede de
+ * novo, senão o mapa de alturas fica velho e o clique de depois cai na linha errada.
+ */
+function watchSize(dom: HTMLElement, view: EditorView): void {
+  if (typeof ResizeObserver === "undefined") return;
+  const ro = new ResizeObserver(() => view.requestMeasure());
+  ro.observe(dom);
+  sizes.set(dom, ro);
+}
+
+function unmount(dom: HTMLElement): void {
+  sizes.get(dom)?.disconnect();
+  sizes.delete(dom);
+  const root = roots.get(dom);
+  roots.delete(dom);
+  // Fora do ciclo do React: desmontar no meio de um render dele dá aviso.
+  if (root) queueMicrotask(() => root.unmount());
+}
 /** O widget de agora de cada DOM: o CodeMirror reaproveita o DOM (`updateDOM`) com outro widget, de outro texto. */
 const widgets = new WeakMap<HTMLElement, RenderedWidget>();
 
@@ -319,6 +344,7 @@ class RenderedWidget extends WidgetType {
     roots.set(dom, root);
     widgets.set(dom, this);
     this.draw(root, view, dom);
+    watchSize(dom, view);
     // Lê o widget pelo DOM: depois de um `updateDOM`, o `this` daqui é o de antes.
     dom.addEventListener("mousedown", (e) => widgets.get(dom)?.place(e, view, dom));
     return dom;
@@ -374,6 +400,8 @@ class RenderedWidget extends WidgetType {
     const href = link?.getAttribute("href") ?? "";
     // Link de nota, de tag ou o cartão da imagem: o clique abre (ou carrega). URL: só com ⌘. Com ⌥, nenhum abre.
     placingOnly = !!link && (e.altKey || (opensOutside(href) && !e.metaKey));
+    // Só vale para o `click` deste clique: se o bloco sair do DOM, esse `click` nem chega no link (review do T2983).
+    if (placingOnly) document.addEventListener("mouseup", () => setTimeout(() => (placingOnly = false)), { once: true });
     if (target.closest("input, button") || (link && !placingOnly)) return;
     e.preventDefault();
     const at = view.posAtDOM(dom) + this.offsetAt(dom, e.clientX, e.clientY);
@@ -411,10 +439,7 @@ class RenderedWidget extends WidgetType {
   }
 
   destroy(dom: HTMLElement) {
-    const root = roots.get(dom);
-    roots.delete(dom);
-    // Fora do ciclo do React: desmontar no meio de um render dele dá aviso.
-    if (root) queueMicrotask(() => root.unmount());
+    unmount(dom);
   }
 
   ignoreEvent() {
@@ -450,12 +475,11 @@ class MermaidUnderWidget extends WidgetType {
         onShown={() => view.requestMeasure()}
       />,
     );
+    watchSize(dom, view);
     return dom;
   }
   destroy(dom: HTMLElement) {
-    const root = roots.get(dom);
-    roots.delete(dom);
-    if (root) queueMicrotask(() => root.unmount());
+    unmount(dom);
   }
   ignoreEvent() {
     return true;
@@ -509,6 +533,7 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered a[href^='kiwi-load-image:']": { borderRadius: "6px", padding: "1px 6px", fontSize: "13px" },
   ".cm-rendered input[type=checkbox]": { cursor: "pointer" },
   ".cm-rendered img": { display: "block", maxWidth: "100%" },
+  ".cm-rendered img[style*='inline']": { display: "inline", width: "auto !important", borderRadius: "6px" },
   // Os diagramas (T2984), como no Channels: o desenho rola de lado quando não cabe; os botões ficam discretos.
   ".kn-mermaid": { padding: "2px 0" },
   ".cm-mermaid-under": { padding: "6px 0 2px", cursor: "default" },

@@ -132,7 +132,9 @@ class AttachmentWidget extends WidgetType {
     // Clicar no anexo põe o cursor na linha dele: o embed vira texto para editar (como a tabela).
     wrap.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      view.dispatch({ selection: { anchor: this.from } });
+      // No fim da linha: com o editor já focado, o começo dela caía no fim da linha de cima quando o navegador relia a
+      // seleção (o anexo muda de lugar no mesmo update).
+      view.dispatch({ selection: { anchor: view.state.doc.lineAt(this.from).to } });
       view.focus();
     });
     const name = this.target.split("/").at(-1)!;

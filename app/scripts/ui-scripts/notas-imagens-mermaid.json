@@ -41,8 +41,8 @@
       "name": "o ![[planta.png]] no meio do texto vira imagem, lida do vault"
     },
     {
-      "waitFor": ".kn-note-editor .cm-rendered a[href='https://example.com/a.png']:has-text('remota')",
-      "name": "a imagem de fora vira link (abre no navegador)"
+      "waitFor": ".kn-note-editor .cm-rendered a[href^='kiwi-load-image:']:has-text('remota')",
+      "name": "a imagem de fora vira um cartão, sem carregar"
     },
     {
       "expectCount": ".kn-note-editor img[src^='http']",
@@ -55,6 +55,14 @@
     },
     {
       "screenshot": "imagens.png"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered a[href^='kiwi-load-image:']",
+      "name": "clique no cartão da imagem de fora"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered img[src='https://example.com/a.png']",
+      "name": "só agora a imagem de fora entra na nota (jow, #3039)"
     },
     {
       "click": ".kn-note-editor .cm-attachment img[alt='planta.png'] >> nth=0",

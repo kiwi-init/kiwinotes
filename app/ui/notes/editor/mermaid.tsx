@@ -221,6 +221,20 @@ export function mermaidCode(source: string): string | null {
   return m[2]!;
 }
 
+/**
+ * O SVG do mermaid como nó, sem colar HTML na página: o `DOMParser` não roda script, e por garantia sai o que poderia rodar ou
+ * carregar algo (script, iframe, object, embed, atributo `on…`). O mermaid já passa o SVG pelo DOMPurify dele.
+ */
+function svgNode(svg: string): SVGSVGElement | null {
+  const el = new DOMParser().parseFromString(svg, "text/html").querySelector("svg");
+  if (!el) return null;
+  for (const bad of el.querySelectorAll("script, iframe, object, embed")) bad.remove();
+  for (const node of [el, ...el.querySelectorAll("*")]) {
+    for (const a of [...node.attributes]) if (/^on/i.test(a.name)) node.removeAttribute(a.name);
+  }
+  return document.importNode(el, true);
+}
+
 const linkOf = (a: Element): string | null => a.getAttribute("href") ?? a.getAttribute("xlink:href");
 
 /**
@@ -232,11 +246,18 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
   const [drawn, setDrawn] = useState<Drawn>(null);
   const [showCode, setShowCode] = useState(false);
   const box = useRef<HTMLElement>(null);
+  const host = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState(false);
   const measure = () => {
     const el = box.current;
     if (el) setMore(el.scrollWidth - el.clientWidth - el.scrollLeft > 2);
   };
+  // O desenho entra antes de medir (o efeito de baixo procura o <svg>).
+  const svg = drawn?.kind === "svg" && !showCode ? drawn.svg : null;
+  useLayoutEffect(() => {
+    const node = svg ? svgNode(svg) : null;
+    host.current?.replaceChildren(...(node ? [node] : []));
+  }, [svg]);
   useLayoutEffect(() => {
     onShown?.();
     const el = box.current;
@@ -299,8 +320,8 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
   return (
     <div className="kn-mermaid">
       <figure ref={box} onScroll={measure} onClick={clicked} className={more ? "kn-mermaid-drawn is-more" : "kn-mermaid-drawn"}>
-        {/* SVG do mermaid em `securityLevel: "strict"` (passa pelo DOMPurify dele), sem link nem imagem de fora. */}
-        <div role="img" aria-label="Diagrama Mermaid" dangerouslySetInnerHTML={{ __html: drawn.svg }} />
+        {/* SVG do mermaid em `securityLevel: "strict"`, sem link nem imagem de fora; entra pelo `svgNode`. */}
+        <div ref={host} role="img" aria-label="Diagrama Mermaid" />
       </figure>
       <div className="kn-mermaid-tools">
         <button type="button" onClick={() => setShowCode(true)}>
