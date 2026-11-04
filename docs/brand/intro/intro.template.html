@@ -1,0 +1,331 @@
+<!doctype html>
+<!--
+  A intro do Kiwi Notes (T2113, spec #2078): o protótipo para o harry aprovar. Gerado por `gerar.ts` a partir deste
+  modelo e do Kiwi-cat Aura (docs/brand/kiwi-cat-familia). Abra o `intro.html` no navegador; não edite o gerado.
+
+  Os 6 tempos (s):
+    0,0  preto: a base do ícone aparece, e a borda de um prisma é desenhada, de frente
+    0,8  "Kiwi init" aparece no meio, e o arco-íris passa pelo prisma na diagonal
+    1,5  o nome some, e o prisma vira 3D, girando no próprio eixo para cima
+    2,0  ele se expande em três prismas (o logo), com o arco-íris passando pelo vidro dos três
+    2,9  os três voltam para dentro de si e viram um liquid glass circular, que vira uma bola preta
+    3,7  da bola começa a abertura do Kiwi-cat (a Aura, com a animação dela intacta)
+
+  Leve: tudo é camada que só muda `transform` e `opacity`. O blur da aura do gato é desenhado uma vez dentro da camada
+  dele, e a camada gira e esmaece por cima (#2085). Um clique pula. "Reduzir movimento" mostra o gato pronto, com um fade.
+  ?gato=2 toca a abertura do gato no dobro da velocidade; ?medir=1 grava o tempo de cada frame (para o medir.ts).
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiwi Notes: intro</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #101014; overflow: hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif; }
+
+  /* O palco: 1024 px lógicos (as coordenadas do ícone), escalado para a janela pelo script. */
+  #fit { position: absolute; left: 50%; top: 50%; width: 1024px; height: 1024px; margin: -512px 0 0 -512px; transform-origin: 50% 50%; }
+  #stage { position: relative; width: 1024px; height: 1024px; border-radius: 224px; overflow: hidden; isolation: isolate; will-change: opacity; }
+  .L { position: absolute; left: 0; top: 0; width: 1024px; height: 1024px; will-change: transform, opacity; }
+
+  /* 1. A base preta e a borda desenhada. */
+  #base { position: absolute; inset: 0; background: #000; opacity: 0; }
+  .play #base { animation: fade .25s ease-out both; }
+  #outline { position: absolute; left: 252px; top: 280px; width: 520px; height: 320px; }
+  #outline i { position: absolute; display: block; opacity: 0; will-change: transform, opacity; }
+  #outline i.h, #outline i.v { background: rgba(255, 255, 255, .9); }
+  #outline i.c { width: 52px; height: 52px; box-sizing: border-box; border: 0 solid rgba(255, 255, 255, .9); }
+
+  /* O prisma: cada camada (as 4 da espessura e a face, das 3 lâminas) tem a transformação 3D inteira, calculada da
+     linha do tempo pelo script. Sem preserve-3d: a ordem de pintura é fixa (de trás para a frente) e cada camada é
+     uma textura que só muda de transform na GPU. */
+  #scene { position: absolute; inset: 0; transform-origin: 512px 470px; will-change: transform, opacity; }
+  .ly { position: absolute; left: 252px; top: 280px; width: 520px; height: 320px; border-radius: 52px; box-sizing: border-box; will-change: transform, opacity; }
+  .side { background: linear-gradient(to bottom, #123a52 0%, #2a2160 40%, #4a1c48 70%, #4a3018 100%); opacity: 0; }
+  .side.k4 { border: 2px solid rgba(255, 255, 255, .7); }
+  .face {
+    background: linear-gradient(155deg, #26304a 0%, #0b0d14 38%, #0b0d14 72%, #1d2340 100%);
+    border: 3px solid rgba(255, 255, 255, .9);
+    overflow: hidden;
+    opacity: 0;
+  }
+  .shine { position: absolute; left: 46px; top: 12px; width: 170px; height: 24px; border-radius: 40px / 14px; border-top: 3px solid rgba(255, 255, 255, .55); box-sizing: border-box; }
+  /* O arco-íris: uma faixa larga dentro da face, que anda na diagonal. */
+  .band {
+    position: absolute; left: 50%; top: 50%; width: 1400px; height: 230px; margin: -115px 0 0 -700px; opacity: 0;
+    background: linear-gradient(to bottom, rgba(255, 95, 191, 0) 0%, rgba(255, 95, 191, .85) 18%, rgba(255, 165, 61, .85) 31%, rgba(255, 242, 122, .85) 44%,
+      rgba(92, 255, 176, .8) 56%, rgba(69, 201, 255, .85) 68%, rgba(123, 97, 255, .85) 80%, rgba(255, 255, 255, .5) 88%, rgba(255, 255, 255, 0) 100%);
+    will-change: transform, opacity;
+  }
+  #title {
+    position: absolute; left: 0; right: 0; top: 404px; text-align: center; font-size: 76px; font-weight: 600; letter-spacing: -.01em;
+    color: rgba(255, 255, 255, .96); opacity: 0; will-change: transform, opacity;
+  }
+
+  /* 5. O liquid glass e a bola preta (o círculo do começo do gato, em 0,55 do tamanho). */
+  #orb { position: absolute; left: 320px; top: 234.4px; width: 384px; height: 384px; opacity: 0; will-change: transform, opacity; }
+  #orb > b { position: absolute; inset: 0; border-radius: 50%; }
+  #ball { background: linear-gradient(to bottom, #0a3b48 0%, #083340 4%, #021019 19%, #000204 40%, #000 94%); }
+  #glass { will-change: opacity; }
+  #glass::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%; box-sizing: border-box; border: 6px solid rgba(255, 255, 255, .88);
+    background: radial-gradient(circle at 34% 28%, rgba(120, 170, 230, .5) 0%, rgba(30, 40, 70, .6) 26%, rgba(11, 13, 20, .96) 58%, rgba(36, 30, 90, .95) 100%);
+  }
+  #glass::after {
+    content: ""; position: absolute; inset: 14px; border-radius: 50%;
+    background: conic-gradient(from 200deg, #ff5fbf, #ffa53d, #fff27a, #5cffb0, #45c9ff, #7b61ff, #ff5fbf);
+    -webkit-mask: radial-gradient(closest-side, transparent 84%, #000 90%, #000 97%, transparent 100%);
+    mask: radial-gradient(closest-side, transparent 84%, #000 90%, #000 97%, transparent 100%);
+    opacity: .75;
+  }
+  #glass i { position: absolute; left: 70px; top: 46px; width: 130px; height: 70px; border-radius: 50%; border-top: 7px solid rgba(255, 255, 255, .8); transform: rotate(-24deg); }
+
+  /* 6. O gato: a Aura, com a aura em camadas (o blur fica pronto dentro delas). */
+  /* O gato está no palco desde o começo, parado e invisível: pinta antes, e a passagem só solta as animações. */
+  #cat-layer.off { display: none; }
+  #cat-layer.paused, #cat-layer.paused * { animation-play-state: paused !important; }
+  #cat-layer > svg { position: absolute; left: 0; top: 0; }
+  div#aura-intro { opacity: 0; }
+  div#aura-intro-spin, div#aura-intro-spread { transform-origin: 512px 426.4px; }
+  div#aura, div#aura-grow, div#aura-orbit, div#aura-blobs { transform-origin: 512px 486.4px; }
+  /* A borda de vidro e a luz de borda da pose final (gerar.ts): acendem quando a parte termina de se formar. O rabo
+     balança com o mesmo sway do #tail-wrap (origem 680,985 do gato, no palco). */
+  /* De 0,003, e não de 0: assim o WebKit pinta a camada antes (README). */
+  #rim-body { animation: rimIn .6s ease 4.8s both; }
+  #rim-tail { transform-origin: 646.4px 890.4px; animation: rimIn .5s ease 6.0s both, sway 3.6s ease-in-out 6.2s infinite; }
+  @keyframes rimIn { from { opacity: .003; } to { opacity: 1; } }
+
+  /* O fim: tudo some (no app, a janela fecha e o hub aparece). */
+  #stage.out { animation: fadeOut .35s ease-in both; }
+
+  #again {
+    position: fixed; right: 16px; bottom: 16px; font: 500 14px/1 -apple-system, sans-serif; padding: 10px 14px; border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, .25); background: rgba(255, 255, 255, .08); color: #fff; cursor: pointer; opacity: 0; pointer-events: none;
+    transition: opacity .3s;
+  }
+  body.done #again { opacity: 1; pointer-events: auto; }
+
+  /* --------------------------------------------------------------- a linha do tempo */
+  .play #scene { animation: sceneOut .28s cubic-bezier(.5, 0, .75, 0) 2.92s both; }
+  .play .face { animation: fade .3s ease-out .8s both; }
+  .play .side { animation: fade .25s ease-out 1.6s both; }
+  .play .ly.s1, .play .ly.s2 { animation: fade .15s linear 2.0s both; }
+  .play .s0 .band { animation: sweep .7s cubic-bezier(.45, 0, .55, 1) 1.0s both, sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.2s; }
+  .play .s1 .band { animation: sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.28s both; }
+  .play .s2 .band { animation: sweep2 .7s cubic-bezier(.45, 0, .55, 1) 2.36s both; }
+  .play #title { animation: titleIn .4s cubic-bezier(.2, .8, .2, 1) .85s both, titleOut .22s ease-in 1.45s forwards; }
+  .play #orb { animation: orbIn .75s cubic-bezier(.2, .8, .2, 1) 3.0s both; }
+  .play #glass { animation: fadeOut .35s ease-in-out 3.4s both; }
+  .play #orb.grow { animation: orbGrow .9s cubic-bezier(.2, .8, .2, 1) both, fadeOut .01s linear .9s forwards; }
+
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes edgeX { from { opacity: 1; transform: scaleX(0); } to { opacity: 1; transform: scaleX(1); } }
+  @keyframes edgeY { from { opacity: 1; transform: scaleY(0); } to { opacity: 1; transform: scaleY(1); } }
+  @keyframes outlineOut { to { opacity: 0; } }
+  @keyframes titleIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes titleOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-10px) scale(.98); } }
+  @keyframes sweep { 0% { opacity: 0; transform: rotate(-32deg) translateY(-470px); } 18%, 82% { opacity: 1; } 100% { opacity: 0; transform: rotate(-32deg) translateY(470px); } }
+  @keyframes sweep2 { 0% { opacity: 0; transform: rotate(-32deg) translateY(-470px); } 18%, 82% { opacity: 1; } 100% { opacity: 0; transform: rotate(-32deg) translateY(470px); } }
+  @keyframes sceneOut { 0% { opacity: 1; transform: none; } 60% { opacity: 1; } 100% { opacity: 0; transform: translateY(-44px) scale(.28); } }
+  @keyframes orbIn {
+    0% { opacity: 0; transform: scale(.12); }
+    30% { opacity: 1; transform: scale(.63, .49); }
+    55% { transform: scale(.5, .6); }
+    78% { transform: scale(.575, .53); }
+    100% { opacity: 1; transform: scale(.55); }
+  }
+  @keyframes orbGrow { from { opacity: 1; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
+
+  /* Reduzir movimento: o gato pronto, com um fade de 0,5 s. */
+  @media (prefers-reduced-motion: reduce) {
+    #outline, #scene, #title, #orb { display: none; }
+    #cat-layer { display: block; }
+    #base { opacity: 1; }
+    #stage { animation: fade .5s ease-out both; }
+    #stage *, #stage.out { animation: none !important; }
+    div#aura-intro { opacity: 0; }
+    #rim-body, #rim-tail { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="fit">
+  <div id="stage" role="img" aria-label="Kiwi Notes">
+    <div id="base"></div>
+    <div id="outline"></div>
+    <div id="scene"></div>
+    <div id="title">Kiwi init</div>
+    <div id="orb"><b id="ball"></b><b id="glass"><i></i></b></div>
+    <div id="cat-layer" class="paused">
+      <!--AURA-->
+      <!--CAT-->
+    </div>
+  </div>
+</div>
+<!--DEFS-->
+<button id="again" type="button">De novo</button>
+<script>
+  (() => {
+    const params = new URLSearchParams(location.search);
+    const stage = document.getElementById("stage");
+    const fit = document.getElementById("fit");
+    const cat = document.getElementById("cat-layer");
+    const orb = document.getElementById("orb");
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const catSpeed = Number(params.get("gato")) || 1;
+
+    const resize = () => fit.style.transform = `scale(${Math.min(innerWidth, innerHeight) * 0.86 / 1024})`;
+    addEventListener("resize", resize);
+    resize();
+
+    // A borda desenhada: 4 lados e 4 cantos em sequência, como um traço (cada pedaço só muda transform e opacity).
+    const W = 520, H = 320, R = 52, S = 3, T0 = 0.2, TOTAL = 0.62;
+    const arc = (Math.PI * R) / 2;
+    const pieces = [
+      { cls: "h", len: W - 2 * R, css: { left: R, top: 0, width: W - 2 * R, height: S }, origin: "left", anim: "edgeX" },
+      { cls: "c", len: arc, css: { right: 0, top: 0, borderTopWidth: S, borderRightWidth: S, borderTopRightRadius: R } },
+      { cls: "v", len: H - 2 * R, css: { right: 0, top: R, width: S, height: H - 2 * R }, origin: "top", anim: "edgeY" },
+      { cls: "c", len: arc, css: { right: 0, bottom: 0, borderBottomWidth: S, borderRightWidth: S, borderBottomRightRadius: R } },
+      { cls: "h", len: W - 2 * R, css: { left: R, bottom: 0, width: W - 2 * R, height: S }, origin: "right", anim: "edgeX" },
+      { cls: "c", len: arc, css: { left: 0, bottom: 0, borderBottomWidth: S, borderLeftWidth: S, borderBottomLeftRadius: R } },
+      { cls: "v", len: H - 2 * R, css: { left: 0, top: R, width: S, height: H - 2 * R }, origin: "bottom", anim: "edgeY" },
+      { cls: "c", len: arc, css: { left: 0, top: 0, borderTopWidth: S, borderLeftWidth: S, borderTopLeftRadius: R } },
+    ];
+    const perimeter = pieces.reduce((n, p) => n + p.len, 0);
+    const outline = document.getElementById("outline");
+    let at = T0;
+    for (const p of pieces) {
+      const el = document.createElement("i");
+      el.className = p.cls;
+      for (const [k, v] of Object.entries(p.css)) el.style[k] = typeof v === "number" ? `${v}px` : v;
+      const dur = (TOTAL * p.len) / perimeter;
+      if (p.anim) {
+        el.style.transformOrigin = p.origin;
+        el.dataset.anim = `${p.anim} ${dur.toFixed(3)}s linear ${at.toFixed(3)}s both, outlineOut .3s ease-out 1.0s forwards`;
+      } else {
+        el.dataset.anim = `fade ${(dur * 0.8).toFixed(3)}s linear ${at.toFixed(3)}s both, outlineOut .3s ease-out 1.0s forwards`;
+      }
+      at += dur;
+      outline.append(el);
+    }
+
+    // O prisma em 3D. A pose de cada instante: a virada para cima (rotateX), o giro no plano (rotateZ) e a distância
+    // de cada lâmina na pilha (translateZ), com as curvas de easing do roteiro. Amostrada a 60 por segundo.
+    const bezier = (x1, y1, x2, y2) => (x) => {
+      if (x <= 0 || x >= 1) return Math.min(1, Math.max(0, x));
+      let lo = 0, hi = 1, u = x;
+      for (let i = 0; i < 30; i++) {
+        const bx = 3 * x1 * u * (1 - u) ** 2 + 3 * x2 * u * u * (1 - u) + u ** 3;
+        if (bx < x) lo = u; else hi = u;
+        u = (lo + hi) / 2;
+      }
+      return 3 * y1 * u * (1 - u) ** 2 + 3 * y2 * u * u * (1 - u) + u ** 3;
+    };
+    const ease = bezier(.45, 0, .2, 1), pop = bezier(.3, 1.35, .5, 1), implode = bezier(.6, 0, .9, .4);
+    const seg = (t, from, dur, f) => f(Math.min(1, Math.max(0, (t - from) / dur)));
+    const GAP = 78, DEPTH = 8, END = 3.35;
+    const pose = (t, slab, k) => {
+      const up = seg(t, 1.55, 0.5, ease), turn = seg(t, 2.0, 0.6, ease);
+      const out = seg(t, 2.0, 0.6, pop) * (1 - seg(t, 2.68, 0.28, implode));
+      const z = (slab === 0 ? GAP * out : slab === 2 ? -1 - (GAP - 1) * out : 0) - DEPTH * k;
+      return `perspective(1700px) translateY(${(30 * up).toFixed(2)}px) rotateX(${(58 * up).toFixed(3)}deg) rotateZ(${(-34 * turn).toFixed(3)}deg) scale(${(1 - 0.18 * up).toFixed(4)}) translateZ(${z.toFixed(2)}px)`;
+    };
+    const scene = document.getElementById("scene");
+    const layers = [];
+    for (const slab of [2, 1, 0]) {
+      for (const k of [4, 3, 2, 1, 0]) {
+        const el = document.createElement("b");
+        el.className = `ly s${slab} ${k ? `side k${k}` : "face"}`;
+        if (!k) el.innerHTML = '<i class="band"></i><i class="shine"></i>';
+        el.style.transform = pose(0, slab, k);
+        scene.append(el);
+        layers.push({ el, slab, k });
+      }
+    }
+    let prism = [];
+    const animatePrism = () => {
+      for (const a of prism) a.cancel();
+      prism = layers.map(({ el, slab, k }) => {
+        const frames = [{ offset: 0, transform: pose(0, slab, k) }];
+        for (let t = 1.5; t < END; t += 1 / 60) frames.push({ offset: t / END, transform: pose(t, slab, k) });
+        frames.push({ offset: 1, transform: pose(END, slab, k) });
+        return el.animate(frames, { duration: END * 1000, fill: "both" });
+      });
+    };
+
+    // Os frames, para o medir.ts: o intervalo entre cada requestAnimationFrame.
+    if (params.has("medir")) {
+      const frames = (window.__frames = []);
+      const tick = (t) => { frames.push(t); requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    }
+
+    let timers = [];
+    const later = (s, fn) => timers.push(setTimeout(fn, s * 1000));
+
+    function startCat() {
+      cat.classList.remove("paused");
+      if (catSpeed !== 1) for (const a of cat.getAnimations({ subtree: true })) a.playbackRate = catSpeed;
+    }
+
+    function play() {
+      for (const t of timers) clearTimeout(t);
+      timers = [];
+      document.body.classList.remove("done");
+      stage.classList.remove("out");
+      cat.classList.add("off", "paused");
+      orb.classList.remove("grow");
+      stage.classList.remove("play");
+      for (const el of outline.children) el.style.animation = "none";
+      void stage.offsetWidth; // recomeça as animações do zero
+      cat.classList.remove("off");
+      for (const el of outline.children) el.style.animation = el.dataset.anim;
+      if (reduced) {
+        startCat();
+        later(2.5, finish);
+        return;
+      }
+      stage.classList.add("play");
+      animatePrism();
+      // 3,7 s: a bola cresce junto com o círculo do gato (o circleIn dele), e o gato começa.
+      later(3.7, () => { orb.classList.add("grow"); startCat(); });
+      // O gato termina a abertura em ~7,8 s (no ritmo dele) e fica um instante pronto.
+      later(3.7 + 8.4 / catSpeed, finish);
+    }
+
+    function finish() {
+      stage.classList.add("out");
+      later(0.4, () => {
+        document.body.classList.add("done");
+        window.__done = true;
+      });
+    }
+
+    stage.addEventListener("click", () => { for (const t of timers) clearTimeout(t); timers = []; finish(); });
+    document.getElementById("again").addEventListener("click", play);
+    // A linha do tempo começa depois do 1º frame: a carga (pintar o gato parado, decodificar os bitmaps) não come o
+    // começo da animação.
+    if (params.has("t")) play();
+    else requestAnimationFrame(() => requestAnimationFrame(play));
+
+    // ?t=2.4: congela o frame daquele instante (para a prancha), sem depender do relógio.
+    if (params.has("t")) {
+      const t = Number(params.get("t"));
+      for (const x of timers) clearTimeout(x);
+      timers = [];
+      if (t >= 3.7 && !reduced) { orb.classList.add("grow"); startCat(); }
+      for (const a of document.getAnimations()) {
+        a.pause();
+        const target = a.effect && a.effect.target;
+        const inCat = cat.contains(target);
+        const late = t >= 3.7 && (inCat || target === orb);
+        a.currentTime = inCat && t < 3.7 ? 0 : Math.max(0, (late ? (t - 3.7) * (inCat ? catSpeed : 1) : t) * 1000);
+      }
+    }
+  })();
+</script>
+</body>
+</html>
