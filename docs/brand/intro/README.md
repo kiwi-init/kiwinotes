@@ -51,6 +51,15 @@ bun docs/brand/intro/gravar-gato.ts /tmp/kiwi-medida --sem-video
 bun docs/brand/intro/frames.ts /tmp/kiwi-frames
 ```
 
+`gravar-gato.ts` descarta o começo branco da gravação e codifica o vídeo do gato.
+Com o `ffmpeg` do sistema, sai `gato.mp4`. Num Mac sem ele (o do jow, por exemplo), o script usa o que o Playwright já baixa, em `~/Library/Caches/ms-playwright/ffmpeg-*/ffmpeg-mac`, e sai `gato.webm` já cortado, em VP9.
+Esse ffmpeg só lê webm/mjpeg, só escreve png e VP9, e a entrada vai por `-i file:<caminho>`: `-` e `pipe:` não funcionam.
+Para conferir o caminho sem o `ffmpeg` do sistema, rode com um `PATH` sem o Homebrew:
+
+```sh
+env PATH=/usr/bin:/bin:/usr/sbin:/sbin bun docs/brand/intro/gravar-gato.ts /tmp/kiwi-video-sem-ffmpeg
+```
+
 `comparar.ts` captura os dez frames da prancha mais f126/f190 contra o renderer antigo. Seus limites das poses intermediárias são históricos e devem falhar para a nova direção do #4031; não são um critério de aprovação do movimento. `verificacao-gato.json` guarda somente a comparação anterior, identificada pelo hash do HTML daquela versão.
 `comparar.py` inclui olhos e orelhas na diferença; exclui apenas a borda arredondada do palco.
 Os olhos vetoriais e a rasterização/alpha do navegador podem diferir do Pillow.
