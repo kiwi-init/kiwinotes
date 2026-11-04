@@ -113,10 +113,14 @@ function cached(): Appearance | null {
   }
 }
 
-/** O que veio do engine. Um engine antigo (antes do 1.7.0) não manda `appearance`: fica o padrão. */
+/** O que veio do engine. Um engine antigo (antes do 1.8.0) não manda `appearance`: fica o padrão. */
 export function fromSettings(s: Partial<AppSettings> | null | undefined): Appearance {
   return sanitizeAppearance(s?.appearance);
 }
+
+/** As duas Aparências são iguais, campo a campo. */
+export const sameAppearance = (x: Appearance, y: Appearance): boolean =>
+  (Object.keys(x) as (keyof Appearance)[]).every((k) => x[k] === y[k]);
 
 let started = false;
 
@@ -141,6 +145,8 @@ export function startAppearance(): void {
   }
   engine?.on("settings.changed", (payload) => {
     const a = fromSettings(payload as UiEvents["settings.changed"]);
+    // O evento também vem quando muda outra coisa (as fixadas, o atalho): sem mudança na Aparência, nada a pintar.
+    if (sameAppearance(a, current)) return;
     applyAppearance(a);
     cache(a);
   });

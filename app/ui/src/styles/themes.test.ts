@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { DEFAULT_APPEARANCE, isThemeId } from "../../../src/shared/appearance.ts";
-import { fromSettings, textOn, themeVars } from "./appearance.ts";
+import { fromSettings, sameAppearance, textOn, themeVars } from "./appearance.ts";
 import { FALLBACK_THEME, THEME_TOKENS, THEMES, themeFor } from "./themes.ts";
 
 const COLOR = /^(#[0-9a-f]{6}|rgb\(\d{1,3} \d{1,3} \d{1,3} \/ (0|1|0?\.\d+)\))$/;
@@ -58,8 +58,14 @@ describe("os tokens que a janela recebe", () => {
     }
   });
 
-  test("um engine de antes do 1.7.0 (sem appearance) fica no padrão", () => {
+  test("um engine de antes do 1.8.0 (sem appearance) fica no padrão", () => {
     expect(fromSettings({ notesShortcut: null })).toEqual(DEFAULT_APPEARANCE);
     expect(fromSettings(null)).toEqual(DEFAULT_APPEARANCE);
+  });
+
+  test("um settings.changed das fixadas (T2468) não muda a Aparência, e a janela não repinta", () => {
+    const a = fromSettings({ notesShortcut: null, pinned: ["A.md"], appearance: DEFAULT_APPEARANCE });
+    expect(sameAppearance(a, DEFAULT_APPEARANCE)).toBe(true);
+    expect(sameAppearance({ ...a, font: "inter" }, DEFAULT_APPEARANCE)).toBe(false);
   });
 });

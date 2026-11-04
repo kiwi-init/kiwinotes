@@ -20,6 +20,7 @@ import {
 } from "electrobun/bun/appengine";
 
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION, type AppSettings } from "../shared/ui-contract.ts";
+import type { SettingsPatch } from "../store/settings.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrl, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
@@ -78,7 +79,7 @@ function fakeDeps() {
       dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
       settings: {
         load: async () => ({ ...settings }),
-        save: async (patch: Partial<AppSettings>) => (calls.push(`settings.save:${JSON.stringify(patch)}`), Object.assign(settings, patch), { ...settings }),
+        save: async (patch: SettingsPatch) => (calls.push(`settings.save:${JSON.stringify(patch)}`), Object.assign(settings, patch, { appearance: { ...settings.appearance, ...patch.appearance } }), { ...settings }),
       },
       settingsChanged: (s: AppSettings) => void calls.push(`settingsChanged:${s.notesShortcut}`),
       clipboardWrite: (text: string) => void copied.push(text),

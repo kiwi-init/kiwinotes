@@ -66,3 +66,22 @@ test("as combinações oferecidas estão no formato que o helper entende (KeyCom
     expect(label.endsWith(parts.at(-1)!.toUpperCase())).toBe(true);
   }
 });
+
+test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perder campo nem corromper o arquivo", async () => {
+  fresh();
+  const store = new SettingsStore(dir);
+  await Promise.all([
+    store.save({ appearance: { font: "inter" } }),
+    store.save({ appearance: { mode: "dark" } }),
+    store.save({ pinned: ["A.md"] }),
+    store.save({ appearance: { textSize: "large" } }),
+    store.save({ notesShortcut: null }),
+  ]);
+  const raw = readFileSync(store.file, "utf8");
+  expect(raw.endsWith("}\n")).toBe(true);
+  expect(await new SettingsStore(dir).load()).toEqual({
+    notesShortcut: null,
+    pinned: ["A.md"],
+    appearance: { ...DEFAULT_APPEARANCE, font: "inter", mode: "dark", textSize: "large" },
+  });
+});

@@ -30,6 +30,9 @@ export function sanitizePinned(input: unknown): string[] {
   return [...new Set(input.filter((p): p is string => typeof p === "string" && p.length > 0 && p.length <= 1024))].slice(0, MAX_PINNED);
 }
 
+/** O que o `save` aceita: a Aparência pode vir em parte, e o resto dela fica como está. */
+export type SettingsPatch = Partial<Omit<AppSettings, "appearance">> & { appearance?: Partial<Appearance> };
+
 interface SettingsFile extends Partial<AppSettings> {
   version: 1;
 }
@@ -55,10 +58,21 @@ export class SettingsStore {
     return sanitizeSettings(await readJson<SettingsFile>(this.file));
   }
 
-  /** Muda só os campos de `patch` (já validados por quem chama). Devolve tudo como ficou. */
-  async save(patch: Partial<AppSettings>): Promise<AppSettings> {
-    const next = { ...(await this.load()), ...patch };
-    await writeJson(this.file, { version: 1, ...next } satisfies SettingsFile);
-    return next;
+  /** As gravações, uma depois da outra: ler, mesclar e gravar sem outra no meio (o `fixPinned` e a Aparência). */
+  private queue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Muda só os campos de `patch` (já validados por quem chama), e da Aparência só os campos dados. Devolve tudo como
+   * ficou. Uma por vez: duas trocas rápidas de janelas diferentes não perdem campo (T2503, revisão #2582).
+   */
+  save(patch: SettingsPatch): Promise<AppSettings> {
+    const run = this.queue.then(async () => {
+      const current = await this.load();
+      const next: AppSettings = { ...current, ...patch, appearance: { ...current.appearance, ...patch.appearance } };
+      await writeJson(this.file, { version: 1, ...next } satisfies SettingsFile);
+      return next;
+    });
+    this.queue = run.catch(() => {});
+    return run;
   }
 }

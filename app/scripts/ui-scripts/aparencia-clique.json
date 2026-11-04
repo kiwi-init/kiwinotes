@@ -1,0 +1,186 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Clique",
+        "content": "Linha 1 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 2 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 3 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 4 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 5 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 6 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 7 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 8 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 9 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 10 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 11 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 12 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 13 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 14 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 15 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 16 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 17 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 18 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 19 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 20 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 21 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 22 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 23 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 24 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 25 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 26 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 27 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 28 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 29 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 30 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 31 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 32 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 33 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 34 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 35 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 36 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 37 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 38 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 39 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 40 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 41 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 42 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 43 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 44 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 45 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 46 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 47 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 48 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 49 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 50 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 51 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 52 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 53 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 54 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 55 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 56 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 57 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 58 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 59 do teste de clique, com texto suficiente para ocupar a largura.\nLinha 60 do teste de clique, com texto suficiente para ocupar a largura.\n"
+      },
+      "name": "uma nota longa (60 linhas)"
+    },
+    {
+      "waitFor": ".kn-hub-item",
+      "name": "o hub abre"
+    },
+    {
+      "invoke": "settings.set",
+      "args": {
+        "appearance": {
+          "textSize": "default"
+        }
+      },
+      "name": "Tamanho do texto: default"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Clique')",
+      "name": "a nota está na lista"
+    },
+    {
+      "click": ".kn-side-item:has-text('Clique')",
+      "name": "abre a nota"
+    },
+    {
+      "waitFor": ".cm-content",
+      "name": "o editor"
+    },
+    {
+      "click": ".cm-line:has-text('Linha 25 do teste')",
+      "name": "clica no meio da linha 25"
+    },
+    {
+      "type": "§default",
+      "name": "escreve uma marca onde está o cursor"
+    },
+    {
+      "expectCount": ".cm-line:has-text('Linha 25 do teste'):has-text('§default')",
+      "count": 1,
+      "name": "a marca caiu na linha 25"
+    },
+    {
+      "expectCount": ".cm-line:has-text('§default')",
+      "count": 1,
+      "name": "e só nela"
+    },
+    {
+      "invoke": "settings.set",
+      "args": {
+        "appearance": {
+          "textSize": "large"
+        }
+      },
+      "name": "Tamanho do texto: large"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Clique')",
+      "name": "a nota está na lista"
+    },
+    {
+      "click": ".kn-side-item:has-text('Clique')",
+      "name": "abre a nota"
+    },
+    {
+      "waitFor": ".cm-content",
+      "name": "o editor"
+    },
+    {
+      "click": ".cm-line:has-text('Linha 12 do teste')",
+      "name": "clica no meio da linha 12"
+    },
+    {
+      "type": "§large",
+      "name": "escreve uma marca onde está o cursor"
+    },
+    {
+      "expectCount": ".cm-line:has-text('Linha 12 do teste'):has-text('§large')",
+      "count": 1,
+      "name": "a marca caiu na linha 12"
+    },
+    {
+      "expectCount": ".cm-line:has-text('§large')",
+      "count": 1,
+      "name": "e só nela"
+    },
+    {
+      "invoke": "settings.set",
+      "args": {
+        "appearance": {
+          "textSize": "larger"
+        }
+      },
+      "name": "Tamanho do texto: larger"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Clique')",
+      "name": "a nota está na lista"
+    },
+    {
+      "click": ".kn-side-item:has-text('Clique')",
+      "name": "abre a nota"
+    },
+    {
+      "waitFor": ".cm-content",
+      "name": "o editor"
+    },
+    {
+      "click": ".cm-line:has-text('Linha 40 do teste')",
+      "name": "clica no meio da linha 40"
+    },
+    {
+      "type": "§larger",
+      "name": "escreve uma marca onde está o cursor"
+    },
+    {
+      "expectCount": ".cm-line:has-text('Linha 40 do teste'):has-text('§larger')",
+      "count": 1,
+      "name": "a marca caiu na linha 40"
+    },
+    {
+      "expectCount": ".cm-line:has-text('§larger')",
+      "count": 1,
+      "name": "e só nela"
+    },
+    {
+      "invoke": "settings.set",
+      "args": {
+        "appearance": {
+          "textSize": "largest"
+        }
+      },
+      "name": "Tamanho do texto: largest"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Clique')",
+      "name": "a nota está na lista"
+    },
+    {
+      "click": ".kn-side-item:has-text('Clique')",
+      "name": "abre a nota"
+    },
+    {
+      "waitFor": ".cm-content",
+      "name": "o editor"
+    },
+    {
+      "click": ".cm-line:has-text('Linha 33 do teste')",
+      "name": "clica no meio da linha 33"
+    },
+    {
+      "type": "§largest",
+      "name": "escreve uma marca onde está o cursor"
+    },
+    {
+      "expectCount": ".cm-line:has-text('Linha 33 do teste'):has-text('§largest')",
+      "count": 1,
+      "name": "a marca caiu na linha 33"
+    },
+    {
+      "expectCount": ".cm-line:has-text('§largest')",
+      "count": 1,
+      "name": "e só nela"
+    },
+    {
+      "wait": 1500,
+      "name": "o autosave grava a última marca"
+    },
+    {
+      "invoke": "settings.set",
+      "args": {
+        "appearance": {
+          "textSize": "default"
+        }
+      },
+      "name": "volta ao Padrão"
+    }
+  ]
+}

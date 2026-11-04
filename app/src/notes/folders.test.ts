@@ -190,7 +190,7 @@ describe("pelas capacidades (contrato 1.7.0)", () => {
       snippets: { load: async () => [], save: async (s) => s },
       history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
       dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
-      settings: { load: async () => settings, save: async (patch) => (settings = { ...settings, ...patch }) },
+      settings: { load: async () => settings, save: async (patch) => (settings = { ...settings, ...patch, appearance: { ...settings.appearance, ...patch.appearance } }) },
       clipboardWrite: () => {},
       notes: v,
       reveal: (abs) => revealed.push(abs),
