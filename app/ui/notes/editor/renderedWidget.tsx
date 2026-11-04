@@ -144,13 +144,30 @@ const reading = new Set<string>();
 const waiting = new Set<() => void>();
 /** Sobe a cada anexo que chega: um bloco que desenhou antes e só se inscreveu depois não perde a chegada. */
 let arrivals = 0;
-/** As imagens de fora que a pessoa mandou carregar (com um clique no cartão), nesta janela. */
-const remoteAllowed = new Set<string>();
+/**
+ * As imagens de fora que a pessoa mandou carregar (com um clique no cartão), nesta janela: o engine baixa e devolve um
+ * `data:` (`images.remote`); a janela mesma não carrega nada da internet (a CSP não tem `https:`). `null`: não deu.
+ */
+const remote = new Map<string, AttachmentFile | null | "loading">();
 
-function allowRemote(url: string): void {
-  remoteAllowed.add(url);
+function arrived(): void {
   arrivals++;
   for (const wake of [...waiting]) wake();
+}
+
+function loadRemote(url: string, source: AttachmentSource | undefined): void {
+  if (remote.get(url) === "loading") return;
+  if (!source?.remote) {
+    remote.set(url, null);
+    return arrived();
+  }
+  remote.set(url, "loading");
+  arrived();
+  const settle = (f: AttachmentFile | null) => {
+    remote.set(url, f);
+    arrived();
+  };
+  source.remote(url).then(settle, () => settle(null));
 }
 
 function readImage(source: AttachmentSource | undefined, target: string): AttachmentFile | null | undefined {
@@ -183,7 +200,8 @@ function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNod
     const from = imageSource(node.attributes?.url ?? "");
     if (from.kind === "data") return node;
     if (from.kind === "remote") {
-      if (remoteAllowed.has(from.url)) return node;
+      const got = remote.get(from.url);
+      if (got && got !== "loading") return { ...node, attributes: { ...node.attributes, url: got.dataUrl } };
       let host = from.url;
       try {
         host = new URL(from.url).host;
@@ -192,7 +210,9 @@ function withImages(node: ASTNode, source: AttachmentSource | undefined): ASTNod
       }
       const label = `🖼 ${alt || "imagem"} · ${host}`;
       // https: o clique carrega aqui. http: só abre no navegador (a CSP não deixa carregar sem TLS).
-      if (/^https:/i.test(from.url)) return { type: "Link", attributes: { url: `${LOAD_IMAGE_LINK}${encodeURIComponent(from.url)}` }, children: [text(`${label} · carregar`)] };
+      if (got === "loading") return text(`${label} · carregando…`);
+      const load = got === null ? "não deu para carregar · tentar de novo" : "carregar";
+      if (/^https:/i.test(from.url)) return { type: "Link", attributes: { url: `${LOAD_IMAGE_LINK}${encodeURIComponent(from.url)}` }, children: [text(`${label} · ${load}`)] };
       return { type: "Link", attributes: { url: from.url }, children: [text(label)] };
     }
     if (from.kind === "attachment") {
@@ -368,7 +388,7 @@ class RenderedWidget extends WidgetType {
           return;
         }
         const act = linkAction(url);
-        if (act?.kind === "loadImage") allowRemote(act.url);
+        if (act?.kind === "loadImage") loadRemote(act.url, this.actions.attachments);
         else if (act?.kind === "note") this.actions.onOpenLink(act.target);
         else if (act?.kind === "tag") this.actions.onOpenTag?.(act.tag);
         else if (act?.kind === "url") {
@@ -508,7 +528,7 @@ class ImagesUnderWidget extends WidgetType {
     const callbacks = {
       onLinkPress: ({ url }: { url: string }) => {
         const act = linkAction(url);
-        if (act?.kind === "loadImage") allowRemote(act.url);
+        if (act?.kind === "loadImage") loadRemote(act.url, this.actions.attachments);
         else if (act?.kind === "url") {
           const safe = externalUrl(act.url);
           if (safe) this.actions.onOpenUrl(safe);

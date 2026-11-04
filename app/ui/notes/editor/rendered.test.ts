@@ -6,7 +6,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 
 import { wikiLinkSyntax } from "./index.ts";
-import { mermaidCode, linksApart, picturesOff } from "./mermaid.tsx";
+import { linksApart, mermaidCode, picturesOff, shapesWithoutPictures } from "./mermaid.tsx";
 import { fullTree, imagesUnderCursor, imageSource, linkAction, mermaidUnderCursor, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
 
 const md = markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] });
@@ -226,5 +226,15 @@ describe("as imagens do bloco do cursor", () => {
     expect(under("![[planta.png]]", 0)).toEqual([]);
     expect(under("```\n![x](b.png)\n```", 0)).toEqual([]);
     expect(under("a `![x](b.png)`", 0)).toEqual([]);
+  });
+});
+
+describe("a forma de imagem do mermaid (review do #109)", () => {
+  test("sai o img: de fora, fica o rótulo; data: fica", () => {
+    expect(shapesWithoutPictures('A@{ img: "https://x.com/a.png", label: "foto" } --> B')).toBe('A@{ label: "foto" } --> B');
+    expect(shapesWithoutPictures('A@{ label: "foto", img: "https://x.com/a.png", pos: "t" }')).toBe('A@{ label: "foto", pos: "t" }');
+    expect(shapesWithoutPictures("A@{ label: 'x', img: 'https://x.com/a.png' }")).toBe("A@{ label: 'x' }");
+    expect(shapesWithoutPictures('A@{ img: "data:image/png;base64,AA", label: "x" }')).toBe('A@{ img: "data:image/png;base64,AA", label: "x" }');
+    expect(shapesWithoutPictures("graph TD\n  A[img: x] --> B")).toBe("graph TD\n  A[img: x] --> B");
   });
 });

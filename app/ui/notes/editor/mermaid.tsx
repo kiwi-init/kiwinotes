@@ -124,6 +124,20 @@ export function picturesOff(svg: string): string {
   return svg.replace(/<(image|img)\b([^>]*?)(\/?)>/gi, (_, tag: string, attrs: string, close: string) => `<${tag}${keeping(attrs, (url) => /^data:/i.test(url))}${close}>`);
 }
 
+/**
+ * A forma de imagem do mermaid (`A@{ img: "https://…" }`) sem a imagem, a não ser `data:`: o mermaid monta o SVG no
+ * documento antes de qualquer filtro, e a imagem tentaria carregar (a CSP barra, mas nem tenta). Fica a forma com o
+ * rótulo.
+ */
+export function shapesWithoutPictures(source: string): string {
+  return source.replace(/@\{[^}]*\}/g, (shape) =>
+    shape.replace(/(^@\{\s*|,\s*)img\s*:\s*("[^"]*"|'[^']*'|[^,}\s]+)\s*(,\s*)?/g, (all, lead: string, value: string, comma?: string) => {
+      if (/^["']?data:/i.test(value)) return all;
+      return lead.startsWith("@") ? lead : comma ? ", " : " ";
+    }),
+  );
+}
+
 function draw(source: string): Promise<Drawn> {
   const run = queue.then(async (): Promise<Drawn> => {
     const m = await load();
@@ -131,6 +145,8 @@ function draw(source: string): Promise<Drawn> {
     m.initialize({
       startOnLoad: false,
       securityLevel: "strict",
+      // Rótulo só texto: rótulo em HTML deixaria passar um <img> de fora, montado antes de qualquer filtro (review do #109).
+      htmlLabels: false,
       theme: "base",
       themeVariables: variables,
       fontFamily: font,
@@ -138,7 +154,7 @@ function draw(source: string): Promise<Drawn> {
       layout: "dagre",
       themeCSS: CSS,
       state: { layout: "dagre" },
-      flowchart: { useMaxWidth: false, curve: "basis", padding: 8, nodeSpacing: 24, rankSpacing: 28, diagramPadding: 4 },
+      flowchart: { htmlLabels: false, useMaxWidth: false, curve: "basis", padding: 8, nodeSpacing: 24, rankSpacing: 28, diagramPadding: 4 },
       sequence: {
         useMaxWidth: false,
         actorMargin: 24,
@@ -161,8 +177,9 @@ function draw(source: string): Promise<Drawn> {
       },
     });
     try {
-      await m.parse(source);
-      const { svg } = await m.render(`kiwi-mermaid-${next++}`, source);
+      const safe = shapesWithoutPictures(source);
+      await m.parse(safe);
+      const { svg } = await m.render(`kiwi-mermaid-${next++}`, safe);
       return { kind: "svg", svg: picturesOff(linksApart(svg)) };
     } catch (e) {
       return { kind: "error", message: errorLine(e) };

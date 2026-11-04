@@ -200,6 +200,11 @@ export interface UiCapabilities {
   "attachments.read": { args: { link: string }; result: AttachmentData };
   /** Renomeia ou move o anexo e troca os links das notas que apontavam para ele. */
   "attachments.rename": { args: { path: string; newPath: string }; result: { path: string; updatedLinks: number } };
+  /**
+   * A imagem de fora (https) de uma nota como `data:`, baixada pelo engine só depois do clique da pessoa no cartão
+   * (T2984, #3039). A janela não carrega nada da internet. E_BAD_URL, E_FETCH, E_NOT_IMAGE, E_TOO_BIG.
+   */
+  "images.remote": { args: { url: string }; result: AttachmentData };
 }
 
 export type UiCapability = keyof UiCapabilities;
@@ -235,6 +240,7 @@ export const UI_CAPABILITIES = [
   "attachments.save",
   "attachments.read",
   "attachments.rename",
+  "images.remote",
   "notes.move",
   "notes.duplicate",
   "notes.restore",

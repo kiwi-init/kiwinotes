@@ -11,15 +11,14 @@
  *   (nada de `eval` nem `new Function`). É o parser de Markdown do Channels (md4c), que vem embutido no build da UI;
  * - `style-src` com `'unsafe-inline'`: o CodeMirror da janela Notas cai numa tag `<style>` quando não há
  *   `adoptedStyleSheets` (#1385). A UI não monta HTML (nada de `innerHTML`), então isso não abre script;
- * - `img-src` com `https:` (T2984): a imagem de fora numa nota (`![](https://…)`) só carrega depois que a pessoa clica
- *   no cartão dela (decisão do jow no #3039). Nada carrega sozinho: a UI só põe um `<img src="https://…">` depois
- *   desse clique. `http:` continua bloqueado;
  * - `connect-src ws://127.0.0.1:*`: só o socket da ponte do RPC, que o preload do Electrobun abre em
  *   `ws://127.0.0.1:<porta>` (a porta muda a cada vez). Com `'none'`, o WebKit lança `SecurityError` no
  *   `new WebSocket`, a inicialização do preload para antes de pôr o transporte do RPC, e nenhuma janela sobe (#1419).
  *   Nada de rede de verdade: nem `https:`, nem outro host;
  * - sem `'unsafe-eval'`: o `evaluateJavascriptWithResponse` do preload (`new Function`) devolve o erro em vez de rodar.
  *   O app usa o `executeJavascript`, que vem do WebView e não passa pela CSP;
+ * - `img-src` sem `https:`: a imagem de fora de uma nota é baixada pelo engine, só depois do clique da pessoa, e chega
+ *   como `data:` (T2984, #3039). Assim nenhum desenho (o Markdown, o mermaid, um CSS) baixa algo sozinho;
  * - `object-src`, `frame-src`, `base-uri` e `form-action` em `'none'`: nada de plugin, iframe, `<base>` nem form que
  *   leve a outro lugar.
  */
@@ -27,7 +26,7 @@ export const VIEWS_CSP = [
   "default-src 'self' views:",
   "script-src 'self' views: 'wasm-unsafe-eval'",
   "style-src 'self' views: 'unsafe-inline'",
-  "img-src 'self' views: data: https:",
+  "img-src 'self' views: data:",
   "font-src 'self' views: data:",
   "connect-src ws://127.0.0.1:*",
   "object-src 'none'",

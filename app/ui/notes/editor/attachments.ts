@@ -17,6 +17,8 @@ export interface AttachmentFile {
 export interface AttachmentSource {
   save(name: string, data: string): Promise<{ embed: string }>;
   read(link: string): Promise<AttachmentFile>;
+  /** A imagem de fora (https) como `data:`, baixada pelo engine depois do clique no cartão (T2984). */
+  remote?(url: string): Promise<AttachmentFile>;
 }
 
 // ---------------------------------------------------------------- funções puras (testadas)

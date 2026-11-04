@@ -9,7 +9,8 @@ import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
-import { type Attachments, attachmentsFolder } from "../notes/attachments.ts";
+import { type AttachmentData, type Attachments, attachmentsFolder } from "../notes/attachments.ts";
+import { RemoteImageError } from "../notes/remote-image.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
@@ -90,6 +91,8 @@ export interface CapabilityDeps {
   ocr?: Pick<OcrIndex, "scan" | "enqueue" | "match">;
   /** Os anexos das notas (T2594): sem eles (um host antigo), as capacidades `attachments.*` dão E_NO_ATTACHMENTS. */
   attachments?: Pick<Attachments, "save" | "read" | "rename">;
+  /** Baixa a imagem de fora depois do clique (T2984). Sem isto, o `images.remote` dá E_NO_REMOTE_IMAGES. */
+  remoteImage?(url: string): Promise<AttachmentData>;
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
    * o `notes.reveal` só confere que o item existe.
@@ -539,6 +542,18 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const a = fields(args, "attachments.rename", ["path", "newPath"]);
       await vault();
       return attachments().rename(a.path, a.newPath);
+    },
+    "images.remote": async (args) => {
+      const a = fields(args, "images.remote", ["url"]);
+      if (!deps.remoteImage) throw new CapabilityError("E_NO_REMOTE_IMAGES", "this host does not load remote images");
+      try {
+        const url = optionalString(a.url, "url", 8192);
+        if (!url) throw bad("images.remote: url is required");
+        return await deps.remoteImage(url);
+      } catch (e) {
+        if (e instanceof RemoteImageError) throw new CapabilityError(e.code, e.message);
+        throw e;
+      }
     },
   };
   // A lista do contrato e os handlers andam juntos.

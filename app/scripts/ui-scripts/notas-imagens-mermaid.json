@@ -17,6 +17,13 @@
       }
     },
     {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Diagramas com imagem",
+        "content": "Dois jeitos de pôr imagem de fora num diagrama (review do #109): nenhum pode baixar nada.\n\n```mermaid\ngraph TD\n  C[\"<img src='https://example.com/v4-htmllabel.png'> rótulo\"] --> D\n```\n\n```mermaid\nflowchart TD\n  E@{ img: \"https://example.com/v5-imgshape.png\", label: \"foto\" } --> F\n```\n"
+      }
+    },
+    {
       "waitFor": ".kn-crumb-bt",
       "name": "a janela Notas abre"
     },
@@ -54,6 +61,11 @@
       "name": "o mermaid vira diagrama"
     },
     {
+      "expectCount": ".kn-note-editor .cm-rendered .kn-mermaid-drawn svg",
+      "count": 1,
+      "name": "o diagrama desenhado"
+    },
+    {
       "screenshot": "imagens.png"
     },
     {
@@ -61,8 +73,8 @@
       "name": "clique no cartão da imagem de fora"
     },
     {
-      "waitFor": ".kn-note-editor .cm-rendered img[src='https://example.com/a.png']",
-      "name": "só agora a imagem de fora entra na nota (jow, #3039)"
+      "waitFor": ".kn-note-editor .cm-rendered img[src^='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQ']",
+      "name": "só agora a imagem de fora entra na nota, como data: que o engine baixou (no headless, uma imagem fixa, sem rede)"
     },
     {
       "click": ".kn-note-editor .cm-attachment img[alt='planta.png'] >> nth=0",
@@ -90,7 +102,7 @@
       "name": "e a imagem do anexo continua à vista embaixo dele"
     },
     {
-      "waitFor": ".kn-note-editor .cm-images-under img[src='https://example.com/a.png']",
+      "waitFor": ".kn-note-editor .cm-images-under img[src^='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQ']",
       "name": "a de fora também (já carregada pelo clique)"
     },
     {
@@ -110,6 +122,40 @@
     },
     {
       "screenshot": "imagens-editando.png"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Diagramas com imagem"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Diagramas com imagem')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered:has-text('nenhum pode baixar nada')",
+      "name": "a nota com os dois diagramas abre"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-rendered .kn-mermaid-drawn svg",
+      "count": 2,
+      "name": "os dois diagramas com imagem de fora desenhados (rótulo com <img> e a forma @{ img })"
+    },
+    {
+      "expectCount": ".kn-note-editor svg image, .kn-note-editor svg img, .kn-note-editor img[src^='http']",
+      "count": 0,
+      "name": "e nenhum tem imagem dentro"
+    },
+    {
+      "wait": 3000,
+      "name": "tempo para alguma imagem de fora tentar sair: o relatório tem que vir com blocked e problems vazios"
+    },
+    {
+      "screenshot": "diagramas-com-imagem.png"
     }
-  ]
+  ],
+  "description": ""
 }
