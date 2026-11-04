@@ -461,7 +461,6 @@ const ORDINAL_WORD = `(?:(?:twenty|thirty)[\\s-](?:first|second|third|fourth|fif
 const MONTH_EN = `(?:${MONTHS_EN.replace(/ /g, "|")})`;
 const DATE_EN = rx(`(?<![\\p{L}])(${MONTH_EN})\\s+(${ORDINAL_WORD})${NUM_END}`);
 const DATE_EN_OF = rx(`(?<![\\p{L}])(?:the\\s+)?(${ORDINAL_WORD})\\s+of\\s+(${MONTH_EN})${NUM_END}`);
-const AM_PM = rx(`(?<![\\p{L}\\p{N}])(\\d{1,2}(?::\\d{2})?)\\s?([ap])\\.?m\\.?(?![\\p{L}\\p{N}])`);
 
 function ordinalValue(s: string): number {
   const w = s.toLowerCase();
@@ -499,7 +498,6 @@ function writtenForms(text: string): string {
     const d = ordinalValue(day);
     return d < 1 || d > 31 ? all : `${monthCase(month)} ${d}`;
   });
-  out = out.replace(AM_PM, (_, t: string, ap: string) => `${t} ${ap.toUpperCase()}M`);
   return out;
 }
 

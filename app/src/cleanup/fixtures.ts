@@ -60,11 +60,11 @@ export const fixtures: Fixture[] = [
   { name: "gagueira com já no meio sai", raw: "a a gente já chegou", expected: "A gente já chegou." },
 
   // ---------------------------------------------------------------- autocorreções
-  { name: "não, quer dizer", raw: "me encontra às três, não, quer dizer, às quatro", expected: "Me encontra às quatro." },
-  { name: "não quer dizer sem vírgula", raw: "a reunião é às três não quer dizer às quatro na sala dois", expected: "A reunião é às quatro na sala dois." },
+  { name: "não, quer dizer", raw: "me encontra às três, não, quer dizer, às quatro", expected: "Me encontra às 4h." },
+  { name: "não quer dizer sem vírgula", raw: "a reunião é às três não quer dizer às quatro na sala dois", expected: "A reunião é às 4h na sala 2." },
   { name: "não quer dizer que é negação", raw: "isso não quer dizer que o projeto atrasou", expected: "Isso não quer dizer que o projeto atrasou." },
   { name: "ou melhor com palavra parecida", raw: "manda pro João, ou melhor, pra Maria", expected: "Manda pra Maria." },
-  { name: "digo troca a última palavra", raw: "são três, digo, quatro arquivos", expected: "São quatro arquivos." },
+  { name: "digo troca a última palavra", raw: "são três, digo, quatro arquivos", expected: "São 4 arquivos." },
   { name: "eu digo sem vírgula fica", raw: "eu digo que vale a pena", expected: "Eu digo que vale a pena." },
   { name: "não espera é verbo", raw: "ele não espera ninguém", expected: "Ele não espera ninguém." },
   { name: "inglês: I mean", raw: "let's meet on monday, I mean, on tuesday", expected: "Let's meet on tuesday." },
@@ -86,7 +86,7 @@ export const fixtures: Fixture[] = [
   { name: "correção sem âncora troca do começo dela até o fim, sem deixar resto", raw: "amanhã cedo eu vou ao escritório de carro, não, quer dizer, de ônibus", expected: "Amanhã cedo eu vou ao escritório de ônibus." },
   { name: "correção com âncora longa", raw: "manda pro João o relatório, ou melhor, pra Maria o relatório", expected: "Manda pra Maria o relatório." },
   { name: "correção sem número nem repetição troca a última palavra", raw: "chama o Pedro, não, quer dizer, Paulo", expected: "Chama o Paulo." },
-  { name: "a correção não atravessa frase", raw: "Fechei o PR. Amanhã às nove, não, quer dizer, às dez eu reviso.", expected: "Fechei o PR. Amanhã às dez eu reviso." },
+  { name: "a correção não atravessa frase", raw: "Fechei o PR. Amanhã às nove, não, quer dizer, às dez eu reviso.", expected: "Fechei o PR. Amanhã às 10h eu reviso." },
   { name: "correção logo depois do ponto do STT", raw: "Vamos marcar sexta. Não, quer dizer, segunda.", expected: "Vamos marcar segunda." },
   { name: "apaga a última frase", raw: "Manda pro time. O prazo é sexta. Apaga a última frase. O prazo é segunda.", expected: "Manda pro time. O prazo é segunda." },
   { name: "scratch that", raw: "Ship it Friday. Scratch that. Ship it Monday.", expected: "Ship it Monday." },
@@ -97,13 +97,13 @@ export const fixtures: Fixture[] = [
   { name: "what I mean é conteúdo", raw: "That's what I mean.", expected: "That's what I mean." },
 
   // Sem vírgula, como o STT entrega (T1229). Só vale quando o que vem depois repete uma palavra da frase.
-  { name: "ou melhor sem vírgula", raw: "a entrega é dia dez ou melhor dia doze", expected: "A entrega é dia doze." },
+  { name: "ou melhor sem vírgula", raw: "a entrega é dia dez ou melhor dia doze", expected: "A entrega é dia 12." },
   { name: "ou melhor sem vírgula, pro/pra", raw: "manda pro joão ou melhor pra maria o relatório", expected: "Manda pra maria o relatório." },
   { name: "ou melhor sem nada que repita fica", raw: "dá pra fazer hoje ou melhor amanhã", expected: "Dá pra fazer hoje ou melhor amanhã." },
   { name: "ou melhor sem vírgula troca no máximo 2 palavras", raw: "esse plano é bom ou melhor plano que já vi", expected: "Esse plano é bom ou melhor plano que já vi." },
   { name: "ou melhor do que é comparação", raw: "o novo ficou igual ou melhor do que o antigo", expected: "O novo ficou igual ou melhor do que o antigo." },
-  { name: "digo sem vírgula", raw: "o custo foi de cem reais digo duzentos reais", expected: "O custo foi de duzentos reais." },
-  { name: "digo sem vírgula com a mesma palavra", raw: "chego às três digo às quatro", expected: "Chego às quatro." },
+  { name: "digo sem vírgula", raw: "o custo foi de cem reais digo duzentos reais", expected: "O custo foi de 200 reais." },
+  { name: "digo sem vírgula com a mesma palavra", raw: "chego às três digo às quatro", expected: "Chego às 4h." },
   { name: "eu digo e aí fica", raw: "e aí eu digo e aí ele riu", expected: "E aí eu digo e aí ele riu." },
   { name: "te digo fica", raw: "como eu te digo sempre ele chega cedo", expected: "Como eu te digo sempre ele chega cedo." },
   { name: "o que eu digo fica", raw: "ele faz o que eu digo e o que eu faço", expected: "Ele faz o que eu digo e o que eu faço." },
@@ -132,7 +132,7 @@ export const fixtures: Fixture[] = [
   { name: "lista em inglês", raw: "first, buy milk, second, call mom", expected: "1. Buy milk\n2. Call mom" },
   { name: "segundo ele não é item", raw: "primeiro eu liguei pro suporte, segundo ele o problema é na rede", expected: "Primeiro eu liguei pro suporte, segundo ele o problema é na rede." },
   { name: "primeiro sozinho não é lista", raw: "primeiro eu vou almoçar", expected: "Primeiro eu vou almoçar." },
-  { name: "primeiro de maio e segunda-feira não são lista", raw: "Primeiro de maio, segunda-feira, é feriado.", expected: "Primeiro de maio, segunda-feira, é feriado." },
+  { name: "primeiro de maio e segunda-feira não são lista", raw: "Primeiro de maio, segunda-feira, é feriado.", expected: "1º de maio, segunda-feira, é feriado." },
   { name: "segunda é dia da semana", raw: "primeiro eu falo com o João, segunda tem reunião", expected: "Primeiro eu falo com o João, segunda tem reunião." },
   { name: "do no começo não é pergunta", raw: "do jeito que ficou tá bom", expected: "Do jeito que ficou tá bom." },
   // Sem vírgula, só com os três primeiros ordinais em sequência (T1229).
@@ -179,9 +179,9 @@ export const fixtures: Fixture[] = [
   { name: "terminal: frase corrige o termo", raw: "o pacs caiu de novo", bundleId: TERMINAL, dictionary: DEV, expected: "O PACS caiu de novo." },
 
   // ---------------------------------------------------------------- tom por app
-  { name: "slack: uma frase sem ponto", raw: "ok chego às quatro", bundleId: SLACK, expected: "Ok chego às quatro" },
+  { name: "slack: uma frase sem ponto", raw: "ok chego às quatro", bundleId: SLACK, expected: "Ok chego às 4h" },
   { name: "slack: pergunta mantém o ?", raw: "você vem amanhã, né?", bundleId: SLACK, expected: "Você vem amanhã?" },
-  { name: "slack: duas frases mantêm os pontos", raw: "chego às quatro. me espera", bundleId: SLACK, expected: "Chego às quatro. Me espera." },
+  { name: "slack: duas frases mantêm os pontos", raw: "chego às quatro. me espera", bundleId: SLACK, expected: "Chego às 4h. Me espera." },
   { name: "mail: pontuação completa", raw: "oi Ana segue o relatório em anexo", bundleId: MAIL, expected: "Oi Ana segue o relatório em anexo." },
   { name: "terminal: comando fica literal", raw: "git status", bundleId: TERMINAL, expected: "git status" },
   { name: "terminal: comando com muleta", raw: "hum git checkout main", bundleId: TERMINAL, expected: "git checkout main" },

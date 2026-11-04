@@ -93,7 +93,7 @@ describe("LLM por cima das regras", () => {
     const { backend, calls } = fakeLlm("x");
     const r = await cleanup({ raw: "ok chego às quatro", bundleId: "com.tinyspeck.slackmacgap" }, { llm: backend, llmMode: "auto" });
     expect(calls).toHaveLength(0);
-    expect(r.text).toBe("Ok chego às quatro");
+    expect(r.text).toBe("Ok chego às 4h");
   });
 
   test("terminal nunca passa pelo LLM, nem no always", async () => {

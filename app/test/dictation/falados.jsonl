@@ -4,7 +4,7 @@
 // importa (`contains`/`excludes`, tom, espaço) e não a vírgula. `known`: como em casos.jsonl.
 {"name": "falado: hum some", "say": "hum, eu acho que dá pra entregar amanhã", "voice": "Luciana", "expect": {"contains": ["acho que dá", "entregar amanhã"], "excludes": ["hum", "Hum"]}}
 {"name": "falado: tipo some", "say": "me manda o relatório amanhã, tipo, de manhã", "voice": "Luciana", "expect": {"contains": "relatório amanhã", "excludes": ["tipo", "Tipo"]}}
-{"name": "falado: autocorreção", "say": "me encontra às três, não, quer dizer, às quatro", "voice": "Luciana", "expect": {"contains": "quatro", "excludes": ["três", "quer dizer"]}}
+{"name": "falado: autocorreção", "say": "me encontra às três, não, quer dizer, às quatro", "voice": "Luciana", "expect": {"contains": "4", "excludes": ["3", "três", "quer dizer"]}}
 {"name": "falado: pergunta", "say": "quando sai o próximo release", "voice": "Luciana", "expect": {"contains": "?"}}
 {"name": "falado en: uh some", "say": "uh, I think we should ship it on Friday", "voice": "Samantha", "expect": {"contains": "ship it on Friday", "excludes": ["uh", "Uh"]}}
 {"name": "falado en: scratch that", "say": "Ship it Friday. Scratch that. Ship it Monday.", "voice": "Samantha", "expect": {"contains": "Monday", "excludes": ["Friday", "Scratch"]}}
@@ -28,3 +28,4 @@
 {"name": "sem termo: she packs her bags", "say": "she packs her bags", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
 {"name": "sem termo: bring the comb", "say": "bring the comb", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
 {"name": "sem termo: a reunião de amanhã", "say": "a reunião de amanhã", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "falado: data por extenso vira algarismo (T1974)", "say": "a entrega é dia cinco de março", "voice": "Luciana", "expect": {"contains": "5 de março", "excludes": ["cinco"]}}

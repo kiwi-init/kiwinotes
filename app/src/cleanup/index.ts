@@ -3,6 +3,7 @@
 
 import { compileDictionary, protect } from "./dictionary.ts";
 import { polish, vocabularyOf } from "./llm.ts";
+import { isNumberWord } from "./numbers.ts";
 import { systemMessage } from "./prompts.ts";
 import { applyRules, capitalize, finishRules, looksLikeCode, tidyPunctuation } from "./rules.ts";
 import { toneFor } from "./tone.ts";
@@ -26,6 +27,7 @@ const EXPECTED_DROPS = new Set(
     "tipo assim sabe então quer dizer digo melhor pera espera mean wait rather scratch apaga última ultima frase anterior like know",
     "nova novo linha quebra parágrafo próximo line paragraph lugar",
     "primeiro segundo terceiro quarto quinto sexto first second third fourth fifth sixth",
+    "cento percent dollars dollar bucks horas hora minutos minuto vírgula ponto point meia",
   ]
     .join(" ")
     .split(" "),
@@ -35,7 +37,8 @@ function contentWords(s: string): string[] {
   return s
     .toLocaleLowerCase("pt-BR")
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((w) => w.length > 3 && !EXPECTED_DROPS.has(w));
+    // Um número por extenso vira algarismo (T1974): "cinquenta" → "50" não é palavra perdida.
+    .filter((w) => w.length > 3 && !EXPECTED_DROPS.has(w) && !isNumberWord(w));
 }
 
 /**
