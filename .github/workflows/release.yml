@@ -66,10 +66,10 @@ jobs:
           path: ~/.hutch
           key: hutch-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/hutch-pin.json') }}
 
-      # O Build compilava o helper e o FluidAudio do zero a cada run (7,8 min de ~10, #1682). Primeiro o helper pronto
-      # (app/.helper, ~22 MB): com os mesmos fontes e o mesmo toolchain, o `swift build` nem roda. O que vai para o
-      # cache nunca está assinado: a assinatura é feita na cópia de dentro do .app. Sem acerto, o cache do .build
-      # (~1 GB) traz as dependências já compiladas e só o nosso código recompila.
+      # O Build compilava o helper e o FluidAudio do zero a cada run (7,8 min de ~10, #1682). O helper pronto
+      # (app/.helper, ~22 MB) vai para o cache: com os mesmos fontes e o mesmo toolchain, o `swift build` nem roda. O que
+      # vai para o cache nunca está assinado: a assinatura é feita na cópia de dentro do .app. O cache do native/.build
+      # (~1 GB) saiu: no runner (Swift 6.3.3), mesmo restaurado, o FluidAudio recompilava inteiro (run 41752909679).
       - name: Swift toolchain id
         id: swift
         # O Xcode e o Swift: um Xcode novo com o mesmo Swift também não reaproveita objeto (#1714).
@@ -82,16 +82,6 @@ jobs:
         with:
           path: app/.helper
           key: helper-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.swift', 'native/Package.resolved', 'native/Sources/**', 'app/scripts/build-helper.ts') }}
-
-      - if: steps.helper.outputs.cache-hit != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            native/.build
-            ~/Library/Caches/org.swift.swiftpm
-          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved') }}-${{ hashFiles('native/Package.swift', 'native/Sources/**') }}
-          restore-keys: |
-            swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved') }}-
 
       - name: Electrobun toolchain
         timeout-minutes: 5
@@ -194,16 +184,6 @@ jobs:
         with:
           path: app/.helper
           key: helper-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.swift', 'native/Package.resolved', 'native/Sources/**', 'app/scripts/build-helper.ts') }}
-
-      - if: steps.helper.outputs.cache-hit != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            native/.build
-            ~/Library/Caches/org.swift.swiftpm
-          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved') }}-${{ hashFiles('native/Package.swift', 'native/Sources/**') }}
-          restore-keys: |
-            swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.id }}-${{ hashFiles('native/Package.resolved') }}-
 
       - name: Build the helper
         if: steps.helper.outputs.cache-hit != 'true'
