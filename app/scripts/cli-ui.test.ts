@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { webkit } from "playwright-core";
 
 import { parseArgs, runScreenshot, runUi } from "./cli-ui.ts";
-import { buildStamp, type UiContext } from "./ui-page.ts";
+import { buildStamp, noteProblem, type UiContext } from "./ui-page.ts";
 import { parseScript, runStep } from "./ui-steps.ts";
 
 describe("flags", () => {
@@ -64,6 +64,16 @@ describe("passos", () => {
 
   test("nenhum passo escreve no clipboard", () => {
     expect(() => parseScript([{ invoke: "clipboard.write", args: { text: "x" } }])).toThrow("clipboard");
+  });
+});
+
+describe("o --note confere o caminho exato, como a janela (#1864)", () => {
+  const list = { ok: true, value: { folders: ["Projetos"], notes: [{ path: "Projetos/Projeto X.md" }, { path: "Ana.md" }] } };
+  test("exato passa; maiúsculas trocadas dizem o caminho certo; o que não existe dá E_NOT_FOUND", () => {
+    expect(noteProblem("Projetos/Projeto X.md", list)).toBeNull();
+    expect(noteProblem("projetos/projeto x.md", list)).toBe("--note projetos/projeto x.md: a nota não abriu (existe como Projetos/Projeto X.md; o caminho é exato)");
+    expect(noteProblem("Nada.md", list)).toBe("--note Nada.md: a nota não abriu (E_NOT_FOUND)");
+    expect(noteProblem("Ana.md", { ok: false, code: "E_IO" })).toContain("notes.list: E_IO");
   });
 });
 
@@ -265,7 +275,7 @@ describe.skipIf(!hasWebkit)("no WebKit headless", () => {
     const { ctx } = fakeCtx(dir);
     capture();
     expect(await runScreenshot(["notes", "--dist", page, "--note", "Sumida.md", "--out", join(dir, "n.png")], ctx)).toBe(1);
-    expect(lastJson().shots[0].problems).toEqual(["--note Sumida.md: a nota não abriu (E_NO_CAPABILITY)"]);
+    expect(lastJson().shots[0].problems).toEqual(["--note Sumida.md: a nota não abriu (E_NOT_FOUND)"]);
   }, 60_000);
 
   test("a página não sai para a rede e a CSP das views vale: tudo vira problema no relatório", async () => {
