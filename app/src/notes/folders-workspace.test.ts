@@ -270,6 +270,16 @@ test("picker cancellation, dangerous paths, symlinks and access errors preserve 
       code: "E_BAD_FOLDER",
     });
   }
+  // Os cofres sincronizados dentro de ~/Library passam; o resto de ~/Library, não.
+  const icloud = path.join(r.home, "Library", "Mobile Documents", "iCloud~md~obsidian", "Documents", "Cofre");
+  const drive = path.join(r.home, "Library", "CloudStorage", "GoogleDrive-ana@exemplo.com", "Meu Drive", "Notas");
+  const prefs = path.join(r.home, "Library", "Preferences");
+  for (const dir of [icloud, drive, prefs]) await mkdir(dir, { recursive: true });
+  expect(await validateNotesRoot(icloud, r.home)).toBe(await realpath(icloud));
+  expect(await validateNotesRoot(drive, r.home)).toBe(await realpath(drive));
+  for (const root of [path.join(r.home, "Library"), prefs]) {
+    await expect(validateNotesRoot(root, r.home)).rejects.toMatchObject({ code: "E_BAD_FOLDER" });
+  }
   const link = path.join(r.root, "home-link");
   await symlink(r.home, link);
   await expect(validateNotesRoot(link, r.home)).rejects.toMatchObject({

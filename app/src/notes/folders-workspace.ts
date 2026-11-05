@@ -87,10 +87,16 @@ export async function validateNotesRoot(
     "/dev",
     path.join(realHome, "Library"),
   ];
+  // Dentro de ~/Library, só as pastas sincronizadas: o iCloud (o cofre do Obsidian com sync do iCloud fica em
+  // `Mobile Documents/iCloud~md~obsidian/Documents/…`) e o Google Drive, o Dropbox e o OneDrive (`CloudStorage/…`).
+  const synced = [
+    path.join(realHome, "Library", "Mobile Documents"),
+    path.join(realHome, "Library", "CloudStorage"),
+  ];
   if (
     root === path.parse(root).root ||
     root === realHome ||
-    forbidden.some((p) => within(root, p))
+    (forbidden.some((p) => within(root, p)) && !synced.some((p) => within(root, p)))
   )
     throw new FolderError(
       "E_BAD_FOLDER",
