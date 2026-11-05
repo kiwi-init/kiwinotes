@@ -332,3 +332,23 @@ test("meeting relabel: pending finals are written first, and bad changes are ref
   await expect(notes.relabel("s10", [{ start: 1, end: 3, channel: "system", from: "Pessoa 1", to: "a\nb" }])).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   await expect(notes.relabel("nope", [])).rejects.toMatchObject({ code: "E_NOT_FOUND" });
 });
+
+test("meeting recovery (R3): finals already saved before a crash count as saved and aren't written twice", async () => {
+  const { notes, vault } = await rig();
+  const n = await notes.start("s11", "Teams", at);
+  const committed: number[] = [];
+  notes.onCommitted((_, batch) => committed.push(...batch.map((s) => s.start)));
+  await notes.segment("s11", segment(1, "Pessoa 1", "Antes da queda."));
+  await notes.segment("s11", segment(4, "Você", "Eu também."));
+  await notes.flush();
+  expect(metadata((await vault.get(n.path)).content).meeting_progress).toEqual({ system: 3, mine: 6 });
+  // The helper restarts and transcribes the spool again, cut differently.
+  await notes.segment("s11", { ...segment(0.8, "Pessoa 1", "Antes da queda."), end: 2.9 });
+  await notes.segment("s11", segment(7, "Pessoa 1", "Depois da queda."));
+  await notes.flush();
+  await new Promise((r) => setTimeout(r, 0));
+  const content = (await vault.get(n.path)).content;
+  expect(content.match(/Antes da queda/g)?.length).toBe(1);
+  expect(content).toContain("Depois da queda.");
+  expect(committed.sort((a, b) => a - b)).toEqual([0.8, 1, 4, 7]);
+});

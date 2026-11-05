@@ -195,8 +195,18 @@ export class MeetingNotes {
       validateSession(session);
       validateSegment(segment);
       if (!segment.final || !segment.text.trim()) return;
-      if (!(await this.find(session)))
-        throw new VaultError("E_NOT_FOUND", "meeting note not found");
+      const note = await this.find(session);
+      if (!note) throw new VaultError("E_NOT_FOUND", "meeting note not found");
+      // R3: after a crash the helper transcribes again what was left in its spool (the system channel stays whole
+      // until the end, #5131). What ends before the saved progress of the channel is already in the note: it counts
+      // as saved, so its audio can go, and the note doesn't get it twice.
+      const progress = dataOf(note.content).meeting_progress;
+      const saved = segment.channel && progress && typeof progress[segment.channel] === "number" ? progress[segment.channel] : undefined;
+      if (saved !== undefined && segment.end <= saved) {
+        const batch = [{ ...segment }];
+        queueMicrotask(() => this.notify(session, batch));
+        return;
+      }
       this.states.get(session)!.pending.push({ ...segment });
       this.timer ??= setTimeout(() => {
         this.timer = undefined;
@@ -286,6 +296,10 @@ export class MeetingNotes {
       }
       content = setMeetingField(content, "participants", participants);
       content = setMeetingField(content, "meeting_speakers", speakers);
+      // R3: how far each channel is saved, for the recovery after a crash (see `segment`).
+      const progress: Record<string, number> = { ...(typeof data.meeting_progress === "object" && data.meeting_progress ? data.meeting_progress : {}) };
+      for (const s of batch) if (s.channel) progress[s.channel] = Math.max(progress[s.channel] ?? 0, s.end);
+      if (Object.keys(progress).length) content = setMeetingField(content, "meeting_progress", progress);
       if (state.end !== undefined) {
         content = setMeetingField(
           content,
@@ -302,10 +316,13 @@ export class MeetingNotes {
     });
     state.pending.splice(0, batch.length);
     state.end = undefined;
-    this.options.onCommitted?.(state.session, batch);
+    this.notify(state.session, batch);
+  }
+  private notify(session: string, batch: MeetingSegment[]): void {
+    this.options.onCommitted?.(session, batch);
     for (const listener of this.committedListeners) {
       try {
-        listener(state.session, batch);
+        listener(session, batch);
       } catch (error) {
         this.options.onError?.(error);
       }

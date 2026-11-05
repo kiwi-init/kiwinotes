@@ -289,6 +289,11 @@ function LiveCard({ live }: { live: Extract<MeetingLive, { recording: true }> })
           <span className="kn-meet-clock">{elapsed}</span>
           {live.minePaused ? <span> · seu mic está pausado</span> : null}
         </div>
+        {live.warning === "system_audio_silent" ? (
+          <div className="kn-meet-live-error">Não estamos ouvindo o áudio da reunião. Confira a Gravação de áudio do sistema em Ajustes do Sistema › Privacidade.</div>
+        ) : live.warning === "transcription_unavailable" ? (
+          <div className="kn-meet-live-error">A transcrição não subiu. O áudio fica guardado e é transcrito depois.</div>
+        ) : null}
         {error ? <div className="kn-meet-live-error">{error}</div> : null}
       </div>
       <Button

@@ -54,6 +54,8 @@ public struct LiveMeeting: Sendable {
     private var timeline = SpeakerTimeline()
     private var echo: EchoFilter
     private var silent = SilentChannelDetector()
+    /// The system finals sent so far: the VBx correction at the end works on them (#5131).
+    public private(set) var systemFinals: [MeetingSegment] = []
 
     /// `output`: `meeting.started.output` (R1). With headphones nothing plays into the mic, and the echo filter is off.
     public init(session: String, output: String, dictionary: TranscriptDictionary = .empty, segmenter: LiveSegmenter.Config = .init()) {
@@ -143,8 +145,10 @@ public struct LiveMeeting: Sendable {
         let index = next[s.channel]!
         next[s.channel] = index + 1
         if provisional[s.channel] != nil { provisional[s.channel] = nil }
-        return .segment(MeetingSegment(session: session, channel: s.channel, index: index, startFrame: s.startFrame, endFrame: s.endFrame,
-                                       speaker: s.speaker, text: s.text, final: true))
+        let segment = MeetingSegment(session: session, channel: s.channel, index: index, startFrame: s.startFrame, endFrame: s.endFrame,
+                                     speaker: s.speaker, text: s.text, final: true)
+        if s.channel == .system { systemFinals.append(segment) }
+        return .segment(segment)
     }
 
     private mutating func provisionalEvent(_ channel: MeetingChannel, _ draft: LiveDraft?) -> [Event] {

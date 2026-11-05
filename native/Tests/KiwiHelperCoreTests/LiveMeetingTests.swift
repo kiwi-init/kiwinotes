@@ -205,3 +205,36 @@ final class LiveMeetingTests: XCTestCase {
         XCTAssertFalse(heard.feed(zeros(60)), "after real audio, quiet is just quiet")
     }
 }
+
+/// R3, option B (#5131): the VBx at the end corrects the live speakers, keeping the names already given.
+final class SpeakerRelabelTests: XCTestCase {
+    func seg(_ i: Int, _ start: Double, _ end: Double, _ speaker: String) -> MeetingSegment {
+        MeetingSegment(session: "s", channel: .system, index: i, startFrame: Int(start * 16_000), endFrame: Int(end * 16_000),
+                       speaker: speaker, text: "x", final: true)
+    }
+
+    func testClustersKeepTheLiveLabelTheyOverlapMost() {
+        // Live: the Sortformer heard two people; the VBx hears three. Cluster 7 is mostly "Pessoa 1", 4 mostly "Pessoa 2".
+        let finals = [seg(0, 0, 10, "Pessoa 1"), seg(1, 10, 20, "Pessoa 2"), seg(2, 20, 30, "Pessoa 2"), seg(3, 30, 40, "Pessoa 1")]
+        let vbx: [SpeakerTimeline.Turn] = [.init(speaker: 7, start: 0, end: 10), .init(speaker: 4, start: 10, end: 20),
+                                            .init(speaker: 9, start: 20, end: 30), .init(speaker: 7, start: 30, end: 40)]
+        let changes = SpeakerRelabel.plan(finals: finals, vbx: vbx)
+        XCTAssertEqual(changes, [.init(id: "system-2", start: 20, end: 30, from: "Pessoa 2", to: "Pessoa 3")])
+    }
+
+    func testAMergedSpeakerSplitsAndOnlyChangedSegmentsMove() {
+        let finals = [seg(0, 0, 5, "Pessoa 1"), seg(1, 5, 10, "Pessoa 1"), seg(2, 10, 15, "Pessoa 2")]
+        let vbx: [SpeakerTimeline.Turn] = [.init(speaker: 0, start: 0, end: 5), .init(speaker: 1, start: 5, end: 15)]
+        let changes = SpeakerRelabel.plan(finals: finals, vbx: vbx)
+        // Cluster 1 overlaps "Pessoa 2" 5 s and "Pessoa 1" 5 s; tie goes to the label first in order, then cluster 0 takes
+        // what's left. Either way each segment ends with one consistent label per cluster.
+        let after = finals.map { s in changes.first { $0.id == s.id }?.to ?? s.speaker }
+        XCTAssertEqual(after[1], after[2], "the same VBx speaker, the same label")
+        XCTAssertNotEqual(after[0], after[1])
+    }
+
+    func testNothingToDoWithoutVbxOrSystemFinals() {
+        XCTAssertEqual(SpeakerRelabel.plan(finals: [seg(0, 0, 5, "Pessoa 1")], vbx: []), [])
+        XCTAssertEqual(SpeakerRelabel.plan(finals: [], vbx: [.init(speaker: 0, start: 0, end: 1)]), [])
+    }
+}
