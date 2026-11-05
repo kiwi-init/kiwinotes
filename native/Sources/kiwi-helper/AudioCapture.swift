@@ -8,6 +8,8 @@ import KiwiHelperCore
 /// already read a device keeps that device's format (T590).
 final class AVMicEngine: MicEngine {
     var onConfigurationChange: (() -> Void)?
+    /// The device's format when the tap went in, read the same way as `hardwareFormat()` so the two compare (#5154).
+    private(set) var preparedFormat: InputFormat?
 
     private let engine = AVAudioEngine()
     private let device: AudioDeviceID?
@@ -39,12 +41,34 @@ final class AVMicEngine: MicEngine {
             guard format.sampleRate > 0, format.channelCount > 0 else { throw AudioCaptureError.noInputDevice }
             input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in onBuffer(buffer) }
             tapInstalled = true
+            preparedFormat = hardwareFormat()
         }
         engine.prepare()
     }
 
     func start() throws {
         try engine.start()
+    }
+
+    /// The input device's nominal rate and input channels, from Core Audio's properties: nothing is opened, so no mic
+    /// indicator and no prompt. The device is the one set on the input unit, or the system's default input.
+    func hardwareFormat() -> InputFormat? {
+        guard let id = device ?? AudioDevices.defaultInput else { return nil }
+        var rateAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain
+        )
+        var rate = Float64(0)
+        var size = UInt32(MemoryLayout<Float64>.size)
+        guard AudioObjectGetPropertyData(id, &rateAddress, 0, nil, &size, &rate) == noErr, rate > 0 else { return nil }
+        var configAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration, mScope: kAudioObjectPropertyScopeInput, mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyDataSize(id, &configAddress, 0, nil, &size) == noErr, size > 0 else { return nil }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { raw.deallocate() }
+        guard AudioObjectGetPropertyData(id, &configAddress, 0, nil, &size, raw) == noErr else { return nil }
+        let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
+        return InputFormat(sampleRate: rate, channels: list.reduce(0) { $0 + Int($1.mNumberChannels) })
     }
 
     func stop() {

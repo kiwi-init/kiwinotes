@@ -308,8 +308,10 @@ export type Event =
    * ou `no_audio` (o mic parou de mandar áudio, mesmo depois de um engine novo; T590). Nesses dois, só quando havia
    * menos de 0,3 s gravado; com mais, vem `record.stopped` com `lost` (T883).
    * Pode vir logo depois do `record.started`, que sai antes de o mic subir.
+   * `mic_busy` (#5154): sem áudio, ou o engine não subiu, enquanto outro app (`busyApp`, ex.: "Chrome" no Meet) usa o
+   * mesmo mic. O helper já tentou um engine novo antes de desistir; a pílula diz "Mic ocupado por <app>".
    */
-  | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState }
+  | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState; busyApp?: string }
   /** Nível RMS de 0 a 1, ~30 Hz enquanto grava. Alimenta a onda do overlay. */
   | { type: "audio.level"; rms: number }
   /**
