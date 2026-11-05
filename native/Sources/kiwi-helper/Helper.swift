@@ -40,6 +40,8 @@ final class Helper {
     private let meetingDirectory: URL?
     private let meetingMic = MeetingMicrophone()
     private var meetings: MeetingCommands?
+    /// R2 (#195): which app takes the mic, the pop-up, the meeting shortcuts and the meeting pill.
+    private var meeting: MeetingController!
 
     init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false, meetingDirectory: URL? = nil) {
         self.connection = connection
@@ -50,6 +52,17 @@ final class Helper {
         self.mic = mic
         audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
         tap = HotkeyTap(key: .fn) { [weak self] event in self?.onHotkey(event) }
+        tap.meetingCombo = KeyCombo(MeetingController.defaultShortcut)
+        tap.pauseMineCombo = KeyCombo(MeetingController.defaultPauseShortcut)
+        meeting = MeetingController(ownPids: [getpid(), getppid()], headless: headless)
+        meeting.startCapture = { [weak self] app in
+            var fields: [String: Any] = [:]
+            if let app { fields["app"] = app.name }
+            self?.meetingCommand("meeting.start", fields)
+        }
+        meeting.stopCapture = { [weak self] in self?.meetingCommand("meeting.stop") }
+        meeting.setMinePaused = { [weak self] paused in self?.meetingCommand(paused ? "meeting.pauseMine" : "meeting.resumeMine") }
+        meeting.emit = { [weak self] type, fields in self?.emit(type, fields) }
         audio.onLevel = { [weak self] level in
             // Level queue: send straight away, the write queue serializes it.
             self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
@@ -57,6 +70,7 @@ final class Helper {
         }
         overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
+        overlay.onVisibleChange = { [weak self] visible in self?.meeting.setDictating(visible) }
         // Touching the input before the mic is granted can bring up the system prompt.
         audio.mayWarmUp = { [headless] in !headless && Permission.microphone.status == "granted" }
         audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "mic: \(message)"]) }
@@ -100,6 +114,7 @@ final class Helper {
         }
         if !headless { tap.start() }
         overlay.enabled = !headless
+        meeting.start()
         lastPermissions = Permission.snapshot()
         lastLlm = Self.key(llm.status)
         emit("ready", [
@@ -187,6 +202,12 @@ final class Helper {
             actions = gesture.otherKeyDown()
         case .notesShortcut:
             emit("hotkey.notes", [:])
+            return
+        case .meetingShortcut:
+            meeting.meetingShortcut()
+            return
+        case .pauseMineShortcut:
+            meeting.pauseMineShortcut()
             return
         }
         actions.forEach(apply)
@@ -348,6 +369,26 @@ final class Helper {
     private func handle(_ message: InboundMessage) {
         let id = message.id
         switch message.type {
+        case _ where ["meeting.pauseMine", "meeting.resumeMine"].contains(message.type) && meeting.isRecording:
+            // Through the detector, so the meeting app's mute and the person's pause don't undo each other (R2).
+            meeting.minePausedByApp(message.type == "meeting.pauseMine")
+            reply(id, ok: true)
+        case "debug.meetingMicUsers" where debugCommands:
+            // The agents' CLI drives the meeting detection with made-up mic users; nothing reads the real audio system.
+            guard let list = message.fields["users"] as? [[String: Any]] else { return reply(id, ok: false, error: "invalid_value") }
+            let users = list.compactMap { u -> MicUser? in
+                guard let pid = (u["pid"] as? NSNumber)?.int32Value, let bundleId = u["bundleId"] as? String else { return nil }
+                return MicUser(pid: pid, bundleId: bundleId)
+            }
+            meeting.micUsers(Set(users))
+            reply(id, ok: true)
+        case "meeting.answer":
+            // The meeting panel's buttons, from the app (the hub's card, R6, or a test): `record`, `notNow`, `stop`, `keepGoing`.
+            guard let name = message.string("answer"), let answer = MeetingDetector.Answer(rawValue: name) else {
+                return reply(id, ok: false, error: "invalid_value")
+            }
+            meeting.answer(answer)
+            reply(id, ok: true)
         case _ where message.type.hasPrefix("meeting."):
             // Before even constructing a source; agents can never trigger a capture or TCC prompt headless.
             if headless && ["meeting.start", "meeting.resumeMine"].contains(message.type) {
@@ -451,18 +492,41 @@ final class Helper {
                 self.emit("meeting.error", ["error": code])
             }
         }
-        system.onError = fail
-        capture.onError = fail
-        meetingMic.audio.onLost = { code, _ in fail(code) }
+        let failAndStop: (String) -> Void = { [weak self] code in
+            fail(code)
+            DispatchQueue.main.async { self?.meeting.captureStopped() }
+        }
+        system.onError = failAndStop
+        capture.onError = failAndStop
+        meetingMic.audio.onLost = { code, _ in failAndStop(code) }
         meetingMic.audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "meeting mic: \(message)"]) }
         meetingMic.selection.choice = mic.choice
         let commands = MeetingCommands(capture: capture, headless: headless,
             microphonePermission: { Permission.microphone.status },
             metadata: { [weak self] in
                 return ["output": MeetingOutput.route(), "microphone": self?.meetingMic.selection.last?.fields ?? [:]]
-            }, emit: { [weak self] type, fields in self?.emit(type, fields) })
+            }, emit: { [weak self] type, fields in
+                self?.emit(type, fields)
+                // The detector counts a recording only once R1 says it started, whoever asked for it.
+                DispatchQueue.main.async {
+                    if type == "meeting.started" { self?.meeting.captureStarted(appName: fields["app"] as? String) }
+                    if type == "meeting.stopped" { self?.meeting.captureStopped() }
+                }
+            })
         meetings = commands
         return commands
+    }
+
+    /// A meeting command from the detector (R2): the same path as the app's, with no reply to send.
+    private func meetingCommand(_ type: String, _ fields: [String: Any] = [:]) {
+        guard !headless || !["meeting.start", "meeting.resumeMine"].contains(type) else {
+            return emit("meeting.error", ["error": "headless_no_mic"])
+        }
+        var object = fields
+        object["type"] = type
+        guard let data = try? JSONSerialization.data(withJSONObject: object),
+              let message = try? InboundMessage.decode(data) else { return }
+        do { _ = try meetingCommands().handle(message) } catch { emit("meeting.error", ["error": "meeting_unavailable"]) }
     }
 
     /// `debug.transcribe {path}` (KIWI_DEBUG=1): a WAV takes the path of a recording that just ended, so the app can
@@ -498,7 +562,9 @@ final class Helper {
 
     /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, notesShortcut?, microphone?}` (ADR 0001; `microphone`:
     /// T3229, "auto" | "builtin" | "system" | "uid:<UID>"). Hold and double tap share
-    /// the one key. `notesShortcut`: "control+option+n", or null to turn it off (T1499).
+    /// the one key. `notesShortcut`: "control+option+n", or null to turn it off (T1499). R2 (#195):
+    /// `meetingShortcut`/`meetingPauseShortcut` (the same format, or null; default ⌃⌥R and ⌃⌥M), `meetingSuggest`
+    /// (the pop-up, default true) and `meetingApps` (`[{bundleId, name}]`, replaces the default list).
     private func configure(_ message: InboundMessage) -> String? {
         // Check everything before changing anything: a bad value leaves the whole config as it was.
         let hold = message.double("holdThresholdMs"), doubleTap = message.double("doubleTapMs")
@@ -532,6 +598,18 @@ final class Helper {
                 notesCombo = .some(combo)
             }
         }
+        var meetingCombos: [WritableKeyPath<HotkeyTap, KeyCombo?>: KeyCombo?] = [:]
+        for (field, path) in [("meetingShortcut", \HotkeyTap.meetingCombo), ("meetingPauseShortcut", \HotkeyTap.pauseMineCombo)] {
+            guard let value = message.fields[field] else { continue }
+            if value is NSNull {
+                meetingCombos[path] = .some(nil)
+            } else {
+                guard let spec = value as? String, let combo = KeyCombo(spec) else { return "invalid_value" }
+                meetingCombos[path] = .some(combo)
+            }
+        }
+        if let value = message.fields["meetingSuggest"], !(value is Bool) { return "invalid_value" }
+        if let value = message.fields["meetingApps"], MeetingApps.parse(value) == nil { return "invalid_value" }
         var requested: HotkeyKey?
         if let name = message.string("hotkey") {
             guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
@@ -545,6 +623,8 @@ final class Helper {
             if !headless { tap.start() }
         }
         if let combo = notesCombo { tap.notesCombo = combo }
+        for (path, combo) in meetingCombos { tap[keyPath: path] = combo }
+        _ = meeting.configure(message.fields)
         if microphone != nil { appKnowsMicrophone = true }
         if let choice = microphone, choice != mic.choice {
             mic.choice = choice

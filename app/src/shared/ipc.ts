@@ -89,12 +89,24 @@ export type Command =
        * no overlay. Vai num `config.set` só dele: um helper antigo que recusa o campo não derruba os outros.
        */
       microphone?: MicrophoneChoice;
+      /**
+       * R2 (#195): o atalho de gravar e parar a reunião e o de "pausar meu mic", no formato do `notesShortcut`, ou null
+       * para desligar. Sem eles, o helper usa ⌃⌥R e ⌃⌥M.
+       */
+      meetingShortcut?: string | null;
+      meetingPauseShortcut?: string | null;
+      /** O pop-up "Gravar esta reunião?" (padrão: ligado). Desligado, o atalho ainda grava. */
+      meetingSuggest?: boolean;
+      /** Os apps que contam como reunião (substitui a lista padrão: Teams, Zoom, Webex, Slack, FaceTime e os navegadores). */
+      meetingApps?: MeetingApp[];
     }
   | { type: "meeting.start"; app?: string; chunkDuration?: number }
   | { type: "meeting.stop" }
   | { type: "meeting.pauseMine" }
   | { type: "meeting.resumeMine" }
   | { type: "meeting.pending" }
+  /** Um botão do painel de reunião, vindo do app (o card do hub no R6, ou um teste): o mesmo que o clique no pop-up. */
+  | { type: "meeting.answer"; answer: MeetingAnswer }
   /** Delete whole chunks ending before the final watermark minus the ASR look-behind (2 s by default). */
   | { type: "meeting.ack"; session: string; channel: "mine" | "system"; finalThroughFrame: number; contextFrames?: number }
   | { type: "record.start" }
@@ -136,7 +148,9 @@ export type Command =
    * `transcript.final`), para testar o app sem o mic. `invalid_value` se o arquivo não abre; `already_recording`.
    */
   /** `app` e `target` (T1740): a CLI dos agentes diz qual app está na frente e se é a nota rápida. */
-  | { type: "debug.transcribe"; path: string; app?: AppRef; target?: "note" };
+  | { type: "debug.transcribe"; path: string; app?: AppRef; target?: "note" }
+  /** KIWI_DEBUG=1: processos inventados usando o mic, para testar o perceber a reunião sem olhar o áudio de verdade (R2). */
+  | { type: "debug.meetingMicUsers"; users: { pid: number; bundleId: string }[] };
 
 /**
  * O campo descrito em vez de lido (T1740): com `insert.text {dryRun, simulate}`, o helper responde o plano e o espaço
@@ -163,6 +177,7 @@ export interface CommandResults {
   "meeting.resumeMine": Record<string, never>;
   "meeting.pending": { chunks: MeetingChunk[] };
   "meeting.ack": Record<string, never>;
+  "meeting.answer": Record<string, never>;
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
@@ -195,6 +210,7 @@ export interface CommandResults {
   "llm.prewarm": Record<string, never>;
   "audio.inputs": AudioInputs;
   "debug.transcribe": Record<string, never>;
+  "debug.meetingMicUsers": Record<string, never>;
 }
 
 // ---------------------------------------------------------- sidecar → Bun
@@ -210,7 +226,22 @@ export interface MeetingChunk {
   path: string;
 }
 
+/** Um app que conta como reunião (R2): o processo conta quando o bundle id é este ou começa com ele e um ponto. */
+export interface MeetingApp {
+  bundleId: string;
+  name: string;
+}
+
+/** Os botões do painel de reunião: "Gravar" e "Agora não" no pop-up; "Parar" e "Continuar" no "A reunião acabou?". */
+export type MeetingAnswer = "record" | "notNow" | "stop" | "keepGoing";
+
 export type Event =
+  /** Um app de reunião pegou o mic, e o helper mostrou "Gravar esta reunião?" (um por reunião; R2). */
+  | { type: "meeting.suggested"; app: MeetingApp }
+  /** O app gravado ficou ~2 min sem o mic, e o helper perguntou "A reunião acabou?". Nunca para sozinho (#4846). */
+  | { type: "meeting.endSuggested"; app: MeetingApp }
+  /** A pessoa respondeu no painel (ou o app mandou `meeting.answer`). */
+  | { type: "meeting.answered"; answer: MeetingAnswer }
   | { type: "meeting.started"; session: string; app?: string; sampleRate: 16000; output: "headphones" | "speaker" | "unknown"; microphone?: Record<string, unknown> }
   | { type: "meeting.stopped"; session: string; pendingChunks: number }
   | { type: "meeting.level"; channel: "mine" | "system"; rms: number }
@@ -327,6 +358,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "meeting.resumeMine",
   "meeting.pending",
   "meeting.ack",
+  "meeting.answer",
   "record.start",
   "record.stop",
   "overlay.state",
@@ -337,9 +369,13 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "llm.prewarm",
   "audio.inputs",
   "debug.transcribe",
+  "debug.meetingMicUsers",
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
+  "meeting.suggested",
+  "meeting.endSuggested",
+  "meeting.answered",
   "meeting.started",
   "meeting.stopped",
   "meeting.level",

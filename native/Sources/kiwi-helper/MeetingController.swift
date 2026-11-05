@@ -6,6 +6,11 @@ import KiwiHelperCore
 /// It never starts or stops the capture by itself: `start` and `stop` come out of a click or a shortcut.
 /// Everything on the main thread.
 final class MeetingController {
+    /// Until the app sends its own (`config.set meetingShortcut`, the settings of R6): record or stop, and
+    /// "pausar meu mic". Neither does anything in the usual Mac apps.
+    static let defaultShortcut = "control+option+r"
+    static let defaultPauseShortcut = "control+option+m"
+
     /// R1's capture: `meeting.start {app}`, `meeting.stop`, `meeting.pauseMine`/`resumeMine`, called in the helper.
     var startCapture: ((MeetingApp?) -> Void)?
     var stopCapture: (() -> Void)?
@@ -18,6 +23,8 @@ final class MeetingController {
     let panel = MeetingPanel()
     private let headless: Bool
     private var timer: Timer?
+    /// The app of the last `start` this controller asked for, until `meeting.started` comes.
+    private var requested: MeetingApp??
 
     init(ownPids: Set<Int32>, headless: Bool) {
         detector = MeetingDetector(ownPids: ownPids)
@@ -49,15 +56,21 @@ final class MeetingController {
     func pauseMineShortcut() { run(detector.pauseMineShortcut(at: Self.now)) }
 
     func answer(_ answer: MeetingDetector.Answer) {
-        emit?("meeting.answer", ["answer": answer.rawValue])
+        emit?("meeting.answered", ["answer": answer.rawValue])
         run(detector.answer(answer, at: Self.now))
     }
 
     /// The process list, from the listener or (headless, debug) from the app.
     func micUsers(_ users: Set<MicUser>) { run(detector.micUsers(users, at: Self.now)) }
 
-    /// R1's capture started or stopped, whoever asked (the panel, a shortcut, the app's `meeting.start`).
-    func captureStarted(app: MeetingApp?) { run(detector.recordingStarted(app: app, at: Self.now)) }
+    /// R1's capture started or stopped, whoever asked (the panel, a shortcut, the app's `meeting.start`). `appName`
+    /// is `meeting.started.app`: the name this controller asked for, or what the app sent.
+    func captureStarted(appName: String?) {
+        let app = requested.flatMap { $0?.name == appName ? $0 : nil }
+            ?? appName.flatMap { name in detector.apps.apps.first { $0.name == name } }
+        requested = nil
+        run(detector.recordingStarted(app: app, at: Self.now))
+    }
     func captureStopped() { run(detector.recordingStopped(at: Self.now)) }
 
     /// The app's `meeting.pauseMine`/`resumeMine`: kept in the detector, so the mute doesn't undo the person's pause.
@@ -93,7 +106,9 @@ final class MeetingController {
             case let .suggest(app): emit?("meeting.suggested", ["app": app.fields])
             case let .askEnded(app): emit?("meeting.endSuggested", ["app": app.fields])
             case .hideSuggestion, .hideAskEnded: break
-            case let .start(app): startCapture?(app)
+            case let .start(app):
+                requested = .some(app)
+                startCapture?(app)
             case .stop: stopCapture?()
             case .pauseMine: setMinePaused?(true)
             case .resumeMine: setMinePaused?(false)

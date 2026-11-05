@@ -12,11 +12,23 @@ final class HotkeyTap {
         case otherKey
         /// The combination that opens the Notes window was pressed (`hotkey.notes`, T1499).
         case notesShortcut
+        /// The meeting shortcut: record or stop the meeting (R2, #195).
+        case meetingShortcut
+        /// "Pausar meu mic" during a meeting (R2).
+        case pauseMineShortcut
     }
 
     var key: HotkeyKey
     /// The combination that opens the Notes window; nil: off (until the app sends it in `config.set`).
     var notesCombo: KeyCombo?
+    /// The meeting shortcut and "pausar meu mic" (R2); nil: off.
+    var meetingCombo: KeyCombo?
+    var pauseMineCombo: KeyCombo?
+    /// Every combination with the event it sends, for the key-down check and the chord guard (T1653).
+    private var combos: [(KeyCombo, Event)] {
+        [(notesCombo, Event.notesShortcut), (meetingCombo, .meetingShortcut), (pauseMineCombo, .pauseMineShortcut)]
+            .compactMap { combo, event in combo.map { ($0, event) } }
+    }
     private let onEvent: (Event) -> Void
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -85,7 +97,7 @@ final class HotkeyTap {
                     if !down { chordPress = false }
                     return
                 }
-                if down, !keyIsDown, notesCombo?.startsWith(key, flags: event.flags.rawValue) == true {
+                if down, !keyIsDown, combos.contains(where: { $0.0.startsWith(key, flags: event.flags.rawValue) }) {
                     chordPress = true
                     return
                 }
@@ -108,10 +120,11 @@ final class HotkeyTap {
             if keyIsDown { onEvent(.otherKey) }
             let code = event.getIntegerValueField(.keyboardEventKeycode)
             let repeated = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-            if let combo = notesCombo, combo.matches(keyCode: code, flags: event.flags.rawValue, autorepeat: repeated, typed: {
+            for (combo, shortcut) in combos where combo.matches(keyCode: code, flags: event.flags.rawValue, autorepeat: repeated, typed: {
                 KeyboardLayout.character(forKeyCode: code, withCommand: combo.usesCommandLayer)
             }) {
-                onEvent(.notesShortcut)
+                onEvent(shortcut)
+                break
             }
         default:
             break
