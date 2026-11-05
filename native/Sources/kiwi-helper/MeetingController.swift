@@ -110,8 +110,12 @@ final class MeetingController {
                 requested = .some(app)
                 startCapture?(app)
             case .stop: stopCapture?()
-            case .pauseMine: setMinePaused?(true)
-            case .resumeMine: setMinePaused?(false)
+            case .pauseMine:
+                setMinePaused?(true)
+                emit?("meeting.minePaused", ["paused": true])
+            case .resumeMine:
+                setMinePaused?(false)
+                emit?("meeting.minePaused", ["paused": false])
             }
         }
         panel.show(detector.panel)

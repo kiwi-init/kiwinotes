@@ -18,6 +18,8 @@ import { builtInFrom, channelUrlOrOff, createUiEngine, devServerAllowed, directI
 import { UI_TRUSTED_KEYS } from "./ui-keys.ts";
 import { windowSecurity } from "./window-security.ts";
 import { fetchRemoteImage } from "../notes/remote-image.ts";
+import { NOT_RECORDING } from "../shared/meetings.ts";
+import { MeetingHostError } from "./meetings.ts";
 
 export type WindowName = UiWindow;
 
@@ -101,6 +103,21 @@ const capabilities = uiCapabilities({
   remoteImage: (url) => fetchRemoteImage(url),
   // O seletor de microfone dos Ajustes (T3230): o helper lista as entradas, sem abrir nenhuma.
   audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
+  // A gravação de reunião ao vivo (R6): a do helper do Session de agora.
+  meetings: {
+    live: () => session.get()?.meetings.live() ?? NOT_RECORDING,
+    onChange: (fn) => session.get()?.meetings.onChange(fn) ?? (() => {}),
+    stop: async () => {
+      const s = session.get();
+      if (!s) throw new MeetingHostError("no_helper");
+      await s.meetings.stop();
+    },
+    setMinePaused: async (paused) => {
+      const s = session.get();
+      if (!s) throw new MeetingHostError("no_helper");
+      await s.meetings.setMinePaused(paused);
+    },
+  },
   ocr: stores.ocr,
   exporter: stores.exporter,
   // Exportar (T2684): a pasta pelo seletor do macOS, só no clique da pessoa. Com KIWI_DEBUG=1 (os agentes), nenhum

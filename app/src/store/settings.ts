@@ -9,6 +9,7 @@ import { type SavedSearch, sanitizeSavedSearches } from "../shared/query.ts";
 import { DEFAULT_TEMPLATES_FOLDER } from "../shared/templates.ts";
 import { DEFAULT_MICROPHONE, isMicrophoneChoice, type MicrophoneChoice } from "../shared/microphone.ts";
 import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
+import { DEFAULT_MEETING_SETTINGS, type MeetingSettings, sanitizeMeetingSettings } from "../shared/meetings.ts";
 import { folderPath } from "../notes/paths.ts";
 import { readJson, writeJson } from "./files.ts";
 
@@ -36,12 +37,14 @@ export interface AppSettings {
   microphone: MicrophoneChoice;
   /** A árvore das Notas mostra a extensão (`.md`, `.pdf`…) depois do nome (T3370). Desligado por padrão. */
   showExtensions: boolean;
+  /** Os ajustes de reunião (R6, T4947): os atalhos, o pop-up e os apps que contam. O helper recebe no `config.set`. */
+  meetings: MeetingSettings;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -96,6 +99,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     ocr: typeof o.ocr === "boolean" ? o.ocr : true,
     microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
     showExtensions: o.showExtensions === true,
+    meetings: sanitizeMeetingSettings(o.meetings),
   };
 }
 
@@ -131,7 +135,11 @@ export class SettingsStore {
       const current = await this.load();
       const patch = change(current);
       if (!patch) return current;
-      const next: AppSettings = { ...current, ...patch, appearance: { ...current.appearance, ...patch.appearance } };
+      const next: AppSettings = {
+        ...current,
+        ...patch,
+        appearance: { ...current.appearance, ...patch.appearance },
+      };
       await writeJson(this.file, { version: 1, ...next } satisfies SettingsFile);
       return next;
     });

@@ -143,7 +143,12 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
 
   // ---------------------------------------------------------------- o motor
   const session = o.helper ? new (await import("../bun/session.ts")).Session(path.join(data, "views")) : null;
+  // A gravação de reunião ao vivo (R6): a do helper, ou uma de mentira com `KIWI_FAKE_MEETING=<app>` para os prints e os
+  // roteiros da aba Reuniões (o headless nunca grava de verdade: o helper recusa `meeting.start` sem mic).
+  const { FakeMeetingHost } = await import("../bun/meetings.ts");
+  const meetings = process.env.KIWI_FAKE_MEETING ? new FakeMeetingHost(process.env.KIWI_FAKE_MEETING) : session?.meetings;
   const capabilities = uiCapabilities({
+    meetings,
     dictionary: stores.dictionary,
     snippets: stores.snippets,
     history: stores.history,
@@ -181,6 +186,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.notes.onChanged((paths) => event("notes.changed", { paths })),
     stores.notes.onOtherFiles((paths) => event("files.changed", { paths })),
     stores.history.onAdded((entry) => event("history.added", entry)),
+    meetings?.onChange((live) => event("meetings.live", live)) ?? (() => {}),
   ];
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));

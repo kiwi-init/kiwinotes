@@ -172,6 +172,8 @@ session.set(dictation);
 dictation.sidecar.on("audio.inputs.changed", () => {
   for (const w of ["hub", "settings"] as const) sendToWindow(w, "audio.inputs.changed", {});
 });
+// A gravação de reunião começou, parou ou pausou o canal "você" (R6): o card ao vivo da aba Reuniões.
+dictation.meetings.onChange((live) => sendToWindow("hub", "meetings.live", live));
 // O texto dos anexos (T2709): o mesmo helper, no modo `--ocr` (lê e sai), em prioridade de fundo.
 if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.ocr.setRunner(helperRunner(helperPath(PATHS.VIEWS_FOLDER)));
 // O PDF do exportar (T2684): o mesmo helper, no modo `--export-pdf` (imprime fora da tela e sai).

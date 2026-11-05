@@ -243,7 +243,10 @@ export type Event =
   /** A pessoa respondeu no painel (ou o app mandou `meeting.answer`). */
   | { type: "meeting.answered"; answer: MeetingAnswer }
   | { type: "meeting.started"; session: string; app?: string; sampleRate: 16000; output: "headphones" | "speaker" | "unknown"; microphone?: Record<string, unknown> }
-  | { type: "meeting.stopped"; session: string; pendingChunks: number }
+  /** `reason: "error"` (R6): a captura caiu (o mic sumiu, o tap falhou), e o `meeting.error` veio antes. */
+  | { type: "meeting.stopped"; session: string; pendingChunks: number; reason?: "error"; error?: string }
+  /** O canal "você" pausou ou voltou: o mute do app de reunião, o "pausar meu mic" ou o app (R2, para o card do R6). */
+  | { type: "meeting.minePaused"; paused: boolean }
   | { type: "meeting.level"; channel: "mine" | "system"; rms: number }
   | { type: "meeting.error"; error: string; microphone?: PermissionState }
   | ({ type: "meeting.chunk"; recovered?: boolean } & MeetingChunk)
@@ -376,6 +379,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "meeting.suggested",
   "meeting.endSuggested",
   "meeting.answered",
+  "meeting.minePaused",
   "meeting.started",
   "meeting.stopped",
   "meeting.level",

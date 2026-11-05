@@ -6,6 +6,7 @@ import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
 
 import {
   type AppEngine,
@@ -71,7 +72,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: { ...DEFAULT_MEETING_SETTINGS } };
   let t = 0;
   return {
     calls,
