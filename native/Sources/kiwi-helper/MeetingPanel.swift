@@ -72,7 +72,8 @@ final class MeetingPanel {
         orderOutWork?.cancel()
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        if let screen = Self.targetScreen() {
+        // Placed when it shows up; while it's on screen it stays put (no jumping to the mouse's screen mid-meeting).
+        if !state.visible, let screen = Self.targetScreen() {
             let size = MeetingView.panelSize
             let frame = OverlayLayout.frame(screen: screen.frame, visible: screen.visibleFrame, size: size, pillBottom: MeetingView.bottom)
             panel.setFrame(frame, display: false)
