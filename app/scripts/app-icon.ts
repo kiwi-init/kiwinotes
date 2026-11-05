@@ -1,5 +1,5 @@
 // T4411, spec #4406: o Kiwi-cat v2 aprovado (#4415), sem redesenhar, na grade do Channels.
-// A fonte raster é embutida no SVG e renderizada diretamente em cada tamanho final pelo WebKit headless.
+// O SVG referencia a v2 no repo; só a renderização headless embute os pixels em memória.
 // O iconset é commitado; o build só copia (electrobun.config.ts, mac.icons).
 //   bun scripts/app-icon.ts
 //   bun scripts/app-icon.ts --compare /Applications/Channels.app/Contents/Resources/AppIcon.icns /tmp/icones.png
@@ -20,15 +20,17 @@ export const GRID = { canvas: 1024, inset: 100, base: 824, radius: 185 } as cons
 export const ICONSET_SIZES = [16, 32, 128, 256, 512] as const;
 
 /** Recorte quadrado central da v2: mantém a proporção, a pose e a luz sobre a base preta. */
-export function iconSvg(source: Uint8Array): string {
-  const png = Buffer.from(source).toString("base64");
+export function iconSvg(source?: Uint8Array): string {
+  const href = source
+    ? `data:image/png;base64,${Buffer.from(source).toString("base64")}`
+    : "../../docs/brand/kiwi-cat/gerada/kiwi-cat-candidata-v2.png";
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${GRID.canvas} ${GRID.canvas}" width="${GRID.canvas}" height="${GRID.canvas}">`,
     `<!-- Gerado por app/scripts/app-icon.ts (T4411) da kiwi-cat-candidata-v2.png aprovada. Não edite à mão. -->`,
     `<defs><clipPath id="base"><rect x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" rx="${GRID.radius}"/></clipPath></defs>`,
     `<g clip-path="url(#base)">`,
     `<rect x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" fill="#000"/>`,
-    `<image id="kiwi-cat" x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" preserveAspectRatio="xMidYMid slice" href="data:image/png;base64,${png}"/>`,
+    `<image id="kiwi-cat" x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" preserveAspectRatio="xMidYMid slice" href="${href}"/>`,
     `</g></svg>`,
     "",
   ].join("\n");
@@ -72,7 +74,7 @@ async function render(page: Page, svg: string, px: number): Promise<Buffer> {
 
 async function generate(): Promise<void> {
   const svg = iconSvg(readFileSync(SOURCE));
-  writeFileSync(OUT_SVG, svg);
+  writeFileSync(OUT_SVG, iconSvg());
   rmSync(OUT_ICONSET, { recursive: true, force: true });
   mkdirSync(OUT_ICONSET, { recursive: true });
   await withPage(async (page) => {
@@ -90,7 +92,7 @@ async function generate(): Promise<void> {
 
 /** A prancha a 1:1 em 16, 32, 128 e 512 px. Aceita o .icns instalado do Channels, sem copiá-lo ao repo. */
 async function compare(channelsIcon: string, out: string): Promise<void> {
-  const ours = readFileSync(OUT_SVG, "utf8");
+  const ours = iconSvg(readFileSync(SOURCE));
   const tmp = mkdtempSync(path.join(tmpdir(), "kn-channels-icon-"));
   let theirs: string;
   try {

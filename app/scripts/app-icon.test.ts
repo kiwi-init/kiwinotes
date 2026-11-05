@@ -24,6 +24,8 @@ test("o iconset tem 16, 32, 128, 256 e 512 em 1x e 2x (até 1024), e o commitado
   expect(files.map((f) => f.px).sort((a, b) => a - b)).toEqual([16, 32, 32, 64, 128, 256, 256, 512, 512, 1024]);
   for (const f of files) expect(existsSync(path.join(app, "build-config", "icon.iconset", f.name))).toBe(true);
   // A fonte v2 é exatamente a aprovada; ninguém trocou a imagem nem esqueceu de gerar.
-  const source = readFileSync(path.join(app, "..", "docs", "brand", "kiwi-cat", "gerada", "kiwi-cat-candidata-v2.png"));
-  expect(readFileSync(path.join(app, "build-config", "icon.svg"), "utf8")).toBe(iconSvg(source));
+  const svg = readFileSync(path.join(app, "build-config", "icon.svg"), "utf8");
+  expect(svg).toBe(iconSvg());
+  expect(svg).toContain('href="../../docs/brand/kiwi-cat/gerada/kiwi-cat-candidata-v2.png"');
+  expect(svg).not.toContain("base64");
 });
