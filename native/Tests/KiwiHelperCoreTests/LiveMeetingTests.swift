@@ -33,6 +33,15 @@ final class LiveMeetingTests: XCTestCase {
         XCTAssertEqual(LiveWords.join(t[...], stable: 3).map(\.firm), [true, false])
     }
 
+    /// The decoder's last "." of a sentence can last into the silence after it: it doesn't stretch the word.
+    func testPunctuationDoesNotStretchTheWord() {
+        let t = [LiveToken("▁pendente", start: 16.0, end: 16.4), LiveToken(".", start: 16.4, end: 20.1), LiveToken("▁longuíssima", start: 21, end: 25)]
+        let words = LiveWords.join(t[...], stable: 3)
+        XCTAssertEqual(words.map(\.text), ["pendente.", "longuíssima"])
+        XCTAssertEqual(words[0].end, 16.6, accuracy: 0.001)
+        XCTAssertEqual(words[1].end, 23, accuracy: 0.001, "no word lasts more than 2 s")
+    }
+
     /// Only firm words become final; a pause cuts; the rest stays provisional and can still change.
     func testFinalsAtAPauseOverFirmWordsOnly() {
         var s = LiveSegmenter()
@@ -170,6 +179,18 @@ final class LiveMeetingTests: XCTestCase {
         XCTAssertTrue(events.contains(.drained(.system, 320_000)))
     }
 
+    /// From the R3 measure: a reply that repeats the question's word, or shares only "e, a, o" with what was said near
+    /// it, is the person speaking, not echo.
+    func testRepliesAreNotEcho() {
+        var m = LiveMeeting(session: session, output: "speaker")
+        _ = m.fed(.mine, clockFrame: 0, samples: noise(30))
+        _ = m.fed(.system, clockFrame: 0, samples: noise(30))
+        var events = m.asr(.system, retained: 0, added: tokens("ou trocaram o IP?", from: 0) + tokens("na produção o volume é menor", from: 10), stable: 10)
+        events += m.asr(.mine, retained: 0, added: tokens("Trocaram.", from: 2.3) + tokens("e a produção corre o mesmo risco?", from: 7), stable: 8)
+        events += m.finish(.system) + m.finish(.mine)
+        XCTAssertEqual(segments(events).filter { $0.channel == .mine }.map(\.text), ["Trocaram.", "e a produção corre o mesmo risco?"])
+    }
+
     func testNoEchoFilterWithHeadphones() {
         var m = LiveMeeting(session: session, output: "headphones")
         _ = m.fed(.mine, clockFrame: 0, samples: noise(5))
@@ -203,38 +224,5 @@ final class LiveMeetingTests: XCTestCase {
         var heard = SilentChannelDetector()
         XCTAssertFalse(heard.feed(noise(1)))
         XCTAssertFalse(heard.feed(zeros(60)), "after real audio, quiet is just quiet")
-    }
-}
-
-/// R3, option B (#5131): the VBx at the end corrects the live speakers, keeping the names already given.
-final class SpeakerRelabelTests: XCTestCase {
-    func seg(_ i: Int, _ start: Double, _ end: Double, _ speaker: String) -> MeetingSegment {
-        MeetingSegment(session: "s", channel: .system, index: i, startFrame: Int(start * 16_000), endFrame: Int(end * 16_000),
-                       speaker: speaker, text: "x", final: true)
-    }
-
-    func testClustersKeepTheLiveLabelTheyOverlapMost() {
-        // Live: the Sortformer heard two people; the VBx hears three. Cluster 7 is mostly "Pessoa 1", 4 mostly "Pessoa 2".
-        let finals = [seg(0, 0, 10, "Pessoa 1"), seg(1, 10, 20, "Pessoa 2"), seg(2, 20, 30, "Pessoa 2"), seg(3, 30, 40, "Pessoa 1")]
-        let vbx: [SpeakerTimeline.Turn] = [.init(speaker: 7, start: 0, end: 10), .init(speaker: 4, start: 10, end: 20),
-                                            .init(speaker: 9, start: 20, end: 30), .init(speaker: 7, start: 30, end: 40)]
-        let changes = SpeakerRelabel.plan(finals: finals, vbx: vbx)
-        XCTAssertEqual(changes, [.init(id: "system-2", start: 20, end: 30, from: "Pessoa 2", to: "Pessoa 3")])
-    }
-
-    func testAMergedSpeakerSplitsAndOnlyChangedSegmentsMove() {
-        let finals = [seg(0, 0, 5, "Pessoa 1"), seg(1, 5, 10, "Pessoa 1"), seg(2, 10, 15, "Pessoa 2")]
-        let vbx: [SpeakerTimeline.Turn] = [.init(speaker: 0, start: 0, end: 5), .init(speaker: 1, start: 5, end: 15)]
-        let changes = SpeakerRelabel.plan(finals: finals, vbx: vbx)
-        // Cluster 1 overlaps "Pessoa 2" 5 s and "Pessoa 1" 5 s; tie goes to the label first in order, then cluster 0 takes
-        // what's left. Either way each segment ends with one consistent label per cluster.
-        let after = finals.map { s in changes.first { $0.id == s.id }?.to ?? s.speaker }
-        XCTAssertEqual(after[1], after[2], "the same VBx speaker, the same label")
-        XCTAssertNotEqual(after[0], after[1])
-    }
-
-    func testNothingToDoWithoutVbxOrSystemFinals() {
-        XCTAssertEqual(SpeakerRelabel.plan(finals: [seg(0, 0, 5, "Pessoa 1")], vbx: []), [])
-        XCTAssertEqual(SpeakerRelabel.plan(finals: [], vbx: [.init(speaker: 0, start: 0, end: 1)]), [])
     }
 }

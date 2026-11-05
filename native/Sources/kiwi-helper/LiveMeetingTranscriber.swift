@@ -37,16 +37,17 @@ final class LiveMeetingTranscriber: @unchecked Sendable {
     private let options: Options
     private let emit: Emit
     private let core: Core
-    /// The system channel's chunks of this meeting, still in the spool (#5131 keeps them until the end).
-    private let systemChunks: @Sendable () -> [MeetingChunk]
+    /// The whole system channel on the meeting clock, for the VBx at the end: the spool's chunks in the app (#5131
+    /// keeps them until the end), the WAV in `--meeting-live`.
+    private let systemAudio: @Sendable () throws -> [Float]
     private var inputs: [MeetingChannel: AsyncStream<(Int, [Float])>.Continuation] = [:]
     private var workers: [Task<Void, Never>] = []
     private var ticker: Task<Void, Never>?
 
     /// `output`: `meeting.started.output` (headphones turns the echo filter off).
     init(session: String, output: String, dictionary: TranscriptDictionary, options: Options = .fromEnvironment(),
-         systemChunks: @escaping @Sendable () -> [MeetingChunk], emit: @escaping Emit) {
-        self.systemChunks = systemChunks
+         systemAudio: @escaping @Sendable () throws -> [Float], emit: @escaping Emit) {
+        self.systemAudio = systemAudio
         self.session = session
         self.options = options
         self.emit = emit
@@ -80,31 +81,41 @@ final class LiveMeetingTranscriber: @unchecked Sendable {
         inputs = [:]
         for worker in workers { await worker.value }
         ticker?.cancel()
-        let (finals, drainedSystem) = await core.finishAll()
-        // The speakers corrected over the whole system channel, after the ASR is done (it peaks at ~1 GB, ADR 0009).
-        if options.vbx, let drainedSystem, !finals.isEmpty {
-            do {
-                let audio = try Self.audio(systemChunks())
-                if !audio.isEmpty {
-                    let manager = OfflineDiarizerManager(config: .default)
-                    try await manager.prepareModels()
-                    let result = try await manager.process(audio: audio)
-                    var ids: [String: Int] = [:]
-                    let turns = result.segments.map { s -> SpeakerTimeline.Turn in
-                        let id = ids[s.speakerId] ?? ids.count
-                        ids[s.speakerId] = id
-                        return SpeakerTimeline.Turn(speaker: id, start: Double(s.startTimeSeconds), end: Double(s.endTimeSeconds))
-                    }
-                    let changes = SpeakerRelabel.plan(finals: finals, vbx: turns)
-                    emit("log", ["level": "info", "message": "meeting: vbx found \(ids.count) speakers, \(changes.count) segments relabeled"])
-                    if !changes.isEmpty { emit("meeting.relabel", ["session": session, "changes": changes.map(\.fields)]) }
+        let (_, drainedSystem) = await core.finishAll()
+        // Option B (#5131): the VBx over the whole system channel, after the ASR is done (it peaks at ~1 GB, ADR 0009).
+        // The app corrects the blocks saved in the note by its timeline (#5168). If it fails twice, the live labels stay
+        // and the note says so; the audio still goes (#5176: never kept forever over a failure).
+        if options.vbx, drainedSystem != nil {
+            var turns: [[String: Any]]?
+            for attempt in 1...2 where turns == nil {
+                do {
+                    turns = try await Self.vbx(try systemAudio())
+                } catch {
+                    emit("log", ["level": "warn", "message": "meeting: vbx attempt \(attempt) failed: \(error)"])
                 }
-            } catch {
-                // Without the correction the live labels stay, and the audio goes as usual.
-                emit("log", ["level": "warn", "message": "meeting: vbx failed: \(error)"])
+            }
+            if let turns {
+                emit("log", ["level": "info", "message": "meeting: vbx \(Set(turns.compactMap { $0["speaker"] as? Int }).count) speakers"])
+                emit("meeting.relabel", ["session": session, "turns": turns])
+            } else {
+                emit("meeting.relabel", ["session": session, "turns": [] as [Any], "failed": true])
             }
         }
         if let drainedSystem { emit("meeting.drained", ["session": session, "channel": "system", "frame": drainedSystem]) }
+    }
+
+    /// The VBx clusters of the system channel, as `{speaker, start, end}` on the meeting clock. Empty audio: no turns.
+    static func vbx(_ audio: [Float]) async throws -> [[String: Any]] {
+        guard audio.contains(where: { $0 != 0 }) else { return [] }
+        let manager = OfflineDiarizerManager(config: .default)
+        try await manager.prepareModels()
+        let result = try await manager.process(audio: audio)
+        var ids: [String: Int] = [:]
+        return result.segments.map { s in
+            let id = ids[s.speakerId] ?? ids.count
+            ids[s.speakerId] = id
+            return ["speaker": id, "start": Double(s.startTimeSeconds), "end": Double(s.endTimeSeconds)]
+        }
     }
 
     /// The system channel on the meeting clock, from its chunks (zeros where nothing came).

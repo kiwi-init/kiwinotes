@@ -30,6 +30,9 @@ public struct LiveWord: Equatable, Sendable {
 }
 
 public enum LiveWords {
+    public static let punctuationSlack = 0.2
+    public static let maxWord = 2.0
+
     /// Joins tokens into words, like the R0 bench (`MeetingBench.words`). `stable`: the first `stable` tokens of the
     /// slice are firm.
     public static func join(_ tokens: ArraySlice<LiveToken>, stable: Int) -> [LiveWord] {
@@ -38,11 +41,17 @@ public enum LiveWords {
             let opens = t.text.hasPrefix("▁") || t.text.hasPrefix(" ") || out.isEmpty
             let clean = t.text.replacingOccurrences(of: "▁", with: "").trimmingCharacters(in: .whitespaces)
             let firm = i - tokens.startIndex < stable // `stable` counts from the start of the slice
+            // The decoder gives a sentence's last token (often just ".") a duration that runs into the silence after it:
+            // that made a finished sentence look like it overlapped the next speaker (R3 measure, the echo filter).
+            // A punctuation token adds at most `punctuationSlack`, and no word lasts more than `maxWord`.
+            let punctuation = !clean.isEmpty && clean.unicodeScalars.allSatisfy { CharacterSet.punctuationCharacters.contains($0) }
             if opens {
-                out.append(LiveWord(text: clean, start: t.start, end: t.end, firm: firm, tokens: 1))
+                out.append(LiveWord(text: clean, start: t.start, end: min(t.end, t.start + maxWord), firm: firm, tokens: 1))
             } else {
+                let previous = out[out.count - 1].end
+                let end = punctuation ? min(t.end, previous + punctuationSlack) : t.end
                 out[out.count - 1].text += clean
-                out[out.count - 1].end = t.end
+                out[out.count - 1].end = min(max(previous, end), out[out.count - 1].start + maxWord)
                 out[out.count - 1].firm = out[out.count - 1].firm && firm
                 out[out.count - 1].tokens += 1
             }
@@ -244,6 +253,10 @@ public struct EchoFilter: Sendable {
         public var slack: Double = 1.5
         /// The share of the "you" words that must also be in the system segments.
         public var similarity: Double = 0.5
+        /// How much of the "you" segment's time the system speech must cover (echo arrives at the same time).
+        public var coverage: Double = 0.5
+        /// The tolerance on each side of a system segment for that coverage (the echo's delay, different cuts).
+        public var timePad: Double = 0.3
         public init() {}
     }
 
@@ -297,11 +310,19 @@ public struct EchoFilter: Sendable {
         let slack = Int(config.slack * StreamClock.sampleRate)
         let near = system.filter { $0.endFrame + slack >= s.startFrame && $0.startFrame - slack <= s.endFrame }
         guard !near.isEmpty else { return false }
-        let mine = EchoFilter.words(s.text)
-        guard !mine.isEmpty else { return true }
+        // Echo is the same sound a few ms late: the system speech covers most of the "you" segment. Someone repeating
+        // your words a moment later (or talking over you) is not echo (R3 measure: "Bom, e a produção…" was lost).
+        let pad = Int(config.timePad * StreamClock.sampleRate)
+        let covered = near.reduce(0) { $0 + max(0, min(s.endFrame, $1.endFrame + pad) - max(s.startFrame, $1.startFrame - pad)) }
+        guard Double(covered) >= config.coverage * Double(max(1, s.endFrame - s.startFrame)) else { return false }
+        // Only content words count (3+ letters): "e", "a", "o" are in every sentence. Two must match, or, for a one-word
+        // segment, the system speech must cover nearly all of it (a reply that repeats the question's word isn't echo).
+        let mine = EchoFilter.words(s.text).filter { $0.count >= 3 }
+        guard !mine.isEmpty else { return Double(covered) >= 0.9 * Double(max(1, s.endFrame - s.startFrame)) }
         let theirs = Set(near.flatMap { EchoFilter.words($0.text) })
         let shared = mine.filter { theirs.contains($0) }.count
-        return Double(shared) / Double(mine.count) >= config.similarity
+        if mine.count == 1 { return shared == 1 && Double(covered) >= 0.9 * Double(max(1, s.endFrame - s.startFrame)) }
+        return shared >= 2 && Double(shared) / Double(mine.count) >= config.similarity
     }
 
     /// Lowercased words without accents or punctuation.
@@ -319,6 +340,12 @@ public struct LiveSegmentDraft: Equatable, Sendable {
     public var endFrame: Int
     public var speaker: String
     public var text: String
+    /// The words on the meeting clock (seconds).
+    public var words: [(text: String, start: Double, end: Double)] = []
+
+    public static func == (a: LiveSegmentDraft, b: LiveSegmentDraft) -> Bool {
+        (a.channel, a.startFrame, a.endFrame, a.speaker, a.text) == (b.channel, b.startFrame, b.endFrame, b.speaker, b.text)
+    }
 
     public init(channel: MeetingChannel, startFrame: Int, endFrame: Int, speaker: String, text: String) {
         self.channel = channel

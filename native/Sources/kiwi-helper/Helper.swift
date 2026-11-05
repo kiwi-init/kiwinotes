@@ -549,7 +549,9 @@ final class Helper {
     private func makeTranscriber(session: String, output: String) -> LiveMeetingTranscriber {
         LiveMeetingTranscriber(
             session: session, output: output, dictionary: meetingDictionary,
-            systemChunks: { [weak self] in self?.meetings?.capture.pendingChunks().filter { $0.session == session } ?? [] },
+            systemAudio: { [weak self] in
+                try LiveMeetingTranscriber.audio(self?.meetings?.capture.pendingChunks().filter { $0.session == session } ?? [])
+            },
             emit: { [weak self] type, fields in self?.emit(type, fields) })
     }
 

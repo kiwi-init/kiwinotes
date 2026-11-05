@@ -16,10 +16,15 @@ Spec #4823. As escolhas são as do [ADR 0009](../adr/0009-reunioes.md), aceito c
    - `meeting.settled {session, channel, frame}`: antes dali, nada novo sai no canal;
    - `meeting.warning`: o canal sistema só com zeros por 10 s (`system_audio_silent`, a permissão, #5030) ou a transcrição que não subiu.
 5. No `meeting.stop`, os streams terminam e os últimos finais saem. Então, só no fim (opção B):
-   - o **VBx** roda sobre o canal sistema inteiro, lido do spool;
-   - os grupos dele herdam os rótulos ao vivo com que mais se sobrepõem, um para um, e os outros viram "Pessoa N" novas;
-   - os finais que mudam de grupo saem num `meeting.relabel`;
-   - depois vem `meeting.drained` do sistema.
+   - o **VBx** roda sobre o canal sistema inteiro, lido do spool, e a linha do tempo dele sai num `meeting.relabel {turns}`;
+   - depois vem `meeting.drained` do sistema;
+   - se o VBx falha duas vezes, sai `meeting.relabel {failed: true}`: os rótulos ao vivo ficam, e a nota ganha uma linha discreta que diz isso (#5176). O áudio não fica guardado para sempre por causa de uma falha (#4840).
+6. Quem corrige é o writer do R4 (`MeetingNotes.relabel`), sobre os **blocos salvos** (#5168):
+   - o comentário de cada bloco guarda o tempo, o canal e o rótulo do ASR;
+   - cada grupo do VBx herda o rótulo salvo com que mais se sobrepõe, um para um, e os outros grupos viram "Pessoa N" novas;
+   - cada bloco do sistema vai para o grupo que mais o cobre;
+   - um nome dado pela pessoa ("Pessoa 1" → "Ana") fica, pelo `meeting_speakers`;
+   - vale também com cortes diferentes depois de uma queda, ou com os rótulos de um Sortformer rodado de novo.
 
 ## Quando o áudio sai do disco (o app, `src/bun/meeting-acks.ts`)
 - O R4 avisa (`onCommitted`) quando o texto está salvo na nota. Só então o app manda o `meeting.ack` (#5061).
@@ -29,7 +34,7 @@ Spec #4823. As escolhas são as do [ADR 0009](../adr/0009-reunioes.md), aceito c
 
 ## Depois de uma queda
 - No boot, o helper transcreve o que sobrou no spool, reunião por reunião, e o app escreve na nota pela `session`.
-- A nota guarda até onde cada canal está salvo (`meeting_progress`). O que acaba antes disso conta como salvo: libera o áudio e não aparece duas vezes.
+- A nota guarda até onde cada canal está salvo (`meeting_progress`). O que acaba antes disso conta como salvo: libera o áudio e não aparece duas vezes. Um final que cruza o progresso é cortado na palavra (os finais levam `words` com os tempos).
 
 ## Testes
 - `swift test`: o núcleo (`LiveMeetingTests`, `SpeakerRelabelTests`) e o fsync do spool.

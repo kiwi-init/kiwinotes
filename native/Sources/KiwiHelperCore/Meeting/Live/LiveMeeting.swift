@@ -4,6 +4,11 @@ import Foundation
 /// the R1 clock) for the ack. Always with `session` and `channel` (#5064). `id` is the place in the channel: the
 /// provisional text of the next segment carries the id the final will have, so a UI replaces it.
 public struct MeetingSegment: Equatable, Sendable {
+    public static func == (a: MeetingSegment, b: MeetingSegment) -> Bool {
+        a.session == b.session && a.channel == b.channel && a.index == b.index && a.startFrame == b.startFrame &&
+            a.endFrame == b.endFrame && a.speaker == b.speaker && a.text == b.text && a.final == b.final
+    }
+
     public let session: String
     public let channel: MeetingChannel
     public let index: Int
@@ -12,14 +17,18 @@ public struct MeetingSegment: Equatable, Sendable {
     public let speaker: String
     public let text: String
     public let final: Bool
+    /// The words with their times (seconds on the meeting clock), so the app can cut a replay at the saved progress (#5168).
+    public var words: [(text: String, start: Double, end: Double)] = []
 
     public var id: String { "\(channel.rawValue)-\(index)" }
     public var start: Double { Double(startFrame) / StreamClock.sampleRate }
     public var end: Double { Double(endFrame) / StreamClock.sampleRate }
 
     public var fields: [String: Any] {
-        ["session": session, "channel": channel.rawValue, "id": id, "start": start, "end": end, "startFrame": startFrame,
-         "endFrame": endFrame, "speaker": speaker, "text": text, "final": final]
+        var f: [String: Any] = ["session": session, "channel": channel.rawValue, "id": id, "start": start, "end": end, "startFrame": startFrame,
+                                "endFrame": endFrame, "speaker": speaker, "text": text, "final": final]
+        if final, !words.isEmpty { f["words"] = words.map { ["text": $0.text, "start": $0.start, "end": $0.end] } }
+        return f
     }
 }
 
@@ -125,8 +134,11 @@ public struct LiveMeeting: Sendable {
             let text = TranscriptPostProcessor.process(draft.text, dictionary: dictionary)
             guard !text.isEmpty else { continue }
             let speaker = channel == .mine ? SpeakerNames.you : names.name(timeline.speaker(from: draft.start, to: draft.end))
-            let segment = LiveSegmentDraft(channel: channel, startFrame: clock.clockFrame(draft.start), endFrame: clock.clockFrame(draft.end),
+            var segment = LiveSegmentDraft(channel: channel, startFrame: clock.clockFrame(draft.start), endFrame: clock.clockFrame(draft.end),
                                            speaker: speaker, text: text)
+            segment.words = draft.words.filter { !$0.text.isEmpty }.map {
+                ($0.text, Double(clock.clockFrame($0.start)) / StreamClock.sampleRate, Double(clock.clockFrame($0.end)) / StreamClock.sampleRate)
+            }
             if channel == .mine {
                 events += echo.mine(segment).map { emitFinal($0) }
             } else {
@@ -145,8 +157,9 @@ public struct LiveMeeting: Sendable {
         let index = next[s.channel]!
         next[s.channel] = index + 1
         if provisional[s.channel] != nil { provisional[s.channel] = nil }
-        let segment = MeetingSegment(session: session, channel: s.channel, index: index, startFrame: s.startFrame, endFrame: s.endFrame,
+        var segment = MeetingSegment(session: session, channel: s.channel, index: index, startFrame: s.startFrame, endFrame: s.endFrame,
                                      speaker: s.speaker, text: s.text, final: true)
+        segment.words = s.words
         if s.channel == .system { systemFinals.append(segment) }
         return .segment(segment)
     }

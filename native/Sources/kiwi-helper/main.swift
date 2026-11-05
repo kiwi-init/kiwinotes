@@ -23,6 +23,9 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
                     (--dictionary: one term per line; --ctc: also the CTC rescoring, on in the app since
                     T1973; downloads the model the first time and waits for it)
+  --meeting-live <file.wav> [--realtime] [--output speaker|headphones]  the R3 pipeline as the app runs it (two
+                    streaming ASRs, live Sortformer, echo filter, VBx at the end) over a 2-channel WAV, as `score.ts`
+                    lines (T4943). No mic, no sound, no spool.
   --meeting         measure the meeting pipeline (T4926, spec #4823) on a 2-channel 16 kHz WAV (0 = you, 1 = the
                     others): streaming or batch ASR per channel and diarization of channel 1, JSON lines, and exit.
                     No mic, no sound. --realtime feeds the stream at real-time pace, for the true lag.
@@ -45,6 +48,7 @@ var language = TranscriptionLanguage.auto
 var useVAD = false
 var useCTC = false
 var meeting: MeetingBench.Options?
+var meetingLive: MeetingLiveRun.Options?
 var args = CommandLine.arguments.dropFirst().makeIterator()
 while let arg = args.next() {
     switch arg {
@@ -114,7 +118,15 @@ while let arg = args.next() {
     case "--diarizer":
         guard let v = args.next(), let kind = MeetingBench.DiarizerKind(rawValue: v), meeting != nil else { fail("--diarizer sortformer|lseend|vbx|none, after --meeting") }
         meeting?.diarizer = kind
-    case "--realtime": meeting?.realtime = true
+    case "--meeting-live":
+        guard let path = args.next() else { fail("--meeting-live needs a file") }
+        meetingLive = MeetingLiveRun.Options(path: path)
+    case "--output":
+        guard let v = args.next(), ["speaker", "headphones", "unknown"].contains(v), meetingLive != nil else { fail("--output speaker|headphones, after --meeting-live") }
+        meetingLive?.output = v
+    case "--realtime":
+        meeting?.realtime = true
+        meetingLive?.realtime = true
     case "--vad": useVAD = true
     case "--ctc": useCTC = true
     case _ where !arg.hasPrefix("-") && !transcribeFiles.isEmpty:
@@ -149,6 +161,11 @@ if let (input, output) = exportPDF {
 
 if let meeting {
     Task { exit(await MeetingBench.run(meeting)) }
+    CFRunLoopRun()
+}
+
+if let meetingLive {
+    Task { exit(await MeetingLiveRun.run(meetingLive)) }
     CFRunLoopRun()
 }
 
