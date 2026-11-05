@@ -115,7 +115,7 @@ function deps(meetings?: CapabilityDeps["meetings"]): CapabilityDeps {
     meetings,
     settings: {
       load: async () => settings,
-      save: async (patch) => (settings = { ...settings, ...patch } as typeof settings),
+      save: async (patch: object) => (settings = { ...settings, ...patch } as typeof settings),
     },
   } as unknown as CapabilityDeps;
 }
