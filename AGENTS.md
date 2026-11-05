@@ -11,6 +11,9 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - **Agente não dispara diálogo do macOS.** Nada que possa abrir um pedido do sistema na tela do harry: permissões (`permissions.request`, `AXIsProcessTrustedWithOptions`, mic), Automação ou Ajustes. Fluxo de permissão se testa só com o helper falso, e a chave `defaults` de `com.kiwinotes.helper` não se mexe. Rodar o app ou o helper de verdade só quando todas as permissões já estão dadas, e mesmo assim sem mic e com `dryRun` (#536).
 
 ## Branches e PRs
+- **1 spec = 1 issue = 1 PR** (#4331). Cada ponto (uma correção, uma feature, um botão) é um spec. Um pedido com vários pontos vira vários specs.
+- Aprovado o spec, quem pega a task abre a issue no repo (`gh issue create`), com o link do spec do Kiwi (#N) e a task (`T<n>`).
+- O PR resolve só aquela issue e leva `Closes #<issue>` no corpo, para o merge fechá-la.
 - `main` só muda por PR e está sempre buildável. Nunca faça force-push nela.
 - Trabalhe em `kn/T<n>-<slug>`, por exemplo `kn/T3-stt-benchmark`. Uma task por branch e por PR.
 - O corpo do PR diz a task (`T3`), o que mudou e como você verificou (os comandos e o que observou).
