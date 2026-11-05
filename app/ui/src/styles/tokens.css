@@ -113,6 +113,15 @@
   --hover-ease: cubic-bezier(0.34, 1.32, 0.64, 1);
   --hover-in-delay: 0s;
   --hover-out-delay: 80ms;
+  /*
+   * barra de rolagem (T4505, spec #4497): fina, sem trilho, na cor fraca do tema. Aparece só enquanto rola e some
+   * logo depois (ui/src/scrollbar.ts). Engrossa um pouco com o mouse em cima.
+   */
+  --scrollbar-size: 4px;
+  --scrollbar-size-hover: 6px;
+  --scrollbar-color: color-mix(in srgb, var(--text) 28%, transparent);
+  --scrollbar-color-hover: color-mix(in srgb, var(--text) 45%, transparent);
+  --scrollbar-fade: 0.24s;
 }
 
 /* Escuro antes do JS: o OLED Black do Channels. */

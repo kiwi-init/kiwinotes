@@ -54,6 +54,77 @@ textarea {
   }
 }
 
+/* ---------------------------------------------------------- barra de rolagem */
+
+/* A nativa some em todo o app: no WebKit, uma estilizada reserva a largura dela. No lugar, o polegar fino da camada
+   abaixo, por cima do conteúdo (T4505, spec #4497; ui/src/scrollbar.ts). A rolagem continua igual. */
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+.kn-scrollbars {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  zoom: 1;
+}
+
+.kn-scrollbar {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  transition: opacity var(--scrollbar-fade) var(--ease) 0s;
+}
+
+.kn-scrollbar.on {
+  opacity: 1;
+  pointer-events: auto;
+  transition-duration: 0.08s;
+}
+
+.kn-scrollbar::before {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: var(--scrollbar-color);
+  transition:
+    width var(--fast) var(--ease),
+    height var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+.kn-scrollbar-y::before {
+  top: 0;
+  bottom: 0;
+  right: 2px;
+  width: var(--scrollbar-size);
+}
+
+.kn-scrollbar-x::before {
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: var(--scrollbar-size);
+}
+
+.kn-scrollbar-y:is(:hover, .drag)::before {
+  width: var(--scrollbar-size-hover);
+}
+
+.kn-scrollbar-x:is(:hover, .drag)::before {
+  height: var(--scrollbar-size-hover);
+}
+
+.kn-scrollbar:is(:hover, .drag)::before {
+  background: var(--scrollbar-color-hover);
+}
+
 /* ---------------------------------------------------------- keyframes */
 
 /* a janela entra: sobe 8px, cresce de 0.985 e acende */

@@ -15,6 +15,7 @@ import { createRoot } from "react-dom/client";
 import { engineReady } from "../api.ts";
 import { TopBar, useInHub } from "../topbar.tsx";
 import { startAppearance } from "../styles/appearance.ts";
+import { startScrollbars } from "../scrollbar.ts";
 
 declare global {
   interface Window {
@@ -35,6 +36,7 @@ export function mount(node: ReactNode): void {
   if (!root) throw new Error("no #root");
   // A Aparência antes do primeiro render: a janela já pinta no tema escolhido (T2503). Espera o engine no máximo
   // 300 ms; se ele demorar, pinta com a cópia local (ou o padrão) e troca quando a resposta chegar.
+  startScrollbars();
   const appearance = Promise.race([startAppearance(), new Promise<void>((r) => setTimeout(r, 300))]);
   void appearance.then(() => createRoot(root).render(<Booted>{node}</Booted>));
 }
