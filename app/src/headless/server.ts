@@ -153,6 +153,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     snippets: stores.snippets,
     history: stores.history,
     notes: stores.notes,
+    meetingNotes: stores.meetingNotes,
     attachments: stores.attachments,
     // O headless não sai para a rede: a imagem de fora é sempre esta, depois de conferir o endereço como o app confere.
     remoteImage: async (url) => {
@@ -281,7 +282,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   const stop = () => {
     stopping ??= (async () => {
       for (const off of offs) off();
-      session?.stop();
+      await session?.stop();
+      await stores.meetingNotes.flush();
       stores.notes.close();
       await stores.versions.close();
       server.stop(true);

@@ -17,6 +17,7 @@ import { Dictation } from "./dictation.ts";
 import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
 import { MeetingLiveTracker } from "./meetings.ts";
 import { Sidecar } from "./sidecar.ts";
+import { MeetingNoteSession } from "./meeting-notes.ts";
 import { stores } from "./stores.ts";
 
 /** O helper que vai dentro do .app (o `copy` do electrobun.config.ts), ou `KIWI_HELPER`. */
@@ -71,6 +72,7 @@ export interface SessionStatus {
 export class Session {
   readonly sidecar: Sidecar;
   readonly dictation: Dictation;
+  readonly meetingNotes: MeetingNoteSession;
   readonly permissions: PermissionFlow;
   /** A gravação de reunião ao vivo (R6), pelos eventos do helper: o card da aba Reuniões. */
   readonly meetings: MeetingLiveTracker;
@@ -95,12 +97,14 @@ export class Session {
     this.dictation = new Dictation({ sidecar: this.sidecar, history: stores.history, notes: stores.dictationNotes, llm, llmMode, dryRun });
     // Com KIWI_DEBUG=1 (agentes), nada é pedido sozinho: nenhum diálogo do macOS abre (#537, #551).
     // Nem o reset do clique no menu (#666).
+    this.meetingNotes = new MeetingNoteSession(this.sidecar, stores.meetingNotes);
     this.permissions = new PermissionFlow(this.sidecar, fileAskedStore(stores.dir), undefined, !dryRun, !dryRun);
     this.meetings = new MeetingLiveTracker((c) => this.sidecar.send(c));
   }
 
   start(): void {
     this.dictation.attach();
+    this.meetingNotes.attach();
     this.permissions.attach();
     for (const type of ["meeting.started", "meeting.stopped", "meeting.minePaused"] as const) {
       this.sidecar.on(type, (e) => this.meetings.feed(e));
@@ -142,10 +146,11 @@ export class Session {
     this.sidecar.start();
   }
 
-  stop(): void {
+  stop(): Promise<void> {
     this.dictation.detach();
     this.permissions.detach();
     this.sidecar.stop();
+    return this.meetingNotes.detach();
   }
 
   status(): SessionStatus {

@@ -8,7 +8,7 @@ import path from "node:path";
 /** Um erro com código, que o AppEngine passa à UI como está. */
 export class VaultError extends Error {
   constructor(
-    readonly code: "E_BAD_ARGS" | "E_NOT_FOUND" | "E_EXISTS" | "E_OUTSIDE_VAULT",
+    readonly code: "E_BAD_ARGS" | "E_NOT_FOUND" | "E_EXISTS" | "E_OUTSIDE_VAULT" | "E_CONFLICT",
     message: string,
   ) {
     super(message);

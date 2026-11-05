@@ -10,7 +10,8 @@ import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
-import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile } from "../notes/vault.ts";
+import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
+} from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
 import type { MeetingLive, MeetingNote, MeetingSettings } from "./meetings.ts";
@@ -57,7 +58,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   com o clique da pessoa), o evento `files.changed` e o `showExtensions` nas settings. Só acréscimo.
 // 1.21.0 (T4947): a aba Reuniões do hub (R6, #198): `meetings.list`, `meetings.live`, `meetings.stop`,
 //   `meetings.pauseMine`, o evento `meetings.live` e os `meetings` nas settings. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.21.0";
+// 1.22.0 (T4945): meeting speakers and append-only edit rebase for live meeting notes.
+export const UI_CONTRACT_VERSION = "1.22.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -70,19 +72,23 @@ export const CLIPBOARD_MAX_CHARS = 100_000;
 export interface UiCapabilities {
   "dictionary.get": { args: Record<string, never>; result: DictionaryTerm[] };
   /** Devolve o que foi salvo (já limpo: sem vazios nem repetidos). */
-  "dictionary.set": { args: { terms: DictionaryTerm[] }; result: DictionaryTerm[] };
+  "dictionary.set": { args: { terms: DictionaryTerm[] }; result: DictionaryTerm[];
+  };
   /** Os aliases que trocariam texto de verdade (#434), com o texto do aviso. */
-  "dictionary.check": { args: { terms: DictionaryTerm[] }; result: (AliasWarning & { text: string })[] };
+  "dictionary.check": { args: { terms: DictionaryTerm[] }; result: (AliasWarning & { text: string })[];
+  };
   "snippets.get": { args: Record<string, never>; result: Snippet[] };
   "snippets.set": { args: { snippets: Snippet[] }; result: Snippet[] };
-  "history.search": { args: { query?: string; limit?: number; before?: string }; result: HistoryPage };
+  "history.search": { args: { query?: string; limit?: number; before?: string }; result: HistoryPage;
+  };
   "history.delete": { args: { id: string }; result: boolean };
   /**
    * "Enviar para nota…" (1.2.0, T1320): o ditado vai para o fim da nota `path` ou, sem `path`, para uma nota nova em
    * `Caixa de entrada/`. Mandar de novo não duplica: `already` diz que o trecho já estava lá. Ditado que não existe
    * dá E_NOT_FOUND.
    */
-  "history.toNote": { args: { id: string; path?: string }; result: { note: NoteMeta; created: boolean; already: boolean } };
+  "history.toNote": { args: { id: string; path?: string }; result: { note: NoteMeta; created: boolean; already: boolean };
+  };
   /** As Configurações que o engine guarda (1.3.0, T1499). */
   "settings.get": { args: Record<string, never>; result: AppSettings };
   /** Muda só os campos dados e devolve tudo. Um valor que não existe dá E_INVALID, sem mudar nada. */
@@ -93,7 +99,8 @@ export interface UiCapabilities {
    * A seção que o hub deve mostrar ao abrir (1.4.0, T2121): o menu da barra ou o atalho pediu "Notas", "Ditado"…
    * Devolve e esquece; null é "a de sempre". Com o hub já aberto, o pedido chega pelo evento `hub.navigate`.
    */
-  "hub.section": { args: Record<string, never>; result: { section: HubSection | null } };
+  "hub.section": { args: Record<string, never>; result: { section: HubSection | null };
+  };
   /**
    * A intro da abertura do zero terminou (1.5.0, T2308): no último frame, no clique para pular ou no "Reduzir
    * movimento". O main fecha a janela `intro` e abre o hub. Fora da intro, não faz nada.
@@ -117,25 +124,42 @@ export interface UiCapabilities {
    * `tree` (1.7.0) é a mesma lista em árvore, com as pastas vazias. `files` (1.19.0) são os arquivos que não são nota
    * (anexo, PDF, `.canvas`), fora os ocultos.
    */
-  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode; files?: VaultFile[] } };
+  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode; files?: VaultFile[];
+    };
+  };
   "notes.get": { args: { path: string }; result: Note };
   /** Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. */
-  "notes.save": { args: { path: string; content: string; baseVersion: string }; result: SaveResult };
+  "notes.save": { args: { path: string; content: string; baseVersion: string;
+      baseContent?: string;
+    }; result: SaveResult & { content?: string };
+  };
+  "meetings.speakers": {
+    args: { path: string };
+    result: { speakers: string[] };
+  };
+  "meetings.renameSpeaker": {
+    args: { path: string; from: string; to: string };
+    result: NoteMeta;
+  };
   /** Título repetido vira "Título 2". */
   /**
    * Com `template` (1.9.0), o path de uma nota modelo: o conteúdo vem dela, com `{{title}}`, `{{date}}`, `{{time}}` e
    * `{{date:AAAA-MM-DD}}` trocados. `content` e `template` juntos dão E_BAD_ARGS.
    */
-  "notes.create": { args: { folder?: string; title: string; content?: string; template?: string }; result: Note };
+  "notes.create": { args: { folder?: string; title: string; content?: string; template?: string;
+    }; result: Note;
+  };
   /** Renomeia ou move, e atualiza os [[links]] das outras notas. */
-  "notes.rename": { args: { path: string; newPath: string }; result: { meta: NoteMeta; updatedLinks: number } };
+  "notes.rename": { args: { path: string; newPath: string }; result: { meta: NoteMeta; updatedLinks: number };
+  };
   /**
    * Não apaga: espera 10 min (o `notes.restore`) numa pasta oculta do vault e então vai para a Lixeira do macOS (1.7.0;
    * antes ia direto para a Lixeira).
    */
   "notes.delete": { args: { path: string }; result: true };
   /** Para outra pasta ("" é a raiz), com o mesmo nome; os [[links]] seguem. */
-  "notes.move": { args: { path: string; folder: string }; result: { meta: NoteMeta; updatedLinks: number } };
+  "notes.move": { args: { path: string; folder: string }; result: { meta: NoteMeta; updatedLinks: number };
+  };
   /** Uma cópia na mesma pasta: "Título 2". */
   "notes.duplicate": { args: { path: string }; result: Note };
   /** Desfaz um `notes.delete` ou `folders.delete` dos últimos 10 min, pelo caminho original. Lugar ocupado: E_EXISTS. */
@@ -152,13 +176,16 @@ export interface UiCapabilities {
   // Fora do vault, em `<dados do app>/history`: uma versão por save que muda o texto, no máximo uma a cada 2 min por
   // nota, até 50 versões ou 30 dias. O histórico segue a nota quando ela muda de nome ou de pasta.
   /** As versões da nota, a mais nova primeiro. `id` é o carimbo da hora. */
-  "notes.versions": { args: { path: string }; result: { versions: { id: string; at: string; size: number }[] } };
-  "notes.version": { args: { path: string; id: string }; result: { content: string; at: string } };
+  "notes.versions": { args: { path: string }; result: { versions: { id: string; at: string; size: number }[] };
+  };
+  "notes.version": { args: { path: string; id: string }; result: { content: string; at: string };
+  };
   /**
    * Volta a nota para a versão `id`, gravando por cima (condicionado à versão de agora). O texto de antes e o restaurado
    * viram versões também, então dá para desfazer o restaurar.
    */
-  "notes.restoreVersion": { args: { path: string; id: string }; result: SaveResult };
+  "notes.restoreVersion": { args: { path: string; id: string }; result: SaveResult;
+  };
 
   // ---------------------------------------------------------------- exportar (1.15.0, T2684)
   /**
@@ -166,7 +193,9 @@ export interface UiCapabilities {
    * `<Título>.md` (com os anexos em `<Título> anexos/`), `.html` (um arquivo só, com o tema de `theme`, as variáveis CSS
    * da janela) ou `.pdf`; "Título 2" se já existe. Cancelar dá E_CANCELED. Sem o helper, o PDF dá E_NO_PDF.
    */
-  "notes.export": { args: { path: string; format: "md" | "html" | "pdf"; theme?: Record<string, string> }; result: { file: string } };
+  "notes.export": { args: { path: string; format: "md" | "html" | "pdf"; theme?: Record<string, string>;
+    }; result: { file: string };
+  };
 
   // ---------------------------------------------------------------- nota do dia, links e Lixeira (1.10.0, T2593)
   /** `<dailyFolder>/AAAA-MM-DD.md`, criada vazia se não existe. Sem `date`, a de hoje (no relógio do Mac). */
@@ -175,11 +204,14 @@ export interface UiCapabilities {
    * A nota de um `[[link]]`: a que ele acha, ou uma nova. `[[Pasta/Nota]]` cria em Pasta; `[[Nota]]`, na pasta de `from`
    * (a nota onde o link está) ou na raiz. A `#seção` e o `|apelido` não entram no nome.
    */
-  "notes.createFromLink": { args: { link: string; from?: string }; result: Note };
+  "notes.createFromLink": { args: { link: string; from?: string }; result: Note;
+  };
   /** "Mencionada sem link": as notas que citam o título desta sem `[[ ]]` (sem acento nem maiúscula, palavra inteira). */
-  "notes.unlinkedMentions": { args: { path: string }; result: { path: string; title: string; context: string }[] };
+  "notes.unlinkedMentions": { args: { path: string }; result: { path: string; title: string; context: string }[];
+  };
   /** Na nota `path`, as menções de `target` viram `[[Alvo]]` (ou `[[Alvo|texto]]`, se a grafia difere). */
-  "notes.linkMentions": { args: { path: string; target: string }; result: { meta: NoteMeta; count: number } };
+  "notes.linkMentions": { args: { path: string; target: string }; result: { meta: NoteMeta; count: number };
+  };
   /**
    * A Lixeira do app: o que espera o Desfazer (`where: "kiwi"`, com `until`) e o que já foi para o Lixo do macOS
    * (`"macos"`, só para mostrar: tirar de lá pede o Acesso Total ao Disco).
@@ -196,9 +228,11 @@ export interface UiCapabilities {
   /** Cria a pasta e as de cima que faltarem. */
   "folders.create": { args: { path: string }; result: { path: string } };
   /** Renomeia ou move (o `newPath` pode estar em outro pai). */
-  "folders.rename": { args: { path: string; newPath: string }; result: { path: string; moved: number; updatedLinks: number } };
+  "folders.rename": { args: { path: string; newPath: string }; result: { path: string; moved: number; updatedLinks: number };
+  };
   /** Para dentro de `parent` ("" é a raiz), com o mesmo nome. */
-  "folders.move": { args: { path: string; parent: string }; result: { path: string; moved: number; updatedLinks: number } };
+  "folders.move": { args: { path: string; parent: string }; result: { path: string; moved: number; updatedLinks: number };
+  };
   /** Com o que tem dentro: espera o "Desfazer" (`notes.restore`) como a nota. */
   "folders.delete": { args: { path: string }; result: true };
   /**
@@ -206,21 +240,25 @@ export interface UiCapabilities {
    * exata"`, `tag:x` ou `#x` (e as filhas), `path:pedaço` (ou `path:"com espaço"`), e `-` antes de qualquer um para
    * excluir. Só filtros: as notas que passam, das mais recentes. Só exclusões: nada.
    */
-  "notes.search": { args: { query: string; limit?: number }; result: SearchHit[] };
+  "notes.search": { args: { query: string; limit?: number }; result: SearchHit[];
+  };
   "notes.backlinks": { args: { path: string }; result: Backlink[] };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
   /** As tags do vault em árvore (`#projeto/kiwi` dentro de `projeto`), com quantas notas cada uma tem (1.9.0). */
   "notes.tags": { args: Record<string, never>; result: { tags: TagNode[] } };
   /** As notas da pasta de modelos (`templatesFolder` das settings), por nome (1.9.0). */
-  "notes.templates": { args: Record<string, never>; result: { folder: string; templates: NoteMeta[] } };
+  "notes.templates": { args: Record<string, never>; result: { folder: string; templates: NoteMeta[] };
+  };
   // ---------------------------------------------------------------- anexos (1.11.0, T2594)
   /** Grava uma imagem ou um PDF (`data` em base64, até 25 MB) na pasta de anexos, com nome único; devolve o embed. */
-  "attachments.save": { args: { name: string; data: string }; result: SavedAttachment };
+  "attachments.save": { args: { name: string; data: string }; result: SavedAttachment;
+  };
   /** O anexo de um `![[…]]` (ou de um caminho) como `data:` URL, para o editor desenhar. Sem anexo, E_NOT_FOUND. */
   "attachments.read": { args: { link: string }; result: AttachmentData };
   /** Renomeia ou move o anexo e troca os links das notas que apontavam para ele. */
-  "attachments.rename": { args: { path: string; newPath: string }; result: { path: string; updatedLinks: number } };
+  "attachments.rename": { args: { path: string; newPath: string }; result: { path: string; updatedLinks: number };
+  };
   /**
    * A imagem de fora (https) de uma nota como `data:`, baixada pelo engine só depois do clique da pessoa no cartão
    * (T2984, #3039). A janela não carrega nada da internet. E_BAD_URL, E_FETCH, E_NOT_IMAGE, E_TOO_BIG.
@@ -268,6 +306,8 @@ export const UI_CAPABILITIES = [
   "notes.list",
   "notes.get",
   "notes.save",
+  "meetings.speakers",
+  "meetings.renameSpeaker",
   "notes.create",
   "notes.rename",
   "notes.delete",
@@ -328,13 +368,15 @@ export interface UiEvents {
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */
-export const HUB_SECTIONS = ["notes", "meetings", "dictation", "settings", "about"] as const;
+export const HUB_SECTIONS = ["notes", "meetings", "dictation", "settings", "about",
+] as const;
 export type HubSection = (typeof HUB_SECTIONS)[number];
 export const isHubSection = (v: unknown): v is HubSection => (HUB_SECTIONS as readonly unknown[]).includes(v);
 
 /** As janelas que viram UI do AppEngine. */
 // O `hub` (T2121) é a janela principal; as outras três seguem como UIs próprias (a CLI e quem tinha uma instalada).
-export const UI_WINDOWS = ["settings", "history", "notes", "hub", "intro"] as const;
+export const UI_WINDOWS = ["settings", "history", "notes", "hub", "intro",
+] as const;
 export type UiWindow = (typeof UI_WINDOWS)[number];
 
 /** O canal do build: as rc recebem as rc (o feed `updates-rc`), a estável só a estável, e o dev nunca checa. */

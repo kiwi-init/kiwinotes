@@ -173,6 +173,7 @@ test("meeting IPC carries control and chunk metadata, never raw audio", () => {
     { v: 1, id: "m6", type: "meeting.ack", session: "test", channel: "mine", finalThroughFrame: 64_000, contextFrames: 32_000 },
     { v: 1, type: "meeting.started", session: "test", sampleRate: 16000, output: "speaker" },
     { v: 1, type: "meeting.stopped", session: "test", pendingChunks: 0 },
+    { v: 1, type: "meeting.segment", session: "test", channel: "system", start: 1, end: 3, speaker: "Pessoa 1", text: "Olá.", final: true },
     { v: 1, type: "meeting.level", channel: "system", rms: 0.25 },
     { v: 1, type: "meeting.error", error: "microphone_permission", microphone: "undetermined" },
     { v: 1, type: "meeting.chunk", session: "test", chunkId: "mine-0", channel: "mine", startFrame: 0, frames: 160_000, sampleRate: 16000, format: "f32le", path: "/tmp/fake/mine.pcm", recovered: true },
