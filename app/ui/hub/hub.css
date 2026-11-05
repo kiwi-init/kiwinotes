@@ -63,12 +63,12 @@
   height: calc(var(--ctl) - 4px);
   border-radius: var(--r-row);
   background: var(--wash-2, var(--surface-hover));
-  /* A posição e a largura vêm de uma mola em JS (T4380, hub/pill.ts), que parte de onde a pílula está. Aqui só a
-     opacidade, para ela sumir e reaparecer na aba ativa quando o mouse sai da faixa (120 ms, o PILL_FADE_MS). */
   transform: translateX(0);
-  transition: opacity 120ms var(--ease);
-  will-change: transform, width;
   pointer-events: none;
+}
+
+.kn-tabs-pill[data-moving="true"] {
+  transition: transform var(--glide), width var(--glide);
 }
 
 .kn-tab {
@@ -85,24 +85,13 @@
   font: 500 var(--t-ui) / 1 var(--ui);
   white-space: nowrap;
   cursor: default;
-  /* T3821: a aba sob o mouse cresce um pouco e o rótulo ganha peso, com o mesmo movimento dos botões */
-  transition:
-    color var(--fast) var(--ease),
-    transform var(--hover-dur) var(--hover-ease) var(--hover-out-delay),
-    text-shadow var(--hover-dur) var(--ease) var(--hover-out-delay);
+  /* Channels instalado: o hover só muda ink-2 → ink, em --fast (160 ms, ease padrão). */
+  transition: color var(--fast);
 }
 
 .kn-tab:hover,
 .kn-tab[aria-selected="true"] {
   color: var(--ink);
-}
-
-/* O peso vem de uma sombra da própria cor, e não do font-weight: a largura da aba não muda, e as vizinhas não pulam. */
-.kn-tab:hover,
-.kn-tab:focus-visible {
-  transform: scale(1.04);
-  text-shadow: 0 0 0.6px currentColor;
-  transition-delay: 0s, var(--hover-in-delay), var(--hover-in-delay);
 }
 
 .kn-tab:focus-visible {

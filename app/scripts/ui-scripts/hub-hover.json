@@ -20,8 +20,9 @@
       "name": "mouse na aba Ditado"
     },
     {
-      "waitFor": ".kn-tab[data-hover]:has-text('Ditado')",
-      "name": "a pílula vai para a aba sob o mouse"
+      "expectCount": ".kn-tab[data-hover]",
+      "count": 0,
+      "name": "hover não cria estado de seleção"
     },
     {
       "expectCount": ".kn-tab[aria-selected='true']:has-text('Notas')",
@@ -33,8 +34,9 @@
       "name": "mouse no Nova nota"
     },
     {
-      "waitFor": ".kn-tabs:not(:has(.kn-tab[data-hover]))",
-      "name": "fora das abas, a pílula volta para a escolhida (depois do atraso de saída)"
+      "expectCount": ".kn-tab[data-hover]",
+      "count": 0,
+      "name": "fora das abas não há estado de hover da pílula"
     },
     {
       "screenshot": "nova-nota.png",
@@ -52,7 +54,9 @@
       "name": "mouse parado em Sobre"
     },
     {
-      "waitFor": ".kn-tab[data-hover]:has-text('Sobre')"
+      "expectCount": ".kn-tab[aria-selected='true']:has-text('Notas')",
+      "count": 1,
+      "name": "mouse parado em Sobre não seleciona a aba"
     },
     {
       "press": "ArrowRight",
@@ -64,7 +68,7 @@
     {
       "expectCount": ".kn-tab[data-hover]",
       "count": 0,
-      "name": "o teclado manda: a pílula sai do hover e vai para a escolhida"
+      "name": "o teclado escolhe a aba mesmo com o mouse parado em outra"
     },
     {
       "click": ".kn-tab:has-text('Sobre')",
