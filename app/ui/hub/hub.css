@@ -63,10 +63,11 @@
   height: calc(var(--ctl) - 4px);
   border-radius: var(--r-row);
   background: var(--wash-2, var(--surface-hover));
-  /* T3821: o mesmo movimento do hover, que é quem mais move a pílula agora */
-  transition:
-    transform var(--hover-dur) var(--hover-ease),
-    width var(--hover-dur) var(--hover-ease);
+  /* A posição e a largura vêm de uma mola em JS (T4380, hub/pill.ts), que parte de onde a pílula está. Aqui só a
+     opacidade, para ela sumir e reaparecer na aba ativa quando o mouse sai da faixa (120 ms, o PILL_FADE_MS). */
+  transform: translateX(0);
+  transition: opacity 120ms var(--ease);
+  will-change: transform, width;
   pointer-events: none;
 }
 
