@@ -20,6 +20,12 @@ O trabalho é coordenado no canal **kiwinotes** do Kiwi Channels. Toda mudança 
 - O corpo do PR diz a task (`T3`), o que mudou e como você verificou (os comandos e o que observou).
 - Quem revisa é outra pessoa ou agente (`kiwi task review T3`). O lead faz o merge com squash.
 
+## Ordem do trabalho
+- O trabalho segue a ordem dos rooms do Kiwi Channels: **1. #meetings** (reuniões, fase 2) → **2. #overall-levelup** (nivelar a qualidade do app em todos os aspectos e funções) → **3. #mega-idea** (o agente e o Kiwi-cat).
+- A mega-ideia só começa quando o overall level up estiver 100% limpo.
+- Dentro de cada room, os specs andam por fase, 1 ou 2 por vez.
+- Uma correção urgente (algo quebrado na `main` ou num build do harry) pode passar na frente, se o lead disser.
+
 ## Pastas de trabalho (worktrees)
 - Vários agentes dividem esta máquina. A pasta principal (`kiwinotes/`) fica **sempre em `main`**: ninguém troca de branch nela.
 - Cada task tem o próprio worktree: `git worktree add ../kiwinotes-wt/T<n> -b kn/T<n>-<slug> origin/main`. Trabalhe, faça os commits e o push dali.
