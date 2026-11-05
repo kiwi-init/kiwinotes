@@ -7,6 +7,7 @@ let usage = """
 usage: kiwi-helper --socket <path> [--dump-wav <dir>]
        kiwi-helper --stdio [--dump-wav <dir>]
        kiwi-helper --transcribe <file.wav>… [--dictionary <file>] [--language auto|pt|en] [--vad] [--ctc]
+       kiwi-helper --meeting <file.wav> [--asr stream|batch|none] [--diarizer sortformer|lseend|vbx|none] [--realtime]
 
   --socket <path>   connect to the app's unix socket (the app listens; NDJSON v1, see docs/adr/0001-ipc.md)
   --stdio           talk NDJSON over stdin/stdout instead, for manual testing
@@ -20,6 +21,9 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
                     (--dictionary: one term per line; --ctc: also the CTC rescoring, on in the app since
                     T1973; downloads the model the first time and waits for it)
+  --meeting         measure the meeting pipeline (T4926, spec #4823) on a 2-channel 16 kHz WAV (0 = you, 1 = the
+                    others): streaming or batch ASR per channel and diarization of channel 1, JSON lines, and exit.
+                    No mic, no sound. --realtime feeds the stream at real-time pace, for the true lag.
 """
 
 func fail(_ message: String) -> Never {
@@ -38,6 +42,7 @@ var dictionaryFile: String?
 var language = TranscriptionLanguage.auto
 var useVAD = false
 var useCTC = false
+var meeting: MeetingBench.Options?
 var args = CommandLine.arguments.dropFirst().makeIterator()
 while let arg = args.next() {
     switch arg {
@@ -84,6 +89,16 @@ while let arg = args.next() {
     case "--language":
         guard let name = args.next(), let value = TranscriptionLanguage(rawValue: name) else { fail("--language auto|pt|en") }
         language = value
+    case "--meeting":
+        guard let path = args.next() else { fail("--meeting needs a file") }
+        meeting = MeetingBench.Options(path: path)
+    case "--asr":
+        guard let v = args.next(), let mode = MeetingBench.ASRMode(rawValue: v), meeting != nil else { fail("--asr stream|batch|none, after --meeting") }
+        meeting?.asr = mode
+    case "--diarizer":
+        guard let v = args.next(), let kind = MeetingBench.DiarizerKind(rawValue: v), meeting != nil else { fail("--diarizer sortformer|lseend|vbx|none, after --meeting") }
+        meeting?.diarizer = kind
+    case "--realtime": meeting?.realtime = true
     case "--vad": useVAD = true
     case "--ctc": useCTC = true
     case _ where !arg.hasPrefix("-") && !transcribeFiles.isEmpty:
@@ -114,6 +129,11 @@ if let (input, output) = exportPDF {
         }
     }
     NSApplication.shared.run()
+}
+
+if let meeting {
+    Task { exit(await MeetingBench.run(meeting)) }
+    CFRunLoopRun()
 }
 
 if !transcribeFiles.isEmpty {
