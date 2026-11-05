@@ -7,6 +7,7 @@
 //   { "type": "…" }                                   digita no foco
 //   { "press": "Meta+k" }                             uma tecla ou combinação (⌘K é "Meta+k")
 //   { "hover": "SEL" }
+//   { "scroll": "SEL", "y": 400, "x"?: 0 }            o mouse no elemento e a roda: rola de verdade (T4505)
 //   { "waitFor": "SEL", "state"?: "visible|hidden|attached|detached" }
 //   { "wait": 300 }                                   ms (até 10 s)
 //   { "expectText": "SEL", "text": "…" }              o texto do elemento contém `text`
@@ -38,6 +39,8 @@ export type Step =
   | { type: string }
   | { press: string }
   | { hover: string }
+  /** O mouse no meio do elemento e a roda (`y` px para baixo, `x` para a direita), como um scroll de verdade (T4505). */
+  | { scroll: string; y?: number; x?: number }
   | { waitFor: string; state?: "visible" | "hidden" | "attached" | "detached" }
   | { wait: number }
   | { expectText: string; text: string }
@@ -60,7 +63,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
+const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -118,6 +121,15 @@ export function parseScript(json: unknown): ScriptFile {
         if (s.modifiers !== undefined && !(Array.isArray(s.modifiers) && s.modifiers.every((m) => MODIFIERS.has(m as string)))) {
           throw new Error(`${at}: modifiers entre Alt, Control, Meta, Shift`);
         }
+        break;
+      case "scroll":
+        str(s.scroll, `${at}.scroll`);
+        for (const k of ["x", "y"] as const) {
+          if (s[k] !== undefined && !(typeof s[k] === "number" && Number.isFinite(s[k]) && Math.abs(s[k] as number) <= 100_000)) {
+            throw new Error(`${at}: scroll.${k} em px, até 100000`);
+          }
+        }
+        if (s.x === undefined && s.y === undefined) throw new Error(`${at}: scroll precisa de y ou x (px)`);
         break;
       case "waitFor":
         str(s.waitFor, `${at}.waitFor`);
@@ -219,6 +231,10 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
   else if ("type" in s) await page.keyboard.type(s.type);
   else if ("press" in s) await page.keyboard.press(s.press);
   else if ("hover" in s) await page.hover(s.hover, { timeout });
+  else if ("scroll" in s) {
+    await page.hover(s.scroll, { timeout });
+    await page.mouse.wheel(s.x ?? 0, s.y ?? 0);
+  }
   else if ("waitFor" in s) await page.waitForSelector(s.waitFor, { timeout, state: s.state ?? "visible" });
   else if ("wait" in s) await page.waitForTimeout(s.wait);
   else if ("expectText" in s) {

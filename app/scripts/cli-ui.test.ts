@@ -54,6 +54,9 @@ describe("passos", () => {
     expect(() => parseScript([{ waitFor: ".a", state: "sumido" }])).toThrow("state");
     expect(() => parseScript([{ click: ".a", timeout: 0 }])).toThrow("timeout");
     expect(() => parseScript({ scale: 3, steps: [{ wait: 1 }] })).toThrow("scale");
+    expect(() => parseScript([{ scroll: ".a" }])).toThrow("scroll precisa de y ou x");
+    expect(() => parseScript([{ scroll: ".a", y: "muito" }])).toThrow("scroll.y");
+    expect(parseScript([{ scroll: ".a", y: 400 }]).steps).toHaveLength(1);
   });
 
   test("o print é só um nome .png: nada de escrever fora da pasta de saída", () => {
