@@ -95,6 +95,21 @@ export const api = {
     section: () => invoke("hub.section", {}),
     onNavigate: (fn: (e: UiEvents["hub.navigate"]) => void) => on("hub.navigate", fn),
   },
+  /** A aba Reuniões do hub (1.21.0, T4947): as notas de reunião e a gravação ao vivo. */
+  meetings: {
+    list: () => invoke("meetings.list", {}),
+    live: () => invoke("meetings.live", {}),
+    /** Só no clique em "Parar". */
+    stop: () => invoke("meetings.stop", {}),
+    pauseMine: (paused: boolean) => invoke("meetings.pauseMine", { paused }),
+    onLive: (fn: (live: UiEvents["meetings.live"]) => void) => on("meetings.live", fn),
+    /** As notas mudaram (inclusive fora do app): a lista lê de novo. */
+    onNotesChanged: (fn: () => void) => on("notes.changed", () => fn()),
+    rename: (path: string, newPath: string) => invoke("notes.rename", { path, newPath }),
+    /** Para a Lixeira do app, com 10 min para desfazer (`restore`). */
+    delete: (path: string) => invoke("notes.delete", { path }),
+    restore: (path: string) => invoke("notes.restore", { path }),
+  },
   /** Só num gesto da pessoa (o clique em copiar): nenhuma UI escreve no clipboard sozinha (#1199). */
   copy: async (text: string) => {
     if (navigator.userActivation && !navigator.userActivation.isActive) throw new Error("copiar só com um clique");

@@ -13,7 +13,7 @@ import type { TagNode } from "./tags.ts";
 import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
-import type { MeetingLive, MeetingNote } from "./meetings.ts";
+import type { MeetingLive, MeetingNote, MeetingSettings } from "./meetings.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
@@ -86,7 +86,7 @@ export interface UiCapabilities {
   /** As Configurações que o engine guarda (1.3.0, T1499). */
   "settings.get": { args: Record<string, never>; result: AppSettings };
   /** Muda só os campos dados e devolve tudo. Um valor que não existe dá E_INVALID, sem mudar nada. */
-  "settings.set": { args: Partial<AppSettings>; result: AppSettings };
+  "settings.set": { args: Partial<Omit<AppSettings, "meetings">> & { meetings?: Partial<MeetingSettings> }; result: AppSettings };
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
   /**
