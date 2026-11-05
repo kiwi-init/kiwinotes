@@ -17,6 +17,15 @@ import {
   transcriptSection,
 } from "../shared/meeting-note.ts";
 
+/** One VBx correction (R3): the segment at `start`–`end` of `channel` moves from the ASR label `from` to `to`. */
+export interface MeetingRelabel {
+  start: number;
+  end: number;
+  channel?: "mine" | "system";
+  from: string;
+  to: string;
+}
+
 export interface MeetingSegment {
   start: number;
   end: number;
@@ -373,6 +382,67 @@ export class MeetingNotes {
         );
       });
       return metaOf(note);
+    });
+  }
+  /**
+   * R3 (T4943, option B of #5131): after the meeting, the VBx corrects who said what on the system channel. Each change
+   * moves one segment already in the note from one ASR label to another (`Pessoa 2` → `Pessoa 1`). The line keeps its
+   * time and text and shows the new label's name, through `meeting_speakers`: a speaker the person renamed during the
+   * meeting keeps that name (`Pessoa 1` → `Ana`). The segment's hash follows the new label, so a replay stays
+   * idempotent. One conditional write (ADR 0007); pending finals of the session are written first. Resolves when it's
+   * on disk: only then may the system channel's audio be released.
+   */
+  relabel(session: string, changes: MeetingRelabel[]): Promise<{ changed: number }> {
+    return this.serialize(async () => {
+      validateSession(session);
+      if (!Array.isArray(changes)) throw new VaultError("E_BAD_ARGS", "invalid relabel");
+      for (const c of changes) {
+        validateSegment({ ...c, speaker: c.from, text: "", final: true });
+        if (typeof c.to !== "string" || !c.to.trim() || c.to.length > 100 || /[\r\n]/.test(c.to))
+          throw new VaultError("E_BAD_ARGS", "invalid relabel");
+      }
+      const note = await this.find(session);
+      if (!note) throw new VaultError("E_NOT_FOUND", "meeting note not found");
+      const state = this.states.get(session)!;
+      if (state.pending.length) await this.flushState(state);
+      if (!changes.length) return { changed: 0 };
+      let changed = 0;
+      await this.mutate(state.path, (current) => {
+        changed = 0;
+        const data = dataOf(current.content);
+        const speakers: Record<string, string> = { ...(data.meeting_speakers ?? {}) };
+        const nameOf = (label: string) => (Object.hasOwn(speakers, label) ? speakers[label]! : label);
+        const split = splitMeetingNote(current.content);
+        const section = transcriptSection(split.body);
+        if (!section) return current.content;
+        let transcript = split.body.slice(section.from, section.to);
+        for (const c of changes) {
+          if (c.from === c.to) continue;
+          const segment = { start: c.start, end: c.end, channel: c.channel, text: "", final: true };
+          const oldRef = `%%meeting-segment:${idOf(session, { ...segment, speaker: c.from })}%%`;
+          const newRef = `%%meeting-segment:${idOf(session, { ...segment, speaker: c.to })}%%`;
+          const at = transcript.indexOf(oldRef);
+          if (at < 0) continue; // not in the note (already moved, or the person deleted the line)
+          const lineStart = transcript.lastIndexOf("\n", at) + 1;
+          const lineEnd = transcript.indexOf("\n", at) < 0 ? transcript.length : transcript.indexOf("\n", at);
+          const line = transcript.slice(lineStart, lineEnd);
+          if (!Object.hasOwn(speakers, c.to))
+            Object.defineProperty(speakers, c.to, { value: c.to, enumerable: true, writable: true, configurable: true });
+          const relabeled = line
+            .replace(/^(\*\*\d\d:\d\d · )(.+?)(:\*\*)/, (_, a: string, _name: string, b: string) => a + escape(nameOf(c.to)) + b)
+            .replace(oldRef, newRef);
+          transcript = transcript.slice(0, lineStart) + relabeled + transcript.slice(lineEnd);
+          changed++;
+        }
+        if (!changed) return current.content;
+        // The participants are the names still speaking in the transcript, in the order they were, plus the new ones.
+        const spoken = new Set([...transcript.matchAll(/^\*\*\d\d:\d\d · (.+?):\*\*/gm)].map((m) => m[1]!.replace(/\\(.)/g, "$1")));
+        const before: string[] = Array.isArray(data.participants) ? data.participants.filter((v: unknown): v is string => typeof v === "string") : [];
+        const participants = [...before.filter((n) => spoken.has(n)), ...[...spoken].filter((n) => !before.includes(n))];
+        const body = split.body.slice(0, section.from) + transcript + split.body.slice(section.to);
+        return setMeetingField(setMeetingField(split.frontmatter + body, "participants", participants), "meeting_speakers", speakers);
+      });
+      return { changed };
     });
   }
   /** Optional base content enables a safe append-only rebase; ordinary notes retain their normal conflict behavior. */

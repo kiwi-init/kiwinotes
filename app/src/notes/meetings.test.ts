@@ -288,3 +288,47 @@ test("meeting: fake helper events create, append and finish a note without captu
   expect(c).toContain("validar o PACS");
   expect(metadata(c).duration).toBe(30);
 });
+
+// R3 (T4943, option B of #5131): the VBx corrects the speakers after the meeting.
+test("meeting relabel: renamed during the meeting, then the VBx moved a segment: the person's name stays", async () => {
+  const { notes, vault } = await rig();
+  const n = await notes.start("s9", "Teams", at);
+  await notes.segment("s9", segment(1, "Pessoa 1", "Primeiro ponto."));
+  await notes.segment("s9", segment(5, "Pessoa 2", "Eu acho que sim."));
+  await notes.segment("s9", segment(9, "Pessoa 2", "Sem dúvida."));
+  await notes.segment("s9", segment(13, "Você", "Fechado então."));
+  await notes.flush();
+  await notes.renameSpeaker(n.path, "Pessoa 1", "Ana");
+  // The person writes in her own section meanwhile.
+  const mine = await vault.get(n.path);
+  await vault.save(n.path, mine.content.replace("## Minhas notas\n", "## Minhas notas\nLevar o laudo.\n"), mine.version);
+  // The VBx: the segment at 5 s was Ana's after all; the one at 9 s goes to a third person.
+  const r = await notes.relabel("s9", [
+    { start: 5, end: 7, channel: "system", from: "Pessoa 2", to: "Pessoa 1" },
+    { start: 9, end: 11, channel: "system", from: "Pessoa 2", to: "Pessoa 3" },
+    { start: 99, end: 100, channel: "system", from: "Pessoa 2", to: "Pessoa 1" },
+  ]);
+  expect(r.changed).toBe(2);
+  const after = (await vault.get(n.path)).content;
+  expect(after).toContain("Levar o laudo.");
+  expect(after).toMatch(/\*\*14:30 · Ana:\*\* Eu acho que sim\./);
+  expect(after).toMatch(/\*\*14:30 · Pessoa 3:\*\* Sem dúvida\./);
+  expect(after).not.toContain("· Pessoa 2:");
+  expect(metadata(after).participants).toEqual(["Ana", "Você", "Pessoa 3"]);
+  expect(metadata(after).meeting_speakers).toMatchObject({ "Pessoa 1": "Ana", "Pessoa 3": "Pessoa 3" });
+  // Idempotent: a replay of the corrected segment doesn't add a line; the same relabel again changes nothing.
+  await notes.segment("s9", segment(5, "Pessoa 1", "Eu acho que sim."));
+  await notes.flush();
+  expect((await vault.get(n.path)).content.match(/Eu acho que sim/g)?.length).toBe(1);
+  expect((await notes.relabel("s9", [{ start: 5, end: 7, channel: "system", from: "Pessoa 2", to: "Pessoa 1" }])).changed).toBe(0);
+});
+
+test("meeting relabel: pending finals are written first, and bad changes are refused", async () => {
+  const { notes, vault } = await rig(60_000);
+  const n = await notes.start("s10", "Zoom", at);
+  await notes.segment("s10", segment(1, "Pessoa 2", "Ainda no lote."));
+  expect((await notes.relabel("s10", [{ start: 1, end: 3, channel: "system", from: "Pessoa 2", to: "Pessoa 1" }])).changed).toBe(1);
+  expect((await vault.get(n.path)).content).toMatch(/· Pessoa 1:\*\* Ainda no lote\./);
+  await expect(notes.relabel("s10", [{ start: 1, end: 3, channel: "system", from: "Pessoa 1", to: "a\nb" }])).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+  await expect(notes.relabel("nope", [])).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+});
