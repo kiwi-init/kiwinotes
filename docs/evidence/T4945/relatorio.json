@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "synthetic": true,
+  "helper": false,
+  "reports": [
+    {
+      "theme": "light",
+      "ready": true,
+      "problems": [],
+      "clipboard": [],
+      "blocked": [],
+      "invokes": {
+        "settings.get": 4,
+        "notes.list": 8,
+        "trash.list": 7,
+        "notes.get": 8,
+        "notes.backlinks": 9,
+        "notes.tags": 7,
+        "notes.save": 3,
+        "meetings.speakers": 1,
+        "meetings.renameSpeaker": 1
+      },
+      "invokeErrors": []
+    },
+    {
+      "theme": "dark",
+      "ready": true,
+      "problems": [],
+      "clipboard": [],
+      "blocked": [],
+      "invokes": {
+        "settings.get": 4,
+        "notes.list": 1,
+        "trash.list": 1,
+        "notes.get": 1,
+        "notes.backlinks": 1
+      },
+      "invokeErrors": []
+    }
+  ]
+}

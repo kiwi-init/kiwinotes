@@ -2,41 +2,52 @@
 // main (T1192). Cada handler valida os argumentos e responde `E_BAD_ARGS` quando eles não servem. Nada genérico: não
 // há "rodar comando" nem "ler arquivo qualquer".
 
-import type { AppAbout, DictionaryTerm, HistoryEntry, HistoryPage, HubSection, Snippet, UpdatesView } from "../shared/ui-contract.ts";
-import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapability } from "../shared/ui-contract.ts";
+import type { AppAbout, DictionaryTerm, HistoryEntry, HistoryPage, HubSection, Snippet, UpdatesView,
+} from "../shared/ui-contract.ts";
+import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapability,
+} from "../shared/ui-contract.ts";
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
-import { type AppSettings, MAX_PINNED, type SettingsPatch } from "../store/settings.ts";
+import { type AppSettings, MAX_PINNED, type SettingsPatch,
+} from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
-import { type AttachmentData, type Attachments, attachmentsFolder } from "../notes/attachments.ts";
+import { type AttachmentData, type Attachments, attachmentsFolder,
+} from "../notes/attachments.ts";
 import { openMode } from "../shared/attachments.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
 import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import { isNotesShortcut } from "../shared/shortcuts.ts";
-import { type ExternalMoves, followPinned, type Vault } from "../notes/vault.ts";
+import { type ExternalMoves, followPinned, type Vault,
+} from "../notes/vault.ts";
 import type { NoteVersions } from "../notes/versions.ts";
 import { ExportError, type NoteExporter } from "../notes/export.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
+import type { MeetingNotes } from "../notes/meetings.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 import { checkMeetingSettingsPatch, NOT_RECORDING } from "../shared/meetings.ts";
 import { listMeetings, type MeetingHost, MeetingHostError } from "./meetings.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
-  dictionary: { load(): Promise<DictionaryTerm[]>; save(terms: DictionaryTerm[]): Promise<DictionaryTerm[]> };
-  snippets: { load(): Promise<Snippet[]>; save(snippets: Snippet[]): Promise<Snippet[]> };
+  dictionary: { load(): Promise<DictionaryTerm[]>; save(terms: DictionaryTerm[]): Promise<DictionaryTerm[]>;
+  };
+  snippets: { load(): Promise<Snippet[]>; save(snippets: Snippet[]): Promise<Snippet[]>;
+  };
   history: {
-    search(params: { query?: string; limit?: number; before?: string }): Promise<HistoryPage>;
+    search(params: { query?: string; limit?: number; before?: string;
+    }): Promise<HistoryPage>;
     delete(id: string): Promise<boolean>;
     get(id: string): Promise<HistoryEntry | null>;
   };
   /** O ditado vira nota (T1320): uma por vez, sem duplicar. */
+  meetingNotes?: Pick<MeetingNotes, "speakers" | "renameSpeaker" | "saveEdit">;
   dictationNotes: {
     toNew(text: string, at: Date, id: string): Promise<ToNoteResult>;
-    append(path: string, text: string, at: Date, id: string): Promise<ToNoteResult>;
+    append(path: string, text: string, at: Date, id: string,
+    ): Promise<ToNoteResult>;
   };
   /** As Configurações (T1499). */
   /** O `save` mescla a Aparência dada com a que está gravada, uma gravação por vez. */
@@ -47,7 +58,8 @@ export interface CapabilityDeps {
      * Ler, decidir e gravar na mesma fila (T2639). Sem ele (stubs de teste), as fixadas caem no `load` + `save`, que
      * podem se atropelar.
      */
-    update?(change: (current: AppSettings) => SettingsPatch | null): Promise<AppSettings>;
+    update?(change: (current: AppSettings) => SettingsPatch | null,
+    ): Promise<AppSettings>;
   };
   /** O helper passa a vigiar o atalho novo (T1499). */
   settingsChanged?(settings: AppSettings): void;
@@ -119,7 +131,8 @@ export interface CapabilityDeps {
 }
 
 /** As atualizações sem o Updater por perto (o headless, os testes): nada vai à rede. */
-const UPDATES_OFF: UpdatesView = { state: "off", reason: "sem o atualizador no headless e nos testes", lastCheck: null };
+const UPDATES_OFF: UpdatesView = { state: "off", reason: "sem o atualizador no headless e nos testes", lastCheck: null,
+};
 
 /** Um erro com código, que o AppEngine passa à UI como está (`E_BAD_ARGS`). */
 export class CapabilityError extends Error {
@@ -150,7 +163,8 @@ function list(value: unknown, field: string, max: number): unknown[] {
   return value;
 }
 
-function optionalString(value: unknown, field: string, max: number): string | undefined {
+function optionalString(value: unknown, field: string, max: number,
+): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string") throw bad(`${field} must be a string`);
   if (value.length > max) throw bad(`${field} is longer than ${max}`);
@@ -158,7 +172,8 @@ function optionalString(value: unknown, field: string, max: number): string | un
 }
 
 /** Os handlers do contrato, por nome. O AppEngine recusa (`E_NO_CAPABILITY`) qualquer nome fora daqui. */
-export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args: unknown) => Promise<unknown> | unknown> {
+export function uiCapabilities(deps: CapabilityDeps,
+): Record<UiCapability, (args: unknown) => Promise<unknown> | unknown> {
   const now = deps.now ?? Date.now;
   // O main não vê o clique: a UI só chama no gesto (navigator.userActivation), e aqui vai um limite de ritmo para uma
   // UI que tente encher o clipboard sozinha.
@@ -193,7 +208,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
   const vault = async () => {
     await deps.notes.open();
     watchingPins ??= (async () => {
-      deps.notes.onExternalMoves((r) => void followPins(r).catch((e) => console.error("[notes] pinned:", e)));
+      deps.notes.onExternalMoves((r) => void followPins(r).catch((e) => console.error("[notes] pinned:", e)),
+      );
       // O OCR (T2709): os anexos que mudam por fora, e uma passada em todos na abertura (o cache pula os já lidos).
       if (deps.ocr) {
         const ocr = deps.ocr;
@@ -201,7 +217,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
         void ocr.scan().catch((e) => console.error("[ocr] scan:", e));
       }
       // Best effort (revisão #2574): uma limpeza de fixadas que falha (o disco, o settings) nunca derruba as notas.
-      await followPins({ moves: new Map(), gone: [] }).catch((e) => console.error("[notes] pinned:", e));
+      await followPins({ moves: new Map(), gone: [] }).catch((e) => console.error("[notes] pinned:", e),
+      );
     })();
     await watchingPins;
     return deps.notes;
@@ -209,11 +226,13 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
   const followPins = async (r: ExternalMoves) => {
     // O histórico de versões segue a nota renomeada por fora (T2680), e as fixadas também (T2559).
     await deps.versions?.move((p) => r.moves.get(p) ?? p);
-    await changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()));
+    await changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()),
+    );
   };
   /** Os argumentos de uma capacidade de notas: só os campos conhecidos, para um typo não passar calado. */
   const attachments = () => {
-    if (!deps.attachments) throw new CapabilityError("E_NO_ATTACHMENTS", "this host has no attachments");
+    if (!deps.attachments) throw new CapabilityError("E_NO_ATTACHMENTS", "this host has no attachments",
+      );
     return deps.attachments;
   };
   const fields = (args: unknown, cap: string, allowed: string[]) => {
@@ -228,7 +247,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
    * leva junto as fixadas de dentro dela.
    */
   const fixPinned = (map: (p: string) => string | null) =>
-    changePinned((pinned) => [...new Set(pinned.map(map).filter((p): p is string => p !== null))]);
+    changePinned((pinned) => [...new Set(pinned.map(map).filter((p): p is string => p !== null)),
+    ]);
   /** A nota (ou a pasta) mudou de lugar pelo app: as fixadas e o histórico de versões vão junto. */
   const followMove = async (map: (p: string) => string) => {
     await deps.versions?.move(map);
@@ -247,30 +267,38 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     }
   };
   const under = (prefix: string, p: string) => p === prefix || p.startsWith(`${prefix}/`);
-  const moveUnder = (from: string, to: string) => (p: string) => (under(from, p) ? `${to}${p.slice(from.length)}` : p);
-  const dropUnder = (gone: string) => (p: string) => (under(gone, p) ? null : p);
+  const moveUnder = (from: string, to: string) => (p: string) =>
+    under(from, p) ? `${to}${p.slice(from.length)}` : p;
+  const dropUnder = (gone: string) => (p: string) =>
+    under(gone, p) ? null : p;
 
-  const handlers: { [K in UiCapability]: (args: unknown) => Promise<UiCapabilities[K]["result"]> | UiCapabilities[K]["result"] } = {
+  const handlers: { [K in UiCapability]: (args: unknown,
+    ) => Promise<UiCapabilities[K]["result"]> | UiCapabilities[K]["result"];
+  } = {
     "dictionary.get": (args) => {
       noArgs(args, "dictionary.get");
       return deps.dictionary.load();
     },
     "dictionary.set": async (args) => {
-      const terms = sanitizeTerms(list(object(args, "dictionary.set").terms, "terms", MAX_TERMS * 2));
+      const terms = sanitizeTerms(list(object(args, "dictionary.set").terms, "terms", MAX_TERMS * 2),
+      );
       const saved = await deps.dictionary.save(terms);
       deps.dictionaryChanged?.(saved);
       return saved;
     },
     "dictionary.check": (args) => {
-      const terms = sanitizeTerms(list(object(args, "dictionary.check").terms, "terms", MAX_TERMS * 2));
-      return aliasWarnings(terms).map((w) => ({ ...w, text: aliasWarningText(w) }));
+      const terms = sanitizeTerms(list(object(args, "dictionary.check").terms, "terms", MAX_TERMS * 2),
+      );
+      return aliasWarnings(terms).map((w) => ({ ...w, text: aliasWarningText(w),
+      }));
     },
     "snippets.get": (args) => {
       noArgs(args, "snippets.get");
       return deps.snippets.load();
     },
     "snippets.set": async (args) => {
-      const snippets = sanitizeSnippets(list(object(args, "snippets.set").snippets, "snippets", 2000));
+      const snippets = sanitizeSnippets(list(object(args, "snippets.set").snippets, "snippets", 2000),
+      );
       const saved = await deps.snippets.save(snippets);
       deps.snippetsChanged?.(saved);
       return saved;
@@ -282,7 +310,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       if (a.limit !== undefined && (typeof a.limit !== "number" || !Number.isInteger(a.limit) || a.limit < 1 || a.limit > 500)) {
         throw bad("limit must be an integer from 1 to 500");
       }
-      return deps.history.search({ query, before, limit: a.limit as number | undefined });
+      return deps.history.search({ query, before, limit: a.limit as number | undefined,
+      });
     },
     "history.delete": (args) => {
       const id = optionalString(object(args, "history.delete").id, "id", 128);
@@ -295,7 +324,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       if (!id) throw bad("id is required");
       const path = optionalString(a.path, "path", 1024);
       const entry = await deps.history.get(id);
-      if (!entry) throw new CapabilityError("E_NOT_FOUND", `history.toNote: no dictation ${id}`);
+      if (!entry) throw new CapabilityError("E_NOT_FOUND", `history.toNote: no dictation ${id}`,
+        );
       const at = new Date(entry.at);
       return path ? deps.dictationNotes.append(path, entry.text, at, entry.id) : deps.dictationNotes.toNew(entry.text, at, entry.id);
     },
@@ -308,7 +338,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const patch: SettingsPatch = {};
       for (const [key, value] of Object.entries(a)) {
         if (key === "notesShortcut") {
-          if (!isNotesShortcut(value)) throw bad("notesShortcut must be one of the offered shortcuts, or null");
+          if (!isNotesShortcut(value)) throw bad("notesShortcut must be one of the offered shortcuts, or null",
+            );
           patch.notesShortcut = value;
         } else if (key === "pinned") {
           patch.pinned = pinnedList(value);
@@ -350,13 +381,16 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           try {
             patch.attachmentsFolder = attachmentsFolder(value);
           } catch (e) {
-            throw bad(`settings.set: ${e instanceof Error ? e.message : String(e)}`);
+            throw bad(`settings.set: ${e instanceof Error ? e.message : String(e)}`,
+            );
           }
         } else if (key === "savedSearches") {
           // As buscas salvas (T2660): a lista inteira, cada uma com nome e busca.
-          if (!Array.isArray(value) || value.length > MAX_SAVED_SEARCHES) throw bad(`savedSearches must be a list of up to ${MAX_SAVED_SEARCHES}`);
+          if (!Array.isArray(value) || value.length > MAX_SAVED_SEARCHES) throw bad(`savedSearches must be a list of up to ${MAX_SAVED_SEARCHES}`,
+            );
           const list = sanitizeSavedSearches(value);
-          if (list.length !== value.length) throw bad("savedSearches: each one needs a name and a query, without repeating a query");
+          if (list.length !== value.length) throw bad("savedSearches: each one needs a name and a query, without repeating a query",
+            );
           patch.savedSearches = list;
         } else if (key === "meetings") {
           // Os ajustes de reunião (1.21.0, T4947): só os campos dados; o helper recebe no `config.set`.
@@ -366,7 +400,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           patch.meetings = { ...(await deps.settings.load()).meetings, ...checked.patch };
         } else if (key === "microphone") {
           // Por qual mic o ditado grava (1.18.0, T3230): o helper recebe no `config.set`.
-          if (!isMicrophoneChoice(value)) throw bad('microphone must be "auto", "builtin", "system" or "uid:<device UID>"');
+          if (!isMicrophoneChoice(value)) throw bad('microphone must be "auto", "builtin", "system" or "uid:<device UID>"',
+            );
           patch.microphone = value;
         } else throw bad(`settings.set: unknown setting ${key}`);
       }
@@ -380,8 +415,10 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     },
     "app.about": (args) => {
       noArgs(args, "app.about");
-      if (!deps.about) return { version: "dev", channel: "dev", releaseUrl: null, updates: UPDATES_OFF } satisfies AppAbout;
-      return { ...deps.about.info(), updates: deps.about.view() } satisfies AppAbout;
+      if (!deps.about) return { version: "dev", channel: "dev", releaseUrl: null, updates: UPDATES_OFF,
+        } satisfies AppAbout;
+      return { ...deps.about.info(), updates: deps.about.view(),
+      } satisfies AppAbout;
     },
     "updates.check": async (args) => {
       noArgs(args, "updates.check");
@@ -401,7 +438,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       if (typeof text !== "string") throw bad("text must be a string");
       if (text.length > CLIPBOARD_MAX_CHARS) throw bad(`text is longer than ${CLIPBOARD_MAX_CHARS} characters`);
       const t = now();
-      if (t - lastCopy < 300) throw new CapabilityError("E_RATE", "clipboard.write: too soon after the last copy");
+      if (t - lastCopy < 300) throw new CapabilityError("E_RATE", "clipboard.write: too soon after the last copy",
+        );
       lastCopy = t;
       deps.clipboardWrite(text);
       return true;
@@ -411,15 +449,49 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       noArgs(args, "notes.list");
       return (await vault()).list();
     },
+    "meetings.speakers": async (args) => {
+      const a = fields(args, "meetings.speakers", ["path"]);
+      if (!deps.meetingNotes)
+        throw new CapabilityError("E_NO_MEETINGS", "meeting notes unavailable");
+      return { speakers: await deps.meetingNotes.speakers(notePath(a.path)) };
+    },
+    "meetings.renameSpeaker": async (args) => {
+      const a = fields(args, "meetings.renameSpeaker", ["path", "from", "to"]);
+      if (!deps.meetingNotes)
+        throw new CapabilityError("E_NO_MEETINGS", "meeting notes unavailable");
+      if (typeof a.from !== "string" || typeof a.to !== "string")
+        throw bad("from and to must be strings");
+      return deps.meetingNotes.renameSpeaker(notePath(a.path), a.from, a.to);
+    },
     "notes.get": async (args) => (await vault()).get(fields(args, "notes.get", ["path"]).path),
     "notes.save": async (args) => {
-      const a = fields(args, "notes.save", ["path", "content", "baseVersion"]);
+      const a = fields(args, "notes.save", ["path", "content", "baseVersion",
+        "baseContent",
+      ]);
       const v = await vault();
       // O texto de antes, para a 1ª versão de uma nota sem histórico (T2680).
-      const before = deps.versions ? await v.get(a.path).then((n) => n.content, () => undefined) : undefined;
-      const r = await v.save(a.path, a.content, a.baseVersion);
+      const before = deps.versions ? await v.get(a.path).then((n) => n.content, () => undefined,
+          ) : undefined;
+      if (a.baseContent !== undefined && typeof a.baseContent !== "string")
+        throw bad("baseContent must be a string");
+      const r =
+        deps.meetingNotes &&
+        typeof a.path === "string" &&
+        typeof a.content === "string" &&
+        typeof a.baseVersion === "string"
+          ? await deps.meetingNotes.saveEdit(
+              a.path,
+              a.content,
+              a.baseVersion,
+              a.baseContent as string | undefined,
+            )
+          : await v.save(a.path, a.content, a.baseVersion);
       if (r.saved && deps.versions && typeof a.content === "string") {
-        await deps.versions.record(r.meta.path, a.content, before).catch((e) => console.error("[notes] versions:", e));
+        await deps.versions.record(r.meta.path,
+            "content" in r && typeof r.content === "string"
+              ? r.content
+              : a.content, before,
+          ).catch((e) => console.error("[notes] versions:", e));
       }
       return r;
     },
@@ -434,7 +506,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       try {
         return await deps.versions.get(p, a.id);
       } catch (e) {
-        throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message);
+        throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message,
+        );
       }
     },
     "notes.export": async (args) => {
@@ -461,7 +534,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       try {
         old = await deps.versions.get(p, a.id);
       } catch (e) {
-        throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message);
+        throw new CapabilityError((e as { code?: string }).code ?? "E_FAILED", (e as Error).message,
+        );
       }
       // O de agora vira uma versão antes (para dar para voltar do restaurar), e o restaurado também.
       const current = await v.get(p);
@@ -471,8 +545,10 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       return r;
     },
     "notes.create": async (args) => {
-      const a = fields(args, "notes.create", ["folder", "title", "content", "template"]);
-      return (await vault()).create(a.folder, a.title, a.content ?? "", a.template);
+      const a = fields(args, "notes.create", ["folder", "title", "content", "template",
+      ]);
+      return (await vault()).create(a.folder, a.title, a.content ?? "", a.template,
+      );
     },
     "notes.rename": async (args) => {
       const a = fields(args, "notes.rename", ["path", "newPath"]);
@@ -506,13 +582,15 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     },
     "notes.daily": async (args) => {
       const a = fields(args, "notes.daily", ["date"]);
-      return (await vault()).daily(a.date, (await deps.settings.load()).dailyFolder);
+      return (await vault()).daily(a.date, (await deps.settings.load()).dailyFolder,
+      );
     },
     "notes.createFromLink": async (args) => {
       const a = fields(args, "notes.createFromLink", ["link", "from"]);
       return (await vault()).createFromLink(a.link, a.from);
     },
-    "notes.unlinkedMentions": async (args) => (await vault()).unlinkedMentions(fields(args, "notes.unlinkedMentions", ["path"]).path),
+    "notes.unlinkedMentions": async (args) => (await vault()).unlinkedMentions(fields(args, "notes.unlinkedMentions", ["path"]).path,
+      ),
     "notes.linkMentions": async (args) => {
       const a = fields(args, "notes.linkMentions", ["path", "target"]);
       return (await vault()).linkMentions(a.path, a.target);
@@ -530,7 +608,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       deps.revealTrash?.();
       return true as const;
     },
-    "folders.create": async (args) => (await vault()).createFolder(fields(args, "folders.create", ["path"]).path),
+    "folders.create": async (args) => (await vault()).createFolder(fields(args, "folders.create", ["path"]).path,
+      ),
     "folders.rename": async (args) => {
       const a = fields(args, "folders.rename", ["path", "newPath"]);
       const r = await (await vault()).moveFolder(a.path, a.newPath);
@@ -561,7 +640,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const max = typeof a.limit === "number" ? a.limit : 20;
       if (hits.length >= max) return hits;
       // O exato antes do aproximado (T2966), nas notas e nos anexos juntos; o resto da ordem fica como veio.
-      const all = [...hits, ...(await attachmentHits(deps.ocr, v, a.query as string, hits, max))];
+      const all = [...hits, ...(await attachmentHits(deps.ocr, v, a.query as string, hits, max)),
+      ];
       return [...all.filter((h) => !h.approx), ...all.filter((h) => h.approx)];
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
@@ -592,7 +672,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     },
     "images.remote": async (args) => {
       const a = fields(args, "images.remote", ["url"]);
-      if (!deps.remoteImage) throw new CapabilityError("E_NO_REMOTE_IMAGES", "this host does not load remote images");
+      if (!deps.remoteImage) throw new CapabilityError("E_NO_REMOTE_IMAGES", "this host does not load remote images",
+        );
       try {
         const url = optionalString(a.url, "url", 8192);
         if (!url) throw bad("images.remote: url is required");
@@ -605,7 +686,8 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     "audio.inputs": async (args) => {
       noArgs(args, "audio.inputs");
       const got = await deps.audioInputs?.();
-      if (!got) throw new CapabilityError("E_NO_HELPER", "the helper is not running, or does not list audio inputs");
+      if (!got) throw new CapabilityError("E_NO_HELPER", "the helper is not running, or does not list audio inputs",
+        );
       return got;
     },
     "meetings.list": async (args) => {

@@ -914,3 +914,10 @@ body {
   justify-content: flex-end;
   padding-top: 10px;
 }
+
+/* Meeting speaker names (T4945): same local dialog as the note's other actions. */
+.kn-meeting-speaker { padding: 24px; }
+.kn-meeting-speaker h2 { margin: 0 0 20px; font-size: 18px; }
+.kn-meeting-speaker label { display: grid; gap: 6px; margin: 12px 0; }
+.kn-meeting-speaker input, .kn-meeting-speaker select { width: 100%; padding: 8px; border: 1px solid var(--line-2, var(--surface-2)); border-radius: 6px; background: var(--bg); color: inherit; font: inherit; }
+.kn-meeting-speaker-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }

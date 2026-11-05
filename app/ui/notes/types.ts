@@ -4,7 +4,8 @@
 import type { UiCapabilities } from "../../src/shared/ui-contract.ts";
 import type { AttachmentSource } from "./editor/attachments.ts";
 
-export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode } from "../../src/shared/ui-contract.ts";
+export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode,
+} from "../../src/shared/ui-contract.ts";
 import type { TagNode } from "../../src/shared/ui-contract.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
 import type { Note, NoteMeta } from "../../src/shared/ui-contract.ts";
@@ -32,12 +33,19 @@ type Result<C extends keyof UiCapabilities> = Promise<UiCapabilities[C]["result"
 
 /** As capacidades `notes.*` do contrato, como a janela chama. */
 export interface NotesApi {
+  meetings?: {
+    speakers(path: string): Promise<string[]>;
+    renameSpeaker(path: string, from: string, to: string): Promise<NoteMeta>;
+  };
   list(): Promise<VaultListing>;
   get(path: string): Promise<Note>;
   /** Se a nota mudou fora (no Obsidian, por exemplo), não grava e devolve a versão do disco. */
-  save(path: string, content: string, baseVersion: string): Result<"notes.save">;
+  save(path: string, content: string, baseVersion: string,
+    baseContent?: string,
+  ): Result<"notes.save">;
   /** Título repetido vira "Título 2". */
-  create(title: string, folder?: string, content?: string, template?: string): Promise<Note>;
+  create(title: string, folder?: string, content?: string, template?: string,
+  ): Promise<Note>;
   /** As tags em árvore (T2619). Num engine antes do 1.9.0, não existe. */
   tags?(): Promise<TagNode[]>;
   /** A pasta de modelos e as notas dela (T2619). Num engine antes do 1.9.0, não existe. */
@@ -66,21 +74,25 @@ export interface NotesApi {
    * Exportar (T2684): o engine abre o seletor de pasta e grava `<Título>.md|.html|.pdf`. `theme` são as variáveis CSS da
    * janela, para o HTML e o PDF saírem com o tema de agora. Cancelar dá E_CANCELED.
    */
-  export?(path: string, format: ExportFormat, theme: Record<string, string>): Promise<{ file: string }>;
+  export?(path: string, format: ExportFormat, theme: Record<string, string>,
+  ): Promise<{ file: string }>;
   /** Os anexos (T2594, contrato 1.11.0). Num engine sem eles, colar e arrastar arquivo não faz nada de especial. */
   attachments?: AttachmentSource;
   /**
    * As buscas salvas (T2660, `savedSearches` nas settings). `list()` dá `null` num engine que ainda não as tem: a janela
    * esconde o "Salvar esta busca".
    */
-  savedSearches?: { list(): Promise<SavedSearch[] | null>; set(list: SavedSearch[]): Promise<SavedSearch[]> };
+  savedSearches?: { list(): Promise<SavedSearch[] | null>; set(list: SavedSearch[]): Promise<SavedSearch[]>;
+  };
   /**
    * Os arquivos que não são nota (T3370, contrato 1.19.0): abrir no app padrão do Mac, só pelo clique, e o aviso de que
    * mudaram. Num engine antigo, a árvore só tem pastas e notas.
    */
-  files?: { open(path: string): Promise<true>; onChanged(fn: () => void): () => void };
+  files?: { open(path: string): Promise<true>; onChanged(fn: () => void): () => void;
+  };
   /** As preferências da árvore, e o aviso quando as settings mudam (de outra janela, os Ajustes). */
-  prefs?: { get(): Promise<TreePrefs>; onChanged(fn: (p: TreePrefs) => void): () => void };
+  prefs?: { get(): Promise<TreePrefs>; onChanged(fn: (p: TreePrefs) => void): () => void;
+  };
 }
 
 export type TrashItem = UiCapabilities["trash.list"]["result"]["items"][number];
@@ -103,7 +115,8 @@ export interface ExtrasApi {
   createFromLink(link: string, from?: string): Promise<Note>;
   unlinkedMentions(path: string): Promise<Mention[]>;
   /** Na nota `path`, as menções de `target` viram `[[link]]`. */
-  linkMentions(path: string, target: string): Promise<{ meta: NoteMeta; count: number }>;
+  linkMentions(path: string, target: string,
+  ): Promise<{ meta: NoteMeta; count: number }>;
   trashList(): Promise<TrashItem[]>;
   /** O que espera o Desfazer vai já para o Lixo do macOS. */
   trashEmpty(): Promise<number>;
@@ -125,7 +138,8 @@ export interface FoldersApi {
   move(path: string, parent: string): Promise<FolderMoved>;
   /** Com o que tiver dentro, como o `delete` da nota: dá para desfazer por 10 min. */
   delete(path: string): Promise<true>;
-  moveNote(path: string, folder: string): Promise<{ meta: NoteMeta; updatedLinks: number }>;
+  moveNote(path: string, folder: string,
+  ): Promise<{ meta: NoteMeta; updatedLinks: number }>;
   /** "Título 2", na mesma pasta. */
   duplicateNote(path: string): Promise<Note>;
   /** O "Desfazer" do apagar (nota ou pasta, nos últimos 10 min), pelo caminho original. `E_EXISTS` se o lugar foi ocupado. */

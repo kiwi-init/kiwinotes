@@ -1,11 +1,15 @@
 // O CodeMirror dentro do React: um EditorView por janela, e um estado novo a cada nota aberta (o desfazer não atravessa
 // de uma nota para outra). O texto que chega de fora (a nota recarregada) troca o estado; o que a pessoa digita só sobe.
 
+import { Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 
 import type { AttachmentSource } from "./editor/attachments.ts";
-import { editorExtensions, type LinkCache, type LinkTarget, stateFor } from "./editor/index.ts";
+import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
+} from "./editor/index.ts";
+
+const externalUpdates = new WeakSet<EditorView>();
 
 export interface NoteEditorProps {
   /** Muda quando outra nota abre, ou quando a mesma nota é recarregada do disco. */
@@ -24,17 +28,23 @@ export interface NoteEditorProps {
   onError?(text: string): void;
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError }: NoteEditorProps) {
+export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError,
+}: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
-  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError });
-  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError };
+  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError,
+  });
+  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError,
+  };
 
   const extensions = useRef(
     editorExtensions(
       {
-        onChange: (d) => latest.current.onChange(d),
+        onChange: (d) => {
+          if (!view.current || !externalUpdates.has(view.current))
+            latest.current.onChange(d);
+        },
         onOpenLink: (t) => latest.current.onOpenLink(t),
         onOpenTag: (t) => latest.current.onOpenTag?.(t),
         onSlashTemplate: () => latest.current.onSlashTemplate?.(),
@@ -48,7 +58,8 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
   );
 
   useEffect(() => {
-    const v = new EditorView({ parent: host.current!, state: stateFor(doc, extensions.current) });
+    const v = new EditorView({ parent: host.current!, state: stateFor(doc, extensions.current),
+    });
     view.current = v;
     const detach = links.attach(v);
     // Quem rola é a coluna da nota (o título e a meta rolam junto), não o editor. Sem avisar o editor, a medida das
@@ -104,4 +115,40 @@ export function insertIntoEditor(text: string): boolean {
 /** O que entra depois de `before` (o caractere antes do cursor): um espaço quando colaria numa palavra. */
 export function joinInsert(before: string, text: string): string {
   return before && !/\s/.test(before) ? ` ${text}` : text;
+}
+
+/** Apply a meeting append without replacing the editor state, cursor, scroll or undo history. */
+export function updateEditorDocument(next: string): void {
+  const dom = document.querySelector<HTMLElement>(".kn-note-editor .cm-editor");
+  const view = dom ? EditorView.findFromDOM(dom) : null;
+  if (!view) return;
+  const before = view.state.doc.toString();
+  if (before === next) return;
+  let from = 0,
+    tail = 0;
+  while (
+    from < before.length &&
+    from < next.length &&
+    before[from] === next[from]
+  )
+    from++;
+  while (
+    tail < before.length - from &&
+    tail < next.length - from &&
+    before[before.length - 1 - tail] === next[next.length - 1 - tail]
+  )
+    tail++;
+  externalUpdates.add(view);
+  try {
+    view.dispatch({
+      changes: {
+        from,
+        to: before.length - tail,
+        insert: next.slice(from, next.length - tail),
+      },
+      annotations: Transaction.addToHistory.of(false),
+    });
+  } finally {
+    externalUpdates.delete(view);
+  }
 }

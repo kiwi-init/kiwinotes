@@ -19,20 +19,31 @@ import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
 import { wordCount } from "./editor/text.ts";
 import { type Draft, Drafts, forgetDraftOnDelete } from "./drafts.ts";
+import { MeetingSpeakerDialog } from "./MeetingSpeakerDialog.tsx";
+import {
+  isMeetingNote,
+  rebaseMeetingEdit,
+} from "../../src/shared/meeting-note.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
-import { focusEditor, insertIntoEditor, NoteEditor } from "./NoteEditor.tsx";
+import { focusEditor, insertIntoEditor,
+  updateEditorDocument,
+  NoteEditor,
+} from "./NoteEditor.tsx";
 import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
 import { type SideTarget, Sidebar } from "./Sidebar.tsx";
-import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy } from "./tree.ts";
+import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy,
+} from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
 import { VersionsDialog } from "./VersionsDialog.tsx";
-import { hasFilters, parseQuery, type SavedSearch } from "../../src/shared/query.ts";
+import { hasFilters, parseQuery, type SavedSearch,
+} from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
-import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs } from "./types.ts";
+import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs,
+} from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
@@ -56,7 +67,8 @@ export function freeName(base: string, taken: Set<string>): string {
   for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
 }
 
-const join = (folder: string, name: string) => (folder ? `${folder}/${name}` : name);
+const join = (folder: string, name: string) =>
+  folder ? `${folder}/${name}` : name;
 
 /** Quanto esperar depois da última tecla para gravar. */
 const SAVE_AFTER_MS = 500;
@@ -95,10 +107,12 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   /** As buscas salvas (T2660); `null` num engine que ainda não as tem. */
   const [saved, setSaved] = useState<SavedSearch[] | null>(null);
   /** A extensão nos nomes e a pasta da nota do dia (T3370), das settings; segue quando os Ajustes mudam. */
-  const [prefs, setPrefs] = useState<TreePrefs>({ showExtensions: false, dailyFolder: "" });
+  const [prefs, setPrefs] = useState<TreePrefs>({ showExtensions: false, dailyFolder: "",
+  });
   /** "Nova nota a partir de modelo…": os modelos e a pasta onde a nota nasce. */
   // `insert` (T2660, "/modelo"): o modelo entra no cursor da nota aberta, em vez de criar uma nota.
-  const [picking, setPicking] = useState<{ folder: string; templates: NoteMeta[]; insert?: boolean } | null>(null);
+  const [picking, setPicking] = useState<{ folder: string; templates: NoteMeta[]; insert?: boolean;
+  } | null>(null);
   // A árvore e o "Citada em" abrem em popover (C · Foco).
   const [treeOpen, setTreeOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
@@ -109,12 +123,18 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   const [sortBy, setSortBy] = useState<SortBy>(loadSort);
   const [selectedFolder, setSelectedFolder] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; target: SideTarget } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; target: SideTarget;
+  } | null>(null);
+  const [speakerDialog, setSpeakerDialog] = useState<{
+    path: string;
+    speakers: string[];
+  } | null>(null);
   const [moving, setMoving] = useState<SideTarget | null>(null);
   /** O "Versões…" aberto (T2680): a nota e o texto dela no disco, para a diferença. */
   /** "Exportar…" (T2684): a nota cujo formato a pessoa está escolhendo. */
   const [exporting, setExporting] = useState<string | null>(null);
-  const [versionsOf, setVersionsOf] = useState<{ path: string; title: string; content: string } | null>(null);
+  const [versionsOf, setVersionsOf] = useState<{ path: string; title: string; content: string;
+  } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   /** O meio da janela: a nota, ou a Lixeira do app (T2593). */
   const [view, setView] = useState<"note" | "trash">("note");
@@ -129,6 +149,7 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   const pending = useRef<string | null>(null);
   const frontmatter = useRef("");
   const version = useRef("");
+  const baseContent = useRef("");
   const current = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const links = useMemo(() => new LinkCache((t) => api.resolve(t)), [api]);
@@ -166,6 +187,7 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
       const split = splitFrontmatter(n.content);
       frontmatter.current = split.frontmatter;
       version.current = n.version;
+      baseContent.current = n.content;
       current.current = n.path;
       pending.current = null;
       setNote(n);
@@ -207,9 +229,13 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
       const path = current.current;
       const text = pending.current;
       if (!path || text === null) return "clean";
-      let r: SaveResult;
+      const submitted = frontmatter.current + text;
+      let r: SaveResult & { content?: string };
       try {
-        r = await api.save(path, frontmatter.current + text, version.current);
+        r = await api.save(path,
+          submitted, version.current,
+          baseContent.current,
+        );
       } catch {
         setSaveFailed(true);
         return "error";
@@ -218,14 +244,41 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
         setConflict(r.current);
         return "conflict";
       }
+      if (current.current !== path) return "saved";
+      const savedContent = r.content ?? submitted;
+      const typing = pending.current !== text;
+      const latest =
+        pending.current === null
+          ? submitted
+          : frontmatter.current + pending.current;
+      const displayContent = typing
+        ? (rebaseMeetingEdit(submitted, latest, savedContent) ?? latest)
+        : savedContent;
+      const display = splitFrontmatter(displayContent);
       version.current = r.meta.version;
+      baseContent.current = savedContent;
+      frontmatter.current = display.frontmatter;
       setSaveFailed(false);
-      // Só limpa se nada foi digitado enquanto gravava.
-      if (pending.current === text) {
-        pending.current = null;
-        if (!undecided.current) drafts.remove(path);
+      setConflict(null);
+      pending.current = typing ? display.body : null;
+        if (!undecided.current) {
+        if (typing)
+          drafts.set({
+            path,
+            body: display.body,
+            frontmatter: display.frontmatter,
+            baseVersion: r.meta.version,
+          });
+        else drafts.remove(path);
       }
-      setNote((old) => (old && old.path === path ? { ...old, ...r.meta, content: frontmatter.current + text } : old));
+      if (r.content) {
+        updateEditorDocument(display.body);
+        setBody(display.body);
+        setWords(wordCount(display.body));
+      }
+      setNote((old) =>
+        old && old.path === path ? { ...old, ...r.meta, content: savedContent } : old,
+      );
       return "saved";
     };
     queue.current = queue.current.then(once, once);
@@ -241,7 +294,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
       const outcome = await save();
       if (outcome === "conflict" || outcome === "error") {
         setPalette(false);
-        requestAnimationFrame(() => document.querySelector(".kn-save-alert")?.scrollIntoView({ block: "nearest" }));
+        requestAnimationFrame(() => document.querySelector(".kn-save-alert")?.scrollIntoView({ block: "nearest" }),
+        );
         return false;
       }
       if (pending.current === null) return true;
@@ -275,7 +329,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   );
 
   const create = useCallback(
-    async (wanted: string, focusTitle = false, folder?: string, template?: string) => {
+    async (wanted: string, focusTitle = false, folder?: string, template?: string,
+    ) => {
       if (!(await leave())) return;
       const n = await api.create(wanted, folder || undefined, undefined, template).catch(() => null);
       setPalette(false);
@@ -330,9 +385,42 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
         const path = current.current;
         if (!path) return;
         api.backlinks(path).then(setBacklinks, () => {});
-        if (!paths.includes(path) || pending.current !== null) return;
+        if (!paths.includes(path)) return;
         api.get(path).then(
-          (n) => n.version !== version.current && show(n, true),
+          (n) => {
+            if (current.current !== path || n.version === version.current)
+              return;
+            const local =
+              frontmatter.current +
+              (pending.current ?? splitFrontmatter(baseContent.current).body);
+            const merged = rebaseMeetingEdit(
+              baseContent.current,
+              local,
+              n.content,
+            );
+            if (merged !== null && !undecided.current) {
+              const split = splitFrontmatter(merged);
+              const dirty = merged !== n.content;
+              baseContent.current = n.content;
+              frontmatter.current = split.frontmatter;
+              version.current = n.version;
+              pending.current = dirty ? split.body : null;
+              if (dirty)
+                drafts.set({
+                  path,
+                  body: split.body,
+                  frontmatter: split.frontmatter,
+                  baseVersion: n.version,
+                });
+              else drafts.remove(path);
+              updateEditorDocument(split.body);
+              setBody(split.body);
+              setWords(wordCount(split.body));
+              setNote(n);
+              return;
+            }
+            if (pending.current === null) show(n, true);
+          },
           () => {
             // Apagada ou renomeada fora: a janela fica sem nota aberta.
             current.current = null;
@@ -394,7 +482,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
     setWords(wordCount(doc));
     // O rascunho anda junto com a edição, para sobreviver a um fechamento que o save não alcançou.
     if (current.current && !undecided.current) {
-      drafts.set({ path: current.current, body: doc, frontmatter: frontmatter.current, baseVersion: version.current });
+      drafts.set({ path: current.current, body: doc, frontmatter: frontmatter.current, baseVersion: version.current,
+      });
     }
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_AFTER_MS);
@@ -433,7 +522,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
 
   // O número da Lixeira, na lateral.
   useEffect(() => {
-    api.extras?.trashList().then((items) => setTrashCount(items.length), () => {});
+    api.extras?.trashList().then((items) => setTrashCount(items.length), () => {},
+    );
   }, [api, vaultVersion]);
 
   const rename = async () => {
@@ -489,6 +579,7 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   const keepMine = () => {
     if (!conflict) return;
     version.current = conflict.version;
+    baseContent.current = conflict.content;
     setConflict(null);
     void save();
   };
@@ -502,7 +593,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   }, [pins]);
 
   const say = (text: string, undo?: () => void) => setToast({ text, undo });
-  const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${/E_EXISTS/.test(String(e)) ? ": já existe um com esse nome" : ""}.`);
+  const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${/E_EXISTS/.test(String(e)) ? ": já existe um com esse nome" : ""}.`,
+    );
 
   /** Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. */
   const after = async (moved?: { from: string; to: string }) => {
@@ -513,7 +605,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
     // A pasta escolhida acompanha o renomear e o mover (T3371): a "Nova pasta" que virou "Ideias" continua sendo onde
     // o + Nota e o + Pasta criam.
     if (moved) {
-      const follow = (f: string) => (f === moved.from ? moved.to : f.startsWith(`${moved.from}/`) ? moved.to + f.slice(moved.from.length) : f);
+      const follow = (f: string) =>
+        f === moved.from ? moved.to : f.startsWith(`${moved.from}/`) ? moved.to + f.slice(moved.from.length) : f;
       setSelectedFolder(follow);
       setOpenFolders((o) => new Set([...o].map(follow)));
     }
@@ -529,7 +622,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
 
   const newFolder = async (parent: string) => {
     if (!folders) return;
-    const taken = new Set((listing?.folders ?? []).filter((f) => folderOf(f) === parent).map((f) => f.slice(f.lastIndexOf("/") + 1)));
+    const taken = new Set((listing?.folders ?? []).filter((f) => folderOf(f) === parent).map((f) => f.slice(f.lastIndexOf("/") + 1)),
+    );
     const r = await folders.create(join(parent, freeName("Nova pasta", taken))).catch(failed_("criar a pasta"));
     if (!r) return;
     await after();
@@ -619,7 +713,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
     }
     const name = target.path.slice(target.path.lastIndexOf("/") + 1).replace(/\.md$/, "");
     // O engine tira das fixadas o que foi apagado; o Desfazer põe de volta.
-    const wasPinned = pinned.filter((p) => p === target.path || (target.kind === "folder" && p.startsWith(`${target.path}/`)));
+    const wasPinned = pinned.filter((p) => p === target.path || (target.kind === "folder" && p.startsWith(`${target.path}/`)),
+    );
     const r =
       target.kind === "note"
         ? await api.delete(target.path).catch(failed_("apagar a nota"))
@@ -640,8 +735,7 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
                 await after();
                 if (target.kind === "note") await open(back.path);
               },
-              failed_("desfazer"),
-            )
+              failed_("desfazer"))
         : undefined,
     );
   };
@@ -671,14 +765,20 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   const menuFor = (t: SideTarget): MenuItem[] => {
     const sortItems: MenuItem[] = [
       { kind: "title", label: "Ordenar por" },
-      { label: "Nome", checked: sortBy === "name", onSelect: () => sort("name") },
-      { label: "Edição", checked: sortBy === "edited", onSelect: () => sort("edited") },
-      { label: "Criação", checked: sortBy === "created", onSelect: () => sort("created") },
+      { label: "Nome", checked: sortBy === "name", onSelect: () => sort("name"),
+      },
+      { label: "Edição", checked: sortBy === "edited", onSelect: () => sort("edited"),
+      },
+      { label: "Criação", checked: sortBy === "created", onSelect: () => sort("created"),
+      },
     ];
     if (t.kind === "empty") {
       return [
-        { label: "Nova nota", hint: "⌘N", onSelect: () => void create("Sem título", true, "") },
-        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate("") }] : []),
+        { label: "Nova nota", hint: "⌘N", onSelect: () => void create("Sem título", true, ""),
+        },
+        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(""),
+              },
+            ] : []),
         ...(folders ? [{ label: "Nova pasta", onSelect: () => void newFolder("") }] : []),
         { kind: "separator" },
         ...sortItems,
@@ -686,29 +786,59 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
     }
     if (t.kind === "folder") {
       return [
-        { label: "Nova nota aqui", onSelect: () => void create("Sem título", true, t.path) },
-        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(t.path) }] : []),
-        { label: "Nova pasta aqui", onSelect: () => void newFolder(t.path), disabled: !folders },
+        { label: "Nova nota aqui", onSelect: () => void create("Sem título", true, t.path),
+        },
+        ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(t.path),
+              },
+            ] : []),
+        { label: "Nova pasta aqui", onSelect: () => void newFolder(t.path), disabled: !folders,
+        },
         { kind: "separator" },
-        { label: "Renomear", onSelect: () => setRenaming(`f:${t.path}`), disabled: !folders },
-        { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders },
-        { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
+        { label: "Renomear", onSelect: () => setRenaming(`f:${t.path}`), disabled: !folders,
+        },
+        { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders,
+        },
+        { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders,
+        },
         { kind: "separator" },
-        { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !folders },
+        { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !folders,
+        },
       ];
     }
     const isPinned = pinned.includes(t.path);
     return [
       { label: "Abrir", onSelect: () => void open(t.path) },
-      { label: isPinned ? "Desafixar" : "Fixar", onSelect: () => void togglePin(t.path), disabled: !pins },
+      { label: isPinned ? "Desafixar" : "Fixar", onSelect: () => void togglePin(t.path), disabled: !pins,
+      },
       { kind: "separator" },
       { label: "Renomear", onSelect: () => setRenaming(`n:${t.path}`) },
-      { label: "Duplicar", onSelect: () => void duplicate(t.path), disabled: !folders },
-      { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders },
+      ...(api.meetings && note?.path === t.path && isMeetingNote(note.content)
+        ? [
+            {
+              label: "Renomear falante…",
+              onSelect: () => {
+                void leave()
+                  .then(async (ok) => {
+                    if (!ok) return;
+                    const speakers = await api.meetings!.speakers(t.path);
+                    if (speakers.length)
+                      setSpeakerDialog({ path: t.path, speakers });
+                    else say("Ainda não há falantes nesta reunião.");
+                  })
+                  .catch(failed_("ler os falantes"));
+              },
+            },
+          ]
+        : []),
+      { label: "Duplicar", onSelect: () => void duplicate(t.path), disabled: !folders,
+      },
+      { label: "Mover para…", onSelect: () => setMoving(t), disabled: !folders,
+      },
       { label: "Copiar link [[…]]", onSelect: () => copyLink(t.path) },
       ...(api.versions ? [{ label: "Versões…", onSelect: () => void openVersions(t.path) }] : []),
       ...(api.export ? [{ label: "Exportar…", onSelect: () => setExporting(t.path) }] : []),
-      { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
+      { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders,
+      },
       { kind: "separator" },
       { label: "Apagar", danger: true, onSelect: () => void remove(t) },
     ];
@@ -733,7 +863,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
       (r) =>
         r.templates.length
           ? setPicking({ folder, templates: r.templates, insert })
-          : say(`Nenhum modelo ainda. As notas da pasta “${r.folder}” viram modelos.`),
+          : say(`Nenhum modelo ainda. As notas da pasta “${r.folder}” viram modelos.`,
+              ),
       failed_("ler os modelos"),
     );
   };
@@ -745,7 +876,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   // As preferências da árvore e os outros arquivos do cofre (T3370): um anexo novo ou apagado por fora refaz a lista.
   useEffect(() => {
     api.prefs?.get().then(setPrefs, () => {});
-    const offs = [api.prefs?.onChanged(setPrefs), api.files?.onChanged(() => void refresh())];
+    const offs = [api.prefs?.onChanged(setPrefs), api.files?.onChanged(() => void refresh()),
+    ];
     return () => offs.forEach((off) => off?.());
   }, [api, refresh]);
 
@@ -766,17 +898,23 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
   };
 
   const paletteCommands = [
-    ...(api.templates ? [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template" }] : []),
-    ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true }] : []),
+    ...(api.templates ? [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template",
+          },
+        ] : []),
+    ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true,
+          },
+        ] : []),
   ];
 
   const linkTargets = (): LinkTarget[] => {
     const notes = listing?.notes ?? [];
     const paths = notes.map((n) => n.path);
-    return notes.filter((n) => n.path !== note?.path).map((n) => ({ title: n.title, folder: n.folder, link: linkTextFor(n.path, paths) }));
+    return notes.filter((n) => n.path !== note?.path).map((n) => ({ title: n.title, folder: n.folder, link: linkTextFor(n.path, paths),
+      }));
   };
 
-  const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy]);
+  const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy],
+  );
   // Com filtros (T2660), quem decide é o engine (`notes.search`); sem, o nome na árvore basta, na hora.
   const [queryPaths, setQueryPaths] = useState<Set<string> | null>(null);
   useEffect(() => {
@@ -794,12 +932,17 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
     };
   }, [api, query, listing]);
   const found = useMemo(
-    () => (queryPaths ? filterTreeToPaths(fullTree, queryPaths) : filterTree(fullTree, query)),
+    () =>
+      queryPaths ? filterTreeToPaths(fullTree, queryPaths) : filterTree(fullTree, query),
     [fullTree, query, queryPaths],
   );
-  const openNow = useMemo(() => (query.trim() ? new Set([...openFolders, ...found.open]) : openFolders), [openFolders, found, query]);
-  const byPath = useMemo(() => new Map((listing?.notes ?? []).map((n) => [n.path, n])), [listing]);
-  const fileTimes = useMemo(() => new Map((listing?.files ?? []).map((f) => [f.path, f.mtime])), [listing]);
+  const openNow = useMemo(() =>
+      query.trim() ? new Set([...openFolders, ...found.open]) : openFolders, [openFolders, found, query],
+  );
+  const byPath = useMemo(() => new Map((listing?.notes ?? []).map((n) => [n.path, n])), [listing],
+  );
+  const fileTimes = useMemo(() => new Map((listing?.files ?? []).map((f) => [f.path, f.mtime])), [listing],
+  );
   const pinnedNotes = pinned.map((p) => byPath.get(p)).filter((n) => n !== undefined);
   const recent = useMemo(() => recentNotes(listing?.notes ?? [], 5), [listing]);
 
@@ -962,7 +1105,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
                   #{t}
                 </button>
               ))}
-              {[editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`].map((t) => (
+              {[editedLabel(note), `${words} ${words === 1 ? "palavra" : "palavras"}`,
+                  ].map((t) => (
                 <span key={t}>{t}</span>
               ))}
               <button
@@ -984,9 +1128,13 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
                       <span className="kn-back-ctx">{plainContext(b.context)}</span>
                     </button>
                   ))}
-                  {!backlinks.length ? <div className="kn-faint">Nenhuma nota cita esta com link.</div> : null}
+                  {!backlinks.length ? (
+                        <div className="kn-faint">Nenhuma nota cita esta com link.</div>
+                      ) : null}
                   {/* "Mencionada sem link" (T2593): as que citam o título sem [[ ]], com o "Linkar". */}
-                  {api.extras ? <UnlinkedMentions extras={api.extras} path={note.path} version={vaultVersion} onOpen={(p) => void open(p)} /> : null}
+                  {api.extras ? (
+                        <UnlinkedMentions extras={api.extras} path={note.path} version={vaultVersion} onOpen={(p) => void open(p)} />
+                      ) : null}
                 </Popover>
               ) : null}
             </div>
@@ -1004,8 +1152,9 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
               </div>
             ) : saveFailed ? (
               <div className="kn-conflict kn-save-alert" role="alert">
-                Não deu para gravar esta nota. O que você escreveu continua aqui.
-                <span className="kn-conflict-actions">
+                    Não deu para gravar esta nota. O que você escreveu continua
+                    aqui.
+                    <span className="kn-conflict-actions">
                   <button type="button" className="kn-bt" onClick={discard}>
                     Descartar a edição
                   </button>
@@ -1058,13 +1207,29 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
           notes={listing?.notes ?? []}
           initialQuery={paletteQuery}
           commands={paletteCommands}
-          onCommand={(id, q) => (id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q) : undefined)}
+          onCommand={(id, q) =>
+            id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q) : undefined
+          }
           onOpen={(p) => void open(p)}
           onCreate={(t) => void create(t)}
           onClose={() => setPalette(false)}
         />
       ) : null}
-      {menu ? <ContextMenu x={menu.x} y={menu.y} items={menuFor(menu.target)} onClose={() => setMenu(null)} /> : null}
+      {speakerDialog && api.meetings ? (
+        <MeetingSpeakerDialog
+          speakers={speakerDialog.speakers}
+          onClose={() => setSpeakerDialog(null)}
+          onRename={async (from, to) => {
+            await api.meetings!.renameSpeaker(speakerDialog.path, from, to);
+            if (current.current === speakerDialog.path)
+              show(await api.get(speakerDialog.path));
+            void refresh();
+          }}
+        />
+      ) : null}
+      {menu ? (
+        <ContextMenu x={menu.x} y={menu.y} items={menuFor(menu.target)} onClose={() => setMenu(null)} />
+      ) : null}
       {moving && moving.kind !== "empty" ? (
         <FolderPicker
           title={`Mover “${moving.path.slice(moving.path.lastIndexOf("/") + 1).replace(/\.md$/, "")}” para…`}
@@ -1078,7 +1243,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
       {picking ? (
         <ListPicker
           title={picking.insert ? "Pôr o modelo na nota…" : `Nova nota${picking.folder ? ` em “${picking.folder.replace(/\//g, " / ")}”` : ""} a partir de…`}
-          items={picking.templates.map((m) => ({ value: m.path, label: m.title }))}
+          items={picking.templates.map((m) => ({ value: m.path, label: m.title,
+          }))}
           emptyText="Nenhum modelo com esse nome"
           onPick={(path) => {
             const m = picking.templates.find((x) => x.path === path);
@@ -1088,7 +1254,9 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
             // "/modelo": o corpo do modelo (sem o frontmatter dele) no cursor, com as variáveis da nota aberta.
             api.get(m.path).then((t) => {
               const body = splitFrontmatter(t.content).body;
-              insertIntoEditor(fillTemplate(body, { title: note?.title ?? "", now: new Date() }));
+              insertIntoEditor(fillTemplate(body, { title: note?.title ?? "", now: new Date(),
+                }),
+              );
               focusEditor();
             }, failed_("ler o modelo"));
           }}
@@ -1107,7 +1275,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
             setVersionsOf(null);
             void refresh();
             // A nota aberta é a restaurada: o editor mostra o texto de volta.
-            if (current.current === p) api.get(p).then((n) => show(n), () => {});
+            if (current.current === p) api.get(p).then((n) => show(n), () => {},
+              );
           }}
         />
       ) : null}

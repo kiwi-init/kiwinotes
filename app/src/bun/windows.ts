@@ -98,6 +98,7 @@ const capabilities = uiCapabilities({
     Bun.spawn(["/usr/bin/open", path.join(process.env.HOME ?? "", ".Trash")], { stdio: ["ignore", "ignore", "ignore"] });
   },
   notes: stores.notes,
+  meetingNotes: stores.meetingNotes,
   attachments: stores.attachments,
   // A imagem de fora de uma nota, só depois do clique no cartão (T2984, #3039).
   remoteImage: (url) => fetchRemoteImage(url),

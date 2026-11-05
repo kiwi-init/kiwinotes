@@ -12,6 +12,7 @@ import { Attachments } from "../notes/attachments.ts";
 import { NoteExporter } from "../notes/export.ts";
 import { OcrIndex } from "../notes/ocr.ts";
 import { DictationNotes } from "../notes/fromDictation.ts";
+import { MeetingNotes } from "../notes/meetings.ts";
 import { Vault } from "../notes/vault.ts";
 import { NoteVersions } from "../notes/versions.ts";
 
@@ -40,6 +41,7 @@ export const stores = {
    * agentes, sem mexer nas notas reais). A pasta só nasce na 1ª vez que alguém usa as notas.
    */
   notes,
+  meetingNotes: new MeetingNotes(notes, { onError: () => console.error("[meetings] note write failed; pending text retained") }),
   /** O ditado vira nota (T1320): o Histórico e a nota rápida do atalho passam pelo mesmo, um por vez. */
   dictationNotes: new DictationNotes(notes),
   /** Os anexos colados e arrastados (T2594), na pasta das Configurações (`Anexos/` por padrão). */
