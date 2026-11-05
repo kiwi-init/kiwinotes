@@ -12,14 +12,6 @@
   user-select: text;
 }
 
-.kn-about-icon {
-  width: 112px;
-  height: 112px;
-  margin-bottom: 14px;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
 .kn-about-name {
   margin: 0;
   font: 650 var(--t-display)/1.2 var(--font-display);

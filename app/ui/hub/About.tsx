@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 
 import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api } from "../src/api.ts";
-import catUrl from "../src/assets/kiwi-cat.svg";
 import { Button } from "../src/kit/index.tsx";
 import { CHANNEL, statusLine } from "./aboutText.ts";
 
@@ -46,7 +45,6 @@ export function About() {
   const busy = view.state === "checking" || view.state === "downloading" || view.state === "applying";
   return (
     <div className="kn-about">
-      <img className="kn-about-icon" src={catUrl} alt="" width={112} height={112} />
       <h1 className="kn-about-name">Kiwi Notes</h1>
       <p className="kn-about-version">
         Versão {about.version} · {CHANNEL[about.channel]}

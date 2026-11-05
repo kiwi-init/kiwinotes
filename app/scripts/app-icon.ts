@@ -1,14 +1,8 @@
-// O ícone do app (T2467, spec #2457 ponto 1), como o Channels faz (`kiwi-init/channels`, `desktop/scripts/icons.ts`):
-// cada tamanho renderizado do vetor, nunca um PNG grande reamostrado. Até aqui o app não tinha ícone nenhum (o Info.plist
-// pedia `AppIcon`, e o bundle não tinha o .icns), e o Dock mostrava o genérico.
-//
-//   bun scripts/app-icon.ts                                   # gera build-config/icon.svg e build-config/icon.iconset
-//   bun scripts/app-icon.ts --compare <channels.svg> <out.png> # prancha lado a lado com o do Channels (16, 32, 128, 512)
-//
-// O desenho é o Kiwi-cat Aura (T2025, `docs/brand/kiwi-cat-familia/kiwi-cat-1-aura.svg`), na grade do ícone do Channels:
-// a base de 824 px com 100 de margem numa tela de 1024, e o raio de 185 (o grid de ícone do macOS). O resultado é
-// commitado; o build só copia (`electrobun.config.ts`, `mac.icons`). Rode de novo ao mudar o SVG. Usa o WebKit do
-// Playwright de app/node_modules (o mesmo do `cli screenshot`), com a rede bloqueada.
+// T4411, spec #4406: o Kiwi-cat v2 aprovado (#4415), sem redesenhar, na grade do Channels.
+// O SVG referencia a v2 no repo; só a renderização headless embute os pixels em memória.
+// O iconset é commitado; o build só copia (electrobun.config.ts, mac.icons).
+//   bun scripts/app-icon.ts
+//   bun scripts/app-icon.ts --compare /Applications/Channels.app/Contents/Resources/AppIcon.icns /tmp/icones.png
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -16,7 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 const APP = path.resolve(import.meta.dirname, "..");
-const SOURCE = path.join(APP, "..", "docs", "brand", "kiwi-cat-familia", "kiwi-cat-1-aura.svg");
+const SOURCE = path.join(APP, "..", "docs", "brand", "kiwi-cat", "gerada", "kiwi-cat-candidata-v2.png");
 const OUT_SVG = path.join(APP, "build-config", "icon.svg");
 const OUT_ICONSET = path.join(APP, "build-config", "icon.iconset");
 
@@ -25,25 +19,19 @@ export const GRID = { canvas: 1024, inset: 100, base: 824, radius: 185 } as cons
 /** Os tamanhos do iconset do macOS: cada um em 1x e 2x (16@2x = 32, 512@2x = 1024). */
 export const ICONSET_SIZES = [16, 32, 128, 256, 512] as const;
 
-/**
- * O SVG do ícone: o Aura inteiro (1024, raio 224) encaixado na base de 824 do Channels. O raio de dentro vira 230 para
- * que, reduzido a 824/1024, dê os 185 do Channels.
- */
-export function iconSvg(aura: string): string {
-  const open = /<svg\b[^>]*>/.exec(aura);
-  const close = aura.lastIndexOf("</svg>");
-  if (!open || close < 0) throw new Error("app-icon: the Aura SVG has no <svg> root");
-  const inner = aura.slice(open.index + open[0].length, close);
-  const innerRadius = Math.round((GRID.radius * GRID.canvas) / GRID.base);
-  const body = inner.replace(/rx="224"/g, `rx="${innerRadius}"`);
-  if (body === inner) throw new Error('app-icon: the Aura SVG has no rx="224" base to fit');
+/** Recorte quadrado central da v2: mantém a proporção, a pose e a luz sobre a base preta. */
+export function iconSvg(source?: Uint8Array): string {
+  const href = source
+    ? `data:image/png;base64,${Buffer.from(source).toString("base64")}`
+    : "../../docs/brand/kiwi-cat/gerada/kiwi-cat-candidata-v2.png";
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${GRID.canvas} ${GRID.canvas}" width="${GRID.canvas}" height="${GRID.canvas}">`,
-    `<!-- Gerado por app/scripts/app-icon.ts (T2467) de docs/brand/kiwi-cat-familia/kiwi-cat-1-aura.svg. Não edite à mão. -->`,
-    `<svg id="kiwi-cat" x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" viewBox="0 0 ${GRID.canvas} ${GRID.canvas}">`,
-    body.trim(),
-    `</svg>`,
-    `</svg>`,
+    `<!-- Gerado por app/scripts/app-icon.ts (T4411) da kiwi-cat-candidata-v2.png aprovada. Não edite à mão. -->`,
+    `<defs><clipPath id="base"><rect x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" rx="${GRID.radius}"/></clipPath></defs>`,
+    `<g clip-path="url(#base)">`,
+    `<rect x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" fill="#000"/>`,
+    `<image id="kiwi-cat" x="${GRID.inset}" y="${GRID.inset}" width="${GRID.base}" height="${GRID.base}" preserveAspectRatio="xMidYMid slice" href="${href}"/>`,
+    `</g></svg>`,
     "",
   ].join("\n");
 }
@@ -75,7 +63,7 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   }
 }
 
-/** Um tamanho, do vetor: o SVG desenhado já no tamanho final. */
+/** Um tamanho: a fonte aprovada composta na grade e amostrada já no tamanho final. */
 async function render(page: Page, svg: string, px: number): Promise<Buffer> {
   await page.setViewportSize({ width: px, height: px });
   await page.setContent(
@@ -85,8 +73,8 @@ async function render(page: Page, svg: string, px: number): Promise<Buffer> {
 }
 
 async function generate(): Promise<void> {
-  const svg = iconSvg(readFileSync(SOURCE, "utf8"));
-  writeFileSync(OUT_SVG, svg);
+  const svg = iconSvg(readFileSync(SOURCE));
+  writeFileSync(OUT_SVG, iconSvg());
   rmSync(OUT_ICONSET, { recursive: true, force: true });
   mkdirSync(OUT_ICONSET, { recursive: true });
   await withPage(async (page) => {
@@ -102,10 +90,20 @@ async function generate(): Promise<void> {
   console.log(`app-icon: ${path.relative(APP, OUT_SVG)} and ${iconsetFiles().length} PNGs in ${path.relative(APP, OUT_ICONSET)}`);
 }
 
-/** A prancha: o Kiwi Notes em cima e o Channels embaixo, em 16, 32, 128 e 512 px, cada um do vetor e a 1:1. */
-async function compare(channelsSvg: string, out: string): Promise<void> {
-  const ours = readFileSync(OUT_SVG, "utf8");
-  const theirs = readFileSync(channelsSvg, "utf8");
+/** A prancha a 1:1 em 16, 32, 128 e 512 px. Aceita o .icns instalado do Channels, sem copiá-lo ao repo. */
+async function compare(channelsIcon: string, out: string): Promise<void> {
+  const ours = iconSvg(readFileSync(SOURCE));
+  const tmp = mkdtempSync(path.join(tmpdir(), "kn-channels-icon-"));
+  let theirs: string;
+  try {
+    if (path.extname(channelsIcon) === ".icns") {
+      const png = path.join(tmp, "channels.png");
+      execFileSync("sips", ["-s", "format", "png", channelsIcon, "--out", png]);
+      theirs = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><image width="1024" height="1024" href="data:image/png;base64,${readFileSync(png).toString("base64")}"/></svg>`;
+    } else theirs = readFileSync(channelsIcon, "utf8");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
   const sizes = [16, 32, 128, 512];
   const shots: Record<string, string> = {};
   await withPage(async (page) => {
@@ -133,7 +131,7 @@ if (import.meta.main) {
   const i = process.argv.indexOf("--compare");
   if (i >= 0) {
     const [channels, out] = process.argv.slice(i + 1);
-    if (!channels || !out) throw new Error("usage: bun scripts/app-icon.ts --compare <channels icon.svg> <out.png>");
+    if (!channels || !out) throw new Error("usage: bun scripts/app-icon.ts --compare <channels icon.svg|AppIcon.icns> <out.png>");
     await compare(channels, out);
   } else await generate();
 }
