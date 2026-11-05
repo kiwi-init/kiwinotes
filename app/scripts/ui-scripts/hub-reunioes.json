@@ -1,0 +1,78 @@
+{
+  "window": "hub",
+  "query": { "section": "meetings" },
+  "steps": [
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Reuniões",
+        "title": "2026-11-05 14h32 Reunião do Teams",
+        "content": "---\ntype: meeting\nsession: a1\ndate: \"2026-11-05\"\nstart: \"2026-11-05T17:32:00.000Z\"\nend: \"2026-11-05T18:10:00.000Z\"\nduration: 2280\napp: \"Teams\"\nparticipants: [Você, Pessoa 1, Pessoa 2]\n---\n## Minhas notas\n\n## Transcrição\n**14:32 · Você:** Bom dia, vamos começar pelo PACS.\n"
+      },
+      "name": "uma reunião do Teams (o formato do R4)"
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Reuniões",
+        "title": "2026-11-05 10h00 Daily",
+        "content": "---\ntype: meeting\nsession: a2\ndate: \"2026-11-05\"\nstart: \"2026-11-05T13:00:00.000Z\"\nend: \"2026-11-05T13:14:00.000Z\"\nduration: 840\napp: \"Chrome\"\nparticipants: [Você, Pessoa 1, Pessoa 2, Pessoa 3, Pessoa 4]\n---\n"
+      },
+      "name": "uma daily pelo Meet"
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Reuniões",
+        "title": "2026-11-03 16h00 Migração do PACS",
+        "content": "---\ntype: meeting\nsession: a3\ndate: \"2026-11-03\"\nstart: \"2026-11-03T19:00:00.000Z\"\nend: \"2026-11-03T20:05:00.000Z\"\nduration: 3900\napp: \"Zoom\"\nparticipants: [Você, Ana]\n---\n"
+      },
+      "name": "uma reunião de outro dia, com um falante renomeado"
+    },
+    {
+      "invoke": "notes.create",
+      "args": { "title": "Projeto", "content": "---\ntype: projeto\n---\nNão é reunião.\n" },
+      "name": "uma nota que não é reunião"
+    },
+    { "click": ".kn-tab:has-text('Notas')", "name": "passa pelas Notas" },
+    { "click": ".kn-tab:has-text('Reuniões')", "name": "volta para Reuniões" },
+    { "expectCount": ".kn-meet-row", "count": 3, "name": "só as três reuniões, sem a nota de projeto" },
+    { "expectText": ".kn-meet-row >> nth=0", "text": "Reunião do Teams", "name": "a mais nova primeiro" },
+    { "expectText": ".kn-meet-row >> nth=0", "text": "38 min", "name": "a duração" },
+    { "expectText": ".kn-meet-row >> nth=1", "text": "Você, Pessoa 1 e mais 3", "name": "os participantes, curtos" },
+    { "expectText": ".kn-meet-live", "text": "Gravando · Teams", "name": "o card ao vivo, pelo engine falso" },
+    { "screenshot": "reunioes-lista.png" },
+    { "click": ".kn-meet-live button:has-text('Pausar meu mic')", "name": "pausa o meu mic" },
+    { "expectText": ".kn-meet-live", "text": "seu mic está pausado", "name": "o card diz que o mic está pausado" },
+    { "screenshot": "reunioes-mic-pausado.png", "selector": ".kn-meet-live" },
+    { "click": ".kn-meet-live button:has-text('Voltar meu mic')", "name": "volta o mic" },
+    { "hover": ".kn-meet-row >> nth=2" },
+    { "click": "button[aria-label='Renomear 2026-11-03 16h00 Migração do PACS']", "name": "renomeia" },
+    { "fill": "input[aria-label='Novo nome da reunião']", "text": "Migração do PACS com a Ana" },
+    { "press": "Enter" },
+    { "expectText": ".kn-meet-row >> nth=2", "text": "Migração do PACS com a Ana", "name": "o nome novo na lista" },
+    { "hover": ".kn-meet-row >> nth=1" },
+    { "click": "button[aria-label='Apagar 2026-11-05 10h00 Daily']", "name": "apaga a daily" },
+    { "expectText": ".kn-meet-notice", "text": "foi para a Lixeira", "name": "o aviso com Desfazer" },
+    { "expectCount": ".kn-meet-row", "count": 2 },
+    { "click": ".kn-meet-notice button:has-text('Desfazer')", "name": "desfaz" },
+    { "expectCount": ".kn-meet-row", "count": 3, "name": "a daily voltou" },
+    { "click": ".kn-meet-open:has-text('Reunião do Teams')", "name": "abre nas Notas" },
+    { "expectText": ".kn-tab[aria-selected=true]", "text": "Notas", "name": "o hub foi para as Notas" },
+    { "screenshot": "reunioes-abriu-nas-notas.png" },
+    { "click": ".kn-tab:has-text('Reuniões')" },
+    { "click": ".kn-meet-live button:has-text('Parar')", "name": "para a gravação pelo card" },
+    { "expectCount": ".kn-meet-live", "count": 0, "name": "o card some" },
+    { "click": "[role=switch][aria-label='Perguntar se quer gravar']", "name": "desliga o pop-up" },
+    { "expectCount": "[role=switch][aria-label='Perguntar se quer gravar'][aria-checked=false]", "count": 1 },
+    { "click": "button[aria-label='Tirar Slack']", "name": "tira o Slack da lista" },
+    { "fill": "input[aria-label='Nome do app']", "text": "Discord" },
+    { "fill": "input[aria-label='Identificador do app']", "text": "com.hnc.Discord" },
+    { "click": ".kn-meet-app-add button:has-text('Adicionar')", "name": "acrescenta o Discord" },
+    { "expectText": ".kn-meet-app-list", "text": "Discord" },
+    { "expectCount": "button:has-text('Restaurar a lista padrão')", "count": 1 },
+    { "scroll": ".kn-content", "y": 1200 },
+    { "screenshot": "reunioes-ajustes.png" }
+  ]
+}

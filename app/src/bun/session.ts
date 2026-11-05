@@ -15,6 +15,7 @@ import { DEFAULT_SETTINGS, type AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import { Dictation } from "./dictation.ts";
 import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
+import { MeetingLiveTracker } from "./meetings.ts";
 import { Sidecar } from "./sidecar.ts";
 import { stores } from "./stores.ts";
 
@@ -71,6 +72,8 @@ export class Session {
   readonly sidecar: Sidecar;
   readonly dictation: Dictation;
   readonly permissions: PermissionFlow;
+  /** A gravação de reunião ao vivo (R6), pelos eventos do helper: o card da aba Reuniões. */
+  readonly meetings: MeetingLiveTracker;
   private stt: SttState = "starting";
   private boosting: SessionStatus["boosting"];
   private statusListeners = new Set<(s: SessionStatus) => void>();
@@ -93,12 +96,19 @@ export class Session {
     // Com KIWI_DEBUG=1 (agentes), nada é pedido sozinho: nenhum diálogo do macOS abre (#537, #551).
     // Nem o reset do clique no menu (#666).
     this.permissions = new PermissionFlow(this.sidecar, fileAskedStore(stores.dir), undefined, !dryRun, !dryRun);
+    this.meetings = new MeetingLiveTracker((c) => this.sidecar.send(c));
   }
 
   start(): void {
     this.dictation.attach();
     this.permissions.attach();
+    for (const type of ["meeting.started", "meeting.stopped", "meeting.minePaused"] as const) {
+      this.sidecar.on(type, (e) => this.meetings.feed(e));
+    }
+    // O helper que caiu levou a captura junto (R6): o card ao vivo some.
+    this.sidecar.onClose(() => this.meetings.reset());
     this.sidecar.on("ready", () => {
+      this.meetings.reset();
       this.stt = "starting";
       this.boosting = undefined;
       this.emitStatus();
@@ -172,6 +182,12 @@ export class Session {
     // atalho das notas.
     const mic = await this.sidecar.send({ type: "config.set", microphone: settings.microphone }).catch(() => undefined);
     if (mic && !mic.ok) console.warn(`[session] config.set microphone: ${mic.error}`);
+    // Os ajustes de reunião (R6) num `config.set` só deles, pelo mesmo motivo: um helper de antes do R2 recusa os campos.
+    const m = settings.meetings;
+    const meeting = await this.sidecar
+      .send({ type: "config.set", meetingShortcut: m.shortcut, meetingPauseShortcut: m.pauseShortcut, meetingSuggest: m.suggest, meetingApps: m.apps })
+      .catch(() => undefined);
+    if (meeting && !meeting.ok) console.warn(`[session] config.set meetings: ${meeting.error}`);
   }
 
   /** As entradas de áudio para o seletor dos Ajustes (T3230); null sem o helper, ou com um que não sabe listar. */

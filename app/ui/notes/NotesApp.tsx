@@ -72,7 +72,10 @@ function useEnterAnimation() {
   return n;
 }
 
-function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active: boolean }) {
+function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Drafts; active: boolean; openRequest?: { path: string; n: number } | null }) {
+  // A nota que outra seção do hub pediu (T4947): a de antes de montar abre na carga; as seguintes, pelo efeito abaixo.
+  const openRequestRef = useRef(openRequest);
+  const handledRequest = useRef(openRequest?.n ?? 0);
   const [listing, setListing] = useState<VaultListing | null>(null);
   const [failed, setFailed] = useState(false);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
@@ -296,8 +299,9 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
         setListing(l);
         const have = new Set(l.notes.map((n) => n.path));
         setOrphans(drafts.all().filter((d) => !have.has(d.path)));
-        // `?note=` (Vite no navegador, testes): abre essa nota. No app a página carrega sem query.
-        const asked = new URLSearchParams(location.search).get("note");
+        // `?note=` (Vite no navegador, testes): abre essa nota. No app a página carrega sem query. No hub, a nota que
+        // outra seção pediu (Reuniões, T4947) antes de as Notas montarem.
+        const asked = openRequestRef.current?.path ?? new URLSearchParams(location.search).get("note");
         const first =
           l.notes.find((n) => n.path === asked) ??
           l.notes.find((n) => n.path === "Caixa de entrada.md") ??
@@ -340,6 +344,12 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   );
 
   // No hub (T2121) as Notas ficam montadas e escondidas nas outras seções: as teclas só valem com elas na tela (T2200).
+  useEffect(() => {
+    if (!openRequest || openRequest.n === handledRequest.current) return;
+    handledRequest.current = openRequest.n;
+    void open(openRequest.path);
+  }, [openRequest, open]);
+
   const activeRef = useRef(active);
   activeRef.current = active;
   useEffect(() => {
@@ -1135,7 +1145,7 @@ function Shell({ children }: { children: React.ReactNode }) {
  * Notas estão na tela. No hub, com outra seção à frente, elas ficam montadas e escondidas, e o ⌘N e o ⌘K não podem
  * agir sem ninguém ver (T2200).
  */
-export function NotesApp({ active = true }: { active?: boolean } = {}) {
+export function NotesApp({ active = true, openRequest = null }: { active?: boolean; openRequest?: { path: string; n: number } | null } = {}) {
   const drafts = useMemo(() => new Drafts(), []);
   const api = useMemo(() => {
     const a = notesApi();
@@ -1148,7 +1158,7 @@ export function NotesApp({ active = true }: { active?: boolean } = {}) {
       </Shell>
     );
   }
-  return <Notes api={api} drafts={drafts} active={active} />;
+  return <Notes api={api} drafts={drafts} active={active} openRequest={openRequest} />;
 }
 
 

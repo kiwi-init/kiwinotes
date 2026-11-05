@@ -488,8 +488,14 @@ final class Helper {
         let fail: (String) -> Void = { [weak self] code in
             DispatchQueue.main.async {
                 guard let self else { return }
+                let session = self.meetings?.capture.session
                 try? self.meetings?.capture.stop()
                 self.emit("meeting.error", ["error": code])
+                // The capture is over: the app's live card (R6) and the note (R4) learn it like a normal stop.
+                if let session {
+                    let pending = self.meetings?.capture.pendingChunks().filter { $0.session == session }.count ?? 0
+                    self.emit("meeting.stopped", ["session": session, "pendingChunks": pending, "reason": "error", "error": code])
+                }
             }
         }
         let failAndStop: (String) -> Void = { [weak self] code in

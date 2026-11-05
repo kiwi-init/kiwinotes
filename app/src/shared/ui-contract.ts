@@ -13,10 +13,13 @@ import type { TagNode } from "./tags.ts";
 import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
+import type { MeetingLive, MeetingNote, MeetingSettings } from "./meetings.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
 export type { TagNode };
+export type { MeetingLive, MeetingNote };
+export { MEETING_PAUSE_SHORTCUTS, MEETING_SHORTCUTS, DEFAULT_MEETING_APPS, type MeetingAppEntry, type MeetingSettings } from "./meetings.ts";
 export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet, TrashItem };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
@@ -52,7 +55,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   desconectado). Só acréscimo.
 // 1.20.0 (T3370): a árvore com todos os arquivos (`files` no `notes.list`), o `files.open` (no app padrão do Mac, só
 //   com o clique da pessoa), o evento `files.changed` e o `showExtensions` nas settings. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.20.0";
+// 1.21.0 (T4947): a aba Reuniões do hub (R6, #198): `meetings.list`, `meetings.live`, `meetings.stop`,
+//   `meetings.pauseMine`, o evento `meetings.live` e os `meetings` nas settings. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.21.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -81,7 +86,7 @@ export interface UiCapabilities {
   /** As Configurações que o engine guarda (1.3.0, T1499). */
   "settings.get": { args: Record<string, never>; result: AppSettings };
   /** Muda só os campos dados e devolve tudo. Um valor que não existe dá E_INVALID, sem mudar nada. */
-  "settings.set": { args: Partial<AppSettings>; result: AppSettings };
+  "settings.set": { args: Partial<Omit<AppSettings, "meetings">> & { meetings?: Partial<MeetingSettings> }; result: AppSettings };
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
   /**
@@ -226,6 +231,19 @@ export interface UiCapabilities {
    * nunca abre o mic. E_NO_HELPER: o helper não está de pé, ou é antigo e não sabe listar.
    */
   "audio.inputs": { args: Record<string, never>; result: AudioInputs };
+
+  // ---------------------------------------------------------------- reuniões (1.21.0, T4947)
+  /**
+   * As notas de reunião (`type: meeting` no frontmatter, do R4), em qualquer pasta, a mais nova primeiro. Uma nota sem
+   * algum campo ainda aparece, com ele vazio.
+   */
+  "meetings.list": { args: Record<string, never>; result: { meetings: MeetingNote[] } };
+  /** A gravação agora, pelos eventos do helper. Sem o helper, `{recording: false}`. */
+  "meetings.live": { args: Record<string, never>; result: MeetingLive };
+  /** O "Parar" do card ao vivo: só um clique da pessoa. Sem gravação, E_NOT_RECORDING; sem o helper, E_NO_HELPER. */
+  "meetings.stop": { args: Record<string, never>; result: true };
+  /** "Pausar meu mic" (ou voltar) no card ao vivo. Sem gravação, E_NOT_RECORDING. */
+  "meetings.pauseMine": { args: { paused: boolean }; result: true };
 }
 
 export type UiCapability = keyof UiCapabilities;
@@ -283,6 +301,10 @@ export const UI_CAPABILITIES = [
   "notes.version",
   "notes.restoreVersion",
   "notes.export",
+  "meetings.list",
+  "meetings.live",
+  "meetings.stop",
+  "meetings.pauseMine",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -301,6 +323,8 @@ export interface UiEvents {
   "settings.changed": AppSettings;
   /** Entrou ou saiu um microfone, ou mudou a saída padrão (1.18.0): os Ajustes listam de novo. */
   "audio.inputs.changed": Record<string, never>;
+  /** A gravação começou, parou ou o canal "você" pausou (1.21.0): o card ao vivo da aba Reuniões. */
+  "meetings.live": MeetingLive;
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

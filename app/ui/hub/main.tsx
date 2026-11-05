@@ -10,10 +10,11 @@ import { HUB_SECTIONS, type HubSection, isHubSection } from "../../src/shared/ui
 import { History } from "../history/History.tsx";
 import { NotesApp } from "../notes/NotesApp.tsx";
 import { About } from "./About.tsx";
+import { Meetings } from "../meetings/Meetings.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { api, has } from "../src/api.ts";
 import { HubBarContext } from "../src/topbar.tsx";
-import { Empty, mount } from "../src/kit/index.tsx";
+import { mount } from "../src/kit/index.tsx";
 
 const LABELS: Record<HubSection, string> = {
   notes: "Notas",
@@ -23,14 +24,20 @@ const LABELS: Record<HubSection, string> = {
   about: "Sobre",
 };
 
-/** Seção que ainda não existe: aparece na barra, sem abrir nada. */
-const SOON: ReadonlySet<HubSection> = new Set(["meetings"]);
+/** Seção que ainda não existe: aparece na barra, sem abrir nada. Reuniões chegou com o R6 (T4947). */
+const SOON: ReadonlySet<HubSection> = new Set([]);
+
+/** Abrir uma nota nas Notas a partir de outra seção (Reuniões, T4947): `n` muda a cada pedido, mesmo para a mesma nota. */
+export interface OpenRequest {
+  path: string;
+  n: number;
+}
 
 /** `active`: a seção está na tela. As outras ficam montadas e escondidas (o estado não se perde ao trocar). */
-function Pane({ section, active }: { section: HubSection; active: boolean }) {
+function Pane({ section, active, openRequest, onOpenNote }: { section: HubSection; active: boolean; openRequest: OpenRequest | null; onOpenNote(path: string): void }) {
   switch (section) {
     case "notes":
-      return <NotesApp active={active} />;
+      return <NotesApp active={active} openRequest={openRequest} />;
     case "dictation":
       return <History />;
     case "settings":
@@ -38,13 +45,7 @@ function Pane({ section, active }: { section: HubSection; active: boolean }) {
     case "about":
       return <About />;
     case "meetings":
-      return (
-        <div className="kn-hub-soon">
-          <Empty icon={<MeetingIcon />} title="Reuniões, em breve">
-            Gravar e resumir reuniões no Mac, sem nada sair dele.
-          </Empty>
-        </div>
-      );
+      return <Meetings onOpen={onOpenNote} />;
   }
 }
 
@@ -113,17 +114,6 @@ function Tabs({ section, onGo }: { section: HubSection; onGo(s: HubSection): voi
   );
 }
 
-/** O glifo do vazio de Reuniões, no tom dos outros vazios (o do Ditado): 44 px, na cor de destaque (T2778). */
-function MeetingIcon() {
-  return (
-    <svg width="44" height="44" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ color: "var(--accent)" }}>
-      <circle cx="12" cy="13" r="4.5" />
-      <circle cx="24" cy="13" r="4.5" />
-      <path d="M4.5 28c.8-4.6 3.8-7 7.5-7s6.7 2.4 7.5 7M16.5 28c.8-4.6 3.8-7 7.5-7s6.7 2.4 7.5 7" />
-    </svg>
-  );
-}
-
 /** A seção inicial: `?section=` (a CLI e o print) ou Notas. */
 function initialSection(): HubSection {
   const q = new URLSearchParams(location.search).get("section");
@@ -134,6 +124,11 @@ function Hub() {
   const [section, setSection] = useState<HubSection>(initialSection);
   const [visited, setVisited] = useState<Set<HubSection>>(() => new Set([section]));
   const [entry, setEntry] = useState(1);
+  const [openRequest, setOpenRequest] = useState<OpenRequest | null>(null);
+  const openNote = (path: string) => {
+    setOpenRequest((r) => ({ path, n: (r?.n ?? 0) + 1 }));
+    go("notes");
+  };
   const ref = useRef<HTMLDivElement>(null);
 
   const go = (s: HubSection) => {
@@ -182,7 +177,7 @@ function Hub() {
         {HUB_SECTIONS.filter((s) => visited.has(s)).map((s) => (
           <section key={s} className="kn-hub-pane" hidden={s !== section} aria-label={LABELS[s]}>
             <HubBarContext.Provider value={{ start, end, active: s === section }}>
-              <Pane section={s} active={s === section} />
+              <Pane section={s} active={s === section} openRequest={openRequest} onOpenNote={openNote} />
             </HubBarContext.Provider>
           </section>
         ))}

@@ -21,6 +21,8 @@ import { ExportError, type NoteExporter } from "../notes/export.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
+import { checkMeetingSettingsPatch, NOT_RECORDING } from "../shared/meetings.ts";
+import { listMeetings, type MeetingHost, MeetingHostError } from "./meetings.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
@@ -107,6 +109,11 @@ export interface CapabilityDeps {
    * tipo de documento conhecido, ou tem o bit de execução: `openMode`). Sem isto (o headless, os testes, KIWI_DEBUG), o `files.open` só confere que o arquivo existe.
    */
   openFile?(abs: string, mode: "app" | "finder"): void;
+  /**
+   * A gravação de reunião ao vivo (R6, T4947): o estado pelos eventos do helper, parar e pausar o canal "você". Sem
+   * isto (testes antigos), `meetings.live` diz que não grava, e parar ou pausar dá E_NO_HELPER.
+   */
+  meetings?: MeetingHost;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
@@ -227,6 +234,18 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
     await deps.versions?.move(map);
     await fixPinned(map);
   };
+  /** Parar ou pausar a gravação: só com uma de pé, e o erro do helper vira o código dele. */
+  const meetingCall = async (call: (host: MeetingHost) => Promise<void>) => {
+    const host = deps.meetings;
+    if (!host) throw new CapabilityError("E_NO_HELPER", "no helper to record meetings");
+    if (!host.live().recording) throw new CapabilityError("E_NOT_RECORDING", "no meeting is being recorded");
+    try {
+      await call(host);
+    } catch (e) {
+      if (e instanceof MeetingHostError) throw new CapabilityError("E_HELPER", e.code);
+      throw e;
+    }
+  };
   const under = (prefix: string, p: string) => p === prefix || p.startsWith(`${prefix}/`);
   const moveUnder = (from: string, to: string) => (p: string) => (under(from, p) ? `${to}${p.slice(from.length)}` : p);
   const dropUnder = (gone: string) => (p: string) => (under(gone, p) ? null : p);
@@ -339,6 +358,12 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
           const list = sanitizeSavedSearches(value);
           if (list.length !== value.length) throw bad("savedSearches: each one needs a name and a query, without repeating a query");
           patch.savedSearches = list;
+        } else if (key === "meetings") {
+          // Os ajustes de reunião (1.21.0, T4947): só os campos dados; o helper recebe no `config.set`.
+          const checked = checkMeetingSettingsPatch(value);
+          if (!checked.ok) throw bad(`settings.set: ${checked.error}`);
+          // Os que não vieram ficam como estão.
+          patch.meetings = { ...(await deps.settings.load()).meetings, ...checked.patch };
         } else if (key === "microphone") {
           // Por qual mic o ditado grava (1.18.0, T3230): o helper recebe no `config.set`.
           if (!isMicrophoneChoice(value)) throw bad('microphone must be "auto", "builtin", "system" or "uid:<device UID>"');
@@ -582,6 +607,25 @@ export function uiCapabilities(deps: CapabilityDeps): Record<UiCapability, (args
       const got = await deps.audioInputs?.();
       if (!got) throw new CapabilityError("E_NO_HELPER", "the helper is not running, or does not list audio inputs");
       return got;
+    },
+    "meetings.list": async (args) => {
+      noArgs(args, "meetings.list");
+      return { meetings: await listMeetings(await vault()) };
+    },
+    "meetings.live": (args) => {
+      noArgs(args, "meetings.live");
+      return deps.meetings?.live() ?? NOT_RECORDING;
+    },
+    "meetings.stop": async (args) => {
+      noArgs(args, "meetings.stop");
+      await meetingCall((host) => host.stop());
+      return true as const;
+    },
+    "meetings.pauseMine": async (args) => {
+      const paused = fields(args, "meetings.pauseMine", ["paused"]).paused;
+      if (typeof paused !== "boolean") throw bad("meetings.pauseMine: paused must be true or false");
+      await meetingCall((host) => host.setMinePaused(paused));
+      return true as const;
     },
   };
   // A lista do contrato e os handlers andam juntos.
