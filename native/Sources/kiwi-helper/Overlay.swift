@@ -404,6 +404,7 @@ enum OverlaySnapshots {
             ("done", .done, nil, []),
             ("done-message", .done, "O texto também ficou no clipboard", []),
             ("error", .error, OverlayText.error("no_input_device"), []),
+            ("error-mic-busy", .error, MicBusy.message(app: "Chrome"), []),
         ]
         for (name, phase, message, bars) in samples {
             let state = OverlayViewState()

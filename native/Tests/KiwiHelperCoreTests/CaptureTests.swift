@@ -26,11 +26,17 @@ private final class FakeEngine: MicEngine {
     var discarded = false
     var failPrepare = false
     var failStart = false
+    /// The device's format as Core Audio would say now (#5154): shared by every engine of a rig, like the device.
+    var deviceFormat: () -> InputFormat? = { nil }
+    private(set) var preparedFormat: InputFormat?
 
     func prepare(onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws {
         if failPrepare { throw AudioCaptureError.noInputDevice }
         self.onBuffer = onBuffer
+        preparedFormat = deviceFormat()
     }
+
+    func hardwareFormat() -> InputFormat? { deviceFormat() }
 
     func start() throws {
         if failStart { throw NSError(domain: "fake", code: 1) }
@@ -76,6 +82,9 @@ private final class Rig {
     var nextFailsStart = false
     var nextFailsPrepare = false
     var log: [String] = []
+    /// The mic's format now; another app (a meeting) can change it (#5154).
+    var deviceFormat: InputFormat?
+    var diagnostics: [CaptureDiagnostic] = []
     /// What `AudioCapture` scheduled with `after`, run by `advance` on the test's clock.
     private var timers: [(at: TimeInterval, work: () -> Void)] = []
     lazy var capture: AudioCapture = {
@@ -84,6 +93,7 @@ private final class Rig {
                 let e = FakeEngine()
                 e.failStart = self.nextFailsStart
                 e.failPrepare = self.nextFailsPrepare
+                e.deviceFormat = { [unowned self] in self.deviceFormat }
                 self.engines.append(e)
                 return e
             },
@@ -92,6 +102,7 @@ private final class Rig {
             watchdogInterval: nil
         )
         c.onLog = { [unowned self] in self.log.append($0) }
+        c.onDiagnostic = { [unowned self] in self.diagnostics.append($0) }
         c.onLost = { [unowned self] code, samples in
             self.lost.append(code)
             self.kept.append(samples)
@@ -381,8 +392,8 @@ final class CaptureTests: XCTestCase {
         XCTAssertThrowsError(try rig.capture.start()) { XCTAssertEqual("\($0)", "no_input_device") }
         XCTAssertFalse(rig.capture.isRecording)
         rig.nextFailsPrepare = false
-        // The replacement made after the failure was built while it still failed; the one after works.
-        XCTAssertThrowsError(try rig.capture.start())
+        // The replacement made after the failure was built while it still failed; `start` gives it up for a fresh
+        // engine on its own (#5154), so the next try works without a second failure.
         try rig.capture.start()
         rig.engine.feed(rate: 16_000, seconds: 0.1, clock: rig.clock)
         XCTAssertEqual(rig.capture.stop().count, 1_600)
@@ -573,5 +584,88 @@ extension CaptureTests {
         XCTAssertGreaterThan(frames, 15_500)
         XCTAssertGreaterThan(packets, 1)
         XCTAssertTrue(capture.stop().isEmpty)
+    }
+
+    // MARK: #5154: a meeting app on the same mic
+
+    func testAFormatChangedSinceTheWarmUpGetsANewEngine() throws {
+        let rig = Rig()
+        rig.deviceFormat = InputFormat(sampleRate: 48_000, channels: 1)
+        rig.capture.warmUp()
+        XCTAssertEqual(rig.engines.count, 1)
+        // The Meet turns on voice processing: the mic goes to 24 kHz after the warm-up, with no notification.
+        rig.deviceFormat = InputFormat(sampleRate: 24_000, channels: 1)
+        try rig.capture.start()
+        XCTAssertEqual(rig.engines.count, 2, "the stale engine is replaced before starting")
+        XCTAssertTrue(rig.engines[0].discarded)
+        XCTAssertEqual(rig.engine.preparedFormat, InputFormat(sampleRate: 24_000, channels: 1))
+        XCTAssertTrue(rig.diagnostics.contains(.formatChanged(from: InputFormat(sampleRate: 48_000, channels: 1),
+                                                              to: InputFormat(sampleRate: 24_000, channels: 1))))
+        rig.engine.feed(rate: 24_000, seconds: 0.2, clock: rig.clock)
+        // 0,2 s at 16 kHz; converting from 24 kHz keeps a few samples back in the filter.
+        XCTAssertEqual(Double(rig.capture.stop().count), 3_200, accuracy: 32, "it records, at 16 kHz")
+        XCTAssertEqual(rig.diagnostics.last, .ended(reason: "stopped", buffers: 10, firstBufferMs: 20))
+    }
+
+    func testTheSameFormatKeepsTheWarmEngine() throws {
+        let rig = Rig()
+        rig.deviceFormat = InputFormat(sampleRate: 48_000, channels: 1)
+        rig.capture.warmUp()
+        try rig.capture.start()
+        XCTAssertEqual(rig.engines.count, 1, "no new engine (the warm-up keeps saving the first syllable)")
+        XCTAssertEqual(rig.diagnostics.first, .starting(prepared: InputFormat(sampleRate: 48_000, channels: 1),
+                                                        hardware: InputFormat(sampleRate: 48_000, channels: 1)))
+        _ = rig.capture.stop()
+    }
+
+    func testAnEngineThatWontStartGetsOneMoreTry() throws {
+        let rig = Rig()
+        rig.capture.warmUp()
+        rig.engine.failStart = true // the warm engine is stuck on the old device state
+        try rig.capture.start()
+        XCTAssertTrue(rig.capture.isRecording)
+        XCTAssertEqual(rig.engines.count, 2)
+        XCTAssertTrue(rig.diagnostics.contains { if case .startFailed(_, true) = $0 { return true } else { return false } })
+        rig.engine.feed(rate: 16_000, seconds: 0.1, clock: rig.clock)
+        XCTAssertEqual(rig.capture.stop().count, 1_600)
+    }
+
+    func testTwoFailedStartsGiveUp() {
+        let rig = Rig()
+        rig.nextFailsStart = true
+        XCTAssertThrowsError(try rig.capture.start())
+        XCTAssertFalse(rig.capture.isRecording)
+        XCTAssertTrue(rig.diagnostics.contains { if case .startFailed(_, false) = $0 { return true } else { return false } })
+    }
+
+    func testNoAudioAtAllRetriesOnceAndEndsWithTheDiagnosis() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.advance(1.6)
+        rig.capture.checkStall() // the first engine gave nothing: a new one
+        XCTAssertEqual(rig.engines.count, 2)
+        XCTAssertTrue(rig.lost.isEmpty)
+        rig.advance(1.6)
+        rig.capture.checkStall() // the new one neither: no_audio
+        XCTAssertEqual(rig.lost, ["no_audio"])
+        XCTAssertEqual(rig.diagnostics.last { if case .ended = $0 { return true } else { return false } },
+                       .ended(reason: "no_audio", buffers: 0, firstBufferMs: nil))
+    }
+
+    func testABusyMicSaysWhichApp() {
+        XCTAssertEqual(MicBusy.classify("no_audio", otherApps: ["Chrome"]).code, "mic_busy")
+        XCTAssertEqual(MicBusy.classify("no_audio", otherApps: ["Chrome"]).app, "Chrome")
+        XCTAssertEqual(MicBusy.classify("engine_start_failed", otherApps: ["Teams", "Zoom"]).app, "Teams")
+        XCTAssertEqual(MicBusy.classify("no_audio", otherApps: []).code, "no_audio", "nobody else: the old message")
+        XCTAssertEqual(MicBusy.classify("device_changed", otherApps: ["Chrome"]).code, "device_changed")
+        XCTAssertEqual(MicBusy.message(app: "Chrome"), "Mic ocupado por Chrome")
+        XCTAssertLessThanOrEqual(MicBusy.message(app: String(repeating: "x", count: 60)).count, 38)
+        XCTAssertEqual(OverlayText.error("mic_busy"), "Mic ocupado por outro app")
+    }
+
+    func testTheDiagnosticLineHasOnlyTheDeviceSide() {
+        let line = CaptureDiagnostic.ended(reason: "no_audio", buffers: 0, firstBufferMs: nil)
+            .logLine(device: "MacBook Pro Microphone", inUseBy: ["Chrome"], runningSomewhere: true)
+        XCTAssertEqual(line, "diag: end no_audio · 0 buffers · first never · device MacBook Pro Microphone · in use somewhere · also on the mic: Chrome")
     }
 }

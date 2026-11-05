@@ -11,8 +11,24 @@ public enum AudioCaptureError: Error, CustomStringConvertible {
     }
 }
 
+/// The input's format, for the diagnostics and to notice a change between the warm-up and the recording (#5154).
+public struct InputFormat: Equatable, Sendable, CustomStringConvertible {
+    public var sampleRate: Double
+    public var channels: Int
+    public init(sampleRate: Double, channels: Int) {
+        self.sampleRate = sampleRate
+        self.channels = channels
+    }
+    public var description: String { "\(Int(sampleRate)) Hz \(channels) ch" }
+}
+
 /// What `AudioCapture` needs from the audio engine: `AVAudioEngine` in the helper, a fake in the tests (no mic, T590).
 public protocol MicEngine: AnyObject {
+    /// The format the tap was installed with (`prepare`), or nil before that.
+    var preparedFormat: InputFormat? { get }
+    /// The input device's format right now, read from Core Audio without opening it: another app (a meeting with
+    /// voice processing) can change it after the warm-up (#5154). Nil when it can't be read.
+    func hardwareFormat() -> InputFormat?
     /// Installs the tap and prepares the engine, without starting the device (no mic indicator). Called once per
     /// engine. The tap hands over buffers in whatever format the device has.
     func prepare(onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws
@@ -23,6 +39,25 @@ public protocol MicEngine: AnyObject {
     func discard()
     /// The engine's configuration changed (another input device, another format). Main thread.
     var onConfigurationChange: (() -> Void)? { get set }
+}
+
+public extension MicEngine {
+    var preparedFormat: InputFormat? { nil }
+    func hardwareFormat() -> InputFormat? { nil }
+}
+
+/// What a recording looked like, for the app's log (#5154): never audio or text, only the device side. Main thread,
+/// except `.ended` from a stop, which comes on the caller's thread.
+public enum CaptureDiagnostic: Equatable, Sendable {
+    /// The engine is about to start: the format of the tap and the device's format now.
+    case starting(prepared: InputFormat?, hardware: InputFormat?)
+    /// The device's format changed since the warm-up: a new engine is made before starting.
+    case formatChanged(from: InputFormat, to: InputFormat)
+    /// `engine.start` failed; `retrying` when a fresh engine gets one more try.
+    case startFailed(error: String, retrying: Bool)
+    /// The recording is over: why (`stopped`, `no_audio`, `device_changed`), the buffers that came and when the
+    /// first one did (ms after `start`, nil if none came).
+    case ended(reason: String, buffers: Int, firstBufferMs: Int?)
 }
 
 /// Any input format → 16 kHz mono Float32 (what Parakeet takes). The converter follows the buffers' format: a converter
@@ -168,6 +203,8 @@ public final class AudioCapture {
 
     /// What happened to the engine, for the app's log (no audio in it). Main thread.
     public var onLog: ((String) -> Void)?
+    /// The device side of each recording, for the diagnosis of #5154 (no audio, no text).
+    public var onDiagnostic: ((CaptureDiagnostic) -> Void)?
     /// How long after `start` the first audio arrived: speech before it is lost, and a short dictation that loses
     /// its first syllable comes out wrong (T985). Called once per recording, on the engine's thread.
     public var onFirstBuffer: ((_ afterStart: TimeInterval) -> Void)?
@@ -212,6 +249,9 @@ public final class AudioCapture {
     private let resampler = Resampler(sampleRate: sampleRate)
     private var samples: [Float] = []
     private var capturing = false
+    /// Buffers that came in this recording, and when the first one did (for `.ended`). Guarded by `samplesQueue`.
+    private var bufferCount = 0
+    private var firstBufferMs: Int?
     /// When `start` was called, until the first buffer of the recording arrives (`onFirstBuffer`).
     private var waitingFirstBufferSince: TimeInterval?
     private var watchdog = CaptureWatchdog()
@@ -257,19 +297,47 @@ public final class AudioCapture {
         guard !isRecording else { return }
         // The input just changed and hasn't settled: the engine we have is for the old one. Make the new one now.
         if !pendingChanges.isEmpty { applyInputChange() }
-        let afterInputChange = engineFromInputChange
-        do {
-            try prepareEngine()
-        } catch {
+        // Another app can change the device's format after the warm-up without the engine noticing (a meeting that
+        // turns on voice processing, #5154): the tap would wait for buffers in the old format. Read it again now.
+        if prepared, let was = engine.preparedFormat, let current = engine.hardwareFormat(), was != current {
+            onLog?("input format changed since the warm-up (\(was) → \(current)): new engine")
+            onDiagnostic?(.formatChanged(from: was, to: current))
             replaceEngine()
-            throw error
+            engineFromInputChange = true
         }
+        do {
+            try startEngine()
+        } catch {
+            // One more try with a fresh engine, which reads the device from scratch (#5154), before giving up.
+            onDiagnostic?(.startFailed(error: "\(error)", retrying: true))
+            onLog?("the engine didn't start (\(error)): new engine, one more try")
+            replaceEngine()
+            engineFromInputChange = true
+            do {
+                try startEngine()
+            } catch {
+                onDiagnostic?(.startFailed(error: "\(error)", retrying: false))
+                replaceEngine()
+                throw error
+            }
+        }
+        isRecording = true
+        startTimers()
+    }
+
+    /// Prepares (if needed) and starts the engine, resetting this recording's state. Throws with the state undone.
+    private func startEngine() throws {
+        let afterInputChange = engineFromInputChange
+        try prepareEngine()
+        onDiagnostic?(.starting(prepared: engine.preparedFormat, hardware: engine.hardwareFormat()))
         meter.reset()
         levelQueue.sync { pacer.reset() }
         samplesQueue.sync {
             resampler.reset()
             samples.removeAll(keepingCapacity: true)
             capturing = true
+            bufferCount = 0
+            firstBufferMs = nil
             waitingFirstBufferSince = now()
             watchdog.start(at: now(), afterInputChange: afterInputChange)
         }
@@ -282,11 +350,8 @@ public final class AudioCapture {
                 capturing = false
                 watchdog.stop()
             }
-            replaceEngine()
             throw error
         }
-        isRecording = true
-        startTimers()
     }
 
     /// Stops and hands back everything recorded since `start`.
@@ -295,12 +360,14 @@ public final class AudioCapture {
         engine.stop()
         isRecording = false
         stopTimers()
-        return samplesQueue.sync {
+        let (kept, buffers, first) = samplesQueue.sync { () -> ([Float], Int, Int?) in
             capturing = false
             watchdog.stop()
             defer { samples.removeAll() }
-            return samples
+            return (samples, bufferCount, firstBufferMs)
         }
+        onDiagnostic?(.ended(reason: "stopped", buffers: buffers, firstBufferMs: first))
+        return kept
     }
 
     /// The input changed: the engine's configuration-change notification, or the default input device changed.
@@ -384,12 +451,13 @@ public final class AudioCapture {
         engine.stop()
         isRecording = false
         stopTimers()
-        let captured = samplesQueue.sync { () -> [Float] in
+        let (captured, buffers, first) = samplesQueue.sync { () -> ([Float], Int, Int?) in
             capturing = false
             watchdog.stop()
             defer { samples.removeAll() }
-            return samples.count >= Self.keptOnLoss ? samples : []
+            return (samples.count >= Self.keptOnLoss ? samples : [], bufferCount, firstBufferMs)
         }
+        onDiagnostic?(.ended(reason: code, buffers: buffers, firstBufferMs: first))
         replaceEngine()
         warmUp()
         onLost?(code, captured)
@@ -403,9 +471,11 @@ public final class AudioCapture {
             guard capturing, generation == self.generation, let out = resampler.convert(buffer) else { return nil }
             let t = now()
             watchdog.buffer(at: t)
+            bufferCount += 1
             if let since = waitingFirstBufferSince {
                 // The buffer covers the time before it was handed over: its start is the first sound kept.
                 firstAfter = max(0, t - since - Double(buffer.frameLength) / buffer.format.sampleRate)
+                firstBufferMs = Int(((t - since) * 1000).rounded())
                 waitingFirstBufferSince = nil
             }
             if retainSamples { samples.append(contentsOf: out) }

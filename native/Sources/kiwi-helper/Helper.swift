@@ -74,6 +74,12 @@ final class Helper {
         // Touching the input before the mic is granted can bring up the system prompt.
         audio.mayWarmUp = { [headless] in !headless && Permission.microphone.status == "granted" }
         audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "mic: \(message)"]) }
+        // The device side of each dictation (#5154): formats, buffers, why it ended and who else holds the mic.
+        audio.onDiagnostic = { [weak self, mic] diagnostic in
+            DispatchQueue.main.async {
+                self?.emit("log", ["level": "info", "message": "mic: " + MicDiagnostics.line(diagnostic, pick: mic.last)])
+            }
+        }
         // The time from the key to the first sound kept, per dictation (T985): only a number, no audio.
         audio.onFirstBuffer = { [weak self] after in
             let ms = Int((after * 1000).rounded())
@@ -84,8 +90,12 @@ final class Helper {
             guard !samples.isEmpty else {
                 self.gesture.reset()
                 self.recordingStartedAt = nil
-                self.emit("record.error", ["reason": "hotkey", "error": code, "microphone": Permission.microphone.status])
-                return self.overlay.set(.error, message: OverlayText.error(code))
+                // No audio while another app holds the mic (#5154): say which one.
+                let busy = MicBusy.classify(code, otherApps: MicDiagnostics.otherApps())
+                var fields: [String: Any] = ["reason": "hotkey", "error": busy.code, "microphone": Permission.microphone.status]
+                if let app = busy.app { fields["busyApp"] = app }
+                self.emit("record.error", fields)
+                return self.overlay.set(.error, message: busy.app.map(MicBusy.message) ?? OverlayText.error(busy.code))
             }
             // T883: the mic went away mid-dictation. What it heard is transcribed like a normal end (as the pill's ✓:
             // the key still held doesn't start another one), and `lost` tells the app to say the mic dropped.
@@ -276,11 +286,21 @@ final class Helper {
         } catch {
             gesture.reset()
             // A stable code for the app; AVAudioEngine's own errors are long sentences.
-            let code = (error as? AudioCaptureError)?.description ?? "engine_start_failed"
+            var code = (error as? AudioCaptureError)?.description ?? "engine_start_failed"
             let microphone = Permission.microphone.status
-            emit("record.error", ["reason": reason, "error": code, "microphone": microphone])
+            var fields: [String: Any] = ["reason": reason, "microphone": microphone]
+            var busyApp: String?
+            if microphone == "granted" {
+                // The engine wouldn't start while another app holds the mic (#5154): say which one.
+                let busy = MicBusy.classify(code, otherApps: MicDiagnostics.otherApps())
+                code = busy.code
+                busyApp = busy.app
+                if let app = busy.app { fields["busyApp"] = app }
+            }
+            fields["error"] = code
+            emit("record.error", fields)
             let shown = microphone == "granted" ? code : microphone == "undetermined" ? "microphone_undetermined" : "microphone_denied"
-            overlay.set(.error, message: OverlayText.error(shown))
+            overlay.set(.error, message: busyApp.map(MicBusy.message) ?? OverlayText.error(shown))
             return code
         }
         recordingStartedAt = ProcessInfo.processInfo.systemUptime
@@ -504,8 +524,14 @@ final class Helper {
         }
         system.onError = failAndStop
         capture.onError = failAndStop
-        meetingMic.audio.onLost = { code, _ in failAndStop(code) }
+        // The meeting app holds the same mic (#5154): a channel that gives nothing says so (`mic_busy`).
+        meetingMic.audio.onLost = { code, _ in failAndStop(MicBusy.classify(code, otherApps: MicDiagnostics.otherApps()).code) }
         meetingMic.audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "meeting mic: \(message)"]) }
+        meetingMic.audio.onDiagnostic = { [weak self, meetingMic] diagnostic in
+            DispatchQueue.main.async {
+                self?.emit("log", ["level": "info", "message": "meeting mic: " + MicDiagnostics.line(diagnostic, pick: meetingMic.selection.last)])
+            }
+        }
         meetingMic.selection.choice = mic.choice
         let commands = MeetingCommands(capture: capture, headless: headless,
             microphonePermission: { Permission.microphone.status },

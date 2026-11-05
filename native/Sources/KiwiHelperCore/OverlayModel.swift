@@ -122,6 +122,7 @@ public enum OverlayText {
         case "microphone_undetermined": return "Permita o microfone e tente de novo"
         case "device_changed": return "O microfone mudou"
         case "no_audio": return "Sem áudio do microfone"
+        case "mic_busy": return "Mic ocupado por outro app"
         case "engine_start_failed", "audio_converter": return "Não deu para usar o microfone"
         default: return "Algo deu errado"
         }
