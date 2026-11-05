@@ -17,7 +17,7 @@ import { helperRunner } from "../notes/ocr.ts";
 import { helperPdf } from "../notes/export.ts";
 import { stores } from "./stores.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
-import { closeWindow, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
+import { closeWindow, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
 // velho de pé é substituído. Com KIWI_DEBUG=1 nunca derruba outro.
@@ -156,6 +156,7 @@ function setMenu(s: SessionStatus) {
     { type: "divider" },
     // As janelas soltas de antes viraram seções do hub (#2100).
     { type: "normal", label: "Notas…", action: "notes" },
+    { type:"normal",label:"Abrir pasta de notas…",action:"notes-folder" },
     { type: "normal", label: "Ditado…", action: "dictation" },
     { type: "normal", label: "Configurações…", action: "settings" },
     { type: "normal", label: "Sobre o Kiwi Notes…", action: "about" },
@@ -175,9 +176,9 @@ dictation.sidecar.on("audio.inputs.changed", () => {
 // A gravação de reunião começou, parou ou pausou o canal "você" (R6): o card ao vivo da aba Reuniões.
 dictation.meetings.onChange((live) => sendToWindow("hub", "meetings.live", live));
 // O texto dos anexos (T2709): o mesmo helper, no modo `--ocr` (lê e sai), em prioridade de fundo.
-if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.ocr.setRunner(helperRunner(helperPath(PATHS.VIEWS_FOLDER)));
+if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.folders.setOcrRunner(helperRunner(helperPath(PATHS.VIEWS_FOLDER)));
 // O PDF do exportar (T2684): o mesmo helper, no modo `--export-pdf` (imprime fora da tela e sai).
-if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.exporter.setPdf(helperPdf(helperPath(PATHS.VIEWS_FOLDER)));
+if (existsSync(helperPath(PATHS.VIEWS_FOLDER))) stores.folders.setPdf(helperPdf(helperPath(PATHS.VIEWS_FOLDER)));
 setMenu(dictation.status());
 dictation.onStatus(setMenu);
 // O atalho global da janela Notas (T1499): quem vê a tecla é o helper, que já tem o Monitoramento de Entrada.
@@ -191,6 +192,10 @@ tray.on("tray-clicked", (event) => {
   switch (action) {
     case "hub":
       openHub();
+      break;
+    case "notes-folder":
+      openHub("notes");
+      void openNotesFolderFromMenu();
       break;
     case "notes":
     case "dictation":
@@ -219,7 +224,7 @@ function quit(): void {
   // sair nunca espera mais que isso.
   const exit = () => process.exit(0);
   setTimeout(exit, 800);
-  void Promise.allSettled([meetingFlush, stores.versions.close()]).then(exit, exit);
+  void Promise.allSettled([meetingFlush, stores.folders.close()]).then(exit, exit);
 }
 
 // Um build novo pede para este sair (T992): sai limpo, parando o helper e soltando o socket.

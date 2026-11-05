@@ -147,8 +147,12 @@ export function followPinned(pinned: readonly string[], r: ExternalMoves, now: {
   return out;
 }
 
+export interface IndexProgress { seen: number; notes: number; done: boolean }
+
 export interface VaultOptions {
   root: string;
+  onIndexProgress?(progress: IndexProgress): void;
+  strictRoot?: boolean;
   /** Manda para a Lixeira do macOS. Nos testes, de mentira. */
   trash?: (abs: string) => Promise<void>;
   /** Quanto o watcher junta mudanças antes de avisar. */
@@ -278,6 +282,8 @@ function snippetAround(content: string, term: string): string {
 
 export class Vault {
   readonly root: string;
+  private readonly onIndexProgress?: (progress: IndexProgress) => void;
+  private readonly strictRoot: boolean;
   private readonly trash: (abs: string) => Promise<void>;
   private readonly debounceMs: number;
   private readonly watchOnOpen: boolean;
@@ -309,6 +315,8 @@ export class Vault {
 
   constructor(o: VaultOptions) {
     this.root = o.root;
+    this.onIndexProgress = o.onIndexProgress;
+    this.strictRoot = o.strictRoot ?? false;
     this.trash = o.trash ?? macTrash;
     this.debounceMs = o.debounceMs ?? 150;
     this.watchOnOpen = o.watch ?? false;
@@ -360,7 +368,7 @@ export class Vault {
     this.watcher = watch(this.root, { recursive: true }, (_event, file) => {
       if (!file) return;
       const rel = String(file).split(path.sep).join("/").normalize("NFC");
-      if (rel.split("/").some((s) => s.startsWith("."))) return;
+      if (rel.split("/").some((s) => s.startsWith(".") || s === "node_modules")) return;
       this.pendingPaths.add(rel);
       this.flushTimer ??= setTimeout(() => void this.flush().catch((e) => console.error("[notes] watcher flush failed:", e)), this.debounceMs);
     });
@@ -989,14 +997,29 @@ export class Vault {
     const folders = new Set<string>();
     const files = new Map<string, VaultFile>();
     const packages = new Set<string>();
+    let seen = 0;
+    this.onIndexProgress?.({ seen, notes: 0, done: false });
     const walk = async (rel: string) => {
-      for (const name of await readdir(path.join(this.root, rel)).catch(() => [] as string[])) {
-        if (name.startsWith(".")) continue;
+      const directory = path.join(this.root, rel);
+      const names = await readdir(directory).catch(error => {
+        if (!rel && this.strictRoot) throw new VaultError("E_ACCESS", `Não foi possível ler a pasta ${directory}: ${(error as Error).message}`);
+        return [] as string[];
+      });
+      for (const name of names) {
+        if (name.startsWith(".") || name === "node_modules") continue;
         const child = rel ? `${rel}/${name}` : name;
         const key = child.normalize("NFC");
         const abs = path.join(this.root, child);
         const s = await lstat(abs).catch(() => null);
         if (!s || s.isSymbolicLink()) continue;
+        if (s.isFile() || s.isDirectory() && PACKAGE_MARKS[extOf(name)]) {
+          seen++;
+          if (seen % 128 === 0) {
+            this.onIndexProgress?.({ seen, notes: notes.size, done: false });
+            await new Promise(resolve => setTimeout(resolve, 0));
+            if (this.closed) return;
+          }
+        }
         if (s.isDirectory() && isPackageDir(name, await packageEntries(abs))) {
           // Um documento-pacote: arquivo, não pasta (T3371). Só com a marca do formato e sem nota dentro (#3476).
           packages.add(key);
@@ -1020,6 +1043,7 @@ export class Vault {
     this.files = files;
     this.packages = packages;
     this.resolver = null;
+    this.onIndexProgress?.({ seen, notes: notes.size, done: true });
   }
 
   /** O que o watcher juntou: relê o que mudou, tira o que sumiu, e avisa. */

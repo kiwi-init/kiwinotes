@@ -921,3 +921,18 @@ body {
 .kn-meeting-speaker label { display: grid; gap: 6px; margin: 12px 0; }
 .kn-meeting-speaker input, .kn-meeting-speaker select { width: 100%; padding: 8px; border: 1px solid var(--line-2, var(--surface-2)); border-radius: 6px; background: var(--bg); color: inherit; font: inherit; }
 .kn-meeting-speaker-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+.kn-notes-folder { position: relative; }
+.kn-folder-menu { position: absolute; z-index: 80; top: 100%; left: 0; min-width: 260px; max-width: 520px; padding: 8px; border-radius: 12px; background: var(--bg); box-shadow: 0 10px 36px #0002; }
+.kn-folder-menu button { display: grid; gap: 3px; width: 100%; padding: 10px; text-align: left; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.kn-folder-menu button:hover { background: var(--bg-2, var(--surface)); }
+.kn-folder-menu small { opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kn-folder-confirm { padding: 24px; }
+.kn-folder-confirm p { overflow-wrap: anywhere; }
+.kn-folder-confirm > div { display: flex; justify-content: end; gap: 8px; margin-top: 20px; }
+.kn-notes-folder { position: relative; flex-shrink: 0; }
+.kn-notes-folder > .kn-bt { white-space: nowrap; }
+/* Nos Ajustes, o botão fica à direita da linha: o menu abre para a esquerda e o caminho longo quebra em qualquer ponto. */
+.kn-row .kn-folder-menu { left: auto; right: 0; }
+.kn-row:has(.kn-notes-folder) .kn-row-hint { overflow-wrap: anywhere; }
+.kn-folder-progress { padding: 12px 24px; font-size: 14px; }

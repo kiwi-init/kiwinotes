@@ -47,7 +47,18 @@ export function reportError(error: unknown): void {
 /** O engine tem esta capacidade (uma UI nova num engine velho esconde o que ele não sabe fazer). */
 export const has = (cap: UiCapability) => window.engine?.has(cap) ?? false;
 
+async function invokeInternal<C extends "notes.rename"|"notes.delete"|"notes.restore">(cap:C,args:UiCapabilities[C]["args"]):Promise<UiCapabilities[C]["result"]>{
+  if(!window.engine?.has("notes.folder"))return invoke(cap,args);
+  const view=await invoke("notes.folder",{});
+  return window.engine.invoke(cap,{...args,folderId:view.internal.id}) as Promise<UiCapabilities[C]["result"]>;
+}
+
 export const api = {
+  noteFolders: {
+    get: () => invoke("notes.folder",{}),
+    open: (args: UiCapabilities["notes.openFolder"]["args"] = {}) => invoke("notes.openFolder",args),
+    onChanged: (fn: (v:UiEvents["notes.folderChanged"])=>void) => on("notes.folderChanged",fn),
+  },
   dictionary: {
     get: () => invoke("dictionary.get", {}),
     set: (terms: UiCapabilities["dictionary.set"]["args"]["terms"]) => invoke("dictionary.set", { terms }),
@@ -105,10 +116,10 @@ export const api = {
     onLive: (fn: (live: UiEvents["meetings.live"]) => void) => on("meetings.live", fn),
     /** As notas mudaram (inclusive fora do app): a lista lê de novo. */
     onNotesChanged: (fn: () => void) => on("notes.changed", () => fn()),
-    rename: (path: string, newPath: string) => invoke("notes.rename", { path, newPath }),
+    rename: (path: string, newPath: string) => invokeInternal("notes.rename", { path, newPath }),
     /** Para a Lixeira do app, com 10 min para desfazer (`restore`). */
-    delete: (path: string) => invoke("notes.delete", { path }),
-    restore: (path: string) => invoke("notes.restore", { path }),
+    delete: (path: string) => invokeInternal("notes.delete", { path }),
+    restore: (path: string) => invokeInternal("notes.restore", { path }),
   },
   /** Só num gesto da pessoa (o clique em copiar): nenhuma UI escreve no clipboard sozinha (#1199). */
   copy: async (text: string) => {

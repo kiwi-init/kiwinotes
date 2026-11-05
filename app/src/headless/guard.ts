@@ -2,7 +2,7 @@
 // `KIWI_HEADLESS_DATA`) errado não pode cair no vault do harry: o caminho que é, ou fica dentro de, uma das pastas
 // reais é recusado com E_REAL_DATA, antes de criar qualquer coisa.
 
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -10,7 +10,14 @@ import { dataDir } from "../store/files.ts";
 
 /** As pastas do app de verdade: os dados (as nossas e as do Electrobun) e o vault das notas. */
 export function realDataRoots(home = os.homedir()): string[] {
+  let configured: string[] = [];
+  try {
+    const saved = JSON.parse(readFileSync(path.join(dataDir(home), "notes-folders.json"), "utf8"));
+    configured = [saved.current, ...(Array.isArray(saved.recent) ? saved.recent : [])]
+      .filter((p): p is string => typeof p === "string" && path.isAbsolute(p));
+  } catch { /* no configured folder yet */ }
   return [
+    ...configured,
     dataDir(home), // ~/Library/Application Support/KiwiNotes
     path.join(home, "Library", "Application Support", "app.kiwinotes.desktop"),
     path.join(home, "KiwiNotes"), // o vault (src/bun/stores.ts); não há outro vault configurável no app hoje
@@ -63,6 +70,17 @@ export function assertNotRealData(data: string, home = os.homedir()): void {
       throw new RealDataError(
         `refusing ${path.resolve(data)}: ${candidate === data ? "it" : "its vault"} is the real app's data (${hit}). Use a scratch folder.`,
       );
+    }
+  }
+}
+
+/** A fake folder choice cannot index a real folder, including an ancestor containing real data. */
+export function assertHeadlessNotesFolder(folder: string, home = os.homedir()): void {
+  const candidate = resolveReal(folder);
+  for (const root of realDataRoots(home)) {
+    const real = resolveReal(root);
+    if (within(candidate,real) || within(real,candidate) || within(path.resolve(folder),path.resolve(root))) {
+      throw new RealDataError(`refusing the real notes folder ${folder}; use a scratch folder`);
     }
   }
 }

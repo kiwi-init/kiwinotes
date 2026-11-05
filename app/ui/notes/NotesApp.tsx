@@ -15,6 +15,8 @@ import { TopBar } from "../src/topbar.tsx";
 import { Popover } from "./Popover.tsx";
 import { TreePopover } from "./TreePopover.tsx";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
+import { NotesFolderControl, FolderConfirmation, useNotesFolders, type FolderController } from "./NotesFolder.tsx";
+import type { FolderRef } from "../../src/notes/folders-workspace.ts";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
 import { wordCount } from "./editor/text.ts";
@@ -84,7 +86,7 @@ function useEnterAnimation() {
   return n;
 }
 
-function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Drafts; active: boolean; openRequest?: { path: string; n: number } | null }) {
+function Notes({ api, drafts, active, openRequest, folderController, folderRef }: { api: NotesApi; drafts: Drafts; active: boolean; openRequest?: { path: string; n: number; internal?: boolean } | null; folderController?:FolderController;folderRef?:FolderRef }) {
   // A nota que outra seção do hub pediu (T4947): a de antes de montar abre na carga; as seguintes, pelo efeito abaixo.
   const openRequestRef = useRef(openRequest);
   const handledRequest = useRef(openRequest?.n ?? 0);
@@ -774,6 +776,11 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
     ];
     if (t.kind === "empty") {
       return [
+        ...(folderController?.supported ? [
+          {label:"Abrir pasta…",onSelect:()=>{void leave().then(async ok=>{if(ok)await folderController.open();});}},
+          ...(folderController.view?.recent??[]).map(r=>({label:`Abrir ${r.name}`,onSelect:()=>{void leave().then(async ok=>{if(ok)await folderController.open(r.key);});}})),
+          {kind:"separator" as const},
+        ]:[]),
         { label: "Nova nota", hint: "⌘N", onSelect: () => void create("Sem título", true, ""),
         },
         ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(""),
@@ -960,6 +967,8 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
     <div className="kn-notes" data-entered={entered}>
       <TopBar
         start={
+          <>
+          {folderController?.supported?<NotesFolderControl controller={folderController} folder={folderRef} onBeforeOpen={leave}/>:null}
           <button
             ref={setCrumbEl}
             type="button"
@@ -972,6 +981,7 @@ function Notes({ api, drafts, active, openRequest }: { api: NotesApi; drafts: Dr
             <span className="kn-crumb-label">{note?.folder ? note.folder.replace(/\//g, " / ") : "Notas"}</span>
             <Chevron />
           </button>
+          </>
         }
         end={
           <span className="kn-float-group">
@@ -1314,20 +1324,27 @@ function Shell({ children }: { children: React.ReactNode }) {
  * Notas estão na tela. No hub, com outra seção à frente, elas ficam montadas e escondidas, e o ⌘N e o ⌘K não podem
  * agir sem ninguém ver (T2200).
  */
-export function NotesApp({ active = true, openRequest = null }: { active?: boolean; openRequest?: { path: string; n: number } | null } = {}) {
-  const drafts = useMemo(() => new Drafts(), []);
+export function NotesApp({ active = true, openRequest = null }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean } | null } = {}) {
+  const request = openRequest?.n ?? 0;
+  const [mode,setMode] = useState({n:request,internal:openRequest?.internal===true});
+  const controller = useNotesFolders(()=>setMode({n:request,internal:false}));
+  const internal = mode.n===request?mode.internal:openRequest?.internal===true;
+  const previousFolder = useRef<string | undefined>(undefined);
+  useEffect(()=>{
+    const id=controller.view?.current.id;
+    if(previousFolder.current&&id&&previousFolder.current!==id)setMode({n:request,internal:false});
+    previousFolder.current=id;
+  },[controller.view?.current.id,request]);
+  const folder = internal?controller.view?.internal:controller.view?.current;
+  const namespace = folder&&folder.key!==controller.view?.internal.key?folder.key:"";
+  const drafts = useMemo(() => new Drafts(undefined,Date.now,namespace), [namespace]);
   const api = useMemo(() => {
-    const a = notesApi();
-    return a && forgetDraftOnDelete(a, drafts);
-  }, [drafts]);
-  if (!api) {
-    return (
-      <Shell>
-        <Empty title="As notas ainda não chegaram a esta versão do app">Atualize o Kiwi Notes para abrir o vault.</Empty>
-      </Shell>
-    );
-  }
-  return <Notes api={api} drafts={drafts} active={active} openRequest={openRequest} />;
+    if(controller.supported&&!folder)return null;
+    const a = notesApi(folder?.id);
+    return a && forgetDraftOnDelete(a,drafts);
+  }, [drafts,folder?.id,controller.supported]);
+  if (!api) return <Shell><Empty title={controller.error|| (controller.supported?"Abrindo a pasta das notas…":"As notas ainda não chegaram a esta versão do app")}/></Shell>;
+  return <>{controller.view&&controller.view.progress.phase!=="idle"?<div className="kn-folder-progress" role="status" aria-live="polite">Lendo {controller.view.progress.path}… {controller.view.progress.seen} arquivos encontrados.</div>:null}<Notes key={folder?.id??"legacy"} api={api} drafts={drafts} active={active} openRequest={openRequest} folderController={controller} folderRef={folder}/><FolderConfirmation controller={controller}/></>;
 }
 
 

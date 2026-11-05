@@ -1,0 +1,128 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "waitFor": "[aria-label='Pasta das notas']"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Nota interna')"
+    },
+    {
+      "screenshot": "01-pasta-padrao.png"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": "[aria-label='Pasta das notas']"
+    },
+    {
+      "click": "[role='menuitem']:has-text('Abrir pasta…')"
+    },
+    {
+      "expectText": "[aria-label='Pasta das notas']",
+      "text": "Obsidian de teste"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Projeto Atlas')"
+    },
+    {
+      "expectCount": ".kn-side-item:has-text('Nota interna')",
+      "count": 0
+    },
+    {
+      "screenshot": "02-arvore-externa.png"
+    },
+    {
+      "click": ".kn-side-item:has-text('Projeto Atlas')"
+    },
+    {
+      "expectText": ".kn-title",
+      "text": "Projeto Atlas"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+End"
+    },
+    {
+      "type": "\n\nEdição feita no Kiwi, dentro da pasta escolhida."
+    },
+    {
+      "press": "Meta+s"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "03-editada-na-pasta.png"
+    },
+    {
+      "click": ".kn-tab:has-text('Reuniões')"
+    },
+    {
+      "waitFor": ".kn-meet-row"
+    },
+    {
+      "expectText": ".kn-meet-row >> nth=0",
+      "text": "Reunião do Teams"
+    },
+    {
+      "screenshot": "05-reunioes-na-base-interna.png"
+    },
+    {
+      "click": ".kn-tab:has-text('Notas')"
+    },
+    {
+      "click": "[aria-label='Pasta das notas']"
+    },
+    {
+      "waitFor": "[role='menuitem']:has-text('vault')"
+    },
+    {
+      "screenshot": "04-pastas-recentes.png"
+    },
+    {
+      "click": "[role='menuitem']:has-text('vault')"
+    },
+    {
+      "expectText": "[aria-label='Pasta das notas']",
+      "text": "vault"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Nota interna')"
+    },
+    {
+      "expectCount": ".kn-side-item:has-text('Projeto Atlas')",
+      "count": 0
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "waitFor": ".kn-row:has-text('Pasta das notas')"
+    },
+    {
+      "hover": ".kn-row:has-text('Pasta das notas')"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "screenshot": "06-ajustes-pasta.png"
+    }
+  ]
+}

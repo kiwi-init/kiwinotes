@@ -30,6 +30,7 @@ const SOON: ReadonlySet<HubSection> = new Set([]);
 /** Abrir uma nota nas Notas a partir de outra seção (Reuniões, T4947): `n` muda a cada pedido, mesmo para a mesma nota. */
 export interface OpenRequest {
   path: string;
+  internal?: boolean;
   n: number;
 }
 
@@ -126,7 +127,7 @@ function Hub() {
   const [entry, setEntry] = useState(1);
   const [openRequest, setOpenRequest] = useState<OpenRequest | null>(null);
   const openNote = (path: string) => {
-    setOpenRequest((r) => ({ path, n: (r?.n ?? 0) + 1 }));
+    setOpenRequest((r) => ({ path, internal: true, n: (r?.n ?? 0) + 1 }));
     go("notes");
   };
   const ref = useRef<HTMLDivElement>(null);

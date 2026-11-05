@@ -8,6 +8,8 @@ import { DictionarySection } from "./Dictionary.tsx";
 import { ExtensionsRow } from "./ExtensionsRow.tsx";
 import { MicrophoneRow } from "./Microphone.tsx";
 import { NotesShortcutRow } from "./NotesShortcut.tsx";
+import { NotesFolderRow } from "../notes/NotesFolder.tsx";
+import "../notes/notes.css";
 import { OcrRow } from "./OcrRow.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 
@@ -62,6 +64,7 @@ export function Settings() {
       <SnippetsSection />
 
       <Section title="Notas">
+        <NotesFolderRow />
         <ExtensionsRow />
         <OcrRow />
       </Section>

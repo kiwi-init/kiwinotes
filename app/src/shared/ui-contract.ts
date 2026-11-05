@@ -14,6 +14,7 @@ import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, Trash
 } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
+import type { FolderView, OpenFolderResult } from "../notes/folders-workspace.ts";
 import type { MeetingLive, MeetingNote, MeetingSettings } from "./meetings.ts";
 
 export type { AppSettings };
@@ -59,7 +60,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.21.0 (T4947): a aba Reuniões do hub (R6, #198): `meetings.list`, `meetings.live`, `meetings.stop`,
 //   `meetings.pauseMine`, o evento `meetings.live` e os `meetings` nas settings. Só acréscimo.
 // 1.22.0 (T4945): meeting speakers and append-only edit rebase for live meeting notes.
-export const UI_CONTRACT_VERSION = "1.22.0";
+// 1.23.0 (T5161): selectable note folders, recents and folder-scoped note preferences.
+export const UI_CONTRACT_VERSION = "1.23.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -70,6 +72,8 @@ export const CLIPBOARD_MAX_CHARS = 100_000;
 
 /** Argumentos e resultado de cada capacidade. */
 export interface UiCapabilities {
+  "notes.folder": { args: Record<string,never>; result: FolderView };
+  "notes.openFolder": { args: {recent?: string;confirm?:string;cancel?:string}; result: OpenFolderResult };
   "dictionary.get": { args: Record<string, never>; result: DictionaryTerm[] };
   /** Devolve o que foi salvo (já limpo: sem vazios nem repetidos). */
   "dictionary.set": { args: { terms: DictionaryTerm[] }; result: DictionaryTerm[];
@@ -287,6 +291,8 @@ export interface UiCapabilities {
 export type UiCapability = keyof UiCapabilities;
 
 export const UI_CAPABILITIES = [
+  "notes.folder",
+  "notes.openFolder",
   "dictionary.get",
   "dictionary.set",
   "dictionary.check",
@@ -349,12 +355,13 @@ export const UI_CAPABILITIES = [
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
 export interface UiEvents {
+  "notes.folderChanged": FolderView;
   /** Um ditado novo entrou no histórico. */
   "history.added": HistoryEntry;
   /** Notas criadas, mudadas, apagadas ou renomeadas, inclusive fora do app (o watcher do vault). */
-  "notes.changed": { paths: string[] };
+  "notes.changed": { paths: string[]; folderId?: string };
   /** Arquivos que não são nota apareceram, mudaram ou sumiram, inclusive fora do app (1.19.0): a árvore lista de novo. */
-  "files.changed": { paths: string[] };
+  "files.changed": { paths: string[]; folderId?: string };
   /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */
   "hub.navigate": { section: HubSection };
   /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */
