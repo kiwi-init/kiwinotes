@@ -171,7 +171,9 @@ export function Meetings({ onOpen }: { onOpen(path: string): void }) {
           </section>
         ))
       )}
-      <MeetingSettingsSection />
+      <div className="kn-meet-settings">
+        <MeetingSettingsSection />
+      </div>
     </Window>
   );
 }

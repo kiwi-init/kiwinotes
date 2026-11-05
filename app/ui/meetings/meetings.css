@@ -179,6 +179,10 @@
 
 /* ---------------------------------------------------------- os ajustes */
 
+.kn-meet-settings {
+  margin-top: var(--space-6, 32px);
+}
+
 .kn-meet-apps {
   flex-wrap: wrap;
 }
