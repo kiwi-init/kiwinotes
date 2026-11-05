@@ -12,7 +12,9 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --stdio           talk NDJSON over stdin/stdout instead, for manual testing
   --headless        for the agents' CLI (T1739): no hotkey tap, no pill, no mic, no permission asks, dry-run inserts
   --dump-wav <dir>  also save each recording as 16 kHz WAV there (for the STT benchmark; never inside the repo)
-  --overlay-snapshot <dir>  render the dictation pill in each state as PNGs there, then exit
+  --overlay-snapshot <dir>  render the dictation pill and the meeting panel in each state as PNGs there, then exit
+  --mic-users       print the processes taking mic input now, as JSON, and exit (R2): reads CoreAudio's process
+                    list only, never opens the mic and asks for no permission
   --ocr <file>…     read the text in images and PDFs with Vision and PDFKit (T2709), one JSON line each, and exit;
                     no session, no mic, no permission asks (for the app's OCR queue, which runs it at background priority)
   --export-pdf <in.html> <out.pdf>  print a note's HTML to PDF in an off-screen WebKit view (T2684), then exit;
@@ -61,11 +63,25 @@ while let arg = args.next() {
         let dir = URL(fileURLWithPath: path, isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try MainActor.assumeIsolated { try OverlaySnapshots.write(to: dir) }
+            try MainActor.assumeIsolated {
+                try OverlaySnapshots.write(to: dir)
+                try MeetingSnapshots.write(to: dir)
+            }
         } catch {
             fail("can't write snapshots to \(dir.path): \(error)")
         }
         print("wrote overlay snapshots to \(dir.path)")
+        exit(0)
+    case "--mic-users":
+        guard let users = MicListener.readOnce() else { fail("can't read CoreAudio's process list (macOS 14.2+)") }
+        let apps = MeetingApps()
+        let list = users.sorted { $0.pid < $1.pid }.map { user -> [String: Any] in
+            var fields: [String: Any] = ["pid": Int(user.pid), "bundleId": user.bundleId]
+            if let app = apps.match(user.bundleId) { fields["meeting"] = app.name }
+            return fields
+        }
+        let data = try! JSONSerialization.data(withJSONObject: list, options: [.sortedKeys])
+        print(String(decoding: data, as: UTF8.self))
         exit(0)
     case "--export-pdf":
         guard let input = args.next(), let output = args.next() else { fail("--export-pdf needs <in.html> <out.pdf>") }
