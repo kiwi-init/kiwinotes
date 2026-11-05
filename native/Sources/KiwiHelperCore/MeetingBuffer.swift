@@ -26,10 +26,19 @@ public final class MeetingBuffer {
     public let directory: URL
     public let session: String
     public let chunkFrames: Int
-    private struct OpenChunk { let url: URL; let handle: FileHandle; let start: Int; var frames: Int }
+    private struct OpenChunk { let url: URL; let handle: FileHandle; let start: Int; var frames: Int; var syncedAt: TimeInterval }
     private var open: [MeetingChannel: OpenChunk] = [:]
+    /// Every packet is written right away (the OS has it if the app dies); the disk flush (fsync) happens when a chunk
+    /// is sealed and at most once per `syncInterval` per channel, not on every packet (#5030, R1's review).
+    public let syncInterval: TimeInterval
+    private let now: () -> TimeInterval
+    /// How many fsyncs so far, for the tests.
+    public private(set) var syncs = 0
 
-    public init(root: URL, chunkDuration: Double, session: UUID = UUID()) throws {
+    public init(root: URL, chunkDuration: Double, session: UUID = UUID(), syncInterval: TimeInterval = 1,
+                now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) throws {
+        self.syncInterval = syncInterval
+        self.now = now
         guard chunkDuration.isFinite, (0.02...60).contains(chunkDuration) else { throw MeetingFailure.invalidValue }
         self.session = session.uuidString
         chunkFrames = Int((chunkDuration * Double(Self.sampleRate)).rounded())
@@ -52,7 +61,7 @@ public final class MeetingBuffer {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
                 let url = directory.appendingPathComponent("\(channel.rawValue)-\(start)-\(UUID().uuidString).part")
                 guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600]) else { throw MeetingFailure.storage }
-                open[channel] = OpenChunk(url: url, handle: try FileHandle(forWritingTo: url), start: start, frames: 0)
+                open[channel] = OpenChunk(url: url, handle: try FileHandle(forWritingTo: url), start: start, frames: 0, syncedAt: now())
             }
             var current = open[channel]!
             let count = min(chunkFrames - current.frames, samples.count - offset)
@@ -62,7 +71,11 @@ public final class MeetingBuffer {
                 withUnsafeBytes(of: &bits) { bytes.append(contentsOf: $0) }
             }
             try current.handle.write(contentsOf: bytes)
-            try current.handle.synchronize()
+            if now() - current.syncedAt >= syncInterval {
+                try current.handle.synchronize()
+                syncs += 1
+                current.syncedAt = now()
+            }
             current.frames += count
             open[channel] = current
             offset += count
@@ -78,6 +91,7 @@ public final class MeetingBuffer {
     private func seal(_ channel: MeetingChannel) throws -> MeetingChunk? {
         guard let current = open[channel] else { return nil }
         try current.handle.synchronize()
+        syncs += 1
         try current.handle.close()
         open.removeValue(forKey: channel)
         let url = current.url.deletingPathExtension().appendingPathExtension("pcm")
