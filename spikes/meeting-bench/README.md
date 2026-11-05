@@ -36,3 +36,7 @@ kiwi unlock bench
   - Atraso p50 e p90, CPU e memória de pico.
 
 O áudio e os resultados ficam em `audio/` e `results/`, que o git ignora.
+
+## A medida do R3 (T4943)
+
+`run-live.sh` roda `kiwi-helper --meeting-live <wav> --output speaker|headphones [--realtime]`. É o pipeline que o app usa, inteiro: os dois ASR em streaming, o Sortformer ao vivo, o filtro de eco e a correção do VBx no fim. Ele escreve as mesmas linhas `word`/`spk`, e o mesmo `score.ts` dá a nota (`results/score-live.jsonl`). Veja [docs/meetings/live.md](../../docs/meetings/live.md).

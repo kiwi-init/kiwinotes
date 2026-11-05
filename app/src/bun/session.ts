@@ -127,7 +127,7 @@ export class Session {
     this.sidecar.on("meeting.drained", (e) => this.meetingAcks.drained(e.session, e.channel, e.frame));
     this.sidecar.on("meeting.relabel", (e) => {
       this.meetingAcks.relabelStarted(e.session);
-      stores.meetingNotes.relabel(e.session, e.changes).then(
+      stores.meetingNotes.relabel(e.session, e.turns, { failed: e.failed === true }).then(
         () => this.meetingAcks.relabelDone(e.session),
         () => console.error("[meetings] speaker correction not written; the system audio stays for the recovery"),
       );

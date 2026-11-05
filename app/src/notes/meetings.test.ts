@@ -289,8 +289,10 @@ test("meeting: fake helper events create, append and finish a note without captu
   expect(metadata(c).duration).toBe(30);
 });
 
-// R3 (T4943, option B of #5131): the VBx corrects the speakers after the meeting.
-test("meeting relabel: renamed during the meeting, then the VBx moved a segment: the person's name stays", async () => {
+// R3 (T4943, option B of #5131): the VBx corrects the speakers after the meeting, over the saved blocks.
+const turn = (speaker: number, start: number, end: number) => ({ speaker, start, end });
+
+test("meeting relabel: renamed during the meeting, then the VBx moved segments: the person's name stays", async () => {
   const { notes, vault } = await rig();
   const n = await notes.start("s9", "Teams", at);
   await notes.segment("s9", segment(1, "Pessoa 1", "Primeiro ponto."));
@@ -299,38 +301,64 @@ test("meeting relabel: renamed during the meeting, then the VBx moved a segment:
   await notes.segment("s9", segment(13, "Você", "Fechado então."));
   await notes.flush();
   await notes.renameSpeaker(n.path, "Pessoa 1", "Ana");
-  // The person writes in her own section meanwhile.
   const mine = await vault.get(n.path);
   await vault.save(n.path, mine.content.replace("## Minhas notas\n", "## Minhas notas\nLevar o laudo.\n"), mine.version);
-  // The VBx: the segment at 5 s was Ana's after all; the one at 9 s goes to a third person.
-  const r = await notes.relabel("s9", [
-    { start: 5, end: 7, channel: "system", from: "Pessoa 2", to: "Pessoa 1" },
-    { start: 9, end: 11, channel: "system", from: "Pessoa 2", to: "Pessoa 3" },
-    { start: 99, end: 100, channel: "system", from: "Pessoa 2", to: "Pessoa 1" },
-  ]);
-  expect(r.changed).toBe(2);
+  // The VBx: cluster 4 spoke at 1 s and 5 s (Ana, after all); cluster 8 at 9 s.
+  const r = await notes.relabel("s9", [turn(4, 0.5, 3.5), turn(4, 4.5, 7.5), turn(8, 8.5, 11.5)]);
+  expect(r.changed).toBe(1); // only the block at 5 s moves: cluster 4 is "Pessoa 1" (Ana), cluster 8 stays "Pessoa 2"
   const after = (await vault.get(n.path)).content;
   expect(after).toContain("Levar o laudo.");
   expect(after).toMatch(/\*\*14:30 · Ana:\*\* Eu acho que sim\./);
-  expect(after).toMatch(/\*\*14:30 · Pessoa 3:\*\* Sem dúvida\./);
-  expect(after).not.toContain("· Pessoa 2:");
-  expect(metadata(after).participants).toEqual(["Ana", "Você", "Pessoa 3"]);
-  expect(metadata(after).meeting_speakers).toMatchObject({ "Pessoa 1": "Ana", "Pessoa 3": "Pessoa 3" });
-  // Idempotent: a replay of the corrected segment doesn't add a line; the same relabel again changes nothing.
+  expect(after).toMatch(/\*\*14:30 · Pessoa 2:\*\* Sem dúvida\./);
+  expect(after).toMatch(/\*\*14:30 · Você:\*\* Fechado então\./);
+  expect(metadata(after).participants).toEqual(["Ana", "Pessoa 2", "Você"]);
+  expect(metadata(after).meeting_speakers).toMatchObject({ "Pessoa 1": "Ana" });
+  // Idempotent: a replay of the moved segment with its new label adds nothing; the same VBx again changes nothing.
   await notes.segment("s9", segment(5, "Pessoa 1", "Eu acho que sim."));
   await notes.flush();
   expect((await vault.get(n.path)).content.match(/Eu acho que sim/g)?.length).toBe(1);
-  expect((await notes.relabel("s9", [{ start: 5, end: 7, channel: "system", from: "Pessoa 2", to: "Pessoa 1" }])).changed).toBe(0);
+  expect((await notes.relabel("s9", [turn(4, 0.5, 3.5), turn(4, 4.5, 7.5), turn(8, 8.5, 11.5)])).changed).toBe(0);
 });
 
-test("meeting relabel: pending finals are written first, and bad changes are refused", async () => {
+test("meeting relabel (#5168): finds the saved block even when the replay cut it differently", async () => {
+  const { notes, vault } = await rig();
+  const n = await notes.start("s12", "Teams", at);
+  await notes.segment("s12", segment(1, "Pessoa 1", "Primeiro."));
+  await notes.segment("s12", segment(5, "Pessoa 2", "Antes da queda."));
+  await notes.flush();
+  await notes.renameSpeaker(n.path, "Pessoa 1", "Ana");
+  // The crash: the replay cuts [4.8, 6.9] and the progress skips it (it ends before 7).
+  await notes.segment("s12", { ...segment(4.8, "Pessoa 1", "Antes da queda."), end: 6.9, words: [{ start: 4.8, end: 6.9, text: "Antes da queda." }] });
+  await notes.flush();
+  // The VBx says the speaker at 5 s is the one at 1 s.
+  expect((await notes.relabel("s12", [turn(0, 0.8, 3.2), turn(0, 4.8, 6.9)])).changed).toBe(1);
+  const after = (await vault.get(n.path)).content;
+  expect(after).toMatch(/· Ana:\*\* Antes da queda\./);
+  expect(after).not.toContain("· Pessoa 2:");
+  expect(after.match(/Antes da queda/g)?.length).toBe(1);
+});
+
+test("meeting relabel: pending finals are written first, bad turns are refused", async () => {
   const { notes, vault } = await rig(60_000);
   const n = await notes.start("s10", "Zoom", at);
   await notes.segment("s10", segment(1, "Pessoa 2", "Ainda no lote."));
-  expect((await notes.relabel("s10", [{ start: 1, end: 3, channel: "system", from: "Pessoa 2", to: "Pessoa 1" }])).changed).toBe(1);
-  expect((await vault.get(n.path)).content).toMatch(/· Pessoa 1:\*\* Ainda no lote\./);
-  await expect(notes.relabel("s10", [{ start: 1, end: 3, channel: "system", from: "Pessoa 1", to: "a\nb" }])).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+  await notes.segment("s10", segment(5, "Pessoa 1", "Outra pessoa."));
+  expect((await notes.relabel("s10", [turn(3, 1, 3), turn(3, 5, 7)])).changed).toBe(1);
+  expect((await vault.get(n.path)).content.match(/· Pessoa 1:/g)?.length).toBe(2);
+  await expect(notes.relabel("s10", [{ speaker: 1.5, start: 0, end: 1 }])).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   await expect(notes.relabel("nope", [])).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+});
+
+test("meeting relabel (#5176): the VBx failed twice: live labels stay, and one discreet line says so", async () => {
+  const { notes, vault } = await rig();
+  const n = await notes.start("s13", "Teams", at);
+  await notes.segment("s13", segment(1, "Pessoa 1", "Oi."));
+  await notes.flush();
+  expect((await notes.relabel("s13", [], { failed: true })).changed).toBe(1);
+  expect((await notes.relabel("s13", [], { failed: true })).changed).toBe(0);
+  const after = (await vault.get(n.path)).content;
+  expect(after.match(/não puderam ser revisados/g)?.length).toBe(1);
+  expect(after).toMatch(/· Pessoa 1:\*\* Oi\./);
 });
 
 test("meeting recovery (R3): finals already saved before a crash count as saved and aren't written twice", async () => {
@@ -351,4 +379,21 @@ test("meeting recovery (R3): finals already saved before a crash count as saved 
   expect(content.match(/Antes da queda/g)?.length).toBe(1);
   expect(content).toContain("Depois da queda.");
   expect(committed.sort((a, b) => a - b)).toEqual([0.8, 1, 4, 7]);
+});
+
+test("meeting recovery (#5168): a replay that crosses the saved progress goes in from the word after it, once", async () => {
+  const { notes, vault } = await rig();
+  const n = await notes.start("s14", "Teams", at);
+  await notes.segment("s14", segment(1, "Pessoa 1", "Antes da queda."));
+  await notes.flush();
+  await notes.renameSpeaker(n.path, "Pessoa 1", "Ana");
+  const words = [
+    { start: 0.8, end: 1.4, text: "Antes" }, { start: 1.5, end: 1.8, text: "da" }, { start: 1.9, end: 2.9, text: "queda." },
+    { start: 3.3, end: 3.6, text: "Depois" }, { start: 3.6, end: 3.8, text: "da" }, { start: 3.8, end: 4.2, text: "queda." },
+  ];
+  await notes.segment("s14", { ...segment(0.8, "Pessoa 1", "Antes da queda. Depois da queda."), end: 4.2, words });
+  await notes.flush();
+  const after = (await vault.get(n.path)).content;
+  expect(after.match(/Antes da queda/g)?.length).toBe(1);
+  expect(after).toMatch(/· Ana:\*\* Depois da queda\./);
 });
