@@ -59,7 +59,7 @@
       "name": "abre a nota pela árvore"
     },
     {
-      "expectCount": ".kn-hover-sidebar:not([data-open]) .kn-tree-pop[inert]",
+      "expectCount": ".kn-tree-pop:not([data-open])[inert]",
       "count": 1,
       "name": "a árvore fecha ao abrir a nota"
     },

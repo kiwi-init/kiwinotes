@@ -13,7 +13,7 @@ import { api as appApi } from "../src/api.ts";
 import { Button, Empty, HoverLabel } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
 import { Popover } from "./Popover.tsx";
-import { HoverSidebar } from "./HoverSidebar.tsx";
+import { TreePopover } from "./TreePopover.tsx";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
@@ -99,7 +99,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
   // A árvore e o "Citada em" abrem em popover (C · Foco).
   const [treeOpen, setTreeOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
-  const crumbRef = useRef<HTMLButtonElement>(null);
+  const [crumbEl, setCrumbEl] = useState<HTMLButtonElement | null>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   // O básico de app de notas (T2469).
   const [query, setQuery] = useState("");
@@ -808,13 +808,12 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
       <TopBar
         start={
           <button
-            ref={crumbRef}
+            ref={setCrumbEl}
             type="button"
             className="kn-float kn-crumb-bt"
             aria-expanded={treeOpen}
             aria-haspopup="dialog"
             title="Pastas e notas"
-            onClick={() => setTreeOpen((o) => !o)}
           >
             <TreeIcon />
             <span className="kn-crumb-label">{note?.folder ? note.folder.replace(/\//g, " / ") : "Notas"}</span>
@@ -834,7 +833,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
           </span>
         }
       />
-      <HoverSidebar open={treeOpen} onOpenChange={setTreeOpen} anchor={crumbRef} busy={Boolean(renaming || menu || moving || picking)}>
+      <TreePopover open={treeOpen} onOpenChange={setTreeOpen} anchor={crumbEl} busy={Boolean(renaming || menu || moving || picking)}>
         <Sidebar
           autoFocus={false}
           metadata={byPath}
@@ -894,7 +893,7 @@ function Notes({ api, drafts, active }: { api: NotesApi; drafts: Drafts; active:
           }}
           onUnsave={(q) => saved && setSavedList(saved.filter((s) => s.query !== q))}
         />
-      </HoverSidebar>
+      </TreePopover>
       <main className="kn-center">
         {view === "trash" && api.extras ? (
           <TrashView
