@@ -242,7 +242,22 @@ export type Event =
   | { type: "meeting.endSuggested"; app: MeetingApp }
   /** A pessoa respondeu no painel (ou o app mandou `meeting.answer`). */
   | { type: "meeting.answered"; answer: MeetingAnswer }
-  | { type: "meeting.segment"; session?: string; start: number; end: number; speaker: string; text: string; final: boolean; channel?: "mine" | "system" }
+  /**
+   * R3 (T4943): o texto ao vivo. `id` é o lugar no canal (o provisório leva o id do final que virá). `startFrame` e
+   * `endFrame` são o relógio do R1 (16 kHz), para o `meeting.ack`. O helper manda sempre `session` e `channel` (#5064).
+   */
+  | { type: "meeting.segment"; session?: string; start: number; end: number; speaker: string; text: string; final: boolean; channel?: "mine" | "system"; id?: string; startFrame?: number; endFrame?: number; words?: { start: number; end: number; text: string }[] }
+  /** R3: nesse canal, nada novo sai antes deste frame além dos finais já mandados (a marca d'água do "você"). */
+  | { type: "meeting.settled"; session: string; channel: "mine" | "system"; frame: number }
+  /** R3: o stream do canal acabou neste frame; todos os finais saíram (o sistema, depois da correção do VBx). */
+  | { type: "meeting.drained"; session: string; channel: "mine" | "system"; frame: number }
+  /**
+   * R3: a linha do tempo do VBx no fim (opção B, #5131), antes do `drained` do sistema; o writer corrige os blocos
+   * salvos por ela. `failed`: o VBx não rodou nem na 2ª tentativa (#5176), e a nota ganha uma linha que diz isso.
+   */
+  | { type: "meeting.relabel"; session: string; turns: { speaker: number; start: number; end: number }[]; failed?: boolean }
+  /** R3: `system_audio_silent` (o canal sistema só trouxe zeros: a permissão, #5030) ou `transcription_unavailable`. */
+  | { type: "meeting.warning"; session: string; channel?: "mine" | "system"; warning: string }
   | { type: "meeting.started"; session: string; app?: string; sampleRate: 16000; output: "headphones" | "speaker" | "unknown"; microphone?: Record<string, unknown> }
   /** `reason: "error"` (R6): a captura caiu (o mic sumiu, o tap falhou), e o `meeting.error` veio antes. */
   | { type: "meeting.stopped"; session: string; pendingChunks: number; reason?: "error"; error?: string }
@@ -384,6 +399,10 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "meeting.answered",
   "meeting.minePaused",
   "meeting.segment",
+  "meeting.settled",
+  "meeting.drained",
+  "meeting.relabel",
+  "meeting.warning",
   "meeting.started",
   "meeting.stopped",
   "meeting.level",

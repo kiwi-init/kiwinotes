@@ -4,6 +4,8 @@ export const MEETING_FIELDS = [
   "meeting_speakers",
   "end",
   "duration",
+  // R3: how far each channel is saved (the recovery after a crash).
+  "meeting_progress",
 ] as const;
 const FM = /^---\r?\n([\s\S]*?)\r?\n---[^\S\r\n]*(?:\r?\n|$)/;
 export function splitMeetingNote(content: string) {

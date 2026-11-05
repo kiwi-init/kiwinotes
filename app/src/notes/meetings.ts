@@ -17,6 +17,97 @@ import {
   transcriptSection,
 } from "../shared/meeting-note.ts";
 
+/** One turn of the VBx at the end of the meeting (R3): a speaker cluster, in seconds since the meeting began. */
+export interface MeetingTurn {
+  speaker: number;
+  start: number;
+  end: number;
+}
+
+/** A transcript block already in the note, with what its comment says (R3 writes the time, channel and ASR label). */
+interface SavedBlock {
+  lineStart: number;
+  lineEnd: number;
+  hash: string;
+  start: number;
+  end: number;
+  channel: "mine" | "system";
+  label: string;
+}
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+/**
+ * The block's comment: the replay hash and, since R3, where the segment is (seconds, channel, ASR label), so the VBx
+ * correction finds the saved block even when a replay cut it differently. `%` is escaped so the JSON never closes the
+ * `%%` comment.
+ */
+function refOf(session: string, s: MeetingSegment): string {
+  const where = { s: round3(s.start), e: round3(s.end), c: s.channel ?? (s.speaker === "Você" ? "mine" : "system"), l: s.speaker };
+  return `%%meeting-segment:${idOf(session, s)} ${JSON.stringify(where).replace(/%/g, "\\u0025")}%%`;
+}
+const refPrefix = (session: string, s: MeetingSegment) => `%%meeting-segment:${idOf(session, s)}`;
+
+function blocksOf(transcript: string): SavedBlock[] {
+  const blocks: SavedBlock[] = [];
+  for (const m of transcript.matchAll(/%%meeting-segment:([0-9a-f]{24}) (\{[^\n]*?\})%%/g)) {
+    try {
+      const w = JSON.parse(m[2]!) as { s?: unknown; e?: unknown; c?: unknown; l?: unknown };
+      if (typeof w.s !== "number" || typeof w.e !== "number" || (w.c !== "mine" && w.c !== "system") || typeof w.l !== "string") continue;
+      const at = m.index!;
+      const lineStart = transcript.lastIndexOf("\n", at) + 1;
+      const next = transcript.indexOf("\n", at);
+      blocks.push({ lineStart, lineEnd: next < 0 ? transcript.length : next, hash: m[1]!, start: w.s, end: w.e, channel: w.c, label: w.l });
+    } catch {
+      // a comment someone edited by hand: that block stays as it is
+    }
+  }
+  return blocks;
+}
+
+/**
+ * The VBx clusters take the saved labels they overlap most, one to one (so a label the person renamed keeps its
+ * name); a cluster no saved label matches gets a new "Pessoa N". Each system block then goes to the cluster that covers
+ * most of it. Returns the new label per block index (only the ones that change).
+ */
+export function planRelabel(blocks: { start: number; end: number; channel: string; label: string }[], turns: MeetingTurn[]): Map<number, string> {
+  const out = new Map<number, string>();
+  const system = blocks.map((b, i) => ({ ...b, i })).filter((b) => b.channel === "system");
+  if (!system.length || !turns.length) return out;
+  const overlap = (b: { start: number; end: number }, c: number) =>
+    turns.filter((t) => t.speaker === c).reduce((sum, t) => sum + Math.max(0, Math.min(b.end, t.end) - Math.max(b.start, t.start)), 0);
+  const labels = [...new Set(system.map((b) => b.label))];
+  const clusters = [...new Set([...turns].sort((a, b) => a.start - b.start).map((t) => t.speaker))];
+  const pairs: { label: string; cluster: number; seconds: number }[] = [];
+  for (const label of labels)
+    for (const cluster of clusters) {
+      const seconds = system.filter((b) => b.label === label).reduce((sum, b) => sum + overlap(b, cluster), 0);
+      if (seconds > 0) pairs.push({ label, cluster, seconds });
+    }
+  pairs.sort((a, b) => b.seconds - a.seconds || a.label.localeCompare(b.label) || a.cluster - b.cluster);
+  const nameOf = new Map<number, string>();
+  const taken = new Set<string>();
+  for (const p of pairs)
+    if (!nameOf.has(p.cluster) && !taken.has(p.label)) {
+      nameOf.set(p.cluster, p.label);
+      taken.add(p.label);
+    }
+  let next = Math.max(0, ...labels.map((l) => Number(/^Pessoa (\d+)$/.exec(l)?.[1] ?? 0))) + 1;
+  for (const c of clusters) if (!nameOf.has(c)) nameOf.set(c, `Pessoa ${next++}`);
+  for (const b of system) {
+    let best: { c: number; s: number } | null = null;
+    for (const c of clusters) {
+      const s = overlap(b, c);
+      if (s > 0 && (!best || s > best.s)) best = { c, s };
+    }
+    const to = best && nameOf.get(best.c);
+    if (to && to !== b.label) out.set(b.i, to);
+  }
+  return out;
+}
+
+/** The line the writer leaves when the VBx couldn't run, even after a second try (decision of the lead, #5176). */
+export const SPEAKERS_NOT_REVIEWED = "_Os falantes desta reunião não puderam ser revisados no fim._";
+
 export interface MeetingSegment {
   start: number;
   end: number;
@@ -24,6 +115,8 @@ export interface MeetingSegment {
   text: string;
   final: boolean;
   channel?: "mine" | "system";
+  /** R3: the words with their times (seconds since the meeting began), to cut a replay at the saved progress. */
+  words?: { start: number; end: number; text: string }[];
 }
 interface State {
   session: string;
@@ -186,9 +279,28 @@ export class MeetingNotes {
       validateSession(session);
       validateSegment(segment);
       if (!segment.final || !segment.text.trim()) return;
-      if (!(await this.find(session)))
-        throw new VaultError("E_NOT_FOUND", "meeting note not found");
-      this.states.get(session)!.pending.push({ ...segment });
+      const note = await this.find(session);
+      if (!note) throw new VaultError("E_NOT_FOUND", "meeting note not found");
+      // R3: after a crash the helper transcribes again what was left in its spool (the system channel stays whole
+      // until the end, #5131). What ends before the saved progress of the channel is already in the note: it counts
+      // as saved, so its audio can go, and the note doesn't get it twice.
+      const progress = dataOf(note.content).meeting_progress;
+      const saved = segment.channel && progress && typeof progress[segment.channel] === "number" ? progress[segment.channel] : undefined;
+      let kept: MeetingSegment = { ...segment };
+      if (saved !== undefined && segment.start < saved) {
+        // Cut at the word: only what ends after the saved progress goes in (#5168). Without word times, a segment
+        // that crosses it goes in whole, and one that ends before it counts as saved.
+        const words = Array.isArray(segment.words) ? segment.words.filter((w) => w && Number.isFinite(w.end) && typeof w.text === "string") : [];
+        const after = words.filter((w) => w.end > saved + 0.01);
+        if (segment.end <= saved || (words.length && !after.length)) {
+          const batch = [{ ...segment }];
+          queueMicrotask(() => this.notify(session, batch));
+          return;
+        }
+        if (words.length && after.length < words.length)
+          kept = { ...segment, start: after[0]!.start, text: after.map((w) => w.text).join(" "), words: after };
+      }
+      this.states.get(session)!.pending.push(kept);
       this.timer ??= setTimeout(() => {
         this.timer = undefined;
         void this.flush().catch((e) => this.options.onError?.(e));
@@ -257,8 +369,8 @@ export class MeetingNotes {
         : [];
       let content = current.content;
       for (const s of batch) {
-        const ref = `%%meeting-segment:${idOf(state.session, s)}%%`;
-        if (content.includes(ref)) continue;
+        const ref = refOf(state.session, s);
+        if (content.includes(refPrefix(state.session, s))) continue;
         const name = Object.hasOwn(speakers, s.speaker)
           ? speakers[s.speaker]!
           : s.speaker;
@@ -277,6 +389,10 @@ export class MeetingNotes {
       }
       content = setMeetingField(content, "participants", participants);
       content = setMeetingField(content, "meeting_speakers", speakers);
+      // R3: how far each channel is saved, for the recovery after a crash (see `segment`).
+      const progress: Record<string, number> = { ...(typeof data.meeting_progress === "object" && data.meeting_progress ? data.meeting_progress : {}) };
+      for (const s of batch) if (s.channel) progress[s.channel] = Math.max(progress[s.channel] ?? 0, s.end);
+      if (Object.keys(progress).length) content = setMeetingField(content, "meeting_progress", progress);
       if (state.end !== undefined) {
         content = setMeetingField(
           content,
@@ -293,10 +409,13 @@ export class MeetingNotes {
     });
     state.pending.splice(0, batch.length);
     state.end = undefined;
-    this.options.onCommitted?.(state.session, batch);
+    this.notify(state.session, batch);
+  }
+  private notify(session: string, batch: MeetingSegment[]): void {
+    this.options.onCommitted?.(session, batch);
     for (const listener of this.committedListeners) {
       try {
-        listener(state.session, batch);
+        listener(session, batch);
       } catch (error) {
         this.options.onError?.(error);
       }
@@ -373,6 +492,71 @@ export class MeetingNotes {
         );
       });
       return metaOf(note);
+    });
+  }
+  /**
+   * R3 (T4943, option B of #5131): after the meeting, the VBx corrects who said what on the system channel. It works on
+   * the blocks saved in the note (their comment says time, channel and ASR label), so it applies even when a replay
+   * cut the segments differently, or a Sortformer run again after a crash numbered the speakers differently (#5168).
+   * The line keeps its time and text and shows the new label's name through `meeting_speakers`: a speaker the person
+   * renamed keeps that name. The block's hash follows the new label, so a replay stays idempotent.
+   *
+   * `failed`: the VBx couldn't run even after a second try (#5176). The live labels stay, and a discreet line says so.
+   * One conditional write (ADR 0007), after the session's pending finals. Resolves when it's on disk: only then may the
+   * system channel's audio be released.
+   */
+  relabel(session: string, turns: MeetingTurn[], options: { failed?: boolean } = {}): Promise<{ changed: number }> {
+    return this.serialize(async () => {
+      validateSession(session);
+      if (!Array.isArray(turns) || turns.length > 100_000) throw new VaultError("E_BAD_ARGS", "invalid relabel");
+      for (const t of turns)
+        if (!t || !Number.isInteger(t.speaker) || !Number.isFinite(t.start) || !Number.isFinite(t.end) || t.end < t.start)
+          throw new VaultError("E_BAD_ARGS", "invalid relabel");
+      const note = await this.find(session);
+      if (!note) throw new VaultError("E_NOT_FOUND", "meeting note not found");
+      const state = this.states.get(session)!;
+      if (state.pending.length) await this.flushState(state);
+      if (!turns.length && !options.failed) return { changed: 0 };
+      let changed = 0;
+      await this.mutate(state.path, (current) => {
+        changed = 0;
+        const data = dataOf(current.content);
+        const speakers: Record<string, string> = { ...(data.meeting_speakers ?? {}) };
+        const nameOf = (label: string) => (Object.hasOwn(speakers, label) ? speakers[label]! : label);
+        const split = splitMeetingNote(current.content);
+        const section = transcriptSection(split.body);
+        if (!section) return current.content;
+        let transcript = split.body.slice(section.from, section.to);
+        if (options.failed) {
+          if (transcript.includes(SPEAKERS_NOT_REVIEWED)) return current.content;
+          transcript = `${transcript.replace(/\s*$/, "")}\n\n${SPEAKERS_NOT_REVIEWED}\n`;
+          changed = 1;
+        } else {
+          const blocks = blocksOf(transcript);
+          const plan = planRelabel(blocks, turns);
+          // From the end, so the earlier offsets stay right.
+          for (const [i, to] of [...plan].sort((a, b) => b[0] - a[0])) {
+            const b = blocks[i]!;
+            const line = transcript.slice(b.lineStart, b.lineEnd);
+            if (!Object.hasOwn(speakers, to))
+              Object.defineProperty(speakers, to, { value: to, enumerable: true, writable: true, configurable: true });
+            const moved: MeetingSegment = { start: b.start, end: b.end, channel: b.channel, speaker: to, text: "", final: true };
+            const relabeled = line
+              .replace(/^(\*\*\d\d:\d\d · )(.+?)(:\*\*)/, (_, a: string, _name: string, c: string) => a + escape(nameOf(to)) + c)
+              .replace(/%%meeting-segment:[0-9a-f]{24} \{[^\n]*?\}%%/, () => refOf(session, moved));
+            transcript = transcript.slice(0, b.lineStart) + relabeled + transcript.slice(b.lineEnd);
+            changed++;
+          }
+        }
+        if (!changed) return current.content;
+        // The participants are the names still speaking in the transcript, in the order they were, plus the new ones.
+        const spoken = new Set([...transcript.matchAll(/^\*\*\d\d:\d\d · (.+?):\*\*/gm)].map((m) => m[1]!.replace(/\\(.)/g, "$1")));
+        const before: string[] = Array.isArray(data.participants) ? data.participants.filter((v: unknown): v is string => typeof v === "string") : [];
+        const participants = [...before.filter((n) => spoken.has(n)), ...[...spoken].filter((n) => !before.includes(n))];
+        const body = split.body.slice(0, section.from) + transcript + split.body.slice(section.to);
+        return setMeetingField(setMeetingField(split.frontmatter + body, "participants", participants), "meeting_speakers", speakers);
+      });
+      return { changed };
     });
   }
   /** Optional base content enables a safe append-only rebase; ordinary notes retain their normal conflict behavior. */

@@ -16,6 +16,7 @@ import type { Snippet } from "../store/snippets.ts";
 import { Dictation } from "./dictation.ts";
 import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
 import { MeetingLiveTracker } from "./meetings.ts";
+import { MeetingAcks } from "./meeting-acks.ts";
 import { Sidecar } from "./sidecar.ts";
 import { MeetingNoteSession } from "./meeting-notes.ts";
 import { stores } from "./stores.ts";
@@ -100,15 +101,38 @@ export class Session {
     this.meetingNotes = new MeetingNoteSession(this.sidecar, stores.meetingNotes);
     this.permissions = new PermissionFlow(this.sidecar, fileAskedStore(stores.dir), undefined, !dryRun, !dryRun);
     this.meetings = new MeetingLiveTracker((c) => this.sidecar.send(c));
+    // R3: o áudio da reunião só sai do disco do helper depois que o texto dele está salvo na nota (#5061, #5064).
+    this.meetingAcks = new MeetingAcks((ack) => {
+      void this.sidecar.send(ack).then(
+        (r) => r.ok || console.warn(`[meetings] meeting.ack ${ack.channel}: ${r.error}`),
+        () => console.warn("[meetings] meeting.ack: helper gone; the audio stays for the recovery"),
+      );
+    });
   }
+
+  /** As acks da reunião (R3): os eventos do helper e as confirmações do R4 entram. */
+  readonly meetingAcks: MeetingAcks;
 
   start(): void {
     this.dictation.attach();
     this.meetingNotes.attach();
     this.permissions.attach();
-    for (const type of ["meeting.started", "meeting.stopped", "meeting.minePaused"] as const) {
+    for (const type of ["meeting.started", "meeting.stopped", "meeting.minePaused", "meeting.warning"] as const) {
       this.sidecar.on(type, (e) => this.meetings.feed(e));
     }
+    // R3: a marca d'água de cada canal, a correção do VBx e o fim (#5131: o sistema só no fim).
+    stores.meetingNotes.onCommitted((session, segments) => this.meetingAcks.committed(session, segments));
+    this.sidecar.on("meeting.segment", (e) => this.meetingAcks.segment(e));
+    this.sidecar.on("meeting.settled", (e) => this.meetingAcks.settled(e.session, e.channel, e.frame));
+    this.sidecar.on("meeting.drained", (e) => this.meetingAcks.drained(e.session, e.channel, e.frame));
+    this.sidecar.on("meeting.relabel", (e) => {
+      this.meetingAcks.relabelStarted(e.session);
+      stores.meetingNotes.relabel(e.session, e.turns, { failed: e.failed === true }).then(
+        () => this.meetingAcks.relabelDone(e.session),
+        () => console.error("[meetings] speaker correction not written; the system audio stays for the recovery"),
+      );
+    });
+    this.sidecar.on("meeting.warning", (e) => console.warn(`[meetings] ${e.channel ?? ""} ${e.warning}`));
     // O helper que caiu levou a captura junto (R6): o card ao vivo some.
     this.sidecar.onClose(() => this.meetings.reset());
     this.sidecar.on("ready", () => {

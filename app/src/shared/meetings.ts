@@ -27,7 +27,7 @@ export interface MeetingNote {
 /** A gravação agora, pelos eventos do helper (`meeting.started`/`stopped`/`minePaused`). */
 export type MeetingLive =
   | { recording: false }
-  | { recording: true; session: string; app: string | null; since: string; minePaused: boolean };
+  | { recording: true; session: string; app: string | null; since: string; minePaused: boolean; warning?: string };
 
 export const NOT_RECORDING: MeetingLive = { recording: false };
 
@@ -241,6 +241,9 @@ export function nextLive(live: MeetingLive, event: { type: string; [k: string]: 
         since: now.toISOString(),
         minePaused: false,
       };
+    case "meeting.warning":
+      // R3: o canal sistema só trouxe zeros (a permissão de áudio do sistema, #5030).
+      return live.recording && event.session === live.session && typeof event.warning === "string" ? { ...live, warning: event.warning } : live;
     case "meeting.minePaused":
       return live.recording ? { ...live, minePaused: event.paused === true } : live;
     case "meeting.stopped":

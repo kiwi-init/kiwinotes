@@ -40,6 +40,9 @@ final class Helper {
     private let meetingDirectory: URL?
     private let meetingMic = MeetingMicrophone()
     private var meetings: MeetingCommands?
+    /// R3: the live transcript of the meeting being recorded, and the dictionary it uses.
+    private let live = LiveMeetingSlot()
+    private var meetingDictionary = TranscriptDictionary.empty
     /// R2 (#195): which app takes the mic, the pop-up, the meeting shortcuts and the meeting pill.
     private var meeting: MeetingController!
 
@@ -141,8 +144,10 @@ final class Helper {
         connection.start()
         // Recovery enumerates already-spooled files only. It never starts the mic or system tap.
         if let meetingDirectory, FileManager.default.fileExists(atPath: meetingDirectory.path) {
-            do { try meetingCommands().recover() }
-            catch { emit("meeting.error", ["error": "meeting_recovery_failed"]) }
+            do {
+                try meetingCommands().recover()
+                recoverTranscripts()
+            } catch { emit("meeting.error", ["error": "meeting_recovery_failed"]) }
         }
         // Who macOS checks the permissions against, and what it says (T658). No dialog: these only read.
         let tcc = Responsible.current()?.summary ?? "responsible process unknown"
@@ -515,6 +520,7 @@ final class Helper {
                 if let session {
                     let pending = self.meetings?.capture.pendingChunks().filter { $0.session == session }.count ?? 0
                     self.emit("meeting.stopped", ["session": session, "pendingChunks": pending, "reason": "error", "error": code])
+                    self.finishLive()
                 }
             }
         }
@@ -533,12 +539,17 @@ final class Helper {
             }
         }
         meetingMic.selection.choice = mic.choice
+        // R3: every packet, after the spool has it, goes to the live transcript too.
+        capture.onSamples = { [live] channel, frame, samples in live.feed(channel, startFrame: frame, samples: samples) }
         let commands = MeetingCommands(capture: capture, headless: headless,
             microphonePermission: { Permission.microphone.status },
             metadata: { [weak self] in
                 return ["output": MeetingOutput.route(), "microphone": self?.meetingMic.selection.last?.fields ?? [:]]
             }, emit: { [weak self] type, fields in
                 self?.emit(type, fields)
+                // R3: the transcript starts with the capture (right here, so no packet waits long) and ends with it.
+                if type == "meeting.started", let session = fields["session"] as? String { self?.startLive(session: session, output: fields["output"] as? String) }
+                if type == "meeting.stopped" { self?.finishLive() }
                 // The detector counts a recording only once R1 says it started, whoever asked for it.
                 DispatchQueue.main.async {
                     if type == "meeting.started" { self?.meeting.captureStarted(appName: fields["app"] as? String) }
@@ -547,6 +558,47 @@ final class Helper {
             })
         meetings = commands
         return commands
+    }
+
+    // MARK: Live transcript (R3)
+
+    private func startLive(session: String, output: String?) {
+        guard !headless else { return }
+        live.start(makeTranscriber(session: session, output: output ?? "unknown"))
+    }
+
+    private func finishLive() {
+        guard let t = live.take() else { return }
+        Task { await t.finish() }
+    }
+
+    private func makeTranscriber(session: String, output: String) -> LiveMeetingTranscriber {
+        LiveMeetingTranscriber(
+            session: session, output: output, dictionary: meetingDictionary,
+            systemAudio: { [weak self] in
+                try LiveMeetingTranscriber.audio(self?.meetings?.capture.pendingChunks().filter { $0.session == session } ?? [])
+            },
+            emit: { [weak self] type, fields in self?.emit(type, fields) })
+    }
+
+    /// After a crash: the meetings left in the spool are transcribed (as fast as the models go), one after the other.
+    /// The app writes the finals into each note by its session and acks the audio as usual (R1, R4).
+    private func recoverTranscripts() {
+        guard !headless, let capture = meetings?.capture else { return }
+        let sessions = Dictionary(grouping: capture.pendingChunks(), by: \.session)
+        guard !sessions.isEmpty else { return }
+        emit("log", ["level": "info", "message": "meeting: recovering \(sessions.count) meeting(s)"])
+        Task { [weak self] in
+            for (session, chunks) in sessions.sorted(by: { $0.key < $1.key }) {
+                guard let self else { return }
+                let t = self.makeTranscriber(session: session, output: "unknown")
+                for chunk in chunks.sorted(by: { $0.startFrame < $1.startFrame }) {
+                    guard let samples = try? LiveMeetingTranscriber.floats(chunk) else { continue }
+                    t.feed(chunk.channel, startFrame: chunk.startFrame, samples: samples)
+                }
+                await t.finish()
+            }
+        }
     }
 
     /// A meeting command from the detector (R2): the same path as the app's, with no reply to send.
@@ -669,6 +721,10 @@ final class Helper {
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
         if language != nil || dictionary != nil || vad != nil {
             let prepared = dictionary.map(TranscriptDictionary.init)
+            if let prepared {
+                meetingDictionary = prepared
+                live.transcriber?.setDictionary(prepared)
+            }
             // In the same chain as the transcriptions: a recording that ends after this command uses it.
             let previous = sttChain
             sttChain = Task { [stt] in

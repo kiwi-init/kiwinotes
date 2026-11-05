@@ -177,4 +177,22 @@ extension MeetingCaptureTests {
         XCTAssertEqual(try floats(recovered[0]), [0.25, 0.5])
         XCTAssertEqual(try Data(contentsOf: outside), Data([9, 9, 9, 9]))
     }
+
+    /// #5030: the fsync goes with the seal and at most once a second per channel, not on every packet. The packets are
+    /// written right away all the same: a crash keeps them (the recovery test above reads a `.part`).
+    func testFsyncOnSealAndOncePerSecond() throws {
+        let root = try temporary()
+        var clock = 0.0
+        let spool = try MeetingBuffer(root: root, chunkDuration: 10, syncInterval: 1, now: { clock })
+        for n in 0..<50 { // 50 packets of 10 ms over 0.5 s: no fsync yet
+            _ = try spool.append(Array(repeating: 0.1, count: 160), channel: .mine, startFrame: n * 160)
+            clock += 0.01
+        }
+        XCTAssertEqual(spool.syncs, 0)
+        clock = 1.2
+        _ = try spool.append(Array(repeating: 0.1, count: 160), channel: .mine, startFrame: 50 * 160)
+        XCTAssertEqual(spool.syncs, 1)
+        _ = try spool.finish()
+        XCTAssertEqual(spool.syncs, 2, "sealing always syncs")
+    }
 }

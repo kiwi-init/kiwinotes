@@ -1,6 +1,6 @@
 # ADR 0009: o ASR e a diarização das reuniões
 
-- Status: proposto (T4926, R0 do spec #4823). A escolha final é do harry.
+- Status: **aceito (B, #5131)**. O harry escolheu guardar o canal sistema até o fim e corrigir os falantes com o VBx; o R3 (T4943) implementa. Proposto no T4926 (R0 do spec #4823).
 - Spike: [`spikes/meeting-bench/`](../../spikes/meeting-bench/README.md). Medido em 2026-11-05 num M1 Pro com 16 GB e macOS 27.2, com o FluidAudio 0.18.2 (o mesmo do ditado, ADR 0003), com `kiwi lock bench`.
 
 ## Contexto
