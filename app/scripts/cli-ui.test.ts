@@ -59,6 +59,11 @@ describe("passos", () => {
     expect(parseScript([{ scroll: ".a", y: 400 }]).steps).toHaveLength(1);
     expect(() => parseScript([{ expectScroll: ".a" }])).toThrow("min ou max");
     expect(() => parseScript([{ expectScroll: ".a", min: "x" }])).toThrow("expectScroll.min");
+    expect(() => parseScript([{ expectSame: ".a" }])).toThrow("as: precisa de um texto");
+    expect(() => parseScript([{ expectSame: ".a", as: "" }])).toThrow("as: precisa de um texto");
+    expect(() => parseScript([{ expectSame: ".a", as: ".b", tolerance: -1 }])).toThrow("tolerance");
+    expect(parseScript([{ expectSame: ".a", as: ".b" }]).steps).toHaveLength(1);
+    expect(parseScript([{ expectSame: ".a", as: ".b", property: "color", tolerance: 2 }]).steps).toHaveLength(1);
   });
 
   test("o print é só um nome .png: nada de escrever fora da pasta de saída", () => {
@@ -277,6 +282,40 @@ describe.skipIf(!hasWebkit)("no WebKit headless", () => {
     expect(r.failedAt).toBe(2);
     expect(r.skipped).toBe(1);
     expect(existsSync(r.steps[1].shot)).toBe(true);
+  }, 60_000);
+
+  test("expectSame: o retângulo de um elemento contra o de outro, e a propriedade computada (T4671)", async () => {
+    const browser = await webkit.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(`<style>
+        i { position: absolute; width: 40px; height: 20px; }
+        #a { left: 10px; top: 4px; }
+        #b { left: 11px; top: 4px; }
+        #c { left: 60px; top: 4px; color: rgb(1, 2, 3); }
+        #d { left: 80px; top: 40px; color: rgb(1, 2, 3); }
+        #e { left: 60px; top: 80px; color: rgb(9, 9, 9); }
+      </style><i id="a"></i><i id="b"></i><i id="c"></i><i id="d"></i><i id="e"></i>`);
+      const send = async () => ({});
+      // Um passo que tem que falhar, com a mensagem que diz o que veio de cada lado.
+      const fails = async (step: Parameters<typeof runStep>[1], msg: string) => {
+        try {
+          await runStep(page, step, dir, send);
+        } catch (e) {
+          expect(String(e)).toContain(msg);
+          return;
+        }
+        throw new Error(`esperava falhar: ${JSON.stringify(step)}`);
+      };
+      // 1 px de diferença ainda conta como o mesmo lugar (o padrão), e dá para apertar com a `tolerance`.
+      await runStep(page, { expectSame: "#a", as: "#b" }, dir, send);
+      await fails({ expectSame: "#a", as: "#b", tolerance: 0, timeout: 200 }, "o retângulo");
+      await fails({ expectSame: "#a", as: "#c", timeout: 200 }, "o retângulo");
+      await runStep(page, { expectSame: "#c", as: "#d", property: "color" }, dir, send);
+      await fails({ expectSame: "#c", as: "#e", property: "color", timeout: 200 }, "color");
+    } finally {
+      await browser.close();
+    }
   }, 60_000);
 
   test("--note de uma nota que não existe vira aviso em problems (#1835)", async () => {
