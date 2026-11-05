@@ -146,3 +146,24 @@ describe("LineDecoder", () => {
 test("default socket lives in Application Support", () => {
   expect(defaultSocketPath("/Users/x")).toBe("/Users/x/Library/Application Support/KiwiNotes/sidecar.sock");
 });
+
+test("meeting IPC carries control and chunk metadata, never raw audio", () => {
+  const messages: Message[] = [
+    { v: 1, id: "m1", type: "meeting.start", app: "Teams", chunkDuration: 10 },
+    { v: 1, id: "m2", type: "meeting.pauseMine" },
+    { v: 1, id: "m3", type: "meeting.resumeMine" },
+    { v: 1, id: "m4", type: "meeting.stop" },
+    { v: 1, id: "m5", type: "meeting.pending" },
+    { v: 1, id: "m6", type: "meeting.ack", session: "test", channel: "mine", finalThroughFrame: 64_000, contextFrames: 32_000 },
+    { v: 1, type: "meeting.started", session: "test", sampleRate: 16000, output: "speaker" },
+    { v: 1, type: "meeting.stopped", session: "test", pendingChunks: 0 },
+    { v: 1, type: "meeting.level", channel: "system", rms: 0.25 },
+    { v: 1, type: "meeting.error", error: "microphone_permission", microphone: "undetermined" },
+    { v: 1, type: "meeting.chunk", session: "test", chunkId: "mine-0", channel: "mine", startFrame: 0, frames: 160_000, sampleRate: 16000, format: "f32le", path: "/tmp/fake/mine.pcm", recovered: true },
+  ];
+  for (const message of messages) {
+    const parsed = parseLine(encode(message).trim());
+    expect(parsed).toEqual(message);
+    expect("id" in message ? isCommand(parsed) : isEvent(parsed)).toBe(true);
+  }
+});

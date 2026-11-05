@@ -32,7 +32,8 @@ import { resealBundles, signAdHoc } from "./signing.ts";
 const WRAPPER_ENVIRONMENT = { ELECTROBUN_INSTALLER_UI_AUTOCLOSE: "1" };
 
 const USAGE: Record<string, string> = {
-  NSMicrophoneUsageDescription: "O Kiwi Notes ouve o microfone só enquanto você segura o atalho, e transcreve tudo no seu Mac.",
+  NSAudioCaptureUsageDescription: "O Kiwi Notes captura o áudio da reunião só quando você pede. A transcrição acontece no Mac e o áudio é apagado depois de transcrito.",
+  NSMicrophoneUsageDescription: "O Kiwi Notes usa o microfone quando você dita ou pede para gravar uma reunião, e transcreve tudo no seu Mac.",
 };
 
 /** Os Info.plist de todos os .app dentro de `dir` (o app e, no release, o wrapper). */

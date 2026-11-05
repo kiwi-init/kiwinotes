@@ -142,6 +142,7 @@ let app = NSApplication.shared
 // Headless (T1739): prohibited, so it never shows anything on screen.
 app.setActivationPolicy(headless ? .prohibited : .accessory)
 
-let helper = Helper(connection: connection, dumpDirectory: dumpDirectory, headless: headless)
+let meetingDirectory = socketPath.map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("meeting-buffer", isDirectory: true) }
+let helper = Helper(connection: connection, dumpDirectory: dumpDirectory, headless: headless, meetingDirectory: meetingDirectory)
 helper.run()
 app.run()

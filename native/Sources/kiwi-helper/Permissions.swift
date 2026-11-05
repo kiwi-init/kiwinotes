@@ -5,14 +5,20 @@ import CoreGraphics
 import KiwiHelperCore
 import Security
 
-/// The three permissions dictation needs. Names match the IPC fields.
+/// Permissions for dictation and meeting capture. Names match the IPC fields.
 enum Permission: String, CaseIterable {
     case microphone
     case accessibility
     case inputMonitoring
+    case systemAudio
 
     var status: String {
         switch self {
+        case .systemAudio:
+            // No public non-prompting preflight for process taps. Never infer a grant from silence or a successful
+            // start: the OS can supply zeroes when denied. Consent is asked only by an explicit meeting start.
+            if #available(macOS 14.2, *) { return "undetermined" }
+            return "restricted"
         case .microphone:
             switch AVCaptureDevice.authorizationStatus(for: .audio) {
             case .authorized: return "granted"
@@ -32,8 +38,10 @@ enum Permission: String, CaseIterable {
     /// Shown in the app's onboarding next to the "open Settings" button.
     var why: String {
         switch self {
+        case .systemAudio:
+            return "Para transcrever o áudio da reunião no Mac, só quando você pede. O áudio é apagado depois de transcrito."
         case .microphone:
-            return "Para ouvir o que você dita. Só grava enquanto o atalho está ativo, e o áudio não sai do Mac."
+            return "Para ouvir o ditado ou sua voz nas reuniões que você pedir para gravar. O áudio não sai do Mac."
         case .accessibility:
             return "Para colar o texto no app em que você está digitando."
         case .inputMonitoring:
@@ -44,6 +52,7 @@ enum Permission: String, CaseIterable {
     var settingsURL: URL {
         let anchor: String
         switch self {
+        case .systemAudio: anchor = "Privacy_ScreenCapture"
         case .microphone: anchor = "Privacy_Microphone"
         case .accessibility: anchor = "Privacy_Accessibility"
         case .inputMonitoring: anchor = "Privacy_ListenEvent"
@@ -64,6 +73,12 @@ enum Permission: String, CaseIterable {
     /// What `PermissionAsk` says, in order: reset, prompt, Settings. On its own, one window at a time; a person's click
     /// (`reset`, only from the app's menu) always ends in something visible (T658, T825).
     func request(reset: Bool = false, completion: @escaping (String) -> Void) {
+        // Only a person's explicit click opens Settings. First consent comes from the process-tap aggregate,
+        // never from requesting permission to record the screen.
+        if self == .systemAudio {
+            NSWorkspace.shared.open(settingsURL)
+            return completion(status)
+        }
         // Who macOS charges is looked up only for a click: the decision (Kiwi Notes only) is in PermissionAsk.
         let responsible = reset ? Responsible.current()?.bundleId : nil
         let ask = PermissionAsk.next(permission: rawValue, state: status, askedBefore: askedBefore, reset: reset,
@@ -97,6 +112,8 @@ enum Permission: String, CaseIterable {
     private func prompt(completion: @escaping (String) -> Void) {
         UserDefaults.standard.set(true, forKey: "asked.\(rawValue)")
         switch self {
+        case .systemAudio:
+            completion(status)
         case .microphone:
             AVCaptureDevice.requestAccess(for: .audio) { _ in
                 DispatchQueue.main.async { completion(self.status) }
