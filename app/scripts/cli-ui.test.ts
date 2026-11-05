@@ -57,6 +57,8 @@ describe("passos", () => {
     expect(() => parseScript([{ scroll: ".a" }])).toThrow("scroll precisa de y ou x");
     expect(() => parseScript([{ scroll: ".a", y: "muito" }])).toThrow("scroll.y");
     expect(parseScript([{ scroll: ".a", y: 400 }]).steps).toHaveLength(1);
+    expect(() => parseScript([{ expectScroll: ".a" }])).toThrow("min ou max");
+    expect(() => parseScript([{ expectScroll: ".a", min: "x" }])).toThrow("expectScroll.min");
   });
 
   test("o print é só um nome .png: nada de escrever fora da pasta de saída", () => {

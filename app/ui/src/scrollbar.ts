@@ -33,6 +33,24 @@ export function dragToScroll(delta: number, size: number, client: number, track:
   return free > 0 ? (delta / free) * (size - client) : 0;
 }
 
+/** Do polegar até a borda e entre as pontas do trilho, em px. */
+const INSET = 2;
+/** A área que pega o mouse (o polegar visível fica dentro dela, encostado na borda; base.css). */
+const HIT = 12;
+
+/**
+ * O trilho de um eixo, em px da tela: a parte visível sem as pontas e, quando os dois eixos rolam, sem o canto do
+ * outro polegar. O mesmo no desenho (`place`) e no arraste, para o fim do trilho ser o fim do conteúdo (revisão #4579).
+ */
+export function trackLength(visible: number, both: boolean): number {
+  return visible - 2 * INSET - (both ? HIT : 0);
+}
+
+/** A roda em px, como o navegador rolaria: o `deltaMode` em linhas (16 px) ou em páginas (a parte visível). */
+export function wheelPx(delta: number, mode: number, page: number): number {
+  return mode === 1 ? delta * 16 : mode === 2 ? delta * page : delta;
+}
+
 type Axis = "y" | "x";
 interface Bar {
   el: HTMLElement;
@@ -42,10 +60,6 @@ interface Bar {
   held: number;
 }
 
-/** Do polegar até a borda e entre as pontas do trilho, em px. */
-const INSET = 2;
-/** A área que pega o mouse (o polegar visível fica dentro dela, encostado na borda; base.css). */
-const HIT = 12;
 const ROLLS = new Set(["auto", "scroll"]);
 
 let layer: HTMLDivElement | null = null;
@@ -72,14 +86,16 @@ function place(b: Bar): void {
   const both = rolls(el, "y") && rolls(el, "x");
   for (const axis of ["y", "x"] as const) {
     const node = b[axis];
+    const track = trackLength(axis === "y" ? h : w, both);
     const box = rolls(el, axis)
       ? axis === "y"
-        ? thumbBox(el.scrollTop, el.scrollHeight, el.clientHeight, h - 2 * INSET - (both ? HIT : 0))
-        : thumbBox(el.scrollLeft, el.scrollWidth, el.clientWidth, w - 2 * INSET - (both ? HIT : 0))
+        ? thumbBox(el.scrollTop, el.scrollHeight, el.clientHeight, track)
+        : thumbBox(el.scrollLeft, el.scrollWidth, el.clientWidth, track)
       : null;
     node.hidden = !box;
     if (!box) continue;
     node.dataset.length = String(box.length);
+    node.dataset.track = String(track);
     if (axis === "y") {
       node.style.cssText = `top:${top + INSET + box.offset}px;left:${left + w - HIT}px;height:${box.length}px`;
     } else {
@@ -118,6 +134,17 @@ function makeThumb(b: () => Bar, axis: Axis): HTMLDivElement {
     bar.held = Math.max(0, bar.held - 1);
     hideLater(bar);
   });
+  // A roda sobre o polegar rola a área dele: o polegar fica fora dela (na camada), e sem isso a roda parava quando
+  // a barra aparecia debaixo do mouse, na borda (revisão #4579).
+  node.addEventListener(
+    "wheel",
+    (e) => {
+      const el = b().el;
+      e.preventDefault();
+      el.scrollBy({ left: wheelPx(e.deltaX, e.deltaMode, el.clientWidth), top: wheelPx(e.deltaY, e.deltaMode, el.clientHeight) });
+    },
+    { passive: false },
+  );
   node.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -125,9 +152,7 @@ function makeThumb(b: () => Bar, axis: Axis): HTMLDivElement {
     const el = bar.el;
     const start = axis === "y" ? e.clientY : e.clientX;
     const from = axis === "y" ? el.scrollTop : el.scrollLeft;
-    const r = el.getBoundingClientRect();
-    const z = axis === "y" ? (el.offsetHeight > 0 ? r.height / el.offsetHeight : 1) : el.offsetWidth > 0 ? r.width / el.offsetWidth : 1;
-    const track = (axis === "y" ? el.clientHeight : el.clientWidth) * z - 2 * INSET;
+    const track = Number(node.dataset.track) || 0;
     const length = Number(node.dataset.length) || 0;
     const size = axis === "y" ? el.scrollHeight : el.scrollWidth;
     const client = axis === "y" ? el.clientHeight : el.clientWidth;

@@ -5,13 +5,17 @@
     { "expectCount": ".kn-scrollbar.on", "count": 0, "name": "parado, não tem barra nenhuma na tela" },
     { "scroll": ".kn-content", "y": 300, "name": "rola os Ajustes com a roda" },
     { "waitFor": ".kn-scrollbar-y.on", "name": "o polegar fino aparece enquanto rola" },
-    { "screenshot": "barra-rolagem-rolando.png" },
-    { "hover": ".kn-scrollbar-y.on", "name": "mouse no polegar" },
+    { "scroll": ".kn-scrollbar-y.on", "y": 300, "name": "logo depois, a roda com o mouse sobre o polegar (revisão #4579)" },
+    { "expectScroll": ".kn-content", "min": 420, "max": 650, "name": "a roda sobre o polegar continuou rolando a área (passou dos 300; uns 600 no WebKit, 450 no Chromium a 2x, que manda o deltaY da roda pela metade)" },
+    { "hover": ".kn-scrollbar-y.on", "name": "o mouse acompanha o polegar, que desceu" },
     { "wait": 1200, "name": "passa o tempo de sumir com o mouse em cima" },
     { "expectCount": ".kn-scrollbar-y.on", "count": 1, "name": "com o mouse em cima, ele fica (e engrossa)" },
     { "screenshot": "barra-rolagem-hover.png" },
-    { "hover": ".kn-content h2, .kn-content", "name": "o mouse sai do polegar" },
+    { "hover": ".kn-content", "name": "o mouse sai do polegar" },
     { "waitFor": ".kn-scrollbar.on", "state": "detached", "timeout": 3000, "name": "e ele some sozinho logo depois" },
-    { "screenshot": "barra-rolagem-parada.png" }
+    { "screenshot": "barra-rolagem-parada.png" },
+    { "scroll": ".kn-content", "y": -200, "name": "rola de novo, para cima" },
+    { "waitFor": ".kn-scrollbar-y.on", "name": "e ele volta enquanto rola" },
+    { "screenshot": "barra-rolagem-rolando.png" }
   ]
 }

@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { dragToScroll, SCROLLBAR_MIN_THUMB, thumbBox } from "./scrollbar.ts";
+import { dragToScroll, SCROLLBAR_MIN_THUMB, thumbBox, trackLength, wheelPx } from "./scrollbar.ts";
 
 const css = (p: string) => readFileSync(path.join(import.meta.dir, p), "utf8");
 
@@ -34,6 +34,20 @@ describe("o polegar", () => {
     expect(dragToScroll(300, 1000, 250, 400, 100)).toBe(750);
     expect(dragToScroll(150, 1000, 250, 400, 100)).toBe(375);
     expect(dragToScroll(10, 1000, 250, 100, 100)).toBe(0);
+  });
+
+  test("com os dois eixos, o arraste até o fim do trilho desenhado chega ao fim do conteúdo (revisão #4579)", () => {
+    // A área 400×240 com conteúdo 1200×1000 do caso da revisão: o trilho vertical perde o canto do horizontal.
+    const track = trackLength(240, true);
+    expect(track).toBeLessThan(trackLength(240, false));
+    const box = thumbBox(0, 1000, 240, track)!;
+    expect(dragToScroll(track - box.length, 1000, 240, track, box.length)).toBe(760);
+  });
+
+  test("a roda sobre o polegar rola como na área: px, linhas ou páginas", () => {
+    expect(wheelPx(120, 0, 400)).toBe(120);
+    expect(wheelPx(3, 1, 400)).toBe(48);
+    expect(wheelPx(1, 2, 400)).toBe(400);
   });
 });
 

@@ -8,6 +8,7 @@
 //   { "press": "Meta+k" }                             uma tecla ou combinação (⌘K é "Meta+k")
 //   { "hover": "SEL" }
 //   { "scroll": "SEL", "y": 400, "x"?: 0 }            o mouse no elemento e a roda: rola de verdade (T4505)
+//   { "expectScroll": "SEL", "min"?: 100, "max"?: 900 }  o scrollTop do elemento fica entre min e max (T4505)
 //   { "waitFor": "SEL", "state"?: "visible|hidden|attached|detached" }
 //   { "wait": 300 }                                   ms (até 10 s)
 //   { "expectText": "SEL", "text": "…" }              o texto do elemento contém `text`
@@ -41,6 +42,8 @@ export type Step =
   | { hover: string }
   /** O mouse no meio do elemento e a roda (`y` px para baixo, `x` para a direita), como um scroll de verdade (T4505). */
   | { scroll: string; y?: number; x?: number }
+  /** O `scrollTop` do primeiro elemento fica entre `min` e `max` (px), esperando até o timeout (T4505). */
+  | { expectScroll: string; min?: number; max?: number }
   | { waitFor: string; state?: "visible" | "hidden" | "attached" | "detached" }
   | { wait: number }
   | { expectText: string; text: string }
@@ -63,7 +66,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
+const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -130,6 +133,13 @@ export function parseScript(json: unknown): ScriptFile {
           }
         }
         if (s.x === undefined && s.y === undefined) throw new Error(`${at}: scroll precisa de y ou x (px)`);
+        break;
+      case "expectScroll":
+        str(s.expectScroll, `${at}.expectScroll`);
+        for (const k of ["min", "max"] as const) {
+          if (s[k] !== undefined && !(typeof s[k] === "number" && Number.isFinite(s[k]))) throw new Error(`${at}: expectScroll.${k} em px`);
+        }
+        if (s.min === undefined && s.max === undefined) throw new Error(`${at}: expectScroll precisa de min ou max (px)`);
         break;
       case "waitFor":
         str(s.waitFor, `${at}.waitFor`);
@@ -234,6 +244,18 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
   else if ("scroll" in s) {
     await page.hover(s.scroll, { timeout });
     await page.mouse.wheel(s.x ?? 0, s.y ?? 0);
+  } else if ("expectScroll" in s) {
+    const min = s.min ?? -Infinity;
+    const max = s.max ?? Infinity;
+    await page.waitForSelector(s.expectScroll, { timeout, state: "attached" });
+    const deadline = Date.now() + timeout;
+    let top = NaN;
+    while (true) {
+      top = await page.locator(s.expectScroll).first().evaluate((e) => e.scrollTop, undefined, { timeout: 500 }).catch(() => NaN);
+      if ((top >= min && top <= max) || Date.now() > deadline) break;
+      await page.waitForTimeout(50);
+    }
+    if (!(top >= min && top <= max)) throw new Error(`esperava o scrollTop de ${s.expectScroll} entre ${min} e ${max}, veio ${top}`);
   }
   else if ("waitFor" in s) await page.waitForSelector(s.waitFor, { timeout, state: s.state ?? "visible" });
   else if ("wait" in s) await page.waitForTimeout(s.wait);
