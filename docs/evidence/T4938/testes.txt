@@ -1,0 +1,12 @@
+MeetingCaptureTests testAckWhileRecordingCanContinueAfterDirectoryIsEmpty — passou (0.013 seconds).
+MeetingCaptureTests testCrashRecoveryIncludesPartialPacketAndOnlyAckDeletesIt — passou (0.019 seconds).
+MeetingCaptureTests testPauseMineKeepsSystemAndCommonTimelineAndRejectsLateBuffers — passou (0.017 seconds).
+MeetingCaptureTests testRecoveryIgnoresSymlinksAndOnlyTruncatesAnIncompleteLastFloat — passou (0.007 seconds).
+MeetingCaptureTests testStartFailureClosesBothSourcesAndPreservesAlreadyCapturedAudio — passou (0.001 seconds).
+MeetingCaptureTests testStreamingAndSpoolShareTheClockEvenWhenOneSourceStartsLate — passou (0.010 seconds).
+MeetingCaptureTests testTwoIndependentChannelsChunkingAndFinalAckLeavesNoAudio — passou (0.022 seconds).
+MeetingCaptureTests testWatermarkRetainsLookBehindUncommittedAudioAndOtherChannel — passou (0.062 seconds).
+MeetingCommandsTests testCommandsWithFakeTapDeliverSpoolAndWatermarkDrain — passou (0.017 seconds).
+MeetingCommandsTests testHeadlessAndMissingMicNeverStartEitherSourceOrAskPermission — passou (0.001 seconds).
+
+	 Executed 150 tests, with 0 failures (0 unexpected) in 2.156 (2.198) seconds

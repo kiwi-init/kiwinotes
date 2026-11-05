@@ -19,6 +19,7 @@ export const ASK_ORDER: Permission[] = ["inputMonitoring", "accessibility", "mic
 const ON_LAUNCH: Permission[] = ["inputMonitoring", "accessibility"];
 
 export const PERMISSION_NAMES: Record<Permission, string> = {
+  systemAudio: "Áudio do sistema",
   microphone: "Microfone",
   accessibility: "Acessibilidade",
   inputMonitoring: "Monitoramento de Entrada",
@@ -78,6 +79,10 @@ export class PermissionFlow {
       // O macOS ainda não perguntou do microfone: pergunta agora, no ditado que precisou dele.
       this.sidecar.on("record.error", (e) => {
         if (this.auto && e.microphone === "undetermined") void this.request("microphone");
+      }),
+      // Meetings are explicit use too. System audio is never requested at launch or during dictation.
+      this.sidecar.on("meeting.error", (e) => {
+        if (this.auto && e.error === "microphone_permission" && e.microphone === "undetermined") void this.request("microphone");
       }),
     );
   }

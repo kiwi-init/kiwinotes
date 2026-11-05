@@ -556,3 +556,22 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(Double(rig.kept.first?.count ?? 0), 8_000, accuracy: 16)
     }
 }
+
+extension CaptureTests {
+    func testMeetingStreamingUsesResamplerWithoutRetainingWholeRecording() throws {
+        let engine = FakeEngine()
+        let capture = AudioCapture(makeEngine: { engine }, watchdogInterval: nil, retainSamples: false)
+        var frames = 0
+        var packets = 0
+        capture.onSamples = { samples, time in
+            frames += samples.count
+            packets += 1
+            XCTAssertTrue(time.isFinite)
+        }
+        try capture.start()
+        engine.feed(rate: 48_000, seconds: 1)
+        XCTAssertGreaterThan(frames, 15_500)
+        XCTAssertGreaterThan(packets, 1)
+        XCTAssertTrue(capture.stop().isEmpty)
+    }
+}

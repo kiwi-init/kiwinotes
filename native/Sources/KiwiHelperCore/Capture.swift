@@ -153,6 +153,11 @@ public final class AudioCapture {
     /// Called on a private queue, at a steady ~30 Hz while recording.
     public var onLevel: ((Float) -> Void)?
 
+    /// Streaming consumer (meetings). Called on the engine thread with the packet's start on the uptime clock.
+    /// Set before starting. With `retainSamples: false`, a long meeting never accumulates in RAM.
+    public var onSamples: (([Float], TimeInterval) -> Void)?
+    private let retainSamples: Bool
+
     /// The recording ended because the mic went away: `device_changed` (the new device didn't start) or `no_audio`
     /// (no buffer even after a new engine), with what was captured until then, to transcribe like a normal end
     /// (T883: losing a dictation is worse than a short text). Empty under `keptOnLoss` samples. Main thread.
@@ -224,9 +229,11 @@ public final class AudioCapture {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         },
         watchdog: CaptureWatchdog = CaptureWatchdog(),
-        watchdogInterval: TimeInterval? = 0.25
+        watchdogInterval: TimeInterval? = 0.25,
+        retainSamples: Bool = true
     ) {
         self.makeEngine = makeEngine
+        self.retainSamples = retainSamples
         self.now = now
         self.after = after
         self.watchdog = watchdog
@@ -401,11 +408,12 @@ public final class AudioCapture {
                 firstAfter = max(0, t - since - Double(buffer.frameLength) / buffer.format.sampleRate)
                 waitingFirstBufferSince = nil
             }
-            samples.append(contentsOf: out)
+            if retainSamples { samples.append(contentsOf: out) }
             return out
         }
         if let firstAfter { onFirstBuffer?(firstAfter) }
         guard let chunk, !chunk.isEmpty else { return }
+        onSamples?(chunk, now() - Double(chunk.count) / Self.sampleRate)
         // The tap calls back on one thread at a time, and buffers from an old engine stop above, so `meter` needs no lock.
         let levels = meter.push(chunk)
         if !levels.isEmpty { levelQueue.async { self.pacer.push(levels) } }

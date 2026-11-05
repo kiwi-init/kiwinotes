@@ -30,9 +30,9 @@ export function defaultSocketPath(home = os.homedir()): string {
 export type HotkeyKey = "fn" | "rightOption" | "rightCommand" | "rightControl";
 
 /** Sem `inputMonitoring` o event tap nasce, mas não recebe tecla: o atalho não funciona. */
-export type Permission = "microphone" | "accessibility" | "inputMonitoring";
+export type Permission = "microphone" | "accessibility" | "inputMonitoring" | "systemAudio";
 export type PermissionState = "granted" | "denied" | "restricted" | "undetermined";
-export type Permissions = Record<Permission, PermissionState>;
+export type Permissions = Record<Exclude<Permission, "systemAudio">, PermissionState> & { systemAudio?: PermissionState };
 
 /** Por que o LLM local (Apple Foundation Models) não está disponível. */
 export type LlmUnavailableReason = "appleIntelligenceNotEnabled" | "deviceNotEligible" | "modelNotReady";
@@ -90,6 +90,13 @@ export type Command =
        */
       microphone?: MicrophoneChoice;
     }
+  | { type: "meeting.start"; app?: string; chunkDuration?: number }
+  | { type: "meeting.stop" }
+  | { type: "meeting.pauseMine" }
+  | { type: "meeting.resumeMine" }
+  | { type: "meeting.pending" }
+  /** Delete whole chunks ending before the final watermark minus the ASR look-behind (2 s by default). */
+  | { type: "meeting.ack"; session: string; channel: "mine" | "system"; finalThroughFrame: number; contextFrames?: number }
   | { type: "record.start" }
   | { type: "record.stop" }
   /** `message` vale no `error` e no `done` (secure input, #224): com mensagem, o `done` fica 2,5 s em vez de 0,7 s. */
@@ -150,6 +157,12 @@ export type CommandType = Command["type"];
 export interface CommandResults {
   ping: Record<string, never>;
   "config.set": { hotkey: HotkeyKey; hotkeyActive: boolean };
+  "meeting.start": { session: string };
+  "meeting.stop": Record<string, never>;
+  "meeting.pauseMine": Record<string, never>;
+  "meeting.resumeMine": Record<string, never>;
+  "meeting.pending": { chunks: MeetingChunk[] };
+  "meeting.ack": Record<string, never>;
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
@@ -186,7 +199,23 @@ export interface CommandResults {
 
 // ---------------------------------------------------------- sidecar → Bun
 
+export interface MeetingChunk {
+  session: string;
+  chunkId: string;
+  channel: "mine" | "system";
+  startFrame: number;
+  frames: number;
+  sampleRate: 16000;
+  format: "f32le";
+  path: string;
+}
+
 export type Event =
+  | { type: "meeting.started"; session: string; app?: string; sampleRate: 16000; output: "headphones" | "speaker" | "unknown"; microphone?: Record<string, unknown> }
+  | { type: "meeting.stopped"; session: string; pendingChunks: number }
+  | { type: "meeting.level"; channel: "mine" | "system"; rms: number }
+  | { type: "meeting.error"; error: string; microphone?: PermissionState }
+  | ({ type: "meeting.chunk"; recovered?: boolean } & MeetingChunk)
   | {
       type: "ready";
       version: string;
@@ -292,6 +321,12 @@ export type Message = CommandMessage | EventMessage | ResultMessage;
 const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "ping",
   "config.set",
+  "meeting.start",
+  "meeting.stop",
+  "meeting.pauseMine",
+  "meeting.resumeMine",
+  "meeting.pending",
+  "meeting.ack",
   "record.start",
   "record.stop",
   "overlay.state",
@@ -305,6 +340,11 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
 ]);
 
 const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
+  "meeting.started",
+  "meeting.stopped",
+  "meeting.level",
+  "meeting.error",
+  "meeting.chunk",
   "ready",
   "permissions.changed",
   "audio.inputs.changed",

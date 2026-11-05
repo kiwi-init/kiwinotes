@@ -185,3 +185,25 @@ describe("PermissionFlow", () => {
     expect(missing(undefined)).toEqual([]);
   });
 });
+
+describe("permissões de reunião com helper falso", () => {
+  test("áudio do sistema não é pedido ao abrir nem durante ditado", async () => {
+    const { sidecar, asked, emit } = fake();
+    const flow = new PermissionFlow(sidecar, memoryStore(), () => {});
+    flow.attach();
+    await emit(ready(perms({ microphone: "granted", inputMonitoring: "granted", accessibility: "granted", systemAudio: "undetermined" })));
+    await emit({ type: "meeting.error", error: "system_capture_failed" });
+    expect(asked).toEqual([]);
+    flow.detach();
+  });
+  test("primeiro uso da reunião pede mic só fora do modo de agente", async () => {
+    for (const auto of [true, false]) {
+      const { sidecar, asked, emit } = fake();
+      const flow = new PermissionFlow(sidecar, memoryStore(), () => {}, auto);
+      flow.attach();
+      await emit({ type: "meeting.error", error: "microphone_permission", microphone: "undetermined" });
+      expect(asked).toEqual(auto ? ["microphone"] : []);
+      flow.detach();
+    }
+  });
+});

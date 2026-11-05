@@ -37,11 +37,15 @@ final class Helper {
     /// `--headless` (T1739): for the agents' CLI. No hotkey tap, no overlay, no mic, no permission asks, and every
     /// insert is a dry run. Nothing reaches the screen or the person's keyboard, clipboard or microphone.
     private let headless: Bool
+    private let meetingDirectory: URL?
+    private let meetingMic = MeetingMicrophone()
+    private var meetings: MeetingCommands?
 
-    init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false) {
+    init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false, meetingDirectory: URL? = nil) {
         self.connection = connection
         self.dumpDirectory = dumpDirectory
         self.headless = headless
+        self.meetingDirectory = meetingDirectory
         let mic = MicSelection()
         self.mic = mic
         audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
@@ -90,6 +94,7 @@ final class Helper {
             // No orphan sidecar: when the app goes away, so do we.
             DispatchQueue.main.async {
                 _ = self?.audio.stop()
+                try? self?.meetings?.capture.stop()
                 exit(0)
             }
         }
@@ -109,6 +114,11 @@ final class Helper {
         ])
         // Read only after `ready` is queued, so it is always the first line the app sees.
         connection.start()
+        // Recovery enumerates already-spooled files only. It never starts the mic or system tap.
+        if let meetingDirectory, FileManager.default.fileExists(atPath: meetingDirectory.path) {
+            do { try meetingCommands().recover() }
+            catch { emit("meeting.error", ["error": "meeting_recovery_failed"]) }
+        }
         // Who macOS checks the permissions against, and what it says (T658). No dialog: these only read.
         let tcc = Responsible.current()?.summary ?? "responsible process unknown"
         emit("log", ["level": "info", "message": "tcc: \(tcc); \(Permission.snapshot().sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))"])
@@ -120,6 +130,7 @@ final class Helper {
         devicesWatcher.start { [weak self] what in
             guard let self else { return }
             if !self.headless, self.mic.isStale(after: what) { self.audio.inputChanged(what) }
+            if !self.headless, self.meetings?.capture.session != nil, self.meetingMic.selection.isStale(after: what) { self.meetingMic.audio.inputChanged(what) }
             // Only to an app that knows the event: it sent `microphone` (T3230). An older app logs an unknown type.
             if self.appKnowsMicrophone { self.emit("audio.inputs.changed", [:]) }
         }
@@ -337,6 +348,15 @@ final class Helper {
     private func handle(_ message: InboundMessage) {
         let id = message.id
         switch message.type {
+        case _ where message.type.hasPrefix("meeting."):
+            // Before even constructing a source; agents can never trigger a capture or TCC prompt headless.
+            if headless && ["meeting.start", "meeting.resumeMine"].contains(message.type) {
+                return reply(id, ok: false, error: "headless_no_mic")
+            }
+            do {
+                let result = try meetingCommands().handle(message)
+                reply(id, ok: result.ok, error: result.error, result.data)
+            } catch { reply(id, ok: false, error: "meeting_unavailable") }
         case "ping":
             reply(id, ok: true)
         case "config.set":
@@ -417,6 +437,32 @@ final class Helper {
         default:
             reply(id, ok: false, error: "unknown_type")
         }
+    }
+
+    private func meetingCommands() throws -> MeetingCommands {
+        if let meetings { return meetings }
+        guard let meetingDirectory, #available(macOS 14.2, *) else { throw MeetingFailure.invalidValue }
+        let system = SystemAudioTap()
+        let capture = try MeetingCapture(root: meetingDirectory, mine: meetingMic, system: system)
+        let fail: (String) -> Void = { [weak self] code in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                try? self.meetings?.capture.stop()
+                self.emit("meeting.error", ["error": code])
+            }
+        }
+        system.onError = fail
+        capture.onError = fail
+        meetingMic.audio.onLost = { code, _ in fail(code) }
+        meetingMic.audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "meeting mic: \(message)"]) }
+        meetingMic.selection.choice = mic.choice
+        let commands = MeetingCommands(capture: capture, headless: headless,
+            microphonePermission: { Permission.microphone.status },
+            metadata: { [weak self] in
+                return ["output": MeetingOutput.route(), "microphone": self?.meetingMic.selection.last?.fields ?? [:]]
+            }, emit: { [weak self] type, fields in self?.emit(type, fields) })
+        meetings = commands
+        return commands
     }
 
     /// `debug.transcribe {path}` (KIWI_DEBUG=1): a WAV takes the path of a recording that just ended, so the app can
@@ -504,6 +550,8 @@ final class Helper {
             mic.choice = choice
             // A new engine for the new mic; mid-recording it switches and keeps what was captured.
             if !headless { audio.inputChanged("microphone: \(choice.value)") }
+            meetingMic.selection.choice = choice
+            if meetings?.capture.session != nil, !headless { meetingMic.audio.inputChanged("microphone: \(choice.value)") }
         }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
