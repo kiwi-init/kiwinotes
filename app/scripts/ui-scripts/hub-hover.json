@@ -16,46 +16,49 @@
       "name": "o nome ao lado do ícone é só visual (o aria-label continua)"
     },
     {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "a pílula começa na aba ativa (T4671)"
+    },
+    {
       "hover": ".kn-tab:has-text('Ditado')",
       "name": "mouse na aba Ditado"
     },
     {
-      "expectCount": ".kn-tab[data-hover]",
-      "count": 0,
-      "name": "hover não cria estado de seleção"
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "o hover não move a pílula: ela continua na ativa (T4671)"
     },
     {
-      "expectCount": ".kn-tab[aria-selected='true']:has-text('Notas')",
-      "count": 1,
-      "name": "e a escolhida continua sendo Notas"
+      "expectSame": ".kn-tab:has-text('Ditado')",
+      "as": ".kn-tab[aria-selected='true']",
+      "property": "color",
+      "name": "e o texto sob o mouse fica na cor da ativa: o hover só clareia (T4671)"
     },
     {
       "hover": ".kn-float-group .kn-expand[aria-label='Nova nota']",
       "name": "mouse no Nova nota"
     },
     {
-      "expectCount": ".kn-tab[data-hover]",
-      "count": 0,
-      "name": "fora das abas não há estado de hover da pílula"
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "sair das abas não move a pílula"
     },
     {
       "screenshot": "nova-nota.png",
       "selector": ".kn-hub-top"
     },
     {
-      "hover": ".kn-tab:has-text('Sobre')"
-    },
-    {
       "click": ".kn-tab:has-text('Notas')",
-      "name": "volta para Notas"
+      "name": "volta para Notas, e o foco fica nela (o teclado precisa disto)"
     },
     {
       "hover": ".kn-tab:has-text('Sobre')",
       "name": "mouse parado em Sobre"
     },
     {
-      "expectCount": ".kn-tab[aria-selected='true']:has-text('Notas')",
-      "count": 1,
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
       "name": "mouse parado em Sobre não seleciona a aba"
     },
     {
@@ -66,9 +69,9 @@
       "waitFor": ".kn-tab[aria-selected='true']:has-text('Reuniões')"
     },
     {
-      "expectCount": ".kn-tab[data-hover]",
-      "count": 0,
-      "name": "o teclado escolhe a aba mesmo com o mouse parado em outra"
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "o teclado escolhe a aba mesmo com o mouse parado em outra, e a pílula a acompanha"
     },
     {
       "click": ".kn-tab:has-text('Sobre')",
@@ -76,6 +79,11 @@
     },
     {
       "waitFor": ".kn-tab[aria-selected='true']:has-text('Sobre')"
+    },
+    {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "e a pílula chega na aba clicada"
     }
   ]
 }

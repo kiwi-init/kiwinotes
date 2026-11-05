@@ -104,13 +104,18 @@
   color: var(--ink-3, var(--text-3));
 }
 
+/* "Reduzir movimento" zera a pílula por conta própria (T4671, #150): com `[data-moving="true"]` no seletor, estas
+   regras vencem a da animação por especificidade, em qualquer ordem de arquivo, sem depender do `!important` da
+   base.css. A pílula sem `data-moving` continua coberta pelo primeiro seletor de cada lista. */
 @media (prefers-reduced-motion: reduce) {
-  .kn-tabs-pill {
+  :root .kn-tabs-pill,
+  :root .kn-tabs-pill[data-moving="true"] {
     transition: none;
   }
 }
 
-:root[data-motion="reduced"] .kn-tabs-pill {
+:root[data-motion="reduced"] .kn-tabs-pill,
+:root[data-motion="reduced"] .kn-tabs-pill[data-moving="true"] {
   transition: none;
 }
 

@@ -13,6 +13,9 @@
 //   { "wait": 300 }                                   ms (até 10 s)
 //   { "expectText": "SEL", "text": "…" }              o texto do elemento contém `text`
 //   { "expectCount": "SEL", "count": 3 }
+//   { "expectSame": "SEL", "as": "SEL", "property"?: "color", "tolerance"?: 1 }  o retângulo de SEL é o de `as` (até
+//                                                     `tolerance` px, padrão 1); com `property`, as duas propriedades
+//                                                     computadas têm o mesmo valor (T4671)
 //   { "screenshot": "nome.png", "selector"?: "SEL" }  print da janela (ou só do elemento)
 //   { "drop": "SEL", "file": "caminho" }           arrasta um arquivo (imagem, PDF) e solta no meio do elemento (T2594)
 //   { "pasteFile": "SEL", "file": "caminho" }      cola um arquivo no elemento, como um ⌘V com uma imagem (T2594).
@@ -48,6 +51,8 @@ export type Step =
   | { wait: number }
   | { expectText: string; text: string }
   | { expectCount: string; count: number }
+  /** O retângulo de um elemento é o de outro, ou (com `property`) as duas propriedades computadas são iguais. */
+  | { expectSame: string; as: string; property?: string; tolerance?: number }
   | { screenshot: string; selector?: string }
   | { invoke: string; args?: Record<string, unknown> }
   | { drop: string; file: string }
@@ -66,7 +71,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "screenshot", "invoke", "drop", "pasteFile"] as const;
+const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "screenshot", "invoke", "drop", "pasteFile"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -118,6 +123,14 @@ export function parseScript(json: unknown): ScriptFile {
       case "expectCount":
         str(s.expectCount, `${at}.expectCount`);
         if (!Number.isInteger(s.count) || (s.count as number) < 0) throw new Error(`${at}: expectCount precisa de count (inteiro ≥ 0)`);
+        break;
+      case "expectSame":
+        str(s.expectSame, `${at}.expectSame`);
+        str(s.as, `${at}.as`);
+        if (s.property !== undefined) str(s.property, `${at}.property`);
+        if (s.tolerance !== undefined && !(typeof s.tolerance === "number" && Number.isFinite(s.tolerance) && s.tolerance >= 0 && s.tolerance <= 64)) {
+          throw new Error(`${at}: tolerance em px, de 0 a 64`);
+        }
         break;
       case "click":
         str(s.click, `${at}.click`);
@@ -283,6 +296,50 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
       await page.waitForTimeout(50);
     }
     if (n !== s.count) throw new Error(`esperava ${s.count} de ${s.expectCount}, veio ${n}`);
+  } else if ("expectSame" in s) {
+    // Duas leituras do mesmo momento: o retângulo de um elemento e o de outro (a pílula na aba escolhida), ou a
+    // propriedade computada dos dois (o texto da aba sob o mouse na cor da ativa). Espera até bater, para a animação
+    // terminar; se não bater, a mensagem mostra o que veio de cada lado (T4671).
+    const tol = s.tolerance ?? 1;
+    type Same = { style: [string, string] | null; rect: number[][] | null } | null;
+    // Os seletores são os do Playwright (`:has-text(…)` vale), e as duas leituras são do mesmo instante: os
+    // elementos viram handles e um `evaluate` só lê os dois.
+    const one = page.locator(s.expectSame).first();
+    const other = page.locator(s.as).first();
+    await one.waitFor({ timeout, state: "attached" });
+    await other.waitFor({ timeout, state: "attached" });
+    const read = async (): Promise<Same> => {
+      const round = (r: { x: number; y: number; width: number; height: number }) =>
+        [r.x, r.y, r.width, r.height].map((n) => Math.round(n * 100) / 100);
+      if (s.property) {
+        const prop = s.property;
+        const [a, b] = await Promise.all([
+          one.evaluate((e, p) => getComputedStyle(e).getPropertyValue(p), prop),
+          other.evaluate((e, p) => getComputedStyle(e).getPropertyValue(p), prop),
+        ]);
+        return { style: [a, b], rect: null };
+      }
+      const [ra, rb] = await Promise.all([one.boundingBox({ timeout: 1_000 }), other.boundingBox({ timeout: 1_000 })]);
+      if (!ra || !rb) return null;
+      return { style: null, rect: [round(ra), round(rb)] };
+    };
+    const same = (v: Same) => {
+      if (!v) return false;
+      if (v.style) return v.style[0] === v.style[1];
+      const [a, b] = v.rect ?? [];
+      return !!a && !!b && a.every((n, i) => Math.abs(n - (b[i] ?? Infinity)) <= tol);
+    };
+    const deadline = Date.now() + timeout;
+    let got: Same = null;
+    while (true) {
+      got = await read();
+      if (same(got) || Date.now() > deadline) break;
+      await page.waitForTimeout(50);
+    }
+    if (!same(got)) {
+      const what = s.property ? `${s.property} igual` : `o retângulo (até ${tol} px)`;
+      throw new Error(`esperava ${what} em ${s.expectSame} e ${s.as}, veio ${JSON.stringify(got)}`);
+    }
   } else if ("screenshot" in s) {
     const path = join(out, s.screenshot);
     await settle(page);
