@@ -1,0 +1,145 @@
+# Reunião sintética (T4926, R0): uma linha por fala, "PAPEL: texto".
+# A = você (canal do mic). B a F = os outros (canal do sistema). O gerador mapeia os papéis para vozes do `say`.
+# Na reunião de 10 min, E e F viram B e C (3 outros falantes); na de 30 min, os cinco aparecem.
+# Linhas com "#" são comentários. O texto é ficção sobre uma migração de PACS, com os termos do trabalho de propósito.
+
+A: Bom dia, pessoal. Vamos começar? Hoje a pauta é a migração do PACS legado e o cronograma do mês que vem.
+B: Bom dia. Antes de tudo, eu queria falar do backlog da semana passada, porque ficou coisa pendente.
+A: Pode falar. O que ficou para trás?
+B: Ficou a validação dos estudos que deram erro no STOW. Foram uns trezentos e poucos, quase todos de ressonância.
+C: Isso é aquele problema do transfer syntax, né? Os arquivos JPEG 2000 que a API não aceitava.
+B: Exatamente. A gente converteu uma parte, mas ainda falta reenviar o lote da unidade de Campinas.
+A: Certo. Quem fica com o reenvio do lote de Campinas?
+C: Eu fico. Consigo rodar hoje à tarde, depois da janela de manutenção.
+A: Perfeito. Anota aí: o reenvio de Campinas é com você, até amanhã.
+D: Uma dúvida. A VM de origem ainda é a mesma, ou trocaram o IP depois da mudança de rede?
+A: Trocaram. A origem agora é a dez ponto vinte ponto trinta ponto quinze, e o destino continua o mesmo.
+D: Então eu preciso atualizar o AE Title no script de extração, senão o C-MOVE não chega.
+C: E confere a porta também, porque o firewall da VPN bloqueou a quatro mil e quatro na última vez.
+D: Boa lembrança. Eu vou pedir a liberação para o time de infraestrutura ainda hoje.
+A: Agora, sobre o cronograma. A meta era terminar a carga histórica até o fim do mês. Estamos no prazo?
+B: Mais ou menos. A carga histórica está em sessenta por cento, mas a velocidade caiu na última semana.
+E: Caiu por causa da cota da API. A gente bateu no limite de requisições por minuto duas vezes.
+A: E já pedimos o aumento da cota?
+E: Pedi na segunda-feira. O suporte disse que responde em até três dias úteis.
+C: Enquanto isso, dá para rodar o lote em paralelo em duas regiões? Ou isso complica o BigQuery depois?
+E: Complica um pouco. O export para o BigQuery espera um dicom store por região, e aí a gente teria que juntar depois.
+A: Então vamos manter uma região só e esperar a cota. Prefiro atrasar dois dias a ter dado espalhado.
+B: Concordo. E aproveitando, eu queria mostrar o dashboard novo dos estudos migrados.
+A: Mostra. Todo mundo está vendo a tela?
+D: Estou vendo. Esse gráfico de barras é por unidade?
+B: É por unidade e por modalidade. Dá para ver que tomografia está quase toda migrada, e raio-x ainda está atrás.
+F: O raio-x está atrás porque são muitos arquivos pequenos. O gargalo ali não é o tamanho, é a quantidade de requisições.
+A: Faz sentido. Tem como agrupar mais instâncias por requisição no STOW?
+F: Tem. A gente pode mandar um multipart com várias instâncias. Eu testei com cinquenta e funcionou bem.
+C: Cinquenta por requisição já reduz bastante. Só cuidado com o timeout do proxy, que é de sessenta segundos.
+F: Verdade. Eu vou medir o tempo médio antes de subir para cem.
+A: Ótimo. Próximo ponto: a anonimização para o projeto de pesquisa. Como está?
+E: Está quase pronta. O pipeline remove nome, data de nascimento e o número do prontuário dos cabeçalhos.
+B: E as imagens com texto queimado? Ultrassom costuma ter o nome do paciente na própria imagem.
+E: Essas a gente separa e manda para revisão manual. Não dá para confiar só no cabeçalho.
+A: Certo. Quero isso documentado antes de mandar qualquer coisa para o parceiro.
+D: Eu posso escrever a documentação. Coloco no confluence até sexta.
+A: Combinado, documentação da anonimização com você até sexta.
+C: Uma coisa que me preocupa é o storage class. Os estudos antigos estão todos em standard, e isso está caro.
+B: A ideia era mover para archive depois de noventa dias sem acesso, não era?
+C: Era. Mas ninguém criou a regra ainda. Estamos pagando o preço cheio em quase quarenta terabytes.
+A: Isso é urgente. Quem consegue criar a política de ciclo de vida?
+F: Eu crio. Só preciso confirmar com o financeiro se pode ir direto para archive ou se passa por coldline antes.
+A: Confirma e me avisa. Se der, quero isso aplicado ainda nesta sprint.
+D: Mudando de assunto, o hospital da zona sul pediu acesso ao visualizador. Eles querem usar o OHIF direto.
+A: Pode liberar, mas só depois que o login único estiver funcionando. Não quero senha compartilhada.
+D: Entendido. O login único depende do time de identidade, e eles disseram que entregam semana que vem.
+B: Então o acesso da zona sul fica para depois da entrega da identidade.
+A: Isso. Registra como dependência no plano.
+E: Sobre o Kubernetes, o cluster de homologação ficou sem espaço em disco ontem à noite.
+C: Foi o log do worker de conversão. Ele estava gravando o arquivo inteiro no log a cada erro.
+E: Eu já corrigi. Agora ele grava só o identificador do estudo e o código do erro.
+A: Bom. E a produção? Corre o mesmo risco?
+E: Na produção o volume de log é menor, mas eu vou aplicar a mesma correção hoje.
+F: Aproveita e coloca um alerta de disco acima de oitenta por cento, para não ser pego de surpresa.
+E: Vou colocar. Mando o alerta para o canal do time.
+A: Agora, uma coisa mais estratégica. O diretor perguntou se a gente consegue desligar o PACS antigo em março.
+B: Em março é apertado. Ainda tem as unidades do interior, que nem começaram.
+C: E tem o contrato de suporte do PACS antigo, que vence em fevereiro. Se não renovar, ficamos sem garantia.
+A: Então a pergunta real é: renovamos por mais três meses ou arriscamos?
+D: Eu renovaria por três meses. O custo é pequeno perto do risco de ficar sem suporte no meio da migração.
+B: Concordo com a renovação curta. Três meses dá margem para as unidades do interior.
+A: Decidido então: renovamos o suporte por três meses e a meta de desligamento passa para junho.
+F: Eu aviso o fornecedor. Preciso de alguém do jurídico para olhar o aditivo.
+A: Eu falo com o jurídico. Fica comigo.
+E: Uma última coisa técnica. O QIDO está lento quando a busca é por nome do paciente.
+C: É porque o campo não está indexado do jeito certo. Buscar por accession number é muito mais rápido.
+E: Mas o pessoal da recepção busca por nome. Não dá para mudar o hábito deles.
+A: Então precisamos de um índice auxiliar. Dá para fazer no BigQuery e consultar por lá?
+E: Dá. O BigQuery tem uma cópia dos metadados. A busca por nome vira uma consulta lá e devolve o identificador do estudo.
+B: Só cuidado com a defasagem. O export para o BigQuery não é em tempo real.
+E: É de alguns minutos. Para a recepção, acho que serve.
+A: Serve. Vamos testar com a recepção da unidade central primeiro.
+D: Eu combino o teste com a coordenadora da recepção.
+A: Pessoal, deixa eu recapitular. Campinas é reenvio hoje. Cota da API aguardando. Anonimização documentada até sexta.
+A: Política de storage nesta sprint. Suporte renovado por três meses, desligamento em junho. Índice auxiliar no BigQuery.
+B: Faltou o alerta de disco no Kubernetes.
+A: Verdade, e o alerta de disco. Alguém tem mais alguma coisa?
+C: Só uma. Na próxima reunião eu queria apresentar o teste de carga do WADO, com os números de latência.
+A: Combinado, fica na pauta da próxima. Obrigado, pessoal. Até semana que vem.
+# --- Segunda parte (usada na reunião de 30 min, junto com a primeira) ---
+A: Retomando a reunião de acompanhamento. Hoje eu quero fechar os números do teste de carga do WADO.
+C: Fechei ontem. Com cem usuários simultâneos, a latência média ficou em trezentos milissegundos.
+F: E o percentil noventa e nove? Média esconde muita coisa.
+C: O p noventa e nove ficou em um segundo e meio. Acima disso, só quando o estudo tem mais de mil instâncias.
+A: Um segundo e meio é aceitável para o radiologista?
+B: Para abrir o estudo, sim. Para rolar as séries, eles reclamam se passar de meio segundo.
+C: Para rolar, o visualizador já faz pré-carregamento das próximas imagens. O usuário não sente.
+D: Desde que o cache do navegador esteja ligado. Em algumas máquinas da zona norte ele está desativado por política.
+A: Então anota: verificar a política de cache nas máquinas da zona norte.
+D: Eu verifico com o suporte local.
+E: Sobre a cota, a resposta chegou. Aumentaram para o dobro.
+A: Ótimo. Isso destrava a carga histórica?
+E: Destrava. Com o dobro da cota e o multipart de cinquenta instâncias, a estimativa é terminar em doze dias.
+B: Doze dias é antes do fim do mês. Voltamos para o prazo original.
+A: Excelente. Vamos manter o acompanhamento diário até terminar.
+F: A política de ciclo de vida foi aplicada. O financeiro liberou ir direto para archive.
+C: E já dá para ver a economia?
+F: A estimativa é cortar quase setenta por cento do custo de armazenamento dos estudos antigos.
+A: Isso é uma boa notícia para levar ao diretor. Me manda os números por escrito.
+F: Mando ainda hoje, com o gráfico de antes e depois.
+D: O login único foi entregue. Já liberei o acesso da zona sul ao visualizador.
+B: Eles conseguiram entrar sem problema?
+D: Dois usuários tiveram problema com o celular, porque o segundo fator não estava configurado.
+A: Isso é do time de identidade. Abre um chamado para eles e acompanha.
+D: Abro e coloco você em cópia.
+E: O índice auxiliar no BigQuery funcionou na recepção da unidade central.
+A: E o tempo de busca?
+E: Caiu de doze segundos para menos de um segundo. A coordenadora gostou bastante.
+C: Agora é replicar para as outras unidades, uma por semana.
+A: Uma por semana está bom. Começa pelas que têm mais atendimento.
+B: Uma pergunta sobre as unidades do interior. Alguém já levantou a lista de equipamentos de lá?
+F: Eu levantei. São quarenta e dois equipamentos, e cinco deles não falam DICOM direito.
+A: Não falam como?
+F: Eles mandam o arquivo com a tag de modalidade vazia, e o nosso roteamento depende dela.
+C: Dá para corrigir no roteador de entrada. A gente preenche a modalidade pelo AE Title de origem.
+F: Funciona, desde que cada equipamento tenha um AE Title único. Dois deles compartilham o mesmo.
+A: Então primeiro corrigimos o AE Title duplicado, depois aplicamos a regra no roteador.
+D: Eu falo com o técnico da unidade para trocar o AE Title de um dos equipamentos.
+E: Só lembrando que trocar o AE Title exige reiniciar o serviço de envio do equipamento.
+D: Vou combinar para fora do horário de atendimento.
+A: Bem lembrado. Nada de reiniciar equipamento com paciente na sala.
+B: Mudando de assunto, o parceiro de pesquisa recebeu o primeiro lote anonimizado.
+E: E a revisão manual das imagens de ultrassom pegou alguma coisa?
+B: Pegou sete imagens com nome queimado. Foram removidas antes do envio.
+A: Sete em quanto?
+B: Sete em pouco mais de dois mil. Mostra que a revisão manual é necessária.
+A: Então a revisão manual vira regra fixa no processo. Isso entra na documentação.
+D: Já atualizo o documento com essa regra.
+C: Eu queria levantar um risco. A equipe está pequena para as unidades do interior e para a carga histórica ao mesmo tempo.
+F: Concordo. Eu estou dividido entre três frentes e nenhuma anda direito.
+A: Faz sentido. Vou pedir ao diretor mais uma pessoa por três meses. Enquanto isso, a carga histórica tem prioridade.
+B: E as unidades do interior ficam esperando?
+A: Ficam no levantamento e no planejamento. A execução começa quando a carga histórica terminar.
+E: Isso alinha com os doze dias da estimativa.
+A: Exato. Pessoal, recapitulando de novo. Carga histórica em doze dias, com acompanhamento diário.
+A: Cache da zona norte para verificar. Economia de storage para o diretor. Chamado de identidade aberto.
+A: Índice replicado uma unidade por semana. AE Title duplicado no interior. Revisão manual como regra fixa.
+C: E o pedido de mais uma pessoa.
+A: E o pedido de mais uma pessoa, comigo. Obrigado a todos.
