@@ -39,11 +39,16 @@ export class Drafts {
   constructor(
     private storage: DraftStorage | null = windowStorage(),
     private now: () => number = Date.now,
+    private namespace = "",
   ) {}
+
+  private owns(key:string|null):key is string{if(!key?.startsWith(this.prefix()))return false;return Boolean(this.namespace)||!/^kiwi\.notes\.draft\.v1:[a-f0-9]{20}:/.test(key);}
+
+  private prefix(){return this.namespace?`${PREFIX}${this.namespace}:`:PREFIX;}
 
   get(path: string): Draft | null {
     try {
-      const raw = this.storage?.getItem(PREFIX + path);
+      const raw = this.storage?.getItem(this.prefix() + path);
       if (!raw) return null;
       const d = JSON.parse(raw) as Draft;
       if (d.path !== path || typeof d.body !== "string" || this.now() - Date.parse(d.at) > MAX_AGE_MS) return null;
@@ -55,7 +60,7 @@ export class Drafts {
 
   set(d: Omit<Draft, "at">): void {
     try {
-      this.storage?.setItem(PREFIX + d.path, JSON.stringify({ ...d, at: new Date(this.now()).toISOString() }));
+      this.storage?.setItem(this.prefix() + d.path, JSON.stringify({ ...d, at: new Date(this.now()).toISOString() }));
     } catch {
       // cota cheia: o save de verdade continua tentando, só não há rascunho
     }
@@ -63,7 +68,7 @@ export class Drafts {
 
   remove(path: string): void {
     try {
-      this.storage?.removeItem(PREFIX + path);
+      this.storage?.removeItem(this.prefix() + path);
     } catch {}
   }
 
@@ -75,7 +80,7 @@ export class Drafts {
     try {
       for (let i = 0; i < s.length; i++) {
         const k = s.key(i);
-        const d = k?.startsWith(PREFIX) ? this.get(k.slice(PREFIX.length)) : null;
+        const d = this.owns(k) ? this.get(k.slice(this.prefix().length)) : null;
         if (d) out.push(d);
       }
     } catch {}
@@ -90,9 +95,9 @@ export class Drafts {
       const keys: string[] = [];
       for (let i = 0; i < s.length; i++) {
         const k = s.key(i);
-        if (k?.startsWith(PREFIX)) keys.push(k);
+        if (this.owns(k)) keys.push(k);
       }
-      for (const k of keys) if (!this.get(k.slice(PREFIX.length))) s.removeItem(k);
+      for (const k of keys) if (!this.get(k.slice(this.prefix().length))) s.removeItem(k);
     } catch {}
   }
 }

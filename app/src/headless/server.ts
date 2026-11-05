@@ -107,9 +107,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // também com --no-helper, quando o helper existe.
   {
     const ocrHelper = o.helperPath ?? process.env.KIWI_HELPER ?? defaultHelper(path.resolve(import.meta.dirname, "..", ".."));
-    if (ocrHelper && existsSync(ocrHelper)) stores.ocr.setRunner((await import("../notes/ocr.ts")).helperRunner(ocrHelper));
+    if (ocrHelper && existsSync(ocrHelper)) stores.folders.setOcrRunner((await import("../notes/ocr.ts")).helperRunner(ocrHelper));
     // O PDF do exportar (T2684) também: o `--export-pdf` imprime fora da tela e sai.
-    if (ocrHelper && existsSync(ocrHelper)) stores.exporter.setPdf((await import("../notes/export.ts")).helperPdf(ocrHelper));
+    if (ocrHelper && existsSync(ocrHelper)) stores.folders.setPdf((await import("../notes/export.ts")).helperPdf(ocrHelper));
   }
   const { uiCapabilities } = await import("../bun/ui-capabilities.ts");
   const { directInvoke } = await import("../bun/ui-engine.ts");
@@ -153,6 +153,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     snippets: stores.snippets,
     history: stores.history,
     notes: stores.notes,
+    notesFolders: stores.folders,
+    chooseNotesFolder: async () => process.env.KIWI_TEST_NOTES_FOLDER ?? null,
     meetingNotes: stores.meetingNotes,
     attachments: stores.attachments,
     // O headless não sai para a rede: a imagem de fora é sempre esta, depois de conferir o endereço como o app confere.
@@ -184,8 +186,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     revealTrash: () => console.log("[headless] trash.reveal (not opened)"),
   });
   const offs = [
-    stores.notes.onChanged((paths) => event("notes.changed", { paths })),
-    stores.notes.onOtherFiles((paths) => event("files.changed", { paths })),
+    stores.folders.onNotesChanged((folder, paths) => event("notes.changed", { paths, folderId:folder.id })),
+    stores.folders.onFilesChanged((folder, paths) => event("files.changed", { paths, folderId:folder.id })),
+    stores.folders.onChange(view=>event("notes.folderChanged",view)),
     stores.history.onAdded((entry) => event("history.added", entry)),
     meetings?.onChange((live) => event("meetings.live", live)) ?? (() => {}),
   ];
@@ -284,8 +287,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       for (const off of offs) off();
       await session?.stop();
       await stores.meetingNotes.flush();
-      stores.notes.close();
-      await stores.versions.close();
+      await stores.folders.close();
       server.stop(true);
       rmSync(sock, { force: true });
       rmSync(stateFile(data), { force: true });

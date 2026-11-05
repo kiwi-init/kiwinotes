@@ -1,11 +1,11 @@
 // T1827: o headless recusa os dados reais. O `home` é falso (um tmp): o teste nunca encosta nas pastas de verdade.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { assertNotRealData, realDataRoots, resolveReal } from "./guard.ts";
+import { assertHeadlessNotesFolder, assertNotRealData, realDataRoots, resolveReal } from "./guard.ts";
 
 const home = realpathSync(mkdtempSync(path.join(tmpdir(), "kn-guard-")));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
@@ -62,3 +62,20 @@ test("a CLI: `start` nos dados reais sai com E_REAL_DATA, exit 1, sem criar nada
   expect(await Bun.file(path.join(data, "control.sock")).exists()).toBe(false);
   expect(await Bun.file(path.join(data, "headless.out")).exists()).toBe(false);
 }, 30_000);
+
+
+test("configured notes folders and their recents are protected, including symlinks and ancestors",()=>{
+ const fake=realpathSync(mkdtempSync(path.join(tmpdir(),"kn-configured-guard-")));
+ try{
+  const support=path.join(fake,"Library","Application Support","KiwiNotes");mkdirSync(support,{recursive:true});
+  const current=path.join(fake,"Documents","Obsidian"),recent=path.join(fake,"Work","Notes");
+  mkdirSync(current,{recursive:true});mkdirSync(recent,{recursive:true});
+  writeFileSync(path.join(support,"notes-folders.json"),JSON.stringify({version:1,current,recent:[recent]}));
+  const alias=path.join(fake,"alias");symlinkSync(current,alias);
+  for(const root of [current,recent,alias,path.join(current,"nested"),path.dirname(current)]){
+   expect(()=>assertHeadlessNotesFolder(root,fake)).toThrow(expect.objectContaining({code:"E_REAL_DATA"}));
+  }
+  expect(()=>assertNotRealData(path.join(recent,"scratch"),fake)).toThrow(expect.objectContaining({code:"E_REAL_DATA"}));
+  expect(()=>assertHeadlessNotesFolder(path.join(fake,"tmp"),fake)).not.toThrow();
+ }finally{rmSync(fake,{recursive:true,force:true});}
+});

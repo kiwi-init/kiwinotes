@@ -98,6 +98,12 @@ const capabilities = uiCapabilities({
     Bun.spawn(["/usr/bin/open", path.join(process.env.HOME ?? "", ".Trash")], { stdio: ["ignore", "ignore", "ignore"] });
   },
   notes: stores.notes,
+  notesFolders: stores.folders,
+  chooseNotesFolder: async () => {
+    if (process.env.KIWI_DEBUG === "1") return null;
+    const selected = await Utils.openFileDialog({canChooseFiles:false,canChooseDirectory:true,allowsMultipleSelection:false});
+    return selected[0] ?? null;
+  },
   meetingNotes: stores.meetingNotes,
   attachments: stores.attachments,
   // A imagem de fora de uma nota, só depois do clique no cartão (T2984, #3039).
@@ -141,12 +147,12 @@ const capabilities = uiCapabilities({
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */
 const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();
-stores.notes.onChanged((paths) => {
-  for (const rpc of rpcs.values()) rpc.send.event({ name: "notes.changed", payload: { paths } });
+stores.folders.onNotesChanged((folder, paths) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "notes.changed", payload: { paths, folderId: folder.id } });
 });
 // Os outros arquivos do cofre (T3370): a árvore mostra todos.
-stores.notes.onOtherFiles((paths) => {
-  for (const rpc of rpcs.values()) rpc.send.event({ name: "files.changed", payload: { paths } });
+stores.folders.onFilesChanged((folder, paths) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "files.changed", payload: { paths, folderId: folder.id } });
 });
 
 const preload = enginePreload(UI_CAPABILITIES, appEnginePageScript);
@@ -282,4 +288,13 @@ export function sendToWindow<E extends keyof UiEvents>(name: WindowName, event: 
   if (!rpc) return false;
   rpc.send.event({ name: event, payload });
   return true;
+}
+
+stores.folders.onChange(view => {
+  for (const rpc of rpcs.values()) rpc.send.event({name:"notes.folderChanged",payload:view});
+});
+
+/** A tray click uses the same picker/confirmation/progress path as the Notes UI. Never called by an agent. */
+export async function openNotesFolderFromMenu():Promise<void>{
+  try { await capabilities["notes.openFolder"]({}); } catch { /* the folder state carries the error to the UI */ }
 }

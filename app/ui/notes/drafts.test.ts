@@ -92,3 +92,13 @@ describe("rascunho do que não foi gravado", () => {
     expect(d.get("Torto.md")?.frontmatter).toBe("");
   });
 });
+
+
+test("same relative path has isolated drafts per root; legacy prune leaves scoped drafts intact",()=>{
+ const storage=memory();const now=()=>Date.parse("2026-11-05T12:00:00Z");
+ const legacy=new Drafts(storage,now),a=new Drafts(storage,now,"a".repeat(20)),b=new Drafts(storage,now,"b".repeat(20));
+ for(const [d,body] of [[legacy,"internal"],[a,"A"],[b,"B"]] as const)d.set({path:"Ana.md",body,baseVersion:"1"});
+ legacy.prune();a.prune();
+ expect(legacy.all().map(d=>d.body)).toEqual(["internal"]);expect(a.all().map(d=>d.body)).toEqual(["A"]);expect(b.get("Ana.md")?.body).toBe("B");
+ a.remove("Ana.md");expect(b.get("Ana.md")?.body).toBe("B");expect(legacy.get("Ana.md")?.body).toBe("internal");
+});

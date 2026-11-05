@@ -85,7 +85,7 @@ export async function listAttachments(root: string): Promise<string[]> {
       return;
     }
     for (const e of entries) {
-      if (e.name.startsWith(".") || e.isSymbolicLink()) continue;
+      if (e.name.startsWith(".") || e.name === "node_modules" || e.isSymbolicLink()) continue;
       const p = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) await walk(p);
       else if (e.isFile() && ATTACHMENT_TYPES[extOf(e.name)]) out.push(p.normalize("NFC"));

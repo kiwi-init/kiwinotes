@@ -25,6 +25,8 @@ import type { NoteVersions } from "../notes/versions.ts";
 import { ExportError, type NoteExporter } from "../notes/export.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
+import type { NotesFolders } from "../notes/folders-workspace.ts";
+import { folderCapabilities } from "./folder-capabilities.ts";
 import type { MeetingNotes } from "../notes/meetings.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 import { checkMeetingSettingsPatch, NOT_RECORDING } from "../shared/meetings.ts";
@@ -32,6 +34,8 @@ import { listMeetings, type MeetingHost, MeetingHostError } from "./meetings.ts"
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
+  notesFolders?: NotesFolders;
+  chooseNotesFolder?(): Promise<string | null>;
   dictionary: { load(): Promise<DictionaryTerm[]>; save(terms: DictionaryTerm[]): Promise<DictionaryTerm[]>;
   };
   snippets: { load(): Promise<Snippet[]>; save(snippets: Snippet[]): Promise<Snippet[]>;
@@ -174,6 +178,7 @@ function optionalString(value: unknown, field: string, max: number,
 /** Os handlers do contrato, por nome. O AppEngine recusa (`E_NO_CAPABILITY`) qualquer nome fora daqui. */
 export function uiCapabilities(deps: CapabilityDeps,
 ): Record<UiCapability, (args: unknown) => Promise<unknown> | unknown> {
+  if (deps.notesFolders) return folderCapabilities(deps, uiCapabilities);
   const now = deps.now ?? Date.now;
   // O main não vê o clique: a UI só chama no gesto (navigator.userActivation), e aqui vai um limite de ritmo para uma
   // UI que tente encher o clipboard sozinha.
@@ -445,6 +450,8 @@ export function uiCapabilities(deps: CapabilityDeps,
       return true;
     },
     // O vault valida caminho, conteúdo e limites (E_OUTSIDE_VAULT, E_BAD_ARGS); aqui, os campos.
+    "notes.folder": () => { throw new CapabilityError("E_NO_FOLDERS","Este engine não troca a pasta das notas."); },
+    "notes.openFolder": () => { throw new CapabilityError("E_NO_FOLDERS","Este engine não troca a pasta das notas."); },
     "notes.list": async (args) => {
       noArgs(args, "notes.list");
       return (await vault()).list();

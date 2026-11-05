@@ -17,8 +17,9 @@ export function engineNotes(
   invoke: Invoke,
   on: (name: string, fn: (payload: unknown) => void) => () => void,
   has: (cap: string) => boolean = () => false,
+  folderId?: string,
 ): NotesApi {
-  const call = <T>(cap: string, args: object = {}) => invoke(cap, args) as Promise<T>;
+  const call = <T>(cap: string, args: object = {}) => invoke(cap, {...args,...(folderId?{folderId}:{})}) as Promise<T>;
   // As de pastas e as fixadas vêm juntas no contrato 1.7.0 (T2468, #2493). Num engine antigo, a janela esconde o que
   // depende delas; o `pinned` também, porque um campo desconhecido no settings.set dá E_INVALID.
   const withFolders = has("folders.create");
@@ -83,7 +84,7 @@ export function engineNotes(
     : undefined;
   // Os outros arquivos do cofre e as preferências da árvore (1.19.0, T3370).
   const files: NotesApi["files"] = has("files.open")
-    ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", () => fn()),
+    ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", e => {const event=e as {folderId?:string};if(!folderId||!event.folderId||event.folderId===folderId)fn();}),
       }
     : undefined;
   const treePrefs = (s: { showExtensions?: boolean; dailyFolder?: string;
@@ -95,10 +96,9 @@ export function engineNotes(
     ? {
         get: () => call<{ showExtensions?: boolean; dailyFolder?: string }>("settings.get",
           ).then(treePrefs),
-        onChanged: (fn) => on("settings.changed", (s) => fn(treePrefs((s ?? {}) as { showExtensions?: boolean; dailyFolder?: string },
-              ),
-            ),
-          ),
+        onChanged: (fn) => on("settings.changed", () => {
+          void call<{showExtensions?:boolean;dailyFolder?:string}>("settings.get").then(s=>fn(treePrefs(s)),()=>{});
+        }),
       }
     : undefined;
   return {
@@ -146,18 +146,18 @@ export function engineNotes(
     search: (query, limit) => call("notes.search", { query, ...(limit ? { limit } : {}) }),
     backlinks: (path) => call("notes.backlinks", { path }),
     resolve: (link) => call("notes.resolve", { link }),
-    onChanged: (fn) => on("notes.changed", (payload) => fn((payload as { paths: string[] }).paths),
-      ),
+    onChanged: (fn) => on("notes.changed", (payload) => {const e=payload as {paths:string[];folderId?:string};if(!folderId||!e.folderId||e.folderId===folderId)fn(e.paths);}),
   };
 }
 
 /** O vault desta janela, ou `null` quando o engine não tem as capacidades das notas. */
-export function notesApi(): NotesApi | null {
+export function notesApi(folderId?: string): NotesApi | null {
   const engine = window.engine;
   if (engine) return engine.has("notes.list") ? engineNotes(
           (c, a) => engine.invoke(c, a),
           (n, f) => engine.on(n, f),
           (c) => engine.has(c),
+          folderId,
         ) : null;
   if (!import.meta.env?.DEV) return null;
   // Só no Vite do navegador: os testes de interação simulam por aqui uma edição feita fora (no Obsidian).
