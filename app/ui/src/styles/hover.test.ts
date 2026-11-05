@@ -1,4 +1,4 @@
-// O hover fluido (T3821, spec #3816): um movimento só, em tokens, que os botões e as abas usam; o "Reduzir movimento"
+// O hover fluido (T3821, spec #3816): um movimento só, em tokens, para os botões; o "Reduzir movimento"
 // desliga. A T3826 (as linhas e a barra lateral) usa os mesmos nomes.
 
 import { describe, expect, test } from "bun:test";
@@ -34,13 +34,7 @@ describe("o hover fluido", () => {
     expect(rule(kit, ".kn-expand-label")).toContain("justify-self: stretch");
   });
 
-  test("as abas do hub crescem com o mesmo movimento, sem mudar a largura (nada de font-weight no hover)", () => {
-    const hub = css("hub/hub.css");
-    expect(rule(hub, ".kn-tab")).toContain("transform var(--hover-dur) var(--hover-ease) var(--hover-out-delay)");
-    const hover = rule(hub, ".kn-tab:hover,\n.kn-tab:focus-visible");
-    expect(hover).toContain("transform: scale(");
-    expect(hover).not.toContain("font-weight");
-  });
+  // T4535 substituiu o hover das abas; seu contrato é medido no WebKit por scripts/hub-tabs-ui-check.ts.
 
   test('o "Reduzir movimento" (o do sistema e o dos Ajustes) zera toda transição', () => {
     const base = css("src/styles/base.css");
