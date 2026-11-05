@@ -15,6 +15,8 @@ final class Overlay {
     var onCancel: (() -> Void)?
     /// ✓: stop and transcribe, like letting go of the key.
     var onFinish: (() -> Void)?
+    /// The pill came up (true) or left (false): the meeting panel steps aside meanwhile (R2).
+    var onVisibleChange: ((Bool) -> Void)?
 
     private let state = OverlayViewState()
     private var panel: NSPanel?
@@ -121,10 +123,12 @@ final class Overlay {
         }
         state.visible = true
         panel.orderFrontRegardless() // shows without activating us or taking the key window
+        onVisibleChange?(true)
     }
 
     private func hide() {
         state.visible = false
+        onVisibleChange?(false)
         // Let the fade-out play, then take the panel off screen so it costs nothing while idle.
         let work = DispatchWorkItem { [weak self] in self?.panel?.orderOut(nil) }
         orderOutWork = work

@@ -143,6 +143,22 @@ describe("LineDecoder", () => {
   });
 });
 
+test("meeting detection (R2): the pop-up's events, its answers and the meeting settings", () => {
+  const messages: Message[] = [
+    { v: 1, id: "c1", type: "config.set", meetingShortcut: "control+option+r", meetingPauseShortcut: null, meetingSuggest: true, meetingApps: [{ bundleId: "com.microsoft.teams2", name: "Teams" }] },
+    { v: 1, id: "a1", type: "meeting.answer", answer: "notNow" },
+    { v: 1, id: "d1", type: "debug.meetingMicUsers", users: [{ pid: 500, bundleId: "com.microsoft.teams2" }] },
+    { v: 1, type: "meeting.suggested", app: { bundleId: "com.microsoft.teams2", name: "Teams" } },
+    { v: 1, type: "meeting.endSuggested", app: { bundleId: "com.microsoft.teams2", name: "Teams" } },
+    { v: 1, type: "meeting.answered", answer: "keepGoing" },
+  ];
+  for (const message of messages) {
+    const parsed = parseLine(encode(message).trim());
+    expect(parsed).toEqual(message);
+    expect("id" in message ? isCommand(parsed) : isEvent(parsed)).toBe(true);
+  }
+});
+
 test("default socket lives in Application Support", () => {
   expect(defaultSocketPath("/Users/x")).toBe("/Users/x/Library/Application Support/KiwiNotes/sidecar.sock");
 });
