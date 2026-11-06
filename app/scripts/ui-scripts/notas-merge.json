@@ -1,0 +1,138 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Projeto",
+        "content": "Intro.\n\n- uma\n- duas\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Conflito",
+        "content": "Intro.\n\n- uma\n- duas\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-side-item:has-text('Projeto')"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+End"
+    },
+    {
+      "type": "\nEscrito no Kiwi.",
+      "name": "a pessoa escreve no fim"
+    },
+    {
+      "invoke": "notes.save",
+      "args": {
+        "path": "Projeto.md",
+        "content": "Intro mudada no Obsidian.\n\n- uma\n- duas\n",
+        "baseVersion": "current"
+      },
+      "name": "o Obsidian muda o começo, ao mesmo tempo"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Intro mudada no Obsidian",
+      "name": "a de fora entrou"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Escrito no Kiwi.",
+      "name": "e a minha ficou"
+    },
+    {
+      "expectCount": ".kn-merge",
+      "count": 0,
+      "name": "sem aviso: trechos diferentes"
+    },
+    {
+      "screenshot": "01-juntado-sem-aviso.png"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-side-item:has-text('Conflito')"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+End"
+    },
+    {
+      "type": "\nMinha linha.",
+      "name": "a pessoa acrescenta no fim"
+    },
+    {
+      "invoke": "notes.save",
+      "args": {
+        "path": "Conflito.md",
+        "content": "Intro do Obsidian.\n\n- uma\n- duas\n- três do Obsidian\n",
+        "baseVersion": "current"
+      },
+      "name": "o Obsidian muda o começo e também acrescenta no fim"
+    },
+    {
+      "waitFor": ".kn-merge",
+      "timeout": 4000,
+      "name": "o aviso com o trecho que bateu"
+    },
+    {
+      "expectCount": ".kn-merge-block",
+      "count": 1
+    },
+    {
+      "expectText": ".kn-merge-block",
+      "text": "três do Obsidian"
+    },
+    {
+      "screenshot": "02-so-o-trecho-que-bate.png"
+    },
+    {
+      "click": ".kn-merge button:has-text('Manter a minha')"
+    },
+    {
+      "expectCount": ".kn-merge",
+      "count": 0
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Minha linha.",
+      "name": "ficou a minha no trecho"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Intro do Obsidian",
+      "name": "e a de fora no resto"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "screenshot": "03-resolvido.png"
+    }
+  ]
+}
