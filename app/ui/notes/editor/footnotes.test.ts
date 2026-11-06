@@ -61,6 +61,14 @@ describe("notas de rodapé (T6377)", () => {
     ]);
   });
 
+  test("revisão 2: preço não é fórmula; %% dentro de código não abre comentário", () => {
+    const labels = (doc: string) => scanFootnotes(doc).marks.map((m) => (m.kind === "ref" ? m.label : m.text));
+    expect(labels("R$10[^1] ou R$ 20.")).toEqual(["1"]);
+    expect(labels("US$5[^1], depois US$ 7.")).toEqual(["1"]);
+    expect(labels("R$10[^1] ou R$20[^2] e $a$[^3], mas $x^[2]$.")).toEqual(["1", "2", "3"]);
+    expect(labels('```c\nprintf("%%d");\n```\nTexto[^1] e `%%`[^2].\n\n%% fim %%\n')).toEqual(["1", "2"]);
+  });
+
   test("revisão: uma linha cheia de ^[ sem fecho não trava", () => {
     const t = performance.now();
     scanFootnotes(`${"^[".repeat(20_000)}\n${"`".repeat(5000)}`);

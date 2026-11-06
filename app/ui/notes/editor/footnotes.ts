@@ -61,7 +61,8 @@ function codeSpans(line: string): [number, number][] {
     out.push([runs[i]!.at, runs[close]!.at + runs[i]!.len]);
     i = close;
   }
-  for (const m of line.matchAll(/\$\$[^$]+\$\$|\$(?!\s)[^$]*?[^\s\\$]\$(?!\d)|\$[^\s$\\]\$(?!\d)/g)) {
+  // Como o md4c: o `$` logo depois de letra ou número (R$10, US$5) não abre fórmula.
+  for (const m of line.matchAll(/(?<![\p{L}\p{N}\\])(?:\$\$[^$]+\$\$|\$(?!\s)[^$]*?[^\s\\$]\$(?!\d))/gu)) {
     if (!out.some(([a, b]) => m.index! >= a && m.index! < b)) out.push([m.index!, m.index! + m[0].length]);
   }
   return out;
@@ -72,6 +73,30 @@ const escaped = (line: string, at: number) => {
   for (let i = at - 1; i >= 0 && line[i] === "\\"; i--) n++;
   return n % 2 === 1;
 };
+
+/**
+ * A nota com o código (os blocos cercados e os trechos em linha) trocado por espaços, do mesmo tamanho: para achar os
+ * comentários sem que um `%%` de dentro do código (`printf("%%d")`) case com o de um comentário de verdade mais abaixo.
+ */
+function withoutCode(lines: string[]): string {
+  let fence: string | null = null;
+  return lines
+    .map((line) => {
+      const f = FENCE.exec(line);
+      if (fence) {
+        if (f && f[1]![0] === fence[0] && f[1]!.length >= fence.length && !line.slice(f[0].length).trim()) fence = null;
+        return " ".repeat(line.length);
+      }
+      if (f) {
+        fence = f[1]!;
+        return " ".repeat(line.length);
+      }
+      let out = line;
+      for (const [a, b] of codeSpans(line)) out = out.slice(0, a) + " ".repeat(b - a) + out.slice(b);
+      return out;
+    })
+    .join("\n");
+}
 
 /** A nota em linha mais longa que o leitor procura: sem limite, uma linha cheia de `^[` sem fecho trava o editor. */
 const MAX_INLINE = 2000;
@@ -96,7 +121,7 @@ export function scanFootnotes(doc: string): Footnotes {
   // Quase toda nota não tem nota de rodapé: nem lê.
   const lines = doc.includes("[^") || doc.includes("^[") ? doc.split("\n") : [];
   // Os comentários (`%%…%%`, `<!--…-->`) não aparecem: o que está dentro não ganha número.
-  const comments = lines.length ? [...doc.matchAll(/%%[\s\S]*?%%|<!--[\s\S]*?-->/g)].map((m) => [m.index!, m.index! + m[0].length] as const) : [];
+  const comments = lines.length ? [...withoutCode(lines).matchAll(/%%[\s\S]*?%%|<!--[\s\S]*?-->/g)].map((m) => [m.index!, m.index! + m[0].length] as const) : [];
   const inComment = (x: number) => comments.some(([a, b]) => x >= a && x < b);
   let at = 0;
   let fence: string | null = null;

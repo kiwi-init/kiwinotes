@@ -123,6 +123,11 @@ describe("notas de rodapé (T6377)", () => {
     expect(linkAction("kiwi-footnote:a%29b")).toEqual({ kind: "footnote", label: "a)b" });
     // `[^1]: Fonte:` é um link de referência para o parser, e a linha recuada viraria bloco de código: vão juntas.
     expect(blocks("X[^1].\n\n[^1]: Fonte:\n    https://x.com/a\n")).toEqual(["X[¹](kiwi-footnote:1).", "[¹](kiwi-footnote-def:1) Fonte:\n    https://x.com/a"]);
+    // O bloco de código do parser segue depois da linha em branco: nada fica cru no meio.
+    expect(blocks("X[^1].\n\n[^1]: Fonte:\n    https://x.com/a\n\n    mais um trecho\n")).toEqual([
+      "X[¹](kiwi-footnote:1).",
+      "[¹](kiwi-footnote-def:1) Fonte:\n    https://x.com/a\n\n    mais um trecho",
+    ]);
   });
 
   test("a chamada e a nota em linha viram o número, como link; a definição mostra o número dela", () => {

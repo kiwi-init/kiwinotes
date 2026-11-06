@@ -81,7 +81,12 @@ export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree 
     if (footnoteDef) {
       // As linhas recuadas logo abaixo continuam a nota: vão no mesmo bloco, e lá viram parágrafo (`toRenderable`).
       const def = footnotesOf(state).defs.find((d) => d.from === from);
-      if (def && def.to > to) to = covered = def.to;
+      if (def && def.to > to) {
+        to = def.to;
+        // O bloco de código que o parser fez com a continuação pode seguir depois de uma linha em branco: vai inteiro.
+        for (let m = n.nextSibling; m && m.from < to; m = m.nextSibling) to = Math.max(to, state.doc.lineAt(m.to).to);
+        covered = to;
+      }
     }
     if (focused && touches(state, from, to)) continue;
     const source = state.doc.sliceString(from, to);

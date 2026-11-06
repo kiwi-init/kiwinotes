@@ -714,7 +714,10 @@ function footnoteHover(actions: RenderedActions) {
       };
 
       escape = (e: KeyboardEvent) => {
-        if (e.key === "Escape" && this.tip) this.hide();
+        if (e.key !== "Escape" || !this.tip) return;
+        // O Esc fecha só o hover, não a janela ou o painel de trás.
+        e.stopPropagation();
+        this.hide();
       };
 
       over = (e: MouseEvent) => {
@@ -738,8 +741,9 @@ function footnoteHover(actions: RenderedActions) {
       mousedown = (e: MouseEvent) => {
         if (!this.tip?.contains(e.target as Node)) return this.hide();
         this.meta = e.metaKey;
-        // O foco fica no editor: sem foco, a nota inteira é redesenhada, e o hover perde o número de onde saiu.
-        e.preventDefault();
+        // No link, o foco fica no editor: sem foco, a nota inteira é redesenhada antes do clique. No texto, não: dá para
+        // selecionar e copiar.
+        if ((e.target as Element).closest?.("a")) e.preventDefault();
       };
 
       show(el: HTMLElement) {
