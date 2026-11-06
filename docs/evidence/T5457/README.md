@@ -5,6 +5,8 @@ Issue #157, onda 2 do levelup (spec Kiwi #5292). Decisão do harry (#4756); o cu
 **Nada aqui toca o `AppleFnUsageType` real.** No headless e com `KIWI_DEBUG=1`, o helper usa uma preferência falsa num arquivo (`fn-usage-fake.json`, ao lado do socket). O valor inicial vem de `KIWI_FAKE_FN_USAGE`: 0 nenhuma ação, 1 fonte de entrada, 2 emojis, 3 ditar. A de verdade (`TISUpdateFnUsageType`, o que os Ajustes chamam) só roda no app do harry.
 
 ## Ponta a ponta (CLI headless, helper de debug, sob o `kiwi lock bench`)
+
+![](ponta-a-ponta-headless.png)
 Com a preferência falsa em 2 (emojis):
 
 | passo | preferência | marca no disco |
