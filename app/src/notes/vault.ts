@@ -10,15 +10,17 @@ import { lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, wr
 import type { Stats } from "node:fs";
 import path from "node:path";
 
-import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
+import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
-import { bodyTags, hasTag, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
+import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
 import { fileNameFor, filePath, folderPath, inside, notePath, VaultError } from "./paths.ts";
+import { applyTextEdits, headingFor, headingKey, markdownStructure } from "../shared/markdown-structure.ts";
+import { noteReferences, referenceTarget, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
 
 export interface NoteMeta {
   /** Relativo ao vault, POSIX, com `.md`. */
@@ -615,7 +617,7 @@ export class Vault {
   }
 
   /** Renomeia ou move, e atualiza os [[links]] das outras notas que apontavam para ela. */
-  async rename(input: unknown, target: unknown): Promise<{ meta: NoteMeta; updatedLinks: number }> {
+  async rename(input: unknown, target: unknown): Promise<{ meta: NoteMeta; updatedLinks: number; skippedPaths: string[] }> {
     const from = notePath(input);
     const to = notePath(target);
     const fromAbs = inside(this.root, from);
@@ -638,6 +640,7 @@ export class Vault {
     const entry = await this.index(to, content, toAbs);
 
     let updatedLinks = 0;
+    const skippedPaths: string[] = [];
     // Com os apelidos (T5352): os da nota vão com ela para o caminho novo.
     const aliasesBefore = this.aliasMap();
     aliasesBefore.delete(to);
@@ -646,22 +649,98 @@ export class Vault {
     const resolveBefore = makeResolver(before, aliasesBefore);
     const resolveAfter = makeResolver(after, aliasesAfter);
     for (const e of [...this.notes.values()]) {
-      if (!e.links.some((t) => resolveBefore(t) === from)) continue;
-      // Do disco, e escrita condicional: se a nota mudar entre ler e escrever, lê de novo (até 3 vezes).
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const abs = inside(this.root, e.meta.path);
-        const disk = await readFile(abs, "utf8").catch(() => null);
-        if (disk === null) break;
-        const { content: next, count } = rewriteLinks(disk, from, to, resolveBefore, resolveAfter);
-        if (!count) break;
-        if (await this.write(e.meta.path, next, versionOf(disk))) {
-          updatedLinks += count;
-          break;
-        }
-      }
+      const result = await this.refactorNote(e.meta.path, disk => rewriteNoteReferences(
+        disk, e.meta.path === to ? from : e.meta.path, e.meta.path, from, to, resolveBefore, resolveAfter));
+      if (result.skipped) skippedPaths.push(e.meta.path);
+      updatedLinks += result.count;
     }
     this.emit([from, to]);
-    return { meta: (this.notes.get(to) ?? entry).meta, updatedLinks };
+    return { meta: (this.notes.get(to) ?? entry).meta, updatedLinks, skippedPaths };
+  }
+
+  /** E11: rewrite current disk text with the same CAS/retry guard as save. Never replace a concurrent edit. */
+  private async refactorNote(p: string, rewrite: (content: string) => { content: string; count: number; unsupported?: boolean }) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const disk = await readFile(inside(this.root, p), "utf8").catch(() => null);
+      if (disk === null) return { count: 0, skipped: true };
+      const next = rewrite(disk);
+      if (next.content === disk) return { count: 0, skipped: !!next.unsupported };
+      try {
+        if (await this.write(p, next.content, versionOf(disk))) return { count: next.count, skipped: !!next.unsupported };
+      } catch (error) {
+        if (["ENOENT", "EACCES", "EPERM", "EROFS", "ENOSPC"].includes((error as NodeJS.ErrnoException).code ?? "")) return { count: 0, skipped: true };
+        throw error;
+      }
+    }
+    return { count: 0, skipped: true };
+  }
+
+  async renameHeading(input: unknown, offset: unknown, title: unknown, baseVersion: unknown): Promise<RefactorResult> {
+    const p = notePath(input);
+    if (!Number.isInteger(offset) || (offset as number) < 0 || typeof title !== "string" || !title.trim() || title.length > 200 || /[\r\n\x00-\x1f\[\]#|]/.test(title) || typeof baseVersion !== "string")
+      throw new VaultError("E_BAD_ARGS", "a heading needs an offset, a single-line title and baseVersion");
+    const wanted = title.trim();
+    await this.scan();
+    const source = await this.get(p);
+    if (source.version !== baseVersion) throw new VaultError("E_CONFLICT", "the note changed; reopen the rename");
+    const headings = markdownStructure(source.content).headings;
+    const selected = headings.find(h => h.from <= (offset as number) && (offset as number) <= h.to);
+    if (!selected) throw new VaultError("E_BAD_ARGS", "no heading at offset");
+    const replacement = markdownStructure("# " + wanted).headings[0];
+    if (!replacement || !replacement.title || replacement.title !== wanted)
+      throw new VaultError("E_BAD_ARGS", "use a plain heading title");
+    if (headings.some(h => h !== selected && (headingKey(h.title) === headingKey(wanted) || h.slug === replacement.slug)))
+      throw new VaultError("E_EXISTS", "another heading already has this title");
+    if (source.content.slice(selected.textFrom, selected.textTo) === wanted) return { updatedNotes: 0, updatedReferences: 0, skippedPaths: [], warnings: await this.linkWarnings(p) };
+    const resolve = makeResolver([...this.notes.keys()], this.aliasMap());
+    const self = rewriteHeadingReferences(source.content, p, p, selected, headings, wanted, resolve);
+    // Rename the source heading first, then parse fresh reference ranges against the original heading identity.
+    const renamed = applyTextEdits(source.content, [{ from: selected.textFrom, to: selected.textTo, insert: wanted }]);
+    const selfAfter = rewriteHeadingReferences(renamed, p, p, selected, headings, wanted, resolve);
+    if (!await this.write(p, selfAfter.content, baseVersion)) throw new VaultError("E_CONFLICT", "the note changed; reopen the rename");
+    const result: RefactorResult = { updatedNotes: 1, updatedReferences: self.count, skippedPaths: [], warnings: [] };
+    for (const path of [...this.notes.keys()]) {
+      if (path === p) continue;
+      const r = await this.refactorNote(path, disk => rewriteHeadingReferences(disk, path, p, selected, headings, wanted, resolve));
+      if (r.count) result.updatedNotes++;
+      result.updatedReferences += r.count;
+      if (r.skipped) result.skippedPaths.push(path);
+    }
+    result.warnings = await this.linkWarnings(p);
+    return result;
+  }
+
+  async renameTag(from: unknown, to: unknown): Promise<RefactorResult> {
+    if (!validTag(from) || !validTag(to)) throw new VaultError("E_BAD_ARGS", "invalid tag");
+    const old = cleanTag(from)!, wanted = cleanTag(to)!;
+    await this.scan();
+    const entries = [...this.notes.values()];
+    if (!entries.some(e => hasTag(e.meta.tags, old))) throw new VaultError("E_NOT_FOUND", "no such tag");
+    if (tagKey(old) !== tagKey(wanted) && entries.some(e => e.meta.tags.some(t => !hasTag([t], old) && hasTag([t], wanted))))
+      throw new VaultError("E_EXISTS", "the destination tag already exists");
+    const result: RefactorResult = { updatedNotes: 0, updatedReferences: 0, skippedPaths: [], warnings: [] };
+    for (const e of entries) {
+      const r = await this.refactorNote(e.meta.path, disk => rewriteTag(disk, old, wanted));
+      if (r.count) result.updatedNotes++;
+      result.updatedReferences += r.count;
+      if (r.skipped) result.skippedPaths.push(e.meta.path);
+    }
+    return result;
+  }
+
+  /** At most 100 source locations. Missing fragments are distinct from missing notes; code is never a link. */
+  async linkWarnings(input: unknown): Promise<LinkWarning[]> {
+    const p = notePath(input), source = await this.get(p), resolve = makeResolver([...this.notes.keys()], this.aliasMap());
+    const warnings: LinkWarning[] = [];
+    for (const ref of noteReferences(source.content)) {
+      const target = referenceTarget(ref, p, resolve);
+      let reason: LinkWarning["reason"] | undefined;
+      if (!target) reason = "note";
+      else if (ref.fragment && !ref.fragment.startsWith("^") && !headingFor(markdownStructure(target === p ? source.content : this.notes.get(target)?.content ?? "").headings, ref.fragment)) reason = "heading";
+      if (reason) warnings.push({ path: p, target: ref.target + (ref.fragment ? "#" + ref.fragment : ""), reason, line: source.content.slice(0, ref.from).split("\n").length });
+      if (warnings.length === 100) break;
+    }
+    return warnings;
   }
 
   /**

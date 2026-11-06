@@ -1,3 +1,4 @@
+import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
 //
@@ -78,7 +79,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.30.0 (T5556): clipboard.read, only on an explicit paste gesture.
 // 1.31.0 (T5560): local spelling suggestions.
 // 1.32.0 (T5833): o `cues` nas settings, os sons de início e de fim. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.32.0";
+// 1.33.0 (T6014): refactors de título/tag e avisos de links quebrados. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.33.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -190,7 +192,7 @@ export interface UiCapabilities {
     }; result: Note;
   };
   /** Renomeia ou move, e atualiza os [[links]] das outras notas. */
-  "notes.rename": { args: { path: string; newPath: string }; result: { meta: NoteMeta; updatedLinks: number };
+  "notes.rename": { args: { path: string; newPath: string }; result: { meta: NoteMeta; updatedLinks: number; skippedPaths?: string[] };
   };
   /**
    * Não apaga: espera 10 min (o `notes.restore`) numa pasta oculta do vault e então vai para a Lixeira do macOS (1.7.0;
@@ -287,6 +289,9 @@ export interface UiCapabilities {
   "notes.resolve": { args: { link: string }; result: string | null };
   /** As tags do vault em árvore (`#projeto/kiwi` dentro de `projeto`), com quantas notas cada uma tem (1.9.0). */
   "notes.tags": { args: Record<string, never>; result: { tags: TagNode[] } };
+  "notes.renameHeading": { args: { path: string; offset: number; title: string; baseVersion: string }; result: RefactorResult };
+  "notes.renameTag": { args: { from: string; to: string }; result: RefactorResult };
+  "notes.linkWarnings": { args: { path: string }; result: { warnings: LinkWarning[] } };
   /** As notas da pasta de modelos (`templatesFolder` das settings), por nome (1.9.0). */
   "notes.templates": { args: Record<string, never>; result: { folder: string; templates: NoteMeta[] };
   };
@@ -361,6 +366,9 @@ export const UI_CAPABILITIES = [
   "notes.backlinks",
   "notes.resolve",
   "notes.tags",
+  "notes.renameHeading",
+  "notes.renameTag",
+  "notes.linkWarnings",
   "notes.templates",
   "attachments.save",
   "attachments.read",

@@ -53,6 +53,9 @@ export interface NotesApi {
   /** A pasta de modelos e as notas dela (T2619). Num engine antes do 1.9.0, não existe. */
   templates?(): Promise<{ folder: string; templates: NoteMeta[] }>;
   rename(path: string, newPath: string): Result<"notes.rename">;
+  renameHeading?(path: string, offset: number, title: string, baseVersion: string): Result<"notes.renameHeading">;
+  renameTag?(from: string, to: string): Result<"notes.renameTag">;
+  linkWarnings?(path: string): Result<"notes.linkWarnings">;
   /** Com o T2468, vai antes para `<vault>/.kiwi-trash/` por 10 min (o "Desfazer", `restore`), e depois para a Lixeira. */
   delete(path: string): Result<"notes.delete">;
   search(query: string, limit?: number): Result<"notes.search">;

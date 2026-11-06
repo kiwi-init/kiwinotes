@@ -1,0 +1,186 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Projeto Kiwi",
+        "content": "---\naliases: [Projeto Inicial]\ntags: [projeto, projeto/reunioes, ocupada] # manter\n---\n# Plano antigo\n\nAs notas ficam locais. #projeto\n\n[[#Plano antigo|Veja o plano]]\n\n`[[Projeto Kiwi]]`"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Referências",
+        "content": "Consulte [[Projeto Kiwi#Plano antigo|plano do Kiwi]] e [o plano](Projeto%20Kiwi.md#Plano%20antigo).\n\n#projeto/reunioes\n\n[[Ainda não existe]]\n\n[[Projeto Inicial#Plano antigo]]"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Projeto Kiwi"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Projeto Kiwi\")"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-note-editor h1:has-text(\"Plano antigo\")"
+    },
+    {
+      "click": ".kn-note-editor h1:has-text(\"Plano antigo\")",
+      "button": "right",
+      "position": {
+        "x": 30,
+        "y": 8
+      }
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text(\"Renomear título e seus links\")"
+    },
+    {
+      "screenshot": "01-menu-titulo.png"
+    },
+    {
+      "click": ".kn-menu-item:has-text(\"Renomear título e seus links\")"
+    },
+    {
+      "waitFor": "[role=dialog][aria-label=\"Renomear título\"]"
+    },
+    {
+      "fill": "[aria-label=\"Novo nome\"]",
+      "text": "Plano atual"
+    },
+    {
+      "screenshot": "02-renomear-titulo.png"
+    },
+    {
+      "click": "[role=dialog] button[type=submit]"
+    },
+    {
+      "waitFor": "[role=dialog]",
+      "state": "hidden"
+    },
+    {
+      "waitFor": ".kn-note-editor h1:has-text(\"Plano atual\")"
+    },
+    {
+      "click": ".kn-meta-bt[title=\"Notas com #projeto\"]",
+      "button": "right"
+    },
+    {
+      "click": ".kn-menu-item:has-text(\"Renomear #projeto\")"
+    },
+    {
+      "fill": "[aria-label=\"Novo nome\"]",
+      "text": "ocupada"
+    },
+    {
+      "click": "[role=dialog] button[type=submit]"
+    },
+    {
+      "waitFor": "[role=dialog] [role=alert]"
+    },
+    {
+      "expectText": "[role=dialog] [role=alert]",
+      "text": "já está em uso"
+    },
+    {
+      "fill": "[aria-label=\"Novo nome\"]",
+      "text": "trabalho"
+    },
+    {
+      "screenshot": "03-renomear-tag.png"
+    },
+    {
+      "click": "[role=dialog] button[type=submit]"
+    },
+    {
+      "waitFor": "[role=dialog]",
+      "state": "hidden"
+    },
+    {
+      "waitFor": ".kn-meta-bt:has-text(\"#trabalho\")"
+    },
+    {
+      "fill": ".kn-title",
+      "text": "Projeto atualizado"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "wait": 250
+    },
+    {
+      "screenshot": "04-nota-renomeada.png"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Referências"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Referências\")"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-link-warnings summary"
+    },
+    {
+      "click": ".kn-link-warnings summary"
+    },
+    {
+      "expectText": ".kn-link-warnings",
+      "text": "Ainda não existe"
+    },
+    {
+      "expectText": ".kn-meta",
+      "text": "#trabalho/reunioes"
+    },
+    {
+      "screenshot": "05-referencias.png"
+    },
+    {
+      "invoke": "notes.get",
+      "args": {
+        "path": "Projeto atualizado.md"
+      }
+    },
+    {
+      "invoke": "notes.get",
+      "args": {
+        "path": "Referências.md"
+      }
+    },
+    {
+      "invoke": "notes.linkWarnings",
+      "args": {
+        "path": "Referências.md"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Ainda não existe",
+        "content": "# Cheguei"
+      }
+    },
+    {
+      "waitFor": ".kn-link-warnings",
+      "state": "hidden"
+    },
+    {
+      "screenshot": "06-link-resolvido.png"
+    }
+  ]
+}

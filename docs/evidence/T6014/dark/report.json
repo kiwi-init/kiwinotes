@@ -1,0 +1,414 @@
+{
+  "ok": true,
+  "window": "notes",
+  "browser": "webkit",
+  "out": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6014/docs/evidence/T6014/dark",
+  "steps": [
+    {
+      "n": 1,
+      "step": "invoke notes.create",
+      "ok": true,
+      "ms": 9,
+      "value": {
+        "path": "Projeto Kiwi.md",
+        "title": "Projeto Kiwi",
+        "folder": "",
+        "mtime": "2026-11-06T15:52:42.062Z",
+        "ctime": "2026-11-06T15:52:42.062Z",
+        "size": 186,
+        "version": "34141a1895d7fb4e",
+        "tags": [
+          "projeto",
+          "projeto/reunioes",
+          "ocupada"
+        ],
+        "content": "---\naliases: [Projeto Inicial]\ntags: [projeto, projeto/reunioes, ocupada] # manter\n---\n# Plano antigo\n\nAs notas ficam locais. #projeto\n\n[[#Plano antigo|Veja o plano]]\n\n`[[Projeto Kiwi]]`"
+      }
+    },
+    {
+      "n": 2,
+      "step": "invoke notes.create",
+      "ok": true,
+      "ms": 6,
+      "value": {
+        "path": "Referências.md",
+        "title": "Referências",
+        "folder": "",
+        "mtime": "2026-11-06T15:52:42.069Z",
+        "ctime": "2026-11-06T15:52:42.068Z",
+        "size": 175,
+        "version": "d34d4604af7f61b9",
+        "tags": [
+          "projeto/reunioes"
+        ],
+        "content": "Consulte [[Projeto Kiwi#Plano antigo|plano do Kiwi]] e [o plano](Projeto%20Kiwi.md#Plano%20antigo).\n\n#projeto/reunioes\n\n[[Ainda não existe]]\n\n[[Projeto Inicial#Plano antigo]]"
+      }
+    },
+    {
+      "n": 3,
+      "step": "waitFor .kn-crumb-bt",
+      "ok": true,
+      "ms": 35
+    },
+    {
+      "n": 4,
+      "step": "press Meta+k",
+      "ok": true,
+      "ms": 15
+    },
+    {
+      "n": 5,
+      "step": "type Projeto Kiwi",
+      "ok": true,
+      "ms": 39
+    },
+    {
+      "n": 6,
+      "step": "waitFor .kn-palette-it:has-text(\"Projeto Kiwi\")",
+      "ok": true,
+      "ms": 5
+    },
+    {
+      "n": 7,
+      "step": "press Enter",
+      "ok": true,
+      "ms": 2
+    },
+    {
+      "n": 8,
+      "step": "waitFor .kn-note-editor h1:has-text(\"Plano antigo\")",
+      "ok": true,
+      "ms": 88
+    },
+    {
+      "n": 9,
+      "step": "click .kn-note-editor h1:has-text(\"Plano antigo\")",
+      "ok": true,
+      "ms": 45
+    },
+    {
+      "n": 10,
+      "step": "waitFor .kn-menu-item:has-text(\"Renomear título e seus links\")",
+      "ok": true,
+      "ms": 3
+    },
+    {
+      "n": 11,
+      "step": "screenshot 01-menu-titulo.png",
+      "ok": true,
+      "ms": 79,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6014/docs/evidence/T6014/dark/01-menu-titulo.png"
+    },
+    {
+      "n": 12,
+      "step": "click .kn-menu-item:has-text(\"Renomear título e seus links\")",
+      "ok": true,
+      "ms": 45
+    },
+    {
+      "n": 13,
+      "step": "waitFor [role=dialog][aria-label=\"Renomear título\"]",
+      "ok": true,
+      "ms": 5
+    },
+    {
+      "n": 14,
+      "step": "fill [aria-label=\"Novo nome\"]",
+      "ok": true,
+      "ms": 7
+    },
+    {
+      "n": 15,
+      "step": "screenshot 02-renomear-titulo.png",
+      "ok": true,
+      "ms": 82,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6014/docs/evidence/T6014/dark/02-renomear-titulo.png"
+    },
+    {
+      "n": 16,
+      "step": "click [role=dialog] button[type=submit]",
+      "ok": true,
+      "ms": 36
+    },
+    {
+      "n": 17,
+      "step": "waitFor [role=dialog]",
+      "ok": true,
+      "ms": 2
+    },
+    {
+      "n": 18,
+      "step": "waitFor .kn-note-editor h1:has-text(\"Plano atual\")",
+      "ok": true,
+      "ms": 86
+    },
+    {
+      "n": 19,
+      "step": "click .kn-meta-bt[title=\"Notas com #projeto\"]",
+      "ok": true,
+      "ms": 54
+    },
+    {
+      "n": 20,
+      "step": "click .kn-menu-item:has-text(\"Renomear #projeto\")",
+      "ok": true,
+      "ms": 45
+    },
+    {
+      "n": 21,
+      "step": "fill [aria-label=\"Novo nome\"]",
+      "ok": true,
+      "ms": 8
+    },
+    {
+      "n": 22,
+      "step": "click [role=dialog] button[type=submit]",
+      "ok": true,
+      "ms": 40
+    },
+    {
+      "n": 23,
+      "step": "waitFor [role=dialog] [role=alert]",
+      "ok": true,
+      "ms": 25
+    },
+    {
+      "n": 24,
+      "step": "expectText [role=dialog] [role=alert]",
+      "ok": true,
+      "ms": 6
+    },
+    {
+      "n": 25,
+      "step": "fill [aria-label=\"Novo nome\"]",
+      "ok": true,
+      "ms": 5
+    },
+    {
+      "n": 26,
+      "step": "screenshot 03-renomear-tag.png",
+      "ok": true,
+      "ms": 86,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6014/docs/evidence/T6014/dark/03-renomear-tag.png"
+    },
+    {
+      "n": 27,
+      "step": "click [role=dialog] button[type=submit]",
+      "ok": true,
+      "ms": 44
+    },
+    {
+      "n": 28,
+      "step": "waitFor [role=dialog]",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 29,
+      "step": "waitFor .kn-meta-bt:has-text(\"#trabalho\")",
+      "ok": true,
+      "ms": 32
+    },
+    {
+      "n": 30,
+      "step": "fill .kn-title",
+      "ok": true,
+      "ms": 8
+    },
+    {
+      "n": 31,
+      "step": "press Enter",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 32,
+      "step": "wait 250",
+      "ok": true,
+      "ms": 252
+    },
+    {
+      "n": 33,
+      "step": "screenshot 04-nota-renomeada.png",
+      "ok": true,
+      "ms": 67,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6014/docs/evidence/T6014/dark/04-nota-renomeada.png"
+    },
+    {
+      "n": 34,
+      "step": "press Meta+k",
+      "ok": true,
+      "ms": 5
+    },
+    {
+      "n": 35,
+      "step": "type Referências",
+      "ok": true,
+      "ms": 26
+    },
+    {
+      "n": 36,
+      "step": "waitFor .kn-palette-it:has-text(\"Referências\")",
+      "ok": true,
+      "ms": 3
+    },
+    {
+      "n": 37,
+      "step": "press Enter",
+      "ok": true,
+      "ms": 2
+    },
+    {
+      "n": 38,
+      "step": "waitFor .kn-link-warnings summary",
+      "ok": true,
+      "ms": 26
+    },
+    {
+      "n": 39,
+      "step": "click .kn-link-warnings summary",
+      "ok": true,
+      "ms": 31
+    },
+    {
+      "n": 40,
+      "step": "expectText .kn-link-warnings",
+      "ok": true,
+      "ms": 6
+    },
+    {
+      "n": 41,
+      "step": "expectText .kn-meta",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 42,
+      "step": "screenshot 05-referencias.png",
+      "ok": true,
+      "ms": 63,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6014/docs/evidence/T6014/dark/05-referencias.png"
+    },
+    {
+      "n": 43,
+      "step": "invoke notes.get",
+      "ok": true,
+      "ms": 1,
+      "value": {
+        "path": "Projeto atualizado.md",
+        "title": "Projeto atualizado",
+        "folder": "",
+        "mtime": "2026-11-06T15:52:42.970Z",
+        "ctime": "2026-11-06T15:52:42.970Z",
+        "size": 187,
+        "version": "1b3255b90e248d2c",
+        "tags": [
+          "trabalho",
+          "trabalho/reunioes",
+          "ocupada"
+        ],
+        "content": "---\naliases: [Projeto Inicial]\ntags: [trabalho, trabalho/reunioes, ocupada] # manter\n---\n# Plano atual\n\nAs notas ficam locais. #trabalho\n\n[[#Plano atual|Veja o plano]]\n\n`[[Projeto Kiwi]]`"
+      }
+    },
+    {
+      "n": 44,
+      "step": "invoke notes.get",
+      "ok": true,
+      "ms": 1,
+      "value": {
+        "path": "Referências.md",
+        "title": "Referências",
+        "folder": "",
+        "mtime": "2026-11-06T15:52:43.011Z",
+        "ctime": "2026-11-06T15:52:43.011Z",
+        "size": 185,
+        "version": "a934df59a63231d3",
+        "tags": [
+          "trabalho/reunioes"
+        ],
+        "content": "Consulte [[Projeto atualizado#Plano atual|plano do Kiwi]] e [o plano](Projeto%20atualizado.md#Plano%20atual).\n\n#trabalho/reunioes\n\n[[Ainda não existe]]\n\n[[Projeto Inicial#Plano atual]]"
+      }
+    },
+    {
+      "n": 45,
+      "step": "invoke notes.linkWarnings",
+      "ok": true,
+      "ms": 1,
+      "value": {
+        "warnings": [
+          {
+            "path": "Referências.md",
+            "target": "Ainda não existe",
+            "reason": "note",
+            "line": 5
+          }
+        ]
+      }
+    },
+    {
+      "n": 46,
+      "step": "invoke notes.create",
+      "ok": true,
+      "ms": 1,
+      "value": {
+        "path": "Ainda não existe.md",
+        "title": "Ainda não existe",
+        "folder": "",
+        "mtime": "2026-11-06T15:52:43.495Z",
+        "ctime": "2026-11-06T15:52:43.495Z",
+        "size": 9,
+        "version": "7d2c5d4225a1d9cf",
+        "tags": [],
+        "content": "# Cheguei"
+      }
+    },
+    {
+      "n": 47,
+      "step": "waitFor .kn-link-warnings",
+      "ok": true,
+      "ms": 29
+    },
+    {
+      "n": 48,
+      "step": "screenshot 06-link-resolvido.png",
+      "ok": true,
+      "ms": 66,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6014/docs/evidence/T6014/dark/06-link-resolvido.png"
+    }
+  ],
+  "ready": true,
+  "problems": [],
+  "clipboard": [],
+  "blocked": [],
+  "invokes": {
+    "settings.get": 5,
+    "notes.folder": 1,
+    "notes.list": 13,
+    "trash.list": 9,
+    "notes.tags": 12,
+    "notes.get": 7,
+    "notes.backlinks": 12,
+    "notes.linkWarnings": 10,
+    "notes.renameHeading": 1,
+    "notes.renameTag": 2,
+    "notes.rename": 1,
+    "notes.resolve": 6
+  },
+  "invokeErrors": [
+    {
+      "cap": "notes.renameTag",
+      "code": "E_EXISTS",
+      "message": "the destination tag already exists"
+    },
+    {
+      "cap": "notes.get",
+      "code": "E_NOT_FOUND",
+      "message": "no note Projeto Kiwi.md"
+    },
+    {
+      "cap": "notes.linkWarnings",
+      "code": "E_NOT_FOUND",
+      "message": "no note Projeto Kiwi.md"
+    }
+  ]
+}

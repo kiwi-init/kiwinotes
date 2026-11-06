@@ -1,4 +1,5 @@
 // T5556: menu operations share E1 transactions; clipboard access happens only after a chosen action.
+import { markdownStructure } from "../../../src/shared/markdown-structure.ts";
 import type { EditorState, TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { startCompletion } from "@codemirror/autocomplete";
@@ -42,7 +43,7 @@ export async function pasteSelection(view: ClipboardTarget, clipboard: EditorCli
   view.focus();
 }
 
-export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void): MenuItem[] {
+export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void, onRenameHeading?: (offset: number, title: string, source: string) => void): MenuItem[] {
   const chosenState = view.state;
   const safe = () => unchanged(view, chosenState);
   const perform = (action: () => void) => () => { if (safe()) { action(); view.focus(); } };
@@ -62,6 +63,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
     view.dispatch({ changes: { from: sel.from, to: sel.to, insert: result.insert }, selection: { anchor: sel.from + result.cursor }, userEvent: "input.type", scrollIntoView: true });
     if (id === "link") startCompletion(view);
   });
+  const heading = onRenameHeading ? markdownStructure(chosenState.doc.toString()).headings.find(h => h.from <= chosenState.selection.main.head && chosenState.selection.main.head <= h.to) : undefined;
   const selected = !view.state.selection.main.empty;
   const range = tableAt(view.state);
   const ctx = range && view.state.selection.ranges.length === 1
@@ -75,6 +77,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
       })),
     })) }, { kind: "separator" }] : [];
   return [
+    ...(heading ? [{ label: "Renomear título e seus links…", onSelect: perform(() => onRenameHeading?.(heading.from, heading.title, chosenState.doc.toString())) }, { kind: "separator" as const }] : []),
     ...tableItems,
     { kind: "submenu", label: "Formatar", items: [
       ...["Mod-b", "Mod-i", "Shift-Mod-x", "Shift-Mod-h", "Mod-e", "Mod-/"].map(command),

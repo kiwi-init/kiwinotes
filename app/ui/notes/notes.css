@@ -1031,3 +1031,10 @@ body {
 
 /* The context menu replaces the selection toolbar until it closes, preserving the selection. */
 .kn-note-editor[data-context-menu-open] .kn-fmt { display: none; }
+
+/* E11: quiet, expandable broken-reference hints; source text stays in the editor. */
+.kn-link-warnings { margin: 8px 0 18px; padding: 10px 13px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-3); font-size: 12px; line-height: 1.55; }
+.kn-link-warnings summary { cursor: pointer; color: var(--text); }
+.kn-link-warnings ul { padding-left: 20px; margin: 8px 0 0; }
+.kn-link-warnings li { overflow-wrap: anywhere; }
+.kn-link-warnings li span { color: var(--text); }

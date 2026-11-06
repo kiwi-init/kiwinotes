@@ -1,0 +1,20 @@
+{
+  "light": {
+    "steps": 48,
+    "passed": true,
+    "exactSavedReferencesChecked": true,
+    "aliasesAndCodePreserved": true,
+    "problems": [],
+    "blocked": [],
+    "clipboard": []
+  },
+  "dark": {
+    "steps": 48,
+    "passed": true,
+    "exactSavedReferencesChecked": true,
+    "aliasesAndCodePreserved": true,
+    "problems": [],
+    "blocked": [],
+    "clipboard": []
+  }
+}
