@@ -1052,3 +1052,22 @@ body {
 .kn-link-warnings ul { padding-left: 20px; margin: 8px 0 0; }
 .kn-link-warnings li { overflow-wrap: anywhere; }
 .kn-link-warnings li span { color: var(--text); }
+
+/* O modo foco (T6385, E13): somem a barra de cima, as migalhas, a meta, o sumário e os avisos; fica só o texto. */
+.kn-notes .kn-bar,
+.kn-notes .kn-page-crumbs,
+.kn-notes .kn-meta,
+.kn-notes .kn-outline,
+.kn-notes .kn-link-warnings {
+  transition: opacity var(--slow) var(--ease);
+}
+
+.kn-notes[data-focus] .kn-bar,
+.kn-notes[data-focus] .kn-page-crumbs,
+.kn-notes[data-focus] .kn-meta,
+.kn-notes[data-focus] .kn-outline,
+.kn-notes[data-focus] .kn-link-warnings {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
