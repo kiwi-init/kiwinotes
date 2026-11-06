@@ -73,7 +73,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `meetings.shortcut|pauseShortcut` continuam, iguais aos `shortcuts`, mas agora qualquer atalho cabe neles. Só acréscimo.
 // 1.27.0 (T5458): o `cancel` nos `shortcuts` (o Esc durante o ditado, L5) e o `bareKey` do `shortcuts.record`. Só acréscimo.
 // 1.28.0 (T5459): o `pasteLast` nos `shortcuts`, o "colar a última" (L9). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.28.0";
+// 1.29.0 (T5455): local dictation recovery, history.retry and history.changed.
+export const UI_CONTRACT_VERSION = "1.29.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -97,6 +98,7 @@ export interface UiCapabilities {
   "snippets.set": { args: { snippets: Snippet[] }; result: Snippet[] };
   "history.search": { args: { query?: string; limit?: number; before?: string }; result: HistoryPage;
   };
+  "history.retry": {args:{id:string};result:HistoryEntry};
   "history.delete": { args: { id: string }; result: boolean };
   /**
    * "Enviar para nota…" (1.2.0, T1320): o ditado vai para o fim da nota `path` ou, sem `path`, para uma nota nova em
@@ -327,6 +329,7 @@ export const UI_CAPABILITIES = [
   "snippets.get",
   "snippets.set",
   "history.search",
+  "history.retry",
   "history.delete",
   "history.toNote",
   "settings.get",
@@ -389,6 +392,7 @@ export interface UiEvents {
   "notes.folderChanged": FolderView;
   /** Um ditado novo entrou no histórico. */
   "history.added": HistoryEntry;
+  "history.changed": Record<string,never>;
   /** Notas criadas, mudadas, apagadas ou renomeadas, inclusive fora do app (o watcher do vault). */
   "notes.changed": { paths: string[]; folderId?: string };
   /** Arquivos que não são nota apareceram, mudaram ou sumiram, inclusive fora do app (1.19.0): a árvore lista de novo. */

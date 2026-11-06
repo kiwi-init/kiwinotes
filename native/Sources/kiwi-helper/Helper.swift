@@ -8,6 +8,8 @@ final class Helper {
 
     private let connection: SocketConnection
     private let dumpDirectory: URL?
+    private let recordingJournal: RecordingJournal?
+    private var currentRecovery: RecordingRecovery?
     /// The mic the dictation records from (T3229, spec #3202): the Mac's when the output is a Bluetooth headset.
     private let mic: MicSelection
     private let audio: AudioCapture
@@ -59,9 +61,10 @@ final class Helper {
     /// R2 (#195): which app takes the mic, the pop-up, the meeting shortcuts and the meeting pill.
     private var meeting: MeetingController!
 
-    init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false, meetingDirectory: URL? = nil) {
+    init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false, meetingDirectory: URL? = nil, recoveryDirectory: URL? = nil) {
         self.connection = connection
         self.dumpDirectory = dumpDirectory
+        self.recordingJournal = recoveryDirectory.map { RecordingJournal(directory: $0) }
         self.headless = headless
         self.meetingDirectory = meetingDirectory
         let mic = MicSelection()
@@ -80,6 +83,9 @@ final class Helper {
         meeting.stopCapture = { [weak self] in self?.meetingCommand("meeting.stop") }
         meeting.setMinePaused = { [weak self] paused in self?.meetingCommand(paused ? "meeting.pauseMine" : "meeting.resumeMine") }
         meeting.emit = { [weak self] type, fields in self?.emit(type, fields) }
+        let journal = recordingJournal
+        audio.onRetainedSamples = { [journal] samples, offset in journal?.append(samples, at: offset) }
+        journal?.onError = { [weak self] _ in self?.emit("log", ["level": "warn", "message": "mic: recording_storage"]) }
         audio.onLevel = { [weak self] level in
             // Level queue: send straight away, the write queue serializes it.
             self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
@@ -111,6 +117,7 @@ final class Helper {
                 let busy = MicBusy.classify(code, otherApps: MicDiagnostics.otherApps())
                 var fields: [String: Any] = ["reason": "hotkey", "error": busy.code, "microphone": Permission.microphone.status]
                 if let app = busy.app { fields["busyApp"] = app }
+                if let recovery = self.finishRecovery() { fields["recovery"] = recovery.fields }
                 self.emit("record.error", fields)
                 return self.overlay.set(.error, message: busy.app.map(MicBusy.message) ?? OverlayText.error(busy.code))
             }
@@ -135,6 +142,7 @@ final class Helper {
             // No orphan sidecar: when the app goes away, so do we.
             DispatchQueue.main.async {
                 _ = self?.audio.stop()
+                _ = self?.finishRecovery()
                 try? self?.meetings?.capture.stop()
                 exit(0)
             }
@@ -380,6 +388,13 @@ final class Helper {
         let stale = !headless && mic.isStale()
         if stale { audio.inputChanged("mic changed since the warm-up") }
         if let pick = stale ? mic.peek() : mic.last { started["microphone"] = pick.fields }
+        do { try beginRecovery(&started) }
+        catch {
+            emit("record.started", started)
+            emit("record.error", ["reason": reason, "error": "recording_storage", "microphone": Permission.microphone.status])
+            overlay.set(.error, message: "Não foi possível guardar o áudio")
+            return "recording_storage"
+        }
         emit("record.started", started)
         overlay.set(.listening)
         let t0 = ProcessInfo.processInfo.systemUptime
@@ -400,6 +415,7 @@ final class Helper {
                 if let app = busy.app { fields["busyApp"] = app }
             }
             fields["error"] = code
+            if let recovery = finishRecovery() { fields["recovery"] = recovery.fields }
             emit("record.error", fields)
             let shown = microphone == "granted" ? code : microphone == "undetermined" ? "microphone_undetermined" : "microphone_denied"
             overlay.set(.error, message: busyApp.map(MicBusy.message) ?? OverlayText.error(shown))
@@ -433,6 +449,8 @@ final class Helper {
             "samples": samples.count,
         ]
         if let lost { fields["lost"] = lost }
+        let recovery = finishRecovery()
+        if let recovery { fields["recovery"] = recovery.fields }
         let audioPath = dump(samples)
         if let audioPath { fields["audioPath"] = audioPath }
         recordingStartedAt = nil
@@ -440,12 +458,12 @@ final class Helper {
         // The app moves it on with overlay.state done|error. With nothing recorded (the mic prompt was up,
         // or the engine never delivered) there is nothing to transcribe, so no `done` would come: hide now.
         overlay.set(samples.isEmpty ? .hidden : .processing)
-        transcribe(samples, durationMs: fields["durationMs"] as! Int, audioPath: audioPath, releasedAt: releasedAt)
+        transcribe(samples, durationMs: fields["durationMs"] as! Int, audioPath: audioPath, releasedAt: releasedAt, recovery: recovery)
     }
 
     /// `transcript.final` for a finished recording, or `transcript.error`. `latencyMs` goes from the end of the
     /// recording (the key let go) to the text, waiting behind an earlier transcription included.
-    private func transcribe(_ samples: [Float], durationMs: Int, audioPath: String?, releasedAt: TimeInterval? = nil) {
+    private func transcribe(_ samples: [Float], durationMs: Int, audioPath: String?, releasedAt: TimeInterval? = nil, recovery: RecordingRecovery? = nil) {
         // From the key let go, tail included (T5456): the person waits from there.
         let stoppedAt = releasedAt ?? ProcessInfo.processInfo.systemUptime
         let previous = sttChain
@@ -461,12 +479,15 @@ final class Helper {
                     "latencyMs": Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000),
                 ]
                 if let audioPath { fields["audioPath"] = audioPath }
+                if let recovery { fields["recovery"] = recovery.fields }
                 self?.emit("transcript.final", fields)
                 // The model loaded now, after a failed start (offline on the first run, #383).
                 self?.setSTT(.ready)
             } catch {
                 let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
-                self?.emit("transcript.error", ["error": code])
+                var fields: [String: Any] = ["error": code]
+                if let recovery { fields["recovery"] = recovery.fields }
+                self?.emit("transcript.error", fields)
                 if code == Transcriber.Failure.modelUnavailable.rawValue {
                     self?.setSTT(.unavailable, ["error": code])
                 }
@@ -477,9 +498,58 @@ final class Helper {
     private func cancelRecording(reason: String) {
         guard audio.isRecording else { return }
         _ = audio.stop()
+        try? recordingJournal?.cancel()
+        currentRecovery = nil
         recordingStartedAt = nil
         emit("record.cancelled", ["reason": reason])
         overlay.set(.hidden)
+    }
+
+    private func beginRecovery(_ started: inout [String: Any]) throws {
+        guard let recordingJournal else { return }
+        let app = started["app"] as? [String: String]
+        let metadata = try recordingJournal.begin(app: app?["bundleId"].map { RecordingApp(bundleId: $0, name: app?["name"]) }, target: started["target"] as? String)
+        currentRecovery = metadata
+        started["recovery"] = metadata.fields
+    }
+
+    private func finishRecovery() -> RecordingRecovery? {
+        let metadata = currentRecovery
+        currentRecovery = nil
+        do { return try recordingJournal?.finish() }
+        catch {
+            emit("log", ["level": "warn", "message": "mic: recording_storage"])
+            return metadata // keep the readable prefix, never erase it after an I/O failure
+        }
+    }
+
+    /// Only managed UUIDs; a retry never starts a device or emits a new recording into the dictation FIFO.
+    private func retryRecording(_ id: String?, _ message: InboundMessage) {
+        guard let recordingJournal, let recordingId = message.string("recordingId"), RecordingJournal.isIdentifier(recordingId) else {
+            return reply(id, ok: false, error: "invalid_value")
+        }
+        guard currentRecovery?.id != recordingId else { return reply(id, ok: false, error: "already_recording") }
+        let samples: [Float]
+        do {
+            let file = try recordingJournal.audioURL(recordingId)
+            guard try RecordingJournal.repair(file) > 0 else { return reply(id, ok: false, error: "no_audio") }
+            samples = try AudioFile.samples16k(file)
+        } catch { return reply(id, ok: false, error: "recovery_unavailable") }
+        let previous = sttChain
+        let started = ProcessInfo.processInfo.systemUptime
+        sttChain = Task { @MainActor [stt, weak self] in
+            await previous?.value
+            do {
+                let output = try await stt.transcribe(samples)
+                self?.reply(id, ok: true, ["text": output.text, "raw": output.raw, "lang": output.lang,
+                    "durationMs": Int(Double(samples.count) / AudioCapture.sampleRate * 1000),
+                    "latencyMs": Int((ProcessInfo.processInfo.systemUptime - started) * 1000)])
+                self?.setSTT(.ready)
+            } catch {
+                let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
+                self?.reply(id, ok: false, error: code)
+            }
+        }
     }
 
     private func dump(_ samples: [Float]) -> String? {
@@ -528,6 +598,8 @@ final class Helper {
                 let result = try meetingCommands().handle(message)
                 reply(id, ok: result.ok, error: result.error, result.data)
             } catch { reply(id, ok: false, error: "meeting_unavailable") }
+        case "dictation.retry":
+            retryRecording(id, message)
         case "ping":
             reply(id, ok: true)
         case "config.set":
@@ -752,13 +824,16 @@ final class Helper {
             started["app"] = ["bundleId": bundleId, "name": (app["name"] as? String) ?? bundleId]
         } else if message.fields["app"] != nil {
             return reply(id, ok: false, error: "invalid_value")
-        } else if let app = FrontApp.current {
+        } else if !headless, let app = FrontApp.current {
             started["app"] = ["bundleId": app.bundleId, "name": app.name]
         }
         if let target = message.string("target") {
             guard target == "note" else { return reply(id, ok: false, error: "invalid_value") }
             started["target"] = "note"
         }
+        do { try beginRecovery(&started) }
+        catch { return reply(id, ok: false, error: "recording_storage") }
+        recordingJournal?.append(samples, at: 0)
         reply(id, ok: true)
         emit("record.started", started)
         overlay.set(.listening)

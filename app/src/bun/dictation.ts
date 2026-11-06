@@ -8,7 +8,7 @@
 
 import { cleanup, llmSystemMessage } from "../cleanup/index.ts";
 import type { LlmBackend, LlmMode, Tone } from "../cleanup/types.ts";
-import type { AppRef, Command, Event, EventMessage, InsertSimulation, ResultMessage } from "../shared/ipc.ts";
+import type { AppRef, Command, Event, EventMessage, InsertSimulation, RecordingRef, ResultMessage } from "../shared/ipc.ts";
 import { sanitizeMicInUse } from "../shared/microphone.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, NewHistoryEntry } from "../store/history.ts";
@@ -27,8 +27,9 @@ export interface DictationSidecar {
 
 export interface DictationOptions {
   sidecar: DictationSidecar;
-  /** `search`: o "colar a última" (L9) pega o ditado mais novo daqui. Sem ele, o atalho só avisa. */
-  history: { add(entry: NewHistoryEntry): Promise<HistoryEntry>; search?(q: { limit: number }): Promise<{ entries: HistoryEntry[] }> };
+  /** `search`/`latestText`: o "colar a última" (L9), pulando recuperações ainda sem texto. */
+  history: { add(entry: NewHistoryEntry): Promise<HistoryEntry>; search?(q: { limit: number }): Promise<{ entries: HistoryEntry[] }>; latestText?():Promise<HistoryEntry|null> };
+  recovery?: { activate(ref:RecordingRef):void; fail(id:string,error:string):Promise<void>; complete(id:string):Promise<void> };
   llm?: LlmBackend;
   llmMode?: LlmMode;
   /** Devolver o clipboard da pessoa depois de colar. Padrão: sim. */
@@ -101,6 +102,7 @@ export interface SimulatedDictation {
 }
 
 type Recording = {
+  recovery?:RecordingRef;
   app?: AppRef;
   lost?: string;
   note?: boolean;
@@ -155,13 +157,26 @@ export class Dictation {
         const mic = sanitizeMicInUse(e.microphone);
         // Com a tampa fechada o escolhido (o mic do Mac) está conectado, só não grava: a Ajustes explica, a pílula não.
         const fellBackTo = mic?.fellBack && !mic.lidClosed ? micShortName(mic) : undefined;
-        this.recordings.push({ app, note, simulate: cli?.simulate, done: cli?.done, ...(fellBackTo ? { fellBackTo } : {}) });
+        if(e.recovery)this.options.recovery?.activate(e.recovery);
+        this.recordings.push({ recovery:e.recovery, app, note, simulate: cli?.simulate, done: cli?.done, ...(fellBackTo ? { fellBackTo } : {}) });
         // A nota não leva o tom do app da frente (um terminal daria o tom literal): o prewarm é o do tom padrão.
         this.prewarm(note ? undefined : app);
       }),
       // A gravação que acabou de começar não vai ter texto.
-      sidecar.on("record.cancelled", () => void this.recordings.pop()?.done?.(failed("record_cancelled"))),
-      sidecar.on("record.error", () => void this.recordings.pop()?.done?.(failed("record_error"))),
+      sidecar.on("record.cancelled", () => {
+        const recording=this.recordings.pop();
+        this.enqueue(async()=>{
+          await this.settleRecovery(recording?.recovery,true);
+          recording?.done?.(failed("record_cancelled"));
+        });
+      }),
+      sidecar.on("record.error", e => {
+        const recording=this.recordings.pop(),ref=e.recovery??recording?.recovery;
+        this.enqueue(async()=>{
+          await this.settleRecovery(ref,false,"record_error");
+          recording?.done?.(failed("record_error"));
+        });
+      }),
       // O mic caiu, mas o que ele ouviu vai ser transcrito: a pílula avisa no fim.
       sidecar.on("record.stopped", (e) => {
         const last = this.recordings.at(-1);
@@ -171,13 +186,15 @@ export class Dictation {
         const recording = this.recordings.shift();
         const app = recording?.app ?? this.activeApp;
         this.enqueue(async () => {
-          const outcome = await (recording?.note ? this.handleNote(e, app, recording.lost, recording.fellBackTo) : this.handle(e, app, recording?.lost, recording?.simulate, recording?.fellBackTo));
+          const transcript={...e,recovery:e.recovery??recording?.recovery};
+          const outcome = await (recording?.note ? this.handleNote(transcript, app, recording.lost, recording.fellBackTo) : this.handle(transcript, app, recording?.lost, recording?.simulate, recording?.fellBackTo));
           recording?.done?.(outcome);
         });
       }),
       sidecar.on("transcript.error", (e) => {
         const recording = this.recordings.shift();
         this.enqueue(async () => {
+          await this.settleRecovery(e.recovery??recording?.recovery,false,e.error);
           await this.overlay("error", TRANSCRIPT_ERROR[e.error] ?? TRANSCRIPT_ERROR.stt_failed);
           const outcome = this.done(failed(e.error));
           recording?.done?.(outcome);
@@ -257,7 +274,9 @@ export class Dictation {
    * testes dos agentes). Não entra de novo no Histórico. Sem ditado nenhum, a pílula avisa.
    */
   async pasteLast(): Promise<{ pasted: boolean; text?: string }> {
-    const last = (await this.options.history.search?.({ limit: 1 }).catch(() => undefined))?.entries[0];
+    const last = this.options.history.latestText
+      ? await this.options.history.latestText().catch(()=>null)
+      : (await this.options.history.search?.({ limit: 1 }).catch(() => undefined))?.entries[0];
     if (!last?.text.trim()) {
       await this.overlay("error", NOTHING_TO_PASTE);
       return { pasted: false };
@@ -292,6 +311,7 @@ export class Dictation {
   private async handle(t: Transcript, app: AppRef | undefined, lost?: string, simulate?: InsertSimulation, fellBackTo?: string): Promise<DictationOutcome> {
     const started = performance.now();
     const empty = async () => {
+      await this.settleRecovery(t.recovery,false,"stt_empty");
       // Sem fala depois de o mic cair: o mesmo aviso de antes do T883, em vez de sumir sem dizer nada.
       await (lost ? this.overlay("error", MIC_LOST_EMPTY) : this.overlay("hidden"));
       return this.done({ text: "", raw: t.text, sttMs: t.latencyMs, app, pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
@@ -345,10 +365,13 @@ export class Dictation {
         lang: t.lang || undefined,
         durationMs: t.durationMs,
         audioPath: t.audioPath,
+        recoveryId:t.recovery?.id,
+        ...(t.recovery?{at:new Date(t.recovery.at)}:{}),
       });
     } catch (e) {
       this.log(`history add failed: ${String(e)}`);
     }
+    await this.settleRecovery(t.recovery,pasted,"insert_failed");
     this.log(
       `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? `pasted${insert.ok && insert.data.reason ? ` (${insert.data.reason})` : ""}` : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}${insert.ok && insert.data.focusVia ? ` · focus ${insert.data.focusVia}` : ""}`,
     );
@@ -375,16 +398,18 @@ export class Dictation {
     const started = performance.now();
     const base = { raw: t.text, sttMs: t.latencyMs, app };
     if (!t.text.trim()) {
+      await this.settleRecovery(t.recovery,false,"stt_empty");
       await (lost ? this.overlay("error", MIC_LOST_EMPTY) : this.overlay("hidden"));
       return this.done({ ...base, text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
     }
     const result = await cleanup({ raw: t.text, dictionary: this.dictionary }, { llm: this.options.llm, llmMode: this.options.llmMode ?? "off" });
     const text = expandSnippets(result.text, this.snippets);
     if (!text.trim()) {
+      await this.settleRecovery(t.recovery,false,"stt_empty");
       await this.overlay("hidden");
       return this.done({ ...base, text: "", pasted: false, skipped: "empty", appMs: Math.round(performance.now() - started) });
     }
-    const at = new Date();
+    const at = t.recovery?new Date(t.recovery.at):new Date();
     // Primeiro o Histórico, para a nota levar o id do ditado (T1565): um "Enviar para nota" depois reconhece o trecho.
     let entry: HistoryEntry | undefined;
     try {
@@ -396,6 +421,7 @@ export class Dictation {
         lang: t.lang || undefined,
         durationMs: t.durationMs,
         audioPath: t.audioPath,
+        recoveryId:t.recovery?.id,
         at,
       });
     } catch (e) {
@@ -414,8 +440,22 @@ export class Dictation {
       await this.overlay("error", NOTE_FAILED);
     }
     const appMs = Math.round(performance.now() - started);
+    await this.settleRecovery(t.recovery,!!note,"note_failed");
     this.log(`quick note: stt ${t.latencyMs} ms + app ${appMs} ms · ${note ? `${note.created ? "created" : "already in"} ${note.note.path}` : "failed"}`);
     return this.done({ ...base, entry, text, tone: result.tone, pasted: false, appMs, note });
+  }
+
+  /** Retry returns text to History. It never pastes into whichever app happens to be focused now. */
+  async cleanRecovered(text:string,app?:AppRef,note=false):Promise<{text:string;tone:Tone}>{
+    const result=await cleanup({raw:text,bundleId:note?undefined:app?.bundleId,dictionary:this.dictionary},
+      {llm:this.options.llm,llmMode:this.options.llmMode??"off"});
+    return {text:expandSnippets(result.text,this.snippets),tone:result.tone};
+  }
+
+  private async settleRecovery(ref:RecordingRef|undefined,complete:boolean,error="stt_failed"){
+    if(!ref||!this.options.recovery)return;
+    try{if(complete)await this.options.recovery.complete(ref.id);else await this.options.recovery.fail(ref.id,error);}
+    catch{this.log("recovery_update_failed");}
   }
 
   private async overlay(state: "hidden" | "done" | "error", message?: string) {

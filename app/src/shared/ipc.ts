@@ -60,6 +60,9 @@ export interface AppRef {
 
 // ---------------------------------------------------------- Bun → sidecar
 
+export interface RecordingRef { id:string;at:string }
+export interface RecoveredTranscript { text:string;raw:string;lang:"pt"|"en"|"mix"|"";durationMs:number;latencyMs:number }
+
 export type Command =
   | { type: "ping" }
   | {
@@ -116,6 +119,7 @@ export type Command =
   | { type: "meeting.answer"; answer: MeetingAnswer }
   /** Delete whole chunks ending before the final watermark minus the ASR look-behind (2 s by default). */
   | { type: "meeting.ack"; session: string; channel: "mine" | "system"; finalThroughFrame: number; contextFrames?: number }
+  | { type: "dictation.retry"; recordingId:string }
   | { type: "record.start" }
   | { type: "record.stop" }
   /** `message` vale no `error` e no `done` (secure input, #224): com mensagem, o `done` fica 2,5 s em vez de 0,7 s. */
@@ -196,6 +200,7 @@ export interface CommandResults {
   "meeting.pending": { chunks: MeetingChunk[] };
   "meeting.ack": Record<string, never>;
   "meeting.answer": Record<string, never>;
+  "dictation.retry": RecoveredTranscript;
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
@@ -320,6 +325,7 @@ export type Event =
    */
   | {
       type: "record.started";
+      recovery?: RecordingRef;
       reason: RecordReason;
       app?: AppRef;
       target?: "note";
@@ -335,6 +341,7 @@ export type Event =
    */
   | {
       type: "record.stopped";
+      recovery?: RecordingRef;
       reason: RecordReason;
       mode: StopMode;
       durationMs: number;
@@ -352,7 +359,7 @@ export type Event =
    * `mic_busy` (#5154): sem áudio, ou o engine não subiu, enquanto outro app (`busyApp`, ex.: "Chrome" no Meet) usa o
    * mesmo mic. O helper já tentou um engine novo antes de desistir; a pílula diz "Mic ocupado por <app>".
    */
-  | { type: "record.error"; reason: RecordReason; error: string; microphone: PermissionState; busyApp?: string }
+  | { type: "record.error"; recovery?:RecordingRef; reason: RecordReason; error: string; microphone: PermissionState; busyApp?: string }
   /** Nível RMS de 0 a 1, ~30 Hz enquanto grava. Alimenta a onda do overlay. */
   | { type: "audio.level"; rms: number }
   /**
@@ -366,7 +373,7 @@ export type Event =
    * (filtro, correção fonética, aliases); `raw` é o do modelo. `lang`: `pt`, `en`, `mix`, ou `""` sem texto.
    * `latencyMs`: do fim da gravação até aqui.
    */
-  | { type: "transcript.final"; text: string; raw: string; lang: "pt" | "en" | "mix" | ""; durationMs: number; latencyMs: number; audioPath?: string }
+  | { type: "transcript.final"; text: string; raw: string; lang: "pt" | "en" | "mix" | ""; durationMs: number; latencyMs: number; audioPath?: string;recovery?:RecordingRef }
   /**
    * O modelo de STT: `loading` logo depois do `ready` (a primeira carga pode levar um minuto: download, ou o
    * CoreML compilando depois de atualizar o macOS), depois `ready` ou `unavailable`.
@@ -379,7 +386,7 @@ export type Event =
    */
   | { type: "stt.boosting"; state: "loading" | "ready" | "unavailable" }
   /** A gravação não virou texto: `model_unavailable` (sem modelo, ex.: offline na primeira vez) ou `stt_failed`. */
-  | { type: "transcript.error"; error: "model_unavailable" | "stt_failed" }
+  | { type: "transcript.error"; recovery?:RecordingRef; error: "model_unavailable" | "stt_failed" }
   | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string };
 
 export type EventType = Event["type"];
@@ -406,6 +413,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "meeting.pending",
   "meeting.ack",
   "meeting.answer",
+  "dictation.retry",
   "record.start",
   "record.stop",
   "overlay.state",

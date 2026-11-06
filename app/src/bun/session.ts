@@ -20,6 +20,7 @@ import { MeetingLiveTracker } from "./meetings.ts";
 import { MeetingAcks } from "./meeting-acks.ts";
 import { Sidecar, SidecarError, type SupervisorStatus } from "./sidecar.ts";
 import { MeetingNoteSession } from "./meeting-notes.ts";
+import { RecoveryError } from "../store/recording-recovery.ts";
 import { stores } from "./stores.ts";
 
 /** O helper que vai dentro do .app (o `copy` do electrobun.config.ts), ou `KIWI_HELPER`. */
@@ -114,14 +115,14 @@ export class Session {
       helper,
       socketPath: socketPathFor(stores.dir),
       // O `debug.transcribe` (áudio sintético, sem mic) só existe com KIWI_DEBUG=1 (T457); nunca no app de release.
-      env: process.env.KIWI_DEBUG === "1" ? { KIWI_DEBUG: "1" } : undefined,
+      env: {KIWI_RECOVERY_DIR:stores.recoveries.dir,...process.env.KIWI_DEBUG === "1" ? { KIWI_DEBUG: "1" } : {}},
     });
     // O modo do LLM fica `off` por padrão (ADR 0002). KIWI_LLM_MODE=auto|always para testar.
     const llmMode = (["auto", "always"].includes(process.env.KIWI_LLM_MODE ?? "") ? process.env.KIWI_LLM_MODE : "off") as LlmMode;
     const llm = sidecarLlm({ status: () => this.sidecar.ready?.llm, request: (c, signal) => this.sidecar.send(c, signal) });
     // Com KIWI_DEBUG=1 nada é colado nem vai para o clipboard (testes de agente, #490).
     const dryRun = process.env.KIWI_DEBUG === "1";
-    this.dictation = new Dictation({ sidecar: this.sidecar, history: stores.history, notes: stores.dictationNotes, llm, llmMode, dryRun });
+    this.dictation = new Dictation({ sidecar: this.sidecar, history: stores.history, recovery:stores.recoveries, notes: stores.dictationNotes, llm, llmMode, dryRun });
     // Com KIWI_DEBUG=1 (agentes), nada é pedido sozinho: nenhum diálogo do macOS abre (#537, #551).
     // Nem o reset do clique no menu (#666).
     this.meetingNotes = new MeetingNoteSession(this.sidecar, stores.meetingNotes);
@@ -161,6 +162,8 @@ export class Session {
     this.sidecar.on("meeting.warning", (e) => console.warn(`[meetings] ${e.channel ?? ""} ${e.warning}`));
     // O helper que caiu levou a captura junto (R6): o card ao vivo some.
     this.sidecar.onClose(() => this.meetings.reset());
+    this.sidecar.onClose(() => void stores.recoveries.interrupted().catch(()=>console.warn("[recovery] interrupted_failed")));
+    stores.recoveries.start();
     this.sidecar.on("ready", () => {
       this.meetings.reset();
       this.stt = "starting";
@@ -201,7 +204,26 @@ export class Session {
   stop(): Promise<void> {
     this.dictation.detach();
     this.permissions.detach();
+    stores.recoveries.stop();
     return Promise.all([this.sidecar.stop(),this.meetingNotes.detach()]).then(()=>{});
+  }
+
+  async retryDictation(historyId:string){
+    const entry=await stores.history.get(historyId);
+    if(!entry?.recoveryId)throw new RecoveryError("E_RECOVERY_EXPIRED");
+    return stores.recoveries.withRetry(entry.recoveryId,async record=>{
+      try{
+        await this.sidecar.whenReady();
+        const result=await this.sidecar.request({type:"dictation.retry",recordingId:record.id},undefined,10*60_000);
+        const text=await this.dictation.cleanRecovered(result.data.text,record.app?{bundleId:record.app.bundleId,name:record.app.name??record.app.bundleId}:undefined,record.target==="note");
+        if(!text.text.trim())throw new Error("stt_empty");
+        if(!await stores.recoveries.get(record.id))throw new RecoveryError("E_RECOVERY_EXPIRED");
+        const saved=await stores.history.add({raw:result.data.text,text:text.text,tone:text.tone,lang:result.data.lang,
+          durationMs:result.data.durationMs,app:record.app,at:new Date(record.at),recoveryId:record.id});
+        await stores.recoveries.complete(record.id);
+        return (await stores.history.get(saved.id))!;
+      }catch(error){await stores.recoveries.fail(record.id,"stt_failed");throw error;}
+    });
   }
 
   /** O estado do helper para o "Salvar diagnóstico" (T5350): só leitura, nunca pede permissão. */

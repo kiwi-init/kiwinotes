@@ -74,6 +74,10 @@ const capabilities = uiCapabilities({
   dictionary: stores.dictionary,
   snippets: stores.snippets,
   history: stores.history,
+  retryDictation: async id => {
+    const current=session.get();if(!current)throw new Error("helper_unavailable");
+    return current.retryDictation(id);
+  },
   dictionaryChanged: (terms) => void session.get()?.dictionaryChanged(terms),
   snippetsChanged: (snippets) => session.get()?.snippetsChanged(snippets),
   settings: stores.settings,
@@ -322,6 +326,10 @@ export function sendToWindow<E extends keyof UiEvents>(name: WindowName, event: 
   rpc.send.event({ name: event, payload });
   return true;
 }
+
+stores.recoveries.onChanged(()=>{
+  for(const rpc of rpcs.values())rpc.send.event({name:"history.changed",payload:{}});
+});
 
 stores.folders.onChange(view => {
   for (const rpc of rpcs.values()) rpc.send.event({name:"notes.folderChanged",payload:view});

@@ -191,6 +191,8 @@ public final class AudioCapture {
     /// Streaming consumer (meetings). Called on the engine thread with the packet's start on the uptime clock.
     /// Set before starting. With `retainSamples: false`, a long meeting never accumulates in RAM.
     public var onSamples: (([Float], TimeInterval) -> Void)?
+    /// Dictation durability: only enqueues work, inside samplesQueue, before stop can take its snapshot.
+    public var onRetainedSamples: ((_ samples: [Float], _ offset: Int) -> Void)?
     private let retainSamples: Bool
 
     /// The recording ended because the mic went away: `device_changed` (the new device didn't start) or `no_audio`
@@ -515,7 +517,11 @@ public final class AudioCapture {
                 firstBufferMs = Int(((t - since) * 1000).rounded())
                 waitingFirstBufferSince = nil
             }
-            if retainSamples { samples.append(contentsOf: out) }
+            if retainSamples {
+                let offset = samples.count
+                samples.append(contentsOf: out)
+                onRetainedSamples?(out, offset)
+            }
             return out
         }
         if let firstAfter { onFirstBuffer?(firstAfter) }

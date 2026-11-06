@@ -160,6 +160,9 @@ export function History() {
   const [picking, setPicking] = useState<string | null>(null);
   const [sent, setSent] = useState<Map<string, string>>(new Map());
   const canSend = has("history.toNote");
+  const [retrying, setRetrying] = useState<Set<string>>(new Set());
+  const [retryErrors, setRetryErrors] = useState<Map<string, string>>(new Map());
+  const canRetry = has("history.retry");
   const words = fold(query).split(/\s+/).filter(Boolean);
   const wordsRef = useRef(words);
   wordsRef.current = words;
@@ -207,11 +210,13 @@ export function History() {
     () =>
       api.history.onAdded((e) => {
         if (!matches(e, wordsRef.current)) return;
-        setEntries((old) => [e, ...old]);
+        setEntries((old) => [e, ...old.filter((item) => item.id !== e.id)].sort((a, b) => a.id < b.id ? 1 : -1));
         setFresh((f) => new Set(f).add(e.id));
       }),
     [],
   );
+
+  useEffect(() => api.history.onChanged(() => load(query)), [load, query]);
 
   const remove = async (id: string) => {
     if (!(await api.history.delete(id).catch(() => false))) return;
@@ -257,6 +262,20 @@ export function History() {
     );
   }
 
+  const retry = async (id: string) => {
+    if (retrying.has(id)) return;
+    setRetrying((old) => new Set(old).add(id));
+    setRetryErrors((old) => { const next = new Map(old); next.delete(id); return next; });
+    try {
+      await api.history.retry(id);
+      load(query);
+    } catch {
+      setRetryErrors((old) => new Map(old).set(id, "Não foi possível transcrever. Tente novamente."));
+    } finally {
+      setRetrying((old) => { const next = new Set(old); next.delete(id); return next; });
+    }
+  };
+
   const groups: { day: string; label: string; items: HistoryEntry[] }[] = [];
   for (const e of entries) {
     const day = dayKey(e.at);
@@ -276,7 +295,7 @@ export function History() {
                   <span className="kn-entry-time">{time(e.at)}</span>
                   {e.app?.name ? <span>· {e.app.name}</span> : null}
                   <span className="kn-entry-actions">
-                    {canSend ? (
+                    {canSend && e.text.trim() ? (
                       <button
                         type="button"
                         className="kn-icon-button"
@@ -287,17 +306,28 @@ export function History() {
                         <NoteIcon />
                       </button>
                     ) : null}
-                    <button type="button" className="kn-icon-button" aria-label="Copiar o texto" onClick={() => api.copy(e.text)}>
+                    {e.text.trim() ? <button type="button" className="kn-icon-button" aria-label="Copiar o texto" onClick={() => api.copy(e.text)}>
                       <CopyIcon />
-                    </button>
+                    </button> : null}
                     <button type="button" className="kn-icon-button" data-tone="danger" aria-label="Apagar do histórico" onClick={() => remove(e.id)}>
                       <TrashIcon />
                     </button>
                   </span>
                 </div>
                 <div className="kn-entry-text">
-                  <Highlight text={e.text} words={words} />
+                  {e.text.trim() ? <Highlight text={e.text} words={words} /> : "O ditado não foi concluído"}
                 </div>
+                {canRetry && e.recoveryId ? (
+                  <div className="kn-entry-recovery">
+                    <Button disabled={retrying.has(e.id)} onClick={() => void retry(e.id)}>
+                      {retrying.has(e.id) ? "Transcrevendo…" : "Transcrever de novo"}
+                    </Button>
+                    <small>{e.expiresAt
+                      ? `Áudio guardado neste Mac até ${new Date(e.expiresAt).toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}.`
+                      : "Áudio guardado neste Mac."}</small>
+                    {retryErrors.has(e.id) ? <p role="alert">{retryErrors.get(e.id)}</p> : null}
+                  </div>
+                ) : null}
                 {e.raw.trim() && e.raw.trim() !== e.text.trim() ? (
                   <div className="kn-entry-raw">
                     <Highlight text={e.raw} words={words} />
