@@ -1,0 +1,6 @@
+load ms 513
+index 1000 notes s 65.0 chunks 2000 file MB 3.1
+query ms median 4.1 max 9.1
+reopen unchanged ms 4 re-embedded 0
+       65.64 real       119.66 user         1.12 sys
+           649805824  maximum resident set size

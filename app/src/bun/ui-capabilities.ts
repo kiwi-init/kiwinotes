@@ -20,6 +20,10 @@ import { openMode } from "../shared/attachments.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
 import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
+import type { SemanticIndex } from "../notes/semantic/index.ts";
+import type { SemanticEngine } from "../notes/semantic/engine.ts";
+import { semanticQueryText } from "../shared/query.ts";
+import type { SemanticStatus } from "../shared/ui-contract.ts";
 import { checkShortcutsPatch, isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault,
 } from "../notes/vault.ts";
@@ -116,6 +120,12 @@ export interface CapabilityDeps {
   revealTrash?(): void;
   /** O texto dos anexos para a busca (T2709). Sem ele, a busca é só nas notas. */
   ocr?: Pick<OcrIndex, "scan" | "enqueue" | "match">;
+  /** A busca pelo sentido desta pasta (T6013). Sem ela, a busca é só pelas palavras, como antes. */
+  semantic?: Pick<SemanticIndex, "sync" | "query" | "status" | "clear">;
+  /** As notas que o índice do sentido acompanha: o mesmo vault de `notes`. */
+  semanticSource?: Pick<Vault, "semanticDocuments" | "onChanged">;
+  /** O modelo da busca pelo sentido, um para o app (T6013). */
+  semanticEngine?: Pick<SemanticEngine, "state" | "start" | "disable">;
   /** Os anexos das notas (T2594): sem eles (um host antigo), as capacidades `attachments.*` dão E_NO_ATTACHMENTS. */
   attachments?: Pick<Attachments, "save" | "read" | "rename">;
   /** Baixa a imagem de fora depois do clique (T2984). Sem isto, o `images.remote` dá E_NO_REMOTE_IMAGES. */
@@ -232,6 +242,13 @@ export function uiCapabilities(deps: CapabilityDeps,
         const ocr = deps.ocr;
         deps.notes.onOtherFiles((paths) => ocr.enqueue(paths));
         void ocr.scan().catch((e) => console.error("[ocr] scan:", e));
+      }
+      // A busca pelo sentido (T6013): o índice acompanha as notas, e a fila anda em segundo plano.
+      if (deps.semantic && deps.semanticSource) {
+        const semantic = deps.semantic;
+        const notes = deps.semanticSource;
+        semantic.sync(notes.semanticDocuments());
+        notes.onChanged(() => semantic.sync(notes.semanticDocuments()));
       }
       // Best effort (revisão #2574): uma limpeza de fixadas que falha (o disco, o settings) nunca derruba as notas.
       await followPins({ moves: new Map(), gone: [] }).catch((e) => console.error("[notes] pinned:", e),
@@ -361,6 +378,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     "settings.set": async (args) => {
       const a = object(args, "settings.set");
       const patch: SettingsPatch = {};
+      let turnSemantic: boolean | null = null;
       // Os atalhos (1.24.0, T5349), também os que vêm nos campos de antes: conferidos juntos no fim, sem conflito.
       const shortcutPatch: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(a)) {
@@ -415,6 +433,11 @@ export function uiCapabilities(deps: CapabilityDeps,
           if (typeof value !== "boolean") throw bad("ocr must be true or false");
           patch.ocr = value;
           if (value) void deps.ocr?.scan().catch(() => {});
+        } else if (key === "semanticSearch") {
+          // A busca pelo sentido (T6013): desligar apaga o modelo e os vetores; ligar baixa de novo e refaz o índice.
+          if (typeof value !== "boolean") throw bad("semanticSearch must be true or false");
+          patch.semanticSearch = value;
+          turnSemantic = value;
         } else if (key === "attachmentsFolder") {
           // A pasta dos anexos (1.11.0, T2594): relativa ao vault, sem sair dele.
           try {
@@ -462,6 +485,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
       const saved = await deps.settings.save(patch);
       deps.settingsChanged?.(saved);
+      if (turnSemantic === false) {
+        await deps.semanticEngine?.disable();
+        await deps.semantic?.clear();
+      } else if (turnSemantic === true && deps.semantic && deps.semanticSource) {
+        await vault();
+        deps.semantic.sync(deps.semanticSource.semanticDocuments());
+      }
       return saved;
     },
     "hub.section": (args) => {
@@ -721,7 +751,15 @@ export function uiCapabilities(deps: CapabilityDeps,
     "notes.search": async (args) => {
       const a = fields(args, "notes.search", ["query", "limit"]);
       const v = await vault();
-      const hits = v.search(a.query, a.limit);
+      // O sentido só com o modelo já carregado e a busca ligada: a busca nunca espera o download (T6013).
+      const text = typeof a.query === "string" && a.query.length <= 500 ? semanticQueryText(a.query) : "";
+      const semantic = deps.semantic && text && (await deps.settings.load()).semanticSearch
+        ? await deps.semantic.query(text, 50).catch((e) => {
+          console.error("[semantic] query:", e);
+          return undefined;
+        })
+        : undefined;
+      const hits = v.search(a.query, a.limit, semantic);
       // O texto das imagens e dos PDFs (T2709) completa a lista, depois do que achou nas notas.
       if (!deps.ocr || !(await deps.settings.load()).ocr) return hits;
       const max = typeof a.limit === "number" ? a.limit : 20;
@@ -730,6 +768,14 @@ export function uiCapabilities(deps: CapabilityDeps,
       const all = [...hits, ...(await attachmentHits(deps.ocr, v, a.query as string, hits, max)),
       ];
       return [...all.filter((h) => !h.approx), ...all.filter((h) => h.approx)];
+    },
+    "notes.semanticStatus": async (args): Promise<SemanticStatus> => {
+      noArgs(args, "notes.semanticStatus");
+      const enabled = (await deps.settings.load()).semanticSearch;
+      if (!deps.semanticEngine || !deps.semantic) return { enabled, phase: "off", notes: 0, indexed: 0 };
+      await vault();
+      if (enabled) void deps.semanticEngine.start();
+      return { enabled, ...deps.semanticEngine.state(), ...deps.semantic.status() };
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
     "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),

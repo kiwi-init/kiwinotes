@@ -94,7 +94,10 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
                     <Highlight text={it.title} ranges={titleRanges(it.title, query)} />
                     {it.snippet ? <Snippet text={plainSnippet(it.snippet)} query={query} /> : null}
                   </span>
-                  <span className="kn-palette-r">{it.detail}</span>
+                  <span className="kn-palette-r">
+                    {it.semantic ? <span className="kn-palette-why" title="Sem as palavras da busca, mas sobre o mesmo assunto">pelo sentido</span> : null}
+                    {it.detail}
+                  </span>
                 </>
               ) : it.kind === "command" ? (
                 <span className="kn-palette-title kn-palette-create">{it.title}</span>

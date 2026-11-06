@@ -18,6 +18,8 @@ import { MeetingNotes } from "./meetings.ts";
 import { Attachments } from "./attachments.ts";
 import { OcrIndex, type OcrRunner } from "./ocr.ts";
 import { NoteExporter } from "./export.ts";
+import { SemanticIndex } from "./semantic/index.ts";
+import type { SemanticEngine } from "./semantic/engine.ts";
 
 export interface FolderRef {
   id: string;
@@ -169,6 +171,8 @@ export interface FolderBundle {
   attachments: Attachments;
   ocr: OcrIndex;
   exporter: NoteExporter;
+  /** A busca pelo sentido desta pasta (T6013): os vetores em `folders/<chave>/semantic/`, fora do cofre. */
+  semantic?: SemanticIndex;
 }
 interface Options {
   dir: string;
@@ -179,6 +183,8 @@ interface Options {
   watch?: boolean;
   limit?: number;
   guard?(path: string): void;
+  /** O modelo da busca pelo sentido (T6013), um para todas as pastas. */
+  semantic?: SemanticEngine;
 }
 /** Root-bound bundles never mutate their root during an in-flight save. The UI's id rejects calls from an old view. */
 export class NotesFolders {
@@ -240,12 +246,21 @@ export class NotesFolders {
     });
     const exporter = new NoteExporter({ vault: notes });
     if (this.pdf) exporter.setPdf(this.pdf);
+    const semantic = this.options.semantic
+      ? new SemanticIndex({
+          dir: internal
+            ? path.join(this.options.dir, "semantic")
+            : path.join(this.options.dir, "folders", key, "semantic"),
+          engine: this.options.semantic,
+        })
+      : undefined;
     const bundle = {
       ref,
       notes,
       settings,
       ocr,
       exporter,
+      semantic,
       versions: new NoteVersions({
         dir: internal
           ? path.join(this.options.dir, "history", "notes")
@@ -470,7 +485,10 @@ export class NotesFolders {
           )
             next.notes.watch();
         } catch (error) {
-          if (next !== this.internalBundle) next.notes.close();
+          if (next !== this.internalBundle) {
+            next.notes.close();
+            void next.semantic?.close();
+          }
           this.progress = { ...this.progress, phase: "idle" };
           this.emit();
           throw error;
@@ -488,6 +506,7 @@ export class NotesFolders {
         } catch (error) {
           if (next !== this.internalBundle) {
             next.notes.close();
+            await next.semantic?.close();
             await next.versions.close();
           }
           throw error;
@@ -497,6 +516,7 @@ export class NotesFolders {
         this.registry = registry;
         if (previous !== this.internalBundle && previous !== next) {
           previous.notes.close();
+          await previous.semantic?.close();
           await previous.versions.close();
         }
         this.progress = { ...this.progress, phase: "idle" };
@@ -548,6 +568,7 @@ export class NotesFolders {
     const all = new Set([this.active!, this.internalBundle!]);
     for (const b of all) {
       b.notes.close();
+      await b.semantic?.close();
       await b.versions.close();
     }
   }

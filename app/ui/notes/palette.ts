@@ -7,7 +7,8 @@ import { hasFilters, parseQuery } from "../../src/shared/query.ts";
 import type { NoteMeta, SearchHit } from "./types.ts";
 
 export type PaletteItem =
-  | { kind: "note"; path: string; title: string; detail: string; snippet?: string }
+  /** `semantic` (T6013): achada só pelo sentido, sem nenhuma palavra da busca. */
+  | { kind: "note"; path: string; title: string; detail: string; snippet?: string; semantic?: boolean }
   | { kind: "create"; title: string }
   /** Um comando da janela (T2619: "Nova nota a partir de modelo…"). */
   | { kind: "command"; id: string; title: string };
@@ -79,7 +80,7 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   // operador, e não há "Criar". Os comandos que pedem a busca (Salvar) vêm no fim.
   if (hasFilters(parseQuery(q))) {
     return [
-      ...textHits.slice(0, MAX).map((h): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet })),
+      ...textHits.slice(0, MAX).map((h): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet, ...(h.semantic ? { semantic: true } : {}) })),
       ...commands.filter((c) => c.withQuery).map((c): PaletteItem => ({ kind: "command", id: c.id, title: c.title })),
     ];
   }
@@ -89,7 +90,7 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   if (ranked && textHits.length) {
     const seen = new Set(textHits.map(hit => hit.path));
     const out: PaletteItem[] = [
-      ...textHits.map((h): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet })),
+      ...textHits.map((h): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet, ...(h.semantic ? { semantic: true } : {}) })),
       ...titleRanks(notes, q).filter(({ n }) => !seen.has(n.path)).map(({ n }): PaletteItem => ({ kind: "note", path: n.path, title: n.title, detail: n.folder })),
     ].slice(0, MAX);
     out.push(...cmds(false));
@@ -100,7 +101,7 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   const seen = new Set<string>();
   const once = (path: string) => !seen.has(path) && !!seen.add(path);
   const titleItem = (n: NoteMeta): PaletteItem => ({ kind: "note", path: n.path, title: n.title, detail: n.folder });
-  const textItem = (h: SearchHit): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet });
+  const textItem = (h: SearchHit): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet, ...(h.semantic ? { semantic: true } : {}) });
   const items: PaletteItem[] = [];
   for (const x of titles) if (x.rank < 3 && once(x.n.path)) items.push(titleItem(x.n));
   for (const h of textHits) if (!h.approx && once(h.path)) items.push(textItem(h));
