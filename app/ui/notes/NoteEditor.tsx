@@ -6,7 +6,7 @@ import { EditorView } from "@codemirror/view";
 import { isolateHistory } from "@codemirror/commands";
 import { headingFor, markdownStructure } from "../../src/shared/markdown-structure.ts";
 import { moveSection } from "./editor/section-move.ts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api as appApi, has } from "../src/api.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { editorMenu } from "./editor/context-menu.ts";
@@ -163,7 +163,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
         .finally(() => { splitting.current = false; });
     } : undefined, latest.current.onRenameHeading)] });
   };
-  const headings = markdownStructure(editorDoc).headings;
+  const headings = useMemo(() => markdownStructure(editorDoc).headings, [editorDoc]);
   const goToHeading = (offset: number) => {
     const v = view.current;
     if (!v || offset > v.state.doc.length) return;
