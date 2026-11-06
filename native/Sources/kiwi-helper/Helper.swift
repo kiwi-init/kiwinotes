@@ -272,6 +272,8 @@ final class Helper {
 
     @discardableResult
     private func startRecording(reason: String, note: Bool = false) -> String? {
+        // Pressed again while the last one is still recording its tail (T5456): that one ends now, with what it has.
+        if audio.isFinishing { audio.finishNow() }
         guard !audio.isRecording else { return nil }
         // Tell the app first, so the overlay shows up while the engine comes up. If the mic then fails,
         // record.error follows record.started (ADR 0001).
@@ -316,12 +318,19 @@ final class Helper {
     }
 
     private func stopRecording(reason: String, mode: String) {
-        guard audio.isRecording else { return }
-        finishRecording(audio.stop(), reason: reason, mode: mode)
+        guard audio.isRecording, !audio.isFinishing else { return }
+        // Let go (or the pill's ✓): the pill says "processing" now, and the mic takes in `releaseTail` more, so the last
+        // word isn't cut (T5456, issue #155). `record.stop` from the app ends right away.
+        guard reason != "command" else { return finishRecording(audio.stop(), reason: reason, mode: mode) }
+        let releasedAt = ProcessInfo.processInfo.systemUptime
+        overlay.set(.processing)
+        audio.stop(after: AudioCapture.releaseTail) { [weak self] samples in
+            self?.finishRecording(samples, reason: reason, mode: mode, releasedAt: releasedAt)
+        }
     }
 
     /// The end of a recording, from the mic or from `debug.transcribe`: `record.stopped`, the pill, the transcript.
-    private func finishRecording(_ samples: [Float], reason: String, mode: String, lost: String? = nil) {
+    private func finishRecording(_ samples: [Float], reason: String, mode: String, lost: String? = nil, releasedAt: TimeInterval? = nil) {
         var fields: [String: Any] = [
             "reason": reason,
             "mode": mode,
@@ -336,13 +345,14 @@ final class Helper {
         // The app moves it on with overlay.state done|error. With nothing recorded (the mic prompt was up,
         // or the engine never delivered) there is nothing to transcribe, so no `done` would come: hide now.
         overlay.set(samples.isEmpty ? .hidden : .processing)
-        transcribe(samples, durationMs: fields["durationMs"] as! Int, audioPath: audioPath)
+        transcribe(samples, durationMs: fields["durationMs"] as! Int, audioPath: audioPath, releasedAt: releasedAt)
     }
 
     /// `transcript.final` for a finished recording, or `transcript.error`. `latencyMs` goes from the end of the
     /// recording (the key let go) to the text, waiting behind an earlier transcription included.
-    private func transcribe(_ samples: [Float], durationMs: Int, audioPath: String?) {
-        let stoppedAt = ProcessInfo.processInfo.systemUptime
+    private func transcribe(_ samples: [Float], durationMs: Int, audioPath: String?, releasedAt: TimeInterval? = nil) {
+        // From the key let go, tail included (T5456): the person waits from there.
+        let stoppedAt = releasedAt ?? ProcessInfo.processInfo.systemUptime
         let previous = sttChain
         sttChain = Task { @MainActor [stt, weak self] in
             await previous?.value
