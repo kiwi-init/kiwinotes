@@ -13,6 +13,7 @@ final class Helper {
     /// The mic the dictation records from (T3229, spec #3202): the Mac's when the output is a Bluetooth headset.
     private let mic: MicSelection
     private let audio: AudioCapture
+    private var media: DictationMedia!
     private let devicesWatcher = AudioDevicesWatcher()
     /// The app sent `microphone` in a `config.set`, so it knows `audio.inputs.changed`.
     private var appKnowsMicrophone = false
@@ -74,6 +75,8 @@ final class Helper {
         let mic = MicSelection()
         self.mic = mic
         audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
+        media = DictationMedia(volume: headless || ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1" ? nil : OutputVolume(),
+                               notify: { [weak self] code in self?.emit("log", ["level": "info", "message": code]) })
         tap = HotkeyTap { [weak self] event in self?.onTap(event) }
         // The cancel is armed only while a dictation records: outside it, Esc is the other apps' (L5).
         tap.isActive = { [weak self] id in id != "cancel" || self?.audio.isRecording == true }
@@ -124,6 +127,7 @@ final class Helper {
         }
         audio.onLost = { [weak self] code, samples in
             guard let self else { return }
+            self.media.end()
             guard !samples.isEmpty else {
                 self.gesture.reset()
                 self.recordingStartedAt = nil
@@ -355,6 +359,7 @@ final class Helper {
     private func quit() -> Never {
         globe.restore()
         _ = audio.stop()
+        media.end()
         // L3 (T5455): o journal do ditado em curso fecha antes de sair, para a recuperação.
         _ = finishRecovery()
         try? meetings?.capture.stop()
@@ -427,11 +432,13 @@ final class Helper {
         if stale { audio.inputChanged("mic changed since the warm-up") }
         if let pick = stale ? mic.peek() : mic.last { started["microphone"] = pick.fields }
         beginRecovery(&started)
-        emit("record.started", started)
-        overlay.set(.listening)
         let t0 = ProcessInfo.processInfo.systemUptime
         do {
-            try audio.start()
+            try media.startCapture(meetingActive: meeting.isRecording) {
+                emit("record.started", started)
+                overlay.set(.listening)
+                try audio.start()
+            }
         } catch {
             gesture.reset()
             // A stable code for the app; AVAudioEngine's own errors are long sentences.
@@ -474,6 +481,7 @@ final class Helper {
 
     /// The end of a recording, from the mic or from `debug.transcribe`: `record.stopped`, the pill, the transcript.
     private func finishRecording(_ samples: [Float], reason: String, mode: String, lost: String? = nil, releasedAt: TimeInterval? = nil) {
+        media.end()
         var fields: [String: Any] = [
             "reason": reason,
             "mode": mode,
@@ -530,6 +538,7 @@ final class Helper {
     private func cancelRecording(reason: String) {
         guard audio.isRecording else { return }
         _ = audio.stop()
+        media.end()
         if currentRecovery != nil { try? recordingJournal?.cancel() }
         currentRecovery = nil
         recordingStartedAt = nil
@@ -629,6 +638,7 @@ final class Helper {
             if headless && ["meeting.start", "meeting.resumeMine"].contains(message.type) {
                 return reply(id, ok: false, error: "headless_no_mic")
             }
+            if message.type == "meeting.start" { media.end() }
             do {
                 let result = try meetingCommands().handle(message)
                 reply(id, ok: result.ok, error: result.error, result.data)
@@ -846,6 +856,7 @@ final class Helper {
         object["type"] = type
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               let message = try? InboundMessage.decode(data) else { return }
+        if type == "meeting.start" { media.end() }
         do { _ = try meetingCommands().handle(message) } catch { emit("meeting.error", ["error": "meeting_unavailable"]) }
     }
 
