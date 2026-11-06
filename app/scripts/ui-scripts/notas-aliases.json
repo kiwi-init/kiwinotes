@@ -1,0 +1,19 @@
+{
+  "window": "hub",
+  "steps": [
+    { "invoke": "notes.create", "args": { "folder": "Pessoas", "title": "Ana", "content": "---\naliases: [Ana Souza, AS]\n---\nContato da Ana.\n" } },
+    { "invoke": "notes.create", "args": { "title": "Reunião", "content": "Falei com [[Ana Souza]] sobre o prazo.\n\nE com [[Fulano]], que ainda não tem nota.\n" } },
+    { "waitFor": ".kn-crumb-bt" },
+    { "click": ".kn-crumb-bt" },
+    { "click": ".kn-side-item:has-text('Reunião')" },
+    { "waitFor": ".cm-content" },
+    { "press": "Escape" },
+    { "wait": 600 },
+    { "expectCount": "a:has-text('Ana Souza')", "count": 1, "name": "o [[apelido]] vira link" },
+    { "screenshot": "01-apelido-e-link-que-falta.png" },
+    { "click": "a:has-text('Ana Souza')", "name": "o clique no apelido abre a nota" },
+    { "expectText": ".kn-title", "text": "Ana", "name": "abriu a Ana" },
+    { "wait": 400 },
+    { "screenshot": "02-abriu-pelo-apelido.png" }
+  ]
+}
