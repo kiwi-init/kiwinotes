@@ -41,16 +41,28 @@ const CONTINUATION = /^(?: {4}|\t)/;
 
 const key = (label: string) => label.toLocaleLowerCase("pt-BR");
 
-/** Os trechos de código em linha (`` `a` ``, ``` ``a`b`` ```) da linha: o que está dentro não é nota de rodapé. */
+/**
+ * Os trechos de código em linha (`` `a` ``, ``` ``a`b`` ```) e de fórmula (`$x^2$`, `$$…$$`, o KaTeX está ligado) da
+ * linha: o que está dentro não é nota de rodapé. O `$` seguido de espaço ou de número no fim é dinheiro, não fórmula.
+ */
 function codeSpans(line: string): [number, number][] {
   const out: [number, number][] = [];
   const runs = [...line.matchAll(/`+/g)].map((m) => ({ at: m.index!, len: m[0].length }));
+  // O próximo trecho de crases do mesmo tamanho, de trás para a frente: sem procurar de novo a cada abertura.
+  const next: number[] = [];
+  const seen = new Map<number, number>();
+  for (let i = runs.length - 1; i >= 0; i--) {
+    next[i] = seen.get(runs[i]!.len) ?? -1;
+    seen.set(runs[i]!.len, i);
+  }
   for (let i = 0; i < runs.length; i++) {
-    const open = runs[i]!;
-    const close = runs.findIndex((r, j) => j > i && r.len === open.len);
+    const close = next[i]!;
     if (close < 0) continue;
-    out.push([open.at, runs[close]!.at + open.len]);
+    out.push([runs[i]!.at, runs[close]!.at + runs[i]!.len]);
     i = close;
+  }
+  for (const m of line.matchAll(/\$\$[^$]+\$\$|\$(?!\s)[^$]*?[^\s\\$]\$(?!\d)|\$[^\s$\\]\$(?!\d)/g)) {
+    if (!out.some(([a, b]) => m.index! >= a && m.index! < b)) out.push([m.index!, m.index! + m[0].length]);
   }
   return out;
 }
@@ -61,10 +73,13 @@ const escaped = (line: string, at: number) => {
   return n % 2 === 1;
 };
 
+/** A nota em linha mais longa que o leitor procura: sem limite, uma linha cheia de `^[` sem fecho trava o editor. */
+const MAX_INLINE = 2000;
+
 /** O `]` que fecha o `[` de `at`, contando os pares de dentro; -1 sem fecho na linha. */
 function closing(line: string, at: number): number {
   let depth = 0;
-  for (let i = at; i < line.length; i++) {
+  for (let i = at, end = Math.min(line.length, at + MAX_INLINE); i < end; i++) {
     const c = line[i];
     if (c === "\\") i++;
     else if (c === "[") depth++;
@@ -78,7 +93,11 @@ export function scanFootnotes(doc: string): Footnotes {
   // Sem o número ainda: ele sai da ordem, depois de ler tudo.
   const marks: ({ kind: "ref"; label: string; from: number; to: number } | { kind: "inline"; text: string; from: number; to: number })[] = [];
   const defs: FootnoteDef[] = [];
-  const lines = doc.split("\n");
+  // Quase toda nota não tem nota de rodapé: nem lê.
+  const lines = doc.includes("[^") || doc.includes("^[") ? doc.split("\n") : [];
+  // Os comentários (`%%…%%`, `<!--…-->`) não aparecem: o que está dentro não ganha número.
+  const comments = lines.length ? [...doc.matchAll(/%%[\s\S]*?%%|<!--[\s\S]*?-->/g)].map((m) => [m.index!, m.index! + m[0].length] as const) : [];
+  const inComment = (x: number) => comments.some(([a, b]) => x >= a && x < b);
   let at = 0;
   let fence: string | null = null;
   let i = 0;
@@ -103,10 +122,10 @@ export function scanFootnotes(doc: string): Footnotes {
       continue;
     }
     const code = codeSpans(line);
-    const inCode = (x: number) => code.some(([a, b]) => x >= a && x < b);
+    const inCode = (x: number) => code.some(([a, b]) => x >= a && x < b) || inComment(lineFrom + x);
     let scanFrom = 0;
     const d = DEF.exec(line);
-    if (d && !inCode(line.indexOf("["))) {
+    if (d && !d[1]!.endsWith("\\") && !inCode(line.indexOf("["))) {
       const markerTo = lineFrom + d[0].trimEnd().length;
       let text = line.slice(d[0].length);
       let to = lineFrom + line.length;
@@ -121,13 +140,8 @@ export function scanFootnotes(doc: string): Footnotes {
       defs.push({ label: d[1]!, from: lineFrom, to, markerTo, textFrom: lineFrom + d[0].length, text: text.trim() });
       scanFrom = d[0].length;
     }
-    for (const m of line.slice(scanFrom).matchAll(REF)) {
-      const x = scanFrom + m.index!;
-      if (escaped(line, x) || inCode(x)) continue;
-      // `[^x](endereço)` é um link do Markdown com o texto "^x", não uma nota.
-      if (line[x + m[0].length] === "(") continue;
-      marks.push({ kind: "ref", label: m[1]!, from: lineFrom + x, to: lineFrom + x + m[0].length });
-    }
+    // As notas em linha primeiro: uma chamada `[^1]` dentro de uma delas é texto dela (aparece no hover), não outra nota.
+    const inline: [number, number][] = [];
     for (let x = line.indexOf("^[", scanFrom); x >= 0; x = line.indexOf("^[", x + 1)) {
       if (escaped(line, x) || inCode(x)) continue;
       const end = closing(line, x + 1);
@@ -135,7 +149,15 @@ export function scanFootnotes(doc: string): Footnotes {
       const text = line.slice(x + 2, end);
       if (!text.trim()) continue;
       marks.push({ kind: "inline", text, from: lineFrom + x, to: lineFrom + end + 1 });
+      inline.push([x, end + 1]);
       x = end;
+    }
+    for (const m of line.slice(scanFrom).matchAll(REF)) {
+      const x = scanFrom + m.index!;
+      if (escaped(line, x) || inCode(x) || inline.some(([a, b]) => x >= a && x < b)) continue;
+      // `[^x](endereço)` é um link do Markdown com o texto "^x", não uma nota; `[^x\]` tem o `]` escapado.
+      if (line[x + m[0].length] === "(" || m[1]!.endsWith("\\")) continue;
+      marks.push({ kind: "ref", label: m[1]!, from: lineFrom + x, to: lineFrom + x + m[0].length });
     }
   }
   marks.sort((a, b) => a.from - b.from);
@@ -195,7 +217,9 @@ export function nextFootnoteLabel(notes: Footnotes): string {
  * ficam juntas (com ou sem linha em branco depois da última).
  */
 export function definitionAtEnd(doc: string, notes: Footnotes, label: string): { from: number; insert: string } {
-  const afterDefs = notes.defs.length > 0 && notes.defs.at(-1)!.to === doc.trimEnd().length;
+  // Depois da última definição, só espaço: a nova entra junto dela.
+  const last = notes.defs.at(-1);
+  const afterDefs = !!last && !doc.slice(last.to).trim();
   const sep = afterDefs ? (doc.endsWith("\n") ? "" : "\n") : doc.endsWith("\n\n") ? "" : doc.endsWith("\n") ? "\n" : "\n\n";
   return { from: doc.length, insert: `${sep}[^${label}]: ` };
 }
@@ -225,7 +249,8 @@ export function footnoteInsert(doc: string, at: number, notes: Footnotes = scanF
 /** A transação de inserir uma nota de rodapé no cursor do editor (o fim da seleção). */
 export function insertFootnote(state: EditorState, remove?: { from: number; to: number }): TransactionSpec {
   const r = footnoteInsert(state.doc.toString(), state.selection.main.to, footnotesOf(state), remove);
-  return { changes: r.changes, selection: { anchor: r.cursor }, scrollIntoView: true, userEvent: "input.type" };
+  // `input.complete`, não `input.type`: o ⌘Z desfaz só a nota, sem levar junto o que foi digitado antes.
+  return { changes: r.changes, selection: { anchor: r.cursor }, scrollIntoView: true, userEvent: "input.complete" };
 }
 
 /**
@@ -242,7 +267,7 @@ export function footnoteJump(
     const def = notes.def(to.label);
     if (def) return { selection: { anchor: def.to }, scrollIntoView: true, userEvent: "select" };
     const add = definitionAtEnd(state.doc.toString(), notes, to.label);
-    return { changes: { from: add.from, insert: add.insert }, selection: { anchor: add.from + add.insert.length }, scrollIntoView: true, userEvent: "input.type" };
+    return { changes: { from: add.from, insert: add.insert }, selection: { anchor: add.from + add.insert.length }, scrollIntoView: true, userEvent: "input.complete" };
   }
   if (to.kind === "footnoteDef") {
     const k = key(to.label);

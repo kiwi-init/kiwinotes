@@ -24,7 +24,7 @@ import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/
 
 import { externalUrl, parseLinks } from "../links.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
-import { editorFocused, type LinkResolver, linksChanged } from "./livePreview.ts";
+import { editorFocused, focusEditorNow, type LinkResolver, linksChanged } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
 import { type Callout, parseCallout } from "./callouts.ts";
 import { footnoteJump, footnotesOf, footnoteText } from "./footnotes.ts";
@@ -446,11 +446,9 @@ class RenderedWidget extends WidgetType {
         const act = linkAction(url);
         if (act?.kind === "footnote" || act?.kind === "footnoteDef" || act?.kind === "footnoteInline") {
           // Da chamada para a definição e de volta (T6377): o cursor vai para lá, e aquele bloco vira texto.
+          focusEditorNow(view);
           const tr = footnoteJump(view.state, act);
-          if (tr) {
-            view.focus();
-            view.dispatch(tr);
-          }
+          if (tr) view.dispatch(tr);
         } else if (act?.kind === "loadImage") loadRemote(act.url, this.actions.attachments);
         else if (act?.kind === "note") this.actions.onOpenLink(act.target);
         else if (act?.kind === "tag") this.actions.onOpenTag?.(act.tag);
@@ -695,16 +693,29 @@ function footnoteHover(actions: RenderedActions) {
       anchor: HTMLElement | null = null;
       showTimer: ReturnType<typeof setTimeout> | undefined;
       hideTimer: ReturnType<typeof setTimeout> | undefined;
+      /** O clique no link de dentro veio com ⌘: o link para fora (http, https, mailto) só abre assim, como no editor. */
+      meta = false;
 
       constructor(readonly view: EditorView) {
         view.dom.addEventListener("mouseover", this.over);
         view.dom.addEventListener("mouseout", this.out);
         view.dom.addEventListener("mousedown", this.mousedown, true);
+        // A nota rolou, ou o Esc: o hover sai, como um tooltip do sistema.
+        addEventListener("scroll", this.away, true);
+        addEventListener("keydown", this.escape, true);
       }
 
-      update(u: { docChanged: boolean }) {
-        if (u.docChanged) this.hide();
+      update(u: { docChanged: boolean; selectionSet: boolean }) {
+        if (u.docChanged || u.selectionSet) this.hide();
       }
+
+      away = () => {
+        if (this.tip) this.hide();
+      };
+
+      escape = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && this.tip) this.hide();
+      };
 
       over = (e: MouseEvent) => {
         const t = e.target as HTMLElement;
@@ -725,7 +736,10 @@ function footnoteHover(actions: RenderedActions) {
       };
 
       mousedown = (e: MouseEvent) => {
-        if (!this.tip?.contains(e.target as Node)) this.hide();
+        if (!this.tip?.contains(e.target as Node)) return this.hide();
+        this.meta = e.metaKey;
+        // O foco fica no editor: sem foco, a nota inteira é redesenhada, e o hover perde o número de onde saiu.
+        e.preventDefault();
       };
 
       show(el: HTMLElement) {
@@ -757,6 +771,16 @@ function footnoteHover(actions: RenderedActions) {
             if (act?.kind === "note") {
               this.hide();
               actions.onOpenLink(act.target);
+            } else if (act?.kind === "tag" && actions.onOpenTag) {
+              this.hide();
+              actions.onOpenTag(act.tag);
+            } else if (act?.kind === "url" && this.meta) {
+              // Fonte com endereço (`[IBGE](https://…)`): abre com ⌘-clique, como a dica do link diz.
+              const safe = externalUrl(act.url);
+              if (safe) {
+                this.hide();
+                actions.onOpenUrl(safe);
+              }
             }
           },
         };
@@ -779,6 +803,8 @@ function footnoteHover(actions: RenderedActions) {
         this.view.dom.removeEventListener("mouseover", this.over);
         this.view.dom.removeEventListener("mouseout", this.out);
         this.view.dom.removeEventListener("mousedown", this.mousedown, true);
+        removeEventListener("scroll", this.away, true);
+        removeEventListener("keydown", this.escape, true);
       }
     },
   );

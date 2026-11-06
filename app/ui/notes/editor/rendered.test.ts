@@ -117,6 +117,14 @@ describe("notas de rodapé (T6377)", () => {
     return renderedBlocks(state, false, tree).map((b) => toRenderable(b.source, b.from, tree, () => "ok", notes));
   };
 
+  test("revisão: a chamada dentro da nota em linha é texto dela; rótulo com parêntese; a definição de uma palavra continua", () => {
+    expect(blocks("Texto ^[ver [^1]] mais.\n")).toEqual(["Texto [¹](kiwi-footnote-inline:1) mais."]);
+    expect(blocks("A[^a)b].\n\n[^a)b]: Nota.\n")).toEqual(["A[¹](kiwi-footnote:a%29b).", "[¹](kiwi-footnote-def:a%29b) Nota."]);
+    expect(linkAction("kiwi-footnote:a%29b")).toEqual({ kind: "footnote", label: "a)b" });
+    // `[^1]: Fonte:` é um link de referência para o parser, e a linha recuada viraria bloco de código: vão juntas.
+    expect(blocks("X[^1].\n\n[^1]: Fonte:\n    https://x.com/a\n")).toEqual(["X[¹](kiwi-footnote:1).", "[¹](kiwi-footnote-def:1) Fonte:\n    https://x.com/a"]);
+  });
+
   test("a chamada e a nota em linha viram o número, como link; a definição mostra o número dela", () => {
     expect(blocks("Texto[^a] e ^[em linha].\n\n[^a]: A nota.\n")).toEqual([
       "Texto[¹](kiwi-footnote:a) e [²](kiwi-footnote-inline:2).",

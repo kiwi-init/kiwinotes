@@ -51,6 +51,29 @@ describe("notas de rodapé (T6377)", () => {
     expect(n.defs).toEqual([]);
   });
 
+  test("revisão: fórmula, comentário, escape e a chamada dentro da nota em linha não ganham número", () => {
+    const doc = "$x^[2]$ e R$ 4.200^[caro]. %% [^oculta] %% <!-- [^html] --> a[^x\\] b ^[ver [^1]] c[^1].\n";
+    const n = scanFootnotes(doc);
+    expect(n.marks.map((m) => [m.kind === "ref" ? m.label : m.text, m.n])).toEqual([
+      ["caro", 1],
+      ["ver [^1]", 2],
+      ["1", 3],
+    ]);
+  });
+
+  test("revisão: uma linha cheia de ^[ sem fecho não trava", () => {
+    const t = performance.now();
+    scanFootnotes(`${"^[".repeat(20_000)}\n${"`".repeat(5000)}`);
+    expect(performance.now() - t).toBeLessThan(1000);
+  });
+
+  test("revisão: espaço depois da última definição; o ⌘Z desfaz só a nota", () => {
+    const doc = "A[^1] e B.\n\n[^1]: Um.   \n";
+    expect(apply(doc, footnoteInsert(doc, 9))).toBe("A[^1] e B[^2].\n\n[^1]: Um.   \n[^2]: ");
+    const state = EditorState.create({ doc: "Frase.", selection: { anchor: 6 } });
+    expect(insertFootnote(state).userEvent).toBe("input.complete");
+  });
+
   test("nota em linha vazia ou sem fecho fica texto", () => {
     expect(scanFootnotes("a ^[] b ^[sem fecho").marks).toEqual([]);
   });

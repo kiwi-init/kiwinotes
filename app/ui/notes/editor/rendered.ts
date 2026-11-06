@@ -11,7 +11,7 @@ import { isAttachmentName } from "../../../src/shared/attachments.ts";
 import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
 import { embedLine } from "./attachments.ts";
-import { type Footnotes, footnoteLabel, superscript } from "./footnotes.ts";
+import { type Footnotes, footnoteLabel, footnotesOf, superscript } from "./footnotes.ts";
 import { DICTATION_CAPTION } from "./livePreview.ts";
 
 /** Os blocos de cima da árvore que a lib desenha. Tabela tem o widget editável dela (`tablePreview`). */
@@ -69,12 +69,20 @@ export function keepsRaw(node: SyntaxNode, source: string): boolean {
  */
 export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree = fullTree(state)): RenderedBlock[] {
   const out: RenderedBlock[] = [];
+  let covered = -1;
   for (let n = tree.topNode.firstChild; n; n = n.nextSibling) {
+    // A linha recuada de uma definição de uma palavra só, que o parser lê como bloco de código: já foi com a nota.
+    if (n.from < covered) continue;
     // `[^1]: Palavra` (uma palavra só, ou um endereço) é um link de referência para o parser: é a nota de rodapé (T6377).
     const footnoteDef = n.name === "LinkReference" && /^ {0,3}\[\^/.test(state.doc.sliceString(n.from, n.from + 6));
     if (!RENDERED.has(n.name) && !footnoteDef) continue;
     const from = state.doc.lineAt(n.from).from;
-    const to = state.doc.lineAt(n.to).to;
+    let to = state.doc.lineAt(n.to).to;
+    if (footnoteDef) {
+      // As linhas recuadas logo abaixo continuam a nota: vão no mesmo bloco, e lá viram parágrafo (`toRenderable`).
+      const def = footnotesOf(state).defs.find((d) => d.from === from);
+      if (def && def.to > to) to = covered = def.to;
+    }
     if (focused && touches(state, from, to)) continue;
     const source = state.doc.sliceString(from, to);
     if (!source.trim() || keepsRaw(n, source)) continue;
@@ -124,13 +132,13 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
   const end = offset + source.length;
   for (const m of notes?.marks ?? []) {
     if (m.from < offset || m.to > end || inAny(tree, m.from + 1, CODE_INLINE)) continue;
-    const url = m.kind === "inline" ? `${FOOTNOTE_INLINE_LINK}${m.n}` : `${notes!.def(m.label) ? FOOTNOTE_LINK : FOOTNOTE_MISSING_LINK}${encodeURIComponent(m.label)}`;
+    const url = m.kind === "inline" ? `${FOOTNOTE_INLINE_LINK}${m.n}` : `${notes!.def(m.label) ? FOOTNOTE_LINK : FOOTNOTE_MISSING_LINK}${labelUrl(m.label)}`;
     edits.push({ from: m.from - offset, to: m.to - offset, insert: `[${superscript(m.n)}](${url})` });
   }
   for (const d of notes?.defs ?? []) {
     const marker = d.markerTo - `[^${d.label}]:`.length;
     if (marker < offset || d.markerTo > end) continue;
-    edits.push({ from: marker - offset, to: d.markerTo - offset, insert: `[${escapeLabel(footnoteLabel(notes!, d.label))}](${FOOTNOTE_DEF_LINK}${encodeURIComponent(d.label)})` });
+    edits.push({ from: marker - offset, to: d.markerTo - offset, insert: `[${escapeLabel(footnoteLabel(notes!, d.label))}](${FOOTNOTE_DEF_LINK}${labelUrl(d.label)})` });
   }
   const inFootnote = (a: number) => edits.some((e) => a >= e.from && a < e.to);
   let lineStart = 0;
@@ -168,6 +176,9 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
 }
 
 const CODE_INLINE = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText"]);
+
+/** O rótulo no endereço do link: o `encodeURIComponent` deixa o `(` e o `)`, que fecham o `(…)` do Markdown antes da hora. */
+const labelUrl = (label: string) => encodeURIComponent(label).replace(/[()]/g, (c) => (c === "(" ? "%28" : "%29"));
 
 export type LinkAction =
   | { kind: "note"; target: string }

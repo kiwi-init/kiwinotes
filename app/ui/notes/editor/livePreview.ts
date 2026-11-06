@@ -100,6 +100,7 @@ class FootnoteWidget extends WidgetType {
     el.addEventListener("mousedown", (e) => {
       if (e.button !== 0 || e.altKey || e.shiftKey) return;
       e.preventDefault();
+      focusEditorNow(view);
       const tr = footnoteJump(view.state, this.jump);
       if (tr) view.dispatch(tr);
     });
@@ -299,6 +300,17 @@ export const editorFocused = StateField.define<boolean>({
   create: () => false,
   update: (v, tr) => tr.effects.reduce((acc, e) => (e.is(focusChanged) ? e.value : acc), v),
 });
+
+/**
+ * O foco volta para o editor, e o `editorFocused` vai junto, na hora. A transação de foco do CodeMirror chega uns 10 ms
+ * depois, e o que fosse despachado antes dela ainda via o editor sem foco, com o bloco de destino desenhado: o
+ * navegador punha o cursor na beira do desenho, e o texto digitado logo em seguida caía na linha de cima (o menu
+ * Inserir › Nota de rodapé, T6377). Chame antes de despachar a ação.
+ */
+export function focusEditorNow(view: EditorView): void {
+  view.focus();
+  if (view.hasFocus && view.state.field(editorFocused, false) === false) view.dispatch({ effects: focusChanged.of(true) });
+}
 
 /**
  * O `editorFocused` igual ao foco de verdade. O CodeMirror monta a transação de foco quando o foco muda e a aplica um
