@@ -60,6 +60,10 @@ final class Helper {
     private var meetingDictionary = TranscriptDictionary.empty
     /// R2 (#195): which app takes the mic, the pop-up, the meeting shortcuts and the meeting pill.
     private var meeting: MeetingController!
+    /// L6 (T5457): com o Fn como atalho, a ação do 🌐 do macOS fica em "Nenhuma ação" enquanto o helper roda.
+    private var globe: GlobeKeyOwner!
+    private var globeStarted = false
+    private var signalSources: [DispatchSourceSignal] = []
 
     init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false, meetingDirectory: URL? = nil, recoveryDirectory: URL? = nil) {
         self.connection = connection
@@ -73,6 +77,17 @@ final class Helper {
         tap = HotkeyTap { [weak self] event in self?.onTap(event) }
         // The cancel is armed only while a dictation records: outside it, Esc is the other apps' (L5).
         tap.isActive = { [weak self] id in id != "cancel" || self?.audio.isRecording == true }
+        // A preferência de verdade só no app. No headless e com KIWI_DEBUG (os agentes), uma falsa num arquivo, e o
+        // AppleFnUsageType do Mac nunca é tocado (AGENTS.md, #4871).
+        let dataDirectory = meetingDirectory?.deletingLastPathComponent()
+        let fake = headless || ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1"
+        let store: FnUsageStore? = fake
+            ? dataDirectory.map { FileFnUsageStore(file: $0.appendingPathComponent("fn-usage-fake.json"),
+                                                   initial: Int32(ProcessInfo.processInfo.environment["KIWI_FAKE_FN_USAGE"] ?? "") ?? 2) }
+            : SystemFnUsage()
+        globe = GlobeKeyOwner(store: store, marker: dataDirectory?.appendingPathComponent("globe-preference.json")) { [weak self] line in
+            self?.emit("log", ["level": "info", "message": line])
+        }
         applyShortcuts()
         meeting = MeetingController(ownPids: [getpid(), getppid()], headless: headless)
         meeting.startCapture = { [weak self] app in
@@ -141,12 +156,23 @@ final class Helper {
         connection.onClose = { [weak self] in
             // No orphan sidecar: when the app goes away, so do we.
             DispatchQueue.main.async {
-                _ = self?.audio.stop()
-                _ = self?.finishRecovery()
-                try? self?.meetings?.capture.stop()
-                exit(0)
+                guard let self else { exit(0) }
+                self.quit()
             }
         }
+        // O app encerra o helper com SIGTERM: antes de sair, a ação do 🌐 volta (T5457).
+        signalSources = [SIGTERM, SIGINT].map { number in
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler { [weak self] in
+                guard let self else { exit(0) }
+                self.quit()
+            }
+            source.resume()
+            return source
+        }
+        globe.start(fnIsShortcut: dictationKey == .fn)
+        globeStarted = true
         if !headless { tap.start() }
         overlay.enabled = !headless
         meeting.start()
@@ -321,6 +347,19 @@ final class Helper {
     private func applyShortcuts() {
         // A fixed order, so two shortcuts on the same keys always resolve the same way.
         tap.bindings = ["dictation", "cancel", "pasteLast", "notes", "meeting", "meetingPause"].compactMap { id in shortcuts[id].map { (id: id, shortcut: $0) } }
+        // L6 (T5457): trocar o atalho para outra tecla devolve a ação do 🌐; voltar para o Fn troca de novo.
+        if globeStarted { globe.set(fnIsShortcut: dictationKey == .fn) }
+    }
+
+    /// Devolve a ação do 🌐 e sai: o app fechou (o socket, ⌘Q) ou mandou encerrar (SIGTERM). Uma queda fica para a
+    /// próxima abertura, que desfaz a troca primeiro.
+    private func quit() -> Never {
+        globe.restore()
+        _ = audio.stop()
+        // L3 (T5455): o journal do ditado em curso fecha antes de sair, para a recuperação.
+        _ = finishRecovery()
+        try? meetings?.capture.stop()
+        exit(0)
     }
 
     private func apply(_ action: GestureAction) {

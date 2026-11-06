@@ -17,6 +17,7 @@ afterEach(() => {
 test("do log do helper, só o diagnóstico do mic (ditado e reunião) vai para o log do app; o texto do dryRun nunca", () => {
   expect(helperLogLine("mic: diag · engine new · first audio 120 ms")).toBe("[sidecar] mic: diag · engine new · first audio 120 ms");
   expect(helperLogLine("meeting mic: diag · Teams")).toBe("[sidecar] meeting mic: diag · Teams");
+  expect(helperLogLine("fn: the 🌐 action is off while Kiwi uses Fn (was 2)")).toBe("[sidecar] fn: the 🌐 action is off while Kiwi uses Fn (was 2)");
   expect(helperLogLine("insert (dry run): bom dia a todos")).toBeNull();
   expect(helperLogLine("transcript: bom dia")).toBeNull();
 });
