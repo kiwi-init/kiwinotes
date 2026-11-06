@@ -1,0 +1,39 @@
+Test Suite 'Selected tests' started at 2026-11-06 10:35:11.045.
+Test Suite 'KiwiOCRTests.xctest' started at 2026-11-06 10:35:11.046.
+Test Suite 'KiwiOCRTests.xctest' passed at 2026-11-06 10:35:11.046.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-06 10:35:11.046.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-06 10:35:11.142.
+Test Suite 'KiwiHelperCoreTests.xctest' started at 2026-11-06 10:35:11.143.
+Test Suite 'DictationMediaTests' started at 2026-11-06 10:35:11.143.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testFailedCaptureRestoresImmediately]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testFailedCaptureRestoresImmediately]' passed (0.001 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testLowersBeforeCaptureAndRestoresWhenCaptureEnds]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testLowersBeforeCaptureAndRestoresWhenCaptureEnds]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testManualVolumeChoiceIsPreserved]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testManualVolumeChoiceIsPreserved]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMeetingNeverLowersAndStartingMeetingReleasesDictationChange]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMeetingNeverLowersAndStartingMeetingReleasesDictationChange]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMutedOutputAndDisabledAdapterHaveNoWrites]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMutedOutputAndDisabledAdapterHaveNoWrites]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testOutputSwitchNeverModifiesTheNewDefaultAndDisconnectedDeviceIsSkipped]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testOutputSwitchNeverModifiesTheNewDefaultAndDisconnectedDeviceIsSkipped]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testRepeatedStartEndAndNewCaptureDoNotAccumulateDucking]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testRepeatedStartEndAndNewCaptureDoNotAccumulateDucking]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testStereoChannelsRestoreIndependentlyAndQuantizedVolumeRestores]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testStereoChannelsRestoreIndependentlyAndQuantizedVolumeRestores]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testUnavailableOrReadOnlyVolumeNeverBlocksCaptureAndReportsStableCode]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testUnavailableOrReadOnlyVolumeNeverBlocksCaptureAndReportsStableCode]' passed (0.000 seconds).
+Test Suite 'DictationMediaTests' passed at 2026-11-06 10:35:11.146.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'KiwiHelperCoreTests.xctest' passed at 2026-11-06 10:35:11.146.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'Selected tests' passed at 2026-11-06 10:35:11.146.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.004) seconds
+Test Suite 'Selected tests' started at 2026-11-06 10:35:11.258.
+Test Suite 'KiwiExportTests.xctest' started at 2026-11-06 10:35:11.259.
+Test Suite 'KiwiExportTests.xctest' passed at 2026-11-06 10:35:11.259.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-06 10:35:11.259.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
