@@ -51,7 +51,9 @@ jobs:
         timeout-minutes: 5
         run: for i in 1 2 3; do bun run prepare:eb && exit 0; echo "electrobun prepare failed ($i of 3)"; [ "$i" -lt 3 ] && sleep 20; done; exit 1
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restaura aqui e grava logo depois de instalar (não no fim do job): um teste que falha não impede de guardar.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: playwright-cache
         with:
           path: ~/Library/Caches/ms-playwright
           # O v2 entrou com o chrome-headless-shell (issue 224): o cache antigo só tinha o WebKit.
@@ -62,16 +64,25 @@ jobs:
       - name: Browsers
         run: bunx playwright-core install webkit chromium-headless-shell
 
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
+
       - name: bun test
         run: bun test
 
       # Os roteiros de UI que o `bun test` não roda (issue 224): ficaram quebrando na `main` sem ninguém ver.
       # A janela Notas no Vite de dev com o vault de mentira, e as abas do hub no build real com um headless --no-helper.
+      # Rodam mesmo com o `bun test` vermelho: um defeito não esconde o outro.
       - name: notes-ui-check
+        if: ${{ !cancelled() }}
         timeout-minutes: 10
         run: bun scripts/notes-ui-check.ts
 
       - name: hub-tabs-ui-check
+        if: ${{ !cancelled() }}
         timeout-minutes: 10
         run: bun scripts/hub-tabs-ui-check.ts
 

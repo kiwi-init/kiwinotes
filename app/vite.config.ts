@@ -11,10 +11,12 @@ import { defineConfig } from "vite";
 const md4cAsEsm = {
   name: "kiwi-md4c-esm",
   setup(build: { onLoad(o: { filter: RegExp }, cb: (a: { path: string }) => Promise<{ contents: string; loader: "js" }>): void }) {
-    build.onLoad({ filter: /react-native-enriched-markdown[\\/]lib[\\/]module[\\/]web[\\/]wasm[\\/]md4c\.js$/ }, async (args) => ({
-      contents: `${await readFile(args.path, "utf8")}\nexport default createMd4cModule;\n`,
-      loader: "js",
-    }));
+    build.onLoad({ filter: /react-native-enriched-markdown[\\/]lib[\\/]module[\\/]web[\\/]wasm[\\/]md4c\.js$/ }, async (args) => {
+      const code = await readFile(args.path, "utf8");
+      // A lib mudou o nome: melhor quebrar o dev aqui do que deixar toda nota em texto cru sem dizer por quê.
+      if (!/\bcreateMd4cModule\b/.test(code)) throw new Error(`${args.path}: sem o createMd4cModule; reveja o md4cAsEsm`);
+      return { contents: `${code}\nexport default createMd4cModule;\n`, loader: "js" };
+    });
   },
 };
 

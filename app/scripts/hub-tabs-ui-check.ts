@@ -5,7 +5,7 @@
 // e OUT, os dois ficam em pastas novas do tmp. Roda no CI (ci.yml).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Browser, type Page } from "playwright-core";
@@ -53,11 +53,26 @@ const style = (p: Page, section: string) => p.locator(`.kn-tab[data-section=${se
     width: b.width, weight: s.fontWeight };
 });
 
-// Sobe por último, logo antes do try: um erro antes dele não deixa um headless órfão.
+// Sobe por último, logo antes do try: um erro antes dele não deixa um headless órfão. O `cli start` deixa o engine
+// solto: o Ctrl-C e o timeout do passo do CI (SIGINT, SIGTERM) não passam pelo `finally`, então também derrubam ele.
+const cli = resolve(import.meta.dir, "cli.ts");
+let running = false;
+/** Derruba o nosso headless e apaga a pasta de dados que o roteiro criou no tmp (a de OUT fica: são os prints). */
+const cleanup = () => {
+  if (running) spawnSync(process.execPath, [cli, "stop", "--data", data], { encoding: "utf8", timeout: 15_000 });
+  running = false;
+  if (!dataArg && ownHeadless) rmSync(data, { recursive: true, force: true });
+};
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+  process.on(signal, () => {
+    cleanup();
+    process.exit(code);
+  });
+}
 if (ownHeadless) {
-  const cli = resolve(import.meta.dir, "cli.ts");
   const up = spawnSync(process.execPath, [cli, "start", "--data", data, "--no-helper"], { encoding: "utf8" });
-  if (up.status !== 0) throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
+  running = up.status === 0;
+  if (!running) throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
 }
 try {
   for (const theme of ["light", "dark"] as const) {
@@ -180,6 +195,6 @@ try {
 } finally {
   writeFileSync(resolve(out, "metrics.json"), JSON.stringify(metrics, null, 2));
   await browser.close();
-  if (ownHeadless) await request(data, { cmd: "stop" }, 10_000);
+  cleanup();
 }
 console.log(`prints e vídeos em ${out}`);
