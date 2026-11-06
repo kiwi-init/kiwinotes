@@ -133,13 +133,28 @@ function turndown(): TurndownService {
 /** O HTML colado em Markdown limpo: sem comentário, sem espaço no fim da linha, no máximo uma linha em branco seguida. */
 export function htmlToMarkdown(html: string): string {
   const md = turndown().turndown(html.replace(/<!--[\s\S]*?-->/g, ""));
-  return md
+  return betweenWords(md)
     .replace(/ /g, " ")
     .replace(/[ \t]+$/gm, "")
     // A caixa da tarefa vem com o espaço dela e o do texto.
     .replace(/^([ \t]*(?:[-*+]|\d+\.) \[[ xX]\]) {2,}/gm, "$1 ")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/^\n+|\s+$/g, "");
+}
+
+/**
+ * Os espaços seguidos no meio da linha viram um (o que sobra de uma imagem ou de um botão que saiu), menos no código, onde
+ * o espaço é do código.
+ */
+function betweenWords(md: string): string {
+  let fence = false;
+  return md
+    .split("\n")
+    .map((line) => {
+      if (/^ {0,3}(?:```|~~~)/.test(line)) fence = !fence;
+      return fence || line.startsWith("    ") ? line : line.replace(/(\S) {2,}(?=\S)/g, "$1 ");
+    })
+    .join("\n");
 }
 
 /** O texto, sem a marcação que o turndown escapa e com os espaços juntos: para ver se o Markdown acrescenta algo. */

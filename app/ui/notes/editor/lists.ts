@@ -61,6 +61,12 @@ export function itemIndentEm(indent: string, marker: string, task: boolean): num
   return Math.round((cols * 0.55 + mark) * 100) / 100;
 }
 
+/**
+ * O começo do item. Inclusivo nas duas pontas: o "•" e a caixa do `livePreview` substituem o marcador a partir do mesmo
+ * ponto, e uma marca não inclusiva abre depois deles (fica com o "•" do lado de fora, no recuo negativo da linha).
+ */
+const head = Decoration.mark({ class: "cm-list-head", inclusiveStart: true, inclusiveEnd: true });
+
 function buildHanging(view: EditorView): DecorationSet {
   const out: Range<Decoration>[] = [];
   const { state } = view;
@@ -72,7 +78,7 @@ function buildHanging(view: EditorView): DecorationSet {
       if (!m || !isListMark(state, line.from + m[1]!.length)) continue;
       const em = itemIndentEm(m[1]!, m[2]!, !!m[4]);
       out.push(Decoration.line({ class: "cm-list-line", attributes: { style: `--kn-hang: ${em}em` } }).range(line.from));
-      out.push(Decoration.mark({ class: "cm-list-head" }).range(line.from, line.from + m[0].length));
+      out.push(head.range(line.from, line.from + m[0].length));
     }
   }
   return Decoration.set(out, true);
