@@ -12,14 +12,14 @@ export interface WikiLink {
   alias?: string;
 }
 
-const LINK = /\[\[([^\[\]|#\n]+)(?:#([^\[\]|\n]*))?(?:\|([^\[\]\n]*))?\]\]/g;
+const LINK = /\[\[([^\[\]|#\n]*)(?:#([^\[\]|\n]*))?(?:\|([^\[\]\n]*))?\]\]/g;
 
 /** Todos os links do texto, em ordem. */
 export function parseLinks(text: string): WikiLink[] {
   const out: WikiLink[] = [];
   for (const m of text.matchAll(LINK)) {
     const target = m[1]!.trim();
-    if (!target) continue;
+    if (!target && !m[2]?.trim()) continue;
     out.push({
       from: m.index!,
       to: m.index! + m[0].length,

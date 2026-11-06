@@ -19,6 +19,7 @@ import { EditorView, keymap, placeholder, showTooltip, type Tooltip } from "@cod
 import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 
+import { markdownStructure } from "../../../src/shared/markdown-structure.ts";
 import { externalUrl, linkAt } from "../links.ts";
 import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
@@ -55,6 +56,7 @@ export interface EditorOptions {
   onSlashTemplate?(): void;
   /** As notas para o autocomplete do `[[`. */
   linkTargets(): LinkTarget[];
+  headingContent?(target: string): Promise<string | null>;
   /** `notes.resolve`: para desenhar o link que ainda não existe de outro jeito. */
   resolve(target: string): Promise<string | null>;
   /** Os anexos (T2594): colar e arrastar imagem e PDF, e desenhar o `![[…]]`. Sem isto (um engine antigo), nada muda. */
@@ -105,6 +107,28 @@ export function linkCompletion(targets: () => LinkTarget[]) {
       },
     }));
     return { from, options, validFor: /^[^\[\]|#\n]*$/ };
+  };
+}
+
+export function headingCompletion(content: (target: string) => Promise<string | null>) {
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    const match = ctx.matchBefore(/\[\[[^\[\]|#\n]*#[^\[\]|#\n]*/);
+    if (!match) return null;
+    const hash = match.text.indexOf("#");
+    const target = match.text.slice(2, hash).trim();
+    const text = target ? await content(target).catch(() => null) : ctx.state.doc.toString();
+    if (text === null || ctx.aborted) return null;
+    return {
+      from: match.from + hash + 1,
+      options: markdownStructure(text).headings.filter((h) => h.title && !/[\[\]|#]/.test(h.title)).map((h) => ({
+        label: h.title,
+        apply: (view, _completion, from, to) => {
+          const close = view.state.doc.sliceString(to, to + 2) === "]]" ? "" : "]]";
+          view.dispatch({ changes: { from, to, insert: h.title + close }, selection: { anchor: from + h.title.length + 2 } });
+        },
+      })),
+      validFor: /^[^\[\]|#\n]*$/,
+    };
   };
 }
 
@@ -343,7 +367,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     ...(opts.attachments ? [attachmentPreview(opts.attachments), attachmentTheme] : []),
     ]),
     ...(opts.attachments ? [attachmentInput(opts.attachments, (t) => opts.onError?.(t))] : []),
-    autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets)], icons: false, closeOnBlur: true }),
+    autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets), headingCompletion((target) => opts.headingContent?.(target) ?? Promise.resolve(null))], icons: false, closeOnBlur: true }),
     formatBar,
     tableKeys,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
@@ -386,7 +410,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
           const link = linkAt(line.text, pos - line.from);
           if (link) {
             e.preventDefault();
-            opts.onOpenLink(link.target);
+            opts.onOpenLink(link.target + (link.heading ? `#${link.heading}` : ""));
             return true;
           }
           // Link do Markdown ([texto](https://…) ou <https://…>): ⌘-clique abre fora, nunca na janela.

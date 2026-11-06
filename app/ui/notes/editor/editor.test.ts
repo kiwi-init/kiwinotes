@@ -8,7 +8,7 @@ import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 
 import { externalUrl } from "../links.ts";
-import { linkCompletion, urlAt, wikiLinkSyntax } from "./index.ts";
+import { headingCompletion, linkCompletion, urlAt, wikiLinkSyntax } from "./index.ts";
 import { DICTATION_CAPTION, findComments, rawCellStart } from "./livePreview.ts";
 
 const targets = () => [
@@ -35,6 +35,28 @@ describe("autocomplete do [[", () => {
     expect(complete("[[Ana#Tít")).toBeNull();
     expect(complete("[Ana")).toBeNull();
   });
+});
+
+test("autocomplete de títulos usa a nota resolvida e ignora código", async () => {
+  const state = EditorState.create({ doc: "[[Ana#Ti" });
+  const source = headingCompletion(async (target) => target === "Ana" ? "# Título\n```\n# Falso\n```\n## Outro" : null);
+  const result = await source(new CompletionContext(state, state.doc.length, false));
+  expect(result?.from).toBe(6);
+  expect(result?.options.map((option) => option.label)).toEqual(["Título", "Outro"]);
+  expect(await source(new CompletionContext(EditorState.create({ doc: "[[Ana|x#" }), 8, false))).toBeNull();
+});
+
+test("autocomplete de títulos locais usa o texto atual", async () => {
+  const doc = "# Primeiro\n[[#";
+  const state = EditorState.create({ doc });
+  const result = await headingCompletion(async () => null)(new CompletionContext(state, doc.length, false));
+  expect(result?.options.map((option) => option.label)).toEqual(["Primeiro"]);
+});
+
+test("não oferece títulos que quebrariam a sintaxe do wikilink", async () => {
+  const doc = "# A | B\n# Fecha ]\n# Seguro\n[[#";
+  const result = await headingCompletion(async () => null)(new CompletionContext(EditorState.create({ doc }), doc.length, false));
+  expect(result?.options.map((option) => option.label)).toEqual(["Seguro"]);
 });
 
 describe("Markdown do GitHub", () => {

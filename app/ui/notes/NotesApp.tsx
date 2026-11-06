@@ -99,6 +99,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
   const [note, setNote] = useState<Note | null>(null);
   const [docKey, setDocKey] = useState("");
+  const [headingJump, setHeadingJump] = useState<{ path: string; heading: string; sequence: number } | null>(null);
   const shown = useRef(0);
   const [body, setBody] = useState("");
   const [title, setTitle] = useState("");
@@ -212,6 +213,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       version.current = n.version;
       baseContent.current = n.content;
       current.current = n.path;
+      setHeadingJump(null);
       pending.current = null;
       setNote(n);
       setTitle(n.title);
@@ -538,20 +540,24 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   };
 
   const onOpenLink = async (target: string) => {
-    const path = await api.resolve(target).catch(() => null);
-    // Como no Obsidian: clicar num link para uma nota que não existe cria a nota. Com o engine que tem `notes.daily` (T2593), na pasta
-    // certa: `[[Pasta/Nota]]` em Pasta, `[[Nota]]` na pasta desta nota.
-    if (path) await open(path);
+    const hash = target.indexOf("#");
+    const name = hash < 0 ? target : target.slice(0, hash);
+    const heading = hash < 0 ? "" : target.slice(hash + 1);
+    const path = name ? await api.resolve(name).catch(() => null) : current.current;
+    if (path) {
+      if (path !== current.current) await open(path);
+      if (heading && current.current === path) setHeadingJump((previous) => ({ path, heading, sequence: (previous?.sequence ?? 0) + 1 }));
+    }
     else if (api.extras) {
       if (!(await leave())) return;
-      const n = await api.extras.createFromLink(target, current.current ?? undefined).catch(() => null);
+      const n = await api.extras.createFromLink(name, current.current ?? undefined).catch(() => null);
       if (!n) return;
       setTreeOpen(false);
       setBackOpen(false);
       await refresh();
       show(n);
       requestAnimationFrame(() => focusEditor());
-    } else await create(target);
+    } else if (name) await create(name);
   };
 
   /** A nota do dia (T2593): abre a de hoje, criando se ainda não existe. */
@@ -1314,6 +1320,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             </details> : null}
             <NoteEditor
               docKey={docKey}
+              headingJump={headingJump?.path === note.path ? headingJump : null}
               doc={body}
               links={links}
               onChange={onChange}
@@ -1328,6 +1335,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               onOpenTag={openTag}
               onSlashTemplate={api.templates ? () => fromTemplate(note?.folder ?? "", true) : undefined}
               linkTargets={linkTargets}
+              headingContent={async (target) => {
+                const path = await api.resolve(target);
+                if (!path) return null;
+                return path === note.path ? pending.current ?? splitFrontmatter(baseContent.current).body : (await api.get(path)).content;
+              }}
               attachments={api.attachments}
               onError={(t) => say(t)}
             />

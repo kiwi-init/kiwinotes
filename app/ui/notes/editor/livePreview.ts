@@ -171,9 +171,10 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
         const a = line.from + link.from;
         const b = line.from + link.to;
         if (inCode(tree.resolveInner(a + 2, 1))) continue;
-        const status = resolver.status(link.target);
+        const status = link.target ? resolver.status(link.target) : "ok";
         const cls = `cm-wikilink${status === "missing" ? " cm-wikilink-missing" : ""}`;
-        const attributes = { "data-target": link.target, title: status === "missing" ? `${link.target} (ainda não existe)` : link.target };
+        const destination = link.target + (link.heading ? `#${link.heading}` : "");
+        const attributes = { "data-target": destination, title: status === "missing" ? `${link.target} (ainda não existe)` : destination };
         if (isActive(a)) {
           out.push(Decoration.mark({ class: `${cls} cm-wikilink-raw`, attributes }).range(a, b));
           continue;
@@ -182,8 +183,8 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
         const raw = line.text.slice(link.from, link.to);
         const bar = raw.lastIndexOf("|");
         const hash = raw.indexOf("#");
-        const shownAt = bar > 0 ? bar + 1 : 2;
-        const shownEnd = bar > 0 ? raw.length - 2 : hash > 0 ? hash : raw.length - 2;
+        const shownAt = bar > 0 ? bar + 1 : !link.target && hash > 0 ? hash + 1 : 2;
+        const shownEnd = bar > 0 || !link.target ? raw.length - 2 : hash > 0 ? hash : raw.length - 2;
         if (shownEnd <= shownAt) continue; // apelido vazio ("[[Ana|]]"): fica cru
         out.push(hide.range(a, a + shownAt));
         out.push(Decoration.mark({ class: cls, attributes }).range(a + shownAt, a + shownEnd));

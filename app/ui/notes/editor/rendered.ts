@@ -114,7 +114,7 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
     for (const link of parseLinks(line)) {
       const a = lineStart + link.from;
       if (inAny(tree, offset + a + 2, CODE_INLINE)) continue;
-      const shown = link.alias || link.target;
+      const shown = link.alias || link.target || link.heading || "";
       const embed = line[link.from - 1] === "!";
       if (embed && isAttachmentName(link.target)) {
         // `![[foto.png]]` no meio do texto: a imagem, lida do vault.
@@ -123,8 +123,9 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
         continue;
       }
       // `![[Nota]]` (a nota embutida, do Obsidian) aparece como o link para ela.
-      const scheme = status(link.target) === "missing" ? MISSING_LINK : NOTE_LINK;
-      edits.push({ from: embed ? a - 1 : a, to: lineStart + link.to, insert: `[${escapeLabel(shown)}](${scheme}${encodeURIComponent(link.target)})` });
+      const scheme = link.target && status(link.target) === "missing" ? MISSING_LINK : NOTE_LINK;
+      const destination = link.target + (link.heading ? `#${link.heading}` : "");
+      edits.push({ from: embed ? a - 1 : a, to: lineStart + link.to, insert: `[${escapeLabel(shown)}](${scheme}${encodeURIComponent(destination)})` });
     }
     const callout = calloutHead(line);
     if (callout && !inAny(tree, offset + lineStart, CODE_INLINE)) {
