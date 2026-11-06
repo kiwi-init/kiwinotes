@@ -1,0 +1,223 @@
+{
+  "text": {
+    "passed": 113,
+    "failed": 0,
+    "known": 0,
+    "fixed": [],
+    "note": null
+  },
+  "wav": {
+    "passed": 26,
+    "failed": 0,
+    "known": 0,
+    "fixed": [],
+    "note": "boosting do vocabulário: ready · STT: mediana 260 ms, pior 532 ms (26 casos)"
+  },
+  "fp": {
+    "passed": 30,
+    "failed": 0,
+    "known": 0,
+    "fixed": [],
+    "note": null
+  },
+  "L7": [
+    {
+      "name": "L7: PT vírgula e ponto final",
+      "ok": true,
+      "text": "Oi, Ana.",
+      "failures": []
+    },
+    {
+      "name": "L7: PT interrogação",
+      "ok": true,
+      "text": "Você vem?",
+      "failures": []
+    },
+    {
+      "name": "L7: PT exclamação",
+      "ok": true,
+      "text": "Conseguimos!",
+      "failures": []
+    },
+    {
+      "name": "L7: PT dois pontos",
+      "ok": true,
+      "text": "Aviso: atenção.",
+      "failures": []
+    },
+    {
+      "name": "L7: PT ponto e vírgula",
+      "ok": true,
+      "text": "Entreguei; falta revisar.",
+      "failures": []
+    },
+    {
+      "name": "L7: PT aspas",
+      "ok": true,
+      "text": "“Texto citado”",
+      "failures": []
+    },
+    {
+      "name": "L7: PT parênteses",
+      "ok": true,
+      "text": "Teste (opcional)",
+      "failures": []
+    },
+    {
+      "name": "L7: PT reticências",
+      "ok": true,
+      "text": "Talvez… amanhã.",
+      "failures": []
+    },
+    {
+      "name": "L7: EN comma e full stop",
+      "ok": true,
+      "text": "Hello, Ana.",
+      "failures": []
+    },
+    {
+      "name": "L7: EN period",
+      "ok": true,
+      "text": "Done. Next task.",
+      "failures": []
+    },
+    {
+      "name": "L7: EN question mark",
+      "ok": true,
+      "text": "Are you coming?",
+      "failures": []
+    },
+    {
+      "name": "L7: EN exclamation mark",
+      "ok": true,
+      "text": "We did it!",
+      "failures": []
+    },
+    {
+      "name": "L7: EN colon e semicolon",
+      "ok": true,
+      "text": "Notice: ready; ship tomorrow.",
+      "failures": []
+    },
+    {
+      "name": "L7: EN quotes",
+      "ok": true,
+      "text": "“Quoted text”",
+      "failures": []
+    },
+    {
+      "name": "L7: EN parentheses",
+      "ok": true,
+      "text": "Test (optional)",
+      "failures": []
+    },
+    {
+      "name": "L7: EN ellipsis",
+      "ok": true,
+      "text": "Maybe… tomorrow.",
+      "failures": []
+    },
+    {
+      "name": "L7: nome ponto final",
+      "ok": true,
+      "text": "O ponto final do projeto.",
+      "failures": []
+    },
+    {
+      "name": "L7: nome vírgula",
+      "ok": true,
+      "text": "A vírgula separa as orações.",
+      "failures": []
+    },
+    {
+      "name": "L7: nome interrogação",
+      "ok": true,
+      "text": "O ponto de interrogação indica dúvida.",
+      "failures": []
+    },
+    {
+      "name": "L7: nome dois pontos",
+      "ok": true,
+      "text": "Temos 2 pontos importantes.",
+      "failures": []
+    },
+    {
+      "name": "L7: nome inglês",
+      "ok": true,
+      "text": "The period of the project.",
+      "failures": []
+    },
+    {
+      "name": "L7: nome colon",
+      "ok": true,
+      "text": "Colon cancer is serious.",
+      "failures": []
+    },
+    {
+      "name": "L7: nome parênteses",
+      "ok": true,
+      "text": "Ela abre parênteses no texto.",
+      "failures": []
+    },
+    {
+      "name": "L7: decimal PT",
+      "ok": true,
+      "text": "O valor é 3,5.",
+      "failures": []
+    },
+    {
+      "name": "L7: decimal EN",
+      "ok": true,
+      "text": "The value is 3.5.",
+      "failures": []
+    },
+    {
+      "name": "L7: horas negadas",
+      "ok": true,
+      "text": "Às 3h não às 4h.",
+      "failures": []
+    },
+    {
+      "name": "L7: horas na frase",
+      "ok": true,
+      "text": "Me encontra às 3h não às 4h.",
+      "failures": []
+    },
+    {
+      "name": "L7: comando com STT",
+      "ok": true,
+      "text": "Oi, Ana.",
+      "failures": []
+    },
+    {
+      "name": "L7: ponto explícito no Slack",
+      "ok": true,
+      "text": "Oi, Ana.",
+      "failures": []
+    },
+    {
+      "name": "L7: vírgula sozinha",
+      "ok": true,
+      "text": ",",
+      "failures": []
+    },
+    {
+      "name": "L7: colon sozinho",
+      "ok": true,
+      "text": ":",
+      "failures": []
+    },
+    {
+      "name": "L7: ponto final sozinho",
+      "ok": true,
+      "text": ".",
+      "failures": []
+    },
+    {
+      "name": "L7: nome reticências",
+      "ok": true,
+      "text": "Adoro reticências no texto.",
+      "failures": []
+    }
+  ]
+}

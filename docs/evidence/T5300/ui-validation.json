@@ -1,0 +1,16 @@
+{
+  "light": {
+    "ready": true,
+    "problems": [],
+    "clipboard": [],
+    "blocked": [],
+    "invokeErrors": []
+  },
+  "dark": {
+    "ready": true,
+    "problems": [],
+    "clipboard": [],
+    "blocked": [],
+    "invokeErrors": []
+  }
+}

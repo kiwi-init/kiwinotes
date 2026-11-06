@@ -1,0 +1,122 @@
+[
+  {
+    "title": "Português",
+    "raw": "oi vírgula Ana ponto final",
+    "result": {
+      "input": "text",
+      "app": null,
+      "note": false,
+      "raw": "oi vírgula Ana ponto final",
+      "text": "Oi, Ana.",
+      "tone": "default",
+      "latencyMs": {
+        "stt": 0,
+        "app": 6
+      },
+      "insert": {
+        "plan": "paste",
+        "reason": null,
+        "autoSpace": true,
+        "spaced": false,
+        "typed": "Oi, Ana."
+      },
+      "historyId": "2026-11-06T03:34:56.446Z-c634"
+    }
+  },
+  {
+    "title": "English",
+    "raw": "notice colon ready semicolon ship tomorrow",
+    "result": {
+      "input": "text",
+      "app": null,
+      "note": false,
+      "raw": "notice colon ready semicolon ship tomorrow",
+      "text": "Notice: ready; ship tomorrow.",
+      "tone": "default",
+      "latencyMs": {
+        "stt": 0,
+        "app": 1
+      },
+      "insert": {
+        "plan": "paste",
+        "reason": null,
+        "autoSpace": true,
+        "spaced": false,
+        "typed": "Notice: ready; ship tomorrow."
+      },
+      "historyId": "2026-11-06T03:34:56.603Z-2f32"
+    }
+  },
+  {
+    "title": "Horas",
+    "raw": "às três não às quatro",
+    "result": {
+      "input": "text",
+      "app": null,
+      "note": false,
+      "raw": "às três não às quatro",
+      "text": "Às 3h não às 4h.",
+      "tone": "default",
+      "latencyMs": {
+        "stt": 0,
+        "app": 3
+      },
+      "insert": {
+        "plan": "paste",
+        "reason": null,
+        "autoSpace": true,
+        "spaced": false,
+        "typed": "Às 3h não às 4h."
+      },
+      "historyId": "2026-11-06T03:34:56.790Z-8314"
+    }
+  },
+  {
+    "title": "Conteúdo preservado",
+    "raw": "o ponto final do projeto",
+    "result": {
+      "input": "text",
+      "app": null,
+      "note": false,
+      "raw": "o ponto final do projeto",
+      "text": "O ponto final do projeto.",
+      "tone": "default",
+      "latencyMs": {
+        "stt": 0,
+        "app": 1
+      },
+      "insert": {
+        "plan": "paste",
+        "reason": null,
+        "autoSpace": true,
+        "spaced": false,
+        "typed": "O ponto final do projeto."
+      },
+      "historyId": "2026-11-06T03:34:56.948Z-3e55"
+    }
+  },
+  {
+    "title": "Decimal preservado",
+    "raw": "o valor é três vírgula cinco",
+    "result": {
+      "input": "text",
+      "app": null,
+      "note": false,
+      "raw": "o valor é três vírgula cinco",
+      "text": "O valor é 3,5.",
+      "tone": "default",
+      "latencyMs": {
+        "stt": 0,
+        "app": 1
+      },
+      "insert": {
+        "plan": "paste",
+        "reason": null,
+        "autoSpace": true,
+        "spaced": false,
+        "typed": "O valor é 3,5."
+      },
+      "historyId": "2026-11-06T03:34:57.099Z-c3be"
+    }
+  }
+]
