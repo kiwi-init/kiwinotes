@@ -114,6 +114,9 @@ type Recording = {
 
 /** Um ditado que não chegou a texto (a gravação caiu, o STT falhou, o helper reiniciou). */
 const failed = (error: string): DictationOutcome => ({ text: "", pasted: false, skipped: "error", error, appMs: 0 });
+/** O site do navegador (L18), quando o helper mandou: só para o tom, nunca para o histórico. */
+const siteOf = (app: AppRef | undefined): { title?: string; urlHost?: string } | undefined =>
+  app?.title || app?.urlHost ? { ...(app.title ? { title: app.title } : {}), ...(app.urlHost ? { urlHost: app.urlHost } : {}) } : undefined;
 
 export class Dictation {
   private dictionary: DictionaryTerm[] = [];
@@ -303,7 +306,7 @@ export class Dictation {
   private prewarm(app: AppRef | undefined) {
     const { llm, llmMode = "off" } = this.options;
     if (llmMode === "off" || !llm?.available() || llm.name !== "foundation-models") return;
-    const tone = toneFor(app?.bundleId);
+    const tone = toneFor(app?.bundleId, app);
     if (tone === "literal") return;
     void this.options.sidecar.send({ type: "llm.prewarm", system: llmSystemMessage(tone, this.dictionary) }).catch(() => {});
   }
@@ -320,7 +323,7 @@ export class Dictation {
     if (!t.text.trim()) return empty();
 
     const result = await cleanup(
-      { raw: t.text, bundleId: app?.bundleId, dictionary: this.dictionary },
+      { raw: t.text, bundleId: app?.bundleId, site: siteOf(app), dictionary: this.dictionary },
       { llm: this.options.llm, llmMode: this.options.llmMode ?? "off" },
     );
     // Os snippets entram depois da limpeza, para o texto deles sair exatamente como a pessoa escreveu.
@@ -447,7 +450,7 @@ export class Dictation {
 
   /** Retry returns text to History. It never pastes into whichever app happens to be focused now. */
   async cleanRecovered(text:string,app?:AppRef,note=false):Promise<{text:string;tone:Tone}>{
-    const result=await cleanup({raw:text,bundleId:note?undefined:app?.bundleId,dictionary:this.dictionary},
+    const result=await cleanup({raw:text,bundleId:note?undefined:app?.bundleId,site:note?undefined:siteOf(app),dictionary:this.dictionary},
       {llm:this.options.llm,llmMode:this.options.llmMode??"off"});
     return {text:expandSnippets(result.text,this.snippets),tone:result.tone};
   }

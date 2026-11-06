@@ -57,6 +57,9 @@ export type StopMode = "ptt" | "toggle" | "command" | "debug";
 export interface AppRef {
   bundleId: string;
   name: string;
+  /** Só num navegador (L18): o título da janela em foco e o host da página, para o tom pelo site. Não vai ao histórico. */
+  title?: string;
+  urlHost?: string;
 }
 
 // ---------------------------------------------------------- Bun → sidecar

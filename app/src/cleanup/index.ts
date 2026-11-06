@@ -56,7 +56,7 @@ export function rulesDroppedTooMuch(raw: string, ruled: string): boolean {
 
 /** Só as regras: síncrono e em menos de 1 ms. É o que entra quando não há LLM. */
 export function cleanupWithRules(input: CleanupInput): { text: string; tone: Tone } {
-  const tone = input.tone ?? toneFor(input.bundleId);
+  const tone = input.tone ?? toneFor(input.bundleId, input.site);
   const dictionary = compileDictionary(input.dictionary);
   const protectedText = protect(input.raw, dictionary);
   // Comando ou não, decidido com os termos de volta: "kubectl get pods ." com `kubectl` no dicionário é comando.

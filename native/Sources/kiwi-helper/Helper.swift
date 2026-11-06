@@ -435,7 +435,10 @@ final class Helper {
         // record.error follows record.started (ADR 0001).
         var started: [String: Any] = ["reason": reason]
         if note { started["target"] = "note" }
-        if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
+        if let app = FrontApp.current {
+            let site = BrowserSiteReader.read(app)
+            started["app"] = BrowserSite.appFields(bundleId: app.bundleId, name: app.name, title: site.title, host: site.host)
+        }
         // Which mic (T3229): the app tells the person when the chosen one wasn't connected (`fellBack`).
         // The lid closed (or opened) since the engine was made: `start` makes the new one right away (T3229, #3300).
         let stale = !headless && mic.isStale()
@@ -908,7 +911,8 @@ final class Helper {
         // CLI (T1740) can say which app it is (`app: {bundleId, name?}`) and make it a quick note (`target: "note"`).
         var started: [String: Any] = ["reason": "debug"]
         if let app = message.fields["app"] as? [String: Any], let bundleId = app["bundleId"] as? String, !bundleId.isEmpty {
-            started["app"] = ["bundleId": bundleId, "name": (app["name"] as? String) ?? bundleId]
+            started["app"] = BrowserSite.appFields(bundleId: bundleId, name: (app["name"] as? String) ?? bundleId,
+                                                   title: app["title"] as? String, host: app["urlHost"] as? String)
         } else if message.fields["app"] != nil {
             return reply(id, ok: false, error: "invalid_value")
         } else if !headless, let app = FrontApp.current {
