@@ -8,6 +8,9 @@ import KiwiHelperCore
 // AutoLearn); o `prePasteDelay`, os 2 s máximos da devolução do clipboard e a sequência ⌘↓ V↓ V↑ ⌘↑ com a fonte privada vêm
 // de lá. A tecla do V segue o layout atual com ⌘ apertado, e não a física fixa. A decisão por foco, o secure
 // input e o `changeCount` como dono do clipboard são nossos.
+// L12 (T5835): conferir se a colagem entrou e, se não, digitar. O veredito é o `PasteCheck` do KiwiHelperCore, portado
+// de FluidVoice/Sources/Fluid/Services/PasteVerifier.swift @ b6457f1 (GPL-3.0); aqui ficam só as leituras do
+// Accessibility e a digitação.
 
 /// `insert.text`: puts the dictated text into the focused field with ⌘V and gives the person's clipboard back.
 /// Pasting works the same in every app (Cocoa, Electron, terminals, browsers); typing through Accessibility
@@ -34,6 +37,11 @@ final class Inserter {
         var focusVia = "none"
     }
 
+    /// O resultado da conferência de cada colagem (L12), para o log: o veredito e se o texto foi digitado.
+    var onChecked: ((PasteVerdict, _ typed: Bool, _ app: String?) -> Void)?
+    /// Sobe a cada colagem: a conferência da anterior para, e nada é digitado por cima do ditado novo.
+    private var generation = 0
+    private let checks = DispatchQueue(label: "kiwi.insert.check", qos: .utility)
     private let keeper = ClipboardKeeper()
     private let keys = DispatchQueue(label: "kiwi.insert.keys", qos: .userInteractive)
     private var jobs: [(text: String, restore: Bool, autoSpace: Bool, completion: (Outcome) -> Void)] = []
@@ -88,13 +96,105 @@ final class Inserter {
         let ours = keeper.put(spaced ? " " + text : text, on: pasteboard, keepOriginal: restore,
                               onRead: restore ? { timer.read() } : nil)
         timer.ours = ours
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys] in
+        // L12: o campo antes do ⌘V, para conferir depois se o texto entrou. Só num campo de texto que não é de senha.
+        generation += 1
+        let gen = generation
+        let pastedText = spaced ? " " + text : text
+        let before = trusted && !IsSecureEventInputEnabled() ? focused.element.flatMap(Self.snapshot) : nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys, self] in
             keys.async {
                 Self.postCommandV()
+                let pastedAt = ProcessInfo.processInfo.systemUptime
                 DispatchQueue.main.async {
                     completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier,
                                        spaced: spaced, focusVia: focused.via))
                     if restore { timer.pasted() }
+                    if let before { self.check(before: before, text: pastedText, pastedAt: pastedAt, generation: gen,
+                                               pid: app?.processIdentifier, app: app?.bundleIdentifier) }
+                }
+            }
+        }
+    }
+
+    /// L12 (T5835): as três leituras depois do ⌘V, fora da main. Se a colagem com certeza não entrou (o Chromium às
+    /// vezes ignora o ⌘V), digita o texto; na dúvida, nada. Uma colagem nova, ou a pessoa apertando uma tecla ou
+    /// clicando depois da colagem, para a conferência.
+    private func check(before: PasteSnapshot, text: String, pastedAt: TimeInterval, generation gen: Int, pid: pid_t?, app: String?) {
+        checks.async { [weak self] in
+            guard let self else { return }
+            let current = { DispatchQueue.main.sync { self.generation == gen } }
+            var verdict = PasteCheck.verify(
+                before: before, pastedText: text,
+                capture: { Self.focus(app: pid).element.flatMap(Self.snapshot) },
+                wait: { delay in
+                    Thread.sleep(forTimeInterval: delay)
+                    return current()
+                })
+            var typed = false
+            if case .notLanded = verdict {
+                let sincePaste = ProcessInfo.processInfo.systemUptime - pastedAt
+                if PasteCheck.userActedAfterPaste(secondsSinceLastInput: Self.secondsSinceLastInput(), secondsSincePaste: sincePaste) {
+                    verdict = .unknown(reason: "user_acted")
+                } else if current() {
+                    self.keys.sync { Self.type(text) }
+                    typed = true
+                }
+            }
+            DispatchQueue.main.async { self.onChecked?(verdict, typed, app) }
+        }
+    }
+
+    /// O campo em foco como o `PasteCheck` vê: o papel, o texto (se não for grande), a contagem e o cursor. Nunca um
+    /// campo de senha nem algo que não é campo de texto. O texto fica só na memória, para comparar.
+    static func snapshot(_ element: AXUIElement) -> PasteSnapshot? {
+        AXUIElementSetMessagingTimeout(element, axTimeout)
+        func string(_ attribute: String) -> String? {
+            var ref: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, attribute as CFString, &ref) == .success else { return nil }
+            return ref as? String
+        }
+        guard let role = string(kAXRoleAttribute), PasteCheck.textRoles.contains(role),
+              string(kAXSubroleAttribute) != kAXSecureTextFieldSubrole as String else { return nil }
+        var countRef: CFTypeRef?
+        let count = AXUIElementCopyAttributeValue(element, kAXNumberOfCharactersAttribute as CFString, &countRef) == .success
+            ? (countRef as? NSNumber)?.intValue : nil
+        let value = (count ?? 0) <= PasteCheck.maxReadableCharacters ? string(kAXValueAttribute) : nil
+        var caret: (location: Int, length: Int)?
+        var rangeRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+           let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID() {
+            var range = CFRange()
+            if AXValueGetValue(rangeRef as! AXValue, .cfRange, &range) { caret = (range.location, range.length) }
+        }
+        return PasteSnapshot(element: Int(CFHash(element)), role: role, value: value, characterCount: count, caret: caret)
+    }
+
+    /// A última tecla ou clique da pessoa, em segundos.
+    static func secondsSinceLastInput() -> TimeInterval {
+        [CGEventType.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+            .map { CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0) }.min() ?? .infinity
+    }
+
+    /// Digita o texto como teclas Unicode, em pedaços, e ⇧↩ nas quebras de linha (`TypingPlan`). Fora da main.
+    static func type(_ text: String) {
+        let source = CGEventSource(stateID: .privateState)
+        for step in TypingPlan.steps(for: text) {
+            switch step {
+            case .newline:
+                for down in [true, false] {
+                    guard let e = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Return), keyDown: down) else { continue }
+                    e.flags = .maskShift
+                    e.post(tap: .cghidEventTap)
+                    usleep(keyEventGap)
+                }
+            case .text(let piece):
+                let units = Array(piece.utf16)
+                for down in [true, false] {
+                    guard let e = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else { continue }
+                    e.flags = []
+                    e.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+                    e.post(tap: .cghidEventTap)
+                    usleep(keyEventGap)
                 }
             }
         }

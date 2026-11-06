@@ -76,6 +76,10 @@ final class Helper {
         audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
         tap = HotkeyTap { [weak self] event in self?.onTap(event) }
         // The cancel is armed only while a dictation records: outside it, Esc is the other apps' (L5).
+        // L12 (T5835): o que a conferência da colagem achou, sem texto, para o log em arquivo.
+        inserter.onChecked = { [weak self] verdict, typed, app in
+            self?.emit("log", ["level": "info", "message": "paste: \(verdict.log)\(typed ? " · typed instead" : "") · \(app ?? "-")"])
+        }
         tap.isActive = { [weak self] id in id != "cancel" || self?.audio.isRecording == true }
         // A preferência de verdade só no app. No headless e com KIWI_DEBUG (os agentes), uma falsa num arquivo, e o
         // AppleFnUsageType do Mac nunca é tocado (AGENTS.md, #4871).
