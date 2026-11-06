@@ -80,8 +80,11 @@ const escaped = (line: string, at: number) => {
  */
 function withoutCode(lines: string[]): string {
   let fence: string | null = null;
+  // O frontmatter também: é YAML, e um `%%` de lá casaria com um comentário do texto.
+  const front = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
   return lines
-    .map((line) => {
+    .map((line, i) => {
+      if (i <= front) return " ".repeat(line.length);
       const f = FENCE.exec(line);
       if (fence) {
         if (f && f[1]![0] === fence[0] && f[1]!.length >= fence.length && !line.slice(f[0].length).trim()) fence = null;
@@ -98,19 +101,20 @@ function withoutCode(lines: string[]): string {
     .join("\n");
 }
 
-/** A nota em linha mais longa que o leitor procura: sem limite, uma linha cheia de `^[` sem fecho trava o editor. */
-const MAX_INLINE = 2000;
-
-/** O `]` que fecha o `[` de `at`, contando os pares de dentro; -1 sem fecho na linha. */
-function closing(line: string, at: number): number {
-  let depth = 0;
-  for (let i = at, end = Math.min(line.length, at + MAX_INLINE); i < end; i++) {
+/**
+ * O `]` que fecha cada `[` da linha, contando os pares de dentro (e pulando o escapado), numa passada só: procurar o fecho
+ * a partir de cada `^[` era quadrático numa linha cheia deles sem fecho.
+ */
+function closers(line: string): Map<number, number> {
+  const out = new Map<number, number>();
+  const open: number[] = [];
+  for (let i = 0; i < line.length; i++) {
     const c = line[i];
     if (c === "\\") i++;
-    else if (c === "[") depth++;
-    else if (c === "]" && --depth === 0) return i;
+    else if (c === "[") open.push(i);
+    else if (c === "]" && open.length) out.set(open.pop()!, i);
   }
-  return -1;
+  return out;
 }
 
 /** Lê as notas de rodapé de uma nota inteira, fora do frontmatter e do código. */
@@ -167,9 +171,10 @@ export function scanFootnotes(doc: string): Footnotes {
     }
     // As notas em linha primeiro: uma chamada `[^1]` dentro de uma delas é texto dela (aparece no hover), não outra nota.
     const inline: [number, number][] = [];
+    const close = line.includes("^[") ? closers(line) : null;
     for (let x = line.indexOf("^[", scanFrom); x >= 0; x = line.indexOf("^[", x + 1)) {
       if (escaped(line, x) || inCode(x)) continue;
-      const end = closing(line, x + 1);
+      const end = close!.get(x + 1) ?? -1;
       if (end < 0) continue;
       const text = line.slice(x + 2, end);
       if (!text.trim()) continue;

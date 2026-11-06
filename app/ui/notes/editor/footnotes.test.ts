@@ -67,6 +67,7 @@ describe("notas de rodapé (T6377)", () => {
     expect(labels("US$5[^1], depois US$ 7.")).toEqual(["1"]);
     expect(labels("R$10[^1] ou R$20[^2] e $a$[^3], mas $x^[2]$.")).toEqual(["1", "2", "3"]);
     expect(labels('```c\nprintf("%%d");\n```\nTexto[^1] e `%%`[^2].\n\n%% fim %%\n')).toEqual(["1", "2"]);
+    expect(labels("---\nx: '%%'\n---\nT[^1] e %% y %%\n")).toEqual(["1"]);
   });
 
   test("revisão: uma linha cheia de ^[ sem fecho não trava", () => {
