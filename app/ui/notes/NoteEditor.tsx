@@ -91,11 +91,12 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
 
-  const openMenu = (x: number, y: number, moveCursor: boolean) => {
+  const openMenu = (x: number, y: number, moveCursor: boolean, tablePos?: number) => {
     const v = view.current;
     if (!v) return;
     if (moveCursor) {
-      const pos = v.posAtCoords({ x, y });
+      const pos = tablePos !== undefined && Number.isInteger(tablePos) && tablePos >= 0 && tablePos <= v.state.doc.length
+        ? tablePos : v.posAtCoords({ x, y });
       if (pos !== null && !v.state.selection.ranges.some((range) => pos >= range.from && pos <= range.to))
         v.dispatch({ selection: EditorSelection.cursor(pos) });
     }
@@ -106,7 +107,11 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
   };
   return <>
     <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}
-      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(e.clientX, e.clientY, true); }}
+      onContextMenu={(e) => {
+        e.preventDefault(); e.stopPropagation();
+        const cell = (e.target as Element).closest<HTMLElement>("[data-kiwi-table-pos]");
+        openMenu(e.clientX, e.clientY, true, cell ? Number(cell.dataset.kiwiTablePos) : undefined);
+      }}
       onKeyDown={(e) => {
         if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;
         e.preventDefault(); e.stopPropagation();

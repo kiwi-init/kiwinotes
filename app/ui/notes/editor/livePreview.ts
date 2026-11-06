@@ -341,12 +341,16 @@ class TableWidget extends WidgetType {
       el.textContent = text.replace(/\\\|/g, "|");
       const a = t.align[col];
       if (a) el.style.textAlign = a;
+      let offset = 0;
+      for (let i = 0; i < row; i++) offset += lines[i]!.length + 1;
+      const cellPos = this.from + offset + rawCellStart(lines[row]!, col);
+      el.dataset.kiwiTablePos = String(cellPos);
       el.addEventListener("mousedown", (e) => {
+        // Keep the widget alive until contextmenu reaches NoteEditor on a secondary click.
+        if (e.button !== 0 || e.ctrlKey) { e.preventDefault(); return; }
         e.preventDefault();
         // Clicar numa célula põe o cursor nela: a tabela vira texto para editar.
-        let offset = 0;
-        for (let i = 0; i < row; i++) offset += lines[i]!.length + 1;
-        view.dispatch({ selection: { anchor: this.from + offset + rawCellStart(lines[row]!, col) } });
+        view.dispatch({ selection: { anchor: cellPos } });
         view.focus();
       });
       return el;

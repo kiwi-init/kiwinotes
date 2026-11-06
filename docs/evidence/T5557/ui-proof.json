@@ -1,0 +1,39 @@
+{
+  "light": {
+    "ok": true,
+    "steps": 89,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "notes.save": 1
+    },
+    "problems": [],
+    "blocked": [],
+    "clipboard": [],
+    "invokeErrors": []
+  },
+  "dark": {
+    "ok": true,
+    "steps": 89,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "notes.save": 1
+    },
+    "problems": [],
+    "blocked": [],
+    "clipboard": [],
+    "invokeErrors": []
+  },
+  "savedMarkdown": "# Operações de tabela\n\n| Nome       | Valor |\n| :--------- | ----: |\n| Ana        |     2 |\n| Dani       |     5 |\n| Bia        |    10 |\n| Céu \\| mar |    30 |\n\nFim.\n"
+}

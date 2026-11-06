@@ -1,0 +1,292 @@
+{
+  "window": "notes",
+  "size": "1180x900",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Operações de tabela",
+        "content": "# Operações de tabela\n\n| Nome | Valor |\n| :--- | ---: |\n| Bia | 10 |\n| Ana | 2 |\n| Céu \\| mar | 30 |\n\nFim.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Operações de tabela"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text('Operações de tabela')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-md-table td:has-text('Bia')"
+    },
+    {
+      "click": ".cm-md-table td:has-text('Bia')",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "hover": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Tabela']"
+    },
+    {
+      "hover": "[aria-label='Tabela'] > .kn-menu-item:has-text('Linha')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Linha']"
+    },
+    {
+      "screenshot": "01-menu-linha.png"
+    },
+    {
+      "click": "[aria-label='Linha'] > .kn-menu-item:has-text('Duplicar linha')"
+    },
+    {
+      "expectCount": ".cm-line:has-text('Bia')",
+      "count": 2
+    },
+    {
+      "press": "Meta+Alt+ArrowDown"
+    },
+    {
+      "waitFor": ".cm-line:has-text('Ana') + .cm-line:has-text('Bia')"
+    },
+    {
+      "press": "Meta+Alt+Shift+D"
+    },
+    {
+      "press": "Meta+Alt+e"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "expectCount": ".cm-md-table th",
+      "count": 3
+    },
+    {
+      "waitFor": ".cm-md-table th:nth-child(2)[style*='center']"
+    },
+    {
+      "click": ".cm-md-table th:nth-child(2)",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "hover": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Tabela']"
+    },
+    {
+      "hover": "[aria-label='Tabela'] > .kn-menu-item:has-text('Coluna')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Coluna']"
+    },
+    {
+      "screenshot": "02-menu-coluna.png"
+    },
+    {
+      "click": "[aria-label='Coluna'] > .kn-menu-item:has-text('Mover à direita')"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "waitFor": ".cm-md-table th:nth-child(3)[style*='center']"
+    },
+    {
+      "click": ".cm-md-table tbody tr:first-child td:nth-child(2)",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "hover": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Tabela']"
+    },
+    {
+      "hover": "[aria-label='Tabela'] > .kn-menu-item:has-text('Ordenar pela coluna')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Ordenar pela coluna']"
+    },
+    {
+      "screenshot": "03-menu-ordenar.png"
+    },
+    {
+      "click": "[aria-label='Ordenar pela coluna'] > .kn-menu-item:has-text('Crescente')"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "expectText": ".cm-md-table tbody tr:first-child td:first-child",
+      "text": "Ana"
+    },
+    {
+      "expectText": ".cm-md-table tbody tr:first-child td:nth-child(2)",
+      "text": "2"
+    },
+    {
+      "screenshot": "04-ordenada.png"
+    },
+    {
+      "click": ".cm-md-table tbody tr:nth-child(3) td:first-child",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "hover": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Tabela']"
+    },
+    {
+      "hover": "[aria-label='Tabela'] > .kn-menu-item:has-text('Linha')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Linha']"
+    },
+    {
+      "click": "[aria-label='Linha'] > .kn-menu-item:has-text('Apagar linha')"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "expectCount": ".cm-md-table tbody tr",
+      "count": 3
+    },
+    {
+      "click": ".cm-md-table th:nth-child(3)"
+    },
+    {
+      "press": "Meta+Alt+Shift+Backspace"
+    },
+    {
+      "press": "Meta+z"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "expectCount": ".cm-md-table th",
+      "count": 3
+    },
+    {
+      "click": ".cm-md-table th:nth-child(3)"
+    },
+    {
+      "press": "Meta+Shift+Z"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "expectCount": ".cm-md-table th",
+      "count": 2
+    },
+    {
+      "click": ".cm-md-table th:nth-child(2)"
+    },
+    {
+      "press": "Meta+Alt+Backspace"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "expectCount": ".cm-md-table th",
+      "count": 2
+    },
+    {
+      "expectCount": ".cm-md-table tbody tr",
+      "count": 3
+    },
+    {
+      "click": ".cm-md-table th:nth-child(2)"
+    },
+    {
+      "press": "Meta+Alt+Shift+ArrowUp"
+    },
+    {
+      "type": "5"
+    },
+    {
+      "press": "Shift+Tab"
+    },
+    {
+      "type": "Dani"
+    },
+    {
+      "press": "Tab"
+    },
+    {
+      "press": "Meta+Alt+s"
+    },
+    {
+      "click": ".cm-rendered h1"
+    },
+    {
+      "waitFor": ".cm-md-table"
+    },
+    {
+      "expectCount": ".cm-md-table tbody tr",
+      "count": 4
+    },
+    {
+      "expectText": ".cm-md-table tbody tr:nth-child(2) td:first-child",
+      "text": "Dani"
+    },
+    {
+      "waitFor": ".cm-md-table td:has-text('Céu | mar')"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "screenshot": "05-resultado.png"
+    }
+  ]
+}

@@ -3,10 +3,11 @@ import type { EditorState, TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { startCompletion } from "@codemirror/autocomplete";
 import type { MenuItem } from "../ContextMenu.tsx";
-import { FORMAT_KEYS } from "./index.ts";
+import { FORMAT_KEYS, tableAt, tableActionCommand } from "./index.ts";
 import { insertLink } from "./format.ts";
 import { slashInsert } from "./slash.ts";
 import { linkFromPaste } from "./text.ts";
+import { TABLE_ACTIONS, canTableAction, tableContext } from "./table.ts";
 
 export interface EditorClipboard {
   read?(): Promise<string>;
@@ -61,7 +62,19 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
     if (id === "link") startCompletion(view);
   });
   const selected = !view.state.selection.main.empty;
+  const range = tableAt(view.state);
+  const ctx = range && view.state.selection.ranges.length === 1
+    ? tableContext(view.state.sliceDoc(range.from, range.to), view.state.selection.main.head - range.from) : null;
+  const tableItems: MenuItem[] = ctx ? [{ kind: "submenu", label: "Tabela", items:
+    ([ ["row", "Linha"], ["column", "Coluna"], ["align", "Alinhamento"], ["sort", "Ordenar pela coluna"] ] as const).map(([group, label]): MenuItem => ({
+      kind: "submenu", label, items: TABLE_ACTIONS.filter((item) => item.group === group).map((item) => ({
+        label: item.label, hint: item.hint, disabled: !canTableAction(ctx, item.id),
+        checked: "align" in item ? (ctx.table.align[ctx.col] ?? null) === item.align : undefined,
+        onSelect: perform(() => { tableActionCommand(item.id)(view); }),
+      })),
+    })) }, { kind: "separator" }] : [];
   return [
+    ...tableItems,
     { kind: "submenu", label: "Formatar", items: [
       ...["Mod-b", "Mod-i", "Shift-Mod-x", "Shift-Mod-h", "Mod-e", "Mod-/"].map(command),
       { kind: "separator" }, command("Mod-\\"),
