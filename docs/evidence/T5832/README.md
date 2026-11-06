@@ -4,7 +4,9 @@ Implementa a opção aprovada **baixar o volume**, por propriedades públicas de
 
 A escolha foi aceita pelo lead no Kiwi #5869: atende ao “pausa ou baixa” do harry sem depender de MediaRemote. A referência [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) foi consultada: nas versões novas, seu bridge usa o binário Perl do sistema carregando um framework próprio. Nada desse bridge foi incluído ou executado. Não houve porte de código nem nova dependência.
 
-O controlador guarda dispositivo **e UID** e os canais alterados (master, ou canais individuais). Considera a quantização aceita pelo driver. Só restaura um canal se o valor ainda é o que o Kiwi escreveu: preserva o ajuste manual da pessoa e não altera a nova saída quando ela troca de dispositivo. Dispositivo desconectado e volume não ajustável são tratados sem bloquear a captura. Um dispositivo sem volume escalar ajustável não será baixado; fica o código `media: volume_unavailable` no log.
+Antes de alterar qualquer canal, grava um registro privado **0600** em `dictation-media-volume.json`, no diretório de dados. A escrita é atômica, com fsync do arquivo, sem seguir symlinks. Sem registro gravável, não baixa o volume e não bloqueia o ditado.
+
+O controlador guarda dispositivo **e UID** e os canais alterados (master, ou canais individuais). Considera a quantização aceita pelo driver. Só restaura um canal se o valor ainda é o que o Kiwi escreveu: preserva o ajuste manual da pessoa e não altera a nova saída quando ela troca de dispositivo. Na abertura seguinte do helper, lê o registro e restaura somente os canais ainda no valor que o Kiwi escreveu; após restaurar ou reconhecer ajuste manual, remove o registro. Dispositivo desconectado ou falha ao restaurar mantém a pendência para nova tentativa, inclusive ao reconectar a saída; um novo dispositivo pode ser baixado sem acumular reduções na pendência antiga. O UID estável permite reencontrar o mesmo hardware se o Core Audio mudar seu ID. Registro inválido impede novas alterações, sem bloquear o mic. Um dispositivo sem volume escalar ajustável não será baixado; fica o código `media: volume_unavailable` no log.
 
 Integração no helper:
 
@@ -16,9 +18,9 @@ Integração no helper:
 
 Verificação:
 
-- `swift test`: **277 KiwiHelperCore + 2 KiwiExport, zero falhas**. Build debug completo do helper passou.
-- Nove testes novos com volume falso: ordem antes da captura; restauração/falha; begin/end repetidos e próxima captura; reunião; ajuste manual; troca/desconexão; indisponível/read-only; volume zero e adaptador desabilitado; canais estéreo e quantização.
+- `swift test`: **286 KiwiHelperCore + 2 KiwiExport, zero falhas**. Build debug completo do helper passou.
+- Dezoito testes com volume falso: ordem antes da captura; restauração/falha; begin/end repetidos e próxima captura; reunião; ajuste manual; troca/desconexão; indisponível/read-only; volume zero e adaptador desabilitado; canais estéreo e quantização. Também verifica arquivo 0600 antes da primeira mudança, morte sem `end()`, nova instância, queda real de processo filho com **SIGKILL**, ajuste manual após queda, marcador não gravável/corrompido, falha ao restaurar, renumeração por UID e saída desconectada pendente.
 - `bun test`: **1.083 passaram**, zero falhas. `bun run typecheck`: sem erros.
-- `fake-media-tests.txt` é a saída integral, sem edição, de `swift test --package-path ../native --skip-build --filter DictationMediaTests` executado em `app/`. É a prova em log permitida pelo spec da onda 4. Nenhum teste chamou o adaptador de volume do sistema ou um player real; nenhum som foi tocado, nenhum microfone aberto e nenhum diálogo disparado.
+- `fake-media-crash-tests.txt` é a saída integral, sem edição, de `swift test --package-path ../native --skip-build --filter DictationMediaTests` executado em `app/` (18/0). O log da primeira rodada, `fake-media-tests.txt`, também foi preservado. É a prova em log permitida pelo spec da onda 4. Nenhum teste chamou o adaptador de volume do sistema ou um player real; nenhum som foi tocado, nenhum microfone aberto e nenhum diálogo disparado.
 
 A mídia real, a audibilidade e a restauração no dispositivo da pessoa ficam para o roteiro da rc11. As checagens dos agentes comprovam o controlador e os caminhos de ciclo de vida; não alegam que tocamos mídia real.

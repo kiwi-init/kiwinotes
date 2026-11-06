@@ -1,0 +1,57 @@
+Test Suite 'Selected tests' started at 2026-11-06 10:50:18.354.
+Test Suite 'KiwiOCRTests.xctest' started at 2026-11-06 10:50:18.355.
+Test Suite 'KiwiOCRTests.xctest' passed at 2026-11-06 10:50:18.355.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-06 10:50:18.355.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-06 10:50:18.431.
+Test Suite 'KiwiHelperCoreTests.xctest' started at 2026-11-06 10:50:18.432.
+Test Suite 'DictationMediaTests' started at 2026-11-06 10:50:18.432.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testCrashRecoveryPreservesManualChangeAndClearsMarker]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testCrashRecoveryPreservesManualChangeAndClearsMarker]' passed (0.001 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testDisconnectedPendingRecoveryDoesNotPreventDuckingNewOutput]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testDisconnectedPendingRecoveryDoesNotPreventDuckingNewOutput]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testFailedCaptureRestoresImmediately]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testFailedCaptureRestoresImmediately]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testLowersBeforeCaptureAndRestoresWhenCaptureEnds]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testLowersBeforeCaptureAndRestoresWhenCaptureEnds]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMalformedMarkerDoesNotChangeVolume]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMalformedMarkerDoesNotChangeVolume]' passed (0.004 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testManualVolumeChoiceIsPreserved]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testManualVolumeChoiceIsPreserved]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMarkerIsPrivateAndDurableBeforeVolumeChangesThenNewHelperRestores]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMarkerIsPrivateAndDurableBeforeVolumeChangesThenNewHelperRestores]' passed (0.002 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMeetingNeverLowersAndStartingMeetingReleasesDictationChange]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMeetingNeverLowersAndStartingMeetingReleasesDictationChange]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMutedOutputAndDisabledAdapterHaveNoWrites]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testMutedOutputAndDisabledAdapterHaveNoWrites]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testNormalRestoreClearsMarkerAndDisabledAdapterDoesNotReadIt]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testNormalRestoreClearsMarkerAndDisabledAdapterDoesNotReadIt]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testOutputSwitchNeverModifiesTheNewDefaultAndDisconnectedDeviceIsSkipped]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testOutputSwitchNeverModifiesTheNewDefaultAndDisconnectedDeviceIsSkipped]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testQuantizedVolumeIsPersistedForRecoveryAndRestoreFailureKeepsMarker]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testQuantizedVolumeIsPersistedForRecoveryAndRestoreFailureKeepsMarker]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testRepeatedStartEndAndNewCaptureDoNotAccumulateDucking]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testRepeatedStartEndAndNewCaptureDoNotAccumulateDucking]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testRestartRestoresSameUIDAfterDeviceIDChangesWithoutTouchingNewDefault]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testRestartRestoresSameUIDAfterDeviceIDChangesWithoutTouchingNewDefault]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testSIGKILLThenNewHelperRestoresPersistedFakeVolume]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testSIGKILLThenNewHelperRestoresPersistedFakeVolume]' passed (0.147 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testStereoChannelsRestoreIndependentlyAndQuantizedVolumeRestores]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testStereoChannelsRestoreIndependentlyAndQuantizedVolumeRestores]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testUnavailableOrReadOnlyVolumeNeverBlocksCaptureAndReportsStableCode]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testUnavailableOrReadOnlyVolumeNeverBlocksCaptureAndReportsStableCode]' passed (0.000 seconds).
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testUnwritableMarkerNeverChangesVolumeOrBlocksCapture]' started.
+Test Case '-[KiwiHelperCoreTests.DictationMediaTests testUnwritableMarkerNeverChangesVolumeOrBlocksCapture]' passed (0.000 seconds).
+Test Suite 'DictationMediaTests' passed at 2026-11-06 10:50:18.589.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.156 (0.157) seconds
+Test Suite 'KiwiHelperCoreTests.xctest' passed at 2026-11-06 10:50:18.589.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.156 (0.157) seconds
+Test Suite 'Selected tests' passed at 2026-11-06 10:50:18.589.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.156 (0.158) seconds
+Test Suite 'Selected tests' started at 2026-11-06 10:50:18.691.
+Test Suite 'KiwiExportTests.xctest' started at 2026-11-06 10:50:18.692.
+Test Suite 'KiwiExportTests.xctest' passed at 2026-11-06 10:50:18.692.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-06 10:50:18.692.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds

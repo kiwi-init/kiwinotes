@@ -75,14 +75,15 @@ final class Helper {
         let mic = MicSelection()
         self.mic = mic
         audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
+        let dataDirectory = meetingDirectory?.deletingLastPathComponent()
         media = DictationMedia(volume: headless || ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1" ? nil : OutputVolume(),
+                               journal: dataDirectory.map { FileMediaVolumeJournal(file: $0.appendingPathComponent("dictation-media-volume.json")) },
                                notify: { [weak self] code in self?.emit("log", ["level": "info", "message": code]) })
         tap = HotkeyTap { [weak self] event in self?.onTap(event) }
         // The cancel is armed only while a dictation records: outside it, Esc is the other apps' (L5).
         tap.isActive = { [weak self] id in id != "cancel" || self?.audio.isRecording == true }
         // A preferência de verdade só no app. No headless e com KIWI_DEBUG (os agentes), uma falsa num arquivo, e o
         // AppleFnUsageType do Mac nunca é tocado (AGENTS.md, #4871).
-        let dataDirectory = meetingDirectory?.deletingLastPathComponent()
         let fake = headless || ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1"
         let store: FnUsageStore? = fake
             ? dataDirectory.map { FileFnUsageStore(file: $0.appendingPathComponent("fn-usage-fake.json"),
@@ -174,6 +175,7 @@ final class Helper {
             source.resume()
             return source
         }
+        media.restorePending()
         globe.start(fnIsShortcut: dictationKey == .fn)
         globeStarted = true
         if !headless { tap.start() }
@@ -211,6 +213,7 @@ final class Helper {
         // Only reads Core Audio, so it runs headless too (the Settings list the mics there).
         devicesWatcher.start { [weak self] what in
             guard let self else { return }
+            if !self.audio.isRecording { self.media.restorePending() }
             if !self.headless, self.mic.isStale(after: what) { self.audio.inputChanged(what) }
             if !self.headless, self.meetings?.capture.session != nil, self.meetingMic.selection.isStale(after: what) { self.meetingMic.audio.inputChanged(what) }
             // Only to an app that knows the event: it sent `microphone` (T3230). An older app logs an unknown type.
