@@ -59,6 +59,12 @@ describe("passos", () => {
     expect(parseScript([{ scroll: ".a", y: 400 }]).steps).toHaveLength(1);
     expect(() => parseScript([{ expectScroll: ".a" }])).toThrow("min ou max");
     expect(() => parseScript([{ expectScroll: ".a", min: "x" }])).toThrow("expectScroll.min");
+    // T5299: o scroll de lado, o arrastar e a largura.
+    expect(parseScript([{ expectNoHScroll: ".kn-notes", allow: "pre" }, { drag: ".h", x: 120 }, { expectWidth: ".p", min: 1 }]).steps).toHaveLength(3);
+    expect(() => parseScript([{ expectNoHScroll: ".a", allow: 3 }])).toThrow("allow");
+    expect(() => parseScript([{ drag: ".h" }])).toThrow("drag precisa de x");
+    expect(() => parseScript([{ drag: ".h", x: 1e9 }])).toThrow("drag.x");
+    expect(() => parseScript([{ expectWidth: ".p" }])).toThrow("min ou max");
     expect(() => parseScript([{ expectSame: ".a" }])).toThrow("as: precisa de um texto");
     expect(() => parseScript([{ expectSame: ".a", as: "" }])).toThrow("as: precisa de um texto");
     expect(() => parseScript([{ expectSame: ".a", as: ".b", tolerance: -1 }])).toThrow("tolerance");

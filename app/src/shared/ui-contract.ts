@@ -61,7 +61,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `meetings.pauseMine`, o evento `meetings.live` e os `meetings` nas settings. Só acréscimo.
 // 1.22.0 (T4945): meeting speakers and append-only edit rebase for live meeting notes.
 // 1.23.0 (T5161): selectable note folders, recents and folder-scoped note preferences.
-export const UI_CONTRACT_VERSION = "1.23.0";
+// 1.24.0 (T5299): o `noteWidth` nas settings, a largura da coluna da nota (480 a 1400 px). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.24.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */

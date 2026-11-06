@@ -590,7 +590,9 @@ export function renderedPreview(resolver: LinkResolver, actions: RenderedActions
 
 const renderedTheme = EditorView.theme({
   // Sem margem (o CodeMirror mede sem ela); `cursor: text` porque o clique edita.
-  ".cm-rendered": { cursor: "text", padding: "0" },
+  ".cm-rendered": { cursor: "text", padding: "0", minWidth: "0", overflowWrap: "anywhere" },
+  // T5299 (#212): o bloco de código não quebra; ele rola dentro dele, nunca a nota.
+  ".cm-rendered pre": { maxWidth: "100%", overflowX: "auto", overflowWrap: "normal" },
   ".cm-rendered-raw": { whiteSpace: "pre-wrap" },
   ".cm-rendered a": { cursor: "pointer" },
   ".cm-rendered a[href^='kiwi-tag:']": { borderRadius: "4px", padding: "0 3px" },

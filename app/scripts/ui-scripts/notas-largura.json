@@ -1,0 +1,107 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Linhas longas",
+        "content": "Um parágrafo comum com bastante texto para quebrar a linha de forma natural, sem nada de especial no meio, só palavras normais uma depois da outra até passar da largura da coluna.\n\nURL solta: https://exemplo.com/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nLink: [o link](https://exemplo.com/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)\n\nPalavra: PneumoultramicroscopicossilicovulcanoconióticoPneumoultramicroscopicossilicovulcanoconióticoPneumoultramicroscopicossilicovulcanoconióticoPneumoultramicroscopicossilicovulcanoconiótico\n\nCódigo na linha: `const resultado = calcular(argumento0, argumento1, argumento2, argumento3, argumento4, argumento5, argumento6, argumento7, argumento8, argumento9, argumento10, argumento11, argumento12, argumento13, argumento14, argumento15, argumento16, argumento17, argumento18, argumento19, argumento20, argumento21, argumento22, argumento23, argumento24, argumento25, argumento26, argumento27, argumento28, argumento29, argumento30, argumento31, argumento32, argumento33, argumento34, argumento35, argumento36, argumento37, argumento38, argumento39);`\n\n- item com URL https://exemplo.com/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n> citação com https://exemplo.com/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/caminho/muito/longo/sem/espacos/?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n```js\nconst resultado = calcular(argumento0, argumento1, argumento2, argumento3, argumento4, argumento5, argumento6, argumento7, argumento8, argumento9, argumento10, argumento11, argumento12, argumento13, argumento14, argumento15, argumento16, argumento17, argumento18, argumento19, argumento20, argumento21, argumento22, argumento23, argumento24, argumento25, argumento26, argumento27, argumento28, argumento29, argumento30, argumento31, argumento32, argumento33, argumento34, argumento35, argumento36, argumento37, argumento38, argumento39);\n```\n\n| Coluna 0 | Coluna 1 | Coluna 2 | Coluna 3 | Coluna 4 | Coluna 5 | Coluna 6 | Coluna 7 | Coluna 8 | Coluna 9 | Coluna 10 | Coluna 11 | Coluna 12 | Coluna 13 |\n| - | - | - | - | - | - | - | - | - | - | - | - | - | - |\n| valor comprido 0 | valor comprido 1 | valor comprido 2 | valor comprido 3 | valor comprido 4 | valor comprido 5 | valor comprido 6 | valor comprido 7 | valor comprido 8 | valor comprido 9 | valor comprido 10 | valor comprido 11 | valor comprido 12 | valor comprido 13 |\n\n```mermaid\ngraph LR\n  N0[Etapa número 0 do processo] --> N1[Etapa número 1 do processo]\n  N1[Etapa número 1 do processo] --> N2[Etapa número 2 do processo]\n  N2[Etapa número 2 do processo] --> N3[Etapa número 3 do processo]\n  N3[Etapa número 3 do processo] --> N4[Etapa número 4 do processo]\n  N4[Etapa número 4 do processo] --> N5[Etapa número 5 do processo]\n  N5[Etapa número 5 do processo] --> N6[Etapa número 6 do processo]\n  N6[Etapa número 6 do processo] --> N7[Etapa número 7 do processo]\n  N7[Etapa número 7 do processo] --> N8[Etapa número 8 do processo]\n```\n\nFim.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-side-item:has-text('Linhas longas')"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "expectWidth": ".kn-page",
+      "min": 759,
+      "max": 761,
+      "name": "começa na largura padrão"
+    },
+    {
+      "hover": ".kn-width-handle[data-side='right']"
+    },
+    {
+      "expectCount": ".kn-width-handle[data-shown]",
+      "count": 0,
+      "name": "a alça não aparece na hora"
+    },
+    {
+      "screenshot": "03-alca-invisivel.png"
+    },
+    {
+      "waitFor": ".kn-width-handle[data-shown]",
+      "name": "aparece depois do hover parado"
+    },
+    {
+      "screenshot": "04-alca-depois-do-hover.png"
+    },
+    {
+      "drag": ".kn-width-handle[data-side='right']",
+      "x": 150
+    },
+    {
+      "expectWidth": ".kn-page",
+      "min": 1050,
+      "max": 1070,
+      "name": "arrastar 150 px alarga 300 px"
+    },
+    {
+      "expectNoHScroll": ".kn-notes",
+      "allow": "pre, .cm-md-table-wrap, .kn-mermaid-drawn"
+    },
+    {
+      "screenshot": "05-mais-larga.png"
+    },
+    {
+      "drag": ".kn-width-handle[data-side='left']",
+      "x": 2000
+    },
+    {
+      "expectWidth": ".kn-page",
+      "min": 479,
+      "max": 481,
+      "name": "nunca menos que o mínimo"
+    },
+    {
+      "expectNoHScroll": ".kn-notes",
+      "allow": "pre, .cm-md-table-wrap, .kn-mermaid-drawn"
+    },
+    {
+      "screenshot": "06-no-minimo.png"
+    },
+    {
+      "drag": ".kn-width-handle[data-side='right']",
+      "x": 3000
+    },
+    {
+      "expectNoHScroll": ".kn-notes",
+      "allow": "pre, .cm-md-table-wrap, .kn-mermaid-drawn",
+      "name": "no máximo, ainda sem scroll de lado"
+    },
+    {
+      "screenshot": "07-no-maximo.png"
+    },
+    {
+      "drag": ".kn-width-handle[data-side='right']",
+      "x": -200
+    },
+    {
+      "wait": 500
+    }
+  ]
+}

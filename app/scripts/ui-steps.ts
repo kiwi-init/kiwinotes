@@ -17,6 +17,11 @@
 //                                                     `tolerance` px, padrão 1); com `property`, as duas propriedades
 //                                                     computadas têm o mesmo valor (T4671)
 //   { "screenshot": "nome.png", "selector"?: "SEL" }  print da janela (ou só do elemento)
+//   { "expectNoHScroll": "SEL", "allow"?: "SEL" }    nada rola de lado: nem a página, nem um elemento rolável dentro de
+//                                                     SEL, fora os que casam com `allow` (o bloco de código, a tabela
+//                                                     larga). Na falha, diz quem passa da borda (T5299, issue #212)
+//   { "drag": "SEL", "x": 200, "y"?: 0 }              aperta no meio do elemento, arrasta x/y px e solta (T5299)
+//   { "expectWidth": "SEL", "min"?: 400, "max"?: 900 } a largura do elemento na tela fica entre min e max (T5299)
 //   { "drop": "SEL", "file": "caminho" }           arrasta um arquivo (imagem, PDF) e solta no meio do elemento (T2594)
 //   { "pasteFile": "SEL", "file": "caminho" }      cola um arquivo no elemento, como um ⌘V com uma imagem (T2594).
 //                                                     Só um evento na página: nunca o clipboard de verdade.
@@ -54,6 +59,12 @@ export type Step =
   /** O retângulo de um elemento é o de outro, ou (com `property`) as duas propriedades computadas são iguais. */
   | { expectSame: string; as: string; property?: string; tolerance?: number }
   | { screenshot: string; selector?: string }
+  /** Sem scroll horizontal na página nem dentro de SEL, fora os elementos que casam com `allow` (T5299). */
+  | { expectNoHScroll: string; allow?: string }
+  /** Aperta no meio do elemento, arrasta `x`/`y` px em passos, como o mouse de verdade, e solta (T5299). */
+  | { drag: string; x: number; y?: number }
+  /** A largura do elemento na tela (px) fica entre `min` e `max`, esperando até o timeout (T5299). */
+  | { expectWidth: string; min?: number; max?: number }
   | { invoke: string; args?: Record<string, unknown> }
   | { drop: string; file: string }
   | { pasteFile: string; file: string };
@@ -71,7 +82,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "screenshot", "invoke", "drop", "pasteFile"] as const;
+const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "expectNoHScroll", "drag", "expectWidth", "screenshot", "invoke", "drop", "pasteFile"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -153,6 +164,26 @@ export function parseScript(json: unknown): ScriptFile {
           if (s[k] !== undefined && !(typeof s[k] === "number" && Number.isFinite(s[k]))) throw new Error(`${at}: expectScroll.${k} em px`);
         }
         if (s.min === undefined && s.max === undefined) throw new Error(`${at}: expectScroll precisa de min ou max (px)`);
+        break;
+      case "drag":
+        str(s.drag, `${at}.drag`);
+        for (const k of ["x", "y"] as const) {
+          if (s[k] !== undefined && !(typeof s[k] === "number" && Number.isFinite(s[k]) && Math.abs(s[k] as number) <= 10_000)) {
+            throw new Error(`${at}: drag.${k} em px, até 10000`);
+          }
+        }
+        if (s.x === undefined) throw new Error(`${at}: drag precisa de x (px)`);
+        break;
+      case "expectWidth":
+        str(s.expectWidth, `${at}.expectWidth`);
+        for (const k of ["min", "max"] as const) {
+          if (s[k] !== undefined && !(typeof s[k] === "number" && Number.isFinite(s[k]))) throw new Error(`${at}: expectWidth.${k} em px`);
+        }
+        if (s.min === undefined && s.max === undefined) throw new Error(`${at}: expectWidth precisa de min ou max (px)`);
+        break;
+      case "expectNoHScroll":
+        str(s.expectNoHScroll, `${at}.expectNoHScroll`);
+        if (s.allow !== undefined) str(s.allow, `${at}.allow`);
         break;
       case "waitFor":
         str(s.waitFor, `${at}.waitFor`);
@@ -269,6 +300,56 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
       await page.waitForTimeout(50);
     }
     if (!(top >= min && top <= max)) throw new Error(`esperava o scrollTop de ${s.expectScroll} entre ${min} e ${max}, veio ${top}`);
+  }
+  else if ("drag" in s) {
+    const box = await page.locator(s.drag).first().boundingBox({ timeout });
+    if (!box) throw new Error(`${s.drag} não está na tela`);
+    const x = box.x + box.width / 2;
+    const y = box.y + Math.min(box.height / 2, 200);
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + s.x, y + (s.y ?? 0), { steps: 12 });
+    await page.mouse.up();
+  } else if ("expectWidth" in s) {
+    const min = s.min ?? -Infinity;
+    const max = s.max ?? Infinity;
+    const deadline = Date.now() + timeout;
+    let w = NaN;
+    while (true) {
+      w = (await page.locator(s.expectWidth).first().boundingBox({ timeout: 500 }).catch(() => null))?.width ?? NaN;
+      if ((w >= min && w <= max) || Date.now() > deadline) break;
+      await page.waitForTimeout(50);
+    }
+    if (!(w >= min && w <= max)) throw new Error(`esperava a largura de ${s.expectWidth} entre ${min} e ${max}, veio ${w}`);
+  }
+  else if ("expectNoHScroll" in s) {
+    await page.waitForSelector(s.expectNoHScroll, { timeout, state: "attached" });
+    const found = await page.evaluate(({ sel, allow }) => {
+      const label = (e: Element) => {
+        const cls = typeof e.className === "string" && e.className.trim() ? `.${e.className.trim().split(/\s+/).slice(0, 3).join(".")}` : "";
+        const text = (e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+        return `${e.tagName.toLowerCase()}${cls}${text ? ` "${text}"` : ""}`;
+      };
+      const page = document.scrollingElement ?? document.documentElement;
+      const scrollers = [page, ...document.querySelectorAll(sel), ...[...document.querySelectorAll(sel)].flatMap((r) => [...r.querySelectorAll("*")])];
+      const out: string[] = [];
+      for (const el of new Set(scrollers)) {
+        if (el !== page) {
+          const x = getComputedStyle(el).overflowX;
+          if (x !== "auto" && x !== "scroll") continue;
+          if (allow && el.matches(allow)) continue;
+        }
+        const extra = el.scrollWidth - el.clientWidth;
+        if (extra <= 1) continue;
+        // Quem passa da borda direita: os mais fundos, que são a causa, e não os pais que só os carregam.
+        const edge = el === page ? window.innerWidth : el.getBoundingClientRect().left + el.clientWidth;
+        const wide = [...el.querySelectorAll("*")].filter((c) => c.getBoundingClientRect().right > edge + 1 && !(allow && c.closest(allow)));
+        const leaves = wide.filter((c) => !wide.some((d) => d !== c && c.contains(d))).slice(0, 4);
+        out.push(`${el === page ? "a página" : label(el)} rola ${extra}px de lado${leaves.length ? `; passam da borda: ${leaves.map(label).join("; ")}` : ""}`);
+      }
+      return out;
+    }, { sel: s.expectNoHScroll, allow: s.allow ?? "" });
+    if (found.length) throw new Error(`scroll horizontal: ${found.join(" | ")}`);
   }
   else if ("waitFor" in s) await page.waitForSelector(s.waitFor, { timeout, state: s.state ?? "visible" });
   else if ("wait" in s) await page.waitForTimeout(s.wait);
