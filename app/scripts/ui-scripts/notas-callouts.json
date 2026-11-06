@@ -1,0 +1,42 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Callouts",
+        "content": "# Callouts\n\n> [!note]\n> O tipo de sempre, com o título em PT.\n\n> [!tip] Atalho bom\n> Use **⌘K** para achar qualquer nota.\n\n> [!warning]- Recolhido\n> Este texto só aparece ao abrir.\n\n> [!success]+ Pronto\n> - [x] revisar\n> - [ ] publicar\n\n> [!faq]\n> Um apelido do Obsidian vira Pergunta.\n\n> [!bug] Falha no login\n> O token expira antes do tempo.\n\n> [!quote]\n> Tudo roda neste Mac.\n\nFim.\n"
+      }
+    },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre" },
+    { "press": "Meta+k" },
+    { "type": "Callouts" },
+    { "waitFor": ".kn-palette .kn-palette-it:has-text('Callouts')" },
+    { "press": "Enter" },
+    { "waitFor": ".kn-note-editor .kn-callout[data-callout='quote']", "name": "os callouts aparecem desenhados" },
+    { "expectCount": ".kn-note-editor .kn-callout", "count": 7, "name": "os 7 callouts da nota" },
+    { "expectText": ".kn-callout[data-callout='note'] .kn-callout-title", "text": "Nota", "name": "sem título, o do tipo em PT" },
+    { "expectText": ".kn-callout[data-callout='tip'] .kn-callout-title", "text": "Atalho bom", "name": "com título, o da nota" },
+    { "expectText": ".kn-callout[data-callout='question'] .kn-callout-title", "text": "Pergunta", "name": "o apelido faq vira Pergunta" },
+    { "expectCount": ".kn-callout[data-callout='warning'] .kn-callout-body", "count": 0, "name": "o - começa recolhido" },
+    { "expectCount": ".kn-callout[data-callout='success'] .kn-callout-body input[type=checkbox]", "count": 2, "name": "o + começa aberto, e as tarefas continuam caixas" },
+    { "screenshot": "01-callouts.png" },
+    { "click": ".kn-callout[data-callout='warning'] .kn-callout-fold", "name": "abre o recolhido" },
+    { "waitFor": ".kn-callout[data-callout='warning'] .kn-callout-body:has-text('Este texto só aparece ao abrir')" },
+    { "click": ".kn-callout[data-callout='success'] .kn-callout-fold", "name": "recolhe o aberto" },
+    { "expectCount": ".kn-callout[data-callout='success'] .kn-callout-body", "count": 0 },
+    { "screenshot": "02-recolher.png" },
+    { "invoke": "notes.get", "args": { "path": "Callouts.md" }, "name": "recolher não mexe no .md" },
+    { "click": ".kn-callout[data-callout='bug'] .kn-callout-title", "button": "right", "name": "botão direito no callout" },
+    { "waitFor": "[role=menuitem]:has-text('Tipo do callout')" },
+    { "hover": "[role=menuitem]:has-text('Tipo do callout')" },
+    { "waitFor": "[role=menuitemradio][aria-checked=true]:has-text('Bug')", "name": "o tipo de agora vem marcado" },
+    { "screenshot": "03-trocar-tipo.png" },
+    { "click": "[role=menuitemradio]:has-text('Perigo')", "name": "troca para Perigo" },
+    { "waitFor": ".kn-note-editor .cm-line:has-text('[!danger] Falha no login')", "name": "o tipo trocou no texto; com o cursor dentro, o bloco fica para editar" },
+    { "click": ".kn-note-editor .cm-rendered h1", "name": "o cursor sai do callout" },
+    { "waitFor": ".kn-callout[data-callout='danger'] .kn-callout-title:has-text('Falha no login')", "name": "desenhado como Perigo, com o título de antes" },
+    { "wait": 2000, "name": "o editor salva" },
+    { "invoke": "notes.get", "args": { "path": "Callouts.md" }, "name": "o .md tem [!danger] no lugar de [!bug]" }
+  ]
+}

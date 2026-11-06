@@ -7,6 +7,7 @@ import type { MenuItem } from "../ContextMenu.tsx";
 import { FORMAT_KEYS, tableAt, tableActionCommand } from "./index.ts";
 import { insertLink } from "./format.ts";
 import { slashInsert } from "./slash.ts";
+import { CALLOUT_KINDS, calloutAt } from "./callouts.ts";
 import { linkFromPaste } from "./text.ts";
 import { TEXT_TOOLS, textTool, splitAt } from "./tools.ts";
 import { TABLE_ACTIONS, canTableAction, tableContext } from "./table.ts";
@@ -76,7 +77,14 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
         onSelect: perform(() => { tableActionCommand(item.id)(view); }),
       })),
     })) }, { kind: "separator" }] : [];
+  const callout = calloutAt(chosenState.doc.toString(), chosenState.selection.main.head);
+  const calloutItems: MenuItem[] = callout ? [{ kind: "submenu", label: "Tipo do callout", items: CALLOUT_KINDS.map((kind): MenuItem => ({
+    label: `${kind.glyph}  ${kind.title}`,
+    checked: kind.id === callout.kind.id,
+    onSelect: perform(() => view.dispatch({ changes: { from: callout.from, to: callout.to, insert: kind.id }, userEvent: "input.type" })),
+  })) }, { kind: "separator" }] : [];
   return [
+    ...calloutItems,
     ...(heading ? [{ label: "Renomear título e seus links…", onSelect: perform(() => onRenameHeading?.(heading.from, heading.title, chosenState.doc.toString())) }, { kind: "separator" as const }] : []),
     ...tableItems,
     { kind: "submenu", label: "Formatar", items: [
