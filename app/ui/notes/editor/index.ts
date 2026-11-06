@@ -26,6 +26,8 @@ import { renderedPreview } from "./renderedWidget.tsx";
 import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger, readSlashUsage, recordSlashUse } from "./slash.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
+import { searchPanelOpen } from "@codemirror/search";
+import { searchAndFold, searchablePreviews } from "./search-fold.ts";
 import { highlightSyntax, HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 import { spellingAttributes, disableSpellcheck, SPELLING_EXCLUDED } from "./spelling.ts";
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
@@ -330,13 +332,17 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     // O colar-link é o nosso (o `paste` abaixo): o do lang-markdown não escapa "(" nem ")" do endereço nem "[" do texto.
     markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax, highlightSyntax], addKeymap: true, pasteURLAsLink: false }),
     syntaxHighlighting(highlight),
+    searchAndFold,
+    searchablePreviews([
     // Os blocos fora do cursor, desenhados pela lib do Channels (T2983); antes do resto, para cobrir o preview de linha.
     renderedPreview(links, opts),
     inlinePreview(links),
     tagPreview,
     tablePreview,
     commentPreview,
-    ...(opts.attachments ? [attachmentPreview(opts.attachments), attachmentInput(opts.attachments, (t) => opts.onError?.(t)), attachmentTheme] : []),
+    ...(opts.attachments ? [attachmentPreview(opts.attachments), attachmentTheme] : []),
+    ]),
+    ...(opts.attachments ? [attachmentInput(opts.attachments, (t) => opts.onError?.(t))] : []),
     autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets)], icons: false, closeOnBlur: true }),
     formatBar,
     tableKeys,
@@ -519,7 +525,7 @@ const FORMAT_BUTTONS: { action: FormatAction; label: string; title: string }[] =
 
 function formatTooltip(state: EditorState): Tooltip | null {
   const sel = state.selection.main;
-  if (sel.empty || state.selection.ranges.length > 1) return null;
+  if (sel.empty || state.selection.ranges.length > 1 || searchPanelOpen(state)) return null;
   return {
     pos: sel.from,
     above: true,
@@ -550,7 +556,7 @@ function formatTooltip(state: EditorState): Tooltip | null {
 const formatBar = [
   StateField.define<Tooltip | null>({
     create: (state) => formatTooltip(state),
-    update: (tip, tr) => (tr.docChanged || tr.selection ? formatTooltip(tr.state) : tip),
+    update: (tip, tr) => (tr.docChanged || tr.selection || searchPanelOpen(tr.state) !== searchPanelOpen(tr.startState) ? formatTooltip(tr.state) : tip),
     provide: (f) => showTooltip.from(f),
   }),
   keymap.of(FORMAT_KEYS.map(({ key, run }) => ({ key, run }))),
