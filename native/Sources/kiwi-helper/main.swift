@@ -67,6 +67,23 @@ while let arg = args.next() {
             fail("can't create \(dir.path): \(error)")
         }
         dumpDirectory = dir
+    case "--render-cues":
+        // T5833: os sons propostos em WAV, para a pessoa ouvir. Só escreve arquivos: não toca nada.
+        guard let path = args.next() else { fail("--render-cues needs a folder") }
+        let dir = URL(fileURLWithPath: path, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            for recipe in CueRecipe.proposals {
+                for cue in Cue.allCases {
+                    let file = dir.appendingPathComponent("\(recipe.name)-\(cue == .start ? "inicio" : "fim").wav")
+                    try WAV.encode(samples: CueSynth.render(recipe, cue), sampleRate: 44_100).write(to: file)
+                    print(file.path)
+                }
+            }
+        } catch {
+            fail("can't render the cues in \(dir.path): \(error)")
+        }
+        exit(0)
     case "--overlay-snapshot":
         guard let path = args.next() else { fail("--overlay-snapshot needs a folder") }
         let dir = URL(fileURLWithPath: path, isDirectory: true)

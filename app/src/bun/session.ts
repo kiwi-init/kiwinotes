@@ -284,7 +284,7 @@ export class Session {
     // Os ajustes de reunião (R6) num `config.set` só deles, pelo mesmo motivo: um helper de antes do R2 recusa os campos.
     const m = settings.meetings;
     const meeting = await this.sidecar
-      .send({ type: "config.set", meetingSuggest: m.suggest, meetingApps: m.apps })
+      .send({ type: "config.set", meetingSuggest: m.suggest, meetingApps: m.apps, cues: settings.cues })
       .catch(() => undefined);
     if (meeting && !meeting.ok) console.warn(`[session] config.set meetings: ${meeting.error}`);
   }

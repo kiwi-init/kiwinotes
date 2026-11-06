@@ -77,7 +77,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.29.0 (T5455): local dictation recovery, history.retry and history.changed.
 // 1.30.0 (T5556): clipboard.read, only on an explicit paste gesture.
 // 1.31.0 (T5560): local spelling suggestions.
-export const UI_CONTRACT_VERSION = "1.31.0";
+// 1.32.0 (T5833): o `cues` nas settings, os sons de início e de fim. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.32.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */

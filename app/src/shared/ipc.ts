@@ -107,6 +107,8 @@ export type Command =
        * `notesShortcut`, o `meetingShortcut` e o `meetingPauseShortcut`, que ainda valem.
        */
       shortcuts?: Partial<Record<"dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause", string | null>>;
+      /** Os sons de início e de fim do ditado e da reunião (T5833; padrão: ligados). */
+      cues?: boolean;
       /** O pop-up "Gravar esta reunião?" (padrão: ligado). Desligado, o atalho ainda grava. */
       meetingSuggest?: boolean;
       /** Os apps que contam como reunião (substitui a lista padrão: Teams, Zoom, Webex, Slack, FaceTime e os navegadores). */
