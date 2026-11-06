@@ -101,7 +101,7 @@ export type Command =
        * "control+option+r", "control+k r r"), ou null para desligar. Só os dados mudam. Substitui o `hotkey`, o
        * `notesShortcut`, o `meetingShortcut` e o `meetingPauseShortcut`, que ainda valem.
        */
-      shortcuts?: Partial<Record<"dictation" | "cancel" | "notes" | "meeting" | "meetingPause", string | null>>;
+      shortcuts?: Partial<Record<"dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause", string | null>>;
       /** O pop-up "Gravar esta reunião?" (padrão: ligado). Desligado, o atalho ainda grava. */
       meetingSuggest?: boolean;
       /** Os apps que contam como reunião (substitui a lista padrão: Teams, Zoom, Webex, Slack, FaceTime e os navegadores). */
@@ -311,6 +311,8 @@ export type Event =
   | { type: "hotkey.toggle"; on: boolean }
   /** O atalho do `notesShortcut` foi apertado: o app abre ou traz para a frente a janela Notas (T1499). */
   | { type: "hotkey.notes" }
+  /** O atalho "colar a última" (L9, T5459): o app cola de novo o último ditado do Histórico. */
+  | { type: "hotkey.pasteLast" }
   /** O sidecar começa a gravar sozinho no hotkey.down, para não perder a primeira sílaba. */
   /**
    * `app`: o que estava na frente quando a gravação começou (pode ser o próprio Kiwi). `target: "note"`: a nota
@@ -441,6 +443,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "hotkey.up",
   "hotkey.toggle",
   "hotkey.notes",
+  "hotkey.pasteLast",
   "record.started",
   "record.stopped",
   "record.cancelled",

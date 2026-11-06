@@ -12,7 +12,7 @@
 // não recebe a tecla (com Acessibilidade). Os do app (a paleta, a nota nova, a nota do dia) só valem com uma janela do
 // Kiwi na frente, e só podem ser uma combinação.
 
-export type ShortcutId = "dictation" | "cancel" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote";
+export type ShortcutId = "dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote";
 
 export type ShortcutScope = "global" | "app";
 
@@ -29,6 +29,8 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: "dictation", label: "Ditar", hint: "Segure para falar; toque duas vezes para gravar sem segurar.", group: "Ditado", scope: "global", default: "fn" },
   // L5 (T5458): só durante a gravação, por isso pode ser uma tecla sozinha (Esc, ⌫, ↩), e o app da frente não a recebe.
   { id: "cancel", label: "Cancelar a gravação", hint: "Só durante o ditado: o áudio é descartado e nada é colado.", group: "Ditado", scope: "global", default: "escape" },
+  // L9 (T5459): ⌃⌥V, junto dos outros ⌃⌥ do Kiwi (o Hex usa ⌥⇧V).
+  { id: "pasteLast", label: "Colar o último ditado", hint: "De qualquer app: cola de novo o texto do último ditado.", group: "Ditado", scope: "global", default: "control+option+v" },
   { id: "notes", label: "Abrir as Notas", hint: "De qualquer app.", group: "Notas", scope: "global", default: "control+option+n" },
   { id: "palette", label: "Paleta de comandos", hint: "Com as Notas na frente.", group: "Notas", scope: "app", default: "command+k" },
   { id: "newNote", label: "Nova nota", hint: "Com as Notas na frente.", group: "Notas", scope: "app", default: "command+n" },

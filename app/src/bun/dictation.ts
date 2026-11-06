@@ -27,7 +27,8 @@ export interface DictationSidecar {
 
 export interface DictationOptions {
   sidecar: DictationSidecar;
-  history: { add(entry: NewHistoryEntry): Promise<HistoryEntry> };
+  /** `search`: o "colar a última" (L9) pega o ditado mais novo daqui. Sem ele, o atalho só avisa. */
+  history: { add(entry: NewHistoryEntry): Promise<HistoryEntry>; search?(q: { limit: number }): Promise<{ entries: HistoryEntry[] }> };
   llm?: LlmBackend;
   llmMode?: LlmMode;
   /** Devolver o clipboard da pessoa depois de colar. Padrão: sim. */
@@ -45,6 +46,8 @@ export const NOT_PASTED: Record<string, string> = {
   no_text_field: "Não é um campo de texto: está no clipboard",
   no_accessibility: "Falta a Acessibilidade: está no clipboard",
 };
+/** O "colar a última" (L9) sem nenhum ditado no Histórico. Cabe nas 38 letras da pílula. */
+export const NOTHING_TO_PASTE = "Ainda não há ditado para colar";
 /** Com secure input o ⌘V pode ter sido descartado: o texto fica no clipboard, e o antigo não volta (#224). */
 export const SECURE_INPUT_NOTICE = "O texto também ficou no clipboard";
 /** O mic caiu no meio do ditado: o que ele ouviu até ali foi transcrito, em vez de ir para o lixo (T883). */
@@ -140,6 +143,8 @@ export class Dictation {
         this.recordings = [];
         this.pendingWav = [];
       }),
+      // L9 (T5459): o atalho "colar a última" (⌃⌥V por padrão). Na fila, depois de um ditado que ainda está colando.
+      sidecar.on("hotkey.pasteLast", () => this.enqueue(() => this.pasteLast())),
       sidecar.on("app.active", (e) => {
         this.activeApp = { bundleId: e.bundleId, name: e.name };
       }),
@@ -245,6 +250,34 @@ export class Dictation {
       throw new Error(result.error);
     }
     return outcome;
+  }
+
+  /**
+   * L9 (T5459): cola de novo o último ditado do Histórico no app da frente, pelo mesmo `insert.text` (com dryRun nos
+   * testes dos agentes). Não entra de novo no Histórico. Sem ditado nenhum, a pílula avisa.
+   */
+  async pasteLast(): Promise<{ pasted: boolean; text?: string }> {
+    const last = (await this.options.history.search?.({ limit: 1 }).catch(() => undefined))?.entries[0];
+    if (!last?.text.trim()) {
+      await this.overlay("error", NOTHING_TO_PASTE);
+      return { pasted: false };
+    }
+    const command = {
+      type: "insert.text" as const,
+      text: last.text,
+      restoreClipboard: this.options.restoreClipboard ?? true,
+      autoSpace: last.tone !== "literal",
+    };
+    const insert: InsertResult = await this.options.sidecar
+      .send(this.options.dryRun ? { ...command, dryRun: true } : command)
+      .catch((e) => ({ v: 1, type: "result", id: "", ok: false, error: e instanceof Error ? e.message : String(e) }) as InsertResult);
+    const pasted = insert.ok && (insert.data.pasted || insert.data.dryRun === true);
+    if (!insert.ok) await this.overlay("error", "Não deu para colar o texto");
+    else if (insert.data.dryRun) await this.overlay("done");
+    else if (!insert.data.pasted) await this.overlay("error", NOT_PASTED[insert.data.reason ?? ""] ?? NOT_PASTED.no_focus);
+    else await this.overlay("done", insert.data.reason ? SECURE_INPUT_NOTICE : undefined);
+    this.log(`paste last: ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? "pasted" : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}`);
+    return { pasted, text: last.text };
   }
 
   /** Com o LLM ligado, aquece o Foundation Models com o prompt certo enquanto a pessoa fala. */

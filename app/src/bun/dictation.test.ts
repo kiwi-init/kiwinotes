@@ -11,6 +11,7 @@ import {
   micShortName,
   NOT_PASTED,
   NOTE_FAILED,
+  NOTHING_TO_PASTE,
   noteCreated,
   SECURE_INPUT_NOTICE,
   TRANSCRIPT_ERROR,
@@ -54,7 +55,7 @@ const transcript = (text: string, extra: Partial<Extract<Event, { type: "transcr
   ...extra,
 });
 
-function setup(insert?: Parameters<typeof fakeSidecar>[0]) {
+function setup(insert?: Parameters<typeof fakeSidecar>[0], opts: { dryRun?: boolean } = {}) {
   const sidecar = fakeSidecar(insert);
   const added: NewHistoryEntry[] = [];
   const d = new Dictation({
@@ -64,8 +65,11 @@ function setup(insert?: Parameters<typeof fakeSidecar>[0]) {
         added.push(e);
         return { ...e, id: `id${added.length}`, at: new Date().toISOString() } as any;
       },
+      // O mais novo primeiro, como o HistoryStore.
+      search: async ({ limit }) => ({ entries: added.map((e, i) => ({ ...e, id: `id${i + 1}`, at: "" }) as any).reverse().slice(0, limit) }),
     },
     log: () => {},
+    ...opts,
   });
   d.attach();
   const overlays = () => sidecar.sent.filter((c) => c.type === "overlay.state");
@@ -149,6 +153,31 @@ describe("Dictation", () => {
     await d.idle();
     expect(inserted()).toEqual([]);
     expect(added).toEqual([]);
+  });
+
+  test("L9 (T5459): colar a última cola de novo o ditado mais novo, em dryRun, sem entrar de novo no Histórico", async () => {
+    const { sidecar, d, added, inserted } = setup(undefined, { dryRun: true });
+    for (const text of ["primeiro ditado", "o último ditado"]) {
+      sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.mail", name: "Mail" } });
+      sidecar.emit(transcript(text));
+      await d.idle();
+    }
+    const before = inserted().length;
+    // O atalho chega do helper como evento; o app cola pela fila.
+    sidecar.emit({ type: "hotkey.pasteLast" });
+    await d.idle();
+    expect(inserted().slice(before)).toEqual([added.at(-1)!.text]);
+    const sent = sidecar.sent.filter((c) => c.type === "insert.text").at(-1) as any;
+    expect(sent.dryRun).toBe(true); // nunca o clipboard real num teste
+    expect(added).toHaveLength(2);
+  });
+
+  test("L9 (T5459): sem ditado no Histórico, a pílula avisa e nada é colado", async () => {
+    const { sidecar, d, inserted, overlays } = setup(undefined, { dryRun: true });
+    sidecar.emit({ type: "hotkey.pasteLast" });
+    await d.idle();
+    expect(inserted()).toEqual([]);
+    expect(overlays().at(-1)).toMatchObject({ state: "error", message: NOTHING_TO_PASTE });
   });
 
   test("onDone also fires for an empty transcript and for transcript.error", async () => {

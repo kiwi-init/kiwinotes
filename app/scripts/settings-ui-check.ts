@@ -34,7 +34,7 @@ const server = Bun.serve({
  * "failing" recusa o set. O `shortcuts.record` espera o teste pôr `window.__record` ({shortcut} ou {error}).
  */
 function fakeEngine(mode: "ok" | "old" | "failing") {
-  const shortcuts = { dictation: "fn", cancel: "escape", notes: "control+option+n", palette: "command+k", newNote: "command+n", dailyNote: "shift+command+d", meeting: "control+option+r", meetingPause: "control+option+m" };
+  const shortcuts = { dictation: "fn", cancel: "escape", pasteLast: "control+option+v", notes: "control+option+n", palette: "command+k", newNote: "command+n", dailyNote: "shift+command+d", meeting: "control+option+r", meetingPause: "control+option+m" };
   let settings: Record<string, unknown> = { shortcuts, notesShortcut: shortcuts.notes };
   const calls: unknown[] = [];
   const listeners: ((s: unknown) => void)[] = [];
@@ -146,10 +146,10 @@ await step("as Configurações sobem com a CSP das views, com todos os atalhos e
   const sections = (await page.locator(".kn-section-title").allTextContents()).filter((t) => t.startsWith("Atalhos"));
   if (sections.join(",") !== "Atalhos · Ditado,Atalhos · Notas,Atalhos · Reuniões") throw new Error(sections.join(","));
   const shown: Record<string, string> = {};
-  for (const label of ["Ditar", "Cancelar a gravação", "Abrir as Notas", "Paleta de comandos", "Nova nota", "Nota do dia", "Gravar e parar a reunião", "Pausar meu mic"]) {
+  for (const label of ["Ditar", "Cancelar a gravação", "Colar o último ditado", "Abrir as Notas", "Paleta de comandos", "Nova nota", "Nota do dia", "Gravar e parar a reunião", "Pausar meu mic"]) {
     shown[label] = (await key(page, label).textContent()) ?? "";
   }
-  const want = { Ditar: "Fn 🌐", "Cancelar a gravação": "Esc", "Abrir as Notas": "⌃⌥N", "Paleta de comandos": "⌘K", "Nova nota": "⌘N", "Nota do dia": "⇧⌘D", "Gravar e parar a reunião": "⌃⌥R", "Pausar meu mic": "⌃⌥M" };
+  const want = { Ditar: "Fn 🌐", "Cancelar a gravação": "Esc", "Colar o último ditado": "⌃⌥V", "Abrir as Notas": "⌃⌥N", "Paleta de comandos": "⌘K", "Nova nota": "⌘N", "Nota do dia": "⇧⌘D", "Gravar e parar a reunião": "⌃⌥R", "Pausar meu mic": "⌃⌥M" };
   if (JSON.stringify(shown) !== JSON.stringify(want)) throw new Error(JSON.stringify(shown));
   // O seletor de mentira de antes (Fn / ⌥ direito, que nunca era salvo) saiu.
   if (await page.getByRole("radiogroup", { name: "Tecla do atalho" }).count()) throw new Error("o seletor antigo ainda está lá");
