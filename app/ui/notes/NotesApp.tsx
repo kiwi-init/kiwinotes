@@ -493,6 +493,16 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const selectedFolderRef = useRef(selectedFolder);
   selectedFolderRef.current = selectedFolder;
   const shortcuts = useShortcuts() ?? DEFAULT_SHORTCUTS;
+  // E13 (T6385): o modo foco esconde a árvore e as barras; a máquina de escrever centraliza a linha do cursor.
+  const [focusMode, setFocusMode] = useState(false);
+  const [typewriter, setTypewriter] = useState(false);
+  const toggleFocus = () => {
+    setTreeOpen(false);
+    setFocusMode((f) => !f);
+  };
+  const toggleTypewriter = () => setTypewriter((t) => !t);
+  const togglesRef = useRef({ toggleFocus, toggleTypewriter });
+  togglesRef.current = { toggleFocus, toggleTypewriter };
   const shortcutsRef = useRef(shortcuts);
   shortcutsRef.current = shortcuts;
   /** "Nova nota (⌘N)", com o atalho que valer agora; sem nada quando desligado. */
@@ -515,6 +525,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         flushSync(() => setPalette((p) => !p));
       }
       else if (matchesKeyEvent(s.newNote, e)) void create("Sem título", true, selectedFolderRef.current);
+      else if (matchesKeyEvent(s.focusMode, e)) togglesRef.current.toggleFocus();
+      else if (matchesKeyEvent(s.typewriter, e)) togglesRef.current.toggleTypewriter();
       else return;
       e.preventDefault();
     };
@@ -986,6 +998,10 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true,
           },
         ] : []),
+    ...(note ? [
+      { id: "focus", title: focusMode ? "Sair do modo foco" : "Modo foco", words: "foco concentrar distração zen esconder" },
+      { id: "typewriter", title: typewriter ? "Desligar a máquina de escrever" : "Máquina de escrever", words: "máquina escrever centralizar linha typewriter" },
+    ] : []),
   ];
 
   const linkTargets = (): LinkTarget[] => {
@@ -1056,7 +1072,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }
 
   return (
-    <div className="kn-notes" data-entered={entered}>
+    <div className="kn-notes" data-entered={entered} data-focus={focusMode && note ? "true" : undefined}>
       <TopBar
         start={
           <button
@@ -1342,6 +1358,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               }}
               attachments={api.attachments}
               onError={(t) => say(t)}
+              focus={focusMode}
+              typewriter={typewriter}
+              viewModes={{
+                focusKey: shortcuts.focusMode ? shortcutLabel(shortcuts.focusMode) : undefined,
+                typewriterKey: shortcuts.typewriter ? shortcutLabel(shortcuts.typewriter) : undefined,
+                toggleFocus,
+                toggleTypewriter,
+              }}
             />
           </article>
         ) : listing && !listing.notes.length ? (
@@ -1361,7 +1385,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           initialQuery={paletteQuery}
           commands={paletteCommands}
           onCommand={(id, q) =>
-            id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q) : undefined
+            id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q)
+              : id === "focus" ? toggleFocus() : id === "typewriter" ? toggleTypewriter() : undefined
           }
           onOpen={(p) => void open(p)}
           onCreate={(t) => void create(t)}

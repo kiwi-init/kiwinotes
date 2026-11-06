@@ -93,7 +93,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.33.0 (T6014): refactors de título/tag e avisos de links quebrados. Só acréscimo.
 // 1.34.0 (T6013): a busca pelo sentido: `semanticSearch` nas settings, o `notes.semanticStatus` e o `semantic: true` no
 //   `SearchHit` achado só pelo sentido. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.34.0";
+// 1.35.0 (T6385): o `focusMode` e o `typewriter` nos `shortcuts` (atalhos do app: modo foco e máquina de escrever). Só
+//   acréscimo.
+export const UI_CONTRACT_VERSION = "1.35.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */

@@ -12,7 +12,7 @@
 // não recebe a tecla (com Acessibilidade). Os do app (a paleta, a nota nova, a nota do dia) só valem com uma janela do
 // Kiwi na frente, e só podem ser uma combinação.
 
-export type ShortcutId = "dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote";
+export type ShortcutId = "dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote" | "focusMode" | "typewriter";
 
 export type ShortcutScope = "global" | "app";
 
@@ -35,6 +35,9 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: "palette", label: "Paleta de comandos", hint: "Com as Notas na frente.", group: "Notas", scope: "app", default: "command+k" },
   { id: "newNote", label: "Nova nota", hint: "Com as Notas na frente.", group: "Notas", scope: "app", default: "command+n" },
   { id: "dailyNote", label: "Nota do dia", hint: "Com as Notas na frente.", group: "Notas", scope: "app", default: "shift+command+d" },
+  // E13 (T6385): o foco esmaece o resto e esconde a árvore e as barras; a máquina de escrever centraliza a linha.
+  { id: "focusMode", label: "Modo foco", hint: "Com uma nota aberta: só o parágrafo de agora fica em destaque.", group: "Notas", scope: "app", default: "shift+command+f" },
+  { id: "typewriter", label: "Máquina de escrever", hint: "Com uma nota aberta: a linha do cursor fica no meio da tela.", group: "Notas", scope: "app", default: "shift+command+t" },
   { id: "meeting", label: "Gravar e parar a reunião", hint: "De qualquer app, com ou sem o pop-up.", group: "Reuniões", scope: "global", default: "control+option+r" },
   { id: "meetingPause", label: "Pausar meu mic", hint: "Só durante a gravação: os outros continuam sendo gravados.", group: "Reuniões", scope: "global", default: "control+option+m" },
 ] as const;

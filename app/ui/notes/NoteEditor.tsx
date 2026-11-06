@@ -1,7 +1,7 @@
 // O CodeMirror dentro do React: um EditorView por janela, e um estado novo a cada nota aberta (o desfazer não atravessa
 // de uma nota para outra). O texto que chega de fora (a nota recarregada) troca o estado; o que a pessoa digita só sobe.
 
-import { EditorSelection, Transaction } from "@codemirror/state";
+import { EditorSelection, type Extension, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { isolateHistory } from "@codemirror/commands";
 import { headingFor, markdownStructure } from "../../src/shared/markdown-structure.ts";
@@ -17,6 +17,7 @@ import { isSpellingLanguage } from "../../src/shared/spelling.ts";
 import { lineChanges } from "../../src/shared/merge3.ts";
 
 import type { AttachmentSource } from "./editor/attachments.ts";
+import { focusCompartment, focusExtension, typewriterCompartment, typewriterExtension } from "./editor/focus.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
 
@@ -42,10 +43,23 @@ export interface NoteEditorProps {
   createSplit?(tail: string): Promise<string>;
   onSplitDone?(path: string): void;
   onRenameHeading?(offset: number, title: string, source: string): void;
+  /** O modo foco e a máquina de escrever (T6385, E13). */
+  focus?: boolean;
+  typewriter?: boolean;
+  /** Os dois no menu do botão direito, com o atalho de agora. */
+  viewModes?: { focusKey?: string; typewriterKey?: string; toggleFocus(): void; toggleTypewriter(): void };
 }
 
 export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, onError, createSplit, onSplitDone, onRenameHeading,
+  focus = false, typewriter = false, viewModes,
 }: NoteEditorProps) {
+  const modes = useRef({ focus, typewriter });
+  modes.current = { focus, typewriter };
+  const withModes = (base: Extension[]): Extension[] => [
+    ...base,
+    focusCompartment.of(focusExtension(modes.current.focus)),
+    typewriterCompartment.of(typewriterExtension(modes.current.typewriter)),
+  ];
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [editorDoc, setEditorDoc] = useState(doc);
@@ -57,6 +71,8 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   });
   latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, onError, createSplit, onSplitDone, onRenameHeading,
   };
+  const modeMenu = useRef({ focus, typewriter, viewModes });
+  modeMenu.current = { focus, typewriter, viewModes };
 
   const extensions = useRef(
     editorExtensions(
@@ -80,7 +96,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   );
 
   useEffect(() => {
-    const v = new EditorView({ parent: host.current!, state: stateFor(doc, extensions.current),
+    const v = new EditorView({ parent: host.current!, state: stateFor(doc, withModes(extensions.current)),
     });
     view.current = v;
     const detach = links.attach(v);
@@ -106,9 +122,18 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
     setEditorDoc(doc);
     const v = view.current;
     if (!v) return;
-    v.setState(stateFor(doc, extensions.current));
+    v.setState(stateFor(doc, withModes(extensions.current)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
+
+  useEffect(() => {
+    const v = view.current;
+    if (!v) return;
+    v.dispatch({
+      effects: [focusCompartment.reconfigure(focusExtension(focus)), typewriterCompartment.reconfigure(typewriterExtension(typewriter))],
+    });
+    if (typewriter) v.dispatch({ effects: EditorView.scrollIntoView(v.state.selection.main.head, { y: "center" }) });
+  }, [focus, typewriter]);
 
   useEffect(() => {
     const v = view.current;
@@ -161,7 +186,17 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
         else latest.current.onError?.(`A nota mudou. A continuação foi copiada para ${result.path}; o original foi mantido.`);
       }).catch(() => latest.current.onError?.("Não foi possível criar a continuação. O texto original foi mantido."))
         .finally(() => { splitting.current = false; });
-    } : undefined, latest.current.onRenameHeading)] });
+    } : undefined, latest.current.onRenameHeading), ...viewModeItems()] });
+  };
+  const viewModeItems = (): MenuItem[] => {
+    const m = modeMenu.current;
+    if (!m.viewModes) return [];
+    const { toggleFocus, toggleTypewriter, focusKey, typewriterKey } = m.viewModes;
+    return [
+      { kind: "separator" },
+      { label: "Modo foco", hint: focusKey, checked: m.focus, onSelect: toggleFocus },
+      { label: "Máquina de escrever", hint: typewriterKey, checked: m.typewriter, onSelect: toggleTypewriter },
+    ];
   };
   const headings = useMemo(() => markdownStructure(editorDoc).headings, [editorDoc]);
   const goToHeading = (offset: number) => {
