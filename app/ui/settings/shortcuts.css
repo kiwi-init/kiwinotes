@@ -64,3 +64,14 @@
 .kn-shortcut-off:hover {
   color: var(--ink);
 }
+
+/* "Desligar" só com o mouse na linha (ou o foco do teclado nela): sete botões iguais pesavam a tela. */
+.kn-shortcut-off {
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.kn-row:hover .kn-shortcut-off,
+.kn-row:focus-within .kn-shortcut-off {
+  opacity: 1;
+}

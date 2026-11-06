@@ -10,7 +10,8 @@
       "clipboard": [],
       "blocked": [],
       "invokes": {
-        "settings.get": 4,
+        "settings.get": 5,
+        "notes.folder": 1,
         "notes.list": 8,
         "trash.list": 7,
         "notes.get": 8,
@@ -29,7 +30,8 @@
       "clipboard": [],
       "blocked": [],
       "invokes": {
-        "settings.get": 4,
+        "settings.get": 5,
+        "notes.folder": 1,
         "notes.list": 1,
         "trash.list": 1,
         "notes.get": 1,
