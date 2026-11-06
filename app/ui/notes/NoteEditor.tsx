@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { api as appApi, has } from "../src/api.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { editorMenu } from "./editor/context-menu.ts";
+import { splitNote } from "./editor/tools.ts";
 import { spellingAt, spellingForMenu, spellingMenu } from "./editor/spelling.ts";
 import { isSpellingLanguage } from "../../src/shared/spelling.ts";
 
@@ -33,18 +34,21 @@ export interface NoteEditorProps {
   /** Os anexos (T2594); sem eles, colar e arrastar arquivo não faz nada de especial. Fixo durante a vida da janela. */
   attachments?: AttachmentSource;
   onError?(text: string): void;
+  createSplit?(tail: string): Promise<string>;
+  onSplitDone?(path: string): void;
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError,
+export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError, createSplit, onSplitDone,
 }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const view = useRef<EditorView | null>(null);
   const spellingRequest = useRef(0);
+  const splitting = useRef(false);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
-  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError,
+  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone,
   });
-  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError,
+  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone,
   };
 
   const extensions = useRef(
@@ -91,7 +95,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
     spellingRequest.current++;
     setMenu(null);
     const v = view.current;
-    if (!v || v.state.doc.toString() === doc) return;
+    if (!v) return;
     v.setState(stateFor(doc, extensions.current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
@@ -129,7 +133,16 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
     setMenu({ x, y, items: [...spellingItems, ...editorMenu(v, {
       ...(has("clipboard.write") ? { write: (text: string) => appApi.copy(text) } : {}),
       ...(has("clipboard.read") ? { read: () => appApi.readClipboard() } : {}),
-    }, (message) => latest.current.onError?.(message))] });
+    }, (message) => latest.current.onError?.(message), latest.current.createSplit ? () => {
+      if (splitting.current) return;
+      splitting.current = true;
+      void splitNote(v, tail => latest.current.createSplit!(tail)).then(result => {
+        if (!result) return;
+        if (result.moved) latest.current.onSplitDone?.(result.path);
+        else latest.current.onError?.(`A nota mudou. A continuação foi copiada para ${result.path}; o original foi mantido.`);
+      }).catch(() => latest.current.onError?.("Não foi possível criar a continuação. O texto original foi mantido."))
+        .finally(() => { splitting.current = false; });
+    } : undefined)] });
   };
   return <>
     <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}

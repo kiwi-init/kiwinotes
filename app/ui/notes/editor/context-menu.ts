@@ -7,6 +7,7 @@ import { FORMAT_KEYS, tableAt, tableActionCommand } from "./index.ts";
 import { insertLink } from "./format.ts";
 import { slashInsert } from "./slash.ts";
 import { linkFromPaste } from "./text.ts";
+import { TEXT_TOOLS, textTool, splitAt } from "./tools.ts";
 import { TABLE_ACTIONS, canTableAction, tableContext } from "./table.ts";
 
 export interface EditorClipboard {
@@ -41,7 +42,7 @@ export async function pasteSelection(view: ClipboardTarget, clipboard: EditorCli
   view.focus();
 }
 
-export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void): MenuItem[] {
+export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void): MenuItem[] {
   const chosenState = view.state;
   const safe = () => unchanged(view, chosenState);
   const perform = (action: () => void) => () => { if (safe()) { action(); view.focus(); } };
@@ -91,6 +92,10 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
       { label: "Separador", onSelect: insertBlock("divider") },
       { label: "Callout", onSelect: insertBlock("callout") },
     ] },
+    { kind: "submenu", label: "Ferramentas de texto", items: TEXT_TOOLS.map(item => ({ label: item.label,
+      disabled: !textTool(chosenState, item.id), onSelect: perform(() => { const tr = textTool(view.state, item.id); if (tr) view.dispatch(tr); }),
+    })) },
+    { label: "Dividir nota aqui", disabled: !onSplit || !splitAt(chosenState), onSelect: perform(() => onSplit?.()) },
     { kind: "separator" },
     { label: "Recortar", hint: "⌘X", disabled: !selected || !clipboard.write, onSelect: asyncAction(() => cutSelection(view, clipboard)) },
     { label: "Copiar", hint: "⌘C", disabled: !selected || !clipboard.write, onSelect: asyncAction(async () => {

@@ -13,7 +13,7 @@ describe("comando / (T2660)", () => {
   });
 
   test("os itens casam pelo nome e pelas palavras, sem acento", () => {
-    expect(slashMatches("").length).toBe(13);
+    expect(slashMatches("").length).toBe(15);
     expect(slashMatches("cod").map((i) => i.id)).toEqual(["code"]);
     expect(slashMatches("todo").map((i) => i.id)).toEqual(["todo"]);
     expect(slashMatches("citacao").map((i) => i.id)).toEqual(["quote"]);
@@ -48,4 +48,16 @@ describe("barra de formatação (T2660)", () => {
     expect(toggleHeading("Ideias")).toBe("## Ideias");
     expect(toggleHeading("### Ideias")).toBe("Ideias");
   });
+});
+
+
+test("slash ranks exact aliases above prefixes above contains and usage breaks ties", () => {
+  expect(slashMatches("lista", { numbered: 100 }).map(i => i.id)).toEqual(["list", "numbered"]);
+  expect(slashMatches("titu").map(i => i.id)).toEqual(["h1", "h2"]);
+  expect(slashMatches("odigo").map(i => i.id)).toEqual(["code"]);
+  expect(slashMatches("", { code: 4, table: 2 }).slice(0,2).map(i=>i.id)).toEqual(["code","table"]);
+});
+test("tomorrow and yesterday roll over months/years without mutating the clock", () => {
+ const d=new Date(2026,11,31,23,30); expect(slashInsert("tomorrow",false,d)?.insert).toBe("2027-01-01");
+ expect(slashInsert("yesterday",false,new Date(2026,0,1))?.insert).toBe("2025-12-31"); expect(d.getDate()).toBe(31);
 });
