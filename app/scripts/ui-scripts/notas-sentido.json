@@ -1,0 +1,33 @@
+{
+  "window": "notes",
+  "steps": [
+    { "invoke": "notes.create", "args": { "title": "Backup", "content": "Configurar o backup do servidor toda noite às 2h para o storage na nuvem. #infra" } },
+    { "invoke": "notes.create", "args": { "title": "Portaria", "content": "Segurança do prédio: trocar a fechadura da portaria e cadastrar as visitas." } },
+    { "invoke": "notes.create", "args": { "title": "Bolo de cenoura", "content": "Receita com cobertura de chocolate, assa por 40 minutos." } },
+    { "invoke": "notes.create", "args": { "title": "Férias", "content": "Ideias para a viagem: praia no nordeste, passagens em janeiro." } },
+    { "invoke": "notes.create", "args": { "title": "Carro", "content": "Trocar o óleo e revisar os freios antes da viagem longa." } },
+    { "invoke": "notes.create", "args": { "title": "Mercado", "content": "Lista de compras: leite, ovos, pão, café e frutas." } },
+    { "invoke": "notes.create", "args": { "title": "Leituras", "content": "Livros para ler: Dom Casmurro, Grande Sertão e O Cortiço." } },
+    { "invoke": "notes.semanticStatus", "args": {} },
+    { "wait": 4000 },
+    { "invoke": "notes.semanticStatus", "args": {} },
+    { "waitFor": ".kn-crumb-bt" },
+    { "press": "Meta+k" },
+    { "fill": ".kn-palette-q", "text": "salvar os arquivos em outro lugar" },
+    { "waitFor": ".kn-palette-why" },
+    { "wait": 250 },
+    { "expectText": ".kn-palette-it:nth-child(1)", "text": "Backup" },
+    { "expectText": ".kn-palette-it:nth-child(1)", "text": "pelo sentido" },
+    { "invoke": "notes.search", "args": { "query": "salvar os arquivos em outro lugar" } },
+    { "screenshot": "01-pelo-sentido.png" },
+    { "fill": ".kn-palette-q", "text": "manutenção do automóvel" },
+    { "waitFor": ".kn-palette-why" },
+    { "wait": 250 },
+    { "expectText": ".kn-palette-it:nth-child(1)", "text": "Carro" },
+    { "invoke": "notes.search", "args": { "query": "manutenção do automóvel" } },
+    { "screenshot": "02-sem-palavra-em-comum.png" },
+    { "invoke": "notes.search", "args": { "query": "salvar os arquivos em outro lugar -tag:infra" } },
+    { "invoke": "notes.search", "args": { "query": "física quântica de partículas" } },
+    { "press": "Escape" }
+  ]
+}

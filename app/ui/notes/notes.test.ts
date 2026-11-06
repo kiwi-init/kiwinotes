@@ -304,6 +304,15 @@ describe("⌘K", () => {
     expect(items[2]).toMatchObject({ snippet: "ler a ata" });
   });
 
+  test("o achado só pelo sentido (T6013) chega marcado, na ordem do engine e também com filtros", () => {
+    const hits = [{ path: "Diário.md", title: "Diário", snippet: "o backup do servidor", score: 0.016, semantic: true }];
+    for (const [query, ranked] of [["cópia de segurança", true], ["cópia de segurança", false], ["cópia -tag:x", false]] as const) {
+      const items = paletteItems(notes, query, hits, [], ranked);
+      expect(items[0]).toMatchObject({ kind: "note", path: "Diário.md", semantic: true, snippet: "o backup do servidor" });
+    }
+    expect(paletteItems(notes, "ana", [{ path: "Ana.md", title: "Ana", snippet: "x", score: 1 }], [], true)[0]).not.toHaveProperty("semantic");
+  });
+
   test("o destaque (T2966): as palavras exatas, as letras da subsequência e o erro no trecho", () => {
     expect(titleRanges("Peso em kg", "kg")).toEqual([[8, 10]]);
     expect(titleRanges("hgkjgkj", "kg")).toEqual([

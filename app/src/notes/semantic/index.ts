@@ -172,10 +172,11 @@ export class SemanticIndex {
         this.notes.delete(p);
         this.dirty = true;
       }
-    const model = await this.o.engine.start();
-    if (!model || this.closed) return this.save(true);
+    if (!(await this.o.engine.start()) || this.closed) return this.save(true);
     this.queue = [...this.wanted.values()].filter((d) => this.notes.get(d.path)?.version !== d.version).map((d) => d.path);
     while (this.queue.length && !this.closed) {
+      const model = await this.o.engine.start();
+      if (!model) break;
       const batch = this.queue.splice(0, BATCH);
       for (const p of batch) await this.embedNote(model, p);
       await this.save(false);

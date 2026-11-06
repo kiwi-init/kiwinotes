@@ -217,7 +217,8 @@ function quit(): void {
   const exit = () => { releaseInstance(stores.dir); process.exit(0); };
   // O supervisor precisa de ~2 s para escalar SIGTERM → SIGKILL antes de o Bun sair.
   setTimeout(exit, 3_000);
-  void Promise.allSettled([meetingFlush, stores.folders.close()]).then(exit, exit);
+  // O modelo da busca pelo sentido (T6013) solta o ONNX Runtime antes de sair: sair com ele carregado derruba o Bun.
+  void Promise.allSettled([meetingFlush, stores.folders.close().then(() => stores.semantic.close())]).then(exit, exit);
 }
 
 // Um build novo pede para este sair (T992): sai limpo, parando o helper e soltando o socket.

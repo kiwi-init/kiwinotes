@@ -98,6 +98,8 @@ export const api = {
   notes: {
     list: () => invoke("notes.list", {}),
     search: (query: string) => invoke("notes.search", { query, limit: 12 }),
+    /** A busca pelo sentido (1.34.0, T6013): o modelo e o índice da pasta aberta. */
+    semanticStatus: () => invoke("notes.semanticStatus", {}),
   },
   /** A seção Sobre (T2386): a versão, o canal e as atualizações. */
   app: {

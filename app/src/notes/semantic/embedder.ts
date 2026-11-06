@@ -57,6 +57,7 @@ export async function onnxEmbedder(dir: string, o: { threads?: number } = {}): P
     intraOpNumThreads: o.threads ?? 2,
     interOpNumThreads: 1,
     executionMode: "sequential",
+    enableCpuMemArena: false,
   });
   const output = session.outputNames[0]!;
   const needsTypes = session.inputNames.includes("token_type_ids");
@@ -91,6 +92,10 @@ export async function onnxEmbedder(dir: string, o: { threads?: number } = {}): P
       queue = next.catch(() => {});
       return next;
     },
-    close: () => session.release(),
+    // Solta só depois da inferência em curso: o Bun cai ao sair com o ONNX Runtime ainda rodando (T6013).
+    close: async () => {
+      await queue;
+      await session.release();
+    },
   };
 }

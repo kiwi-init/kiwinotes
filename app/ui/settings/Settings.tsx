@@ -10,6 +10,7 @@ import { MicrophoneRow } from "./Microphone.tsx";
 import { NotesFolderRow } from "../notes/NotesFolder.tsx";
 import "../notes/notes.css";
 import { OcrRow } from "./OcrRow.tsx";
+import { SemanticRow } from "./SemanticRow.tsx";
 import { CuesRow } from "./CuesRow.tsx";
 import { ShortcutsSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
@@ -52,6 +53,7 @@ export function Settings() {
         <NotesFolderRow />
         <ExtensionsRow />
         <OcrRow />
+        <SemanticRow />
       </Section>
 
       <Section title="Privacidade">

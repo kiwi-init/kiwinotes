@@ -437,6 +437,12 @@ body {
   color: var(--text-3);
 }
 
+.kn-palette-why {
+  margin-right: 8px;
+  font-style: italic;
+  color: var(--text-3);
+}
+
 .kn-palette-create {
   color: var(--accent-text);
 }

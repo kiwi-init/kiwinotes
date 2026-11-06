@@ -27,16 +27,21 @@ export interface SemanticEngineOptions {
   fetch?: Fetcher;
   load?(dir: string): Promise<Embedder>;
   now?(): number;
+  /** Sem uso por este tempo, o modelo sai da memória (~0,5 GB) e volta na próxima busca, em ~0,5 s. */
+  idleMs?: number;
 }
 
 /** Depois de uma falha (sem rede, hash errado), espera isto antes de tentar de novo. */
 export const RETRY_MS = 10 * 60_000;
+export const IDLE_MS = 10 * 60_000;
 
 export class SemanticEngine {
   private model: Embedder | null = null;
   private starting: Promise<Embedder | null> | null = null;
   private current: SemanticModelState = { phase: "idle" };
   private failedAt = -Infinity;
+  private lastUse = 0;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly listeners = new Set<(s: SemanticModelState) => void>();
   private readonly manifest: ModelManifest;
   private readonly now: () => number;
@@ -60,14 +65,47 @@ export class SemanticEngine {
     for (const fn of this.listeners) fn(this.state());
   }
 
-  /** O modelo já carregado, sem esperar nada: a busca da pessoa nunca espera o download. */
+  /**
+   * O modelo já carregado, sem esperar nada: a busca da pessoa nunca espera o download nem a carga. Se ele saiu da
+   * memória por falta de uso, a busca volta a carregá-lo em segundo plano e a próxima já usa.
+   */
   loaded(): Embedder | null {
+    if (this.model) this.touch();
+    else if (this.current.phase === "ready") void this.start();
     return this.model;
+  }
+
+  private touch(): void {
+    this.lastUse = this.now();
+    this.schedule(this.o.idleMs ?? IDLE_MS);
+  }
+
+  private schedule(ms: number): void {
+    if (this.idleTimer) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      void this.sweep();
+    }, Math.max(ms, 1000));
+    this.idleTimer.unref();
+  }
+
+  /** Solta o modelo sem uso há `idleMs`; senão, confere de novo quando completar. */
+  async sweep(): Promise<void> {
+    const idle = this.o.idleMs ?? IDLE_MS;
+    if (!this.model) return;
+    const quiet = this.now() - this.lastUse;
+    if (quiet < idle) return this.schedule(idle - quiet);
+    const model = this.model;
+    this.model = null;
+    await model.close().catch(() => {});
   }
 
   /** Começa (ou espera) o download e a carga. `null` quando está desligado ou falhou. */
   start(): Promise<Embedder | null> {
-    if (this.model) return Promise.resolve(this.model);
+    if (this.model) {
+      this.touch();
+      return Promise.resolve(this.model);
+    }
     this.starting ??= this.boot().finally(() => {
       this.starting = null;
     });
@@ -100,6 +138,7 @@ export class SemanticEngine {
       this.set({ phase: "loading" });
       const load = this.o.load ?? (async (d: string) => (await import("./embedder.ts")).onnxEmbedder(d));
       this.model = await load(dir);
+      this.touch();
       this.set({ phase: "ready" });
       return this.model;
     } catch (e) {
@@ -112,6 +151,8 @@ export class SemanticEngine {
 
   /** Desligado na Configuração: solta o modelo e apaga os arquivos dele. */
   async disable(): Promise<void> {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
     await this.starting?.catch(() => null);
     const model = this.model;
     this.model = null;
@@ -122,6 +163,8 @@ export class SemanticEngine {
   }
 
   async close(): Promise<void> {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
     await this.starting?.catch(() => null);
     const model = this.model;
     this.model = null;

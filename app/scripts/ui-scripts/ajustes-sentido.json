@@ -1,0 +1,18 @@
+{
+  "window": "hub",
+  "steps": [
+    { "invoke": "notes.create", "args": { "title": "Backup", "content": "Configurar o backup do servidor toda noite às 2h para o storage na nuvem." } },
+    { "invoke": "notes.semanticStatus", "args": {}, "name": "a pasta abre e o modelo carrega" },
+    { "wait": 3000 },
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "waitFor": ".kn-row:has-text('Buscar pelo sentido')", "name": "a linha, em Notas" },
+    { "expectText": ".kn-row:has-text('Buscar pelo sentido') .kn-row-hint", "text": "Acha notas pelo assunto", "name": "pronta" },
+    { "screenshot": "ajustes-sentido.png", "selector": ".kn-row:has-text('Buscar pelo sentido')" },
+    { "click": ".kn-row:has-text('Buscar pelo sentido') [role=switch]", "name": "desliga" },
+    { "expectText": ".kn-row:has-text('Buscar pelo sentido') .kn-row-hint", "text": "Desligada", "name": "diz que está desligada e o que ligar faz" },
+    { "invoke": "notes.semanticStatus", "args": {}, "name": "o engine desligou" },
+    { "invoke": "settings.get", "name": "gravou semanticSearch: false" },
+    { "screenshot": "ajustes-sentido-desligada.png", "selector": ".kn-row:has-text('Buscar pelo sentido')" }
+  ]
+}

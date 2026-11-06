@@ -327,6 +327,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       stores.recoveries.stop();
       await stores.meetingNotes.flush();
       await stores.folders.close();
+      await stores.semantic.close();
       server.stop(true);
       rmSync(sock, { force: true });
       rmSync(stateFile(data), { force: true });

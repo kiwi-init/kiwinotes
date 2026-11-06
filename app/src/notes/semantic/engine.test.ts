@@ -106,3 +106,20 @@ test("desligar solta o modelo e apaga os arquivos dele", async () => {
   expect(existsSync(path.join(s.root, manifest.id))).toBe(false);
   expect(s.engine.state().phase).toBe("off");
 });
+
+test("sem uso por idleMs, o modelo sai da memória; a próxima busca o traz de volta em segundo plano", async () => {
+  const s = setup();
+  const first = await s.engine.start();
+  s.set({ clock: RETRY_MS - 1 });
+  await s.engine.sweep();
+  expect(s.engine.loaded()).toBe(first);
+  s.set({ clock: 2 * RETRY_MS });
+  await s.engine.sweep();
+  expect(s.engine.loaded()).toBeNull();
+  expect(s.engine.state().phase).toBe("ready");
+  const again = await s.engine.start();
+  expect(again).not.toBeNull();
+  expect(s.loaded.length).toBe(2);
+  expect(s.fetched.length).toBe(1);
+  await s.engine.close();
+});
