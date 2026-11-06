@@ -112,6 +112,14 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
           return;
         }
+        if (name === "Highlight") {
+          out.push(Decoration.mark({ class: "cm-highlight" }).range(node.from, node.to));
+          return;
+        }
+        if (name === "HighlightMark") {
+          if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
+          return;
+        }
         if (name === "InlineCode") {
           out.push(Decoration.mark({ class: "cm-inline-code" }).range(node.from, node.to));
           return;

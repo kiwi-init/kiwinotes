@@ -1,0 +1,42 @@
+{
+  "light": {
+    "ok": true,
+    "steps": 26,
+    "problems": [],
+    "blocked": [],
+    "savedNote": {
+      "path": "Fórmulas e realce E4.md",
+      "title": "Fórmulas e realce E4",
+      "folder": "",
+      "mtime": "2026-11-06T07:02:20.240Z",
+      "ctime": "2026-11-06T07:02:20.240Z",
+      "size": 211,
+      "version": "107b0d7a70a6002c",
+      "tags": [],
+      "content": "Matemática: $x^2 + y^2 = z^2$.\n\n$$\n\\frac{1}{2} + \\sqrt{9} = 3.5\n$$\n\n==Realce visível== com **negrito**.\n\nCódigo: `==literal== $x$`.\n\nFórmula inválida: $\\naoExiste{$.\n\nEdite ==realce ativo== aqui. Digitado.\n"
+    }
+  },
+  "dark": {
+    "ok": true,
+    "steps": 26,
+    "problems": [],
+    "blocked": [],
+    "savedNote": {
+      "path": "Fórmulas e realce E4.md",
+      "title": "Fórmulas e realce E4",
+      "folder": "",
+      "mtime": "2026-11-06T07:02:23.644Z",
+      "ctime": "2026-11-06T07:02:23.644Z",
+      "size": 211,
+      "version": "107b0d7a70a6002c",
+      "tags": [],
+      "content": "Matemática: $x^2 + y^2 = z^2$.\n\n$$\n\\frac{1}{2} + \\sqrt{9} = 3.5\n$$\n\n==Realce visível== com **negrito**.\n\nCódigo: `==literal== $x$`.\n\nFórmula inválida: $\\naoExiste{$.\n\nEdite ==realce ativo== aqui. Digitado.\n"
+    }
+  },
+  "mermaid": {
+    "ok": true,
+    "steps": 38,
+    "problems": [],
+    "blocked": []
+  }
+}
