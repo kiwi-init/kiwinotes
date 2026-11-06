@@ -991,10 +991,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
 
   const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy],
   );
-  // Com filtros (T2660), quem decide é o engine (`notes.search`); sem, o nome na árvore basta, na hora.
+  // T6011: o engine decide as notas também sem filtros (raízes PT e conteúdo); a árvore mantém a hierarquia.
   const [queryPaths, setQueryPaths] = useState<Set<string> | null>(null);
   useEffect(() => {
-    if (!hasFilters(parseQuery(query))) return setQueryPaths(null);
+    if (!query.trim()) return setQueryPaths(null);
+    setQueryPaths(null);
     let live = true;
     const t = setTimeout(() => {
       api.search(query, 100).then(
@@ -1009,7 +1010,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }, [api, query, listing]);
   const found = useMemo(
     () =>
-      queryPaths ? filterTreeToPaths(fullTree, queryPaths) : filterTree(fullTree, query),
+      queryPaths ? filterTreeToPaths(fullTree, queryPaths, hasFilters(parseQuery(query)) ? undefined : query) : filterTree(fullTree, query),
     [fullTree, query, queryPaths],
   );
   const openNow = useMemo(() =>

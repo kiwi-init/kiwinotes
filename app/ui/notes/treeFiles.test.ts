@@ -63,3 +63,10 @@ test("nota do dia: AAAA-MM-DD.md na pasta das notas do dia", () => {
   expect(isDailyNote("Diário/Reunião.md", "Diário")).toBe(false);
   expect(isDailyNote("Diário/2026-11-04.md", undefined)).toBe(false);
 });
+test("L16 engine body hits keep file and folder navigation in the tree", async () => {
+  const { filterTreeToPaths } = await import('./tree.ts');
+  const tree = buildTree(listing);
+  expect(names(filterTreeToPaths(tree, new Set(['Inbox.md']), 'pdf').tree)).toEqual(['folder:Projetos','note:Inbox']);
+  expect(names(filterTreeToPaths(tree, new Set(), 'projetos').tree)).toEqual(['folder:Projetos']);
+  expect(names(filterTreeToPaths(tree, new Set(['Inbox.md'])).tree)).toEqual(['note:Inbox']);
+});

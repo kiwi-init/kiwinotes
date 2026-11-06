@@ -314,3 +314,12 @@ describe("⌘K", () => {
     expect(snippetRanges("a reunião de terça", "reunaio")).toEqual([[2, 9]]);
   });
 });
+
+test("L16: completed engine ranking is retained by the palette, with inflected snippets highlighted", () => {
+  const hits = [
+    {path:'B.md',title:'Plano',score:9,snippet:'Organização das reuniões'},
+    {path:'A.md',title:'Organizar',score:1,snippet:'Assunto'},
+  ];
+  expect(paletteItems([], 'organizar', hits, [], true).filter(i=>i.kind==='note').map(i=>i.path)).toEqual(['B.md','A.md']);
+  expect(snippetRanges('Organização das reuniões', 'organizar reuniao')).toEqual([[0,11],[16,24]]);
+});

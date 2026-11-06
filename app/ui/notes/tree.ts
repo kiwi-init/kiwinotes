@@ -168,11 +168,16 @@ export function recentNotes(notes: NoteMeta[], limit = 5): NoteMeta[] {
  * A busca da árvore com filtros (T2660: `tag:`, `path:`, "frase", `-`): o engine diz quais notas passam, e a árvore
  * mostra só elas, com as pastas até elas abertas.
  */
-export function filterTreeToPaths(tree: TreeNode[], paths: ReadonlySet<string>): { tree: TreeNode[]; open: Set<string> } {
+export function filterTreeToPaths(tree: TreeNode[], paths: ReadonlySet<string>, fileQuery?: string): { tree: TreeNode[]; open: Set<string> } {
   const open = new Set<string>();
   const walk = (nodes: TreeNode[]): TreeNode[] =>
     nodes.flatMap((n): TreeNode[] => {
+      if (n.kind === "file" && fileQuery) {
+        const name = n.ext ? `${n.name}.${n.ext}` : n.name;
+        if (fold(fileQuery).split(/\s+/).every(w => fold(name).includes(w)) || subsequence(fileQuery, name)) return [n];
+      }
       if (n.kind !== "folder") return paths.has(n.path) ? [n] : [];
+      if (fileQuery && fold(fileQuery).split(/\s+/).every(w => fold(n.name).includes(w))) return [n];
       const children = walk(n.children);
       if (!children.length) return [];
       open.add(n.path);
