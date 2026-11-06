@@ -1,0 +1,121 @@
+# CI dos PRs (T4928, L1, issue 152): `bun test`, `typecheck` e `swift test` em todo pull request e em todo push na
+# `main`, num runner macOS arm64. Antes, só o release.yml rodava testes, e só num tag.
+#
+# Sem segredo e sem assinatura: nenhum job aqui lê as credenciais de release, e o token só lê o repo.
+# O teste headless de WebKit (scripts/cli-ui.test.ts) roda aqui: o WebKit do Playwright em headless não precisa de tela.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# O `bun install` roda scripts de dependência: nada aqui pode escrever no repo.
+permissions:
+  contents: read
+
+# Num PR, um push novo cancela o run antigo. Na `main`, cada commit roda até o fim.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bun-test:
+    name: bun test
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # A mesma chave do release.yml: o cache que a `main` guarda serve aos PRs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.hutch
+          key: hutch-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/hutch-pin.json') }}
+
+      # Sem o Hutch e o Livewire fixados, a `main` dá 20 testes falhando (#4866).
+      - name: Electrobun toolchain
+        timeout-minutes: 5
+        run: for i in 1 2 3; do bun run prepare:eb && exit 0; echo "electrobun prepare failed ($i of 3)"; [ "$i" -lt 3 ] && sleep 20; done; exit 1
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/bun.lock') }}
+
+      # O WebKit do Playwright, para os testes headless da UI (scripts/cli-ui.test.ts).
+      - name: WebKit
+        run: bunx playwright-core install webkit
+
+      - name: bun test
+        run: bun test
+
+  typecheck:
+    name: typecheck
+    runs-on: macos-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.hutch
+          key: hutch-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/hutch-pin.json') }}
+
+      # O tsconfig estende o .hutch/devkit/tsconfig.json, que só existe depois do prepare (25 erros sem ele, #4866).
+      - name: Electrobun toolchain
+        timeout-minutes: 5
+        run: for i in 1 2 3; do bun run prepare:eb && exit 0; echo "electrobun prepare failed ($i of 3)"; [ "$i" -lt 3 ] && sleep 20; done; exit 1
+
+      - name: typecheck
+        run: bun run typecheck
+
+  swift-test:
+    name: swift test
+    runs-on: macos-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # Compila só os testes. O `swift test` puro compila todos os alvos, e o kiwi-helper puxa o FluidAudio
+      # (~8 min do zero, #1682). Nenhum alvo de teste depende dele, então este build leva ~20 s e não precisa de cache.
+      - name: Build the tests
+        run: swift build --product KiwiHelperPackageTests
+
+      - name: swift test
+        run: swift test --skip-build
