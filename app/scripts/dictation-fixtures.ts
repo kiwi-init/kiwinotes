@@ -14,6 +14,34 @@ export const SPOKEN_CASES = path.resolve(import.meta.dir, "../test/dictation/fal
 export const FALSE_POSITIVE_CASES = path.resolve(import.meta.dir, "../test/dictation/falsos-positivos.jsonl");
 const VOICES = new Set(["Luciana", "Samantha"]);
 
+/**
+ * O quanto o helper ainda grava depois de soltar o atalho (T5456, issue #155): o mesmo `AudioCapture.releaseTail` do
+ * Swift (0,25 s). `KIWI_RELEASE_TAIL_MS=0` refaz o caso como era antes, para ver o que o rabo salva.
+ */
+export const RELEASE_TAIL_MS = Number(process.env.KIWI_RELEASE_TAIL_MS ?? 250);
+
+/**
+ * Um caso com `soltouAntesMs` (T5456): a pessoa soltou o atalho esse tanto antes de a fala acabar, a última palavra
+ * colada ao soltar. A bateria não usa o mic (AGENTS.md); então o WAV do `say` é cortado onde a gravação de verdade
+ * pararia: no fim da fala, menos o que veio antes de soltar, mais o rabo.
+ */
+export function cutAtRelease(wav: Buffer, soltouAntesMs: number, tailMs = RELEASE_TAIL_MS): Buffer {
+  let at = 12;
+  while (at + 8 <= wav.length && wav.toString("ascii", at, at + 4) !== "data") at += 8 + wav.readUInt32LE(at + 4);
+  if (at + 8 > wav.length) throw new Error("WAV sem o bloco data");
+  const start = at + 8;
+  const size = wav.readUInt32LE(at + 4);
+  const samples = Math.floor(Math.min(size, wav.length - start) / 2);
+  // O fim da fala: a última amostra acima do silêncio do `say`.
+  let end = samples;
+  while (end > 0 && Math.abs(wav.readInt16LE(start + (end - 1) * 2)) < 300) end--;
+  const keep = Math.max(0, Math.min(samples, end - Math.round(((soltouAntesMs - tailMs) * 16_000) / 1000)));
+  const out = Buffer.from(wav.subarray(0, start + keep * 2));
+  out.writeUInt32LE(keep * 2, at + 4);
+  out.writeUInt32LE(out.length - 8, 4);
+  return out;
+}
+
 export interface SpokenCase {
   name: string;
   say: string;
@@ -51,8 +79,9 @@ export function makeFixtures(outDir: string, cases: SpokenCase[]): string {
     const wav = path.join(outDir, `${String(i + 1).padStart(2, "0")}.wav`);
     const r = spawnSync("say", ["-v", c.voice, "-o", wav, "--file-format=WAVE", "--data-format=LEI16@16000", c.say], { encoding: "utf8" });
     if (r.status !== 0) throw new Error(`say (${c.voice}) falhou em "${c.name}": ${(r.stderr || "").trim()}`);
+    if (typeof c.soltouAntesMs === "number") writeFileSync(wav, cutAtRelease(readFileSync(wav), c.soltouAntesMs));
     // O `known` é da bateria (scripts/test-dictation.ts), não do pedido do dictate.
-    const { say: _say, voice: _voice, known: _known, ...request } = c;
+    const { say: _say, voice: _voice, known: _known, soltouAntesMs: _solta, ...request } = c;
     return JSON.stringify({ ...request, wav });
   });
   const batch = path.join(outDir, "falados.batch.jsonl");

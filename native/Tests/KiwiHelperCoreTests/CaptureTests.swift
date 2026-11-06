@@ -668,4 +668,72 @@ extension CaptureTests {
             .logLine(device: "MacBook Pro Microphone", inUseBy: ["Chrome"], runningSomewhere: true)
         XCTAssertEqual(line, "diag: end no_audio · 0 buffers · first never · device MacBook Pro Microphone · in use somewhere · also on the mic: Chrome")
     }
+
+    // MARK: T5456 (issue #155): +250 ms after the shortcut is let go
+
+    func testTheTailKeepsRecordingAQuarterSecondAfterLettingGo() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        var got: [Float]?
+        rig.capture.stop(after: AudioCapture.releaseTail) { got = $0 }
+        XCTAssertEqual(AudioCapture.releaseTail, 0.25)
+        XCTAssertNil(got, "still recording the tail")
+        XCTAssertTrue(rig.capture.isRecording)
+        XCTAssertTrue(rig.capture.isFinishing)
+        XCTAssertTrue(rig.engine.started, "the mic stays on for the tail")
+        // The last word, said right after the key came up.
+        rig.engine.feed(rate: 16_000, seconds: 0.24, clock: rig.clock)
+        rig.advance(0.25)
+        XCTAssertEqual(got?.count, 16_000 * 74 / 100, "0.5 s + the 0.24 s of the tail")
+        XCTAssertFalse(rig.capture.isRecording)
+        XCTAssertFalse(rig.capture.isFinishing)
+        XCTAssertFalse(rig.engine.started, "the mic closes when the tail ends")
+        // A second stop while nothing records does nothing.
+        rig.capture.stop(after: AudioCapture.releaseTail) { _ in XCTFail("not recording") }
+        rig.advance(1)
+    }
+
+    func testACancelDuringTheTailDiscardsRightAway() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        rig.capture.stop(after: AudioCapture.releaseTail) { _ in XCTFail("a cancel never hands the recording over") }
+        _ = rig.capture.stop()
+        XCTAssertFalse(rig.capture.isRecording)
+        XCTAssertFalse(rig.engine.started, "the mic closes on the cancel, without waiting")
+        rig.advance(1)
+    }
+
+    func testANewPressDuringTheTailEndsItWithWhatCameSoFar() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        var got: [Float]?
+        rig.capture.stop(after: AudioCapture.releaseTail) { got = $0 }
+        rig.engine.feed(rate: 16_000, seconds: 0.1, clock: rig.clock)
+        rig.capture.finishNow()
+        XCTAssertEqual(got?.count, 16_000 * 6 / 10)
+        XCTAssertFalse(rig.capture.isRecording)
+        try rig.capture.start()
+        XCTAssertTrue(rig.capture.isRecording, "the next recording starts at once")
+        rig.advance(1)
+        XCTAssertTrue(rig.capture.isRecording, "the old tail's timer doesn't end the new recording")
+    }
+
+    func testAMicLostDuringTheTailEndsThroughOnLostOnly() throws {
+        let rig = Rig()
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 0.5, clock: rig.clock)
+        rig.capture.stop(after: AudioCapture.releaseTail) { _ in XCTFail("the loss already handed it over") }
+        // The engine dies inside the tail (the clock moves without running the tail's timer): two stalls, `no_audio`.
+        rig.clock.t += 1.1
+        rig.capture.checkStall()
+        rig.clock.t += 1.6
+        rig.capture.checkStall()
+        XCTAssertEqual(rig.lost, ["no_audio"])
+        XCTAssertEqual(rig.kept.first?.count, 8_000)
+        XCTAssertFalse(rig.capture.isFinishing)
+        rig.advance(1)
+    }
 }

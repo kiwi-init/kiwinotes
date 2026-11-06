@@ -2,6 +2,8 @@
 // fala (`say`, com a voz de `voice`: Luciana em pt-BR, Samantha em en-US). O `scripts/dictation-fixtures.ts` gera os
 // WAV numa pasta temporária: áudio nunca entra no repo. O STT pontua do jeito dele, então o `expect` confere o que
 // importa (`contains`/`excludes`, tom, espaço) e não a vírgula. `known`: como em casos.jsonl.
+// `soltouAntesMs` (T5456): o atalho foi solto esse tanto antes de a fala acabar; o WAV é cortado onde a gravação
+// pararia, com o rabo de 250 ms do helper (`KIWI_RELEASE_TAIL_MS=0` mostra como era antes).
 {"name": "falado: hum some", "say": "hum, eu acho que dá pra entregar amanhã", "voice": "Luciana", "expect": {"contains": ["acho que dá", "entregar amanhã"], "excludes": ["hum", "Hum"]}}
 {"name": "falado: tipo some", "say": "me manda o relatório amanhã, tipo, de manhã", "voice": "Luciana", "expect": {"contains": "relatório amanhã", "excludes": ["tipo", "Tipo"]}}
 {"name": "falado: autocorreção", "say": "me encontra às três, não, quer dizer, às quatro", "voice": "Luciana", "expect": {"contains": "4", "excludes": ["3", "três", "quer dizer"]}}
@@ -29,3 +31,4 @@
 {"name": "sem termo: bring the comb", "say": "bring the comb", "voice": "Samantha", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
 {"name": "sem termo: a reunião de amanhã", "say": "a reunião de amanhã", "voice": "Luciana", "expect": {"excludes": ["DICOM", "PACS", "GitHub", "Kiwi Notes", "kubectl"]}}
 {"name": "falado: data por extenso vira algarismo (T1974)", "say": "a entrega é dia cinco de março", "voice": "Luciana", "expect": {"contains": "5 de março", "excludes": ["cinco"]}}
+{"name": "falado: última palavra ao soltar (L4, +250 ms)", "say": "me lembra de ligar para o fornecedor amanhã", "voice": "Luciana", "soltouAntesMs": 450, "expect": {"contains": "amanhã"}}

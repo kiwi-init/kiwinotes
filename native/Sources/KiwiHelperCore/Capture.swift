@@ -214,6 +214,16 @@ public final class AudioCapture {
 
     public private(set) var isRecording = false
 
+    /// How much longer the mic keeps recording after the shortcut is let go (T5456, issue #155): the last word often
+    /// ends a moment after the key comes up, and VoiceTypr and OpenSuperWhisper record on a little too. Nothing changes
+    /// at the start of a recording (no pre-roll, no open mic, #4756).
+    public static let releaseTail: TimeInterval = 0.25
+    /// The recording that was let go and is still taking in its tail: `done` gets the whole recording when it ends.
+    private var tail: (id: Int, done: ([Float]) -> Void)?
+    private var tails = 0
+    /// Let go, still recording the tail.
+    public var isFinishing: Bool { tail != nil }
+
     /// How long the input has to stay put before a change makes a new engine (T1248). Changes in a burst come within
     /// a few hundred ms of each other; much longer and a switch mid-recording loses more of what's said.
     public static let inputSettle: TimeInterval = 0.4
@@ -355,7 +365,33 @@ public final class AudioCapture {
     }
 
     /// Stops and hands back everything recorded since `start`.
+    /// Ends the recording `seconds` from now (`releaseTail` when the shortcut is let go), still capturing until then;
+    /// `done` gets everything, on the main thread. A `stop()` (a cancel) in the meantime drops it without calling
+    /// `done`, `finishNow()` ends it early with what came so far, and a lost mic ends it through `onLost` as usual.
+    public func stop(after seconds: TimeInterval, done: @escaping ([Float]) -> Void) {
+        guard isRecording, tail == nil else { return }
+        guard seconds > 0 else { return done(stop()) }
+        tails += 1
+        let id = tails
+        tail = (id, done)
+        after(seconds) { [weak self] in
+            guard let self, let t = self.tail, t.id == id else { return }
+            self.tail = nil
+            t.done(self.stop())
+        }
+    }
+
+    /// The tail ends now, with what was captured so far: a new recording is starting (T5456). Nothing if no tail.
+    public func finishNow() {
+        guard let t = tail else { return }
+        tail = nil
+        t.done(stop())
+    }
+
+    /// Ends the recording now and hands over what was captured. During a tail, this is a cancel: the tail's `done`
+    /// never runs.
     public func stop() -> [Float] {
+        tail = nil
         guard isRecording else { return [] }
         engine.stop()
         isRecording = false
@@ -448,6 +484,7 @@ public final class AudioCapture {
 
     /// Ends the recording, hands over what was captured (`onLost`), and gets a fresh engine ready for the next one.
     private func fail(_ code: String) {
+        tail = nil // `onLost` ends it, tail or not
         engine.stop()
         isRecording = false
         stopTimers()
