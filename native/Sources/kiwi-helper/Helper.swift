@@ -639,6 +639,14 @@ final class Helper {
             } catch { reply(id, ok: false, error: "meeting_unavailable") }
         case "dictation.retry":
             retryRecording(id, message)
+        case "spelling.check":
+            let language = message.string("language")
+            guard let word = message.string("word"),
+                  message.fields["language"] == nil || language != nil,
+                  let result = LocalSpelling.check(word, language: language, using: NativeSpelling.check) else {
+                return reply(id, ok: false, error: "invalid_value")
+            }
+            reply(id, ok: true, result.fields)
         case "ping":
             reply(id, ok: true)
         case "config.set":

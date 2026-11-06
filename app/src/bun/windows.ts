@@ -1,3 +1,4 @@
+import { NO_SPELLING } from "../shared/spelling.ts";
 // As janelas do Kiwi Notes. Cada uma é uma UI do AppEngine em modo host (T1192, ADR 0006): o engine sobe quando a
 // janela abre, mostra a UI mais nova que funciona (a de fábrica do .app, ou uma instalada pelo canal local), troca
 // quando chega uma nova e volta atrás se ela falhar. A UI só fala com o main pelo contrato (src/shared/ui-contract.ts).
@@ -92,6 +93,7 @@ const capabilities = uiCapabilities({
     Utils.clipboardWriteText(text);
   },
   clipboardRead: () => process.env.KIWI_DEBUG === "1" ? debugClipboard : Utils.clipboardReadText(),
+  spelling: (word, language) => session.get()?.checkSpelling(word, language) ?? NO_SPELLING,
   // "Mostrar no Finder" (T2468). Com KIWI_DEBUG=1 (os agentes), só registra: nada abre na tela de ninguém.
   reveal: (abs) => {
     if (process.env.KIWI_DEBUG === "1") return void console.log(`[notes] reveal (dry run): ${abs}`);
@@ -248,6 +250,7 @@ async function openWindow(name: WindowName): Promise<void> {
   const dir = path.join(stores.dir, "appengine", name);
   const options = {
     title: spec.title,
+    spellCheck: name === "notes" || name === "hub",
     preload,
     ...(name === "intro" ? introChrome(spec) : { frame: { width: spec.width, height: spec.height }, titleBarStyle: "hiddenInset" as const }),
     rpc,

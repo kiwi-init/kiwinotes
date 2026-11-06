@@ -1,3 +1,4 @@
+import { isSpellingLanguage, isSpellingWord, NO_SPELLING, spellingResult, type SpellingResult } from "../shared/spelling.ts";
 // As capacidades do contrato 1.0.0 (src/shared/ui-contract.ts): o único jeito de uma UI do AppEngine pedir algo ao
 // main (T1192). Cada handler valida os argumentos e responde `E_BAD_ARGS` quando eles não servem. Nada genérico: não
 // há "rodar comando" nem "ler arquivo qualquer".
@@ -74,6 +75,7 @@ export interface CapabilityDeps {
   snippetsChanged?(snippets: Snippet[]): void;
   clipboardWrite(text: string): void;
   clipboardRead?(): string | null;
+  spelling?(word: string, language?: string): SpellingResult | Promise<SpellingResult>;
   /** A seção pedida para o hub que ainda vai abrir (T2121): devolve e esquece. Sem ela, null. */
   hubSection?(): HubSection | null;
   /** A intro avisou que terminou (T2308): o hub segue. */
@@ -486,6 +488,12 @@ export function uiCapabilities(deps: CapabilityDeps,
       noArgs(args, "intro.done");
       deps.introDone?.();
       return true as const;
+    },
+    "spelling.suggest": async (args) => {
+      const o = object(args, "spelling.suggest");
+      if (Object.keys(o).some((key) => key !== "word" && key !== "language") || !isSpellingWord(o.word)
+          || o.language !== undefined && !isSpellingLanguage(o.language)) throw bad("invalid spelling word or language");
+      return spellingResult(await deps.spelling?.(o.word, o.language as string | undefined) ?? NO_SPELLING, o.word);
     },
     "clipboard.read": (args) => {
       noArgs(args, "clipboard.read");

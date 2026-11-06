@@ -1,3 +1,5 @@
+import { fakeSpelling } from "./spelling.ts";
+import { NO_SPELLING } from "../shared/spelling.ts";
 // O Kiwi Notes sem nada na tela, para os agentes testarem o app inteiro (T1739, P0 do harry #1726; AGENTS.md, T1268).
 //
 // Roda no Bun puro, fora do Electrobun: sem o runtime dele não existe ícone na barra, janela nem pílula. O motor é o
@@ -153,8 +155,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // roteiros da aba Reuniões (o headless nunca grava de verdade: o helper recusa `meeting.start` sem mic).
   const { FakeMeetingHost } = await import("../bun/meetings.ts");
   const meetings = process.env.KIWI_FAKE_MEETING ? new FakeMeetingHost(process.env.KIWI_FAKE_MEETING) : session?.meetings;
+  const spelling = process.env.KIWI_FAKE_SPELLING ? fakeSpelling(process.env.KIWI_FAKE_SPELLING)
+    : (word: string, language?: string) => session?.checkSpelling(word, language) ?? NO_SPELLING;
   let fakeClipboard = "";
   const capabilities = uiCapabilities({
+    spelling,
     meetings,
     dictionary: stores.dictionary,
     snippets: stores.snippets,

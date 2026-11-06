@@ -1,3 +1,4 @@
+import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
 //
 // Uma UI só chama o main por `engine.invoke(cap, args)` com um destes nomes. Os nomes são estáveis: tirar ou mudar
@@ -75,7 +76,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.28.0 (T5459): o `pasteLast` nos `shortcuts`, o "colar a última" (L9). Só acréscimo.
 // 1.29.0 (T5455): local dictation recovery, history.retry and history.changed.
 // 1.30.0 (T5556): clipboard.read, only on an explicit paste gesture.
-export const UI_CONTRACT_VERSION = "1.30.0";
+// 1.31.0 (T5560): local spelling suggestions.
+export const UI_CONTRACT_VERSION = "1.31.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -126,6 +128,7 @@ export interface UiCapabilities {
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
   "clipboard.read": { args: Record<string, never>; result: string };
+  "spelling.suggest": { args: { word: string; language?: string }; result: SpellingResult };
   /**
    * A seção que o hub deve mostrar ao abrir (1.4.0, T2121): o menu da barra ou o atalho pediu "Notas", "Ditado"…
    * Devolve e esquece; null é "a de sempre". Com o hub já aberto, o pedido chega pelo evento `hub.navigate`.
@@ -338,6 +341,7 @@ export const UI_CAPABILITIES = [
   "settings.set",
   "clipboard.write",
   "clipboard.read",
+  "spelling.suggest",
   "hub.section",
   "intro.done",
   "app.about",

@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { api as appApi, has } from "../src/api.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { editorMenu } from "./editor/context-menu.ts";
+import { spellingAt, spellingForMenu, spellingMenu } from "./editor/spelling.ts";
+import { isSpellingLanguage } from "../../src/shared/spelling.ts";
 
 import { lineChanges } from "../../src/shared/merge3.ts";
 
@@ -38,6 +40,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const view = useRef<EditorView | null>(null);
+  const spellingRequest = useRef(0);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
   const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError,
   });
@@ -76,6 +79,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
     return () => {
       scroller?.removeEventListener("scroll", remeasure);
       detach();
+      spellingRequest.current++;
       v.destroy();
       view.current = null;
     };
@@ -84,6 +88,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
   }, []);
 
   useEffect(() => {
+    spellingRequest.current++;
     setMenu(null);
     const v = view.current;
     if (!v || v.state.doc.toString() === doc) return;
@@ -91,19 +96,40 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
 
-  const openMenu = (x: number, y: number, moveCursor: boolean, tablePos?: number) => {
+  useEffect(() => {
+    const cancelPending = () => { spellingRequest.current++; };
+    addEventListener("mousedown", cancelPending, true);
+    addEventListener("keydown", cancelPending, true);
+    addEventListener("blur", cancelPending);
+    return () => { removeEventListener("mousedown", cancelPending, true); removeEventListener("keydown", cancelPending, true); removeEventListener("blur", cancelPending); };
+  }, []);
+
+  const openMenu = async (x: number, y: number, moveCursor: boolean, tablePos?: number) => {
     const v = view.current;
     if (!v) return;
+    let spellingPos: number | null = v.state.selection.main.head;
     if (moveCursor) {
       const pos = tablePos !== undefined && Number.isInteger(tablePos) && tablePos >= 0 && tablePos <= v.state.doc.length
         ? tablePos : v.posAtCoords({ x, y });
+      spellingPos = pos;
       if (pos !== null && !v.state.selection.ranges.some((range) => pos >= range.from && pos <= range.to))
         v.dispatch({ selection: EditorSelection.cursor(pos) });
     }
-    setMenu({ x, y, items: editorMenu(v, {
+    const request = ++spellingRequest.current;
+    const snapshot = v.state.doc;
+    const target = spellingPos === null ? null : spellingAt(v.state, spellingPos);
+    let spellingItems: MenuItem[] = [];
+    if (target && has("spelling.suggest")) {
+      const lang = v.contentDOM.lang || document.documentElement.lang;
+      const result = await spellingForMenu(target.word, () => appApi.spelling.suggest(target.word, isSpellingLanguage(lang) ? lang : undefined));
+      if (request !== spellingRequest.current || !v.dom.isConnected || v.state.doc !== snapshot) return;
+      spellingItems = spellingMenu(v, target, result);
+    }
+    if (request !== spellingRequest.current || !v.dom.isConnected || v.state.doc !== snapshot) return;
+    setMenu({ x, y, items: [...spellingItems, ...editorMenu(v, {
       ...(has("clipboard.write") ? { write: (text: string) => appApi.copy(text) } : {}),
       ...(has("clipboard.read") ? { read: () => appApi.readClipboard() } : {}),
-    }, (message) => latest.current.onError?.(message)) });
+    }, (message) => latest.current.onError?.(message))] });
   };
   return <>
     <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}

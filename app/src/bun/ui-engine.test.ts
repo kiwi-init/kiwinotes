@@ -331,6 +331,20 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(f.calls.filter((c) => c.startsWith("settings.save"))).toHaveLength(2);
   });
 
+  test("spelling checks one bounded word only, sanitizes output and degrades without a helper", async () => {
+    const f = fakeDeps(); const calls: string[] = [];
+    const caps = uiCapabilities({ ...f.deps, spelling: async (word, language) => {
+      calls.push(`${word}:${language}`);
+      return { available: true, misspelled: true, suggestions: ["reunião", "reunião", "ruim\nlinha"] };
+    } });
+    expect(await directInvoke(caps, "spelling.suggest", { word: "reuniao", language: "pt-BR" })).toMatchObject({ ok: true, value: { available: true, misspelled: true, suggestions: ["reunião"] } });
+    expect(calls).toEqual(["reuniao:pt-BR"]);
+    for (const args of [{ word: "duas palavras" }, { word: "a".repeat(129) }, { word: "erro\n" }, { word: "erro", language: "pt-BR\n" }, { word: "erro", extra: true }])
+      expect(await directInvoke(caps, "spelling.suggest", args)).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(calls).toHaveLength(1);
+    expect(await directInvoke(uiCapabilities(f.deps), "spelling.suggest", { word: "erro" })).toMatchObject({ ok: true, value: { available: false, suggestions: [] } });
+  });
+
   test("clipboard.read is explicit, text only, bounded and unavailable without an adapter", async () => {
     const f = fakeDeps(); let reads = 0;
     const caps = uiCapabilities({ ...f.deps, clipboardRead: () => { reads++; return "texto local"; } });
