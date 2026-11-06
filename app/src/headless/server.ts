@@ -11,6 +11,7 @@
 // Controle: um socket unix (0600) em <data>/control.sock, com um JSON por linha (o protocolo do #1745).
 
 import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { statusLabel } from "../bun/session-status.ts";
 import { LineWriter } from "./lineWriter.ts";
 import path from "node:path";
 import type { Socket } from "bun";
@@ -227,7 +228,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     vault: process.env.KIWI_VAULT_DIR,
     contract: UI_CONTRACT_VERSION,
     capabilities: UI_CAPABILITIES,
-    helper: !session ? "off" : session.sidecar.ready ? "ready" : "starting",
+    helper: !session ? "off" : session.sidecar.supervision().state === "failed" ? "failed" : session.sidecar.ready ? "ready" : "starting",
+    menuLabel: session ? statusLabel(session.status()) : "Helper desligado",
     session: session?.status() ?? null,
   });
 

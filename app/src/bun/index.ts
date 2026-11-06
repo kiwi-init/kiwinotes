@@ -12,6 +12,7 @@ import { repairInstallRegistry, runningBundle } from "./install-registry.ts";
 import { cleanLaunchServices, realLsRegister } from "./launch-services.ts";
 import { claimInstance, releaseInstance } from "./instance.ts";
 import { PERMISSION_NAMES } from "./permissions.ts";
+import { statusLabel } from "./session-status.ts";
 import { helperPath, Session, session, type SessionStatus } from "./session.ts";
 import { helperRunner } from "../notes/ocr.ts";
 import { helperPdf } from "../notes/export.ts";
@@ -86,17 +87,6 @@ const tray = new Tray({
   width: 18,
   height: 18,
 });
-
-/** A primeira linha do menu diz se dá para ditar agora, e por que não. */
-export function statusLabel(s: SessionStatus): string {
-  if (!s.connected) return "Iniciando…";
-  if (!s.hotkeyActive) return `Atalho desligado: falta ${s.missing.includes("inputMonitoring") ? PERMISSION_NAMES.inputMonitoring : "permissão"}`;
-  if (s.stt === "loading" || s.stt === "starting") return "Preparando o modelo de voz…";
-  if (s.stt === "unavailable") return "Modelo de voz indisponível";
-  // O ditado já funciona; o vocabulário (DICOM, PACS…) ainda não ajuda o modelo a ouvir (T1973).
-  if (s.boosting === "loading") return "Pronto para ditar · baixando o vocabulário…";
-  return "Pronto para ditar";
-}
 
 // A atualização automática (T1969): o menu ganha "Atualizar e reiniciar" quando uma versão nova, já conferida, está
 // pronta. Nada reinicia sem o clique.
@@ -222,11 +212,11 @@ function quit(): void {
   updates.stop();
   const meetingFlush = dictation.stop();
   tray.remove();
-  releaseInstance(stores.dir);
   // A versão pendente de uma nota editada há menos de 2 min (T2680) vai para o histórico antes de sair, com um teto:
   // sair nunca espera mais que isso.
-  const exit = () => process.exit(0);
-  setTimeout(exit, 800);
+  const exit = () => { releaseInstance(stores.dir); process.exit(0); };
+  // O supervisor precisa de ~2 s para escalar SIGTERM → SIGKILL antes de o Bun sair.
+  setTimeout(exit, 3_000);
   void Promise.allSettled([meetingFlush, stores.folders.close()]).then(exit, exit);
 }
 
@@ -235,7 +225,8 @@ process.on("SIGTERM", () => quit());
 // Qualquer saída, inclusive a do Updater (T1969), que sai sem passar pelo quit(): o helper não fica órfão e a trava
 // de instância é solta para o app novo.
 process.on("exit", () => {
-  dictation.stop();
+  void dictation.stop();
+  dictation.sidecar.forceKill();
   releaseInstance(stores.dir);
 });
 
