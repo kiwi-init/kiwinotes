@@ -35,7 +35,7 @@ const server = Bun.serve({
  */
 function fakeEngine(mode: "ok" | "old" | "failing") {
   const shortcuts = { dictation: "fn", cancel: "escape", pasteLast: "control+option+v", notes: "control+option+n", palette: "command+k", newNote: "command+n", dailyNote: "shift+command+d", meeting: "control+option+r", meetingPause: "control+option+m" };
-  let settings: Record<string, unknown> = { shortcuts, notesShortcut: shortcuts.notes };
+  let settings: Record<string, unknown> = { shortcuts, notesShortcut: shortcuts.notes, cues: true };
   const calls: unknown[] = [];
   const listeners: ((s: unknown) => void)[] = [];
   const caps: Record<string, (args: any) => unknown> = {
@@ -227,6 +227,16 @@ await step("L5 (T5458): o cancelar grava uma tecla sozinha (⌫), pedindo bareKe
   if (other !== "{}") throw new Error(other);
   await row(page, "Cancelar a gravação").getByRole("button", { name: "Padrão" }).click();
   await expectKey(page, "Cancelar a gravação", "Esc");
+});
+
+await step("T5833: o som ao começar e terminar vem ligado, e desligar grava cues: false", async () => {
+  const cuesRow = row(page, "Som ao começar e terminar");
+  await cuesRow.waitFor();
+  if (shots) await cuesRow.locator("xpath=..").screenshot({ path: join(shots, "07-sons.png") });
+  const sw = cuesRow.getByRole("switch");
+  if ((await sw.getAttribute("aria-checked")) !== "true") throw new Error("devia vir ligado");
+  await sw.click();
+  await page.waitForFunction(() => JSON.stringify((window as any).__calls.at(-1)) === '{"cues":false}');
 });
 
 await step("sem erro nem violação de CSP no caminho todo", async () => {

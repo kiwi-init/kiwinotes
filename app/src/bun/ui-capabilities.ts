@@ -396,6 +396,10 @@ export function uiCapabilities(deps: CapabilityDeps,
           }
           if (!dir) throw bad("dailyFolder must name a folder of the vault");
           patch.dailyFolder = dir;
+        } else if (key === "cues") {
+          // Os sons de início e de fim (1.32.0, T5833): o helper recebe no `config.set`.
+          if (typeof value !== "boolean") throw bad("cues must be true or false");
+          patch.cues = value;
         } else if (key === "showExtensions") {
           // A extensão na árvore das Notas (1.19.0, T3370).
           if (typeof value !== "boolean") throw bad("showExtensions must be true or false");

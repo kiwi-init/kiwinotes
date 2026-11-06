@@ -10,6 +10,7 @@ import { MicrophoneRow } from "./Microphone.tsx";
 import { NotesFolderRow } from "../notes/NotesFolder.tsx";
 import "../notes/notes.css";
 import { OcrRow } from "./OcrRow.tsx";
+import { CuesRow } from "./CuesRow.tsx";
 import { ShortcutsSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 
@@ -26,6 +27,7 @@ export function Settings() {
 
       <Section title="Transcrição">
         <MicrophoneRow />
+        <CuesRow />
         <Row label="Idioma" hint="Automático aceita português e inglês na mesma frase.">
           <Segmented
             label="Idioma"

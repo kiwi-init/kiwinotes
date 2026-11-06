@@ -30,6 +30,18 @@ final class SystemAudioTap: MeetingAudioSource {
     private var invalidationWorkItem: DispatchWorkItem?
     private var invalidationReported = false
 
+    /// The HAL's process object of a pid (`kAudioHardwarePropertyTranslatePIDToProcessObject`), or 0 when it has none.
+    static func processObject(_ pid: Int32) -> UInt32 {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
+                                                 mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var qualifier = pid
+        var object = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address,
+                                                UInt32(MemoryLayout<pid_t>.size), &qualifier, &size, &object)
+        return status == noErr ? object : 0
+    }
+
     func start(onSamples: @escaping ([Float], TimeInterval) -> Void) throws {
         guard stopping else { throw MeetingFailure.alreadyRecording }
         stopping = false
@@ -42,7 +54,9 @@ final class SystemAudioTap: MeetingAudioSource {
         let tapDescription = CATapDescription()
         tapDescription.name = "kiwinotes-meeting-audio"
         tapDescription.uuid = UUID()
-        tapDescription.processes = []
+        // `isExclusive`: every process but these. T5833: the helper and the app stay out, so Kiwi's own start and end
+        // sounds never reach the "sistema" channel or its transcript.
+        tapDescription.processes = MeetingTapExclusion.processObjects(pids: [getpid(), getppid()], translate: Self.processObject)
         tapDescription.isMono = true
         tapDescription.isExclusive = true
         tapDescription.isMixdown = true

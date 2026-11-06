@@ -20,6 +20,8 @@ final class Helper {
     private let overlay = Overlay()
     private let inserter = Inserter()
     private var gesture = HotkeyGesture()
+    /// T5833 (#213): os sons de início e de fim. Ligados por padrão; o app manda o ajuste no `config.set {cues}`.
+    private let cues: RecordingCues
     /// ⌥ was held when the dictation key last went down: the recording it starts is a quick note (T1320).
     private var nextIsNote = false
     private var tap: HotkeyTap!
@@ -69,6 +71,7 @@ final class Helper {
     init(connection: SocketConnection, dumpDirectory: URL?, headless: Bool = false, meetingDirectory: URL? = nil, recoveryDirectory: URL? = nil) {
         self.connection = connection
         self.dumpDirectory = dumpDirectory
+        cues = RecordingCues(player: headless ? SilentCuePlayer() : SoundCuePlayer())
         self.recordingJournal = recoveryDirectory.map { RecordingJournal(directory: $0) }
         self.headless = headless
         self.meetingDirectory = meetingDirectory
@@ -439,6 +442,8 @@ final class Helper {
         if stale { audio.inputChanged("mic changed since the warm-up") }
         if let pick = stale ? mic.peek() : mic.last { started["microphone"] = pick.fields }
         beginRecovery(&started)
+        // T5833: o som de início antes de tudo: antes de a L8 baixar a mídia e de o mic abrir (#5880, #5897).
+        cues.playStart()
         let t0 = ProcessInfo.processInfo.systemUptime
         do {
             try media.startCapture(meetingActive: meeting.isRecording) {
@@ -489,6 +494,8 @@ final class Helper {
     /// The end of a recording, from the mic or from `debug.transcribe`: `record.stopped`, the pill, the transcript.
     private func finishRecording(_ samples: [Float], reason: String, mode: String, lost: String? = nil, releasedAt: TimeInterval? = nil) {
         media.end()
+        // T5833: o mic já fechou e a mídia já voltou (L8): o som de fim. O `debug.transcribe` não grava.
+        if reason != "debug" { cues.playEnd() }
         var fields: [String: Any] = [
             "reason": reason,
             "mode": mode,
@@ -546,6 +553,7 @@ final class Helper {
         guard audio.isRecording else { return }
         _ = audio.stop()
         media.end()
+        cues.playEnd() // T5833: cancelar também termina a gravação, com o mic fechado e a mídia de volta
         if currentRecovery != nil { try? recordingJournal?.cancel() }
         currentRecovery = nil
         recordingStartedAt = nil
@@ -647,7 +655,7 @@ final class Helper {
             }
             if message.type == "meeting.start" { media.end() }
             do {
-                let result = try meetingCommands().handle(message)
+                let result = try handleMeeting(message)
                 reply(id, ok: result.ok, error: result.error, result.data)
             } catch { reply(id, ok: false, error: "meeting_unavailable") }
         case "dictation.retry":
@@ -864,7 +872,25 @@ final class Helper {
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               let message = try? InboundMessage.decode(data) else { return }
         if type == "meeting.start" { media.end() }
-        do { _ = try meetingCommands().handle(message) } catch { emit("meeting.error", ["error": "meeting_unavailable"]) }
+        do { _ = try handleMeeting(message) } catch { emit("meeting.error", ["error": "meeting_unavailable"]) }
+    }
+
+    /// T5833: o som de início antes de a reunião começar a gravar (o mic "você" ainda fechado; o canal "sistema" não
+    /// ouve o Kiwi), e o de fim depois de ela parar. Pelos dois caminhos: o comando do app e o atalho ou o pop-up.
+    private func handleMeeting(_ message: InboundMessage) throws -> MeetingReply {
+        let commands = try meetingCommands()
+        switch message.type {
+        case "meeting.start":
+            var result: MeetingReply!
+            cues.begin(open: { result = commands.handle(message) })
+            return result
+        case "meeting.stop":
+            let result = commands.handle(message)
+            if result.ok { cues.playEnd() }
+            return result
+        default:
+            return commands.handle(message)
+        }
     }
 
     /// `debug.transcribe {path}` (KIWI_DEBUG=1): a WAV takes the path of a recording that just ended, so the app can
@@ -953,6 +979,8 @@ final class Helper {
             }
         }
         if let value = message.fields["meetingSuggest"], !(value is Bool) { return "invalid_value" }
+        // T5833: os sons de início e de fim (padrão: ligados).
+        if let value = message.fields["cues"], !(value is Bool) { return "invalid_value" }
         if let value = message.fields["meetingApps"], MeetingApps.parse(value) == nil { return "invalid_value" }
         if !changed.isEmpty {
             let dictationChanged = changed["dictation"].map { $0 != shortcuts["dictation"] } ?? false
@@ -972,6 +1000,7 @@ final class Helper {
             meetingMic.selection.choice = choice
             if meetings?.capture.session != nil, !headless { meetingMic.audio.inputChanged("microphone: \(choice.value)") }
         }
+        if let on = message.fields["cues"] as? Bool { cues.enabled = on }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
         if hold != nil || doubleTap != nil { tap.timings = (doubleTap: gesture.doubleTapWindow, tap: gesture.holdThreshold) }
