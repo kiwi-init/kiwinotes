@@ -63,6 +63,13 @@ test("nota do dia: AAAA-MM-DD.md na pasta das notas do dia", () => {
   expect(isDailyNote("Diário/Reunião.md", "Diário")).toBe(false);
   expect(isDailyNote("Diário/2026-11-04.md", undefined)).toBe(false);
 });
+test("tree retains title matches missing from engine results", async () => {
+  const { filterTreeToPaths } = await import("./tree.ts");
+  const notes = Array.from({ length: 101 }, (_, i) => note(`needle${i}.md`, `needle${i}`));
+  const tree = buildTree({ folders: [], notes });
+  expect(filterTreeToPaths(tree, new Set(notes.slice(0, 100).map(n => n.path)), "needle").tree).toHaveLength(101);
+});
+
 test("L16 engine body hits keep file and folder navigation in the tree", async () => {
   const { filterTreeToPaths } = await import('./tree.ts');
   const tree = buildTree(listing);

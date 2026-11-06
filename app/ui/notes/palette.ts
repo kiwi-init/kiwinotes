@@ -87,7 +87,11 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   // aproximado.
   // Uma nota que casa aproximada no título e exata no texto fica com o texto, que é exato.
   if (ranked && textHits.length) {
-    const out: PaletteItem[] = textHits.slice(0, MAX).map(h => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet }));
+    const seen = new Set(textHits.map(hit => hit.path));
+    const out: PaletteItem[] = [
+      ...textHits.map((h): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet })),
+      ...titleRanks(notes, q).filter(({ n }) => !seen.has(n.path)).map(({ n }): PaletteItem => ({ kind: "note", path: n.path, title: n.title, detail: n.folder })),
+    ].slice(0, MAX);
     out.push(...cmds(false));
     if (!notes.some(n => fold(n.title) === fold(q))) out.push({ kind: "create", title: q });
     return out;

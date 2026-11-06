@@ -315,6 +315,12 @@ describe("⌘K", () => {
   });
 });
 
+test("ranked palette preserves local title matches after engine hits", () => {
+  const note = { path: "nOtEs99.md", title: "nOtEs99", folder: "", mtime: "2026-11-01", ctime: "2026-11-01", size: 0, version: "1", tags: [] };
+  const hits = [{ path: "Other.md", title: "Other", score: 1, snippet: "nt99" }];
+  expect(paletteItems([note], "nt99", hits, [], true).filter(item => item.kind === "note").map(item => item.path)).toEqual(["Other.md", "nOtEs99.md"]);
+});
+
 test("L16: completed engine ranking is retained by the palette, with inflected snippets highlighted", () => {
   const hits = [
     {path:'B.md',title:'Plano',score:9,snippet:'Organização das reuniões'},
