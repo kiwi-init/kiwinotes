@@ -9,6 +9,7 @@ import type { SyntaxNode } from "@lezer/common";
 
 import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
+import { footnoteJump, footnoteLabel, footnotesOf, superscript } from "./footnotes.ts";
 import { parseTable } from "./table.ts";
 
 // ---------------------------------------------------------------- links
@@ -72,6 +73,40 @@ class BulletWidget extends WidgetType {
     dot.className = "cm-bullet";
     dot.textContent = "•";
     return dot;
+  }
+}
+
+/**
+ * O número de uma nota de rodapé fora da linha do cursor (T6377): o `[^1]`, o `^[…]` e o `[^1]:` da definição viram o
+ * número em sobrescrito. O clique anda entre a chamada e a definição, como no bloco desenhado; o hover mostra o texto.
+ */
+class FootnoteWidget extends WidgetType {
+  constructor(
+    readonly shown: string,
+    readonly cls: string,
+    readonly attrs: Record<string, string>,
+    readonly jump: Parameters<typeof footnoteJump>[1],
+  ) {
+    super();
+  }
+  eq(other: FootnoteWidget) {
+    return other.shown === this.shown && other.cls === this.cls && JSON.stringify(other.attrs) === JSON.stringify(this.attrs);
+  }
+  toDOM(view: EditorView) {
+    const el = document.createElement("span");
+    el.className = this.cls;
+    el.textContent = this.shown;
+    for (const [k, v] of Object.entries(this.attrs)) el.setAttribute(k, v);
+    el.addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || e.altKey || e.shiftKey) return;
+      e.preventDefault();
+      const tr = footnoteJump(view.state, this.jump);
+      if (tr) view.dispatch(tr);
+    });
+    return el;
+  }
+  ignoreEvent() {
+    return false;
   }
 }
 
@@ -162,6 +197,34 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
       },
     });
 
+    // As notas de rodapé (T6377): na linha do cursor, o `[^1]` cru e marcado; fora dela, o número.
+    const notes = footnotesOf(state);
+    /** As notas em linha que viraram número: os links de dentro delas não ganham decoração. */
+    const folded: [number, number][] = [];
+    for (const m of notes.marks) {
+      if (m.to < from || m.from > to || inCode(tree.resolveInner(m.from + 1, 1))) continue;
+      const missing = m.kind === "ref" && !notes.def(m.label);
+      const cls = `cm-footnote${missing ? " cm-footnote-missing" : ""}`;
+      const attrs: Record<string, string> = m.kind === "ref" ? { "data-footnote": m.label } : { "data-footnote-n": String(m.n) };
+      if (isActive(m.from)) {
+        out.push(Decoration.mark({ class: `${cls} cm-footnote-raw`, attributes: attrs }).range(m.from, m.to));
+        continue;
+      }
+      const jump = m.kind === "ref" ? { kind: "footnote" as const, label: m.label } : { kind: "footnoteInline" as const, n: m.n };
+      if (m.kind === "inline") folded.push([m.from, m.to]);
+      out.push(Decoration.replace({ widget: new FootnoteWidget(superscript(m.n), cls, attrs, jump) }).range(m.from, m.to));
+    }
+    for (const d of notes.defs) {
+      const marker = d.markerTo - `[^${d.label}]:`.length;
+      if (d.markerTo < from || marker > to || inCode(tree.resolveInner(marker + 1, 1))) continue;
+      if (isActive(marker)) {
+        out.push(Decoration.mark({ class: "cm-footnote cm-footnote-def cm-footnote-raw" }).range(marker, d.markerTo));
+        continue;
+      }
+      const jump = { kind: "footnoteDef" as const, label: d.label };
+      out.push(Decoration.replace({ widget: new FootnoteWidget(footnoteLabel(notes, d.label), "cm-footnote cm-footnote-def", {}, jump) }).range(marker, d.markerTo));
+    }
+
     // Links [[…]]: fora da linha do cursor, só o nome (ou o apelido) aparece, como link.
     let pos = from;
     while (pos <= to) {
@@ -171,6 +234,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
         const a = line.from + link.from;
         const b = line.from + link.to;
         if (inCode(tree.resolveInner(a + 2, 1))) continue;
+        if (folded.some(([x, y]) => a >= x && a < y)) continue;
         const status = link.target ? resolver.status(link.target) : "ok";
         const cls = `cm-wikilink${status === "missing" ? " cm-wikilink-missing" : ""}`;
         const destination = link.target + (link.heading ? `#${link.heading}` : "");

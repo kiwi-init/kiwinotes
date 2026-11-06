@@ -11,6 +11,7 @@ import { isAttachmentName } from "../../../src/shared/attachments.ts";
 import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
 import { embedLine } from "./attachments.ts";
+import { type Footnotes, footnoteLabel, superscript } from "./footnotes.ts";
 import { DICTATION_CAPTION } from "./livePreview.ts";
 
 /** Os blocos de cima da árvore que a lib desenha. Tabela tem o widget editável dela (`tablePreview`). */
@@ -69,7 +70,9 @@ export function keepsRaw(node: SyntaxNode, source: string): boolean {
 export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree = fullTree(state)): RenderedBlock[] {
   const out: RenderedBlock[] = [];
   for (let n = tree.topNode.firstChild; n; n = n.nextSibling) {
-    if (!RENDERED.has(n.name)) continue;
+    // `[^1]: Palavra` (uma palavra só, ou um endereço) é um link de referência para o parser: é a nota de rodapé (T6377).
+    const footnoteDef = n.name === "LinkReference" && /^ {0,3}\[\^/.test(state.doc.sliceString(n.from, n.from + 6));
+    if (!RENDERED.has(n.name) && !footnoteDef) continue;
     const from = state.doc.lineAt(n.from).from;
     const to = state.doc.lineAt(n.to).to;
     if (focused && touches(state, from, to)) continue;
@@ -90,6 +93,14 @@ export const TAG_LINK = "kiwi-tag:";
 export const ATTACHMENT_LINK = "kiwi-attachment:";
 /** O cartão da imagem de fora: o clique nele carrega a imagem na nota (só então o app pede ela à internet). */
 export const LOAD_IMAGE_LINK = "kiwi-load-image:";
+/**
+ * As notas de rodapé (T6377): a chamada `[^x]` (com a definição, ou sem ela ainda), o rótulo da definição embaixo e a
+ * nota em linha `^[…]`, pelo número dela. O hover mostra o texto, e o clique anda entre a chamada e a definição.
+ */
+export const FOOTNOTE_LINK = "kiwi-footnote:";
+export const FOOTNOTE_MISSING_LINK = "kiwi-footnote-missing:";
+export const FOOTNOTE_DEF_LINK = "kiwi-footnote-def:";
+export const FOOTNOTE_INLINE_LINK = "kiwi-footnote-inline:";
 
 export type LinkStatusOf = (target: string) => "ok" | "missing" | "unknown";
 
@@ -105,15 +116,30 @@ function inAny(tree: Tree, pos: number, names: Set<string>): boolean {
 /**
  * O texto do bloco como a lib vai ler: `[[nota|apelido]]` vira `[apelido](kiwi-note:nota)` (ou `kiwi-note-missing:`
  * quando a nota ainda não existe) e `#tag` vira `[#tag](kiwi-tag:tag)`, como as menções do Channels. Fora de código.
+ * As notas de rodapé (`notes`, da nota inteira) viram o número em sobrescrito, como link (`kiwi-footnote:`).
  * `offset` é onde o bloco começa no documento (para olhar a árvore).
  */
-export function toRenderable(source: string, offset: number, tree: Tree, status: LinkStatusOf): string {
+export function toRenderable(source: string, offset: number, tree: Tree, status: LinkStatusOf, notes?: Footnotes): string {
   const edits: { from: number; to: number; insert: string }[] = [];
+  const end = offset + source.length;
+  for (const m of notes?.marks ?? []) {
+    if (m.from < offset || m.to > end || inAny(tree, m.from + 1, CODE_INLINE)) continue;
+    const url = m.kind === "inline" ? `${FOOTNOTE_INLINE_LINK}${m.n}` : `${notes!.def(m.label) ? FOOTNOTE_LINK : FOOTNOTE_MISSING_LINK}${encodeURIComponent(m.label)}`;
+    edits.push({ from: m.from - offset, to: m.to - offset, insert: `[${superscript(m.n)}](${url})` });
+  }
+  for (const d of notes?.defs ?? []) {
+    const marker = d.markerTo - `[^${d.label}]:`.length;
+    if (marker < offset || d.markerTo > end) continue;
+    edits.push({ from: marker - offset, to: d.markerTo - offset, insert: `[${escapeLabel(footnoteLabel(notes!, d.label))}](${FOOTNOTE_DEF_LINK}${encodeURIComponent(d.label)})` });
+  }
+  const inFootnote = (a: number) => edits.some((e) => a >= e.from && a < e.to);
   let lineStart = 0;
   for (const line of source.split("\n")) {
     for (const link of parseLinks(line)) {
       const a = lineStart + link.from;
       if (inAny(tree, offset + a + 2, CODE_INLINE)) continue;
+      // O link dentro de uma nota em linha some com ela: aparece no hover.
+      if (inFootnote(a)) continue;
       const shown = link.alias || link.target || link.heading || "";
       const embed = line[link.from - 1] === "!";
       if (embed && isAttachmentName(link.target)) {
@@ -143,7 +169,14 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
 
 const CODE_INLINE = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText"]);
 
-export type LinkAction = { kind: "note"; target: string } | { kind: "tag"; tag: string } | { kind: "url"; url: string } | { kind: "loadImage"; url: string };
+export type LinkAction =
+  | { kind: "note"; target: string }
+  | { kind: "tag"; tag: string }
+  | { kind: "url"; url: string }
+  | { kind: "loadImage"; url: string }
+  | { kind: "footnote"; label: string }
+  | { kind: "footnoteDef"; label: string }
+  | { kind: "footnoteInline"; n: number };
 
 /** O que fazer com o clique num link desenhado pela lib. */
 export function linkAction(url: string): LinkAction | null {
@@ -167,6 +200,20 @@ export function linkAction(url: string): LinkAction | null {
   if (url.startsWith(TAG_LINK)) {
     const tag = decode(url.slice(TAG_LINK.length));
     return tag ? { kind: "tag", tag } : null;
+  }
+  for (const scheme of [FOOTNOTE_MISSING_LINK, FOOTNOTE_LINK]) {
+    if (url.startsWith(scheme)) {
+      const label = decode(url.slice(scheme.length));
+      return label ? { kind: "footnote", label } : null;
+    }
+  }
+  if (url.startsWith(FOOTNOTE_DEF_LINK)) {
+    const label = decode(url.slice(FOOTNOTE_DEF_LINK.length));
+    return label ? { kind: "footnoteDef", label } : null;
+  }
+  if (url.startsWith(FOOTNOTE_INLINE_LINK)) {
+    const n = Number(url.slice(FOOTNOTE_INLINE_LINK.length));
+    return Number.isInteger(n) && n > 0 ? { kind: "footnoteInline", n } : null;
   }
   return { kind: "url", url };
 }

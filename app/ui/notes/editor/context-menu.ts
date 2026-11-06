@@ -8,6 +8,7 @@ import { FORMAT_KEYS, tableAt, tableActionCommand } from "./index.ts";
 import { insertLink } from "./format.ts";
 import { slashInsert } from "./slash.ts";
 import { CALLOUT_KINDS, calloutAt } from "./callouts.ts";
+import { insertFootnote } from "./footnotes.ts";
 import { linkFromPaste } from "./text.ts";
 import { TEXT_TOOLS, textTool, splitAt } from "./tools.ts";
 import { TABLE_ACTIONS, canTableAction, tableContext } from "./table.ts";
@@ -102,6 +103,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
       { label: "Bloco de código", onSelect: insertBlock("code") },
       { label: "Separador", onSelect: insertBlock("divider") },
       { label: "Callout", onSelect: insertBlock("callout") },
+      { label: "Nota de rodapé", onSelect: perform(() => view.dispatch(insertFootnote(view.state))) },
     ] },
     { kind: "submenu", label: "Ferramentas de texto", items: TEXT_TOOLS.map(item => ({ label: item.label,
       disabled: !textTool(chosenState, item.id), onSelect: perform(() => { const tr = textTool(view.state, item.id); if (tr) view.dispatch(tr); }),
