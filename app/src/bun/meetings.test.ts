@@ -1,6 +1,7 @@
 // A aba Reuniões (R6, T4947): a lista das notas de reunião, o estado ao vivo pelos eventos do helper e as capacidades.
 import { expect, test } from "bun:test";
 
+import { DEFAULT_SHORTCUTS } from "../shared/shortcuts.ts";
 import { DEFAULT_MEETING_SETTINGS, durationLabel, elapsedLabel, meetingFromNote, nextLive, NOT_RECORDING, participantsLabel, sortMeetings } from "../shared/meetings.ts";
 import { FakeMeetingHost, listMeetings, MeetingLiveTracker } from "./meetings.ts";
 import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
@@ -110,7 +111,7 @@ test("o rastreador avisa só quando muda, e o helper que cai leva a gravação",
 });
 
 function deps(meetings?: CapabilityDeps["meetings"]): CapabilityDeps {
-  let settings = { meetings: { ...DEFAULT_MEETING_SETTINGS } } as unknown as Awaited<ReturnType<CapabilityDeps["settings"]["load"]>>;
+  let settings = { meetings: { ...DEFAULT_MEETING_SETTINGS }, shortcuts: { ...DEFAULT_SHORTCUTS } } as unknown as Awaited<ReturnType<CapabilityDeps["settings"]["load"]>>;
   return {
     meetings,
     settings: {
@@ -154,7 +155,7 @@ test("settings.set {meetings}: só os campos dados, e um valor que não existe d
   const caps = uiCapabilities(deps());
   const saved = (await caps["settings.set"]({ meetings: { suggest: false, shortcut: null } })) as { meetings: typeof DEFAULT_MEETING_SETTINGS };
   expect(saved.meetings).toEqual({ ...DEFAULT_MEETING_SETTINGS, suggest: false, shortcut: null });
-  await expect(Promise.resolve(caps["settings.set"]({ meetings: { shortcut: "command+q" } }))).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+  await expect(Promise.resolve(caps["settings.set"]({ meetings: { shortcut: "q" } }))).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   await expect(Promise.resolve(caps["settings.set"]({ meetings: { apps: [{ bundleId: "x" }] } }))).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   await expect(Promise.resolve(caps["settings.set"]({ meetings: { color: "red" } }))).rejects.toMatchObject({ code: "E_BAD_ARGS" });
 });

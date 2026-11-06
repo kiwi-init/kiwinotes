@@ -13,5 +13,8 @@ export function statusLabel(s: SessionStatus): string {
   // O ditado já funciona; o vocabulário (DICOM, PACS…) ainda não ajuda o modelo a ouvir (T1973).
   if (s.boosting === "loading")
     return "Pronto para ditar · baixando o vocabulário…";
+  // Os atalhos funcionam, mas o app da frente também recebe a tecla (T5349): falta a Acessibilidade.
+  if (s.hotkeyPriority === false)
+    return `Pronto para ditar · atalhos sem prioridade: falta ${PERMISSION_NAMES.accessibility}`;
   return "Pronto para ditar";
 }

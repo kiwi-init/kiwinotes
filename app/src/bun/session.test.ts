@@ -5,7 +5,8 @@ import path from "node:path";
 
 import { DictionaryStore } from "../store/dictionary.ts";
 import { SnippetStore } from "../store/snippets.ts";
-import { helperLogLine, loadLists } from "./session.ts";
+import { DEFAULT_SETTINGS, SettingsStore } from "../store/settings.ts";
+import { helperLogLine, loadLists, shortcutsConfig } from "./session.ts";
 
 let dir = "";
 afterEach(() => {
@@ -42,5 +43,21 @@ describe("loadLists", () => {
     const lists = await loadLists({ dictionary: new DictionaryStore(dir), snippets: new SnippetStore(dir) }, (m) => warnings.push(m));
     expect(lists).toEqual({ terms: [], snippets: [] });
     expect(warnings).toEqual([]);
+  });
+});
+
+describe("shortcutsConfig (T5349)", () => {
+  test("bug corrigido: a tecla do ditado escolhida é guardada e vai para o helper (antes ficava sempre no Fn)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "kiwi-session-"));
+    expect(shortcutsConfig(DEFAULT_SETTINGS)).toEqual({
+      type: "config.set",
+      shortcuts: { dictation: "fn", notes: "control+option+n", meeting: "control+option+r", meetingPause: "control+option+m" },
+    });
+    await new SettingsStore(dir).save({ shortcuts: { ...DEFAULT_SETTINGS.shortcuts, dictation: "rightOption" } });
+    // Um app novo (outro boot) lê do arquivo e manda o ⌥ direito.
+    const config = shortcutsConfig(await new SettingsStore(dir).load());
+    expect(config.shortcuts?.dictation).toBe("rightOption");
+    // Os do app (a paleta…) não vão: o helper não os vê.
+    expect(Object.keys(config.shortcuts ?? {})).not.toContain("palette");
   });
 });

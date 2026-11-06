@@ -12,6 +12,8 @@ import { flushSync } from "react-dom";
 import { api as appApi } from "../src/api.ts";
 import { Button, Empty, HoverLabel } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
+import { useShortcuts } from "../src/useShortcuts.ts";
+import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/shared/shortcuts.ts";
 import { Popover } from "./Popover.tsx";
 import { TreePopover } from "./TreePopover.tsx";
 import { NoteWidthHandles } from "./NoteWidth.tsx";
@@ -457,21 +459,28 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
 
   const selectedFolderRef = useRef(selectedFolder);
   selectedFolderRef.current = selectedFolder;
+  const shortcuts = useShortcuts() ?? DEFAULT_SHORTCUTS;
+  const shortcutsRef = useRef(shortcuts);
+  shortcutsRef.current = shortcuts;
+  /** "Nova nota (⌘N)", com o atalho que valer agora; sem nada quando desligado. */
+  const withKey = (label: string, id: "palette" | "newNote" | "dailyNote") =>
+    shortcuts[id] === null ? label : `${label} (${shortcutLabel(shortcuts[id])})`;
   /** A nota do dia pelo ⇧⌘D (o `openDaily` vem mais abaixo). */
   const openDailyRef = useRef<() => Promise<void>>(async () => {});
 
-  // ⌘K busca, ⌘N cria (na pasta escolhida). Ao esconder a janela, grava o que estiver pendente.
+  // ⌘K busca, ⌘N cria (na pasta escolhida), ⇧⌘D abre a nota do dia: os padrões, que a pessoa troca nas Configurações
+  // (T5349). Ao esconder a janela, grava o que estiver pendente.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!activeRef.current || !e.metaKey || e.altKey || e.ctrlKey) return;
-      // Síncrono: a busca já está com o foco antes da próxima tecla (quem digita rápido não escreve na nota).
-      if (e.shiftKey && e.key.toLowerCase() === "d") void openDailyRef.current();
-      else if (e.shiftKey) return;
-      else if (e.key === "k") {
+      if (!activeRef.current) return;
+      const s = shortcutsRef.current;
+      if (matchesKeyEvent(s.dailyNote, e)) void openDailyRef.current();
+      else if (matchesKeyEvent(s.palette, e)) {
+        // Síncrono: a busca já está com o foco antes da próxima tecla (quem digita rápido não escreve na nota).
         setPaletteQuery("");
         flushSync(() => setPalette((p) => !p));
       }
-      else if (e.key === "n") void create("Sem título", true, selectedFolderRef.current);
+      else if (matchesKeyEvent(s.newNote, e)) void create("Sem título", true, selectedFolderRef.current);
       else return;
       e.preventDefault();
     };
@@ -786,7 +795,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           ...(folderController.view?.recent??[]).map(r=>({label:`Abrir ${r.name}`,onSelect:()=>{void leave().then(async ok=>{if(ok)await folderController.open(r.key);});}})),
           {kind:"separator" as const},
         ]:[]),
-        { label: "Nova nota", hint: "⌘N", onSelect: () => void create("Sem título", true, ""),
+        { label: "Nova nota", hint: shortcuts.newNote === null ? undefined : shortcutLabel(shortcuts.newNote), onSelect: () => void create("Sem título", true, ""),
         },
         ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(""),
               },
@@ -1003,11 +1012,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         }
         end={
           <span className="kn-float-group">
-            <button type="button" className="kn-expand" title="Nova nota (⌘N)" aria-label="Nova nota" onClick={() => void create("Sem título", true, selectedFolderRef.current)}>
+            <button type="button" className="kn-expand" title={withKey("Nova nota", "newNote")} aria-label="Nova nota" onClick={() => void create("Sem título", true, selectedFolderRef.current)}>
               <PenIcon />
               <HoverLabel>Nova nota</HoverLabel>
             </button>
-            <button type="button" className="kn-expand" title="Buscar (⌘K)" aria-label="Buscar" onClick={() => openPalette()}>
+            <button type="button" className="kn-expand" title={withKey("Buscar", "palette")} aria-label="Buscar" onClick={() => openPalette()}>
               <SearchIcon />
               <HoverLabel>Buscar</HoverLabel>
             </button>
@@ -1024,6 +1033,10 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           open={openNow}
           current={note?.path ?? null}
           selectedFolder={selectedFolder}
+          keys={{
+            newNote: shortcuts.newNote === null ? null : shortcutLabel(shortcuts.newNote),
+            dailyNote: shortcuts.dailyNote === null ? null : shortcutLabel(shortcuts.dailyNote),
+          }}
           query={query}
           onQuery={setQuery}
           pinned={pinnedNotes}

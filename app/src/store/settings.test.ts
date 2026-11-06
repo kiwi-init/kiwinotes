@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { DEFAULT_NOTES_SHORTCUT, NOTES_SHORTCUTS } from "../shared/shortcuts.ts";
+import { DEFAULT_NOTES_SHORTCUT, DEFAULT_SHORTCUTS, NOTES_SHORTCUTS } from "../shared/shortcuts.ts";
 import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
 import { DEFAULT_SETTINGS, SettingsStore, sanitizeSettings } from "./settings.ts";
 
@@ -11,17 +11,27 @@ import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
 let dir: string;
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 const fresh = () => (dir = mkdtempSync(path.join(tmpdir(), "kiwi-settings-")));
+/** Os padrões, com o atalho das Notas desligado (nos `shortcuts` e no campo de antes, iguais). */
+const notesOff = { shortcuts: { ...DEFAULT_SHORTCUTS, notes: null }, notesShortcut: null };
 
 test("sem arquivo, o padrão: ⌃⌥N abre a janela Notas (T1499)", async () => {
   fresh();
+<<<<<<< HEAD
   expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
+=======
+  expect(await new SettingsStore(dir).load()).toEqual({ shortcuts: DEFAULT_SHORTCUTS, notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS });
+>>>>>>> 6c11a6e (T5349: todos os atalhos configuráveis no app, com o gravador e o aviso de conflito (#175))
   expect(DEFAULT_SETTINGS.notesShortcut).toBe(DEFAULT_NOTES_SHORTCUT);
 });
 
 test("grava só o que mudou, só para o usuário, e lê de volta; null (desligado) fica", async () => {
   fresh();
   const store = new SettingsStore(dir);
+<<<<<<< HEAD
   const off = { notesShortcut: null, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 };
+=======
+  const off = { ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS };
+>>>>>>> 6c11a6e (T5349: todos os atalhos configuráveis no app, com o gravador e o aviso de conflito (#175))
   expect(await store.save({ notesShortcut: null })).toEqual(off);
   expect(await new SettingsStore(dir).load()).toEqual(off);
   expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual({ version: 1, ...off });
@@ -31,16 +41,24 @@ test("grava só o que mudou, só para o usuário, e lê de volta; null (desligad
 
 test("editado à mão com um valor que não existe: volta ao padrão, sem quebrar", async () => {
   fresh();
-  writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: "command+q" }));
+  writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: "q" }));
   expect(await new SettingsStore(dir).load()).toEqual(DEFAULT_SETTINGS);
   expect(sanitizeSettings(null)).toEqual(DEFAULT_SETTINGS);
+<<<<<<< HEAD
   expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
+=======
+  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ shortcuts: { ...DEFAULT_SHORTCUTS, notes: "option+command+n" }, notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS });
+>>>>>>> 6c11a6e (T5349: todos os atalhos configuráveis no app, com o gravador e o aviso de conflito (#175))
 });
 
 test("a Aparência (T2503): um settings.json de antes dela abre no padrão, e um campo ruim volta sozinho", async () => {
   fresh();
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: null }));
+<<<<<<< HEAD
   expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: null, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
+=======
+  expect(await new SettingsStore(dir).load()).toEqual({ ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS });
+>>>>>>> 6c11a6e (T5349: todos os atalhos configuráveis no app, com o gravador e o aviso de conflito (#175))
   const mixed = { mode: "light", lightTheme: "glacier-mint", darkTheme: 42, textSize: "huge", font: "lato", motion: "reduced" };
   expect(sanitizeSettings({ appearance: mixed }).appearance).toEqual({
     ...DEFAULT_APPEARANCE,
@@ -81,7 +99,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
   const raw = readFileSync(store.file, "utf8");
   expect(raw.endsWith("}\n")).toBe(true);
   expect(await new SettingsStore(dir).load()).toEqual({
-    notesShortcut: null,
+    ...notesOff,
     pinned: ["A.md"],
     appearance: { ...DEFAULT_APPEARANCE, font: "inter", mode: "dark", textSize: "large" },
     templatesFolder: "Modelos",
@@ -118,6 +136,31 @@ test("os ajustes de reunião (R6, T4947): o padrão, um campo ruim volta sozinho
   expect(DEFAULT_SETTINGS.meetings.pauseShortcut).toBe("control+option+m");
   expect(DEFAULT_SETTINGS.meetings.suggest).toBe(true);
   expect(DEFAULT_SETTINGS.meetings.apps.map((a) => a.name)).toContain("Teams");
-  const m = sanitizeSettings({ meetings: { shortcut: "command+q", pauseShortcut: null, suggest: "sim", apps: [{ bundleId: "com.hnc.Discord", name: " Discord " }, { bundleId: "com.hnc.discord", name: "De novo" }, { bundleId: "não vale", name: "x" }] } }).meetings;
+  const m = sanitizeSettings({ meetings: { shortcut: "q", pauseShortcut: null, suggest: "sim", apps: [{ bundleId: "com.hnc.Discord", name: " Discord " }, { bundleId: "com.hnc.discord", name: "De novo" }, { bundleId: "não vale", name: "x" }] } }).meetings;
   expect(m).toEqual({ shortcut: "control+option+r", pauseShortcut: null, suggest: true, apps: [{ bundleId: "com.hnc.Discord", name: "Discord" }] });
+});
+
+test("os atalhos (T5349): um settings.json de antes deles traz os campos antigos, e os novos ganham deles", () => {
+  // De antes do T5349: o das Notas e os das reuniões.
+  const old = sanitizeSettings({ notesShortcut: "control+command+n", meetings: { shortcut: null, pauseShortcut: "option+command+m" } });
+  expect(old.shortcuts).toEqual({ ...DEFAULT_SHORTCUTS, notes: "control+command+n", meeting: null, meetingPause: "option+command+m" });
+  expect(old.meetings.shortcut).toBeNull();
+  // Com `shortcuts`, eles mandam, e os campos de antes repetem.
+  const now = sanitizeSettings({ notesShortcut: "control+command+n", shortcuts: { notes: "double:rightCommand", dictation: "control+option+d", palette: "q" } });
+  expect(now.shortcuts.notes).toBe("double:rightCommand");
+  expect(now.notesShortcut).toBe("double:rightCommand");
+  expect(now.shortcuts.dictation).toBe("control+option+d");
+  expect(now.shortcuts.palette).toBe("command+k"); // uma letra sozinha volta ao padrão
+});
+
+test("os atalhos (T5349): o save muda só os dados, e os campos de antes entram neles", async () => {
+  fresh();
+  const store = new SettingsStore(dir);
+  const a = await store.save({ shortcuts: { ...DEFAULT_SHORTCUTS, dictation: "rightOption" } });
+  expect(a.shortcuts.dictation).toBe("rightOption");
+  const b = await store.save({ notesShortcut: "f5" });
+  expect(b.shortcuts).toEqual({ ...DEFAULT_SHORTCUTS, dictation: "rightOption", notes: "f5" });
+  const c = await store.save({ meetings: { ...b.meetings, pauseShortcut: null } });
+  expect(c.shortcuts.meetingPause).toBeNull();
+  expect((await new SettingsStore(dir).load()).shortcuts).toEqual(c.shortcuts);
 });

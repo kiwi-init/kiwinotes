@@ -95,6 +95,12 @@ export type Command =
        */
       meetingShortcut?: string | null;
       meetingPauseShortcut?: string | null;
+      /**
+       * T5349 (#175): os atalhos globais, cada um no texto de `shared/shortcuts.ts` ("fn", "double:rightCommand",
+       * "control+option+r", "control+k r r"), ou null para desligar. Só os dados mudam. Substitui o `hotkey`, o
+       * `notesShortcut`, o `meetingShortcut` e o `meetingPauseShortcut`, que ainda valem.
+       */
+      shortcuts?: Partial<Record<"dictation" | "notes" | "meeting" | "meetingPause", string | null>>;
       /** O pop-up "Gravar esta reunião?" (padrão: ligado). Desligado, o atalho ainda grava. */
       meetingSuggest?: boolean;
       /** Os apps que contam como reunião (substitui a lista padrão: Teams, Zoom, Webex, Slack, FaceTime e os navegadores). */
@@ -143,6 +149,12 @@ export type Command =
   /** As entradas de áudio e a saída padrão (T3229/T3230), para o seletor dos Ajustes. Só lista: não abre a entrada. */
   | { type: "audio.inputs" }
   /**
+   * "Aperte o atalho" das Configurações (T5349): o tap do helper lê as teclas (o WebView não vê o Fn nem o lado dos
+   * modificadores) e responde quando a pessoa termina. Enquanto isso, nenhum atalho dispara.
+   */
+  | { type: "shortcut.record" }
+  | { type: "shortcut.cancel" }
+  /**
    * Só com `KIWI_DEBUG=1` no sidecar (sem isso, `unknown_type`), e só com áudio sintético (`say`): o arquivo faz o
    * caminho de uma gravação que terminou (`record.started`/`record.stopped` com `reason: "debug"`, a pílula, o
    * `transcript.final`), para testar o app sem o mic. `invalid_value` se o arquivo não abre; `already_recording`.
@@ -170,7 +182,11 @@ export type CommandType = Command["type"];
 /** O que cada comando devolve no `result` quando dá certo. */
 export interface CommandResults {
   ping: Record<string, never>;
-  "config.set": { hotkey: HotkeyKey; hotkeyActive: boolean };
+  /** `hotkey`: o atalho do ditado, no texto de `shortcuts.ts` (desde o T5349; antes, só a tecla). */
+  "config.set": { hotkey: string; hotkeyActive: boolean; hotkeyPriority?: boolean };
+  /** O atalho que a pessoa apertou (T5349). Erros: `cancelled` (Esc ou `shortcut.cancel`), `invalid_shortcut`, `hotkey_inactive`. */
+  "shortcut.record": { shortcut: string };
+  "shortcut.cancel": Record<string, never>;
   "meeting.start": { session: string };
   "meeting.stop": Record<string, never>;
   "meeting.pauseMine": Record<string, never>;
@@ -270,20 +286,26 @@ export type Event =
       type: "ready";
       version: string;
       pid: number;
-      hotkey: HotkeyKey;
+      /** O atalho do ditado, no texto de `shortcuts.ts` (desde o T5349; antes, só a tecla). */
+      hotkey: string;
       /** `false` quando falta permissão e o atalho não recebe tecla. */
       hotkeyActive: boolean;
+      /**
+       * Os atalhos têm prioridade (T5349): o app da frente não recebe a tecla. `false` sem Acessibilidade: eles
+       * funcionam, mas o outro app também vê a tecla. Ausente num helper de antes do T5349.
+       */
+      hotkeyPriority?: boolean;
       permissions: Permissions;
       /** Texto para explicar cada permissão na UI. */
       permissionHelp?: Partial<Record<Permission, string>>;
       /** Se o LLM local está pronto. Opcional até o sidecar mandar (T52). */
       llm?: LlmStatus;
     }
-  | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean; llm?: LlmStatus }
+  | { type: "permissions.changed"; permissions: Permissions; hotkeyActive: boolean; hotkeyPriority?: boolean; llm?: LlmStatus }
   /** Entrou ou saiu um dispositivo de áudio, ou mudou a saída padrão (T3229): os Ajustes listam de novo. */
   | { type: "audio.inputs.changed" }
-  | { type: "hotkey.down"; key: HotkeyKey }
-  | { type: "hotkey.up"; key: HotkeyKey }
+  | { type: "hotkey.down"; key: string }
+  | { type: "hotkey.up"; key: string }
   | { type: "hotkey.toggle"; on: boolean }
   /** O atalho do `notesShortcut` foi apertado: o app abre ou traz para a frente a janela Notas (T1499). */
   | { type: "hotkey.notes" }
@@ -389,6 +411,8 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "llm.complete",
   "llm.prewarm",
   "audio.inputs",
+  "shortcut.record",
+  "shortcut.cancel",
   "debug.transcribe",
   "debug.meetingMicUsers",
 ]);

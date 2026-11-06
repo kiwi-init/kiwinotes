@@ -6,17 +6,14 @@ import { type FormEvent, useEffect, useState } from "react";
 import {
   DEFAULT_MEETING_APPS,
   isBundleId,
-  MEETING_PAUSE_SHORTCUTS,
-  MEETING_SHORTCUTS,
   type MeetingAppEntry,
   type MeetingSettings,
 } from "../../src/shared/meetings.ts";
 import { api, has } from "../src/api.ts";
 import { RemoveIcon } from "../src/kit/editable.tsx";
-import { Button, Row, Section, Segmented, Switch } from "../src/kit/index.tsx";
-
-const OFF = "off" as const;
-const options = (list: readonly { value: string; label: string }[]) => [...list.map((s) => ({ value: s.value, label: s.label })), { value: OFF, label: "Desligado" }];
+import { Button, Row, Section, Switch } from "../src/kit/index.tsx";
+import { ShortcutRow } from "../settings/Shortcuts.tsx";
+import { useShortcuts } from "../src/useShortcuts.ts";
 
 /** Os apps iguais à lista padrão, na mesma ordem. */
 const isDefault = (apps: MeetingAppEntry[]) =>
@@ -25,6 +22,8 @@ const isDefault = (apps: MeetingAppEntry[]) =>
 export function MeetingSettingsSection() {
   const [settings, setSettings] = useState<MeetingSettings | null>(null);
   const [failed, setFailed] = useState(false);
+  // Os atalhos das reuniões são os de Configurações › Atalhos (T5349): a mesma linha, nos dois lugares.
+  const shortcuts = useShortcuts();
 
   useEffect(() => {
     if (!has("settings.get")) return;
@@ -54,22 +53,12 @@ export function MeetingSettingsSection() {
   return (
     <Section title="Ajustes de reunião">
       {failed ? <div className="kn-meet-settings-error" role="alert">Não deu para salvar. Tente de novo.</div> : null}
-      <Row label="Gravar e parar" hint="De qualquer app, com ou sem o pop-up.">
-        <Segmented
-          label="Atalho de gravar a reunião"
-          value={settings.shortcut ?? OFF}
-          options={options(MEETING_SHORTCUTS)}
-          onChange={(v) => change({ shortcut: v === OFF ? null : (v as MeetingSettings["shortcut"]) })}
-        />
-      </Row>
-      <Row label="Pausar meu mic" hint="Só durante a gravação: os outros continuam sendo gravados.">
-        <Segmented
-          label="Atalho de pausar o seu mic"
-          value={settings.pauseShortcut ?? OFF}
-          options={options(MEETING_PAUSE_SHORTCUTS)}
-          onChange={(v) => change({ pauseShortcut: v === OFF ? null : (v as MeetingSettings["pauseShortcut"]) })}
-        />
-      </Row>
+      {shortcuts ? (
+        <>
+          <ShortcutRow id="meeting" shortcuts={shortcuts} />
+          <ShortcutRow id="meetingPause" shortcuts={shortcuts} />
+        </>
+      ) : null}
       <Row label="Perguntar se quer gravar" hint="Quando um app de reunião pega o microfone, uma vez por reunião. Nunca grava sozinho.">
         <Switch label="Perguntar se quer gravar" checked={settings.suggest} onChange={(suggest) => change({ suggest })} />
       </Row>

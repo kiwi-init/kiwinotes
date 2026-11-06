@@ -7,8 +7,9 @@ import path from "node:path";
 
 import { sidecarLlm } from "../cleanup/index.ts";
 import type { LlmMode } from "../cleanup/types.ts";
-import { defaultSocketPath, type Event, type LlmStatus, type Permission, type Permissions } from "../shared/ipc.ts";
+import { type Command, defaultSocketPath, type Event, type LlmStatus, type Permission, type Permissions } from "../shared/ipc.ts";
 import type { AudioInputs } from "../shared/microphone.ts";
+import { GLOBAL_SHORTCUT_IDS } from "../shared/shortcuts.ts";
 import { listAudioInputs } from "./audio-inputs.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import { DEFAULT_SETTINGS, type AppSettings } from "../store/settings.ts";
@@ -17,7 +18,7 @@ import { Dictation } from "./dictation.ts";
 import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
 import { MeetingLiveTracker } from "./meetings.ts";
 import { MeetingAcks } from "./meeting-acks.ts";
-import { Sidecar, type SupervisorStatus } from "./sidecar.ts";
+import { Sidecar, SidecarError, type SupervisorStatus } from "./sidecar.ts";
 import { MeetingNoteSession } from "./meeting-notes.ts";
 import { stores } from "./stores.ts";
 
@@ -67,6 +68,8 @@ export interface SessionStatus {
   /** O modelo do boosting do vocabulário (T1973); `undefined` até o helper dizer. */
   boosting?: Extract<Event, { type: "stt.boosting" }>["state"];
   hotkeyActive: boolean;
+  /** Os atalhos têm prioridade sobre os dos outros apps (T5349); `false` sem Acessibilidade, `undefined` num helper antigo. */
+  hotkeyPriority?: boolean;
   /** As permissões que faltam, na ordem em que o app pede (T532). */
   missing: Permission[];
 }
@@ -83,6 +86,14 @@ export interface SessionDiagnostics extends SessionStatus {
   /** O último `ready` do helper, ou null se ele não está de pé. */
   helper: { version: string; pid: number; permissions: Permissions; llm?: LlmStatus } | null;
   exits: Sidecar["exits"];
+}
+
+/**
+ * O `config.set` com os atalhos globais das Configurações (T5349). Antes dele, a tecla do ditado nem era guardada: o
+ * seletor dos Ajustes só mudava a tela, e o helper ficava sempre no Fn.
+ */
+export function shortcutsConfig(settings: Pick<AppSettings, "shortcuts">): Extract<Command, { type: "config.set" }> {
+  return { type: "config.set", shortcuts: Object.fromEntries(GLOBAL_SHORTCUT_IDS.map((id) => [id, settings.shortcuts[id]])) };
 }
 
 export class Session {
@@ -205,7 +216,7 @@ export class Session {
 
   status(): SessionStatus {
     const ready = this.sidecar.ready;
-    return { supervision:this.sidecar.supervision(), connected: !!ready, stt: this.stt, boosting: this.boosting, hotkeyActive: ready?.hotkeyActive ?? false, missing: missing(ready?.permissions) };
+    return { supervision:this.sidecar.supervision(), connected: !!ready, stt: this.stt, boosting: this.boosting, hotkeyActive: ready?.hotkeyActive ?? false, hotkeyPriority: ready?.hotkeyPriority, missing: missing(ready?.permissions) };
   }
 
   onStatus(fn: (s: SessionStatus) => void): () => void {
@@ -229,10 +240,10 @@ export class Session {
     await Promise.all([this.dictionaryChanged(terms), this.settingsChanged(settings)]);
   }
 
-  /** O helper vigia o atalho da janela Notas que está nas Configurações (T1499); null desliga. */
+  /** O helper vigia os atalhos globais das Configurações (T5349): o ditado, as Notas e as reuniões; null desliga. */
   async settingsChanged(settings: AppSettings): Promise<void> {
-    const result = await this.sidecar.send({ type: "config.set", notesShortcut: settings.notesShortcut }).catch(() => undefined);
-    if (result && !result.ok) console.warn(`[session] config.set notesShortcut: ${result.error}`);
+    const result = await this.sidecar.send(shortcutsConfig(settings)).catch(() => undefined);
+    if (result && !result.ok) console.warn(`[session] config.set shortcuts: ${result.error}`);
     // O microfone vai num `config.set` só dele (T3230): um helper de antes do #3202 que recusar o campo não leva junto o
     // atalho das notas.
     const mic = await this.sidecar.send({ type: "config.set", microphone: settings.microphone }).catch(() => undefined);
@@ -240,9 +251,27 @@ export class Session {
     // Os ajustes de reunião (R6) num `config.set` só deles, pelo mesmo motivo: um helper de antes do R2 recusa os campos.
     const m = settings.meetings;
     const meeting = await this.sidecar
-      .send({ type: "config.set", meetingShortcut: m.shortcut, meetingPauseShortcut: m.pauseShortcut, meetingSuggest: m.suggest, meetingApps: m.apps })
+      .send({ type: "config.set", meetingSuggest: m.suggest, meetingApps: m.apps })
       .catch(() => undefined);
     if (meeting && !meeting.ok) console.warn(`[session] config.set meetings: ${meeting.error}`);
+  }
+
+  /**
+   * "Aperte o atalho" (T5349): o helper lê as teclas e devolve o texto do atalho. Espera a pessoa por até 1 min.
+   * Rejeita com o código do helper: `cancelled`, `invalid_shortcut`, `hotkey_inactive`, `sidecar_closed`…
+   */
+  async recordShortcut(): Promise<string> {
+    const r = await this.sidecar.send({ type: "shortcut.record" }, undefined, 60_000).catch((e: unknown) => {
+      // O tempo acabou: o helper ainda está gravando, então para.
+      void this.sidecar.send({ type: "shortcut.cancel" }).catch(() => {});
+      throw e;
+    });
+    if (!r.ok) throw new SidecarError(r.error);
+    return r.data.shortcut;
+  }
+
+  cancelShortcutRecording(): void {
+    void this.sidecar.send({ type: "shortcut.cancel" }).catch(() => {});
   }
 
   /** As entradas de áudio para o seletor dos Ajustes (T3230); null sem o helper, ou com um que não sabe listar. */
