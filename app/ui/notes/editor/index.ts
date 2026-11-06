@@ -26,6 +26,7 @@ import { renderedPreview } from "./renderedWidget.tsx";
 import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger } from "./slash.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
+import { spellingAttributes, disableSpellcheck, SPELLING_EXCLUDED } from "./spelling.ts";
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
 
 export interface LinkTarget {
@@ -321,6 +322,8 @@ export class LinkCache implements LinkResolver {
 export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "resolve">, links: LinkResolver): Extension[] {
   return [
     history(),
+    spellingAttributes,
+    disableSpellcheck(SPELLING_EXCLUDED),
     closeBrackets(),
     // O colar-link é o nosso (o `paste` abaixo): o do lang-markdown não escapa "(" nem ")" do endereço nem "[" do texto.
     markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax], addKeymap: true, pasteURLAsLink: false }),

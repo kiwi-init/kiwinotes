@@ -1,0 +1,48 @@
+{
+  "light": {
+    "ok": true,
+    "passedSteps": 55,
+    "problems": [],
+    "blocked": [],
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "spelling.suggest": 3,
+      "notes.save": 1
+    }
+  },
+  "dark": {
+    "ok": true,
+    "passedSteps": 55,
+    "problems": [],
+    "blocked": [],
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "spelling.suggest": 3,
+      "notes.save": 1
+    }
+  },
+  "nativeHelper": {
+    "ok": true,
+    "available": true,
+    "misspelled": true,
+    "expectedSuggestionPresent": true
+  },
+  "savedContent": "Uma reunião marcada.\n\n`codigoerrado`\n\nEste errro fica aqui.\n",
+  "E2Regression": {
+    "ok": true,
+    "passedSteps": 70,
+    "problems": []
+  }
+}

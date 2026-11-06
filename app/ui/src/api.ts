@@ -54,6 +54,7 @@ async function invokeInternal<C extends "notes.rename"|"notes.delete"|"notes.res
 }
 
 export const api = {
+  spelling: { suggest: (word: string, language?: string) => invoke("spelling.suggest", { word, ...(language ? { language } : {}) }) },
   noteFolders: {
     get: () => invoke("notes.folder",{}),
     open: (args: UiCapabilities["notes.openFolder"]["args"] = {}) => invoke("notes.openFolder",args),

@@ -1,3 +1,4 @@
+import { NO_SPELLING, spellingResult, type SpellingResult } from "../shared/spelling.ts";
 // A sessão de ditado do app (T58): o sidecar, o fluxo do ditado e o que precisa ficar em sincronia com
 // os arquivos (o dicionário vai para o STT no `config.set`, a cada `ready` e a cada mudança).
 
@@ -207,6 +208,14 @@ export class Session {
     this.permissions.detach();
     stores.recoveries.stop();
     return Promise.all([this.sidecar.stop(),this.meetingNotes.detach()]).then(()=>{});
+  }
+
+  async checkSpelling(word: string, language?: string): Promise<SpellingResult> {
+    if (!this.sidecar.ready) return NO_SPELLING;
+    try {
+      const result = await this.sidecar.request({ type: "spelling.check", word, ...(language ? { language } : {}) }, undefined, 2000);
+      return spellingResult(result.data, word);
+    } catch { return NO_SPELLING; }
   }
 
   async retryDictation(historyId:string){

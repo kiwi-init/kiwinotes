@@ -1,3 +1,4 @@
+import type { SpellingResult } from "./spelling.ts";
 // Contrato de IPC entre o app (main em Bun) e o sidecar Swift (native/).
 // Decisão e motivos: docs/adr/0001-ipc.md. O lado Swift espelha estes tipos.
 //
@@ -65,6 +66,7 @@ export interface RecoveredTranscript { text:string;raw:string;lang:"pt"|"en"|"mi
 
 export type Command =
   | { type: "ping" }
+  | { type: "spelling.check"; word: string; language?: string }
   | {
       type: "config.set";
       hotkey?: HotkeyKey;
@@ -188,6 +190,7 @@ export type CommandType = Command["type"];
 /** O que cada comando devolve no `result` quando dá certo. */
 export interface CommandResults {
   ping: Record<string, never>;
+  "spelling.check": SpellingResult;
   /** `hotkey`: o atalho do ditado, no texto de `shortcuts.ts` (desde o T5349; antes, só a tecla). */
   "config.set": { hotkey: string; hotkeyActive: boolean; hotkeyPriority?: boolean };
   /** O atalho que a pessoa apertou (T5349). Erros: `cancelled` (Esc ou `shortcut.cancel`), `invalid_shortcut`, `hotkey_inactive`. */
@@ -405,6 +408,7 @@ export type Message = CommandMessage | EventMessage | ResultMessage;
 
 const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "ping",
+  "spelling.check",
   "config.set",
   "meeting.start",
   "meeting.stop",

@@ -73,6 +73,10 @@
       "press": "Shift+F10"
     },
     {
+      "waitFor": ".kn-menu",
+      "name": "o menu aguarda a consulta local de ortografia"
+    },
+    {
       "click": ".kn-menu-item:has-text('Copiar')"
     },
     {
@@ -94,6 +98,10 @@
       "press": "Shift+F10"
     },
     {
+      "waitFor": ".kn-menu",
+      "name": "o menu aguarda a consulta local de ortografia"
+    },
+    {
       "click": ".kn-menu-item:has-text('Colar sem formatação')"
     },
     {
@@ -108,6 +116,10 @@
     },
     {
       "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu",
+      "name": "o menu aguarda a consulta local de ortografia"
     },
     {
       "click": ".kn-menu-item:has-text('Recortar')"
@@ -125,6 +137,10 @@
     },
     {
       "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu",
+      "name": "o menu aguarda a consulta local de ortografia"
     },
     {
       "press": "Home"
@@ -149,6 +165,10 @@
     },
     {
       "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu",
+      "name": "o menu aguarda a consulta local de ortografia"
     },
     {
       "press": "Home"
@@ -187,6 +207,10 @@
     },
     {
       "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu",
+      "name": "o menu aguarda a consulta local de ortografia"
     },
     {
       "hover": ".kn-menu-item:has-text('Inserir')"
