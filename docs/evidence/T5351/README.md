@@ -10,7 +10,7 @@ Reprodução antes da mudança: um fake que cai 10 ms depois de `ready` inicia *
 |---|---|
 | Estabilidade para zerar o backoff | 60 s depois de ready |
 | Ready depois do spawn | 15 s |
-| Ping / prazo da resposta | a cada 15 s / 5 s |
+| Ping / prazo / perdas seguidas para reiniciar | 10 s após a resposta ou prazo / 5 s / 3 (~45 s sem resposta) |
 | SIGTERM → SIGKILL | 2 s |
 | Espera entre reinícios | 0,5 s, 1 s, 2 s… até 30 s |
 | Limite de quedas | 5 em 5 minutos |
@@ -42,8 +42,14 @@ bun run cli stop --data /tmp/kn-supervisor-proof
 
 ## Resultado final
 
-- `bun test src scripts ui`: **973 passaram, 0 falharam**, sobre a main com a L10 e o cache do índice (#219 e #220).
+- `bun test src scripts ui`: **976 passaram, 0 falharam**, sobre a main com a L10 e o cache do índice (#219 e #220).
 - `bun run typecheck`: limpo.
-- Supervisor/CLI focados: **22/0**; inclui processos de verdade falsos, sem Swift nem dispositivos.
+- Supervisor/CLI focados: **25/0**; inclui processos de verdade falsos, sem Swift nem dispositivos.
 - WebKit: pronto, sem erros da página, rede bloqueada ou erros de invoke (`ui-validation.json`).
 - O headless da evidência foi fechado e o lock bench liberado.
+
+## Ajuste da revisão #5448
+
+Um ping isolado perdido não termina o helper. São necessárias três perdas consecutivas; qualquer resposta válida de ping zera a conta, inclusive tardia. Os ids recentes ficam limitados a dez e são descartados ao trocar ou encerrar o processo, para um resultado antigo não interferir em outro helper. Cada tentativa espera 10 s e dá 5 s para a resposta: cerca de 45 s de silêncio contínuo antes da decisão, sem sondas sobrepostas nem acúmulo de timers ao acordar o Mac.
+
+Testes adicionais: duas perdas, um pong e mais duas perdas mantêm o helper; três perdas consecutivas terminam; pongs que chegam após o prazo também evitam a acumulação. Os artefatos de cinco exits e o print continuam os mesmos: a política de quedas não mudou.

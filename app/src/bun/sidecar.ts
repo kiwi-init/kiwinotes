@@ -39,7 +39,8 @@ export interface SupervisorStatus {
 export const SUPERVISOR_DEFAULTS = {
   stableMs: 60_000,
   readyTimeoutMs: 15_000,
-  pingIntervalMs: 15_000,
+  pingIntervalMs: 10_000,
+  maxMissedPings: 3,
   pingTimeoutMs: 5_000,
   terminateMs: 2_000,
   maxCrashes: 5,
@@ -93,6 +94,8 @@ export class Sidecar {
   private killTimer?: Timer;
   private terminationReason?: string;
   private stopping?: Promise<void>;
+  private missedPings = 0;
+  private pingIds = new Set<string>();
   private pending = new Map<
     string,
     { resolve(r: ResultMessage): void; reject(e: Error): void; timer: Timer }
@@ -207,6 +210,8 @@ export class Sidecar {
     if (this.stopped || this.proc || this.health.state === "failed") return;
     this.restartTimer = undefined;
     this.terminationReason = undefined;
+    this.missedPings = 0;
+    this.pingIds.clear();
     this.setHealth({ state: "starting", crashes: this.crashTimes.length });
     const argv = [this.options.helper, "--socket", this.options.socketPath];
     const env = {
@@ -307,6 +312,7 @@ export class Sidecar {
     clearTimeout(this.readyTimer);
     clearTimeout(this.stableTimer);
     clearTimeout(this.pingTimer);
+    this.pingIds.clear();
     this.readyTimer = this.stableTimer = this.pingTimer = undefined;
   }
 
@@ -346,8 +352,15 @@ export class Sidecar {
             this.schedulePing(proc);
         },
         () => {
-          if (this.proc === proc && !this.stopped && !this.terminationReason)
+          if (this.proc !== proc || this.stopped || this.terminationReason)
+            return;
+          this.missedPings++;
+          this.log(
+            `supervisor ping_missed pid=${proc.pid ?? "unknown"} missed=${this.missedPings} limit=${this.limits.maxMissedPings}`,
+          );
+          if (this.missedPings >= this.limits.maxMissedPings)
             this.terminate("ping_timeout");
+          else this.schedulePing(proc);
         },
       );
     }, this.limits.pingIntervalMs);
@@ -498,6 +511,12 @@ export class Sidecar {
     if (!socket) return Promise.reject(new SidecarError("sidecar_closed"));
     if (signal?.aborted) return Promise.reject(new SidecarError("aborted"));
     const id = `b${++this.nextId}`;
+    if (command.type === "ping") {
+      this.pingIds.add(id);
+      // Retém poucos ids após o prazo: um pong tardio ainda prova que o helper está vivo.
+      if (this.pingIds.size > 10)
+        this.pingIds.delete(this.pingIds.values().next().value!);
+    }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => this.settle(id, new SidecarError("sidecar_timeout")),
@@ -536,7 +555,10 @@ export class Sidecar {
   }
 
   private receive(m: Message) {
-    if (isResult(m)) return this.settle(m.id, m);
+    if (isResult(m)) {
+      if (this.pingIds.delete(m.id) && m.ok) this.missedPings = 0;
+      return this.settle(m.id, m);
+    }
     if (!isEvent(m)) return;
     if (m.type === "ready") {
       if (this.stopped || !this.proc || this.terminationReason) return;

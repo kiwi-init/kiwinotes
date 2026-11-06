@@ -324,7 +324,7 @@ test("no ready has a deadline; the original whenReady waiter rejects at terminal
   expect(helper.procs[0]!.signals).toEqual(["SIGTERM"]);
 });
 
-test("a missing pong has its own deadline and restarts the helper", async () => {
+test("three consecutive missing pongs restart the helper after their deadlines", async () => {
   const helper = fakeHelper((m) =>
     m.type === "ping" ? undefined : { ok: true, data: {} },
   );
@@ -468,5 +468,84 @@ test("healthy pongs keep the same helper, even when it repeats ready", async () 
     expect(helper.procs).toHaveLength(1);
   } finally {
     clearInterval(repeats);
+  }
+});
+
+test("one lost ping does not kill the helper, and a pong resets the consecutive count", async () => {
+  let pings = 0;
+  // Two losses, one pong, two more losses: never three in a row.
+  const helper = fakeHelper((m) => {
+    if (m.type !== "ping") return { ok: true, data: {} };
+    pings++;
+    return pings === 3 || pings >= 6 ? { ok: true, data: {} } : undefined;
+  });
+  const logs: string[] = [];
+  const s = make(helper, undefined, {
+    supervision: { pingIntervalMs: 5, pingTimeoutMs: 5 },
+    log: (m) => logs.push(m),
+  });
+  await until(() => pings >= 6);
+  expect(helper.procs).toHaveLength(1);
+  expect(s.exits).toHaveLength(0);
+  expect(logs.filter((m) => m.includes("missed=1 "))).toHaveLength(2);
+  expect(logs.filter((m) => m.includes("missed=2 "))).toHaveLength(2);
+  expect(logs.some((m) => m.includes("missed=3 "))).toBe(false);
+});
+
+test("three consecutive ping deadlines terminate exactly after the third loss", async () => {
+  let pings = 0;
+  const helper = fakeHelper((m) => {
+    if (m.type === "ping") {
+      pings++;
+      return undefined;
+    }
+    return { ok: true, data: {} };
+  });
+  const s = make(helper, undefined, {
+    supervision: { pingIntervalMs: 5, pingTimeoutMs: 5, maxCrashes: 1 },
+  });
+  await until(() => s.supervision().state === "failed");
+  expect(pings).toBe(3);
+  expect(helper.procs).toHaveLength(1);
+  expect(helper.procs[0]!.signals).toEqual(["SIGTERM"]);
+  expect(s.supervision().reason).toBe("ping_timeout");
+});
+
+test("a valid pong arriving after its deadline also clears the missed count", async () => {
+  let pings = 0;
+  const timers: Timer[] = [];
+  const helper = fakeHelper((m) => {
+    if (m.type !== "ping") return { ok: true, data: {} };
+    pings++;
+    timers.push(
+      setTimeout(
+        () =>
+          helper.procs[0]!.socket.write(
+            encode({
+              v: 1,
+              type: "result",
+              id: m.id,
+              ok: true,
+              data: {},
+            } as Message),
+          ),
+        20,
+      ),
+    );
+    return undefined;
+  });
+  const logs: string[] = [];
+  const s = make(helper, undefined, {
+    supervision: { pingIntervalMs: 15, pingTimeoutMs: 5 },
+    log: (m) => logs.push(m),
+  });
+  try {
+    await until(() => pings >= 4);
+    await Bun.sleep(22);
+    expect(s.supervision().state).toBe("ready");
+    expect(helper.procs).toHaveLength(1);
+    expect(logs.some((m) => m.includes("missed=2 "))).toBe(false);
+  } finally {
+    for (const timer of timers) clearTimeout(timer);
   }
 });
