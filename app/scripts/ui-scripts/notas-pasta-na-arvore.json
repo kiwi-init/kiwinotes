@@ -1,0 +1,90 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "expectCount": ".kn-notes-folder",
+      "count": 0
+    },
+    {
+      "screenshot": "01-topo-sem-botao-extra.png"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-side-root-bt"
+    },
+    {
+      "expectText": ".kn-side-root-bt",
+      "text": "vault"
+    },
+    {
+      "screenshot": "02-arvore-com-a-pasta.png"
+    },
+    {
+      "click": ".kn-side-root-bt"
+    },
+    {
+      "waitFor": "[data-root='open']"
+    },
+    {
+      "screenshot": "03-abrir-pasta-na-arvore.png"
+    },
+    {
+      "click": "[data-root='open']"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "expectText": ".kn-side-root-bt",
+      "text": "Obsidian de teste"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Projeto Atlas')"
+    },
+    {
+      "click": ".kn-side-root-bt"
+    },
+    {
+      "waitFor": "[data-root='recent']:has-text('vault')"
+    },
+    {
+      "screenshot": "04-recentes-na-arvore.png"
+    },
+    {
+      "click": "[data-root='recent']:has-text('vault')"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "expectText": ".kn-side-root-bt",
+      "text": "vault"
+    },
+    {
+      "waitFor": ".kn-side-item:has-text('Nota interna')"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "waitFor": ".kn-row:has-text('Pasta das notas')"
+    },
+    {
+      "hover": ".kn-row:has-text('Pasta das notas')"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "screenshot": "05-atalho-nos-ajustes.png"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "window": "hub",
   "steps": [
     {
-      "waitFor": "[aria-label='Pasta das notas']"
+      "waitFor": ".kn-crumb-bt"
     },
     {
       "click": ".kn-crumb-bt"
@@ -17,14 +17,23 @@
       "press": "Escape"
     },
     {
-      "click": "[aria-label='Pasta das notas']"
+      "click": ".kn-crumb-bt"
     },
     {
-      "click": "[role='menuitem']:has-text('Abrir pasta…')"
+      "click": ".kn-side-root-bt"
     },
     {
-      "expectText": "[aria-label='Pasta das notas']",
+      "click": "[data-root='open']"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "expectText": ".kn-side-root-bt",
       "text": "Obsidian de teste"
+    },
+    {
+      "press": "Escape"
     },
     {
       "click": ".kn-crumb-bt"
@@ -81,20 +90,29 @@
       "click": ".kn-tab:has-text('Notas')"
     },
     {
-      "click": "[aria-label='Pasta das notas']"
+      "click": ".kn-crumb-bt"
     },
     {
-      "waitFor": "[role='menuitem']:has-text('vault')"
+      "click": ".kn-side-root-bt"
+    },
+    {
+      "waitFor": "[data-root='recent']:has-text('vault')"
     },
     {
       "screenshot": "04-pastas-recentes.png"
     },
     {
-      "click": "[role='menuitem']:has-text('vault')"
+      "click": "[data-root='recent']:has-text('vault')"
     },
     {
-      "expectText": "[aria-label='Pasta das notas']",
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "expectText": ".kn-side-root-bt",
       "text": "vault"
+    },
+    {
+      "press": "Escape"
     },
     {
       "click": ".kn-crumb-bt"
