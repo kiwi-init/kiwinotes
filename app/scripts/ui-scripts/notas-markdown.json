@@ -53,8 +53,8 @@
       "name": "a #tag vira etiqueta"
     },
     {
-      "waitFor": ".kn-note-editor .cm-rendered .enrm-admonition",
-      "name": "o callout do Obsidian aparece como o do Channels"
+      "waitFor": ".kn-note-editor .cm-rendered .kn-callout[data-callout='note']",
+      "name": "o callout do Obsidian aparece com o cabeçalho dele (T6383)"
     },
     {
       "waitFor": ".kn-note-editor .cm-rendered blockquote",

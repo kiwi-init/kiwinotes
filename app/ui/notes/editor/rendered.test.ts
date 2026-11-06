@@ -98,22 +98,13 @@ describe("o Markdown que vai para a lib", () => {
 describe("callouts do Obsidian", () => {
   const render = (doc: string) => toRenderable(doc, 0, fullTree(stateOf(doc)), () => "ok");
 
-  test("> [!note] Título vira o [!NOTE] da lib, com o título em negrito embaixo", () => {
-    expect(render("> [!note] Ideia\n> boa")).toBe("> [!NOTE]\n> **Ideia**\n> boa");
-  });
-
-  test("sem título, e com o tipo do Obsidian levado ao mais perto", () => {
-    expect(render("> [!danger]-\n> cuidado")).toBe("> [!CAUTION]\n> cuidado");
-    expect(render("> [!INFO]\n> x")).toBe("> [!NOTE]\n> x");
-  });
-
-  test("tipo que não existe e [!x] no meio da citação ficam como estão", () => {
-    expect(render("> [!foo] a")).toBe("> [!foo] a");
-    expect(render("> antes\n> [!note] meio")).toBe("> antes\n> [!note] meio");
+  test("o cabeçalho fica como está: quem desenha é o widget do callout (T6383)", () => {
+    expect(render("> [!note] Ideia\n> boa")).toBe("> [!note] Ideia\n> boa");
+    expect(render("> [!danger]-\n> cuidado")).toBe("> [!danger]-\n> cuidado");
   });
 
   test("o link no título continua link", () => {
-    expect(render("> [!tip] Ver [[Ana]]\n> x")).toBe("> [!TIP]\n> **Ver [Ana](kiwi-note:Ana)**\n> x");
+    expect(render("> [!tip] Ver [[Ana]]\n> x")).toBe("> [!tip] Ver [Ana](kiwi-note:Ana)\n> x");
   });
 });
 

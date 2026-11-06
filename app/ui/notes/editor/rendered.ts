@@ -127,19 +127,6 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
       const destination = link.target + (link.heading ? `#${link.heading}` : "");
       edits.push({ from: embed ? a - 1 : a, to: lineStart + link.to, insert: `[${escapeLabel(shown)}](${scheme}${encodeURIComponent(destination)})` });
     }
-    const callout = calloutHead(line);
-    if (callout && !inAny(tree, offset + lineStart, CODE_INLINE)) {
-      const prev = source.slice(0, Math.max(0, lineStart - 1)).split("\n").pop() ?? "";
-      if (lineStart === 0 || !/^\s*>/.test(prev)) {
-        const head = `[!${callout.type}]`;
-        edits.push({
-          from: lineStart + callout.from,
-          to: lineStart + callout.titleAt,
-          insert: callout.title ? `${head}\n${callout.quote}**` : head,
-        });
-        if (callout.title) edits.push({ from: lineStart + line.length, to: lineStart + line.length, insert: "**" });
-      }
-    }
     for (const t of tagsInLine(line)) {
       const a = lineStart + t.from;
       if (inAny(tree, offset + a, NO_TAG)) continue;
@@ -155,49 +142,6 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
 }
 
 const CODE_INLINE = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText"]);
-
-/** Os tipos de callout do Obsidian no tipo mais perto dos cinco que a lib (e o Channels) desenha. */
-const CALLOUTS: Record<string, string> = {
-  note: "NOTE",
-  info: "NOTE",
-  todo: "NOTE",
-  abstract: "NOTE",
-  summary: "NOTE",
-  tldr: "NOTE",
-  example: "NOTE",
-  quote: "NOTE",
-  cite: "NOTE",
-  tip: "TIP",
-  hint: "TIP",
-  success: "TIP",
-  check: "TIP",
-  done: "TIP",
-  important: "IMPORTANT",
-  warning: "WARNING",
-  attention: "WARNING",
-  question: "WARNING",
-  help: "WARNING",
-  faq: "WARNING",
-  caution: "CAUTION",
-  danger: "CAUTION",
-  error: "CAUTION",
-  failure: "CAUTION",
-  fail: "CAUTION",
-  missing: "CAUTION",
-  bug: "CAUTION",
-};
-
-/**
- * A primeira linha de um callout do Obsidian (`> [!note] Título`, `> [!tip]-`). A lib só lê o do GitHub, `> [!NOTE]`
- * sozinho na linha: o título desce para a linha de baixo, em negrito.
- */
-export function calloutHead(line: string): { quote: string; from: number; titleAt: number; type: string; title: string } | null {
-  const m = /^(\s*>\s?)\[!([A-Za-z]+)\][+-]?[ \t]*/.exec(line);
-  if (!m) return null;
-  const type = CALLOUTS[m[2]!.toLowerCase()];
-  if (!type) return null;
-  return { quote: m[1]!, from: m[1]!.length, titleAt: m[0].length, type, title: line.slice(m[0].length).trim() };
-}
 
 export type LinkAction = { kind: "note"; target: string } | { kind: "tag"; tag: string } | { kind: "url"; url: string } | { kind: "loadImage"; url: string };
 

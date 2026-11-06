@@ -26,6 +26,7 @@ import { externalUrl } from "../links.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
 import { editorFocused, type LinkResolver, linksChanged } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
+import { type Callout, parseCallout } from "./callouts.ts";
 import {
   fullTree,
   imageSource,
@@ -272,7 +273,47 @@ interface BlockProps {
   onShown(): void;
 }
 
+/**
+ * O callout do Obsidian (T6383): o cabeçalho é nosso (o ícone, o título em PT ou o da nota, e a seta quando tem `+`/`-`),
+ * e o corpo é desenhado pela lib como o resto. Recolher muda só a vista, como no Obsidian: o `.md` não muda.
+ */
+function CalloutBox({ callout, markdown, callbacks, attachments, onShown }: Omit<BlockProps, "source"> & { callout: Callout }) {
+  const [open, setOpen] = useState(callout.fold !== "-");
+  const body = parseCallout(markdown)?.body ?? callout.body;
+  useLayoutEffect(onShown, [open]);
+  return (
+    <div className={`kn-callout kn-callout-${callout.kind.tone}`} data-callout={callout.kind.id} data-open={open ? "true" : "false"}>
+      <div className="kn-callout-head">
+        <span className="kn-callout-icon" aria-hidden="true">{callout.kind.glyph}</span>
+        <span className="kn-callout-title">{callout.title}</span>
+        {callout.fold ? (
+          <button
+            type="button"
+            className="kn-callout-fold"
+            aria-expanded={open}
+            aria-label={open ? "Recolher" : "Abrir"}
+            onClick={() => setOpen((o) => !o)}
+          >
+            ›
+          </button>
+        ) : null}
+      </div>
+      {open && body.trim() ? (
+        <div className="kn-callout-body">
+          <Block markdown={body} source={callout.body} callbacks={callbacks} attachments={attachments} onShown={onShown} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Block({ markdown, source, callbacks, attachments, onShown }: BlockProps) {
+  const callout = parseCallout(source);
+  if (callout) return <CalloutBox callout={callout} markdown={markdown} callbacks={callbacks} attachments={attachments} onShown={onShown} />;
+  return <PlainBlock markdown={markdown} source={source} callbacks={callbacks} attachments={attachments} onShown={onShown} />;
+}
+
+function PlainBlock({ markdown, source, callbacks, attachments, onShown }: BlockProps) {
   const [, parsedNow] = useState(0);
   const current = parsed.get(markdown) ?? null;
   useLayoutEffect(() => {
@@ -605,6 +646,35 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered input[type=checkbox]": { cursor: "pointer" },
   ".cm-rendered img": { display: "block", maxWidth: "100%" },
   ".cm-rendered img[style*='inline']": { display: "inline", width: "auto !important", borderRadius: "6px" },
+  // Os callouts (T6383): a borda e o ícone no tom do tipo, o fundo suave, e a seta que gira quando abre.
+  ".kn-callout": {
+    borderLeft: "2px solid var(--kn-callout-ink)",
+    borderRadius: "0 8px 8px 0",
+    background: "var(--surface-2)",
+    padding: "6px 12px",
+    margin: "2px 0",
+  },
+  ".kn-callout-accent": { "--kn-callout-ink": "var(--accent-text)", background: "var(--accent-soft)" },
+  ".kn-callout-danger": { "--kn-callout-ink": "var(--danger)" },
+  ".kn-callout-neutral": { "--kn-callout-ink": "var(--text-3)" },
+  ".kn-callout-head": { display: "flex", alignItems: "center", gap: "8px", minHeight: "23px", color: "var(--kn-callout-ink)", fontWeight: "600" },
+  ".kn-callout-icon": { width: "16px", textAlign: "center", fontSize: "13px", lineHeight: "1" },
+  ".kn-callout-title": { flex: "1", minWidth: "0", fontSize: "14px" },
+  ".kn-callout-fold": {
+    border: "0",
+    borderRadius: "6px",
+    width: "22px",
+    height: "22px",
+    padding: "0",
+    background: "none",
+    color: "var(--text-3)",
+    cursor: "pointer",
+    fontSize: "15px",
+    transition: "transform var(--fast) var(--ease)",
+  },
+  ".kn-callout-fold:hover": { background: "var(--surface-hover)", color: "var(--text)" },
+  ".kn-callout[data-open='true'] .kn-callout-fold": { transform: "rotate(90deg)" },
+  ".kn-callout-body": { marginTop: "2px", color: "var(--text)" },
   // Os diagramas (T2984), como no Channels: o desenho rola de lado quando não cabe; os botões ficam discretos.
   ".kn-mermaid": { padding: "2px 0" },
   ".cm-images-under": { padding: "6px 0 2px", cursor: "default" },
