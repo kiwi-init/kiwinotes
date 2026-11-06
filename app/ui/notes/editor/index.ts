@@ -24,7 +24,7 @@ import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTh
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { renderedPreview } from "./renderedWidget.tsx";
 import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
-import { slashInsert, slashMatches, slashTrigger } from "./slash.ts";
+import { slashInsert, slashMatches, slashTrigger, readSlashUsage, recordSlashUse } from "./slash.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
 import { spellingAttributes, disableSpellcheck, SPELLING_EXCLUDED } from "./spelling.ts";
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
@@ -425,12 +425,15 @@ export function slashCompletion(opts: Pick<EditorOptions, "onSlashTemplate">) {
       if (n.name === "FencedCode" || n.name === "InlineCode" || n.name === "CodeBlock") return null;
     }
     const from = line.from + trig.from;
-    const options: Completion[] = slashMatches(trig.typed).map((it, i) => ({
+    const usage = readSlashUsage();
+    const options: Completion[] = slashMatches(trig.typed, usage).map((it, i) => ({
       label: it.label,
       detail: it.detail,
+      section: !trig.typed && Object.keys(usage).length ? (usage[it.id] ? { name: "Mais usados", rank: 0 } : { name: "Outros comandos", rank: 1 }) : undefined,
       // A ordem do slash.ts, não a do filtro do CodeMirror.
       boost: 100 - i,
       apply: (view: EditorView, _c: Completion, a: number, b: number) => {
+        recordSlashUse(it.id);
         if (it.id === "template") {
           view.dispatch({ changes: { from: a, to: b, insert: "" }, selection: { anchor: a } });
           opts.onSlashTemplate?.();

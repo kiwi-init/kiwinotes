@@ -1274,6 +1274,12 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               doc={body}
               links={links}
               onChange={onChange}
+              createSplit={!conflict && !draft ? async (tail) => {
+                const n = await api.create(`${note.title} — continuação`, note.folder || undefined, tail);
+                void refresh();
+                return n.path;
+              } : undefined}
+              onSplitDone={(path) => { void open(path); }}
               onOpenLink={(t) => void onOpenLink(t)}
               onOpenTag={openTag}
               onSlashTemplate={api.templates ? () => fromTemplate(note?.folder ?? "", true) : undefined}

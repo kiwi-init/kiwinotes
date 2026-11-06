@@ -1,0 +1,249 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Ferramentas E12",
+        "content": "item10\nitem2\nitem2"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Ferramentas E12"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Ferramentas E12\")"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+a"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "hover": ".kn-menu-item:has-text(\"Ferramentas de texto\")"
+    },
+    {
+      "waitFor": "[aria-label=\"Ferramentas de texto\"]"
+    },
+    {
+      "click": "[aria-label=\"Ferramentas de texto\"] .kn-menu-item:has-text(\"Ordenar linhas\")"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "item2item2item10"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "hover": ".kn-menu-item:has-text(\"Ferramentas de texto\")"
+    },
+    {
+      "waitFor": "[aria-label=\"Ferramentas de texto\"]"
+    },
+    {
+      "click": "[aria-label=\"Ferramentas de texto\"] .kn-menu-item:has-text(\"Tirar linhas duplicadas\")"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "item2item10"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "hover": ".kn-menu-item:has-text(\"Ferramentas de texto\")"
+    },
+    {
+      "waitFor": "[aria-label=\"Ferramentas de texto\"]"
+    },
+    {
+      "click": "[aria-label=\"Ferramentas de texto\"] .kn-menu-item:has-text(\"MAIÚSCULAS\")"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "ITEM2ITEM10"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "hover": ".kn-menu-item:has-text(\"Ferramentas de texto\")"
+    },
+    {
+      "waitFor": "[aria-label=\"Ferramentas de texto\"]"
+    },
+    {
+      "click": "[aria-label=\"Ferramentas de texto\"] .kn-menu-item:has-text(\"minúsculas\")"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "item2item10"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "hover": ".kn-menu-item:has-text(\"Ferramentas de texto\")"
+    },
+    {
+      "waitFor": "[aria-label=\"Ferramentas de texto\"]"
+    },
+    {
+      "screenshot": "01-ferramentas.png"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+End"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "type": "Continuação intacta."
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "screenshot": "02-dividir.png"
+    },
+    {
+      "click": ".kn-menu-item:has-text(\"Dividir nota aqui\")"
+    },
+    {
+      "waitFor": ".kn-title[value=\"Ferramentas E12 — continuação\"]"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Continuação intacta."
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+End"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "type": "/amanha"
+    },
+    {
+      "waitFor": ".cm-tooltip-autocomplete li:has-text(\"Amanhã\")"
+    },
+    {
+      "screenshot": "03-amanha.png"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "type": "/ontem"
+    },
+    {
+      "waitFor": ".cm-tooltip-autocomplete li:has-text(\"Ontem\")"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "type": "/"
+    },
+    {
+      "waitFor": "completion-section:has-text(\"Mais usados\")"
+    },
+    {
+      "waitFor": ".cm-tooltip-autocomplete li:first-of-type:has-text(\"Amanhã\")",
+      "name": "mais usados vêm antes dos demais comandos"
+    },
+    {
+      "screenshot": "04-mais-usados.png"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "press": "Backspace"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "invoke": "notes.get",
+      "args": {
+        "path": "Ferramentas E12.md"
+      }
+    },
+    {
+      "invoke": "notes.get",
+      "args": {
+        "path": "Ferramentas E12 — continuação.md"
+      }
+    }
+  ]
+}

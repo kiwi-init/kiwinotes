@@ -1,0 +1,67 @@
+{
+  "light": {
+    "ok": true,
+    "steps": 76,
+    "problems": [],
+    "blocked": [],
+    "savedNotes": [
+      {
+        "path": "Ferramentas E12.md",
+        "title": "Ferramentas E12",
+        "folder": "",
+        "mtime": "2026-11-06T06:53:38.226Z",
+        "ctime": "2026-11-06T06:53:38.226Z",
+        "size": 14,
+        "version": "cde1e36aa571bcf0",
+        "tags": [],
+        "content": "item2\nitem10\n\n"
+      },
+      {
+        "path": "Ferramentas E12 — continuação.md",
+        "title": "Ferramentas E12 — continuação",
+        "folder": "",
+        "mtime": "2026-11-06T06:53:39.580Z",
+        "ctime": "2026-11-06T06:53:39.579Z",
+        "size": 46,
+        "version": "66b85a3df6fea9e1",
+        "tags": [],
+        "content": "Continuação intacta.\n\n2026-11-07\n2026-11-05\n"
+      }
+    ]
+  },
+  "dark": {
+    "ok": true,
+    "steps": 76,
+    "problems": [],
+    "blocked": [],
+    "savedNotes": [
+      {
+        "path": "Ferramentas E12.md",
+        "title": "Ferramentas E12",
+        "folder": "",
+        "mtime": "2026-11-06T06:53:42.933Z",
+        "ctime": "2026-11-06T06:53:42.933Z",
+        "size": 14,
+        "version": "cde1e36aa571bcf0",
+        "tags": [],
+        "content": "item2\nitem10\n\n"
+      },
+      {
+        "path": "Ferramentas E12 — continuação.md",
+        "title": "Ferramentas E12 — continuação",
+        "folder": "",
+        "mtime": "2026-11-06T06:53:44.309Z",
+        "ctime": "2026-11-06T06:53:44.309Z",
+        "size": 46,
+        "version": "66b85a3df6fea9e1",
+        "tags": [],
+        "content": "Continuação intacta.\n\n2026-11-07\n2026-11-05\n"
+      }
+    ]
+  },
+  "E2": {
+    "ok": true,
+    "steps": 70,
+    "problems": []
+  }
+}
