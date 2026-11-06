@@ -15,7 +15,7 @@ import { TopBar } from "../src/topbar.tsx";
 import { Popover } from "./Popover.tsx";
 import { TreePopover } from "./TreePopover.tsx";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
-import { NotesFolderControl, FolderConfirmation, useNotesFolders, type FolderController } from "./NotesFolder.tsx";
+import { FolderConfirmation, useNotesFolders, type FolderController } from "./NotesFolder.tsx";
 import type { FolderRef } from "../../src/notes/folders-workspace.ts";
 import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
@@ -35,7 +35,7 @@ import { focusEditor, insertIntoEditor,
 } from "./NoteEditor.tsx";
 import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
-import { type SideTarget, Sidebar } from "./Sidebar.tsx";
+import { type SideRoot, type SideTarget, Sidebar } from "./Sidebar.tsx";
 import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy,
 } from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
@@ -952,6 +952,22 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   );
   const pinnedNotes = pinned.map((p) => byPath.get(p)).filter((n) => n !== undefined);
   const recent = useMemo(() => recentNotes(listing?.notes ?? [], 5), [listing]);
+  // T5298 (#211): a pasta raiz vive dentro da árvore do topo, e não num botão ao lado dela.
+  const folderView = folderController?.supported ? folderController.view : null;
+  const shownFolder = folderRef ?? folderView?.current;
+  const rootFolder: SideRoot | undefined = folderController && folderView && shownFolder ? {
+    name: shownFolder.name,
+    path: shownFolder.path,
+    recent: folderView.recent.filter((r) => r.key !== shownFolder.key),
+    error: folderController.error || undefined,
+    onOpen: (key) => {
+      void leave().then(async (ok) => {
+        if (!ok) return;
+        setTreeOpen(false);
+        await folderController.open(key);
+      });
+    },
+  } : undefined;
 
   if (failed && !listing) {
     return (
@@ -967,8 +983,6 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     <div className="kn-notes" data-entered={entered}>
       <TopBar
         start={
-          <>
-          {folderController?.supported?<NotesFolderControl controller={folderController} folder={folderRef} onBeforeOpen={leave}/>:null}
           <button
             ref={setCrumbEl}
             type="button"
@@ -981,7 +995,6 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             <span className="kn-crumb-label">{note?.folder ? note.folder.replace(/\//g, " / ") : "Notas"}</span>
             <Chevron />
           </button>
-          </>
         }
         end={
           <span className="kn-float-group">
@@ -1055,6 +1068,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             openPalette(q);
           }}
           onUnsave={(q) => saved && setSavedList(saved.filter((s) => s.query !== q))}
+          root={rootFolder}
         />
       </TreePopover>
       <main className="kn-center">

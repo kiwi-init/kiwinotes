@@ -71,6 +71,20 @@ export interface SidebarProps {
    */
   onNewNote?(folder: string): void;
   onNewFolder?(folder: string): void;
+  /**
+   * A pasta raiz das notas (T5298, issue #211): a primeira linha da árvore. Ela abre ali mesmo o "Abrir pasta…" e as
+   * pastas recentes, para que a árvore seja o lugar único de navegação, sem controle extra ao lado dela.
+   */
+  root?: SideRoot;
+}
+
+/** A pasta aberta e as recentes (sem a aberta). `onOpen()` abre o seletor; `onOpen(key)`, uma recente. */
+export interface SideRoot {
+  name: string;
+  path: string;
+  recent: { key: string; name: string; path: string }[];
+  onOpen(recent?: string): void;
+  error?: string;
 }
 
 function ModifiedAt({ value }: { value?: string }) {
@@ -354,6 +368,7 @@ export function Sidebar(p: SidebarProps) {
         </button>
       ) : null}
       </div>
+      {!searching && p.root ? <RootFolder root={p.root} /> : null}
       {!searching && p.onDaily ? (
         <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title="Nota do dia (⇧⌘D)">
           <TreeIcon name="today" />
@@ -442,4 +457,41 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void):
     </button>,
     ...tagItems(t.children, depth + 1, onTag),
   ]);
+}
+
+/** A pasta raiz no topo da árvore: um clique mostra, logo abaixo e dentro da árvore, o "Abrir pasta…" e as recentes. */
+function RootFolder({ root }: { root: SideRoot }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="kn-side-root" data-open={open || undefined}>
+      <button
+        type="button"
+        className="kn-side-item kn-side-root-bt"
+        aria-expanded={open}
+        aria-label={`Pasta das notas: ${root.name}`}
+        title={root.path}
+        onClick={() => setOpen(!open)}
+      >
+        <Twisty open={open} />
+        <TreeIcon name={open ? "folder-open" : "folder"} />
+        <span className="kn-side-name">{root.name}</span>
+      </button>
+      {open ? (
+        <div className="kn-side-root-list" role="group" aria-label="Pastas de notas">
+          <button type="button" className="kn-side-item" data-root="open" onClick={() => root.onOpen()}>
+            <TreeIcon name="folder-plus" />
+            <span className="kn-side-name">Abrir pasta…</span>
+          </button>
+          {root.recent.map((r) => (
+            <button type="button" className="kn-side-item" data-root="recent" key={r.key} title={r.path} onClick={() => root.onOpen(r.key)}>
+              <TreeIcon name="folder" />
+              <span className="kn-side-name">{r.name}</span>
+              <span className="kn-side-root-path">{r.path}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {root.error ? <p className="kn-side-root-error" role="alert">{root.error}</p> : null}
+    </div>
+  );
 }

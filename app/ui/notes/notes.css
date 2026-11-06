@@ -697,6 +697,38 @@ body {
 .kn-side-daily {
   margin-bottom: 8px;
 }
+
+/* ---- T5298 (#211): a pasta raiz é a primeira linha da árvore; "Abrir pasta…" e as recentes abrem ali mesmo ---- */
+.kn-side-root {
+  margin-bottom: 8px;
+}
+.kn-side-root-bt .kn-side-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.kn-side-root-list {
+  display: grid;
+  padding-left: 18px;
+}
+.kn-side-root-list .kn-side-item {
+  min-width: 0;
+}
+.kn-side-root-list .kn-side-name {
+  flex-shrink: 0;
+}
+.kn-side-root-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-3, var(--text-3));
+  font-size: 0.85em;
+}
+.kn-side-root-error {
+  margin: 4px 0 0 18px;
+  color: var(--danger, var(--text-2));
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
 .kn-side-daily .kn-side-count,
 .kn-side-trash .kn-side-count {
   font-family: var(--mono);
