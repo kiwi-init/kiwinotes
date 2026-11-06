@@ -301,7 +301,9 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       }
       if (current.current !== path) return "saved";
       const savedContent = r.content ?? submitted;
-      const typing = pending.current !== text;
+      // A gravação da própria janela volta pelo onChanged antes da resposta do save, e o applyMerged já deixa o
+      // pending em null quando o disco tem o texto dela (T6374). Null aqui não é digitação: é tudo gravado.
+      const typing = pending.current !== null && pending.current !== text;
       const latest =
         pending.current === null
           ? submitted
