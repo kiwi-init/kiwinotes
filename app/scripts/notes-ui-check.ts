@@ -30,12 +30,18 @@ const URL = `http://127.0.0.1:${PORT}/notes/index.html`;
 const shots = process.argv[2] ? resolve(process.argv[2]) : undefined;
 const appDir = resolve(import.meta.dir, "..");
 
+// Outro Vite na porta (o roteiro de outra worktree): o nosso sairia pelo `--strictPort`, e o teste rodaria no código dele.
+if (await fetch(URL).then(() => true, () => false)) throw new Error(`a porta ${PORT} já está em uso: feche o outro notes-ui-check`);
 const vite = Bun.spawn(["bun", "x", "vite", "--port", String(PORT), "--strictPort", "--host", "127.0.0.1"], { cwd: appDir, stdout: "ignore", stderr: "inherit" });
+// Um erro fora de um `step` (a página que não abre) não deixa o Vite órfão segurando o stderr: no CI, o passo travaria.
+process.on("exit", () => vite.kill());
 for (let i = 0; ; i++) {
   try {
     if ((await fetch(URL)).ok) break;
   } catch {}
-  if (i > 100) throw new Error("o Vite não subiu");
+  if (vite.exitCode !== null) throw new Error(`o Vite saiu (código ${vite.exitCode}) antes de responder`);
+  // 60 s: o primeiro pré-bundle na máquina carregada passa fácil dos 10 s. Um Vite que caiu sai antes, pelo exitCode.
+  if (i > 600) throw new Error("o Vite não subiu em 60 s");
   await Bun.sleep(100);
 }
 
@@ -65,30 +71,68 @@ const expectEq = (a: unknown, b: unknown) => {
 const title = () => page.inputValue(".kn-title");
 const content = (path: string) => page.evaluate((p) => (window as any).__kiwiNotesMock.notes.get(p)?.content as string, path);
 const settle = () => page.waitForTimeout(700); // o autosave espera 500 ms
+/**
+ * Espera até `ok` valer, de 100 em 100 ms, por até 5 s. O autosave espera 500 ms: com um tempo fixo (o `settle`), a
+ * máquina carregada (o runner do CI, outro agente rodando) grava depois da conferência, e o passo falha à toa.
+ */
+async function until<T>(get: () => Promise<T>, ok: (v: T) => boolean, what: (v: T) => string, timeout = 5000): Promise<T> {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const v = await get();
+    if (ok(v)) return v;
+    if (Date.now() > end) throw new Error(what(v));
+    await page.waitForTimeout(100);
+  }
+}
+/** O .md da nota depois que o autosave gravar o que o passo espera. */
+const saved = (path: string, ok: (c: string) => boolean) => until(async () => (await content(path)) ?? "", ok, (c) => `não gravou: …${JSON.stringify(c.slice(-120))}`);
+// A árvore fica num popover atrás do botão "Notas" do topo (T4363): abre antes de clicar nela.
+async function openTree() {
+  if ((await page.getAttribute(".kn-crumb-bt", "aria-expanded")) !== "true") await page.click(".kn-crumb-bt");
+  await page.waitForSelector(".kn-side", { state: "visible" });
+}
+// Os nomes da seção "Notas" da árvore (as pastas e as notas da raiz), sem os Recentes e as Fixadas de cima.
+const treeNames = () =>
+  page.evaluate(() => {
+    const head = [...document.querySelectorAll(".kn-side-head")].find((h) => h.textContent === "Notas");
+    const names: string[] = [];
+    for (let el = head?.nextElementSibling; el && !el.classList.contains("kn-side-head"); el = el.nextElementSibling) {
+      const name = el.querySelector(".kn-side-item:not(.kn-side-trash) .kn-side-name");
+      if (name) names.push(name.textContent ?? "");
+    }
+    return names;
+  });
+// Fora do cursor, o bloco é desenhado (T2983): o link de nota é um <a href="kiwi-note:…"> dentro do .cm-rendered, e o
+// de uma nota que ainda não existe, `kiwi-note-missing:`.
+const noteLink = (text: string, missing = false) =>
+  page.locator(`.cm-rendered a[href^="${missing ? "kiwi-note-missing:" : "kiwi-note:"}"]`, { hasText: text }).first();
 
 await page.goto(URL);
 await page.waitForSelector(".kn-title");
 
 await step("abre a Caixa de entrada e lista o vault", async () => {
   expectEq(await title(), "Caixa de entrada");
-  const side = await page.$$eval(".kn-side-item", (els) => els.map((e) => e.textContent));
-  expectEq(side, ["Diário", "Pessoas", "Projetos", "Reuniões", "Caixa de entrada"]);
+  expectEq(await treeNames(), ["Diário", "Pessoas", "Projetos", "Reuniões", "Caixa de entrada"]);
 });
 
 await step("clique num [[link]] abre a nota", async () => {
-  await page.click(".cm-wikilink >> text=Ana");
+  await noteLink("Ana").click();
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ana");
+  // Quem cita a nota fica no popover do "citada em N", na linha de baixo do título.
+  await page.click(".kn-meta-bt >> text=citada em");
+  await page.waitForSelector(".kn-back-pop .kn-back");
   const back = await page.$$eval(".kn-back .kn-link", (els) => els.map((e) => e.textContent));
   expectEq(back.sort(), ["2026-11-02 Planejamento", "Caixa de entrada", "Site novo"]);
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".kn-back-pop", { state: "detached" });
 });
 
 await step("⌘K acha por título e abre com Enter", async () => {
   await page.keyboard.press("Meta+k");
   await page.waitForSelector(".kn-palette");
   await page.keyboard.type("mudan");
-  await page.waitForTimeout(250);
-  const first = await page.textContent(".kn-palette-it[aria-selected=true] .kn-palette-title");
-  if (!first?.startsWith("Mudança de escritório")) throw new Error(`primeiro: ${first}`);
+  const selected = () => page.textContent(".kn-palette-it[aria-selected=true] .kn-palette-title");
+  await until(selected, (t) => !!t?.startsWith("Mudança de escritório"), (t) => `primeiro: ${t}`);
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Mudança de escritório");
   if (await page.$(".kn-palette")) throw new Error("a paleta não fechou");
@@ -106,10 +150,8 @@ await step("⌘K acha por texto (notes.search), com trecho", async () => {
 if (shots) await page.screenshot({ path: `${shots}/notas-projeto.png` });
 
 await step("checkbox marca a tarefa no .md", async () => {
-  await page.click(".cm-line:has-text('Pedir o orçamento') .cm-task-box");
-  await settle();
-  const c = await content("Projetos/Mudança de escritório.md");
-  if (!c.includes("- [x] Pedir o orçamento da mudança")) throw new Error(c);
+  await page.click(".cm-rendered li:has-text('Pedir o orçamento') input[type=checkbox]");
+  await saved("Projetos/Mudança de escritório.md", (c) => c.includes("- [x] Pedir o orçamento da mudança"));
 });
 
 await step("tabela: clicar na célula vira texto; Tab vai para a próxima e alinha", async () => {
@@ -119,9 +161,7 @@ await step("tabela: clicar na célula vira texto; Tab vai para a próxima e alin
   const sel = await page.evaluate(() => getSelection()?.toString());
   expectEq(sel, "1.800");
   await page.keyboard.type("2.000");
-  await settle();
-  const c = await content("Projetos/Mudança de escritório.md");
-  if (!/\| Rede +\| Fio Certo +\| 2\.000 \|/.test(c)) throw new Error(c.slice(c.indexOf("| Item")));
+  const c = await saved("Projetos/Mudança de escritório.md", (c) => /\| Rede +\| Fio Certo +\| 2\.000 \|/.test(c));
   const rows = c.slice(c.indexOf("| Item")).trim().split("\n");
   if (new Set(rows.map((r) => r.length)).size !== 1) throw new Error(`colunas desalinhadas:\n${rows.join("\n")}`);
 });
@@ -131,11 +171,12 @@ await step("autocomplete do [[ completa o link", async () => {
   await page.keyboard.press("Enter"); // foca o editor
   await page.keyboard.press("Meta+ArrowDown");
   await page.keyboard.type("\nFalar com a [[Ana");
-  await page.waitForSelector(".cm-tooltip-autocomplete");
+  // O autocomplete ignora o Enter nos 75 ms depois de a lista mudar (o `interactionDelay` do CodeMirror). Na máquina
+  // carregada (o runner do CI), o Enter caía nessa janela e virava quebra de linha dentro do `[[Ana]]`.
+  await page.waitForSelector(".cm-tooltip-autocomplete li[aria-selected]:has-text('Ana')");
+  await page.waitForTimeout(200);
   await page.keyboard.press("Enter");
-  await settle();
-  const c = await content("Projetos/Mudança de escritório.md");
-  if (!c.trimEnd().endsWith("Falar com a [[Ana]]")) throw new Error(c.slice(-60));
+  await saved("Projetos/Mudança de escritório.md", (c) => c.trimEnd().endsWith("Falar com a [[Ana]]"));
 });
 
 await step("HTML no texto fica texto (nenhum script roda)", async () => {
@@ -179,19 +220,20 @@ await step("edição de fora com edição pendente: aviso, e 'Manter a minha' gr
   await page.evaluate(() => (window as any).__kiwiNotesMock.editOutside("Projetos/Mudança do escritório.md", "Mudou no Obsidian.\n"));
   await page.waitForSelector(".kn-conflict");
   await page.click("text=Manter a minha");
-  await settle();
-  const c = await content("Projetos/Mudança do escritório.md");
-  if (!c.endsWith("minha linha")) throw new Error(c.slice(-40));
+  await saved("Projetos/Mudança do escritório.md", (c) => c.endsWith("minha linha"));
 });
 
 await step("edição de fora sem nada pendente: a nota recarrega sozinha", async () => {
   await page.evaluate(() => (window as any).__kiwiNotesMock.editOutside("Projetos/Mudança do escritório.md", "Versão do Obsidian.\n"));
-  await page.waitForSelector(".cm-line >> text=Versão do Obsidian.");
+  await page.waitForSelector(".cm-content >> text=Versão do Obsidian.");
   if (await page.$(".kn-conflict")) throw new Error("mostrou conflito sem edição pendente");
 });
 
 // Revisão do T1317 (#1488): trocar de nota nunca descarta texto não gravado.
-const sideClick = (name: string) => page.locator(".kn-side-item", { hasText: name }).first().click();
+async function sideClick(name: string) {
+  await openTree();
+  await page.locator(".kn-side-item[data-kind=note]", { hasText: name }).first().click();
+}
 const editorText = () => page.$eval(".cm-content", (e) => e.textContent ?? "");
 
 await step("conflito na tela: clicar em outra nota não troca nem perde o texto; 'Manter a minha' grava", async () => {
@@ -207,8 +249,7 @@ await step("conflito na tela: clicar em outra nota não troca nem perde o texto;
   expectEq(await title(), "Site novo");
   if (!(await editorText()).includes("TEXTO QUE EU DIGITEI")) throw new Error("o texto sumiu do editor");
   await page.click("text=Manter a minha");
-  await settle();
-  if (!(await content("Projetos/Site novo.md")).includes("TEXTO QUE EU DIGITEI")) throw new Error("não gravou");
+  await saved("Projetos/Site novo.md", (c) => c.includes("TEXTO QUE EU DIGITEI"));
   await sideClick("Caixa de entrada");
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Caixa de entrada");
 });
@@ -236,8 +277,7 @@ await step("save que falha: aviso na tela, trocar de nota não descarta, 'Tentar
     m.save = m.__save;
   });
   await page.click("text=Tentar de novo");
-  await settle();
-  if (!(await content("Pessoas/Ana.md")).includes("OUTRO TEXTO MEU")) throw new Error("não gravou");
+  await saved("Pessoas/Ana.md", (c) => c.includes("OUTRO TEXTO MEU"));
   if (await page.$(".kn-save-alert")) throw new Error("o aviso ficou");
 });
 
@@ -252,8 +292,7 @@ await step("save que falha: 'Descartar a edição' volta ao disco e deixa trocar
   await page.keyboard.type(" DESCARTAR ISTO");
   await page.waitForSelector(".kn-save-alert");
   await page.click("text=Descartar a edição");
-  await page.waitForTimeout(300);
-  if ((await editorText()).includes("DESCARTAR ISTO")) throw new Error("não descartou");
+  await until(editorText, (t) => !t.includes("DESCARTAR ISTO"), () => "não descartou");
   await page.evaluate(() => {
     const m = (window as any).__kiwiNotesMock;
     m.save = m.__save;
@@ -311,28 +350,26 @@ await step("rascunho: edição que não gravou volta ao reabrir, e 'Recuperar' g
   await page.waitForSelector(".kn-draft >> text=não foi gravada");
   if ((await editorText()).includes("RASCUNHO")) throw new Error("o editor já abriu com o rascunho, sem perguntar");
   await page.click(".kn-draft >> text=Recuperar");
-  await settle();
+  await saved("Pessoas/Ana.md", (c) => c.includes("RASCUNHO QUE NÃO GRAVOU"));
   if (!(await editorText()).includes("RASCUNHO QUE NÃO GRAVOU")) throw new Error("o rascunho não voltou ao editor");
-  if (!(await content("Pessoas/Ana.md")).includes("RASCUNHO QUE NÃO GRAVOU")) throw new Error("não gravou");
-  expectEq(await draftKeys(), []);
+  await until(draftKeys, (k) => k.length === 0, (k) => `o rascunho ficou: ${k.join(", ")}`);
 });
 
 await step("rascunho: 'Descartar' fica com o que está no disco e apaga o rascunho", async () => {
   await typeWithSaveFailing(" OUTRO RASCUNHO");
   await page.waitForSelector(".kn-draft");
   await page.click(".kn-draft >> text=Descartar");
-  await page.waitForTimeout(200);
-  if (await page.$(".kn-draft")) throw new Error("o aviso ficou");
+  await page.waitForSelector(".kn-draft", { state: "detached" });
   if ((await editorText()).includes("OUTRO RASCUNHO")) throw new Error("o rascunho entrou");
-  expectEq(await draftKeys(), []);
+  await until(draftKeys, (k) => k.length === 0, (k) => `o rascunho ficou: ${k.join(", ")}`);
 });
 
 await step("rascunho: edição que gravou não deixa rascunho", async () => {
   await page.click(".cm-content");
   await page.keyboard.press("Meta+ArrowDown");
   await page.keyboard.type(" gravou");
-  await settle();
-  expectEq(await draftKeys(), []);
+  await saved("Pessoas/Ana.md", (c) => c.includes(" gravou"));
+  await until(draftKeys, (k) => k.length === 0, (k) => `o rascunho ficou: ${k.join(", ")}`);
   await page.goto(`${URL}?note=${encodeURIComponent("Pessoas/Ana.md")}`);
   await page.waitForSelector(".kn-title");
   await page.waitForTimeout(300);
@@ -404,9 +441,8 @@ await step("rascunho órfão: 'Descartar' apaga sem criar nada", async () => {
   await page.goto(URL);
   await page.waitForSelector(".kn-orphan >> text=Sumida");
   await page.click(".kn-orphan >> text=Descartar");
-  await page.waitForTimeout(200);
-  if (await page.$(".kn-orphan")) throw new Error("o aviso ficou");
-  expectEq(await draftKeys(), []);
+  await page.waitForSelector(".kn-orphan", { state: "detached" });
+  await until(draftKeys, (k) => k.length === 0, (k) => `o rascunho ficou: ${k.join(", ")}`);
   if (await page.evaluate(() => (window as any).__kiwiNotesMock.notes.has("Caixa de entrada/Sumida.md"))) throw new Error("criou nota");
 });
 
@@ -417,7 +453,7 @@ await step("%%comentário%% some fora da linha do cursor e aparece apagado nela;
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
   // Muda "fora" com a nota aberta e sem nada pendente: ela recarrega sozinha.
   await page.evaluate((b) => (window as any).__kiwiNotesMock.editOutside("Pessoas/Ana.md", b), body);
-  await page.waitForSelector(".cm-line >> text=Fim.");
+  await page.waitForSelector(".cm-content >> text=Fim.");
   const shown = await editorText();
   for (const hidden of ["segredo", "bloco escondido", "em duas linhas"]) if (shown.includes(hidden)) throw new Error(`apareceu: ${hidden}`);
   if (!shown.includes("Texto visível") || !shown.includes("depois.")) throw new Error(shown);
@@ -452,7 +488,8 @@ await step("⌘K cria nota nova quando não há título igual", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ideia nova");
   await page.waitForTimeout(200);
-  await page.click(".kn-palette-create");
+  // Os comandos da paleta também usam .kn-palette-create, e "Ideia nova" acha o "Nova nota": clica no "Criar …".
+  await page.locator(".kn-palette-create", { hasText: "Criar “Ideia nova”" }).click();
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ideia nova");
   if (!(await content("Ideia nova.md") === "")) throw new Error("não criou");
 });
@@ -462,7 +499,7 @@ await step("clique num link para nota que não existe cria a nota", async () => 
   await page.keyboard.type("veja [[Nota fantasma]] depois");
   await settle();
   await page.click(".kn-title"); // tira o foco do editor: o link vira link
-  await page.locator(".cm-wikilink", { hasText: "Nota fantasma" }).click();
+  await noteLink("Nota fantasma", true).click();
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Nota fantasma");
 });
 
