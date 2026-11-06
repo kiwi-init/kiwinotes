@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { sidecarLlm } from "../cleanup/index.ts";
+import { learnFromEdit } from "./learn-dictionary.ts";
 import type { LlmMode } from "../cleanup/types.ts";
 import { type Command, defaultSocketPath, type Event, type LlmStatus, type Permission, type Permissions } from "../shared/ipc.ts";
 import type { AudioInputs } from "../shared/microphone.ts";
@@ -183,6 +184,8 @@ export class Session {
       this.emitStatus();
     });
     this.sidecar.on("permissions.changed", () => this.emitStatus());
+    // L23 (decisão do harry no #4767): a correção logo depois de colar vira dicionário, sem perguntar.
+    this.sidecar.on("paste.edited", (e) => void this.learn(e.pasted, e.edited, e.app).catch(() => console.warn("[learn] failed")));
     // O que o mic fez (engine novo, quanto tempo até o primeiro áudio depois do atalho, T985): só números e nomes
     // de evento, nunca áudio nem texto. Os outros logs do helper ficam de fora (o dryRun loga o texto).
     this.sidecar.on("log", (e) => {
@@ -310,6 +313,14 @@ export class Session {
   /** As entradas de áudio para o seletor dos Ajustes (T3230); null sem o helper, ou com um que não sabe listar. */
   audioInputs(): Promise<AudioInputs | null> {
     return listAudioInputs((c) => this.sidecar.send(c));
+  }
+
+  /** A troca de um termo no trecho colado entra no dicionário. Num terminal ou editor de código (tom literal), não. */
+  private async learn(pasted: string, edited: string, app?: string): Promise<void> {
+    const saved = await learnFromEdit(stores.dictionary, { pasted, edited, ...(app ? { app } : {}) });
+    if (!saved) return;
+    await this.dictionaryChanged(saved);
+    console.log("[learn] dictionary learned a correction");
   }
 
   async dictionaryChanged(terms: DictionaryTerm[]): Promise<void> {

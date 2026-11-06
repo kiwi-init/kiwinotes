@@ -88,6 +88,12 @@ final class Helper {
         inserter.onChecked = { [weak self] verdict, typed, app in
             self?.emit("log", ["level": "info", "message": "paste: \(verdict.log)\(typed ? " · typed instead" : "") · \(app ?? "-")"])
         }
+        // L23: a correção logo depois da colagem vai ao app, que decide se vira dicionário. Só o trecho colado.
+        inserter.onEdited = { [weak self] pasted, edited, app in
+            var fields: [String: Any] = ["pasted": pasted, "edited": edited]
+            if let app { fields["app"] = app }
+            self?.emit("paste.edited", fields)
+        }
         tap.isActive = { [weak self] id in id != "cancel" || self?.audio.isRecording == true }
         // A preferência de verdade só no app. No headless e com KIWI_DEBUG (os agentes), uma falsa num arquivo, e o
         // AppleFnUsageType do Mac nunca é tocado (AGENTS.md, #4871).

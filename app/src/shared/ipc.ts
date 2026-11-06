@@ -372,6 +372,8 @@ export type Event =
    * app duas vezes seguidas.
    */
   | { type: "app.active"; bundleId: string; name: string; pid: number }
+  /** L23: a pessoa mudou o trecho colado logo depois da colagem: o que o Kiwi colou e como ele está agora. */
+  | { type: "paste.edited"; pasted: string; edited: string; app?: string }
   | { type: "transcript.partial"; text: string }
   /**
    * O texto de uma gravação, na ordem em que terminaram. `text` já passou pelo pós-processamento do VoiceInk
@@ -464,6 +466,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "record.error",
   "audio.level",
   "app.active",
+  "paste.edited",
   "transcript.partial",
   "transcript.final",
   "transcript.error",
