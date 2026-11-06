@@ -1,0 +1,18 @@
+{
+  "light": {
+    "ok": true,
+    "steps": 93,
+    "problems": [],
+    "blocked": [],
+    "clipboard": [],
+    "invokeErrors": []
+  },
+  "dark": {
+    "ok": true,
+    "steps": 93,
+    "problems": [],
+    "blocked": [],
+    "clipboard": [],
+    "invokeErrors": []
+  }
+}

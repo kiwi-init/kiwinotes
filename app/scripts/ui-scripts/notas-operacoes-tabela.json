@@ -47,10 +47,24 @@
       "waitFor": "[role=menu][aria-label='Linha']"
     },
     {
+      "expectCount": "[aria-label='Linha'] .kn-menu-item:has-text('Duplicar linha') .kn-menu-hint",
+      "count": 0
+    },
+    {
       "screenshot": "01-menu-linha.png"
     },
     {
-      "click": "[aria-label='Linha'] > .kn-menu-item:has-text('Duplicar linha')"
+      "click": "[aria-label='Tabela'] > .kn-menu-item:has-text('Linha')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "press": "Enter",
+      "name": "duplica a linha pelo teclado do menu, sem atalho global"
     },
     {
       "expectCount": ".cm-line:has-text('Bia')",
