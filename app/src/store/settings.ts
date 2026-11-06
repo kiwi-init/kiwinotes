@@ -52,11 +52,7 @@ export interface AppSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-<<<<<<< HEAD
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
-=======
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS };
->>>>>>> 6c11a6e (T5349: todos os atalhos configuráveis no app, com o gravador e o aviso de conflito (#175))
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -116,9 +112,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
     showExtensions: o.showExtensions === true,
     meetings: sanitizeMeetingSettings(o.meetings),
-<<<<<<< HEAD
     noteWidth: sanitizeNoteWidth(o.noteWidth),
-=======
   });
 }
 
@@ -128,7 +122,6 @@ function withShortcutMirrors(s: AppSettings): AppSettings {
     ...s,
     notesShortcut: s.shortcuts.notes,
     meetings: { ...s.meetings, shortcut: s.shortcuts.meeting, pauseShortcut: s.shortcuts.meetingPause },
->>>>>>> 6c11a6e (T5349: todos os atalhos configuráveis no app, com o gravador e o aviso de conflito (#175))
   };
 }
 

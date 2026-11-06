@@ -66,15 +66,12 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `meetings.pauseMine`, o evento `meetings.live` e os `meetings` nas settings. Só acréscimo.
 // 1.22.0 (T4945): meeting speakers and append-only edit rebase for live meeting notes.
 // 1.23.0 (T5161): selectable note folders, recents and folder-scoped note preferences.
-<<<<<<< HEAD
 // 1.24.0 (T5299): o `noteWidth` nas settings, a largura da coluna da nota (480 a 1400 px). Só acréscimo.
 // 1.25.0 (T5350): o `diagnostics.save`, o "Salvar diagnóstico" da seção Sobre. Só acréscimo.
-=======
 // 1.26.0 (T5349): todos os atalhos configuráveis: `shortcuts` nas settings (o `settings.set` aceita só parte deles e
 //   recusa dois nas mesmas teclas), `shortcuts.record` e `shortcuts.cancelRecord`. O `notesShortcut` e os
 //   `meetings.shortcut|pauseShortcut` continuam, iguais aos `shortcuts`, mas agora qualquer atalho cabe neles. Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.26.0";
->>>>>>> 6c11a6e (T5349: todos os atalhos configuráveis no app, com o gravador e o aviso de conflito (#175))
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
