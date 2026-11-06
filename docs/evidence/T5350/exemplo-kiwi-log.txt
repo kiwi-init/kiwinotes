@@ -1,0 +1,3 @@
+2026-11-06T03:37:58.342Z INFO  [headless] up: <tmp>/control.sock (helper off)
+2026-11-06T03:38:05.503Z INFO  [diagnostics] saved 799 bytes
+2026-11-06T03:38:05.503Z INFO  [headless] diagnostics.reveal (not opened): Kiwi Notes diagnóstico 2026-11-06 00h38.txt
