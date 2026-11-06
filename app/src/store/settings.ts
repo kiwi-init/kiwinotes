@@ -1,6 +1,7 @@
 // As Configurações que o engine guarda (T1499): `settings.json`, ao lado do dicionário e dos snippets. O atalho da janela
 // Notas e a Aparência (T2503); o resto da tela de Configurações ainda é casca.
 
+import { NOTE_WIDTH, sanitizeNoteWidth } from "../shared/note-width.ts";
 import path from "node:path";
 
 import { attachmentsFolder, DEFAULT_ATTACHMENTS_FOLDER } from "../notes/attachments.ts";
@@ -39,12 +40,14 @@ export interface AppSettings {
   showExtensions: boolean;
   /** Os ajustes de reunião (R6, T4947): os atalhos, o pop-up e os apps que contam. O helper recebe no `config.set`. */
   meetings: MeetingSettings;
+  /** A largura máxima da coluna da nota, em px (T5299, issue #212): a alça na borda da nota muda, dentro dos limites. */
+  noteWidth: number;
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS };
+export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -100,6 +103,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
     showExtensions: o.showExtensions === true,
     meetings: sanitizeMeetingSettings(o.meetings),
+    noteWidth: sanitizeNoteWidth(o.noteWidth),
   };
 }
 

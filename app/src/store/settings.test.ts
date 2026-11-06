@@ -14,14 +14,14 @@ const fresh = () => (dir = mkdtempSync(path.join(tmpdir(), "kiwi-settings-")));
 
 test("sem arquivo, o padrão: ⌃⌥N abre a janela Notas (T1499)", async () => {
   fresh();
-  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS });
+  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
   expect(DEFAULT_SETTINGS.notesShortcut).toBe(DEFAULT_NOTES_SHORTCUT);
 });
 
 test("grava só o que mudou, só para o usuário, e lê de volta; null (desligado) fica", async () => {
   fresh();
   const store = new SettingsStore(dir);
-  const off = { notesShortcut: null, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS };
+  const off = { notesShortcut: null, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 };
   expect(await store.save({ notesShortcut: null })).toEqual(off);
   expect(await new SettingsStore(dir).load()).toEqual(off);
   expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual({ version: 1, ...off });
@@ -34,13 +34,13 @@ test("editado à mão com um valor que não existe: volta ao padrão, sem quebra
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: "command+q" }));
   expect(await new SettingsStore(dir).load()).toEqual(DEFAULT_SETTINGS);
   expect(sanitizeSettings(null)).toEqual(DEFAULT_SETTINGS);
-  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS });
+  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
 });
 
 test("a Aparência (T2503): um settings.json de antes dela abre no padrão, e um campo ruim volta sozinho", async () => {
   fresh();
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: null }));
-  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: null, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS });
+  expect(await new SettingsStore(dir).load()).toEqual({ notesShortcut: null, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
   const mixed = { mode: "light", lightTheme: "glacier-mint", darkTheme: 42, textSize: "huge", font: "lato", motion: "reduced" };
   expect(sanitizeSettings({ appearance: mixed }).appearance).toEqual({
     ...DEFAULT_APPEARANCE,
@@ -92,7 +92,16 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
     microphone: "auto",
     showExtensions: false,
     meetings: DEFAULT_MEETING_SETTINGS,
+    noteWidth: 760,
   });
+});
+
+test("a largura da nota (T5299): arredonda, fica nos limites e um valor ruim volta ao padrão", () => {
+  expect(sanitizeSettings({ noteWidth: 900.4 }).noteWidth).toBe(900);
+  expect(sanitizeSettings({ noteWidth: 100 }).noteWidth).toBe(480);
+  expect(sanitizeSettings({ noteWidth: 99999 }).noteWidth).toBe(1400);
+  expect(sanitizeSettings({ noteWidth: "largo" }).noteWidth).toBe(760);
+  expect(sanitizeSettings({ noteWidth: Number.NaN }).noteWidth).toBe(760);
 });
 
 test("a pasta de anexos (T2594): padrão Anexos, e um valor que sai do vault volta ao padrão", async () => {

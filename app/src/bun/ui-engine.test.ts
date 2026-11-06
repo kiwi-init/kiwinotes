@@ -72,7 +72,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: { ...DEFAULT_MEETING_SETTINGS } };
+  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
   let t = 0;
   return {
     calls,
@@ -225,6 +225,17 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(await call("history.delete", { id: "abc" })).toMatchObject({ ok: true, value: true });
     expect(await call("history.search", [])).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(f.calls).toEqual(["dictionary.load", "dictionary.save:1", 'history.search:{"query":"reunião","limit":10}', "history.delete:abc"]);
+  });
+
+  test("settings: a largura da nota, em px dentro dos limites (T5299)", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    for (const bad of [479, 1401, "900", null, Number.NaN]) {
+      expect(await call("settings.set", { noteWidth: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    }
+    expect(await call("settings.set", { noteWidth: 980.6 })).toMatchObject({ ok: true, value: { noteWidth: 981 } });
+    expect(f.calls.filter((c) => c.startsWith("settings.save"))).toEqual(['settings.save:{"noteWidth":981}']);
   });
 
   test("settings: o atalho da janela Notas, só um dos oferecidos ou null (T1499)", async () => {

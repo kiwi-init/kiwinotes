@@ -6,7 +6,7 @@
 
 import "./notes.css";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { api as appApi } from "../src/api.ts";
@@ -14,6 +14,8 @@ import { Button, Empty, HoverLabel } from "../src/kit/index.tsx";
 import { TopBar } from "../src/topbar.tsx";
 import { Popover } from "./Popover.tsx";
 import { TreePopover } from "./TreePopover.tsx";
+import { NoteWidthHandles } from "./NoteWidth.tsx";
+import { NOTE_WIDTH } from "../../src/shared/note-width.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { FolderConfirmation, useNotesFolders, type FolderController } from "./NotesFolder.tsx";
 import type { FolderRef } from "../../src/notes/folders-workspace.ts";
@@ -109,8 +111,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   /** As buscas salvas (T2660); `null` num engine que ainda não as tem. */
   const [saved, setSaved] = useState<SavedSearch[] | null>(null);
   /** A extensão nos nomes e a pasta da nota do dia (T3370), das settings; segue quando os Ajustes mudam. */
-  const [prefs, setPrefs] = useState<TreePrefs>({ showExtensions: false, dailyFolder: "",
+  const [prefs, setPrefs] = useState<TreePrefs>({ showExtensions: false, dailyFolder: "", noteWidth: null,
   });
+  /** A largura enquanto a pessoa arrasta a alça, até as settings voltarem com ela (T5299). */
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  useEffect(() => setDragWidth(null), [prefs.noteWidth]);
   /** "Nova nota a partir de modelo…": os modelos e a pasta onde a nota nasce. */
   // `insert` (T2660, "/modelo"): o modelo entra no cursor da nota aberta, em vez de criar uma nota.
   const [picking, setPicking] = useState<{ folder: string; templates: NoteMeta[]; insert?: boolean;
@@ -1098,7 +1103,20 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           </div>
         ) : null}
         {note ? (
-          <article className="kn-page">
+          <article
+            className="kn-page"
+            style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px` } as CSSProperties}
+          >
+            {api.prefs && prefs.noteWidth !== null ? (
+              <NoteWidthHandles
+                width={dragWidth ?? prefs.noteWidth}
+                onChange={setDragWidth}
+                onCommit={(px) => {
+                  if (px === prefs.noteWidth) setDragWidth(null);
+                  else api.prefs?.setNoteWidth(px).catch(failed_("guardar a largura da nota"));
+                }}
+              />
+            ) : null}
             {note.folder ? (
               <div className="kn-page-crumbs" aria-label="Pasta">
                 {note.folder.split("/").map((part, i) => (

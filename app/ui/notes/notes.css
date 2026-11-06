@@ -173,10 +173,48 @@ body {
 }
 
 .kn-page {
-  max-width: 760px;
+  /* T5299 (#212): a coluna fica no meio, na largura que a pessoa escolheu, e nunca passa da janela */
+  position: relative;
+  max-width: var(--note-width, 760px);
+  min-width: 0;
   margin: 0 auto;
   padding: 20px 40px 0;
 }
+
+/* As alças da largura, nas duas bordas da coluna: invisíveis, só aparecem depois de o mouse parar um pouco em cima. */
+.kn-width-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 16px;
+  touch-action: none;
+}
+/* Até a alça aparecer, nem o cursor muda: a borda fica limpa. */
+.kn-width-handle[data-shown] { cursor: col-resize; }
+.kn-width-handle[data-side="left"] { left: 4px; }
+.kn-width-handle[data-side="right"] { right: 4px; }
+.kn-width-handle::after {
+  content: "";
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 7px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--line-2, var(--surface-hover));
+  opacity: 0;
+  transition: opacity var(--fast, 120ms) var(--ease, ease);
+}
+.kn-width-handle[data-shown]::after {
+  opacity: 1;
+}
+.kn-width-handle[data-dragging]::after,
+.kn-width-handle:focus-visible::after {
+  opacity: 1;
+  background: var(--accent);
+}
+.kn-width-handle:focus-visible { outline: none; }
 
 .kn-page-crumbs {
   display: flex;

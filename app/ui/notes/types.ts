@@ -27,6 +27,8 @@ export type VaultFile = NonNullable<UiCapabilities["notes.list"]["result"]["file
 export interface TreePrefs {
   showExtensions: boolean;
   dailyFolder: string;
+  /** A largura da coluna da nota (T5299); `null` num engine de antes do 1.24.0, que não a guarda. */
+  noteWidth: number | null;
 }
 
 type Result<C extends keyof UiCapabilities> = Promise<UiCapabilities[C]["result"]>;
@@ -92,6 +94,8 @@ export interface NotesApi {
   };
   /** As preferências da árvore, e o aviso quando as settings mudam (de outra janela, os Ajustes). */
   prefs?: { get(): Promise<TreePrefs>; onChanged(fn: (p: TreePrefs) => void): () => void;
+    /** Guarda a largura da coluna da nota (T5299). */
+    setNoteWidth(px: number): Promise<void>;
   };
 }
 

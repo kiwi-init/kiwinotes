@@ -1,0 +1,29 @@
+{
+  "window": "hub",
+  "steps": [
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-side-item:has-text('Linhas longas')"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "expectWidth": ".kn-page",
+      "min": 900,
+      "max": 1000,
+      "name": "a largura voltou salva numa janela nova"
+    },
+    {
+      "screenshot": "08-largura-salva.png"
+    }
+  ]
+}

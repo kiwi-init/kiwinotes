@@ -87,18 +87,21 @@ export function engineNotes(
     ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", e => {const event=e as {folderId?:string};if(!folderId||!event.folderId||event.folderId===folderId)fn();}),
       }
     : undefined;
-  const treePrefs = (s: { showExtensions?: boolean; dailyFolder?: string;
-  }): TreePrefs => ({
+  type Prefs = { showExtensions?: boolean; dailyFolder?: string; noteWidth?: number };
+  const treePrefs = (s: Prefs): TreePrefs => ({
     showExtensions: s.showExtensions === true,
     dailyFolder: typeof s.dailyFolder === "string" ? s.dailyFolder : "",
+    noteWidth: typeof s.noteWidth === "number" ? s.noteWidth : null,
   });
   const prefs: NotesApi["prefs"] = has("settings.get")
     ? {
-        get: () => call<{ showExtensions?: boolean; dailyFolder?: string }>("settings.get",
-          ).then(treePrefs),
+        get: () => call<Prefs>("settings.get").then(treePrefs),
         onChanged: (fn) => on("settings.changed", () => {
-          void call<{showExtensions?:boolean;dailyFolder?:string}>("settings.get").then(s=>fn(treePrefs(s)),()=>{});
+          void call<Prefs>("settings.get").then(s=>fn(treePrefs(s)),()=>{});
         }),
+        setNoteWidth: async (px) => {
+          await call("settings.set", { noteWidth: px });
+        },
       }
     : undefined;
   return {

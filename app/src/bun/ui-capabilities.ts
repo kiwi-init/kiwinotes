@@ -9,6 +9,7 @@ import { CLIPBOARD_MAX_CHARS, UI_CAPABILITIES, type UiCapabilities, type UiCapab
 import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
+import { NOTE_WIDTH } from "../shared/note-width.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
@@ -376,6 +377,12 @@ export function uiCapabilities(deps: CapabilityDeps,
           // A extensão na árvore das Notas (1.19.0, T3370).
           if (typeof value !== "boolean") throw bad("showExtensions must be true or false");
           patch.showExtensions = value;
+        } else if (key === "noteWidth") {
+          // A largura da coluna da nota (1.24.0, T5299): px, dentro dos limites.
+          if (typeof value !== "number" || !Number.isFinite(value) || value < NOTE_WIDTH.min || value > NOTE_WIDTH.max) {
+            throw bad(`noteWidth must be a number of px from ${NOTE_WIDTH.min} to ${NOTE_WIDTH.max}`);
+          }
+          patch.noteWidth = Math.round(value);
         } else if (key === "ocr") {
           // O texto dos anexos na busca (T2709): ligar de novo lê o que faltou.
           if (typeof value !== "boolean") throw bad("ocr must be true or false");

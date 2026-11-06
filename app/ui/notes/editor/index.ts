@@ -178,7 +178,11 @@ const theme = EditorView.theme({
   "&": { color: "var(--text)", backgroundColor: "transparent", fontSize: "14px" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font)", lineHeight: "1.65", overflow: "visible" },
-  ".cm-content": { padding: "0 0 40vh", caretColor: "var(--accent)" },
+  // T5299 (#212): nunca scroll horizontal. O CodeMirror põe `flex-shrink: 0` no conteúdo, e o `min-width: auto` do flex
+  // fazia a coluna inteira crescer até a coisa mais larga que não quebra (URL, bloco de código, tabela). Com o conteúdo
+  // podendo encolher, a linha quebra na largura da coluna; URL e palavra gigante quebram em qualquer ponto.
+  ".cm-content": { padding: "0 0 40vh", caretColor: "var(--accent)", minWidth: "0", flexShrink: "1" },
+  "&.cm-editor .cm-lineWrapping": { overflowWrap: "anywhere" },
   ".cm-line": { padding: "0" },
   ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "1.5px" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "var(--accent-soft) !important" },
@@ -220,8 +224,10 @@ const theme = EditorView.theme({
   ".cm-wikilink-raw": { cursor: "text" },
   ".cm-wikilink-missing": { opacity: "0.55" },
   // Sem margem no bloco (o CodeMirror mede sem ela): o espaço vem do padding.
-  ".cm-md-table-wrap": { padding: "4px 0 10px" },
-  ".cm-md-table": { borderCollapse: "collapse", fontSize: "13px", cursor: "text" },
+  // A tabela larga rola dentro dela, nunca a nota (T5299).
+  ".cm-md-table-wrap": { padding: "4px 0 10px", maxWidth: "100%", overflowX: "auto" },
+  // As células não quebram no meio da palavra (o `anywhere` da linha não vale aqui): a tabela rola dentro dela.
+  ".cm-md-table": { borderCollapse: "collapse", fontSize: "13px", cursor: "text", overflowWrap: "normal", whiteSpace: "nowrap" },
   ".cm-md-table th": { fontSize: "11px", fontWeight: "400", color: "var(--text-3)", textAlign: "left", padding: "0 28px 8px 0" },
   ".cm-md-table td": { padding: "0 28px 4px 0", fontVariantNumeric: "tabular-nums" },
   ".cm-tooltip": { border: "none", borderRadius: "10px", background: "var(--surface)", boxShadow: "var(--shadow-pop)" },
