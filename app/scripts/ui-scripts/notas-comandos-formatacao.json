@@ -1,0 +1,356 @@
+{
+  "window": "notes",
+  "size": "1180x1000",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "E1 Formatação",
+        "content": "Comandos de formatação\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "E1 Formatação"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text('E1 Formatação')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+Home"
+    },
+    {
+      "press": "Meta+6"
+    },
+    {
+      "waitFor": ".cm-line:has-text('###### Comandos')"
+    },
+    {
+      "press": "Meta+0"
+    },
+    {
+      "waitFor": ".cm-line:has-text('Comandos de formatação')"
+    },
+    {
+      "press": "Meta+1"
+    },
+    {
+      "waitFor": ".cm-line:has-text('# Comandos')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Prazo antigo"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+Shift+x"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"~~Prazo antigo~~\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Uma ideia importante"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+Shift+h"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"==Uma ideia importante==\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "bun test"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+e"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"`bun test`\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Comentário privado"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+/"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"%%Comentário privado%%\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Site do projeto"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"[Site do projeto]()\")"
+    },
+    {
+      "type": "https://kiwi.dev"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "**Limpar formatação**"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+Backslash"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"Limpar formatação\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Item de lista"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+Shift+8"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"- Item de lista\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Item numerado"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+Shift+7"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"1. Item numerado\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Revisão concluída"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+Shift+9"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"- [ ] Revisão concluída\")"
+    },
+    {
+      "press": "Meta+l"
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"- [x] Revisão concluída\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Uma citação"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Meta+Shift+."
+    },
+    {
+      "waitFor": ".cm-line:has-text(\"> Uma citação\")"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+0",
+      "name": "novo parágrafo sem marcador de lista"
+    },
+    {
+      "type": "Selecione e formate"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "waitFor": ".kn-fmt"
+    },
+    {
+      "waitFor": ".kn-fmt-strike"
+    },
+    {
+      "waitFor": ".kn-fmt-highlight"
+    },
+    {
+      "wait": 1000,
+      "name": "autosave conclui antes de fechar a view"
+    },
+    {
+      "screenshot": "comandos-formatacao.png"
+    },
+    {
+      "press": "Meta+a",
+      "name": "confere o Markdown gerado pelos comandos"
+    },
+    {
+      "screenshot": "markdown-gerado.png"
+    }
+  ]
+}

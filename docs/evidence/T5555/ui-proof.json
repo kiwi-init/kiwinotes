@@ -1,0 +1,36 @@
+{
+  "light": {
+    "ok": true,
+    "steps": 111,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "notes.save": 1
+    },
+    "problems": [],
+    "clipboard": [],
+    "blocked": []
+  },
+  "dark": {
+    "ok": true,
+    "steps": 111,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "notes.save": 1
+    },
+    "problems": [],
+    "clipboard": [],
+    "blocked": []
+  }
+}
