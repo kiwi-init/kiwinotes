@@ -80,11 +80,12 @@ public struct ClipboardSnapshot {
     }
 
     /// Puts `text` on the pasteboard for the paste and returns the change count that marks it as ours.
+    /// `promise` (L11, T5834): the text goes as a promise, so the provider learns when an app reads it.
     @discardableResult
-    public static func put(_ text: String, on pasteboard: NSPasteboard, transient: Bool) -> Int {
+    public static func put(_ text: String, on pasteboard: NSPasteboard, transient: Bool, promise: PromisedText? = nil) -> Int {
         pasteboard.clearContents()
         let item = NSPasteboardItem()
-        item.setString(text, forType: .string)
+        if let promise { item.setDataProvider(promise, forTypes: [.string]) } else { item.setString(text, forType: .string) }
         item.setString(Self.sourceID, forType: Self.source)
         if transient {
             item.setData(Data(), forType: Self.transient)
@@ -111,6 +112,56 @@ public struct ClipboardSnapshot {
     }
 }
 
+/// L11 (T5834): the dictated text as a pasteboard promise. macOS asks for it when an app reads the clipboard, so the
+/// person's clipboard can come back as soon as the app in front has read it, not after a fixed 2 s. (Handy's
+/// `paste_tx/macos.rs` and OpenWhispr's `macos-fast-paste.swift` do the same: MIT, only the idea.)
+public final class PromisedText: NSObject, NSPasteboardItemDataProvider {
+    public let text: String
+    /// Main thread, each time an app reads the text (macOS asks again after the first answer only for another type).
+    public var onRead: (() -> Void)?
+
+    public init(_ text: String) { self.text = text }
+
+    public func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
+        item.setString(text, forType: type)
+        onRead?()
+    }
+}
+
+/// L11 (T5834): when the person's clipboard comes back. Pure: times in, the restore time out.
+/// - Only a read after the ⌘V counts: a clipboard manager that reads our text first would otherwise bring the
+///   person's clipboard back before the paste (our text is also marked transient, which the good ones respect).
+/// - After the read, a short `grace`: some apps read more than once (Electron reads text and then HTML).
+/// - Never before `minAfterPaste`: the app in front may still be handling the ⌘V.
+/// - Nobody read (no field after all, or an app that never asks): `maxDelay`, the old fixed 2 s.
+public struct RestoreSchedule: Equatable, Sendable {
+    public static let grace: TimeInterval = 0.15
+    public static let minAfterPaste: TimeInterval = 0.25
+    public static let maxDelay: TimeInterval = 2.0
+
+    public private(set) var pastedAt: TimeInterval?
+    public private(set) var readAt: TimeInterval?
+
+    public init() {}
+
+    public mutating func pasted(at t: TimeInterval) { pastedAt = t }
+
+    /// Returns whether the read counts (it came after the ⌘V).
+    @discardableResult
+    public mutating func read(at t: TimeInterval) -> Bool {
+        guard let pastedAt, t >= pastedAt else { return false }
+        readAt = readAt.map { max($0, t) } ?? t
+        return true
+    }
+
+    /// When to restore; nil before the ⌘V.
+    public var restoreAt: TimeInterval? {
+        guard let pastedAt else { return nil }
+        guard let readAt else { return pastedAt + Self.maxDelay }
+        return min(pastedAt + Self.maxDelay, max(readAt + Self.grace, pastedAt + Self.minAfterPaste))
+    }
+}
+
 /// The clipboard side of `insert.text`, one dictation after another. A dictation that arrives while the previous
 /// one's restore is still pending must not snapshot the previous dictation as "the person's clipboard": it keeps
 /// the original snapshot, and only the latest restore puts it back.
@@ -118,13 +169,16 @@ public struct ClipboardSnapshot {
 /// snapshot does it without making the second dictation wait for the restore delay.)
 public final class ClipboardKeeper {
     private var pending: (snapshot: ClipboardSnapshot, ours: Int)?
+    /// The promise on the pasteboard now: the pasteboard item doesn't keep its data provider alive.
+    private var promise: PromisedText?
 
     public init() {}
 
     /// Puts `text` on the pasteboard and returns the change count that marks it as ours. With `keepOriginal`,
     /// what the person had there is remembered for `restore`; without it, the text stays and nothing comes back.
+    /// `onRead` (L11): only with `keepOriginal`, the text goes as a promise and `onRead` runs when an app reads it.
     @discardableResult
-    public func put(_ text: String, on pasteboard: NSPasteboard, keepOriginal: Bool) -> Int {
+    public func put(_ text: String, on pasteboard: NSPasteboard, keepOriginal: Bool, onRead: (() -> Void)? = nil) -> Int {
         var original: ClipboardSnapshot?
         if keepOriginal {
             // Still our previous dictation on the clipboard: the person's content is the one we saved then.
@@ -134,7 +188,10 @@ public final class ClipboardKeeper {
                 original = ClipboardSnapshot.take(pasteboard)
             }
         }
-        let ours = ClipboardSnapshot.put(text, on: pasteboard, transient: keepOriginal)
+        // Text that stays (no field) is a plain string: no promise to keep alive after we stop caring.
+        promise = keepOriginal && onRead != nil ? PromisedText(text) : nil
+        promise?.onRead = onRead
+        let ours = ClipboardSnapshot.put(text, on: pasteboard, transient: keepOriginal, promise: promise)
         pending = original.map { ($0, ours) }
         return ours
     }
@@ -144,6 +201,7 @@ public final class ClipboardKeeper {
     public func restore(on pasteboard: NSPasteboard, ifStill ours: Int) -> Bool {
         guard let pending, pending.ours == ours else { return false }
         self.pending = nil
+        promise = nil
         return pending.snapshot.restore(to: pasteboard, ifStill: ours)
     }
 }

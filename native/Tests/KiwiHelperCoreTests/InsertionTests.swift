@@ -150,3 +150,61 @@ final class InsertionTests: XCTestCase {
         XCTAssertEqual(pb.string(forType: ClipboardSnapshot.source), ClipboardSnapshot.sourceID)
     }
 }
+
+/// L11 (T5834): the clipboard comes back once the app in front read the text, not after a fixed 2 s.
+final class ClipboardReadTests: XCTestCase {
+    func testTheRestoreFollowsTheReadAfterThePaste() {
+        var s = RestoreSchedule()
+        XCTAssertNil(s.restoreAt, "nothing before the ⌘V")
+        s.pasted(at: 10)
+        XCTAssertEqual(s.restoreAt, 12, "nobody read yet: the old 2 s")
+        XCTAssertTrue(s.read(at: 10.4))
+        XCTAssertEqual(s.restoreAt!, 10.55, accuracy: 1e-9, "read: a short grace after it")
+        XCTAssertTrue(s.read(at: 10.5), "Electron reads twice: the later read counts")
+        XCTAssertEqual(s.restoreAt!, 10.65, accuracy: 1e-9)
+    }
+
+    func testAReadBeforeThePasteIsAClipboardManagerAndDoesntCount() {
+        var s = RestoreSchedule()
+        XCTAssertFalse(s.read(at: 9.9))
+        s.pasted(at: 10)
+        XCTAssertEqual(s.restoreAt, 12)
+    }
+
+    func testNeverRightOnTopOfThePasteNorLaterThanTheOld2s() {
+        var fast = RestoreSchedule()
+        fast.pasted(at: 10)
+        fast.read(at: 10.01)
+        XCTAssertEqual(fast.restoreAt!, 10.25, accuracy: 1e-9, "the app may still be handling the ⌘V")
+        var slow = RestoreSchedule()
+        slow.pasted(at: 10)
+        slow.read(at: 11.95)
+        XCTAssertEqual(slow.restoreAt, 12, "never later than before L11")
+    }
+
+    func testThePromiseTellsWhenTheTextIsReadAndGivesTheText() {
+        let pb = NSPasteboard(name: NSPasteboard.Name("kiwi-test-\(UUID().uuidString)"))
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("da pessoa", forType: .string)
+        let keeper = ClipboardKeeper()
+        var reads = 0
+        let ours = keeper.put("ditado", on: pb, keepOriginal: true, onRead: { reads += 1 })
+        XCTAssertEqual(reads, 0, "putting it isn't reading it")
+        XCTAssertEqual(pb.string(forType: .string), "ditado", "an app reads the promised text")
+        XCTAssertEqual(reads, 1)
+        XCTAssertNotNil(pb.data(forType: ClipboardSnapshot.transient), "still marked for the clipboard managers")
+        XCTAssertTrue(keeper.restore(on: pb, ifStill: ours))
+        XCTAssertEqual(pb.string(forType: .string), "da pessoa")
+    }
+
+    func testTextThatStaysIsAPlainStringNotAPromise() {
+        let pb = NSPasteboard(name: NSPasteboard.Name("kiwi-test-\(UUID().uuidString)"))
+        defer { pb.releaseGlobally() }
+        let keeper = ClipboardKeeper()
+        var reads = 0
+        keeper.put("sem campo", on: pb, keepOriginal: false, onRead: { reads += 1 })
+        XCTAssertEqual(pb.string(forType: .string), "sem campo")
+        XCTAssertEqual(reads, 0, "no promise: nothing to call back after we stop caring")
+    }
+}
