@@ -490,7 +490,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   // (T5349). Ao esconder a janela, grava o que estiver pendente.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!activeRef.current) return;
+      // O editor já usou a tecla (o ⌘K com texto selecionado vira link, E1): a paleta não abre por cima.
+      if (!activeRef.current || e.defaultPrevented) return;
       const s = shortcutsRef.current;
       if (matchesKeyEvent(s.dailyNote, e)) void openDailyRef.current();
       else if (matchesKeyEvent(s.palette, e)) {

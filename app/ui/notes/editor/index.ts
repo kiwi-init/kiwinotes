@@ -14,7 +14,7 @@ import {
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { EditorState, type Extension, Prec, StateField } from "@codemirror/state";
+import { EditorState, type Extension, Prec, StateField, type TransactionSpec } from "@codemirror/state";
 import { EditorView, keymap, placeholder, showTooltip, type Tooltip } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
@@ -25,7 +25,8 @@ import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type Li
 import { renderedPreview } from "./renderedWidget.tsx";
 import { tableEnter, tableTab } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger } from "./slash.ts";
-import { linkFromPaste, listIndent, toggleHeading, toggleWrap, wrapLink } from "./text.ts";
+import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
+import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
 
 export interface LinkTarget {
   /** O título da nota (o que aparece na lista). */
@@ -436,7 +437,7 @@ export function slashCompletion(opts: Pick<EditorOptions, "onSlashTemplate">) {
 
 // ---------------------------------------------------------------- a barra de formatação (T2660)
 
-type FormatAction = "bold" | "italic" | "code" | "link" | "heading";
+type FormatAction = "bold" | "italic" | "strike" | "highlight" | "code" | "link" | "heading";
 
 /** Aplica uma ação da barra na seleção principal. */
 export function applyFormat(view: EditorView, action: FormatAction): void {
@@ -455,21 +456,47 @@ export function applyFormat(view: EditorView, action: FormatAction): void {
     view.focus();
     return;
   }
-  const marker = action === "bold" ? "**" : action === "italic" ? "*" : "`";
-  const before = state.sliceDoc(Math.max(0, sel.from - 3), sel.from);
-  const after = state.sliceDoc(sel.to, Math.min(state.doc.length, sel.to + 3));
-  const r = toggleWrap(before, selected, after, marker);
-  view.dispatch({
-    changes: { from: sel.from + r.from, to: sel.from + r.to, insert: r.insert },
-    selection: { anchor: sel.from + r.from + r.selFrom, head: sel.from + r.from + r.selTo },
-  });
+  view.dispatch(toggleInline(state, action));
 }
+
+/** Roda um comando de `format.ts` (que devolve a transação) como comando do CodeMirror. */
+const run = (make: (s: EditorState) => TransactionSpec | null) => (view: EditorView) => {
+  const spec = make(view.state);
+  if (!spec) return false;
+  view.dispatch({ ...spec, scrollIntoView: true, userEvent: "input.format" });
+  return true;
+};
+
+/**
+ * Os atalhos de formatação (E1, T5555). São de edição, então ficam fixos, como o ⌘B (os globais estão em Configurações
+ * › Atalhos). Os mesmos do Typora e do Google Docs: ⌘1 a ⌘6 títulos e ⌘0 corpo; ⇧⌘7/8/9 numerada, lista e tarefas.
+ * O ⌘K só vira link com texto selecionado; sem seleção, a tecla segue para a paleta das Notas.
+ */
+export const FORMAT_KEYS: { key: string; label: string; run: (view: EditorView) => boolean }[] = [
+  { key: "Mod-b", label: "Negrito", run: run((s) => toggleInline(s, "bold")) },
+  { key: "Mod-i", label: "Itálico", run: run((s) => toggleInline(s, "italic")) },
+  { key: "Shift-Mod-x", label: "Tachado", run: run((s) => toggleInline(s, "strike")) },
+  { key: "Shift-Mod-h", label: "Realce", run: run((s) => toggleInline(s, "highlight")) },
+  { key: "Mod-e", label: "Código", run: run((s) => toggleInline(s, "code")) },
+  { key: "Mod-/", label: "Comentário", run: run((s) => toggleInline(s, "comment")) },
+  { key: "Mod-k", label: "Link", run: run((s) => (s.selection.main.empty ? null : insertLink(s))) },
+  { key: "Mod-\\", label: "Limpar formatação", run: run(clearInline) },
+  ...[1, 2, 3, 4, 5, 6].map((level) => ({ key: `Mod-${level}`, label: `Título ${level}`, run: run((s) => mapLines(s, (ls) => ls.map((l) => setHeading(l, level)))) })),
+  { key: "Mod-0", label: "Corpo", run: run((s) => mapLines(s, (ls) => ls.map((l) => setHeading(l, 0)))) },
+  { key: "Shift-Mod-8", label: "Lista", run: run((s) => mapLines(s, (ls) => toggleList(ls, "bullet"))) },
+  { key: "Shift-Mod-7", label: "Lista numerada", run: run((s) => mapLines(s, (ls) => toggleList(ls, "numbered"))) },
+  { key: "Shift-Mod-9", label: "Lista de tarefas", run: run((s) => mapLines(s, (ls) => toggleList(ls, "task"))) },
+  { key: "Shift-Mod-.", label: "Citação", run: run((s) => mapLines(s, (ls) => toggleList(ls, "quote"))) },
+  { key: "Mod-l", label: "Marcar tarefa", run: run((s) => mapLines(s, (ls) => ls.map((l) => (l.trim() ? toggleTask(l) : l)))) },
+];
 
 const FORMAT_BUTTONS: { action: FormatAction; label: string; title: string }[] = [
   { action: "bold", label: "B", title: "Negrito (⌘B)" },
   { action: "italic", label: "I", title: "Itálico (⌘I)" },
-  { action: "code", label: "</>", title: "Código" },
-  { action: "link", label: "Link", title: "Link" },
+  { action: "strike", label: "S", title: "Tachado (⇧⌘X)" },
+  { action: "highlight", label: "==", title: "Realce (⇧⌘H)" },
+  { action: "code", label: "</>", title: "Código (⌘E)" },
+  { action: "link", label: "Link", title: "Link (⌘K)" },
   { action: "heading", label: "H", title: "Cabeçalho" },
 ];
 
@@ -509,8 +536,5 @@ const formatBar = [
     update: (tip, tr) => (tr.docChanged || tr.selection ? formatTooltip(tr.state) : tip),
     provide: (f) => showTooltip.from(f),
   }),
-  keymap.of([
-    { key: "Mod-b", run: (v) => (v.state.selection.main.empty ? false : (applyFormat(v, "bold"), true)) },
-    { key: "Mod-i", run: (v) => (v.state.selection.main.empty ? false : (applyFormat(v, "italic"), true)) },
-  ]),
+  keymap.of(FORMAT_KEYS.map(({ key, run }) => ({ key, run }))),
 ];
