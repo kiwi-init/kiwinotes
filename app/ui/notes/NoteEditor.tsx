@@ -105,7 +105,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
     }, (message) => latest.current.onError?.(message)) });
   };
   return <>
-    <div className="kn-note-editor" ref={host}
+    <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(e.clientX, e.clientY, true); }}
       onKeyDown={(e) => {
         if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;

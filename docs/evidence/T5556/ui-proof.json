@@ -1,7 +1,7 @@
 {
   "light": {
     "ok": true,
-    "steps": 62,
+    "steps": 64,
     "invokes": {
       "settings.get": 5,
       "notes.folder": 1,
@@ -20,11 +20,21 @@
     ],
     "problems": [],
     "blocked": [],
-    "invokeErrors": []
+    "invokeErrors": [],
+    "selectionToolbarChecks": [
+      {
+        "step": "a barra de seleção some com o menu aberto",
+        "ok": true
+      },
+      {
+        "step": "a barra volta ao fechar o menu mantendo a seleção",
+        "ok": true
+      }
+    ]
   },
   "dark": {
     "ok": true,
-    "steps": 62,
+    "steps": 64,
     "invokes": {
       "settings.get": 5,
       "notes.folder": 1,
@@ -43,11 +53,21 @@
     ],
     "problems": [],
     "blocked": [],
-    "invokeErrors": []
+    "invokeErrors": [],
+    "selectionToolbarChecks": [
+      {
+        "step": "a barra de seleção some com o menu aberto",
+        "ok": true
+      },
+      {
+        "step": "a barra volta ao fechar o menu mantendo a seleção",
+        "ok": true
+      }
+    ]
   },
   "narrow": {
     "ok": true,
-    "steps": 62,
+    "steps": 64,
     "invokes": {
       "settings.get": 5,
       "notes.folder": 1,
@@ -66,7 +86,17 @@
     ],
     "problems": [],
     "blocked": [],
-    "invokeErrors": []
+    "invokeErrors": [],
+    "selectionToolbarChecks": [
+      {
+        "step": "a barra de seleção some com o menu aberto",
+        "ok": true
+      },
+      {
+        "step": "a barra volta ao fechar o menu mantendo a seleção",
+        "ok": true
+      }
+    ]
   },
   "edge": {
     "ok": true,

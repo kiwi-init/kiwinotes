@@ -37,7 +37,7 @@ function MenuPanel({ x, y, parentLeft, items, owner, onClose, onBack, autoFocus,
   useLayoutEffect(() => {
     // offset sizes ignore the pop-in scale; max-content keeps width stable when clamping changes left.
     const r = { width: ref.current!.offsetWidth, height: ref.current!.offsetHeight };
-    const left = parentLeft !== undefined && x + r.width > innerWidth - 8 ? parentLeft - r.width + 4 : x;
+    const left = parentLeft !== undefined && x + r.width > innerWidth - 8 ? parentLeft - r.width - 2 : x;
     setPos({ left: Math.max(8, Math.min(left, innerWidth - r.width - 8)), top: Math.max(8, Math.min(y, innerHeight - r.height - 8)) });
     if (autoFocus) { ref.current!.focus(); if (parentLeft !== undefined) setSel(actionable[0] ?? -1); }
   }, [x, y, parentLeft, autoFocus]);
@@ -45,8 +45,10 @@ function MenuPanel({ x, y, parentLeft, items, owner, onClose, onBack, autoFocus,
   const open = (i: number, focus: boolean) => {
     const it = items[i], row = rows.current.get(i);
     if (!it || it.kind !== "submenu" || it.disabled || !row) return;
-    const r = row.getBoundingClientRect();
-    setChild({ index: i, x: r.right - 4, y: r.top - 5, left: r.left, focus });
+    const panel = ref.current!;
+    // Anchor to the unscaled panel edge, not an inset row while pop-in is still animating.
+    setChild({ index: i, x: pos.left + panel.offsetWidth + 2,
+      y: pos.top + row.offsetTop - panel.scrollTop - 5, left: pos.left, focus });
   };
   const choose = (i: number) => {
     const it = items[i];

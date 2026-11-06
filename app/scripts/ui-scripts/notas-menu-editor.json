@@ -56,6 +56,11 @@
       "waitFor": "[role=menu][aria-label='Formatar']"
     },
     {
+      "waitFor": ".kn-fmt",
+      "state": "hidden",
+      "name": "a barra de seleção some com o menu aberto"
+    },
+    {
       "screenshot": "01-formatar.png"
     },
     {
@@ -166,6 +171,10 @@
     },
     {
       "waitFor": ".cm-content:focus"
+    },
+    {
+      "waitFor": ".kn-fmt",
+      "name": "a barra volta ao fechar o menu mantendo a seleção"
     },
     {
       "press": "End"
