@@ -36,9 +36,10 @@ export interface NoteEditorProps {
   onError?(text: string): void;
   createSplit?(tail: string): Promise<string>;
   onSplitDone?(path: string): void;
+  onRenameHeading?(offset: number, title: string, source: string): void;
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError, createSplit, onSplitDone,
+export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError, createSplit, onSplitDone, onRenameHeading,
 }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -46,9 +47,9 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
   const spellingRequest = useRef(0);
   const splitting = useRef(false);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
-  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone,
+  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone, onRenameHeading,
   });
-  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone,
+  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone, onRenameHeading,
   };
 
   const extensions = useRef(
@@ -142,7 +143,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
         else latest.current.onError?.(`A nota mudou. A continuação foi copiada para ${result.path}; o original foi mantido.`);
       }).catch(() => latest.current.onError?.("Não foi possível criar a continuação. O texto original foi mantido."))
         .finally(() => { splitting.current = false; });
-    } : undefined)] });
+    } : undefined, latest.current.onRenameHeading)] });
   };
   return <>
     <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}

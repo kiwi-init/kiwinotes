@@ -95,7 +95,7 @@ export interface CapabilityDeps {
   /** O vault das notas (T1316). Aberto na 1ª chamada: o ~/KiwiNotes só nasce quando alguém usa as notas. */
   notes: Pick<
     Vault,
-    | "open" | "list" | "get" | "save" | "create" | "rename" | "delete" | "search" | "backlinks" | "resolve"
+    | "open" | "list" | "get" | "save" | "create" | "rename" | "renameHeading" | "renameTag" | "linkWarnings" | "delete" | "search" | "backlinks" | "resolve"
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile"
@@ -630,6 +630,18 @@ export function uiCapabilities(deps: CapabilityDeps,
       const r = await (await vault()).rename(a.path, a.newPath);
       await followMove(moveUnder(notePath(a.path), r.meta.path));
       return r;
+    },
+    "notes.renameHeading": async (args) => {
+      const a = fields(args, "notes.renameHeading", ["path", "offset", "title", "baseVersion"]);
+      return (await vault()).renameHeading(a.path, a.offset, a.title, a.baseVersion);
+    },
+    "notes.renameTag": async (args) => {
+      const a = fields(args, "notes.renameTag", ["from", "to"]);
+      return (await vault()).renameTag(a.from, a.to);
+    },
+    "notes.linkWarnings": async (args) => {
+      const a = fields(args, "notes.linkWarnings", ["path"]);
+      return { warnings: await (await vault()).linkWarnings(a.path) };
     },
     "notes.delete": async (args) => {
       const p = fields(args, "notes.delete", ["path"]).path;

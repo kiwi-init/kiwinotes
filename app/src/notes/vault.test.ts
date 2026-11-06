@@ -299,7 +299,7 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
     });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
 
-    expect(UI_CONTRACT_VERSION).toBe("1.32.0");
+    expect(UI_CONTRACT_VERSION).toBe("1.33.0");
     expect(UI_CAPABILITIES).toContain("notes.resolve");
     expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
     expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
@@ -319,5 +319,11 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
     });
     expect(await call("notes.create", { title: "Kiwi" })).toMatchObject({ ok: true, value: { path: "Kiwi 2.md" } });
     expect(await call("notes.rename", { path: "Ideias.md", newPath: "Kiwi.md" })).toMatchObject({ ok: false, code: "E_EXISTS" });
+    expect(await call("notes.renameTag", { from: "old", to: "new", extra: true })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("notes.linkWarnings", { path: "../fora.md" })).toMatchObject({ ok: false, code: "E_OUTSIDE_VAULT" });
+    const e11 = await v.create(undefined, "Refactor", "# Antigo\n#old\n[[#Antigo]] [[Sumiu]]");
+    expect(await call("notes.renameHeading", { path: e11.path, offset: 0, title: "Novo", baseVersion: e11.version })).toMatchObject({ ok: true, value: { updatedNotes: 1, updatedReferences: 1 } });
+    expect(await call("notes.renameTag", { from: "old", to: "new" })).toMatchObject({ ok: true, value: { updatedNotes: 1, updatedReferences: 1 } });
+    expect(await call("notes.linkWarnings", { path: e11.path })).toMatchObject({ ok: true, value: { warnings: [{ target: "Sumiu", reason: "note" }] } });
   });
 });

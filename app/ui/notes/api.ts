@@ -145,6 +145,9 @@ export function engineNotes(
         }
       : {}),
     rename: (path, newPath) => call("notes.rename", { path, newPath }),
+    ...(has("notes.renameHeading") ? { renameHeading: (path: string, offset: number, title: string, baseVersion: string) => call("notes.renameHeading", { path, offset, title, baseVersion }) } : {}),
+    ...(has("notes.renameTag") ? { renameTag: (from: string, to: string) => call("notes.renameTag", { from, to }) } : {}),
+    ...(has("notes.linkWarnings") ? { linkWarnings: (path: string) => call("notes.linkWarnings", { path }) } : {}),
     delete: (path) => call("notes.delete", { path }),
     search: (query, limit) => call("notes.search", { query, ...(limit ? { limit } : {}) }),
     backlinks: (path) => call("notes.backlinks", { path }),

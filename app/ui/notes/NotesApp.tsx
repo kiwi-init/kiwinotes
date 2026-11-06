@@ -25,6 +25,8 @@ import { notesApi } from "./api.ts";
 import { LinkCache, type LinkTarget } from "./editor/index.ts";
 import { wordCount } from "./editor/text.ts";
 import { type Draft, Drafts, forgetDraftOnDelete } from "./drafts.ts";
+import { RefactorDialog } from "./RefactorDialog.tsx";
+import type { LinkWarning, RefactorResult } from "../../src/notes/refactor.ts";
 import { MeetingSpeakerDialog } from "./MeetingSpeakerDialog.tsx";
 import { isMeetingNote } from "../../src/shared/meeting-note.ts";
 import { merge3, mergeNoteEdit, type MergeResult } from "../../src/shared/merge3.ts";
@@ -151,6 +153,16 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [view, setView] = useState<"note" | "trash">("note");
   /** Sobe a cada mudança no vault: a Lixeira e o "Mencionada sem link" se refazem (T2593). */
   const [vaultVersion, setVaultVersion] = useState(0);
+  const [linkWarnings, setLinkWarnings] = useState<LinkWarning[]>([]);
+  const [tagMenu, setTagMenu] = useState<{ x: number; y: number; tag: string } | null>(null);
+  const [refactor, setRefactor] = useState<
+    { kind: "tag"; name: string } | { kind: "heading"; name: string; path: string; offset: number; source: string } | null>(null);
+  useEffect(() => {
+    let stale = false;
+    setLinkWarnings([]);
+    if (note && api.linkWarnings) api.linkWarnings(note.path).then(r => { if (!stale) setLinkWarnings(r.warnings); }, () => {});
+    return () => { stale = true; };
+  }, [api, note?.path, note?.version, vaultVersion]);
   const [trashCount, setTrashCount] = useState(0);
   const [pinned, setPinned] = useState<string[]>([]);
   const [words, setWords] = useState(0);
@@ -450,6 +462,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           },
           () => {
             // Apagada ou renomeada fora: a janela fica sem nota aberta.
+            if (current.current !== path) return;
             current.current = null;
             setNote(null);
           },
@@ -564,12 +577,35 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const rename = async () => {
     const wanted = title.trim().replace(/[\\/:]/g, "-");
     if (!note || !wanted || wanted === note.title) return setTitle(note?.title ?? "");
+    const original = note.path, opened = shown.current;
     if (!(await leave())) return setTitle(note.title);
+    if (current.current !== original) return;
     const r = await api.rename(note.path, `${note.folder ? `${note.folder}/` : ""}${wanted}.md`).catch(() => null);
     if (!r) return setTitle(note.title); // já existe uma nota com esse nome
     const n = await api.get(r.meta.path).catch(() => null);
-    if (n) show(n);
+    if (n && pending.current === null && (current.current === original || (current.current === null && shown.current === opened))) show(n);
+    say(r.skippedPaths?.length ? `Nota renomeada. Confira os links em: ${r.skippedPaths.join(", ")}.` : `Nota renomeada. ${r.updatedLinks} ${r.updatedLinks === 1 ? "link atualizado" : "links atualizados"}.`);
     void refresh();
+  };
+
+  const reportRefactor = (r: RefactorResult) => {
+    const summary = `${r.updatedReferences} ${r.updatedReferences === 1 ? "referência atualizada" : "referências atualizadas"} em ${r.updatedNotes} ${r.updatedNotes === 1 ? "nota" : "notas"}.`;
+    say(r.skippedPaths.length ? `${summary} Confira as notas que não puderam ser atualizadas por completo: ${r.skippedPaths.join(", ")}.` : summary);
+    void refresh();
+  };
+  const performRefactor = async (name: string) => {
+    const chosen = refactor;
+    if (!chosen) return;
+    if (!(await leave())) throw Object.assign(new Error("unsaved changes"), { code: "E_CONFLICT" });
+    if (chosen.kind === "tag") {
+      if (!api.renameTag) throw new Error("unavailable");
+      reportRefactor(await api.renameTag(chosen.name, name));
+    } else {
+      if (!api.renameHeading || current.current !== chosen.path) throw Object.assign(new Error("note changed"), { code: "E_CONFLICT" });
+      const source = await api.get(chosen.path), split = splitFrontmatter(source.content);
+      if (split.body !== chosen.source) throw Object.assign(new Error("note changed"), { code: "E_CONFLICT" });
+      reportRefactor(await api.renameHeading(chosen.path, split.frontmatter.length + chosen.offset, name, source.version));
+    }
   };
 
   /** Resolve os trechos que bateram com um lado (T5454): o resto do que os dois mudaram já está junto. */
@@ -1099,6 +1135,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           trashOpen={view === "trash"}
           tags={tagList}
           onTag={openTag}
+          onTagMenu={api.renameTag ? (pos, tag) => setTagMenu({ ...pos, tag }) : undefined}
           saved={saved ?? undefined}
           onSaved={(q) => {
             setTreeOpen(false);
@@ -1175,7 +1212,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             />
             <div className="kn-meta">
               {note.tags.map((t) => (
-                <button type="button" key={`#${t}`} className="kn-meta-bt" title={`Notas com #${t}`} onClick={() => openTag(t)}>
+                <button type="button" key={`#${t}`} className="kn-meta-bt" title={`Notas com #${t}`} onClick={() => openTag(t)}
+                  onContextMenu={api.renameTag ? e => { e.preventDefault(); e.stopPropagation(); setTagMenu({ x: e.clientX, y: e.clientY, tag: t }); } : undefined}>
                   #{t}
                 </button>
               ))}
@@ -1269,6 +1307,10 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
                 </span>
               </div>
             ) : null}
+            {linkWarnings.length ? <details className="kn-link-warnings">
+              <summary>{linkWarnings.length === 100 ? "100 ou mais" : linkWarnings.length} {linkWarnings.length === 1 ? "link quebrado" : "links quebrados"}</summary>
+              <ul>{linkWarnings.map((w, i) => <li key={`${w.line}:${i}`}><span>{w.target}</span> — {w.reason === "note" ? "nota não encontrada" : "título não encontrado"} · linha {w.line}</li>)}</ul>
+            </details> : null}
             <NoteEditor
               docKey={docKey}
               doc={body}
@@ -1280,6 +1322,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
                 return n.path;
               } : undefined}
               onSplitDone={(path) => { void open(path); }}
+              onRenameHeading={api.renameHeading && !conflict && !draft ? (offset, name, source) => setRefactor({ kind: "heading", path: note.path, offset, name, source }) : undefined}
               onOpenLink={(t) => void onOpenLink(t)}
               onOpenTag={openTag}
               onSlashTemplate={api.templates ? () => fromTemplate(note?.folder ?? "", true) : undefined}
@@ -1312,6 +1355,10 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           onClose={() => setPalette(false)}
         />
       ) : null}
+      {refactor ? <RefactorDialog key={`${refactor.kind}:${refactor.name}`} kind={refactor.kind} name={refactor.name} onRename={performRefactor} onClose={() => setRefactor(null)} /> : null}
+      {tagMenu && api.renameTag ? <ContextMenu x={tagMenu.x} y={tagMenu.y} items={[
+        { label: `Renomear #${tagMenu.tag}…`, onSelect: () => { setTreeOpen(false); setRefactor({ kind: "tag", name: tagMenu.tag }); } },
+      ]} onClose={() => setTagMenu(null)} /> : null}
       {speakerDialog && api.meetings ? (
         <MeetingSpeakerDialog
           speakers={speakerDialog.speakers}

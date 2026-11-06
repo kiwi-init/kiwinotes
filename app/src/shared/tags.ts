@@ -2,6 +2,8 @@
 // frontmatter. Uma tag tem pelo menos um caractere que não é número (`#2026` não é tag), não vive em código nem num
 // link, e é a mesma tag sem diferença de maiúscula (`#Projeto` e `#projeto`). O engine e a janela usam as mesmas regras.
 
+import { markdownStructure } from "./markdown-structure.ts";
+
 /** Uma `#tag` no texto: depois do começo da linha, de um espaço ou de um "(". */
 const BODY_TAG = /(?<=^|[\s(])#([\p{L}\p{N}_/-]+)/gu;
 
@@ -28,14 +30,14 @@ export const tagKey = (t: string) => t.toLocaleLowerCase("pt-BR");
 
 /** As `#tag` do corpo (sem o frontmatter), fora de blocos de código, de código na linha e de comentários `%%`. */
 export function bodyTags(body: string): string[] {
-  const prose = body
-    .replace(/```[\s\S]*?(?:```|$)/g, " ")
-    .replace(/`[^`\n]*`/g, " ")
-    .replace(/%%[\s\S]*?%%/g, " ");
+  const context = markdownStructure(body);
   const out: string[] = [];
-  for (const m of prose.matchAll(BODY_TAG)) {
+  for (const m of body.matchAll(BODY_TAG)) {
+    if (!context.prose(m.index!)) continue;
+    let node = context.tree.resolveInner(m.index!, 1), linked = false;
+    for (; node; node = node.parent!) if (["URL", "Link", "Image"].includes(node.name)) { linked = true; break; }
     const t = cleanTag(m[1]!);
-    if (t) out.push(t);
+    if (t && !linked) out.push(t);
   }
   return out;
 }

@@ -52,6 +52,7 @@ export interface SidebarProps {
   /** As tags do vault em árvore (T2619); um clique busca as notas com ela. */
   tags?: TagNode[];
   onTag?(tag: string): void;
+  onTagMenu?(position: { x: number; y: number }, tag: string): void;
   /** Soltar o que foi arrastado numa pasta ("" é a raiz). Sem as capacidades de pastas, nada é arrastável. */
   onDrop?(what: SideTarget, folder: string): void;
   /** A nota do dia (T2593): uma entrada no topo. Num engine sem ela, não aparece. */
@@ -420,7 +421,7 @@ export function Sidebar(p: SidebarProps) {
         <>
           <div className="kn-side-gap" />
           <div className="kn-side-head">Tags</div>
-          {tagItems(p.tags, 0, p.onTag)}
+          {tagItems(p.tags, 0, p.onTag, p.onTagMenu)}
         </>
       ) : null}
       {!searching && p.onTrash ? (
@@ -443,7 +444,7 @@ export function Sidebar(p: SidebarProps) {
 }
 
 /** As tags, com as filhas recuadas embaixo da mãe, e quantas notas cada uma tem. */
-function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void): ReactElement[] {
+function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, onMenu?: SidebarProps["onTagMenu"]): ReactElement[] {
   return tags.flatMap((t) => [
     <button
       type="button"
@@ -454,12 +455,13 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void):
       title={`Notas com #${t.tag}`}
       // ⌃-clique é o clique secundário do Mac: abre só o menu, não a busca por baixo dele (T2693, T2751).
       onClick={(e) => !e.ctrlKey && onTag(t.tag)}
+      onContextMenu={onMenu ? e => { e.preventDefault(); e.stopPropagation(); onMenu({ x: e.clientX, y: e.clientY }, t.tag); } : undefined}
     >
       <TreeIcon name="tag" />
       <span className="kn-side-name">#{t.name}</span>
       <span className="kn-side-count">{t.count}</span>
     </button>,
-    ...tagItems(t.children, depth + 1, onTag),
+    ...tagItems(t.children, depth + 1, onTag, onMenu),
   ]);
 }
 
