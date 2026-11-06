@@ -11,7 +11,7 @@ const all: {
   dictation: Dictation;
   recoveries: RecordingRecoveries;
 }[] = [];
-async function rig(insertFails = false) {
+async function rig(insertFails = false, noteFails = false) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "kn-dictation-recover-"));
   const recoveries = new RecordingRecoveries(dir),
     history = new HistoryStore(dir, recoveries);
@@ -73,6 +73,7 @@ async function rig(insertFails = false) {
     history,
     recovery: recoveries,
     dryRun: true,
+    ...(noteFails ? { notes: { toNew: async () => { throw new Error("fake note write failure"); } } } : {}),
     log: () => {},
   });
   dictation.attach();
@@ -129,18 +130,16 @@ test("confirmed dry-run delivery persists text then removes the managed WAV and 
     { dryRun: true },
   ]);
 });
-test("failed insertion keeps one history entry with text and a retry, not a duplicate placeholder", async () => {
+test("failed insertion removes WAV once text is safely in History", async () => {
   const r = await rig(true);
   r.emit({ type: "record.started", reason: "debug", recovery: r.ref });
   r.emit(final(r.ref));
   await r.dictation.idle();
   const page = await r.history.search();
   expect(page.entries).toHaveLength(1);
-  expect(page.entries[0]).toMatchObject({
-    text: "Teste de recuperação.",
-    recoveryId: r.ref.id,
-  });
-  expect((await readdir(r.recoveries.dir)).length).toBe(2);
+  expect(page.entries[0]).toMatchObject({ text: "Teste de recuperação." });
+  expect(page.entries[0]).not.toHaveProperty("recoveryId");
+  expect(await readdir(r.recoveries.dir)).toEqual([]);
 });
 test("cancel discards immediately; an empty STT with actual audio remains recoverable", async () => {
   const r = await rig();
@@ -160,4 +159,30 @@ test("cancel discards immediately; an empty STT with actual audio remains recove
   expect((await silent.history.search()).entries).toMatchObject([
     { recoveryId: silent.ref.id, recoveryError: "stt_empty" },
   ]);
+});
+
+
+test("insertion and History failures keep the only recoverable copy", async () => {
+  const r = await rig(true);
+  r.history.add = async () => { throw new Error("fake disk full"); };
+  r.emit({type:"record.started",reason:"debug",recovery:r.ref});
+  r.emit(final(r.ref)); await r.dictation.idle();
+  expect((await readdir(r.recoveries.dir)).length).toBe(2);
+  expect((await r.recoveries.get(r.ref.id))?.error).toBe("insert_failed");
+});
+
+
+test("note creation failure removes audio when History already holds the text", async () => {
+  const r=await rig(false,true);
+  r.emit({type:"record.started",reason:"debug",target:"note",recovery:r.ref});
+  r.emit(final(r.ref)); await r.dictation.idle();
+  expect((await r.history.search()).entries[0]?.text).toBe("Teste de recuperação.");
+  expect(await readdir(r.recoveries.dir)).toEqual([]);
+});
+test("note and History failures preserve recovery audio", async () => {
+  const r=await rig(false,true); r.history.add=async()=>{throw new Error("fake disk full");};
+  r.emit({type:"record.started",reason:"debug",target:"note",recovery:r.ref});
+  r.emit(final(r.ref)); await r.dictation.idle();
+  expect((await readdir(r.recoveries.dir)).length).toBe(2);
+  expect((await r.recoveries.get(r.ref.id))?.error).toBe("note_failed");
 });

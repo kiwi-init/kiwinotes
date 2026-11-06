@@ -99,7 +99,6 @@ final class Helper {
         meeting.setMinePaused = { [weak self] paused in self?.meetingCommand(paused ? "meeting.pauseMine" : "meeting.resumeMine") }
         meeting.emit = { [weak self] type, fields in self?.emit(type, fields) }
         let journal = recordingJournal
-        audio.onRetainedSamples = { [journal] samples, offset in journal?.append(samples, at: offset) }
         journal?.onError = { [weak self] _ in self?.emit("log", ["level": "warn", "message": "mic: recording_storage"]) }
         audio.onLevel = { [weak self] level in
             // Level queue: send straight away, the write queue serializes it.
@@ -427,13 +426,7 @@ final class Helper {
         let stale = !headless && mic.isStale()
         if stale { audio.inputChanged("mic changed since the warm-up") }
         if let pick = stale ? mic.peek() : mic.last { started["microphone"] = pick.fields }
-        do { try beginRecovery(&started) }
-        catch {
-            emit("record.started", started)
-            emit("record.error", ["reason": reason, "error": "recording_storage", "microphone": Permission.microphone.status])
-            overlay.set(.error, message: "Não foi possível guardar o áudio")
-            return "recording_storage"
-        }
+        beginRecovery(&started)
         emit("record.started", started)
         overlay.set(.listening)
         let t0 = ProcessInfo.processInfo.systemUptime
@@ -537,23 +530,26 @@ final class Helper {
     private func cancelRecording(reason: String) {
         guard audio.isRecording else { return }
         _ = audio.stop()
-        try? recordingJournal?.cancel()
+        if currentRecovery != nil { try? recordingJournal?.cancel() }
         currentRecovery = nil
         recordingStartedAt = nil
         emit("record.cancelled", ["reason": reason])
         overlay.set(.hidden)
     }
 
-    private func beginRecovery(_ started: inout [String: Any]) throws {
+    private func beginRecovery(_ started: inout [String: Any]) {
+        currentRecovery = nil
+        audio.onRetainedSamples = nil
         guard let recordingJournal else { return }
         let app = started["app"] as? [String: String]
-        let metadata = try recordingJournal.begin(app: app?["bundleId"].map { RecordingApp(bundleId: $0, name: app?["name"]) }, target: started["target"] as? String)
+        guard let metadata = recordingJournal.beginIfAvailable(app: app?["bundleId"].map { RecordingApp(bundleId: $0, name: app?["name"]) }, target: started["target"] as? String) else { return }
+        audio.onRetainedSamples = { [recordingJournal] samples, offset in recordingJournal.append(samples, at: offset) }
         currentRecovery = metadata
         started["recovery"] = metadata.fields
     }
 
     private func finishRecovery() -> RecordingRecovery? {
-        let metadata = currentRecovery
+        guard let metadata = currentRecovery else { return nil }
         currentRecovery = nil
         do { return try recordingJournal?.finish() }
         catch {
@@ -878,9 +874,8 @@ final class Helper {
             guard target == "note" else { return reply(id, ok: false, error: "invalid_value") }
             started["target"] = "note"
         }
-        do { try beginRecovery(&started) }
-        catch { return reply(id, ok: false, error: "recording_storage") }
-        recordingJournal?.append(samples, at: 0)
+        beginRecovery(&started)
+        if currentRecovery != nil { recordingJournal?.append(samples, at: 0) }
         reply(id, ok: true)
         emit("record.started", started)
         overlay.set(.listening)

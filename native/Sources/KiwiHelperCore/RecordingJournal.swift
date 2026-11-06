@@ -62,6 +62,13 @@ public final class RecordingJournal: @unchecked Sendable {
         }
     }
 
+    /// Recovery storage is optional: failures must never prevent the caller from capturing in memory.
+    /// Only the stable error code is reported, never paths or audio. The next recording tries storage again.
+    public func beginIfAvailable(app: RecordingApp? = nil, target: String? = nil, at: Date = Date()) -> RecordingRecovery? {
+        do { return try begin(app: app, target: target, at: at) }
+        catch { onError?("recording_storage"); return nil }
+    }
+
     /// `offset` is the count already retained by AudioCapture, before this chunk. An engine start retry may reset it.
     public func append(_ samples: [Float], at offset: Int) {
         guard !samples.isEmpty else { return }
