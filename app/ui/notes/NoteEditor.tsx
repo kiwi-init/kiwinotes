@@ -3,6 +3,9 @@
 
 import { EditorSelection, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { isolateHistory } from "@codemirror/commands";
+import { markdownStructure } from "../../src/shared/markdown-structure.ts";
+import { moveSection } from "./editor/section-move.ts";
 import { useEffect, useRef, useState } from "react";
 import { api as appApi, has } from "../src/api.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
@@ -31,6 +34,7 @@ export interface NoteEditorProps {
   /** "/modelo" (T2660). */
   onSlashTemplate?(): void;
   linkTargets(): LinkTarget[];
+  headingContent(target: string): Promise<string | null>;
   /** Os anexos (T2594); sem eles, colar e arrastar arquivo não faz nada de especial. Fixo durante a vida da janela. */
   attachments?: AttachmentSource;
   onError?(text: string): void;
@@ -39,23 +43,25 @@ export interface NoteEditorProps {
   onRenameHeading?(offset: number, title: string, source: string): void;
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError, createSplit, onSplitDone, onRenameHeading,
+export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, onError, createSplit, onSplitDone, onRenameHeading,
 }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [editorDoc, setEditorDoc] = useState(doc);
   const view = useRef<EditorView | null>(null);
   const spellingRequest = useRef(0);
   const splitting = useRef(false);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
-  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone, onRenameHeading,
+  const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, onError, createSplit, onSplitDone, onRenameHeading,
   });
-  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError, createSplit, onSplitDone, onRenameHeading,
+  latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, onError, createSplit, onSplitDone, onRenameHeading,
   };
 
   const extensions = useRef(
     editorExtensions(
       {
         onChange: (d) => {
+          setEditorDoc(d);
           if (!view.current || !externalUpdates.has(view.current))
             latest.current.onChange(d);
         },
@@ -65,6 +71,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
         // Abre fora (no navegador padrão), com a política `newWindow: "external"` da janela; nunca navega a janela.
         onOpenUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
         linkTargets: () => latest.current.linkTargets(),
+        headingContent: (target) => latest.current.headingContent(target),
         ...(attachments ? { attachments, onError: (t: string) => latest.current.onError?.(t) } : {}),
       },
       links,
@@ -95,6 +102,7 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
   useEffect(() => {
     spellingRequest.current++;
     setMenu(null);
+    setEditorDoc(doc);
     const v = view.current;
     if (!v) return;
     v.setState(stateFor(doc, extensions.current));
@@ -145,7 +153,29 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
         .finally(() => { splitting.current = false; });
     } : undefined, latest.current.onRenameHeading)] });
   };
+  const headings = markdownStructure(editorDoc).headings;
+  const goToHeading = (offset: number) => {
+    const v = view.current;
+    if (!v || offset > v.state.doc.length) return;
+    v.dispatch({ selection: { anchor: offset }, effects: EditorView.scrollIntoView(offset, { y: "center" }) });
+    v.focus();
+  };
+  const reorder = (offset: number, direction: "up" | "down") => {
+    const v = view.current;
+    if (!v || v.state.doc.toString() !== editorDoc) return;
+    const next = moveSection(editorDoc, offset, direction);
+    if (next === editorDoc) return;
+    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: next }, annotations: isolateHistory.of("full"), userEvent: "input.move" });
+  };
   return <>
+    {headings.length ? <details className="kn-outline">
+      <summary>Sumário</summary>
+      <ol>{headings.map((heading) => <li key={heading.from} style={{ paddingInlineStart: `${(heading.level - 1) * 12}px` }}>
+        <button type="button" className="kn-outline-title" onClick={() => goToHeading(heading.from)}>{heading.title || "Sem título"}</button>
+        <button type="button" aria-label={`Mover ${heading.title} para cima`} onClick={() => reorder(heading.from, "up")}>↑</button>
+        <button type="button" aria-label={`Mover ${heading.title} para baixo`} onClick={() => reorder(heading.from, "down")}>↓</button>
+      </li>)}</ol>
+    </details> : null}
     <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}
       onContextMenu={(e) => {
         e.preventDefault(); e.stopPropagation();

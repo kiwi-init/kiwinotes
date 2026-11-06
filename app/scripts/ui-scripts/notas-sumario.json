@@ -1,0 +1,28 @@
+{
+  "window": "notes",
+  "steps": [
+    { "invoke": "notes.create", "args": { "title": "Sumário E9", "content": "# Primeiro\n\nTexto um.\n\n## Filho\n\nFilho do primeiro.\n\n# Segundo\n\nTexto dois.\n" } },
+    { "waitFor": ".kn-crumb-bt" },
+    { "press": "Meta+k" },
+    { "type": "Sumário E9" },
+    { "waitFor": ".kn-palette-it:has-text(\"Sumário E9\")" },
+    { "press": "Enter" },
+    { "waitFor": ".kn-outline summary" },
+    { "click": ".kn-outline summary" },
+    { "expectCount": ".kn-outline li", "count": 3 },
+    { "screenshot": "sumario.png" },
+    { "click": "button[aria-label=\"Mover Primeiro para baixo\"]" },
+    { "expectText": ".kn-outline li:first-child", "text": "Segundo" },
+    { "click": ".cm-content" },
+    { "press": "Meta+End" },
+    { "press": "Enter" },
+    { "type": "# Terceiro" },
+    { "waitFor": "button:has-text(\"Terceiro\")" },
+    { "press": "Enter" },
+    { "type": "[[#Seg" },
+    { "waitFor": ".cm-tooltip-autocomplete" },
+    { "expectText": ".cm-tooltip-autocomplete", "text": "Segundo" },
+    { "press": "Enter" },
+    { "expectText": ".cm-content", "text": "Segundo" }
+  ]
+}

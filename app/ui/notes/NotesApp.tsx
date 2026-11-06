@@ -1327,6 +1327,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               onOpenTag={openTag}
               onSlashTemplate={api.templates ? () => fromTemplate(note?.folder ?? "", true) : undefined}
               linkTargets={linkTargets}
+              headingContent={async (target) => {
+                const path = await api.resolve(target);
+                if (!path) return null;
+                return path === note.path ? pending.current : (await api.get(path)).content;
+              }}
               attachments={api.attachments}
               onError={(t) => say(t)}
             />
