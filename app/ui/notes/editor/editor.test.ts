@@ -53,6 +53,12 @@ test("autocomplete de títulos locais usa o texto atual", async () => {
   expect(result?.options.map((option) => option.label)).toEqual(["Primeiro"]);
 });
 
+test("não oferece títulos que quebrariam a sintaxe do wikilink", async () => {
+  const doc = "# A | B\n# Fecha ]\n# Seguro\n[[#";
+  const result = await headingCompletion(async () => null)(new CompletionContext(EditorState.create({ doc }), doc.length, false));
+  expect(result?.options.map((option) => option.label)).toEqual(["Seguro"]);
+});
+
 describe("Markdown do GitHub", () => {
   const nodes = (doc: string) => {
     const state = EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] })] });

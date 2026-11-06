@@ -17,6 +17,28 @@ test("does not cross a parent or move beyond sibling boundaries", () => {
   expect(moveSection(source, 2, "up")).toBe(source);
 });
 
+test("moves an indented sibling without corrupting its boundary", () => {
+  const source = "# A\nbody\n  # B\ntext";
+  expect(moveSection(source, source.indexOf("# B"), "up")).toBe("  # B\ntext\n# A\nbody");
+});
+
+test("moves indented siblings and descendants without changing surrounding bytes", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    for (const final of ["", newline, newline + newline]) {
+      const source = ["  # Parent", " ## A", "body", "  ### Child", "child", "   ## B", "text", "  # Next", "tail"].join(newline) + final;
+      const expected = ["  # Parent", "   ## B", "text", " ## A", "body", "  ### Child", "child", "  # Next", "tail"].join(newline) + final;
+      expect(moveSection(source, source.indexOf("## B"), "up")).toBe(expected);
+      expect(moveSection(source, source.indexOf("## A"), "down")).toBe(expected);
+    }
+    for (const final of ["", newline, newline + newline]) {
+      const source = `  # A${newline}body${newline} # B${newline}text${final}`;
+      const expected = ` # B${newline}text${newline}  # A${newline}body${final}`;
+      expect(moveSection(source, source.indexOf("# B"), "up")).toBe(expected);
+      expect(moveSection(source, source.indexOf("# A"), "down")).toBe(expected);
+    }
+  }
+});
+
 test("preserves the final newline state and line endings", () => {
   for (const newline of ["\n", "\r\n"]) {
     for (const final of ["", newline]) {

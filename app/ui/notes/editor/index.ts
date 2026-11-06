@@ -120,7 +120,7 @@ export function headingCompletion(content: (target: string) => Promise<string | 
     if (text === null || ctx.aborted) return null;
     return {
       from: match.from + hash + 1,
-      options: markdownStructure(text).headings.filter((h) => h.title).map((h) => ({
+      options: markdownStructure(text).headings.filter((h) => h.title && !/[\[\]|#]/.test(h.title)).map((h) => ({
         label: h.title,
         apply: (view, _completion, from, to) => {
           const close = view.state.doc.sliceString(to, to + 2) === "]]" ? "" : "]]";
@@ -410,7 +410,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
           const link = linkAt(line.text, pos - line.from);
           if (link) {
             e.preventDefault();
-            opts.onOpenLink(link.target);
+            opts.onOpenLink(link.target + (link.heading ? `#${link.heading}` : ""));
             return true;
           }
           // Link do Markdown ([texto](https://…) ou <https://…>): ⌘-clique abre fora, nunca na janela.

@@ -79,7 +79,7 @@ describe("o Markdown que vai para a lib", () => {
   });
 
   test("[[nota#título]] mostra o nome da nota", () => {
-    expect(render("ver [[Ana#Contato]]")).toBe("ver [Ana](kiwi-note:Ana)");
+    expect(render("ver [[Ana#Contato]] e [[#Local]]")).toBe("ver [Ana](kiwi-note:Ana%23Contato) e [Local](kiwi-note:%23Local)");
   });
 
   test("#tag vira link de tag; #2026 e tag em código não", () => {

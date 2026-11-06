@@ -17,11 +17,12 @@ export interface WikiLink {
 }
 
 // [[alvo]], [[alvo#seção]], [[alvo|apelido]], [[alvo#seção|apelido]], com ! na frente para embed.
-const LINK = /(!?)\[\[([^[\]|#\n]+)(#[^[\]|\n]*)?(\|[^[\]\n]*)?\]\]/g;
+const LINK = /(!?)\[\[([^[\]|#\n]*)(#[^[\]|\n]*)?(\|[^[\]\n]*)?\]\]/g;
 
 export function parseLinks(content: string): WikiLink[] {
   const out: WikiLink[] = [];
   for (const m of content.matchAll(LINK)) {
+    if (!m[2]!.trim() && !m[3]?.slice(1).trim()) continue;
     out.push({ raw: m[0], embed: m[1] === "!", target: m[2]!.trim(), heading: m[3] ?? "", alias: m[4] ?? "", index: m.index! });
   }
   return out;

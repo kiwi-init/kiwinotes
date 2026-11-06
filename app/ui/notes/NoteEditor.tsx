@@ -4,7 +4,7 @@
 import { EditorSelection, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { isolateHistory } from "@codemirror/commands";
-import { markdownStructure } from "../../src/shared/markdown-structure.ts";
+import { headingFor, markdownStructure } from "../../src/shared/markdown-structure.ts";
 import { moveSection } from "./editor/section-move.ts";
 import { useEffect, useRef, useState } from "react";
 import { api as appApi, has } from "../src/api.ts";
@@ -25,6 +25,7 @@ const externalUpdates = new WeakSet<EditorView>();
 export interface NoteEditorProps {
   /** Muda quando outra nota abre, ou quando a mesma nota é recarregada do disco. */
   docKey: string;
+  headingJump: { heading: string; sequence: number } | null;
   doc: string;
   links: LinkCache;
   onChange(doc: string): void;
@@ -43,7 +44,7 @@ export interface NoteEditorProps {
   onRenameHeading?(offset: number, title: string, source: string): void;
 }
 
-export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, onError, createSplit, onSplitDone, onRenameHeading,
+export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, onError, createSplit, onSplitDone, onRenameHeading,
 }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -108,6 +109,15 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
     v.setState(stateFor(doc, extensions.current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
+
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !headingJump) return;
+    const heading = headingFor(markdownStructure(v.state.doc.toString()).headings, headingJump.heading);
+    if (!heading) return;
+    v.dispatch({ selection: { anchor: heading.from }, effects: EditorView.scrollIntoView(heading.from, { y: "center" }) });
+    v.focus();
+  }, [headingJump, docKey]);
 
   useEffect(() => {
     const cancelPending = () => { spellingRequest.current++; };

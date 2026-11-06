@@ -23,15 +23,17 @@ export function moveSection(content: string, headingFrom: number, direction: "up
   const second = Math.max(index, sibling);
   let end = second + 1;
   while (end < headings.length && headings[end]!.level > heading.level) end++;
-  const start = headings[first]!.from;
-  const middle = headings[second]!.from;
-  const finish = end < headings.length ? headings[end]!.from : content.length;
+  const lineStart = (from: number): number => content.lastIndexOf("\n", from - 1) + 1;
+  const start = lineStart(headings[first]!.from);
+  const middle = lineStart(headings[second]!.from);
+  const finish = end < headings.length ? lineStart(headings[end]!.from) : content.length;
   let left = content.slice(start, middle);
   let right = content.slice(middle, finish);
-  if (finish === content.length && !right.endsWith("\n")) {
-    const newline = /(?:\r?\n)+$/.exec(left)?.[0] ?? "";
-    left = left.slice(0, left.length - newline.length);
-    right += newline;
+  if (finish === content.length) {
+    const leftNewlines = /(?:\r?\n)+$/.exec(left)?.[0] ?? "";
+    const rightNewlines = /(?:\r?\n)+$/.exec(right)?.[0] ?? "";
+    left = left.slice(0, left.length - leftNewlines.length) + rightNewlines;
+    right = right.slice(0, right.length - rightNewlines.length) + leftNewlines;
   }
   return content.slice(0, start) + right + left + content.slice(finish);
 }

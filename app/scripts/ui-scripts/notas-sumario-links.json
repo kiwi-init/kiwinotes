@@ -1,0 +1,27 @@
+{
+  "window": "notes",
+  "steps": [
+    { "invoke": "notes.create", "args": { "title": "Destino E9", "content": "# Introdução\n\nInício.\n\n## Alvo remoto\n\nTexto.\n" } },
+    { "invoke": "notes.create", "args": { "title": "Origem E9", "content": "# Local\n\nLeia [[Destino E9#Alvo remoto|ir ao remoto]].\n\nLeia [[#Local|ir ao local]].\n" } },
+    { "waitFor": ".kn-crumb-bt" },
+    { "press": "Meta+k" },
+    { "type": "Origem E9" },
+    { "waitFor": ".kn-palette-it:has-text(\"Origem E9\")" },
+    { "press": "Enter" },
+    { "waitFor": ".cm-content" },
+    { "click": ".cm-content" },
+    { "press": "Meta+End" },
+    { "press": "Enter" },
+    { "type": "[[Origem E9#Loc" },
+    { "waitFor": ".cm-tooltip-autocomplete" },
+    { "expectText": ".cm-tooltip-autocomplete", "text": "Local" },
+    { "press": "Enter" },
+    { "click": "a[href='kiwi-note:%23Local']" },
+    { "type": "MARCA" },
+    { "waitFor": ".cm-line:has-text('MARCA# Local')" },
+    { "click": "a[href='kiwi-note:Destino%20E9%23Alvo%20remoto']" },
+    { "waitFor": ".kn-title[value='Destino E9']" },
+    { "type": "REMOTO" },
+    { "waitFor": ".cm-line:has-text('REMOTO## Alvo remoto')" }
+  ]
+}

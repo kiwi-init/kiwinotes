@@ -63,6 +63,10 @@ async function waitFor<T>(probe: () => T | undefined | null | false, ms = 3000):
 describe("[[links]] com a regra do Obsidian (T1316)", () => {
   const paths = ["Projetos/Kiwi.md", "Kiwi.md", "Diário/2026-11-03.md", "Arquivo/Velho/Kiwi.md", "Ideias.md"];
 
+  test("parse de fragmentos locais", () => {
+    expect(parseLinks("[[#Título]] [[]] [[|alias]]")).toMatchObject([{ target: "", heading: "#Título" }]);
+  });
+
   test("parse: alvo, seção, apelido e embed", () => {
     expect(parseLinks("ver [[Kiwi]], [[Projetos/Kiwi#Fase 1|a fase]] e ![[Ideias]]")).toMatchObject([
       { target: "Kiwi", heading: "", alias: "", embed: false },

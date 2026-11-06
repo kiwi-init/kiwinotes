@@ -1,7 +1,6 @@
 // A lógica da janela Notas (T1317): links, frontmatter, árvore e o vault de mentira com a forma do contrato 1.1.0.
 
 import { describe, expect, test } from "bun:test";
-
 import { engineNotes } from "./api.ts";
 import { joinFrontmatter, splitFrontmatter, tagsOf } from "./frontmatter.ts";
 import { folderOf, linkAt, linkTextFor, noteName, parseLinks, plainContext, plainSnippet } from "./links.ts";
@@ -10,6 +9,9 @@ import { paletteItems, snippetRanges, titleMatches, titleRanges } from "./palett
 import { ancestors, buildTree, editedLabel } from "./tree.ts";
 
 describe("links", () => {
+  test("reconhece wikilink de título da própria nota", () => {
+    expect(parseLinks("[[#Título]]")).toMatchObject([{ target: "", heading: "Título" }]);
+  });
   test("acha [[nota]], [[nota|apelido]] e [[nota#título]]", () => {
     const text = "veja [[Ana]], a [[Projetos/Site novo|o site]] e [[Mudança#Custos]]";
     expect(parseLinks(text).map(({ target, heading, alias }) => ({ target, heading, alias }))).toEqual([
