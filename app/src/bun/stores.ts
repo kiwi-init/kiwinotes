@@ -13,6 +13,7 @@ import { DictationNotes } from "../notes/fromDictation.ts";
 import { NotesFolders } from "../notes/folders-workspace.ts";
 import { assertHeadlessNotesFolder, resolveReal } from "../headless/guard.ts";
 import { Vault } from "../notes/vault.ts";
+import { SemanticEngine } from "../notes/semantic/engine.ts";
 
 /** `KIWI_DATA_DIR` troca a pasta (testes e agentes, sem mexer nos dados reais). */
 const dir = process.env.KIWI_DATA_DIR || dataDir();
@@ -20,9 +21,16 @@ const dir = process.env.KIWI_DATA_DIR || dataDir();
 const defaultRoot = resolveReal(process.env.KIWI_VAULT_DIR || path.join(homedir(), "KiwiNotes"));
 const globalSettings = new SettingsStore(dir);
 const recoveries = new RecordingRecoveries(dir);
+// A busca pelo sentido (T6013): o modelo em `<dados>/models`, ou em KIWI_MODELS_DIR (os agentes reaproveitam o mesmo
+// download entre um tmp e outro). O headless não sai para a rede: só usa um modelo que já está lá.
+const semantic = new SemanticEngine({
+  modelsDir: process.env.KIWI_MODELS_DIR || path.join(dir, "models"),
+  enabled: async () => (await globalSettings.load()).semanticSearch,
+  download: process.env.KIWI_HEADLESS !== "1",
+});
 let folders: NotesFolders;
 const internalNotes = new Vault({ root: defaultRoot, watch: true, onIndexProgress: p => folders?.indexProgress(defaultRoot,p) });
-folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,
+folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,semantic,
   guard: process.env.KIWI_HEADLESS === "1" ? root => assertHeadlessNotesFolder(root) : undefined,
 });
 const fixed = folders.fixed;
@@ -31,6 +39,7 @@ export const stores = {
   dir,
   folders,
   globalSettings,
+  semantic,
   dictionary: new DictionaryStore(dir),
   snippets: new SnippetStore(dir),
   recoveries,

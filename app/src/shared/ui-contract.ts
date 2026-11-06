@@ -29,6 +29,17 @@ import type { Shortcuts } from "./shortcuts.ts";
 export type { TagNode };
 export type { MeetingLive, MeetingNote };
 export { MEETING_PAUSE_SHORTCUTS, MEETING_SHORTCUTS, DEFAULT_MEETING_APPS, type MeetingAppEntry, type MeetingSettings } from "./meetings.ts";
+/** A busca pelo sentido (T6013): o estado do modelo e do índice da pasta aberta. */
+export interface SemanticStatus {
+  enabled: boolean;
+  phase: "off" | "idle" | "downloading" | "loading" | "ready" | "error";
+  /** Bytes baixados e o total, enquanto baixa. */
+  done?: number;
+  total?: number;
+  error?: string;
+  notes: number;
+  indexed: number;
+}
 export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet, TrashItem };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
@@ -80,7 +91,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.31.0 (T5560): local spelling suggestions.
 // 1.32.0 (T5833): o `cues` nas settings, os sons de início e de fim. Só acréscimo.
 // 1.33.0 (T6014): refactors de título/tag e avisos de links quebrados. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.33.0";
+// 1.34.0 (T6013): a busca pelo sentido: `semanticSearch` nas settings, o `notes.semanticStatus` e o `semantic: true` no
+//   `SearchHit` achado só pelo sentido. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.34.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -285,6 +298,8 @@ export interface UiCapabilities {
   "notes.search": { args: { query: string; limit?: number }; result: SearchHit[];
   };
   "notes.backlinks": { args: { path: string }; result: Backlink[] };
+  /** A busca pelo sentido (1.34.0, T6013): o modelo (baixando, pronto…) e quantas notas desta pasta já têm vetores. */
+  "notes.semanticStatus": { args: Record<string, never>; result: SemanticStatus };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
   /** As tags do vault em árvore (`#projeto/kiwi` dentro de `projeto`), com quantas notas cada uma tem (1.9.0). */
@@ -363,6 +378,7 @@ export const UI_CAPABILITIES = [
   "notes.rename",
   "notes.delete",
   "notes.search",
+  "notes.semanticStatus",
   "notes.backlinks",
   "notes.resolve",
   "notes.tags",

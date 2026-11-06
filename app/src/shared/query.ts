@@ -108,3 +108,12 @@ export function sanitizeSavedSearches(input: unknown): SavedSearch[] {
   }
   return out;
 }
+
+/**
+ * O texto que vai para a busca pelo sentido (T6013): as palavras soltas e as "frases", como a pessoa escreveu (com
+ * acento), sem os filtros nem as exclusões. Só filtros: nada.
+ */
+export function semanticQueryText(query: string): string {
+  const q = parseQuery(query, { preserveWords: true });
+  return [...q.words, ...q.phrases].join(" ").trim();
+}

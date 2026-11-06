@@ -182,6 +182,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     // Sem helper nem mic: uma lista fixa (a do #3202, AirPods na saída), para o seletor de microfone dos Ajustes (T3230).
     audioInputs: async () => headlessAudioInputs((await stores.settings.load()).microphone),
     ocr: stores.ocr,
+    semanticEngine: stores.semantic,
     exporter: stores.exporter,
     // O headless nunca abre diálogo: a pasta do exportar vem de KIWI_EXPORT_DIR (T2684), ou o exportar dá E_CANCELED.
     chooseExportFolder: async () => process.env.KIWI_EXPORT_DIR ?? null,

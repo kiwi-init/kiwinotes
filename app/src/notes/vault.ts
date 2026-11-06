@@ -4,6 +4,8 @@
 // (no início e pelo watcher, que pega também o que muda fora do app, como no Obsidian).
 
 import { NoteSearchIndex } from "./search-index.ts";
+import { noteChunks } from "./semantic/chunks.ts";
+import type { SemanticDocument, SemanticHit } from "./semantic/index.ts";
 import { lexicalMatch, lexicalWords } from "../shared/lexical.ts";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -55,6 +57,21 @@ export interface SearchHit {
   score: number;
   /** Achou só por aproximação (T2966): alguma palavra casou com erro de digitação. O exato vem antes. */
   approx?: boolean;
+  /** Achou só pelo sentido (T6013): nenhuma palavra casou, e o trecho é o da nota mais perto da busca. */
+  semantic?: boolean;
+}
+
+/** Quantas notas a busca pelo sentido traz no máximo, e a similaridade mínima (e5: as sem relação ficam abaixo). */
+export const SEMANTIC_LIMIT = 8;
+export const SEMANTIC_FLOOR = 0.8;
+/** A constante do Reciprocal Rank Fusion (Cormack et al., 2009): a soma de 1/(k + posição) em cada lista. */
+const RRF_K = 60;
+
+/** O trecho que casou pelo sentido, refeito da nota (o índice não guarda texto): até ~160 caracteres. */
+function semanticSnippet(title: string, content: string, chunk: number): string {
+  const text = noteChunks(title, content)[chunk] ?? "";
+  const body = text.startsWith(`${title.trim()}. `) ? text.slice(title.trim().length + 2) : text;
+  return body.length > 160 ? `${body.slice(0, 160).trimEnd()}…` : body;
 }
 
 /** Um arquivo do vault que não é nota (T3370): anexo, PDF, o `.canvas` do Obsidian. A árvore mostra todos. */
@@ -479,7 +496,17 @@ export class Vault {
     return this.resolve_()(link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!);
   }
 
-  search(query: unknown, limit: unknown = 20): SearchHit[] {
+  /** As notas para o índice da busca pelo sentido (T6013): o texto fica na memória, o índice guarda só os vetores. */
+  semanticDocuments(): SemanticDocument[] {
+    return [...this.notes.values()].map((e) => ({ path: e.meta.path, title: e.meta.title, version: e.meta.version, content: e.content }));
+  }
+
+  /**
+   * `semantic` (T6013): as notas mais perto da busca pelo sentido, do `SemanticIndex`. Sem ele, a busca é a de antes.
+   * Com ele, o exato continua antes e é reordenado pelo RRF do BM25 com o sentido; as notas achadas só pelo sentido vêm
+   * depois do exato e antes do aproximado, sempre com os filtros valendo.
+   */
+  search(query: unknown, limit: unknown = 20, semantic?: readonly SemanticHit[]): SearchHit[] {
     if (typeof query !== "string" || query.length > 500) throw new VaultError("E_BAD_ARGS", "query must be a string");
     const max = limit === undefined ? 20 : limit;
     if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > 100_000) {
@@ -551,16 +578,52 @@ export class Vault {
     // O trecho só para os que voltam: montar para cada nota que casa custava mais que a busca (288 ms com 1.000 notas).
     // O exato antes do aproximado; o trecho do aproximado mostra a palavra que casou.
     const first = q.phrases[0] ?? q.words[0] ?? (q.tags[0] ? `#${fold(q.tags[0])}` : "");
-    return hits
-      .sort((a, b) => Number(a.approx) - Number(b.approx) || b.score - a.score || a.e.meta.path.localeCompare(b.e.meta.path))
+    const sorted = hits.sort((a, b) => Number(a.approx) - Number(b.approx) || b.score - a.score || a.e.meta.path.localeCompare(b.e.meta.path));
+    const lexicalSnippet = (e: Entry, near?: string) =>
+      snippetAround(e.content, near ?? (q.phrases[0] || lexicalWords(e.content).find(w => lexicalMatch(w, rawWords)) || first));
+    if (semantic?.length && terms.length) return this.fuse(sorted, semantic, accepts, max, lexicalSnippet);
+    return sorted
       .slice(0, max)
       .map(({ e, score, approx, near }) => ({
         path: e.meta.path,
         title: e.meta.title,
-        snippet: snippetAround(e.content, near ?? (q.phrases[0] || lexicalWords(e.content).find(w => lexicalMatch(w, rawWords)) || first)),
+        snippet: lexicalSnippet(e, near),
         score,
         ...(approx ? { approx: true } : {}),
       }));
+  }
+
+  /** O BM25 somado ao sentido (T6013), pelo RRF. O exato fica na frente; o achado só pelo sentido, entre ele e o aproximado. */
+  private fuse(
+    sorted: { e: Entry; score: number; approx: boolean; near?: string }[],
+    semantic: readonly SemanticHit[],
+    accepts: (e: Entry) => boolean,
+    max: number,
+    lexicalSnippet: (e: Entry, near?: string) => string,
+  ): SearchHit[] {
+    const near = semantic.filter((h) => Number.isFinite(h.score) && h.score >= SEMANTIC_FLOOR);
+    const semanticRank = new Map<string, number>();
+    near.forEach((h, i) => {
+      if (!semanticRank.has(h.path)) semanticRank.set(h.path, i);
+    });
+    const rrf = (lexical: number | null, path: string) =>
+      (lexical === null ? 0 : 1 / (RRF_K + lexical + 1)) + (semanticRank.has(path) ? 1 / (RRF_K + semanticRank.get(path)! + 1) : 0);
+    const exact = sorted.filter((h) => !h.approx);
+    const approx = sorted.filter((h) => h.approx);
+    const found = new Set(sorted.map((h) => h.e.meta.path));
+    const exactOut: SearchHit[] = exact
+      .map(({ e, near: n }, i) => ({ path: e.meta.path, title: e.meta.title, snippet: lexicalSnippet(e, n), score: rrf(i, e.meta.path) }))
+      .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+    const semanticOut: SearchHit[] = [];
+    for (const h of near) {
+      if (semanticOut.length >= SEMANTIC_LIMIT) break;
+      const e = this.notes.get(h.path);
+      if (!e || found.has(h.path) || !accepts(e)) continue;
+      found.add(h.path);
+      semanticOut.push({ path: e.meta.path, title: e.meta.title, snippet: semanticSnippet(e.meta.title, e.content, h.chunk), score: rrf(null, h.path), semantic: true });
+    }
+    const approxOut: SearchHit[] = approx.map(({ e, score, near: n }) => ({ path: e.meta.path, title: e.meta.title, snippet: lexicalSnippet(e, n), score, approx: true }));
+    return [...exactOut, ...semanticOut, ...approxOut].slice(0, max);
   }
 
   /** A árvore das tags do vault, com quantas notas cada uma tem (T2619). */

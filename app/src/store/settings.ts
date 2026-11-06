@@ -39,6 +39,8 @@ export interface AppSettings {
   savedSearches: SavedSearch[];
   /** Ler o texto das imagens e dos PDFs anexados para a busca, no Mac (T2709). Ligado por padrão. */
   ocr: boolean;
+  /** A busca pelo sentido (T6013, #4766): o modelo local, baixado uma vez. Ligada por padrão; desligar apaga o modelo. */
+  semanticSearch: boolean;
   /** Por qual microfone o ditado grava (spec #3202, T3230). O helper recebe no `config.set`. Padrão: "auto". */
   microphone: MicrophoneChoice;
   /** A árvore das Notas mostra a extensão (`.md`, `.pdf`…) depois do nome (T3370). Desligado por padrão. */
@@ -54,7 +56,7 @@ export interface AppSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -111,6 +113,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     attachmentsFolder: "attachmentsFolder" in o ? sanitizeAttachmentsFolder(o.attachmentsFolder) : DEFAULT_ATTACHMENTS_FOLDER,
     savedSearches: sanitizeSavedSearches(o.savedSearches),
     ocr: typeof o.ocr === "boolean" ? o.ocr : true,
+    semanticSearch: o.semanticSearch !== false,
     microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
     showExtensions: o.showExtensions === true,
     cues: o.cues !== false,

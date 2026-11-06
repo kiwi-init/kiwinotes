@@ -148,6 +148,7 @@ const capabilities = uiCapabilities({
     },
   },
   ocr: stores.ocr,
+  semanticEngine: stores.semantic,
   exporter: stores.exporter,
   // Exportar (T2684): a pasta pelo seletor do macOS, só no clique da pessoa. Com KIWI_DEBUG=1 (os agentes), nenhum
   // diálogo abre: a pasta é a de KIWI_EXPORT_DIR, ou o exportar dá E_CANCELED.

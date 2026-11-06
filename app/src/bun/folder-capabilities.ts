@@ -27,6 +27,8 @@ export function folderCapabilities(
       settings: b.settings,
       attachments: b.attachments,
       ocr: b.ocr,
+      semantic: b.semantic,
+      semanticSource: b.notes,
       versions: b.versions,
       exporter: b.exporter,
       meetingNotes: b.meetingNotes,

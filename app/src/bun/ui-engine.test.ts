@@ -76,7 +76,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
   let t = 0;
   return {
     calls,
