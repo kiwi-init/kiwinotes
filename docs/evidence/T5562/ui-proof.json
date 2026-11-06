@@ -1,0 +1,41 @@
+{
+  "light": {
+    "ok": true,
+    "steps": 69,
+    "problems": [],
+    "blocked": [],
+    "savedNote": {
+      "path": "Busca e dobra E5.md",
+      "title": "Busca e dobra E5",
+      "folder": "",
+      "mtime": "2026-11-06T13:06:59.330Z",
+      "ctime": "2026-11-06T13:06:59.330Z",
+      "size": 187,
+      "version": "c46d40976231ba6c",
+      "tags": [],
+      "content": "# Primeiro\n\nACHADO um, ACHADO dois.\n\n| Coluna | Valor |\n| --- | --- |\n| ACHADO | 2 |\n\n```txt\nACHADO código\n```\n\n## Filho\n\nMais conteúdo.\n\n# Segundo\n\n- Pai\n  - Filho lista\n- Outro\n\nFim.\n"
+    }
+  },
+  "dark": {
+    "ok": true,
+    "steps": 69,
+    "problems": [],
+    "blocked": [],
+    "savedNote": {
+      "path": "Busca e dobra E5.md",
+      "title": "Busca e dobra E5",
+      "folder": "",
+      "mtime": "2026-11-06T13:07:03.265Z",
+      "ctime": "2026-11-06T13:07:03.264Z",
+      "size": 187,
+      "version": "c46d40976231ba6c",
+      "tags": [],
+      "content": "# Primeiro\n\nACHADO um, ACHADO dois.\n\n| Coluna | Valor |\n| --- | --- |\n| ACHADO | 2 |\n\n```txt\nACHADO código\n```\n\n## Filho\n\nMais conteúdo.\n\n# Segundo\n\n- Pai\n  - Filho lista\n- Outro\n\nFim.\n"
+    }
+  },
+  "markdownRegression": {
+    "ok": true,
+    "steps": 38,
+    "problems": []
+  }
+}
