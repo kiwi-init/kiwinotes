@@ -1,9 +1,12 @@
 // O CodeMirror dentro do React: um EditorView por janela, e um estado novo a cada nota aberta (o desfazer não atravessa
 // de uma nota para outra). O texto que chega de fora (a nota recarregada) troca o estado; o que a pessoa digita só sobe.
 
-import { Transaction } from "@codemirror/state";
+import { EditorSelection, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { api as appApi, has } from "../src/api.ts";
+import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
+import { editorMenu } from "./editor/context-menu.ts";
 
 import { lineChanges } from "../../src/shared/merge3.ts";
 
@@ -33,6 +36,7 @@ export interface NoteEditorProps {
 export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, attachments, onError,
 }: NoteEditorProps) {
   const host = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const view = useRef<EditorView | null>(null);
   // Os callbacks mudam a cada render; o editor chama sempre os de agora.
   const latest = useRef({ onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, onError,
@@ -80,13 +84,37 @@ export function NoteEditor({ docKey, doc, links, onChange, onOpenLink, onOpenTag
   }, []);
 
   useEffect(() => {
+    setMenu(null);
     const v = view.current;
     if (!v || v.state.doc.toString() === doc) return;
     v.setState(stateFor(doc, extensions.current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
 
-  return <div className="kn-note-editor" ref={host} />;
+  const openMenu = (x: number, y: number, moveCursor: boolean) => {
+    const v = view.current;
+    if (!v) return;
+    if (moveCursor) {
+      const pos = v.posAtCoords({ x, y });
+      if (pos !== null && !v.state.selection.ranges.some((range) => pos >= range.from && pos <= range.to))
+        v.dispatch({ selection: EditorSelection.cursor(pos) });
+    }
+    setMenu({ x, y, items: editorMenu(v, {
+      ...(has("clipboard.write") ? { write: (text: string) => appApi.copy(text) } : {}),
+      ...(has("clipboard.read") ? { read: () => appApi.readClipboard() } : {}),
+    }, (message) => latest.current.onError?.(message)) });
+  };
+  return <>
+    <div className="kn-note-editor" ref={host} data-context-menu-open={menu ? true : undefined}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(e.clientX, e.clientY, true); }}
+      onKeyDown={(e) => {
+        if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;
+        e.preventDefault(); e.stopPropagation();
+        const v = view.current, at = v?.coordsAtPos(v.state.selection.main.head);
+        if (at) openMenu(at.left, at.bottom, false);
+      }} />
+    {menu ? <ContextMenu {...menu} onClose={() => setMenu(null)} onRestoreFocus={() => view.current?.focus()} /> : null}
+  </>;
 }
 
 /** Põe o foco no editor da janela (depois de criar uma nota, por exemplo). */

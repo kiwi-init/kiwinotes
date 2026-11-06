@@ -283,13 +283,16 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
       else if (kind === "open") report.blocked.push(message);
       else report.problems.push(message);
     });
+    let fakeClipboard = "";
     await context.exposeBinding("__kiwiInvoke", async (_src, cap: string, args: unknown): Promise<Reply> => {
       report.invokes[cap] = (report.invokes[cap] ?? 0) + 1;
       if (cap === "clipboard.write") {
         const text = (args as { text?: unknown } | null)?.text;
-        report.clipboard.push(typeof text === "string" ? text : JSON.stringify(text));
+        fakeClipboard = typeof text === "string" ? text : JSON.stringify(text);
+        report.clipboard.push(fakeClipboard);
         return { ok: true, value: true };
       }
+      if (cap === "clipboard.read") return { ok: true, value: fakeClipboard };
       let r: Reply;
       try {
         r = (await ctx.send({ cmd: "invoke", cap, args: args ?? {} })) as Reply;

@@ -133,6 +133,10 @@ export const api = {
     delete: (path: string) => invokeInternal("notes.delete", { path }),
     restore: (path: string) => invokeInternal("notes.restore", { path }),
   },
+  readClipboard: async () => {
+    if (navigator.userActivation && !navigator.userActivation.isActive) throw new Error("colar só com um clique");
+    return invoke("clipboard.read", {});
+  },
   /** Só num gesto da pessoa (o clique em copiar): nenhuma UI escreve no clipboard sozinha (#1199). */
   copy: async (text: string) => {
     if (navigator.userActivation && !navigator.userActivation.isActive) throw new Error("copiar só com um clique");

@@ -73,6 +73,7 @@ export interface CapabilityDeps {
   dictionaryChanged?(terms: DictionaryTerm[]): void;
   snippetsChanged?(snippets: Snippet[]): void;
   clipboardWrite(text: string): void;
+  clipboardRead?(): string | null;
   /** A seção pedida para o hub que ainda vai abrir (T2121): devolve e esquece. Sem ela, null. */
   hubSection?(): HubSection | null;
   /** A intro avisou que terminou (T2308): o hub segue. */
@@ -485,6 +486,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       noArgs(args, "intro.done");
       deps.introDone?.();
       return true as const;
+    },
+    "clipboard.read": (args) => {
+      noArgs(args, "clipboard.read");
+      if (!deps.clipboardRead) throw new CapabilityError("E_UNAVAILABLE", "clipboard read unavailable");
+      const text = deps.clipboardRead() ?? "";
+      if (text.length > CLIPBOARD_MAX_CHARS) throw bad(`text is longer than ${CLIPBOARD_MAX_CHARS} characters`);
+      return text;
     },
     "clipboard.write": (args) => {
       const text = object(args, "clipboard.write").text;

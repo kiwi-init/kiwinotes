@@ -331,6 +331,19 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(f.calls.filter((c) => c.startsWith("settings.save"))).toHaveLength(2);
   });
 
+  test("clipboard.read is explicit, text only, bounded and unavailable without an adapter", async () => {
+    const f = fakeDeps(); let reads = 0;
+    const caps = uiCapabilities({ ...f.deps, clipboardRead: () => { reads++; return "texto local"; } });
+    expect(reads).toBe(0);
+    expect(await directInvoke(caps, "clipboard.read", {})).toMatchObject({ ok: true, value: "texto local" });
+    expect(reads).toBe(1);
+    expect(await directInvoke(caps, "clipboard.read", { unexpected: true })).toMatchObject({ ok: false });
+    expect(reads).toBe(1);
+    expect(await directInvoke(uiCapabilities(f.deps), "clipboard.read", {})).toMatchObject({ ok: false, code: "E_UNAVAILABLE" });
+    const huge = uiCapabilities({ ...f.deps, clipboardRead: () => "a".repeat(1_000_001) });
+    expect(await directInvoke(huge, "clipboard.read", {})).toMatchObject({ ok: false });
+  });
+
   test("clipboard.write: só texto, com limite de tamanho e de ritmo (#1199)", async () => {
     const f = fakeDeps();
     const caps = uiCapabilities(f.deps);

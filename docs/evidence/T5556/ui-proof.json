@@ -1,0 +1,137 @@
+{
+  "light": {
+    "ok": true,
+    "steps": 64,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "clipboard.write": 2,
+      "clipboard.read": 1,
+      "notes.save": 1
+    },
+    "fakeClipboardWrites": [
+      "Texto selecionado",
+      "Texto selecionado"
+    ],
+    "problems": [],
+    "blocked": [],
+    "invokeErrors": [],
+    "selectionToolbarChecks": [
+      {
+        "step": "a barra de seleção some com o menu aberto",
+        "ok": true
+      },
+      {
+        "step": "a barra volta ao fechar o menu mantendo a seleção",
+        "ok": true
+      }
+    ]
+  },
+  "dark": {
+    "ok": true,
+    "steps": 64,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "clipboard.write": 2,
+      "clipboard.read": 1,
+      "notes.save": 1
+    },
+    "fakeClipboardWrites": [
+      "Texto selecionado",
+      "Texto selecionado"
+    ],
+    "problems": [],
+    "blocked": [],
+    "invokeErrors": [],
+    "selectionToolbarChecks": [
+      {
+        "step": "a barra de seleção some com o menu aberto",
+        "ok": true
+      },
+      {
+        "step": "a barra volta ao fechar o menu mantendo a seleção",
+        "ok": true
+      }
+    ]
+  },
+  "narrow": {
+    "ok": true,
+    "steps": 64,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 3,
+      "trash.list": 3,
+      "notes.tags": 2,
+      "notes.get": 2,
+      "notes.backlinks": 2,
+      "clipboard.write": 2,
+      "clipboard.read": 1,
+      "notes.save": 1
+    },
+    "fakeClipboardWrites": [
+      "Texto selecionado",
+      "Texto selecionado"
+    ],
+    "problems": [],
+    "blocked": [],
+    "invokeErrors": [],
+    "selectionToolbarChecks": [
+      {
+        "step": "a barra de seleção some com o menu aberto",
+        "ok": true
+      },
+      {
+        "step": "a barra volta ao fechar o menu mantendo a seleção",
+        "ok": true
+      }
+    ]
+  },
+  "edge": {
+    "ok": true,
+    "steps": 15,
+    "invokes": {
+      "settings.get": 5,
+      "notes.folder": 1,
+      "notes.list": 2,
+      "trash.list": 2,
+      "notes.tags": 1,
+      "notes.get": 1,
+      "notes.backlinks": 1
+    },
+    "fakeClipboardWrites": [],
+    "problems": [],
+    "blocked": [],
+    "invokeErrors": []
+  },
+  "tree": {
+    "ok": true,
+    "steps": 9,
+    "invokes": {
+      "settings.get": 6,
+      "notes.folder": 1,
+      "notes.list": 4,
+      "trash.list": 3,
+      "notes.tags": 3,
+      "notes.duplicate": 1,
+      "notes.get": 1,
+      "notes.backlinks": 1
+    },
+    "fakeClipboardWrites": [],
+    "problems": [],
+    "blocked": [],
+    "invokeErrors": []
+  },
+  "savedMarkdown": "~~Texto selecionado~~\n\n# Texto selecionado\n\n---\n\n"
+}

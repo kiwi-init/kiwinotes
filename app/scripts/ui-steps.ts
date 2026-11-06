@@ -41,7 +41,7 @@ import type { Page } from "playwright-core";
 import { settle } from "./ui-page.ts";
 
 export type Step =
-  | { click: string; modifiers?: Modifier[] }
+  | { click: string; modifiers?: Modifier[]; button?: "left" | "right"; position?: { x: number; y: number } }
   | { fill: string; text: string }
   /** Escolhe a opção de um `<select>` pelo `value` (T3230). */
   | { select: string; value: string }
@@ -145,6 +145,11 @@ export function parseScript(json: unknown): ScriptFile {
         break;
       case "click":
         str(s.click, `${at}.click`);
+        if (s.position !== undefined) {
+          const p = s.position as Record<string, unknown>;
+          if (!p || typeof p !== "object" || ![p.x, p.y].every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 4000)) throw new Error(`${at}.position: x e y entre 0 e 4000`);
+        }
+        if (s.button !== undefined && s.button !== "left" && s.button !== "right") throw new Error(`${at}.button: left ou right`);
         if (s.modifiers !== undefined && !(Array.isArray(s.modifiers) && s.modifiers.every((m) => MODIFIERS.has(m as string)))) {
           throw new Error(`${at}: modifiers entre Alt, Control, Meta, Shift`);
         }
@@ -279,7 +284,7 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
     );
     return {};
   }
-  if ("click" in s) await page.click(s.click, { timeout, modifiers: s.modifiers });
+  if ("click" in s) await page.click(s.click, { timeout, modifiers: s.modifiers, button: s.button, position: s.position });
   else if ("fill" in s) await page.fill(s.fill, s.text, { timeout });
   else if ("select" in s) await page.selectOption(s.select, s.value, { timeout });
   else if ("type" in s) await page.keyboard.type(s.type);
