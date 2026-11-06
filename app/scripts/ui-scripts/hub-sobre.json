@@ -7,7 +7,7 @@
     { "expectText": ".kn-about-version", "text": "Versão dev", "name": "a versão e o canal (no headless, dev)" },
     { "expectText": ".kn-about-line", "text": "desligadas", "name": "sem o atualizador, diz que está desligado" },
     { "expectCount": ".kn-about button:has-text('Verificar atualizações'):disabled", "count": 1, "name": "e o botão não vai à rede" },
-    { "expectCount": ".kn-about-link", "count": 0, "name": "sem notas da versão num build local" },
+    { "expectCount": ".kn-about-link:has-text('Notas desta versão')", "count": 0, "name": "sem notas da versão num build local" },
     { "screenshot": "hub-sobre.png" }
   ]
 }

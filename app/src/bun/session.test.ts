@@ -5,10 +5,20 @@ import path from "node:path";
 
 import { DictionaryStore } from "../store/dictionary.ts";
 import { SnippetStore } from "../store/snippets.ts";
-import { loadLists } from "./session.ts";
+import { helperLogLine, loadLists } from "./session.ts";
 
-let dir: string;
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+let dir = "";
+afterEach(() => {
+  if (dir) rmSync(dir, { recursive: true, force: true });
+  dir = "";
+});
+
+test("do log do helper, só o diagnóstico do mic (ditado e reunião) vai para o log do app; o texto do dryRun nunca", () => {
+  expect(helperLogLine("mic: diag · engine new · first audio 120 ms")).toBe("[sidecar] mic: diag · engine new · first audio 120 ms");
+  expect(helperLogLine("meeting mic: diag · Teams")).toBe("[sidecar] meeting mic: diag · Teams");
+  expect(helperLogLine("insert (dry run): bom dia a todos")).toBeNull();
+  expect(helperLogLine("transcript: bom dia")).toBeNull();
+});
 
 describe("loadLists", () => {
   test("a hand-edited JSON that doesn't parse is an empty list with a warning, not a crash, and stays on disk (T914)", async () => {

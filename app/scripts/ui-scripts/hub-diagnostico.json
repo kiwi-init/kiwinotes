@@ -1,0 +1,13 @@
+{
+  "window": "hub",
+  "steps": [
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": ".kn-tab:has-text('Sobre')", "name": "vai para Sobre" },
+    { "waitFor": ".kn-about-diag button:has-text('Salvar diagnóstico')", "name": "o botão discreto embaixo" },
+    { "expectText": ".kn-about-hint", "text": "sem texto nem áudio" },
+    { "screenshot": "01-sobre-com-diagnostico.png" },
+    { "click": ".kn-about-diag button", "name": "salva" },
+    { "expectText": ".kn-about-hint", "text": "Salvo em diagnostics: Kiwi Notes diagnóstico", "name": "diz onde ficou" },
+    { "screenshot": "02-diagnostico-salvo.png" }
+  ]
+}

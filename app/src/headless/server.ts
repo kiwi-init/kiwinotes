@@ -141,6 +141,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     };
   }
 
+  // T5350: o mesmo log em arquivo do app, em <data>/logs, para os roteiros conferirem o "Salvar diagnóstico".
+  const { installFileLog, appLog } = await import("../bun/file-log.ts");
+  installFileLog(data);
+  const { saveDiagnostics } = await import("../bun/diagnostics.ts");
+
   // ---------------------------------------------------------------- o motor
   const session = o.helper ? new (await import("../bun/session.ts")).Session(path.join(data, "views")) : null;
   // A gravação de reunião ao vivo (R6): a do helper, ou uma de mentira com `KIWI_FAKE_MEETING=<app>` para os prints e os
@@ -184,6 +189,23 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     reveal: (abs) => console.log(`[headless] notes.reveal (not opened): ${abs}`),
     openFile: (abs, mode) => console.log(`[headless] files.open (not opened, ${mode}): ${abs}`),
     revealTrash: () => console.log("[headless] trash.reveal (not opened)"),
+    // O diagnóstico vai para <data>/diagnostics e nada abre; os crashes do macOS só de KIWI_CRASH_DIR (nunca os reais).
+    diagnostics: {
+      save: () =>
+        saveDiagnostics({
+          app: () => ({ version: "headless", channel: "dev" }),
+          contract: UI_CONTRACT_VERSION,
+          session: () => session?.diagnostics() ?? null,
+          settings: async () => {
+            const s = await stores.settings.load();
+            return { microphone: s.microphone, notesShortcut: s.notesShortcut };
+          },
+          log: appLog,
+          saveDir: path.join(data, "diagnostics"),
+          crashDir: process.env.KIWI_CRASH_DIR ?? path.join(data, "crash-reports"),
+          reveal: (abs) => console.log(`[headless] diagnostics.reveal (not opened): ${path.basename(abs)}`),
+        }),
+    },
   });
   const offs = [
     stores.folders.onNotesChanged((folder, paths) => event("notes.changed", { paths, folderId:folder.id })),

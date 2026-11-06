@@ -94,6 +94,10 @@ export const api = {
   app: {
     about: () => invoke("app.about", {}),
   },
+  /** "Salvar diagnóstico" (T5350): o .txt sem texto nem áudio; no app, em ~/Downloads e no Finder. */
+  diagnostics: {
+    save: () => invoke("diagnostics.save", {}),
+  },
   updates: {
     /** Checa na hora; resolve quando a checagem termina (pronta, na última versão ou com erro). */
     check: () => invoke("updates.check", {}),

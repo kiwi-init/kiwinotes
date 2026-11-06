@@ -68,6 +68,8 @@ export class Sidecar {
   private connected?: { promise: Promise<Ready>; resolve(r: Ready): void };
   /** O último `ready`, com o `llm` atualizado pelos `permissions.changed`. */
   ready?: Ready;
+  /** As quedas do helper desde que o app abriu, as 20 últimas (T5350: vão no "Salvar diagnóstico"). */
+  readonly exits: { at: string; code: number | null; signal?: string }[] = [];
 
   constructor(private readonly options: SidecarOptions) {
     this.resetConnected();
@@ -147,10 +149,15 @@ export class Sidecar {
       return;
     }
     this.proc = proc;
-    void proc.exited.then(() => {
+    void proc.exited.then((result) => {
       if (this.proc !== proc || this.stopped) return;
       const wait = this.nextWait();
-      this.log(`sidecar exited; restarting in ${wait} ms`);
+      const p = proc as { exitCode?: number | null; signalCode?: string | null };
+      const code = typeof result === "number" ? result : (p.exitCode ?? null);
+      const signal = p.signalCode ?? undefined;
+      this.exits.push({ at: new Date().toISOString(), code, ...(signal ? { signal } : {}) });
+      if (this.exits.length > 20) this.exits.shift();
+      this.log(`sidecar exited (${signal ? `signal ${signal}` : `code ${code ?? "?"}`}); restarting in ${wait} ms`);
       setTimeout(() => this.spawnHelper(), wait);
     });
   }
