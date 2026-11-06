@@ -67,6 +67,7 @@ export function onWindowClosed(fn: (name: WindowName) => void): () => void {
   return () => closeListeners.delete(fn);
 }
 
+let debugClipboard = "";
 const capabilities = uiCapabilities({
   introDone: () => {
     for (const fn of introDoneListeners) fn();
@@ -86,7 +87,11 @@ const capabilities = uiCapabilities({
     // A Aparência vale para todas as janelas abertas (T2503).
     for (const rpc of rpcs.values()) rpc.send.event({ name: "settings.changed", payload: settings });
   },
-  clipboardWrite: (text) => Utils.clipboardWriteText(text),
+  clipboardWrite: (text) => {
+    if (process.env.KIWI_DEBUG === "1") { debugClipboard = text; return; }
+    Utils.clipboardWriteText(text);
+  },
+  clipboardRead: () => process.env.KIWI_DEBUG === "1" ? debugClipboard : Utils.clipboardReadText(),
   // "Mostrar no Finder" (T2468). Com KIWI_DEBUG=1 (os agentes), só registra: nada abre na tela de ninguém.
   reveal: (abs) => {
     if (process.env.KIWI_DEBUG === "1") return void console.log(`[notes] reveal (dry run): ${abs}`);

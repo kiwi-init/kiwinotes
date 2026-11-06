@@ -1,0 +1,204 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Menu do editor",
+        "content": "Texto selecionado\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Menu do editor"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text('Menu do editor')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+Home"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "click": ".cm-line:has-text('Texto selecionado')",
+      "button": "right",
+      "position": {
+        "x": 20,
+        "y": 8
+      }
+    },
+    {
+      "waitFor": ".kn-menu [role=menuitem]:has-text('Formatar')"
+    },
+    {
+      "hover": ".kn-menu-item:has-text('Formatar')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Formatar']"
+    },
+    {
+      "screenshot": "01-formatar.png"
+    },
+    {
+      "click": "[aria-label='Formatar'] .kn-menu-item:has-text('Tachado')"
+    },
+    {
+      "waitFor": ".cm-line:has-text('~~Texto selecionado')"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Copiar')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "type": "Destino"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Colar sem formatação')"
+    },
+    {
+      "expectCount": ".cm-line:has-text('Destino')",
+      "count": 0
+    },
+    {
+      "waitFor": ".cm-line:has-text('Texto selecionado')"
+    },
+    {
+      "press": "Shift+Home"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Recortar')"
+    },
+    {
+      "waitFor": ".cm-line:has-text('Texto selecionado')",
+      "state": "hidden",
+      "name": "recortar conclui antes do desfazer"
+    },
+    {
+      "press": "Meta+z"
+    },
+    {
+      "waitFor": ".cm-line:has-text('Texto selecionado')"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Parágrafo']:focus"
+    },
+    {
+      "screenshot": "02-paragrafo.png"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-line:has-text('# Texto selecionado')"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Formatar']:focus"
+    },
+    {
+      "press": "ArrowLeft"
+    },
+    {
+      "expectCount": "[role=menu][aria-label='Formatar']",
+      "count": 0
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".cm-content:focus"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "hover": ".kn-menu-item:has-text('Inserir')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Inserir']"
+    },
+    {
+      "screenshot": "03-inserir.png"
+    },
+    {
+      "click": "[aria-label='Inserir'] .kn-menu-item:has-text('Separador')"
+    },
+    {
+      "waitFor": ".cm-rendered hr"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "screenshot": "04-resultado.png"
+    }
+  ]
+}

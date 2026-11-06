@@ -153,6 +153,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // roteiros da aba Reuniões (o headless nunca grava de verdade: o helper recusa `meeting.start` sem mic).
   const { FakeMeetingHost } = await import("../bun/meetings.ts");
   const meetings = process.env.KIWI_FAKE_MEETING ? new FakeMeetingHost(process.env.KIWI_FAKE_MEETING) : session?.meetings;
+  let fakeClipboard = "";
   const capabilities = uiCapabilities({
     meetings,
     dictionary: stores.dictionary,
@@ -189,7 +190,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     },
     dictationNotes: stores.dictationNotes,
     // Headless nunca encosta no clipboard da pessoa: o texto vai só para o log, como o dryRun do insert.
-    clipboardWrite: (text) => console.log(`[headless] clipboard.write (not written): ${text.length} chars`),
+    clipboardWrite: (text) => { fakeClipboard = text; console.log(`[headless] clipboard.write (not written): ${text.length} chars`); },
+    clipboardRead: () => fakeClipboard,
     // O "Mostrar no Finder" nunca abre o Finder no headless: só o log (T2468).
     reveal: (abs) => console.log(`[headless] notes.reveal (not opened): ${abs}`),
     openFile: (abs, mode) => console.log(`[headless] files.open (not opened, ${mode}): ${abs}`),

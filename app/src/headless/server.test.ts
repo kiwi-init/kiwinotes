@@ -95,6 +95,7 @@ describe("headless (T1739)", () => {
       expect(await cli(["invoke", "notes.get", '{"path":"../fora.md"}'])).toMatchObject({ code: 1, json: { code: "E_OUTSIDE_VAULT" } });
       // O clipboard da pessoa nunca é tocado.
       expect(await cli(["invoke", "clipboard.write", '{"text":"segredo"}'])).toMatchObject({ code: 0 });
+      expect(await cli(["invoke", "clipboard.read", "{}"])).toMatchObject({ code: 0, json: { ok: true, value: "segredo" } });
       // Uso errado: exit 2.
       expect((await cli(["invoke"])).code).toBe(2);
       expect((await cli(["invoke", "notes.list", "{nao é json"])).code).toBe(2);

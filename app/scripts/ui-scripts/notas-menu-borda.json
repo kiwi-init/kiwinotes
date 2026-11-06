@@ -1,0 +1,55 @@
+{
+  "window": "notes",
+  "size": "640x560",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Canto direito",
+        "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Canto direito"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text('Canto direito')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+End"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "hover": ".kn-menu-item:has-text('Formatar')"
+    },
+    {
+      "waitFor": "[aria-label='Formatar']"
+    },
+    {
+      "expectNoHScroll": ".kn-menu"
+    },
+    {
+      "screenshot": "submenu-na-borda.png"
+    },
+    {
+      "press": "Escape"
+    }
+  ]
+}

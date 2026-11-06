@@ -1024,3 +1024,7 @@ body {
   overflow-wrap: anywhere;
 }
 .kn-merge .kn-conflict-actions { justify-content: flex-end; }
+
+/* Submenus share the floating surface and clamp to the viewport, including short windows. */
+.kn-menu { width: max-content; max-height: calc(100vh - 16px); max-width: calc(100vw - 16px); overflow-y: auto; }
+.kn-menu-arrow { margin-left: 16px; color: var(--text-3); }
