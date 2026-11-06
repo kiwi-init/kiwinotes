@@ -1,7 +1,7 @@
 {
   "window": "notes",
   "steps": [
-    { "invoke": "notes.create", "args": { "title": "Destino E9", "content": "# Introdução\n\nInício.\n\n## Alvo remoto\n\nTexto.\n" } },
+    { "invoke": "notes.create", "args": { "title": "Destino E9", "content": "# Introdução\n\nInício.\n\n## Alvo remoto\n\nTexto.\n\n# Taxa 20%20\n\nFim.\n\n[[#Taxa 20%20|ir à taxa]]\n" } },
     { "invoke": "notes.create", "args": { "title": "Origem E9", "content": "# Local\n\nLeia [[Destino E9#Alvo remoto|ir ao remoto]].\n\nLeia [[#Local|ir ao local]].\n" } },
     { "waitFor": ".kn-crumb-bt" },
     { "press": "Meta+k" },
@@ -22,6 +22,9 @@
     { "click": "a[href='kiwi-note:Destino%20E9%23Alvo%20remoto']" },
     { "waitFor": ".kn-title[value='Destino E9']" },
     { "type": "REMOTO" },
-    { "waitFor": ".cm-line:has-text('REMOTO## Alvo remoto')" }
+    { "waitFor": ".cm-line:has-text('REMOTO## Alvo remoto')" },
+    { "click": "a[href='kiwi-note:%23Taxa%2020%2520']" },
+    { "type": "PERCENT" },
+    { "waitFor": ".cm-line:has-text('PERCENT# Taxa 20%20')" }
   ]
 }

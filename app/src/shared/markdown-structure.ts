@@ -22,6 +22,9 @@ export function headingKey(text: string): string { try {
 }
 catch { } return normalize(text.replace(/^#/, "").trim()); }
 export function headingFor(headings: readonly NoteHeading[], fragment: string): NoteHeading | undefined {
+    const literal = normalize(fragment.replace(/^#/, "").trim());
+    const direct = headings.find(h => normalize(h.title) === literal || h.slug === literal);
+    if (direct) return direct;
     const key = headingKey(fragment);
     return headings.find(h => normalize(h.title) === key || h.slug === key);
 }

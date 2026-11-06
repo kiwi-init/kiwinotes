@@ -1,5 +1,18 @@
+import { EditorState } from "@codemirror/state";
+import { lineChanges } from "../../../src/shared/merge3.ts";
 import { expect, test } from "bun:test";
 import { moveSection } from "./section-move.ts";
+
+test("a move preserves selection outside the edited sections", () => {
+  const doc = "# Intro\nunchanged\n# A\na\n# B\nb\n# End\nuntouched\n";
+  const next = moveSection(doc, doc.indexOf("# A"), "down");
+  for (const text of ["unchanged", "untouched"]) {
+    const cursor = doc.indexOf(text) + 3;
+    const state = EditorState.create({ doc, selection: { anchor: cursor } });
+    const result = state.update({ changes: lineChanges(doc, next) }).state;
+    expect(result.selection.main.head).toBe(next.indexOf(text) + 3);
+  }
+});
 
 test("moves sibling sections with their descendants in either direction", () => {
   const source = "Intro\n# One\nbody\n## Child\nchild\n# Two\nmore\n## Other\nend\n# Three\n";

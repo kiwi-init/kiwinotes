@@ -175,7 +175,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
     if (!v || v.state.doc.toString() !== editorDoc) return;
     const next = moveSection(editorDoc, offset, direction);
     if (next === editorDoc) return;
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: next }, annotations: isolateHistory.of("full"), userEvent: "input.move" });
+    v.dispatch({ changes: lineChanges(editorDoc, next), annotations: isolateHistory.of("full"), userEvent: "input.move" });
   };
   return <>
     {headings.length ? <details className="kn-outline">
