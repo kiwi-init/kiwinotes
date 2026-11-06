@@ -182,6 +182,8 @@ export interface VaultOptions {
   trash?: (abs: string) => Promise<void>;
   /** Quanto o watcher junta mudanças antes de avisar. */
   debounceMs?: number;
+  /** Quanto depois de começar a olhar vem a conferida do disco (T6412). Padrão: `RECONCILE_MS`. */
+  reconcileMs?: number;
   /** Liga o watcher ao abrir (o app liga; os testes ligam na mão). */
   watch?: boolean;
   /** Quanto o apagado espera em `.kiwi-trash` (o "Desfazer") antes de ir para a Lixeira do macOS. */
@@ -194,6 +196,8 @@ export interface VaultOptions {
 export const UNDO_DIR = ".kiwi-trash";
 /** 10 min para desfazer um apagar. */
 export const UNDO_MS = 10 * 60_000;
+/** A conferida depois do `watch()` (T6412): o FSEvents perde o que muda logo no começo; 1 s depois ele já está de pé. */
+export const RECONCILE_MS = 1_000;
 
 /** O que foi apagado, para a Lixeira do app (T2593): no "Desfazer" (`kiwi`) ou já no Lixo do macOS (`macos`). */
 export interface TrashItem {
@@ -361,6 +365,15 @@ export class Vault {
   private watcher: FSWatcher | null = null;
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Cada nota escrita ou apagada pelo app ganha um número (T6412): o scan monta o mapa novo devagar e troca tudo no fim,
+   * e uma nota que mudou no meio dele fica com a versão de agora, não com a que o scan leu antes.
+   */
+  private seq = 0;
+  private touchedAt = new Map<string, number>();
+  private scans = 0;
+  private readonly reconcileMs: number;
   private readonly listeners = new Set<(paths: string[]) => void>();
   private readonly otherListeners = new Set<(paths: string[]) => void>();
   private readonly moveListeners = new Set<(r: ExternalMoves) => void>();
@@ -386,6 +399,7 @@ export class Vault {
     this.strictRoot = o.strictRoot ?? false;
     this.trash = o.trash ?? macTrash;
     this.debounceMs = o.debounceMs ?? 150;
+    this.reconcileMs = o.reconcileMs ?? RECONCILE_MS;
     this.watchOnOpen = o.watch ?? false;
     this.undoMs = o.undoMs ?? UNDO_MS;
     this.now = o.now ?? Date.now;
@@ -439,6 +453,46 @@ export class Vault {
       this.pendingPaths.add(rel);
       this.flushTimer ??= setTimeout(() => void this.flush().catch((e) => console.error("[notes] watcher flush failed:", e)), this.debounceMs);
     });
+    // O FSEvents perde a mudança feita logo depois de começar a olhar (T6412, issue 254: 37 de 90 com o Mac ocupado).
+    // Uma conferida pouco depois relê só o que mudou de mtime ou tamanho (o cache do T5352) e avisa como o watcher.
+    this.reconcileTimer = setTimeout(() => {
+      this.reconcileTimer = null;
+      void this.reconcile().catch((e) => console.error("[notes] watcher reconcile failed:", e));
+    }, this.reconcileMs);
+  }
+
+  /** O que mudou no disco desde o índice de agora, sem esperar o watcher: relê com o cache e avisa os ouvintes. */
+  async reconcile(): Promise<void> {
+    if (this.closed) return;
+    const before = this.snapshot();
+    const files = new Map(this.files);
+    await this.scan({ quiet: true });
+    if (this.closed) return;
+    const after = this.snapshot();
+    const changed = [...after].filter(([p, v]) => before.get(p)?.version !== v.version).map(([p]) => p);
+    for (const p of before.keys()) if (!after.has(p)) changed.push(p);
+    const others = [...this.files].filter(([p, f]) => files.get(p)?.mtime !== f.mtime || files.get(p)?.size !== f.size).map(([p]) => p);
+    for (const p of files.keys()) if (!this.files.has(p)) others.push(p);
+    if (changed.length) this.emit(changed);
+    if (others.length) {
+      for (const fn of this.otherListeners) {
+        try {
+          fn(others);
+        } catch (e) {
+          console.error("[notes] file listener failed:", e);
+        }
+      }
+    }
+    const r = reconcileMoves(before, after);
+    if (r.moves.size || r.gone.length) {
+      for (const fn of this.moveListeners) {
+        try {
+          fn(r);
+        } catch (e) {
+          console.error("[notes] move listener failed:", e);
+        }
+      }
+    }
   }
 
   close(): void {
@@ -450,6 +504,8 @@ export class Vault {
     this.watcher = null;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = null;
+    if (this.reconcileTimer) clearTimeout(this.reconcileTimer);
+    this.reconcileTimer = null;
     // O que esperava o "Desfazer" vai para a Lixeira agora; se o processo sair antes, o próximo `open` termina.
     void this.expireAll();
   }
@@ -721,6 +777,7 @@ export class Vault {
     await rename(fromAbs, toAbs);
     const moved = this.notes.get(from);
     this.notes.delete(from);
+    this.touch(from);
     this.searchDirty = true;
     this.resolver = null;
     const content = moved?.content ?? (await readFile(toAbs, "utf8"));
@@ -840,6 +897,7 @@ export class Vault {
     if (!(await exists(abs))) throw new VaultError("E_NOT_FOUND", `no note ${p}`);
     await this.stage(p, abs, "note");
     this.notes.delete(p);
+    this.touch(p);
     this.searchDirty = true;
     this.resolver = null;
     this.emit([p]);
@@ -1180,6 +1238,7 @@ export class Vault {
     const old = this.notes.get(p);
     if (!old || old.aliases.join("\n") !== entry.aliases.join("\n")) this.resolver = null;
     this.notes.set(p, entry);
+    this.touch(p);
     this.searchDirty = true;
     for (let f = entry.meta.folder; f; f = parentOf(f)) this.folders.add(f);
     return entry;
@@ -1241,13 +1300,28 @@ export class Vault {
    * Relê o cofre inteiro. Monta o índice novo à parte e troca tudo de uma vez no fim: um `list()` ou uma busca no meio
    * nunca veem um cofre pela metade (revisão #3499). Um item que some no meio (o Obsidian renomeando) só fica de fora.
    */
-  private async scan(): Promise<void> {
+  private touch(p: string): void {
+    if (this.scans) this.touchedAt.set(p, ++this.seq);
+  }
+
+  private async scan(o: { quiet?: boolean } = {}): Promise<void> {
+    this.scans++;
+    const started = ++this.seq;
+    try {
+      await this.scanFrom(started, o);
+    } finally {
+      if (--this.scans === 0) this.touchedAt.clear();
+    }
+  }
+
+  private async scanFrom(started: number, o: { quiet?: boolean }): Promise<void> {
+    const progress = o.quiet ? undefined : this.onIndexProgress;
     const notes = new Map<string, Entry>();
     const folders = new Set<string>();
     const files = new Map<string, VaultFile>();
     const packages = new Set<string>();
     let seen = 0;
-    this.onIndexProgress?.({ seen, notes: 0, done: false });
+    progress?.({ seen, notes: 0, done: false });
     // O cache (T5352): as entradas de agora pelo inode, para reconhecer uma nota que mudou de caminho sem reler.
     const byIno = new Map<number, Entry>();
     for (const e of this.notes.values()) byIno.set(e.ino, e);
@@ -1273,7 +1347,7 @@ export class Vault {
         if (s.isFile() || s.isDirectory() && PACKAGE_MARKS[extOf(name)]) {
           seen++;
           if (seen % 128 === 0) {
-            this.onIndexProgress?.({ seen, notes: notes.size, done: false });
+            progress?.({ seen, notes: notes.size, done: false });
             await new Promise(resolve => setTimeout(resolve, 0));
             if (this.closed) return;
           }
@@ -1309,6 +1383,12 @@ export class Vault {
       );
       if (this.closed) return;
     }
+    for (const [p, at] of this.touchedAt) {
+      if (at < started) continue;
+      const now = this.notes.get(p);
+      if (now) notes.set(p, now);
+      else notes.delete(p);
+    }
     this.searchIndex ??= new NoteSearchIndex();
     this.searchIndex.sync(notes.values());
     this.searchDirty = false;
@@ -1317,7 +1397,7 @@ export class Vault {
     this.files = files;
     this.packages = packages;
     this.resolver = null;
-    this.onIndexProgress?.({ seen, notes: notes.size, done: true });
+    progress?.({ seen, notes: notes.size, done: true });
   }
 
   /** O que o watcher juntou: relê o que mudou, tira o que sumiu, e avisa. */
@@ -1389,6 +1469,7 @@ export class Vault {
       }
       if (!s || !s.isFile()) {
         if (this.notes.delete(rel)) {
+          this.touch(rel);
           this.searchDirty = true;
           this.resolver = null;
           changed.push(rel);
