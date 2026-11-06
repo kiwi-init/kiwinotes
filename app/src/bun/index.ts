@@ -16,11 +16,14 @@ import { helperPath, Session, session, type SessionStatus } from "./session.ts";
 import { helperRunner } from "../notes/ocr.ts";
 import { helperPdf } from "../notes/export.ts";
 import { stores } from "./stores.ts";
+import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
 import { closeWindow, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
 // velho de pé é substituído. Com KIWI_DEBUG=1 nunca derruba outro.
+// T5350: o log em arquivo, antes de qualquer linha (o .app de release não tem terminal).
+installFileLog(stores.dir);
 if (claimInstance({ dir: stores.dir, mayReplace: process.env.KIWI_DEBUG !== "1" }).action === "exit") process.exit(0);
 
 Utils.setDockIconVisible(false);

@@ -80,6 +80,8 @@ export interface CapabilityDeps {
    * A seção Sobre (T2386): a versão do app, o canal e as atualizações. Sem isto (o headless, os testes), o `app.about`
    * diz "dev" e as atualizações respondem `off`, sem ir à rede.
    */
+  /** "Salvar diagnóstico" (T5350). Sem isto (testes), o `diagnostics.save` dá E_NO_DIAGNOSTICS. */
+  diagnostics?: { save(): Promise<{ path: string; bytes: number }> };
   about?: {
     info(): Omit<AppAbout, "updates">;
     view(): UpdatesView;
@@ -431,6 +433,11 @@ export function uiCapabilities(deps: CapabilityDeps,
         } satisfies AppAbout;
       return { ...deps.about.info(), updates: deps.about.view(),
       } satisfies AppAbout;
+    },
+    "diagnostics.save": async (args) => {
+      noArgs(args, "diagnostics.save");
+      if (!deps.diagnostics) throw new CapabilityError("E_NO_DIAGNOSTICS", "Este engine não salva diagnóstico.");
+      return deps.diagnostics.save();
     },
     "updates.check": async (args) => {
       noArgs(args, "updates.check");

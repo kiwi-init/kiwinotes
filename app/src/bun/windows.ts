@@ -8,7 +8,9 @@ import path from "node:path";
 import { BrowserView, BrowserWindow, PATHS, Screen, Updater, Utils } from "electrobun/bun";
 import type { AppEngine } from "electrobun/bun/appengine";
 
-import { type HubSection, UI_CAPABILITIES, type UiEvents, type UiWindow } from "../shared/ui-contract.ts";
+import { type HubSection, UI_CAPABILITIES, UI_CONTRACT_VERSION, type UiEvents, type UiWindow } from "../shared/ui-contract.ts";
+import { saveDiagnostics } from "./diagnostics.ts";
+import { appLog } from "./file-log.ts";
 import { WINDOW_SPECS as SPECS } from "../shared/window-specs.ts";
 import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
 import { session } from "./session.ts";
@@ -137,6 +139,28 @@ const capabilities = uiCapabilities({
   versions: stores.versions,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),
+  // "Salvar diagnóstico" (T5350): em ~/Downloads, e o Finder mostra o arquivo. Com KIWI_DEBUG=1 (os agentes), vai para
+  // <dados>/diagnostics e nada abre na tela.
+  diagnostics: {
+    save: () => {
+      const debug = process.env.KIWI_DEBUG === "1";
+      return saveDiagnostics({
+        app: () => about?.info() ?? { version: "dev", channel: "dev" },
+        contract: UI_CONTRACT_VERSION,
+        session: () => session.get()?.diagnostics() ?? null,
+        settings: async () => {
+          const s = await stores.settings.load();
+          return { microphone: s.microphone, notesShortcut: s.notesShortcut };
+        },
+        log: appLog,
+        saveDir: debug ? path.join(stores.dir, "diagnostics") : path.join(process.env.HOME ?? stores.dir, "Downloads"),
+        reveal: (abs) => {
+          if (debug) return void console.log("[diagnostics] reveal (dry run)");
+          Bun.spawn(["/usr/bin/open", "-R", abs], { stdio: ["ignore", "ignore", "ignore"] });
+        },
+      });
+    },
+  },
   about: {
     info: () => about?.info() ?? { version: "dev", channel: "dev", releaseUrl: null },
     view: () => about?.view() ?? { state: "off", reason: "o atualizador ainda não subiu", lastCheck: null },

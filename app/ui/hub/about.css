@@ -60,3 +60,24 @@
   opacity: 0.4;
   cursor: default;
 }
+
+/* O "Salvar diagnóstico" (T5350): embaixo e discreto, um link e uma linha de ajuda. */
+.kn-about-diag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 36px;
+  max-width: 420px;
+}
+
+.kn-about-hint {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.kn-about-diag button:disabled {
+  opacity: 0.5;
+}

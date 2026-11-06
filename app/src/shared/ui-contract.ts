@@ -62,7 +62,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.22.0 (T4945): meeting speakers and append-only edit rebase for live meeting notes.
 // 1.23.0 (T5161): selectable note folders, recents and folder-scoped note preferences.
 // 1.24.0 (T5299): o `noteWidth` nas settings, a largura da coluna da nota (480 a 1400 px). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.24.0";
+// 1.25.0 (T5350): o `diagnostics.save`, o "Salvar diagnóstico" da seção Sobre. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.25.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -113,6 +114,11 @@ export interface UiCapabilities {
   "intro.done": { args: Record<string, never>; result: true };
   /** A versão do app, o canal, o link das notas da versão e as atualizações agora (1.6.0, T2386). */
   "app.about": { args: Record<string, never>; result: AppAbout };
+  /**
+   * "Salvar diagnóstico" (1.25.0, T5350): um .txt com versões, permissões (só o estado), STT, quedas e o fim do log, sem
+   * texto nem áudio. No app vai para ~/Downloads e aparece no Finder; no headless, para <dados>/diagnostics.
+   */
+  "diagnostics.save": { args: Record<string, never>; result: { path: string; bytes: number } };
   /**
    * Checa na hora, sem esperar as 6 h (o Updater do ADR 0008, com a conferência da assinatura), e devolve como ficou
    * quando a checagem termina. Com a versão nova baixada e conferida, `state` é `ready`. Desligado (headless, dev,
@@ -308,6 +314,7 @@ export const UI_CAPABILITIES = [
   "hub.section",
   "intro.done",
   "app.about",
+  "diagnostics.save",
   "updates.check",
   "updates.apply",
   "notes.list",

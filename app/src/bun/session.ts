@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { sidecarLlm } from "../cleanup/index.ts";
 import type { LlmMode } from "../cleanup/types.ts";
-import { defaultSocketPath, type Event, type Permission } from "../shared/ipc.ts";
+import { defaultSocketPath, type Event, type LlmStatus, type Permission, type Permissions } from "../shared/ipc.ts";
 import type { AudioInputs } from "../shared/microphone.ts";
 import { listAudioInputs } from "./audio-inputs.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
@@ -68,6 +68,20 @@ export interface SessionStatus {
   hotkeyActive: boolean;
   /** As permissões que faltam, na ordem em que o app pede (T532). */
   missing: Permission[];
+}
+
+/**
+ * O que um `log` do helper vira no log do app, ou null. Só o diagnóstico do mic, do ditado e da reunião (#208, T5350:
+ * vão para o arquivo, para os testes do harry); o resto fica de fora, porque o dryRun loga o texto do ditado.
+ */
+export function helperLogLine(message: string): string | null {
+  return message.startsWith("mic: ") || message.startsWith("meeting mic: ") ? `[sidecar] ${message}` : null;
+}
+
+export interface SessionDiagnostics extends SessionStatus {
+  /** O último `ready` do helper, ou null se ele não está de pé. */
+  helper: { version: string; pid: number; permissions: Permissions; llm?: LlmStatus } | null;
+  exits: Sidecar["exits"];
 }
 
 export class Session {
@@ -154,7 +168,8 @@ export class Session {
     // O que o mic fez (engine novo, quanto tempo até o primeiro áudio depois do atalho, T985): só números e nomes
     // de evento, nunca áudio nem texto. Os outros logs do helper ficam de fora (o dryRun loga o texto).
     this.sidecar.on("log", (e) => {
-      if (e.message.startsWith("mic: ")) console.log(`[sidecar] ${e.message}`);
+      const line = helperLogLine(e.message);
+      if (line) console.log(line);
     });
     // O helper caiu: o menu sai de "Pronto para ditar" até o próximo `ready` (T914).
     this.sidecar.onClose(() => this.emitStatus());
@@ -175,6 +190,16 @@ export class Session {
     this.permissions.detach();
     this.sidecar.stop();
     return this.meetingNotes.detach();
+  }
+
+  /** O estado do helper para o "Salvar diagnóstico" (T5350): só leitura, nunca pede permissão. */
+  diagnostics(): SessionDiagnostics {
+    const ready = this.sidecar.ready;
+    return {
+      ...this.status(),
+      helper: ready ? { version: ready.version, pid: ready.pid, permissions: ready.permissions, ...(ready.llm ? { llm: ready.llm } : {}) } : null,
+      exits: [...this.sidecar.exits],
+    };
   }
 
   status(): SessionStatus {

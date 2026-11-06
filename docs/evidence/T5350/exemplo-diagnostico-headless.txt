@@ -1,0 +1,30 @@
+Kiwi Notes · diagnóstico
+Gerado em 2026-11-06T03:38:05.488Z
+Sem texto de ditado, de notas nem áudio.
+
+== App
+versão: headless (dev)
+contrato da UI: 1.25.0
+
+== Sistema
+macOS: 27.2 (Darwin 27.2.0)
+arquitetura: arm64
+processador: Apple M1 Pro
+memória: 16 GB
+
+== Helper
+desligado neste app (sem o helper)
+
+== Permissões (só o estado; nada é pedido)
+sem o helper de pé, o estado não é conhecido
+
+== Ditado
+STT: sem o helper
+microfone escolhido: auto
+atalho das Notas: control+option+n
+
+== Crashes do macOS (só o nome e a data)
+nenhum
+
+== Log (as últimas 1 linhas)
+2026-11-06T03:37:58.342Z INFO  [headless] up: <tmp>/control.sock (helper off)
