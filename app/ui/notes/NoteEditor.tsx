@@ -90,6 +90,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
         linkTargets: () => latest.current.linkTargets(),
         headingContent: (target) => latest.current.headingContent(target),
         ...(attachments ? { attachments, onError: (t: string) => latest.current.onError?.(t) } : {}),
+        ...(has("clipboard.write") ? { copy: (text: string) => appApi.copy(text) } : {}),
       },
       links,
     ),
