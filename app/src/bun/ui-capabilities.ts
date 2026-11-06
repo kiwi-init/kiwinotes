@@ -41,6 +41,7 @@ export interface CapabilityDeps {
   };
   snippets: { load(): Promise<Snippet[]>; save(snippets: Snippet[]): Promise<Snippet[]>;
   };
+  retryDictation?(id:string):Promise<HistoryEntry>;
   history: {
     search(params: { query?: string; limit?: number; before?: string;
     }): Promise<HistoryPage>;
@@ -319,12 +320,19 @@ export function uiCapabilities(deps: CapabilityDeps,
     "history.search": (args) => {
       const a = object(args, "history.search");
       const query = optionalString(a.query, "query", 500);
-      const before = optionalString(a.before, "before", 64);
+      const before = optionalString(a.before, "before", 128);
       if (a.limit !== undefined && (typeof a.limit !== "number" || !Number.isInteger(a.limit) || a.limit < 1 || a.limit > 500)) {
         throw bad("limit must be an integer from 1 to 500");
       }
       return deps.history.search({ query, before, limit: a.limit as number | undefined,
       });
+    },
+    "history.retry": async args => {
+      const a=fields(args,"history.retry",["id"]);
+      const id=optionalString(a.id,"id",128);
+      if(!id)throw bad("id is required");
+      if(!deps.retryDictation)throw new CapabilityError("E_NO_HELPER","Não há helper para transcrever.");
+      return deps.retryDictation(id);
     },
     "history.delete": (args) => {
       const id = optionalString(object(args, "history.delete").id, "id", 128);
@@ -339,6 +347,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       const entry = await deps.history.get(id);
       if (!entry) throw new CapabilityError("E_NOT_FOUND", `history.toNote: no dictation ${id}`,
         );
+      if(!entry.text.trim())throw new CapabilityError("E_NO_TEXT","Transcreva o áudio antes de enviar para uma nota.");
       const at = new Date(entry.at);
       return path ? deps.dictationNotes.append(path, entry.text, at, entry.id) : deps.dictationNotes.toNew(entry.text, at, entry.id);
     },

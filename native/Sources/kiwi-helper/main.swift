@@ -196,6 +196,7 @@ let app = NSApplication.shared
 app.setActivationPolicy(headless ? .prohibited : .accessory)
 
 let meetingDirectory = socketPath.map { URL(fileURLWithPath: $0).deletingLastPathComponent().appendingPathComponent("meeting-buffer", isDirectory: true) }
-let helper = Helper(connection: connection, dumpDirectory: dumpDirectory, headless: headless, meetingDirectory: meetingDirectory)
+let recoveryDirectory = ProcessInfo.processInfo.environment["KIWI_RECOVERY_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+let helper = Helper(connection: connection, dumpDirectory: dumpDirectory, headless: headless, meetingDirectory: meetingDirectory, recoveryDirectory: recoveryDirectory)
 helper.run()
 app.run()

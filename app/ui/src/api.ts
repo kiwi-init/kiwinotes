@@ -88,6 +88,8 @@ export const api = {
   history: {
     search: (params: UiCapabilities["history.search"]["args"]) => invoke("history.search", params),
     delete: (id: string) => invoke("history.delete", { id }),
+    retry: (id:string)=>invoke("history.retry",{id}),
+    onChanged:(fn:()=>void)=>on("history.changed",fn),
     onAdded: (fn: (e: HistoryEntry) => void) => on("history.added", fn),
     /** "Enviar para nota…" (T1320): sem `path`, uma nota nova em Caixa de entrada/. */
     toNote: (id: string, path?: string) => invoke("history.toNote", path ? { id, path } : { id }),

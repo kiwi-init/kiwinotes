@@ -259,3 +259,8 @@
 @media (hover: none) {
   .kn-entry-time, .kn-entry-meta .kn-entry-actions { opacity: 1; }
 }
+
+/* Managed, local dictation recovery (T5455). Available without hovering the icon actions. */
+.kn-entry-recovery { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.kn-entry-recovery small { color: var(--text-muted, var(--text-2)); }
+.kn-entry-recovery p { width: 100%; margin: 0; color: var(--text-muted, var(--text-2)); }

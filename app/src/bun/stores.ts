@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { DictionaryStore } from "../store/dictionary.ts";
 import { dataDir } from "../store/files.ts";
+import { RecordingRecoveries } from "../store/recording-recovery.ts";
 import { HistoryStore } from "../store/history.ts";
 import { type AppSettings, type SettingsPatch, SettingsStore } from "../store/settings.ts";
 import { SnippetStore } from "../store/snippets.ts";
@@ -18,6 +19,7 @@ const dir = process.env.KIWI_DATA_DIR || dataDir();
 
 const defaultRoot = resolveReal(process.env.KIWI_VAULT_DIR || path.join(homedir(), "KiwiNotes"));
 const globalSettings = new SettingsStore(dir);
+const recoveries = new RecordingRecoveries(dir);
 let folders: NotesFolders;
 const internalNotes = new Vault({ root: defaultRoot, watch: true, onIndexProgress: p => folders?.indexProgress(defaultRoot,p) });
 folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,
@@ -31,7 +33,8 @@ export const stores = {
   globalSettings,
   dictionary: new DictionaryStore(dir),
   snippets: new SnippetStore(dir),
-  history: new HistoryStore(dir),
+  recoveries,
+  history: new HistoryStore(dir, recoveries),
   settings: {
     load: async () => (await folders.current()).settings.load(),
     save: async (patch: SettingsPatch) => (await folders.current()).settings.save(patch),

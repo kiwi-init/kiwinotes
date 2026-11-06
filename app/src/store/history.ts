@@ -7,6 +7,7 @@ import path from "node:path";
 
 import { ensureDir, writeAtomic } from "./files.ts";
 import { fold } from "./text.ts";
+import { isRecoveryId, recoveryHistoryId } from "./recording-recovery.ts";
 
 export interface HistoryEntry {
   /** Ordena no tempo: `<ISO>-<4 hex>`. */
@@ -24,6 +25,10 @@ export interface HistoryEntry {
   durationMs?: number;
   /** Só quando "Guardar o áudio no histórico" está ligado. */
   audioPath?: string;
+  /** A managed local recording still available for a retry; absent once acknowledged or expired. */
+  recoveryId?: string;
+  recoveryError?: string;
+  expiresAt?: string;
 }
 
 export type NewHistoryEntry = Omit<HistoryEntry, "id" | "at"> & { at?: Date };
@@ -62,6 +67,12 @@ function latestIn(file: string): string {
   return new Date(start + 24 * 3600_000 + MAX_TZ_SPREAD_MS).toISOString();
 }
 
+export interface HistoryRecoverySource {
+  list(): Promise<HistoryEntry[]>;
+  canWrite?(id:string):Promise<boolean>;
+  deleteHistory(id: string): Promise<boolean>;
+}
+
 export class HistoryStore {
   readonly dir: string;
   private listeners = new Set<(e: HistoryEntry) => void>();
@@ -77,7 +88,7 @@ export class HistoryStore {
     return run;
   }
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, private recoveries?: HistoryRecoverySource) {
     this.dir = path.join(dataDir, "history");
   }
 
@@ -94,15 +105,30 @@ export class HistoryStore {
   private async append(input: NewHistoryEntry): Promise<HistoryEntry> {
     const when = input.at ?? new Date();
     const { at: _ignored, ...rest } = input;
+    const recordingId = isRecoveryId(input.recoveryId) ? input.recoveryId : undefined;
+    // Serialized with delete: a retry finishing after deletion must not recreate the deleted item.
+    if(recordingId&&this.recoveries?.canWrite&&!await this.recoveries.canWrite(recordingId))throw new Error("E_RECOVERY_EXPIRED");
     const entry: HistoryEntry = {
       ...rest,
-      id: `${when.toISOString()}-${randomBytes(2).toString("hex")}`,
+      recoveryId: recordingId,
+      id: recordingId ? recoveryHistoryId(recordingId, when.toISOString()) : `${when.toISOString()}-${randomBytes(2).toString("hex")}`,
       at: when.toISOString(),
       raw: input.raw.slice(0, MAX_TEXT),
       text: input.text.slice(0, MAX_TEXT),
     };
     await ensureDir(this.dir);
-    await appendFile(path.join(this.dir, `${dayOf(when)}.jsonl`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+    let replaced = false;
+    if (recordingId) {
+      const from = dayOf(new Date(when.getTime()-MAX_TZ_SPREAD_MS)), to = dayOf(new Date(when.getTime()+MAX_TZ_SPREAD_MS));
+      for (const day of await this.days()) {
+        if(day.slice(0,10)<from||day.slice(0,10)>to)continue;
+        const file=path.join(this.dir,day), lines=(await readFile(file,"utf8")).split("\n").filter(Boolean);
+        let found=false;
+        const next=lines.map(line=>{try{if(JSON.parse(line).id===entry.id){found=true;return JSON.stringify(entry);}}catch{}return line;});
+        if(found){await writeAtomic(file,next.join("\n")+"\n");replaced=true;break;}
+      }
+    }
+    if(!replaced) await appendFile(path.join(this.dir, `${dayOf(when)}.jsonl`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
     for (const fn of this.listeners) fn(entry);
     return entry;
   }
@@ -136,7 +162,34 @@ export class HistoryStore {
    * Os ditados mais novos primeiro. `query` casa sem acento e sem maiúscula, e todas as
    * palavras precisam aparecer (no texto final, no cru ou no nome do app).
    */
-  async search({ query = "", limit = 50, before }: { query?: string; limit?: number; before?: string } = {}): Promise<HistoryPage> {
+  async search(params: {query?:string;limit?:number;before?:string} = {}):Promise<HistoryPage>{
+    const saved=await this.savedSearch(params);
+    if(!this.recoveries)return saved;
+    const pending=await this.pending();
+    const byId=new Map(pending.map(entry=>[entry.id,entry]));
+    const words=fold(params.query??"").split(/\s+/).filter(Boolean);
+    const candidates=pending.filter(entry=>(!params.before||entry.id<params.before)&&words.every(word=>fold(`${entry.text}\n${entry.raw}\n${entry.app?.name??""}`).includes(word)));
+    const merged=new Map(candidates.map(entry=>[entry.id,entry]));
+    for(const entry of saved.entries)merged.set(entry.id,this.enrich(entry,byId.get(entry.id)));
+    const entries=[...merged.values()].sort((a,b)=>a.id<b.id?1:-1);
+    const max=Math.min(Math.max(1,params.limit??50),500);
+    const page=entries.slice(0,max);
+    const hasMore=entries.length>max||!!saved.nextBefore;
+    return {entries:page,...(hasMore&&page.length?{nextBefore:page.at(-1)!.id}:{})};
+  }
+
+  private pending():Promise<HistoryEntry[]>{
+    return this.recoveries!.list().catch(()=>{console.warn("[history] recovery_list_failed");return [];});
+  }
+  private enrich(entry:HistoryEntry,pending?:HistoryEntry):HistoryEntry{
+    const {recoveryId:_id,recoveryError:_error,expiresAt:_expiry,...saved}=entry;
+    return pending?{...saved,recoveryId:pending.recoveryId,recoveryError:pending.recoveryError,expiresAt:pending.expiresAt}:saved;
+  }
+
+  /** L9: a failed/pending audio item has no text to paste; use the latest saved transcript. */
+  async latestText():Promise<HistoryEntry|null>{return (await this.savedSearch({limit:1})).entries[0]??null;}
+
+  private async savedSearch({ query = "", limit = 50, before }: { query?: string; limit?: number; before?: string } = {}): Promise<HistoryPage> {
     const words = fold(query).split(/\s+/).filter(Boolean);
     const max = Math.min(Math.max(1, limit), 500);
     const entries: HistoryEntry[] = [];
@@ -165,7 +218,14 @@ export class HistoryStore {
 
   /** Apaga um ditado (e só ele) reescrevendo o arquivo do dia. */
   /** Um ditado pelo id, ou null. Só lê os arquivos de dia em volta da hora do id (o fuso de quem ditou muda o dia). */
-  async get(id: string): Promise<HistoryEntry | null> {
+  async get(id:string):Promise<HistoryEntry|null>{
+    const saved=await this.savedGet(id);
+    if(!this.recoveries)return saved;
+    const pending=(await this.pending()).find(entry=>entry.id===id);
+    return saved?this.enrich(saved,pending):pending??null;
+  }
+
+  private async savedGet(id: string): Promise<HistoryEntry | null> {
     const at = Date.parse(id.slice(0, 24));
     if (Number.isNaN(at)) return null;
     const from = `${dayOf(new Date(at - MAX_TZ_SPREAD_MS))}.jsonl`;
@@ -179,7 +239,11 @@ export class HistoryStore {
   }
 
   delete(id: string): Promise<boolean> {
-    return this.serialize(() => this.remove(id));
+    return this.serialize(async () => {
+      const saved=await this.remove(id);
+      const recovery=await this.recoveries?.deleteHistory(id);
+      return saved||recovery===true;
+    });
   }
 
   private async remove(id: string): Promise<boolean> {

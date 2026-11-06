@@ -158,6 +158,10 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     dictionary: stores.dictionary,
     snippets: stores.snippets,
     history: stores.history,
+    retryDictation: async id => {
+      if(!session)throw new Error("helper_unavailable");
+      return session.retryDictation(id);
+    },
     notes: stores.notes,
     notesFolders: stores.folders,
     chooseNotesFolder: async () => process.env.KIWI_TEST_NOTES_FOLDER ?? null,
@@ -208,11 +212,13 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
         }),
     },
   });
+  stores.recoveries.start();
   const offs = [
     stores.folders.onNotesChanged((folder, paths) => event("notes.changed", { paths, folderId:folder.id })),
     stores.folders.onFilesChanged((folder, paths) => event("files.changed", { paths, folderId:folder.id })),
     stores.folders.onChange(view=>event("notes.folderChanged",view)),
     stores.history.onAdded((entry) => event("history.added", entry)),
+    stores.recoveries.onChanged(()=>event("history.changed",{})),
     meetings?.onChange((live) => event("meetings.live", live)) ?? (() => {}),
   ];
   if (session) {
@@ -310,6 +316,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stopping ??= (async () => {
       for (const off of offs) off();
       await session?.stop();
+      stores.recoveries.stop();
       await stores.meetingNotes.flush();
       await stores.folders.close();
       server.stop(true);
