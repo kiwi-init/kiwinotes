@@ -482,8 +482,8 @@ export class Vault {
   search(query: unknown, limit: unknown = 20): SearchHit[] {
     if (typeof query !== "string" || query.length > 500) throw new VaultError("E_BAD_ARGS", "query must be a string");
     const max = limit === undefined ? 20 : limit;
-    if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > 100) {
-      throw new VaultError("E_BAD_ARGS", "limit must be an integer from 1 to 100");
+    if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > 100_000) {
+      throw new VaultError("E_BAD_ARGS", "limit must be an integer from 1 to 100000");
     }
     // Os filtros (T2660, src/shared/query.ts): palavras, "frases", tag:, path: e as exclusões com "-".
     const q = parseQuery(query);
@@ -503,17 +503,18 @@ export class Vault {
     } else {
       this.searchIndex ??= new NoteSearchIndex();
       if (this.searchDirty) { this.searchIndex.sync(this.notes.values()); this.searchDirty = false; }
-      for (const hit of this.searchIndex.search(rawWords, q.phrases)) {
-        const e = this.notes.get(hit.path);
-        if (e && accepts(e)) hits.push({ e, score: hit.score, approx: false });
+      const ranks = new Map(this.searchIndex.search(rawWords, q.phrases).map(hit => [hit.path, hit.score]));
+      const lexicalByWord = new Map(q.words.map((word, i) => [word, /^[\p{L}\p{N}]+$/u.test(word)
+        ? new Set(this.searchIndex!.search([rawWords[i]!], []).map(hit => hit.path))
+        : new Set<string>()]));
+      for (const e of this.notes.values()) {
+        if (!accepts(e)) continue;
+        if (q.words.every(word => e.foldedTitle.includes(word) || inText(e, word) || lexicalByWord.get(word)?.has(e.meta.path))) {
+          hits.push({ e, score: ranks.get(e.meta.path) ?? 0, approx: false });
+        }
       }
-      // Literal punctuation-only phrases have no tokens, but retain their existing exact substring meaning.
-      if (!lexicalWords(terms.join(" ")).length)
-        for (const e of this.notes.values()) if (accepts(e)) hits.push({e, score: 1, approx: false});
-      // Typo matching is a fallback after the filters, never mixed into an already successful lexical search.
       if (!hits.length && q.words.length) {
         const memos = new Map<string, Map<string, boolean>>();
-        const lexicalByWord = new Map(q.words.map((word, i) => [word, new Set(this.searchIndex!.search([rawWords[i]!], []).map(h => h.path))]));
         for (const e of this.notes.values()) {
           if (!accepts(e)) continue;
           let score = 0;
@@ -528,7 +529,7 @@ export class Vault {
               continue;
             }
             // Sem o exato, a palavra solta (não a "frase") aceita erro de digitação (T2966, spec #2934).
-            if (q.words.includes(t) && typoBudget(t)) {
+            if (q.words.includes(t) && /^[\p{L}\p{N}]+$/u.test(t) && typoBudget(t)) {
               let memo = memos.get(t);
               if (!memo) memos.set(t, (memo = new Map()));
               const w = approxWord(t, wordsOfEntry(e), memo);
