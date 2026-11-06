@@ -26,7 +26,7 @@ public struct CueRecipe: Equatable, Sendable {
 
     public static func == (a: CueRecipe, b: CueRecipe) -> Bool { a.name == b.name }
 
-    /// Três propostas para o harry escolher (o PR leva os WAVs, `kiwi-helper --render-cues`).
+    /// Três propostas (os WAVs saem do `kiwi-helper --render-cues`); o harry escolheu a gota (#5967).
     public static let proposals: [CueRecipe] = [
         // Marimba: madeira macia, uma quinta (Mi6 → Si6). O 4º parcial da marimba, que some rápido, dá o "toc".
         CueRecipe(name: "marimba", notes: (1318.5, 1975.5), gapMs: 70,
@@ -39,7 +39,7 @@ public struct CueRecipe: Equatable, Sendable {
                   partials: [(1, 1, 1), (2.76, 0.3, 2.8), (5.4, 0.08, 5)], decayMs: 70, glide: 0, lengthMs: 240),
     ]
 
-    public static let defaultName = "marimba"
+    public static let defaultName = "gota"
 
     public static func named(_ name: String) -> CueRecipe? { proposals.first { $0.name == name } }
 }
