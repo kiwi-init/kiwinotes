@@ -40,7 +40,8 @@ for (let i = 0; ; i++) {
     if ((await fetch(URL)).ok) break;
   } catch {}
   if (vite.exitCode !== null) throw new Error(`o Vite saiu (código ${vite.exitCode}) antes de responder`);
-  if (i > 100) throw new Error("o Vite não subiu");
+  // 60 s: o primeiro pré-bundle na máquina carregada passa fácil dos 10 s. Um Vite que caiu sai antes, pelo exitCode.
+  if (i > 600) throw new Error("o Vite não subiu em 60 s");
   await Bun.sleep(100);
 }
 
@@ -84,7 +85,7 @@ async function until<T>(get: () => Promise<T>, ok: (v: T) => boolean, what: (v: 
   }
 }
 /** O .md da nota depois que o autosave gravar o que o passo espera. */
-const saved = (path: string, ok: (c: string) => boolean) => until(async () => (await content(path)) ?? "", ok, (c) => `não gravou: …${c.slice(-80)}`);
+const saved = (path: string, ok: (c: string) => boolean) => until(async () => (await content(path)) ?? "", ok, (c) => `não gravou: …${JSON.stringify(c.slice(-120))}`);
 // A árvore fica num popover atrás do botão "Notas" do topo (T4363): abre antes de clicar nela.
 async function openTree() {
   if ((await page.getAttribute(".kn-crumb-bt", "aria-expanded")) !== "true") await page.click(".kn-crumb-bt");
@@ -130,9 +131,8 @@ await step("⌘K acha por título e abre com Enter", async () => {
   await page.keyboard.press("Meta+k");
   await page.waitForSelector(".kn-palette");
   await page.keyboard.type("mudan");
-  await page.waitForTimeout(250);
-  const first = await page.textContent(".kn-palette-it[aria-selected=true] .kn-palette-title");
-  if (!first?.startsWith("Mudança de escritório")) throw new Error(`primeiro: ${first}`);
+  const selected = () => page.textContent(".kn-palette-it[aria-selected=true] .kn-palette-title");
+  await until(selected, (t) => !!t?.startsWith("Mudança de escritório"), (t) => `primeiro: ${t}`);
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Mudança de escritório");
   if (await page.$(".kn-palette")) throw new Error("a paleta não fechou");
@@ -169,11 +169,12 @@ await step("tabela: clicar na célula vira texto; Tab vai para a próxima e alin
 await step("autocomplete do [[ completa o link", async () => {
   await page.click(".kn-title");
   await page.keyboard.press("Enter"); // foca o editor
-  // Na máquina carregada, o ⌘↓ chegava antes do foco e o texto entrava fora do fim da nota.
-  await page.waitForSelector(".kn-note-editor .cm-editor.cm-focused");
   await page.keyboard.press("Meta+ArrowDown");
   await page.keyboard.type("\nFalar com a [[Ana");
-  await page.waitForSelector(".cm-tooltip-autocomplete");
+  // O autocomplete ignora o Enter nos 75 ms depois de a lista mudar (o `interactionDelay` do CodeMirror). Na máquina
+  // carregada (o runner do CI), o Enter caía nessa janela e virava quebra de linha dentro do `[[Ana]]`.
+  await page.waitForSelector(".cm-tooltip-autocomplete li[aria-selected]:has-text('Ana')");
+  await page.waitForTimeout(200);
   await page.keyboard.press("Enter");
   await saved("Projetos/Mudança de escritório.md", (c) => c.trimEnd().endsWith("Falar com a [[Ana]]"));
 });
@@ -291,8 +292,7 @@ await step("save que falha: 'Descartar a edição' volta ao disco e deixa trocar
   await page.keyboard.type(" DESCARTAR ISTO");
   await page.waitForSelector(".kn-save-alert");
   await page.click("text=Descartar a edição");
-  await page.waitForTimeout(300);
-  if ((await editorText()).includes("DESCARTAR ISTO")) throw new Error("não descartou");
+  await until(editorText, (t) => !t.includes("DESCARTAR ISTO"), () => "não descartou");
   await page.evaluate(() => {
     const m = (window as any).__kiwiNotesMock;
     m.save = m.__save;
@@ -359,10 +359,9 @@ await step("rascunho: 'Descartar' fica com o que está no disco e apaga o rascun
   await typeWithSaveFailing(" OUTRO RASCUNHO");
   await page.waitForSelector(".kn-draft");
   await page.click(".kn-draft >> text=Descartar");
-  await page.waitForTimeout(200);
-  if (await page.$(".kn-draft")) throw new Error("o aviso ficou");
+  await page.waitForSelector(".kn-draft", { state: "detached" });
   if ((await editorText()).includes("OUTRO RASCUNHO")) throw new Error("o rascunho entrou");
-  expectEq(await draftKeys(), []);
+  await until(draftKeys, (k) => k.length === 0, (k) => `o rascunho ficou: ${k.join(", ")}`);
 });
 
 await step("rascunho: edição que gravou não deixa rascunho", async () => {
@@ -442,9 +441,8 @@ await step("rascunho órfão: 'Descartar' apaga sem criar nada", async () => {
   await page.goto(URL);
   await page.waitForSelector(".kn-orphan >> text=Sumida");
   await page.click(".kn-orphan >> text=Descartar");
-  await page.waitForTimeout(200);
-  if (await page.$(".kn-orphan")) throw new Error("o aviso ficou");
-  expectEq(await draftKeys(), []);
+  await page.waitForSelector(".kn-orphan", { state: "detached" });
+  await until(draftKeys, (k) => k.length === 0, (k) => `o rascunho ficou: ${k.join(", ")}`);
   if (await page.evaluate(() => (window as any).__kiwiNotesMock.notes.has("Caixa de entrada/Sumida.md"))) throw new Error("criou nota");
 });
 

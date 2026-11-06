@@ -62,6 +62,7 @@ jobs:
       # O WebKit do Playwright, para os testes headless da UI (scripts/cli-ui.test.ts e o hub-tabs-ui-check), e o
       # chrome-headless-shell do notes-ui-check.
       - name: Browsers
+        id: browsers
         run: bunx playwright-core install webkit chromium-headless-shell
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -75,14 +76,14 @@ jobs:
 
       # Os roteiros de UI que o `bun test` não roda (issue 224): ficaram quebrando na `main` sem ninguém ver.
       # A janela Notas no Vite de dev com o vault de mentira, e as abas do hub no build real com um headless --no-helper.
-      # Rodam mesmo com o `bun test` vermelho: um defeito não esconde o outro.
+      # Rodam mesmo com o `bun test` vermelho (um defeito não esconde o outro), mas só com os navegadores instalados.
       - name: notes-ui-check
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: bun scripts/notes-ui-check.ts
 
       - name: hub-tabs-ui-check
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: bun scripts/hub-tabs-ui-check.ts
 

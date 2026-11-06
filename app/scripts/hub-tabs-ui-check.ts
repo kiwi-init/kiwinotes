@@ -70,9 +70,13 @@ for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
   });
 }
 if (ownHeadless) {
+  // Antes de subir: um `start` que estoura o tempo pode ter deixado o engine de pé, e o `cleanup` derruba mesmo assim.
+  running = true;
   const up = spawnSync(process.execPath, [cli, "start", "--data", data, "--no-helper"], { encoding: "utf8" });
-  running = up.status === 0;
-  if (!running) throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
+  if (up.status !== 0) {
+    cleanup();
+    throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
+  }
 }
 try {
   for (const theme of ["light", "dark"] as const) {
