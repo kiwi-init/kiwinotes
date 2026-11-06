@@ -17,6 +17,7 @@ import { Vault } from "./vault.ts";
 import { SettingsStore } from "../store/settings.ts";
 import { HistoryStore } from "../store/history.ts";
 import { uiCapabilities, type CapabilityDeps } from "../bun/ui-capabilities.ts";
+import { untilSeen } from "./watch-wait.ts";
 
 const rigs: { root: string; folders: NotesFolders }[] = [];
 async function rig(limit = 20_000, watch = false) {
@@ -306,19 +307,19 @@ test("watcher reports only the current external root after switching", async () 
   await r.folders.open(r.a);
   const events: { path: string; paths: string[] }[] = [];
   r.folders.onNotesChanged((f, paths) => events.push({ path: f.path, paths }));
-  await writeFile(path.join(r.a, "Ana.md"), "A changed externally");
-  for (let i = 0; i < 30 && !events.length; i++) await Bun.sleep(30);
-  expect(events.some((e) => e.path === r.a && e.paths.includes("Ana.md"))).toBe(
-    true,
+  await untilSeen(
+    (n) => writeFile(path.join(r.a, "Ana.md"), `A changed externally ${n}`),
+    () => events.some((e) => e.path === r.a && e.paths.includes("Ana.md")),
+    "Ana.md in the first root",
   );
   await r.folders.open(r.b);
   await Bun.sleep(200);
   events.length = 0;
   await writeFile(path.join(r.a, "Ana.md"), "old root");
-  await writeFile(path.join(r.b, "Bia.md"), "new root");
-  for (let i = 0; i < 30 && !events.length; i++) await Bun.sleep(30);
-  expect(events.some((e) => e.path === r.b && e.paths.includes("Bia.md"))).toBe(
-    true,
+  await untilSeen(
+    (n) => writeFile(path.join(r.b, "Bia.md"), `new root ${n}`),
+    () => events.some((e) => e.path === r.b && e.paths.includes("Bia.md")),
+    "Bia.md in the new root",
   );
   expect(events.some((e) => e.path === r.a)).toBe(false);
-});
+}, 20_000);

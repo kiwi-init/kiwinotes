@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync, unlinkSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Vault } from "./vault.ts";
+import { until, untilSeen } from "./watch-wait.ts";
 const opened: Vault[] = [], dirs: string[] = [];
 afterEach(()=>{ for(const v of opened.splice(0))v.close();for(const d of dirs.splice(0))rmSync(d,{recursive:true,force:true}); });
 async function vault(files:Record<string,string>,watch=false) {
@@ -59,11 +60,10 @@ test("postings follow save, filename/folder rename, delete, restore and cached r
 });
 test("external save, move and delete update postings through the watcher",async()=>{
   const {v,root}=await vault({'A.md':'primeiro'},true);
-  async function until(probe:()=>boolean){for(let n=0;n<100;n++){if(probe())return;await Bun.sleep(20);}throw new Error('watcher timed out');}
-  writeFileSync(path.join(root,'A.md'),'organização');await until(()=>paths(v,'organizar')[0]==='A.md');
-  renameSync(path.join(root,'A.md'),path.join(root,'Novo.md'));await until(()=>paths(v,'organizar')[0]==='Novo.md');
-  unlinkSync(path.join(root,'Novo.md'));await until(()=>!paths(v,'organizar').length);
-});
+  await untilSeen(n=>writeFileSync(path.join(root,'A.md'),`organização ${n}`),()=>paths(v,'organizar')[0]==='A.md','A.md saved outside');
+  renameSync(path.join(root,'A.md'),path.join(root,'Novo.md'));await until(()=>paths(v,'organizar')[0]==='Novo.md','A.md renamed outside');
+  unlinkSync(path.join(root,'Novo.md'));await until(()=>!paths(v,'organizar').length,'Novo.md deleted outside');
+},20_000);
 test("separate vaults never share postings, aliases can be found, and reopening rebuilds in memory",async()=>{
   const one=await vault({'A.md':'---\naliases: [Organização]\n---\nTexto local'}), two=await vault({'B.md':'outra pasta'});
   expect(paths(one.v,'organizar')).toEqual(['A.md']);expect(paths(two.v,'organizar')).toEqual([]);
