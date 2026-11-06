@@ -155,7 +155,7 @@ export const TABLE_ACTIONS = [
   { id: "row.insertBelow", group: "row", label: "Inserir abaixo", key: "Mod-Alt-Shift-ArrowDown", hint: "⇧⌥⌘↓" },
   { id: "row.moveUp", group: "row", label: "Mover para cima", key: "Mod-Alt-ArrowUp", hint: "⌥⌘↑" },
   { id: "row.moveDown", group: "row", label: "Mover para baixo", key: "Mod-Alt-ArrowDown", hint: "⌥⌘↓" },
-  { id: "row.duplicate", group: "row", label: "Duplicar linha", key: "Mod-Alt-d", hint: "⌥⌘D" },
+  { id: "row.duplicate", group: "row", label: "Duplicar linha", key: null, hint: undefined },
   { id: "row.delete", group: "row", label: "Apagar linha", key: "Mod-Alt-Backspace", hint: "⌥⌘⌫" },
   { id: "column.insertLeft", group: "column", label: "Inserir à esquerda", key: "Mod-Alt-Shift-ArrowLeft", hint: "⇧⌥⌘←" },
   { id: "column.insertRight", group: "column", label: "Inserir à direita", key: "Mod-Alt-Shift-ArrowRight", hint: "⇧⌥⌘→" },

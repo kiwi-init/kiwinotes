@@ -171,7 +171,7 @@ function listCommand(dir: 1 | -1) {
 
 const tableKeys = Prec.high(
   keymap.of([
-    ...TABLE_ACTIONS.map((action) => ({ key: action.key, run: tableActionCommand(action.id) })),
+    ...TABLE_ACTIONS.flatMap((action) => action.key ? [{ key: action.key, run: tableActionCommand(action.id) }] : []),
     { key: "Tab", run: tableCommand((x, o) => tableTab(x, o, 1)) },
     { key: "Shift-Tab", run: tableCommand((x, o) => tableTab(x, o, -1)) },
     { key: "Enter", run: tableCommand(tableEnter) },
