@@ -80,7 +80,8 @@ export interface SessionStatus {
  * vão para o arquivo, para os testes do harry); o resto fica de fora, porque o dryRun loga o texto do ditado.
  */
 export function helperLogLine(message: string): string | null {
-  return message.startsWith("mic: ") || message.startsWith("meeting mic: ") ? `[sidecar] ${message}` : null;
+  // T5457: e a troca da ação do 🌐 (`fn: …`), só o valor da preferência, para o teste do harry.
+  return /^(mic|meeting mic|fn): /.test(message) ? `[sidecar] ${message}` : null;
 }
 
 export interface SessionDiagnostics extends SessionStatus {
