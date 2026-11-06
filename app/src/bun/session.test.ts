@@ -51,7 +51,7 @@ describe("shortcutsConfig (T5349)", () => {
     dir = mkdtempSync(path.join(tmpdir(), "kiwi-session-"));
     expect(shortcutsConfig(DEFAULT_SETTINGS)).toEqual({
       type: "config.set",
-      shortcuts: { dictation: "fn", cancel: "escape", notes: "control+option+n", meeting: "control+option+r", meetingPause: "control+option+m" },
+      shortcuts: { dictation: "fn", cancel: "escape", pasteLast: "control+option+v", notes: "control+option+n", meeting: "control+option+r", meetingPause: "control+option+m" },
     });
     await new SettingsStore(dir).save({ shortcuts: { ...DEFAULT_SETTINGS.shortcuts, dictation: "rightOption" } });
     // Um app novo (outro boot) lê do arquivo e manda o ⌥ direito.

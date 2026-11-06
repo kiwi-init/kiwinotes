@@ -14,6 +14,12 @@ final class ShortcutTextTests: XCTestCase {
         XCTAssertEqual(Shortcut("f5 f5"), .sequence([KeyCombo("f5")!, KeyCombo("f5")!]))
     }
 
+    func testTheDefaultsAreShortcuts() {
+        // The helper's defaults (Helper.shortcuts), the same as `shared/shortcuts.ts`: L9's ⌃⌥V among them.
+        for text in ["fn", "control+option+v", "control+option+r", "control+option+m"] { XCTAssertNotNil(Shortcut(text), text) }
+        XCTAssertNotNil(Shortcut("escape", bareKey: true))
+    }
+
     func testTheTextGoesBackAndForth() {
         for text in ["fn", "double:rightOption", "control+option+n", "control+option+shift+command+space", "f12", "control+k r r", "option+command+1 2"] {
             XCTAssertEqual(Shortcut(text)?.spec, text)

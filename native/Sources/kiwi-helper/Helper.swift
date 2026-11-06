@@ -27,8 +27,10 @@ final class Helper {
         "meetingPause": Shortcut(MeetingController.defaultPauseShortcut)!,
         // L5 (T5458): Esc cancels the dictation, only while it records (see `tap.isActive`).
         "cancel": Shortcut("escape", bareKey: true)!,
+        // L9 (T5459): paste the last dictation again, from any app. ⌃⌥V, next to Kiwi's other ⌃⌥ shortcuts.
+        "pasteLast": Shortcut("control+option+v")!,
     ]
-    static let shortcutIds: Set<String> = ["dictation", "cancel", "notes", "meeting", "meetingPause"]
+    static let shortcutIds: Set<String> = ["dictation", "cancel", "pasteLast", "notes", "meeting", "meetingPause"]
     /// A `shortcut.record` waiting for the person to press the shortcut.
     private var recordingShortcutId: String?
     private var tickTimer: DispatchWorkItem?
@@ -300,6 +302,8 @@ final class Helper {
     private func fire(_ id: String) {
         switch id {
         case "notes": emit("hotkey.notes", [:])
+        // The app pastes it (it keeps the History): the text never comes back through here.
+        case "pasteLast": emit("hotkey.pasteLast", [:])
         case "meeting": meeting.meetingShortcut()
         case "meetingPause": meeting.pauseMineShortcut()
         default: break
@@ -308,7 +312,7 @@ final class Helper {
 
     private func applyShortcuts() {
         // A fixed order, so two shortcuts on the same keys always resolve the same way.
-        tap.bindings = ["dictation", "cancel", "notes", "meeting", "meetingPause"].compactMap { id in shortcuts[id].map { (id: id, shortcut: $0) } }
+        tap.bindings = ["dictation", "cancel", "pasteLast", "notes", "meeting", "meetingPause"].compactMap { id in shortcuts[id].map { (id: id, shortcut: $0) } }
     }
 
     private func apply(_ action: GestureAction) {
