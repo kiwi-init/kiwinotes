@@ -22,7 +22,18 @@ export interface SemanticHit {
   score: number;
   /** Qual trecho de `noteChunks` casou melhor. */
   chunk: number;
+  /** Perto o bastante para entrar sem nenhuma palavra em comum (`NEAR_FLOOR` e `NEAR_MARGIN`). */
+  near: boolean;
 }
+
+/**
+ * O e5 dá entre 0,80 e 0,84 até para o que não tem nada a ver. Medido com o modelo de verdade em 10 notas e 13 buscas
+ * (T6013): o que casa fica em 0,835 ou mais e pelo menos 0,025 acima da mediana das notas para aquela busca; as buscas
+ * sem nota certa ficaram abaixo de um dos dois. Com poucas notas, a mediana não diz nada e vale só o piso.
+ */
+export const NEAR_FLOOR = 0.835;
+export const NEAR_MARGIN = 0.025;
+const MEDIAN_FROM = 5;
 
 interface Stored {
   version: string;
@@ -218,9 +229,12 @@ export class SemanticIndex {
           chunk = i;
         }
       });
-      if (Number.isFinite(best)) out.push({ path: p, score: best, chunk });
+      if (Number.isFinite(best)) out.push({ path: p, score: best, chunk, near: false });
     }
-    return out.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path)).slice(0, limit);
+    out.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+    const median = out.length >= MEDIAN_FROM ? out[Math.floor(out.length / 2)]!.score : -Infinity;
+    for (const h of out) h.near = h.score >= NEAR_FLOOR && h.score - median >= NEAR_MARGIN;
+    return out.slice(0, limit);
   }
 
   status(): { notes: number; indexed: number } {

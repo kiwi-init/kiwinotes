@@ -61,9 +61,8 @@ export interface SearchHit {
   semantic?: boolean;
 }
 
-/** Quantas notas a busca pelo sentido traz no máximo, e a similaridade mínima (e5: as sem relação ficam abaixo). */
+/** Quantas notas a busca pelo sentido traz no máximo, além das que casam pelas palavras. */
 export const SEMANTIC_LIMIT = 8;
-export const SEMANTIC_FLOOR = 0.8;
 /** A constante do Reciprocal Rank Fusion (Cormack et al., 2009): a soma de 1/(k + posição) em cada lista. */
 const RRF_K = 60;
 
@@ -601,9 +600,10 @@ export class Vault {
     max: number,
     lexicalSnippet: (e: Entry, near?: string) => string,
   ): SearchHit[] {
-    const near = semantic.filter((h) => Number.isFinite(h.score) && h.score >= SEMANTIC_FLOOR);
+    const ranked = semantic.filter((h) => Number.isFinite(h.score));
+    const near = ranked.filter((h) => h.near);
     const semanticRank = new Map<string, number>();
-    near.forEach((h, i) => {
+    ranked.forEach((h, i) => {
       if (!semanticRank.has(h.path)) semanticRank.set(h.path, i);
     });
     const rrf = (lexical: number | null, path: string) =>

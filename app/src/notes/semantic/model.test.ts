@@ -33,7 +33,7 @@ function server(body: (name: string) => Uint8Array | null) {
     urls.push(url);
     const name = url.split("/resolve/abc123/")[1]!;
     const b = body(name);
-    return b ? new Response(b) : new Response("nope", { status: 404 });
+    return b ? new Response(new Uint8Array(b)) : new Response("nope", { status: 404 });
   };
   return { urls, fetch };
 }
