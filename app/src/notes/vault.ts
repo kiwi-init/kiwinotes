@@ -3,6 +3,8 @@
 // de outra nota para atualizar um [[link]] num rename. Não há banco: o índice vive na memória e se refaz do disco
 // (no início e pelo watcher, que pega também o que muda fora do app, como no Obsidian).
 
+import { NoteSearchIndex } from "./search-index.ts";
+import { lexicalMatch, lexicalWords } from "../shared/lexical.ts";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { type FSWatcher, watch } from "node:fs";
@@ -349,6 +351,8 @@ export class Vault {
   private ready: Promise<void> | null = null;
   /** A resolução de [[links]] para as notas de agora; refeita quando uma nota entra, sai ou muda de nome. */
   private resolver: Resolver | null = null;
+  private searchIndex: NoteSearchIndex | null = null;
+  private searchDirty = true;
   /** Só para os testes: roda entre gravar o arquivo temporário e conferir a versão (uma edição de fora bem ali). */
   private beforeReplace?: () => void;
   /** O que foi apagado e ainda dá para desfazer, pelo caminho original (T2468). */
@@ -422,6 +426,9 @@ export class Vault {
   }
 
   close(): void {
+    this.searchIndex?.close();
+    this.searchIndex = null;
+    this.searchDirty = true;
     this.closed = true;
     this.watcher?.close();
     this.watcher = null;
@@ -481,49 +488,64 @@ export class Vault {
     // Os filtros (T2660, src/shared/query.ts): palavras, "frases", tag:, path: e as exclusões com "-".
     const q = parseQuery(query);
     if (!hasPositive(q)) return [];
-    const hits: { e: Entry; score: number; approx: boolean; near?: string }[] = [];
-    // Por palavra da busca, o que cada palavra do vault deu na conta de erros: a mesma palavra aparece em muitas notas.
-    const memos = new Map<string, Map<string, boolean>>();
-    for (const e of this.notes.values()) {
-      if (!q.tags.every((t) => hasTag(e.meta.tags, t)) || q.notTags.some((t) => hasTag(e.meta.tags, t))) continue;
+    const accepts = (e: Entry) => {
+      if (!q.tags.every(t => hasTag(e.meta.tags, t)) || q.notTags.some(t => hasTag(e.meta.tags, t))) return false;
       const foldedPath = fold(e.meta.path);
-      if (!q.paths.every((p) => foldedPath.includes(p)) || q.notPaths.some((p) => foldedPath.includes(p))) continue;
-      if (q.notText.some((t) => e.foldedTitle.includes(t) || inText(e, t))) continue;
-      if (!q.phrases.every((t) => e.foldedTitle.includes(t) || inText(e, t))) continue;
-      const terms = [...q.words, ...q.phrases];
-      // Só filtros: todas as notas que passam, das mais recentes para as mais velhas.
-      if (!terms.length) {
-        hits.push({ e, score: Date.parse(e.meta.mtime) / 1e12, approx: false });
-        continue;
+      if (!q.paths.every(p => foldedPath.includes(p)) || q.notPaths.some(p => foldedPath.includes(p))) return false;
+      if (q.notText.some(t => e.foldedTitle.includes(t) || inText(e, t))) return false;
+      return q.phrases.every(t => e.foldedTitle.includes(t) || inText(e, t));
+    };
+    const hits: { e: Entry; score: number; approx: boolean; near?: string }[] = [];
+    const rawWords = parseQuery(query, { preserveWords: true }).words;
+    const terms = [...q.words, ...q.phrases];
+    if (!terms.length) {
+      for (const e of this.notes.values()) if (accepts(e)) hits.push({e, score: Date.parse(e.meta.mtime) / 1e12, approx: false});
+    } else {
+      this.searchIndex ??= new NoteSearchIndex();
+      if (this.searchDirty) { this.searchIndex.sync(this.notes.values()); this.searchDirty = false; }
+      for (const hit of this.searchIndex.search(rawWords, q.phrases)) {
+        const e = this.notes.get(hit.path);
+        if (e && accepts(e)) hits.push({ e, score: hit.score, approx: false });
       }
-      let score = 0;
-      let all = true;
-      let approx = false;
-      let near: string | undefined;
-      for (const t of terms) {
-        const inTitle = e.foldedTitle.includes(t);
-        const inBody = inText(e, t);
-        if (inTitle || inBody) {
-          score += (inTitle ? 10 : 0) + (inBody ? 1 : 0) + (e.foldedTitle === t ? 20 : 0);
-          continue;
-        }
-        // Sem o exato, a palavra solta (não a "frase") aceita erro de digitação (T2966, spec #2934).
-        if (q.words.includes(t) && typoBudget(t)) {
-          let memo = memos.get(t);
-          if (!memo) memos.set(t, (memo = new Map()));
-          const w = approxWord(t, wordsOfEntry(e), memo);
-          if (w) {
-            approx = true;
-            near ??= t === terms[0] ? w : undefined;
-            score += wordsOf(e.foldedTitle).includes(w) ? 5 : 0.5;
-            continue;
+      // Literal punctuation-only phrases have no tokens, but retain their existing exact substring meaning.
+      if (!lexicalWords(terms.join(" ")).length)
+        for (const e of this.notes.values()) if (accepts(e)) hits.push({e, score: 1, approx: false});
+      // Typo matching is a fallback after the filters, never mixed into an already successful lexical search.
+      if (!hits.length && q.words.length) {
+        const memos = new Map<string, Map<string, boolean>>();
+        const lexicalByWord = new Map(q.words.map((word, i) => [word, new Set(this.searchIndex!.search([rawWords[i]!], []).map(h => h.path))]));
+        for (const e of this.notes.values()) {
+          if (!accepts(e)) continue;
+          let score = 0;
+          let all = true;
+          let approx = false;
+          let near: string | undefined;
+          for (const t of terms) {
+            const inTitle = e.foldedTitle.includes(t);
+            const inBody = inText(e, t);
+            if (inTitle || inBody || lexicalByWord.get(t)?.has(e.meta.path)) {
+              score += (inTitle ? 10 : 0) + (inBody ? 1 : 0) + (e.foldedTitle === t ? 20 : 0);
+              continue;
+            }
+            // Sem o exato, a palavra solta (não a "frase") aceita erro de digitação (T2966, spec #2934).
+            if (q.words.includes(t) && typoBudget(t)) {
+              let memo = memos.get(t);
+              if (!memo) memos.set(t, (memo = new Map()));
+              const w = approxWord(t, wordsOfEntry(e), memo);
+              if (w) {
+                approx = true;
+                near ??= t === terms[0] ? w : undefined;
+                score += wordsOf(e.foldedTitle).includes(w) ? 5 : 0.5;
+                continue;
+              }
+            }
+            all = false;
+            break;
           }
+          if (!all) continue;
+          hits.push({ e, score, approx, near });
         }
-        all = false;
-        break;
       }
-      if (!all) continue;
-      hits.push({ e, score, approx, near });
     }
     // O trecho só para os que voltam: montar para cada nota que casa custava mais que a busca (288 ms com 1.000 notas).
     // O exato antes do aproximado; o trecho do aproximado mostra a palavra que casou.
@@ -534,7 +556,7 @@ export class Vault {
       .map(({ e, score, approx, near }) => ({
         path: e.meta.path,
         title: e.meta.title,
-        snippet: snippetAround(e.content, near ?? first),
+        snippet: snippetAround(e.content, near ?? (q.phrases[0] || lexicalWords(e.content).find(w => lexicalMatch(w, rawWords)) || first)),
         score,
         ...(approx ? { approx: true } : {}),
       }));
@@ -635,6 +657,7 @@ export class Vault {
     await rename(fromAbs, toAbs);
     const moved = this.notes.get(from);
     this.notes.delete(from);
+    this.searchDirty = true;
     this.resolver = null;
     const content = moved?.content ?? (await readFile(toAbs, "utf8"));
     const entry = await this.index(to, content, toAbs);
@@ -753,6 +776,7 @@ export class Vault {
     if (!(await exists(abs))) throw new VaultError("E_NOT_FOUND", `no note ${p}`);
     await this.stage(p, abs, "note");
     this.notes.delete(p);
+    this.searchDirty = true;
     this.resolver = null;
     this.emit([p]);
     return true;
@@ -1092,6 +1116,7 @@ export class Vault {
     const old = this.notes.get(p);
     if (!old || old.aliases.join("\n") !== entry.aliases.join("\n")) this.resolver = null;
     this.notes.set(p, entry);
+    this.searchDirty = true;
     for (let f = entry.meta.folder; f; f = parentOf(f)) this.folders.add(f);
     return entry;
   }
@@ -1220,6 +1245,9 @@ export class Vault {
       );
       if (this.closed) return;
     }
+    this.searchIndex ??= new NoteSearchIndex();
+    this.searchIndex.sync(notes.values());
+    this.searchDirty = false;
     this.notes = notes;
     this.folders = folders;
     this.files = files;
@@ -1297,6 +1325,7 @@ export class Vault {
       }
       if (!s || !s.isFile()) {
         if (this.notes.delete(rel)) {
+          this.searchDirty = true;
           this.resolver = null;
           changed.push(rel);
         }

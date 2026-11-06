@@ -1,0 +1,524 @@
+{
+  "ok": true,
+  "window": "notes",
+  "browser": "webkit",
+  "out": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6011/docs/evidence/T6011/light",
+  "steps": [
+    {
+      "n": 1,
+      "step": "invoke notes.create",
+      "ok": true,
+      "ms": 19,
+      "value": {
+        "path": "Organização.md",
+        "title": "Organização",
+        "folder": "",
+        "mtime": "2026-11-06T16:13:31.997Z",
+        "ctime": "2026-11-06T16:13:31.997Z",
+        "size": 41,
+        "version": "049afb5c2b317a5a",
+        "tags": [
+          "projeto"
+        ],
+        "content": "Notas para organizar as tarefas. #projeto"
+      }
+    },
+    {
+      "n": 2,
+      "step": "invoke notes.create",
+      "ok": true,
+      "ms": 3,
+      "value": {
+        "path": "Síntese.md",
+        "title": "Síntese",
+        "folder": "",
+        "mtime": "2026-11-06T16:13:32.007Z",
+        "ctime": "2026-11-06T16:13:32.007Z",
+        "size": 80,
+        "version": "08051f0218d4e02c",
+        "tags": [
+          "projeto"
+        ],
+        "content": "Organização organização organização das reuniões e dos projetos. #projeto"
+      }
+    },
+    {
+      "n": 3,
+      "step": "invoke notes.create",
+      "ok": true,
+      "ms": 5,
+      "value": {
+        "path": "Ideias.md",
+        "title": "Ideias",
+        "folder": "",
+        "mtime": "2026-11-06T16:13:32.012Z",
+        "ctime": "2026-11-06T16:13:32.011Z",
+        "size": 64,
+        "version": "959be84743c6b6a4",
+        "tags": [
+          "projeto"
+        ],
+        "content": "Planejando ações para organizar projetos e reuniões. #projeto"
+      }
+    },
+    {
+      "n": 4,
+      "step": "invoke notes.create",
+      "ok": true,
+      "ms": 6,
+      "value": {
+        "path": "Contexto.md",
+        "title": "Contexto",
+        "folder": "",
+        "mtime": "2026-11-06T16:13:32.015Z",
+        "ctime": "2026-11-06T16:13:32.015Z",
+        "size": 2249,
+        "version": "36c48d3708c3fcde",
+        "tags": [],
+        "content": "Organização das reuniões. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. "
+      }
+    },
+    {
+      "n": 5,
+      "step": "waitFor .kn-crumb-bt",
+      "ok": true,
+      "ms": 36
+    },
+    {
+      "n": 6,
+      "step": "press Meta+k",
+      "ok": true,
+      "ms": 22
+    },
+    {
+      "n": 7,
+      "step": "fill .kn-palette-q",
+      "ok": true,
+      "ms": 13
+    },
+    {
+      "n": 8,
+      "step": "waitFor .kn-palette-snippet",
+      "ok": true,
+      "ms": 179
+    },
+    {
+      "n": 9,
+      "step": "wait 250",
+      "ok": true,
+      "ms": 252
+    },
+    {
+      "n": 10,
+      "step": "expectText .kn-palette-it:nth-child(1)",
+      "ok": true,
+      "ms": 22
+    },
+    {
+      "n": 11,
+      "step": "expectText .kn-palette-it:nth-child(2)",
+      "ok": true,
+      "ms": 6
+    },
+    {
+      "n": 12,
+      "step": "expectText .kn-palette-it:nth-child(3)",
+      "ok": true,
+      "ms": 7
+    },
+    {
+      "n": 13,
+      "step": "expectText .kn-palette-it:nth-child(4)",
+      "ok": true,
+      "ms": 7
+    },
+    {
+      "n": 14,
+      "step": "invoke notes.search",
+      "ok": true,
+      "ms": 2,
+      "value": [
+        {
+          "path": "Organização.md",
+          "title": "Organização",
+          "snippet": "Notas para organizar as tarefas. #projeto",
+          "score": 0.000003690834731862072
+        },
+        {
+          "path": "Ideias.md",
+          "title": "Ideias",
+          "snippet": "Planejando ações para organizar projetos e reuniões. #projeto",
+          "score": 0.000002934711217904644
+        },
+        {
+          "path": "Síntese.md",
+          "title": "Síntese",
+          "snippet": "Organização organização organização das reuniões e dos projetos. #projeto",
+          "score": 0.0000017955293709928956
+        },
+        {
+          "path": "Contexto.md",
+          "title": "Contexto",
+          "snippet": "Organização das reuniões. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento.…",
+          "score": 3.1108709357831217e-7
+        }
+      ]
+    },
+    {
+      "n": 15,
+      "step": "screenshot 01-bm25.png",
+      "ok": true,
+      "ms": 80,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6011/docs/evidence/T6011/light/01-bm25.png"
+    },
+    {
+      "n": 16,
+      "step": "fill .kn-palette-q",
+      "ok": true,
+      "ms": 5
+    },
+    {
+      "n": 17,
+      "step": "waitFor .kn-palette-it:has-text(\"Síntese\")",
+      "ok": true,
+      "ms": 181
+    },
+    {
+      "n": 18,
+      "step": "wait 250",
+      "ok": true,
+      "ms": 252
+    },
+    {
+      "n": 19,
+      "step": "expectCount .kn-palette-snippet mark:has-text(\"reuniões\")",
+      "ok": true,
+      "ms": 5
+    },
+    {
+      "n": 20,
+      "step": "invoke notes.search",
+      "ok": true,
+      "ms": 4,
+      "value": [
+        {
+          "path": "Ideias.md",
+          "title": "Ideias",
+          "snippet": "Planejando ações para organizar projetos e reuniões. #projeto",
+          "score": 0.0000013434461299105406
+        },
+        {
+          "path": "Síntese.md",
+          "title": "Síntese",
+          "snippet": "Organização organização organização das reuniões e dos projetos. #projeto",
+          "score": 0.0000013128088179399468
+        },
+        {
+          "path": "Contexto.md",
+          "title": "Contexto",
+          "snippet": "Organização das reuniões. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento.…",
+          "score": 3.1108709357831217e-7
+        }
+      ]
+    },
+    {
+      "n": 21,
+      "step": "screenshot 02-portugues.png",
+      "ok": true,
+      "ms": 76,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6011/docs/evidence/T6011/light/02-portugues.png"
+    },
+    {
+      "n": 22,
+      "step": "fill .kn-palette-q",
+      "ok": true,
+      "ms": 7
+    },
+    {
+      "n": 23,
+      "step": "waitFor .kn-palette-it:has-text(\"Síntese\")",
+      "ok": true,
+      "ms": 180
+    },
+    {
+      "n": 24,
+      "step": "wait 250",
+      "ok": true,
+      "ms": 252
+    },
+    {
+      "n": 25,
+      "step": "expectCount .kn-palette-it:has-text(\"Contexto\")",
+      "ok": true,
+      "ms": 1
+    },
+    {
+      "n": 26,
+      "step": "invoke notes.search",
+      "ok": true,
+      "ms": 1,
+      "value": [
+        {
+          "path": "Organização.md",
+          "title": "Organização",
+          "snippet": "Notas para organizar as tarefas. #projeto",
+          "score": 0.000003690834731862072
+        },
+        {
+          "path": "Ideias.md",
+          "title": "Ideias",
+          "snippet": "Planejando ações para organizar projetos e reuniões. #projeto",
+          "score": 0.000002934711217904644
+        },
+        {
+          "path": "Síntese.md",
+          "title": "Síntese",
+          "snippet": "Organização organização organização das reuniões e dos projetos. #projeto",
+          "score": 0.0000017955293709928956
+        }
+      ]
+    },
+    {
+      "n": 27,
+      "step": "screenshot 03-filtros.png",
+      "ok": true,
+      "ms": 62,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6011/docs/evidence/T6011/light/03-filtros.png"
+    },
+    {
+      "n": 28,
+      "step": "fill .kn-palette-q",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 29,
+      "step": "waitFor .kn-palette-it:has-text(\"Ideias\")",
+      "ok": true,
+      "ms": 181
+    },
+    {
+      "n": 30,
+      "step": "wait 250",
+      "ok": true,
+      "ms": 251
+    },
+    {
+      "n": 31,
+      "step": "invoke notes.search",
+      "ok": true,
+      "ms": 1,
+      "value": [
+        {
+          "path": "Ideias.md",
+          "title": "Ideias",
+          "snippet": "Planejando ações para organizar projetos e reuniões. #projeto",
+          "score": 0.5,
+          "approx": true
+        },
+        {
+          "path": "Organização.md",
+          "title": "Organização",
+          "snippet": "Notas para organizar as tarefas. #projeto",
+          "score": 0.5,
+          "approx": true
+        }
+      ]
+    },
+    {
+      "n": 32,
+      "step": "screenshot 04-fuzzy.png",
+      "ok": true,
+      "ms": 62,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6011/docs/evidence/T6011/light/04-fuzzy.png"
+    },
+    {
+      "n": 33,
+      "step": "fill .kn-palette-q",
+      "ok": true,
+      "ms": 9
+    },
+    {
+      "n": 34,
+      "step": "waitFor .kn-palette-it:has-text(\"Ideias\")",
+      "ok": true,
+      "ms": 179
+    },
+    {
+      "n": 35,
+      "step": "wait 250",
+      "ok": true,
+      "ms": 254
+    },
+    {
+      "n": 36,
+      "step": "expectCount .kn-palette-it:has-text(\"Síntese\")",
+      "ok": true,
+      "ms": 1
+    },
+    {
+      "n": 37,
+      "step": "invoke notes.search",
+      "ok": true,
+      "ms": 1,
+      "value": [
+        {
+          "path": "Organização.md",
+          "title": "Organização",
+          "snippet": "Notas para organizar as tarefas. #projeto",
+          "score": 0.000003690834731862072
+        },
+        {
+          "path": "Ideias.md",
+          "title": "Ideias",
+          "snippet": "Planejando ações para organizar projetos e reuniões. #projeto",
+          "score": 0.000002934711217904644
+        }
+      ]
+    },
+    {
+      "n": 38,
+      "step": "press Escape",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 39,
+      "step": "click .kn-crumb-bt",
+      "ok": true,
+      "ms": 39
+    },
+    {
+      "n": 40,
+      "step": "waitFor .kn-side-search",
+      "ok": true,
+      "ms": 2
+    },
+    {
+      "n": 41,
+      "step": "fill .kn-side-search",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 42,
+      "step": "waitFor .kn-tree-pop .kn-side-item:has-text(\"Síntese\")",
+      "ok": true,
+      "ms": 179
+    },
+    {
+      "n": 43,
+      "step": "screenshot 05-arvore.png",
+      "ok": true,
+      "ms": 61,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6011/docs/evidence/T6011/light/05-arvore.png"
+    },
+    {
+      "n": 44,
+      "step": "press Escape",
+      "ok": true,
+      "ms": 5
+    },
+    {
+      "n": 45,
+      "step": "press Escape",
+      "ok": true,
+      "ms": 7
+    },
+    {
+      "n": 46,
+      "step": "press Meta+k",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 47,
+      "step": "fill .kn-palette-q",
+      "ok": true,
+      "ms": 4
+    },
+    {
+      "n": 48,
+      "step": "waitFor .kn-palette-it:nth-child(4):has-text(\"Contexto\")",
+      "ok": true,
+      "ms": 177
+    },
+    {
+      "n": 49,
+      "step": "invoke notes.save",
+      "ok": true,
+      "ms": 6,
+      "value": {
+        "saved": true,
+        "meta": {
+          "path": "Contexto.md",
+          "title": "Contexto",
+          "folder": "",
+          "mtime": "2026-11-06T16:13:35.105Z",
+          "ctime": "2026-11-06T16:13:35.104Z",
+          "size": 9,
+          "version": "492e7654a6e50694",
+          "tags": []
+        }
+      }
+    },
+    {
+      "n": 50,
+      "step": "waitFor .kn-palette-it:nth-child(2):has-text(\"Contexto\")",
+      "ok": true,
+      "ms": 180
+    },
+    {
+      "n": 51,
+      "step": "invoke notes.search",
+      "ok": true,
+      "ms": 1,
+      "value": [
+        {
+          "path": "Organização.md",
+          "title": "Organização",
+          "snippet": "Notas para organizar as tarefas. #projeto",
+          "score": 0.0000028615384615384615
+        },
+        {
+          "path": "Contexto.md",
+          "title": "Contexto",
+          "snippet": "organizar",
+          "score": 0.000002586466165413534
+        },
+        {
+          "path": "Ideias.md",
+          "title": "Ideias",
+          "snippet": "Planejando ações para organizar projetos e reuniões. #projeto",
+          "score": 0.0000015910364145658265
+        },
+        {
+          "path": "Síntese.md",
+          "title": "Síntese",
+          "snippet": "Organização organização organização das reuniões e dos projetos. #projeto",
+          "score": 0.0000011379310344827587
+        }
+      ]
+    },
+    {
+      "n": 52,
+      "step": "screenshot 06-ranking-atualizado.png",
+      "ok": true,
+      "ms": 79,
+      "shot": "/Users/davivicente/Documents/personal-projects/code-projects/kiwinotes-wt/T6011/docs/evidence/T6011/light/06-ranking-atualizado.png"
+    }
+  ],
+  "ready": true,
+  "problems": [],
+  "clipboard": [],
+  "blocked": [],
+  "invokes": {
+    "settings.get": 5,
+    "notes.folder": 1,
+    "notes.list": 6,
+    "trash.list": 6,
+    "notes.tags": 5,
+    "notes.search": 8
+  },
+  "invokeErrors": []
+}

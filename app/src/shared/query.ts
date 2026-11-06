@@ -49,7 +49,7 @@ function tokens(q: string): { neg: boolean; key: string; value: string; quoted: 
 /** Espaços, tabs e quebras de linha viram um espaço só: uma "frase" casa mesmo quebrada no meio da nota (T2751). */
 export const oneSpace = (s: string) => s.replace(/\s+/g, " ");
 
-export function parseQuery(query: string): ParsedQuery {
+export function parseQuery(query: string, options: { preserveWords?: boolean } = {}): ParsedQuery {
   const r: ParsedQuery = { words: [], phrases: [], tags: [], paths: [], notText: [], notTags: [], notPaths: [] };
   for (const t of tokens(query)) {
     const value = t.value.trim();
@@ -66,7 +66,7 @@ export function parseQuery(query: string): ParsedQuery {
     } else if (t.quoted) {
       r.phrases.push(oneSpace(fold(value)));
     } else {
-      r.words.push(fold(value));
+      r.words.push(options.preserveWords ? value.normalize("NFC").toLocaleLowerCase("pt-BR") : fold(value));
     }
   }
   return r;

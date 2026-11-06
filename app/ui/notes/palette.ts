@@ -1,6 +1,7 @@
 // A lógica da busca rápida (⌘K): o título casa na hora, sem ir ao engine; o texto vem do `notes.search`. Sem busca,
 // as notas mais recentes. Por último, "Criar" quando nenhum título é exatamente o que foi digitado.
 
+import { lexicalMatch, WORD } from "../../src/shared/lexical.ts";
 import { highlightRanges, type Range, subsequence } from "../../src/shared/fuzzy.ts";
 import { hasFilters, parseQuery } from "../../src/shared/query.ts";
 import type { NoteMeta, SearchHit } from "./types.ts";
@@ -58,7 +59,7 @@ export function titleRanks(notes: NoteMeta[], query: string): { n: NoteMeta; ran
     .map(({ n, rank }) => ({ n, rank }));
 }
 
-export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchHit[], commands: PaletteCommand[] = []): PaletteItem[] {
+export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchHit[], commands: PaletteCommand[] = [], ranked = false): PaletteItem[] {
   const q = query.trim();
   const folderOf = (path: string) => notes.find((n) => n.path === path)?.folder ?? "";
   const cmds = (all: boolean): PaletteItem[] =>
@@ -85,15 +86,21 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   // A ordem (T2966): título exato, texto exato, título aproximado, texto aproximado. O exato nunca fica abaixo do
   // aproximado.
   // Uma nota que casa aproximada no título e exata no texto fica com o texto, que é exato.
-  const ranked = titleRanks(notes, q);
+  if (ranked && textHits.length) {
+    const out: PaletteItem[] = textHits.slice(0, MAX).map(h => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet }));
+    out.push(...cmds(false));
+    if (!notes.some(n => fold(n.title) === fold(q))) out.push({ kind: "create", title: q });
+    return out;
+  }
+  const titles = titleRanks(notes, q);
   const seen = new Set<string>();
   const once = (path: string) => !seen.has(path) && !!seen.add(path);
   const titleItem = (n: NoteMeta): PaletteItem => ({ kind: "note", path: n.path, title: n.title, detail: n.folder });
   const textItem = (h: SearchHit): PaletteItem => ({ kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet });
   const items: PaletteItem[] = [];
-  for (const x of ranked) if (x.rank < 3 && once(x.n.path)) items.push(titleItem(x.n));
+  for (const x of titles) if (x.rank < 3 && once(x.n.path)) items.push(titleItem(x.n));
   for (const h of textHits) if (!h.approx && once(h.path)) items.push(textItem(h));
-  for (const x of ranked) if (x.rank === 3 && once(x.n.path)) items.push(titleItem(x.n));
+  for (const x of titles) if (x.rank === 3 && once(x.n.path)) items.push(titleItem(x.n));
   for (const h of textHits) if (h.approx && once(h.path)) items.push(textItem(h));
   const out = items.slice(0, MAX);
   out.push(...cmds(false));
@@ -118,5 +125,11 @@ export function titleRanges(title: string, query: string): Range[] {
 /** O que destacar no trecho de um resultado: as palavras da busca, exatas ou com o erro que a busca aceitou. */
 export function snippetRanges(snippet: string, query: string): Range[] {
   const q = parseQuery(query);
-  return highlightRanges(snippet, [...q.words, ...q.phrases]);
+  const ranges = highlightRanges(snippet, [...q.words, ...q.phrases]);
+  const words = parseQuery(query, { preserveWords: true }).words;
+  for (const m of snippet.matchAll(WORD)) if (lexicalMatch(m[0], words)) ranges.push([m.index!, m.index! + m[0].length]);
+  return ranges.sort((a,b)=>a[0]-b[0]).reduce<Range[]>((out, r) => {
+    const prev = out.at(-1); if (prev && r[0] <= prev[1]) prev[1] = Math.max(prev[1], r[1]); else out.push(r);
+    return out;
+  }, []);
 }

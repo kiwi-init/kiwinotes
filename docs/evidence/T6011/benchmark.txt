@@ -1,0 +1,15 @@
+1000 notas: abrir e indexar 527 ms
+busca "reunião": mediana 14.3 ms, pior 16.4 ms (20 resultados)
+busca "reunião projeto prazo": mediana 15.3 ms, pior 15.9 ms (20 resultados)
+busca "nota 999": mediana 1.8 ms, pior 2.4 ms (3 resultados)
+busca "xyzzy": mediana 8.0 ms, pior 47.3 ms (0 resultados)
+busca "reunaio": mediana 13.7 ms, pior 17.3 ms (20 resultados)
+busca "pjoreto prazo": mediana 16.0 ms, pior 21.2 ms (20 resultados)
+busca "xyzzyw": mediana 7.5 ms, pior 8.7 ms (0 resultados)
+⌘K títulos "nt99": mediana 3.3 ms, pior 4.7 ms (28 resultados)
+⌘K títulos "nota 999": mediana 4.5 ms, pior 5.1 ms (1 resultados)
+⌘K títulos "xq": mediana 2.3 ms, pior 2.5 ms (0 resultados)
+backlinks: 4.0 ms (2)
+rename com links: 572 ms (2 links atualizados, 1000 leituras de nota no total)
+rename para outra pasta: 326 ms (2 links atualizados, 1000 leituras de nota no total)
+1000 notas: reabrir (boot seguinte) 514 ms

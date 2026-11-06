@@ -30,6 +30,7 @@
     "@lezer/common": "^1.5.5",
     "@lezer/highlight": "^1.2.5",
     "@lezer/markdown": "^1.8.1",
+    "@orama/stemmers": "3.1.18",
     "@rive-app/canvas-single": "2.45.0",
     "katex": "0.18.10",
     "mermaid": "12.2.0",

@@ -1,0 +1,42 @@
+{
+  "light": {
+    "steps": 52,
+    "passed": true,
+    "initialOrder": [
+      "Organização.md",
+      "Ideias.md",
+      "Síntese.md",
+      "Contexto.md"
+    ],
+    "liveUpdatedOrder": [
+      "Organização.md",
+      "Contexto.md",
+      "Ideias.md",
+      "Síntese.md"
+    ],
+    "fuzzyOnlyFallback": true,
+    "problems": [],
+    "blocked": [],
+    "clipboard": []
+  },
+  "dark": {
+    "steps": 52,
+    "passed": true,
+    "initialOrder": [
+      "Organização.md",
+      "Ideias.md",
+      "Síntese.md",
+      "Contexto.md"
+    ],
+    "liveUpdatedOrder": [
+      "Organização.md",
+      "Contexto.md",
+      "Ideias.md",
+      "Síntese.md"
+    ],
+    "fuzzyOnlyFallback": true,
+    "problems": [],
+    "blocked": [],
+    "clipboard": []
+  }
+}

@@ -23,24 +23,26 @@ export interface PaletteProps {
 
 export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = "", commands = [], onCommand }: PaletteProps) {
   const [query, setQuery] = useState(initialQuery);
-  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [search, setSearch] = useState<{ query: string; hits: SearchHit[] } | null>(null);
+  const hits = search?.query === query ? search.hits : [];
+  const ranked = search?.query === query;
   const [sel, setSel] = useState(0);
   const seq = useRef(0);
 
   // O texto vem do engine, um pouco depois de parar de digitar; uma resposta velha não sobrescreve a nova.
   useEffect(() => {
     const my = ++seq.current;
-    if (!query.trim()) return setHits([]);
+    if (!query.trim()) return setSearch(null);
     const t = setTimeout(() => {
       api.search(query, 20).then(
-        (h) => my === seq.current && setHits(h),
-        () => my === seq.current && setHits([]),
+        (h) => my === seq.current && setSearch({ query, hits: h }),
+        () => my === seq.current && setSearch(null),
       );
     }, 120);
     return () => clearTimeout(t);
-  }, [query, api]);
+  }, [query, api, notes]);
 
-  const items = paletteItems(notes, query, hits, commands);
+  const items = paletteItems(notes, query, hits, commands, ranked);
   useEffect(() => setSel(0), [query]);
 
   const choose = (item: PaletteItem | undefined) => {
