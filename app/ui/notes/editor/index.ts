@@ -11,7 +11,7 @@ import {
   closeBracketsKeymap,
   startCompletion,
 } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
 import { EditorState, type Extension, Prec, StateField, type TransactionSpec } from "@codemirror/state";
@@ -23,7 +23,7 @@ import { externalUrl, linkAt } from "../links.ts";
 import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { renderedPreview } from "./renderedWidget.tsx";
-import { tableEnter, tableTab } from "./table.ts";
+import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger } from "./slash.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
@@ -112,29 +112,37 @@ export function linkCompletion(targets: () => LinkTarget[]) {
  */
 const treeUpTo = (state: EditorState, pos: number) => ensureSyntaxTree(state, Math.min(state.doc.length, pos + 1), 50) ?? syntaxTree(state);
 
-function tableAt(state: EditorState): { from: number; to: number } | null {
+export function tableAt(state: EditorState): { from: number; to: number } | null {
   const pos = state.selection.main.head;
-  for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = treeUpTo(state, pos).resolveInner(pos, -1); n; n = n.parent) {
-    if (n.name === "Table") return { from: state.doc.lineAt(n.from).from, to: state.doc.lineAt(n.to).to };
+  for (const side of [-1, 1] as const) {
+    for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = treeUpTo(state, pos).resolveInner(pos, side); n; n = n.parent) {
+      if (n.name === "Table") return { from: state.doc.lineAt(n.from).from, to: state.doc.lineAt(n.to).to };
+    }
   }
   return null;
 }
 
-function tableCommand(step: (text: string, offset: number) => ReturnType<typeof tableEnter>) {
+function tableCommand(step: (text: string, offset: number) => ReturnType<typeof tableEnter>, structural = false) {
   return (view: EditorView): boolean => {
     const range = tableAt(view.state);
     if (!range) return false;
+    // Consume unavailable structural shortcuts instead of falling through to ordinary text editing.
+    if (structural && view.state.selection.ranges.length !== 1) return true;
     const text = view.state.doc.sliceString(range.from, range.to);
     const r = step(text, view.state.selection.main.head - range.from);
-    if (!r) return false;
+    if (!r) return structural;
     view.dispatch({
       changes: { from: range.from, to: range.to, insert: r.text },
       selection: { anchor: range.from + r.anchor, head: range.from + r.head },
       scrollIntoView: true,
+      userEvent: "input.table",
+      ...(structural ? { annotations: isolateHistory.of("full") } : {}),
     });
     return true;
   };
 }
+
+export const tableActionCommand = (action: TableAction) => tableCommand((text, offset) => tableAction(text, offset, action), true);
 
 /** Tab e ⇧Tab num item de lista (T2469): desce ou sobe um nível, com os filhos (`listIndent`). */
 function listCommand(dir: 1 | -1) {
@@ -163,6 +171,7 @@ function listCommand(dir: 1 | -1) {
 
 const tableKeys = Prec.high(
   keymap.of([
+    ...TABLE_ACTIONS.map((action) => ({ key: action.key, run: tableActionCommand(action.id) })),
     { key: "Tab", run: tableCommand((x, o) => tableTab(x, o, 1)) },
     { key: "Shift-Tab", run: tableCommand((x, o) => tableTab(x, o, -1)) },
     { key: "Enter", run: tableCommand(tableEnter) },
