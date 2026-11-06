@@ -8,6 +8,8 @@ import { FORMAT_KEYS, tableAt, tableActionCommand } from "./index.ts";
 import { insertLink } from "./format.ts";
 import { slashInsert } from "./slash.ts";
 import { CALLOUT_KINDS, calloutAt } from "./callouts.ts";
+import { insertFootnote } from "./footnotes.ts";
+import { focusEditorNow } from "./livePreview.ts";
 import { linkFromPaste } from "./text.ts";
 import { TEXT_TOOLS, textTool, splitAt } from "./tools.ts";
 import { TABLE_ACTIONS, canTableAction, tableContext } from "./table.ts";
@@ -47,7 +49,8 @@ export async function pasteSelection(view: ClipboardTarget, clipboard: EditorCli
 export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void, onRenameHeading?: (offset: number, title: string, source: string) => void): MenuItem[] {
   const chosenState = view.state;
   const safe = () => unchanged(view, chosenState);
-  const perform = (action: () => void) => () => { if (safe()) { action(); view.focus(); } };
+  // O foco antes da ação (T6377): despachada com o editor ainda sem foco, o texto digitado logo depois caía fora dela.
+  const perform = (action: () => void) => () => { if (safe()) { focusEditorNow(view); action(); } };
   const asyncAction = (action: () => Promise<unknown>) => () => {
     if (safe()) void action()
       .catch(() => onError("Não foi possível acessar a área de transferência. Tente novamente."))
@@ -102,6 +105,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
       { label: "Bloco de código", onSelect: insertBlock("code") },
       { label: "Separador", onSelect: insertBlock("divider") },
       { label: "Callout", onSelect: insertBlock("callout") },
+      { label: "Nota de rodapé", onSelect: perform(() => view.dispatch(insertFootnote(view.state))) },
     ] },
     { kind: "submenu", label: "Ferramentas de texto", items: TEXT_TOOLS.map(item => ({ label: item.label,
       disabled: !textTool(chosenState, item.id), onSelect: perform(() => { const tr = textTool(view.state, item.id); if (tr) view.dispatch(tr); }),

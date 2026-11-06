@@ -24,6 +24,8 @@ export const SLASH_ITEMS: SlashItem[] = [
   { id: "callout", label: "Callout", words: "callout aviso nota destaque", detail: "> [!note]" },
   { id: "divider", label: "Divisor", words: "divisor linha separador hr", detail: "---" },
   { id: "link", label: "Link para nota", words: "link nota wikilink", detail: "[[ ]]" },
+  // A nota de rodapé precisa da nota inteira (o próximo número e o fim): o editor insere (`insertFootnote`).
+  { id: "footnote", label: "Nota de rodapé", words: "rodape footnote referencia fonte", detail: "[^1]" },
   { id: "template", label: "Modelo", words: "modelo template", detail: "…" },
   { id: "tomorrow", label: "Amanhã", words: "amanha tomorrow", detail: "AAAA-MM-DD" },
   { id: "yesterday", label: "Ontem", words: "ontem yesterday", detail: "AAAA-MM-DD" },
@@ -63,7 +65,8 @@ export function recordSlashUse(id: string): void {
 
 /**
  * O que entra no lugar de "/palavra": o texto e onde o cursor fica (relativo ao começo do que entrou). No meio de uma
- * linha, um bloco começa numa linha nova; a data e o link entram ali mesmo. `null` para o "Modelo", que a janela abre.
+ * linha, um bloco começa numa linha nova; a data e o link entram ali mesmo. `null` para o "Modelo", que a janela abre,
+ * e para a nota de rodapé, que o editor insere.
  */
 export function slashInsert(id: string, atLineStart: boolean, now: Date): { insert: string; cursor: number } | null {
   const block = (text: string, cursor = text.length) => {

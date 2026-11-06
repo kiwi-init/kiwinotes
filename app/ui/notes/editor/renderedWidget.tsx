@@ -10,7 +10,7 @@ import { HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range, StateField } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { MarkdownStyle } from "react-native-enriched-markdown/lib/module/index.web.js";
@@ -22,12 +22,17 @@ import { buildStyles, zeroTrailingMargins } from "react-native-enriched-markdown
 import { indexTaskItems, markInlineImages } from "react-native-enriched-markdown/lib/module/web/utils.js";
 import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/web/types";
 
-import { externalUrl } from "../links.ts";
+import { externalUrl, parseLinks } from "../links.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
-import { editorFocused, type LinkResolver, linksChanged } from "./livePreview.ts";
+import { editorFocused, focusEditorNow, type LinkResolver, linksChanged } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
 import { type Callout, parseCallout } from "./callouts.ts";
+import { footnoteJump, footnotesOf, footnoteText } from "./footnotes.ts";
 import {
+  FOOTNOTE_DEF_LINK,
+  FOOTNOTE_INLINE_LINK,
+  FOOTNOTE_LINK,
+  FOOTNOTE_MISSING_LINK,
   fullTree,
   imageSource,
   linkAction,
@@ -96,6 +101,11 @@ const STYLE: MarkdownStyle = {
     [`^${NOTE_LINK}`]: { color: "var(--accent-text)", underline: false },
     [`^${TAG_LINK}`]: { color: "var(--accent-text)", backgroundColor: "var(--accent-soft)", underline: false },
     [`^${LOAD_IMAGE_LINK}`]: { color: "var(--text-2)", backgroundColor: "var(--surface-2)", underline: false },
+    // As notas de rodapé (T6377): o número no tom do link; a chamada sem texto ainda, apagada.
+    [`^${FOOTNOTE_MISSING_LINK}`]: { color: "var(--text-3)", underline: false },
+    [`^${FOOTNOTE_LINK}`]: { color: "var(--accent-text)", underline: false },
+    [`^${FOOTNOTE_DEF_LINK}`]: { color: "var(--accent-text)", underline: false },
+    [`^${FOOTNOTE_INLINE_LINK}`]: { color: "var(--accent-text)", underline: false },
   },
   strong: { color: "var(--text)" },
   em: { color: "var(--text)" },
@@ -434,7 +444,12 @@ class RenderedWidget extends WidgetType {
           return;
         }
         const act = linkAction(url);
-        if (act?.kind === "loadImage") loadRemote(act.url, this.actions.attachments);
+        if (act?.kind === "footnote" || act?.kind === "footnoteDef" || act?.kind === "footnoteInline") {
+          // Da chamada para a definição e de volta (T6377): o cursor vai para lá, e aquele bloco vira texto.
+          focusEditorNow(view);
+          const tr = footnoteJump(view.state, act);
+          if (tr) view.dispatch(tr);
+        } else if (act?.kind === "loadImage") loadRemote(act.url, this.actions.attachments);
         else if (act?.kind === "note") this.actions.onOpenLink(act.target);
         else if (act?.kind === "tag") this.actions.onOpenTag?.(act.tag);
         else if (act?.kind === "url") {
@@ -597,8 +612,9 @@ function buildRendered(state: EditorState, resolver: LinkResolver, actions: Rend
   const focused = state.field(editorFocused, false) ?? false;
   const tree = fullTree(state);
   const out: Range<Decoration>[] = [];
+  const notes = footnotesOf(state);
   for (const b of renderedBlocks(state, focused, tree)) {
-    const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t));
+    const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t), notes);
     out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions), block: true }).range(b.from, b.to));
   }
   for (const m of imagesUnderCursor(state, focused, tree)) {
@@ -630,8 +646,172 @@ export function renderedPreview(resolver: LinkResolver, actions: RenderedActions
       },
       provide: (f) => EditorView.decorations.from(f),
     }),
+    footnoteHover(actions),
     renderedTheme,
   ];
+}
+
+// ---------------------------------------------------------------- o hover das notas de rodapé (T6377)
+
+/** O número desenhado pela lib (`<a href="kiwi-footnote…">`) e o do bloco do cursor (`livePreview`, `.cm-footnote`). */
+const FOOTNOTE_TARGET = `a[href^="${FOOTNOTE_LINK}"], a[href^="${FOOTNOTE_MISSING_LINK}"], a[href^="${FOOTNOTE_INLINE_LINK}"], .cm-footnote[data-footnote], .cm-footnote[data-footnote-n]`;
+
+function footnoteOf(el: HTMLElement): { label: string } | { n: number } | null {
+  if (el.dataset.footnote) return { label: el.dataset.footnote };
+  if (el.dataset.footnoteN) return { n: Number(el.dataset.footnoteN) };
+  const act = linkAction(el.getAttribute("href") ?? "");
+  if (act?.kind === "footnote") return { label: act.label };
+  if (act?.kind === "footnoteInline") return { n: act.n };
+  return null;
+}
+
+/** O texto da nota no hover, como Markdown: os `[[links]]` viram links que abrem a nota, como no resto do editor. */
+function tipMarkdown(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      let out = line;
+      for (const l of [...parseLinks(line)].reverse()) {
+        if (line[l.from - 1] === "!") continue;
+        const shown = (l.alias || l.target || l.heading || "").replace(/([\\[\]*_`~<>])/g, "\\$1");
+        out = out.slice(0, l.from) + `[${shown}](${NOTE_LINK}${encodeURIComponent(l.target + (l.heading ? `#${l.heading}` : ""))})` + out.slice(l.to);
+      }
+      return out;
+    })
+    .join("\n");
+}
+
+/**
+ * Passar o mouse no número mostra o texto da nota logo abaixo dele, num popover das Notas. Ele fica aberto com o mouse
+ * em cima (para clicar num link de dentro) e some ao sair, ao clicar ou ao editar.
+ */
+function footnoteHover(actions: RenderedActions) {
+  return ViewPlugin.fromClass(
+    class {
+      tip: HTMLDivElement | null = null;
+      root: Root | null = null;
+      anchor: HTMLElement | null = null;
+      showTimer: ReturnType<typeof setTimeout> | undefined;
+      hideTimer: ReturnType<typeof setTimeout> | undefined;
+      /** O clique no link de dentro veio com ⌘: o link para fora (http, https, mailto) só abre assim, como no editor. */
+      meta = false;
+
+      constructor(readonly view: EditorView) {
+        view.dom.addEventListener("mouseover", this.over);
+        view.dom.addEventListener("mouseout", this.out);
+        view.dom.addEventListener("mousedown", this.mousedown, true);
+        // A nota rolou, ou o Esc: o hover sai, como um tooltip do sistema.
+        addEventListener("scroll", this.away, true);
+        addEventListener("keydown", this.escape, true);
+      }
+
+      update(u: { docChanged: boolean; selectionSet: boolean }) {
+        if (u.docChanged || u.selectionSet) this.hide();
+      }
+
+      away = () => {
+        if (this.tip) this.hide();
+      };
+
+      escape = (e: KeyboardEvent) => {
+        if (e.key !== "Escape" || !this.tip) return;
+        // O Esc fecha só o hover, não a janela ou o painel de trás.
+        e.stopPropagation();
+        this.hide();
+      };
+
+      over = (e: MouseEvent) => {
+        const t = e.target as HTMLElement;
+        if (this.tip?.contains(t)) return clearTimeout(this.hideTimer);
+        const el = t.closest<HTMLElement>(FOOTNOTE_TARGET);
+        if (!el || !this.view.dom.contains(el)) return;
+        clearTimeout(this.hideTimer);
+        if (el === this.anchor && this.tip) return;
+        clearTimeout(this.showTimer);
+        this.showTimer = setTimeout(() => this.show(el), this.tip ? 0 : 180);
+      };
+
+      out = (e: MouseEvent) => {
+        const to = e.relatedTarget as Node | null;
+        if (to && (this.tip?.contains(to) || this.anchor?.contains(to))) return;
+        clearTimeout(this.showTimer);
+        if (this.tip) this.hideTimer = setTimeout(() => this.hide(), 160);
+      };
+
+      mousedown = (e: MouseEvent) => {
+        if (!this.tip?.contains(e.target as Node)) return this.hide();
+        this.meta = e.metaKey;
+        // No link, o foco fica no editor: sem foco, a nota inteira é redesenhada antes do clique. No texto, não: dá para
+        // selecionar e copiar.
+        if ((e.target as Element).closest?.("a")) e.preventDefault();
+      };
+
+      show(el: HTMLElement) {
+        const of = footnoteOf(el);
+        const note = of && footnoteText(footnotesOf(this.view.state), of);
+        if (!note || !el.isConnected) return this.hide();
+        this.hide();
+        const host = this.view.dom;
+        const tip = document.createElement("div");
+        tip.className = `kn-pop kn-footnote-tip${note.missing ? " is-missing" : ""}`;
+        tip.setAttribute("role", "tooltip");
+        const box = host.getBoundingClientRect();
+        const at = el.getBoundingClientRect();
+        tip.style.top = `${Math.round(at.bottom - box.top + 6)}px`;
+        tip.style.left = `${Math.round(Math.max(0, Math.min(at.left - box.left - 12, box.width - 360)))}px`;
+        host.appendChild(tip);
+        this.tip = tip;
+        this.anchor = el;
+        if (note.missing) {
+          tip.textContent = note.text;
+          return;
+        }
+        const root = createRoot(tip);
+        this.root = root;
+        const markdown = tipMarkdown(note.text);
+        const callbacks = {
+          onLinkPress: ({ url }: { url: string }) => {
+            const act = linkAction(url);
+            if (act?.kind === "note") {
+              this.hide();
+              actions.onOpenLink(act.target);
+            } else if (act?.kind === "tag" && actions.onOpenTag) {
+              this.hide();
+              actions.onOpenTag(act.tag);
+            } else if (act?.kind === "url" && this.meta) {
+              // Fonte com endereço (`[IBGE](https://…)`): abre com ⌘-clique, como a dica do link diz.
+              const safe = externalUrl(act.url);
+              if (safe) {
+                this.hide();
+                actions.onOpenUrl(safe);
+              }
+            }
+          },
+        };
+        root.render(<Block markdown={markdown} source={note.text} callbacks={callbacks} attachments={actions.attachments} onShown={() => {}} />);
+      }
+
+      hide() {
+        clearTimeout(this.showTimer);
+        clearTimeout(this.hideTimer);
+        const root = this.root;
+        if (root) queueMicrotask(() => root.unmount());
+        this.tip?.remove();
+        this.tip = null;
+        this.root = null;
+        this.anchor = null;
+      }
+
+      destroy() {
+        this.hide();
+        this.view.dom.removeEventListener("mouseover", this.over);
+        this.view.dom.removeEventListener("mouseout", this.out);
+        this.view.dom.removeEventListener("mousedown", this.mousedown, true);
+        removeEventListener("scroll", this.away, true);
+        removeEventListener("keydown", this.escape, true);
+      }
+    },
+  );
 }
 
 const renderedTheme = EditorView.theme({
@@ -643,6 +823,10 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered a": { cursor: "pointer" },
   ".cm-rendered a[href^='kiwi-tag:']": { borderRadius: "4px", padding: "0 3px" },
   ".cm-rendered a[href^='kiwi-load-image:']": { borderRadius: "6px", padding: "1px 6px", fontSize: "13px" },
+  // As notas de rodapé (T6377): o número em sobrescrito, com um respiro para o dedo e o mouse.
+  ".cm-rendered a[href^='kiwi-footnote']": { padding: "0 1px", fontWeight: "500" },
+  ".kn-footnote-tip": { maxWidth: "360px", padding: "8px 12px", cursor: "default", whiteSpace: "normal" },
+  ".kn-footnote-tip.is-missing": { color: "var(--text-3)", fontSize: "13px", lineHeight: "1.5" },
   ".cm-rendered input[type=checkbox]": { cursor: "pointer" },
   ".cm-rendered img": { display: "block", maxWidth: "100%" },
   ".cm-rendered img[style*='inline']": { display: "inline", width: "auto !important", borderRadius: "6px" },

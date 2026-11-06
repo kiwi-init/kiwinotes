@@ -1,0 +1,319 @@
+// As notas de rodapé (T6377, E7, issue 183): `[^rótulo]` no texto, `[^rótulo]: texto` embaixo e a nota em linha
+// `^[texto]`, como no Obsidian e no Pandoc. Sem DOM: aqui ficam a leitura da nota, os números e o que entra ao inserir
+// uma. O desenho fica em `rendered.ts` (o Markdown que vai para a lib), `livePreview.ts` (o bloco do cursor) e
+// `renderedWidget.tsx` (o hover). Referência de comportamento: SilverBullet `markdown_parser/footnote.ts` (MIT), só como
+// ideia; o Zettlr (GPL-3.0) também só como ideia, sem código.
+
+import type { EditorState, Text, TransactionSpec } from "@codemirror/state";
+
+/** `[^1]` no texto, ou a nota em linha `^[texto]`. `n` é o número que aparece: a ordem da primeira chamada na nota. */
+export type FootnoteMark =
+  | { kind: "ref"; label: string; from: number; to: number; n: number }
+  | { kind: "inline"; text: string; from: number; to: number; n: number };
+
+/** `[^rótulo]: texto` no começo da linha, com as linhas de baixo recuadas (4 espaços ou tab) que continuam o texto. */
+export interface FootnoteDef {
+  label: string;
+  /** O começo da linha do `[^rótulo]:` e o fim da última linha da nota. */
+  from: number;
+  to: number;
+  /** O fim do `[^rótulo]:`, e onde começa o texto. */
+  markerTo: number;
+  textFrom: number;
+  text: string;
+}
+
+export interface Footnotes {
+  /** As chamadas e as notas em linha, na ordem do texto. */
+  marks: FootnoteMark[];
+  defs: FootnoteDef[];
+  /** A primeira definição de cada rótulo (sem diferença de maiúsculas, como os links de referência do CommonMark). */
+  def(label: string): FootnoteDef | undefined;
+  /** O número que o rótulo mostra; `undefined` quando nenhuma chamada usa a nota. */
+  number(label: string): number | undefined;
+}
+
+const LABEL = String.raw`[^\s\]\[^]+`;
+const REF = new RegExp(String.raw`\[\^(${LABEL})\]`, "g");
+const DEF = new RegExp(String.raw`^ {0,3}\[\^(${LABEL})\]:[ \t]?`);
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+const CONTINUATION = /^(?: {4}|\t)/;
+
+const key = (label: string) => label.toLocaleLowerCase("pt-BR");
+
+/**
+ * Os trechos de código em linha (`` `a` ``, ``` ``a`b`` ```) e de fórmula (`$x^2$`, `$$…$$`, o KaTeX está ligado) da
+ * linha: o que está dentro não é nota de rodapé. O `$` seguido de espaço ou de número no fim é dinheiro, não fórmula.
+ */
+function codeSpans(line: string): [number, number][] {
+  const out: [number, number][] = [];
+  const runs = [...line.matchAll(/`+/g)].map((m) => ({ at: m.index!, len: m[0].length }));
+  // O próximo trecho de crases do mesmo tamanho, de trás para a frente: sem procurar de novo a cada abertura.
+  const next: number[] = [];
+  const seen = new Map<number, number>();
+  for (let i = runs.length - 1; i >= 0; i--) {
+    next[i] = seen.get(runs[i]!.len) ?? -1;
+    seen.set(runs[i]!.len, i);
+  }
+  for (let i = 0; i < runs.length; i++) {
+    const close = next[i]!;
+    if (close < 0) continue;
+    out.push([runs[i]!.at, runs[close]!.at + runs[i]!.len]);
+    i = close;
+  }
+  // Como o md4c: o `$` logo depois de letra ou número (R$10, US$5) não abre fórmula.
+  for (const m of line.matchAll(/(?<![\p{L}\p{N}\\])(?:\$\$[^$]+\$\$|\$(?!\s)[^$]*?[^\s\\$]\$(?!\d))/gu)) {
+    if (!out.some(([a, b]) => m.index! >= a && m.index! < b)) out.push([m.index!, m.index! + m[0].length]);
+  }
+  return out;
+}
+
+const escaped = (line: string, at: number) => {
+  let n = 0;
+  for (let i = at - 1; i >= 0 && line[i] === "\\"; i--) n++;
+  return n % 2 === 1;
+};
+
+/**
+ * A nota com o código (os blocos cercados e os trechos em linha) trocado por espaços, do mesmo tamanho: para achar os
+ * comentários sem que um `%%` de dentro do código (`printf("%%d")`) case com o de um comentário de verdade mais abaixo.
+ */
+function withoutCode(lines: string[]): string {
+  let fence: string | null = null;
+  // O frontmatter também: é YAML, e um `%%` de lá casaria com um comentário do texto.
+  const front = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
+  return lines
+    .map((line, i) => {
+      if (i <= front) return " ".repeat(line.length);
+      const f = FENCE.exec(line);
+      if (fence) {
+        if (f && f[1]![0] === fence[0] && f[1]!.length >= fence.length && !line.slice(f[0].length).trim()) fence = null;
+        return " ".repeat(line.length);
+      }
+      if (f) {
+        fence = f[1]!;
+        return " ".repeat(line.length);
+      }
+      let out = line;
+      for (const [a, b] of codeSpans(line)) out = out.slice(0, a) + " ".repeat(b - a) + out.slice(b);
+      return out;
+    })
+    .join("\n");
+}
+
+/**
+ * O `]` que fecha cada `[` da linha, contando os pares de dentro (e pulando o escapado), numa passada só: procurar o fecho
+ * a partir de cada `^[` era quadrático numa linha cheia deles sem fecho.
+ */
+function closers(line: string): Map<number, number> {
+  const out = new Map<number, number>();
+  const open: number[] = [];
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === "\\") i++;
+    else if (c === "[") open.push(i);
+    else if (c === "]" && open.length) out.set(open.pop()!, i);
+  }
+  return out;
+}
+
+/** Lê as notas de rodapé de uma nota inteira, fora do frontmatter e do código. */
+export function scanFootnotes(doc: string): Footnotes {
+  // Sem o número ainda: ele sai da ordem, depois de ler tudo.
+  const marks: ({ kind: "ref"; label: string; from: number; to: number } | { kind: "inline"; text: string; from: number; to: number })[] = [];
+  const defs: FootnoteDef[] = [];
+  // Quase toda nota não tem nota de rodapé: nem lê.
+  const lines = doc.includes("[^") || doc.includes("^[") ? doc.split("\n") : [];
+  // Os comentários (`%%…%%`, `<!--…-->`) não aparecem: o que está dentro não ganha número.
+  const comments = lines.length ? [...withoutCode(lines).matchAll(/%%[\s\S]*?%%|<!--[\s\S]*?-->/g)].map((m) => [m.index!, m.index! + m[0].length] as const) : [];
+  const inComment = (x: number) => comments.some(([a, b]) => x >= a && x < b);
+  let at = 0;
+  let fence: string | null = null;
+  let i = 0;
+  // O frontmatter é YAML, não Markdown.
+  if (lines[0] === "---") {
+    const end = lines.indexOf("---", 1);
+    if (end > 0) {
+      for (; i <= end; i++) at += lines[i]!.length + 1;
+    }
+  }
+  for (; i < lines.length; i++) {
+    const line = lines[i]!;
+    const lineFrom = at;
+    at += line.length + 1;
+    const f = FENCE.exec(line);
+    if (fence) {
+      if (f && f[1]![0] === fence[0] && f[1]!.length >= fence.length && !line.slice(f[0].length).trim()) fence = null;
+      continue;
+    }
+    if (f) {
+      fence = f[1]!;
+      continue;
+    }
+    const code = codeSpans(line);
+    const inCode = (x: number) => code.some(([a, b]) => x >= a && x < b) || inComment(lineFrom + x);
+    let scanFrom = 0;
+    const d = DEF.exec(line);
+    if (d && !d[1]!.endsWith("\\") && !inCode(line.indexOf("["))) {
+      const markerTo = lineFrom + d[0].trimEnd().length;
+      let text = line.slice(d[0].length);
+      let to = lineFrom + line.length;
+      // As linhas recuadas logo abaixo continuam a nota.
+      while (i + 1 < lines.length && CONTINUATION.test(lines[i + 1]!) && lines[i + 1]!.trim()) {
+        i++;
+        const next = lines[i]!;
+        text += `\n${next.trim()}`;
+        to = at + next.length;
+        at += next.length + 1;
+      }
+      defs.push({ label: d[1]!, from: lineFrom, to, markerTo, textFrom: lineFrom + d[0].length, text: text.trim() });
+      scanFrom = d[0].length;
+    }
+    // As notas em linha primeiro: uma chamada `[^1]` dentro de uma delas é texto dela (aparece no hover), não outra nota.
+    const inline: [number, number][] = [];
+    const close = line.includes("^[") ? closers(line) : null;
+    for (let x = line.indexOf("^[", scanFrom); x >= 0; x = line.indexOf("^[", x + 1)) {
+      if (escaped(line, x) || inCode(x)) continue;
+      const end = close!.get(x + 1) ?? -1;
+      if (end < 0) continue;
+      const text = line.slice(x + 2, end);
+      if (!text.trim()) continue;
+      marks.push({ kind: "inline", text, from: lineFrom + x, to: lineFrom + end + 1 });
+      inline.push([x, end + 1]);
+      x = end;
+    }
+    for (const m of line.slice(scanFrom).matchAll(REF)) {
+      const x = scanFrom + m.index!;
+      if (escaped(line, x) || inCode(x) || inline.some(([a, b]) => x >= a && x < b)) continue;
+      // `[^x](endereço)` é um link do Markdown com o texto "^x", não uma nota; `[^x\]` tem o `]` escapado.
+      if (line[x + m[0].length] === "(" || m[1]!.endsWith("\\")) continue;
+      marks.push({ kind: "ref", label: m[1]!, from: lineFrom + x, to: lineFrom + x + m[0].length });
+    }
+  }
+  marks.sort((a, b) => a.from - b.from);
+  const numbers = new Map<string, number>();
+  let next = 0;
+  const numbered = marks.map((m): FootnoteMark => {
+    if (m.kind === "inline") return { ...m, n: ++next };
+    const k = key(m.label);
+    if (!numbers.has(k)) numbers.set(k, ++next);
+    return { ...m, n: numbers.get(k)! };
+  });
+  const byLabel = new Map<string, FootnoteDef>();
+  for (const d of defs) if (!byLabel.has(key(d.label))) byLabel.set(key(d.label), d);
+  return {
+    marks: numbered,
+    defs,
+    def: (label) => byLabel.get(key(label)),
+    number: (label) => numbers.get(key(label)),
+  };
+}
+
+const cache = new WeakMap<Text, Footnotes>();
+
+/** As notas de rodapé do documento do editor, lidas uma vez por versão do texto. */
+export function footnotesOf(state: EditorState): Footnotes {
+  let got = cache.get(state.doc);
+  if (!got) {
+    got = scanFootnotes(state.doc.toString());
+    cache.set(state.doc, got);
+  }
+  return got;
+}
+
+const SUPERSCRIPT = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+/** O número em sobrescrito, como aparece no texto: 12 → ¹². */
+export function superscript(n: number): string {
+  return String(n).replace(/\d/g, (d) => SUPERSCRIPT[Number(d)]!);
+}
+
+/** O marcador de uma chamada: o número dela, ou o rótulo quando nenhuma chamada usa a nota (só a definição). */
+export function footnoteLabel(notes: Footnotes, label: string): string {
+  const n = notes.number(label);
+  return n ? superscript(n) : `[${label}]`;
+}
+
+/** O próximo rótulo livre: um a mais que o maior número em uso (`[^1]`, `[^2]`…). */
+export function nextFootnoteLabel(notes: Footnotes): string {
+  let max = 0;
+  for (const m of notes.marks) if (m.kind === "ref" && /^\d+$/.test(m.label)) max = Math.max(max, Number(m.label));
+  for (const d of notes.defs) if (/^\d+$/.test(d.label)) max = Math.max(max, Number(d.label));
+  return String(max + 1);
+}
+
+/**
+ * A definição `[^rótulo]: ` no fim da nota, junto das outras: uma linha em branco antes da primeira, e as seguintes
+ * ficam juntas (com ou sem linha em branco depois da última).
+ */
+export function definitionAtEnd(doc: string, notes: Footnotes, label: string): { from: number; insert: string } {
+  // Depois da última definição, só espaço: a nova entra junto dela.
+  const last = notes.defs.at(-1);
+  const afterDefs = !!last && !doc.slice(last.to).trim();
+  const sep = afterDefs ? (doc.endsWith("\n") ? "" : "\n") : doc.endsWith("\n\n") ? "" : doc.endsWith("\n") ? "\n" : "\n\n";
+  return { from: doc.length, insert: `${sep}[^${label}]: ` };
+}
+
+/**
+ * Inserir uma nota de rodapé (pelo menu e pelo "/"): a chamada `[^n]` entra no cursor (depois da seleção, que fica), e
+ * a definição `[^n]: ` entra no fim da nota. O cursor vai para a definição, para escrever o texto, como no Obsidian.
+ * `remove` é o trecho que a chamada substitui (o "/rodapé" do comando); sem ele, ela entra em `at`.
+ */
+export function footnoteInsert(doc: string, at: number, notes: Footnotes = scanFootnotes(doc), remove?: { from: number; to: number }): {
+  changes: { from: number; to: number; insert: string }[];
+  cursor: number;
+  label: string;
+} {
+  const label = nextFootnoteLabel(notes);
+  const ref = `[^${label}]`;
+  const def = definitionAtEnd(doc, notes, label);
+  const removed = remove ? remove.to - remove.from : 0;
+  const changes = [
+    remove ? { from: remove.from, to: remove.to, insert: ref } : { from: at, to: at, insert: ref },
+    // Com o cursor no fim da nota, as duas entram no mesmo ponto: a chamada primeiro.
+    { from: def.from, to: def.from, insert: def.insert },
+  ];
+  return { changes, cursor: doc.length - removed + ref.length + def.insert.length, label };
+}
+
+/** A transação de inserir uma nota de rodapé no cursor do editor (o fim da seleção). */
+export function insertFootnote(state: EditorState, remove?: { from: number; to: number }): TransactionSpec {
+  const r = footnoteInsert(state.doc.toString(), state.selection.main.to, footnotesOf(state), remove);
+  // `input.complete`, não `input.type`: o ⌘Z desfaz só a nota, sem levar junto o que foi digitado antes.
+  return { changes: r.changes, selection: { anchor: r.cursor }, scrollIntoView: true, userEvent: "input.complete" };
+}
+
+/**
+ * Para onde vai o cursor ao clicar numa nota de rodapé desenhada: da chamada para o fim do texto da definição (uma
+ * chamada sem definição cria a definição vazia no fim), da definição de volta para a primeira chamada, e da nota em
+ * linha para dentro dela, para editar.
+ */
+export function footnoteJump(
+  state: EditorState,
+  to: { kind: "footnote"; label: string } | { kind: "footnoteDef"; label: string } | { kind: "footnoteInline"; n: number },
+): TransactionSpec | null {
+  const notes = footnotesOf(state);
+  if (to.kind === "footnote") {
+    const def = notes.def(to.label);
+    if (def) return { selection: { anchor: def.to }, scrollIntoView: true, userEvent: "select" };
+    const add = definitionAtEnd(state.doc.toString(), notes, to.label);
+    return { changes: { from: add.from, insert: add.insert }, selection: { anchor: add.from + add.insert.length }, scrollIntoView: true, userEvent: "input.complete" };
+  }
+  if (to.kind === "footnoteDef") {
+    const k = key(to.label);
+    const ref = notes.marks.find((m) => m.kind === "ref" && key(m.label) === k);
+    return ref ? { selection: { anchor: ref.to }, scrollIntoView: true, userEvent: "select" } : null;
+  }
+  const inline = notes.marks.find((m) => m.kind === "inline" && m.n === to.n);
+  return inline ? { selection: { anchor: inline.from + 2, head: inline.to - 1 }, scrollIntoView: true, userEvent: "select" } : null;
+}
+
+/** O texto que o hover mostra: o da definição, o da nota em linha, ou o aviso de que a nota ainda não tem texto. */
+export function footnoteText(notes: Footnotes, of: { label: string } | { n: number }): { text: string; missing: boolean } | null {
+  if ("n" in of) {
+    const m = notes.marks.find((x) => x.kind === "inline" && x.n === of.n);
+    return m && m.kind === "inline" ? { text: m.text, missing: false } : null;
+  }
+  const def = notes.def(of.label);
+  return def?.text ? { text: def.text, missing: false } : { text: "Esta nota de rodapé ainda não tem texto. Clique para escrever.", missing: true };
+}

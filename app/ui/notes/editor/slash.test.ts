@@ -13,7 +13,7 @@ describe("comando / (T2660)", () => {
   });
 
   test("os itens casam pelo nome e pelas palavras, sem acento", () => {
-    expect(slashMatches("").length).toBe(15);
+    expect(slashMatches("").length).toBe(16);
     expect(slashMatches("cod").map((i) => i.id)).toEqual(["code"]);
     expect(slashMatches("todo").map((i) => i.id)).toEqual(["todo"]);
     expect(slashMatches("citacao").map((i) => i.id)).toEqual(["quote"]);

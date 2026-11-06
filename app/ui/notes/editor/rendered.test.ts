@@ -6,6 +6,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 
 import { wikiLinkSyntax } from "./index.ts";
+import { scanFootnotes } from "./footnotes.ts";
 import { linksApart, mermaidCode, picturesOff, shapesWithoutPictures } from "./mermaid.tsx";
 import { fullTree, imagesUnderCursor, imageSource, linkAction, mermaidUnderCursor, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
 
@@ -105,6 +106,55 @@ describe("callouts do Obsidian", () => {
 
   test("o link no título continua link", () => {
     expect(render("> [!tip] Ver [[Ana]]\n> x")).toBe("> [!tip] Ver [Ana](kiwi-note:Ana)\n> x");
+  });
+});
+
+describe("notas de rodapé (T6377)", () => {
+  const blocks = (doc: string) => {
+    const state = stateOf(doc, 0);
+    const tree = fullTree(state);
+    const notes = scanFootnotes(doc);
+    return renderedBlocks(state, false, tree).map((b) => toRenderable(b.source, b.from, tree, () => "ok", notes));
+  };
+
+  test("revisão: a chamada dentro da nota em linha é texto dela; rótulo com parêntese; a definição de uma palavra continua", () => {
+    expect(blocks("Texto ^[ver [^1]] mais.\n")).toEqual(["Texto [¹](kiwi-footnote-inline:1) mais."]);
+    expect(blocks("A[^a)b].\n\n[^a)b]: Nota.\n")).toEqual(["A[¹](kiwi-footnote:a%29b).", "[¹](kiwi-footnote-def:a%29b) Nota."]);
+    expect(linkAction("kiwi-footnote:a%29b")).toEqual({ kind: "footnote", label: "a)b" });
+    // `[^1]: Fonte:` é um link de referência para o parser, e a linha recuada viraria bloco de código: vão juntas.
+    expect(blocks("X[^1].\n\n[^1]: Fonte:\n    https://x.com/a\n")).toEqual(["X[¹](kiwi-footnote:1).", "[¹](kiwi-footnote-def:1) Fonte:\n    https://x.com/a"]);
+    // O bloco de código do parser segue depois da linha em branco: nada fica cru no meio.
+    expect(blocks("X[^1].\n\n[^1]: Fonte:\n    https://x.com/a\n\n    mais um trecho\n")).toEqual([
+      "X[¹](kiwi-footnote:1).",
+      "[¹](kiwi-footnote-def:1) Fonte:\n    https://x.com/a\n\n    mais um trecho",
+    ]);
+  });
+
+  test("a chamada e a nota em linha viram o número, como link; a definição mostra o número dela", () => {
+    expect(blocks("Texto[^a] e ^[em linha].\n\n[^a]: A nota.\n")).toEqual([
+      "Texto[¹](kiwi-footnote:a) e [²](kiwi-footnote-inline:2).",
+      "[¹](kiwi-footnote-def:a) A nota.",
+    ]);
+  });
+
+  test("a chamada sem definição fica apagada; a definição de uma palavra só (link de referência pro parser) também desenha", () => {
+    expect(blocks("x[^1] y[^falta]\n\n[^1]: Palavra\n")).toEqual([
+      "x[¹](kiwi-footnote:1) y[²](kiwi-footnote-missing:falta)",
+      "[¹](kiwi-footnote-def:1) Palavra",
+    ]);
+  });
+
+  test("os links de dentro da nota em linha somem com ela; em código, nada muda", () => {
+    expect(blocks("a ^[ver [[Ana]]] e [[Ana]]")).toEqual(["a [¹](kiwi-footnote-inline:1) e [Ana](kiwi-note:Ana)"]);
+    expect(blocks("`[^1]` e ^[x]")).toEqual(["`[^1]` e [¹](kiwi-footnote-inline:1)"]);
+  });
+
+  test("o clique no número", () => {
+    expect(linkAction("kiwi-footnote:a%20b")).toEqual({ kind: "footnote", label: "a b" });
+    expect(linkAction("kiwi-footnote-missing:x")).toEqual({ kind: "footnote", label: "x" });
+    expect(linkAction("kiwi-footnote-def:1")).toEqual({ kind: "footnoteDef", label: "1" });
+    expect(linkAction("kiwi-footnote-inline:3")).toEqual({ kind: "footnoteInline", n: 3 });
+    expect(linkAction("kiwi-footnote-inline:x")).toBeNull();
   });
 });
 

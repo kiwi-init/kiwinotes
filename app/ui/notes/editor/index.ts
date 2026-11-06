@@ -26,6 +26,7 @@ import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type Li
 import { renderedPreview } from "./renderedWidget.tsx";
 import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger, readSlashUsage, recordSlashUse } from "./slash.ts";
+import { insertFootnote } from "./footnotes.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
 import { searchPanelOpen } from "@codemirror/search";
 import { searchAndFold, searchablePreviews } from "./search-fold.ts";
@@ -235,6 +236,10 @@ const theme = EditorView.theme({
   ".cm-codeblock": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)", paddingLeft: "16px !important" },
   ".cm-quote": { color: "var(--text-2)", paddingLeft: "16px !important" },
   ".cm-bullet": { color: "var(--text-3)", display: "inline-block", width: "10px" },
+  // As notas de rodapé (T6377): o número em sobrescrito no tom do link; a chamada sem texto ainda, apagada.
+  ".cm-footnote": { color: "var(--accent-text)", cursor: "pointer", padding: "0 1px", fontWeight: "500" },
+  ".cm-footnote-raw": { cursor: "text", padding: "0", fontWeight: "inherit" },
+  ".cm-footnote-missing": { color: "var(--text-3)" },
   ".cm-task-box": {
     display: "inline-block",
     width: "13px",
@@ -469,6 +474,11 @@ export function slashCompletion(opts: Pick<EditorOptions, "onSlashTemplate">) {
         if (it.id === "template") {
           view.dispatch({ changes: { from: a, to: b, insert: "" }, selection: { anchor: a } });
           opts.onSlashTemplate?.();
+          return;
+        }
+        if (it.id === "footnote") {
+          // O "/rodapé" vira a chamada, e o cursor vai para a definição no fim (T6377).
+          view.dispatch(insertFootnote(view.state, { from: a, to: b }));
           return;
         }
         const r = slashInsert(it.id, trig.atLineStart, new Date());
