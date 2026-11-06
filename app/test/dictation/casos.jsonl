@@ -93,3 +93,38 @@
 {"name": "número: fração fica por extenso", "text": "dois terços dos exames", "expect": {"text": "Dois terços dos exames."}}
 // ---------------------------------------------------------------- borda
 {"name": "borda: só muleta não insere nada", "text": "hum", "expect": {"text": ""}}
+
+// ---------------------------------------------------------------- T5300 / issue 158: pontuação falada e horas
+{"name": "L7: PT vírgula e ponto final", "text": "oi vírgula Ana ponto final", "expect": {"text": "Oi, Ana."}}
+{"name": "L7: PT interrogação", "text": "você vem ponto de interrogação", "expect": {"text": "Você vem?"}}
+{"name": "L7: PT exclamação", "text": "conseguimos ponto de exclamação", "expect": {"text": "Conseguimos!"}}
+{"name": "L7: PT dois pontos", "text": "aviso dois pontos atenção", "expect": {"text": "Aviso: atenção."}}
+{"name": "L7: PT ponto e vírgula", "text": "entreguei ponto e vírgula falta revisar", "expect": {"text": "Entreguei; falta revisar."}}
+{"name": "L7: PT aspas", "text": "abre aspas texto citado fecha aspas", "expect": {"text": "“Texto citado”"}}
+{"name": "L7: PT parênteses", "text": "teste abre parênteses opcional fecha parênteses", "expect": {"text": "Teste (opcional)"}}
+{"name": "L7: PT reticências", "text": "talvez reticências amanhã", "expect": {"text": "Talvez… amanhã."}}
+{"name": "L7: EN comma e full stop", "text": "hello comma Ana full stop", "expect": {"text": "Hello, Ana."}}
+{"name": "L7: EN period", "text": "done period next task", "expect": {"text": "Done. Next task."}}
+{"name": "L7: EN question mark", "text": "are you coming question mark", "expect": {"text": "Are you coming?"}}
+{"name": "L7: EN exclamation mark", "text": "we did it exclamation mark", "expect": {"text": "We did it!"}}
+{"name": "L7: EN colon e semicolon", "text": "notice colon ready semicolon ship tomorrow", "expect": {"text": "Notice: ready; ship tomorrow."}}
+{"name": "L7: EN quotes", "text": "open quote quoted text close quote", "expect": {"text": "“Quoted text”"}}
+{"name": "L7: EN parentheses", "text": "test open parentheses optional close parentheses", "expect": {"text": "Test (optional)"}}
+{"name": "L7: EN ellipsis", "text": "maybe ellipsis tomorrow", "expect": {"text": "Maybe… tomorrow."}}
+{"name": "L7: nome ponto final", "text": "o ponto final do projeto", "expect": {"text": "O ponto final do projeto."}}
+{"name": "L7: nome vírgula", "text": "a vírgula separa as orações", "expect": {"text": "A vírgula separa as orações."}}
+{"name": "L7: nome interrogação", "text": "o ponto de interrogação indica dúvida", "expect": {"text": "O ponto de interrogação indica dúvida."}}
+{"name": "L7: nome dois pontos", "text": "temos dois pontos importantes", "expect": {"text": "Temos 2 pontos importantes."}}
+{"name": "L7: nome inglês", "text": "the period of the project", "expect": {"text": "The period of the project."}}
+{"name": "L7: nome colon", "text": "colon cancer is serious", "expect": {"text": "Colon cancer is serious."}}
+{"name": "L7: nome parênteses", "text": "ela abre parênteses no texto", "expect": {"text": "Ela abre parênteses no texto."}}
+{"name": "L7: decimal PT", "text": "o valor é três vírgula cinco", "expect": {"text": "O valor é 3,5."}}
+{"name": "L7: decimal EN", "text": "the value is three point five", "expect": {"text": "The value is 3.5."}}
+{"name": "L7: horas negadas", "text": "às três não às quatro", "expect": {"text": "Às 3h não às 4h."}}
+{"name": "L7: horas na frase", "text": "me encontra às três não às quatro", "expect": {"text": "Me encontra às 3h não às 4h."}}
+{"name": "L7: comando com STT", "text": "oi, vírgula Ana ponto final.", "expect": {"text": "Oi, Ana."}}
+{"name": "L7: ponto explícito no Slack", "text": "oi vírgula Ana ponto final", "app": "slack", "expect": {"text": "Oi, Ana.", "tone": "casual"}}
+{"name": "L7: vírgula sozinha", "text": "vírgula", "expect": {"text": ","}}
+{"name": "L7: colon sozinho", "text": "colon", "expect": {"text": ":"}}
+{"name": "L7: ponto final sozinho", "text": "ponto final", "expect": {"text": "."}}
+{"name": "L7: nome reticências", "text": "adoro reticências no texto", "expect": {"text": "Adoro reticências no texto."}}
