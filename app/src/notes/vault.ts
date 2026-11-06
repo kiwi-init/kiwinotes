@@ -6,7 +6,8 @@
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { type FSWatcher, watch } from "node:fs";
-import { lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
@@ -84,6 +85,10 @@ interface Entry {
   content: string;
   /** O inode do arquivo: um rename feito fora (Obsidian, Finder) mantém, e é assim que a gente reconhece (T2559). */
   ino: number;
+  /** Os `aliases:` do frontmatter (T5352): outros nomes pelos quais um [[link]] acha esta nota. */
+  aliases: string[];
+  /** O mtime em ms e o tamanho de quando a entrada foi feita (T5352): igual no disco, o scan reaproveita sem reler. */
+  mtimeMs: number;
 }
 
 /** O que mudou de lugar ou sumiu por fora do app, visto pelo watcher (T2559). */
@@ -225,6 +230,44 @@ export function macTrash(abs: string): Promise<void> {
 
 export const versionOf = (content: string) => createHash("sha256").update(content).digest("hex").slice(0, 16);
 
+/** Os `aliases:` (ou `alias:`) do frontmatter, como o Obsidian lê: lista YAML, `[a, b]` ou um texto só (T5352). */
+export function aliasesOf(content: string): string[] {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
+  if (!fm || !/^(aliases|alias)\s*:/m.test(fm[1]!)) return [];
+  try {
+    const data = Bun.YAML.parse(fm[1]!) as Record<string, unknown> | null;
+    const raw = data && typeof data === "object" ? (data.aliases ?? data.alias) : undefined;
+    const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+    return [...new Set(list.filter((a): a is string => typeof a === "string").map((a) => a.trim()).filter((a) => a && a.length <= 200))];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Escreve e garante no disco antes da troca (T5352): o `fsync` do arquivo temporário vem antes do `rename`, e o da pasta
+ * depois, para uma queda de energia nunca deixar uma nota vazia ou pela metade no lugar da boa.
+ */
+export async function writeDurable(file: string, content: string): Promise<void> {
+  const fh = await openFile(file, "w");
+  try {
+    await fh.writeFile(content);
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+}
+
+async function syncDir(dir: string): Promise<void> {
+  const fh = await openFile(dir, "r").catch(() => null);
+  if (!fh) return;
+  await fh.sync().catch(() => {});
+  await fh.close().catch(() => {});
+}
+
+/** Até quantas leituras de nota ao mesmo tempo no scan (T5352): o disco responde melhor em paralelo, sem abrir demais. */
+const READ_AT_ONCE = 16;
+
 /** As tags do frontmatter (`tags: [a, b]` ou lista YAML) e as `#tag` do texto. */
 function tagsOf(content: string): string[] {
   const tags = new Set<string>();
@@ -312,6 +355,8 @@ export class Vault {
   private readonly now: () => number;
   /** O que já foi para o Lixo do macOS (T2593), do `.kiwi-trash/registry.json`. */
   private registry: RegistryEntry[] = [];
+  /** Quantas notas os scans leram do disco (T5352): os testes e o bench conferem que o cache poupa a releitura. */
+  scanReads = 0;
 
   constructor(o: VaultOptions) {
     this.root = o.root;
@@ -593,8 +638,13 @@ export class Vault {
     const entry = await this.index(to, content, toAbs);
 
     let updatedLinks = 0;
-    const resolveBefore = makeResolver(before);
-    const resolveAfter = makeResolver(after);
+    // Com os apelidos (T5352): os da nota vão com ela para o caminho novo.
+    const aliasesBefore = this.aliasMap();
+    aliasesBefore.delete(to);
+    if (moved?.aliases.length) aliasesBefore.set(from, moved.aliases);
+    const aliasesAfter = new Map([...aliasesBefore].map(([p, a]) => [p === from ? to : p, a] as const));
+    const resolveBefore = makeResolver(before, aliasesBefore);
+    const resolveAfter = makeResolver(after, aliasesAfter);
     for (const e of [...this.notes.values()]) {
       if (!e.links.some((t) => resolveBefore(t) === from)) continue;
       // Do disco, e escrita condicional: se a nota mudar entre ler e escrever, lê de novo (até 3 vezes).
@@ -676,10 +726,12 @@ export class Vault {
     const moves = new Map<string, string>();
     for (const p of before) if (p.startsWith(`${from}/`)) moves.set(p, `${to}${p.slice(from.length)}`);
     const after = before.map((p) => moves.get(p) ?? p);
+    const aliasesBefore = this.aliasMap();
+    const aliasesAfter = new Map([...aliasesBefore].map(([p, a]) => [moves.get(p) ?? p, a] as const));
     await mkdir(path.dirname(toAbs), { recursive: true });
     await rename(fromAbs, toAbs);
     await this.scan();
-    const updatedLinks = await this.rewriteAll(moves, makeResolver(before), makeResolver(after));
+    const updatedLinks = await this.rewriteAll(moves, makeResolver(before, aliasesBefore), makeResolver(after, aliasesAfter));
     this.emit([from, to, ...moves.keys(), ...moves.values()]);
     return { path: to, moved: moves.size, updatedLinks };
   }
@@ -918,12 +970,12 @@ export class Vault {
     const dir = path.join(this.root, UNDO_DIR);
     await mkdir(dir, { recursive: true });
     const tmp = path.join(dir, `.registry-${randomBytes(4).toString("hex")}.tmp`);
-    await writeFile(tmp, JSON.stringify(this.registry));
+    await writeDurable(tmp, JSON.stringify(this.registry));
     await rename(tmp, path.join(dir, REGISTRY_FILE));
   }
 
   private resolve_(): Resolver {
-    this.resolver ??= makeResolver([...this.notes.keys()]);
+    this.resolver ??= makeResolver([...this.notes.keys()], this.aliasMap());
     return this.resolver;
   }
 
@@ -935,7 +987,7 @@ export class Vault {
   private async write(p: string, content: string, expect?: string | null): Promise<Entry | null> {
     const abs = inside(this.root, p);
     const temp = path.join(path.dirname(abs), `.kiwi-${randomBytes(6).toString("hex")}.tmp`);
-    await writeFile(temp, content);
+    await writeDurable(temp, content);
     try {
       this.beforeReplace?.();
       if (expect !== undefined) {
@@ -946,6 +998,7 @@ export class Vault {
         }
       }
       await rename(temp, abs);
+      await syncDir(path.dirname(abs));
     } catch (e) {
       await rm(temp, { force: true });
       throw e;
@@ -957,15 +1010,17 @@ export class Vault {
 
   private async index(p: string, content: string, abs: string): Promise<Entry> {
     const entry = await this.entryFor(p, content, abs);
-    if (!this.notes.has(p)) this.resolver = null;
+    const old = this.notes.get(p);
+    if (!old || old.aliases.join("\n") !== entry.aliases.join("\n")) this.resolver = null;
     this.notes.set(p, entry);
     for (let f = entry.meta.folder; f; f = parentOf(f)) this.folders.add(f);
     return entry;
   }
 
   /** A entrada do índice de uma nota, sem pôr no índice (o `scan` monta um índice novo e troca de uma vez). */
-  private async entryFor(p: string, content: string, abs: string): Promise<Entry> {
-    const s = await stat(abs);
+  private async entryFor(p: string, content: string, abs: string, known?: Stats): Promise<Entry> {
+    // O scan já fez o `lstat`: sem outro `stat` por nota (T5352, ~150 ms com 10 mil notas).
+    const s = known ?? (await stat(abs));
     const title = noteName(p);
     const folder = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
     const entry: Entry = {
@@ -984,8 +1039,34 @@ export class Vault {
       links: parseLinks(content).map((l) => l.target),
       content,
       ino: s.ino,
+      aliases: aliasesOf(content),
+      mtimeMs: s.mtimeMs,
     };
     return entry;
+  }
+
+  /** O caminho → os apelidos, só das notas que têm algum (para o resolver). */
+  private aliasMap(notes: ReadonlyMap<string, Entry> = this.notes): Map<string, string[]> {
+    const out = new Map<string, string[]>();
+    for (const [p, e] of notes) if (e.aliases.length) out.set(p, e.aliases);
+    return out;
+  }
+
+  /**
+   * A entrada de antes, se o arquivo não mudou (T5352, o cache por mtime e tamanho, como o fsal-cache do Zettlr): mesmo
+   * inode, mesmo tamanho e mesmo mtime. Num rename (de pasta, ou feito fora), o inode acha a entrada pelo caminho velho
+   * e ela só troca o caminho, o título e a pasta.
+   */
+  private reuse(p: string, s: Stats, byIno: ReadonlyMap<number, Entry>): Entry | null {
+    const prev = this.notes.get(p)?.ino === s.ino ? this.notes.get(p)! : byIno.get(s.ino);
+    if (!prev || prev.meta.size !== s.size || prev.mtimeMs !== s.mtimeMs) return null;
+    if (prev.meta.path === p) return prev;
+    const title = noteName(p);
+    return {
+      ...prev,
+      meta: { ...prev.meta, path: p, title, folder: p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "" },
+      foldedTitle: fold(title),
+    };
   }
 
   /**
@@ -999,18 +1080,27 @@ export class Vault {
     const packages = new Set<string>();
     let seen = 0;
     this.onIndexProgress?.({ seen, notes: 0, done: false });
+    // O cache (T5352): as entradas de agora pelo inode, para reconhecer uma nota que mudou de caminho sem reler.
+    const byIno = new Map<number, Entry>();
+    for (const e of this.notes.values()) byIno.set(e.ino, e);
+    const toRead: { key: string; abs: string; s: Stats }[] = [];
     const walk = async (rel: string) => {
       const directory = path.join(this.root, rel);
       const names = await readdir(directory).catch(error => {
         if (!rel && this.strictRoot) throw new VaultError("E_ACCESS", `Não foi possível ler a pasta ${directory}: ${(error as Error).message}`);
         return [] as string[];
       });
-      for (const name of names) {
-        if (name.startsWith(".") || name === "node_modules") continue;
+      // Os `lstat` de uma pasta em paralelo, alguns de cada vez (T5352): é a maior parte de um scan que não relê.
+      const visible = names.filter((name) => !name.startsWith(".") && name !== "node_modules");
+      const stats: (Stats | null)[] = [];
+      for (let i = 0; i < visible.length; i += 64) {
+        stats.push(...(await Promise.all(visible.slice(i, i + 64).map((name) => lstat(path.join(directory, name)).catch(() => null)))));
+      }
+      for (const [at, name] of visible.entries()) {
         const child = rel ? `${rel}/${name}` : name;
         const key = child.normalize("NFC");
         const abs = path.join(this.root, child);
-        const s = await lstat(abs).catch(() => null);
+        const s = stats[at] ?? null;
         if (!s || s.isSymbolicLink()) continue;
         if (s.isFile() || s.isDirectory() && PACKAGE_MARKS[extOf(name)]) {
           seen++;
@@ -1028,9 +1118,10 @@ export class Vault {
           folders.add(key);
           await walk(child);
         } else if (s.isFile() && /\.md$/i.test(name)) {
-          const content = await readFile(abs, "utf8").catch(() => null);
-          const entry = content === null ? null : await this.entryFor(key, content, abs).catch(() => null);
-          if (entry) notes.set(key, entry);
+          // Igual ao que já está no índice (T5352): fica, sem reler. Senão, entra na fila de leitura.
+          const kept = this.reuse(key, s, byIno);
+          if (kept) notes.set(key, kept);
+          else toRead.push({ key, abs, s });
         } else if (s.isFile()) {
           files.set(key, fileEntry(key, s));
         }
@@ -1038,6 +1129,18 @@ export class Vault {
     };
     await walk("");
     if (this.closed) return;
+    // As que mudaram (ou todas, no 1º scan), algumas de cada vez em paralelo. Uma que some no meio fica de fora.
+    for (let i = 0; i < toRead.length; i += READ_AT_ONCE) {
+      await Promise.all(
+        toRead.slice(i, i + READ_AT_ONCE).map(async ({ key, abs, s }) => {
+          this.scanReads++;
+          const content = await readFile(abs, "utf8").catch(() => null);
+          const entry = content === null ? null : await this.entryFor(key, content, abs, s).catch(() => null);
+          if (entry) notes.set(key, entry);
+        }),
+      );
+      if (this.closed) return;
+    }
     this.notes = notes;
     this.folders = folders;
     this.files = files;

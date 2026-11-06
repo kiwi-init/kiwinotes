@@ -47,14 +47,20 @@ export type Resolver = (target: string) => string | null;
  * curto. Com barra, o caminho a partir da raiz do vault ou o fim de um caminho. `null` quando a nota não existe.
  * Monta os mapas uma vez: com 1.000 notas, resolver cada link do zero levava 0,6 s nos backlinks.
  */
-export function makeResolver(paths: readonly string[]): Resolver {
+export function makeResolver(paths: readonly string[], aliases?: ReadonlyMap<string, readonly string[]>): Resolver {
   const byName = new Map<string, string[]>();
   const byPath = new Map<string, string[]>();
+  // Os `aliases:` do frontmatter (T5352, como no Obsidian): outro nome para a mesma nota. O nome do arquivo ganha.
+  const byAlias = new Map<string, string[]>();
   for (const p of paths) {
     const n = key(noteName(p));
     byName.set(n, [...(byName.get(n) ?? []), p]);
     const k = key(p);
     byPath.set(k, [...(byPath.get(k) ?? []), p]);
+    for (const a of aliases?.get(p) ?? []) {
+      const ak = key(a);
+      if (ak) byAlias.set(ak, [...(byAlias.get(ak) ?? []), p]);
+    }
   }
   const cache = new Map<string, string | null>();
   return (target) => {
@@ -66,7 +72,7 @@ export function makeResolver(paths: readonly string[]): Resolver {
       const want = key(`${t}.md`);
       out = shortest(byPath.get(want) ?? []) ?? shortest(paths.filter((p) => key(p).endsWith(`/${want}`)));
     } else {
-      out = shortest(byName.get(key(t)) ?? []);
+      out = shortest(byName.get(key(t)) ?? []) ?? shortest(byAlias.get(key(t)) ?? []);
     }
     cache.set(t, out);
     return out;
@@ -97,6 +103,8 @@ export function rewriteLinks(
   let count = 0;
   const out = content.replace(LINK, (raw, bang: string, t: string, heading: string | undefined, alias: string | undefined) => {
     if (resolveBefore(t) !== from) return raw;
+    // Um `[[apelido]]` (os `aliases:` da nota, T5352) continua achando a nota com o nome novo: fica como está.
+    if (resolveAfter(t) === to && key(t) !== key(noteName(from)) && !t.includes("/")) return raw;
     count++;
     return `${bang}[[${target}${heading ?? ""}${alias ?? ""}]]`;
   });
@@ -119,6 +127,8 @@ export function rewriteLinksMany(
     const from = before(t);
     const to = from === null ? undefined : moves.get(from);
     if (!to) return raw;
+    // Um `[[apelido]]` que continua achando a nota no lugar novo fica como está (T5352).
+    if (after(t) === to && !t.includes("/") && key(t) !== key(noteName(from!))) return raw;
     const name = noteName(to);
     const target = after(name) === to ? name : to.replace(/\.md$/i, "");
     const next = `${bang}[[${target}${heading ?? ""}${alias ?? ""}]]`;
