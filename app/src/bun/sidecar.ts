@@ -4,6 +4,7 @@
 
 import { chmodSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
+import { constants } from "node:os";
 
 import {
   type Command,
@@ -22,6 +23,31 @@ import {
 type Ready = Extract<Event, { type: "ready" }>;
 type Listener = (e: EventMessage) => void;
 
+export interface HelperProcess {
+  kill(signal?: "SIGTERM" | "SIGKILL"): void;
+  exited: Promise<unknown>;
+  pid?: number;
+  exitCode?: number | null;
+  signalCode?: string | number | null;
+}
+export interface SupervisorStatus {
+  state: "starting" | "ready" | "backoff" | "failed" | "stopped";
+  crashes: number;
+  reason?: string;
+  restartInMs?: number;
+}
+export const SUPERVISOR_DEFAULTS = {
+  stableMs: 60_000,
+  readyTimeoutMs: 15_000,
+  pingIntervalMs: 15_000,
+  pingTimeoutMs: 5_000,
+  terminateMs: 2_000,
+  maxCrashes: 5,
+  windowMs: 5 * 60_000,
+  backoffMs: 500,
+  maxBackoffMs: 30_000,
+};
+
 export interface SidecarOptions {
   /** O executável `kiwi-helper`. */
   helper: string;
@@ -31,8 +57,10 @@ export interface SidecarOptions {
   /** Quanto esperar por um `result` antes de desistir. */
   requestTimeoutMs?: number;
   /** Troca o `Bun.spawn` (testes). Devolve algo que dá para matar e que avisa quando sai. */
-  spawn?: (argv: string[], env: Record<string, string>) => { kill(): void; exited: Promise<unknown> };
-  log?: (message: string) => void;
+  spawn?: (argv: string[], env: Record<string, string>) => HelperProcess;
+  /** Só os testes encurtam os prazos; o app usa SUPERVISOR_DEFAULTS. */
+  supervision?: Partial<typeof SUPERVISOR_DEFAULTS>;
+  log?: (message: string, level?: "info" | "warn" | "error") => void;
 }
 
 /** Erro de um comando: o código curto do `result` (ou `sidecar_closed`, `sidecar_timeout`). */
@@ -53,8 +81,22 @@ const encoder = new TextEncoder();
 export class Sidecar {
   private server?: { stop(closeActive?: boolean): void };
   private socket?: Socket;
-  private proc?: { kill(): void; exited: Promise<unknown> };
-  private pending = new Map<string, { resolve(r: ResultMessage): void; reject(e: Error): void; timer: Timer }>();
+  private proc?: HelperProcess;
+  private readonly limits: typeof SUPERVISOR_DEFAULTS;
+  private health: SupervisorStatus = { state: "starting", crashes: 0 };
+  private healthListeners = new Set<(status: SupervisorStatus) => void>();
+  private crashTimes: number[] = [];
+  private readyTimer?: Timer;
+  private stableTimer?: Timer;
+  private pingTimer?: Timer;
+  private restartTimer?: Timer;
+  private killTimer?: Timer;
+  private terminationReason?: string;
+  private stopping?: Promise<void>;
+  private pending = new Map<
+    string,
+    { resolve(r: ResultMessage): void; reject(e: Error): void; timer: Timer }
+  >();
   private listeners = new Map<string, Set<Listener>>();
   private closeListeners = new Set<() => void>();
   private nextId = 0;
@@ -65,28 +107,60 @@ export class Sidecar {
    * foram; o resto sai no `drain`, na ordem (review #521: um `config.set` de 30 KB chegava cortado em 8 KB).
    */
   private outbox: Uint8Array[] = [];
-  private connected?: { promise: Promise<Ready>; resolve(r: Ready): void };
+  private connected?: {
+    promise: Promise<Ready>;
+    resolve(r: Ready): void;
+    reject(e: Error): void;
+  };
   /** O último `ready`, com o `llm` atualizado pelos `permissions.changed`. */
   ready?: Ready;
   /** As quedas do helper desde que o app abriu, as 20 últimas (T5350: vão no "Salvar diagnóstico"). */
   readonly exits: { at: string; code: number | null; signal?: string }[] = [];
 
   constructor(private readonly options: SidecarOptions) {
+    this.limits = { ...SUPERVISOR_DEFAULTS, ...options.supervision };
     this.resetConnected();
+  }
+
+  supervision(): SupervisorStatus {
+    return { ...this.health };
+  }
+  onSupervision(fn: (status: SupervisorStatus) => void): () => void {
+    this.healthListeners.add(fn);
+    return () => this.healthListeners.delete(fn);
+  }
+  private setHealth(status: SupervisorStatus) {
+    this.health = status;
+    for (const fn of this.healthListeners) {
+      try {
+        fn(this.supervision());
+      } catch {
+        this.log("supervisor listener_failed");
+      }
+    }
   }
 
   private resetConnected() {
     let resolve!: (r: Ready) => void;
-    const promise = new Promise<Ready>((r) => (resolve = r));
-    this.connected = { promise, resolve };
+    let reject!: (e: Error) => void;
+    const promise = new Promise<Ready>((r, j) => {
+      resolve = r;
+      reject = j;
+    });
+    // A sessão usa eventos e pode nunca chamar whenReady; falha terminal não vira rejeição solta.
+    void promise.catch(() => {});
+    this.connected = { promise, resolve, reject };
   }
 
   /** Resolve no próximo `ready` (o primeiro, ou o de depois de um restart). */
   whenReady(): Promise<Ready> {
-    return this.ready && this.socket ? Promise.resolve(this.ready) : this.connected!.promise;
+    return this.ready && this.socket
+      ? Promise.resolve(this.ready)
+      : this.connected!.promise;
   }
 
   start(): void {
+    if (this.server || this.stopped) return;
     const { socketPath } = this.options;
     mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
     rmSync(socketPath, { force: true });
@@ -101,7 +175,13 @@ export class Sidecar {
       socket: {
         open: (s) => {
           // Um helper por vez: uma segunda conexão (um helper antigo que não morreu) é recusada.
-          if (this.socket) return void s.end();
+          if (
+            this.socket ||
+            this.stopped ||
+            !this.proc ||
+            this.terminationReason
+          )
+            return void s.end();
           this.socket = s;
           this.outbox = [];
           current = decoder();
@@ -114,18 +194,8 @@ export class Sidecar {
         },
         close: (s) => {
           if (s !== this.socket) return;
-          this.socket = undefined;
-          this.outbox = [];
-          this.ready = undefined;
-          this.resetConnected();
-          this.failPending("sidecar_closed");
-          for (const fn of this.closeListeners) {
-            try {
-              fn();
-            } catch (e) {
-              this.log(`close listener failed: ${String(e)}`);
-            }
-          }
+          this.disconnect();
+          if (!this.stopped && this.proc) this.terminate("socket_closed");
         },
       },
     });
@@ -134,37 +204,205 @@ export class Sidecar {
   }
 
   private spawnHelper(): void {
-    if (this.stopped) return;
+    if (this.stopped || this.proc || this.health.state === "failed") return;
+    this.restartTimer = undefined;
+    this.terminationReason = undefined;
+    this.setHealth({ state: "starting", crashes: this.crashTimes.length });
     const argv = [this.options.helper, "--socket", this.options.socketPath];
-    const env = { ...(process.env as Record<string, string>), ...this.options.env };
+    const env = {
+      ...(process.env as Record<string, string>),
+      ...this.options.env,
+    };
     const spawn =
-      this.options.spawn ?? ((a: string[], e: Record<string, string>) => Bun.spawn(a, { env: e, stdout: "inherit", stderr: "inherit" }));
-    let proc: ReturnType<typeof spawn>;
+      this.options.spawn ??
+      ((a: string[], e: Record<string, string>) =>
+        Bun.spawn(a, { env: e, stdout: "inherit", stderr: "inherit" }));
+    let proc: HelperProcess;
     try {
       proc = spawn(argv, env);
-    } catch (e) {
-      // Sem o executável (`bun dev` sem `swift build`, um KIWI_HELPER errado): o app fica de pé e tenta de novo.
-      this.log(`couldn't start the helper (${String(e)}); retrying`);
-      setTimeout(() => this.spawnHelper(), this.nextWait());
+    } catch {
+      this.log("supervisor spawn_error");
+      this.failedAttempt("spawn_error");
       return;
     }
     this.proc = proc;
-    void proc.exited.then((result) => {
-      if (this.proc !== proc || this.stopped) return;
-      const wait = this.nextWait();
-      const p = proc as { exitCode?: number | null; signalCode?: string | null };
-      const code = typeof result === "number" ? result : (p.exitCode ?? null);
-      const signal = p.signalCode ?? undefined;
-      this.exits.push({ at: new Date().toISOString(), code, ...(signal ? { signal } : {}) });
-      if (this.exits.length > 20) this.exits.shift();
-      this.log(`sidecar exited (${signal ? `signal ${signal}` : `code ${code ?? "?"}`}); restarting in ${wait} ms`);
-      setTimeout(() => this.spawnHelper(), wait);
-    });
+    this.log(
+      `supervisor spawn pid=${proc.pid ?? "unknown"} attempt=${this.restarts + 1}`,
+      "info",
+    );
+    this.readyTimer = setTimeout(() => {
+      if (this.proc === proc && !this.ready) this.terminate("ready_timeout");
+    }, this.limits.readyTimeoutMs);
+    void proc.exited.then(
+      (result) => this.exited(proc, result),
+      () => this.exited(proc, undefined),
+    );
   }
 
-  /** Sobe de novo: 0,5 s, 1 s, 2 s… até 30 s. Um `ready` zera a conta. */
-  private nextWait(): number {
-    return Math.min(30_000, 500 * 2 ** this.restarts++);
+  private exited(proc: HelperProcess, result: unknown) {
+    if (this.proc !== proc) return;
+    const reason = this.terminationReason ?? "exit";
+    const code = typeof result === "number" ? result : (proc.exitCode ?? null);
+    const rawSignal = proc.signalCode;
+    const signal =
+      typeof rawSignal === "number"
+        ? (Object.entries(constants.signals).find(
+            ([, n]) => n === rawSignal,
+          )?.[0] ?? String(rawSignal))
+        : (rawSignal ?? undefined);
+    this.exits.push({
+      at: new Date().toISOString(),
+      code,
+      ...(signal ? { signal } : {}),
+    });
+    if (this.exits.length > 20) this.exits.shift();
+    this.log(
+      `supervisor exit pid=${proc.pid ?? "unknown"} exitCode=${code ?? "unknown"} signal=${signal ?? "none"} reason=${reason}`,
+      this.stopped ? "info" : "warn",
+    );
+    this.clearWatch();
+    clearTimeout(this.killTimer);
+    this.killTimer = undefined;
+    this.proc = undefined;
+    this.disconnect();
+    if (!this.stopped) this.failedAttempt(reason);
+  }
+
+  private failedAttempt(reason: string) {
+    const now = performance.now();
+    this.crashTimes = this.crashTimes.filter(
+      (t) => now - t < this.limits.windowMs,
+    );
+    this.crashTimes.push(now);
+    if (this.crashTimes.length >= this.limits.maxCrashes) {
+      this.setHealth({
+        state: "failed",
+        crashes: this.crashTimes.length,
+        reason,
+      });
+      this.connected!.reject(new SidecarError("sidecar_failed"));
+      this.log(
+        `supervisor failed crashes=${this.crashTimes.length} windowMs=${this.limits.windowMs} reason=${reason}`,
+        "error",
+      );
+      return;
+    }
+    const wait = Math.min(
+      this.limits.maxBackoffMs,
+      this.limits.backoffMs * 2 ** this.restarts++,
+    );
+    this.setHealth({
+      state: "backoff",
+      crashes: this.crashTimes.length,
+      reason,
+      restartInMs: wait,
+    });
+    this.log(
+      `supervisor backoff waitMs=${wait} crashes=${this.crashTimes.length} reason=${reason}`,
+    );
+    this.restartTimer = setTimeout(() => this.spawnHelper(), wait);
+  }
+
+  private clearWatch() {
+    clearTimeout(this.readyTimer);
+    clearTimeout(this.stableTimer);
+    clearTimeout(this.pingTimer);
+    this.readyTimer = this.stableTimer = this.pingTimer = undefined;
+  }
+
+  private watchReady() {
+    const proc = this.proc!;
+    clearTimeout(this.readyTimer);
+    this.readyTimer = undefined;
+    this.setHealth({ state: "ready", crashes: this.crashTimes.length });
+    this.log(`supervisor ready pid=${proc.pid ?? "unknown"}`, "info");
+    // Ready só diz que o IPC subiu. STT carregando pode derrubar o processo logo depois.
+    if (!this.stableTimer)
+      this.stableTimer = setTimeout(() => {
+        if (this.proc === proc && this.ready && !this.terminationReason) {
+          this.restarts = 0;
+          this.log(
+            `supervisor stable stableMs=${this.limits.stableMs}`,
+            "info",
+          );
+        }
+        this.stableTimer = undefined;
+      }, this.limits.stableMs);
+    this.schedulePing(proc);
+  }
+
+  private schedulePing(proc: HelperProcess) {
+    clearTimeout(this.pingTimer);
+    this.pingTimer = setTimeout(() => {
+      this.pingTimer = undefined;
+      if (this.proc !== proc || this.stopped || this.terminationReason) return;
+      void this.request(
+        { type: "ping" },
+        undefined,
+        this.limits.pingTimeoutMs,
+      ).then(
+        () => {
+          if (this.proc === proc && !this.stopped && !this.terminationReason)
+            this.schedulePing(proc);
+        },
+        () => {
+          if (this.proc === proc && !this.stopped && !this.terminationReason)
+            this.terminate("ping_timeout");
+        },
+      );
+    }, this.limits.pingIntervalMs);
+  }
+
+  /** Não cria outro helper enquanto o anterior ainda existe. O SIGKILL tem prazo mesmo sem socket. */
+  private terminate(reason: string) {
+    const proc = this.proc;
+    if (!proc || this.terminationReason) return;
+    this.terminationReason = reason;
+    this.clearWatch();
+    this.log(
+      `supervisor terminate pid=${proc.pid ?? "unknown"} signal=SIGTERM reason=${reason}`,
+      reason === "stop" ? "info" : "warn",
+    );
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      this.log("supervisor signal_failed signal=SIGTERM");
+    }
+    this.killTimer = setTimeout(() => {
+      if (this.proc !== proc) return;
+      this.log(
+        `supervisor kill pid=${proc.pid ?? "unknown"} signal=SIGKILL reason=${reason}`,
+      );
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        this.log("supervisor signal_failed signal=SIGKILL", "error");
+      }
+    }, this.limits.terminateMs);
+    this.disconnect();
+  }
+
+  private disconnect() {
+    const socket = this.socket;
+    const wasReady = !!this.ready;
+    this.socket = undefined;
+    this.ready = undefined;
+    this.outbox = [];
+    if (wasReady) this.resetConnected();
+    this.failPending("sidecar_closed");
+    try {
+      socket?.end();
+    } catch {
+      this.log("supervisor socket_close_failed");
+    }
+    if (socket || wasReady)
+      for (const fn of this.closeListeners) {
+        try {
+          fn();
+        } catch {
+          this.log("close listener failed");
+        }
+      }
   }
 
   /** Escreve a linha inteira, agora ou no próximo `drain`. */
@@ -188,16 +426,45 @@ export class Sidecar {
     }
   }
 
-  stop(): void {
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
     this.stopped = true;
-    this.failPending("sidecar_closed");
-    this.proc?.kill();
-    this.socket?.end();
+    clearTimeout(this.restartTimer);
+    this.restartTimer = undefined;
+    this.clearWatch();
+    this.setHealth({ state: "stopped", crashes: this.crashTimes.length });
+    const proc = this.proc;
+    this.terminate("stop");
+    this.disconnect();
+    this.connected!.reject(new SidecarError("sidecar_closed"));
     this.server?.stop(true);
     rmSync(this.options.socketPath, { force: true });
+    this.stopping = proc
+      ? proc.exited.then(
+          () => {},
+          () => {},
+        )
+      : Promise.resolve();
+    return this.stopping;
   }
 
-  on<T extends Event["type"]>(type: T | "*", fn: (e: EventMessage<Extract<Event, { type: T }>>) => void): () => void {
+  /** Última defesa síncrona no evento exit do Bun, onde não há mais tempo para timers. */
+  forceKill(): void {
+    if (!this.proc) return;
+    this.log(
+      `supervisor kill pid=${this.proc.pid ?? "unknown"} signal=SIGKILL reason=app_exit`,
+    );
+    try {
+      this.proc.kill("SIGKILL");
+    } catch {
+      /* o processo já pode ter saído */
+    }
+  }
+
+  on<T extends Event["type"]>(
+    type: T | "*",
+    fn: (e: EventMessage<Extract<Event, { type: T }>>) => void,
+  ): () => void {
     let set = this.listeners.get(type);
     if (!set) this.listeners.set(type, (set = new Set()));
     set.add(fn as Listener);
@@ -211,22 +478,41 @@ export class Sidecar {
   }
 
   /** Manda um comando e espera o `result`. Rejeita com `SidecarError` quando o `ok` é `false`. */
-  async request<C extends Command>(command: C, signal?: AbortSignal): Promise<ResultMessage<C["type"]> & { ok: true }> {
-    const result = await this.send(command, signal);
+  async request<C extends Command>(
+    command: C,
+    signal?: AbortSignal,
+    timeoutMs?: number,
+  ): Promise<ResultMessage<C["type"]> & { ok: true }> {
+    const result = await this.send(command, signal, timeoutMs);
     if (!result.ok) throw new SidecarError(result.error, result.data);
     return result as ResultMessage<C["type"]> & { ok: true };
   }
 
   /** Igual ao `request`, mas devolve o `result` como veio, com `ok: false` incluído. */
-  send<C extends Command>(command: C, signal?: AbortSignal): Promise<ResultMessage<C["type"]>> {
+  send<C extends Command>(
+    command: C,
+    signal?: AbortSignal,
+    timeoutMs?: number,
+  ): Promise<ResultMessage<C["type"]>> {
     const socket = this.socket;
     if (!socket) return Promise.reject(new SidecarError("sidecar_closed"));
     if (signal?.aborted) return Promise.reject(new SidecarError("aborted"));
     const id = `b${++this.nextId}`;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this.settle(id, new SidecarError("sidecar_timeout")), this.options.requestTimeoutMs ?? 15_000);
-      this.pending.set(id, { resolve: resolve as (r: ResultMessage) => void, reject, timer });
-      signal?.addEventListener("abort", () => this.settle(id, new SidecarError("aborted")), { once: true });
+      const timer = setTimeout(
+        () => this.settle(id, new SidecarError("sidecar_timeout")),
+        timeoutMs ?? this.options.requestTimeoutMs ?? 15_000,
+      );
+      this.pending.set(id, {
+        resolve: resolve as (r: ResultMessage) => void,
+        reject,
+        timer,
+      });
+      signal?.addEventListener(
+        "abort",
+        () => this.settle(id, new SidecarError("aborted")),
+        { once: true },
+      );
       try {
         this.write(encode({ ...command, v: IPC_VERSION, id } as Message));
       } catch (e) {
@@ -245,18 +531,26 @@ export class Sidecar {
   }
 
   private failPending(code: string) {
-    for (const id of [...this.pending.keys()]) this.settle(id, new SidecarError(code));
+    for (const id of [...this.pending.keys()])
+      this.settle(id, new SidecarError(code));
   }
 
   private receive(m: Message) {
     if (isResult(m)) return this.settle(m.id, m);
     if (!isEvent(m)) return;
     if (m.type === "ready") {
+      if (this.stopped || !this.proc || this.terminationReason) return;
+      const firstReady = !this.ready;
       this.ready = m;
-      this.restarts = 0;
+      if (firstReady) this.watchReady();
       this.connected!.resolve(m);
     } else if (m.type === "permissions.changed" && this.ready) {
-      this.ready = { ...this.ready, permissions: m.permissions, hotkeyActive: m.hotkeyActive, llm: m.llm ?? this.ready.llm };
+      this.ready = {
+        ...this.ready,
+        permissions: m.permissions,
+        hotkeyActive: m.hotkeyActive,
+        llm: m.llm ?? this.ready.llm,
+      };
     }
     for (const key of [m.type, "*"]) {
       for (const fn of this.listeners.get(key) ?? []) {
@@ -269,8 +563,14 @@ export class Sidecar {
     }
   }
 
-  private log(message: string) {
-    (this.options.log ?? console.warn)(`[sidecar] ${message}`);
+  private log(message: string, level: "info" | "warn" | "error" = "warn") {
+    if (this.options.log) this.options.log(`[sidecar] ${message}`, level);
+    else
+      (level === "info"
+        ? console.log
+        : level === "error"
+          ? console.error
+          : console.warn)(`[sidecar] ${message}`);
   }
 }
 

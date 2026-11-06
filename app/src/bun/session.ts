@@ -17,7 +17,7 @@ import { Dictation } from "./dictation.ts";
 import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
 import { MeetingLiveTracker } from "./meetings.ts";
 import { MeetingAcks } from "./meeting-acks.ts";
-import { Sidecar } from "./sidecar.ts";
+import { Sidecar, type SupervisorStatus } from "./sidecar.ts";
 import { MeetingNoteSession } from "./meeting-notes.ts";
 import { stores } from "./stores.ts";
 
@@ -61,6 +61,7 @@ export async function loadLists(
 export type SttState = Extract<Event, { type: "stt.status" }>["state"] | "starting";
 
 export interface SessionStatus {
+  supervision?: SupervisorStatus;
   connected: boolean;
   stt: SttState;
   /** O modelo do boosting do vocabulário (T1973); `undefined` até o helper dizer. */
@@ -182,14 +183,14 @@ export class Session {
         console.log(`[sidecar] ${e.type}${app}${extra}`);
       });
     }
+    this.sidecar.onSupervision(() => this.emitStatus());
     this.sidecar.start();
   }
 
   stop(): Promise<void> {
     this.dictation.detach();
     this.permissions.detach();
-    this.sidecar.stop();
-    return this.meetingNotes.detach();
+    return Promise.all([this.sidecar.stop(),this.meetingNotes.detach()]).then(()=>{});
   }
 
   /** O estado do helper para o "Salvar diagnóstico" (T5350): só leitura, nunca pede permissão. */
@@ -204,7 +205,7 @@ export class Session {
 
   status(): SessionStatus {
     const ready = this.sidecar.ready;
-    return { connected: !!ready, stt: this.stt, boosting: this.boosting, hotkeyActive: ready?.hotkeyActive ?? false, missing: missing(ready?.permissions) };
+    return { supervision:this.sidecar.supervision(), connected: !!ready, stt: this.stt, boosting: this.boosting, hotkeyActive: ready?.hotkeyActive ?? false, missing: missing(ready?.permissions) };
   }
 
   onStatus(fn: (s: SessionStatus) => void): () => void {

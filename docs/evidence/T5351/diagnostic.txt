@@ -1,0 +1,67 @@
+Kiwi Notes · diagnóstico
+Gerado em 2026-11-06T03:54:16.853Z
+Sem texto de ditado, de notas nem áudio.
+
+== App
+versão: headless (dev)
+contrato da UI: 1.25.0
+
+== Sistema
+macOS: 27.2 (Darwin 27.2.0)
+arquitetura: arm64
+processador: Apple M1 Pro
+memória: 16 GB
+
+== Helper
+de pé: não
+supervisor: failed · quedas na janela: 5 · motivo: socket_closed
+quedas desde que o app abriu: 5
+  2026-11-06T03:54:08.827Z · código 7
+  2026-11-06T03:54:09.379Z · código 7
+  2026-11-06T03:54:10.431Z · código 7
+  2026-11-06T03:54:12.485Z · código 7
+  2026-11-06T03:54:16.535Z · código 7
+
+== Permissões (só o estado; nada é pedido)
+sem o helper de pé, o estado não é conhecido
+
+== Ditado
+STT: starting
+microfone escolhido: auto
+atalho das Notas: control+option+n
+
+== Crashes do macOS (só o nome e a data)
+nenhum
+
+== Log (as últimas 31 linhas)
+2026-11-06T03:54:08.779Z INFO  [sidecar] supervisor spawn pid=70805 attempt=1
+2026-11-06T03:54:08.780Z INFO  [headless] up: /tmp/T5351-visual/control.sock (helper on)
+2026-11-06T03:54:08.795Z INFO  [sidecar] supervisor ready pid=70805
+2026-11-06T03:54:08.796Z INFO  [sidecar] ready
+2026-11-06T03:54:08.826Z WARN  [sidecar] supervisor terminate pid=70805 signal=SIGTERM reason=socket_closed
+2026-11-06T03:54:08.827Z WARN  [sidecar] supervisor exit pid=70805 exitCode=7 signal=none reason=socket_closed
+2026-11-06T03:54:08.827Z WARN  [sidecar] supervisor backoff waitMs=500 crashes=1 reason=socket_closed
+2026-11-06T03:54:09.330Z INFO  [sidecar] supervisor spawn pid=70808 attempt=2
+2026-11-06T03:54:09.346Z INFO  [sidecar] supervisor ready pid=70808
+2026-11-06T03:54:09.346Z INFO  [sidecar] ready
+2026-11-06T03:54:09.379Z WARN  [sidecar] supervisor terminate pid=70808 signal=SIGTERM reason=socket_closed
+2026-11-06T03:54:09.379Z WARN  [sidecar] supervisor exit pid=70808 exitCode=7 signal=none reason=socket_closed
+2026-11-06T03:54:09.379Z WARN  [sidecar] supervisor backoff waitMs=1000 crashes=2 reason=socket_closed
+2026-11-06T03:54:10.382Z INFO  [sidecar] supervisor spawn pid=70813 attempt=3
+2026-11-06T03:54:10.398Z INFO  [sidecar] supervisor ready pid=70813
+2026-11-06T03:54:10.398Z INFO  [sidecar] ready
+2026-11-06T03:54:10.431Z WARN  [sidecar] supervisor terminate pid=70813 signal=SIGTERM reason=socket_closed
+2026-11-06T03:54:10.431Z WARN  [sidecar] supervisor exit pid=70813 exitCode=7 signal=none reason=socket_closed
+2026-11-06T03:54:10.432Z WARN  [sidecar] supervisor backoff waitMs=2000 crashes=3 reason=socket_closed
+2026-11-06T03:54:12.435Z INFO  [sidecar] supervisor spawn pid=70821 attempt=4
+2026-11-06T03:54:12.452Z INFO  [sidecar] supervisor ready pid=70821
+2026-11-06T03:54:12.452Z INFO  [sidecar] ready
+2026-11-06T03:54:12.485Z WARN  [sidecar] supervisor terminate pid=70821 signal=SIGTERM reason=socket_closed
+2026-11-06T03:54:12.485Z WARN  [sidecar] supervisor exit pid=70821 exitCode=7 signal=none reason=socket_closed
+2026-11-06T03:54:12.485Z WARN  [sidecar] supervisor backoff waitMs=4000 crashes=4 reason=socket_closed
+2026-11-06T03:54:16.487Z INFO  [sidecar] supervisor spawn pid=70840 attempt=5
+2026-11-06T03:54:16.502Z INFO  [sidecar] supervisor ready pid=70840
+2026-11-06T03:54:16.502Z INFO  [sidecar] ready
+2026-11-06T03:54:16.535Z WARN  [sidecar] supervisor terminate pid=70840 signal=SIGTERM reason=socket_closed
+2026-11-06T03:54:16.535Z WARN  [sidecar] supervisor exit pid=70840 exitCode=7 signal=none reason=socket_closed
+2026-11-06T03:54:16.535Z ERROR [sidecar] supervisor failed crashes=5 windowMs=300000 reason=socket_closed

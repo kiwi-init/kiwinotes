@@ -60,6 +60,7 @@ export function diagnosticsReport(i: DiagnosticsInput): string {
   if (!s) lines.push("desligado neste app (sem o helper)");
   else {
     lines.push(`de pé: ${yesNo(s.connected)}`);
+    if(s.supervision)lines.push(`supervisor: ${s.supervision.state} · quedas na janela: ${s.supervision.crashes}${s.supervision.reason ? ` · motivo: ${s.supervision.reason}` : ""}`);
     if (s.helper) {
       lines.push(`versão: ${s.helper.version} · pid ${s.helper.pid}`);
       lines.push(`atalho recebendo teclas: ${yesNo(s.hotkeyActive)}`);
