@@ -7,15 +7,13 @@ import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
 import { ExtensionsRow } from "./ExtensionsRow.tsx";
 import { MicrophoneRow } from "./Microphone.tsx";
-import { NotesShortcutRow } from "./NotesShortcut.tsx";
 import { NotesFolderRow } from "../notes/NotesFolder.tsx";
 import "../notes/notes.css";
 import { OcrRow } from "./OcrRow.tsx";
+import { ShortcutsSection } from "./Shortcuts.tsx";
 import { SnippetsSection } from "./Snippets.tsx";
 
 export function Settings() {
-  const [key, setKey] = useState<"fn" | "rightOption">("fn");
-  const [toggle, setToggle] = useState(true);
   const [lang, setLang] = useState<"auto" | "pt" | "en">("auto");
   const [keepAudio, setKeepAudio] = useState(false);
 
@@ -23,23 +21,8 @@ export function Settings() {
     <Window title="Configurações">
       <AppearanceSection />
 
-      <Section title="Atalho">
-        <Row label="Segurar para ditar" hint="Segure, fale e solte: o texto entra onde está o cursor.">
-          <Segmented
-            label="Tecla do atalho"
-            value={key}
-            onChange={setKey}
-            options={[
-              { value: "fn", label: "Fn 🌐" },
-              { value: "rightOption", label: "⌥ direito" },
-            ]}
-          />
-        </Row>
-        <Row label="Duas batidas travam a gravação" hint="Para ditados longos, sem segurar a tecla.">
-          <Switch label="Duas batidas travam a gravação" checked={toggle} onChange={setToggle} />
-        </Row>
-        <NotesShortcutRow />
-      </Section>
+      {/* Todos os atalhos, configuráveis (T5349). Antes, a tecla do ditado aqui só mudava a tela: nunca era salva. */}
+      <ShortcutsSection />
 
       <Section title="Transcrição">
         <MicrophoneRow />

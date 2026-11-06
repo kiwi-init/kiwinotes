@@ -7,6 +7,8 @@
 // Puro (sem disco nem helper), para o `bun test`.
 
 /** Uma nota de reunião, como a lista mostra. */
+import { canonicalShortcut, isShortcutFor } from "./shortcuts.ts";
+
 export interface MeetingNote {
   path: string;
   title: string;
@@ -39,9 +41,9 @@ export interface MeetingAppEntry {
 
 /** Os ajustes de reunião, nas Configurações (`AppSettings.meetings`). */
 export interface MeetingSettings {
-  /** Grava e para a reunião (R2); null desliga. */
+  /** Grava e para a reunião (R2); null desliga. Desde o T5349, o mesmo que `AppSettings.shortcuts.meeting`. */
   shortcut: MeetingShortcut | null;
-  /** "Pausar meu mic"; null desliga. */
+  /** "Pausar meu mic"; null desliga. Desde o T5349, o mesmo que `AppSettings.shortcuts.meetingPause`. */
   pauseShortcut: MeetingPauseShortcut | null;
   /** O pop-up "Gravar esta reunião?". Desligado, o atalho ainda grava. */
   suggest: boolean;
@@ -60,8 +62,9 @@ export const MEETING_PAUSE_SHORTCUTS = [
   { value: "control+command+m", label: "⌃⌘M" },
   { value: "option+command+m", label: "⌥⌘M" },
 ] as const;
-export type MeetingShortcut = (typeof MEETING_SHORTCUTS)[number]["value"];
-export type MeetingPauseShortcut = (typeof MEETING_PAUSE_SHORTCUTS)[number]["value"];
+/** Desde o T5349, qualquer atalho global (`shortcuts.ts`); as listas acima são só as de antes. */
+export type MeetingShortcut = string;
+export type MeetingPauseShortcut = string;
 
 /** A mesma lista do helper (`MeetingApps.defaults`, native/Sources/KiwiHelperCore/Meeting/MeetingApps.swift). */
 export const DEFAULT_MEETING_APPS: readonly MeetingAppEntry[] = [
@@ -92,8 +95,8 @@ export const DEFAULT_MEETING_SETTINGS: MeetingSettings = {
 /** Até quantos apps. */
 export const MAX_MEETING_APPS = 100;
 
-const isShortcut = (v: unknown): v is MeetingShortcut | null => v === null || MEETING_SHORTCUTS.some((s) => s.value === v);
-const isPauseShortcut = (v: unknown): v is MeetingPauseShortcut | null => v === null || MEETING_PAUSE_SHORTCUTS.some((s) => s.value === v);
+const isShortcut = (v: unknown): v is MeetingShortcut | null => v === null || isShortcutFor("meeting", v);
+const isPauseShortcut = (v: unknown): v is MeetingPauseShortcut | null => v === null || isShortcutFor("meetingPause", v);
 
 /** Um bundle id que vale: letras, dígitos, ponto, hífen e sublinhado, como os do macOS. */
 export const isBundleId = (v: unknown): v is string => typeof v === "string" && v.length <= 255 && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(v);
@@ -119,8 +122,8 @@ export function sanitizeMeetingApps(input: unknown): MeetingAppEntry[] | null {
 export function sanitizeMeetingSettings(input: unknown): MeetingSettings {
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
-    shortcut: "shortcut" in o && isShortcut(o.shortcut) ? o.shortcut : DEFAULT_MEETING_SETTINGS.shortcut,
-    pauseShortcut: "pauseShortcut" in o && isPauseShortcut(o.pauseShortcut) ? o.pauseShortcut : DEFAULT_MEETING_SETTINGS.pauseShortcut,
+    shortcut: "shortcut" in o && isShortcut(o.shortcut) ? (o.shortcut && canonicalShortcut(o.shortcut)) : DEFAULT_MEETING_SETTINGS.shortcut,
+    pauseShortcut: "pauseShortcut" in o && isPauseShortcut(o.pauseShortcut) ? (o.pauseShortcut && canonicalShortcut(o.pauseShortcut)) : DEFAULT_MEETING_SETTINGS.pauseShortcut,
     suggest: typeof o.suggest === "boolean" ? o.suggest : true,
     apps: sanitizeMeetingApps(o.apps) ?? [...DEFAULT_MEETING_APPS],
   };
@@ -132,11 +135,11 @@ export function checkMeetingSettingsPatch(input: unknown): { ok: true; patch: Pa
   const patch: Partial<MeetingSettings> = {};
   for (const [key, value] of Object.entries(input)) {
     if (key === "shortcut") {
-      if (!isShortcut(value)) return { ok: false, error: "meetings.shortcut must be one of the offered shortcuts, or null" };
-      patch.shortcut = value;
+      if (!isShortcut(value)) return { ok: false, error: "meetings.shortcut must be a shortcut, or null" };
+      patch.shortcut = value && canonicalShortcut(value);
     } else if (key === "pauseShortcut") {
-      if (!isPauseShortcut(value)) return { ok: false, error: "meetings.pauseShortcut must be one of the offered shortcuts, or null" };
-      patch.pauseShortcut = value;
+      if (!isPauseShortcut(value)) return { ok: false, error: "meetings.pauseShortcut must be a shortcut, or null" };
+      patch.pauseShortcut = value && canonicalShortcut(value);
     } else if (key === "suggest") {
       if (typeof value !== "boolean") return { ok: false, error: "meetings.suggest must be true or false" };
       patch.suggest = value;

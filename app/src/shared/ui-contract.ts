@@ -19,6 +19,11 @@ import type { MeetingLive, MeetingNote, MeetingSettings } from "./meetings.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
+export {
+  conflictOf, DEFAULT_SHORTCUTS, isShortcutFor, matchesKeyEvent, SHORTCUTS, shortcutDef, shortcutLabel,
+  type ShortcutDef, type ShortcutId, type Shortcuts,
+} from "./shortcuts.ts";
+import type { Shortcuts } from "./shortcuts.ts";
 export type { TagNode };
 export type { MeetingLive, MeetingNote };
 export { MEETING_PAUSE_SHORTCUTS, MEETING_SHORTCUTS, DEFAULT_MEETING_APPS, type MeetingAppEntry, type MeetingSettings } from "./meetings.ts";
@@ -63,7 +68,10 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.23.0 (T5161): selectable note folders, recents and folder-scoped note preferences.
 // 1.24.0 (T5299): o `noteWidth` nas settings, a largura da coluna da nota (480 a 1400 px). Só acréscimo.
 // 1.25.0 (T5350): o `diagnostics.save`, o "Salvar diagnóstico" da seção Sobre. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.25.0";
+// 1.26.0 (T5349): todos os atalhos configuráveis: `shortcuts` nas settings (o `settings.set` aceita só parte deles e
+//   recusa dois nas mesmas teclas), `shortcuts.record` e `shortcuts.cancelRecord`. O `notesShortcut` e os
+//   `meetings.shortcut|pauseShortcut` continuam, iguais aos `shortcuts`, mas agora qualquer atalho cabe neles. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.26.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -98,7 +106,18 @@ export interface UiCapabilities {
   /** As Configurações que o engine guarda (1.3.0, T1499). */
   "settings.get": { args: Record<string, never>; result: AppSettings };
   /** Muda só os campos dados e devolve tudo. Um valor que não existe dá E_INVALID, sem mudar nada. */
-  "settings.set": { args: Partial<Omit<AppSettings, "meetings">> & { meetings?: Partial<MeetingSettings> }; result: AppSettings };
+  "settings.set": {
+    args: Partial<Omit<AppSettings, "meetings" | "shortcuts">> & { meetings?: Partial<MeetingSettings>; shortcuts?: Partial<Shortcuts> };
+    result: AppSettings;
+  };
+  /**
+   * "Aperte o atalho" (1.26.0, T5349): o helper lê o que a pessoa aperta, em qualquer tecla (o Fn, o ⌥ direito, uma
+   * sequência), e devolve o texto, sem salvar. Esc cancela. E_CANCELLED: cancelado; E_INVALID: não é um atalho (uma
+   * letra sozinha); E_NO_HELPER: o helper não está de pé ou não tem o atalho ativo (falta permissão).
+   */
+  "shortcuts.record": { args: Record<string, never>; result: { shortcut: string } };
+  /** Para o `shortcuts.record` em andamento (o botão Cancelar), que termina com E_CANCELLED. */
+  "shortcuts.cancelRecord": { args: Record<string, never>; result: Record<string, never> };
   /** Só num gesto da pessoa (o botão de copiar). Até `CLIPBOARD_MAX_CHARS`. */
   "clipboard.write": { args: { text: string }; result: boolean };
   /**
@@ -335,6 +354,8 @@ export const UI_CAPABILITIES = [
   "attachments.rename",
   "images.remote",
   "audio.inputs",
+  "shortcuts.record",
+  "shortcuts.cancelRecord",
   "notes.move",
   "notes.duplicate",
   "notes.restore",

@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
+import { DEFAULT_SHORTCUTS } from "../shared/shortcuts.ts";
 
 import {
   type AppEngine,
@@ -72,7 +73,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, savedSearches: [], microphone: "auto", showExtensions: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
   let t = 0;
   return {
     calls,
@@ -238,25 +239,58 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(f.calls.filter((c) => c.startsWith("settings.save"))).toEqual(['settings.save:{"noteWidth":981}']);
   });
 
-  test("settings: o atalho da janela Notas, só um dos oferecidos ou null (T1499)", async () => {
+  test("settings: o atalho da janela Notas, um atalho ou null (T1499; qualquer atalho desde o T5349)", async () => {
     const f = fakeDeps();
     const caps = uiCapabilities(f.deps);
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
     expect(await call("settings.get", {})).toMatchObject({ ok: true, value: { notesShortcut: "control+option+n" } });
     expect(await call("settings.get", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
-    for (const bad of ["n", "control+option+q", "CONTROL+OPTION+N", 7, {}]) {
+    for (const bad of ["n", "shift+n", "control+option", 7, {}]) {
       expect(await call("settings.set", { notesShortcut: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     }
     expect(await call("settings.set", { theme: "dark" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
-    expect(await call("settings.set", { notesShortcut: "option+command+n" })).toMatchObject({ ok: true, value: { notesShortcut: "option+command+n" } });
-    expect(await call("settings.set", { notesShortcut: null })).toMatchObject({ ok: true, value: { notesShortcut: null } });
+    // O de antes entra nos `shortcuts`, no texto canônico.
+    expect(await call("settings.set", { notesShortcut: "Command+Option+N" })).toMatchObject({
+      ok: true, value: { notesShortcut: "option+command+n", shortcuts: { notes: "option+command+n" } },
+    });
+    expect(await call("settings.set", { notesShortcut: null })).toMatchObject({ ok: true, value: { notesShortcut: null, shortcuts: { notes: null } } });
     // Os ruins não chegaram a gravar nem a avisar o helper.
-    expect(f.calls).toEqual([
-      'settings.save:{"notesShortcut":"option+command+n"}',
-      "settingsChanged:option+command+n",
-      'settings.save:{"notesShortcut":null}',
-      "settingsChanged:null",
-    ]);
+    expect(f.calls.filter((c) => c.startsWith("settingsChanged"))).toEqual(["settingsChanged:option+command+n", "settingsChanged:null"]);
+  });
+
+  test("settings: os atalhos (T5349) mudam só os dados, e dois nas mesmas teclas não gravam nada", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    expect(await call("settings.set", { shortcuts: { dictation: "rightOption", meeting: "control+k r" } })).toMatchObject({
+      ok: true, value: { shortcuts: { dictation: "rightOption", meeting: "control+k r", notes: "control+option+n" }, meetings: { shortcut: "control+k r" } },
+    });
+    // O mesmo atalho de outro, a mesma tecla modificadora, o começo de uma sequência: recusados.
+    for (const shortcuts of [{ notes: "control+option+m" }, { notes: "double:rightOption" }, { palette: "control+k" }]) {
+      expect(await call("settings.set", { shortcuts })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    }
+    // Trocar os dois de uma vez vale.
+    expect(await call("settings.set", { shortcuts: { notes: "control+option+m", meetingPause: null } })).toMatchObject({ ok: true });
+    // Os do app só como uma combinação; e um nome que não existe.
+    for (const shortcuts of [{ palette: "fn" }, { newNote: "control+k n" }, { quit: "command+q" }, ["fn"]]) {
+      expect(await call("settings.set", { shortcuts })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    }
+    expect(f.calls.filter((c) => c.startsWith("settings.save")).length).toBe(2);
+  });
+
+  test("shortcuts.record (T5349): o texto do helper, e os erros dele com o código do contrato", async () => {
+    const f = fakeDeps();
+    let next: () => Promise<string> = async () => "control+option+d";
+    const call = (deps: object, cap: string) => directInvoke(uiCapabilities({ ...f.deps, ...deps }), cap, {});
+    const shortcuts = { record: () => next(), cancel: () => void f.calls.push("cancel") };
+    expect(await call({ shortcuts }, "shortcuts.record")).toMatchObject({ ok: true, value: { shortcut: "control+option+d" } });
+    for (const [error, code] of [["cancelled", "E_CANCELLED"], ["invalid_shortcut", "E_BAD_ARGS"], ["hotkey_inactive", "E_NO_HELPER"]]) {
+      next = async () => { throw new Error(error); };
+      expect(await call({ shortcuts }, "shortcuts.record")).toMatchObject({ ok: false, code });
+    }
+    expect(await call({}, "shortcuts.record")).toMatchObject({ ok: false, code: "E_NO_HELPER" });
+    expect(await call({ shortcuts }, "shortcuts.cancelRecord")).toMatchObject({ ok: true });
+    expect(f.calls).toContain("cancel");
   });
 
   test("settings: a Aparência muda só os campos dados, e um valor ruim não grava nada (T2503)", async () => {

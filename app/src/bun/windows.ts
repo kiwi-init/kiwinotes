@@ -112,6 +112,15 @@ const capabilities = uiCapabilities({
   remoteImage: (url) => fetchRemoteImage(url),
   // O seletor de microfone dos Ajustes (T3230): o helper lista as entradas, sem abrir nenhuma.
   audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
+  // "Aperte o atalho" das Configurações (T5349): o tap do helper lê as teclas.
+  shortcuts: {
+    record: async () => {
+      const s = session.get();
+      if (!s) throw new Error("sidecar_closed");
+      return s.recordShortcut();
+    },
+    cancel: () => session.get()?.cancelShortcutRecording(),
+  },
   // A gravação de reunião ao vivo (R6): a do helper do Session de agora.
   meetings: {
     live: () => session.get()?.meetings.live() ?? NOT_RECORDING,

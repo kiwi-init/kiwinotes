@@ -9,13 +9,18 @@ import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shar
 import { type SavedSearch, sanitizeSavedSearches } from "../shared/query.ts";
 import { DEFAULT_TEMPLATES_FOLDER } from "../shared/templates.ts";
 import { DEFAULT_MICROPHONE, isMicrophoneChoice, type MicrophoneChoice } from "../shared/microphone.ts";
-import { DEFAULT_NOTES_SHORTCUT, isNotesShortcut, type NotesShortcut } from "../shared/shortcuts.ts";
+import { type NotesShortcut, sanitizeShortcuts, type Shortcuts } from "../shared/shortcuts.ts";
 import { DEFAULT_MEETING_SETTINGS, type MeetingSettings, sanitizeMeetingSettings } from "../shared/meetings.ts";
 import { folderPath } from "../notes/paths.ts";
 import { readJson, writeJson } from "./files.ts";
 
 export interface AppSettings {
-  /** O atalho global que abre a janela Notas, ou null (desligado). */
+  /**
+   * Todos os atalhos, de cada ação (T5349, #175): o ditado, as Notas, as reuniões, a paleta… null é desligado. O helper
+   * recebe os globais no `config.set {shortcuts}`.
+   */
+  shortcuts: Shortcuts;
+  /** O atalho global que abre a janela Notas, ou null. Desde o T5349, o mesmo que `shortcuts.notes` (fica pelo contrato 1.x). */
   notesShortcut: NotesShortcut | null;
   /**
    * As notas e pastas fixadas na janela Notas (T2468), relativas ao vault. Ficam aqui e não no frontmatter, para não
@@ -47,7 +52,7 @@ export interface AppSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { notesShortcut: DEFAULT_NOTES_SHORTCUT, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -91,8 +96,12 @@ interface SettingsFile extends Partial<AppSettings> {
 /** Só o que vale: um campo editado à mão com um valor que não existe volta ao padrão, sem derrubar os outros. */
 export function sanitizeSettings(input: unknown): AppSettings {
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return {
-    notesShortcut: "notesShortcut" in o && isNotesShortcut(o.notesShortcut) ? o.notesShortcut : DEFAULT_SETTINGS.notesShortcut,
+  const m = (o.meetings && typeof o.meetings === "object" ? o.meetings : {}) as Record<string, unknown>;
+  // Um settings.json de antes do T5349 tem os atalhos nos campos antigos.
+  const shortcuts = sanitizeShortcuts(o.shortcuts, { notes: o.notesShortcut, meeting: m.shortcut, meetingPause: m.pauseShortcut });
+  return withShortcutMirrors({
+    shortcuts,
+    notesShortcut: shortcuts.notes,
     pinned: sanitizePinned(o.pinned),
     appearance: sanitizeAppearance(o.appearance),
     templatesFolder: sanitizeTemplatesFolder(o.templatesFolder),
@@ -104,6 +113,15 @@ export function sanitizeSettings(input: unknown): AppSettings {
     showExtensions: o.showExtensions === true,
     meetings: sanitizeMeetingSettings(o.meetings),
     noteWidth: sanitizeNoteWidth(o.noteWidth),
+  });
+}
+
+/** Os campos de antes do T5349 (`notesShortcut`, `meetings.shortcut|pauseShortcut`) repetem os `shortcuts`. */
+function withShortcutMirrors(s: AppSettings): AppSettings {
+  return {
+    ...s,
+    notesShortcut: s.shortcuts.notes,
+    meetings: { ...s.meetings, shortcut: s.shortcuts.meeting, pauseShortcut: s.shortcuts.meetingPause },
   };
 }
 
@@ -139,11 +157,18 @@ export class SettingsStore {
       const current = await this.load();
       const patch = change(current);
       if (!patch) return current;
-      const next: AppSettings = {
+      // Os atalhos vêm em parte; os campos de antes (o das Notas e os das reuniões) entram neles.
+      const shortcuts = { ...current.shortcuts, ...patch.shortcuts };
+      if (patch.notesShortcut !== undefined) shortcuts.notes = patch.notesShortcut;
+      if (patch.meetings?.shortcut !== undefined) shortcuts.meeting = patch.meetings.shortcut;
+      if (patch.meetings?.pauseShortcut !== undefined) shortcuts.meetingPause = patch.meetings.pauseShortcut;
+      const next: AppSettings = withShortcutMirrors({
         ...current,
         ...patch,
         appearance: { ...current.appearance, ...patch.appearance },
-      };
+        meetings: { ...current.meetings, ...patch.meetings },
+        shortcuts,
+      });
       await writeJson(this.file, { version: 1, ...next } satisfies SettingsFile);
       return next;
     });

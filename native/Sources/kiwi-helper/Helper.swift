@@ -20,6 +20,15 @@ final class Helper {
     /// ⌥ was held when the dictation key last went down: the recording it starts is a quick note (T1320).
     private var nextIsNote = false
     private var tap: HotkeyTap!
+    /// Every global shortcut, by id (T5349, #175): `dictation`, `notes`, `meeting`, `meetingPause`. A missing id is off.
+    private var shortcuts: [String: Shortcut] = [
+        "dictation": .key(.fn),
+        "meeting": Shortcut(MeetingController.defaultShortcut)!,
+        "meetingPause": Shortcut(MeetingController.defaultPauseShortcut)!,
+    ]
+    static let shortcutIds: Set<String> = ["dictation", "notes", "meeting", "meetingPause"]
+    /// A `shortcut.record` waiting for the person to press the shortcut.
+    private var recordingShortcutId: String?
     private var tickTimer: DispatchWorkItem?
     private var recordingStartedAt: TimeInterval?
     private var lastPermissions: [String: String] = [:]
@@ -54,9 +63,8 @@ final class Helper {
         let mic = MicSelection()
         self.mic = mic
         audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
-        tap = HotkeyTap(key: .fn) { [weak self] event in self?.onHotkey(event) }
-        tap.meetingCombo = KeyCombo(MeetingController.defaultShortcut)
-        tap.pauseMineCombo = KeyCombo(MeetingController.defaultPauseShortcut)
+        tap = HotkeyTap { [weak self] event in self?.onTap(event) }
+        applyShortcuts()
         meeting = MeetingController(ownPids: [getpid(), getppid()], headless: headless)
         meeting.startCapture = { [weak self] app in
             var fields: [String: Any] = [:]
@@ -133,8 +141,9 @@ final class Helper {
         emit("ready", [
             "version": Self.version,
             "pid": Int(getpid()),
-            "hotkey": tap.key.rawValue,
+            "hotkey": dictationSpec,
             "hotkeyActive": hotkeyActive,
+            "hotkeyPriority": hotkeyPriority,
             "permissions": lastPermissions,
             "permissionHelp": Permission.explanations(),
             "llm": llm.status,
@@ -202,31 +211,95 @@ final class Helper {
 
     // MARK: Hotkey
 
-    private func onHotkey(_ event: HotkeyTap.Event) {
-        let actions: [GestureAction]
+    private func onTap(_ event: HotkeyTap.Event) {
         switch event {
-        case .down(let t, let note):
-            emit("hotkey.down", ["key": tap.key.rawValue])
+        case .shortcut(let output):
+            onShortcut(output)
+        case .recorded(let outcome):
+            guard let id = recordingShortcutId else { return }
+            recordingShortcutId = nil
+            switch outcome {
+            case .recorded(let spec): reply(id, ok: true, ["shortcut": spec])
+            case .cancelled: reply(id, ok: false, error: "cancelled")
+            case .invalid: reply(id, ok: false, error: "invalid_shortcut")
+            }
+        }
+    }
+
+    /// The dictation shortcut's text, for `ready` and `config.set`'s reply ("fn", "control+option+d"…); "" when off.
+    private var dictationSpec: String { shortcuts["dictation"]?.spec ?? "" }
+
+    /// The dictation key when the dictation shortcut is a modifier on its own: the quick note's ⌥ is read from it.
+    private var dictationKey: HotkeyKey? {
+        if case .key(let key) = shortcuts["dictation"] { return key }
+        return nil
+    }
+
+    /// One of the shortcuts did something (T5349). The dictation's key or combination: hold to talk, tap twice to
+    /// keep recording (`HotkeyGesture`). Its double tap or sequence: start and stop, like a toggle. Every other one
+    /// fires once: a combination as it goes down, a modifier on its own when it comes up untouched.
+    private func onShortcut(_ output: ShortcutOutput) {
+        var actions: [GestureAction] = []
+        switch output {
+        case .press("dictation", let flags):
+            emit("hotkey.down", ["key": dictationSpec])
             // A recording this press starts is a quick note (T1320); the 2nd tap of a double tap keeps the 1st's.
-            nextIsNote = note
-            actions = gesture.keyDown(at: t)
-        case .up(let t):
-            emit("hotkey.up", ["key": tap.key.rawValue])
-            actions = gesture.keyUp(at: t)
-        case .otherKey:
+            nextIsNote = dictationKey?.noteModifierHeld(flags: flags) ?? false
+            actions = gesture.keyDown(at: ProcessInfo.processInfo.systemUptime)
+        case .release("dictation", _):
+            emit("hotkey.up", ["key": dictationSpec])
+            actions = gesture.keyUp(at: ProcessInfo.processInfo.systemUptime)
+        case .interrupt("dictation", let code):
+            // Letting go of ⌥ in a quick note is part of the gesture.
+            if nextIsNote, gesture.isRecording, dictationKey?.isNoteModifier(keyCode: code) == true { return }
             actions = gesture.otherKeyDown()
-        case .notesShortcut:
-            emit("hotkey.notes", [:])
+        case .trigger("dictation"):
+            if audio.isRecording {
+                gesture.reset()
+                emit("hotkey.toggle", ["on": false])
+                stopRecording(reason: "hotkey", mode: StopMode.toggle.rawValue)
+            } else {
+                nextIsNote = false
+                if startRecording(reason: "hotkey") == nil, audio.isRecording {
+                    gesture.reset(latched: true)
+                    emit("hotkey.toggle", ["on": true])
+                }
+            }
             return
-        case .meetingShortcut:
-            meeting.meetingShortcut()
+        case .press(let id, _) where Self.firesOnPress(shortcuts[id]):
+            fire(id)
             return
-        case .pauseMineShortcut:
-            meeting.pauseMineShortcut()
+        case .release(let id, clean: true) where !Self.firesOnPress(shortcuts[id]):
+            fire(id)
+            return
+        case .trigger(let id):
+            fire(id)
+            return
+        default:
             return
         }
         actions.forEach(apply)
         scheduleTick()
+    }
+
+    /// A combination fires as it goes down; a modifier on its own as it comes up (it may still become ⌥+letter).
+    private static func firesOnPress(_ shortcut: Shortcut?) -> Bool {
+        if case .combo = shortcut { return true }
+        return false
+    }
+
+    private func fire(_ id: String) {
+        switch id {
+        case "notes": emit("hotkey.notes", [:])
+        case "meeting": meeting.meetingShortcut()
+        case "meetingPause": meeting.pauseMineShortcut()
+        default: break
+        }
+    }
+
+    private func applyShortcuts() {
+        // A fixed order, so two shortcuts on the same keys always resolve the same way.
+        tap.bindings = ["dictation", "notes", "meeting", "meetingPause"].compactMap { id in shortcuts[id].map { (id: id, shortcut: $0) } }
     }
 
     private func apply(_ action: GestureAction) {
@@ -427,7 +500,22 @@ final class Helper {
             reply(id, ok: true)
         case "config.set":
             if let error = configure(message) { return reply(id, ok: false, error: error) }
-            reply(id, ok: true, ["hotkey": tap.key.rawValue, "hotkeyActive": hotkeyActive])
+            reply(id, ok: true, ["hotkey": dictationSpec, "hotkeyActive": hotkeyActive, "hotkeyPriority": hotkeyPriority])
+        case "shortcut.record":
+            // Settings' "aperte o atalho" (T5349): the reply comes when the person has pressed it (or Esc).
+            guard !headless, tap.isRunning else { return reply(id, ok: false, error: "hotkey_inactive") }
+            if let previous = recordingShortcutId {
+                recordingShortcutId = nil
+                reply(previous, ok: false, error: "cancelled")
+            }
+            guard let id else { return }
+            recordingShortcutId = id
+            if audio.isRecording { cancelRecording(reason: "config") }
+            gesture.reset()
+            tap.record()
+        case "shortcut.cancel":
+            tap.cancelRecording()
+            reply(id, ok: true)
         case "record.start" where headless:
             reply(id, ok: false, error: "headless_no_mic") // dictate a WAV with debug.transcribe instead
         case "permissions.request" where headless:
@@ -673,41 +761,39 @@ final class Helper {
             guard let name = value as? String, let choice = MicChoice(name) else { return "invalid_value" }
             microphone = choice
         }
-        var notesCombo: KeyCombo??
-        if let value = message.fields["notesShortcut"] {
-            if value is NSNull {
-                notesCombo = .some(nil)
-            } else {
-                guard let spec = value as? String, let combo = KeyCombo(spec) else { return "invalid_value" }
-                notesCombo = .some(combo)
-            }
+        // T5349 (#175): `shortcuts {dictation?, notes?, meeting?, meetingPause?}`, each a shortcut's text or null (off).
+        // The fields before it still work: `hotkey`, `notesShortcut`, `meetingShortcut` and `meetingPauseShortcut`.
+        var changed: [String: Shortcut?] = [:]
+        var legacy: [(String, Any)] = [("notesShortcut", "notes"), ("meetingShortcut", "meeting"), ("meetingPauseShortcut", "meetingPause")]
+            .compactMap { field, id in message.fields[field].map { (id, $0) } }
+        if let name = message.string("hotkey") {
+            guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
+            changed["dictation"] = .some(.key(key))
         }
-        var meetingCombos: [WritableKeyPath<HotkeyTap, KeyCombo?>: KeyCombo?] = [:]
-        for (field, path) in [("meetingShortcut", \HotkeyTap.meetingCombo), ("meetingPauseShortcut", \HotkeyTap.pauseMineCombo)] {
-            guard let value = message.fields[field] else { continue }
+        if let value = message.fields["shortcuts"] {
+            guard let given = value as? [String: Any] else { return "invalid_value" }
+            legacy += given.map { ($0.key, $0.value) }
+        }
+        for (id, value) in legacy {
+            guard Self.shortcutIds.contains(id) else { return "invalid_value" }
             if value is NSNull {
-                meetingCombos[path] = .some(nil)
+                changed[id] = .some(nil)
             } else {
-                guard let spec = value as? String, let combo = KeyCombo(spec) else { return "invalid_value" }
-                meetingCombos[path] = .some(combo)
+                guard let text = value as? String, let shortcut = Shortcut(text) else { return "invalid_value" }
+                changed[id] = .some(shortcut)
             }
         }
         if let value = message.fields["meetingSuggest"], !(value is Bool) { return "invalid_value" }
         if let value = message.fields["meetingApps"], MeetingApps.parse(value) == nil { return "invalid_value" }
-        var requested: HotkeyKey?
-        if let name = message.string("hotkey") {
-            guard let key = HotkeyKey(rawValue: name) else { return "unknown_hotkey" }
-            requested = key
+        if !changed.isEmpty {
+            let dictationChanged = changed["dictation"].map { $0 != shortcuts["dictation"] } ?? false
+            for (id, shortcut) in changed { shortcuts[id] = shortcut }
+            if dictationChanged {
+                gesture.reset()
+                if audio.isRecording { cancelRecording(reason: "config") }
+            }
+            applyShortcuts()
         }
-        if let key = requested, key != tap.key {
-            tap.stop()
-            tap.key = key
-            gesture.reset()
-            if audio.isRecording { cancelRecording(reason: "config") }
-            if !headless { tap.start() }
-        }
-        if let combo = notesCombo { tap.notesCombo = combo }
-        for (path, combo) in meetingCombos { tap[keyPath: path] = combo }
         _ = meeting.configure(message.fields)
         if microphone != nil { appKnowsMicrophone = true }
         if let choice = microphone, choice != mic.choice {
@@ -719,6 +805,7 @@ final class Helper {
         }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
+        if hold != nil || doubleTap != nil { tap.timings = (doubleTap: gesture.doubleTapWindow, tap: gesture.holdThreshold) }
         if language != nil || dictionary != nil || vad != nil {
             let prepared = dictionary.map(TranscriptDictionary.init)
             if let prepared {
@@ -753,16 +840,17 @@ final class Helper {
         let llmStatus = llm.status
         guard now != lastPermissions || Self.key(llmStatus) != lastLlm else { return }
         lastLlm = Self.key(llmStatus)
-        let key = Permission.inputMonitoring.rawValue
-        if now[key] == "granted", lastPermissions[key] != "granted" {
-            // A tap made before the grant stays filtered; make a new one.
+        let key = Permission.inputMonitoring.rawValue, ax = Permission.accessibility.rawValue
+        // A tap made before the Input Monitoring grant stays filtered; make a new one. Accessibility given or taken
+        // away turns the tap's priority on or off (T5349): a new one too.
+        if (now[key] == "granted" && lastPermissions[key] != "granted") || (now[ax] == "granted") != (lastPermissions[ax] == "granted") {
             tap.stop()
             if !headless { tap.start() }
         }
         let mic = Permission.microphone.rawValue
         if now[mic] == "granted", lastPermissions[mic] != "granted", !headless { audio.warmUp() }
         lastPermissions = now
-        emit("permissions.changed", ["permissions": now, "hotkeyActive": hotkeyActive, "llm": llmStatus])
+        emit("permissions.changed", ["permissions": now, "hotkeyActive": hotkeyActive, "hotkeyPriority": hotkeyPriority, "llm": llmStatus])
     }
 
     private static func key(_ status: [String: Any]) -> String {
@@ -772,8 +860,12 @@ final class Helper {
     /// The tap exists and macOS actually delivers key events to it (a listen-only tap is created
     /// even without Input Monitoring, but receives nothing).
     private var hotkeyActive: Bool {
-        tap.isRunning && Permission.inputMonitoring.status == "granted"
+        tap.isRunning && (tap.hasPriority || Permission.inputMonitoring.status == "granted")
     }
+
+    /// The shortcuts are Kiwi's: the tap drops them, so the app in front doesn't get them too (T5349). False
+    /// without Accessibility: they still work, but the other app also sees the keystroke.
+    private var hotkeyPriority: Bool { hotkeyActive && tap.hasPriority }
 
     // MARK: Output
 

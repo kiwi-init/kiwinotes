@@ -30,6 +30,8 @@ export interface SidebarProps {
   current: string | null;
   /** A pasta escolhida (a do ⌘N e da "Nova pasta"); "" é a raiz. */
   selectedFolder: string;
+  /** Como os atalhos aparecem agora ("⌘N", "⇧⌘D"), ou null quando desligados (T5349). Sem isto, os padrões. */
+  keys?: { newNote: string | null; dailyNote: string | null };
   query: string;
   onQuery(q: string): void;
   pinned: NoteMeta[];
@@ -146,6 +148,8 @@ function RenameInput({ initial, depth, onDone }: { initial: string; depth: numbe
 
 export function Sidebar(p: SidebarProps) {
   const [dropOn, setDropOn] = useState<string | null>(null);
+  const newNoteKey = p.keys ? p.keys.newNote : "⌘N";
+  const dailyKey = p.keys ? p.keys.dailyNote : "⇧⌘D";
   const menu = (e: React.MouseEvent, target: SideTarget) => {
     e.preventDefault();
     e.stopPropagation();
@@ -346,7 +350,7 @@ export function Sidebar(p: SidebarProps) {
           type="button"
           className="kn-side-new kn-expand"
           data-new="note"
-          title={`Nova nota ${whereLabel(p.selectedFolder)} (⌘N)`}
+          title={`Nova nota ${whereLabel(p.selectedFolder)}${newNoteKey ? ` (${newNoteKey})` : ""}`}
           aria-label={`Nova nota ${whereLabel(p.selectedFolder)}`}
           onClick={() => p.onNewNote?.(p.selectedFolder)}
         >
@@ -370,10 +374,10 @@ export function Sidebar(p: SidebarProps) {
       </div>
       {!searching && p.root ? <RootFolder root={p.root} /> : null}
       {!searching && p.onDaily ? (
-        <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title="Nota do dia (⇧⌘D)">
+        <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title={`Nota do dia${dailyKey ? ` (${dailyKey})` : ""}`}>
           <TreeIcon name="today" />
           <span className="kn-side-name">Hoje</span>
-          <span className="kn-side-count">⇧⌘D</span>
+          {dailyKey ? <span className="kn-side-count">{dailyKey}</span> : null}
         </button>
       ) : null}
       {!searching && p.pinned.length ? (

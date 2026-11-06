@@ -19,7 +19,7 @@ import { openMode } from "../shared/attachments.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
 import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
-import { isNotesShortcut } from "../shared/shortcuts.ts";
+import { checkShortcutsPatch, isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault,
 } from "../notes/vault.ts";
 import type { NoteVersions } from "../notes/versions.ts";
@@ -118,6 +118,11 @@ export interface CapabilityDeps {
   remoteImage?(url: string): Promise<AttachmentData>;
   /** As entradas de áudio pelo helper (T3230). Sem isto, ou sem o helper de pé, o `audio.inputs` dá E_NO_HELPER. */
   audioInputs?(): Promise<AudioInputs | null>;
+  /**
+   * "Aperte o atalho" pelo helper (T5349): o texto do atalho, ou rejeita com o código dele (`cancelled`,
+   * `invalid_shortcut`…). Sem isto (o headless, que não tem o tap), o `shortcuts.record` dá E_NO_HELPER.
+   */
+  shortcuts?: { record(): Promise<string>; cancel(): void };
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
    * o `notes.reveal` só confere que o item existe.
@@ -344,11 +349,15 @@ export function uiCapabilities(deps: CapabilityDeps,
     "settings.set": async (args) => {
       const a = object(args, "settings.set");
       const patch: SettingsPatch = {};
+      // Os atalhos (1.24.0, T5349), também os que vêm nos campos de antes: conferidos juntos no fim, sem conflito.
+      const shortcutPatch: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(a)) {
         if (key === "notesShortcut") {
-          if (!isNotesShortcut(value)) throw bad("notesShortcut must be one of the offered shortcuts, or null",
-            );
-          patch.notesShortcut = value;
+          if (!isNotesShortcut(value)) throw bad("notesShortcut must be a shortcut, or null");
+          shortcutPatch.notes = value;
+        } else if (key === "shortcuts") {
+          if (!value || typeof value !== "object" || Array.isArray(value)) throw bad("shortcuts must be an object");
+          Object.assign(shortcutPatch, value);
         } else if (key === "pinned") {
           patch.pinned = pinnedList(value);
         } else if (key === "appearance") {
@@ -410,14 +419,30 @@ export function uiCapabilities(deps: CapabilityDeps,
           // Os ajustes de reunião (1.21.0, T4947): só os campos dados; o helper recebe no `config.set`.
           const checked = checkMeetingSettingsPatch(value);
           if (!checked.ok) throw bad(`settings.set: ${checked.error}`);
-          // Os que não vieram ficam como estão.
-          patch.meetings = { ...(await deps.settings.load()).meetings, ...checked.patch };
+          // Os atalhos das reuniões são `shortcuts.meeting|meetingPause` desde o T5349; o resto, só os campos dados.
+          const { shortcut, pauseShortcut, ...rest } = checked.patch;
+          if (shortcut !== undefined) shortcutPatch.meeting = shortcut;
+          if (pauseShortcut !== undefined) shortcutPatch.meetingPause = pauseShortcut;
+          patch.meetings = { ...(await deps.settings.load()).meetings, ...rest };
         } else if (key === "microphone") {
           // Por qual mic o ditado grava (1.18.0, T3230): o helper recebe no `config.set`.
           if (!isMicrophoneChoice(value)) throw bad('microphone must be "auto", "builtin", "system" or "uid:<device UID>"',
             );
           patch.microphone = value;
         } else throw bad(`settings.set: unknown setting ${key}`);
+      }
+      if (Object.keys(shortcutPatch).length > 0) {
+        const current = (await deps.settings.load()).shortcuts;
+        const checked = checkShortcutsPatch(current, shortcutPatch);
+        if (!checked.ok) throw bad(`settings.set: ${checked.error}`);
+        // Inteiros, com os campos de antes iguais a eles: o das Notas e os das reuniões.
+        const shortcuts = { ...current, ...checked.patch };
+        patch.shortcuts = shortcuts;
+        patch.notesShortcut = shortcuts.notes;
+        if (patch.meetings) patch.meetings = { ...patch.meetings, shortcut: shortcuts.meeting, pauseShortcut: shortcuts.meetingPause };
+        else if ("meeting" in checked.patch || "meetingPause" in checked.patch) {
+          patch.meetings = { ...(await deps.settings.load()).meetings, shortcut: shortcuts.meeting, pauseShortcut: shortcuts.meetingPause };
+        }
       }
       const saved = await deps.settings.save(patch);
       deps.settingsChanged?.(saved);
@@ -703,6 +728,23 @@ export function uiCapabilities(deps: CapabilityDeps,
         if (e instanceof RemoteImageError) throw new CapabilityError(e.code, e.message);
         throw e;
       }
+    },
+    "shortcuts.record": async (args) => {
+      noArgs(args, "shortcuts.record");
+      if (!deps.shortcuts) throw new CapabilityError("E_NO_HELPER", "shortcuts.record needs the helper's keyboard tap");
+      try {
+        return { shortcut: await deps.shortcuts.record() };
+      } catch (e) {
+        const code = e instanceof Error ? e.message : String(e);
+        if (code === "cancelled" || code === "aborted") throw new CapabilityError("E_CANCELLED", "shortcuts.record: cancelled");
+        if (code === "invalid_shortcut") throw bad("shortcuts.record: that is not a shortcut (a plain letter, or ⇧ and a letter)");
+        throw new CapabilityError("E_NO_HELPER", `shortcuts.record: ${code}`);
+      }
+    },
+    "shortcuts.cancelRecord": (args) => {
+      noArgs(args, "shortcuts.cancelRecord");
+      deps.shortcuts?.cancel();
+      return {};
     },
     "audio.inputs": async (args) => {
       noArgs(args, "audio.inputs");

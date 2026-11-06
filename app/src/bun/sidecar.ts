@@ -501,7 +501,10 @@ export class Sidecar {
     return result as ResultMessage<C["type"]> & { ok: true };
   }
 
-  /** Igual ao `request`, mas devolve o `result` como veio, com `ok: false` incluído. */
+  /**
+   * Igual ao `request`, mas devolve o `result` como veio, com `ok: false` incluído. `timeoutMs`: para um comando que
+   * espera a pessoa (o `shortcut.record`, T5349); o padrão é o `requestTimeoutMs`.
+   */
   send<C extends Command>(
     command: C,
     signal?: AbortSignal,
@@ -571,6 +574,7 @@ export class Sidecar {
         ...this.ready,
         permissions: m.permissions,
         hotkeyActive: m.hotkeyActive,
+        hotkeyPriority: m.hotkeyPriority ?? this.ready.hotkeyPriority,
         llm: m.llm ?? this.ready.llm,
       };
     }

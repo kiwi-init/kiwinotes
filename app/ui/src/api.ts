@@ -70,6 +70,11 @@ export const api = {
     /** Outra janela (ou o engine) mudou as Configurações (1.8.0). */
     onChanged: (fn: (s: UiEvents["settings.changed"]) => void) => on("settings.changed", fn),
   },
+  /** "Aperte o atalho" (1.24.0, T5349): o helper lê as teclas e devolve o texto, sem salvar. */
+  shortcuts: {
+    record: () => invoke("shortcuts.record", {}),
+    cancelRecord: () => invoke("shortcuts.cancelRecord", {}),
+  },
   /** O microfone do ditado (T3230): as entradas que o helper vê, e o aviso quando uma entra ou sai. */
   audio: {
     inputs: () => invoke("audio.inputs", {}),
