@@ -21,6 +21,8 @@ export default {
       assets: "assets",
       // O helper Swift, compilado pelo preBuild (scripts/build-helper.ts). O app sobe ele de bin/kiwi-helper.
       ".helper": "bin",
+      // O ONNX Runtime da busca semântica, posto em app/.onnxruntime/ pelo preBuild (scripts/onnxruntime.ts, T6318).
+      ".onnxruntime": "bin/napi-v6/darwin/arm64",
     },
     watchIgnore: ["dist/**"],
     mac: {
@@ -33,7 +35,7 @@ export default {
     },
   },
   scripts: {
-    preBuild: "./scripts/build-helper.ts",
+    preBuild: "./scripts/pre-build.ts",
     // NSMicrophoneUsageDescription no Info.plist (o Electrobun não tem campo para isso).
     postBuild: "./scripts/info-plist.ts",
     postWrap: "./scripts/info-plist.ts",
