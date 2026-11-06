@@ -81,3 +81,23 @@ test("fechar antes da conferida cancela", async () => {
   await Bun.sleep(150);
   expect(changed).toEqual([]);
 });
+
+test("um save no meio da conferida continua valendo: a versão é a do save e o save seguinte não dá conflito", async () => {
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 300; i++) files[`N${i}.md`] = `nota ${i}`;
+  const { root, v } = await setup({ ...files, "A.md": "antes" });
+  for (let round = 0; round < 20; round++) {
+    for (const name of ["A.md", ...Object.keys(files).slice(0, 50)]) later(path.join(root, name));
+    const a = await v.get("A.md");
+    const running = v.reconcile();
+    const saved = await v.save("A.md", `rodada ${round}`, a.version);
+    await running;
+    expect(saved.saved).toBe(true);
+    if (!saved.saved) return;
+    expect([round, v.list().notes.find((n) => n.path === "A.md")?.version]).toEqual([round, saved.meta.version]);
+    expect([round, v.search(`rodada`).map((h) => h.path)]).toEqual([round, ["A.md"]]);
+    expect((await v.get("A.md")).content).toBe(`rodada ${round}`);
+    const next = await v.save("A.md", `depois ${round}`, saved.meta.version);
+    expect([round, next.saved]).toEqual([round, true]);
+  }
+});

@@ -366,6 +366,13 @@ export class Vault {
   private pendingPaths = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Cada nota escrita ou apagada pelo app ganha um número (T6412): o scan monta o mapa novo devagar e troca tudo no fim,
+   * e uma nota que mudou no meio dele fica com a versão de agora, não com a que o scan leu antes.
+   */
+  private seq = 0;
+  private touchedAt = new Map<string, number>();
+  private scans = 0;
   private readonly reconcileMs: number;
   private readonly listeners = new Set<(paths: string[]) => void>();
   private readonly otherListeners = new Set<(paths: string[]) => void>();
@@ -770,6 +777,7 @@ export class Vault {
     await rename(fromAbs, toAbs);
     const moved = this.notes.get(from);
     this.notes.delete(from);
+    this.touch(from);
     this.searchDirty = true;
     this.resolver = null;
     const content = moved?.content ?? (await readFile(toAbs, "utf8"));
@@ -889,6 +897,7 @@ export class Vault {
     if (!(await exists(abs))) throw new VaultError("E_NOT_FOUND", `no note ${p}`);
     await this.stage(p, abs, "note");
     this.notes.delete(p);
+    this.touch(p);
     this.searchDirty = true;
     this.resolver = null;
     this.emit([p]);
@@ -1229,6 +1238,7 @@ export class Vault {
     const old = this.notes.get(p);
     if (!old || old.aliases.join("\n") !== entry.aliases.join("\n")) this.resolver = null;
     this.notes.set(p, entry);
+    this.touch(p);
     this.searchDirty = true;
     for (let f = entry.meta.folder; f; f = parentOf(f)) this.folders.add(f);
     return entry;
@@ -1290,7 +1300,21 @@ export class Vault {
    * Relê o cofre inteiro. Monta o índice novo à parte e troca tudo de uma vez no fim: um `list()` ou uma busca no meio
    * nunca veem um cofre pela metade (revisão #3499). Um item que some no meio (o Obsidian renomeando) só fica de fora.
    */
+  private touch(p: string): void {
+    if (this.scans) this.touchedAt.set(p, ++this.seq);
+  }
+
   private async scan(o: { quiet?: boolean } = {}): Promise<void> {
+    this.scans++;
+    const started = ++this.seq;
+    try {
+      await this.scanFrom(started, o);
+    } finally {
+      if (--this.scans === 0) this.touchedAt.clear();
+    }
+  }
+
+  private async scanFrom(started: number, o: { quiet?: boolean }): Promise<void> {
     const progress = o.quiet ? undefined : this.onIndexProgress;
     const notes = new Map<string, Entry>();
     const folders = new Set<string>();
@@ -1358,6 +1382,12 @@ export class Vault {
         }),
       );
       if (this.closed) return;
+    }
+    for (const [p, at] of this.touchedAt) {
+      if (at < started) continue;
+      const now = this.notes.get(p);
+      if (now) notes.set(p, now);
+      else notes.delete(p);
     }
     this.searchIndex ??= new NoteSearchIndex();
     this.searchIndex.sync(notes.values());
@@ -1439,6 +1469,7 @@ export class Vault {
       }
       if (!s || !s.isFile()) {
         if (this.notes.delete(rel)) {
+          this.touch(rel);
           this.searchDirty = true;
           this.resolver = null;
           changed.push(rel);
