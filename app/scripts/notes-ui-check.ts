@@ -31,6 +31,8 @@ const shots = process.argv[2] ? resolve(process.argv[2]) : undefined;
 const appDir = resolve(import.meta.dir, "..");
 
 const vite = Bun.spawn(["bun", "x", "vite", "--port", String(PORT), "--strictPort", "--host", "127.0.0.1"], { cwd: appDir, stdout: "ignore", stderr: "inherit" });
+// Um erro fora de um `step` (a página que não abre) não deixa o Vite órfão segurando o stderr: no CI, o passo travaria.
+process.on("exit", () => vite.kill());
 for (let i = 0; ; i++) {
   try {
     if ((await fetch(URL)).ok) break;
@@ -65,21 +67,43 @@ const expectEq = (a: unknown, b: unknown) => {
 const title = () => page.inputValue(".kn-title");
 const content = (path: string) => page.evaluate((p) => (window as any).__kiwiNotesMock.notes.get(p)?.content as string, path);
 const settle = () => page.waitForTimeout(700); // o autosave espera 500 ms
+// A árvore fica num popover atrás do botão "Notas" do topo (T4363): abre antes de clicar nela.
+async function openTree() {
+  if ((await page.getAttribute(".kn-crumb-bt", "aria-expanded")) !== "true") await page.click(".kn-crumb-bt");
+  await page.waitForSelector(".kn-side", { state: "visible" });
+}
+// Os nomes da seção "Notas" da árvore (as pastas e as notas da raiz), sem os Recentes e as Fixadas de cima.
+const treeNames = () =>
+  page.evaluate(() => {
+    const head = [...document.querySelectorAll(".kn-side-head")].find((h) => h.textContent === "Notas");
+    const names: string[] = [];
+    for (let el = head?.nextElementSibling; el && !el.classList.contains("kn-side-head"); el = el.nextElementSibling) {
+      const name = el.querySelector(".kn-side-item:not(.kn-side-trash) .kn-side-name");
+      if (name) names.push(name.textContent ?? "");
+    }
+    return names;
+  });
+// Fora do cursor, o bloco é desenhado (T2983): o link de nota é um <a href="kiwi-note:…"> dentro do .cm-rendered.
+const noteLink = (text: string) => page.locator('.cm-rendered a[href^="kiwi-note"]', { hasText: text }).first();
 
 await page.goto(URL);
 await page.waitForSelector(".kn-title");
 
 await step("abre a Caixa de entrada e lista o vault", async () => {
   expectEq(await title(), "Caixa de entrada");
-  const side = await page.$$eval(".kn-side-item", (els) => els.map((e) => e.textContent));
-  expectEq(side, ["Diário", "Pessoas", "Projetos", "Reuniões", "Caixa de entrada"]);
+  expectEq(await treeNames(), ["Diário", "Pessoas", "Projetos", "Reuniões", "Caixa de entrada"]);
 });
 
 await step("clique num [[link]] abre a nota", async () => {
-  await page.click(".cm-wikilink >> text=Ana");
+  await noteLink("Ana").click();
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ana");
+  // Quem cita a nota fica no popover do "citada em N", na linha de baixo do título.
+  await page.click(".kn-meta-bt >> text=citada em");
+  await page.waitForSelector(".kn-back-pop .kn-back");
   const back = await page.$$eval(".kn-back .kn-link", (els) => els.map((e) => e.textContent));
   expectEq(back.sort(), ["2026-11-02 Planejamento", "Caixa de entrada", "Site novo"]);
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".kn-back-pop", { state: "detached" });
 });
 
 await step("⌘K acha por título e abre com Enter", async () => {
@@ -106,7 +130,7 @@ await step("⌘K acha por texto (notes.search), com trecho", async () => {
 if (shots) await page.screenshot({ path: `${shots}/notas-projeto.png` });
 
 await step("checkbox marca a tarefa no .md", async () => {
-  await page.click(".cm-line:has-text('Pedir o orçamento') .cm-task-box");
+  await page.click(".cm-rendered li:has-text('Pedir o orçamento') input[type=checkbox]");
   await settle();
   const c = await content("Projetos/Mudança de escritório.md");
   if (!c.includes("- [x] Pedir o orçamento da mudança")) throw new Error(c);
@@ -186,12 +210,15 @@ await step("edição de fora com edição pendente: aviso, e 'Manter a minha' gr
 
 await step("edição de fora sem nada pendente: a nota recarrega sozinha", async () => {
   await page.evaluate(() => (window as any).__kiwiNotesMock.editOutside("Projetos/Mudança do escritório.md", "Versão do Obsidian.\n"));
-  await page.waitForSelector(".cm-line >> text=Versão do Obsidian.");
+  await page.waitForSelector(".cm-content >> text=Versão do Obsidian.");
   if (await page.$(".kn-conflict")) throw new Error("mostrou conflito sem edição pendente");
 });
 
 // Revisão do T1317 (#1488): trocar de nota nunca descarta texto não gravado.
-const sideClick = (name: string) => page.locator(".kn-side-item", { hasText: name }).first().click();
+async function sideClick(name: string) {
+  await openTree();
+  await page.locator(".kn-side-item[data-kind=note]", { hasText: name }).first().click();
+}
 const editorText = () => page.$eval(".cm-content", (e) => e.textContent ?? "");
 
 await step("conflito na tela: clicar em outra nota não troca nem perde o texto; 'Manter a minha' grava", async () => {
@@ -417,7 +444,7 @@ await step("%%comentário%% some fora da linha do cursor e aparece apagado nela;
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
   // Muda "fora" com a nota aberta e sem nada pendente: ela recarrega sozinha.
   await page.evaluate((b) => (window as any).__kiwiNotesMock.editOutside("Pessoas/Ana.md", b), body);
-  await page.waitForSelector(".cm-line >> text=Fim.");
+  await page.waitForSelector(".cm-content >> text=Fim.");
   const shown = await editorText();
   for (const hidden of ["segredo", "bloco escondido", "em duas linhas"]) if (shown.includes(hidden)) throw new Error(`apareceu: ${hidden}`);
   if (!shown.includes("Texto visível") || !shown.includes("depois.")) throw new Error(shown);
@@ -452,7 +479,8 @@ await step("⌘K cria nota nova quando não há título igual", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ideia nova");
   await page.waitForTimeout(200);
-  await page.click(".kn-palette-create");
+  // Os comandos da paleta também usam .kn-palette-create, e "Ideia nova" acha o "Nova nota": clica no "Criar …".
+  await page.locator(".kn-palette-create", { hasText: "Criar “Ideia nova”" }).click();
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ideia nova");
   if (!(await content("Ideia nova.md") === "")) throw new Error("não criou");
 });
@@ -462,7 +490,7 @@ await step("clique num link para nota que não existe cria a nota", async () => 
   await page.keyboard.type("veja [[Nota fantasma]] depois");
   await settle();
   await page.click(".kn-title"); // tira o foco do editor: o link vira link
-  await page.locator(".cm-wikilink", { hasText: "Nota fantasma" }).click();
+  await noteLink("Nota fantasma").click();
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Nota fantasma");
 });
 

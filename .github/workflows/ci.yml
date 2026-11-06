@@ -54,14 +54,26 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/Library/Caches/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/bun.lock') }}
+          # O v2 entrou com o chrome-headless-shell (issue 224): o cache antigo só tinha o WebKit.
+          key: playwright-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/bun.lock') }}
 
-      # O WebKit do Playwright, para os testes headless da UI (scripts/cli-ui.test.ts).
-      - name: WebKit
-        run: bunx playwright-core install webkit
+      # O WebKit do Playwright, para os testes headless da UI (scripts/cli-ui.test.ts e o hub-tabs-ui-check), e o
+      # chrome-headless-shell do notes-ui-check.
+      - name: Browsers
+        run: bunx playwright-core install webkit chromium-headless-shell
 
       - name: bun test
         run: bun test
+
+      # Os roteiros de UI que o `bun test` não roda (issue 224): ficaram quebrando na `main` sem ninguém ver.
+      # A janela Notas no Vite de dev com o vault de mentira, e as abas do hub no build real com um headless --no-helper.
+      - name: notes-ui-check
+        timeout-minutes: 10
+        run: bun scripts/notes-ui-check.ts
+
+      - name: hub-tabs-ui-check
+        timeout-minutes: 10
+        run: bun scripts/hub-tabs-ui-check.ts
 
   typecheck:
     name: typecheck

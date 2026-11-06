@@ -1,22 +1,30 @@
 // T4535 / spec #4521: geometria e cor das abas no build real, com engine headless isolado.
-// Pegue kiwi lock bench. Uso: bun scripts/hub-tabs-ui-check.ts DATA OUT [--before]
+// Pegue kiwi lock bench. Uso: bun scripts/hub-tabs-ui-check.ts [DATA] [OUT] [--before]
 // --before mede a regressão antiga sem exigir o contrato novo. Nenhum app abre na tela.
+// Sem um headless de pé em DATA, o script sobe o seu (`cli start --no-helper`) e o derruba no fim (issue 224). Sem DATA
+// e OUT, os dois ficam em pastas novas do tmp. Roda no CI (ci.yml).
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { webkit, type Browser, type Page } from "playwright-core";
 import { request } from "./cli.ts";
 import { openWindow, type UiContext } from "./ui-page.ts";
 
-const data = resolve(process.argv[2] ?? "/tmp/kn-t4535");
-const out = resolve(process.argv[3] ?? "/tmp/t4535-tabs");
+const [dataArg, outArg] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const data = resolve(dataArg ?? mkdtempSync(join(tmpdir(), "kn-hub-tabs-")));
+const out = resolve(outArg ?? mkdtempSync(join(tmpdir(), "kn-hub-tabs-out-")));
 const before = process.argv.includes("--before");
 mkdirSync(out, { recursive: true });
+
+// O headless de outra pessoa (ou de outro roteiro) fica como está; o nosso cai no fim, passe ou falhe.
+const ownHeadless = !(await request(data, { cmd: "status" }, 2000));
 const ctx: UiContext = {
   data,
   send: async (msg) => {
     const r = await request(data, msg);
-    if (!r) throw new Error("Inicie a CLI headless com --no-helper e a mesma pasta DATA");
+    if (!r) throw new Error(`o headless em ${data} parou no meio do roteiro`);
     return r;
   },
   // O roteiro só muda a aba local, sem gravar notas ou configurações que exijam eventos externos.
@@ -45,6 +53,12 @@ const style = (p: Page, section: string) => p.locator(`.kn-tab[data-section=${se
     width: b.width, weight: s.fontWeight };
 });
 
+// Sobe por último, logo antes do try: um erro antes dele não deixa um headless órfão.
+if (ownHeadless) {
+  const cli = resolve(import.meta.dir, "cli.ts");
+  const up = spawnSync(process.execPath, [cli, "start", "--data", data, "--no-helper"], { encoding: "utf8" });
+  if (up.status !== 0) throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
+}
 try {
   for (const theme of ["light", "dark"] as const) {
     const videoDir = resolve(out, theme);
@@ -166,4 +180,6 @@ try {
 } finally {
   writeFileSync(resolve(out, "metrics.json"), JSON.stringify(metrics, null, 2));
   await browser.close();
+  if (ownHeadless) await request(data, { cmd: "stop" }, 10_000);
 }
+console.log(`prints e vídeos em ${out}`);
