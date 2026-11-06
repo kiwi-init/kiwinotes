@@ -489,7 +489,7 @@ const DAY_FIRST = rx(`(?<![\\p{L}])(dia\\s+)primeiro${NUM_END}(?!\\s+(?:lugar|de
 
 // A hora em PT: "às 3" (ou "às três", já em algarismo), com o que vem depois dizendo que é hora.
 const TIME_NEXT =
-  "e|de|da|do|em|no|na|pra|para|com|que|porque|mas|ou|então|amanhã|hoje|ontem|aí|lá|certo|tá|ok|beleza|combinado|também|se|né|mesmo|até|às|eu|você|ele|ela|nós|a|o|vou|vamos|chego|passo|sem|em ponto";
+  "e|de|da|do|em|no|na|pra|para|com|que|porque|mas|não|ou|então|amanhã|hoje|ontem|aí|lá|certo|tá|ok|beleza|combinado|também|se|né|mesmo|até|às|eu|você|ele|ela|nós|a|o|vou|vamos|chego|passo|sem|em ponto";
 const TIME_PT = rx(
   `(?<![\\p{L}\\p{N}\\p{Co}])(às|das|até\\s+às|até\\s+as|à)\\s+(\\d{1,2})(?:\\s+horas?)?(?:\\s+e\\s+(meia|\\d{1,2})(?:\\s+minutos?)?)?(?=$|[^\\p{L}\\p{N}\\s:,.]|[,.!?;:](?!\\d)|\\s+(?:${TIME_NEXT})${NUM_END}|\\s*$)`,
 );

@@ -1,7 +1,7 @@
 // O motor de regras: o caminho principal da limpeza (ADR 0002). Determinístico e
 // conservador. Só tira o que não tem dúvida; o ambíguo fica como foi dito.
 
-import { spokenNumbers } from "./numbers.ts";
+import { isNumberWord, spokenNumbers } from "./numbers.ts";
 import { WORD_END as E, WORD_START as B } from "./dictionary.ts";
 import type { Tone } from "./types.ts";
 
@@ -11,6 +11,80 @@ const words = (s: string) => s.split(/\s+/).filter(Boolean);
 const norm = (w: string) => w.toLocaleLowerCase("pt-BR").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 
 // ------------------------------------------------------------ comandos falados
+
+// T5300: comandos explícitos de pontuação. A mesma palavra como substantivo fica intacta.
+// Os decimais continuam sendo responsabilidade de numbers.ts; por isso esta etapa roda antes dele.
+const PUNCTUATION_COMMANDS: [string, string][] = [
+  ["ponto de interrogaç[ãa]o|question mark", "?"],
+  ["ponto de exclamaç[ãa]o|exclamation (?:mark|point)", "!"],
+  ["ponto e v[íi]rgula|semi[ -]?colon", ";"],
+  ["ponto final|full stop|period", "."],
+  ["dois pontos|colon", ":"],
+  ["abre aspas|open (?:quotes?|quotation marks?)", "“"],
+  ["fecha aspas|close (?:quotes?|quotation marks?)", "”"],
+  ["abre par[êe]nteses|open (?:parentheses|parenthesis)", "("],
+  ["fecha par[êe]nteses|close (?:parentheses|parenthesis)", ")"],
+  ["retic[êe]ncias|ellipsis", "…"],
+  ["v[íi]rgula|comma", ","],
+];
+const PUNCTUATION = re(
+  `${B}(?:${PUNCTUATION_COMMANDS.map(([pattern]) => pattern).join("|")})${E}`,
+);
+const punctuationOf = PUNCTUATION_COMMANDS.map(([pattern, sign]) => ({
+  re: re(`^(?:${pattern})$`, "iu"),
+  sign,
+}));
+const PUNCTUATION_NOUN_BEFORE = new Set(
+  (
+    "a o as os um uma umas uns de da do das dos na no nas nos pela pelo ao à essa esse esta este aquela aquele sua seu " +
+    "palavra termo sinal comando chamada chamado significa use usa usar usamos colocar coloque escrever escreva digitar digite " +
+    "faltam faltou tem tenho temos marcou marca fez ganhou somou " +
+    "the a an this that these those my your our word term command called means use using insert add type write " +
+    "last next each every scored adoro odeio prefiro aprendi estudei explicar explica discuss prefer learned love hate"
+  ).split(" "),
+);
+const PUNCTUATION_NOUN_AFTER = new Set(
+  "de do da dos das é são significa representam representa importantes principais of is are means represents".split(
+    " ",
+  ),
+);
+const edgeWord = (text: string, last = false) => {
+  const matches = text.match(/[\p{L}\p{N}]+/gu);
+  return (
+    (last ? matches?.at(-1) : matches?.[0])?.toLocaleLowerCase("pt-BR") ?? ""
+  );
+};
+const numericWord = (word: string) => /^\d+$/.test(word) || isNumberWord(word);
+
+/** Conservative command syntax; quotations and noun phrases are content, not an instruction to replace a word. */
+export function spokenPunctuation(text: string): string {
+  let changed = false;
+  const out = text.replace(PUNCTUATION, (command: string, at: number) => {
+    const before = text.slice(0, at),
+      after = text.slice(at + command.length);
+    const previous = edgeWord(before, true),
+      next = edgeWord(after);
+    const sign = punctuationOf.find((p) => p.re.test(command))!.sign;
+    if (
+      (sign === "," && numericWord(previous) && numericWord(next)) ||
+      PUNCTUATION_NOUN_BEFORE.has(previous) ||
+      PUNCTUATION_NOUN_AFTER.has(next) ||
+      ((sign === "(" || sign === "“") &&
+        /^(?:ele|ela|eles|elas|você|vocês|he|she|they|you)$/u.test(previous)) ||
+      (/["“‘'`]\s*$/u.test(before) && /^\s*["”’'`]/u.test(after)) ||
+      (!previous && next && sign !== "(" && sign !== "“")
+    )
+      return command;
+    changed = true;
+    return ` ${sign} `;
+  });
+  if (!changed) return text;
+  return out
+    .replace(/[ \t]+/g, " ")
+    .replace(/ +([,.;:!?…)”])/g, "$1")
+    .replace(/([("“])[ \t]+/g, "$1")
+    .trim();
+}
 
 // O ponto antes do comando fica: "pensando. Novo parágrafo." → "pensando.\n\n".
 const PARAGRAPH = re(`[\\s,;]*${B}(?:novo parágrafo|próximo parágrafo|new paragraph)${E}[\\s,.;:]*`);
@@ -538,7 +612,9 @@ export function applyRules(text: string, tone: Tone, code = tone === "literal" &
   // (T913, regressão do T684). Só os espaços repetidos saem.
   if (code) return asCommand(text.replace(/\s+/g, " "));
   const prose = tone !== "literal";
-  let out = spokenCommands(text, prose);
+  let out = spokenPunctuation(spokenCommands(text, prose));
+  // Ditado de um sinal sozinho também é útil: o tidy normal tiraria uma vírgula solta.
+  if (out !== text && /^[,.;:!?…“”()\s]+$/u.test(out)) return out;
   // Antes da autocorreção: ela troca número por número com o mesmo jeito ("às 3h, não, quer dizer, às 4h"), T1955.
   out = spokenNumbers(out);
   out = selfCorrections(out, prose);
@@ -559,6 +635,8 @@ export function applyRules(text: string, tone: Tone, code = tone === "literal" &
 export function finishRules(text: string, raw: string, tone: Tone): string {
   if (tone === "literal" && looksLikeCode(text)) return asCommand(text);
   let out = finalPunctuation(text, raw);
-  if (tone === "casual") out = casualEnding(out);
+  // Um ponto final pedido pela pessoa também vale no Slack.
+  const explicitStop = /(?:ponto final|full stop|period)[\s.!]*$/iu.test(raw) && spokenPunctuation(raw) !== raw;
+  if (tone === "casual" && !explicitStop) out = casualEnding(out);
   return out;
 }

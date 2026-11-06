@@ -5,7 +5,7 @@ import { compileDictionary, protect } from "./dictionary.ts";
 import { polish, vocabularyOf } from "./llm.ts";
 import { isNumberWord } from "./numbers.ts";
 import { systemMessage } from "./prompts.ts";
-import { applyRules, capitalize, finishRules, looksLikeCode, tidyPunctuation } from "./rules.ts";
+import { applyRules, capitalize, finishRules, looksLikeCode, spokenPunctuation, tidyPunctuation } from "./rules.ts";
 import { toneFor } from "./tone.ts";
 import type { CleanupInput, CleanupOptions, CleanupResult, DictionaryEntry, LlmMode, Tone } from "./types.ts";
 
@@ -46,7 +46,8 @@ function contentWords(s: string): string[] {
  * do que a pessoa disse, alguma regra errou (#241), e fica o texto cru só com maiúscula e ponto.
  */
 export function rulesDroppedTooMuch(raw: string, ruled: string): boolean {
-  const before = contentWords(raw);
+  // Só os comandos realmente consumidos saem da conta; substantivos continuam protegidos pela trava.
+  const before = contentWords(spokenPunctuation(raw));
   if (before.length < 3) return false;
   const after = new Set(contentWords(ruled));
   const lost = before.filter((w) => !after.has(w)).length;
