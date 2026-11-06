@@ -38,7 +38,7 @@ function setup(o: { enabled?: boolean; fail?: boolean; download?: boolean } = {}
     enabled: async () => enabled,
     fetch: async (url) => {
       fetched.push(url);
-      return fail ? new Response("down", { status: 503 }) : new Response(body);
+      return fail ? new Response("down", { status: 503 }) : new Response(new Uint8Array(body));
     },
     load: async (dir) => {
       loaded.push(dir);
