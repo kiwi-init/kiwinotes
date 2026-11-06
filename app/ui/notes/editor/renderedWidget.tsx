@@ -26,6 +26,7 @@ import { externalUrl, parseLinks } from "../links.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
 import { editorFocused, focusEditorNow, type LinkResolver, linksChanged } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
+import { COPIED_MS } from "./code-copy.ts";
 import { type Callout, parseCallout } from "./callouts.ts";
 import { footnoteJump, footnotesOf, footnoteText } from "./footnotes.ts";
 import {
@@ -273,6 +274,8 @@ export interface RenderedActions {
   onOpenUrl(url: string): void;
   /** Os anexos do vault, para as imagens (T2984). */
   attachments?: AttachmentSource;
+  /** O botão Copiar dos blocos de código (T6379); sem ele, o bloco fica sem o botão. */
+  copy?(text: string): Promise<unknown>;
 }
 
 interface BlockProps {
@@ -280,14 +283,41 @@ interface BlockProps {
   source: string;
   callbacks: Parameters<typeof RenderNode>[0]["callbacks"];
   attachments?: AttachmentSource;
+  copy?(text: string): Promise<unknown>;
   onShown(): void;
+}
+
+/** O Copiar no canto do bloco de código desenhado (T6379): aparece com o mouse em cima, e diz "Copiado" por um instante. */
+function CodeCopyButton({ text, copy }: { text: string; copy(text: string): Promise<unknown> }) {
+  const [state, setState] = useState<"done" | "failed" | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    const t = setTimeout(() => setState(null), COPIED_MS);
+    return () => clearTimeout(t);
+  }, [state]);
+  return (
+    <button
+      type="button"
+      className="kn-code-copy"
+      title="Copiar o código"
+      data-state={state ?? undefined}
+      // Nem o cursor nem o foco saem do lugar: só copia.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.stopPropagation();
+        void copy(text).then(() => setState("done"), () => setState("failed"));
+      }}
+    >
+      {state === "done" ? "Copiado" : state === "failed" ? "Não copiou" : "Copiar"}
+    </button>
+  );
 }
 
 /**
  * O callout do Obsidian (T6383): o cabeçalho é nosso (o ícone, o título em PT ou o da nota, e a seta quando tem `+`/`-`),
  * e o corpo é desenhado pela lib como o resto. Recolher muda só a vista, como no Obsidian: o `.md` não muda.
  */
-function CalloutBox({ callout, markdown, callbacks, attachments, onShown }: Omit<BlockProps, "source"> & { callout: Callout }) {
+function CalloutBox({ callout, markdown, callbacks, attachments, copy, onShown }: Omit<BlockProps, "source"> & { callout: Callout }) {
   const [open, setOpen] = useState(callout.fold !== "-");
   const body = parseCallout(markdown)?.body ?? callout.body;
   useLayoutEffect(onShown, [open]);
@@ -310,20 +340,20 @@ function CalloutBox({ callout, markdown, callbacks, attachments, onShown }: Omit
       </div>
       {open && body.trim() ? (
         <div className="kn-callout-body">
-          <Block markdown={body} source={callout.body} callbacks={callbacks} attachments={attachments} onShown={onShown} />
+          <Block markdown={body} source={callout.body} callbacks={callbacks} attachments={attachments} copy={copy} onShown={onShown} />
         </div>
       ) : null}
     </div>
   );
 }
 
-function Block({ markdown, source, callbacks, attachments, onShown }: BlockProps) {
+function Block({ markdown, source, callbacks, attachments, copy, onShown }: BlockProps) {
   const callout = parseCallout(source);
-  if (callout) return <CalloutBox callout={callout} markdown={markdown} callbacks={callbacks} attachments={attachments} onShown={onShown} />;
-  return <PlainBlock markdown={markdown} source={source} callbacks={callbacks} attachments={attachments} onShown={onShown} />;
+  if (callout) return <CalloutBox callout={callout} markdown={markdown} callbacks={callbacks} attachments={attachments} copy={copy} onShown={onShown} />;
+  return <PlainBlock markdown={markdown} source={source} callbacks={callbacks} attachments={attachments} copy={copy} onShown={onShown} />;
 }
 
-function PlainBlock({ markdown, source, callbacks, attachments, onShown }: BlockProps) {
+function PlainBlock({ markdown, source, callbacks, attachments, copy, onShown }: BlockProps) {
   const [, parsedNow] = useState(0);
   const current = parsed.get(markdown) ?? null;
   useLayoutEffect(() => {
@@ -356,6 +386,14 @@ function PlainBlock({ markdown, source, callbacks, attachments, onShown }: Block
     <div ref={box} className={ENRM_TEXT_CLASS} style={{ display: "flex", flexDirection: "column" }} onLoadCapture={onShown} onErrorCapture={onShown}>
       {(ast.children ?? []).map((child, i) => {
         const code = <RenderNode key={`${child.type}-${i}`} node={child} style={NORMAL} styles={STYLES} callbacks={callbacks} capabilities={CAPABILITIES} />;
+        if (child.type === "CodeBlock" && !isMermaid(child) && copy) {
+          return (
+            <div key={`code-${i}`} className="kn-code">
+              {code}
+              <CodeCopyButton text={textOf(child).replace(/\n$/, "")} copy={copy} />
+            </div>
+          );
+        }
         if (!isMermaid(child)) return code;
         return <MermaidBlock key={`mermaid-${i}`} source={textOf(child)} code={code} onLink={(url) => callbacks.onLinkPress?.({ url })} onShown={onShown} />;
       })}
@@ -467,7 +505,7 @@ class RenderedWidget extends WidgetType {
         view.dispatch({ changes: { from: pos, to: pos + 1, insert: checked ? " " : "x" } });
       },
     };
-    root.render(<Block markdown={this.markdown} source={this.source} callbacks={callbacks} attachments={this.actions.attachments} onShown={() => view.requestMeasure()} />);
+    root.render(<Block markdown={this.markdown} source={this.source} callbacks={callbacks} attachments={this.actions.attachments} copy={this.actions.copy} onShown={() => view.requestMeasure()} />);
   }
 
   /** Clique fora de link e de caixa: o cursor vai para o ponto do `.md` onde a pessoa clicou, e o bloco vira texto. */
@@ -819,6 +857,26 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered": { cursor: "text", padding: "0", minWidth: "0", overflowWrap: "anywhere" },
   // T5299 (#212): o bloco de código não quebra; ele rola dentro dele, nunca a nota.
   ".cm-rendered pre": { maxWidth: "100%", overflowX: "auto", overflowWrap: "normal" },
+  // O Copiar do bloco de código (T6379): no canto, fora do que rola, e só com o mouse em cima (ou depois de copiar).
+  ".kn-code": { position: "relative", minWidth: "0" },
+  ".kn-code-copy": {
+    position: "absolute",
+    top: "6px",
+    right: "6px",
+    border: "0",
+    borderRadius: "6px",
+    padding: "0 8px",
+    background: "var(--surface)",
+    color: "var(--text-3)",
+    font: "500 11px/1.9 var(--font)",
+    cursor: "pointer",
+    opacity: "0",
+    transition: "opacity 120ms",
+  },
+  ".kn-code:hover .kn-code-copy, .kn-code-copy:focus-visible, .kn-code-copy[data-state]": { opacity: "1" },
+  ".kn-code-copy:hover": { background: "var(--surface-hover)", color: "var(--text)" },
+  ".kn-code-copy[data-state=done]": { color: "var(--accent-text)" },
+  ".kn-code-copy[data-state=failed]": { color: "var(--danger)" },
   ".cm-rendered-raw": { whiteSpace: "pre-wrap" },
   ".cm-rendered a": { cursor: "pointer" },
   ".cm-rendered a[href^='kiwi-tag:']": { borderRadius: "4px", padding: "0 3px" },

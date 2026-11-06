@@ -28,6 +28,9 @@ import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } fr
 import { slashInsert, slashMatches, slashTrigger, readSlashUsage, recordSlashUse } from "./slash.ts";
 import { insertFootnote } from "./footnotes.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
+import { exitEmptyItem, hangingIndent } from "./lists.ts";
+import { pasteAsMarkdown } from "./paste-html.ts";
+import { codeCopy } from "./code-copy.ts";
 import { searchPanelOpen } from "@codemirror/search";
 import { searchAndFold, searchablePreviews } from "./search-fold.ts";
 import { highlightSyntax, HIGHLIGHT_BACKGROUND } from "./highlight.ts";
@@ -64,6 +67,8 @@ export interface EditorOptions {
   attachments?: AttachmentSource;
   /** Um aviso curto para a pessoa (o anexo que não entrou). */
   onError?(text: string): void;
+  /** O botão Copiar dos blocos de código (T6379): o `clipboard.write` do app. Sem ele, o botão não aparece. */
+  copy?(text: string): Promise<unknown>;
 }
 
 // ---------------------------------------------------------------- [[link]] no parser
@@ -353,6 +358,7 @@ export class LinkCache implements LinkResolver {
 }
 
 export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "resolve">, links: LinkResolver): Extension[] {
+  let pastePlain = false;
   return [
     history(),
     spellingAttributes,
@@ -373,6 +379,11 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     ]),
     ...(opts.attachments ? [attachmentInput(opts.attachments, (t) => opts.onError?.(t))] : []),
     autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets), headingCompletion((target) => opts.headingContent?.(target) ?? Promise.resolve(null))], icons: false, closeOnBlur: true }),
+    // Enter no item vazio sai da lista (T6379): antes do Enter do lang-markdown, que faria a lista "solta"; depois do
+    // autocomplete (o Enter que aceita a sugestão vem primeiro).
+    Prec.highest(keymap.of([{ key: "Enter", run: exitEmptyItem }])),
+    hangingIndent,
+    ...(opts.copy ? [codeCopy(opts.copy)] : []),
     formatBar,
     tableKeys,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
@@ -383,14 +394,29 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
       if (u.docChanged) opts.onChange(u.state.doc.toString());
     }),
     EditorView.domEventHandlers({
-      // Colar um link com texto selecionado vira [texto](link).
+      // O ⇧ no ⌘V: cola o texto puro, sem converter o HTML (como o "Colar sem formatação" do menu).
+      keydown(e) {
+        pastePlain = e.shiftKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v";
+        return false;
+      },
       paste(e, view) {
+        const plain = pastePlain;
+        pastePlain = false;
         const sel = view.state.selection.main;
-        if (sel.empty || view.state.selection.ranges.length > 1) return false;
-        const link = linkFromPaste(view.state.sliceDoc(sel.from, sel.to), e.clipboardData?.getData("text/plain") ?? "");
-        if (!link) return false;
+        // Colar um link com texto selecionado vira [texto](link).
+        if (!sel.empty && view.state.selection.ranges.length === 1) {
+          const link = linkFromPaste(view.state.sliceDoc(sel.from, sel.to), e.clipboardData?.getData("text/plain") ?? "");
+          if (link) {
+            e.preventDefault();
+            view.dispatch(view.state.replaceSelection(link), { userEvent: "input.paste", scrollIntoView: true });
+            return true;
+          }
+        }
+        // De um site ou e-mail (T6379): o HTML vira Markdown. Sem nada a ganhar, o colar de sempre (o texto puro).
+        const md = pasteAsMarkdown(view.state, e.clipboardData, plain);
+        if (md === null) return false;
         e.preventDefault();
-        view.dispatch(view.state.replaceSelection(link), { userEvent: "input.paste", scrollIntoView: true });
+        view.dispatch(view.state.replaceSelection(md), { userEvent: "input.paste", scrollIntoView: true });
         return true;
       },
       mousedown(e, view) {

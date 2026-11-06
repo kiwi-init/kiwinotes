@@ -506,7 +506,7 @@ function buildTags(view: EditorView): DecorationSet {
   return Decoration.set(out, true);
 }
 
-function inFrontmatter(state: EditorState, pos: number): boolean {
+export function inFrontmatter(state: EditorState, pos: number): boolean {
   if (!state.doc.sliceString(0, 4).startsWith("---")) return false;
   const m = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(state.doc.sliceString(0, Math.min(state.doc.length, 20_000)));
   return !!m && pos < m[0].length;
