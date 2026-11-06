@@ -12,6 +12,31 @@ final class RecordingJournalTests: XCTestCase {
     }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: directory) }
 
+    func testUnavailableStorageWarnsWithoutThrowingAndNextRecordingRetries() throws {
+        try Data("blocked directory".utf8).write(to: directory)
+        let journal = RecordingJournal(directory: directory)
+        var warnings: [String] = []
+        journal.onError = { warnings.append($0) }
+        XCTAssertNil(journal.beginIfAvailable())
+        XCTAssertEqual(warnings, ["recording_storage"])
+        journal.append([0.25], at: 0)
+        XCTAssertNil(try journal.finish())
+        XCTAssertEqual(try String(contentsOf: directory), "blocked directory")
+        try FileManager.default.removeItem(at: directory)
+        let ref = try XCTUnwrap(journal.beginIfAvailable())
+        journal.append([0.25], at: 0)
+        XCTAssertEqual(try journal.finish(), ref)
+        XCTAssertEqual(warnings.count, 1)
+    }
+    func testBestEffortBeginNeverOverwritesAnActiveRecovery() throws {
+        let journal = RecordingJournal(directory: directory)
+        let ref = try journal.begin()
+        journal.append([0.25], at: 0)
+        XCTAssertNil(journal.beginIfAvailable())
+        XCTAssertEqual(try journal.finish(), ref)
+        XCTAssertEqual(try RecordingJournal.repair(journal.audioURL(ref.id)), 1)
+    }
+
     func testCheckpointsAreReadableWhileRecordingWithoutFinish() throws {
         let journal = RecordingJournal(directory: directory), metadata = try journal.begin()
         let file = try journal.audioURL(metadata.id)

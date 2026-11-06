@@ -371,7 +371,7 @@ export class Dictation {
     } catch (e) {
       this.log(`history add failed: ${String(e)}`);
     }
-    await this.settleRecovery(t.recovery,pasted,"insert_failed");
+    await this.settleRecovery(t.recovery,pasted || !!entry,"insert_failed");
     this.log(
       `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? `pasted${insert.ok && insert.data.reason ? ` (${insert.data.reason})` : ""}` : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}${insert.ok && insert.data.focusVia ? ` · focus ${insert.data.focusVia}` : ""}`,
     );
@@ -440,7 +440,7 @@ export class Dictation {
       await this.overlay("error", NOTE_FAILED);
     }
     const appMs = Math.round(performance.now() - started);
-    await this.settleRecovery(t.recovery,!!note,"note_failed");
+    await this.settleRecovery(t.recovery,!!note || !!entry,"note_failed");
     this.log(`quick note: stt ${t.latencyMs} ms + app ${appMs} ms · ${note ? `${note.created ? "created" : "already in"} ${note.note.path}` : "failed"}`);
     return this.done({ ...base, entry, text, tone: result.tone, pasted: false, appMs, note });
   }

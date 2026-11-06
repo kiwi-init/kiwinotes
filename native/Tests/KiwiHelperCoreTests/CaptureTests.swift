@@ -129,6 +129,20 @@ private final class Rig {
 final class CaptureTests: XCTestCase {
     /// T3229 (#3202): the mic is open only while recording. The warm-up prepares and never starts the device, and
     /// every way a recording ends leaves no engine running: stop, a lost mic, an input change while idle.
+    func testUnavailableJournalStillCapturesInMemoryWithFakeEngine() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("kiwi-no-spool-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data("blocked".utf8).write(to: directory)
+        let journal = RecordingJournal(directory: directory), rig = Rig()
+        XCTAssertNil(journal.beginIfAvailable())
+        try rig.capture.start()
+        rig.engine.feed(rate: 16_000, seconds: 0.2, clock: rig.clock)
+        let samples = rig.capture.stop()
+        XCTAssertEqual(samples.count, 3200)
+        XCTAssertGreaterThan(samples.map { abs($0) }.max() ?? 0, 0.1)
+        XCTAssertFalse(rig.capture.isRecording)
+    }
+
     func testNoInputIsOpenOutsideARecording() throws {
         let rig = Rig()
         let running = { rig.engines.filter(\.started).count }

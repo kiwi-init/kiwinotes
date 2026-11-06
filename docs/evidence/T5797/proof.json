@@ -1,0 +1,60 @@
+{
+  "blockedDirectory": {
+    "before": {
+      "ok": false,
+      "code": "E_HELPER",
+      "message": "debug.transcribe: recording_storage"
+    },
+    "after": {
+      "requestAccepted": true,
+      "skipped": "empty",
+      "textEmpty": true
+    },
+    "warningLogged": true
+  },
+  "fakeInsert": {
+    "scenario": "fake insert_failed after History saved",
+    "failedInsert": true,
+    "historyText": "Este texto já está seguro no Histórico.",
+    "retryAvailable": false,
+    "remainingRecoveryFiles": 0
+  },
+  "light": {
+    "ok": true,
+    "steps": 7,
+    "problems": [],
+    "blocked": [],
+    "history": {
+      "entries": [
+        {
+          "raw": "Este texto já está seguro no Histórico.",
+          "text": "Este texto já está seguro no Histórico.",
+          "tone": "default",
+          "lang": "pt",
+          "durationMs": 20,
+          "id": "2026-11-06T13:20:30.939Z-recovery-a6567531-2758-462f-af39-029138117459",
+          "at": "2026-11-06T13:20:30.939Z"
+        }
+      ]
+    }
+  },
+  "dark": {
+    "ok": true,
+    "steps": 7,
+    "problems": [],
+    "blocked": [],
+    "history": {
+      "entries": [
+        {
+          "raw": "Este texto já está seguro no Histórico.",
+          "text": "Este texto já está seguro no Histórico.",
+          "tone": "default",
+          "lang": "pt",
+          "durationMs": 20,
+          "id": "2026-11-06T13:20:30.939Z-recovery-a6567531-2758-462f-af39-029138117459",
+          "at": "2026-11-06T13:20:30.939Z"
+        }
+      ]
+    }
+  }
+}
