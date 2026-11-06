@@ -17,6 +17,9 @@ public struct ShortcutRecorder {
 
     public var finishAfter: TimeInterval
     public var typed: (_ keyCode: Int64, _ withCommand: Bool) -> Character?
+    /// A named key on its own (⌫, ↩…) is a shortcut too: recording the cancel of the dictation (L5). Esc first still
+    /// cancels the recording; "Padrão" brings the Esc back.
+    public var bareKey = false
 
     private var taps: [HotkeyKey] = []
     private var heldModifier: (key: HotkeyKey, clean: Bool)?
@@ -92,7 +95,7 @@ public struct ShortcutRecorder {
         if broken {
             outcome = .invalid
         } else if !steps.isEmpty {
-            outcome = Shortcut(steps.joined(separator: " ")).map { .recorded($0.spec) } ?? .invalid
+            outcome = Shortcut(steps.joined(separator: " "), bareKey: bareKey).map { .recorded($0.spec) } ?? .invalid
         } else if taps.count == 1 {
             outcome = .recorded(Shortcut.key(taps[0]).spec)
         } else if taps.count == 2 {

@@ -114,10 +114,10 @@ const capabilities = uiCapabilities({
   audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
   // "Aperte o atalho" das Configurações (T5349): o tap do helper lê as teclas.
   shortcuts: {
-    record: async () => {
+    record: async (bareKey?: boolean) => {
       const s = session.get();
       if (!s) throw new Error("sidecar_closed");
-      return s.recordShortcut();
+      return s.recordShortcut(bareKey);
     },
     cancel: () => session.get()?.cancelShortcutRecording(),
   },

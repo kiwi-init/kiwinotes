@@ -72,7 +72,8 @@ export const api = {
   },
   /** "Aperte o atalho" (1.24.0, T5349): o helper lê as teclas e devolve o texto, sem salvar. */
   shortcuts: {
-    record: () => invoke("shortcuts.record", {}),
+    /** `bareKey`: o cancelar do ditado, onde ⌫ ou ↩ sozinhos valem (1.27.0). */
+    record: (bareKey?: boolean) => invoke("shortcuts.record", bareKey ? { bareKey } : {}),
     cancelRecord: () => invoke("shortcuts.cancelRecord", {}),
   },
   /** O microfone do ditado (T3230): as entradas que o helper vê, e o aviso quando uma entra ou sai. */

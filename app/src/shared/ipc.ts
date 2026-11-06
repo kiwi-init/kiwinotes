@@ -46,7 +46,8 @@ export type OverlayState = "hidden" | "listening" | "processing" | "done" | "err
 
 /** Quem começou ou terminou a gravação. `config`: o atalho mudou no meio. */
 /** `overlay`: o ✕ (cancelar) ou o ✓ (terminar) da pílula. */
-export type RecordReason = "hotkey" | "command" | "config" | "overlay" | "debug";
+/** `escape`: o atalho de cancelar (o Esc) durante a gravação (L5, T5458). */
+export type RecordReason = "hotkey" | "command" | "config" | "overlay" | "debug" | "escape";
 
 /** Como a gravação terminou: soltou a tecla, bateu de novo no toggle, ou pelo app. */
 export type StopMode = "ptt" | "toggle" | "command" | "debug";
@@ -100,7 +101,7 @@ export type Command =
        * "control+option+r", "control+k r r"), ou null para desligar. Só os dados mudam. Substitui o `hotkey`, o
        * `notesShortcut`, o `meetingShortcut` e o `meetingPauseShortcut`, que ainda valem.
        */
-      shortcuts?: Partial<Record<"dictation" | "notes" | "meeting" | "meetingPause", string | null>>;
+      shortcuts?: Partial<Record<"dictation" | "cancel" | "notes" | "meeting" | "meetingPause", string | null>>;
       /** O pop-up "Gravar esta reunião?" (padrão: ligado). Desligado, o atalho ainda grava. */
       meetingSuggest?: boolean;
       /** Os apps que contam como reunião (substitui a lista padrão: Teams, Zoom, Webex, Slack, FaceTime e os navegadores). */
@@ -152,7 +153,8 @@ export type Command =
    * "Aperte o atalho" das Configurações (T5349): o tap do helper lê as teclas (o WebView não vê o Fn nem o lado dos
    * modificadores) e responde quando a pessoa termina. Enquanto isso, nenhum atalho dispara.
    */
-  | { type: "shortcut.record" }
+  /** `bareKey`: gravando o cancelar (L5), onde ⌫ ou ↩ sozinhos também valem. */
+  | { type: "shortcut.record"; bareKey?: boolean }
   | { type: "shortcut.cancel" }
   /**
    * Só com `KIWI_DEBUG=1` no sidecar (sem isso, `unknown_type`), e só com áudio sintético (`say`): o arquivo faz o

@@ -142,6 +142,15 @@ describe("Dictation", () => {
     expect(added.map((e) => e.app?.name)).toEqual(["Mail"]);
   });
 
+  test("L5 (T5458): Esc during a recording cancels it, and nothing is pasted nor kept", async () => {
+    const { sidecar, d, added, inserted } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.mail", name: "Mail" } });
+    sidecar.emit({ type: "record.cancelled", reason: "escape" });
+    await d.idle();
+    expect(inserted()).toEqual([]);
+    expect(added).toEqual([]);
+  });
+
   test("onDone also fires for an empty transcript and for transcript.error", async () => {
     const { sidecar, d } = setup();
     const outcomes: unknown[] = [];

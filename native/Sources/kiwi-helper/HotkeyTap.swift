@@ -45,6 +45,12 @@ final class HotkeyTap {
         }
     }
 
+    /// Whether a shortcut is armed right now (the cancel of the dictation only while recording, L5).
+    var isActive: (String) -> Bool {
+        get { engine.isActive }
+        set { engine.isActive = newValue }
+    }
+
     var timings: (doubleTap: TimeInterval, tap: TimeInterval) {
         get { (engine.doubleTapWindow, engine.tapThreshold) }
         set { engine.doubleTapWindow = newValue.doubleTap; engine.tapThreshold = newValue.tap }
@@ -93,8 +99,10 @@ final class HotkeyTap {
 
     /// Starts "aperte o atalho": until it ends, the keys go to the recorder, no shortcut fires, and (with priority) no
     /// keystroke reaches the app in front. Ends in `.recorded`.
-    func record() {
+    /// `bareKey`: a named key alone (⌫, ↩) is a shortcut too, for the cancel of the dictation (L5).
+    func record(bareKey: Bool = false) {
         recorder = ShortcutRecorder(typed: { code, command in KeyboardLayout.character(forKeyCode: code, withCommand: command) })
+        recorder?.bareKey = bareKey
         engine.setBindings(engine.bindings)
         schedule()
     }
