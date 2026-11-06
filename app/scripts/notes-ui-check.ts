@@ -351,7 +351,9 @@ await step("rascunho: edição que não gravou volta ao reabrir, e 'Recuperar' g
   if ((await editorText()).includes("RASCUNHO")) throw new Error("o editor já abriu com o rascunho, sem perguntar");
   await page.click(".kn-draft >> text=Recuperar");
   await saved("Pessoas/Ana.md", (c) => c.includes("RASCUNHO QUE NÃO GRAVOU"));
-  if (!(await editorText()).includes("RASCUNHO QUE NÃO GRAVOU")) throw new Error("o rascunho não voltou ao editor");
+  // O "Recuperar" grava no clique, e o editor recebe o texto no render seguinte do React (o bloco desenhado, um pouco
+  // depois): no runner lento do CI, o arquivo chegava antes da tela (run 42313405625).
+  await until(editorText, (t) => t.includes("RASCUNHO QUE NÃO GRAVOU"), () => "o rascunho não voltou ao editor");
   await until(draftKeys, (k) => k.length === 0, (k) => `o rascunho ficou: ${k.join(", ")}`);
 });
 
