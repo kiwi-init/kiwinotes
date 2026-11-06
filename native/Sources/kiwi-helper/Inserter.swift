@@ -5,7 +5,7 @@ import KiwiHelperCore
 
 // Partes portadas de VoiceInk/VoiceInk/Infrastructure/SystemIntegration/Paste/CursorPaster.swift @ 19546d2 (GPL-3.0).
 // Mudanças: só o caminho do ⌘V por CGEvent (sem AppleScript, digitação direta ou remota, SmartPunctuation e
-// AutoLearn); os tempos (`prePasteDelay`, `restoreDelay`) e a sequência ⌘↓ V↓ V↑ ⌘↑ com a fonte privada vêm
+// AutoLearn); o `prePasteDelay`, os 2 s máximos da devolução do clipboard e a sequência ⌘↓ V↓ V↑ ⌘↑ com a fonte privada vêm
 // de lá. A tecla do V segue o layout atual com ⌘ apertado, e não a física fixa. A decisão por foco, o secure
 // input e o `changeCount` como dono do clipboard são nossos.
 
@@ -16,10 +16,9 @@ final class Inserter {
     /// Between putting the text on the clipboard and the ⌘V (VoiceInk's `prePasteDelay`): the focus and the
     /// pasteboard settle first, so the target app reads our text and not the previous content.
     static let prePasteDelay: TimeInterval = 0.2
-    /// How long the text stays on the clipboard after ⌘V before the person's content goes back. Electron apps
-    /// (Teams, Slack) read the pasteboard asynchronously, sometimes well after the key; 2 s is VoiceInk's default.
-    /// A copy made in the meantime is never overwritten (`changeCount`).
-    static let restoreDelay: TimeInterval = 2.0
+    /// When the person's content goes back after ⌘V (L11, T5834): as soon as the app in front has read the text
+    /// (`RestoreSchedule`, with a pasteboard promise), and at most 2 s later, VoiceInk's old fixed time. A copy made
+    /// in the meantime is never overwritten (`changeCount`).
     /// Between the four key events, so apps that track the modifier state see ⌘ down before V.
     static let keyEventGap: useconds_t = 10_000
 
@@ -41,7 +40,7 @@ final class Inserter {
     private var busy = false
 
     /// Main thread. One insert at a time, in order: a second dictation waits for the first one's ⌘V (not for its
-    /// restore). `completion` runs once the paste is posted; the clipboard goes back `restoreDelay` later.
+    /// restore). `completion` runs once the paste is posted; the clipboard goes back once the app read it (L11).
     /// `autoSpace`: a space in front when the text lands right after other text (off for the literal tone, T733).
     func insert(_ text: String, restoreClipboard: Bool, autoSpace: Bool = true, completion: @escaping (Outcome) -> Void) {
         jobs.append((text, restoreClipboard, autoSpace, completion))
@@ -85,19 +84,52 @@ final class Inserter {
         let spaced = autoSpace && LeadingSpace.mayRead(plan: plan, role: focused.info?.role)
             && LeadingSpace.needed(before: focused.element.flatMap(Self.textBeforeCaret), text: text)
         let restore = restoreClipboard && reason == nil
-        let ours = keeper.put(spaced ? " " + text : text, on: pasteboard, keepOriginal: restore)
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys, keeper] in
+        let timer = RestoreTimer { [keeper] ours in keeper.restore(on: pasteboard, ifStill: ours) }
+        let ours = keeper.put(spaced ? " " + text : text, on: pasteboard, keepOriginal: restore,
+                              onRead: restore ? { timer.read() } : nil)
+        timer.ours = ours
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.prePasteDelay) { [keys] in
             keys.async {
                 Self.postCommandV()
                 DispatchQueue.main.async {
                     completion(Outcome(pasted: true, restored: restore, reason: reason, app: app?.bundleIdentifier,
                                        spaced: spaced, focusVia: focused.via))
-                    guard restore else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.restoreDelay) {
-                        keeper.restore(on: pasteboard, ifStill: ours)
-                    }
+                    if restore { timer.pasted() }
                 }
             }
+        }
+    }
+
+    /// One restore (L11): the ⌘V and the reads come in, and the restore runs once, at `RestoreSchedule.restoreAt`.
+    /// Main thread only.
+    private final class RestoreTimer {
+        var ours = 0
+        private var schedule = RestoreSchedule()
+        private var work: DispatchWorkItem?
+        private var done = false
+        private let run: (Int) -> Void
+
+        init(run: @escaping (Int) -> Void) { self.run = run }
+
+        func pasted() {
+            schedule.pasted(at: ProcessInfo.processInfo.systemUptime)
+            arm()
+        }
+
+        func read() {
+            if schedule.read(at: ProcessInfo.processInfo.systemUptime) { arm() }
+        }
+
+        private func arm() {
+            guard !done, let at = schedule.restoreAt else { return }
+            work?.cancel()
+            let item = DispatchWorkItem { [self] in
+                guard !done else { return }
+                done = true
+                run(ours)
+            }
+            work = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(0, at - ProcessInfo.processInfo.systemUptime), execute: item)
         }
     }
 
