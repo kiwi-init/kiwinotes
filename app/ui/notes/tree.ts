@@ -172,6 +172,10 @@ export function filterTreeToPaths(tree: TreeNode[], paths: ReadonlySet<string>, 
   const open = new Set<string>();
   const walk = (nodes: TreeNode[]): TreeNode[] =>
     nodes.flatMap((n): TreeNode[] => {
+      if (n.kind === "note" && fileQuery) {
+        const words = fold(fileQuery).split(/\s+/).filter(Boolean);
+        if (words.every(w => fold(n.name).includes(w)) || subsequence(fileQuery, n.name)) return [n];
+      }
       if (n.kind === "file" && fileQuery) {
         const name = n.ext ? `${n.name}.${n.ext}` : n.name;
         if (fold(fileQuery).split(/\s+/).every(w => fold(name).includes(w)) || subsequence(fileQuery, name)) return [n];

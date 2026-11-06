@@ -11,6 +11,22 @@ async function vault(files:Record<string,string>,watch=false) {
   const v=new Vault({root,watch,debounceMs:10,trash:async()=>{}});opened.push(v);await v.open();return{v,root};
 }
 const paths=(v:Vault,q:string)=>v.search(q).map(h=>h.path);
+test("search returns more than 100 matching notes when requested", async () => {
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 101; i++) files[`note${i}.md`] = "needle in content";
+  const { v } = await vault(files);
+  expect(v.search("needle", 101)).toHaveLength(101);
+});
+
+test("literal substrings, phrases and punctuation are preserved alongside BM25", async () => {
+  const { v } = await vault({ "A.md": "programa C++", "B.md": "gramado C language" });
+  expect(paths(v, '"gram"').sort()).toEqual(["A.md", "B.md"]);
+  expect(paths(v, "gram").sort()).toEqual(["A.md", "B.md"]);
+  expect(paths(v, "C++")).toEqual(["A.md"]);
+  expect(paths(v, "programa++")).toEqual([]);
+  expect(paths(v, "gram language")).toEqual(["B.md"]);
+});
+
 test("stemmed lexical search, prefixes and all existing literal filters",async()=>{
   const {v}=await vault({'P/A.md':'#projeto Organização das reuniões. Decidimos o\norçamento.','B.md':'#outro Organizando as reuniões. rascunho'});
   expect(paths(v,'organizar')).toEqual(expect.arrayContaining(['P/A.md','B.md']));

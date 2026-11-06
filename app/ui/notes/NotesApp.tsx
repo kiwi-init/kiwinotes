@@ -998,7 +998,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     setQueryPaths(null);
     let live = true;
     const t = setTimeout(() => {
-      api.search(query, 100).then(
+      api.search(query, Math.min(100_000, Math.max(100, listing?.notes.length ?? 0))).then(
         (hits) => live && setQueryPaths(new Set(hits.map((h) => h.path))),
         () => live && setQueryPaths(new Set()),
       );
