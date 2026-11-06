@@ -17,10 +17,9 @@ export default defineConfig({
   // O Kiwi-cat do Rive na intro (T3154): sem o `ui/intro/kiwi-cat.riv`, o runtime (3 MB) nem entra no pack.
   define: { __KIWI_RIVE_CAT__: JSON.stringify(existsSync(resolve(__dirname, "ui/intro/kiwi-cat.riv"))) },
   assetsInclude: ["**/*.riv"],
-  // O mermaid das Notas (T2984), como no Channels: sem o KaTeX (fórmula dentro de diagrama) e sem o layout ELK.
+  // KaTeX is local for notes (T5558); ELK remains excluded from Mermaid.
   resolve: {
     alias: {
-      katex: resolve(__dirname, "ui/stubs/react-native/index.js"),
       "elkjs/lib/elk.bundled.js": resolve(__dirname, "ui/stubs/no-elk.ts"),
     },
   },

@@ -26,6 +26,7 @@ import { renderedPreview } from "./renderedWidget.tsx";
 import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger, readSlashUsage, recordSlashUse } from "./slash.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
+import { highlightSyntax, HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 import { spellingAttributes, disableSpellcheck, SPELLING_EXCLUDED } from "./spelling.ts";
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
 
@@ -203,6 +204,7 @@ const theme = EditorView.theme({
   ".cm-h1": { fontSize: "20px", paddingTop: "22px !important", letterSpacing: "var(--tracking-tight)" },
   ".cm-h2": { fontSize: "14px", paddingTop: "20px !important", paddingBottom: "2px !important" },
   ".cm-h3, .cm-h4, .cm-h5, .cm-h6": { fontSize: "14px", color: "var(--text-2)", paddingTop: "14px !important" },
+  ".cm-highlight": { backgroundColor: HIGHLIGHT_BACKGROUND, borderRadius: "2px" },
   ".cm-inline-code": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)" },
   ".cm-codeblock": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)", paddingLeft: "16px !important" },
   ".cm-quote": { color: "var(--text-2)", paddingLeft: "16px !important" },
@@ -326,7 +328,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     disableSpellcheck(SPELLING_EXCLUDED),
     closeBrackets(),
     // O colar-link é o nosso (o `paste` abaixo): o do lang-markdown não escapa "(" nem ")" do endereço nem "[" do texto.
-    markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax], addKeymap: true, pasteURLAsLink: false }),
+    markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax, highlightSyntax], addKeymap: true, pasteURLAsLink: false }),
     syntaxHighlighting(highlight),
     // Os blocos fora do cursor, desenhados pela lib do Channels (T2983); antes do resto, para cobrir o preview de linha.
     renderedPreview(links, opts),

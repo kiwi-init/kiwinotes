@@ -5,6 +5,8 @@
 
 // Antes da lib: o `__DEV__` que ela lê.
 import "./enrichedEnv.ts";
+import katex from "katex";
+import { HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Range, StateField } from "@codemirror/state";
@@ -47,6 +49,9 @@ const TEXT = { fontSize: 14, fontFamily: "var(--font)", color: "var(--text)", li
 const HEAD = { fontFamily: "var(--font)", fontWeight: "600", color: "var(--text)", marginTop: 0, marginBottom: 0 };
 
 const STYLE: MarkdownStyle = {
+  math: { color: "var(--text)", backgroundColor: "var(--surface-2)", fontSize: 16, padding: 12, marginTop: 0, marginBottom: 0, textAlign: "center" },
+  inlineMath: { color: "var(--text)" },
+  highlight: { backgroundColor: HIGHLIGHT_BACKGROUND, color: "var(--text)" },
   paragraph: TEXT,
   h1: { ...HEAD, fontSize: 19, lineHeight: 26 },
   h2: { ...HEAD, fontSize: 17, lineHeight: 24 },
@@ -105,9 +110,9 @@ const STYLE: MarkdownStyle = {
 // Um bloco por widget: sem margem embaixo (o CodeMirror mede o bloco sem a margem; o espaço é a linha em branco).
 const NORMAL = zeroTrailingMargins(normalizeMarkdownStyle(STYLE));
 const STYLES = buildStyles(NORMAL);
-const CAPABILITIES = { katex: null, enableTaskListItemToggle: true };
-// Quebra simples vira quebra de linha, como o editor mostra; sem LaTeX (não entra o KaTeX).
-const FLAGS = { latexMath: false, underline: false, hardSoftBreaks: true };
+const CAPABILITIES = { katex, enableTaskListItemToggle: true };
+// KaTeX ships locally; the renderer emits MathML with trust:false and throwOnError:false.
+const FLAGS = { latexMath: true, highlight: true, underline: false, hardSoftBreaks: true };
 
 // ---------------------------------------------------------------- o parse, com cache
 
