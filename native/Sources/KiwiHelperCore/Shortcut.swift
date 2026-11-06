@@ -20,7 +20,9 @@ public enum Shortcut: Hashable, Sendable {
 
     static let maxSteps = 4
 
-    public init?(_ text: String) {
+    /// `bareKey`: a named key on its own (`escape`, `delete`, `return`…) is also a shortcut. Only for the cancel of the
+    /// dictation (L5, T5458), which is armed just while recording, so typing never fires it.
+    public init?(_ text: String, bareKey: Bool = false) {
         let text = text.trimmingCharacters(in: .whitespaces)
         if text.lowercased().hasPrefix("double:") {
             guard let key = Self.modifierKey(String(text.dropFirst("double:".count))) else { return nil }
@@ -32,6 +34,10 @@ public enum Shortcut: Hashable, Sendable {
             return
         }
         let parts = text.split(separator: " ").map(String.init)
+        if bareKey, parts.count == 1, let step = KeyCombo(parts[0], bare: true), step.isBareNamedKey {
+            self = .combo(step)
+            return
+        }
         guard (1...Self.maxSteps).contains(parts.count) else { return nil }
         var steps: [KeyCombo] = []
         for (i, part) in parts.enumerated() {
@@ -109,6 +115,9 @@ public struct ShortcutEngine<Payload> {
     public var sequenceWindow: TimeInterval
     /// What the current layout types on a key code (`withCommand`: read the ⌘ layer), for the letters.
     public var typed: (_ keyCode: Int64, _ withCommand: Bool) -> Character?
+    /// Whether a shortcut is armed right now (L5, T5458: the cancel only while recording). Asked as each key arrives, so
+    /// arming one never resets a gesture under way (the key held for push-to-talk).
+    public var isActive: (_ id: String) -> Bool = { _ in true }
 
     public init(doubleTapWindow: TimeInterval = 0.35, tapThreshold: TimeInterval = 0.3, sequenceWindow: TimeInterval = 0.8,
                 typed: @escaping (Int64, Bool) -> Character? = { _, _ in nil }) {
@@ -189,7 +198,7 @@ public struct ShortcutEngine<Payload> {
             }
             held[key] = Held(since: t, chord: chord)
             guard !chord else { return result }
-            for binding in bindings {
+            for binding in bindings where isActive(binding.id) {
                 switch binding.shortcut {
                 case .key(key):
                     result.outputs.append(.press(binding.id, flags: flags))
@@ -251,8 +260,16 @@ public struct ShortcutEngine<Payload> {
             return result
         }
         if autorepeat { return result }
-        result.outputs = interruptHeld(by: code)
+        // The key's own shortcut first, then the held modifier keys hear it was another key: Esc during push-to-talk is
+        // the cancel (L5), and only then the dictation key's "used as a modifier".
+        let interrupts = interruptHeld(by: code)
+        result = matchKeyDown(code: code, flags: flags, payload: payload, at: t)
+        result.outputs += interrupts
+        return result
+    }
 
+    private mutating func matchKeyDown(code: Int64, flags: UInt64, payload: Payload, at t: TimeInterval) -> Result {
+        var result = Result()
         if var p = pending {
             let next = p.candidates.filter { i in
                 guard case .sequence(let steps) = bindings[i].shortcut else { return false }
@@ -298,7 +315,7 @@ public struct ShortcutEngine<Payload> {
     /// A key-down with no sequence under way: a combination fires, or a sequence starts.
     private mutating func start(code: Int64, flags: UInt64, payload: Payload, at t: TimeInterval) -> Result {
         var result = Result()
-        for binding in bindings {
+        for binding in bindings where isActive(binding.id) {
             if case .combo(let combo) = binding.shortcut, matches(combo, code: code, flags: flags) {
                 swallowed[code] = .some(binding.id)
                 result.consume = true
@@ -307,7 +324,7 @@ public struct ShortcutEngine<Payload> {
             }
         }
         let starting = bindings.indices.filter { i in
-            guard case .sequence(let steps) = bindings[i].shortcut else { return false }
+            guard isActive(bindings[i].id), case .sequence(let steps) = bindings[i].shortcut else { return false }
             return matches(steps[0], code: code, flags: flags)
         }
         if !starting.isEmpty {

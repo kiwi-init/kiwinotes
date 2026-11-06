@@ -309,3 +309,85 @@ final class ShortcutRecorderTests: XCTestCase {
         XCTAssertEqual(r.tick(now: 2), .recorded("option+r"))
     }
 }
+
+/// L5 (T5458): Esc cancels the dictation, armed only while recording, and consumed (the app in front never sees it).
+final class CancelShortcutTests: XCTestCase {
+    let esc: Int64 = 53, fnFlag: UInt64 = 0x80_0000
+
+    func testOnlyTheCancelMayBeABareNamedKey() {
+        XCTAssertNil(Shortcut("escape"), "Esc alone isn't a shortcut that is always armed")
+        XCTAssertEqual(Shortcut("escape", bareKey: true)?.spec, "escape")
+        XCTAssertEqual(Shortcut("delete", bareKey: true)?.spec, "delete")
+        XCTAssertNil(Shortcut("r", bareKey: true), "never a plain letter: it would cancel while you type")
+        XCTAssertEqual(Shortcut("control+c", bareKey: true)?.spec, "control+c", "a combination still works")
+    }
+
+    func engine(recording: @escaping () -> Bool) -> ShortcutEngine<Int> {
+        var e = ShortcutEngine<Int>()
+        e.setBindings([(id: "dictation", shortcut: .key(.fn)), (id: "cancel", shortcut: Shortcut("escape", bareKey: true)!)])
+        e.isActive = { id in id != "cancel" || recording() }
+        return e
+    }
+
+    func testEscOutsideARecordingIsTheOtherAppsAndDoesNothing() {
+        var e = engine(recording: { false })
+        let down = e.handle(.keyDown(keyCode: esc, flags: 0, autorepeat: false), payload: 1, at: 0)
+        XCTAssertFalse(down.consume)
+        XCTAssertEqual(down.outputs, [])
+        XCTAssertFalse(e.handle(.keyUp(keyCode: esc, flags: 0), payload: 2, at: 0.1).consume)
+    }
+
+    func testEscDuringARecordingCancelsAndIsConsumedWithItsKeyUp() {
+        var recording = true
+        var e = engine(recording: { recording })
+        let down = e.handle(.keyDown(keyCode: esc, flags: 0, autorepeat: false), payload: 1, at: 0)
+        XCTAssertTrue(down.consume, "the app in front doesn't get the Esc")
+        XCTAssertEqual(down.outputs, [.press("cancel", flags: 0)])
+        recording = false // the cancel ended the recording
+        XCTAssertTrue(e.handle(.keyUp(keyCode: esc, flags: 0), payload: 2, at: 0.1).consume, "nor its key-up, half of a keystroke")
+        XCTAssertFalse(e.handle(.keyDown(keyCode: esc, flags: 0, autorepeat: false), payload: 3, at: 1).consume, "the next Esc is the app's again")
+    }
+
+    func testEscWhileHoldingTheDictationKeyIsTheCancelFirst() {
+        var e = engine(recording: { true })
+        _ = e.handle(.flags(keyCode: 63, flags: fnFlag), payload: 1, at: 0)
+        let down = e.handle(.keyDown(keyCode: esc, flags: fnFlag, autorepeat: false), payload: 2, at: 0.5)
+        XCTAssertTrue(down.consume)
+        // The cancel comes before the dictation key hears "another key", so the recording ends as an Esc.
+        XCTAssertEqual(down.outputs, [.press("cancel", flags: fnFlag), .interrupt("dictation", keyCode: esc)])
+        // HotkeyGesture: the cancel puts a held key in `releasing`, so the interrupt and the release do nothing.
+        var gesture = HotkeyGesture()
+        _ = gesture.keyDown(at: 0)
+        _ = gesture.endedFromOverlay()
+        XCTAssertEqual(gesture.otherKeyDown(), [])
+        XCTAssertEqual(gesture.keyUp(at: 0.6), [])
+        XCTAssertFalse(gesture.isRecording)
+    }
+
+    func testArmingTheCancelDoesntResetAGestureUnderWay() {
+        var recording = false
+        var e = engine(recording: { recording })
+        XCTAssertEqual(e.handle(.flags(keyCode: 63, flags: fnFlag), payload: 1, at: 0).outputs, [.press("dictation", flags: fnFlag)])
+        recording = true // the press started the recording: the cancel is armed now
+        XCTAssertEqual(e.handle(.flags(keyCode: 63, flags: 0), payload: 2, at: 1).outputs, [.release("dictation", clean: true)], "push-to-talk still ends")
+    }
+
+    func testTheRecorderTakesABareNamedKeyOnlyForTheCancel() {
+        var plain = ShortcutRecorder()
+        plain.feed(.keyDown(keyCode: 51, flags: 0, autorepeat: false), at: 0)
+        plain.feed(.keyUp(keyCode: 51, flags: 0), at: 0.1)
+        XCTAssertEqual(plain.tick(now: 1), .invalid)
+
+        var cancel = ShortcutRecorder()
+        cancel.bareKey = true
+        cancel.feed(.keyDown(keyCode: 51, flags: 0, autorepeat: false), at: 0)
+        cancel.feed(.keyUp(keyCode: 51, flags: 0), at: 0.1)
+        XCTAssertEqual(cancel.tick(now: 1), .recorded("delete"))
+
+        var letter = ShortcutRecorder()
+        letter.bareKey = true
+        letter.feed(.keyDown(keyCode: 15, flags: 0, autorepeat: false), at: 0)
+        letter.feed(.keyUp(keyCode: 15, flags: 0), at: 0.1)
+        XCTAssertEqual(letter.tick(now: 1), .invalid)
+    }
+}

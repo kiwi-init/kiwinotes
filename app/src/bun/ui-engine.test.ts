@@ -289,6 +289,12 @@ describe("contrato 1.0.0 (T1192)", () => {
       expect(await call({ shortcuts }, "shortcuts.record")).toMatchObject({ ok: false, code });
     }
     expect(await call({}, "shortcuts.record")).toMatchObject({ ok: false, code: "E_NO_HELPER" });
+    // `bareKey` (1.27.0, T5458): chega ao helper; outro campo, não.
+    const asked: unknown[] = [];
+    const withBare = { record: async (bare?: boolean) => (asked.push(bare), "delete"), cancel: () => {} };
+    expect(await directInvoke(uiCapabilities({ ...f.deps, shortcuts: withBare }), "shortcuts.record", { bareKey: true })).toMatchObject({ ok: true, value: { shortcut: "delete" } });
+    expect(asked).toEqual([true]);
+    expect(await directInvoke(uiCapabilities({ ...f.deps, shortcuts: withBare }), "shortcuts.record", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(await call({ shortcuts }, "shortcuts.cancelRecord")).toMatchObject({ ok: true });
     expect(f.calls).toContain("cancel");
   });

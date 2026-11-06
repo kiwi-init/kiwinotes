@@ -260,8 +260,8 @@ export class Session {
    * "Aperte o atalho" (T5349): o helper lê as teclas e devolve o texto do atalho. Espera a pessoa por até 1 min.
    * Rejeita com o código do helper: `cancelled`, `invalid_shortcut`, `hotkey_inactive`, `sidecar_closed`…
    */
-  async recordShortcut(): Promise<string> {
-    const r = await this.sidecar.send({ type: "shortcut.record" }, undefined, 60_000).catch((e: unknown) => {
+  async recordShortcut(bareKey = false): Promise<string> {
+    const r = await this.sidecar.send({ type: "shortcut.record", ...(bareKey ? { bareKey } : {}) }, undefined, 60_000).catch((e: unknown) => {
       // O tempo acabou: o helper ainda está gravando, então para.
       void this.sidecar.send({ type: "shortcut.cancel" }).catch(() => {});
       throw e;

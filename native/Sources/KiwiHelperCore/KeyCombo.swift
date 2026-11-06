@@ -78,6 +78,9 @@ public struct KeyCombo: Hashable, Sendable {
     /// A letter or digit, which is read through the keyboard layout.
     var readsLayout: Bool { Self.layoutKeyCodes[key] != nil }
 
+    /// A named key with no modifiers (Esc, ⌫, ↩…): only for a shortcut that is armed just while recording (L5).
+    var isBareNamedKey: Bool { modifiers.isEmpty && !readsLayout }
+
     /// The canonical text: the modifiers in the order of the menus, then the key ("control+option+n").
     public var spec: String {
         (Modifier.menuOrder.filter(modifiers.contains).map(\.rawValue) + [key]).joined(separator: "+")

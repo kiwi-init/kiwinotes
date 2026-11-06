@@ -122,7 +122,7 @@ export interface CapabilityDeps {
    * "Aperte o atalho" pelo helper (T5349): o texto do atalho, ou rejeita com o código dele (`cancelled`,
    * `invalid_shortcut`…). Sem isto (o headless, que não tem o tap), o `shortcuts.record` dá E_NO_HELPER.
    */
-  shortcuts?: { record(): Promise<string>; cancel(): void };
+  shortcuts?: { record(bareKey?: boolean): Promise<string>; cancel(): void };
   /**
    * "Mostrar no Finder" (T2468): o app abre o Finder no caminho absoluto. Sem isto (o headless, os testes, KIWI_DEBUG),
    * o `notes.reveal` só confere que o item existe.
@@ -730,10 +730,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
     },
     "shortcuts.record": async (args) => {
-      noArgs(args, "shortcuts.record");
+      // `bareKey` (1.27.0): gravando o cancelar do ditado, onde uma tecla nomeada sozinha (⌫, ↩) também vale.
+      const a = object(args ?? {}, "shortcuts.record");
+      for (const k of Object.keys(a)) if (k !== "bareKey") throw bad(`shortcuts.record: unknown field ${k}`);
+      if (a.bareKey !== undefined && typeof a.bareKey !== "boolean") throw bad("shortcuts.record: bareKey must be true or false");
       if (!deps.shortcuts) throw new CapabilityError("E_NO_HELPER", "shortcuts.record needs the helper's keyboard tap");
       try {
-        return { shortcut: await deps.shortcuts.record() };
+        return { shortcut: await deps.shortcuts.record(a.bareKey === true) };
       } catch (e) {
         const code = e instanceof Error ? e.message : String(e);
         if (code === "cancelled" || code === "aborted") throw new CapabilityError("E_CANCELLED", "shortcuts.record: cancelled");

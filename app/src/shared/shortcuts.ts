@@ -12,7 +12,7 @@
 // não recebe a tecla (com Acessibilidade). Os do app (a paleta, a nota nova, a nota do dia) só valem com uma janela do
 // Kiwi na frente, e só podem ser uma combinação.
 
-export type ShortcutId = "dictation" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote";
+export type ShortcutId = "dictation" | "cancel" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote";
 
 export type ShortcutScope = "global" | "app";
 
@@ -27,6 +27,8 @@ export interface ShortcutDef {
 
 export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: "dictation", label: "Ditar", hint: "Segure para falar; toque duas vezes para gravar sem segurar.", group: "Ditado", scope: "global", default: "fn" },
+  // L5 (T5458): só durante a gravação, por isso pode ser uma tecla sozinha (Esc, ⌫, ↩), e o app da frente não a recebe.
+  { id: "cancel", label: "Cancelar a gravação", hint: "Só durante o ditado: o áudio é descartado e nada é colado.", group: "Ditado", scope: "global", default: "escape" },
   { id: "notes", label: "Abrir as Notas", hint: "De qualquer app.", group: "Notas", scope: "global", default: "control+option+n" },
   { id: "palette", label: "Paleta de comandos", hint: "Com as Notas na frente.", group: "Notas", scope: "app", default: "command+k" },
   { id: "newNote", label: "Nova nota", hint: "Com as Notas na frente.", group: "Notas", scope: "app", default: "command+n" },
@@ -99,10 +101,14 @@ function parseStep(text: string, bare: boolean): Step | null {
   return { modifiers, key };
 }
 
-/** O texto de um atalho, ou null quando não é um (a mesma regra do `Shortcut.swift`). */
-export function parseShortcut(text: unknown): ParsedShortcut | null {
+/**
+ * O texto de um atalho, ou null quando não é um (a mesma regra do `Shortcut.swift`). `bareKey`: uma tecla nomeada
+ * sozinha (`escape`, `delete`, `return`…) também vale, só para o cancelar do ditado (L5), que só fica armado gravando.
+ */
+export function parseShortcut(text: unknown, opts: { bareKey?: boolean } = {}): ParsedShortcut | null {
   if (typeof text !== "string") return null;
   const t = text.trim();
+  if (opts.bareKey && NAMED_KEYS.includes(t.toLowerCase())) return { kind: "combo", step: { modifiers: [], key: t.toLowerCase() } };
   if (t.toLowerCase().startsWith("double:")) {
     const key = modifierKey(t.slice("double:".length));
     return key ? { kind: "double", key } : null;
@@ -131,15 +137,18 @@ export function shortcutText(p: ParsedShortcut): string {
   }
 }
 
-/** O texto canônico, ou null. */
-export function canonicalShortcut(text: unknown): string | null {
-  const p = parseShortcut(text);
+/** Só o cancelar do ditado aceita uma tecla nomeada sozinha (L5). */
+const bareKeyFor = (id: ShortcutId) => ({ bareKey: id === "cancel" });
+
+/** O texto canônico, ou null. `id`: o de uma ação (o cancelar aceita `escape` sozinho). */
+export function canonicalShortcut(text: unknown, id?: ShortcutId): string | null {
+  const p = parseShortcut(text, id ? bareKeyFor(id) : {});
   return p ? shortcutText(p) : null;
 }
 
 /** Vale para esta ação: os do app só como uma combinação (quem vê é o WebView, que não vê o Fn nem uma sequência). */
 export function isShortcutFor(id: ShortcutId, text: unknown): boolean {
-  const p = parseShortcut(text);
+  const p = parseShortcut(text, bareKeyFor(id));
   if (!p) return false;
   return shortcutDef(id).scope === "global" || p.kind === "combo";
 }
@@ -163,10 +172,10 @@ function stepLabel(s: Step): string {
   return mods && key.length > 1 && !key.startsWith("F") && !/^[←→↑↓↩⇥⌫]$/.test(key) ? `${mods} ${key}` : `${mods}${key}`;
 }
 
-/** Como o atalho aparece nas Configurações e nas dicas: "⌃⌥R", "Fn 🌐", "⌥ direito duas vezes", "⌃K, R, R". */
+/** Como o atalho aparece nas Configurações e nas dicas: "⌃⌥R", "Fn 🌐", "⌥ direito duas vezes", "⌃K, R, R", "Esc". */
 export function shortcutLabel(text: string | null): string {
   if (text === null) return "Desligado";
-  const p = parseShortcut(text);
+  const p = parseShortcut(text, { bareKey: true });
   if (!p) return text;
   switch (p.kind) {
     case "key": return MODIFIER_KEY_LABELS[p.key];
@@ -197,7 +206,7 @@ function claims(p: ParsedShortcut): { modifierKey?: ModifierKey; steps?: string[
  * vezes para outra coisa); ou um é o começo do outro (⌃K e a sequência ⌃K R).
  */
 export function shortcutsConflict(a: string, b: string): boolean {
-  const pa = parseShortcut(a), pb = parseShortcut(b);
+  const pa = parseShortcut(a, { bareKey: true }), pb = parseShortcut(b, { bareKey: true });
   if (!pa || !pb) return false;
   const ca = claims(pa), cb = claims(pb);
   if (ca.modifierKey || cb.modifierKey) return ca.modifierKey === cb.modifierKey;
@@ -227,7 +236,7 @@ export function sanitizeShortcuts(input: unknown, legacy: { notes?: unknown; mee
   for (const id of SHORTCUT_IDS) {
     const value = id in o ? o[id] : (legacy as Record<string, unknown>)[id];
     if (value === null) out[id] = null;
-    else if (value !== undefined && isShortcutFor(id, value)) out[id] = canonicalShortcut(value);
+    else if (value !== undefined && isShortcutFor(id, value)) out[id] = canonicalShortcut(value, id);
   }
   return out;
 }
@@ -240,7 +249,7 @@ export function checkShortcutsPatch(current: Shortcuts, input: unknown): { ok: t
     if (!(SHORTCUT_IDS as string[]).includes(key)) return { ok: false, error: `unknown shortcut ${JSON.stringify(key)}` };
     const id = key as ShortcutId;
     if (value === null) patch[id] = null;
-    else if (isShortcutFor(id, value)) patch[id] = canonicalShortcut(value);
+    else if (isShortcutFor(id, value)) patch[id] = canonicalShortcut(value, id);
     else return { ok: false, error: `shortcuts.${id} is not a shortcut this action can use` };
   }
   const next = { ...current, ...patch };

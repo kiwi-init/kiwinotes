@@ -45,7 +45,7 @@ export function ShortcutRow({ id, shortcuts }: { id: ShortcutId; shortcuts: Shor
 
   const record = () => {
     setState({ kind: "recording" });
-    api.shortcuts.record().then(
+    api.shortcuts.record(id === "cancel").then(
       ({ shortcut }) => choose(shortcut),
       (e) => {
         const code = codeOf(e);
@@ -64,6 +64,8 @@ export function ShortcutRow({ id, shortcuts }: { id: ShortcutId; shortcuts: Shor
     state.kind === "recording"
       ? def.scope === "app"
         ? "Aperte a combinação. Esc cancela."
+        : id === "cancel"
+          ? "Aperte a tecla (⌫, ↩…) ou a combinação. Esc cancela; para voltar ao Esc, use Padrão."
         : "Aperte o atalho: uma tecla, duas vezes, uma combinação ou uma sequência. Esc cancela."
       : state.kind === "conflict"
         ? `${shortcutLabel(state.text)} já é de “${shortcutDef(state.other).label}”. Usar aqui desliga lá.`

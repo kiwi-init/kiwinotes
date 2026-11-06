@@ -105,3 +105,24 @@ describe("os do app, num keydown do WebView", () => {
     expect(matchesKeyEvent("fn", key("k", "KeyK"))).toBe(false);
   });
 });
+
+describe("o cancelar do ditado (L5, T5458)", () => {
+  test("só ele aceita uma tecla nomeada sozinha, nunca uma letra", () => {
+    expect(DEFAULT_SHORTCUTS.cancel).toBe("escape");
+    expect(isShortcutFor("cancel", "escape")).toBe(true);
+    expect(isShortcutFor("cancel", "Delete")).toBe(true);
+    expect(isShortcutFor("cancel", "r")).toBe(false);
+    expect(isShortcutFor("cancel", "control+c")).toBe(true);
+    expect(isShortcutFor("notes", "escape")).toBe(false);
+    expect(sanitizeShortcuts({ cancel: "Return" }).cancel).toBe("return");
+    expect(sanitizeShortcuts({ cancel: "q" }).cancel).toBe("escape");
+  });
+
+  test("rótulo e conflitos", () => {
+    expect(shortcutLabel("escape")).toBe("Esc");
+    expect(shortcutLabel("delete")).toBe("⌫");
+    expect(conflictOf(DEFAULT_SHORTCUTS, "notes", "escape")).toBe("cancel");
+    expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { cancel: "control+option+r" })).toMatchObject({ ok: false });
+    expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { cancel: "delete" })).toEqual({ ok: true, patch: { cancel: "delete" } });
+  });
+});

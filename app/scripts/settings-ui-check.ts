@@ -34,7 +34,7 @@ const server = Bun.serve({
  * "failing" recusa o set. O `shortcuts.record` espera o teste pôr `window.__record` ({shortcut} ou {error}).
  */
 function fakeEngine(mode: "ok" | "old" | "failing") {
-  const shortcuts = { dictation: "fn", notes: "control+option+n", palette: "command+k", newNote: "command+n", dailyNote: "shift+command+d", meeting: "control+option+r", meetingPause: "control+option+m" };
+  const shortcuts = { dictation: "fn", cancel: "escape", notes: "control+option+n", palette: "command+k", newNote: "command+n", dailyNote: "shift+command+d", meeting: "control+option+r", meetingPause: "control+option+m" };
   let settings: Record<string, unknown> = { shortcuts, notesShortcut: shortcuts.notes };
   const calls: unknown[] = [];
   const listeners: ((s: unknown) => void)[] = [];
@@ -49,7 +49,8 @@ function fakeEngine(mode: "ok" | "old" | "failing") {
       for (const fn of listeners) fn({ ...settings });
       return { ...settings };
     },
-    "shortcuts.record": async () => {
+    "shortcuts.record": async (args: { bareKey?: boolean }) => {
+      (window as any).__recordArgs = [...((window as any).__recordArgs ?? []), args];
       (window as any).__recording = true;
       while (!(window as any).__record) await new Promise((r) => setTimeout(r, 20));
       const r = (window as any).__record;
@@ -145,10 +146,10 @@ await step("as Configurações sobem com a CSP das views, com todos os atalhos e
   const sections = (await page.locator(".kn-section-title").allTextContents()).filter((t) => t.startsWith("Atalhos"));
   if (sections.join(",") !== "Atalhos · Ditado,Atalhos · Notas,Atalhos · Reuniões") throw new Error(sections.join(","));
   const shown: Record<string, string> = {};
-  for (const label of ["Ditar", "Abrir as Notas", "Paleta de comandos", "Nova nota", "Nota do dia", "Gravar e parar a reunião", "Pausar meu mic"]) {
+  for (const label of ["Ditar", "Cancelar a gravação", "Abrir as Notas", "Paleta de comandos", "Nova nota", "Nota do dia", "Gravar e parar a reunião", "Pausar meu mic"]) {
     shown[label] = (await key(page, label).textContent()) ?? "";
   }
-  const want = { Ditar: "Fn 🌐", "Abrir as Notas": "⌃⌥N", "Paleta de comandos": "⌘K", "Nova nota": "⌘N", "Nota do dia": "⇧⌘D", "Gravar e parar a reunião": "⌃⌥R", "Pausar meu mic": "⌃⌥M" };
+  const want = { Ditar: "Fn 🌐", "Cancelar a gravação": "Esc", "Abrir as Notas": "⌃⌥N", "Paleta de comandos": "⌘K", "Nova nota": "⌘N", "Nota do dia": "⇧⌘D", "Gravar e parar a reunião": "⌃⌥R", "Pausar meu mic": "⌃⌥M" };
   if (JSON.stringify(shown) !== JSON.stringify(want)) throw new Error(JSON.stringify(shown));
   // O seletor de mentira de antes (Fn / ⌥ direito, que nunca era salvo) saiu.
   if (await page.getByRole("radiogroup", { name: "Tecla do atalho" }).count()) throw new Error("o seletor antigo ainda está lá");
@@ -210,6 +211,22 @@ await step("o botão Cancelar para a gravação", async () => {
   await row(page, "Ditar").getByRole("button", { name: "Cancelar" }).click();
   await page.waitForFunction(() => !(window as any).__recording);
   await expectKey(page, "Ditar", "Fn 🌐");
+});
+
+await step("L5 (T5458): o cancelar grava uma tecla sozinha (⌫), pedindo bareKey ao helper", async () => {
+  await record(page, "Cancelar a gravação", { shortcut: "delete" });
+  await expectKey(page, "Cancelar a gravação", "⌫");
+  const args = await page.evaluate(() => JSON.stringify((window as any).__recordArgs.at(-1)));
+  if (args !== '{"bareKey":true}') throw new Error(args);
+  const got = JSON.parse(await calls(page)).at(-1);
+  if (JSON.stringify(got) !== '{"shortcuts":{"cancel":"delete"}}') throw new Error(JSON.stringify(got));
+  if (shots) await row(page, "Cancelar a gravação").screenshot({ path: join(shots, "06-cancelar.png") });
+  // Os outros não pedem bareKey.
+  await record(page, "Ditar", { error: "E_CANCELLED" });
+  const other = await page.evaluate(() => JSON.stringify((window as any).__recordArgs.at(-1)));
+  if (other !== "{}") throw new Error(other);
+  await row(page, "Cancelar a gravação").getByRole("button", { name: "Padrão" }).click();
+  await expectKey(page, "Cancelar a gravação", "Esc");
 });
 
 await step("sem erro nem violação de CSP no caminho todo", async () => {

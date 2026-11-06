@@ -25,8 +25,10 @@ final class Helper {
         "dictation": .key(.fn),
         "meeting": Shortcut(MeetingController.defaultShortcut)!,
         "meetingPause": Shortcut(MeetingController.defaultPauseShortcut)!,
+        // L5 (T5458): Esc cancels the dictation, only while it records (see `tap.isActive`).
+        "cancel": Shortcut("escape", bareKey: true)!,
     ]
-    static let shortcutIds: Set<String> = ["dictation", "notes", "meeting", "meetingPause"]
+    static let shortcutIds: Set<String> = ["dictation", "cancel", "notes", "meeting", "meetingPause"]
     /// A `shortcut.record` waiting for the person to press the shortcut.
     private var recordingShortcutId: String?
     private var tickTimer: DispatchWorkItem?
@@ -64,6 +66,8 @@ final class Helper {
         self.mic = mic
         audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
         tap = HotkeyTap { [weak self] event in self?.onTap(event) }
+        // The cancel is armed only while a dictation records: outside it, Esc is the other apps' (L5).
+        tap.isActive = { [weak self] id in id != "cancel" || self?.audio.isRecording == true }
         applyShortcuts()
         meeting = MeetingController(ownPids: [getpid(), getppid()], headless: headless)
         meeting.startCapture = { [weak self] app in
@@ -266,6 +270,11 @@ final class Helper {
                 }
             }
             return
+        case .press("cancel", _), .trigger("cancel"):
+            cancelFromShortcut()
+            return
+        case .release("cancel", _):
+            return
         case .press(let id, _) where Self.firesOnPress(shortcuts[id]):
             fire(id)
             return
@@ -299,7 +308,7 @@ final class Helper {
 
     private func applyShortcuts() {
         // A fixed order, so two shortcuts on the same keys always resolve the same way.
-        tap.bindings = ["dictation", "notes", "meeting", "meetingPause"].compactMap { id in shortcuts[id].map { (id: id, shortcut: $0) } }
+        tap.bindings = ["dictation", "cancel", "notes", "meeting", "meetingPause"].compactMap { id in shortcuts[id].map { (id: id, shortcut: $0) } }
     }
 
     private func apply(_ action: GestureAction) {
@@ -314,6 +323,15 @@ final class Helper {
         case .cancelRecording:
             cancelRecording(reason: "hotkey")
         }
+    }
+
+    /// L5 (T5458): the cancel shortcut (Esc) during a dictation, like the pill's ✕: the audio is thrown away and
+    /// nothing is pasted. A key still held for push-to-talk does nothing when it comes up.
+    private func cancelFromShortcut() {
+        guard audio.isRecording else { return }
+        _ = gesture.endedFromOverlay()
+        tickTimer?.cancel()
+        cancelRecording(reason: "escape")
     }
 
     /// The pill's ✕ (cancel) or ✓ (finish, like letting go of the key).
@@ -512,7 +530,8 @@ final class Helper {
             recordingShortcutId = id
             if audio.isRecording { cancelRecording(reason: "config") }
             gesture.reset()
-            tap.record()
+            // `bareKey`: recording the cancel (L5), where ⌫ or ↩ alone is a shortcut too.
+            tap.record(bareKey: message.fields["bareKey"] as? Bool == true)
         case "shortcut.cancel":
             tap.cancelRecording()
             reply(id, ok: true)
@@ -776,10 +795,11 @@ final class Helper {
         }
         for (id, value) in legacy {
             guard Self.shortcutIds.contains(id) else { return "invalid_value" }
+            let bareKey = id == "cancel"
             if value is NSNull {
                 changed[id] = .some(nil)
             } else {
-                guard let text = value as? String, let shortcut = Shortcut(text) else { return "invalid_value" }
+                guard let text = value as? String, let shortcut = Shortcut(text, bareKey: bareKey) else { return "invalid_value" }
                 changed[id] = .some(shortcut)
             }
         }
