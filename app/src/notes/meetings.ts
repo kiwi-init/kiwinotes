@@ -11,11 +11,11 @@ import {
 import {
   appendMeetingTranscript,
   isMeetingNote,
-  rebaseMeetingEdit,
   setMeetingField,
   splitMeetingNote,
   transcriptSection,
 } from "../shared/meeting-note.ts";
+import { mergeNoteEdit } from "../shared/merge3.ts";
 
 /** One turn of the VBx at the end of the meeting (R3): a speaker cluster, in seconds since the meeting began. */
 export interface MeetingTurn {
@@ -559,7 +559,7 @@ export class MeetingNotes {
       return { changed };
     });
   }
-  /** Optional base content enables a safe append-only rebase; ordinary notes retain their normal conflict behavior. */
+  /** Com a base, uma edição sobre uma versão velha é juntada com a de agora: o rebase da reunião, ou o merge de 3 vias (T5454); só um trecho mudado nos dois lados volta como conflito. */
   async saveEdit(
     path: string,
     content: string,
@@ -580,7 +580,7 @@ export class MeetingNotes {
       const merged =
         current.version === baseVersion
           ? content
-          : rebaseMeetingEdit(baseContent, content, current.content);
+          : mergeNoteEdit(baseContent, content, current.content);
       if (merged === null) return { saved: false, current };
       const result = await this.vault.save(path, merged, current.version);
       if (result.saved)

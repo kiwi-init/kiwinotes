@@ -24,10 +24,8 @@ import { LinkCache, type LinkTarget } from "./editor/index.ts";
 import { wordCount } from "./editor/text.ts";
 import { type Draft, Drafts, forgetDraftOnDelete } from "./drafts.ts";
 import { MeetingSpeakerDialog } from "./MeetingSpeakerDialog.tsx";
-import {
-  isMeetingNote,
-  rebaseMeetingEdit,
-} from "../../src/shared/meeting-note.ts";
+import { isMeetingNote } from "../../src/shared/meeting-note.ts";
+import { merge3, mergeNoteEdit, type MergeResult } from "../../src/shared/merge3.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
@@ -100,7 +98,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const shown = useRef(0);
   const [body, setBody] = useState("");
   const [title, setTitle] = useState("");
-  const [conflict, setConflict] = useState<Note | null>(null);
+  /**
+   * A nota mudou fora no mesmo trecho que a pessoa editou (T5454): a nota de agora no disco e o merge, com o resto já
+   * junto e só os trechos que batem para a pessoa escolher.
+   */
+  const [conflict, setConflict] = useState<{ note: Note; merge: Extract<MergeResult, { clean: false }> } | null>(null);
   /** O último save falhou (disco cheio, nota apagada fora, grande demais): a edição fica e a pessoa decide. */
   const [saveFailed, setSaveFailed] = useState(false);
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
@@ -225,6 +227,29 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   );
 
   /**
+   * Um texto juntado (T5454, ou a escrita da reunião) passa a ser o do editor, sobre a nota de agora no disco: a base
+   * vira a de fora, e o que ainda difere dela fica por gravar. O editor troca só as linhas que mudaram.
+   */
+  const applyMerged = (n: Note, merged: string) => {
+    const split = splitFrontmatter(merged);
+    const dirty = merged !== n.content;
+    baseContent.current = n.content;
+    frontmatter.current = split.frontmatter;
+    version.current = n.version;
+    pending.current = dirty ? split.body : null;
+    if (dirty) drafts.set({ path: n.path, body: split.body, frontmatter: split.frontmatter, baseVersion: n.version });
+    else drafts.remove(n.path);
+    updateEditorDocument(split.body);
+    setBody(split.body);
+    setWords(wordCount(split.body));
+    setNote(n);
+    if (dirty) {
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => void save(), SAVE_AFTER_MS);
+    }
+  };
+
+  /**
    * Grava o que está pendente e diz o que houve: "clean" (nada a gravar), "saved", "conflict" (mudou fora: o aviso
    * aparece) ou "error" (o aviso de erro aparece). Um save por vez, numa fila: dois ao mesmo tempo saíam com a mesma
    * versão, e o 2º via a gravação do 1º como conflito.
@@ -248,7 +273,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         return "error";
       }
       if (!r.saved) {
-        setConflict(r.current);
+        // O engine já tentou juntar (T5454). Se ainda assim deu certo aqui (um engine antigo), aplica e grava de novo.
+        if (current.current !== path) return "conflict";
+        const merged = merge3(baseContent.current, submitted, r.current.content);
+        if (merged.clean) {
+          applyMerged(r.current, merged.text);
+          return "saved";
+        }
+        setConflict({ note: r.current, merge: merged });
         return "conflict";
       }
       if (current.current !== path) return "saved";
@@ -259,7 +291,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           ? submitted
           : frontmatter.current + pending.current;
       const displayContent = typing
-        ? (rebaseMeetingEdit(submitted, latest, savedContent) ?? latest)
+        ? (mergeNoteEdit(submitted, latest, savedContent) ?? latest)
         : savedContent;
       const display = splitFrontmatter(displayContent);
       version.current = r.meta.version;
@@ -400,33 +432,19 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             const local =
               frontmatter.current +
               (pending.current ?? splitFrontmatter(baseContent.current).body);
-            const merged = rebaseMeetingEdit(
-              baseContent.current,
-              local,
-              n.content,
-            );
-            if (merged !== null && !undecided.current) {
-              const split = splitFrontmatter(merged);
-              const dirty = merged !== n.content;
-              baseContent.current = n.content;
-              frontmatter.current = split.frontmatter;
-              version.current = n.version;
-              pending.current = dirty ? split.body : null;
-              if (dirty)
-                drafts.set({
-                  path,
-                  body: split.body,
-                  frontmatter: split.frontmatter,
-                  baseVersion: n.version,
-                });
-              else drafts.remove(path);
-              updateEditorDocument(split.body);
-              setBody(split.body);
-              setWords(wordCount(split.body));
-              setNote(n);
+            if (pending.current === null || undecided.current) {
+              if (pending.current === null) show(n, true);
               return;
             }
-            if (pending.current === null) show(n, true);
+            // Com edição por gravar (T5454): junta a de fora com a minha. Limpo, segue escrevendo; senão, o aviso
+            // mostra só os trechos que os dois mudaram.
+            const merged = mergeNoteEdit(baseContent.current, local, n.content);
+            if (merged !== null) {
+              applyMerged(n, merged);
+              return;
+            }
+            const m = merge3(baseContent.current, local, n.content);
+            if (!m.clean) setConflict({ note: n, merge: m });
           },
           () => {
             // Apagada ou renomeada fora: a janela fica sem nota aberta.
@@ -544,9 +562,16 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     void refresh();
   };
 
-  const takeTheirs = (n: Note) => {
-    drafts.remove(n.path);
-    show(n);
+  /** Resolve os trechos que bateram com um lado (T5454): o resto do que os dois mudaram já está junto. */
+  const resolveConflict = (side: "mine" | "theirs") => {
+    if (!conflict) return;
+    const n = conflict.note;
+    setConflict(null);
+    // De novo com o texto de agora: o que a pessoa escreveu com o aviso aberto não se perde.
+    const local = frontmatter.current + (pending.current ?? splitFrontmatter(baseContent.current).body);
+    const merge = merge3(baseContent.current, local, n.content);
+    applyMerged(n, merge.clean ? merge.text : merge.resolve(side));
+    if (pending.current !== null) void save();
   };
 
   /** "Recuperar": o rascunho volta ao editor e grava por cima do que está no disco (a pessoa escolheu). */
@@ -583,13 +608,6 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     setOrphans((o) => o.filter((x) => x !== d));
   };
 
-  const keepMine = () => {
-    if (!conflict) return;
-    version.current = conflict.version;
-    baseContent.current = conflict.content;
-    setConflict(null);
-    void save();
-  };
 
   // ---------------------------------------------------------------- o básico de app de notas (T2469)
 
@@ -1181,13 +1199,30 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               ) : null}
             </div>
             {conflict ? (
-              <div className="kn-conflict kn-save-alert" role="alert">
-                Esta nota mudou fora do Kiwi Notes enquanto você editava.
+              <div className="kn-conflict kn-save-alert kn-merge" role="alert">
+                {/* T5454: o resto do que mudou fora já entrou; só os trechos que os dois mudaram pedem uma escolha. */}
+                <span>
+                  {conflict.merge.conflicts.length === 1
+                    ? "Esta nota mudou fora do Kiwi Notes no mesmo trecho que você editou. Escolha esse trecho; o resto do que mudou fora entra junto."
+                    : `Esta nota mudou fora do Kiwi Notes em ${conflict.merge.conflicts.length} trechos que você também editou. Escolha esses trechos; o resto do que mudou fora entra junto.`}
+                </span>
+                {conflict.merge.conflicts.slice(0, 3).map((c, i) => (
+                  <div className="kn-merge-block" key={i}>
+                    <div>
+                      <small>A sua</small>
+                      <pre>{c.mine.trim() || "(apagado)"}</pre>
+                    </div>
+                    <div>
+                      <small>A de fora</small>
+                      <pre>{c.theirs.trim() || "(apagado)"}</pre>
+                    </div>
+                  </div>
+                ))}
                 <span className="kn-conflict-actions">
-                  <button type="button" className="kn-bt" onClick={() => takeTheirs(conflict)}>
-                    Usar a de fora
+                  <button type="button" className="kn-bt" onClick={() => resolveConflict("theirs")}>
+                    {conflict.merge.conflicts.length === 1 ? "Usar a de fora nesse trecho" : "Usar a de fora nesses trechos"}
                   </button>
-                  <button type="button" className="kn-bt kn-bt-acc" onClick={keepMine}>
+                  <button type="button" className="kn-bt kn-bt-acc" onClick={() => resolveConflict("mine")}>
                     Manter a minha
                   </button>
                 </span>

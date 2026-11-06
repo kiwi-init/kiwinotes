@@ -5,6 +5,8 @@ import { Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 
+import { lineChanges } from "../../src/shared/merge3.ts";
+
 import type { AttachmentSource } from "./editor/attachments.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
@@ -117,35 +119,18 @@ export function joinInsert(before: string, text: string): string {
   return before && !/\s/.test(before) ? ` ${text}` : text;
 }
 
-/** Apply a meeting append without replacing the editor state, cursor, scroll or undo history. */
+/** Aplica a escrita da reunião ou um merge (T5454) sem trocar o estado do editor, o cursor, a rolagem nem o desfazer. */
 export function updateEditorDocument(next: string): void {
   const dom = document.querySelector<HTMLElement>(".kn-note-editor .cm-editor");
   const view = dom ? EditorView.findFromDOM(dom) : null;
   if (!view) return;
   const before = view.state.doc.toString();
   if (before === next) return;
-  let from = 0,
-    tail = 0;
-  while (
-    from < before.length &&
-    from < next.length &&
-    before[from] === next[from]
-  )
-    from++;
-  while (
-    tail < before.length - from &&
-    tail < next.length - from &&
-    before[before.length - 1 - tail] === next[next.length - 1 - tail]
-  )
-    tail++;
   externalUpdates.add(view);
   try {
+    // Linha a linha (T5454): um merge muda o topo e o fim, e o cursor no meio, onde a pessoa escreve, não pula.
     view.dispatch({
-      changes: {
-        from,
-        to: before.length - tail,
-        insert: next.slice(from, next.length - tail),
-      },
+      changes: lineChanges(before, next),
       annotations: Transaction.addToHistory.of(false),
     });
   } finally {

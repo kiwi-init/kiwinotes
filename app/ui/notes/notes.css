@@ -1006,3 +1006,21 @@ body {
 .kn-row .kn-folder-menu { left: auto; right: 0; }
 .kn-row:has(.kn-notes-folder) .kn-row-hint { overflow-wrap: anywhere; }
 .kn-folder-progress { padding: 12px 24px; font-size: 14px; }
+
+/* T5454: o aviso do merge mostra só os trechos que bateram, a sua versão ao lado da de fora. */
+.kn-merge { flex-direction: column; align-items: stretch; gap: 10px; }
+.kn-merge-block { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kn-merge-block > div { min-width: 0; }
+.kn-merge-block small { display: block; margin-bottom: 4px; color: var(--text-3); font-size: var(--t-meta, 12px); }
+.kn-merge-block pre {
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface-2);
+  font: var(--t-meta, 12px)/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.kn-merge .kn-conflict-actions { justify-content: flex-end; }
