@@ -124,6 +124,10 @@ export type Command =
   | { type: "meeting.pending" }
   /** Um botão do painel de reunião, vindo do app (o card do hub no R6, ou um teste): o mesmo que o clique no pop-up. */
   | { type: "meeting.answer"; answer: MeetingAnswer }
+  /** L26: o cartão "Adicionar ao dicionário? Pax → PACS" para a correção feita logo depois de colar. */
+  | { type: "learn.offer"; from: string; to: string }
+  /** Um botão do cartão, vindo do app ou de um teste (no headless não há cartão). */
+  | { type: "learn.answer"; answer: Exclude<LearnAnswer, "expired"> }
   /** Delete whole chunks ending before the final watermark minus the ASR look-behind (2 s by default). */
   | { type: "meeting.ack"; session: string; channel: "mine" | "system"; finalThroughFrame: number; contextFrames?: number }
   | { type: "dictation.retry"; recordingId:string }
@@ -208,6 +212,8 @@ export interface CommandResults {
   "meeting.pending": { chunks: MeetingChunk[] };
   "meeting.ack": Record<string, never>;
   "meeting.answer": Record<string, never>;
+  "learn.offer": Record<string, never>;
+  "learn.answer": Record<string, never>;
   "dictation.retry": RecoveredTranscript;
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
@@ -265,6 +271,8 @@ export interface MeetingApp {
 
 /** Os botões do painel de reunião: "Gravar" e "Agora não" no pop-up; "Parar" e "Continuar" no "A reunião acabou?". */
 export type MeetingAnswer = "record" | "notNow" | "stop" | "keepGoing";
+/** L26: `add` grava, `notNow` não pergunta de novo, `expired` (10 s sem resposta, outra oferta, um ditado) pode voltar. */
+export type LearnAnswer = "add" | "notNow" | "expired";
 
 export type Event =
   /** Um app de reunião pegou o mic, e o helper mostrou "Gravar esta reunião?" (um por reunião; R2). */
@@ -273,6 +281,8 @@ export type Event =
   | { type: "meeting.endSuggested"; app: MeetingApp }
   /** A pessoa respondeu no painel (ou o app mandou `meeting.answer`). */
   | { type: "meeting.answered"; answer: MeetingAnswer }
+  /** L26: a resposta no cartão do `learn.offer`, com a troca que ele mostrava. */
+  | { type: "learn.answered"; from: string; to: string; answer: LearnAnswer }
   /**
    * R3 (T4943): o texto ao vivo. `id` é o lugar no canal (o provisório leva o id do final que virá). `startFrame` e
    * `endFrame` são o relógio do R1 (16 kHz), para o `meeting.ack`. O helper manda sempre `session` e `channel` (#5064).
@@ -429,6 +439,8 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "meeting.pending",
   "meeting.ack",
   "meeting.answer",
+  "learn.offer",
+  "learn.answer",
   "dictation.retry",
   "record.start",
   "record.stop",
@@ -449,6 +461,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "meeting.suggested",
   "meeting.endSuggested",
   "meeting.answered",
+  "learn.answered",
   "meeting.minePaused",
   "meeting.segment",
   "meeting.settled",
