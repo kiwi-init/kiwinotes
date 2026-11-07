@@ -61,6 +61,13 @@ final class Helper {
     /// R3: the live transcript of the meeting being recorded, and the dictionary it uses.
     private let live = LiveMeetingSlot()
     private var meetingDictionary = TranscriptDictionary.empty
+    /// O modo preciso (T6602): o Whisper small, quando o app manda o caminho do modelo no `config.set {precise}`.
+    private let precise = PreciseTranscriber()
+    /// O modelo do modo preciso está carregado: os ditados saem por ele. Só no main actor.
+    private var preciseReady = false
+    /// As cargas e as trocas do modelo do modo preciso, em ordem, fora da fila das transcrições: um ditado não espera
+    /// o modelo carregar, sai pelo Parakeet até ele ficar pronto.
+    private var preciseChain: Task<Void, Never>?
     /// R2 (#195): which app takes the mic, the pop-up, the meeting shortcuts and the meeting pill.
     private var meeting: MeetingController!
     /// L6 (T5457): com o Fn como atalho, a ação do 🌐 do macOS fica em "Nenhuma ação" enquanto o helper roda.
@@ -379,6 +386,12 @@ final class Helper {
         // L3 (T5455): o journal do ditado em curso fecha antes de sair, para a recuperação.
         _ = finishRecovery()
         try? meetings?.capture.stop()
+        // T6602: o Metal do transcribe.cpp aborta num assert no fim do processo com um modelo vivo. Sem ele, sai normal;
+        // com um ditado em curso segurando o modelo, sai sem os destrutores do C++.
+        if !precise.loaded.release() {
+            fflush(stdout)
+            _exit(0)
+        }
         exit(0)
     }
 
@@ -548,32 +561,55 @@ final class Helper {
         // From the key let go, tail included (T5456): the person waits from there.
         let stoppedAt = releasedAt ?? ProcessInfo.processInfo.systemUptime
         let previous = sttChain
-        sttChain = Task { @MainActor [stt, weak self] in
+        sttChain = Task { @MainActor [weak self] in
             await previous?.value
+            guard let self else { return }
             do {
-                let output = try await stt.transcribe(samples)
+                let (output, engine) = try await self.recognize(samples)
                 var fields: [String: Any] = [
                     "text": output.text,
                     "raw": output.raw,
                     "lang": output.lang,
+                    "engine": engine,
                     "durationMs": durationMs,
                     "latencyMs": Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000),
                 ]
                 if let audioPath { fields["audioPath"] = audioPath }
                 if let recovery { fields["recovery"] = recovery.fields }
-                self?.emit("transcript.final", fields)
+                self.emit("transcript.final", fields)
                 // The model loaded now, after a failed start (offline on the first run, #383).
-                self?.setSTT(.ready)
+                if engine == "parakeet" { self.setSTT(.ready) }
             } catch {
                 let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
                 var fields: [String: Any] = ["error": code]
                 if let recovery { fields["recovery"] = recovery.fields }
-                self?.emit("transcript.error", fields)
+                self.emit("transcript.error", fields)
                 if code == Transcriber.Failure.modelUnavailable.rawValue {
-                    self?.setSTT(.unavailable, ["error": code])
+                    self.setSTT(.unavailable, ["error": code])
                 }
             }
         }
+    }
+
+    /// O texto de uma gravação e o motor que o fez (T6602): o Whisper do modo preciso quando ele está carregado e há
+    /// pelo menos um segundo de fala, e o Parakeet no resto do tempo: numa palavra solta, quando o Whisper falha ou
+    /// quando ele devolve o próprio prompt (o ditado nunca se perde por causa dele).
+    private func recognize(_ samples: [Float]) async throws -> (Transcriber.Output, String) {
+        if preciseReady, PreciseRoute.usesWhisper(samples, sampleRate: AudioCapture.sampleRate) {
+            let dictionary = meetingDictionary
+            do {
+                let raw = try await precise.transcribe(samples, terms: dictionary.terms)
+                if WhisperPrompt.echoes(raw, terms: dictionary.terms) {
+                    emit("log", ["level": "info", "message": "precise: whisper gave back the prompt, this dictation goes through parakeet"])
+                } else {
+                    let text = TranscriptPostProcessor.process(raw, dictionary: dictionary)
+                    return (Transcriber.Output(raw: raw, text: text, lang: SpokenLanguage.detect(text)), "whisper")
+                }
+            } catch {
+                emit("log", ["level": "warn", "message": "precise: whisper failed, this dictation goes through parakeet"])
+            }
+        }
+        return (try await stt.transcribe(samples), "parakeet")
     }
 
     private func cancelRecording(reason: String) {
@@ -623,17 +659,18 @@ final class Helper {
         } catch { return reply(id, ok: false, error: "recovery_unavailable") }
         let previous = sttChain
         let started = ProcessInfo.processInfo.systemUptime
-        sttChain = Task { @MainActor [stt, weak self] in
+        sttChain = Task { @MainActor [weak self] in
             await previous?.value
+            guard let self else { return }
             do {
-                let output = try await stt.transcribe(samples)
-                self?.reply(id, ok: true, ["text": output.text, "raw": output.raw, "lang": output.lang,
+                let (output, engine) = try await self.recognize(samples)
+                self.reply(id, ok: true, ["text": output.text, "raw": output.raw, "lang": output.lang, "engine": engine,
                     "durationMs": Int(Double(samples.count) / AudioCapture.sampleRate * 1000),
                     "latencyMs": Int((ProcessInfo.processInfo.systemUptime - started) * 1000)])
-                self?.setSTT(.ready)
+                if engine == "parakeet" { self.setSTT(.ready) }
             } catch {
                 let code = (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue
-                self?.reply(id, ok: false, error: code)
+                self.reply(id, ok: false, error: code)
             }
         }
     }
@@ -1010,6 +1047,8 @@ final class Helper {
         // T5833: os sons de início e de fim (padrão: ligados).
         if let value = message.fields["cues"], !(value is Bool) { return "invalid_value" }
         if let value = message.fields["meetingApps"], MeetingApps.parse(value) == nil { return "invalid_value" }
+        // T6602: `precise`, o caminho do GGUF do Whisper do modo preciso, ou null para desligar.
+        if let value = message.fields["precise"], !(value is NSNull), (value as? String)?.isEmpty != false { return "invalid_value" }
         if !changed.isEmpty {
             let dictationChanged = changed["dictation"].map { $0 != shortcuts["dictation"] } ?? false
             for (id, shortcut) in changed { shortcuts[id] = shortcut }
@@ -1029,6 +1068,7 @@ final class Helper {
             if meetings?.capture.session != nil, !headless { meetingMic.audio.inputChanged("microphone: \(choice.value)") }
         }
         if let on = message.fields["cues"] as? Bool { cues.enabled = on }
+        if let value = message.fields["precise"] { setPrecise(value as? String) }
         if let ms = hold { gesture.holdThreshold = ms / 1000 }
         if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
         if hold != nil || doubleTap != nil { tap.timings = (doubleTap: gesture.doubleTapWindow, tap: gesture.holdThreshold) }
@@ -1049,6 +1089,32 @@ final class Helper {
             }
         }
         return nil
+    }
+
+    /// Carrega (ou troca) o Whisper do modo preciso, ou solta o modelo com `nil`, e diz no `stt.precise`. Quem estava
+    /// ditando enquanto isso segue pelo Parakeet.
+    private func setPrecise(_ path: String?) {
+        if path == nil { preciseReady = false }
+        let previous = preciseChain
+        preciseChain = Task { @MainActor [precise, weak self] in
+            await previous?.value
+            guard let path else {
+                await precise.unload()
+                self?.emit("stt.precise", ["state": "off"])
+                return
+            }
+            self?.emit("stt.precise", ["state": "loading"])
+            let started = ProcessInfo.processInfo.systemUptime
+            do {
+                try await precise.load(path: path)
+                self?.preciseReady = true
+                self?.emit("stt.precise", ["state": "ready", "loadMs": Int((ProcessInfo.processInfo.systemUptime - started) * 1000)])
+            } catch {
+                await precise.unload()
+                self?.preciseReady = false
+                self?.emit("stt.precise", ["state": "unavailable"])
+            }
+        }
     }
 
     // MARK: Permissions

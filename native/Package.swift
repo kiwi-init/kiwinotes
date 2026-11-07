@@ -48,7 +48,7 @@ let package = Package(
         // The sidecar the Bun app starts with `--socket <path>`.
         .executableTarget(
             name: "kiwi-helper",
-            dependencies: ["KiwiHelperCore", "KiwiOCR", "KiwiExport", .product(name: "FluidAudio", package: "FluidAudio")],
+            dependencies: ["KiwiHelperCore", "KiwiOCR", "KiwiExport", "TranscribeCpp", .product(name: "FluidAudio", package: "FluidAudio")],
             exclude: ["Info.plist"],
             linkerSettings: [
                 // Embeds Info.plist (NSMicrophoneUsageDescription) so macOS can ask for the mic.
