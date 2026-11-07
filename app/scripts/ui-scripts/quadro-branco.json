@@ -76,6 +76,26 @@
       "screenshot": "01-quadro.png"
     },
     {
+      "press": "Meta+k",
+      "name": "a paleta em cima do quadro"
+    },
+    {
+      "waitFor": ".kn-palette"
+    },
+    {
+      "expectCount": ".kn-palette .kn-palette-it:has-text('Adicionar propriedade')",
+      "count": 0,
+      "name": "a paleta em cima do quadro não oferece Adicionar propriedade"
+    },
+    {
+      "press": "Escape",
+      "name": "fecha a paleta"
+    },
+    {
+      "expectCount": ".kn-palette",
+      "count": 0
+    },
+    {
       "click": ".kn-canvas-node[data-id='t2']",
       "name": "escolhe o cartão laranja"
     },

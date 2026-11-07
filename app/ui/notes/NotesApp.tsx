@@ -532,10 +532,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [focusMode, setFocusMode] = useState(false);
   const [typewriter, setTypewriter] = useState(false);
   const toggleFocus = () => {
+    if (view !== "note") return;
     setTreeOpen(false);
     setFocusMode((f) => !f);
   };
-  const toggleTypewriter = () => setTypewriter((t) => !t);
+  const toggleTypewriter = () => {
+    if (view !== "note") return;
+    setTypewriter((t) => !t);
+  };
   const togglesRef = useRef({ toggleFocus, toggleTypewriter });
   togglesRef.current = { toggleFocus, toggleTypewriter };
   const shortcutsRef = useRef(shortcuts);
@@ -596,6 +600,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     void save();
   };
   const addNoteProperty = () => {
+    if (view !== "note") return;
     const added = addProperty(frontmatter.current);
     if (!added) return failed_("adicionar uma propriedade: o frontmatter desta nota não é YAML válido")(null);
     onProperties(added.frontmatter);
@@ -1065,7 +1070,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true,
           },
         ] : []),
-    ...(note ? [
+    ...(note && view === "note" ? [
       { id: "focus", title: focusMode ? "Sair do modo foco" : "Modo foco", words: "foco concentrar distração zen esconder" },
       { id: "typewriter", title: typewriter ? "Desligar a máquina de escrever" : "Máquina de escrever", words: "máquina escrever centralizar linha typewriter" },
       { id: "add-property", title: "Adicionar propriedade", words: "propriedade frontmatter metadado campo yaml" },
