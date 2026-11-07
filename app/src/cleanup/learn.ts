@@ -88,7 +88,14 @@ export function learnedPair(pasted: string, edited: string): LearnedPair | null 
   if (x === y) {
     const caseOnly = from.toLocaleLowerCase("pt-BR") === to.toLocaleLowerCase("pt-BR");
     if (!caseOnly || !/\p{Lu}/u.test(to.slice(1))) return null;
-  } else if (inflectionOnly(removed, added) || distance(x, y) / Math.max(x.length, y.length) > MAX_DISTANCE) return null;
+  } else {
+    if (inflectionOnly(removed, added)) return null;
+    const d = distance(x, y);
+    if (d / Math.max(x.length, y.length) > MAX_DISTANCE) return null;
+    // Duas palavras comuns parecidas ("servidor" → "serviço"): sem maiúscula, dígito nem junção de palavras (o STT que
+    // partiu um termo, "cube control" → "kubectl"), é troca de palavra e não de termo; só um erro de digitação passa.
+    if (to === to.toLocaleLowerCase("pt-BR") && !/\p{N}/u.test(to) && removed.length === added.length && d > 1) return null;
+  }
   return { from, to };
 }
 

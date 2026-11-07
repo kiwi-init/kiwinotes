@@ -28,6 +28,13 @@ describe("learnedPair", () => {
     expect(learnedPair("o carro é bonito", "o carro é bonita")).toBeNull();
     expect(learnedPair("a eleição de ontem", "a eleições de ontem")).toBeNull();
     expect(learnedPair("o pão chegou", "os pães chegou")).toBeNull();
+  });
+
+  test("palavra comum por outra parecida, em minúscula, não aprende (rodada 4)", () => {
+    expect(learnedPair("o servidor caiu", "o serviço caiu")).toBeNull();
+    expect(learnedPair("passei no mercado", "passei na mercearia")).toBeNull();
+    expect(learnedPair("rode o cube control get pods", "rode o kubectl get pods")).toEqual({ from: "cube control", to: "kubectl" });
+    expect(learnedPair("abri o githab", "abri o github")).toEqual({ from: "githab", to: "github" });
     expect(learnedPair("mandei para o Pax", "mandei para o PACS")).toEqual({ from: "Pax", to: "PACS" });
   });
 
