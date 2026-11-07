@@ -11,6 +11,7 @@ import { isAttachmentName } from "../../../src/shared/attachments.ts";
 import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
 import { embedLine } from "./attachments.ts";
+import { noteEmbedLine } from "./embed-line.ts";
 import { type Footnotes, footnoteLabel, footnotesOf, superscript } from "./footnotes.ts";
 import { DICTATION_CAPTION } from "./livePreview.ts";
 
@@ -60,7 +61,7 @@ function touches(state: EditorState, from: number, to: number): boolean {
 export function keepsRaw(node: SyntaxNode, source: string): boolean {
   if (CODE.has(node.name)) return false;
   if (source.includes("%%")) return true;
-  return source.split("\n").some((l) => DICTATION_CAPTION.test(l) || embedLine(l));
+  return source.split("\n").some((l) => DICTATION_CAPTION.test(l) || embedLine(l) || noteEmbedLine(l));
 }
 
 /**
@@ -165,6 +166,11 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
       const scheme = link.target && status(link.target) === "missing" ? MISSING_LINK : NOTE_LINK;
       const destination = link.target + (link.heading ? `#${link.heading}` : "");
       edits.push({ from: embed ? a - 1 : a, to: lineStart + link.to, insert: `[${escapeLabel(shown)}](${scheme}${encodeURIComponent(destination)})` });
+    }
+    // O `^id` de bloco no fim da linha (T6594): é a âncora do Obsidian para `![[nota#^id]]`, e só aparece editando.
+    const block = /\s\^[A-Za-z0-9-]+[ \t]*$/.exec(line);
+    if (block && !inAny(tree, offset + lineStart + block.index + 1, CODE_INLINE)) {
+      edits.push({ from: lineStart + block.index, to: lineStart + line.length, insert: "" });
     }
     for (const t of tagsInLine(line)) {
       const a = lineStart + t.from;

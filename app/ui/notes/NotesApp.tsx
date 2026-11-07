@@ -1359,6 +1359,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
                 return path === note.path ? pending.current ?? splitFrontmatter(baseContent.current).body : (await api.get(path)).content;
               }}
               attachments={api.attachments}
+              embed={api.embed}
               onError={(t) => say(t)}
               focus={focusMode}
               typewriter={typewriter}

@@ -152,6 +152,7 @@ export function engineNotes(
     search: (query, limit) => call("notes.search", { query, ...(limit ? { limit } : {}) }),
     backlinks: (path) => call("notes.backlinks", { path }),
     resolve: (link) => call("notes.resolve", { link }),
+    ...(has("notes.embed") ? { embed: (link: string) => call("notes.embed", { link }) } : {}),
     onChanged: (fn) => on("notes.changed", (payload) => {const e=payload as {paths:string[];folderId?:string};if(!folderId||!e.folderId||e.folderId===folderId)fn(e.paths);}),
   };
 }

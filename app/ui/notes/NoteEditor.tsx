@@ -17,6 +17,7 @@ import { isSpellingLanguage } from "../../src/shared/spelling.ts";
 import { lineChanges } from "../../src/shared/merge3.ts";
 
 import type { AttachmentSource } from "./editor/attachments.ts";
+import type { NoteEmbed } from "../../src/shared/ui-contract.ts";
 import { focusCompartment, focusExtension, typewriterCompartment, typewriterExtension } from "./editor/focus.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
@@ -39,6 +40,8 @@ export interface NoteEditorProps {
   headingContent(target: string): Promise<string | null>;
   /** Os anexos (T2594); sem eles, colar e arrastar arquivo não faz nada de especial. Fixo durante a vida da janela. */
   attachments?: AttachmentSource;
+  /** O pedaço de nota de um `![[nota]]` (T6594). */
+  embed?: (link: string) => Promise<NoteEmbed | null>;
   onError?(text: string): void;
   createSplit?(tail: string): Promise<string>;
   onSplitDone?(path: string): void;
@@ -50,7 +53,7 @@ export interface NoteEditorProps {
   viewModes?: { focusKey?: string; typewriterKey?: string; toggleFocus(): void; toggleTypewriter(): void };
 }
 
-export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, onError, createSplit, onSplitDone, onRenameHeading,
+export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
   focus = false, typewriter = false, viewModes,
 }: NoteEditorProps) {
   const modes = useRef({ focus, typewriter });
@@ -90,6 +93,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
         linkTargets: () => latest.current.linkTargets(),
         headingContent: (target) => latest.current.headingContent(target),
         ...(attachments ? { attachments, onError: (t: string) => latest.current.onError?.(t) } : {}),
+        ...(embed ? { embed } : {}),
         ...(has("clipboard.write") ? { copy: (text: string) => appApi.copy(text) } : {}),
       },
       links,
