@@ -3,12 +3,12 @@
 // e não no app da pessoa.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import config from "../electrobun.config.ts";
+import { machoLoadsOf } from "./macho.ts";
 import { ONNX_BUNDLE_DIR, ONNX_DYLIB, ONNX_FILES, ONNX_PACKAGE, ONNX_STAGE, onnxSourceDir, stageOnnxRuntime } from "./onnxruntime.ts";
 
 const appDir = path.resolve(import.meta.dir, "..");
@@ -34,11 +34,9 @@ describe("o onnxruntime-node instalado", () => {
   test("tem os dois arquivos, e o binding só precisa da dylib ao lado dele", () => {
     const names = readdirSync(onnxSourceDir(appDir));
     for (const name of ONNX_FILES) expect(names).toContain(name);
-    const links = spawnSync("otool", ["-L", path.join(onnxSourceDir(appDir), "onnxruntime_binding.node")], { encoding: "utf8" }).stdout;
-    const own = links.split("\n").slice(2).map((l) => l.trim().split(" ")[0]).filter((l) => l?.startsWith("@rpath/"));
-    expect(own).toEqual([`@rpath/${ONNX_DYLIB}`]);
-    const loads = spawnSync("otool", ["-l", path.join(onnxSourceDir(appDir), "onnxruntime_binding.node")], { encoding: "utf8" }).stdout;
-    expect(loads).toMatch(/cmd LC_RPATH\s+cmdsize \d+\s+path @loader_path /);
+    const loads = machoLoadsOf(path.join(onnxSourceDir(appDir), "onnxruntime_binding.node"));
+    expect(loads.dylibs.filter((l) => l.startsWith("@rpath/"))).toEqual([`@rpath/${ONNX_DYLIB}`]);
+    expect(loads.rpaths).toContain("@loader_path");
   });
 
   test("o copy do electrobun.config.ts leva a pasta preparada para esse caminho", () => {
