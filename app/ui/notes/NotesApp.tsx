@@ -405,6 +405,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const openCanvas = useCallback(
     async (p: string) => {
       if (!(await leave())) return;
+      setFocusMode(false);
       setBoard(p);
       setView("canvas");
       setPalette(false);
@@ -1145,7 +1146,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }
 
   return (
-    <div className="kn-notes" data-entered={entered} data-focus={focusMode && note ? "true" : undefined}>
+    <div className="kn-notes" data-entered={entered} data-focus={focusMode && note && view === "note" ? "true" : undefined}>
       <TopBar
         start={
           <button
