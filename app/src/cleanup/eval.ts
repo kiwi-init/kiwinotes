@@ -29,7 +29,7 @@ const TIMEOUT_MS = Number(args.get("timeout") ?? 30_000);
 
 // ------------------------------------------------------------------ backends
 
-/** Apple Foundation Models pelo sidecar: o eval faz o papel do app e escuta o socket. */
+/** Apple Foundation Models pelo sidecar: o eval faz o papel do app e escuta o socket. Headless: sem atalho, pílula nem mic. */
 async function foundationModels(helper: string): Promise<{ backend: LlmBackend; close(): void }> {
   const dir = mkdtempSync(join(tmpdir(), "kiwi-eval-"));
   const socketPath = join(dir, "s.sock");
@@ -58,7 +58,7 @@ async function foundationModels(helper: string): Promise<{ backend: LlmBackend; 
       },
     },
   });
-  const proc = Bun.spawn([helper, "--socket", socketPath], { stdout: "ignore", stderr: "ignore" });
+  const proc = Bun.spawn([helper, "--headless", "--socket", socketPath], { stdout: "ignore", stderr: "ignore" });
   const hello = await readyMsg;
   let n = 0;
   const backend = sidecarLlm({

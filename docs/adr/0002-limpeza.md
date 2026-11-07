@@ -1,6 +1,6 @@
 # ADR 0002: limpeza do ditado com regras primeiro e LLM local opcional
 
-- Status: aceito (T52). O @harry escolheu a opção A em #171: regras primeiro, LLM só onde há folga.
+- Status: aceito (T52). O @harry escolheu a opção A em #171: regras primeiro, LLM só onde há folga. Guarda, prompt PT e golden: T6592.
 - Código: [`app/src/cleanup/`](../../app/src/cleanup/). Contrato do LLM: [ADR 0001](0001-ipc.md) (`llm.complete`, `llm.prewarm`).
 
 ## Contexto
@@ -119,6 +119,42 @@ O que o FM acerta aqui é, quase tudo, uma lacuna das regras: autocorreção no 
 Se um LLM for ligado, a guarda precisa pegar:
 - a troca de idioma em texto curto, porque a conta de palavras novas só vale com 3 ou mais;
 - o número com separador en-US num texto em PT.
+
+### Guarda, prompt em PT e golden com nota (T6592)
+- **Guarda** (`rejectReason`), além do que já tinha:
+  - `language`: o idioma da entrada e da saída pelas stopwords pt/en. Texto curto decide com uma só, se não tiver nenhuma do outro idioma, e assim pega o "kubectl tá fora do path" que a conta de palavras novas deixava passar.
+  - `answered` sem começo de assistente: a entrada é pergunta ("?" ou começa com qual/como/what/can you…), e a saída perdeu o "?" e o começo.
+  - `number_format`: "20,000" num texto em PT.
+  - `markup`: crase de código que ninguém ditou.
+  - A saída perde os espaços no fim da linha (item c acima).
+- **Prompt:** uma regra do Kiwi (nunca traduzir; em PT, milhar com ".", decimal com "," e dinheiro em R$) e 5 exemplos em PT, um para cada erro do T270 e do T1208. Nenhum repete frase do evalset nem do golden.
+- **Golden** (`golden.ts`): 30 ditados inventados, em PT e EN, com o texto que a gente quer colar. A nota de cada caso vai de 0 a 1: 1 menos a distância de edição até o esperado, dividida pelo tamanho do maior dos dois. Zera se perde termo do dicionário ou muda de idioma. Roda com `bun src/cleanup/eval.ts --golden [--fm <kiwi-helper>]`, e o helper sobe `--headless`. O `golden.test.ts` segura as regras no CI (média ≥ 0,95, nenhum caso zerado).
+- **Medição:** FM pelo helper, M1 Pro, macOS 27.2, com o `kiwi lock bench`, `llmMode: "always"` e a guarda nova nas duas colunas.
+
+| | Só regras | Regras + FM, prompt antigo | Regras + FM, prompt com PT |
+|---|---|---|---|
+| Nota média | **0,955** | 0,960 | 0,951 |
+| Exatos | 11 de 30 | 10 | 10 |
+| O LLM melhorou / piorou / igual | | 6 / 11 / 13 | 8 / 10 / 12 |
+| A guarda descartou | | 2 (`language`, `number_format`) | 3 (`language` ×2, `markup`) |
+| Erro do FM | | 1 | 1 |
+| Latência p50 / máx | ~0,01 ms | | 2,7 / 5,5 s |
+
+- **O prompt em PT acerta:**
+  - mantém o registro ("o time" e "te respondo", em vez de "a equipe" e "te responder") e o "pra";
+  - põe o "?" na pergunta e a maiúscula no nome;
+  - escreve "15.200", não "15,200";
+  - mantém a assinatura do e-mail.
+- **O prompt em PT erra:**
+  - traduziu um ditado em inglês para o PT (a guarda pegou);
+  - escreveu "3.500,00 reais";
+  - tirou o "uns" de "pesa uns 80 gigas" (a guarda não pega aproximação tirada);
+  - pôs crases de código (a guarda agora pega).
+- **Nos dois prompts:**
+  - "A call é às 3h30" virou "A call is at 3:30". A guarda nova pegou: é a tradução curta que passava.
+  - "meia-noite" virou "24h", e as listas ganharam linha em branco.
+
+**Decisão: o `llmMode` continua `off`.** No golden, regras + FM não passam das regras sozinhas: 0,951 contra 0,955. Para ligar, o backend tem que passar as regras no golden pela nota do `eval.ts --golden`, e a guarda ainda precisa pegar a aproximação tirada ("uns", "cerca de", "about"). O candidato é o Qwen3-1.7B do T270, quando o MLX entrar no sidecar.
 
 ## Consequências
 - A frase curta sai na hora e sempre igual, e as fixtures (`fixtures.ts`) descrevem exatamente o que a limpeza faz.

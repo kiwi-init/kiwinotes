@@ -254,6 +254,11 @@ describe("guarda da saída do LLM", () => {
     expect(rejectReason("we processed twenty thousand records", "We processed 20,000 records.", dict)).toBeNull();
   });
 
+  test("crase de código que não foi ditada reprova (T6592)", () => {
+    expect(rejectReason("roda o kubectl get pods pra ver se subiu", "Roda o `kubectl get pods` pra ver se subiu.", dict)).toBe("markup");
+    expect(rejectReason("roda o `kubectl` agora", "Roda o `kubectl` agora.", dict)).toBeNull();
+  });
+
   test("idioma pelas stopwords, e nada quando não dá para dizer", () => {
     expect(languageOf("o servidor caiu de novo e ninguém viu")).toBe("pt");
     expect(languageOf("the server is down and nobody saw it")).toBe("en");

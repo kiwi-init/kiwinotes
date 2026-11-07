@@ -90,6 +90,8 @@ export function rejectReason(input: string, output: string, dictionary: Compiled
   const langIn = languageOf(input);
   const langOut = languageOf(out);
   if (langIn && langOut && langIn !== langOut) return "language";
+  // Crase de código que ninguém ditou: o FM pôs `kubectl` e `PACS` entre crases no golden (T6592).
+  if (out.includes("`") && !input.includes("`")) return "markup";
   // Em português a vírgula é decimal: "20,000" é o milhar do inglês, que o FM escreveu em PT (T1208).
   if (langIn === "pt" && EN_THOUSANDS.test(out) && !EN_THOUSANDS.test(input)) return "number_format";
   const ratio = out.length / Math.max(1, input.length);
