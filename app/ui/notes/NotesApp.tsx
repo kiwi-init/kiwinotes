@@ -31,6 +31,8 @@ import { MeetingSpeakerDialog } from "./MeetingSpeakerDialog.tsx";
 import { isMeetingNote } from "../../src/shared/meeting-note.ts";
 import { merge3, mergeNoteEdit, type MergeResult } from "../../src/shared/merge3.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
+import { Properties } from "./Properties.tsx";
+import { addProperty } from "./frontmatter-properties.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
 import { focusEditor, insertIntoEditor,
@@ -172,6 +174,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   // O que ainda não foi gravado: o corpo da nota aberta, o frontmatter que volta com ele e a versão que o disco tem.
   const pending = useRef<string | null>(null);
   const frontmatter = useRef("");
+  /** O mesmo frontmatter, em estado: o painel de propriedades (T6598) desenha a partir dele. */
+  const [frontmatterText, setFrontmatterText] = useState("");
+  const setFrontmatter = (text: string) => {
+    frontmatter.current = text;
+    setFrontmatterText(text);
+  };
+  const [newProperty, setNewProperty] = useState<string | null>(null);
+  const clearNewProperty = useCallback(() => setNewProperty(null), []);
   const version = useRef("");
   const baseContent = useRef("");
   const current = useRef<string | null>(null);
@@ -209,7 +219,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     (n: Note, stay = false) => {
       if (!stay) setView("note");
       const split = splitFrontmatter(n.content);
-      frontmatter.current = split.frontmatter;
+      setFrontmatter(split.frontmatter);
       version.current = n.version;
       baseContent.current = n.content;
       current.current = n.path;
@@ -250,7 +260,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     const split = splitFrontmatter(merged);
     const dirty = merged !== n.content;
     baseContent.current = n.content;
-    frontmatter.current = split.frontmatter;
+    setFrontmatter(split.frontmatter);
     version.current = n.version;
     pending.current = dirty ? split.body : null;
     if (dirty) drafts.set({ path: n.path, body: split.body, frontmatter: split.frontmatter, baseVersion: n.version });
@@ -314,7 +324,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       const display = splitFrontmatter(displayContent);
       version.current = r.meta.version;
       baseContent.current = savedContent;
-      frontmatter.current = display.frontmatter;
+      setFrontmatter(display.frontmatter);
       setSaveFailed(false);
       setConflict(null);
       pending.current = typing ? display.body : null;
@@ -551,6 +561,22 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     }
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_AFTER_MS);
+  };
+
+  /** Uma edição do painel de propriedades (T6598): o frontmatter novo grava junto com o corpo de agora. */
+  const onProperties = (text: string) => {
+    if (text === frontmatter.current) return;
+    setFrontmatter(text);
+    if (pending.current === null) pending.current = splitFrontmatter(baseContent.current).body;
+    if (current.current && !undecided.current)
+      drafts.set({ path: current.current, body: pending.current, frontmatter: text, baseVersion: version.current });
+    void save();
+  };
+  const addNoteProperty = () => {
+    const added = addProperty(frontmatter.current);
+    if (!added) return failed_("adicionar uma propriedade: o frontmatter desta nota não é YAML válido")(null);
+    onProperties(added.frontmatter);
+    setNewProperty(added.key);
   };
 
   const onOpenLink = async (target: string) => {
@@ -1003,6 +1029,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     ...(note ? [
       { id: "focus", title: focusMode ? "Sair do modo foco" : "Modo foco", words: "foco concentrar distração zen esconder" },
       { id: "typewriter", title: typewriter ? "Desligar a máquina de escrever" : "Máquina de escrever", words: "máquina escrever centralizar linha typewriter" },
+      { id: "add-property", title: "Adicionar propriedade", words: "propriedade frontmatter metadado campo yaml" },
     ] : []),
   ];
 
@@ -1275,6 +1302,16 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
                 </Popover>
               ) : null}
             </div>
+            <Properties
+              key={note.path}
+              frontmatter={frontmatterText}
+              onChange={onProperties}
+              onAdd={addNoteProperty}
+              onOpenTag={openTag}
+              onOpenLink={(t) => void onOpenLink(t)}
+              renaming={newProperty}
+              onRenamingDone={clearNewProperty}
+            />
             {conflict ? (
               <div className="kn-conflict kn-save-alert kn-merge" role="alert">
                 {/* T5454: o resto do que mudou fora já entrou; só os trechos que os dois mudaram pedem uma escolha. */}
@@ -1369,6 +1406,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
                 toggleFocus,
                 toggleTypewriter,
               }}
+              onAddProperty={addNoteProperty}
             />
           </article>
         ) : listing && !listing.notes.length ? (
@@ -1389,7 +1427,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           commands={paletteCommands}
           onCommand={(id, q) =>
             id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q)
-              : id === "focus" ? toggleFocus() : id === "typewriter" ? toggleTypewriter() : undefined
+              : id === "focus" ? toggleFocus() : id === "typewriter" ? toggleTypewriter() : id === "add-property" ? addNoteProperty() : undefined
           }
           onOpen={(p) => void open(p)}
           onCreate={(t) => void create(t)}

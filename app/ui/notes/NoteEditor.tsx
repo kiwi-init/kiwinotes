@@ -51,10 +51,12 @@ export interface NoteEditorProps {
   typewriter?: boolean;
   /** Os dois no menu do botão direito, com o atalho de agora. */
   viewModes?: { focusKey?: string; typewriterKey?: string; toggleFocus(): void; toggleTypewriter(): void };
+  /** "Adicionar propriedade" no menu do botão direito (T6598): o painel some quando a nota não tem nenhuma. */
+  onAddProperty?: () => void;
 }
 
 export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
-  focus = false, typewriter = false, viewModes,
+  focus = false, typewriter = false, viewModes, onAddProperty,
 }: NoteEditorProps) {
   const modes = useRef({ focus, typewriter });
   modes.current = { focus, typewriter };
@@ -74,8 +76,8 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   });
   latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, onError, createSplit, onSplitDone, onRenameHeading,
   };
-  const modeMenu = useRef({ focus, typewriter, viewModes });
-  modeMenu.current = { focus, typewriter, viewModes };
+  const modeMenu = useRef({ focus, typewriter, viewModes, onAddProperty });
+  modeMenu.current = { focus, typewriter, viewModes, onAddProperty };
 
   const extensions = useRef(
     editorExtensions(
@@ -195,9 +197,11 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   };
   const viewModeItems = (): MenuItem[] => {
     const m = modeMenu.current;
-    if (!m.viewModes) return [];
+    const property: MenuItem[] = m.onAddProperty ? [{ kind: "separator" }, { label: "Adicionar propriedade", onSelect: m.onAddProperty }] : [];
+    if (!m.viewModes) return property;
     const { toggleFocus, toggleTypewriter, focusKey, typewriterKey } = m.viewModes;
     return [
+      ...property,
       { kind: "separator" },
       { label: "Modo foco", hint: focusKey, checked: m.focus, onSelect: toggleFocus },
       { label: "Máquina de escrever", hint: typewriterKey, checked: m.typewriter, onSelect: toggleTypewriter },

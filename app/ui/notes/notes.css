@@ -1057,6 +1057,7 @@ body {
 .kn-notes .kn-bar,
 .kn-notes .kn-page-crumbs,
 .kn-notes .kn-meta,
+.kn-notes .kn-props,
 .kn-notes .kn-outline,
 .kn-notes .kn-link-warnings {
   transition: opacity var(--slow) var(--ease);
@@ -1065,9 +1066,243 @@ body {
 .kn-notes[data-focus] .kn-bar,
 .kn-notes[data-focus] .kn-page-crumbs,
 .kn-notes[data-focus] .kn-meta,
+.kn-notes[data-focus] .kn-props,
 .kn-notes[data-focus] .kn-outline,
 .kn-notes[data-focus] .kn-link-warnings {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+}
+
+/* O painel de propriedades (T6598, E14): o frontmatter como linhas com tipo, entre fios, embaixo da meta. */
+.kn-props {
+  margin: -16px 0 26px;
+  padding: 4px 0 6px;
+  border-top: 1px solid var(--line-2, var(--surface-2));
+  border-bottom: 1px solid var(--line-2, var(--surface-2));
+}
+
+.kn-props-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px 0 2px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: none;
+  font: var(--t-stamp) / 1 var(--mono);
+  color: var(--text-3);
+  cursor: default;
+}
+
+.kn-props-head:hover {
+  color: var(--text-2);
+}
+
+.kn-props-head svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--fast) var(--ease);
+}
+
+.kn-props-head svg[data-open] {
+  transform: rotate(90deg);
+}
+
+.kn-prop {
+  display: grid;
+  grid-template-columns: 22px minmax(90px, 160px) 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 6px 0 2px;
+  border-radius: var(--r-row);
+}
+
+.kn-prop:hover,
+.kn-prop:focus-within {
+  background: var(--surface-hover);
+}
+
+.kn-prop-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-3);
+  cursor: default;
+}
+
+.kn-prop-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.kn-prop-icon:hover,
+.kn-prop-icon[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.kn-prop-key {
+  overflow: hidden;
+  font: var(--t-meta) / 1.3 var(--mono);
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kn-prop-value {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+}
+
+.kn-prop-val {
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: var(--t-ui) / 1.45 var(--ui);
+  color: var(--text);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.kn-prop-val[data-mono] {
+  font: var(--t-meta) / 1.45 var(--mono);
+}
+
+.kn-prop-val[data-empty],
+.kn-prop-more {
+  color: var(--text-3);
+}
+
+.kn-prop-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 2px 0;
+}
+
+.kn-prop-pill {
+  padding: 1px 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font: var(--t-meta) / 1.5 var(--ui);
+  color: var(--text);
+  cursor: default;
+}
+
+.kn-prop-pill[data-tag],
+.kn-prop-pill[data-link] {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.kn-prop-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--t-ui) / 1.45 var(--ui);
+  color: var(--accent-text);
+  cursor: default;
+}
+
+.kn-prop-pill[data-tag]:hover,
+.kn-prop-pill[data-link]:hover,
+.kn-prop-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kn-prop-more {
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: var(--t-stamp) / 1.5 var(--mono);
+  opacity: 0;
+  cursor: default;
+}
+
+.kn-prop:hover .kn-prop-more,
+.kn-prop-more:focus-visible,
+.kn-prop-more:only-child {
+  opacity: 1;
+}
+
+.kn-prop-input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  box-shadow: var(--focus-ring);
+  outline: none;
+  font: var(--t-ui) / 1 var(--ui);
+  color: var(--text);
+}
+
+.kn-prop-input.kn-prop-key {
+  margin-left: -8px;
+  font: var(--t-meta) / 1 var(--mono);
+}
+
+.kn-prop-input[aria-invalid] {
+  box-shadow: 0 0 0 1.5px var(--danger);
+}
+
+.kn-prop-raw {
+  font: var(--t-stamp) / 1.5 var(--mono);
+  color: var(--text-3);
+  white-space: pre-wrap;
+}
+
+.kn-props-add {
+  margin: 2px 0 0 2px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: none;
+  font: var(--t-ui) / 1.3 var(--ui);
+  color: var(--text-3);
+  cursor: default;
+}
+
+.kn-props-add:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.kn-props-bad {
+  padding: 6px 2px;
+  font: var(--t-meta) / 1.4 var(--ui);
+  color: var(--text-3);
+}
+
+.kn-props :is(button, input):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }

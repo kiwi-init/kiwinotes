@@ -1,0 +1,228 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Ana Souza",
+        "content": "Contato da Acme.\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Reunião com a Ana",
+        "content": "---\nstatus: em andamento\ntags: [reunião, cliente/acme]\ndata: 2026-11-06\nresponsável: \"[[Ana Souza]]\"\nconcluída: false\nprioridade: 2\nparticipantes:\n  - Ana\n  - Bruno\n  - Carla\n---\nCombinamos a entrega da primeira versão para o fim do mês, com a revisão do contrato antes.\n\nA Ana vai mandar os dados de acesso na segunda-feira.\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Sem propriedades",
+        "content": "Uma nota sem frontmatter.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Reunião com a Ana"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Reunião com a Ana')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-props .kn-prop",
+      "name": "o painel aparece"
+    },
+    {
+      "expectCount": ".kn-props .kn-prop",
+      "count": 7,
+      "name": "as 7 propriedades"
+    },
+    {
+      "expectText": ".kn-props-head",
+      "text": "Propriedades · 7"
+    },
+    {
+      "expectText": ".kn-prop:has(.kn-prop-key:text-is('data'))",
+      "text": "6 nov 2026",
+      "name": "a data por extenso"
+    },
+    {
+      "expectText": ".kn-prop:has(.kn-prop-key:text-is('responsável')) .kn-prop-link",
+      "text": "Ana Souza",
+      "name": "o link"
+    },
+    {
+      "expectCount": ".kn-prop:has(.kn-prop-key:text-is('tags')) .kn-prop-pill[data-tag]",
+      "count": 2,
+      "name": "as tags em pílulas"
+    },
+    {
+      "expectCount": ".kn-note-editor :text('status:')",
+      "count": 0,
+      "name": "o frontmatter não aparece no corpo"
+    },
+    {
+      "screenshot": "propriedades.png",
+      "selector": ".kn-page"
+    },
+    {
+      "click": ".kn-prop:has(.kn-prop-key:text-is('status')) .kn-prop-val"
+    },
+    {
+      "fill": ".kn-prop:has(.kn-prop-key:text-is('status')) input",
+      "text": "feito"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "expectText": ".kn-prop:has(.kn-prop-key:text-is('status')) .kn-prop-val",
+      "text": "feito",
+      "name": "editar um texto no lugar"
+    },
+    {
+      "click": ".kn-prop:has(.kn-prop-key:text-is('concluída')) .kn-switch"
+    },
+    {
+      "expectCount": ".kn-prop:has(.kn-prop-key:text-is('concluída')) .kn-switch[aria-checked='true']",
+      "count": 1,
+      "name": "a caixa liga"
+    },
+    {
+      "click": ".kn-prop:has(.kn-prop-key:text-is('prioridade')) .kn-prop-icon"
+    },
+    {
+      "waitFor": ".kn-menu .kn-menu-item:has-text('Número')"
+    },
+    {
+      "expectCount": ".kn-menu .kn-menu-item:has-text('Número') .kn-menu-check:text-is('✓')",
+      "count": 1,
+      "name": "o menu marca o tipo de agora"
+    },
+    {
+      "screenshot": "menu-tipo.png",
+      "selector": ".kn-page"
+    },
+    {
+      "click": ".kn-menu .kn-menu-item:has-text('Renomear')"
+    },
+    {
+      "fill": ".kn-props input[aria-label='Nome da propriedade']",
+      "text": "peso"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "expectCount": ".kn-prop:has(.kn-prop-key:text-is('peso'))",
+      "count": 1,
+      "name": "renomear pelo menu"
+    },
+    {
+      "click": ".kn-prop:has(.kn-prop-key:text-is('participantes')) .kn-prop-icon"
+    },
+    {
+      "click": ".kn-menu .kn-menu-item:has-text('Remover')"
+    },
+    {
+      "expectCount": ".kn-props .kn-prop",
+      "count": 6,
+      "name": "remover pelo menu"
+    },
+    {
+      "click": ".kn-prop:has(.kn-prop-key:text-is('peso')) .kn-prop-icon"
+    },
+    {
+      "click": ".kn-menu .kn-menu-item:has-text('Texto')"
+    },
+    {
+      "expectCount": ".kn-prop:has(.kn-prop-key:text-is('peso'))[data-type='text']",
+      "count": 1,
+      "name": "trocar o tipo"
+    },
+    {
+      "click": ".kn-props-add"
+    },
+    {
+      "fill": ".kn-props input[aria-label='Nome da propriedade']",
+      "text": "projeto"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "click": ".kn-prop:has(.kn-prop-key:text-is('projeto')) .kn-prop-val"
+    },
+    {
+      "fill": ".kn-prop:has(.kn-prop-key:text-is('projeto')) input",
+      "text": "Portal"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "expectText": ".kn-prop:has(.kn-prop-key:text-is('projeto')) .kn-prop-val",
+      "text": "Portal",
+      "name": "adicionar uma propriedade"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "editada.png",
+      "selector": ".kn-page"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Sem propriedades"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Sem propriedades')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-note-editor :text('Uma nota sem frontmatter.')"
+    },
+    {
+      "expectCount": ".kn-props",
+      "count": 0,
+      "name": "sem propriedades, o painel some"
+    },
+    {
+      "click": ".kn-note-editor :text('Uma nota sem frontmatter.')",
+      "button": "right"
+    },
+    {
+      "click": ".kn-menu .kn-menu-item:has-text('Adicionar propriedade')",
+      "name": "adicionar pelo menu do botão direito"
+    },
+    {
+      "fill": ".kn-props input[aria-label='Nome da propriedade']",
+      "text": "fonte"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "expectCount": ".kn-props .kn-prop",
+      "count": 1
+    },
+    {
+      "wait": 400
+    }
+  ]
+}

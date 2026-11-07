@@ -486,6 +486,27 @@ await step("a legenda do ditado fica pequena e verde, sem mostrar o id", async (
   expectEq(said.color, expected);
 });
 
+// T6598: o painel de propriedades edita o frontmatter no lugar, e o resto do arquivo fica como estava.
+await step("propriedades: editar, ligar a caixa e remover mexem só na sua chave", async () => {
+  const fm = "---\n# da reunião\nstatus: aberto # revisar\nconcluída: false\nlista: [\"a b\", 'c']\n---\n";
+  const body = "Corpo da Ana.\n";
+  await page.goto(`${URL}?note=${encodeURIComponent("Pessoas/Ana.md")}`);
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
+  await page.evaluate((t) => (window as any).__kiwiNotesMock.editOutside("Pessoas/Ana.md", t), fm + body);
+  await page.waitForSelector(".kn-props .kn-prop >> nth=2");
+  const row = (k: string) => page.locator(".kn-prop", { has: page.locator(`.kn-prop-key:text-is("${k}")`) });
+  await row("status").locator(".kn-prop-val").click();
+  await row("status").locator("input").fill("fechado");
+  await page.keyboard.press("Enter");
+  await until(() => content("Pessoas/Ana.md"), (c) => c === fm.replace("aberto", "fechado") + body, (c) => `gravou: ${c}`);
+  await row("concluída").locator(".kn-switch").click();
+  await until(() => content("Pessoas/Ana.md"), (c) => c.includes("concluída: true\n"), (c) => `gravou: ${c}`);
+  await row("lista").locator(".kn-prop-icon").click();
+  await page.locator(".kn-menu-item", { hasText: "Remover" }).click();
+  await until(() => content("Pessoas/Ana.md"), (c) => c === "---\n# da reunião\nstatus: fechado # revisar\nconcluída: true\n---\n" + body, (c) => `gravou: ${c}`);
+  if ((await editorText()).includes("status")) throw new Error("o frontmatter apareceu no corpo");
+});
+
 await step("⌘K cria nota nova quando não há título igual", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ideia nova");
