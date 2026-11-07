@@ -123,6 +123,7 @@ const capabilities = uiCapabilities({
   remoteImage: (url) => fetchRemoteImage(url),
   // O seletor de microfone dos Ajustes (T3230): o helper lista as entradas, sem abrir nenhuma.
   audioInputs: async () => (await session.get()?.audioInputs()) ?? null,
+  precise: () => session.get()?.precise.status() ?? null,
   // "Aperte o atalho" das Configurações (T5349): o tap do helper lê as teclas.
   shortcuts: {
     record: async (bareKey?: boolean) => {

@@ -6,7 +6,7 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 
-import type { AppRef, InsertSimulation } from "../shared/ipc.ts";
+import type { AppRef, InsertSimulation, SttEngine } from "../shared/ipc.ts";
 import type { Dictation, DictationOutcome } from "./dictation.ts";
 import { CapabilityError } from "./ui-capabilities.ts";
 
@@ -54,6 +54,8 @@ export interface DictateReport {
   text: string;
   tone: string | null;
   latencyMs: { stt: number; app: number };
+  /** Quem transcreveu o WAV (T6602): o Parakeet ou o Whisper do modo preciso. */
+  engine?: SttEngine;
   /**
    * O que o paste faria (nulo na nota rápida). `typed` é exatamente o que entraria no campo, com o espaço automático;
    * null quando nada entraria (`clipboardOnly`: o texto só fica no clipboard; ou o insert falhou).
@@ -139,6 +141,7 @@ export function report(input: "wav" | "text", note: boolean, o: DictationOutcome
     text: o.text,
     tone: o.tone ?? null,
     latencyMs: { stt: o.sttMs ?? 0, app: o.appMs },
+    ...(o.engine ? { engine: o.engine } : {}),
     insert:
       note || !o.insert
         ? null

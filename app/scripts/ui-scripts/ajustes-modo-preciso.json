@@ -1,0 +1,15 @@
+{
+  "window": "hub",
+  "steps": [
+    { "waitFor": ".kn-tab", "name": "o hub abre" },
+    { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "waitFor": ".kn-row:has-text('Modo preciso')", "name": "a linha, em Transcrição" },
+    { "expectText": ".kn-row:has-text('Modo preciso') .kn-row-hint", "text": "Ligar baixa o modelo (270 MB)", "name": "desligado, diz o que ganha e o que custa" },
+    { "screenshot": "modo-preciso-desligado.png", "selector": ".kn-section:has(.kn-row:has-text('Modo preciso'))" },
+    { "click": ".kn-row:has-text('Modo preciso') [role=switch]", "name": "liga" },
+    { "expectText": ".kn-row:has-text('Modo preciso') .kn-row-hint", "text": "Ligado.", "timeout": 60000, "name": "o helper carregou o Whisper" },
+    { "invoke": "dictation.preciseStatus", "args": {}, "name": "pronto" },
+    { "invoke": "settings.get", "name": "gravou preciseDictation: true" },
+    { "screenshot": "modo-preciso-ligado.png", "selector": ".kn-section:has(.kn-row:has-text('Modo preciso'))" }
+  ]
+}

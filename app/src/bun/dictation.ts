@@ -8,7 +8,7 @@
 
 import { cleanup, llmSystemMessage } from "../cleanup/index.ts";
 import type { LlmBackend, LlmMode, Tone } from "../cleanup/types.ts";
-import type { AppRef, Command, Event, EventMessage, InsertSimulation, RecordingRef, ResultMessage } from "../shared/ipc.ts";
+import type { AppRef, Command, Event, EventMessage, InsertSimulation, RecordingRef, ResultMessage, SttEngine } from "../shared/ipc.ts";
 import { sanitizeMicInUse } from "../shared/microphone.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, NewHistoryEntry } from "../store/history.ts";
@@ -88,6 +88,8 @@ export interface DictationOutcome {
   /** O que o STT deu (antes da limpeza) e quanto ele levou (T1740). */
   raw?: string;
   sttMs?: number;
+  /** Quem transcreveu (T6602): o Parakeet ou o Whisper do modo preciso. Um helper antigo não diz. */
+  engine?: SttEngine;
   /** O app do ditado (o tom sai dele). */
   app?: AppRef;
   /** O que o `insert.text` faria (T1740: só com `simulate`, no dryRun): o plano, o motivo e o espaço automático. */
@@ -382,13 +384,14 @@ export class Dictation {
     }
     await this.settleRecovery(t.recovery,pasted || !!entry,"insert_failed");
     this.log(
-      `dictation: stt ${t.latencyMs} ms + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? `pasted${insert.ok && insert.data.reason ? ` (${insert.data.reason})` : ""}` : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}${insert.ok && insert.data.focusVia ? ` · focus ${insert.data.focusVia}` : ""}`,
+      `dictation: stt ${t.latencyMs} ms${t.engine ? ` (${t.engine})` : ""} + app ${appMs} ms (cleanup ${result.ms} ms${result.llm ? `, llm ${result.llm.used ? "used" : result.llm.reason}` : ""}) · ${result.tone} · ${insert.ok && insert.data.dryRun ? "dry run" : pasted ? `pasted${insert.ok && insert.data.reason ? ` (${insert.data.reason})` : ""}` : `not pasted${insert.ok ? `: ${insert.data.reason}` : `: ${insert.error}`}`}${insert.ok && insert.data.focusVia ? ` · focus ${insert.data.focusVia}` : ""}`,
     );
     return this.done({
       entry,
       text,
       raw: t.text,
       sttMs: t.latencyMs,
+      ...(t.engine ? { engine: t.engine } : {}),
       app,
       tone: result.tone,
       pasted,
@@ -405,7 +408,7 @@ export class Dictation {
    */
   private async handleNote(t: Transcript, app: AppRef | undefined, lost?: string, fellBackTo?: string): Promise<DictationOutcome> {
     const started = performance.now();
-    const base = { raw: t.text, sttMs: t.latencyMs, app };
+    const base = { raw: t.text, sttMs: t.latencyMs, ...(t.engine ? { engine: t.engine } : {}), app };
     if (!t.text.trim()) {
       await this.settleRecovery(t.recovery,false,"stt_empty");
       await (lost ? this.overlay("error", MIC_LOST_EMPTY) : this.overlay("hidden"));

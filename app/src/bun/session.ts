@@ -22,6 +22,7 @@ import { MeetingLiveTracker } from "./meetings.ts";
 import { MeetingAcks } from "./meeting-acks.ts";
 import { Sidecar, SidecarError, type SupervisorStatus } from "./sidecar.ts";
 import { MeetingNoteSession } from "./meeting-notes.ts";
+import { PreciseDictation } from "./precise-dictation.ts";
 import { RecoveryError } from "../store/recording-recovery.ts";
 import { stores } from "./stores.ts";
 
@@ -108,6 +109,8 @@ export class Session {
   readonly permissions: PermissionFlow;
   /** A gravação de reunião ao vivo (R6), pelos eventos do helper: o card da aba Reuniões. */
   readonly meetings: MeetingLiveTracker;
+  /** O modo preciso do ditado (T6602): o Whisper small, baixado quando a pessoa liga. */
+  readonly precise: PreciseDictation;
   private stt: SttState = "starting";
   private boosting: SessionStatus["boosting"];
   private statusListeners = new Set<(s: SessionStatus) => void>();
@@ -134,6 +137,8 @@ export class Session {
     this.meetingNotes = new MeetingNoteSession(this.sidecar, stores.meetingNotes);
     this.permissions = new PermissionFlow(this.sidecar, fileAskedStore(stores.dir), undefined, !dryRun, !dryRun);
     this.meetings = new MeetingLiveTracker((c) => this.sidecar.send(c));
+    // O headless não sai para a rede (como a busca pelo sentido): só usa um modelo que já está na pasta.
+    this.precise = new PreciseDictation({ modelsDir: stores.modelsDir, send: (c) => this.sidecar.send(c), download: process.env.KIWI_HEADLESS !== "1" });
     // R3: o áudio da reunião só sai do disco do helper depois que o texto dele está salvo na nota (#5061, #5064).
     this.meetingAcks = new MeetingAcks((ack) => {
       void this.sidecar.send(ack).then(
@@ -185,6 +190,8 @@ export class Session {
       this.boosting = e.state;
       this.emitStatus();
     });
+    this.sidecar.on("stt.precise", (e) => this.precise.helperState(e.state));
+    this.sidecar.onClose(() => this.precise.helperGone());
     this.sidecar.on("permissions.changed", () => this.emitStatus());
     // L26 (escolha A do harry no #6906): a correção logo depois de colar vira uma pergunta no cartão do helper.
     this.sidecar.on("paste.edited", (e) => void this.learn(e.pasted, e.edited, e.app).catch(() => console.warn("[learn] failed")));
@@ -202,7 +209,12 @@ export class Session {
       this.sidecar.on("*", (e) => {
         if (e.type === "audio.level") return;
         const app = e.type === "app.active" ? ` ${e.bundleId}` : e.type === "record.started" ? ` ${e.app?.bundleId ?? "-"}` : "";
-        const extra = e.type === "stt.status" || e.type === "stt.boosting" ? ` ${e.state}` : e.type === "transcript.final" ? ` ${e.latencyMs} ms` : "";
+        const extra =
+          e.type === "stt.status" || e.type === "stt.boosting" || e.type === "stt.precise"
+            ? ` ${e.state}`
+            : e.type === "transcript.final"
+              ? ` ${e.latencyMs} ms${e.engine ? ` ${e.engine}` : ""}`
+              : "";
         console.log(`[sidecar] ${e.type}${app}${extra}`);
       });
     }
@@ -293,6 +305,8 @@ export class Session {
       .send({ type: "config.set", meetingSuggest: m.suggest, meetingApps: m.apps, cues: settings.cues })
       .catch(() => undefined);
     if (meeting && !meeting.ok) console.warn(`[session] config.set meetings: ${meeting.error}`);
+    // O modo preciso (T6602) por último e sem esperar: ligar pode baixar 270 MB.
+    void this.precise.apply(settings.preciseDictation);
   }
 
   /**

@@ -40,6 +40,19 @@ export interface SemanticStatus {
   notes: number;
   indexed: number;
 }
+/** O modo preciso do ditado (T6602): o Whisper small, baixado quando a pessoa liga. */
+export interface PreciseStatus {
+  enabled: boolean;
+  /** `waiting`: o modelo está baixado, e vai para o helper quando ele estiver de pé. */
+  phase: "off" | "downloading" | "loading" | "ready" | "waiting" | "error";
+  /** Bytes baixados e o total, enquanto baixa. */
+  done?: number;
+  total?: number;
+  /** O que falhou: o download, a carga no helper ou o helper que recusou o modelo. */
+  error?: "download" | "load" | "helper";
+  /** O tamanho do modelo, em bytes. */
+  size: number;
+}
 /** O embed de uma nota (T6594): o pedaço que aparece, ou o fragmento que falta. */
 export type NoteEmbed =
   | { path: string; title: string; kind: "note" | "heading" | "block"; content: string }
@@ -103,7 +116,8 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   Só acréscimo.
 // 1.37.0 (T6600): o quadro branco (JSON Canvas, o `.canvas` do Obsidian): `notes.canvasGet`, `notes.canvasSave`,
 //   `notes.canvasCreate` e `notes.canvasRename`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.37.0";
+// 1.38.0 (T6602): o modo preciso do ditado: `preciseDictation` nas settings e o `dictation.preciseStatus`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.38.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -319,6 +333,8 @@ export interface UiCapabilities {
   "notes.backlinks": { args: { path: string }; result: Backlink[] };
   /** A busca pelo sentido (1.34.0, T6013): o modelo (baixando, pronto…) e quantas notas desta pasta já têm vetores. */
   "notes.semanticStatus": { args: Record<string, never>; result: SemanticStatus };
+  /** O modo preciso do ditado (1.38.0, T6602): o Whisper small (desligado, baixando, pronto…). */
+  "dictation.preciseStatus": { args: Record<string, never>; result: PreciseStatus };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
   /** O que um embed de nota mostra (1.36.0, T6594): o pedaço já cortado, `missing` sem o título ou o bloco, null sem a nota. */
@@ -400,6 +416,7 @@ export const UI_CAPABILITIES = [
   "notes.delete",
   "notes.search",
   "notes.semanticStatus",
+  "dictation.preciseStatus",
   "notes.backlinks",
   "notes.resolve",
   "notes.embed",

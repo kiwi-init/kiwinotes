@@ -23,7 +23,9 @@ import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import type { SemanticIndex } from "../notes/semantic/index.ts";
 import type { SemanticEngine } from "../notes/semantic/engine.ts";
 import { semanticQueryText } from "../shared/query.ts";
-import type { SemanticStatus } from "../shared/ui-contract.ts";
+import type { PreciseStatus, SemanticStatus } from "../shared/ui-contract.ts";
+import { modelBytes } from "../notes/semantic/model.ts";
+import { WHISPER_SMALL } from "./precise-dictation.ts";
 import { checkShortcutsPatch, isNotesShortcut } from "../shared/shortcuts.ts";
 import { type ExternalMoves, followPinned, type Vault,
 } from "../notes/vault.ts";
@@ -125,6 +127,8 @@ export interface CapabilityDeps {
   semantic?: Pick<SemanticIndex, "sync" | "query" | "status" | "clear">;
   /** As notas que o índice do sentido acompanha: o mesmo vault de `notes`. */
   semanticSource?: Pick<Vault, "semanticDocuments" | "onChanged">;
+  /** O modo preciso do ditado (T6602), da sessão com o helper. Sem ela, `null`: o status vem só da configuração. */
+  precise?(): PreciseStatus | null;
   /** O modelo da busca pelo sentido, um para o app (T6013). */
   semanticEngine?: Pick<SemanticEngine, "state" | "start" | "disable">;
   /** Os anexos das notas (T2594): sem eles (um host antigo), as capacidades `attachments.*` dão E_NO_ATTACHMENTS. */
@@ -419,6 +423,10 @@ export function uiCapabilities(deps: CapabilityDeps,
           // Os sons de início e de fim (1.32.0, T5833): o helper recebe no `config.set`.
           if (typeof value !== "boolean") throw bad("cues must be true or false");
           patch.cues = value;
+        } else if (key === "preciseDictation") {
+          // O modo preciso do ditado (1.38.0, T6602): ligar baixa o Whisper small, desligar apaga.
+          if (typeof value !== "boolean") throw bad("preciseDictation must be true or false");
+          patch.preciseDictation = value;
         } else if (key === "showExtensions") {
           // A extensão na árvore das Notas (1.19.0, T3370).
           if (typeof value !== "boolean") throw bad("showExtensions must be true or false");
@@ -790,6 +798,14 @@ export function uiCapabilities(deps: CapabilityDeps,
       await vault();
       if (enabled) void deps.semanticEngine.start();
       return { enabled, ...deps.semanticEngine.state(), ...deps.semantic.status() };
+    },
+    "dictation.preciseStatus": async (args): Promise<PreciseStatus> => {
+      noArgs(args, "dictation.preciseStatus");
+      const live = deps.precise?.();
+      if (live) return live;
+      // Sem o helper de pé (ou sem sessão, no headless sem helper): só o que a configuração diz.
+      const enabled = (await deps.settings.load()).preciseDictation;
+      return { enabled, phase: enabled ? "waiting" : "off", size: modelBytes(WHISPER_SMALL) };
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
     "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),
