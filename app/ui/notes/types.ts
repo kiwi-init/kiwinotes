@@ -23,6 +23,17 @@ export interface VaultListing {
 
 export type VaultFile = NonNullable<UiCapabilities["notes.list"]["result"]["files"]>[number];
 
+export type CanvasFile = UiCapabilities["notes.canvasGet"]["result"];
+export type CanvasSaveResult = UiCapabilities["notes.canvasSave"]["result"];
+
+/** O quadro branco (T6600, contrato 1.36.0): o `.canvas` do Obsidian, aberto no Kiwi. */
+export interface CanvasApi {
+  get(path: string): Promise<CanvasFile>;
+  save(path: string, content: string, baseVersion: string): Promise<CanvasSaveResult>;
+  create(folder: string, title: string, content?: string): Promise<CanvasFile>;
+  rename(from: string, to: string): Promise<CanvasFile>;
+}
+
 /** O que a árvore lê das settings (T3370): a extensão nos nomes e a pasta da nota do dia (o ícone dela). */
 export interface TreePrefs {
   showExtensions: boolean;
@@ -93,8 +104,10 @@ export interface NotesApi {
    * Os arquivos que não são nota (T3370, contrato 1.19.0): abrir no app padrão do Mac, só pelo clique, e o aviso de que
    * mudaram. Num engine antigo, a árvore só tem pastas e notas.
    */
-  files?: { open(path: string): Promise<true>; onChanged(fn: () => void): () => void;
+  files?: { open(path: string): Promise<true>; onChanged(fn: (paths: string[]) => void): () => void;
   };
+  /** O quadro branco (T6600). Num engine antigo, o `.canvas` abre no app padrão do Mac, como os outros arquivos. */
+  canvas?: CanvasApi;
   /** As preferências da árvore, e o aviso quando as settings mudam (de outra janela, os Ajustes). */
   prefs?: { get(): Promise<TreePrefs>; onChanged(fn: (p: TreePrefs) => void): () => void;
     /** Guarda a largura da coluna da nota (T5299). */

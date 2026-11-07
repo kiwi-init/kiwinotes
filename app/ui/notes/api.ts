@@ -84,7 +84,16 @@ export function engineNotes(
     : undefined;
   // Os outros arquivos do cofre e as preferências da árvore (1.19.0, T3370).
   const files: NotesApi["files"] = has("files.open")
-    ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", e => {const event=e as {folderId?:string};if(!folderId||!event.folderId||event.folderId===folderId)fn();}),
+    ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", e => {const event=e as {paths?:string[];folderId?:string};if(!folderId||!event.folderId||event.folderId===folderId)fn(event.paths??[]);}),
+      }
+    : undefined;
+  // O quadro branco (1.36.0, T6600).
+  const canvas: NotesApi["canvas"] = has("notes.canvasGet")
+    ? {
+        get: (path) => call("notes.canvasGet", { path }),
+        save: (path, content, baseVersion) => call("notes.canvasSave", { path, content, baseVersion }),
+        create: (folder, title, content) => call("notes.canvasCreate", { folder, title, ...(content === undefined ? {} : { content }) }),
+        rename: (from, to) => call("notes.canvasRename", { from, to }),
       }
     : undefined;
   type Prefs = { showExtensions?: boolean; dailyFolder?: string; noteWidth?: number };
@@ -106,6 +115,7 @@ export function engineNotes(
     : undefined;
   return {
     ...(files ? { files } : {}),
+    ...(canvas ? { canvas } : {}),
     ...(prefs ? { prefs } : {}),
     ...(folders ? { folders } : {}),
     ...(versions ? { versions } : {}),

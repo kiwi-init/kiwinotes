@@ -111,7 +111,7 @@ describe("o quadro no vault (T6600)", () => {
   test("pelas capacidades do contrato", async () => {
     const { root } = await vault({ "Q.canvas": BOARD });
     const caps = uiCapabilities({
-      settings: { load: async () => DEFAULT_SETTINGS, save: async (s) => s },
+      settings: { load: async () => DEFAULT_SETTINGS, save: async (s: unknown) => s },
       notes: (() => {
         const v = new Vault({ root, debounceMs: 20 });
         vaults.push(v);
