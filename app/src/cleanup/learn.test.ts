@@ -9,7 +9,15 @@ describe("learnedPair", () => {
     expect(learnedPair("Mandei o exame para o Pax ontem.", "Mandei o exame para o PACS ontem.")).toEqual({ from: "Pax", to: "PACS" });
     expect(learnedPair("rode o cube control get pods", "rode o kubectl get pods")).toEqual({ from: "cube control", to: "kubectl" });
     expect(learnedPair("o arquivo dicom chegou", "o arquivo DICOM chegou")).toEqual({ from: "dicom", to: "DICOM" });
-    expect(learnedPair("falei com o Joao", "falei com o João")).toEqual({ from: "Joao", to: "João" });
+    expect(learnedPair("o cluster de cubernetes caiu", "o cluster de Kubernetes caiu")).toEqual({ from: "cubernetes", to: "Kubernetes" });
+  });
+
+  test("gramática não vira regra: palavra comum, ou só acento e pontuação, não aprende (review do #266)", () => {
+    expect(learnedPair("ele e o melhor", "ele é o melhor")).toBeNull();
+    expect(learnedPair("ela esta aqui", "ela está aqui")).toBeNull();
+    expect(learnedPair("tentei mas não deu", "tentei mais não deu")).toBeNull();
+    expect(learnedPair("o carro de Ana", "o carro do Ana")).toBeNull();
+    expect(learnedPair("falei com o Joao", "falei com o João")).toBeNull();
   });
 
   test("reescrever, trocar por outra palavra, inserir ou apagar não aprende", () => {

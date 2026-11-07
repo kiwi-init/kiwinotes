@@ -5,6 +5,7 @@
 
 import { type DictionaryTerm, MAX_ALIASES, MAX_TERM_LENGTH, MAX_TERMS } from "../store/dictionary.ts";
 import { fold } from "../store/text.ts";
+import { COMMON_WORDS } from "./common-words.ts";
 
 export interface LearnedPair {
   /** O que o STT escreveu: vira um alias. */
@@ -40,18 +41,15 @@ function distance(a: string, b: string): number {
 
 const squash = (s: string) => fold(s).replace(/[^\p{L}\p{N}]/gu, "");
 
-/** Só trocou a 1ª letra para maiúscula (ou tudo para minúscula): é a limpeza ou o gosto, não um termo. */
-function onlyCapitalized(from: string, to: string): boolean {
-  const lower = to.toLocaleLowerCase("pt-BR");
-  if (from.toLocaleLowerCase("pt-BR") !== lower) return false;
-  const title = lower.charAt(0).toLocaleUpperCase("pt-BR") + lower.slice(1);
-  return to === lower || to === title;
-}
+/** Palavra comum (ou de até 2 letras): trocar a partir dela é gramática ou estilo, e o alias mudaria todo ditado. */
+const isCommon = (word: string) => word.length <= 2 || COMMON_WORDS.has(fold(word));
 
 /**
  * A troca que a pessoa fez num trecho colado, se for a correção de um termo: o pedaço que mudou (tirando o começo e o
- * fim iguais, palavra por palavra) tem de 1 a 3 palavras de cada lado, soa parecido (a distância de edição sem acento,
- * maiúscula nem espaço é no máximo metade) e não é só maiúscula na 1ª letra. Inserir, apagar e reescrever não contam.
+ * fim iguais, palavra por palavra) tem de 1 a 3 palavras de cada lado e soa parecido (a distância de edição sem acento,
+ * maiúscula nem espaço é no máximo metade). Não contam (review do #266): inserir, apagar, reescrever; a troca a partir
+ * de palavra comum ("mas" → "mais", "de" → "do"); e a que só muda acento, pontuação ou maiúscula ("e" → "é",
+ * "esta" → "está", "ana" → "Ana"), menos a grafia de sigla ou de nome com maiúscula no meio ("dicom" → "DICOM").
  */
 export function learnedPair(pasted: string, edited: string): LearnedPair | null {
   const a = words(pasted);
@@ -66,11 +64,14 @@ export function learnedPair(pasted: string, edited: string): LearnedPair | null 
   const from = removed.join(" ");
   const to = added.join(" ");
   if (from.length > MAX_TERM_LENGTH || to.length > MAX_TERM_LENGTH) return null;
-  if (!/\p{L}/u.test(to) || onlyCapitalized(from, to)) return null;
+  if (!/\p{L}/u.test(to) || removed.every(isCommon)) return null;
   const x = squash(from);
   const y = squash(to);
   if (!x || !y) return null;
-  if (x !== y && distance(x, y) / Math.max(x.length, y.length) > MAX_DISTANCE) return null;
+  if (x === y) {
+    const caseOnly = from.toLocaleLowerCase("pt-BR") === to.toLocaleLowerCase("pt-BR");
+    if (!caseOnly || !/\p{Lu}/u.test(to.slice(1))) return null;
+  } else if (distance(x, y) / Math.max(x.length, y.length) > MAX_DISTANCE) return null;
   return { from, to };
 }
 
