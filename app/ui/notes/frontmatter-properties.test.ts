@@ -12,6 +12,7 @@ import {
   renameProperty,
   setProperty,
 } from "./frontmatter-properties.ts";
+import { splitFrontmatter } from "./frontmatter.ts";
 
 const FM = `---
 # a reunião da semana
@@ -184,4 +185,34 @@ describe("o trecho que muda", () => {
 test("um frontmatter só com comentário aceita a primeira propriedade", () => {
   expect(readProperties("---\n# nada ainda\n---\n")).toEqual([]);
   expect(setProperty("---\n# nada ainda\n---\n", "a", 1)).toBe("---\n# nada ainda\na: 1\n---\n");
+});
+
+describe("o bloco fecha só numa linha `---` na coluna 0", () => {
+  test("um bloco vazio ganha a propriedade dentro dele", () => {
+    expect(readProperties("---\n---\n")).toEqual([]);
+    expect(addProperty("---\n---\n")?.frontmatter).toBe("---\npropriedade:\n---\n");
+    expect(addProperty("---\r\n---\r\n")?.frontmatter).toBe("---\r\npropriedade:\r\n---\r\n");
+    expect(setProperty("---\n\n---\n", "a", 1)).toBe("---\na: 1\n---\n");
+  });
+
+  test("um `---` no fim de um valor não fecha o bloco", () => {
+    const note = "---\ntitle: Parte 1 ---\nstatus: aberto\n---\n# Corpo\n";
+    const { frontmatter, body } = splitFrontmatter(note);
+    expect(readProperties(frontmatter)?.map((p) => [p.key, p.value])).toEqual([
+      ["title", "Parte 1 ---"],
+      ["status", "aberto"],
+    ]);
+    expect(setProperty(frontmatter, "status", "fechado") + body).toBe(note.replace("status: aberto", "status: fechado"));
+  });
+
+  test("um `---` indentado num texto em bloco não fecha o bloco", () => {
+    const note = "---\nnota: |\n  antes\n  ---\n  depois\nstatus: aberto\n---\nCorpo\n";
+    const { frontmatter, body } = splitFrontmatter(note);
+    expect(readProperties(frontmatter)?.map((p) => [p.key, p.value])).toEqual([
+      ["nota", "antes\n---\ndepois\n"],
+      ["status", "aberto"],
+    ]);
+    expect(setProperty(frontmatter, "status", "fechado") + body).toBe(note.replace("status: aberto", "status: fechado"));
+    expect(removeProperty(frontmatter, "status") + body).toBe(note.replace("status: aberto\n", ""));
+  });
 });

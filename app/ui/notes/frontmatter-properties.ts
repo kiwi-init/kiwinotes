@@ -24,7 +24,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/;
 const LINK = /^\[\[[^\]\n]+\]\]$/;
 const LIST_KEYS = new Set(["tags", "aliases", "cssclasses"]);
-const BLOCK = /^---\r?\n([\s\S]*?)\r?\n?---[ \t]*(?:\r?\n|$)/;
+const BLOCK = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
 
 export function inferType(key: string, value: PropertyValue): PropertyType {
   if (Array.isArray(value) || LIST_KEYS.has(key)) return "list";
@@ -64,7 +64,7 @@ function parse(frontmatter: string): Parsed | null {
   if (!frontmatter.trim()) return { doc: new Document({}), inner: "", before: "", after: "" };
   const m = BLOCK.exec(frontmatter);
   if (!m) return null;
-  const inner = m[1]!;
+  const inner = m[1] ?? "";
   const at = frontmatter.indexOf("\n") + 1;
   const doc = parseDocument(inner);
   if (doc.errors.length) return null;
@@ -105,7 +105,8 @@ function rebuild(parsed: Parsed, original: string, inner: string): string {
   const crlf = original.includes("\r\n");
   const text = crlf ? inner.replace(/\r?\n/g, "\r\n") : inner;
   if (!parsed.before) return crlf ? `---\r\n${text}\r\n---\r\n` : `---\n${text}\n---\n`;
-  return parsed.before + text + parsed.after;
+  const eol = crlf ? "\r\n" : "\n";
+  return parsed.before + text + (text && !/^\r?\n/.test(parsed.after) ? eol : "") + parsed.after;
 }
 
 /** Grava o valor na chave (cria no fim se não existe). Só o trecho daquela chave muda; o resto fica byte a byte. */
