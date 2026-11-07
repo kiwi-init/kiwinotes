@@ -155,6 +155,14 @@ describe("prompt do VoiceInk", () => {
     expect(system).not.toContain("<TONE>");
   });
 
+  test("regra de idioma e exemplos em português (T6592)", () => {
+    const system = llmSystemMessage("default");
+    expect(system).toContain("- Never translate. Portuguese stays in Portuguese");
+    expect(system).toContain("Input: quantos dias faltam para o fim do mês\nOutput: Quantos dias faltam para o fim do mês?\n");
+    expect(system).toContain("Output: Importamos 12.000 laudos em 40 pastas, e a taxa foi de R$ 80.");
+    expect(system.indexOf("Input: oi bruno segue")).toBeLessThan(system.lastIndexOf("</EXAMPLES>"));
+  });
+
   test("tom do app e vocabulário escapado", () => {
     const system = llmSystemMessage("casual", ["C++ <beta>", { term: "R&D" }]);
     expect(system).toContain("<TONE>\n- Tone: a chat message.");
