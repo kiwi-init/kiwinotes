@@ -24,6 +24,8 @@ import { externalUrl, linkAt } from "../links.ts";
 import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { renderedPreview } from "./renderedWidget.tsx";
+import { type EmbedSource, notePreview } from "./embeds.tsx";
+import { fullTree, toRenderable } from "./rendered.ts";
 import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger, readSlashUsage, recordSlashUse } from "./slash.ts";
 import { insertFootnote } from "./footnotes.ts";
@@ -65,6 +67,8 @@ export interface EditorOptions {
   resolve(target: string): Promise<string | null>;
   /** Os anexos (T2594): colar e arrastar imagem e PDF, e desenhar o `![[…]]`. Sem isto (um engine antigo), nada muda. */
   attachments?: AttachmentSource;
+  /** Os embeds de nota (T6594): `![[nota]]`, `![[nota#Título]]` e `![[nota#^id]]`, pelo `notes.embed`. */
+  embed?: EmbedSource;
   /** Um aviso curto para a pessoa (o anexo que não entrou). */
   onError?(text: string): void;
   /** O botão Copiar dos blocos de código (T6379): o `clipboard.write` do app. Sem ele, o botão não aparece. */
@@ -357,6 +361,12 @@ export class LinkCache implements LinkResolver {
   }
 }
 
+/** O texto de outra nota como a lib lê (os `[[links]]` e as `#tags`), para um embed (T6594). */
+function embedMarkdown(content: string, links: LinkResolver): string {
+  const state = EditorState.create({ doc: content, extensions: [markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax, highlightSyntax] })] });
+  return toRenderable(content, 0, fullTree(state), (t) => links.status(t));
+}
+
 export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "resolve">, links: LinkResolver): Extension[] {
   let pastePlain = false;
   return [
@@ -376,6 +386,7 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     tablePreview,
     commentPreview,
     ...(opts.attachments ? [attachmentPreview(opts.attachments), attachmentTheme] : []),
+    ...(opts.embed ? [notePreview(opts.embed, (content) => embedMarkdown(content, links), opts)] : []),
     ]),
     ...(opts.attachments ? [attachmentInput(opts.attachments, (t) => opts.onError?.(t))] : []),
     autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets), headingCompletion((target) => opts.headingContent?.(target) ?? Promise.resolve(null))], icons: false, closeOnBlur: true }),

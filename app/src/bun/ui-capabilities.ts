@@ -102,7 +102,7 @@ export interface CapabilityDeps {
     | "open" | "list" | "get" | "save" | "create" | "rename" | "renameHeading" | "renameTag" | "linkWarnings" | "delete" | "search" | "backlinks" | "resolve"
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
-    | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile"
+    | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile" | "embed"
   >;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
@@ -779,6 +779,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "notes.backlinks": async (args) => (await vault()).backlinks(fields(args, "notes.backlinks", ["path"]).path),
     "notes.resolve": async (args) => (await vault()).resolve(fields(args, "notes.resolve", ["link"]).link),
+    "notes.embed": async (args) => (await vault()).embed(fields(args, "notes.embed", ["link"]).link),
     "notes.tags": async (args) => {
       noArgs(args, "notes.tags");
       return { tags: (await vault()).tags() };

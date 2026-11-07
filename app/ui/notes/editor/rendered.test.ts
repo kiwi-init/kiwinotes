@@ -158,6 +158,16 @@ describe("notas de rodapé (T6377)", () => {
   });
 });
 
+describe("o ^id de bloco (T6594)", () => {
+  const render = (doc: string) => toRenderable(doc, 0, fullTree(stateOf(doc)), () => "ok");
+  test("some do texto desenhado; no código e no meio da linha, fica", () => {
+    expect(render("Os detalhes ficam aqui. ^detalhe")).toBe("Os detalhes ficam aqui.");
+    expect(render("- item dois ^item-2")).toBe("- item dois");
+    expect(render("o ^meio da linha")).toBe("o ^meio da linha");
+    expect(render("`x ^id`")).toBe("`x ^id`");
+  });
+});
+
 describe("o clique num link desenhado", () => {
   test("nota, tag e endereço", () => {
     expect(linkAction("kiwi-note:Site%20novo")).toEqual({ kind: "note", target: "Site novo" });

@@ -40,6 +40,10 @@ export interface SemanticStatus {
   notes: number;
   indexed: number;
 }
+/** O embed de uma nota (T6594): o pedaço que aparece, ou o fragmento que falta. */
+export type NoteEmbed =
+  | { path: string; title: string; kind: "note" | "heading" | "block"; content: string }
+  | { path: string; title: string; missing: string };
 export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet, TrashItem };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
@@ -95,7 +99,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `SearchHit` achado só pelo sentido. Só acréscimo.
 // 1.35.0 (T6385): o `focusMode` e o `typewriter` nos `shortcuts` (atalhos do app: modo foco e máquina de escrever). Só
 //   acréscimo.
-export const UI_CONTRACT_VERSION = "1.35.0";
+// 1.36.0 (T6594): o `notes.embed`, o pedaço de nota que um `![[nota]]`, `![[nota#Título]]` ou `![[nota#^id]]` mostra.
+//   Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.36.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -304,6 +310,8 @@ export interface UiCapabilities {
   "notes.semanticStatus": { args: Record<string, never>; result: SemanticStatus };
   /** Para qual nota um `[[link]]` aponta (regra do Obsidian), ou null. */
   "notes.resolve": { args: { link: string }; result: string | null };
+  /** O que um embed de nota mostra (1.36.0, T6594): o pedaço já cortado, `missing` sem o título ou o bloco, null sem a nota. */
+  "notes.embed": { args: { link: string }; result: NoteEmbed | null };
   /** As tags do vault em árvore (`#projeto/kiwi` dentro de `projeto`), com quantas notas cada uma tem (1.9.0). */
   "notes.tags": { args: Record<string, never>; result: { tags: TagNode[] } };
   "notes.renameHeading": { args: { path: string; offset: number; title: string; baseVersion: string }; result: RefactorResult };
@@ -383,6 +391,7 @@ export const UI_CAPABILITIES = [
   "notes.semanticStatus",
   "notes.backlinks",
   "notes.resolve",
+  "notes.embed",
   "notes.tags",
   "notes.renameHeading",
   "notes.renameTag",
