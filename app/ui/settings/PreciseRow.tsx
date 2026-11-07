@@ -30,6 +30,8 @@ const settled = (s: PreciseStatus | null) => !s || !s.enabled || s.phase === "re
 export function PreciseRow() {
   const [status, setStatus] = useState<PreciseStatus | null>(null);
   const [failed, setFailed] = useState(false);
+  /** Muda depois que a configuração salvou: só aí a leitura recomeça, para uma resposta de antes não desfazer o clique. */
+  const [round, setRound] = useState(0);
 
   useEffect(() => {
     if (!has("dictation.preciseStatus")) return;
@@ -51,7 +53,7 @@ export function PreciseRow() {
       alive = false;
       if (timer) clearTimeout(timer);
     };
-  }, [status?.enabled]);
+  }, [round]);
 
   if (!status) return null;
 
@@ -59,7 +61,7 @@ export function PreciseRow() {
     setFailed(false);
     setStatus({ ...status, enabled: next, phase: next ? "downloading" : "off", done: 0, total: status.size });
     api.settings.set({ preciseDictation: next }).then(
-      () => api.dictation.preciseStatus().then(setStatus, () => {}),
+      () => setRound((r) => r + 1),
       () => {
         setStatus({ ...status });
         setFailed(true);
