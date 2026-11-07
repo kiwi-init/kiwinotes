@@ -87,7 +87,7 @@ export function engineNotes(
     ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", e => {const event=e as {paths?:string[];folderId?:string};if(!folderId||!event.folderId||event.folderId===folderId)fn(event.paths??[]);}),
       }
     : undefined;
-  // O quadro branco (1.36.0, T6600).
+  // O quadro branco (1.37.0, T6600).
   const canvas: NotesApi["canvas"] = has("notes.canvasGet")
     ? {
         get: (path) => call("notes.canvasGet", { path }),

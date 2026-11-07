@@ -26,7 +26,7 @@ export type VaultFile = NonNullable<UiCapabilities["notes.list"]["result"]["file
 export type CanvasFile = UiCapabilities["notes.canvasGet"]["result"];
 export type CanvasSaveResult = UiCapabilities["notes.canvasSave"]["result"];
 
-/** O quadro branco (T6600, contrato 1.36.0): o `.canvas` do Obsidian, aberto no Kiwi. */
+/** O quadro branco (T6600, contrato 1.37.0): o `.canvas` do Obsidian, aberto no Kiwi. */
 export interface CanvasApi {
   get(path: string): Promise<CanvasFile>;
   save(path: string, content: string, baseVersion: string): Promise<CanvasSaveResult>;

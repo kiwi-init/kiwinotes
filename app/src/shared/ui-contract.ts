@@ -237,7 +237,7 @@ export interface UiCapabilities {
    */
   "files.open": { args: { path: string }; result: true };
   /**
-   * O quadro branco (1.36.0, T6600): o texto do `.canvas` e a versão. O save é condicional como o das notas (com
+   * O quadro branco (1.37.0, T6600): o texto do `.canvas` e a versão. O save é condicional como o das notas (com
    * `baseVersion` velha não escreve e devolve o de agora) e recusa o que não abre como JSON Canvas. O create aceita o
    * texto inicial; sem ele, o quadro vazio.
    */
