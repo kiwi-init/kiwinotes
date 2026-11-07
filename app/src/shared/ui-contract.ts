@@ -12,7 +12,7 @@ import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
-import type { Backlink, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
+import type { Backlink, CanvasFile, CanvasSaveResult, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
 } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
@@ -95,7 +95,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `SearchHit` achado só pelo sentido. Só acréscimo.
 // 1.35.0 (T6385): o `focusMode` e o `typewriter` nos `shortcuts` (atalhos do app: modo foco e máquina de escrever). Só
 //   acréscimo.
-export const UI_CONTRACT_VERSION = "1.35.0";
+// 1.36.0 (T6600): o quadro branco (JSON Canvas, o `.canvas` do Obsidian): `notes.canvasGet`, `notes.canvasSave`,
+//   `notes.canvasCreate` e `notes.canvasRename`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.36.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -228,6 +230,15 @@ export interface UiCapabilities {
    * dá E_BAD_ARGS: abre no Kiwi. No headless e com KIWI_DEBUG=1, só registra.
    */
   "files.open": { args: { path: string }; result: true };
+  /**
+   * O quadro branco (1.36.0, T6600): o texto do `.canvas` e a versão. O save é condicional como o das notas (com
+   * `baseVersion` velha não escreve e devolve o de agora) e recusa o que não abre como JSON Canvas. O create aceita o
+   * texto inicial; sem ele, o quadro vazio.
+   */
+  "notes.canvasGet": { args: { path: string }; result: CanvasFile };
+  "notes.canvasSave": { args: { path: string; content: string; baseVersion: string }; result: CanvasSaveResult };
+  "notes.canvasCreate": { args: { folder?: string; title: string; content?: string }; result: CanvasFile };
+  "notes.canvasRename": { args: { from: string; to: string }; result: CanvasFile };
 
   // ---------------------------------------------------------------- histórico de versões (1.14.0, T2680)
   // Fora do vault, em `<dados do app>/history`: uma versão por save que muda o texto, no máximo uma a cada 2 min por
@@ -400,6 +411,10 @@ export const UI_CAPABILITIES = [
   "notes.restore",
   "notes.reveal",
   "files.open",
+  "notes.canvasGet",
+  "notes.canvasSave",
+  "notes.canvasCreate",
+  "notes.canvasRename",
   "folders.create",
   "folders.rename",
   "folders.move",

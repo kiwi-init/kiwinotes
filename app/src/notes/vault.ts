@@ -22,7 +22,8 @@ import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
-import { fileNameFor, filePath, folderPath, inside, notePath, VaultError } from "./paths.ts";
+import { canvasPath, fileNameFor, filePath, folderPath, inside, notePath, VaultError } from "./paths.ts";
+import { CanvasParseError, parseCanvas, stringifyCanvas } from "../shared/json-canvas.ts";
 import { applyTextEdits, headingFor, headingKey, markdownStructure } from "../shared/markdown-structure.ts";
 import { noteReferences, referenceTarget, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
 
@@ -49,6 +50,17 @@ export interface Note extends NoteMeta {
 }
 
 export type SaveResult = { saved: true; meta: NoteMeta } | { saved: false; current: Note };
+
+/** Um quadro branco (T6600): o texto do `.canvas` como está no disco, e a versão (o mesmo hash das notas). */
+export interface CanvasFile {
+  path: string;
+  content: string;
+  version: string;
+}
+export type CanvasSaveResult = { saved: true; path: string; version: string } | { saved: false; current: CanvasFile };
+
+/** O `.canvas` novo: o quadro vazio, no formato do Obsidian. */
+const EMPTY_CANVAS = stringifyCanvas({ nodes: [], edges: [] });
 
 export interface SearchHit {
   path: string;
@@ -253,6 +265,19 @@ export function macTrash(abs: string): Promise<void> {
 }
 
 export const versionOf = (content: string) => createHash("sha256").update(content).digest("hex").slice(0, 16);
+
+/** O texto de um quadro para gravar: uma string de até 5 MB que abre como JSON Canvas (T6600). */
+function canvasText(content: unknown): string {
+  if (typeof content !== "string") throw new VaultError("E_BAD_ARGS", "content must be a string");
+  if (content.length > 5_000_000) throw new VaultError("E_BAD_ARGS", "content is larger than 5 MB");
+  try {
+    parseCanvas(content);
+  } catch (e) {
+    if (e instanceof CanvasParseError) throw new VaultError("E_BAD_ARGS", e.message);
+    throw e;
+  }
+  return content;
+}
 
 /** Os `aliases:` (ou `alias:`) do frontmatter, como o Obsidian lê: lista YAML, `[a, b]` ou um texto só (T5352). */
 export function aliasesOf(content: string): string[] {
@@ -736,6 +761,81 @@ export class Vault {
     return { saved: true, meta: entry.meta };
   }
 
+  // ---------------------------------------------------------------- os quadros (T6600)
+  // O `.canvas` não entra no índice das notas: é um arquivo do vault (`files`) que o Kiwi abre, com a mesma escrita
+  // atômica e condicional das notas. O texto só é aceito se for um JSON Canvas que abre: nada grava um quadro quebrado.
+
+  async getCanvas(input: unknown): Promise<CanvasFile> {
+    const p = canvasPath(input);
+    let content: string;
+    try {
+      content = await readFile(inside(this.root, p), "utf8");
+    } catch {
+      throw new VaultError("E_NOT_FOUND", `no board ${p}`);
+    }
+    if (content.length > 5_000_000) throw new VaultError("E_BAD_ARGS", "the board is larger than 5 MB");
+    return { path: p, content, version: versionOf(content) };
+  }
+
+  /** Salva se ninguém mudou o quadro desde `baseVersion`; senão devolve o de agora, sem escrever. */
+  async saveCanvas(input: unknown, content: unknown, baseVersion: unknown): Promise<CanvasSaveResult> {
+    const p = canvasPath(input);
+    const text = canvasText(content);
+    if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
+    const current = await this.getCanvas(p);
+    if (current.version !== baseVersion) return { saved: false, current };
+    if (!(await this.replaceChecked(p, text, baseVersion))) return { saved: false, current: await this.getCanvas(p) };
+    await this.fileWritten(p);
+    return { saved: true, path: p, version: versionOf(text) };
+  }
+
+  /** Cria o quadro na pasta, com o nome livre seguinte ("Quadro 2" se "Quadro" já existe). Vazio, ou com `content`. */
+  async createCanvas(folder: unknown, title: unknown, content: unknown = EMPTY_CANVAS): Promise<CanvasFile> {
+    const dir = folderPath(folder ?? "");
+    const text = canvasText(content);
+    const name = fileNameFor(title);
+    for (let n = 1; n < 1000; n++) {
+      const p = canvasPath(`${dir ? `${dir}/` : ""}${n === 1 ? name : `${name} ${n}`}.canvas`);
+      const abs = inside(this.root, p);
+      if (this.files.has(p) || (await exists(abs))) continue;
+      await mkdir(path.dirname(abs), { recursive: true });
+      if (!(await this.replaceChecked(p, text, null))) continue;
+      await this.fileWritten(p);
+      return { path: p, content: text, version: versionOf(text) };
+    }
+    throw new VaultError("E_EXISTS", `too many boards called ${name}`);
+  }
+
+  /** Renomeia ou move o quadro; não troca um arquivo que já existe no destino. */
+  async renameCanvas(from: unknown, to: unknown): Promise<CanvasFile> {
+    const a = canvasPath(from);
+    const b = canvasPath(to);
+    const absA = inside(this.root, a);
+    const absB = inside(this.root, b);
+    if (!(await exists(absA))) throw new VaultError("E_NOT_FOUND", `no board ${a}`);
+    // Só a caixa mudou ("quadro" → "Quadro"): no APFS é o mesmo arquivo, e o rename troca o nome.
+    if (a !== b && a.toLowerCase() !== b.toLowerCase() && (await exists(absB))) throw new VaultError("E_EXISTS", `${b} already exists`);
+    await mkdir(path.dirname(absB), { recursive: true });
+    await rename(absA, absB);
+    await syncDir(path.dirname(absB));
+    this.files.delete(a);
+    await this.fileWritten(b, [a]);
+    return this.getCanvas(b);
+  }
+
+  /** O arquivo que o próprio Kiwi escreveu entra na lista na hora, e a árvore fica sabendo (o watcher repete depois). */
+  private async fileWritten(p: string, alsoGone: string[] = []) {
+    const s = await stat(inside(this.root, p)).catch(() => null);
+    if (s?.isFile()) this.keepFile(p, s);
+    for (const fn of this.otherListeners) {
+      try {
+        fn([...alsoGone, p]);
+      } catch (e) {
+        console.error("[notes] file listener failed:", e);
+      }
+    }
+  }
+
   /**
    * Cria a nota. Com `template` (o path de uma nota modelo, T2619), o conteúdo é o do modelo com `{{title}}`, `{{date}}`
    * e `{{time}}` trocados; o título trocado é o nome final ("Ata 2" se "Ata" já existe).
@@ -1210,6 +1310,14 @@ export class Vault {
    * escreve e devolve null. A janela que sobra é a do próprio `rename`, de microssegundos.
    */
   private async write(p: string, content: string, expect?: string | null): Promise<Entry | null> {
+    if (!(await this.replaceChecked(p, content, expect))) return null;
+    const entry = await this.index(p, content, inside(this.root, p));
+    this.emit([p]);
+    return entry;
+  }
+
+  /** A troca atômica e condicional do `write`, sem o índice das notas (o quadro usa a mesma, T6600). */
+  private async replaceChecked(p: string, content: string, expect?: string | null): Promise<boolean> {
     const abs = inside(this.root, p);
     const temp = path.join(path.dirname(abs), `.kiwi-${randomBytes(6).toString("hex")}.tmp`);
     await writeDurable(temp, content);
@@ -1219,7 +1327,7 @@ export class Vault {
         const now = await readFile(abs, "utf8").catch(() => null);
         if (expect === null ? now !== null : now === null || versionOf(now) !== expect) {
           await rm(temp, { force: true });
-          return null;
+          return false;
         }
       }
       await rename(temp, abs);
@@ -1228,9 +1336,7 @@ export class Vault {
       await rm(temp, { force: true });
       throw e;
     }
-    const entry = await this.index(p, content, abs);
-    this.emit([p]);
-    return entry;
+    return true;
   }
 
   private async index(p: string, content: string, abs: string): Promise<Entry> {

@@ -42,6 +42,15 @@ export function notePath(input: unknown): string {
   return parts.join("/");
 }
 
+/** Um quadro branco (T6600): relativo, terminando em `.canvas` (o JSON Canvas do Obsidian). */
+export function canvasPath(input: unknown): string {
+  const parts = segments(input, "path");
+  if (!parts.length || !/\.canvas$/i.test(parts.at(-1)!) || parts.at(-1)!.length <= 7) {
+    throw new VaultError("E_BAD_ARGS", "path must name a .canvas board");
+  }
+  return parts.join("/");
+}
+
 /** Um arquivo do vault que não é nota (T3370): relativo, com nome, e sem ser `.md`. */
 export function filePath(input: unknown): string {
   const parts = segments(input, "path");
