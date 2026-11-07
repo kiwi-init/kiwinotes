@@ -432,6 +432,23 @@ final class Helper {
 
     // MARK: Recording
 
+    private let siteReads = DispatchQueue(label: "kiwi.browser-site", qos: .userInitiated)
+
+    /// L18: o título e o host do navegador em frente, para o tom da limpeza. Só o tempo da leitura vai ao log.
+    private func reportSite(_ app: ActiveApp) {
+        guard BrowserSite.isBrowser(app.bundleId) else { return }
+        siteReads.async { [weak self] in
+            let t0 = ProcessInfo.processInfo.systemUptime
+            let site = BrowserSiteReader.read(app)
+            let ms = Int(((ProcessInfo.processInfo.systemUptime - t0) * 1000).rounded())
+            let fields = BrowserSite.siteFields(bundleId: app.bundleId, title: site.title, host: site.host)
+            DispatchQueue.main.async {
+                self?.emit("log", ["level": "info", "message": "site read: \(ms) ms · \(app.bundleId)"])
+                if let fields { self?.emit("record.site", fields) }
+            }
+        }
+    }
+
     @discardableResult
     private func startRecording(reason: String, note: Bool = false) -> String? {
         // Pressed again while the last one is still recording its tail (T5456): that one ends now, with what it has.
@@ -441,7 +458,8 @@ final class Helper {
         // record.error follows record.started (ADR 0001).
         var started: [String: Any] = ["reason": reason]
         if note { started["target"] = "note" }
-        if let app = FrontApp.current { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
+        let front = FrontApp.current
+        if let app = front { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
         // Which mic (T3229): the app tells the person when the chosen one wasn't connected (`fellBack`).
         // The lid closed (or opened) since the engine was made: `start` makes the new one right away (T3229, #3300).
         let stale = !headless && mic.isStale()
@@ -456,6 +474,9 @@ final class Helper {
                 emit("record.started", started)
                 overlay.set(.listening)
                 try audio.start()
+                // L18: o site do navegador sai do caminho do mic: lido numa fila própria, depois que o mic subiu, e
+                // vai num `record.site`, bem antes da transcrição.
+                if let app = front { reportSite(app) }
             }
         } catch {
             gesture.reset()
@@ -914,7 +935,8 @@ final class Helper {
         // CLI (T1740) can say which app it is (`app: {bundleId, name?}`) and make it a quick note (`target: "note"`).
         var started: [String: Any] = ["reason": "debug"]
         if let app = message.fields["app"] as? [String: Any], let bundleId = app["bundleId"] as? String, !bundleId.isEmpty {
-            started["app"] = ["bundleId": bundleId, "name": (app["name"] as? String) ?? bundleId]
+            started["app"] = BrowserSite.appFields(bundleId: bundleId, name: (app["name"] as? String) ?? bundleId,
+                                                   title: app["title"] as? String, host: app["urlHost"] as? String)
         } else if message.fields["app"] != nil {
             return reply(id, ok: false, error: "invalid_value")
         } else if !headless, let app = FrontApp.current {

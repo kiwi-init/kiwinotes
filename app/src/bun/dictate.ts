@@ -23,6 +23,8 @@ export const APP_ALIASES: Record<string, AppRef> = {
   iterm: { bundleId: "com.googlecode.iterm2", name: "iTerm" },
   vscode: { bundleId: "com.microsoft.VSCode", name: "Visual Studio Code" },
   cursor: { bundleId: "com.todesktop.230313mzl4w4u92", name: "Cursor" },
+  chrome: { bundleId: "com.google.Chrome", name: "Google Chrome" },
+  safari: { bundleId: "com.apple.Safari", name: "Safari" },
 };
 
 /** O pedido, como chega no socket. Um de `wav` ou `text`. */
@@ -33,6 +35,9 @@ export interface DictateRequest {
   app?: string;
   /** A nota rápida (T1320): o ditado vira nota em vez de ser colado. */
   note?: boolean;
+  /** Num navegador (L18): o título da janela e o host da página, como o helper leria pela Acessibilidade. */
+  siteTitle?: string;
+  siteHost?: string;
   /** O texto antes do cursor (T733); só os 2 últimos caracteres contam. Sem ele, o campo "não diz" (sem espaço). */
   fieldBefore?: string | null;
   /** O resto do campo descrito: o papel na Acessibilidade, secure input, cursor, a permissão. */
@@ -80,7 +85,7 @@ export function resolveApp(value: string): AppRef {
 export function parseRequest(msg: unknown): { input: "wav" | "text"; value: string; app?: AppRef; note: boolean; simulate: InsertSimulation } {
   if (!msg || typeof msg !== "object" || Array.isArray(msg)) throw bad("dictate: expects an object");
   const m = msg as Record<string, unknown>;
-  const known = new Set(["cmd", "id", "wav", "text", "app", "note", "fieldBefore", "field"]);
+  const known = new Set(["cmd", "id", "wav", "text", "app", "note", "fieldBefore", "field", "siteTitle", "siteHost"]);
   for (const key of Object.keys(m)) if (!known.has(key)) throw bad(`dictate: unknown field ${key}`);
   if ((m.wav === undefined) === (m.text === undefined)) throw bad("dictate: give wav or text (one of them)");
   let input: "wav" | "text";
@@ -98,6 +103,10 @@ export function parseRequest(msg: unknown): { input: "wav" | "text"; value: stri
   }
   if (m.app !== undefined && typeof m.app !== "string") throw bad("app must be a string");
   if (m.note !== undefined && typeof m.note !== "boolean") throw bad("note must be true or false");
+  for (const key of ["siteTitle", "siteHost"] as const) {
+    if (m[key] !== undefined && (typeof m[key] !== "string" || !m[key])) throw bad(`${key} must be a non-empty string`);
+  }
+  if ((m.siteTitle !== undefined || m.siteHost !== undefined) && !m.app) throw bad("siteTitle and siteHost need app (a browser)");
   if (m.fieldBefore !== undefined && m.fieldBefore !== null && typeof m.fieldBefore !== "string") throw bad("fieldBefore must be a string or null");
   const simulate: InsertSimulation = {};
   if (m.field !== undefined) {
@@ -116,7 +125,9 @@ export function parseRequest(msg: unknown): { input: "wav" | "text"; value: stri
     }
   }
   if (m.fieldBefore !== undefined) simulate.textBefore = m.fieldBefore as string | null;
-  return { input, value, app: m.app ? resolveApp(m.app as string) : undefined, note: m.note === true, simulate };
+  const app = m.app ? resolveApp(m.app as string) : undefined;
+  const site = { ...(m.siteTitle ? { title: m.siteTitle as string } : {}), ...(m.siteHost ? { urlHost: m.siteHost as string } : {}) };
+  return { input, value, app: app ? { ...app, ...site } : undefined, note: m.note === true, simulate };
 }
 
 export function report(input: "wav" | "text", note: boolean, o: DictationOutcome): DictateReport {

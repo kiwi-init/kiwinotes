@@ -24,6 +24,8 @@
 //   { "expectWidth": "SEL", "min"?: 400, "max"?: 900 } a largura do elemento na tela fica entre min e max (T5299)
 //   { "drop": "SEL", "file": "caminho" }           arrasta um arquivo (imagem, PDF) e solta no meio do elemento (T2594)
 //   { "pasteFile": "SEL", "file": "caminho" }      cola um arquivo no elemento, como um ⌘V com uma imagem (T2594).
+//   { "pasteHtml": "SEL", "html": "…", "text"?: "…", "shift"?: true }  cola HTML (e o texto puro) no elemento, como um
+//                                                     ⌘V de um site ou e-mail (T6379); `shift`, como o ⇧⌘V.
 //                                                     Só um evento na página: nunca o clipboard de verdade.
 //   { "invoke": "notes.save", "args": {…} }          uma capacidade direto no engine, "de fora" da janela (como uma
 //                                                     edição no Obsidian): a janela vê pelos eventos. Nunca clipboard.
@@ -67,7 +69,8 @@ export type Step =
   | { expectWidth: string; min?: number; max?: number }
   | { invoke: string; args?: Record<string, unknown> }
   | { drop: string; file: string }
-  | { pasteFile: string; file: string };
+  | { pasteFile: string; file: string }
+  | { pasteHtml: string; html: string; text?: string; shift?: boolean };
 
 type Modifier = "Alt" | "Control" | "Meta" | "Shift";
 export type StepWithMeta = Step & { timeout?: number; name?: string };
@@ -82,7 +85,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "expectNoHScroll", "drag", "expectWidth", "screenshot", "invoke", "drop", "pasteFile"] as const;
+const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "expectNoHScroll", "drag", "expectWidth", "screenshot", "invoke", "drop", "pasteFile", "pasteHtml"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -209,6 +212,11 @@ export function parseScript(json: unknown): ScriptFile {
       case "type":
         if (typeof s.type !== "string") throw new Error(`${at}: type precisa de um texto`);
         break;
+      case "pasteHtml":
+        str(s.pasteHtml, `${at}.pasteHtml`);
+        if (typeof s.html !== "string" || !s.html) throw new Error(`${at}: pasteHtml precisa de html`);
+        if (s.text !== undefined && typeof s.text !== "string") throw new Error(`${at}: text é um texto`);
+        break;
       case "drop":
       case "pasteFile":
         str(s[action], `${at}.${action}`);
@@ -257,6 +265,24 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
       throw new Error(`notes.save ${String(args.path)}: não gravou, o baseVersion está velho (use "current")`);
     }
     return { value: r.value };
+  }
+  if ("pasteHtml" in s) {
+    const el = page.locator(s.pasteHtml).first();
+    await el.waitFor({ timeout });
+    await el.evaluate(
+      (target, { html, text, shift }) => {
+        (target as HTMLElement).focus();
+        // O ⇧⌘V: o editor olha o ⇧ no keydown do V. Um evento de mentira, sem a ação do navegador: uma tecla de verdade
+        // poderia colar o clipboard real do Mac na página (AGENTS.md).
+        if (shift) target.dispatchEvent(new KeyboardEvent("keydown", { key: "v", code: "KeyV", shiftKey: true, metaKey: true, bubbles: true, cancelable: true }));
+        const dt = new DataTransfer();
+        dt.setData("text/html", html);
+        dt.setData("text/plain", text);
+        target.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+      },
+      { html: s.html, text: s.text ?? "", shift: !!s.shift },
+    );
+    return {};
   }
   if ("drop" in s || "pasteFile" in s) {
     const sel = "drop" in s ? s.drop : s.pasteFile;
