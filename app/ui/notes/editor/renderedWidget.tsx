@@ -347,6 +347,9 @@ function CalloutBox({ callout, markdown, callbacks, attachments, copy, onShown }
   );
 }
 
+/** O bloco desenhado, também fora do editor (o nó do quadro branco, T6600). */
+export { Block as RenderedBlock };
+
 function Block({ markdown, source, callbacks, attachments, copy, onShown }: BlockProps) {
   const callout = parseCallout(source);
   if (callout) return <CalloutBox callout={callout} markdown={markdown} callbacks={callbacks} attachments={attachments} copy={copy} onShown={onShown} />;

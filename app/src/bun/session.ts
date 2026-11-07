@@ -7,9 +7,9 @@ import os from "node:os";
 import path from "node:path";
 
 import { sidecarLlm } from "../cleanup/index.ts";
-import { learnFromEdit } from "./learn-dictionary.ts";
+import { CorrectionOffers } from "./learn-dictionary.ts";
 import type { LlmMode } from "../cleanup/types.ts";
-import { type Command, defaultSocketPath, type Event, type LlmStatus, type Permission, type Permissions } from "../shared/ipc.ts";
+import { type Command, defaultSocketPath, type Event, type LearnAnswer, type LlmStatus, type Permission, type Permissions } from "../shared/ipc.ts";
 import type { AudioInputs } from "../shared/microphone.ts";
 import { GLOBAL_SHORTCUT_IDS } from "../shared/shortcuts.ts";
 import { listAudioInputs } from "./audio-inputs.ts";
@@ -114,6 +114,8 @@ export class Session {
   private stt: SttState = "starting";
   private boosting: SessionStatus["boosting"];
   private statusListeners = new Set<(s: SessionStatus) => void>();
+  /** L26: a correção depois de colar vira pergunta no cartão do helper. */
+  private readonly offers = new CorrectionOffers(stores.dictionary, (c) => this.sidecar.send(c), (terms) => this.dictionaryChanged(terms));
 
   constructor(viewsFolder: string) {
     const helper = helperPath(viewsFolder);
@@ -191,8 +193,9 @@ export class Session {
     this.sidecar.on("stt.precise", (e) => this.precise.helperState(e.state));
     this.sidecar.onClose(() => this.precise.helperGone());
     this.sidecar.on("permissions.changed", () => this.emitStatus());
-    // L23 (decisão do harry no #4767): a correção logo depois de colar vira dicionário, sem perguntar.
+    // L26 (escolha A do harry no #6906): a correção logo depois de colar vira uma pergunta no cartão do helper.
     this.sidecar.on("paste.edited", (e) => void this.learn(e.pasted, e.edited, e.app).catch(() => console.warn("[learn] failed")));
+    this.sidecar.on("learn.answered", (e) => void this.learnAnswered(e.from, e.to, e.answer).catch(() => console.warn("[learn] failed")));
     // O que o mic fez (engine novo, quanto tempo até o primeiro áudio depois do atalho, T985): só números e nomes
     // de evento, nunca áudio nem texto. Os outros logs do helper ficam de fora (o dryRun loga o texto).
     this.sidecar.on("log", (e) => {
@@ -329,12 +332,14 @@ export class Session {
     return listAudioInputs((c) => this.sidecar.send(c));
   }
 
-  /** A troca de um termo no trecho colado entra no dicionário. Num terminal ou editor de código (tom literal), não. */
+  /** A troca de um termo no trecho colado vira a pergunta do cartão (`CorrectionOffers`). */
   private async learn(pasted: string, edited: string, app?: string): Promise<void> {
-    const saved = await learnFromEdit(stores.dictionary, { pasted, edited, ...(app ? { app } : {}) });
-    if (!saved) return;
-    await this.dictionaryChanged(saved);
-    console.log("[learn] dictionary learned a correction");
+    if (await this.offers.edited({ pasted, edited, ...(app ? { app } : {}) })) console.log("[learn] offered a correction");
+  }
+
+  private async learnAnswered(from: string, to: string, answer: LearnAnswer): Promise<void> {
+    const outcome = await this.offers.answered({ from, to, answer });
+    if (outcome) console.log(`[learn] correction ${outcome}`);
   }
 
   async dictionaryChanged(terms: DictionaryTerm[]): Promise<void> {

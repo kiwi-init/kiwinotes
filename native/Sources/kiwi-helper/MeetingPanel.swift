@@ -30,6 +30,9 @@ final class MeetingPanel {
         state.onTogglePause = { [weak self] in self?.onTogglePause?() }
     }
 
+    /// The panel is on screen (the learn card goes above it).
+    var isShowing: Bool { state.visible }
+
     /// What the detector says to show. `now` is the detector's clock (`systemUptime`).
     func show(_ panel: MeetingDetector.Panel) {
         guard enabled else { return }

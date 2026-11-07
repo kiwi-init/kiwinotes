@@ -18,6 +18,9 @@ final class Helper {
     /// The app sent `microphone` in a `config.set`, so it knows `audio.inputs.changed`.
     private var appKnowsMicrophone = false
     private let overlay = Overlay()
+    /// L26 (T6910): the card that asks before a correction goes into the dictionary.
+    private let learnPanel = LearnPanel()
+    private let learnPrompt = LearnPrompt { delay, run in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: run) }
     private let inserter = Inserter()
     private var gesture = HotkeyGesture()
     /// T5833 (#213): os sons de início e de fim. Ligados por padrão; o app manda o ajuste no `config.set {cues}`.
@@ -131,7 +134,16 @@ final class Helper {
         }
         overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
-        overlay.onVisibleChange = { [weak self] visible in self?.meeting.setDictating(visible) }
+        overlay.onVisibleChange = { [weak self] visible in
+            self?.meeting.setDictating(visible)
+            if visible { self?.learnPrompt.dictationStarted() }
+        }
+        learnPanel.lift = { [weak self] in self?.meeting.panel.isShowing == true ? MeetingView.panelSize.height - MeetingView.bottom : 0 }
+        learnPanel.onAnswer = { [weak self] answer in self?.learnPrompt.answer(answer) }
+        learnPrompt.onChange = { [weak self] offer in self?.learnPanel.show(offer) }
+        learnPrompt.onAnswer = { [weak self] offer, answer in
+            self?.emit("learn.answered", ["from": offer.from, "to": offer.to, "answer": answer.rawValue])
+        }
         // Touching the input before the mic is granted can bring up the system prompt.
         audio.mayWarmUp = { [headless] in !headless && Permission.microphone.status == "granted" }
         audio.onLog = { [weak self] message in self?.emit("log", ["level": "info", "message": "mic: \(message)"]) }
@@ -200,6 +212,7 @@ final class Helper {
         globeStarted = true
         if !headless { tap.start() }
         overlay.enabled = !headless
+        learnPanel.enabled = !headless
         meeting.start()
         lastPermissions = Permission.snapshot()
         lastLlm = Self.key(llm.status)
@@ -705,6 +718,17 @@ final class Helper {
             }
             meeting.micUsers(Set(users))
             reply(id, ok: true)
+        case "learn.offer":
+            // L26: the app found a correction after a paste and asks the person, on the card, before learning it.
+            guard let offer = LearnOffer.parse(message.fields) else { return reply(id, ok: false, error: "invalid_value") }
+            learnPrompt.offer(offer)
+            reply(id, ok: true)
+        case "learn.answer":
+            // The card's buttons, from the app or a test (headless has no card): `add` or `notNow`.
+            guard let name = message.string("answer"), let answer = LearnAnswer(rawValue: name), answer != .expired else {
+                return reply(id, ok: false, error: "invalid_value")
+            }
+            if learnPrompt.answer(answer) { reply(id, ok: true) } else { reply(id, ok: false, error: "no_offer") }
         case "meeting.answer":
             // The meeting panel's buttons, from the app (the hub's card, R6, or a test): `record`, `notNow`, `stop`, `keepGoing`.
             guard let name = message.string("answer"), let answer = MeetingDetector.Answer(rawValue: name) else {

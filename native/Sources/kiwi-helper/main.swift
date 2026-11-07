@@ -13,7 +13,7 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
   --stdio           talk NDJSON over stdin/stdout instead, for manual testing
   --headless        for the agents' CLI (T1739): no hotkey tap, no pill, no mic, no permission asks, dry-run inserts
   --dump-wav <dir>  also save each recording as 16 kHz WAV there (for the STT benchmark; never inside the repo)
-  --overlay-snapshot <dir>  render the dictation pill and the meeting panel in each state as PNGs there, then exit
+  --overlay-snapshot <dir>  render the dictation pill, the meeting panel and the learn card in each state as PNGs there, then exit
   --mic-users       print the processes taking mic input now, as JSON, and exit (R2): reads CoreAudio's process
                     list only, never opens the mic and asks for no permission
   --ocr <file>…     read the text in images and PDFs with Vision and PDFKit (T2709), one JSON line each, and exit;
@@ -92,6 +92,7 @@ while let arg = args.next() {
             try MainActor.assumeIsolated {
                 try OverlaySnapshots.write(to: dir)
                 try MeetingSnapshots.write(to: dir)
+                try LearnSnapshots.write(to: dir)
             }
         } catch {
             fail("can't write snapshots to \(dir.path): \(error)")
