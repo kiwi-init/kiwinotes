@@ -4,6 +4,7 @@
 // (no início e pelo watcher, que pega também o que muda fora do app, como no Obsidian).
 
 import { NoteSearchIndex } from "./search-index.ts";
+import { embedContent, type EmbedKind, parseEmbed } from "./embed.ts";
 import { noteChunks } from "./semantic/chunks.ts";
 import type { SemanticDocument, SemanticHit } from "./semantic/index.ts";
 import { lexicalMatch, lexicalWords } from "../shared/lexical.ts";
@@ -544,6 +545,22 @@ export class Vault {
     }
     const entry = await this.index(p, content, abs);
     return { ...entry.meta, content };
+  }
+
+  /**
+   * O que um `![[nota]]`, `![[nota#Título]]` ou `![[nota#^id]]` mostra (T6594, E15): a nota que o link acha e o pedaço
+   * dela, já cortado. `missing` quando a nota existe mas o título ou o bloco não; `null` quando nem a nota existe.
+   */
+  embed(link: unknown): { path: string; title: string; kind: EmbedKind; content: string } | { path: string; title: string; missing: string } | null {
+    if (typeof link !== "string" || link.length > 1024) throw new VaultError("E_BAD_ARGS", "link must be a string");
+    const parsed = parseEmbed(link);
+    if (!parsed || !parsed.target) return null;
+    const p = this.resolve_()(parsed.target);
+    const e = p ? this.notes.get(p) : undefined;
+    if (!p || !e) return null;
+    const cut = embedContent(e.content, parsed.fragment);
+    if (!cut) return { path: p, title: e.meta.title, missing: parsed.fragment };
+    return { path: p, title: e.meta.title, ...cut };
   }
 
   resolve(link: unknown): string | null {
