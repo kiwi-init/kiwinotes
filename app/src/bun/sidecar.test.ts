@@ -30,6 +30,7 @@ interface FakeProcess {
   exited: Promise<number>;
   socket?: any;
   signals: string[];
+  connect: "pending" | "open" | "failed";
   finish(code: number, signal?: string): void;
   exitCode: number | null;
   signalCode: string | null;
@@ -54,6 +55,7 @@ function fakeHelper(
       }),
       kill: () => {},
       signals: [],
+      connect: "pending",
       exitCode: null,
       signalCode: null,
       finish(code, signal) {
@@ -72,10 +74,11 @@ function fakeHelper(
           JSON.stringify({ v: 1, type: "result", id: m.id, ...reply }) + "\n",
         );
     });
-    void Bun.connect({
+    Bun.connect({
       unix: socketPath,
       socket: {
         open(s) {
+          proc.connect = "open";
           proc.socket = s;
           if (behavior.ready !== false) s.write(encode(READY as any));
           if (behavior.crashAfterMs !== undefined)
@@ -88,6 +91,10 @@ function fakeHelper(
           if (behavior.exitOnClose !== false) proc.finish(0);
         },
       },
+    }).catch(() => {
+      // O app parou de escutar antes de aceitar (ECONNRESET): o helper de verdade sai com erro, e o de mentira também.
+      proc.connect = "failed";
+      proc.finish(1);
     });
     proc.kill = (signal = "SIGTERM") => {
       proc.signals.push(signal);
@@ -548,4 +555,13 @@ test("a valid pong arriving after its deadline also clears the missed count", as
   } finally {
     for (const timer of timers) clearTimeout(timer);
   }
+});
+
+test("stopping before the helper connects ends its connect attempt as an exit, not an unhandled error (T6719)", async () => {
+  const helper = fakeHelper();
+  const s = make(helper);
+  await s.stop();
+  await until(() => helper.procs[0]!.connect !== "pending");
+  expect(helper.procs[0]!.connect).toBe("failed");
+  expect(helper.procs).toHaveLength(1);
 });
