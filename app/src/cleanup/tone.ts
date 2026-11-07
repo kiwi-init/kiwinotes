@@ -1,3 +1,4 @@
+import { siteTone } from "./site-tone.ts";
 import type { Tone } from "./types.ts";
 
 const CASUAL = new Set([
@@ -36,9 +37,14 @@ const LITERAL = new Set([
   "com.apple.dt.Xcode",
 ]);
 
-/** O tom do texto pelo app em foco. JetBrains entra pelo prefixo (IntelliJ, PyCharm, GoLand…). */
-export function toneFor(bundleId: string | undefined): Tone {
+/**
+ * O tom do texto pelo app em foco. JetBrains entra pelo prefixo (IntelliJ, PyCharm, GoLand…). No navegador, o site
+ * aberto decide (L18); site fora da lista fica no `default`, como antes.
+ */
+export function toneFor(bundleId: string | undefined, site?: { title?: string; urlHost?: string }): Tone {
   if (!bundleId) return "default";
+  const bySite = siteTone({ bundleId, ...site });
+  if (bySite) return bySite;
   if (LITERAL.has(bundleId) || bundleId.startsWith("com.jetbrains.")) return "literal";
   if (CASUAL.has(bundleId)) return "casual";
   if (FORMAL.has(bundleId)) return "formal";

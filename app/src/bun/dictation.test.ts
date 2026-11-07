@@ -107,6 +107,20 @@ describe("Dictation", () => {
     expect(added[1]!.text).toBe("git status");
   });
 
+  test("the browser's site arrives after record.started and picks the tone; it never goes to the history (L18)", async () => {
+    const { sidecar, d, added } = setup();
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.google.Chrome", name: "Chrome" } });
+    sidecar.emit({ type: "record.site", bundleId: "com.google.Chrome", title: "Inbox - Gmail", urlHost: "mail.google.com" });
+    sidecar.emit(transcript("oi ana segue o relatório"));
+    // A site for another app (a late read) doesn't touch the next recording.
+    sidecar.emit({ type: "record.started", reason: "hotkey", app: { bundleId: "com.apple.Safari", name: "Safari" } });
+    sidecar.emit({ type: "record.site", bundleId: "com.google.Chrome", urlHost: "mail.google.com" });
+    sidecar.emit(transcript("oi ana segue o relatório"));
+    await d.idle();
+    expect(added.map((e) => e.tone)).toEqual(["formal", "default"]);
+    expect(added[0]!.app).toEqual({ bundleId: "com.google.Chrome", name: "Chrome" });
+  });
+
   test("without record.started.app, the last app.active is the target", async () => {
     const { sidecar, d, added } = setup();
     sidecar.emit({ type: "app.active", bundleId: "com.apple.mail", name: "Mail", pid: 42 });

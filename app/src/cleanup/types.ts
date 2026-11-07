@@ -17,6 +17,8 @@ export interface CleanupInput {
   raw: string;
   /** Bundle id do app em foco (evento `app.active`). Sem ele, o tom é `default`. */
   bundleId?: string;
+  /** Num navegador (L18): o título da janela e o host da página. O site listado decide o tom (Gmail é e-mail). */
+  site?: { title?: string; urlHost?: string };
   dictionary?: DictionaryEntry[];
   /** Força um tom, por cima do que o bundle id diria. */
   tone?: Tone;

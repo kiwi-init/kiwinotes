@@ -1,7 +1,8 @@
 // `bun run cli dictate …` (T1740): o ditado inteiro pelo modo headless (T1739), sem microfone nem colagem.
 //
 //   dictate <arquivo.wav> | --wav <arquivo.wav> | --text "<transcript>"
-//           [--app slack|teams|ghostty|mail|…|<bundleId>] [--note] [--field-before "<texto>"]
+//           [--app slack|teams|ghostty|mail|chrome|safari|…|<bundleId>] [--site-title "<título>"] [--site-host <host>]
+//           [--note] [--field-before "<texto>"]
 //           [--field-role AXTextArea|none] [--secure-input] [--no-accessibility] [--no-caret]
 //   dictate --batch <pasta|arquivo.jsonl>
 //
@@ -87,6 +88,12 @@ export function parseArgs(argv: string[]): { batch: string } | { request: Record
         break;
       case "--note":
         request.note = true;
+        break;
+      case "--site-title":
+        request.siteTitle = value(i++, a);
+        break;
+      case "--site-host":
+        request.siteHost = value(i++, a);
         break;
       case "--field-before":
         // Pode ser vazio (o começo do campo) ou começar com "-": vale o que vier.
