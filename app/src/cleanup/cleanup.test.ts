@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { compileDictionary } from "./dictionary.ts";
 import { fixtures } from "./fixtures.ts";
 import { cleanup, cleanupWithRules, llmSystemMessage, rulesDroppedTooMuch, toneFor } from "./index.ts";
-import { maxTokensFor, rejectReason } from "./llm.ts";
+import { languageOf, maxTokensFor, rejectReason } from "./llm.ts";
 import { filterOutput } from "./outputFilter.ts";
 import { MAX_VOCABULARY_TERMS } from "./prompts.ts";
 import { sidecarLlm } from "./sidecar.ts";
@@ -155,6 +155,14 @@ describe("prompt do VoiceInk", () => {
     expect(system).not.toContain("<TONE>");
   });
 
+  test("regra de idioma e exemplos em português (T6592)", () => {
+    const system = llmSystemMessage("default");
+    expect(system).toContain("- Never translate. Portuguese stays in Portuguese");
+    expect(system).toContain("Input: quantos dias faltam para o fim do mês\nOutput: Quantos dias faltam para o fim do mês?\n");
+    expect(system).toContain("Output: Importamos 12.000 laudos em 40 pastas, e a taxa foi de R$ 80.");
+    expect(system.indexOf("Input: oi bruno segue")).toBeLessThan(system.lastIndexOf("</EXAMPLES>"));
+  });
+
   test("tom do app e vocabulário escapado", () => {
     const system = llmSystemMessage("casual", ["C++ <beta>", { term: "R&D" }]);
     expect(system).toContain("<TONE>\n- Tone: a chat message.");
@@ -224,6 +232,55 @@ describe("guarda da saída do LLM", () => {
     // A mesma negação, só arrumada, passa; e o "no" de "no servidor" não conta.
     expect(rejectReason("eu não vou mandar o relatório amanhã", "Eu não vou mandar o relatório amanhã.", dict)).toBeNull();
     expect(rejectReason("o erro tá no servidor de produção", "O erro está no servidor de produção.", dict)).toBeNull();
+  });
+
+  test("traduzir reprova: a saída tem que ficar no idioma da entrada (T6592)", () => {
+    const pt = "processamos vinte mil exames em trinta e cinco lotes ontem e faltam uns quinhentos";
+    expect(rejectReason(pt, "We processed twenty thousand exams in thirty-five batches yesterday and about five hundred are left.", dict)).toBe("language");
+    expect(rejectReason("let's meet at four on the main room", "Vamos nos encontrar às quatro na sala principal.", dict)).toBe("language");
+    expect(rejectReason(pt, "Processamos 20 mil exames em 35 lotes ontem e faltam uns 500.", dict)).toBeNull();
+    // Os curtos que passaram no T1208 (ADR 0002).
+    expect(rejectReason("o kubectl tá fora do path", "The kubectl is out of the path.", dict)).toBe("language");
+    expect(rejectReason("meu email é davi arroba kiwi ponto app", "My email is davi@kiwi.app.", dict)).toBe("language");
+    // Termo em inglês no meio do português não muda o idioma.
+    expect(rejectReason(input, "O DICOM store está com problema de permissão na Healthcare API.", dict)).toBeNull();
+  });
+
+  test("milhar com vírgula do inglês num texto em português reprova (T6592)", () => {
+    const pt = "processamos vinte mil exames em trinta e cinco lotes";
+    expect(rejectReason(pt, "Processamos 20,000 exames em 35 lotes.", dict)).toBe("number_format");
+    expect(rejectReason(pt, "Processamos 20.000 exames em 35 lotes.", dict)).toBeNull();
+    expect(rejectReason("o custo subiu 2,5 por cento neste mês", "O custo subiu 2,5% neste mês.", dict)).toBeNull();
+    expect(rejectReason("we processed twenty thousand records", "We processed 20,000 records.", dict)).toBeNull();
+  });
+
+  test("crase de código que não foi ditada reprova (T6592)", () => {
+    expect(rejectReason("roda o kubectl get pods pra ver se subiu", "Roda o `kubectl get pods` pra ver se subiu.", dict)).toBe("markup");
+    expect(rejectReason("roda o `kubectl` agora", "Roda o `kubectl` agora.", dict)).toBeNull();
+  });
+
+  test("idioma pelas stopwords, e nada quando não dá para dizer", () => {
+    expect(languageOf("o servidor caiu de novo e ninguém viu")).toBe("pt");
+    expect(languageOf("the server is down and nobody saw it")).toBe("en");
+    expect(languageOf("um so basically we need to like ship this by friday")).toBe("en");
+    expect(languageOf("se for o caso, me avisa")).toBe("pt");
+    expect(languageOf("Canberra.")).toBeNull();
+    expect(languageOf("ok, deploy feito")).toBeNull();
+    expect(languageOf("o build is green")).toBeNull();
+    expect(languageOf("o kubectl tá fora do path")).toBe("pt");
+  });
+
+  test("pergunta respondida sem começo de assistente reprova (T6592)", () => {
+    expect(rejectReason("qual é a capital da austrália", "Canberra é a capital da Austrália.", dict)).toBe("answered");
+    expect(rejectReason("Qual o horário da reunião?", "A reunião é às 10h.", dict)).toBe("answered");
+    expect(rejectReason("what's the weather tomorrow in são paulo", "Tomorrow in São Paulo it will be sunny.", dict)).toBe("answered");
+    expect(rejectReason("oi ana, você sabe onde fica a sala?", "Oi, Ana, a sala fica no segundo andar.", dict)).toBe("answered");
+    // A pergunta só arrumada passa, com ou sem o "?".
+    expect(rejectReason("qual é a capital da austrália", "Qual é a capital da Austrália?", dict)).toBeNull();
+    expect(rejectReason("você pode me explicar por que o kubectl não acha o cluster", "Você pode me explicar por que o kubectl não acha o cluster", dict)).toBeNull();
+    expect(rejectReason("what's the weather tomorrow in são paulo", "What's the weather tomorrow in São Paulo?", dict)).toBeNull();
+    // Começar por "como" ou "quando" sem ser pergunta não reprova a limpeza que mantém o começo.
+    expect(rejectReason("quando chegar me avisa", "Quando chegar, me avisa.", dict)).toBeNull();
   });
 });
 

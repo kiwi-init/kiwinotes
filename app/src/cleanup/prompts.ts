@@ -3,7 +3,9 @@
 // - o prompt "Default" de VoiceInk/VoiceInk/Features/Enhancement/Templates/PromptTemplates.swift;
 // - o bloco de vocabulário de VoiceInk/VoiceInk/Features/Dictionary/Workflows/RecordingVocabulary.swift (`enhancementSection`);
 // - o `<TRANSCRIPT>` da mensagem do usuário, de VoiceInk/VoiceInk/Features/Enhancement/Workflows/AIEnhancementService.swift.
-// Mudanças: os textos estão como no VoiceInk. O que é do Kiwi é a linha de tom (`TONE_RULE`) e o limite de termos.
+// Mudanças: os textos estão como no VoiceInk. O que é do Kiwi é a linha de tom (`TONE_RULE`), o limite de termos, a regra
+// de idioma e números em PT e os exemplos em português do fim de <EXAMPLES> (T6592), escritos para os erros que o
+// FM e o Qwen cometeram no T270 e no T1208 (ADR 0002): traduzir, responder, trocar o verbo, tirar nome, "20,000".
 // Os blocos de contexto (texto selecionado, clipboard, janela) não vieram: o Kiwi não captura nada disso.
 
 import type { Tone } from "./types.ts";
@@ -16,6 +18,7 @@ Clean the raw ASR text inside <TRANSCRIPT> according to <TASK_INSTRUCTIONS>.
 
 <RULES>
 - Use the same language as <TRANSCRIPT>.
+- Never translate. Portuguese stays in Portuguese and English stays in English, even when the transcript mixes in English technical terms. In Portuguese, write thousands with "." and decimals with "," (20.000; 2,5) and money as R$ 100.
 - Preserve the speaker’s meaning, wording, tone, certainty, emotion, and level of formality. Do not paraphrase, summarize, formalize, soften, strengthen, or change what the speaker intended.
 - Correct only what is necessary for accurate, readable transcription: obvious ASR, spelling, grammar, capitalization, punctuation, and sentence-boundary errors. Never add unspoken information or remove meaningful information. When uncertain, preserve the original wording.
 - Remove stutters, accidental repetition, and abandoned false starts.
@@ -54,6 +57,21 @@ Output: We processed 20,000 records in 35 files.
 
 Input: The first invoice is five hundred dollars, the second is thirty-five dollars, and the local fee is three hundred rupees.
 Output: The first invoice is $500, the second is $35, and the local fee is ₹300.
+
+Input: oi bruno segue a planilha do faturamento em anexo qualquer coisa me chama
+Output: Oi, Bruno, segue a planilha do faturamento em anexo. Qualquer coisa, me chama.
+
+Input: o treinamento é na terça não espera na quarta à tarde e leva o notebook
+Output: O treinamento é na quarta à tarde, e leva o notebook.
+
+Input: importamos doze mil laudos em quarenta pastas e a taxa foi de cinquenta reais digo oitenta reais
+Output: Importamos 12.000 laudos em 40 pastas, e a taxa foi de R$ 80.
+
+Input: quantos dias faltam para o fim do mês
+Output: Quantos dias faltam para o fim do mês?
+
+Input: o build tá quebrando na main abre um pr pra isso
+Output: O build tá quebrando na main. Abre um PR pra isso.
 </EXAMPLES>
 
 <OUTPUT_REQUIREMENTS>

@@ -31,9 +31,54 @@ const contentWords = (s: string) =>
       .filter((w) => w.length > 3),
   );
 
+// Palavras que só um dos dois idiomas usa. Fora as que os dois têm ("a", "no", "do", "as", "me", "for", "um"):
+// "um" é muleta no inglês e artigo no português, e "se for" é português (T6592).
+const STOPWORDS: Record<Language, Set<string>> = {
+  pt: new Set(
+    "o os e de da das dos em na nas nos uma umas uns que é para pra com não por mais se eu você ele ela isso esse essa este esta tá está estão são foi vai ao aos pelo pela mas também já ainda quando onde como porque meu minha seu sua nosso nossa".split(" "),
+  ),
+  en: new Set(
+    "the an of to in is are was were it that this and with on at you we they he she be will not by from have has does did can what how why when where which who but also just still there their my your our".split(" "),
+  ),
+};
+type Language = "pt" | "en";
+
+/** O idioma do texto pelas stopwords, ou `null` quando são poucas ou misturadas demais para dizer. */
+export function languageOf(text: string): Language | null {
+  const count: Record<Language, number> = { pt: 0, en: 0 };
+  for (const w of text.toLocaleLowerCase("pt-BR").split(/[^\p{L}']+/u)) {
+    const word = w.replace(/'(?:s|re|ll|ve|d|m)$/u, "");
+    if (STOPWORDS.pt.has(word)) count.pt++;
+    if (STOPWORDS.en.has(word)) count.en++;
+  }
+  // Texto curto conta com uma stopword só, desde que não tenha nenhuma do outro idioma: "kubectl tá fora do path".
+  if (count.pt > 0 && count.en === 0) return "pt";
+  if (count.en > 0 && count.pt === 0) return "en";
+  if (count.pt >= 2 && count.pt >= 2 * count.en) return "pt";
+  if (count.en >= 2 && count.en >= 2 * count.pt) return "en";
+  return null;
+}
+
+const EN_THOUSANDS = /\d,\d{3}(?!\d)/u;
+
+// O começo de uma pergunta ditada: o STT nem sempre põe o "?", então a primeira palavra também conta.
+const QUESTION_START =
+  /^(?:qual|quais|quem|como|quando|onde|quanto|quanta|quantos|quantas|por que|porque|o que|será que|você (?:pode|poderia|sabe)|what|which|who|whom|whose|how|when|where|why|can you|could you|would you|do you|is there|are there)(?![\p{L}\p{N}])/iu;
+
+/**
+ * A entrada é pergunta e a saída virou resposta: perdeu o "?" e não começa mais como pergunta.
+ * Pega o "Canberra." de "qual é a capital da austrália", que não tem começo de assistente.
+ */
+function answeredQuestion(input: string, output: string): boolean {
+  const opening = QUESTION_START.exec(input.trim())?.[0].toLocaleLowerCase("pt-BR");
+  if (!input.includes("?") && !opening) return false;
+  if (output.includes("?")) return false;
+  return !opening || QUESTION_START.exec(output.trim())?.[0].toLocaleLowerCase("pt-BR") !== opening;
+}
+
 /**
  * Por que a saída do LLM não serve, ou `null` se serve. Pega os erros que medimos no
- * Foundation Models (#144): responder a pergunta, inventar coisa, cortar termo do dicionário.
+ * Foundation Models (#144): responder a pergunta, inventar coisa, cortar termo do dicionário, traduzir.
  */
 export function rejectReason(input: string, output: string, dictionary: CompiledDictionary): string | null {
   const out = output.trim();
@@ -41,6 +86,14 @@ export function rejectReason(input: string, output: string, dictionary: Compiled
   // Só conta se o ditado não começa do mesmo jeito: "Segue o link…", "Certo, pode mandar…" são ditados (#309).
   const preamble = ASSISTANT_PREAMBLE.exec(out)?.[0].toLocaleLowerCase();
   if (preamble && ASSISTANT_PREAMBLE.exec(input.trim())?.[0].toLocaleLowerCase() !== preamble) return "answered";
+  if (answeredQuestion(input, out)) return "answered";
+  const langIn = languageOf(input);
+  const langOut = languageOf(out);
+  if (langIn && langOut && langIn !== langOut) return "language";
+  // Crase de código que ninguém ditou: o FM pôs `kubectl` e `PACS` entre crases no golden (T6592).
+  if (out.includes("`") && !input.includes("`")) return "markup";
+  // Em português a vírgula é decimal: "20,000" é o milhar do inglês, que o FM escreveu em PT (T1208).
+  if (langIn === "pt" && EN_THOUSANDS.test(out) && !EN_THOUSANDS.test(input)) return "number_format";
   const ratio = out.length / Math.max(1, input.length);
   if (ratio > 1.4) return "grew";
   if (ratio < 0.5) return "shrank";
@@ -64,12 +117,13 @@ export function rejectReason(input: string, output: string, dictionary: Compiled
   return null;
 }
 
-/** Do Kiwi: o modelo às vezes devolve o texto ainda dentro do `<TRANSCRIPT>` ou entre aspas. */
+/** Do Kiwi: o modelo às vezes devolve o texto ainda dentro do `<TRANSCRIPT>`, entre aspas ou com espaços no fim da linha. */
 function stripWrapping(s: string): string {
   return s
     .trim()
     .replace(/^<TRANSCRIPT>\s*([\s\S]*?)\s*<\/TRANSCRIPT>$/u, "$1")
     .replace(/^["“'](.*)["”']$/su, "$1")
+    .replace(/[ \t]+$/gmu, "")
     .trim();
 }
 

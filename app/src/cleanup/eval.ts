@@ -2,6 +2,7 @@
 //
 //   bun src/cleanup/eval.ts --fm ../native/.build/debug/kiwi-helper --out fm.jsonl
 //   bun src/cleanup/eval.ts --mlx http://127.0.0.1:8090 --model mlx-community/Qwen3.5-2B-4bit --out qwen.jsonl
+//   bun src/cleanup/eval.ts --golden [--fm …|--mlx …]   o golden com nota (T6592); sem backend, só as regras
 //
 // O MLX roda no `mlx_lm.server` do Python (só em 127.0.0.1): o mesmo MLX do mlx-swift-lm do VoiceInk. Nada sai
 // do Mac. Pegue o `kiwi lock bench` antes. Uma linha JSON por caso, mais um resumo no stderr.
@@ -11,18 +12,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { evalCases } from "./evalset.ts";
+import { type GoldenScore, goldenCases, meanScore, scoreGolden } from "./golden.ts";
 import { cleanup, cleanupWithRules, sidecarLlm } from "./index.ts";
 import type { LlmBackend, LlmRequest } from "./types.ts";
 
 const args = new Map<string, string>();
-for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i]!.replace(/^--/, ""), process.argv[i + 1] ?? "");
+for (let i = 2; i < process.argv.length; i++) {
+  const value = process.argv[i + 1];
+  const flagOnly = value === undefined || value.startsWith("--");
+  args.set(process.argv[i]!.replace(/^--/, ""), flagOnly ? "" : value);
+  if (!flagOnly) i++;
+}
 
 /** Quanto esperar por resposta: alto, para medir a latência inteira (a produção usa 1,5 s). */
 const TIMEOUT_MS = Number(args.get("timeout") ?? 30_000);
 
 // ------------------------------------------------------------------ backends
 
-/** Apple Foundation Models pelo sidecar: o eval faz o papel do app e escuta o socket. */
+/** Apple Foundation Models pelo sidecar: o eval faz o papel do app e escuta o socket. Headless: sem atalho, pílula nem mic. */
 async function foundationModels(helper: string): Promise<{ backend: LlmBackend; close(): void }> {
   const dir = mkdtempSync(join(tmpdir(), "kiwi-eval-"));
   const socketPath = join(dir, "s.sock");
@@ -51,7 +58,7 @@ async function foundationModels(helper: string): Promise<{ backend: LlmBackend; 
       },
     },
   });
-  const proc = Bun.spawn([helper, "--socket", socketPath], { stdout: "ignore", stderr: "ignore" });
+  const proc = Bun.spawn([helper, "--headless", "--socket", socketPath], { stdout: "ignore", stderr: "ignore" });
   const hello = await readyMsg;
   let n = 0;
   const backend = sidecarLlm({
@@ -128,7 +135,7 @@ function recording(inner: LlmBackend) {
 }
 
 let closer: (() => void) | undefined;
-let inner: LlmBackend;
+let inner: LlmBackend | undefined;
 if (args.has("fm")) {
   const fm = await foundationModels(args.get("fm")!);
   inner = fm.backend;
@@ -136,9 +143,62 @@ if (args.has("fm")) {
   if (!inner.available()) throw new Error("Foundation Models indisponível");
 } else if (args.has("mlx")) {
   inner = mlx(args.get("mlx")!, args.get("model") ?? "mlx-community/Qwen3.5-2B-4bit");
-} else {
-  throw new Error("use --fm <kiwi-helper> ou --mlx <url> --model <id>");
+} else if (!args.has("golden")) {
+  throw new Error("use --fm <kiwi-helper> ou --mlx <url> --model <id>, ou --golden para só as regras");
 }
+
+/** O golden: a nota das regras e, com backend, a das regras com o LLM, caso a caso. */
+async function golden(llm: LlmBackend | undefined, take: () => { answer?: string; ms?: number }) {
+  const lines: string[] = [];
+  const rulesScores: GoldenScore[] = [];
+  const llmScores: GoldenScore[] = [];
+  const outcomes = new Map<string, number>();
+  for (const c of goldenCases) {
+    const input = { raw: c.raw, bundleId: c.bundleId, dictionary: c.dictionary };
+    const rules = cleanupWithRules(input);
+    const rulesScore = scoreGolden(c, rules.text);
+    rulesScores.push(rulesScore);
+    if (!llm || rules.tone === "literal") {
+      lines.push(JSON.stringify({ id: c.id, tone: rules.tone, rules: rules.text, expected: c.expected, rulesScore: rulesScore.score }));
+      continue;
+    }
+    const r = await cleanup(input, { llm, llmMode: "always", llmTimeoutMs: TIMEOUT_MS });
+    const { answer, ms } = take();
+    const key = !r.llm ? "skipped" : r.llm.used ? "used" : `${r.llm.reason}${r.llm.detail ? `:${r.llm.detail.split(":")[0]}` : ""}`;
+    outcomes.set(key, (outcomes.get(key) ?? 0) + 1);
+    const llmScore = scoreGolden(c, r.text);
+    llmScores.push(llmScore);
+    lines.push(
+      JSON.stringify({ id: c.id, tone: rules.tone, rules: rules.text, answer, final: r.text, expected: c.expected, outcome: key, ms, rulesScore: rulesScore.score, llmScore: llmScore.score }),
+    );
+    process.stderr.write(".");
+  }
+  const worst = (xs: GoldenScore[]) => xs.reduce((a, b) => (b.score < a.score ? b : a));
+  const w = worst(rulesScores);
+  let summary = `\ngolden: ${goldenCases.length} casos\n  só regras: nota ${meanScore(rulesScores)} · exatos ${rulesScores.filter((x) => x.score === 1).length} · pior ${w.id} (${w.score})\n`;
+  if (llm && llmScores.length) {
+    const lw = worst(llmScores);
+    const byId = new Map(rulesScores.map((x) => [x.id, x.score]));
+    const better = llmScores.filter((x) => x.score > byId.get(x.id)!).length;
+    const worse = llmScores.filter((x) => x.score < byId.get(x.id)!).length;
+    summary +=
+      `  regras + ${llm.name}: nota ${meanScore(llmScores)} · exatos ${llmScores.filter((x) => x.score === 1).length} · pior ${lw.id} (${lw.score})\n` +
+      `  o LLM melhorou ${better}, piorou ${worse}, igual ${llmScores.length - better - worse} · ${[...outcomes].map(([k, v]) => `${k} ${v}`).join(" · ")}\n`;
+  }
+  return { lines, summary };
+}
+
+if (args.has("golden")) {
+  const rec = inner ? recording(inner) : undefined;
+  const { lines, summary } = await golden(rec?.backend, rec ? rec.take : () => ({}));
+  closer?.();
+  process.stderr.write(summary);
+  const file = args.get("out");
+  if (file) await Bun.write(file, lines.join("\n") + "\n");
+  else console.log(lines.join("\n"));
+  process.exit(0);
+}
+if (!inner) throw new Error("sem backend");
 
 const { backend, take } = recording(inner);
 const out: string[] = [];
