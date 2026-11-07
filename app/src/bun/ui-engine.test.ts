@@ -53,6 +53,7 @@ const notesStub = {
   search: () => [],
   backlinks: () => [],
   resolve: () => null,
+  embed: () => null,
   moveNote: async () => null as never,
   duplicate: async () => null as never,
   restore: async () => null as never,

@@ -41,6 +41,25 @@ const snapshot = (p: Page) => p.evaluate(() => {
   return { x: box.x, w: box.width, targetX: target.x, targetW: target.width,
     selected: selected.dataset.section, opacity: getComputedStyle(pill).opacity };
 });
+const settled = (p: Page) => p.evaluate(async () => {
+  const finite = (a: Animation) => {
+    const end = a.effect?.getComputedTiming().endTime;
+    return typeof end === "number" && Number.isFinite(end);
+  };
+  const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+  const deadline = performance.now() + 5000;
+  await document.fonts.ready;
+  for (;;) {
+    await frame();
+    await frame();
+    const running = document.getAnimations().filter((a) => finite(a) && a.playState !== "finished");
+    if (!running.length) return;
+    if (performance.now() > deadline) throw new Error(`a janela não parou de animar: ${running.length} animações`);
+    await Promise.all(running.map((a) => a.finished.catch(() => {
+      // Uma animação cancelada (a seleção mudou no meio) também acabou; a volta do laço olha as que sobraram.
+    })));
+  }
+});
 const matchesSelection = (s: Awaited<ReturnType<typeof snapshot>>) => {
   assert.ok(Math.abs(s.x - s.targetX) < 0.6 && Math.abs(s.w - s.targetW) < 0.6, JSON.stringify(s));
   assert.equal(s.opacity, "1");
@@ -110,12 +129,12 @@ try {
     const video = p.video()!;
     try {
       await p.mouse.move(970, 140);
-      await p.waitForTimeout(700);
+      await settled(p);
       const start = await snapshot(p);
       matchesSelection(start);
       const rest = await style(p, "about");
       await p.locator('.kn-tab[data-section=about]').hover();
-      await p.waitForTimeout(650);
+      await settled(p);
       const hovered = await snapshot(p);
       const hoverStyle = await style(p, "about");
       metrics.push({ theme, start, hovered, rest, hoverStyle });
@@ -140,12 +159,12 @@ try {
         if (!before) matchesSelection(await snapshot(p));
       }
       await p.mouse.move(970, 140);
-      await p.waitForTimeout(650);
+      await settled(p);
       if (!before) matchesSelection(await snapshot(p));
       // Um clique com animação: o destino e a curva são os tokens do Channels instalado.
       await p.locator('.kn-tab[data-section=about]').click();
       await p.mouse.move(970, 140);
-      await p.waitForTimeout(650);
+      await settled(p);
       if (!before) {
         const clicked = await snapshot(p);
         assert.equal(clicked.selected, "about");
@@ -161,7 +180,7 @@ try {
       // Mouse em outra aba não pode vencer o teclado; foco visível continua presente.
       await p.locator('.kn-tab[data-section=notes]').hover();
       await p.keyboard.press("ArrowLeft");
-      await p.waitForTimeout(650);
+      await settled(p);
       if (!before) {
         const keyed = await snapshot(p);
         assert.equal(keyed.selected, "settings");
@@ -185,7 +204,7 @@ try {
       }
       // Resize da faixa reposiciona a seleção sem animação de hover residual.
       await p.setViewportSize({ width: 860, height: 640 });
-      await p.waitForTimeout(100);
+      await settled(p);
       if (!before) matchesSelection(await snapshot(p));
       assert.deepEqual(w.report.problems, []);
       assert.deepEqual(w.report.blocked, []);

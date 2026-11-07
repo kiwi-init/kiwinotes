@@ -404,6 +404,26 @@ function PlainBlock({ markdown, source, callbacks, attachments, copy, onShown }:
   );
 }
 
+/**
+ * O Markdown de outra nota, desenhado como o resto (T6594, os embeds): os links abrem como no texto, sem o "só posicionar
+ * o cursor", porque o embed não é editável aqui.
+ */
+export function EmbeddedMarkdown({ markdown, actions, onShown }: { markdown: string; actions: RenderedActions; onShown(): void }) {
+  const callbacks = {
+    onLinkPress: ({ url }: { url: string }) => {
+      const act = linkAction(url);
+      if (act?.kind === "loadImage") loadRemote(act.url, actions.attachments);
+      else if (act?.kind === "note") actions.onOpenLink(act.target);
+      else if (act?.kind === "tag") actions.onOpenTag?.(act.tag);
+      else if (act?.kind === "url") {
+        const safe = externalUrl(act.url);
+        if (safe) actions.onOpenUrl(safe);
+      }
+    },
+  };
+  return <Block markdown={markdown} source={markdown} callbacks={callbacks} attachments={actions.attachments} onShown={onShown} />;
+}
+
 const roots = new WeakMap<HTMLElement, Root>();
 const sizes = new WeakMap<HTMLElement, ResizeObserver>();
 

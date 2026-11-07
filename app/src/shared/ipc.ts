@@ -375,6 +375,8 @@ export type Event =
    * app duas vezes seguidas.
    */
   | { type: "app.active"; bundleId: string; name: string; pid: number }
+  /** L23: a pessoa mudou o trecho colado logo depois da colagem: o que o Kiwi colou e como ele está agora. */
+  | { type: "paste.edited"; pasted: string; edited: string; app?: string }
   /**
    * L18: o site do navegador da gravação que acabou de começar (título da janela e host da página). Vem depois do
    * `record.started`, porque a leitura fica fora do caminho do mic; chega bem antes da transcrição.
@@ -472,6 +474,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "record.error",
   "audio.level",
   "app.active",
+  "paste.edited",
   "record.site",
   "transcript.partial",
   "transcript.final",

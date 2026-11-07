@@ -17,6 +17,7 @@ import { isSpellingLanguage } from "../../src/shared/spelling.ts";
 import { lineChanges } from "../../src/shared/merge3.ts";
 
 import type { AttachmentSource } from "./editor/attachments.ts";
+import type { NoteEmbed } from "../../src/shared/ui-contract.ts";
 import { focusCompartment, focusExtension, typewriterCompartment, typewriterExtension } from "./editor/focus.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
@@ -39,6 +40,8 @@ export interface NoteEditorProps {
   headingContent(target: string): Promise<string | null>;
   /** Os anexos (T2594); sem eles, colar e arrastar arquivo não faz nada de especial. Fixo durante a vida da janela. */
   attachments?: AttachmentSource;
+  /** O pedaço de nota de um `![[nota]]` (T6594). */
+  embed?: (link: string) => Promise<NoteEmbed | null>;
   onError?(text: string): void;
   createSplit?(tail: string): Promise<string>;
   onSplitDone?(path: string): void;
@@ -48,10 +51,12 @@ export interface NoteEditorProps {
   typewriter?: boolean;
   /** Os dois no menu do botão direito, com o atalho de agora. */
   viewModes?: { focusKey?: string; typewriterKey?: string; toggleFocus(): void; toggleTypewriter(): void };
+  /** "Adicionar propriedade" no menu do botão direito (T6598): o painel some quando a nota não tem nenhuma. */
+  onAddProperty?: () => void;
 }
 
-export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, onError, createSplit, onSplitDone, onRenameHeading,
-  focus = false, typewriter = false, viewModes,
+export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
+  focus = false, typewriter = false, viewModes, onAddProperty,
 }: NoteEditorProps) {
   const modes = useRef({ focus, typewriter });
   modes.current = { focus, typewriter };
@@ -71,8 +76,8 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   });
   latest.current = { onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, onError, createSplit, onSplitDone, onRenameHeading,
   };
-  const modeMenu = useRef({ focus, typewriter, viewModes });
-  modeMenu.current = { focus, typewriter, viewModes };
+  const modeMenu = useRef({ focus, typewriter, viewModes, onAddProperty });
+  modeMenu.current = { focus, typewriter, viewModes, onAddProperty };
 
   const extensions = useRef(
     editorExtensions(
@@ -90,6 +95,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
         linkTargets: () => latest.current.linkTargets(),
         headingContent: (target) => latest.current.headingContent(target),
         ...(attachments ? { attachments, onError: (t: string) => latest.current.onError?.(t) } : {}),
+        ...(embed ? { embed } : {}),
         ...(has("clipboard.write") ? { copy: (text: string) => appApi.copy(text) } : {}),
       },
       links,
@@ -191,9 +197,11 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   };
   const viewModeItems = (): MenuItem[] => {
     const m = modeMenu.current;
-    if (!m.viewModes) return [];
+    const property: MenuItem[] = m.onAddProperty ? [{ kind: "separator" }, { label: "Adicionar propriedade", onSelect: m.onAddProperty }] : [];
+    if (!m.viewModes) return property;
     const { toggleFocus, toggleTypewriter, focusKey, typewriterKey } = m.viewModes;
     return [
+      ...property,
       { kind: "separator" },
       { label: "Modo foco", hint: focusKey, checked: m.focus, onSelect: toggleFocus },
       { label: "Máquina de escrever", hint: typewriterKey, checked: m.typewriter, onSelect: toggleTypewriter },

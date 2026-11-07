@@ -39,6 +39,9 @@ final class Inserter {
 
     /// O resultado da conferência de cada colagem (L12), para o log: o veredito e se o texto foi digitado.
     var onChecked: ((PasteVerdict, _ typed: Bool, _ app: String?) -> Void)?
+    /// L23: the person corrected the pasted text right after the paste: what Kiwi pasted and how it reads now.
+    var onEdited: ((_ pasted: String, _ edited: String, _ app: String?) -> Void)?
+    private let edits = DispatchQueue(label: "kiwi.paste-edits")
     /// Sobe a cada colagem: a conferência da anterior para, e nada é digitado por cima do ditado novo.
     private var generation = 0
     private let checks = DispatchQueue(label: "kiwi.insert.check", qos: .utility)
@@ -141,6 +144,46 @@ final class Inserter {
                 }
             }
             DispatchQueue.main.async { self.onChecked?(verdict, typed, app) }
+            if case .confirmed = verdict, !typed, let beforeValue = before.value,
+               let now = Self.focus(app: pid).element.flatMap(Self.snapshot), now.element == before.element,
+               let afterValue = now.value,
+               let region = PastedRegion.locate(before: beforeValue, after: afterValue, pasted: text) {
+                self.watchEdit(region, element: before.element, pid: pid, app: app, current: current)
+            }
+        }
+    }
+
+    /// L23: reads the field for a short while after the paste. Reports the pasted stretch once the person stopped
+    /// changing it, or as it last read when the field is sent or left (only an edit seen in two reads in a row). A new
+    /// paste ends the watch. Off the main thread, on its own queue, so the next paste's check never waits for it.
+    private func watchEdit(_ region: PastedRegion, element: Int, pid: pid_t?, app: String?, current: @escaping () -> Bool) {
+        edits.async { [weak self] in
+            let start = ProcessInfo.processInfo.systemUptime
+            var last: String?
+            var changedAt = start
+            var reads = 0
+            func report(_ edited: String) {
+                DispatchQueue.main.async { self?.onEdited?(region.pasted, edited, app) }
+            }
+            while ProcessInfo.processInfo.systemUptime - start < PasteEditWatch.window {
+                Thread.sleep(forTimeInterval: PasteEditWatch.interval)
+                guard current() else { return }
+                // The focus left the field, the text around the paste changed, or the stretch was emptied (sent).
+                guard let snap = Self.focus(app: pid).element.flatMap(Self.snapshot), snap.element == element,
+                      let value = snap.value, value.hasPrefix(region.prefix), value.hasSuffix(region.suffix),
+                      value.count > region.prefix.count + region.suffix.count else { break }
+                let edited = region.edited(value)
+                let now = ProcessInfo.processInfo.systemUptime
+                if edited != last {
+                    last = edited
+                    changedAt = now
+                    reads = 1
+                    continue
+                }
+                reads += 1
+                if let edited, now - changedAt >= PasteEditWatch.settle { return report(edited) }
+            }
+            if let last, reads >= 2 { report(last) }
         }
     }
 
