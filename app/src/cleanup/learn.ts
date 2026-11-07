@@ -44,11 +44,28 @@ const squash = (s: string) => fold(s).replace(/[^\p{L}\p{N}]/gu, "");
 /** Palavra comum (ou de até 2 letras): trocar a partir dela é gramática ou estilo, e o alias mudaria todo ditado. */
 const isCommon = (word: string) => word.length <= 2 || COMMON_WORDS.has(fold(word));
 
+/** Os fins de flexão de gênero e número, sem acento: o, a, os, as, s, es, e; ão, ões, ães. */
+const ENDINGS = ["oes", "aes", "ao", "os", "as", "es", "o", "a", "s", "e"];
+
+/** A palavra sem acento e em minúscula, e cada forma dela sem um fim de flexão. */
+const stems = (word: string) => {
+  const w = fold(word);
+  return new Set([w, ...ENDINGS.filter((e) => w.endsWith(e)).map((e) => w.slice(0, -e.length))]);
+};
+
+/** Só concordância: palavra por palavra, as duas formas têm um radical em comum ("ótimo" → "ótima", "ao" → "aos"). */
+const inflectionOnly = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((w, i) => {
+    const other = stems(b[i]!);
+    return [...stems(w)].some((s) => other.has(s));
+  });
+
 /**
  * A troca que a pessoa fez num trecho colado, se for a correção de um termo: o pedaço que mudou (tirando o começo e o
  * fim iguais, palavra por palavra) tem de 1 a 3 palavras de cada lado e soa parecido (a distância de edição sem acento,
  * maiúscula nem espaço é no máximo metade). Não contam (review do #266): inserir, apagar, reescrever; a troca a partir
- * de palavra comum ("mas" → "mais", "de" → "do"); e a que só muda acento, pontuação ou maiúscula ("e" → "é",
+ * de palavra comum ("mas" → "mais", "de" → "do"); a que só muda gênero ou número ("ótimo" → "ótima", "mercado" →
+ * "mercados", também da @sparkly-ibis no #6724); e a que só muda acento, pontuação ou maiúscula ("e" → "é",
  * "esta" → "está", "ana" → "Ana"), menos a grafia de sigla ou de nome com maiúscula no meio ("dicom" → "DICOM").
  */
 export function learnedPair(pasted: string, edited: string): LearnedPair | null {
@@ -71,7 +88,7 @@ export function learnedPair(pasted: string, edited: string): LearnedPair | null 
   if (x === y) {
     const caseOnly = from.toLocaleLowerCase("pt-BR") === to.toLocaleLowerCase("pt-BR");
     if (!caseOnly || !/\p{Lu}/u.test(to.slice(1))) return null;
-  } else if (distance(x, y) / Math.max(x.length, y.length) > MAX_DISTANCE) return null;
+  } else if (inflectionOnly(removed, added) || distance(x, y) / Math.max(x.length, y.length) > MAX_DISTANCE) return null;
   return { from, to };
 }
 

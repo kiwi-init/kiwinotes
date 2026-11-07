@@ -20,6 +20,17 @@ describe("learnedPair", () => {
     expect(learnedPair("falei com o Joao", "falei com o João")).toBeNull();
   });
 
+  test("só concordância de gênero ou número não aprende (#6724)", () => {
+    expect(learnedPair("a reunião foi ótimo", "a reunião foi ótima")).toBeNull();
+    expect(learnedPair("o carro está pronto", "o carro está pronta")).toBeNull();
+    expect(learnedPair("ele foi ao mercado", "ele foi ao mercados")).toBeNull();
+    expect(learnedPair("vamos ao mercado amanhã", "vamos aos mercados amanhã")).toBeNull();
+    expect(learnedPair("o carro é bonito", "o carro é bonita")).toBeNull();
+    expect(learnedPair("a eleição de ontem", "a eleições de ontem")).toBeNull();
+    expect(learnedPair("o pão chegou", "os pães chegou")).toBeNull();
+    expect(learnedPair("mandei para o Pax", "mandei para o PACS")).toEqual({ from: "Pax", to: "PACS" });
+  });
+
   test("reescrever, trocar por outra palavra, inserir ou apagar não aprende", () => {
     expect(learnedPair("a reunião é amanhã", "a reunião é hoje")).toBeNull();
     expect(learnedPair("vou mandar o relatório", "vou mandar o relatório agora")).toBeNull();
