@@ -49,6 +49,7 @@ import { VersionsDialog } from "./VersionsDialog.tsx";
 import { hasFilters, parseQuery, type SavedSearch,
 } from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
+import { CanvasView } from "./canvas/CanvasView.tsx";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs,
 } from "./types.ts";
@@ -153,7 +154,10 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   /** O meio da janela: a nota, ou a Lixeira do app (T2593). */
-  const [view, setView] = useState<"note" | "trash">("note");
+  const [view, setView] = useState<"note" | "trash" | "canvas">("note");
+  /** O quadro branco aberto (T6600), e o "grava antes de sair" dele. */
+  const [board, setBoard] = useState<string | null>(null);
+  const boardFlush = useRef<(() => Promise<boolean>) | null>(null);
   /** Sobe a cada mudança no vault: a Lixeira e o "Mencionada sem link" se refazem (T2593). */
   const [vaultVersion, setVaultVersion] = useState(0);
   const [linkWarnings, setLinkWarnings] = useState<LinkWarning[]>([]);
@@ -357,6 +361,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
    * fica na nota com o aviso na tela, para a pessoa escolher; trocar de nota nunca descarta texto calado.
    */
   const leave = useCallback(async (): Promise<boolean> => {
+    // O quadro aberto grava primeiro; com conflito ou erro, fica nele com o aviso.
+    if (boardFlush.current && !(await boardFlush.current())) return false;
     for (let i = 0; i < 3; i++) {
       const outcome = await save();
       if (outcome === "conflict" || outcome === "error") {
@@ -395,6 +401,20 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     [api, leave, show],
   );
 
+  /** Abre o quadro branco (T6600) no lugar da nota. */
+  const openCanvas = useCallback(
+    async (p: string) => {
+      if (!(await leave())) return;
+      setFocusMode(false);
+      setBoard(p);
+      setView("canvas");
+      setPalette(false);
+      setTreeOpen(false);
+      setBackOpen(false);
+    },
+    [leave],
+  );
+
   const create = useCallback(
     async (wanted: string, focusTitle = false, folder?: string, template?: string,
     ) => {
@@ -424,6 +444,10 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         // `?note=` (Vite no navegador, testes): abre essa nota. No app a página carrega sem query. No hub, a nota que
         // outra seção pediu (Reuniões, T4947) antes de as Notas montarem.
         const asked = openRequestRef.current?.path ?? new URLSearchParams(location.search).get("note");
+        if (asked && /\.canvas$/i.test(asked) && api.canvas && l.files?.some((f) => f.path === asked)) {
+          void openCanvas(asked);
+          return;
+        }
         const first =
           l.notes.find((n) => n.path === asked) ??
           l.notes.find((n) => n.path === "Caixa de entrada.md") ??
@@ -509,10 +533,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [focusMode, setFocusMode] = useState(false);
   const [typewriter, setTypewriter] = useState(false);
   const toggleFocus = () => {
+    if (view !== "note") return;
     setTreeOpen(false);
     setFocusMode((f) => !f);
   };
-  const toggleTypewriter = () => setTypewriter((t) => !t);
+  const toggleTypewriter = () => {
+    if (view !== "note") return;
+    setTypewriter((t) => !t);
+  };
   const togglesRef = useRef({ toggleFocus, toggleTypewriter });
   togglesRef.current = { toggleFocus, toggleTypewriter };
   const shortcutsRef = useRef(shortcuts);
@@ -573,6 +601,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     void save();
   };
   const addNoteProperty = () => {
+    if (view !== "note") return;
     const added = addProperty(frontmatter.current);
     if (!added) return failed_("adicionar uma propriedade: o frontmatter desta nota não é YAML válido")(null);
     onProperties(added.frontmatter);
@@ -901,6 +930,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(""),
               },
             ] : []),
+        ...(api.canvas ? [{ label: "Novo quadro branco", onSelect: () => void newCanvas("") }] : []),
         ...(folders ? [{ label: "Nova pasta", onSelect: () => void newFolder("") }] : []),
         { kind: "separator" },
         ...sortItems,
@@ -913,6 +943,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         ...(api.templates ? [{ label: "Nova nota a partir de modelo…", onSelect: () => fromTemplate(t.path),
               },
             ] : []),
+        ...(api.canvas ? [{ label: "Novo quadro branco aqui", onSelect: () => void newCanvas(t.path) }] : []),
         { label: "Nova pasta aqui", onSelect: () => void newFolder(t.path), disabled: !folders,
         },
         { kind: "separator" },
@@ -1019,14 +1050,28 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     say(`Busca salva: “${q}”. Ela fica na árvore.`);
   };
 
+  /** "Novo quadro branco" (T6600): um `.canvas` vazio na pasta, aberto na hora, com o nome pronto para trocar. */
+  const newCanvas = async (folder: string) => {
+    if (!api.canvas || !(await leave())) return;
+    try {
+      const c = await api.canvas.create(folder, "Quadro sem título");
+      await refresh();
+      await openCanvas(c.path);
+      requestAnimationFrame(() => (document.querySelector(".kn-canvas-title") as HTMLInputElement | null)?.select());
+    } catch (e) {
+      failed_("criar o quadro")(e);
+    }
+  };
+
   const paletteCommands = [
+    ...(api.canvas ? [{ id: "canvas", title: "Novo quadro branco", words: "canvas quadro branco tela whiteboard desenho" }] : []),
     ...(api.templates ? [{ id: "template", title: "Nova nota a partir de modelo…", words: "modelo template",
           },
         ] : []),
     ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true,
           },
         ] : []),
-    ...(note ? [
+    ...(note && view === "note" ? [
       { id: "focus", title: focusMode ? "Sair do modo foco" : "Modo foco", words: "foco concentrar distração zen esconder" },
       { id: "typewriter", title: typewriter ? "Desligar a máquina de escrever" : "Máquina de escrever", words: "máquina escrever centralizar linha typewriter" },
       { id: "add-property", title: "Adicionar propriedade", words: "propriedade frontmatter metadado campo yaml" },
@@ -1101,7 +1146,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }
 
   return (
-    <div className="kn-notes" data-entered={entered} data-focus={focusMode && note ? "true" : undefined}>
+    <div className="kn-notes" data-entered={entered} data-focus={focusMode && note && view === "note" ? "true" : undefined}>
       <TopBar
         start={
           <button
@@ -1165,6 +1210,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           onOpenFile={
             api.files
               ? (p) => {
+                  // O quadro branco abre no Kiwi (T6600); o resto, no app padrão do Mac.
+                  if (api.canvas && /\.canvas$/i.test(p)) return void openCanvas(p);
                   setTreeOpen(false);
                   api.files?.open(p).catch(failed_("abrir o arquivo"));
                 }
@@ -1198,7 +1245,23 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         />
       </TreePopover>
       <main className="kn-center">
-        {view === "trash" && api.extras ? (
+        {view === "canvas" && board && api.canvas ? (
+          <CanvasView
+            key={board}
+            api={api as NotesApi & { canvas: NonNullable<NotesApi["canvas"]> }}
+            path={board}
+            flushRef={boardFlush}
+            onOpenLink={(t) => void onOpenLink(t)}
+            onOpenNote={(p) => void open(p)}
+            onOpenTag={openTag}
+            onOpenFile={api.files ? (p) => void api.files?.open(p).catch(failed_("abrir o arquivo")) : undefined}
+            onRenamed={(p) => {
+              setBoard(p);
+              void refresh();
+            }}
+            onError={(text) => say(text)}
+          />
+        ) : view === "trash" && api.extras ? (
           <TrashView
             extras={api.extras}
             folders={api.folders}
@@ -1426,7 +1489,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           initialQuery={paletteQuery}
           commands={paletteCommands}
           onCommand={(id, q) =>
-            id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q)
+            id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q) : id === "canvas" ? void newCanvas(selectedFolderRef.current)
               : id === "focus" ? toggleFocus() : id === "typewriter" ? toggleTypewriter() : id === "add-property" ? addNoteProperty() : undefined
           }
           onOpen={(p) => void open(p)}
