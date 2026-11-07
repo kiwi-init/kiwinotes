@@ -1,0 +1,31 @@
+{
+  "rate": 175,
+  "vad": false,
+  "window": 15,
+  "reports": [
+    {
+      "name": "servidor",
+      "words": 168,
+      "seconds": 71,
+      "errors": 9,
+      "baselineErrors": 8,
+      "lost": []
+    },
+    {
+      "name": "tarefas",
+      "words": 180,
+      "seconds": 70,
+      "errors": 7,
+      "baselineErrors": 2,
+      "lost": []
+    },
+    {
+      "name": "viagem",
+      "words": 169,
+      "seconds": 65,
+      "errors": 1,
+      "baselineErrors": 0,
+      "lost": []
+    }
+  ]
+}
