@@ -47,6 +47,11 @@ export interface AppSettings {
   showExtensions: boolean;
   /** Os sons de início e de fim do ditado e da reunião (T5833, #213). Ligados por padrão; o helper recebe no `config.set`. */
   cues: boolean;
+  /**
+   * O modo preciso do ditado (T6602, #6894): o Whisper small no lugar do Parakeet, com o dicionário como prompt. Erra
+   * menos os termos técnicos, a ~0,3 s por ditado. Desligado por padrão; ligar baixa o modelo (270 MB), e desligar apaga.
+   */
+  preciseDictation: boolean;
   /** Os ajustes de reunião (R6, T4947): os atalhos, o pop-up e os apps que contam. O helper recebe no `config.set`. */
   meetings: MeetingSettings;
   /** A largura máxima da coluna da nota, em px (T5299, issue #212): a alça na borda da nota muda, dentro dos limites. */
@@ -56,7 +61,7 @@ export interface AppSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -117,6 +122,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     microphone: isMicrophoneChoice(o.microphone) ? o.microphone : DEFAULT_MICROPHONE,
     showExtensions: o.showExtensions === true,
     cues: o.cues !== false,
+    preciseDictation: o.preciseDictation === true,
     meetings: sanitizeMeetingSettings(o.meetings),
     noteWidth: sanitizeNoteWidth(o.noteWidth),
   });

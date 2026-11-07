@@ -181,6 +181,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     },
     // Sem helper nem mic: uma lista fixa (a do #3202, AirPods na saída), para o seletor de microfone dos Ajustes (T3230).
     audioInputs: async () => headlessAudioInputs((await stores.settings.load()).microphone),
+    precise: () => session?.precise.status() ?? null,
     ocr: stores.ocr,
     semanticEngine: stores.semantic,
     exporter: stores.exporter,

@@ -77,7 +77,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
   let t = 0;
   return {
     calls,
@@ -241,6 +241,22 @@ describe("contrato 1.0.0 (T1192)", () => {
     }
     expect(await call("settings.set", { noteWidth: 980.6 })).toMatchObject({ ok: true, value: { noteWidth: 981 } });
     expect(f.calls.filter((c) => c.startsWith("settings.save"))).toEqual(['settings.save:{"noteWidth":981}']);
+  });
+
+  test("settings: o modo preciso do ditado, e o estado dele com e sem a sessão do helper (T6602)", async () => {
+    const f = fakeDeps();
+    const caps = uiCapabilities(f.deps);
+    const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
+    for (const bad of ["true", 1, null]) {
+      expect(await call("settings.set", { preciseDictation: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    }
+    expect(await call("dictation.preciseStatus", {})).toMatchObject({ ok: true, value: { enabled: false, phase: "off", size: 269_751_136 } });
+    expect(await call("settings.set", { preciseDictation: true })).toMatchObject({ ok: true, value: { preciseDictation: true } });
+    expect(f.calls.filter((c) => c.startsWith("settings.save"))).toEqual(['settings.save:{"preciseDictation":true}']);
+    expect(await call("dictation.preciseStatus", {})).toMatchObject({ ok: true, value: { enabled: true, phase: "waiting" } });
+    const live = uiCapabilities({ ...f.deps, precise: () => ({ enabled: true, phase: "downloading", done: 10, total: 100, size: 100 }) });
+    expect(await directInvoke(live, "dictation.preciseStatus", {})).toMatchObject({ ok: true, value: { phase: "downloading", done: 10 } });
+    expect(await call("dictation.preciseStatus", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
   });
 
   test("settings: o atalho da janela Notas, um atalho ou null (T1499; qualquer atalho desde o T5349)", async () => {

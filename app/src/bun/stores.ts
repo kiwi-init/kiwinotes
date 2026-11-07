@@ -22,9 +22,11 @@ const defaultRoot = resolveReal(process.env.KIWI_VAULT_DIR || path.join(homedir(
 const globalSettings = new SettingsStore(dir);
 const recoveries = new RecordingRecoveries(dir);
 // A busca pelo sentido (T6013): o modelo em `<dados>/models`, ou em KIWI_MODELS_DIR (os agentes reaproveitam o mesmo
-// download entre um tmp e outro). O headless não sai para a rede: só usa um modelo que já está lá.
+// download entre um tmp e outro). O headless não sai para a rede: só usa um modelo que já está lá. O Whisper do modo
+// preciso (T6602) fica na mesma pasta.
+const modelsDir = process.env.KIWI_MODELS_DIR || path.join(dir, "models");
 const semantic = new SemanticEngine({
-  modelsDir: process.env.KIWI_MODELS_DIR || path.join(dir, "models"),
+  modelsDir,
   enabled: async () => (await globalSettings.load()).semanticSearch,
   download: process.env.KIWI_HEADLESS !== "1",
 });
@@ -37,6 +39,7 @@ const fixed = folders.fixed;
 
 export const stores = {
   dir,
+  modelsDir,
   folders,
   globalSettings,
   semantic,

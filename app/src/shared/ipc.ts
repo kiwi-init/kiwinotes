@@ -65,7 +65,11 @@ export interface AppRef {
 // ---------------------------------------------------------- Bun → sidecar
 
 export interface RecordingRef { id:string;at:string }
-export interface RecoveredTranscript { text:string;raw:string;lang:"pt"|"en"|"mix"|"";durationMs:number;latencyMs:number }
+/** O motor que fez o texto (T6602): o Parakeet de sempre ou o Whisper do modo preciso. */
+export type SttEngine = "parakeet" | "whisper";
+/** O modelo do modo preciso no helper (T6602). */
+export type PreciseModelState = "loading" | "ready" | "unavailable" | "off";
+export interface RecoveredTranscript { text:string;raw:string;lang:"pt"|"en"|"mix"|"";engine?:SttEngine;durationMs:number;latencyMs:number }
 
 export type Command =
   | { type: "ping" }
@@ -112,6 +116,12 @@ export type Command =
       shortcuts?: Partial<Record<"dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause", string | null>>;
       /** Os sons de início e de fim do ditado e da reunião (T5833; padrão: ligados). */
       cues?: boolean;
+      /**
+       * O modo preciso (T6602): o caminho do GGUF do Whisper small que o app baixou, ou null para desligar. Com o modelo
+       * carregado (`stt.precise ready`), os ditados saem pelo Whisper, com o dicionário como prompt. Vai num `config.set`
+       * só dele: um helper antigo que recusa o campo não derruba os outros.
+       */
+      precise?: string | null;
       /** O pop-up "Gravar esta reunião?" (padrão: ligado). Desligado, o atalho ainda grava. */
       meetingSuggest?: boolean;
       /** Os apps que contam como reunião (substitui a lista padrão: Teams, Zoom, Webex, Slack, FaceTime e os navegadores). */
@@ -388,7 +398,18 @@ export type Event =
    * (filtro, correção fonética, aliases); `raw` é o do modelo. `lang`: `pt`, `en`, `mix`, ou `""` sem texto.
    * `latencyMs`: do fim da gravação até aqui.
    */
-  | { type: "transcript.final"; text: string; raw: string; lang: "pt" | "en" | "mix" | ""; durationMs: number; latencyMs: number; audioPath?: string;recovery?:RecordingRef }
+  | {
+      type: "transcript.final";
+      text: string;
+      raw: string;
+      lang: "pt" | "en" | "mix" | "";
+      /** Quem transcreveu (T6602): o Whisper do modo preciso ou o Parakeet. Um helper antigo não manda. */
+      engine?: SttEngine;
+      durationMs: number;
+      latencyMs: number;
+      audioPath?: string;
+      recovery?: RecordingRef;
+    }
   /**
    * O modelo de STT: `loading` logo depois do `ready` (a primeira carga pode levar um minuto: download, ou o
    * CoreML compilando depois de atualizar o macOS), depois `ready` ou `unavailable`.
@@ -400,6 +421,11 @@ export type Event =
    * sem o modelo, sai sem boosting. Depois de um `unavailable`, tenta de novo num ditado, no mínimo 10 min depois.
    */
   | { type: "stt.boosting"; state: "loading" | "ready" | "unavailable" }
+  /**
+   * O Whisper do modo preciso (T6602), depois de um `config.set {precise}`: `loading`, `ready` (os ditados já saem por
+   * ele), `unavailable` (o arquivo não abre ou não é Whisper; os ditados seguem pelo Parakeet) ou `off`.
+   */
+  | { type: "stt.precise"; state: PreciseModelState; loadMs?: number }
   /** A gravação não virou texto: `model_unavailable` (sem modelo, ex.: offline na primeira vez) ou `stt_failed`. */
   | { type: "transcript.error"; recovery?:RecordingRef; error: "model_unavailable" | "stt_failed" }
   | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string };
@@ -481,6 +507,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "transcript.error",
   "stt.status",
   "stt.boosting",
+  "stt.precise",
   "log",
 ]);
 

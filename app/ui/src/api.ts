@@ -60,6 +60,8 @@ export const api = {
     open: (args: UiCapabilities["notes.openFolder"]["args"] = {}) => invoke("notes.openFolder",args),
     onChanged: (fn: (v:UiEvents["notes.folderChanged"])=>void) => on("notes.folderChanged",fn),
   },
+  /** O modo preciso do ditado (1.38.0, T6602): o Whisper small, baixando, pronto… */
+  dictation: { preciseStatus: () => invoke("dictation.preciseStatus", {}) },
   dictionary: {
     get: () => invoke("dictionary.get", {}),
     set: (terms: UiCapabilities["dictionary.set"]["args"]["terms"]) => invoke("dictionary.set", { terms }),
