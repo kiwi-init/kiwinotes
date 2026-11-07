@@ -35,6 +35,13 @@ public enum BrowserSite {
         return host.lowercased()
     }
 
+    /// The `record.site` that follows `record.started` (the read is off the mic's path): nil when there's nothing to
+    /// say, or the app isn't a browser.
+    public static func siteFields(bundleId: String, title: String?, host: String?) -> [String: String]? {
+        let fields = appFields(bundleId: bundleId, name: "", title: title, host: host).filter { $0.key != "name" }
+        return fields.count > 1 ? fields : nil
+    }
+
     /// The `app` of `record.started`: the title and host only for a browser, and only when there is one.
     public static func appFields(bundleId: String, name: String, title: String?, host: String?) -> [String: String] {
         var fields = ["bundleId": bundleId, "name": name]

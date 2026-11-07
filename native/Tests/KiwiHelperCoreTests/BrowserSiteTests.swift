@@ -33,4 +33,12 @@ final class BrowserSiteTests: XCTestCase {
         XCTAssertNil(BrowserSite.host(of: "about:blank"))
         XCTAssertNil(BrowserSite.host(of: nil))
     }
+
+    /// `record.site`: only the bundle id and what was read; nothing when nothing was read or it isn't a browser.
+    func testSiteFields() {
+        XCTAssertEqual(BrowserSite.siteFields(bundleId: "com.apple.Safari", title: "Gmail", host: "mail.google.com"),
+                       ["bundleId": "com.apple.Safari", "title": "Gmail", "urlHost": "mail.google.com"])
+        XCTAssertNil(BrowserSite.siteFields(bundleId: "com.apple.Safari", title: nil, host: nil))
+        XCTAssertNil(BrowserSite.siteFields(bundleId: "com.apple.mail", title: "Contrato", host: "x.com"))
+    }
 }

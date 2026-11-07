@@ -375,6 +375,11 @@ export type Event =
    * app duas vezes seguidas.
    */
   | { type: "app.active"; bundleId: string; name: string; pid: number }
+  /**
+   * L18: o site do navegador da gravação que acabou de começar (título da janela e host da página). Vem depois do
+   * `record.started`, porque a leitura fica fora do caminho do mic; chega bem antes da transcrição.
+   */
+  | { type: "record.site"; bundleId: string; title?: string; urlHost?: string }
   | { type: "transcript.partial"; text: string }
   /**
    * O texto de uma gravação, na ordem em que terminaram. `text` já passou pelo pós-processamento do VoiceInk
@@ -467,6 +472,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "record.error",
   "audio.level",
   "app.active",
+  "record.site",
   "transcript.partial",
   "transcript.final",
   "transcript.error",

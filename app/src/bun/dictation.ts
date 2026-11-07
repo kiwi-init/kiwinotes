@@ -181,6 +181,12 @@ export class Dictation {
         });
       }),
       // O mic caiu, mas o que ele ouviu vai ser transcrito: a pílula avisa no fim.
+      // L18: o site chega depois (a leitura fica fora do caminho do mic) e vale para a gravação do mesmo app.
+      sidecar.on("record.site", (e) => {
+        const last = this.recordings.at(-1);
+        if (!last?.app || last.app.bundleId !== e.bundleId) return;
+        last.app = { ...last.app, ...(e.title ? { title: e.title } : {}), ...(e.urlHost ? { urlHost: e.urlHost } : {}) };
+      }),
       sidecar.on("record.stopped", (e) => {
         const last = this.recordings.at(-1);
         if (e.lost && last) last.lost = e.lost;
