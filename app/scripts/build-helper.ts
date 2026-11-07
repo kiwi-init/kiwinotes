@@ -9,6 +9,8 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
+import { bundleHelperLibraries } from "./helper-libs.ts";
+
 // O Hutch roda os hooks na raiz do projeto (app/).
 const appDir = process.cwd();
 if (!existsSync(path.join(appDir, "electrobun.config.ts"))) throw new Error(`build-helper: run from app/, not ${appDir}`);
@@ -57,4 +59,6 @@ cpSync(helper, path.join(out, "kiwi-helper"));
 for (const name of readdirSync(binDir)) {
   if (name.endsWith(".bundle")) cpSync(path.join(binDir, name), path.join(out, name), { recursive: true });
 }
+// T6602: o transcribe.cpp (framework dinâmico) vira uma dylib simples ao lado do helper (scripts/helper-libs.ts).
+for (const lib of bundleHelperLibraries(binDir, out)) console.log(`build-helper: ${lib} next to the helper`);
 logHelper(helper);
