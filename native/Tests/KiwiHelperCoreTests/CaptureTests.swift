@@ -30,10 +30,17 @@ private final class FakeEngine: MicEngine {
     var deviceFormat: () -> InputFormat? = { nil }
     private(set) var preparedFormat: InputFormat?
 
+    /// Called once the tap is in, like the real engine switching to its device: set by a rig whose engines post
+    /// a configuration change about themselves after that (#7007).
+    var onPrepared: ((FakeEngine) -> Void)?
+    var switchesDevice = false
+
     func prepare(onBuffer: @escaping (AVAudioPCMBuffer) -> Void) throws {
         if failPrepare { throw AudioCaptureError.noInputDevice }
+        let first = self.onBuffer == nil
         self.onBuffer = onBuffer
         preparedFormat = deviceFormat()
+        if first { onPrepared?(self) }
     }
 
     func hardwareFormat() -> InputFormat? { deviceFormat() }
@@ -85,6 +92,10 @@ private final class Rig {
     /// The mic's format now; another app (a meeting) can change it (#5154).
     var deviceFormat: InputFormat?
     var diagnostics: [CaptureDiagnostic] = []
+    /// Each engine posts a configuration change about itself this long after it's prepared, as an `AVAudioEngine` does
+    /// when it's pointed at a device (the mic chosen in Settings, or the Mac's mic with Bluetooth output, #7007).
+    /// Nil: never.
+    var selfChangeAfterPrepare: TimeInterval?
     /// What `AudioCapture` scheduled with `after`, run by `advance` on the test's clock.
     private var timers: [(at: TimeInterval, work: () -> Void)] = []
     lazy var capture: AudioCapture = {
@@ -94,6 +105,11 @@ private final class Rig {
                 e.failStart = self.nextFailsStart
                 e.failPrepare = self.nextFailsPrepare
                 e.deviceFormat = { [unowned self] in self.deviceFormat }
+                e.switchesDevice = self.selfChangeAfterPrepare != nil
+                e.onPrepared = { [unowned self] engine in
+                    guard let delay = self.selfChangeAfterPrepare else { return }
+                    self.timers.append((self.clock.t + delay, { [weak engine] in engine?.onConfigurationChange?() }))
+                }
                 self.engines.append(e)
                 return e
             },
@@ -450,6 +466,38 @@ final class CaptureTests: XCTestCase {
         _ = rig.capture.stop()
         XCTAssertEqual(delays.count, 2)
         XCTAssertEqual(delays[1], 0, accuracy: 0.001)
+    }
+
+    /// #7007: an engine pointed at a device (the mic chosen in Settings, or the Mac's mic with Bluetooth output, T3229)
+    /// switches to it when it's prepared, and that switch makes it post a configuration change about itself. Taken as
+    /// an input change, it made a new engine, which switched and posted again: a new engine every ~0.6 s, the mic
+    /// indicator flickering, and mid-recording the engine swapped again and again until the dictation was lost. That
+    /// notice makes no new engine.
+    func testAnEnginesOwnConfigurationChangeAfterPrepareMakesNoNewEngine() throws {
+        let rig = Rig()
+        rig.selfChangeAfterPrepare = 0.2
+        rig.capture.warmUp()
+        rig.advance(5)
+        XCTAssertEqual(rig.engines.count, 1, "idle: \(rig.log)")
+        try rig.capture.start()
+        rig.engine.feed(rate: 48_000, seconds: 0.3, clock: rig.clock)
+        rig.advance(5)
+        XCTAssertEqual(rig.engines.count, 1, "recording: \(rig.log)")
+        XCTAssertTrue(rig.engine.started)
+        XCTAssertEqual(rig.lost, [])
+    }
+
+    /// A configuration change that comes later is a real one (another app changed the device, #5154): new engine.
+    func testALaterConfigurationChangeStillMakesANewEngine() throws {
+        let rig = Rig()
+        rig.selfChangeAfterPrepare = 0.2
+        rig.capture.warmUp()
+        rig.advance(5)
+        rig.engine.onConfigurationChange?()
+        rig.settle()
+        XCTAssertEqual(rig.engines.count, 2, "\(rig.log)")
+        rig.advance(5)
+        XCTAssertEqual(rig.engines.count, 2, "the new engine's own notice: \(rig.log)")
     }
 
     // MARK: T1248: Bluetooth headset connecting (A2DP → HFP)

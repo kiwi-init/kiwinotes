@@ -39,9 +39,14 @@ public protocol MicEngine: AnyObject {
     func discard()
     /// The engine's configuration changed (another input device, another format). Main thread.
     var onConfigurationChange: (() -> Void)? { get set }
+    /// `prepare` points the engine at a device of its own (the mic chosen in Settings, or the Mac's mic with Bluetooth
+    /// output, T3229), which makes the engine post a configuration change about itself shortly after
+    /// (`AudioCapture.ownChangeWindow`, #7007).
+    var switchesDevice: Bool { get }
 }
 
 public extension MicEngine {
+    var switchesDevice: Bool { false }
     var preparedFormat: InputFormat? { nil }
     func hardwareFormat() -> InputFormat? { nil }
 }
@@ -230,6 +235,13 @@ public final class AudioCapture {
     /// a few hundred ms of each other; much longer and a switch mid-recording loses more of what's said.
     public static let inputSettle: TimeInterval = 0.4
 
+    /// A configuration change this soon after preparing an engine that switches device (`MicEngine.switchesDevice`) is
+    /// its own doing, not the input changing: pointing a fresh engine at a device (the mic chosen in Settings, or the
+    /// Mac's mic with Bluetooth output, T3229) makes it post one about itself,
+    /// ~0.2 s later. Taken as an input change it made a new engine, which switched and posted again: a new engine every
+    /// ~0.6 s, the mic indicator flickering and the dictation lost (#7007).
+    public static let ownChangeWindow: TimeInterval = 1.0
+
     private let makeEngine: () -> MicEngine
     private let now: () -> TimeInterval
     private let after: (TimeInterval, @escaping () -> Void) -> Void
@@ -242,6 +254,8 @@ public final class AudioCapture {
     private var engineFromInputChange = false
     private var engine: MicEngine
     private var prepared = false
+    /// When the current engine was prepared (`ownChangeWindow`); nil before that.
+    private var preparedAt: TimeInterval?
     /// New engines the watchdog made in a row without audio in between: one, then `no_audio`. Back to 0 once audio
     /// comes again, so a later, unrelated stall gets its own new engine (T883).
     ///
@@ -455,6 +469,7 @@ public final class AudioCapture {
         let generation = samplesQueue.sync { self.generation }
         try engine.prepare { [weak self] buffer in self?.process(buffer, generation: generation) }
         prepared = true
+        preparedAt = now()
     }
 
     private func replaceEngine() {
@@ -464,10 +479,21 @@ public final class AudioCapture {
         engine = makeEngine()
         observe(engine)
         prepared = false
+        preparedAt = nil
     }
 
     private func observe(_ engine: MicEngine) {
-        engine.onConfigurationChange = { [weak self] in self?.inputChanged("engine configuration") }
+        engine.onConfigurationChange = { [weak self] in self?.engineConfigurationChanged() }
+    }
+
+    /// The engine says its configuration changed: an input change, unless it's the engine's own device switch right
+    /// after it was prepared (`ownChangeWindow`, #7007).
+    private func engineConfigurationChanged() {
+        if engine.switchesDevice, let at = preparedAt, now() - at < Self.ownChangeWindow {
+            onLog?("engine configuration right after preparing it: its own device switch, no new engine")
+            return
+        }
+        inputChanged("engine configuration")
     }
 
     /// A new engine mid-recording: keep what was captured and go on with the new device.
