@@ -8,6 +8,8 @@ import KiwiHelperCore
 /// already read a device keeps that device's format (T590).
 final class AVMicEngine: MicEngine {
     var onConfigurationChange: (() -> Void)?
+    /// `prepare` sets `device` on the input unit, and the engine then posts a configuration change about it (#7007).
+    var switchesDevice: Bool { device != nil }
     /// The device's format when the tap went in, read the same way as `hardwareFormat()` so the two compare (#5154).
     private(set) var preparedFormat: InputFormat?
 
