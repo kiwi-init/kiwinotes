@@ -1,7 +1,7 @@
 // A bateria de regressão do ditado (T1908, spec #15): o texto sai sem muletas, pontuado, com as autocorreções
 // faladas e no tom do app. Um comando só, pela CLI headless (T1739), sem mic, sem colagem e sem nada na tela:
 //
-//   bun run test:dictation [--only text|wav] [--no-boosting] [--keep] [--json]
+//   bun run test:dictation [--only text|wav|precise] [--no-boosting] [--keep] [--json]
 //
 // 1. sobe o headless (com o helper em --headless) numa pasta de dados temporária;
 // 2. põe o dicionário e os snippets de test/dictation/config.json pelo engine (`dictionary.set`, `snippets.set`);
@@ -9,17 +9,22 @@
 // 4. modo `wav`: test/dictation/falados.jsonl vira WAV com o `say` (scripts/dictation-fixtures.ts) e vai de ponta a
 //    ponta, do STT ao texto. O áudio fica na pasta temporária, nunca no repo. Junto, o conjunto de falso positivo
 //    (test/dictation/falsos-positivos.jsonl, T1973), à parte no relatório;
-// 5. para o headless e apaga a pasta (com `--keep`, deixa e diz onde).
+// 5. modo `precise` (#7082): test/dictation/precisos.jsonl numa segunda sessão, com o "Ditado preciso" ligado (o
+//    Whisper small). O headless não baixa o modelo: ele vem de KIWI_MODELS_DIR ou do app deste Mac, por um link na
+//    pasta temporária. Sem o modelo, o modo é pulado e a bateria diz isso;
+// 6. para o headless e apaga a pasta (com `--keep`, deixa e diz onde).
 //
 // Exit 0 se todos os casos passam; 1 se algum falhou; 2 uso errado. O modo wav usa o STT de verdade: na máquina
 // dividida, pegue `kiwi lock bench` antes (AGENTS.md).
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
-import { FALSE_POSITIVE_CASES, loadSpoken, makeFixtures, missingVoices } from "./dictation-fixtures.ts";
+import { WHISPER_SMALL } from "../src/bun/precise-dictation.ts";
+import { modelDir } from "../src/notes/semantic/model.ts";
+import { FALSE_POSITIVE_CASES, loadSpoken, makeFixtures, missingVoices, PRECISE_CASES } from "./dictation-fixtures.ts";
 
 const APP = path.resolve(import.meta.dir, "..");
 const CASES = path.join(APP, "test/dictation/casos.jsonl");
@@ -34,7 +39,7 @@ interface BatchResult {
 }
 
 function parseArgs(argv: string[]) {
-  const a = { modes: ["text", "wav"] as ("text" | "wav")[], keep: false, json: false, boosting: true };
+  const a = { modes: ["text", "wav", "precise"] as ("text" | "wav" | "precise")[], keep: false, json: false, boosting: true };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--keep") a.keep = true;
@@ -43,7 +48,7 @@ function parseArgs(argv: string[]) {
     else if (arg === "--no-boosting") a.boosting = false;
     else if (arg === "--only") {
       const m = argv[++i];
-      if (m !== "text" && m !== "wav") throw new Error("--only text|wav");
+      if (m !== "text" && m !== "wav" && m !== "precise") throw new Error("--only text|wav|precise");
       a.modes = [m];
     } else throw new Error(`flag desconhecida: ${arg}`);
   }
@@ -101,6 +106,33 @@ function invoke(data: string, cap: string, args: unknown) {
   if (r.code !== 0) throw new Error(`${cap}: ${r.out.code ?? ""} ${r.out.message ?? ""}`.trim());
 }
 
+/**
+ * O Whisper small já baixado (#7082): em KIWI_MODELS_DIR (a pasta que os agentes dividem) ou no app deste Mac. A
+ * bateria só lê o arquivo, por um link; `null` quando ele não está em nenhum dos dois.
+ */
+function preciseModel(): string | null {
+  const file = WHISPER_SMALL.files[0]!.name;
+  const roots = [process.env.KIWI_MODELS_DIR, path.join(homedir(), "Library/Application Support/KiwiNotes/models")];
+  for (const root of roots) {
+    if (!root) continue;
+    const found = path.join(modelDir(root, WHISPER_SMALL), file);
+    if (existsSync(found)) return found;
+  }
+  return null;
+}
+
+/** O "Ditado preciso" carrega o modelo no helper depois do `ready`: os casos esperam por ele. */
+async function waitPrecise(data: string, timeoutMs = 120_000): Promise<string> {
+  const until = Date.now() + timeoutMs;
+  let phase = "timeout";
+  while (Date.now() < until) {
+    phase = cli(data, "invoke", "dictation.preciseStatus").out.value?.phase ?? phase;
+    if (phase === "ready" || phase === "error") return phase;
+    await Bun.sleep(250);
+  }
+  return phase;
+}
+
 interface ModeResult {
   passed: number;
   failed: number;
@@ -145,6 +177,7 @@ function runBatch(data: string, file: string, known: Map<string, string>): ModeR
 const LABELS: Record<string, string> = {
   text: "texto (casos.jsonl)",
   wav: "falado (falados.jsonl, say → STT)",
+  precise: "modo preciso (precisos.jsonl, say → Whisper small)",
   fp: "falso positivo (falsos-positivos.jsonl, say → STT)",
 };
 
@@ -167,13 +200,14 @@ async function main(): Promise<number> {
   try {
     a = parseArgs(process.argv.slice(2));
   } catch (e) {
-    console.error(`${(e as Error).message}\nusage: bun run test:dictation [--only text|wav] [--no-boosting] [--keep] [--json]`);
+    console.error(`${(e as Error).message}\nusage: bun run test:dictation [--only text|wav|precise] [--no-boosting] [--keep] [--json]`);
     return 2;
   }
   const spoken = a.modes.includes("wav") ? loadSpoken() : [];
   // O conjunto de falso positivo (T1973) roda junto do falado, e sai à parte no relatório.
   const falsePositives = a.modes.includes("wav") ? loadSpoken(FALSE_POSITIVE_CASES) : [];
-  const missing = missingVoices([...spoken, ...falsePositives]);
+  const precise = a.modes.includes("precise") ? loadSpoken(PRECISE_CASES) : [];
+  const missing = missingVoices([...spoken, ...falsePositives, ...precise]);
   if (missing.length) {
     console.error(`faltam as vozes do say: ${missing.join(", ")} (Ajustes › Acessibilidade › Conteúdo falado › Gerenciar vozes), ou rode com --only text`);
     return 1;
@@ -181,11 +215,15 @@ async function main(): Promise<number> {
 
   // Caminho curto: o socket unix tem limite de 104 caracteres.
   const data = mkdtempSync(path.join(tmpdir(), "kn-dict-"));
+  // O modo preciso tem a sua sessão: a configuração e o modelo entram na pasta antes de o headless subir.
+  const preciseData = path.join(data, "p");
   const results: Record<string, ModeResult> = {};
   let started = false;
+  let preciseStarted = false;
   const stop = () => {
     if (started) cli(data, "stop");
-    started = false;
+    if (preciseStarted) cli(preciseData, "stop");
+    started = preciseStarted = false;
     if (!a.keep) rmSync(data, { recursive: true, force: true });
   };
   process.on("SIGINT", () => {
@@ -195,13 +233,17 @@ async function main(): Promise<number> {
   try {
     // O helper herda o ambiente da CLI, que herda o deste processo.
     if (!a.boosting) process.env.KIWI_STT_BOOSTING = "off";
-    const s = cli(data, "start");
-    if (s.code !== 0) throw new Error(`o headless não subiu: ${s.out.message ?? JSON.stringify(s.out)}`);
-    started = true;
-    await waitHelper(data);
     const config = JSON.parse(readFileSync(CONFIG, "utf8")) as { dictionary: unknown[]; snippets: unknown[] };
-    invoke(data, "dictionary.set", { terms: config.dictionary });
-    invoke(data, "snippets.set", { snippets: config.snippets });
+    const start = async (dir: string) => {
+      const s = cli(dir, "start");
+      if (s.code !== 0) throw new Error(`o headless não subiu: ${s.out.message ?? JSON.stringify(s.out)}`);
+      if (dir === data) started = true;
+      else preciseStarted = true;
+      await waitHelper(dir);
+      invoke(dir, "dictionary.set", { terms: config.dictionary });
+      invoke(dir, "snippets.set", { snippets: config.snippets });
+    };
+    if (a.modes.includes("text") || a.modes.includes("wav")) await start(data);
 
     if (a.modes.includes("text")) {
       const { batch, known } = splitKnown(CASES, path.join(data, "casos.batch.jsonl"));
@@ -213,6 +255,27 @@ async function main(): Promise<number> {
       results.wav = runBatch(data, makeFixtures(path.join(data, "wav"), spoken), known);
       results.fp = runBatch(data, makeFixtures(path.join(data, "fp"), falsePositives), new Map());
       results.wav.note = [`boosting do vocabulário: ${boosting}`, sttLatency(results.wav)].filter(Boolean).join(" · ");
+    }
+    if (a.modes.includes("precise")) {
+      // Um headless por vez: a máquina é dividida, e dois helpers com modelo carregado não cabem bem.
+      if (started) cli(data, "stop");
+      started = false;
+      const model = preciseModel();
+      if (!model) {
+        results.precise = { passed: 0, failed: 0, known: 0, fixed: [], cases: [], note: "pulado: o Whisper small não está baixado (ligue o Ditado preciso no app, ou aponte KIWI_MODELS_DIR)" };
+      } else {
+        const dir = modelDir(path.join(preciseData, "models"), WHISPER_SMALL);
+        mkdirSync(dir, { recursive: true });
+        // Um link: os 270 MB não são copiados, e apagar a pasta temporária não toca no modelo.
+        symlinkSync(model, path.join(dir, path.basename(model)));
+        writeFileSync(path.join(preciseData, "settings.json"), JSON.stringify({ version: 1, preciseDictation: true }));
+        await start(preciseData);
+        const phase = await waitPrecise(preciseData);
+        if (phase !== "ready") throw new Error(`o modo preciso não ficou pronto (${phase}); veja \`bun run cli logs --data ${preciseData}\``);
+        const known = new Map(precise.filter((c) => typeof c.known === "string").map((c) => [c.name, c.known as string]));
+        results.precise = runBatch(preciseData, makeFixtures(path.join(preciseData, "wav"), precise), known);
+        results.precise.note = sttLatency(results.precise) ?? undefined;
+      }
     }
   } catch (e) {
     console.error(`a bateria não rodou: ${(e as Error).message}`);

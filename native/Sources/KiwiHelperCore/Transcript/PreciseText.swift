@@ -111,3 +111,178 @@ public enum PreciseRoute {
         speechSeconds(samples, sampleRate: sampleRate) >= minimumSpeechSeconds
     }
 }
+
+public extension WhisperPrompt {
+    /// O texto sem o eco do prompt no começo (#7082): num ditado longo com ruído, o Whisper devolveu "DICOM, PACS,
+    /// Kiwi Notes" e só depois a fala. Eco é o texto começar por três ou mais palavras seguidas do prompt, ou pelo
+    /// prompt inteiro (de duas palavras para cima); uma fala que só começa por um termo ("DICOM é um padrão") fica
+    /// como está. Um texto que é todo eco (`echoes`) sai vazio.
+    static func withoutEcho(_ text: String, terms: [String]) -> String {
+        if echoes(text, terms: terms) { return "" }
+        let prompt = words(make(terms) ?? "")
+        let said = wordRanges(text)
+        guard prompt.count >= 2, let first = said.first else { return text }
+        var longest = 0
+        for start in prompt.indices where prompt[start] == first.word {
+            var run = 0
+            while start + run < prompt.count, run < said.count, prompt[start + run] == said[run].word { run += 1 }
+            longest = max(longest, run)
+        }
+        guard longest >= 3 || longest == prompt.count else { return text }
+        let rest = text[said[longest - 1].range.upperBound...]
+        return String(rest.drop { !$0.isLetter && !$0.isNumber })
+    }
+
+    /// As palavras de `words`, cada uma com o seu lugar no texto.
+    internal static func wordRanges(_ text: String) -> [(word: String, range: Range<String.Index>)] {
+        var out: [(word: String, range: Range<String.Index>)] = []
+        var start: String.Index?
+        var i = text.startIndex
+        while i < text.endIndex {
+            let inWord = text[i].isLetter || text[i].isNumber
+            if inWord, start == nil { start = i }
+            if !inWord, let s = start {
+                out.append((text[s..<i].lowercased(), s..<i))
+                start = nil
+            }
+            i = text.index(after: i)
+        }
+        if let s = start { out.append((text[s...].lowercased(), s..<text.endIndex)) }
+        return out
+    }
+}
+
+/// O ditado longo do modo preciso em pedaços (#7082). O Whisper lê o áudio em blocos de 30 s, e num ditado de mais
+/// de 30 s com ruído ele devolveu o prompt (o dicionário) no lugar de um bloco inteiro: de 71 s de fala saíram os
+/// últimos 11 s. Cada pedaço de até 28 s cabe num bloco só, e os mesmos pedaços, transcritos sozinhos, saem inteiros.
+public enum PreciseChunks {
+    /// O maior pedaço: abaixo dos 30 s do bloco do Whisper, com folga.
+    public static let maxSeconds = 28.0
+    /// O corte fica na segunda metade do pedaço: onde o áudio está mais quieto entre 14 e 28 s.
+    static let minSeconds = maxSeconds / 2
+    /// O último pedaço nunca fica menor que isto: um resto de meio segundo o Whisper erra (`PreciseRoute`).
+    static let minTailSeconds = 2.0
+    /// O silêncio procurado: a média de 200 ms.
+    static let quietSeconds = 0.2
+    static let frameSeconds = 0.02
+
+    /// Os pedaços do ditado, em ordem e sem buraco. Até `maxSeconds`, um só: o ditado inteiro, como sempre foi.
+    /// O corte vai no trecho mais quieto, e não abaixo de um limiar fixo: com ruído de fundo, a pausa não é silêncio.
+    public static func split(_ samples: [Float], sampleRate: Double = 16_000) -> [Range<Int>] {
+        let most = Int(maxSeconds * sampleRate)
+        guard samples.count > most else { return [0..<samples.count] }
+        let frame = max(1, Int(sampleRate * frameSeconds))
+        let energy = frameEnergy(samples, frame: frame)
+        // sums[i]: a energia dos quadros antes do i.
+        var sums = [Float](repeating: 0, count: energy.count + 1)
+        for i in energy.indices { sums[i + 1] = sums[i] + energy[i] }
+        let quiet = max(1, Int(quietSeconds / frameSeconds))
+        var chunks: [Range<Int>] = []
+        var start = 0
+        while samples.count - start > most {
+            let low = (start + Int(minSeconds * sampleRate)) / frame
+            let high = min(start + most, samples.count - Int(minTailSeconds * sampleRate)) / frame
+            var cut = high * frame
+            if high - quiet >= low {
+                var best = Float.infinity
+                for at in low...(high - quiet) {
+                    let e = sums[at + quiet] - sums[at]
+                    // No empate, o mais tarde: menos pedaços.
+                    if e <= best {
+                        best = e
+                        cut = (at + quiet / 2) * frame
+                    }
+                }
+            }
+            chunks.append(start..<cut)
+            start = cut
+        }
+        chunks.append(start..<samples.count)
+        return chunks
+    }
+
+    /// Quanto do pedaço tem voz, em segundos: os quadros de 20 ms acima do silêncio e bem acima do chão de ruído do
+    /// próprio pedaço (o décimo percentil). Com chiado de fundo, o silêncio fixo do `PreciseRoute` daria o clipe todo.
+    /// Numa fala quase sem pausa, o décimo percentil já é voz: sem contraste entre ele e os quadros mais fortes, vale
+    /// só o silêncio fixo.
+    public static func voicedSeconds(_ samples: [Float], sampleRate: Double = 16_000) -> Double {
+        let frame = max(1, Int(sampleRate * frameSeconds))
+        let rms = frameEnergy(samples, frame: frame).map { ($0 / Float(frame)).squareRoot() }.sorted()
+        guard !rms.isEmpty else { return 0 }
+        let floor = rms[rms.count / 10] * 1.6
+        let loud = rms[rms.count * 9 / 10]
+        let threshold = loud < floor ? PreciseRoute.silence : max(PreciseRoute.silence, floor)
+        return Double(rms.filter { $0 >= threshold }.count) * frameSeconds
+    }
+
+    /// Um texto curto demais para a voz do pedaço: menos de 4 caracteres por segundo de voz, com 3 s de voz ou mais.
+    /// A fala em português dá de 12 a 15 por segundo; nos ditados em que o bloco sumiu, saíram 2 a 3. Sem texto
+    /// nenhum, basta 1 s de voz.
+    public static func tooShort(_ text: String, for samples: [Float], sampleRate: Double = 16_000) -> Bool {
+        let voiced = voicedSeconds(samples, sampleRate: sampleRate)
+        if text.isEmpty { return voiced >= PreciseRoute.minimumSpeechSeconds }
+        return voiced >= 3 && Double(text.count) < 4 * voiced
+    }
+
+    /// O texto do ditado pelo Whisper, pedaço por pedaço, ou `nil` quando o ditado inteiro deve ir pelo Parakeet.
+    ///
+    /// Um pedaço só (até 28 s) segue como sempre: o Whisper que falha ou devolve só o prompt manda o ditado ao
+    /// Parakeet. Em vários pedaços, cada um tem a sua guarda: o eco do prompt sai do começo; se não sobra fala, o
+    /// pedaço vai de novo sem o prompt; e o que sai vazio ou curto demais (`tooShort`) é transcrito pelo Parakeet, e
+    /// fica o texto mais comprido. Assim nenhum trecho do ditado se perde.
+    public static func transcribe(
+        _ samples: [Float], terms: [String], sampleRate: Double = 16_000,
+        whisper: ([Float], [String]) async throws -> String,
+        parakeet: ([Float]) async throws -> String,
+        log: (String) -> Void = { _ in }
+    ) async -> String? {
+        let chunks = split(samples, sampleRate: sampleRate)
+        if chunks.count == 1 {
+            guard let raw = try? await whisper(samples, terms) else {
+                log("precise: whisper failed, this dictation goes through parakeet")
+                return nil
+            }
+            let text = WhisperPrompt.withoutEcho(raw, terms: terms)
+            if text.isEmpty, !raw.isEmpty {
+                log("precise: whisper gave back the prompt, this dictation goes through parakeet")
+                return nil
+            }
+            return text
+        }
+        var texts: [String] = []
+        for (n, range) in chunks.enumerated() {
+            let chunk = Array(samples[range])
+            let label = "precise: chunk \(n + 1)/\(chunks.count)"
+            var text = ""
+            if let raw = try? await whisper(chunk, terms) {
+                text = WhisperPrompt.withoutEcho(raw, terms: terms)
+                if text != raw { log("\(label): the prompt came back, taken out") }
+                if text.isEmpty, !raw.isEmpty, !terms.isEmpty {
+                    text = WhisperPrompt.withoutEcho((try? await whisper(chunk, [])) ?? "", terms: terms)
+                }
+            } else {
+                log("\(label): whisper failed")
+            }
+            if tooShort(text, for: chunk, sampleRate: sampleRate) {
+                let other = ((try? await parakeet(chunk)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                log("\(label): \(text.count) characters from whisper, \(other.count) from parakeet")
+                if other.count > text.count { text = other }
+            }
+            if !text.isEmpty { texts.append(text) }
+        }
+        return texts.isEmpty ? nil : texts.joined(separator: " ")
+    }
+
+    /// A energia (soma dos quadrados) de cada quadro inteiro.
+    private static func frameEnergy(_ samples: [Float], frame: Int) -> [Float] {
+        var out = [Float](repeating: 0, count: samples.count / frame)
+        samples.withUnsafeBufferPointer { s in
+            for i in out.indices {
+                var sum: Float = 0
+                for j in (i * frame)..<((i + 1) * frame) { sum += s[j] * s[j] }
+                out[i] = sum
+            }
+        }
+        return out
+    }
+}

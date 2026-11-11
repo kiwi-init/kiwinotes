@@ -1,0 +1,8 @@
+// Bateria do ditado, modo preciso (#7082): o Whisper small com o dicionário como prompt, de ponta a ponta. Roda numa
+// sessão à parte do `bun run test:dictation`, com o "Ditado preciso" ligado, e só quando o modelo já está baixado
+// (KIWI_MODELS_DIR, ou o do app deste Mac): o headless não baixa nada. Os casos são como os de falados.jsonl, mais:
+// `sayFile` (um texto de test/dictation no lugar do `say`) e `volume` com `noise` (o áudio mais baixo e com chiado).
+// O ditado longo com ruído: 71 s. Antes do #7082, o Whisper devolvia o dicionário no lugar de um bloco de 30 s e
+// sobravam os últimos 11 s (173 de ~1040 caracteres). O `contains` pega o começo, o meio e o fim, em trechos que o ruído não troca.
+{"name": "preciso: ditado longo com ruído sai inteiro", "sayFile": "longos/servidor.txt", "voice": "Luciana", "volume": 0.25, "noise": 450, "expect": {"contains": ["sistema operacional", "usuário dedicado", "backup automático", "uso no hospital", "equipe de infraestrutura"]}}
+{"name": "preciso: ditado curto segue igual", "say": "me manda o relatório amanhã de manhã, por favor", "voice": "Luciana", "expect": {"contains": "relatório amanhã"}}
