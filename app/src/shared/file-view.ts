@@ -9,6 +9,11 @@ export const MAX_VIEW_TEXT_BYTES = 5 * 1024 * 1024;
 
 export type FileReadAs = "text" | "binary";
 
+/** Os textos que as Notas abrem editáveis e gravam de volta (T7105): só estes o `files.save` aceita. */
+export const EDITABLE_TEXT = new Set(["txt", "log", "json", "yaml", "yml"]);
+
+export const isEditableText = (name: string): boolean => EDITABLE_TEXT.has((/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? "").toLowerCase());
+
 export const viewLimit = (as: FileReadAs): number => (as === "text" ? MAX_VIEW_TEXT_BYTES : MAX_VIEW_BYTES);
 
 /** "1,2 MB", "340 KB", "12 B": o tamanho como o Finder diz. */

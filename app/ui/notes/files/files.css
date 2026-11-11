@@ -70,3 +70,54 @@
 .kn-file-notice .kn-bt {
   background: var(--surface-hover);
 }
+
+/* ---------------------------------------------------------- o texto (T7105) */
+
+.kn-file-text {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-text-area {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18px 40px 40px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: var(--text);
+  font: 13px/1.6 var(--mono, var(--font-mono, ui-monospace, Menlo, monospace));
+  tab-size: 2;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.kn-file-text-area:focus-visible {
+  box-shadow: none;
+}
+
+.kn-file-text-status {
+  position: absolute;
+  right: 40px;
+  bottom: 12px;
+  font: var(--t-meta, 12px) / 1 var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.kn-file-text-note,
+.kn-file-text-alert {
+  flex: none;
+  margin: 12px 40px 0;
+  padding: 10px 14px;
+  border-radius: var(--r-row, 8px);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--t-ui);
+}

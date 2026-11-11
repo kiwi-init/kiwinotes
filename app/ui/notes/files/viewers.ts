@@ -2,18 +2,26 @@
 // Cada formato entra aqui no seu PR (txt, csv, pdf, docx, xlsx, draw.io, imagens). Um tipo sem visualizador segue
 // como sempre: o clique na árvore abre no app padrão do Mac.
 
-import type { ComponentType } from "react";
+import type { ComponentType, MutableRefObject } from "react";
 
 import { extOf } from "../../../src/shared/attachments.ts";
 import type { FileReadAs } from "../../../src/shared/file-view.ts";
-import type { FileContent } from "../types.ts";
+import type { FileContent, NotesApi } from "../types.ts";
+import { TextViewer } from "./TextViewer.tsx";
+
+/** O `files` das Notas num engine que tem o `files.read` (contrato 1.39.0). */
+export type FilesApi = NonNullable<NotesApi["files"]> & { read: NonNullable<NonNullable<NotesApi["files"]>["read"]> };
 
 /** O conteúdo lido, já sem o caso "grande demais". */
 export type LoadedFile = Exclude<FileContent, { tooLarge: true }>;
 
 export interface FileViewerProps {
   path: string;
+  /** O arquivo como está no disco; muda quando o `FileView` lê de novo (outro app gravou). */
   file: LoadedFile;
+  files: FilesApi;
+  /** Um visualizador que edita põe aqui o "grava antes de sair": `false` segura a pessoa no arquivo. */
+  flushRef: MutableRefObject<(() => Promise<boolean>) | null>;
 }
 
 export interface FileViewer {
@@ -23,7 +31,16 @@ export interface FileViewer {
 }
 
 /** Por extensão, em minúsculas e sem o ponto. */
-export const VIEWERS: Record<string, FileViewer> = {};
+const text: FileViewer = { as: "text", View: TextViewer };
+
+export const VIEWERS: Record<string, FileViewer> = {
+  // T7105: os textos, editáveis (os mesmos tipos que o `files.save` aceita).
+  txt: text,
+  log: text,
+  json: text,
+  yaml: text,
+  yml: text,
+};
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */
 export function viewerFor(name: string, viewers: Record<string, FileViewer> = VIEWERS): FileViewer | undefined {

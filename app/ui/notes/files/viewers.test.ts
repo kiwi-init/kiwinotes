@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { EDITABLE_TEXT } from "../../../src/shared/file-view.ts";
 import type { FileContent } from "../types.ts";
 import { type FileViewer, loadFile, viewerFor, VIEWERS } from "./viewers.ts";
 
@@ -20,9 +21,13 @@ test("o visualizador vem da extensão, sem ligar para maiúsculas nem para a pas
   expect(viewerFor("v1.2.svg", viewers)).toBe(text);
 });
 
-test("T7103 (a base): nenhum formato registrado ainda, então a árvore segue abrindo no app padrão", () => {
-  expect(Object.keys(VIEWERS)).toEqual([]);
+test("os formatos registrados: os textos (T7105); o resto segue abrindo no app padrão", () => {
+  expect(Object.keys(VIEWERS).sort()).toEqual(["json", "log", "txt", "yaml", "yml"]);
+  for (const name of ["lista.txt", "saida.LOG", "dados.json", "config.yaml", "config.yml"]) expect(viewerFor(name)?.as).toBe("text");
+  // Os mesmos tipos que o `files.save` aceita: o que abre editável, grava.
+  expect(Object.keys(VIEWERS).filter((ext) => VIEWERS[ext]!.as === "text").sort()).toEqual([...EDITABLE_TEXT].sort());
   expect(viewerFor("contrato.pdf")).toBeUndefined();
+  expect(viewerFor("nota.md")).toBeUndefined();
 });
 
 test("ler para o visualizador: pronto, grande demais, sem visualizador, sumiu e erro", async () => {
