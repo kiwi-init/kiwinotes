@@ -1,7 +1,7 @@
 {
   "window": "notes",
   "steps": [
-    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Dados/vendas.csv com 1200 linhas e separador ';', Dados/contatos.tsv e uma nota)" },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Dados/vendas.csv com 1200 linhas e separador ';', Dados/contatos.tsv, Dados/excel.csv em Windows-1252 com a linha sep=;, Dados/largo.csv com 5000 colunas e uma nota)" },
     { "click": ".kn-crumb-bt", "name": "abre a árvore" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Dados')", "name": "abre a pasta Dados" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('vendas')", "name": "clica no csv" },
@@ -24,6 +24,20 @@
     { "waitFor": ".kn-file[data-state='ready'] .kn-file-table", "name": "o tsv também abre como tabela" },
     { "expectCount": ".kn-file-table thead th[scope='col']", "count": 3, "name": "3 colunas separadas por tab" },
     { "expectText": ".kn-file-table-foot", "text": "2 linhas · 3 colunas" },
-    { "screenshot": "03-tsv.png" }
+    { "screenshot": "03-tsv.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('excel')", "name": "clica no csv do Excel em Windows-1252" },
+    { "waitFor": ".kn-file-table thead th:has-text('Descrição')", "name": "os acentos saem certos no cabeçalho" },
+    { "expectText": ".kn-file-table tbody", "text": "Ação" },
+    { "expectText": ".kn-file-table-foot", "text": "lido como Windows-1252", "name": "e o rodapé diz a codificação" },
+    { "expectCount": ".kn-file-table thead th[scope='col']", "count": 3, "name": "a linha sep=; do Excel não vira cabeçalho" },
+    { "screenshot": "04-excel.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('largo')", "name": "clica no csv de 5000 colunas" },
+    { "waitFor": ".kn-file-table-note", "name": "o aviso das colunas que ficaram de fora" },
+    { "expectText": ".kn-file-table-note", "text": "5.000 colunas" },
+    { "expectCount": ".kn-file-table thead th[scope='col']", "count": 200, "name": "só as primeiras 200 colunas são montadas" },
+    { "expectText": ".kn-file-table-foot", "text": "5.000 colunas" },
+    { "screenshot": "05-largo.png" }
   ]
 }
