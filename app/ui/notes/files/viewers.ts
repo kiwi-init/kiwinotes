@@ -40,6 +40,8 @@ const PdfViewer = lazy(() => import("./PdfViewer.tsx").then((m) => ({ default: m
 const DocxViewer = lazy(() => import("./DocxViewer.tsx").then((m) => ({ default: m.DocxViewer })));
 // O de xlsx traz o SheetJS: só quando uma planilha abre.
 const XlsxViewer = lazy(() => import("./XlsxViewer.tsx").then((m) => ({ default: m.XlsxViewer })));
+// O de draw.io traz o viewer da JGraph (4,9 MB): só quando um diagrama abre.
+const DrawioViewer = lazy(() => import("./DrawioViewer.tsx").then((m) => ({ default: m.DrawioViewer })));
 
 const text: FileViewer = { as: "text", View: TextViewer };
 const table: FileViewer = { as: "text", View: TableViewer };
@@ -71,6 +73,9 @@ export const VIEWERS: Record<string, FileViewer> = {
   heif: image,
   bmp: image,
   svg: image,
+  // T7112: o diagrama do draw.io, pelo viewer oficial do pack. O `.drawio.svg` já é um desenho: abre como imagem.
+  drawio: { as: "text", View: DrawioViewer },
+  "drawio.svg": image,
 };
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */
