@@ -42,6 +42,7 @@ export function statusLine(v: UpdatesView): string {
 export const CREDITS: readonly { name: string; by: string; license: string; use: string; /** O pacote npm, de onde vem o texto da licença. */ pkg: string }[] = [
   { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas", pkg: "pdfjs-dist" },
   { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "abrir docx nas Notas", pkg: "mammoth" },
+  { name: "SheetJS Community Edition", by: "SheetJS LLC", license: "Apache-2.0", use: "abrir xlsx nas Notas", pkg: "xlsx" },
 ];
 
 /** O arquivo com o texto de cada licença, que vai no pack das Notas (`ui/notes/public/`, copiado para `dist/notes/`). */

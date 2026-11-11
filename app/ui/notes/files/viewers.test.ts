@@ -21,13 +21,17 @@ test("o visualizador vem da extensão, sem ligar para maiúsculas nem para a pas
   expect(viewerFor("v1.2.svg", viewers)).toBe(text);
 });
 
-test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7109) e o docx (T7110); o resto segue abrindo no app padrão", () => {
-  expect(Object.keys(VIEWERS).sort()).toEqual(["csv", "docx", "json", "log", "pdf", "tsv", "txt", "yaml", "yml"]);
+test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7109), o docx (T7110) e o xlsx (T7111); o resto segue abrindo no app padrão", () => {
+  expect(Object.keys(VIEWERS).sort()).toEqual(["csv", "docx", "json", "log", "pdf", "tsv", "txt", "xlsx", "yaml", "yml"]);
   // O pdf é lido em binário (T7109).
   expect(viewerFor("Docs/Contrato.PDF")?.as).toBe("binary");
   // O docx também (T7110), e o .doc antigo segue no app padrão.
   expect(viewerFor("Proposta.DOCX")?.as).toBe("binary");
   expect(viewerFor("antigo.doc")).toBeUndefined();
+  // A planilha também (T7111), e o .xls antigo e o .ods seguem no app padrão.
+  expect(viewerFor("Vendas.XLSX")?.as).toBe("binary");
+  expect(viewerFor("antiga.xls")).toBeUndefined();
+  expect(viewerFor("livre.ods")).toBeUndefined();
   expect(viewerFor("Dados/vendas.CSV")?.View).toBe(viewerFor("dados.tsv")!.View);
   expect(viewerFor("vendas.csv")?.View).not.toBe(viewerFor("lista.txt")!.View);
   for (const name of ["lista.txt", "saida.LOG", "dados.json", "config.yaml", "config.yml"]) expect(viewerFor(name)?.as).toBe("text");
@@ -35,7 +39,7 @@ test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7
   expect(Object.keys(VIEWERS).filter((ext) => VIEWERS[ext] === viewerFor("a.txt")).sort()).toEqual([...EDITABLE_TEXT].sort());
   // A tabela é só leitura: o `files.save` não aceita csv nem tsv.
   expect(EDITABLE_TEXT.has("csv") || EDITABLE_TEXT.has("tsv")).toBe(false);
-  expect(viewerFor("planilha.xlsx")).toBeUndefined();
+  expect(viewerFor("slides.pptx")).toBeUndefined();
   expect(viewerFor("nota.md")).toBeUndefined();
 });
 

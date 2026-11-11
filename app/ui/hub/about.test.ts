@@ -61,8 +61,12 @@ describe("os créditos (spec #7079)", () => {
     const pdf = (await import("pdfjs-dist/package.json")).default as { license: string };
     const mammoth = (await import("mammoth/package.json")).default as { license: string };
     expect(CREDITS.find((c) => c.name === "PDF.js")?.license).toBe(pdf.license);
+    const { readFileSync } = await import("node:fs");
+    // O `xlsx` não exporta o package.json; ele é lido do disco.
+    const xlsx = JSON.parse(readFileSync(new URL("../../node_modules/xlsx/package.json", import.meta.url), "utf8")) as { license: string };
     expect(CREDITS.find((c) => c.name === "Mammoth")?.license).toBe(mammoth.license);
-    expect(creditsLine()).toBe("Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause).");
+    expect(CREDITS.find((c) => c.pkg === "xlsx")?.license).toBe(xlsx.license);
+    expect(creditsLine()).toBe("Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); SheetJS Community Edition, de SheetJS LLC (Apache-2.0).");
     expect(creditsLine([])).toBe("");
     expect(creditsLine([CREDITS[0]!, { name: "X", by: "Y", license: "MIT", use: "z", pkg: "x" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, de Y (MIT).");
   });
