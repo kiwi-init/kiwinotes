@@ -21,8 +21,8 @@ test("o visualizador vem da extensão, sem ligar para maiúsculas nem para a pas
   expect(viewerFor("v1.2.svg", viewers)).toBe(text);
 });
 
-test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7109), o docx (T7110) e o xlsx (T7111); o resto segue abrindo no app padrão", () => {
-  expect(Object.keys(VIEWERS).sort()).toEqual(["csv", "docx", "json", "log", "pdf", "tsv", "txt", "xlsx", "yaml", "yml"]);
+test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7109), o docx (T7110), o xlsx (T7111) e as imagens (T7113); o resto segue abrindo no app padrão", () => {
+  expect(Object.keys(VIEWERS).sort()).toEqual(["bmp", "csv", "docx", "gif", "heic", "heif", "jpeg", "jpg", "json", "log", "pdf", "png", "svg", "tsv", "txt", "webp", "xlsx", "yaml", "yml"]);
   // O pdf é lido em binário (T7109).
   expect(viewerFor("Docs/Contrato.PDF")?.as).toBe("binary");
   // O docx também (T7110), e o .doc antigo segue no app padrão.
@@ -32,6 +32,9 @@ test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7
   expect(viewerFor("Vendas.XLSX")?.as).toBe("binary");
   expect(viewerFor("antiga.xls")).toBeUndefined();
   expect(viewerFor("livre.ods")).toBeUndefined();
+  // As imagens (T7113), todas no mesmo visualizador; o .drawio.svg vai para o draw.io quando ele entrar.
+  for (const name of ["foto.HEIC", "planta.png", "logo.svg", "scan.jpeg", "anim.gif"]) expect(viewerFor(name)).toBe(viewerFor("a.png"));
+  expect(viewerFor("velha.tif")).toBeUndefined();
   expect(viewerFor("Dados/vendas.CSV")?.View).toBe(viewerFor("dados.tsv")!.View);
   expect(viewerFor("vendas.csv")?.View).not.toBe(viewerFor("lista.txt")!.View);
   for (const name of ["lista.txt", "saida.LOG", "dados.json", "config.yaml", "config.yml"]) expect(viewerFor(name)?.as).toBe("text");

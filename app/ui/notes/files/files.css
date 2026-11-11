@@ -423,3 +423,36 @@
   color: var(--text);
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------- a imagem (T7113) */
+
+.kn-file-image {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* a imagem no meio; maior que a área, ela rola para os dois lados a partir do canto */
+.kn-file-image-area {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--surface-2);
+}
+
+.kn-file-image-area[data-zoomed] {
+  place-items: start;
+}
+
+.kn-file-image-img {
+  display: block;
+  max-width: none;
+  height: auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  /* o fundo xadrez mostra a transparência do png e do svg */
+  background:
+    conic-gradient(#e6e6e6 25%, #fff 0 50%, #e6e6e6 0 75%, #fff 0) 0 0 / 16px 16px;
+}

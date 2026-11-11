@@ -7,6 +7,7 @@ import { type ComponentType, lazy, type MutableRefObject } from "react";
 import { extOf } from "../../../src/shared/attachments.ts";
 import type { FileReadAs } from "../../../src/shared/file-view.ts";
 import type { FileContent, NotesApi } from "../types.ts";
+import { ImageViewer } from "./ImageViewer.tsx";
 import { TableViewer } from "./TableViewer.tsx";
 import { TextViewer } from "./TextViewer.tsx";
 
@@ -42,6 +43,7 @@ const XlsxViewer = lazy(() => import("./XlsxViewer.tsx").then((m) => ({ default:
 
 const text: FileViewer = { as: "text", View: TextViewer };
 const table: FileViewer = { as: "text", View: TableViewer };
+const image: FileViewer = { as: "binary", View: ImageViewer };
 
 export const VIEWERS: Record<string, FileViewer> = {
   // T7105: os textos, editáveis (os mesmos tipos que o `files.save` aceita).
@@ -59,6 +61,16 @@ export const VIEWERS: Record<string, FileViewer> = {
   docx: { as: "binary", View: DocxViewer },
   // T7111: a planilha, pelo SheetJS do pack. Só o `.xlsx` (o `.xls` antigo e o `.ods` seguem no app padrão).
   xlsx: { as: "binary", View: XlsxViewer },
+  // T7113: as imagens inteiras, com zoom. O tipo de verdade vem dos bytes (`imageInfo.ts`).
+  png: image,
+  jpg: image,
+  jpeg: image,
+  gif: image,
+  webp: image,
+  heic: image,
+  heif: image,
+  bmp: image,
+  svg: image,
 };
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */
