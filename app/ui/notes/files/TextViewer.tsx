@@ -1,16 +1,20 @@
 // txt, log, json e yaml dentro das Notas (T7105, spec #7079): o texto num editor simples, que grava sozinho no
-// arquivo. Sem realce nem formatação: o arquivo sai como a pessoa escreveu, com as quebras de linha que tinha. Um
-// texto que não é UTF-8 (`readOnly`) só é lido: gravar trocaria os bytes que o Kiwi não entendeu.
+// arquivo. Sem realce nem formatação: o arquivo sai como a pessoa escreveu, com o fim de linha que tinha (`\r\n` do
+// Windows volta `\r\n`, embora o `<textarea>` trabalhe em `\n`). Só é lido, sem gravar: um texto que não é UTF-8
+// (`readOnly`), porque gravar trocaria os bytes que o Kiwi não entendeu, e um com fins de linha misturados, porque
+// não há como devolver cada linha com o fim que tinha.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { TextSession, type TextSaveState } from "./textSession.ts";
+import { detectEol, TextSession, type TextSaveState, toEditor } from "./textSession.ts";
 import type { FileViewerProps } from "./viewers.ts";
 
 export function TextViewer({ path, file, files, flushRef }: FileViewerProps) {
   const initial = "text" in file ? file : { text: "", version: file.version };
-  const readOnly = !files.save || ("readOnly" in file && file.readOnly === true);
-  const [text, setText] = useState(initial.text);
+  const notUtf8 = "readOnly" in file && file.readOnly === true;
+  const mixedEol = detectEol(initial.text) === null;
+  const readOnly = !files.save || notUtf8 || mixedEol;
+  const [text, setText] = useState(() => toEditor(initial.text));
   const [state, setState] = useState<TextSaveState>("idle");
   const area = useRef<HTMLTextAreaElement>(null);
 
@@ -50,7 +54,11 @@ export function TextViewer({ path, file, files, flushRef }: FileViewerProps) {
     <div className="kn-file-text">
       {readOnly ? (
         <div className="kn-file-text-note" role="status">
-          Este arquivo não está em UTF-8. Aqui ele só é lido; para editar, abra no app padrão.
+          {notUtf8
+            ? "Este arquivo não está em UTF-8. Aqui ele só é lido; para editar, abra no app padrão."
+            : mixedEol
+              ? "Este arquivo mistura fins de linha do Windows e do Mac. Aqui ele só é lido; para editar, abra no app padrão."
+              : "Aqui este arquivo só é lido; para editar, abra no app padrão."}
         </div>
       ) : state === "conflict" ? (
         <div className="kn-conflict kn-file-text-alert" role="alert">

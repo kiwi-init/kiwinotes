@@ -2,7 +2,7 @@
 // Texto ou binário, com limite de tamanho, só de dentro do cofre e só arquivo de verdade.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -148,6 +148,23 @@ describe("gravar um texto do cofre (T7105)", () => {
     expect(await v.readFile("Docs/lista.txt", "text")).toMatchObject({ version: versionOf(next), text: next });
     // Nada de arquivo temporário sobrando ao lado.
     expect(readdirSync(path.join(root, "Docs"))).toEqual(["lista.txt"]);
+  });
+
+  test("revisão do T7105: salvar mantém as permissões do arquivo, e o CRLF que recebeu", async () => {
+    const { v, root } = await vault({ "privado.json": "{}", "script.yml": "a: 1\r\n", "Nota.md": "oi" });
+    chmodSync(path.join(root, "privado.json"), 0o600);
+    chmodSync(path.join(root, "script.yml"), 0o755);
+    chmodSync(path.join(root, "Nota.md"), 0o600);
+    const mode = (rel: string) => statSync(path.join(root, rel)).mode & 0o777;
+    expect((await v.saveFile("privado.json", '{"a":1}', versionOf("{}"))).saved).toBe(true);
+    expect((await v.saveFile("script.yml", "a: 2\r\nb: 3\r\n", versionOf("a: 1\r\n"))).saved).toBe(true);
+    expect(mode("privado.json")).toBe(0o600);
+    expect(mode("script.yml")).toBe(0o755);
+    expect(read(root, "script.yml")).toBe("a: 2\r\nb: 3\r\n");
+    // A mesma troca atômica grava as notas: a nota privada continua privada.
+    const note = await v.get("Nota.md");
+    expect((await v.save("Nota.md", "oi, de novo", note.version)).saved).toBe(true);
+    expect(mode("Nota.md")).toBe(0o600);
   });
 
   test("com a versão velha não escreve, e devolve o de agora", async () => {

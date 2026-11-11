@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { FileSaveResult } from "../types.ts";
-import { TextSession, type TextSaveState } from "./textSession.ts";
+import { detectEol, TextSession, type TextSaveState, toDisk, toEditor } from "./textSession.ts";
 
 /** Um disco de mentira: grava se a versão bate, como o `files.save`. O timer é do teste. */
 function rig(text = "um") {
@@ -155,4 +155,51 @@ test("o disco falhou: erro, o texto fica por gravar e tentar de novo grava", asy
   r.failing(false);
   expect(await r.session.save()).toBe(true);
   expect(r.disk.text).toBe("um dois");
+});
+
+test("revisão do T7105: o fim de linha do arquivo volta em cada save, embora a tela trabalhe em \\n", async () => {
+  expect(detectEol("a\r\nb\r\n")).toBe("\r\n");
+  expect(detectEol("a\rb\r")).toBe("\r");
+  expect(detectEol("a\nb\n")).toBe("\n");
+  expect(detectEol("sem quebra")).toBe("\n");
+  expect(detectEol("")).toBe("\n");
+  expect(detectEol("a\r\nb\nc")).toBeNull();
+  expect(detectEol("a\rb\r\nc")).toBeNull();
+  expect(toEditor("a\r\nb\rc\n")).toBe("a\nb\nc\n");
+  expect(toDisk("a\nb\n", "\r\n")).toBe("a\r\nb\r\n");
+  expect(toDisk("a\nb", "\r")).toBe("a\rb");
+  expect(toDisk("a\nb\n", "\n")).toBe("a\nb\n");
+
+  // Um txt do Windows: a tela mostra em \n (como o <textarea>), e uma letra digitada não reescreve as outras linhas.
+  const r = rig("um\r\ndois\r\n");
+  expect(r.session.text).toBe("um\ndois\n");
+  expect(r.session.eol).toBe("\r\n");
+  r.session.edit("um\ndois\nx");
+  await r.tick();
+  expect(r.disk.text).toBe("um\r\ndois\r\nx");
+  // Colar um texto com \r\n no editor não dobra as quebras.
+  r.session.edit("um\r\ndois\r\nx\r\ny");
+  await r.tick();
+  expect(r.disk.text).toBe("um\r\ndois\r\nx\r\ny");
+  // O eco do próprio save não muda nada.
+  r.session.external({ text: r.disk.text, version: r.disk.version });
+  expect(r.shown).toEqual([]);
+});
+
+test("o de fora entra com o fim de linha dele: de CRLF para LF, e o próximo save segue o novo", async () => {
+  const r = rig("um\r\ndois\r\n");
+  r.outside("um\ndois\ntrês\n");
+  r.session.external({ text: r.disk.text, version: r.disk.version });
+  expect(r.shown).toEqual(["um\ndois\ntrês\n"]);
+  expect(r.session.eol).toBe("\n");
+  r.session.edit("um\ndois\ntrês\nquatro\n");
+  await r.tick();
+  expect(r.disk.text).toBe("um\ndois\ntrês\nquatro\n");
+  // No conflito, "usar o de fora" também troca o fim de linha guardado.
+  r.session.edit("o meu\n");
+  r.outside("de\r\nfora\r\n");
+  await r.tick();
+  r.session.useTheirs();
+  expect(r.session.text).toBe("de\nfora\n");
+  expect(r.session.eol).toBe("\r\n");
 });

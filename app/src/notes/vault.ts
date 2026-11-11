@@ -11,7 +11,7 @@ import { lexicalMatch, lexicalWords } from "../shared/lexical.ts";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { type FSWatcher, watch } from "node:fs";
-import { lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import path from "node:path";
 
@@ -1412,6 +1412,10 @@ export class Vault {
           return false;
         }
       }
+      // O arquivo novo fica com as permissões do que ele troca (revisão do T7105): sem isto, um `600` privado ou um
+      // `755` voltava `644` a cada save, de nota, de quadro ou de texto.
+      const old = await stat(abs).catch(() => null);
+      if (old) await chmod(temp, old.mode & 0o7777);
       await rename(temp, abs);
       await syncDir(path.dirname(abs));
     } catch (e) {

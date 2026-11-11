@@ -4,9 +4,32 @@
 
 import type { FileSaveResult } from "../types.ts";
 
+export type Eol = "\n" | "\r\n" | "\r";
+
+/**
+ * O fim de linha do arquivo (revisão do T7105): `\r\n` (Windows), `\r` (Mac antigo) ou `\n`. O `<textarea>` troca
+ * todos por `\n` no `value`, então sem guardar o do arquivo, digitar uma letra reescrevia todas as linhas. `null` com
+ * mais de um tipo misturado: aí não há como devolver o arquivo como era, e ele abre só para leitura.
+ */
+export function detectEol(text: string): Eol | null {
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  const cr = (text.match(/\r/g) ?? []).length - crlf;
+  const lf = (text.match(/\n/g) ?? []).length - crlf;
+  const kinds = [crlf, cr, lf].filter((n) => n > 0).length;
+  if (kinds > 1) return null;
+  return crlf ? "\r\n" : cr ? "\r" : "\n";
+}
+
+/** O texto como o `<textarea>` o guarda: todas as quebras em `\n`. */
+export const toEditor = (text: string): string => text.replace(/\r\n?/g, "\n");
+
+/** O texto do editor com o fim de linha do arquivo de volta. */
+export const toDisk = (text: string, eol: Eol): string => (eol === "\n" ? toEditor(text) : toEditor(text).replace(/\n/g, eol));
+
 export type TextSaveState = "idle" | "pending" | "saving" | "saved" | "conflict" | "error";
 
 export interface TextSessionOptions {
+  /** O texto como está no disco, com o fim de linha dele. */
   text: string;
   version: string;
   save(content: string, baseVersion: string): Promise<FileSaveResult>;
@@ -21,8 +44,11 @@ export interface TextSessionOptions {
 export const TEXT_SAVE_MS = 600;
 
 export class TextSession {
+  /** O texto da tela, com as quebras em `\n` (como o `<textarea>`). O que vai ao disco é o `toDisk` dele. */
   text: string;
   version: string;
+  /** O fim de linha do arquivo, reaplicado em cada save. Com fins misturados (`detectEol` nulo), fica `\n`. */
+  eol: Eol;
   state: TextSaveState = "idle";
   /** O arquivo como está no disco, quando ele mudou fora com algo ainda não gravado aqui. */
   conflict: { text: string; version: string } | null = null;
@@ -34,7 +60,8 @@ export class TextSession {
   private readonly clearTimer: (id: unknown) => void;
 
   constructor(private readonly o: TextSessionOptions) {
-    this.text = o.text;
+    this.text = toEditor(o.text);
+    this.eol = detectEol(o.text) ?? "\n";
     this.version = o.version;
     this.delay = o.delayMs ?? TEXT_SAVE_MS;
     this.setTimer = o.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
@@ -42,7 +69,8 @@ export class TextSession {
   }
 
   /** A pessoa digitou. */
-  edit(text: string): void {
+  edit(typed: string): void {
+    const text = toEditor(typed);
     if (text === this.text) return;
     this.text = text;
     this.dirty = true;
@@ -57,7 +85,7 @@ export class TextSession {
     while (this.saving) await this.saving;
     if (!this.dirty || this.conflict) return !this.dirty;
     this.dirty = false;
-    const sent = this.text;
+    const sent = toDisk(this.text, this.eol);
     this.set("saving");
     const run = (async () => {
       try {
@@ -104,9 +132,7 @@ export class TextSession {
    */
   external(file: { text: string; version: string }): void {
     if (file.version === this.version || this.dirty || this.saving || this.conflict) return;
-    this.text = file.text;
-    this.version = file.version;
-    this.o.onText(file.text);
+    this.adopt(file);
     this.set("idle");
   }
 
@@ -116,9 +142,7 @@ export class TextSession {
     if (!c) return;
     this.conflict = null;
     this.dirty = false;
-    this.text = c.text;
-    this.version = c.version;
-    this.o.onText(c.text);
+    this.adopt(c);
     this.set("saved");
   }
 
@@ -130,6 +154,14 @@ export class TextSession {
     this.conflict = null;
     this.dirty = true;
     return this.save();
+  }
+
+  /** O texto do disco entra na tela, com o fim de linha dele guardado. */
+  private adopt(file: { text: string; version: string }): void {
+    this.text = toEditor(file.text);
+    this.eol = detectEol(file.text) ?? "\n";
+    this.version = file.version;
+    this.o.onText(this.text);
   }
 
   dispose(): void {
