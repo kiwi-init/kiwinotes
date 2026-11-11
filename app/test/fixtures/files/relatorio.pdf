@@ -1,0 +1,75 @@
+%PDF-1.4
+%âãÏÓ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Length 250 >>
+stream
+BT /F1 20 Tf
+1 0 0 1 72 760 Tm (Relatório de vendas) Tj
+/F1 12 Tf
+1 0 0 1 72 732 Tm (Novembro de 2026) Tj
+1 0 0 1 72 712 Tm () Tj
+1 0 0 1 72 692 Tm (Este é o relatório mensal da loja.) Tj
+1 0 0 1 72 672 Tm (As vendas de cadeiras cresceram 12%.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 269 >>
+stream
+BT /F1 20 Tf
+1 0 0 1 72 760 Tm (Página dois) Tj
+/F1 12 Tf
+1 0 0 1 72 732 Tm () Tj
+1 0 0 1 72 712 Tm (A mesa de jantar foi o produto mais vendido.) Tj
+1 0 0 1 72 692 Tm (O relatório completo está no anexo.) Tj
+1 0 0 1 72 672 Tm (Ação: repor o estoque de cadeiras.) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 193 >>
+stream
+BT /F1 20 Tf
+1 0 0 1 72 760 Tm (Página três) Tj
+/F1 12 Tf
+1 0 0 1 72 732 Tm () Tj
+1 0 0 1 72 712 Tm (Conclusão: as vendas fecharam o mês em alta.) Tj
+1 0 0 1 72 692 Tm (Fim do relatório.) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 8 0 R >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000133 00000 n 
+0000000230 00000 n 
+0000000531 00000 n 
+0000000657 00000 n 
+0000000977 00000 n 
+0000001103 00000 n 
+0000001347 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+1473
+%%EOF

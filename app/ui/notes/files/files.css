@@ -199,3 +199,102 @@
 .kn-file-table-note {
   margin-bottom: 8px;
 }
+
+/* ---------------------------------------------------------- o pdf (T7109) */
+
+.kn-file-pdf {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-pdf-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 40px;
+  border-bottom: 1px solid var(--border, var(--surface-2));
+  font-size: var(--t-meta, 12px);
+  color: var(--text-2);
+}
+
+.kn-file-pdf-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kn-file-pdf-bar .kn-bt:disabled {
+  opacity: 0.45;
+}
+
+.kn-file-pdf-zoom {
+  min-width: 44px;
+  text-align: center;
+  font-family: var(--mono, var(--font-mono, monospace));
+}
+
+.kn-file-pdf-page {
+  font-family: var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+}
+
+.kn-file-pdf-find {
+  margin-left: auto;
+}
+
+.kn-file-pdf-query {
+  width: 200px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.kn-file-pdf-count {
+  min-width: 64px;
+  font-family: var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+}
+
+.kn-file-pdf-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  background: var(--surface-2);
+}
+
+/* a folha é sempre branca, como o papel, nos dois temas */
+.kn-file-pdf-sheet {
+  position: relative;
+  margin: 0 auto 24px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.kn-file-pdf-sheet:last-child {
+  margin-bottom: 0;
+}
+
+.kn-file-pdf-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kn-file-pdf-mark {
+  position: absolute;
+  border-radius: 2px;
+  background: rgba(255, 213, 0, 0.4);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.kn-file-pdf-mark[data-current] {
+  background: rgba(255, 138, 0, 0.55);
+}

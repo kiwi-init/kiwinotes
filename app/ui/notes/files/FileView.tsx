@@ -2,7 +2,7 @@
 // app padrão" e, embaixo, o visualizador do tipo (`viewers.ts`). O view só lê: nada aqui escreve no arquivo. Grande
 // demais, sem visualizador, sumido ou com erro, ele diz o que houve e oferece o app padrão.
 
-import { type MutableRefObject, useEffect, useRef, useState } from "react";
+import { type MutableRefObject, Suspense, useEffect, useRef, useState } from "react";
 
 import { fileSize } from "../../../src/shared/file-view.ts";
 import { fileType } from "../tree.ts";
@@ -75,7 +75,10 @@ export function FileView({ files, path, onOpenExternal, flushRef, viewer = viewe
       </header>
       <div className="kn-file-body" aria-busy={state.kind === "loading" ? "true" : undefined}>
         {state.kind === "ready" ? (
-          <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} />
+          // Um visualizador pesado (o pdf) chega depois, por import dinâmico.
+          <Suspense fallback={null}>
+            <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} />
+          </Suspense>
         ) : state.kind === "tooLarge" ? (
           notice(`Este arquivo tem ${fileSize(state.size)}, e o Kiwi Notes mostra aqui até ${fileSize(state.limit)}.`)
         ) : state.kind === "unsupported" ? (

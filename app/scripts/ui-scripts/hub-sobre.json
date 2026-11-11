@@ -8,6 +8,7 @@
     { "expectText": ".kn-about-line", "text": "desligadas", "name": "sem o atualizador, diz que está desligado" },
     { "expectCount": ".kn-about button:has-text('Verificar atualizações'):disabled", "count": 1, "name": "e o botão não vai à rede" },
     { "expectCount": ".kn-about-link:has-text('Notas desta versão')", "count": 0, "name": "sem notas da versão num build local" },
+    { "expectText": ".kn-about-credits", "text": "PDF.js, da Mozilla (Apache-2.0)", "name": "o crédito do software de terceiros (spec #7079)" },
     { "screenshot": "hub-sobre.png" }
   ]
 }

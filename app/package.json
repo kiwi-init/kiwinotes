@@ -37,6 +37,7 @@
     "katex": "0.18.10",
     "mermaid": "12.2.0",
     "onnxruntime-node": "1.30.0",
+    "pdfjs-dist": "6.5.438",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-native": "file:./ui/stubs/react-native",
