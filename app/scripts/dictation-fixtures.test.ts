@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { cutAtRelease } from "./dictation-fixtures.ts";
+import { cutAtRelease, loadSpoken, PRECISE_CASES, withNoise } from "./dictation-fixtures.ts";
 
 /** Um WAV de 16 kHz, mono, 16 bits: `voiceMs` de som e `silenceMs` de silêncio no fim. */
 function wav(voiceMs: number, silenceMs: number): Buffer {
@@ -33,4 +33,28 @@ test("T5456: o WAV para onde a gravação pararia: o fim da fala, menos o que ve
   expect(ms(cutAtRelease(w, 0, 0))).toBe(1000);
   expect(ms(cutAtRelease(w, -1000, 250))).toBe(1300);
   expect(cutAtRelease(w, 450, 250).readUInt32LE(4)).toBe(cutAtRelease(w, 450, 250).length - 8);
+});
+
+test("#7082: o WAV com ruído sai mais baixo, com chiado no silêncio, e igual a cada rodada", () => {
+  const w = wav(500, 500);
+  const noisy = withNoise(w, 0.25, 450);
+  expect(noisy.length).toBe(w.length);
+  expect(noisy.subarray(0, 44).equals(w.subarray(0, 44))).toBe(true);
+  const rms = (b: Buffer, from: number, to: number) => {
+    let sum = 0;
+    for (let i = from; i < to; i++) sum += b.readInt16LE(44 + i * 2) ** 2;
+    return Math.sqrt(sum / (to - from));
+  };
+  // A voz: 8000 × 0,25 = 2000, mais o ruído. O silêncio: só o ruído, de desvio 450.
+  expect(Math.abs(rms(noisy, 0, 8000) - Math.hypot(2000, 450))).toBeLessThan(40);
+  expect(Math.abs(rms(noisy, 8000, 16_000) - 450)).toBeLessThan(25);
+  expect(withNoise(w, 0.25, 450).equals(noisy)).toBe(true);
+  expect(withNoise(w, 0.25, 450, 2).equals(noisy)).toBe(false);
+});
+
+test("#7082: os casos do modo preciso têm um ditado longo (de arquivo) com ruído", () => {
+  const cases = loadSpoken(PRECISE_CASES);
+  const long = cases.filter((c) => c.sayFile?.startsWith("longos/") && typeof c.noise === "number");
+  expect(long.length).toBeGreaterThanOrEqual(1);
+  expect(() => loadSpoken(PRECISE_CASES)).not.toThrow();
 });

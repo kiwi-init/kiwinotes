@@ -606,20 +606,21 @@ final class Helper {
 
     /// O texto de uma gravação e o motor que o fez (T6602): o Whisper do modo preciso quando ele está carregado e há
     /// pelo menos um segundo de fala, e o Parakeet no resto do tempo: numa palavra solta, quando o Whisper falha ou
-    /// quando ele devolve o próprio prompt (o ditado nunca se perde por causa dele).
+    /// quando ele devolve o próprio prompt (o ditado nunca se perde por causa dele). Um ditado de mais de 28 s vai ao
+    /// Whisper em pedaços, e o Parakeet cobre o pedaço que sair vazio (`PreciseChunks`, #7082).
     private func recognize(_ samples: [Float]) async throws -> (Transcriber.Output, String) {
         if preciseReady, PreciseRoute.usesWhisper(samples, sampleRate: AudioCapture.sampleRate) {
             let dictionary = meetingDictionary
-            do {
-                let raw = try await precise.transcribe(samples, terms: dictionary.terms)
-                if WhisperPrompt.echoes(raw, terms: dictionary.terms) {
-                    emit("log", ["level": "info", "message": "precise: whisper gave back the prompt, this dictation goes through parakeet"])
-                } else {
-                    let text = TranscriptPostProcessor.process(raw, dictionary: dictionary)
-                    return (Transcriber.Output(raw: raw, text: text, lang: SpokenLanguage.detect(text)), "whisper")
-                }
-            } catch {
-                emit("log", ["level": "warn", "message": "precise: whisper failed, this dictation goes through parakeet"])
+            let precise = precise
+            let stt = stt
+            let raw = await PreciseChunks.transcribe(
+                samples, terms: dictionary.terms, sampleRate: AudioCapture.sampleRate,
+                whisper: { try await precise.transcribe($0, terms: $1) },
+                parakeet: { try await stt.transcribe($0).raw },
+                log: { [weak self] in self?.emit("log", ["level": "info", "message": $0]) })
+            if let raw {
+                let text = TranscriptPostProcessor.process(raw, dictionary: dictionary)
+                return (Transcriber.Output(raw: raw, text: text, lang: SpokenLanguage.detect(text)), "whisper")
             }
         }
         return (try await stt.transcribe(samples), "parakeet")
