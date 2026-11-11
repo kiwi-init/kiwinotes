@@ -45,7 +45,7 @@ function zip(files: Record<string, Uint8Array | string>): Uint8Array {
 
 test("lê o tamanho descompactado de cada parte, sem descompactar", () => {
   const z = zip({ "word/document.xml": "<w:document/>", "word/media/a.png": new Uint8Array(1000) });
-  expect(zipEntries(z)).toEqual([
+  expect(zipEntries(z)?.map(({ name, size }) => ({ name, size }))).toEqual([
     { name: "word/document.xml", size: 13 },
     { name: "word/media/a.png", size: 1000 },
   ]);
@@ -58,8 +58,13 @@ test("a bomba de zip: poucos KB compactados, muitos MB de XML, é recusada antes
   expect(bomb.length).toBeLessThan(100 * 1024);
   expect(checkZip(bomb)).toMatchObject({ ok: false, reason: "too-large" });
   // As imagens contam no total, não no limite do XML.
-  expect(checkZip(zip({ "word/document.xml": "<w:document/>", "word/media/foto.png": new Uint8Array(30 * 1024 * 1024) }))).toEqual({ ok: true });
-  expect(checkZip(zip({ "word/document.xml": "x", "word/media/foto.png": new Uint8Array(ZIP_LIMITS.total + 1) }))).toMatchObject({ ok: false, reason: "too-large" });
+  const png = (size: number) => {
+    const b = new Uint8Array(size);
+    b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    return b;
+  };
+  expect(checkZip(zip({ "word/document.xml": "<w:document/>", "word/media/foto.png": png(30 * 1024 * 1024) }))).toEqual({ ok: true });
+  expect(checkZip(zip({ "word/document.xml": "x", "word/media/foto.png": png(ZIP_LIMITS.total + 1) }))).toMatchObject({ ok: false, reason: "too-large" });
 });
 
 test("muitas partes, ou o que não é zip, também é recusado", () => {
@@ -78,4 +83,46 @@ test("o docx de exemplo passa", () => {
   const entries = zipEntries(docx);
   expect(entries?.map((e) => e.name)).toContain("word/document.xml");
   expect(checkZip(docx)).toEqual({ ok: true });
+});
+
+/** Troca o tamanho aberto que o zip declara para a parte `name`, no cabeçalho local e no diretório central. */
+function lie(z: Uint8Array, name: string, size: number): Uint8Array {
+  const out = new Uint8Array(z);
+  const view = new DataView(out.buffer);
+  const n = new TextEncoder().encode(name);
+  for (let i = 0; i + 46 < out.length; i++) {
+    const sig = view.getUint32(i, true);
+    const at = sig === 0x04034b50 ? i + 30 : sig === 0x02014b50 ? i + 46 : -1;
+    if (at < 0 || !n.every((b, k) => out[at + k] === b)) continue;
+    view.setUint32(sig === 0x04034b50 ? i + 22 : i + 24, size, true);
+  }
+  return out;
+}
+
+test("rodada 2: a bomba que mente o tamanho no zip também é recusada, sem descompactar tudo", () => {
+  const honest = zip({ "word/document.xml": "<w:p>" + "a".repeat(30 * 1024 * 1024) + "</w:p>" });
+  const liar = lie(honest, "word/document.xml", 5000);
+  expect(zipEntries(liar)?.[0]?.size).toBe(5000);
+  const started = performance.now();
+  expect(checkZip(liar)).toEqual({ ok: false, reason: "too-large" });
+  // Para no teto de 20 MB de texto, sem abrir os 30.
+  expect(performance.now() - started).toBeLessThan(2000);
+});
+
+test("rodada 2: o nome da parte não engana; o que vale é o conteúdo", () => {
+  // Texto com nome de imagem conta no limite do texto.
+  expect(checkZip(zip({ "word/media/foto.png": "a".repeat(21 * 1024 * 1024) }))).toEqual({ ok: false, reason: "too-large" });
+  expect(checkZip(zip({ "word/documento-principal.bin": "a".repeat(21 * 1024 * 1024) }))).toEqual({ ok: false, reason: "too-large" });
+});
+
+test("rodada 2: um método de compressão desconhecido, ou o cabeçalho local que não existe, dá not-zip", () => {
+  const z = zip({ "word/document.xml": "<w:document>" + "x".repeat(5000) + "</w:document>" });
+  // O método 99 no diretório central (o check mede o tamanho; um deflate corrompido o mammoth recusa depois).
+  const unknown = new Uint8Array(z);
+  const dv = new DataView(unknown.buffer);
+  for (let i = 0; i + 4 < unknown.length; i++) if (dv.getUint32(i, true) === 0x02014b50) dv.setUint16(i + 10, 99, true);
+  expect(checkZip(unknown)).toEqual({ ok: false, reason: "not-zip" });
+  const nolocal = new Uint8Array(z);
+  new DataView(nolocal.buffer).setUint32(0, 0, true);
+  expect(checkZip(nolocal)).toEqual({ ok: false, reason: "not-zip" });
 });
