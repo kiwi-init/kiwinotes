@@ -12,7 +12,7 @@ import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
-import type { Backlink, CanvasFile, CanvasSaveResult, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
+import type { Backlink, CanvasFile, CanvasSaveResult, FileContent, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
 } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
@@ -117,7 +117,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.37.0 (T6600): o quadro branco (JSON Canvas, o `.canvas` do Obsidian): `notes.canvasGet`, `notes.canvasSave`,
 //   `notes.canvasCreate` e `notes.canvasRename`. Só acréscimo.
 // 1.38.0 (T6602): o modo preciso do ditado: `preciseDictation` nas settings e o `dictation.preciseStatus`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.38.0";
+// 1.39.0 (T7103, spec #7079): o `files.read`, o conteúdo de um arquivo do cofre que não é nota, para as Notas
+//   mostrarem na própria janela. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.39.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -250,6 +252,13 @@ export interface UiCapabilities {
    * dá E_BAD_ARGS: abre no Kiwi. No headless e com KIWI_DEBUG=1, só registra.
    */
   "files.open": { args: { path: string }; result: true };
+  /**
+   * O conteúdo de um arquivo do vault que não é nota (1.39.0, T7103), para as Notas mostrarem na própria janela: com
+   * `as: "text"`, o texto em UTF-8 (até 5 MB); com `"binary"` (o padrão), os bytes em base64 (até 25 MB). Acima do
+   * limite volta `tooLarge` com o tamanho, sem o conteúdo: a UI avisa e oferece o `files.open`. Só lê, e só arquivo
+   * de dentro do cofre; nota (`.md`) dá E_BAD_ARGS.
+   */
+  "files.read": { args: { path: string; as?: "text" | "binary" }; result: FileContent };
   /**
    * O quadro branco (1.37.0, T6600): o texto do `.canvas` e a versão. O save é condicional como o das notas (com
    * `baseVersion` velha não escreve e devolve o de agora) e recusa o que não abre como JSON Canvas. O create aceita o
@@ -437,6 +446,7 @@ export const UI_CAPABILITIES = [
   "notes.restore",
   "notes.reveal",
   "files.open",
+  "files.read",
   "notes.canvasGet",
   "notes.canvasSave",
   "notes.canvasCreate",

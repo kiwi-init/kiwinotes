@@ -341,10 +341,12 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
   }
 }
 
-/** O aviso de um `--note` que a janela não vai abrir, ou null quando o caminho está, exato, no `notes.list`. */
+/** O aviso de um `--note` que a janela não vai abrir, ou null quando o caminho está, exato, no `notes.list` (nota ou arquivo). */
 export function noteProblem(asked: string, list: Record<string, unknown>): string | null {
   if (list.ok !== true) return `--note ${asked}: não deu para conferir (notes.list: ${String(list.code ?? "E_FAILED")})`;
-  const paths = ((list.value as { notes?: { path: string }[] } | undefined)?.notes ?? []).map((n) => n.path);
+  // As notas e os outros arquivos do cofre: um arquivo que não é nota abre no view de arquivo (T7103).
+  const value = list.value as { notes?: { path: string }[]; files?: { path: string }[] } | undefined;
+  const paths = [...(value?.notes ?? []), ...(value?.files ?? [])].map((n) => n.path);
   if (paths.includes(asked)) return null;
   const near = paths.find((p) => p.toLowerCase() === asked.toLowerCase());
   return near ? `--note ${asked}: a nota não abriu (existe como ${near}; o caminho é exato)` : `--note ${asked}: a nota não abriu (E_NOT_FOUND)`;

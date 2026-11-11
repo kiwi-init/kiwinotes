@@ -84,7 +84,7 @@ export function engineNotes(
     : undefined;
   // Os outros arquivos do cofre e as preferências da árvore (1.19.0, T3370).
   const files: NotesApi["files"] = has("files.open")
-    ? { open: (path) => call("files.open", { path }), onChanged: (fn) => on("files.changed", e => {const event=e as {paths?:string[];folderId?:string};if(!folderId||!event.folderId||event.folderId===folderId)fn(event.paths??[]);}),
+    ? { open: (path) => call("files.open", { path }), ...(has("files.read") ? { read: (path: string, as: "text" | "binary") => call("files.read", { path, as }) } : {}), onChanged: (fn) => on("files.changed", e => {const event=e as {paths?:string[];folderId?:string};if(!folderId||!event.folderId||event.folderId===folderId)fn(event.paths??[]);}),
       }
     : undefined;
   // O quadro branco (1.37.0, T6600).

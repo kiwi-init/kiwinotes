@@ -91,6 +91,10 @@ describe("o --note confere o caminho exato, como a janela (#1864)", () => {
     expect(noteProblem("Projetos/Projeto X.md", list)).toBeNull();
     expect(noteProblem("projetos/projeto x.md", list)).toBe("--note projetos/projeto x.md: a nota não abriu (existe como Projetos/Projeto X.md; o caminho é exato)");
     expect(noteProblem("Nada.md", list)).toBe("--note Nada.md: a nota não abriu (E_NOT_FOUND)");
+    // Um arquivo que não é nota também abre (o view de arquivo, T7103).
+    const withFiles = { ok: true, value: { notes: [], files: [{ path: "Anexos/contrato.pdf" }] } };
+    expect(noteProblem("Anexos/contrato.pdf", withFiles)).toBeNull();
+    expect(noteProblem("Anexos/outro.pdf", withFiles)).toBe("--note Anexos/outro.pdf: a nota não abriu (E_NOT_FOUND)");
     expect(noteProblem("Ana.md", { ok: false, code: "E_IO" })).toContain("notes.list: E_IO");
   });
 });

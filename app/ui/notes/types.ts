@@ -23,6 +23,9 @@ export interface VaultListing {
 
 export type VaultFile = NonNullable<UiCapabilities["notes.list"]["result"]["files"]>[number];
 
+/** O conteúdo de um arquivo que não é nota (T7103, contrato 1.39.0): o texto, os bytes em base64, ou "grande demais". */
+export type FileContent = UiCapabilities["files.read"]["result"];
+
 export type CanvasFile = UiCapabilities["notes.canvasGet"]["result"];
 export type CanvasSaveResult = UiCapabilities["notes.canvasSave"]["result"];
 
@@ -107,6 +110,8 @@ export interface NotesApi {
    * mudaram. Num engine antigo, a árvore só tem pastas e notas.
    */
   files?: { open(path: string): Promise<true>; onChanged(fn: (paths: string[]) => void): () => void;
+    /** O conteúdo, para as Notas mostrarem na própria janela (T7103, contrato 1.39.0). Num engine antigo, não existe. */
+    read?(path: string, as: "text" | "binary"): Promise<FileContent>;
   };
   /** O quadro branco (T6600). Num engine antigo, o `.canvas` abre no app padrão do Mac, como os outros arquivos. */
   canvas?: CanvasApi;

@@ -50,6 +50,8 @@ import { hasFilters, parseQuery, type SavedSearch,
 } from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { CanvasView } from "./canvas/CanvasView.tsx";
+import { FileView, type FilesApi } from "./files/FileView.tsx";
+import { viewerFor } from "./files/viewers.ts";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs,
 } from "./types.ts";
@@ -154,7 +156,9 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   /** O meio da janela: a nota, ou a Lixeira do app (T2593). */
-  const [view, setView] = useState<"note" | "trash" | "canvas">("note");
+  const [view, setView] = useState<"note" | "trash" | "canvas" | "file">("note");
+  /** O arquivo que não é nota aberto no lugar dela (T7103, spec #7079). */
+  const [fileOpen, setFileOpen] = useState<string | null>(null);
   /** O quadro branco aberto (T6600), e o "grava antes de sair" dele. */
   const [board, setBoard] = useState<string | null>(null);
   const boardFlush = useRef<(() => Promise<boolean>) | null>(null);
@@ -415,6 +419,20 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     [leave],
   );
 
+  /** Abre um arquivo que não é nota no lugar da nota (T7103): o visualizador do tipo, ou o aviso com o app padrão. */
+  const openFileView = useCallback(
+    async (p: string) => {
+      if (!(await leave())) return;
+      setFocusMode(false);
+      setFileOpen(p);
+      setView("file");
+      setPalette(false);
+      setTreeOpen(false);
+      setBackOpen(false);
+    },
+    [leave],
+  );
+
   const create = useCallback(
     async (wanted: string, focusTitle = false, folder?: string, template?: string,
     ) => {
@@ -446,6 +464,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         const asked = openRequestRef.current?.path ?? new URLSearchParams(location.search).get("note");
         if (asked && /\.canvas$/i.test(asked) && api.canvas && l.files?.some((f) => f.path === asked)) {
           void openCanvas(asked);
+          return;
+        }
+        // Um arquivo que não é nota, pedido pelo caminho: abre no view de arquivo (T7103).
+        if (asked && api.files?.read && l.files?.some((f) => f.path === asked)) {
+          void openFileView(asked);
           return;
         }
         const first =
@@ -1212,6 +1235,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               ? (p) => {
                   // O quadro branco abre no Kiwi (T6600); o resto, no app padrão do Mac.
                   if (api.canvas && /\.canvas$/i.test(p)) return void openCanvas(p);
+                  // O tipo que tem visualizador abre nas Notas (T7103, spec #7079).
+                  if (api.files?.read && viewerFor(p)) return void openFileView(p);
                   setTreeOpen(false);
                   api.files?.open(p).catch(failed_("abrir o arquivo"));
                 }
@@ -1260,6 +1285,13 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               void refresh();
             }}
             onError={(text) => say(text)}
+          />
+        ) : view === "file" && fileOpen && api.files?.read ? (
+          <FileView
+            key={fileOpen}
+            files={api.files as FilesApi}
+            path={fileOpen}
+            onOpenExternal={(p) => void api.files?.open(p).catch(failed_("abrir o arquivo"))}
           />
         ) : view === "trash" && api.extras ? (
           <TrashView
