@@ -105,7 +105,7 @@ export interface CapabilityDeps {
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile" | "embed"
-    | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile"
+    | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile"
   >;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
@@ -709,6 +709,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     "files.read": async (args) => {
       const a = fields(args, "files.read", ["path", "as"]);
       return (await vault()).readFile(a.path, a.as ?? "binary");
+    },
+    "files.save": async (args) => {
+      const a = fields(args, "files.save", ["path", "content", "baseVersion"]);
+      return (await vault()).saveFile(a.path, a.content, a.baseVersion);
     },
     "notes.canvasGet": async (args) => (await vault()).getCanvas(fields(args, "notes.canvasGet", ["path"]).path),
     "notes.canvasSave": async (args) => {

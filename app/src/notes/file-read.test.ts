@@ -2,7 +2,7 @@
 // Texto ou binário, com limite de tamanho, só de dentro do cofre e só arquivo de verdade.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -86,6 +86,20 @@ describe("ler um arquivo do cofre (T7103)", () => {
     expect(await code(42)).toBe("E_BAD_ARGS");
   });
 
+  test("o que está dentro de um pacote (`.pages`, `.key`) não é lido: é do app dono dele", async () => {
+    const { v } = await vault({ "Relatório.pages/Index/Document.iwa": "x", "Relatório.pages/preview.txt": "dentro", "Docs/a.txt": "a" });
+    const code = (p: string) => v.readFile(p, "text").then(() => "ok", (e) => (e as { code?: string }).code);
+    expect(await code("Relatório.pages/preview.txt")).toBe("E_NOT_FOUND");
+    expect(await code("Relatório.pages")).toBe("E_NOT_FOUND");
+    expect(await code("Docs/a.txt")).toBe("ok");
+  });
+
+  test("um texto que não é UTF-8 volta com `readOnly`", async () => {
+    const { v } = await vault({ "latin1.txt": new Uint8Array([0x61, 0xe7, 0xe3, 0x6f]), "utf8.txt": "ação" });
+    expect(await v.readFile("latin1.txt", "text")).toMatchObject({ size: 4, readOnly: true });
+    expect("readOnly" in (await v.readFile("utf8.txt", "text"))).toBe(false);
+  });
+
   test("pela capacidade `files.read` do contrato", async () => {
     const { v } = await vault({ "Docs/a.txt": "abc" });
     const caps = uiCapabilities({
@@ -114,4 +128,97 @@ test("o tamanho como o Finder diz", () => {
   expect(fileSize(1.2 * 1024 * 1024)).toBe("1,2 MB");
   expect(fileSize(MAX_VIEW_BYTES)).toBe("25 MB");
   expect(fileSize(3 * 1024 ** 3)).toBe("3 GB");
+});
+
+describe("gravar um texto do cofre (T7105)", () => {
+  const read = (root: string, rel: string) => readFileSync(path.join(root, rel), "utf8");
+
+  test("grava com a versão certa, com as quebras de linha como vieram, e a árvore fica sabendo", async () => {
+    const { v, root } = await vault({ "Docs/lista.txt": "um\r\ndois\r\n" });
+    const changed: string[][] = [];
+    v.onOtherFiles((paths) => changed.push(paths));
+    const before = await v.readFile("Docs/lista.txt", "text");
+    if (!("text" in before)) throw new Error("no text");
+    const next = "um\r\ndois\r\ntrês, ação\r\n";
+    const r = await v.saveFile("Docs/lista.txt", next, before.version);
+    expect(r).toEqual({ saved: true, path: "Docs/lista.txt", size: Buffer.byteLength(next), version: versionOf(next) });
+    expect(read(root, "Docs/lista.txt")).toBe(next);
+    expect(changed.flat()).toContain("Docs/lista.txt");
+    // A versão que o save devolve é a que o read dá: o próximo save parte dela.
+    expect(await v.readFile("Docs/lista.txt", "text")).toMatchObject({ version: versionOf(next), text: next });
+    // Nada de arquivo temporário sobrando ao lado.
+    expect(readdirSync(path.join(root, "Docs"))).toEqual(["lista.txt"]);
+  });
+
+  test("revisão do T7105: salvar mantém as permissões do arquivo, e o CRLF que recebeu", async () => {
+    const { v, root } = await vault({ "privado.json": "{}", "script.yml": "a: 1\r\n", "Nota.md": "oi" });
+    chmodSync(path.join(root, "privado.json"), 0o600);
+    chmodSync(path.join(root, "script.yml"), 0o755);
+    chmodSync(path.join(root, "Nota.md"), 0o600);
+    const mode = (rel: string) => statSync(path.join(root, rel)).mode & 0o777;
+    expect((await v.saveFile("privado.json", '{"a":1}', versionOf("{}"))).saved).toBe(true);
+    expect((await v.saveFile("script.yml", "a: 2\r\nb: 3\r\n", versionOf("a: 1\r\n"))).saved).toBe(true);
+    expect(mode("privado.json")).toBe(0o600);
+    expect(mode("script.yml")).toBe(0o755);
+    expect(read(root, "script.yml")).toBe("a: 2\r\nb: 3\r\n");
+    // A mesma troca atômica grava as notas: a nota privada continua privada.
+    const note = await v.get("Nota.md");
+    expect((await v.save("Nota.md", "oi, de novo", note.version)).saved).toBe(true);
+    expect(mode("Nota.md")).toBe(0o600);
+  });
+
+  test("com a versão velha não escreve, e devolve o de agora", async () => {
+    const { v, root } = await vault({ "a.json": "{}" });
+    const before = await v.readFile("a.json", "text");
+    if (!("text" in before)) throw new Error("no text");
+    writeFileSync(path.join(root, "a.json"), '{"de":"fora"}');
+    const r = await v.saveFile("a.json", '{"o":"meu"}', before.version);
+    expect(r).toMatchObject({ saved: false, current: { path: "a.json", text: '{"de":"fora"}' } });
+    expect(read(root, "a.json")).toBe('{"de":"fora"}');
+  });
+
+  test("só os textos editáveis, só num arquivo que já existe, de dentro do cofre e em UTF-8", async () => {
+    const { v, root, dir } = await vault({ "a.txt": "a", "b.csv": "x;y", "Kiwi.md": "oi", "c.pdf": "%PDF", "latin1.txt": new Uint8Array([0x61, 0xe7]) });
+    writeFileSync(path.join(dir, "fora.txt"), "de fora");
+    symlinkSync(path.join(dir, "fora.txt"), path.join(root, "atalho.txt"));
+    const version = versionOf("a");
+    const code = (p: unknown, content: unknown = "novo", base: unknown = version) => v.saveFile(p, content, base).then((r) => (r.saved ? "saved" : "stale"), (e) => (e as { code?: string }).code);
+    expect(await code("b.csv")).toBe("E_BAD_ARGS");
+    expect(await code("c.pdf")).toBe("E_BAD_ARGS");
+    expect(await code("Kiwi.md")).toBe("E_BAD_ARGS");
+    expect(await code("novo.txt")).toBe("E_NOT_FOUND");
+    expect(await code("atalho.txt")).toBe("E_OUTSIDE_VAULT");
+    expect(await code("../fora.txt")).toBe("E_OUTSIDE_VAULT");
+    expect(await code("a.txt", 42)).toBe("E_BAD_ARGS");
+    expect(await code("a.txt", "novo", null)).toBe("E_BAD_ARGS");
+    expect(await code("a.txt", "x".repeat(MAX_VIEW_TEXT_BYTES + 1))).toBe("E_BAD_ARGS");
+    // O que não é UTF-8 não é gravado por cima, nem com a versão "certa".
+    const latin = await v.readFile("latin1.txt", "text");
+    expect(await code("latin1.txt", "ac", "version" in latin ? latin.version : "")).toBe("E_BAD_ARGS");
+    expect(readFileSync(path.join(root, "latin1.txt")).equals(Buffer.from([0x61, 0xe7]))).toBe(true);
+    expect(read(dir, "fora.txt")).toBe("de fora");
+    expect(read(root, "a.txt")).toBe("a");
+    expect(await code("a.txt")).toBe("saved");
+    expect(read(root, "a.txt")).toBe("novo");
+  });
+
+  test("pela capacidade `files.save` do contrato", async () => {
+    const { v, root } = await vault({ "a.yaml": "a: 1\n" });
+    const caps = uiCapabilities({
+      dictionary: { load: async () => [], save: async (t) => t },
+      snippets: { load: async () => [], save: async (s) => s },
+      history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+      dictationNotes: { toNew: async () => { throw new Error("not used") }, append: async () => { throw new Error("not used") } },
+      settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
+      clipboardWrite: () => {},
+      notes: v,
+    });
+    const call = (args: unknown) => directInvoke(caps, "files.save", args);
+    expect(UI_CAPABILITIES).toContain("files.save");
+    expect(await call({ path: "a.yaml", content: "a: 2\n", baseVersion: versionOf("a: 1\n") })).toMatchObject({ ok: true, value: { saved: true, version: versionOf("a: 2\n") } });
+    expect(read(root, "a.yaml")).toBe("a: 2\n");
+    expect(await call({ path: "a.yaml", content: "a: 3\n", baseVersion: "velha" })).toMatchObject({ ok: true, value: { saved: false } });
+    expect(await call({ path: "a.yaml", content: "a: 3\n" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call({ path: "a.yaml", content: "a: 3\n", baseVersion: "x", extra: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+  });
 });

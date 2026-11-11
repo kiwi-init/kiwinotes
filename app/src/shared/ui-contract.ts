@@ -12,7 +12,7 @@ import type { HistoryEntry, HistoryPage } from "../store/history.ts";
 import type { AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
-import type { Backlink, CanvasFile, CanvasSaveResult, FileContent, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
+import type { Backlink, CanvasFile, CanvasSaveResult, FileContent, FileSaveResult, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
 } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
@@ -119,7 +119,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.38.0 (T6602): o modo preciso do ditado: `preciseDictation` nas settings e o `dictation.preciseStatus`. Só acréscimo.
 // 1.39.0 (T7103, spec #7079): o `files.read`, o conteúdo de um arquivo do cofre que não é nota, para as Notas
 //   mostrarem na própria janela. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.39.0";
+// 1.40.0 (T7105, spec #7079): o `files.save`, que grava um texto do cofre (txt, log, json, yaml) aberto nas Notas, e
+//   o `readOnly` no `files.read` de um texto que não é UTF-8. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.40.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -259,6 +261,12 @@ export interface UiCapabilities {
    * de dentro do cofre; nota (`.md`) dá E_BAD_ARGS.
    */
   "files.read": { args: { path: string; as?: "text" | "binary" }; result: FileContent };
+  /**
+   * Grava um texto do vault aberto nas Notas (1.40.0, T7105): só `.txt`, `.log`, `.json`, `.yaml` e `.yml`, só num
+   * arquivo que já existe, até 5 MB. Condicional como o save das notas: com `baseVersion` velha não escreve e devolve
+   * o de agora. Outro tipo de arquivo, ou um texto que não é UTF-8 (`readOnly` no `files.read`), dá E_BAD_ARGS.
+   */
+  "files.save": { args: { path: string; content: string; baseVersion: string }; result: FileSaveResult };
   /**
    * O quadro branco (1.37.0, T6600): o texto do `.canvas` e a versão. O save é condicional como o das notas (com
    * `baseVersion` velha não escreve e devolve o de agora) e recusa o que não abre como JSON Canvas. O create aceita o
@@ -447,6 +455,7 @@ export const UI_CAPABILITIES = [
   "notes.reveal",
   "files.open",
   "files.read",
+  "files.save",
   "notes.canvasGet",
   "notes.canvasSave",
   "notes.canvasCreate",

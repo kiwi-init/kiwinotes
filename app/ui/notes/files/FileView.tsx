@@ -2,36 +2,41 @@
 // app padrão" e, embaixo, o visualizador do tipo (`viewers.ts`). O view só lê: nada aqui escreve no arquivo. Grande
 // demais, sem visualizador, sumido ou com erro, ele diz o que houve e oferece o app padrão.
 
-import { useEffect, useState } from "react";
+import { type MutableRefObject, useEffect, useRef, useState } from "react";
 
 import { fileSize } from "../../../src/shared/file-view.ts";
 import { fileType } from "../tree.ts";
 import { TreeIcon } from "../treeIcons.tsx";
-import type { NotesApi } from "../types.ts";
-import { type FileState, type FileViewer, loadFile, viewerFor } from "./viewers.ts";
+import { type FilesApi, type FileState, type FileViewer, loadFile, viewerFor } from "./viewers.ts";
 import "./files.css";
 
-export type FilesApi = NonNullable<NotesApi["files"]> & { read: NonNullable<NonNullable<NotesApi["files"]>["read"]> };
+export type { FilesApi };
 
 interface Props {
   files: FilesApi;
   path: string;
   /** O "Abrir no app padrão": quem abre é as Notas, que já sabem dizer quando não deu. */
   onOpenExternal(path: string): void;
+  /** O "grava antes de sair" do visualizador que edita (T7105); as Notas chamam antes de trocar de nota ou de view. */
+  flushRef: MutableRefObject<(() => Promise<boolean>) | null>;
   /** Só para testes e para os PRs dos formatos: no app, o visualizador vem do registro. */
   viewer?: FileViewer;
 }
 
-export function FileView({ files, path, onOpenExternal, viewer = viewerFor(path) }: Props) {
+export function FileView({ files, path, onOpenExternal, flushRef, viewer = viewerFor(path) }: Props) {
   const [state, setState] = useState<FileState>({ kind: "loading" });
+  const generation = useRef(0);
   const name = path.split("/").at(-1)!;
 
   useEffect(() => {
     let alive = true;
-    const load = () =>
+    // Duas leituras seguidas podem chegar fora de ordem: só a última pedida vale (revisão do T7103).
+    const load = () => {
+      const mine = ++generation.current;
       void loadFile(files.read, path, viewer).then((s) => {
-        if (alive) setState(s);
+        if (alive && mine === generation.current) setState(s);
       });
+    };
     setState({ kind: "loading" });
     load();
     // Mudou no disco (outro app gravou): o view lê de novo, sem piscar o "carregando".
@@ -70,7 +75,7 @@ export function FileView({ files, path, onOpenExternal, viewer = viewerFor(path)
       </header>
       <div className="kn-file-body" aria-busy={state.kind === "loading" ? "true" : undefined}>
         {state.kind === "ready" ? (
-          <state.viewer.View path={path} file={state.file} />
+          <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} />
         ) : state.kind === "tooLarge" ? (
           notice(`Este arquivo tem ${fileSize(state.size)}, e o Kiwi Notes mostra aqui até ${fileSize(state.limit)}.`)
         ) : state.kind === "unsupported" ? (

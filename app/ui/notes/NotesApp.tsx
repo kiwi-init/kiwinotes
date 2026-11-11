@@ -159,6 +159,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [view, setView] = useState<"note" | "trash" | "canvas" | "file">("note");
   /** O arquivo que não é nota aberto no lugar dela (T7103, spec #7079). */
   const [fileOpen, setFileOpen] = useState<string | null>(null);
+  /** O "grava antes de sair" do arquivo aberto, quando o visualizador edita (T7105). */
+  const fileFlush = useRef<(() => Promise<boolean>) | null>(null);
   /** O quadro branco aberto (T6600), e o "grava antes de sair" dele. */
   const [board, setBoard] = useState<string | null>(null);
   const boardFlush = useRef<(() => Promise<boolean>) | null>(null);
@@ -367,6 +369,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const leave = useCallback(async (): Promise<boolean> => {
     // O quadro aberto grava primeiro; com conflito ou erro, fica nele com o aviso.
     if (boardFlush.current && !(await boardFlush.current())) return false;
+    // O texto aberto no view de arquivo também (T7105).
+    if (fileFlush.current && !(await fileFlush.current())) return false;
     for (let i = 0; i < 3; i++) {
       const outcome = await save();
       if (outcome === "conflict" || outcome === "error") {
@@ -1291,6 +1295,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             key={fileOpen}
             files={api.files as FilesApi}
             path={fileOpen}
+            flushRef={fileFlush}
             onOpenExternal={(p) => void api.files?.open(p).catch(failed_("abrir o arquivo"))}
           />
         ) : view === "trash" && api.extras ? (

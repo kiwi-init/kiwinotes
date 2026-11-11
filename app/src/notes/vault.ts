@@ -11,14 +11,14 @@ import { lexicalMatch, lexicalWords } from "../shared/lexical.ts";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { type FSWatcher, watch } from "node:fs";
-import { lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import path from "node:path";
 
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
-import { viewLimit } from "../shared/file-view.ts";
+import { isEditableText, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -64,9 +64,14 @@ export interface CanvasFile {
  * do limite (`viewLimit`), só o tamanho: a UI avisa e oferece o app padrão.
  */
 export type FileContent =
-  | { path: string; size: number; version: string; text: string }
+  | { path: string; size: number; version: string; text: string; /** Não é UTF-8: o texto perdeu bytes, e o `files.save` o recusaria (T7105). */ readOnly?: true }
   | { path: string; size: number; version: string; base64: string }
   | { path: string; size: number; tooLarge: true; limit: number };
+
+/** O `files.save` (T7105): gravou, ou o arquivo mudou desde `baseVersion` e volta o de agora, sem escrever. */
+export type FileSaveResult =
+  | { saved: true; path: string; size: number; version: string }
+  | { saved: false; current: FileContent };
 
 export type CanvasSaveResult = { saved: true; path: string; version: string } | { saved: false; current: CanvasFile };
 
@@ -571,15 +576,17 @@ export class Vault {
 
   /**
    * Lê um arquivo do cofre que não é nota (spec #7079), como texto (UTF-8) ou em binário (base64). Só arquivo de
-   * verdade: um link simbólico, uma pasta ou um pacote dão E_NOT_FOUND, e nada sai do cofre (`inside`). O tamanho é
-   * conferido antes de ler; acima do limite, volta `tooLarge` sem o conteúdo.
+   * verdade: um link simbólico, uma pasta, um pacote (`.pages`, `.key`) ou o que está dentro de um pacote dão
+   * E_NOT_FOUND, e nada sai do cofre (`inside`). O tamanho é conferido antes de ler; acima do limite, volta `tooLarge`
+   * sem o conteúdo. Um texto que não é UTF-8 volta com `readOnly`: ele aparece, mas não é gravado por cima.
    */
   async readFile(input: unknown, as: unknown = "binary"): Promise<FileContent> {
     if (as !== "text" && as !== "binary") throw new VaultError("E_BAD_ARGS", "as must be text or binary");
     const p = filePath(input);
     const abs = inside(this.root, p);
     const s = await lstat(abs).catch(() => null);
-    if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
+    // O que está dentro de um pacote é do app dono dele (revisão do T7103).
+    if (!s?.isFile() || this.packageOf(p)) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     const limit = viewLimit(as);
     if (s.size > limit) return { path: p, size: s.size, tooLarge: true, limit };
     let bytes: Buffer;
@@ -591,9 +598,30 @@ export class Vault {
     // O arquivo cresceu entre o `lstat` e a leitura.
     if (bytes.length > limit) return { path: p, size: bytes.length, tooLarge: true, limit };
     const version = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
-    return as === "text"
-      ? { path: p, size: bytes.length, version, text: bytes.toString("utf8") }
-      : { path: p, size: bytes.length, version, base64: bytes.toString("base64") };
+    if (as === "binary") return { path: p, size: bytes.length, version, base64: bytes.toString("base64") };
+    const text = bytes.toString("utf8");
+    const utf8 = Buffer.from(text, "utf8").equals(bytes);
+    return { path: p, size: bytes.length, version, text, ...(utf8 ? {} : { readOnly: true as const }) };
+  }
+
+  /**
+   * Grava um texto do cofre que as Notas abrem editável (T7105): só `.txt`, `.log`, `.json`, `.yaml` e `.yml`, só num
+   * arquivo que já existe, e só se ninguém o mudou desde `baseVersion` (senão devolve o de agora, sem escrever). A
+   * escrita é a troca atômica das notas. Um arquivo que não é UTF-8 nunca casa com a versão: não é gravado por cima.
+   */
+  async saveFile(input: unknown, content: unknown, baseVersion: unknown): Promise<FileSaveResult> {
+    const p = filePath(input);
+    if (!isEditableText(p)) throw new VaultError("E_BAD_ARGS", "only txt, log, json, yaml and yml files are saved");
+    if (typeof content !== "string") throw new VaultError("E_BAD_ARGS", "content must be a string");
+    const size = Buffer.byteLength(content, "utf8");
+    if (size > MAX_VIEW_TEXT_BYTES) throw new VaultError("E_BAD_ARGS", "content is larger than 5 MB");
+    if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
+    const current = await this.readFile(p, "text");
+    if ("tooLarge" in current || !("text" in current) || current.readOnly) throw new VaultError("E_BAD_ARGS", `${p} can't be saved as text`);
+    if (current.version !== baseVersion) return { saved: false, current };
+    if (!(await this.replaceChecked(p, content, baseVersion))) return { saved: false, current: await this.readFile(p, "text") };
+    await this.fileWritten(p);
+    return { saved: true, path: p, size, version: versionOf(content) };
   }
 
   async get(input: unknown): Promise<Note> {
@@ -1384,6 +1412,10 @@ export class Vault {
           return false;
         }
       }
+      // O arquivo novo fica com as permissões do que ele troca (revisão do T7105): sem isto, um `600` privado ou um
+      // `755` voltava `644` a cada save, de nota, de quadro ou de texto.
+      const old = await stat(abs).catch(() => null);
+      if (old) await chmod(temp, old.mode & 0o7777);
       await rename(temp, abs);
       await syncDir(path.dirname(abs));
     } catch (e) {
