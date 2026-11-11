@@ -35,6 +35,8 @@ export interface FileViewer {
 // O visualizador de pdf traz o pdf.js (1,7 MB com o worker): só carrega quando um pdf abre. O `FileView` espera por
 // ele num <Suspense>.
 const PdfViewer = lazy(() => import("./PdfViewer.tsx").then((m) => ({ default: m.PdfViewer })));
+// O de docx traz o mammoth: também só quando um docx abre.
+const DocxViewer = lazy(() => import("./DocxViewer.tsx").then((m) => ({ default: m.DocxViewer })));
 
 const text: FileViewer = { as: "text", View: TextViewer };
 const table: FileViewer = { as: "text", View: TableViewer };
@@ -51,6 +53,8 @@ export const VIEWERS: Record<string, FileViewer> = {
   tsv: table,
   // T7109: o pdf, pelo pdf.js do pack.
   pdf: { as: "binary", View: PdfViewer },
+  // T7110: o docx formatado, pelo mammoth do pack. Só o `.docx`: o `.doc` antigo é outro formato.
+  docx: { as: "binary", View: DocxViewer },
 };
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */

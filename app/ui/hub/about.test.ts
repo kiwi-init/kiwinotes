@@ -57,12 +57,30 @@ describe("app.about e updates.* (contrato 1.6.0)", () => {
 });
 
 describe("os créditos (spec #7079)", () => {
-  test("o PDF.js aparece com a licença que o pacote declara", async () => {
-    const pkg = (await import("pdfjs-dist/package.json")).default as { license: string };
-    const pdf = CREDITS.find((c) => c.name === "PDF.js");
-    expect(pdf?.license).toBe(pkg.license);
-    expect(creditsLine()).toBe("Com PDF.js, da Mozilla (Apache-2.0).");
+  test("cada biblioteca aparece com a licença que o pacote dela declara", async () => {
+    const pdf = (await import("pdfjs-dist/package.json")).default as { license: string };
+    const mammoth = (await import("mammoth/package.json")).default as { license: string };
+    expect(CREDITS.find((c) => c.name === "PDF.js")?.license).toBe(pdf.license);
+    expect(CREDITS.find((c) => c.name === "Mammoth")?.license).toBe(mammoth.license);
+    expect(creditsLine()).toBe("Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause).");
     expect(creditsLine([])).toBe("");
-    expect(creditsLine([...CREDITS, { name: "X", by: "Y", license: "MIT", use: "z" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, da Y (MIT).");
+    expect(creditsLine([CREDITS[0]!, { name: "X", by: "Y", license: "MIT", use: "z", pkg: "x" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, de Y (MIT).");
+  });
+});
+
+describe("o arquivo de avisos de terceiros (revisão do T7109)", () => {
+  test("está em dia: o texto inteiro de cada licença, como o pacote instalado traz", async () => {
+    const { currentNotices, NOTICES_PATH } = await import("../../scripts/third-party-notices.ts");
+    const { readFileSync } = await import("node:fs");
+    const file = readFileSync(NOTICES_PATH, "utf8");
+    expect(file).toBe(currentNotices());
+    expect(file).toContain("Apache License");
+    expect(file).toContain("Version 2.0, January 2004");
+    expect(file).toContain("Redistribution and use in source and binary forms");
+    for (const c of CREDITS) expect(file).toContain(`(${c.pkg}), de ${c.by}`);
+    // As dependências que vão junto também (revisão do T7110): as do mammoth, com a licença MIT do jszip e a do pako.
+    for (const dep of ["jszip", "pako", "@xmldom/xmldom", "underscore", "lop"]) expect(file).toContain(`(${dep}), de seus autores`);
+    // O que é só para Node, opcional, não entra (o canvas do pdf.js).
+    expect(file).not.toContain("@napi-rs/canvas");
   });
 });
