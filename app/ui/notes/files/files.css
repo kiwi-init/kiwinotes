@@ -298,3 +298,82 @@
 .kn-file-pdf-mark[data-current] {
   background: rgba(255, 138, 0, 0.55);
 }
+
+/* ---------------------------------------------------------- o docx (T7110) */
+
+.kn-file-docx {
+  height: 100%;
+  overflow: auto;
+}
+
+.kn-file-docx-note {
+  margin-bottom: 0;
+}
+
+/* a coluna do texto, na fonte e na largura das notas */
+.kn-file-docx-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 40px 64px;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-user-select: text;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.kn-file-docx-page h1,
+.kn-file-docx-page h2,
+.kn-file-docx-page h3,
+.kn-file-docx-page h4 {
+  margin: 1.4em 0 0.5em;
+  font-family: var(--font-display, var(--font));
+  letter-spacing: var(--tracking-display, normal);
+  line-height: 1.25;
+}
+
+.kn-file-docx-page h1 { font-size: 26px; }
+.kn-file-docx-page h2 { font-size: 20px; }
+.kn-file-docx-page h3 { font-size: 17px; }
+.kn-file-docx-page > :first-child { margin-top: 0; }
+
+.kn-file-docx-page p { margin: 0 0 0.8em; }
+.kn-file-docx-page ul,
+.kn-file-docx-page ol { margin: 0 0 0.8em; padding-left: 1.5em; }
+
+/* só o link que passou pela lista; um `<a>` sem `href` (um `javascript:` que saiu) é texto comum */
+.kn-file-docx-page a[href] {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: default;
+}
+
+.kn-file-docx-page img {
+  max-width: 100%;
+  height: auto;
+}
+
+.kn-file-docx-page table {
+  border-collapse: collapse;
+  margin: 0 0 1em;
+  font-size: 14px;
+}
+
+.kn-file-docx-page td,
+.kn-file-docx-page th {
+  padding: 6px 10px;
+  border: 1px solid var(--border, var(--surface-2));
+  vertical-align: top;
+}
+
+.kn-file-docx-page td > p:last-child,
+.kn-file-docx-page th > p:last-child { margin-bottom: 0; }
+
+.kn-file-docx-page blockquote {
+  margin: 0 0 0.8em;
+  padding-left: 14px;
+  border-left: 3px solid var(--surface-2);
+  color: var(--text-2);
+}

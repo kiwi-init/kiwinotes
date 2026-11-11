@@ -1,0 +1,32 @@
+{
+  "window": "notes",
+  "steps": [
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Docs/proposta.docx, a cópia de test/fixtures/files/proposta.docx, e uma nota)" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Docs')", "name": "abre a pasta Docs" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('proposta')", "name": "clica no docx" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-docx-page h1", "timeout": 15000, "name": "o docx abre nas Notas, formatado" },
+    { "expectText": ".kn-file-title", "text": "proposta.docx" },
+    { "expectText": ".kn-file-docx-page h1", "text": "Proposta de mudança", "name": "o título" },
+    { "expectCount": ".kn-file-docx-page h2", "count": 3, "name": "os subtítulos" },
+    { "expectCount": ".kn-file-docx-page strong", "count": 1, "name": "o negrito" },
+    { "expectCount": ".kn-file-docx-page em", "count": 1, "name": "o itálico" },
+    { "expectCount": ".kn-file-docx-page ul li", "count": 3, "name": "a lista" },
+    { "expectCount": ".kn-file-docx-page table tr", "count": 3, "name": "a tabela" },
+    { "expectText": ".kn-file-docx-page table", "text": "R$ 2.400,00" },
+    { "expectCount": ".kn-file-docx-page img[alt='A planta da sala'][src^='data:image/png']", "count": 1, "name": "a imagem, dentro do próprio documento" },
+    { "expectText": ".kn-file-docx-page", "text": "& o orçamento <aprovado>.", "name": "o texto escapado aparece como texto" },
+    { "expectCount": ".kn-file-docx-page a[href='https://example.com/fornecedor']", "count": 1, "name": "o link de fora segue link" },
+    { "expectCount": ".kn-file-docx-page a[href^='javascript']", "count": 0, "name": "o link javascript: do documento não vira link" },
+    { "expectText": ".kn-file-docx-page", "text": "um link perigoso", "name": "o texto dele fica" },
+    { "expectSame": ".kn-file-docx-page a:not([href])", "as": ".kn-file-docx-page p:last-child", "property": "color", "name": "e com a cor do texto, não de link" },
+    { "expectCount": ".kn-file-docx-note", "count": 0, "name": "nada ficou de fora da conversão" },
+    { "screenshot": "01-docx.png" },
+    { "scroll": ".kn-file-docx", "y": 1200 },
+    { "screenshot": "02-docx-fim.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='note']", "name": "clicar numa nota volta para o editor" },
+    { "waitFor": ".kn-note-editor .cm-content" },
+    { "expectCount": ".kn-file", "count": 0 }
+  ]
+}

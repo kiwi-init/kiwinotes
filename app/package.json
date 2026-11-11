@@ -35,6 +35,7 @@
     "@orama/stemmers": "3.1.18",
     "@rive-app/canvas-single": "2.45.0",
     "katex": "0.18.10",
+    "mammoth": "1.13.0",
     "mermaid": "12.2.0",
     "onnxruntime-node": "1.30.0",
     "pdfjs-dist": "6.5.438",

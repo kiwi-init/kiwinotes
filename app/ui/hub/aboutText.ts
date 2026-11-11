@@ -39,12 +39,22 @@ export function statusLine(v: UpdatesView): string {
  * O software de terceiros que vai dentro do app e pede crédito (spec #7079): cada visualizador de arquivo das Notas
  * que usa uma biblioteca entra aqui, com a licença dela.
  */
-export const CREDITS: readonly { name: string; by: string; license: string; use: string }[] = [
-  { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas" },
+export const CREDITS: readonly { name: string; by: string; license: string; use: string; /** O pacote npm, de onde vem o texto da licença. */ pkg: string }[] = [
+  { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas", pkg: "pdfjs-dist" },
+  { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "abrir docx nas Notas", pkg: "mammoth" },
 ];
 
-/** A linha de créditos do Sobre: "Com PDF.js, da Mozilla (Apache-2.0)". */
+/** O arquivo com o texto de cada licença, que vai no pack das Notas (`ui/notes/public/`, copiado para `dist/notes/`). */
+export const NOTICES_FILE = "THIRD_PARTY_NOTICES.txt";
+
+/** O texto do arquivo de avisos: cada biblioteca, com a versão e a licença inteira, como o pacote dela traz. */
+export function noticesText(items: readonly { name: string; by: string; license: string; use: string; pkg: string; version: string; text: string }[]): string {
+  const head = "Kiwi Notes: software de terceiros que vai dentro do app, com as licenças.\nGerado por `bun scripts/third-party-notices.ts`; não edite à mão.\n";
+  return [head, ...items.map((i) => `${"=".repeat(78)}\n${i.name} ${i.version} (${i.pkg}), de ${i.by}: ${i.use}\nLicença: ${i.license}\n\n${i.text.trim()}\n`)].join("\n");
+}
+
+/** A linha de créditos do Sobre: "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, …". */
 export function creditsLine(credits = CREDITS): string {
   if (!credits.length) return "";
-  return `Com ${credits.map((c) => `${c.name}, da ${c.by} (${c.license})`).join("; ")}.`;
+  return `Com ${credits.map((c) => `${c.name}, ${c.by.startsWith("Mozilla") ? "da" : "de"} ${c.by} (${c.license})`).join("; ")}.`;
 }
