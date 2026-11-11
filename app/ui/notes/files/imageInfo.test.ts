@@ -46,12 +46,7 @@ test("o tipo pelos bytes e o tamanho pelo cabeçalho: png, jpeg, gif, webp, bmp,
   new DataView(bmp.buffer).setInt32(18, 100, true);
   new DataView(bmp.buffer).setInt32(22, -50, true); // altura negativa: a imagem de cima para baixo
   expect(imageInfo(bmp)).toMatchObject({ type: "bmp", width: 100, height: 50 });
-  const heic = new Uint8Array(64);
-  heic.set(new TextEncoder().encode("ftypheic"), 4);
-  heic.set(new TextEncoder().encode("ispe"), 30);
-  new DataView(heic.buffer).setUint32(38, 4032);
-  new DataView(heic.buffer).setUint32(42, 3024);
-  expect(imageInfo(heic)).toMatchObject({ type: "heic", mime: "image/heic", width: 4032, height: 3024 });
+  expect(imageInfo(heicWith([[4032, 3024]]))).toMatchObject({ type: "heic", mime: "image/heic", width: 4032, height: 3024 });
   for (const svg of ['<svg xmlns="http://www.w3.org/2000/svg"/>', '﻿  <?xml version="1.0"?>\n<svg width="10">', "<!-- logo -->\n<svg>"]) {
     expect(imageInfo(new TextEncoder().encode(svg))).toMatchObject({ type: "svg", mime: "image/svg+xml", width: null });
   }
@@ -87,4 +82,73 @@ test("o zoom anda pelos degraus, e o ajuste cabe a imagem inteira sem passar do 
   expect(fitScale(4000, 3000, 1000, 600)).toBe(0.2);
   expect(fitScale(100, 50, 1000, 600)).toBe(1);
   expect(fitScale(0, 50, 1000, 600)).toBe(1);
+});
+
+/** Um jpeg com `extra` bytes de metadados (APP1 e APP2) antes do SOF de `w` × `h`. */
+function jpegWithMeta(extra: number, w: number, h: number): Uint8Array {
+  const parts: number[] = [0xff, 0xd8];
+  for (let left = extra; left > 0; ) {
+    const n = Math.min(left, 65_000);
+    parts.push(0xff, 0xe1, ((n + 2) >> 8) & 0xff, (n + 2) & 0xff, ...new Array(n).fill(0x41));
+    left -= n;
+  }
+  parts.push(0xff, 0xc0, 0x00, 0x11, 0x08, (h >> 8) & 0xff, h & 0xff, (w >> 8) & 0xff, w & 0xff, 0x03);
+  return Uint8Array.from(parts);
+}
+
+/** Um HEIC com `ftyp`, um `meta` com as caixas `ispe` dadas, e um `mdat` com "ispe" por acaso no meio dos bytes. */
+function heicWith(sizes: [number, number][], mdatTrap = false): Uint8Array {
+  const box = (type: string, body: Uint8Array) => {
+    const out = new Uint8Array(8 + body.length);
+    new DataView(out.buffer).setUint32(0, out.length);
+    out.set(new TextEncoder().encode(type), 4);
+    out.set(body, 8);
+    return out;
+  };
+  const ispe = ([w, h]: [number, number]) => {
+    const body = new Uint8Array(12);
+    new DataView(body.buffer).setUint32(4, w);
+    new DataView(body.buffer).setUint32(8, h);
+    return box("ispe", body);
+  };
+  const cat = (...p: Uint8Array[]) => {
+    const out = new Uint8Array(p.reduce((n, x) => n + x.length, 0));
+    let at = 0;
+    for (const x of p) {
+      out.set(x, at);
+      at += x.length;
+    }
+    return out;
+  };
+  const trap = new Uint8Array(32);
+  trap.set(new TextEncoder().encode("ispe"), 4);
+  new DataView(trap.buffer).setUint32(12, 90_000);
+  new DataView(trap.buffer).setUint32(16, 90_000);
+  return cat(box("ftyp", new TextEncoder().encode("heic\0\0\0\0mif1heic")), box("meta", cat(new Uint8Array(4), ...sizes.map(ispe))), ...(mdatTrap ? [box("mdat", trap)] : []));
+}
+
+test("revisão do T7113: o jpeg com 74 KB de metadados antes do SOF tem o tamanho achado, e a bomba é recusada", () => {
+  expect(imageInfo(jpegWithMeta(74 * 1024, 30_000, 30_000))).toMatchObject({ type: "jpeg", width: 30_000, height: 30_000 });
+  expect(imageProblem(imageInfo(jpegWithMeta(74 * 1024, 30_000, 30_000)))).toBe("tooLarge");
+  expect(imageProblem(imageInfo(jpegWithMeta(200 * 1024, 4032, 3024)))).toBeNull();
+});
+
+test("revisão do T7113: no HEIC vale o maior ispe do meta, e o mdat não engana", () => {
+  expect(imageInfo(heicWith([[512, 512], [40_000, 40_000], [320, 240]]))).toMatchObject({ type: "heic", width: 40_000, height: 40_000 });
+  expect(imageProblem(imageInfo(heicWith([[512, 512], [40_000, 40_000]])))).toBe("tooLarge");
+  // A grade do iPhone: tiles de 512 e a imagem inteira de 4032 × 3024; e "ispe" solto no mdat não conta.
+  expect(imageInfo(heicWith([[512, 512], [4032, 3024], [320, 240]], true))).toMatchObject({ width: 4032, height: 3024 });
+  // O último ispe terminando exatamente no fim do meta (e do arquivo) também conta.
+  expect(imageInfo(heicWith([[4032, 3024]]))).toMatchObject({ width: 4032, height: 3024 });
+});
+
+test("revisão do T7113: imagem de pixels sem tamanho achado é recusada; o SVG passa", () => {
+  // Um jpeg sem SOF, um heic sem meta, um webp de chunk desconhecido.
+  expect(imageProblem(imageInfo(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xd9, 0, 0, 0, 0, 0, 0])))).toBe("unknown");
+  expect(imageProblem(imageInfo(heicWith([]).subarray(0, 28)))).toBe("unknown");
+  const webp = new Uint8Array(30);
+  webp.set(new TextEncoder().encode("RIFF"), 0);
+  webp.set(new TextEncoder().encode("WEBPXXXX"), 8);
+  expect(imageProblem(imageInfo(webp))).toBe("unknown");
+  expect(imageProblem(imageInfo(new TextEncoder().encode("<svg/>")))).toBeNull();
 });

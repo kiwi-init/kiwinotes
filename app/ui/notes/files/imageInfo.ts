@@ -49,14 +49,41 @@ function jpegSize(b: Uint8Array): [number, number] | null {
   return null;
 }
 
-/** As dimensões de um HEIC: a caixa `ispe` (o tamanho da imagem) traz largura e altura em 32 bits. */
+/**
+ * As dimensões de um HEIC: a maior caixa `ispe` (o tamanho de cada imagem) dentro da caixa `meta`. O HEIC do iPhone é
+ * uma grade: os tiles de 512 × 512 e a miniatura também têm `ispe`, e o primeiro raramente é o da imagem inteira
+ * (revisão do T7113). A busca fica dentro do `meta`: no `mdat`, os bytes da imagem podem formar "ispe" por acaso.
+ */
 function heicSize(b: Uint8Array, view: DataView): [number, number] | null {
-  // A caixa fica no começo (dentro do `meta`); procura nos primeiros 64 KB.
-  const end = Math.min(b.length - 16, 64 * 1024);
-  for (let i = 4; i < end; i++) {
-    if (b[i] === 0x69 && ascii(b, i, 4) === "ispe") return [view.getUint32(i + 8), view.getUint32(i + 12)];
+  let at = 0;
+  let meta: [number, number] | null = null;
+  // As caixas do topo: tamanho (32 bits, 1 = 64 bits, 0 = até o fim) e tipo.
+  while (at + 8 <= b.length) {
+    let size = view.getUint32(at);
+    let head = 8;
+    if (size === 1) {
+      if (at + 16 > b.length) return null;
+      size = Number(view.getBigUint64(at + 8));
+      head = 16;
+    } else if (size === 0) size = b.length - at;
+    if (size < head) return null;
+    if (ascii(b, at + 4, 4) === "meta") {
+      meta = [at + head, Math.min(b.length, at + size)];
+      break;
+    }
+    at += size;
   }
-  return null;
+  if (!meta) return null;
+  let best: [number, number] | null = null;
+  // `ispe`, 4 bytes de versão e flags, a largura e a altura: 16 bytes a partir do tipo. O último pode terminar
+  // exatamente no fim do `meta`.
+  for (let i = meta[0]; i + 16 <= meta[1]; i++) {
+    if (b[i] !== 0x69 || ascii(b, i, 4) !== "ispe") continue;
+    const w = view.getUint32(i + 8);
+    const h = view.getUint32(i + 12);
+    if (!best || w * h > best[0] * best[1]) best = [w, h];
+  }
+  return best;
 }
 
 /** O tipo e o tamanho da imagem, ou `null` quando os bytes não são de nenhuma imagem que as Notas mostram. */
@@ -81,14 +108,18 @@ export function imageInfo(bytes: Uint8Array): ImageInfo | null {
   if (b.length >= 12 && ascii(b, 4, 4) === "ftyp" && /^(heic|heix|heim|heis|hevc|hevx|mif1|msf1)$/.test(ascii(b, 8, 4))) return make("heic", heicSize(b, view));
   // O SVG é texto: o começo, sem o BOM e os espaços, é `<svg`, `<?xml` ou um comentário, e há um `<svg` perto.
   const head = new TextDecoder().decode(b.subarray(0, 4096)).replace(/^﻿/, "").trimStart();
-  if (/^(<\?xml|<!--|<!doctype svg|<svg)/i.test(head) && /<svg[\s>]/i.test(head)) return make("svg", null);
+  if (/^(<\?xml|<!--|<!doctype svg|<svg)/i.test(head) && /<svg[\s/>]/i.test(head)) return make("svg", null);
   return null;
 }
 
-/** Se a imagem pode ser mostrada: o tipo é conhecido e os pixels cabem. O formato que não diz o tamanho passa. */
+/**
+ * Se a imagem pode ser mostrada: o tipo é conhecido e os pixels cabem. Uma imagem de pixels cujo tamanho não se acha
+ * também é recusada (revisão do T7113): sem o tamanho, o teto não vale. Só o SVG, que é desenho, passa sem tamanho.
+ */
 export function imageProblem(info: ImageInfo | null): "unknown" | "tooLarge" | null {
   if (!info) return "unknown";
-  if (info.width !== null && info.height !== null && info.width * info.height > MAX_PIXELS) return "tooLarge";
+  if (info.width === null || info.height === null) return info.type === "svg" ? null : "unknown";
+  if (info.width * info.height > MAX_PIXELS) return "tooLarge";
   return null;
 }
 

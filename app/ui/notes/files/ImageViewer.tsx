@@ -10,7 +10,8 @@ import type { FileViewerProps } from "./viewers.ts";
 
 export function ImageViewer({ path, file }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
-  const info = useMemo(() => imageInfo(bytesOf(base64.slice(0, 96 * 1024 - (96 * 1024) % 4))), [base64]);
+  // O arquivo inteiro: o tamanho de um jpeg pode vir depois de 72 KB de metadados (revisão do T7113).
+  const info = useMemo(() => imageInfo(bytesOf(base64)), [base64]);
   const problem = imageProblem(info);
   /** `null`: ajustada à janela. */
   const [zoom, setZoom] = useState<number | null>(null);
@@ -35,7 +36,9 @@ export function ImageViewer({ path, file }: FileViewerProps) {
         <p>
           {problem === "tooLarge"
             ? `Esta imagem tem ${info?.width?.toLocaleString("pt-BR")} × ${info?.height?.toLocaleString("pt-BR")} pixels, grande demais para abrir aqui. Abra no app padrão.`
-            : "Não deu para mostrar esta imagem aqui. Abra no app padrão."}
+            : problem === "unknown" && info
+              ? "Não deu para saber o tamanho desta imagem, e por isso ela não abre aqui. Abra no app padrão."
+              : "Não deu para mostrar esta imagem aqui. Abra no app padrão."}
         </p>
       </div>
     );
