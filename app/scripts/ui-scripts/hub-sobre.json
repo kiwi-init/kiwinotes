@@ -10,6 +10,7 @@
     { "expectCount": ".kn-about-link:has-text('Notas desta versão')", "count": 0, "name": "sem notas da versão num build local" },
     { "expectText": ".kn-about-credits", "text": "PDF.js, da Mozilla (Apache-2.0)", "name": "o crédito do software de terceiros (spec #7079)" },
     { "expectText": ".kn-about-credits", "text": "Mammoth, de Michael Williamson (BSD-2-Clause)" },
+    { "expectText": ".kn-about-credits", "text": "SheetJS Community Edition, de SheetJS LLC (Apache-2.0)" },
     { "screenshot": "hub-sobre.png" }
   ]
 }

@@ -35,7 +35,6 @@ export function TableViewer({ path, file, files }: FileViewerProps) {
 
   const text = utf8 ? file.text : decoded && decoded !== "error" ? decoded.text : null;
   const table = useMemo(() => (text === null ? null : parseTable(text, path)), [text, path]);
-  const [shown, setShown] = useState(PAGE);
 
   if (decoded === "error" && !utf8) {
     return (
@@ -53,18 +52,38 @@ export function TableViewer({ path, file, files }: FileViewerProps) {
     );
   }
 
-  const columns = Array.from({ length: Math.min(table.columns, MAX_COLUMNS) }, (_, i) => i);
-  const rows = table.rows.slice(0, shown);
-  const more = table.rows.length - rows.length;
-  const hidden = table.columns - columns.length;
   const encoding = !utf8 && decoded && decoded !== "error" ? ENCODINGS[decoded.encoding] : null;
+  return <TableGrid header={table.header} rows={table.rows} columns={table.columns} foot={encoding ? `lido como ${encoding}` : null} />;
+}
+
+interface GridProps {
+  /** O nome de cada coluna; a que não tem nome mostra a letra (A, B…), como a planilha. */
+  header: string[];
+  rows: string[][];
+  columns: number;
+  /** Um trecho a mais no rodapé, depois de "N linhas · M colunas". */
+  foot?: string | null;
+  /** O número da primeira linha (a planilha começa no 1 da linha 1, e o csv conta depois do cabeçalho). */
+  firstRow?: number;
+}
+
+/**
+ * A tabela de leitura (T7107), para o csv e para a planilha (T7111): o cabeçalho fixo, a rolagem, o número de cada
+ * linha, `PAGE` linhas por vez e no máximo `MAX_COLUMNS` colunas, com o aviso das que ficaram de fora.
+ */
+export function TableGrid({ header, rows: all, columns: total, foot, firstRow = 1 }: GridProps) {
+  const [shown, setShown] = useState(PAGE);
+  const columns = Array.from({ length: Math.min(total, MAX_COLUMNS) }, (_, i) => i);
+  const rows = all.slice(0, shown);
+  const more = all.length - rows.length;
+  const hidden = total - columns.length;
   const n = (value: number) => value.toLocaleString("pt-BR");
 
   return (
     <div className="kn-file-table-wrap">
       {hidden > 0 ? (
         <div className="kn-file-text-note kn-file-table-note" role="status">
-          {`Esta tabela tem ${n(table.columns)} colunas. Aqui aparecem as primeiras ${n(MAX_COLUMNS)}; para ver todas, abra no app padrão.`}
+          {`Esta tabela tem ${n(total)} colunas. Aqui aparecem as primeiras ${n(MAX_COLUMNS)}; para ver todas, abra no app padrão.`}
         </div>
       ) : null}
       <div className="kn-file-table-scroll">
@@ -74,7 +93,7 @@ export function TableViewer({ path, file, files }: FileViewerProps) {
               <th className="kn-file-table-n" aria-label="Linha" />
               {columns.map((c) => (
                 <th key={c} scope="col">
-                  {table.header[c] || <span className="kn-faint">{columnName(c)}</span>}
+                  {header[c] || <span className="kn-faint">{columnName(c)}</span>}
                 </th>
               ))}
             </tr>
@@ -82,7 +101,7 @@ export function TableViewer({ path, file, files }: FileViewerProps) {
           <tbody>
             {rows.map((row, r) => (
               <tr key={r}>
-                <td className="kn-file-table-n">{r + 1}</td>
+                <td className="kn-file-table-n">{r + firstRow}</td>
                 {columns.map((c) => (
                   <td key={c}>{row[c] ?? ""}</td>
                 ))}
@@ -97,8 +116,8 @@ export function TableViewer({ path, file, files }: FileViewerProps) {
         ) : null}
       </div>
       <div className="kn-file-table-foot" aria-live="polite">
-        {`${n(table.rows.length)} ${table.rows.length === 1 ? "linha" : "linhas"} · ${n(table.columns)} ${table.columns === 1 ? "coluna" : "colunas"}`}
-        {encoding ? ` · lido como ${encoding}` : ""}
+        {`${n(all.length)} ${all.length === 1 ? "linha" : "linhas"} · ${n(total)} ${total === 1 ? "coluna" : "colunas"}`}
+        {foot ? ` · ${foot}` : ""}
       </div>
     </div>
   );

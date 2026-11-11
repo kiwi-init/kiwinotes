@@ -37,6 +37,8 @@ export interface FileViewer {
 const PdfViewer = lazy(() => import("./PdfViewer.tsx").then((m) => ({ default: m.PdfViewer })));
 // O de docx traz o mammoth: também só quando um docx abre.
 const DocxViewer = lazy(() => import("./DocxViewer.tsx").then((m) => ({ default: m.DocxViewer })));
+// O de xlsx traz o SheetJS: só quando uma planilha abre.
+const XlsxViewer = lazy(() => import("./XlsxViewer.tsx").then((m) => ({ default: m.XlsxViewer })));
 
 const text: FileViewer = { as: "text", View: TextViewer };
 const table: FileViewer = { as: "text", View: TableViewer };
@@ -55,6 +57,8 @@ export const VIEWERS: Record<string, FileViewer> = {
   pdf: { as: "binary", View: PdfViewer },
   // T7110: o docx formatado, pelo mammoth do pack. Só o `.docx`: o `.doc` antigo é outro formato.
   docx: { as: "binary", View: DocxViewer },
+  // T7111: a planilha, pelo SheetJS do pack. Só o `.xlsx` (o `.xls` antigo e o `.ods` seguem no app padrão).
+  xlsx: { as: "binary", View: XlsxViewer },
 };
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */

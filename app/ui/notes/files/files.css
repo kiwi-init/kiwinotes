@@ -377,3 +377,49 @@
   border-left: 3px solid var(--surface-2);
   color: var(--text-2);
 }
+
+/* ---------------------------------------------------------- a planilha (T7111) */
+
+.kn-file-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-sheet > .kn-file-table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.kn-file-sheet-note {
+  margin-bottom: 0;
+}
+
+.kn-file-sheet-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 10px 40px 8px;
+  overflow-x: auto;
+}
+
+.kn-file-sheet-tab {
+  flex: none;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--t-ui, 13px);
+  cursor: default;
+}
+
+.kn-file-sheet-tab:hover {
+  background: var(--surface-hover);
+}
+
+.kn-file-sheet-tab[aria-selected="true"] {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}

@@ -45,6 +45,7 @@
     "react-native": "file:./ui/stubs/react-native",
     "react-native-enriched-markdown": "1.1.1",
     "turndown": "7.2.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "yaml": "2.8.2"
   },
   "devDependencies": {
