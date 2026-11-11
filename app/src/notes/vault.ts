@@ -18,6 +18,7 @@ import path from "node:path";
 import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
+import { viewLimit } from "../shared/file-view.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -58,6 +59,15 @@ export interface CanvasFile {
   content: string;
   version: string;
 }
+/**
+ * Um arquivo do cofre que não é nota, lido para as Notas mostrarem (spec #7079): o texto, ou os bytes em base64. Acima
+ * do limite (`viewLimit`), só o tamanho: a UI avisa e oferece o app padrão.
+ */
+export type FileContent =
+  | { path: string; size: number; version: string; text: string }
+  | { path: string; size: number; version: string; base64: string }
+  | { path: string; size: number; tooLarge: true; limit: number };
+
 export type CanvasSaveResult = { saved: true; path: string; version: string } | { saved: false; current: CanvasFile };
 
 /** O `.canvas` novo: o quadro vazio, no formato do Obsidian. */
@@ -557,6 +567,33 @@ export class Vault {
     if (s?.isDirectory() && this.packages.has(p)) return { abs, mode: 0 };
     if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     return { abs, mode: s.mode };
+  }
+
+  /**
+   * Lê um arquivo do cofre que não é nota (spec #7079), como texto (UTF-8) ou em binário (base64). Só arquivo de
+   * verdade: um link simbólico, uma pasta ou um pacote dão E_NOT_FOUND, e nada sai do cofre (`inside`). O tamanho é
+   * conferido antes de ler; acima do limite, volta `tooLarge` sem o conteúdo.
+   */
+  async readFile(input: unknown, as: unknown = "binary"): Promise<FileContent> {
+    if (as !== "text" && as !== "binary") throw new VaultError("E_BAD_ARGS", "as must be text or binary");
+    const p = filePath(input);
+    const abs = inside(this.root, p);
+    const s = await lstat(abs).catch(() => null);
+    if (!s?.isFile()) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
+    const limit = viewLimit(as);
+    if (s.size > limit) return { path: p, size: s.size, tooLarge: true, limit };
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(abs);
+    } catch {
+      throw new VaultError("E_NOT_FOUND", `no file ${p}`);
+    }
+    // O arquivo cresceu entre o `lstat` e a leitura.
+    if (bytes.length > limit) return { path: p, size: bytes.length, tooLarge: true, limit };
+    const version = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
+    return as === "text"
+      ? { path: p, size: bytes.length, version, text: bytes.toString("utf8") }
+      : { path: p, size: bytes.length, version, base64: bytes.toString("base64") };
   }
 
   async get(input: unknown): Promise<Note> {
