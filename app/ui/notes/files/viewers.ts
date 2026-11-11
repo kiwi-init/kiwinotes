@@ -2,7 +2,7 @@
 // Cada formato entra aqui no seu PR (txt, csv, pdf, docx, xlsx, draw.io, imagens). Um tipo sem visualizador segue
 // como sempre: o clique na árvore abre no app padrão do Mac.
 
-import type { ComponentType, MutableRefObject } from "react";
+import { type ComponentType, lazy, type MutableRefObject } from "react";
 
 import { extOf } from "../../../src/shared/attachments.ts";
 import type { FileReadAs } from "../../../src/shared/file-view.ts";
@@ -32,6 +32,10 @@ export interface FileViewer {
 }
 
 /** Por extensão, em minúsculas e sem o ponto. */
+// O visualizador de pdf traz o pdf.js (1,7 MB com o worker): só carrega quando um pdf abre. O `FileView` espera por
+// ele num <Suspense>.
+const PdfViewer = lazy(() => import("./PdfViewer.tsx").then((m) => ({ default: m.PdfViewer })));
+
 const text: FileViewer = { as: "text", View: TextViewer };
 const table: FileViewer = { as: "text", View: TableViewer };
 
@@ -45,6 +49,8 @@ export const VIEWERS: Record<string, FileViewer> = {
   // T7107: a tabela, só leitura.
   csv: table,
   tsv: table,
+  // T7109: o pdf, pelo pdf.js do pack.
+  pdf: { as: "binary", View: PdfViewer },
 };
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */

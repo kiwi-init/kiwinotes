@@ -81,3 +81,8 @@
 .kn-about-diag button:disabled {
   opacity: 0.5;
 }
+
+/* os créditos do software de terceiros (spec #7079): no fim, discretos */
+.kn-about-credits {
+  margin-top: 20px;
+}

@@ -34,3 +34,17 @@ export function statusLine(v: UpdatesView): string {
   }
 }
 
+
+/**
+ * O software de terceiros que vai dentro do app e pede crédito (spec #7079): cada visualizador de arquivo das Notas
+ * que usa uma biblioteca entra aqui, com a licença dela.
+ */
+export const CREDITS: readonly { name: string; by: string; license: string; use: string }[] = [
+  { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas" },
+];
+
+/** A linha de créditos do Sobre: "Com PDF.js, da Mozilla (Apache-2.0)". */
+export function creditsLine(credits = CREDITS): string {
+  if (!credits.length) return "";
+  return `Com ${credits.map((c) => `${c.name}, da ${c.by} (${c.license})`).join("; ")}.`;
+}

@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button } from "../src/kit/index.tsx";
-import { CHANNEL, statusLine } from "./aboutText.ts";
+import { CHANNEL, creditsLine, statusLine } from "./aboutText.ts";
 
 /** Abre um link do GitHub fora do app (no navegador padrão, pelo `newWindow: "external"` da janela). */
 const openOutside = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
@@ -101,6 +101,7 @@ export function About() {
           </p>
         </div>
       ) : null}
+      <p className="kn-about-hint kn-about-credits">{creditsLine()}</p>
     </div>
   );
 }

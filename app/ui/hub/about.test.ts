@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { uiCapabilities } from "../../src/bun/ui-capabilities.ts";
 import { directInvoke } from "../../src/bun/ui-engine.ts";
 import type { UpdatesView } from "../../src/shared/ui-contract.ts";
-import { statusLine } from "./aboutText.ts";
+import { CREDITS, creditsLine, statusLine } from "./aboutText.ts";
 
 const at = "2026-11-04T12:30:00.000Z";
 const hhmm = new Date(at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -53,5 +53,16 @@ describe("app.about e updates.* (contrato 1.6.0)", () => {
     expect(await directInvoke(caps, "app.about", {})).toMatchObject({ ok: true, value: { version: "0.1.0-rc3", channel: "rc", updates: view } });
     expect(await directInvoke(caps, "updates.check", {})).toEqual({ ok: true, value: view });
     expect(checks).toBe(1);
+  });
+});
+
+describe("os créditos (spec #7079)", () => {
+  test("o PDF.js aparece com a licença que o pacote declara", async () => {
+    const pkg = (await import("pdfjs-dist/package.json")).default as { license: string };
+    const pdf = CREDITS.find((c) => c.name === "PDF.js");
+    expect(pdf?.license).toBe(pkg.license);
+    expect(creditsLine()).toBe("Com PDF.js, da Mozilla (Apache-2.0).");
+    expect(creditsLine([])).toBe("");
+    expect(creditsLine([...CREDITS, { name: "X", by: "Y", license: "MIT", use: "z" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, da Y (MIT).");
   });
 });
