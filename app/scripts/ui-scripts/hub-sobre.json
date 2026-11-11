@@ -11,6 +11,7 @@
     { "expectText": ".kn-about-credits", "text": "PDF.js, da Mozilla (Apache-2.0)", "name": "o crédito do software de terceiros (spec #7079)" },
     { "expectText": ".kn-about-credits", "text": "Mammoth, de Michael Williamson (BSD-2-Clause)" },
     { "expectText": ".kn-about-credits", "text": "SheetJS Community Edition, de SheetJS LLC (Apache-2.0)" },
+    { "expectText": ".kn-about-credits", "text": "draw.io, de JGraph Ltd (Apache-2.0)", "name": "e o viewer do draw.io (T7112)" },
     { "screenshot": "hub-sobre.png" }
   ]
 }

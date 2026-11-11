@@ -456,3 +456,36 @@
   background:
     conic-gradient(#e6e6e6 25%, #fff 0 50%, #e6e6e6 0 75%, #fff 0) 0 0 / 16px 16px;
 }
+
+/* ---------------------------------------------------------- o draw.io (T7112) */
+
+.kn-file-drawio {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-drawio-area {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px 24px;
+  background: var(--surface-2);
+  /* O HTML dos rótulos fica preso aqui (revisão do T7112): com `contain: paint`, um `position: fixed` ou `absolute`
+     num rótulo se posiciona dentro desta área e é cortado por ela, sem cobrir a barra, a árvore ou a nota. */
+  contain: paint;
+}
+
+/* o diagrama no papel branco, como no draw.io, nos dois temas */
+.kn-file-drawio-graph {
+  margin: 0 auto;
+  background: #fff;
+  border-radius: var(--r-card, 14px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  color: #000;
+}
+
+.kn-file-drawio-area[hidden] {
+  display: none;
+}

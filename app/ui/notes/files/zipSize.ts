@@ -81,7 +81,7 @@ function isImage(head: Uint8Array): boolean {
  * Os bytes que uma parte dá de verdade, descompactando em pedaços, até `cap`: passou disso, para e devolve `cap + 1`.
  * `head` recebe os primeiros bytes que saem (para saber se é imagem). `-1`: a parte está quebrada.
  */
-function inflatedSize(data: Uint8Array, method: number, cap: number, head: Uint8Array): number {
+export function inflatedSize(data: Uint8Array, method: number, cap: number, head: Uint8Array = new Uint8Array(0)): number {
   if (method === 0) {
     head.set(data.subarray(0, head.length));
     return Math.min(data.length, cap + 1);

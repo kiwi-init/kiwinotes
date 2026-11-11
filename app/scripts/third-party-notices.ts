@@ -11,6 +11,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { CREDITS, NOTICES_FILE, noticesText } from "../ui/hub/aboutText.ts";
+import { DRAWIO_DIR, DRAWIO_VERSION } from "./drawio-viewer.ts";
 
 const APP = path.resolve(import.meta.dir, "..");
 export const NOTICES_PATH = path.join(APP, "ui", "notes", "public", NOTICES_FILE);
@@ -73,10 +74,21 @@ export function dependencyTree(roots: string[]): Pkg[] {
   return out;
 }
 
+/** O que vai copiado no repo, fora do npm (T7112): a pasta com a licença e a versão fixada. Não tem dependências. */
+const VENDORED: Record<string, { dir: string; version: string }> = {
+  "jgraph/drawio": { dir: DRAWIO_DIR, version: DRAWIO_VERSION },
+};
+
 export function currentNotices(): string {
-  const all = dependencyTree(CREDITS.map((c) => c.pkg));
+  const all = dependencyTree(CREDITS.map((c) => c.pkg).filter((p) => !VENDORED[p]));
   const roots = new Set(CREDITS.map((c) => c.pkg));
   const credited = CREDITS.map((c) => {
+    const vendored = VENDORED[c.pkg];
+    if (vendored) {
+      const text = licenseText(vendored.dir);
+      if (!text) throw new Error(`${c.pkg}: falta o LICENSE em ${vendored.dir}`);
+      return { ...c, version: vendored.version, text };
+    }
     const pkg = all.find((p) => p.name === c.pkg)!;
     return { ...c, version: pkg.version, text: licenseText(pkg.dir) ?? `(o pacote não traz o arquivo da licença; ela é ${pkg.license})` };
   });

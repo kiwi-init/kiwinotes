@@ -40,6 +40,9 @@ export default defineConfig({
     },
   },
   root: resolve(__dirname, "ui", window ?? ""),
+  // O hub também mostra as Notas, com os visualizadores de arquivo (spec #7079): ele leva a mesma pasta `public` das
+  // Notas, com o THIRD_PARTY_NOTICES.txt das bibliotecas que vão junto.
+  ...(window === "hub" ? { publicDir: resolve(__dirname, "ui", "notes", "public") } : {}),
   base: "./",
   build: {
     outDir: resolve(__dirname, "dist", window ?? ""),
