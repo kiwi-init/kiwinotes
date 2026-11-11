@@ -78,5 +78,9 @@ describe("o arquivo de avisos de terceiros (revisão do T7109)", () => {
     expect(file).toContain("Version 2.0, January 2004");
     expect(file).toContain("Redistribution and use in source and binary forms");
     for (const c of CREDITS) expect(file).toContain(`(${c.pkg}), de ${c.by}`);
+    // As dependências que vão junto também (revisão do T7110): as do mammoth, com a licença MIT do jszip e a do pako.
+    for (const dep of ["jszip", "pako", "@xmldom/xmldom", "underscore", "lop"]) expect(file).toContain(`(${dep}), de seus autores`);
+    // O que é só para Node, opcional, não entra (o canvas do pdf.js).
+    expect(file).not.toContain("@napi-rs/canvas");
   });
 });

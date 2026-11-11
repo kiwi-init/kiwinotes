@@ -1,7 +1,7 @@
 {
   "window": "notes",
   "steps": [
-    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Docs/proposta.docx, a cópia de test/fixtures/files/proposta.docx, e uma nota)" },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Docs/proposta.docx, a cópia de test/fixtures/files/proposta.docx; Docs/bomba.docx, o mesmo com 30 MB de texto no document.xml; e uma nota)" },
     { "click": ".kn-crumb-bt", "name": "abre a árvore" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Docs')", "name": "abre a pasta Docs" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('proposta')", "name": "clica no docx" },
@@ -24,6 +24,11 @@
     { "screenshot": "01-docx.png" },
     { "scroll": ".kn-file-docx", "y": 1200 },
     { "screenshot": "02-docx-fim.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('bomba')", "name": "clica num docx de 33 KB que descompacta para 30 MB" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-notice:has-text('grande demais')", "name": "recusado antes do mammoth, sem travar a janela" },
+    { "expectCount": ".kn-file-docx-page", "count": 0 },
+    { "screenshot": "03-bomba.png" },
     { "click": ".kn-crumb-bt", "name": "abre a árvore" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='note']", "name": "clicar numa nota volta para o editor" },
     { "waitFor": ".kn-note-editor .cm-content" },
