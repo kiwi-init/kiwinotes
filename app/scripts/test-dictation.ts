@@ -282,7 +282,8 @@ async function main(): Promise<number> {
     stop();
     return 1;
   } finally {
-    if (started) stop();
+    // A sessão do modo preciso também: sem isto, o headless e o helper dela ficavam rodando depois da bateria.
+    if (started || preciseStarted) stop();
   }
 
   if (a.json) console.log(JSON.stringify(results, null, 2));

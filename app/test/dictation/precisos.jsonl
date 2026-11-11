@@ -6,3 +6,4 @@
 // sobravam os últimos 11 s (173 de ~1040 caracteres). O `contains` pega o começo, o meio e o fim, em trechos que o ruído não troca.
 {"name": "preciso: ditado longo com ruído sai inteiro", "sayFile": "longos/servidor.txt", "voice": "Luciana", "volume": 0.25, "noise": 450, "expect": {"contains": ["sistema operacional", "usuário dedicado", "backup automático", "uso no hospital", "equipe de infraestrutura"]}}
 {"name": "preciso: ditado curto segue igual", "say": "me manda o relatório amanhã de manhã, por favor", "voice": "Luciana", "expect": {"contains": "relatório amanhã"}}
+{"name": "preciso: a fala que começa por um termo do dicionário fica inteira", "say": "Kiwi Notes é um aplicativo de notas que roda inteiro no computador, sem mandar nada para a nuvem", "voice": "Luciana", "expect": {"contains": "Kiwi Notes é um aplicativo"}}

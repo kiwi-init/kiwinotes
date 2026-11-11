@@ -113,42 +113,23 @@ public enum PreciseRoute {
 }
 
 public extension WhisperPrompt {
-    /// O texto sem o eco do prompt no começo (#7082): num ditado longo com ruído, o Whisper devolveu "DICOM, PACS,
-    /// Kiwi Notes" e só depois a fala. Eco é o texto começar por três ou mais palavras seguidas do prompt, ou pelo
-    /// prompt inteiro (de duas palavras para cima); uma fala que só começa por um termo ("DICOM é um padrão") fica
-    /// como está. Um texto que é todo eco (`echoes`) sai vazio.
-    static func withoutEcho(_ text: String, terms: [String]) -> String {
-        if echoes(text, terms: terms) { return "" }
+    /// O texto começa pelo prompt (#7082): num ditado longo com ruído, o Whisper devolveu "DICOM, PACS, Kiwi Notes" e
+    /// só depois a fala. `true` quando o texto é todo eco (`echoes`), ou começa por três ou mais palavras seguidas do
+    /// prompt, ou pelo prompt inteiro (de duas palavras para cima). É só uma suspeita: uma fala de verdade também
+    /// pode começar por um termo ("Kiwi Notes é um aplicativo"), então quem chama não corta o texto, e sim transcreve
+    /// o pedaço de novo sem o prompt.
+    static func startsWithEcho(_ text: String, terms: [String]) -> Bool {
+        if echoes(text, terms: terms) { return true }
         let prompt = words(make(terms) ?? "")
-        let said = wordRanges(text)
-        guard prompt.count >= 2, let first = said.first else { return text }
+        let said = words(text)
+        guard prompt.count >= 2, let first = said.first else { return false }
         var longest = 0
-        for start in prompt.indices where prompt[start] == first.word {
+        for start in prompt.indices where prompt[start] == first {
             var run = 0
-            while start + run < prompt.count, run < said.count, prompt[start + run] == said[run].word { run += 1 }
+            while start + run < prompt.count, run < said.count, prompt[start + run] == said[run] { run += 1 }
             longest = max(longest, run)
         }
-        guard longest >= 3 || longest == prompt.count else { return text }
-        let rest = text[said[longest - 1].range.upperBound...]
-        return String(rest.drop { !$0.isLetter && !$0.isNumber })
-    }
-
-    /// As palavras de `words`, cada uma com o seu lugar no texto.
-    internal static func wordRanges(_ text: String) -> [(word: String, range: Range<String.Index>)] {
-        var out: [(word: String, range: Range<String.Index>)] = []
-        var start: String.Index?
-        var i = text.startIndex
-        while i < text.endIndex {
-            let inWord = text[i].isLetter || text[i].isNumber
-            if inWord, start == nil { start = i }
-            if !inWord, let s = start {
-                out.append((text[s..<i].lowercased(), s..<i))
-                start = nil
-            }
-            i = text.index(after: i)
-        }
-        if let s = start { out.append((text[s...].lowercased(), s..<text.endIndex)) }
-        return out
+        return longest >= 3 || longest == prompt.count
     }
 }
 
@@ -227,9 +208,10 @@ public enum PreciseChunks {
     /// O texto do ditado pelo Whisper, pedaço por pedaço, ou `nil` quando o ditado inteiro deve ir pelo Parakeet.
     ///
     /// Um pedaço só (até 28 s) segue como sempre: o Whisper que falha ou devolve só o prompt manda o ditado ao
-    /// Parakeet. Em vários pedaços, cada um tem a sua guarda: o eco do prompt sai do começo; se não sobra fala, o
-    /// pedaço vai de novo sem o prompt; e o que sai vazio ou curto demais (`tooShort`) é transcrito pelo Parakeet, e
-    /// fica o texto mais comprido. Assim nenhum trecho do ditado se perde.
+    /// Parakeet, e o texto não é mexido. Em vários pedaços, cada um tem a sua guarda: se o texto começa pelo prompt
+    /// (`startsWithEcho`), o pedaço vai de novo sem o prompt, e fica esse texto (o que a pessoa disse continua lá,
+    /// mesmo que sejam os termos); e o que sai vazio ou curto demais (`tooShort`) é transcrito pelo Parakeet, e fica
+    /// o texto mais comprido. Assim nenhum trecho do ditado se perde.
     public static func transcribe(
         _ samples: [Float], terms: [String], sampleRate: Double = 16_000,
         whisper: ([Float], [String]) async throws -> String,
@@ -242,26 +224,26 @@ public enum PreciseChunks {
                 log("precise: whisper failed, this dictation goes through parakeet")
                 return nil
             }
-            let text = WhisperPrompt.withoutEcho(raw, terms: terms)
-            if text.isEmpty, !raw.isEmpty {
+            if WhisperPrompt.echoes(raw, terms: terms) {
                 log("precise: whisper gave back the prompt, this dictation goes through parakeet")
                 return nil
             }
-            return text
+            return raw
         }
         var texts: [String] = []
         for (n, range) in chunks.enumerated() {
             let chunk = Array(samples[range])
             let label = "precise: chunk \(n + 1)/\(chunks.count)"
             var text = ""
-            if let raw = try? await whisper(chunk, terms) {
-                text = WhisperPrompt.withoutEcho(raw, terms: terms)
-                if text != raw { log("\(label): the prompt came back, taken out") }
-                if text.isEmpty, !raw.isEmpty, !terms.isEmpty {
-                    text = WhisperPrompt.withoutEcho((try? await whisper(chunk, [])) ?? "", terms: terms)
+            do {
+                text = try await whisper(chunk, terms)
+                if WhisperPrompt.startsWithEcho(text, terms: terms) {
+                    log("\(label): the text starts with the prompt, again without it")
+                    text = try await whisper(chunk, [])
                 }
-            } else {
+            } catch {
                 log("\(label): whisper failed")
+                text = ""
             }
             if tooShort(text, for: chunk, sampleRate: sampleRate) {
                 let other = ((try? await parakeet(chunk)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

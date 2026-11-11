@@ -46,18 +46,17 @@ final class PreciseChunksTests: XCTestCase {
     }
 
     /// O que saiu no clipe de 71 s com ruído, e no histórico do harry: o prompt e depois o fim da fala.
-    func testTheEchoAtTheStartComesOut() {
+    func testATextThatStartsWithThePromptIsSuspect() {
         let terms = ["DICOM", "PACS", "Kiwi Notes"]
-        XCTAssertEqual(WhisperPrompt.withoutEcho("DICOM, PACS, Kiwi Notes do paciente, sempre que possível.", terms: terms),
-                       "do paciente, sempre que possível.")
-        XCTAssertEqual(WhisperPrompt.withoutEcho("DICOM, PACS, Kiwi Notes.", terms: terms), "")
-        XCTAssertEqual(WhisperPrompt.withoutEcho("PACS, Kiwi Notes. E depois o resto.", terms: terms), "E depois o resto.")
-        // Uma fala que começa por um ou dois termos não é eco.
+        XCTAssertTrue(WhisperPrompt.startsWithEcho("DICOM, PACS, Kiwi Notes do paciente, sempre que possível.", terms: terms))
+        XCTAssertTrue(WhisperPrompt.startsWithEcho("DICOM, PACS, Kiwi Notes.", terms: terms))
+        XCTAssertTrue(WhisperPrompt.startsWithEcho("PACS, Kiwi Notes. E depois o resto.", terms: terms))
+        XCTAssertTrue(WhisperPrompt.startsWithEcho("Kiwi Notes é um aplicativo de notas.", terms: ["Kiwi Notes"]))
         for said in ["DICOM é um padrão de imagens.", "O DICOM, PACS, Kiwi Notes.", "DICOM, PACS caíram de novo.", "Bom dia.", ""] {
-            XCTAssertEqual(WhisperPrompt.withoutEcho(said, terms: terms), said)
+            XCTAssertFalse(WhisperPrompt.startsWithEcho(said, terms: terms), said)
         }
-        XCTAssertEqual(WhisperPrompt.withoutEcho("DICOM caiu.", terms: ["DICOM"]), "DICOM caiu.")
-        XCTAssertEqual(WhisperPrompt.withoutEcho("Bom dia.", terms: []), "Bom dia.")
+        XCTAssertFalse(WhisperPrompt.startsWithEcho("DICOM caiu.", terms: ["DICOM"]))
+        XCTAssertFalse(WhisperPrompt.startsWithEcho("Bom dia.", terms: []))
     }
 
     func testTooShortForTheVoiceInTheChunk() {
@@ -100,6 +99,12 @@ final class PreciseChunksTests: XCTestCase {
         var calls = Calls()
         var text = await run(samples, calls: calls) { _, _ in "Bom dia." }
         XCTAssertEqual(text, "Bom dia.")
+        // A revisão da rodada 1: a fala que começa pelo termo do dicionário fica inteira, sem outra chamada.
+        let app = "Kiwi Notes é um aplicativo de notas que roda inteiro no computador."
+        text = await run(samples, terms: ["Kiwi Notes"], calls: Calls()) { _, _ in app }
+        XCTAssertEqual(text, app)
+        text = await run(samples, calls: Calls()) { _, _ in "DICOM, PACS, Kiwi Notes são os assuntos." }
+        XCTAssertEqual(text, "DICOM, PACS, Kiwi Notes são os assuntos.")
         XCTAssertEqual(calls.whisper.count, 1)
         XCTAssertEqual(calls.whisper[0].seconds, 10, accuracy: 0.01)
         XCTAssertEqual(calls.whisper[0].terms, ["DICOM", "PACS", "Kiwi Notes"])
@@ -125,20 +130,32 @@ final class PreciseChunksTests: XCTestCase {
         XCTAssertTrue(calls.parakeet.isEmpty)
     }
 
-    func testTheEchoComesOutOfEachChunkAndAnEchoOnlyChunkGoesAgainWithoutThePrompt() async {
+    func testAChunkThatStartsWithThePromptGoesAgainWithoutIt() async {
         let samples = speech(seconds: 71, pausesAt: [22, 47])
         let calls = Calls()
         let text = await run(samples, calls: calls) { n, terms in
             switch n {
-            case 1: return "DICOM, PACS, Kiwi Notes \(self.long)"
-            case 2: return "DICOM, PACS, Kiwi Notes." // o pedaço 2, com o prompt
-            case 3: return terms.isEmpty ? "Sem prompt, \(self.long)" : "errado"
+            case 1: return "DICOM, PACS, Kiwi Notes do paciente." // o pedaço 1, com o prompt: eco e o fim da fala
+            case 2: return terms.isEmpty ? "Um, \(self.long)" : "errado"
+            case 3: return "DICOM, PACS, Kiwi Notes." // o pedaço 2: só o eco
+            case 4: return terms.isEmpty ? "Dois, \(self.long)" : "errado"
             default: return "Fim, \(self.long)"
             }
         }
-        XCTAssertEqual(text, "\(long) Sem prompt, \(long) Fim, \(long)")
-        XCTAssertEqual(calls.whisper.map { $0.terms.isEmpty }, [false, false, true, false])
-        XCTAssertEqual(calls.whisper[1].seconds, calls.whisper[2].seconds)
+        XCTAssertEqual(text, "Um, \(long) Dois, \(long) Fim, \(long)")
+        XCTAssertEqual(calls.whisper.map { $0.terms.isEmpty }, [false, true, false, true, false])
+        XCTAssertEqual(calls.whisper[0].seconds, calls.whisper[1].seconds)
+        XCTAssertTrue(calls.parakeet.isEmpty)
+    }
+
+    /// A revisão da rodada 1: a pessoa disse mesmo os termos no começo do pedaço. Sem o prompt, eles continuam lá.
+    func testSpeechThatStartsWithTheTermsIsKept() async {
+        let samples = speech(seconds: 40, pausesAt: [20])
+        let calls = Calls()
+        let said = "Kiwi Notes é um aplicativo de notas que roda inteiro no computador, sem nuvem. \(long)"
+        let text = await run(samples, terms: ["Kiwi Notes"], calls: calls) { n, _ in n <= 2 ? said : self.long }
+        XCTAssertEqual(text, "\(said) \(long)")
+        XCTAssertEqual(calls.whisper.map { $0.terms.isEmpty }, [false, true, false])
         XCTAssertTrue(calls.parakeet.isEmpty)
     }
 
