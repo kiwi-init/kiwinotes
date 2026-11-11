@@ -1,0 +1,29 @@
+{
+  "window": "notes",
+  "steps": [
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Dados/vendas.csv com 1200 linhas e separador ';', Dados/contatos.tsv e uma nota)" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Dados')", "name": "abre a pasta Dados" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('vendas')", "name": "clica no csv" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-table", "name": "o csv abre nas Notas, como tabela" },
+    { "expectText": ".kn-file-title", "text": "vendas.csv" },
+    { "expectCount": ".kn-file-table thead th[scope='col']", "count": 4, "name": "o cabeçalho com as 4 colunas (o separador é ponto e vírgula)" },
+    { "expectText": ".kn-file-table thead", "text": "Observação" },
+    { "expectText": ".kn-file-table tbody tr:nth-child(2)", "text": "Sala, com vista; e varanda", "name": "o campo entre aspas guarda o separador" },
+    { "expectCount": ".kn-file-table tbody tr", "count": 500, "name": "as primeiras 500 linhas" },
+    { "expectText": ".kn-file-table-foot", "text": "1.200 linhas · 4 colunas", "name": "o rodapé diz o total" },
+    { "expectCount": ".kn-file-text-area", "count": 0, "name": "só leitura: sem editor" },
+    { "screenshot": "01-tabela.png" },
+    { "scroll": ".kn-file-table-scroll", "y": 3000, "name": "rola a tabela" },
+    { "expectScroll": ".kn-file-table-scroll", "min": 1000, "name": "as linhas rolam" },
+    { "screenshot": "02-rolada.png", "name": "o print mostra o cabeçalho fixo no alto com as linhas roladas" },
+    { "click": ".kn-file-table-more", "name": "Mostrar mais" },
+    { "expectCount": ".kn-file-table tbody tr", "count": 1000, "name": "entram mais 500 linhas" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore de novo" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('contatos')", "name": "clica no tsv" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-table", "name": "o tsv também abre como tabela" },
+    { "expectCount": ".kn-file-table thead th[scope='col']", "count": 3, "name": "3 colunas separadas por tab" },
+    { "expectText": ".kn-file-table-foot", "text": "2 linhas · 3 colunas" },
+    { "screenshot": "03-tsv.png" }
+  ]
+}

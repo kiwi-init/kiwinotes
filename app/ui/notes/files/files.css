@@ -121,3 +121,77 @@
   color: var(--text-2);
   font-size: var(--t-ui);
 }
+
+/* ---------------------------------------------------------- a tabela do csv e do tsv (T7107) */
+
+.kn-file-table-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 40px 24px;
+}
+
+.kn-file-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--t-ui, 13px);
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.kn-file-table th,
+.kn-file-table td {
+  padding: 6px 12px;
+  max-width: 420px;
+  border-bottom: 1px solid var(--border, var(--surface-2));
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* o cabeçalho fica no alto enquanto as linhas rolam */
+.kn-file-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg, var(--surface, Canvas));
+  font-weight: 600;
+  white-space: nowrap;
+  /* a linha de baixo é sombra, não borda: a borda de uma célula fixa some com `border-collapse: separate` ao rolar */
+  border-bottom: 0;
+  box-shadow: 0 1px 0 var(--border, var(--surface-2));
+}
+
+.kn-file-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+.kn-file-table .kn-file-table-n {
+  padding-left: 0;
+  color: var(--text-3);
+  font: var(--t-meta, 12px) / 1.7 var(--mono, var(--font-mono, monospace));
+  text-align: right;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kn-file-table-more {
+  margin-top: 14px;
+}
+
+.kn-file-table-foot {
+  flex: none;
+  padding: 8px 40px 10px;
+  border-top: 1px solid var(--border, var(--surface-2));
+  font: var(--t-meta, 12px) / 1 var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+}
