@@ -471,6 +471,9 @@
   overflow: auto;
   padding: 16px 24px 24px;
   background: var(--surface-2);
+  /* O HTML dos rótulos fica preso aqui (revisão do T7112): com `contain: paint`, um `position: fixed` ou `absolute`
+     num rótulo se posiciona dentro desta área e é cortado por ela, sem cobrir a barra, a árvore ou a nota. */
+  contain: paint;
 }
 
 /* o diagrama no papel branco, como no draw.io, nos dois temas */

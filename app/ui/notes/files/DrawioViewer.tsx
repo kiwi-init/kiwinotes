@@ -5,13 +5,15 @@
 // A exceção (escolha B do harry, #7312): o viewer põe na página o HTML dos rótulos do diagrama, limpo pelo DOMPurify
 // que vem nele. Em todo o resto, a janela Notas nunca põe HTML de um arquivo na página. Rede e `eval` seguem
 // bloqueados pela CSP das views: os caminhos de recursos apontam para o próprio pack, e nada sai para a internet. Um
-// rótulo ou uma forma com imagem de fora nem tenta buscá-la (`drawioGuard.ts`).
+// rótulo ou uma forma com imagem de fora nem tenta buscá-la, nem a fonte ou a fórmula de fora (`drawioGuard.ts`).
+// O HTML dos rótulos fica preso na área do diagrama (`contain: paint` em `files.css`): um `position: fixed` não cobre
+// o resto da janela.
 
 import viewerUrl from "./drawio/viewer-static.min.js?url";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { checkDrawio } from "./drawio.ts";
-import { installDrawioGuard } from "./drawioGuard.ts";
+import { installDrawioGuard, pointViewerAtPack } from "./drawioGuard.ts";
 import type { FileViewerProps } from "./viewers.ts";
 
 /** As dicas da barra do viewer em português (sem os textos dele, que viriam da rede, elas ficariam em inglês). */
@@ -30,21 +32,13 @@ interface DrawioGlobals {
   mxUtils?: { parseXml(xml: string): Document };
 }
 
-/** Os caminhos que o viewer usaria na internet passam a apontar para o pack: o que ele pedir não sai do app. */
-const LOCAL_PATHS = [
-  "DRAWIO_BASE_URL", "DRAWIO_LIGHTBOX_URL", "DRAWIO_VIEWER_URL", "STENCIL_PATH", "IMAGE_PATH", "GRAPH_IMAGE_PATH",
-  "STYLE_PATH", "CSS_PATH", "RESOURCES_PATH", "mxBasePath", "mxImageBasePath",
-] as const;
-
 let loading: Promise<DrawioGlobals> | null = null;
 
 function loadViewer(): Promise<DrawioGlobals> {
   loading ??= new Promise<DrawioGlobals>((resolve, reject) => {
     const w = window as unknown as Record<string, unknown> & DrawioGlobals;
-    for (const key of LOCAL_PATHS) w[key] ??= "./drawio";
-    // Sem os textos e o CSS que ele baixaria; o viewer funciona sem eles.
-    w.mxLoadResources = false;
-    w.mxLoadStylesheet = false;
+    // Os caminhos que o viewer usaria na internet passam a apontar para o pack: o que ele pedir não sai do app.
+    pointViewerAtPack(w);
     const script = document.createElement("script");
     script.src = viewerUrl;
     script.onload = () => {

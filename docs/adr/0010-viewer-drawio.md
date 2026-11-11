@@ -15,15 +15,18 @@ A janela Notas nunca põe HTML de um arquivo na página: o docx passa por um lei
 - **A exceção:** o viewer põe na página o HTML dos rótulos do diagrama. Esse HTML passa antes pelo DOMPurify que vem nele (`Graph.sanitizeHtml`), e o resto da trava das views continua valendo:
   - a CSP não tem `unsafe-eval` nem `unsafe-inline` em `script-src`, então um `<script>` ou um `onerror` num rótulo não roda;
   - `img-src` e `connect-src` não deixam sair para a internet, e a janela não navega para fora.
-- **Nada de fora é nem pedido:**
+- **A exceção fica na área do diagrama:** a área tem `contain: paint`. Um rótulo com `position: fixed` ou `absolute` se posiciona dentro dela e é cortado por ela, sem cobrir a barra, a árvore ou a nota.
+- **Nada de fora é nem pedido** (a trava vale também no Vite do dev, onde a CSP não está):
+  - todo caminho que o viewer lê de `window` (`DRAW_MATH_URL`, `PROXY_URL`, `SHAPES_PATH`, `DRAWIO_SERVER_URL` e os outros) aponta para o pack, e o log fica desligado. O teste confere a lista contra o `viewer-static.min.js`, então uma versão nova com um caminho novo falha no `bun test`. Os textos e o CSS dele não são baixados (`mxLoadResources = false`);
   - um gancho no DOMPurify tira de cada rótulo o `src`, o `srcset`, o `href` de imagem e o `url()` do CSS que não sejam uma imagem embutida (`data:image/…`);
-  - as formas de imagem (`image=` no estilo) têm o mesmo filtro;
-  - os caminhos que o viewer usaria na internet apontam para o pack, e os textos e o CSS dele não são baixados (`mxLoadResources = false`).
-  - Um link (`<a href>`) fica: clicar nele abre no navegador padrão, como numa nota.
+  - as imagens das formas (`image=`, `indicatorImage=`) e a de fundo da página têm o mesmo filtro, e o canvas SVG do viewer só desenha imagem embutida;
+  - fontes de fora (`fontSource`, `extFonts`, Google Fonts) não carregam: o rótulo usa a fonte do sistema;
+  - fórmulas (`math="1"`) não carregam o MathJax, que viria de fora: o texto da fórmula aparece como está;
+  - um link (`<a href>`) fica: clicar nele abre no navegador padrão, como numa nota. Um `javascript:` sai.
 - **Tetos antes do viewer:** o arquivo inteiro e cada página comprimida, já inflada, até 20 MB, e até 200 páginas. Um arquivo que não é diagrama ou que passa do teto vira um aviso, sem carregar o viewer.
 - **Só leitura.** O `.drawio.svg` já é um desenho e abre como imagem, pelo viewer de imagens.
 
 ## Consequências
 - Trocar de versão: `bun scripts/drawio-viewer.ts` baixa a tag nova e confere. Depois, atualizar o sha256 e a versão no script e rodar `bun scripts/third-party-notices.ts`.
 - O pack das Notas e o do hub ficam 4,9 MB maiores. Quem não abre um `.drawio` não paga nada em memória.
-- Formas que o viewer buscaria de fora (stencils extras, imagens por URL) aparecem vazias. A forma em si e o rótulo continuam lá.
+- Formas que o viewer buscaria de fora (stencils extras, imagens por URL) aparecem vazias. A forma em si e o rótulo continuam lá. Fórmulas aparecem como o texto TeX, e fontes do Google viram a fonte do sistema. O diagrama inteiro abre no app padrão.
