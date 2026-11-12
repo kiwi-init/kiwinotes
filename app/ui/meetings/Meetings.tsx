@@ -197,7 +197,8 @@ function MeetingRow({
 }) {
   const meta = [
     m.start ? clock(m.start) : null,
-    m.live ? "gravando" : m.duration !== null ? durationLabel(m.duration) : null,
+    // Sem `end` e sem gravação (o helper ou o app caiu antes do T7938): o `duration: 0` não é a duração dela.
+    m.live ? "gravando" : m.start && m.end === null ? "interrompida" : m.duration !== null ? durationLabel(m.duration) : null,
     m.app,
   ].filter(Boolean);
   const people = participantsLabel(m.participants);

@@ -40,6 +40,17 @@ export class MeetingNoteSession {
       }),
     );
   }
+  /**
+   * O helper caiu com a reunião gravando (T7938): ele não manda o `meeting.stopped`, e a nota ficava sem `end` e "gravando"
+   * para sempre. Ela fecha aqui, na hora da queda. As falas que o helper novo recuperar do spool continuam entrando nela
+   * (o `segment` acha a nota pelo `session`).
+   */
+  interrupted(): void {
+    const active = this.active;
+    if (!active) return;
+    this.active = undefined;
+    void this.notes.finish(active, new Date(this.now())).catch(this.onError);
+  }
   async detach(): Promise<void> {
     this.offs.splice(0).forEach((off) => off());
     const active = this.active;

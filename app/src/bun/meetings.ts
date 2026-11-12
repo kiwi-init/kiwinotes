@@ -125,17 +125,17 @@ export class FakeMeetingHost implements MeetingHost {
 
 /**
  * As notas de reunião do vault: as que têm `type:` no texto (o índice em memória) e, delas, as que o frontmatter diz
- * `type: meeting`. Lê só essas do disco.
+ * `type: meeting`. Lê só essas do disco. Com o `liveSession`, só a nota dessa sessão é `live` (T7938).
  */
 export async function listMeetings(notes: {
   notesContaining(text: string): NoteMeta[];
   get(path: string): Promise<{ content: string } & NoteMeta>;
-}): Promise<MeetingNote[]> {
+}, liveSession?: string | null): Promise<MeetingNote[]> {
   const found: MeetingNote[] = [];
   for (const meta of notes.notesContaining("type:")) {
     const note = await notes.get(meta.path).catch(() => null);
     if (!note) continue; // sumiu entre o índice e a leitura
-    const m = meetingFromNote(note, note.content);
+    const m = meetingFromNote(note, note.content, liveSession);
     if (m) found.push(m);
   }
   return sortMeetings(found);

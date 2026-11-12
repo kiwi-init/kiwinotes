@@ -884,7 +884,9 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "meetings.list": async (args) => {
       noArgs(args, "meetings.list");
-      return { meetings: await listMeetings(await vault()) };
+      // "Gravando" é só a da gravação de agora (T7938), não toda nota sem `end`.
+      const live = deps.meetings?.live() ?? NOT_RECORDING;
+      return { meetings: await listMeetings(await vault(), live.recording ? live.session : null) };
     },
     "meetings.live": (args) => {
       noArgs(args, "meetings.live");
