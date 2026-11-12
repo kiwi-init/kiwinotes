@@ -863,12 +863,20 @@ await step("digitando sem parar, o rascunho anda a cada 1,5 s", async () => {
     const k = Object.keys(localStorage).find((key) => key.startsWith("kiwi.notes.draft.v1:"));
     return k ? localStorage.getItem(k) ?? "" : "";
   });
+  // O relógio da página na mão (T8236): o tempo só anda 120 ms por tecla, e um engasgo do runner não vira uma pausa de
+  // 500 ms, em que o save gravava e apagava o rascunho. Sem o teto de 1,5 s, nem a espera de 300 ms nem o save chegam.
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1000);
   let seen = "";
-  for (let i = 0; i < 26; i++) {
-    await page.keyboard.type(typed[i % typed.length]!);
-    await page.waitForTimeout(120);
-    // Depois de ~2,5 s digitando, sem nenhuma pausa: o rascunho tem que já ter o começo do que foi digitado.
-    if (i === 20) seen = await draft();
+  try {
+    for (let i = 0; i < 26; i++) {
+      await page.keyboard.type(typed[i % typed.length]!);
+      await page.clock.runFor(120);
+      // Depois de ~2,5 s de digitação, sem nenhuma pausa: o rascunho tem que já ter o começo do que foi digitado.
+      if (i === 20) seen = await draft();
+    }
+  } finally {
+    await page.clock.resume();
   }
   expectEq(seen.includes(typed), true);
 });

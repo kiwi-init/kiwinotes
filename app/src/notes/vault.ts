@@ -442,6 +442,8 @@ export class Vault {
   private registry: RegistryEntry[] = [];
   /** Quantas notas os scans leram do disco (T5352): os testes e o bench conferem que o cache poupa a releitura. */
   scanReads = 0;
+  /** Quantos trechos a busca montou (T8236): o teste confere que são só os dos resultados que voltam, sem cronômetro. */
+  snippetsBuilt = 0;
   /** Quantas notas os refactors (renomear, mover, título) releram do disco (T7877): o bench mostra o que o filtro poupa. */
   refactorReads = 0;
 
@@ -755,8 +757,10 @@ export class Vault {
     // O exato antes do aproximado; o trecho do aproximado mostra a palavra que casou.
     const first = q.phrases[0] ?? q.words[0] ?? (q.tags[0] ? `#${fold(q.tags[0])}` : "");
     const sorted = hits.sort((a, b) => Number(a.approx) - Number(b.approx) || b.score - a.score || a.e.meta.path.localeCompare(b.e.meta.path));
-    const lexicalSnippet = (e: Entry, near?: string) =>
-      snippetAround(e.content, near ?? (q.phrases[0] || lexicalWords(e.content).find(w => lexicalMatch(w, rawWords)) || first));
+    const lexicalSnippet = (e: Entry, near?: string) => {
+      this.snippetsBuilt++;
+      return snippetAround(e.content, near ?? (q.phrases[0] || lexicalWords(e.content).find(w => lexicalMatch(w, rawWords)) || first));
+    };
     if (semantic?.length && terms.length) return this.fuse(sorted, semantic, accepts, max, lexicalSnippet);
     return sorted
       .slice(0, max)

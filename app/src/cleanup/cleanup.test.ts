@@ -110,11 +110,21 @@ describe("LLM por cima das regras", () => {
   });
 
   test("timeout: aborta e devolve as regras", async () => {
-    const { backend } = fakeLlm("Oi, Ana.", { delayMs: 500 });
+    // O LLM que demoraria 1 min: sem o timeout, o teste estoura o prazo do bun test (5 s) em vez de passar (T8236).
+    const { backend } = fakeLlm("Oi, Ana.", { delayMs: 60_000 });
+    let aborted = false;
+    const complete = backend.complete;
+    backend.complete = (req, signal) => {
+      signal.addEventListener("abort", () => (aborted = true));
+      return complete(req, signal);
+    };
     const r = await cleanup({ raw, bundleId: MAIL, dictionary }, { llm: backend, llmMode: "always", llmTimeoutMs: 30 });
     expect(r.llm).toMatchObject({ used: false, reason: "timeout" });
     expect(r.text).toBe(r.rulesText);
-    expect(r.ms).toBeLessThan(400);
+    // A guarda sem relógio: o pedido ao LLM foi abortado. O tempo vai para o log, com um teto de 100× o timeout de 30 ms.
+    expect(aborted).toBe(true);
+    console.log(`[cleanup.test] timeout de 30 ms: devolveu em ${r.ms} ms`);
+    expect(r.ms).toBeLessThan(3000);
   });
 
   test("erro do backend: devolve as regras", async () => {

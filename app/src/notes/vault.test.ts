@@ -349,7 +349,7 @@ describe("Vault (T1316)", () => {
     expect(seen.flat()).toEqual(expect.arrayContaining(["Nota.md", "Nova.md"]));
   });
 
-  test("1.000 notas: abrir e buscar dentro da meta (< ~200 ms por busca no M1 Pro)", async () => {
+  test("1.000 notas: a busca monta o trecho só dos 20 que voltam, e fica dentro da meta", async () => {
     const files: Record<string, string> = {};
     const words = "kiwi nota reunião projeto ditado vault obsidian markdown índice busca semana time pauta ideia".split(" ");
     for (let i = 0; i < 1000; i++) {
@@ -358,11 +358,16 @@ describe("Vault (T1316)", () => {
     }
     const { v } = await vault(files);
     expect(v.list().notes.length).toBe(1000);
+    const built = v.snippetsBuilt;
     const t0 = performance.now();
     const hits = v.search("reunião projeto", 20);
     const ms = performance.now() - t0;
     expect(hits.length).toBe(20);
-    expect(ms).toBeLessThan(200);
+    // A guarda sem relógio (T8236): montar o trecho de cada nota que casa (mil, aqui) custava 288 ms. Só os 20 que voltam.
+    expect(v.snippetsBuilt - built).toBe(20);
+    // O tempo vai para o log, com um teto de 10× a meta de ~200 ms: um engasgo do runner não derruba o CI.
+    console.log(`[vault.test] busca em 1.000 notas: ${ms.toFixed(1)} ms`);
+    expect(ms).toBeLessThan(2000);
     expect(v.backlinks("Pasta 1/Nota 1.md").map((b) => b.path)).toEqual(["Pasta 0/Nota 0.md"]);
   });
 });
