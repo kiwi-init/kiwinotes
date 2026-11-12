@@ -1,0 +1,239 @@
+{
+  "source": "prancha-estados.png",
+  "input": "../gerada/kiwi-cat-candidata-v2.png",
+  "tool": "image_gen integrado",
+  "referenceOnly": true,
+  "frames": [
+    {
+      "file": "quadros/repouso-padrao.png",
+      "state": "repouso",
+      "palette": "padrao",
+      "crop": {
+        "x": 9,
+        "y": 7,
+        "width": 311,
+        "height": 238
+      }
+    },
+    {
+      "file": "quadros/repouso-claude.png",
+      "state": "repouso",
+      "palette": "claude",
+      "crop": {
+        "x": 320,
+        "y": 7,
+        "width": 309,
+        "height": 238
+      }
+    },
+    {
+      "file": "quadros/repouso-codex.png",
+      "state": "repouso",
+      "palette": "codex",
+      "crop": {
+        "x": 629,
+        "y": 7,
+        "width": 310,
+        "height": 238
+      }
+    },
+    {
+      "file": "quadros/acordou-padrao.png",
+      "state": "acordou",
+      "palette": "padrao",
+      "crop": {
+        "x": 9,
+        "y": 245,
+        "width": 311,
+        "height": 230
+      }
+    },
+    {
+      "file": "quadros/acordou-claude.png",
+      "state": "acordou",
+      "palette": "claude",
+      "crop": {
+        "x": 320,
+        "y": 245,
+        "width": 309,
+        "height": 230
+      }
+    },
+    {
+      "file": "quadros/acordou-codex.png",
+      "state": "acordou",
+      "palette": "codex",
+      "crop": {
+        "x": 629,
+        "y": 245,
+        "width": 310,
+        "height": 230
+      }
+    },
+    {
+      "file": "quadros/ouvindo-padrao.png",
+      "state": "ouvindo",
+      "palette": "padrao",
+      "crop": {
+        "x": 9,
+        "y": 475,
+        "width": 311,
+        "height": 232
+      }
+    },
+    {
+      "file": "quadros/ouvindo-claude.png",
+      "state": "ouvindo",
+      "palette": "claude",
+      "crop": {
+        "x": 320,
+        "y": 475,
+        "width": 309,
+        "height": 232
+      }
+    },
+    {
+      "file": "quadros/ouvindo-codex.png",
+      "state": "ouvindo",
+      "palette": "codex",
+      "crop": {
+        "x": 629,
+        "y": 475,
+        "width": 310,
+        "height": 232
+      }
+    },
+    {
+      "file": "quadros/thinking-padrao.png",
+      "state": "thinking",
+      "palette": "padrao",
+      "crop": {
+        "x": 9,
+        "y": 707,
+        "width": 311,
+        "height": 226
+      }
+    },
+    {
+      "file": "quadros/thinking-claude.png",
+      "state": "thinking",
+      "palette": "claude",
+      "crop": {
+        "x": 320,
+        "y": 707,
+        "width": 309,
+        "height": 226
+      }
+    },
+    {
+      "file": "quadros/thinking-codex.png",
+      "state": "thinking",
+      "palette": "codex",
+      "crop": {
+        "x": 629,
+        "y": 707,
+        "width": 310,
+        "height": 226
+      }
+    },
+    {
+      "file": "quadros/agindo-padrao.png",
+      "state": "agindo",
+      "palette": "padrao",
+      "crop": {
+        "x": 9,
+        "y": 933,
+        "width": 311,
+        "height": 221
+      }
+    },
+    {
+      "file": "quadros/agindo-claude.png",
+      "state": "agindo",
+      "palette": "claude",
+      "crop": {
+        "x": 320,
+        "y": 933,
+        "width": 309,
+        "height": 221
+      }
+    },
+    {
+      "file": "quadros/agindo-codex.png",
+      "state": "agindo",
+      "palette": "codex",
+      "crop": {
+        "x": 629,
+        "y": 933,
+        "width": 310,
+        "height": 221
+      }
+    },
+    {
+      "file": "quadros/pronto-padrao.png",
+      "state": "pronto",
+      "palette": "padrao",
+      "crop": {
+        "x": 9,
+        "y": 1154,
+        "width": 311,
+        "height": 226
+      }
+    },
+    {
+      "file": "quadros/pronto-claude.png",
+      "state": "pronto",
+      "palette": "claude",
+      "crop": {
+        "x": 320,
+        "y": 1154,
+        "width": 309,
+        "height": 226
+      }
+    },
+    {
+      "file": "quadros/pronto-codex.png",
+      "state": "pronto",
+      "palette": "codex",
+      "crop": {
+        "x": 629,
+        "y": 1154,
+        "width": 310,
+        "height": 226
+      }
+    },
+    {
+      "file": "quadros/erro-padrao.png",
+      "state": "erro",
+      "palette": "padrao",
+      "crop": {
+        "x": 9,
+        "y": 1380,
+        "width": 311,
+        "height": 243
+      }
+    },
+    {
+      "file": "quadros/erro-claude.png",
+      "state": "erro",
+      "palette": "claude",
+      "crop": {
+        "x": 320,
+        "y": 1380,
+        "width": 309,
+        "height": 243
+      }
+    },
+    {
+      "file": "quadros/erro-codex.png",
+      "state": "erro",
+      "palette": "codex",
+      "crop": {
+        "x": 629,
+        "y": 1380,
+        "width": 310,
+        "height": 243
+      }
+    }
+  ]
+}
