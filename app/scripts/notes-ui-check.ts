@@ -91,6 +91,16 @@ async function openTree() {
   if ((await page.getAttribute(".kn-crumb-bt", "aria-expanded")) !== "true") await page.click(".kn-crumb-bt");
   await page.waitForSelector(".kn-side", { state: "visible" });
 }
+// Fechada, a árvore tira o conteúdo da página depois da animação (T7390): ler a árvore pede abrir antes.
+async function closeTree() {
+  if ((await page.getAttribute(".kn-crumb-bt", "aria-expanded")) !== "true") return;
+  // O Esc sai da busca da árvore (vazia) e fecha; fora dela, ele pode ficar com o campo que tem o foco (o título).
+  // Com um toast na tela (o "renomeado" de um renomear), o Esc é dele: espera ele sair.
+  await page.waitForSelector(".kn-toast", { state: "detached", timeout: 20_000 });
+  await page.focus(".kn-tree-pop .kn-side-search");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".kn-tree-pop .kn-side", { state: "detached" });
+}
 // Os nomes da seção "Notas" da árvore (as pastas e as notas da raiz), sem os Recentes e as Fixadas de cima.
 const treeNames = () =>
   page.evaluate(() => {
@@ -112,7 +122,9 @@ await page.waitForSelector(".kn-title");
 
 await step("abre a Caixa de entrada e lista o vault", async () => {
   expectEq(await title(), "Caixa de entrada");
+  await openTree();
   expectEq(await treeNames(), ["Diário", "Pessoas", "Projetos", "Reuniões", "Caixa de entrada"]);
+  await closeTree();
 });
 
 await step("clique num [[link]] abre a nota", async () => {
@@ -207,7 +219,9 @@ await step("⌘-clique: link https abre fora, javascript: não faz nada", async 
 await step("renomear pelo título atualiza os links de quem cita", async () => {
   await page.fill(".kn-title", "Mudança do escritório");
   await page.keyboard.press("Enter");
+  await openTree();
   await page.waitForFunction(() => document.querySelector(".kn-side-item[aria-current=page]")?.textContent === "Mudança do escritório");
+  await closeTree();
   const c = await content("Reuniões/2026-11-02 Planejamento.md");
   if (!c.includes("[[Mudança do escritório]]")) throw new Error(c);
 });

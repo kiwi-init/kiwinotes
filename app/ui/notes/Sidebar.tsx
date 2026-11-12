@@ -14,6 +14,7 @@ import { HoverLabel } from "../src/kit/index.tsx";
 import { TreeIcon, Twisty } from "./treeIcons.tsx";
 import type { SavedSearch } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
+import type { SectionId } from "./sidebarState.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
 
 /** Em que o botão direito (ou o arrastar) caiu. */
@@ -79,6 +80,15 @@ export interface SidebarProps {
    * pastas recentes, para que a árvore seja o lugar único de navegação, sem controle extra ao lado dela.
    */
   root?: SideRoot;
+  /**
+   * As seções recolhidas (T7390, spec #7383): Fixadas, Buscas salvas, Recentes, Notas e Tags recolhem pelo título.
+   * Sem `onSection`, os títulos são só texto e tudo fica aberto.
+   */
+  collapsed?: ReadonlySet<SectionId>;
+  onSection?(id: SectionId): void;
+  /** Os botões do topo que fecham e abrem todas as pastas da árvore, também as de dentro. */
+  onCollapseAll?(): void;
+  onExpandAll?(): void;
 }
 
 /** A pasta aberta e as recentes (sem a aberta). `onOpen()` abre o seletor; `onOpen(key)`, uma recente. */
@@ -151,6 +161,19 @@ export function Sidebar(p: SidebarProps) {
   const [dropOn, setDropOn] = useState<string | null>(null);
   const newNoteKey = p.keys ? p.keys.newNote : "⌘N";
   const dailyKey = p.keys ? p.keys.dailyNote : "⇧⌘D";
+  const shut = (id: SectionId) => Boolean(p.onSection && p.collapsed?.has(id));
+  /** O título de uma seção: com `onSection`, um botão com a seta que recolhe e abre a seção (T7390). */
+  const head = (id: SectionId, label: string) =>
+    p.onSection ? (
+      <button type="button" className="kn-side-head" data-section={id} aria-expanded={!shut(id)} onClick={() => p.onSection?.(id)}>
+        <Twisty open={!shut(id)} />
+        {label}
+      </button>
+    ) : (
+      <div className="kn-side-head" data-section={id}>
+        {label}
+      </div>
+    );
   const menu = (e: React.MouseEvent, target: SideTarget) => {
     e.preventDefault();
     e.stopPropagation();
@@ -372,6 +395,18 @@ export function Sidebar(p: SidebarProps) {
           <HoverLabel>Pasta</HoverLabel>
         </button>
       ) : null}
+      {p.onCollapseAll ? (
+        <button type="button" className="kn-side-new kn-expand" data-all="collapse" title="Recolher todas as pastas" aria-label="Recolher todas as pastas" onClick={() => p.onCollapseAll?.()}>
+          <TreeIcon name="collapse-all" />
+          <HoverLabel>Recolher</HoverLabel>
+        </button>
+      ) : null}
+      {p.onExpandAll ? (
+        <button type="button" className="kn-side-new kn-expand" data-all="expand" title="Expandir todas as pastas" aria-label="Expandir todas as pastas" onClick={() => p.onExpandAll?.()}>
+          <TreeIcon name="expand-all" />
+          <HoverLabel>Expandir</HoverLabel>
+        </button>
+      ) : null}
       </div>
       {!searching && p.root ? <RootFolder root={p.root} /> : null}
       {!searching && p.onDaily ? (
@@ -383,15 +418,15 @@ export function Sidebar(p: SidebarProps) {
       ) : null}
       {!searching && p.pinned.length ? (
         <>
-          <div className="kn-side-head">Fixadas</div>
-          {p.pinned.map((n) => noteItem({ path: n.path, name: n.title }, 0, `p:${n.path}`, false))}
+          {head("pinned", "Fixadas")}
+          {!shut("pinned") && p.pinned.map((n) => noteItem({ path: n.path, name: n.title }, 0, `p:${n.path}`, false))}
           <div className="kn-side-gap" />
         </>
       ) : null}
       {!searching && p.saved?.length && p.onSaved ? (
         <>
-          <div className="kn-side-head">Buscas salvas</div>
-          {p.saved.map((s) => (
+          {head("saved", "Buscas salvas")}
+          {!shut("saved") && p.saved.map((s) => (
             <div key={`s:${s.query}`} className="kn-side-saved">
               <button type="button" className="kn-side-item" data-kind="search" title={s.query} onClick={(e) => !e.ctrlKey && p.onSaved?.(s.query)}>
                 <TreeIcon name="search" />
@@ -409,19 +444,20 @@ export function Sidebar(p: SidebarProps) {
       ) : null}
       {!searching && p.recent.length ? (
         <>
-          <div className="kn-side-head">Recentes</div>
-          {p.recent.map((n) => noteItem({ path: n.path, name: n.title }, 0, `r:${n.path}`, false))}
+          {head("recent", "Recentes")}
+          {!shut("recent") && p.recent.map((n) => noteItem({ path: n.path, name: n.title }, 0, `r:${n.path}`, false))}
           <div className="kn-side-gap" />
         </>
       ) : null}
-      <div className="kn-side-head">{searching ? "Resultado" : "Notas"}</div>
-      {items(p.tree, 0)}
+      {/* Na busca, o resultado vem inteiro, mesmo com a seção Notas recolhida. */}
+      {searching ? <div className="kn-side-head" data-section="notes">Resultado</div> : head("notes", "Notas")}
+      {searching || !shut("notes") ? items(p.tree, 0) : null}
       {searching && !p.tree.length ? <div className="kn-side-empty">Nada com esse nome</div> : null}
       {!searching && p.tags?.length && p.onTag ? (
         <>
           <div className="kn-side-gap" />
-          <div className="kn-side-head">Tags</div>
-          {tagItems(p.tags, 0, p.onTag, p.onTagMenu)}
+          {head("tags", "Tags")}
+          {!shut("tags") && tagItems(p.tags, 0, p.onTag, p.onTagMenu)}
         </>
       ) : null}
       {!searching && p.onTrash ? (

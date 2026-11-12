@@ -52,6 +52,7 @@ import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { CanvasView } from "./canvas/CanvasView.tsx";
 import { FileView, type FilesApi } from "./files/FileView.tsx";
 import { viewerFor } from "./files/viewers.ts";
+import { allFolders, loadCollapsed, loadOpenFolders, saveCollapsed, saveOpenFolders, type SectionId, toggled } from "./sidebarState.ts";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs,
 } from "./types.ts";
@@ -101,7 +102,12 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const handledRequest = useRef(openRequest?.n ?? 0);
   const [listing, setListing] = useState<VaultListing | null>(null);
   const [failed, setFailed] = useState(false);
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+  // As pastas abertas e as seções recolhidas da barra ficam guardadas entre aberturas (T7390, spec #7383). As pastas
+  // são de cada cofre (este componente remonta a cada troca de pasta das notas).
+  const vaultKey = folderRef?.key ?? "";
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => loadOpenFolders(vaultKey));
+  const [collapsed, setCollapsed] = useState<Set<SectionId>>(() => loadCollapsed());
+  useEffect(() => saveCollapsed(collapsed), [collapsed]);
   const [note, setNote] = useState<Note | null>(null);
   const [docKey, setDocKey] = useState("");
   const [headingJump, setHeadingJump] = useState<{ path: string; heading: string; sequence: number } | null>(null);
@@ -1114,6 +1120,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
 
   const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy],
   );
+  // Grava as pastas abertas; com o cofre lido, as que foram apagadas saem da lista (revisão do T7390).
+  useEffect(
+    () => saveOpenFolders(vaultKey, openFolders, listing ? new Set(allFolders(fullTree)) : undefined),
+    [vaultKey, openFolders, listing, fullTree],
+  );
   // T6011: o engine decide as notas também sem filtros (raízes PT e conteúdo); a árvore mantém a hierarquia.
   const [queryPaths, setQueryPaths] = useState<Set<string> | null>(null);
   useEffect(() => {
@@ -1226,13 +1237,15 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           onSelectFolder={setSelectedFolder}
           onMenu={(at, target) => setMenu({ ...at, target })}
           onDrop={folders ? (what, folder) => void moveItem(what, folder) : undefined}
-          onToggle={(f) =>
-            setOpenFolders((s) => {
-              const next = new Set(s);
-              if (!next.delete(f)) next.add(f);
-              return next;
-            })
-          }
+          onToggle={(f) => setOpenFolders((s) => toggled(s, f))}
+          collapsed={collapsed}
+          onSection={(id) => setCollapsed((s) => toggled(s, id))}
+          onCollapseAll={() => setOpenFolders(new Set())}
+          onExpandAll={() => {
+            setOpenFolders(new Set(allFolders(fullTree)));
+            // Expandir tudo mostra a árvore: a seção Notas abre junto, se estava recolhida.
+            setCollapsed((s) => (s.has("notes") ? toggled(s, "notes") : s));
+          }}
           onOpen={(p) => void open(p)}
           onOpenFile={
             api.files

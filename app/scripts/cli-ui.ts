@@ -262,7 +262,9 @@ export async function runUi(argv: string[], ctx: UiContext): Promise<number> {
           const step: Record<string, unknown> = { n: i + 1, step: describeStep(s) };
           try {
             const r = await runStep(w.page, s, out, ctx.send);
-            Object.assign(step, { ok: true, ms: Math.round(performance.now() - t0) }, r);
+            const ms = Math.round(performance.now() - t0);
+            if (s.maxMs !== undefined && ms > s.maxMs) throw new Error(`o passo levou ${ms} ms, e o limite (maxMs) é ${s.maxMs} ms`);
+            Object.assign(step, { ok: true, ms }, r);
           } catch (e) {
             const shot = join(out, `falhou-passo-${i + 1}.png`);
             await w.page.screenshot({ path: shot }).catch(() => {});

@@ -106,6 +106,28 @@ body {
   margin: 4px 0 8px;
 }
 
+/* O título que recolhe a seção (T7390): um botão que parece o texto de antes, com a seta das pastas à esquerda. */
+button.kn-side-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 2px 0;
+  margin: 2px 0 6px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: default;
+  border-radius: var(--radius-sm);
+}
+button.kn-side-head:hover {
+  color: var(--text-2);
+}
+button.kn-side-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .kn-side-item {
   /* T3370: cada item é uma linha com a seta (nas da árvore), o ícone, o nome, a extensão e o número à direita */
   display: flex;
@@ -598,7 +620,7 @@ body {
 }
 
 .kn-side-item[data-drop],
-.kn-side[data-drop] > .kn-side-head:last-of-type {
+.kn-side[data-drop] > .kn-side-head[data-section="notes"] {
   color: var(--accent-text);
 }
 
