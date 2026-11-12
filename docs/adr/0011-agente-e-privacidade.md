@@ -16,7 +16,7 @@ Então a frase "nada sai do Mac" deixa de ser exata. Antes de qualquer código, 
 ## O que vai para o agente
 Só com o agente ligado, e só nestes dois momentos:
 - **quando você faz um pedido a ele.** Vai o texto do pedido: a sua fala vira texto no Mac, como no ditado, e o áudio nunca vai. Vão também os trechos de notas, de reuniões e de arquivos que o agente lê, pelas ferramentas do Kiwi, para atender aquele pedido;
-- **quando termina uma reunião que você gravou.** Vai a transcrição dela, para o agente preparar a proposta (o resumo e o que entra na nota do projeto), que você aprova ou não (#8360).
+- **quando termina uma reunião que você gravou.** Vai a transcrição dela, para o agente preparar a proposta (o resumo e o que entra na nota do projeto), que você aprova ou não (#8360). Dá para desligar só essa proposta depois das reuniões em Ajustes › Agente, sem desligar o agente: uma reunião pode ser sensível. O interruptor é do spec da tela.
 
 ## O que nunca vai
 - **O áudio** do ditado e das reuniões.
@@ -51,7 +51,7 @@ Só com o agente ligado, e só nestes dois momentos:
 > **O que vai para o {agente}**
 > - O que você pedir a ele. A sua voz vira texto aqui no Mac, e o áudio não vai.
 > - Os trechos das suas notas, reuniões e arquivos que ele ler para atender o pedido.
-> - A transcrição de uma reunião que você gravou, quando ela termina, para ele preparar o resumo. Você aprova antes de entrar na nota.
+> - A transcrição de uma reunião que você gravou, quando ela termina, para ele preparar o resumo. Você aprova antes de entrar na nota, e pode desligar só isso em Ajustes › Agente.
 >
 > **O que nunca vai**
 > - O áudio do ditado e das reuniões.
