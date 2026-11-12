@@ -121,6 +121,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [conflict, setConflict] = useState<{ note: Note; merge: Extract<MergeResult, { clean: false }> } | null>(null);
   /** O último save falhou (disco cheio, nota apagada fora, grande demais): a edição fica e a pessoa decide. */
   const [saveFailed, setSaveFailed] = useState(false);
+  // A nota aberta sumiu fora (apagada ou renomeada) com texto por gravar (T7513): o texto fica no editor e o aviso deixa
+  // a pessoa escolher. Até lá não grava (não recria a nota calado) e não sai dela.
+  const [gone, setGone] = useState(false);
+  const goneRef = useRef(false);
+  const markGone = (v: boolean) => {
+    goneRef.current = v;
+    setGone(v);
+  };
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [palette, setPalette] = useState(false);
   /** O texto com que o ⌘K abre (T2619: `tag:…` vindo de um clique numa tag). */
@@ -252,6 +260,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       setDocKey(`${n.path}@${n.version}@${++shown.current}`);
       setConflict(null);
       setSaveFailed(false);
+      markGone(false);
       // Um rascunho que não foi gravado (a janela fechou com conflito ou erro na tela): oferece de volta.
       const d = drafts.get(n.path);
       if (d && d.body !== split.body) {
@@ -303,6 +312,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       const path = current.current;
       const text = pending.current;
       if (!path || text === null) return "clean";
+      if (goneRef.current) return "error";
       const submitted = frontmatter.current + text;
       let r: SaveResult & { content?: string };
       try {
@@ -396,12 +406,31 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     pending.current = null;
     if (!path) return;
     drafts.remove(path);
-    api.get(path).then(show, () => {
+    const close = () => {
       current.current = null;
       setNote(null);
       setSaveFailed(false);
-    });
+      markGone(false);
+    };
+    if (goneRef.current) return close();
+    api.get(path).then(show, close);
   }, [api, drafts, show]);
+
+  /** "Recuperar como nota nova" (T7513): a nota aberta sumiu fora; o texto do editor vira uma nota na mesma pasta. */
+  const recoverGone = async () => {
+    const path = current.current;
+    if (!path || pending.current === null) return;
+    const text = frontmatter.current + pending.current;
+    const n = await api
+      .create(noteName(path), folderOf(path) || undefined, text)
+      // A pasta pode ter sumido junto: vai para a Caixa de entrada, como o rascunho órfão.
+      .catch(() => api.create(noteName(path), INBOX, text))
+      .catch(() => null);
+    if (!n || current.current !== path) return; // o aviso fica: dá para tentar de novo
+    drafts.remove(path);
+    await refresh();
+    show(n);
+  };
 
   const open = useCallback(
     async (path: string) => {
@@ -512,8 +541,16 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         if (!paths.includes(path)) return;
         api.get(path).then(
           (n) => {
-            if (current.current !== path || n.version === version.current)
-              return;
+            if (current.current !== path) return;
+            // Voltou (desfeito no Finder, renomeada de volta): o aviso sai e o texto segue para o disco.
+            if (goneRef.current) {
+              markGone(false);
+              if (n.version === version.current) {
+                void save();
+                return;
+              }
+            }
+            if (n.version === version.current) return;
             const local =
               frontmatter.current +
               (pending.current ?? splitFrontmatter(baseContent.current).body);
@@ -532,8 +569,13 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             if (!m.clean) setConflict({ note: n, merge: m });
           },
           () => {
-            // Apagada ou renomeada fora: a janela fica sem nota aberta.
+            // Apagada ou renomeada fora: a janela fica sem nota aberta. Com texto por gravar, fica nela com o aviso (T7513).
             if (current.current !== path) return;
+            if (pending.current !== null) {
+              clearTimeout(timer.current);
+              markGone(true);
+              return;
+            }
             current.current = null;
             setNote(null);
           },
@@ -1425,7 +1467,19 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               renaming={newProperty}
               onRenamingDone={clearNewProperty}
             />
-            {conflict ? (
+            {gone ? (
+              <div className="kn-conflict kn-save-alert kn-gone" role="alert">
+                Esta nota foi apagada ou renomeada fora do Kiwi Notes. O que você escreveu continua aqui.
+                <span className="kn-conflict-actions">
+                  <button type="button" className="kn-bt" onClick={discard}>
+                    Descartar
+                  </button>
+                  <button type="button" className="kn-bt kn-bt-acc" onClick={() => void recoverGone()}>
+                    Recuperar como nota nova
+                  </button>
+                </span>
+              </div>
+            ) : conflict ? (
               <div className="kn-conflict kn-save-alert kn-merge" role="alert">
                 {/* T5454: o resto do que mudou fora já entrou; só os trechos que os dois mudaram pedem uma escolha. */}
                 <span>
