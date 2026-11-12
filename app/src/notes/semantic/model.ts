@@ -3,8 +3,7 @@
 // SHA-256 conferido antes de entrar: um arquivo errado nunca é usado.
 
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { type FileHandle, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 export interface ModelFile {
@@ -116,14 +115,17 @@ export async function ensureModel(
       stall = setTimeout(() => abort.abort(new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} stalled: no bytes for ${Math.round(stallMs / 1000)} s`)), stallMs);
     };
     const hash = createHash("sha256");
-    let out: ReturnType<typeof createWriteStream> | undefined;
+    // O `.part` por um FileHandle, cada escrita esperada (T8159): o `createWriteStream` abria e escrevia por conta
+    // própria, o `destroy` não esperava, e o `rm` do erro corria antes. O `.part` sobrava, ou o stream abria depois de a
+    // pasta sumir e o erro dele ficava sem dono (o `ENOENT` que derrubou o CI e o build da rc15).
+    let out: FileHandle | undefined;
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let size = 0;
     try {
       arm();
       const res = await unlessAborted(get(fileUrl(m, f), { signal: abort.signal }), abort.signal);
       if (!res.ok || !res.body) throw new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} failed: HTTP ${res.status}`);
-      const file = (out = createWriteStream(part));
+      const file = (out = await open(part, "w"));
       reader = res.body.getReader();
       for (;;) {
         arm();
@@ -132,16 +134,18 @@ export async function ensureModel(
         size += chunk.byteLength;
         if (size > f.size) throw new ModelError("E_MODEL_HASH", `${f.name} is larger than expected`);
         hash.update(chunk);
-        if (!file.write(chunk)) await new Promise<void>((r) => file.once("drain", () => r()));
+        for (let at = 0; at < chunk.byteLength; ) at += (await file.write(chunk, at, chunk.byteLength - at)).bytesWritten;
         o.onProgress?.(done + size, total);
       }
       clearTimeout(stall);
-      await new Promise<void>((resolve, reject) => file.end((e?: Error | null) => (e ? reject(e) : resolve())));
+      out = undefined;
+      await file.close();
     } catch (e) {
       // A leitura pendente e a conexão saem junto: o `cancel` solta o corpo, e o `abort` o `fetch`.
       abort.abort(e);
       void reader?.cancel().catch(() => {});
-      out?.destroy();
+      // Fecha antes de apagar, e só devolve depois: nada do `.part` fica correndo depois do retorno.
+      await out?.close().catch(() => {});
       await rm(part, { force: true });
       throw e instanceof ModelError ? e : new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} failed: ${String(e)}`);
     } finally {
