@@ -112,6 +112,9 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [collapsed, setCollapsed] = useState<Set<SectionId>>(() => loadCollapsed());
   useEffect(() => saveCollapsed(collapsed), [collapsed]);
   const [note, setNote] = useState<Note | null>(null);
+  /** A nota aberta não é UTF-8 (T7575): só leitura. */
+  const readOnlyRef = useRef(false);
+  readOnlyRef.current = note?.readOnly === true;
   const [docKey, setDocKey] = useState("");
   const [headingJump, setHeadingJump] = useState<{ path: string; heading: string; sequence: number } | null>(null);
   const shown = useRef(0);
@@ -659,6 +662,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }, [create, save]);
 
   const onChange = (doc: string) => {
+    // A nota que não é UTF-8 só é lida (T7575): nada fica por gravar, nem vira rascunho.
+    if (readOnlyRef.current) return;
     pending.current = doc;
     setWords(wordCount(doc));
     // O rascunho anda junto com a edição, para sobreviver a um fechamento que o save não alcançou.
@@ -672,7 +677,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
 
   /** Uma edição do painel de propriedades (T6598): o frontmatter novo grava junto com o corpo de agora. */
   const onProperties = (text: string) => {
-    if (text === frontmatter.current) return;
+    if (text === frontmatter.current || readOnlyRef.current) return;
     setFrontmatter(text);
     if (pending.current === null) pending.current = splitFrontmatter(baseContent.current).body;
     if (current.current && !undecided.current)
@@ -1484,6 +1489,12 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
               renaming={newProperty}
               onRenamingDone={clearNewProperty}
             />
+            {note.readOnly ? (
+              <div className="kn-conflict kn-readonly" role="status">
+                Esta nota não está em UTF-8, e os caracteres que o Kiwi Notes não entendeu aparecem como �. Aqui ela só é
+                lida, para eles não se perderem; para editar, salve a nota em UTF-8 no app de onde ela veio.
+              </div>
+            ) : null}
             {gone ? (
               <div className="kn-conflict kn-save-alert kn-gone" role="alert">
                 Esta nota foi apagada ou renomeada fora do Kiwi Notes. O que você escreveu continua aqui.
@@ -1559,6 +1570,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             </details> : null}
             <NoteEditor
               docKey={docKey}
+              readOnly={note.readOnly === true}
               headingJump={headingJump?.path === note.path ? headingJump : null}
               doc={body}
               links={links}

@@ -170,6 +170,40 @@ describe("Vault (T1316)", () => {
     expect(existsSync(path.join(v.root, "Pasta/C.md"))).toBe(true);
   });
 
+  // T7437: uma nota que não é UTF-8 (Latin-1, de um app antigo do Windows) volta do disco com U+FFFD no lugar dos
+  // acentos. Gravar esse texto por cima apaga os acentos de vez. Como no files.save (T7105): os bytes não mudam.
+  const latin = Buffer.from("# Reunião\n\nAção: ver [[Alvo]].\n", "latin1");
+  test("rename não reescreve os links de uma nota que não é UTF-8; ela sai em skippedPaths", async () => {
+    const { v, root } = await vault({ "Alvo.md": "# Alvo\n", "Latin.md": latin as unknown as string });
+    const r = await v.rename("Alvo.md", "Alvo novo.md");
+    expect(readFileSync(path.join(root, "Latin.md"))).toEqual(latin);
+    expect(r.skippedPaths).toContain("Latin.md");
+  });
+  test("save não grava por cima de uma nota que não é UTF-8", async () => {
+    const { v, root } = await vault({ "Latin.md": latin as unknown as string });
+    const note = await v.get("Latin.md");
+    await code(v.save("Latin.md", note.content + "mais uma linha\n", note.version));
+    expect(readFileSync(path.join(root, "Latin.md"))).toEqual(latin);
+  });
+  test("a nota que não é UTF-8 volta com readOnly, e o save diz E_NOT_UTF8 (T7575)", async () => {
+    const { v } = await vault({ "Latin.md": latin as unknown as string, "Boa.md": "Ação em UTF-8.\n" });
+    const note = await v.get("Latin.md");
+    expect(note.readOnly).toBe(true);
+    expect((await v.get("Boa.md")).readOnly).toBeUndefined();
+    expect(await code(v.save("Latin.md", "outro texto", note.version))).toBe("E_NOT_UTF8");
+  });
+  test("renomear a tag e mover a pasta pulam a nota que não é UTF-8; os bytes não mudam (T7575)", async () => {
+    // A tag em ASCII: o acento lido de um Latin-1 vira U+FFFD, e a tag não casaria.
+    const tagged = Buffer.from("Ação #projeto e [[Pasta/Alvo]].\n", "latin1");
+    const { v, root } = await vault({ "Latin.md": tagged as unknown as string, "Boa.md": "#projeto\n", "Pasta/Alvo.md": "alvo" });
+    const r = await v.renameTag("projeto", "plano");
+    expect(r.skippedPaths).toContain("Latin.md");
+    expect(readFileSync(path.join(root, "Boa.md"), "utf8")).toBe("#plano\n");
+    await v.moveFolder("Pasta", "Outra");
+    expect(existsSync(path.join(root, "Outra/Alvo.md"))).toBe(true);
+    expect(readFileSync(path.join(root, "Latin.md"))).toEqual(tagged);
+  });
+
   test("rename não apaga o que mudou fora e o índice ainda não viu (revisão #1397)", async () => {
     const { v, root } = await vault({ "A.md": "a", "B.md": "Veja [[A]].\n" });
     // Editada no Obsidian depois do open, antes do watcher (ou sem ele): o índice ainda tem a versão velha.

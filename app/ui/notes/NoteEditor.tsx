@@ -1,7 +1,7 @@
 // O CodeMirror dentro do React: um EditorView por janela, e um estado novo a cada nota aberta (o desfazer não atravessa
 // de uma nota para outra). O texto que chega de fora (a nota recarregada) troca o estado; o que a pessoa digita só sobe.
 
-import { EditorSelection, type Extension, Transaction } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, type Extension, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { isolateHistory } from "@codemirror/commands";
 import { headingFor, markdownStructure } from "../../src/shared/markdown-structure.ts";
@@ -23,6 +23,10 @@ import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
 
 const externalUpdates = new WeakSet<EditorView>();
+
+/** Só leitura (T7575): a nota que não é UTF-8 aparece, mas não se edita (gravar apagaria os bytes que o Kiwi não leu). */
+const readOnlyCompartment = new Compartment();
+const readOnlyExtension = (on: boolean): Extension => (on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []);
 
 export interface NoteEditorProps {
   /** Muda quando outra nota abre, ou quando a mesma nota é recarregada do disco. */
@@ -53,17 +57,20 @@ export interface NoteEditorProps {
   viewModes?: { focusKey?: string; typewriterKey?: string; toggleFocus(): void; toggleTypewriter(): void };
   /** "Adicionar propriedade" no menu do botão direito (T6598): o painel some quando a nota não tem nenhuma. */
   onAddProperty?: () => void;
+  /** A nota só é lida (T7575: não é UTF-8). */
+  readOnly?: boolean;
 }
 
 export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
-  focus = false, typewriter = false, viewModes, onAddProperty,
+  focus = false, typewriter = false, viewModes, onAddProperty, readOnly = false,
 }: NoteEditorProps) {
-  const modes = useRef({ focus, typewriter });
-  modes.current = { focus, typewriter };
+  const modes = useRef({ focus, typewriter, readOnly });
+  modes.current = { focus, typewriter, readOnly };
   const withModes = (base: Extension[]): Extension[] => [
     ...base,
     focusCompartment.of(focusExtension(modes.current.focus)),
     typewriterCompartment.of(typewriterExtension(modes.current.typewriter)),
+    readOnlyCompartment.of(readOnlyExtension(modes.current.readOnly)),
   ];
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -141,6 +148,10 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
     });
     if (typewriter) v.dispatch({ effects: EditorView.scrollIntoView(v.state.selection.main.head, { y: "center" }) });
   }, [focus, typewriter]);
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyExtension(readOnly)) });
+  }, [readOnly]);
 
   useEffect(() => {
     const v = view.current;

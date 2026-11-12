@@ -9,7 +9,7 @@ import { linkSafeName } from "../shared/wikilinks.ts";
 /** Um erro com código, que o AppEngine passa à UI como está. */
 export class VaultError extends Error {
   constructor(
-    readonly code: "E_BAD_ARGS" | "E_NOT_FOUND" | "E_EXISTS" | "E_OUTSIDE_VAULT" | "E_CONFLICT" | "E_ACCESS",
+    readonly code: "E_BAD_ARGS" | "E_NOT_FOUND" | "E_EXISTS" | "E_OUTSIDE_VAULT" | "E_CONFLICT" | "E_ACCESS" | "E_NOT_UTF8",
     message: string,
   ) {
     super(message);
