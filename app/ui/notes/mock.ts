@@ -12,7 +12,7 @@ import { DEFAULT_TEMPLATES_FOLDER, fillTemplate } from "../../src/shared/templat
 import type { TagNode } from "./types.ts";
 import { linkSpans, unlinkedSpans, contextOf } from "../../src/notes/mentions.ts";
 import type { VersionsApi } from "./types.ts";
-import type { Backlink, ExtrasApi, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, TrashItem, VaultListing } from "./types.ts";
+import type { Backlink, ExtrasApi, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, TrashItem, VaultFile, VaultListing } from "./types.ts";
 
 interface Stored {
   content: string;
@@ -98,10 +98,14 @@ export class MockVault implements NotesApi {
     this.emit([path]);
   }
 
+  /** Os arquivos que não são notas (T7616): só na lista, para um `[[relatorio.pdf]]` achar o arquivo. */
+  otherFiles: VaultFile[] = [];
+
   async list(): Promise<VaultListing> {
     return {
       folders: [...this.dirs].sort((a, b) => a.localeCompare(b, "pt-BR")),
       notes: [...this.notes.keys()].map((p) => this.meta(p)),
+      ...(this.otherFiles.length ? { files: [...this.otherFiles] } : {}),
     };
   }
 

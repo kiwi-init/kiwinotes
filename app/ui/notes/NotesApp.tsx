@@ -35,7 +35,7 @@ import { Properties } from "./Properties.tsx";
 import { addProperty } from "./frontmatter-properties.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
-import { linkSafeName } from "../../src/shared/wikilinks.ts";
+import { linkSafeName, makeFileResolver, type Resolver } from "../../src/shared/wikilinks.ts";
 import { focusEditor, insertIntoEditor,
   updateEditorDocument,
   NoteEditor,
@@ -216,7 +216,12 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const baseContent = useRef("");
   const current = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const links = useMemo(() => new LinkCache((t) => api.resolve(t)), [api]);
+  // Um `[[relatorio.pdf]]` acha o arquivo do vault (T7616): o link não fica de quebrado, e seguir abre o arquivo.
+  const fileOf = useMemo<Resolver>(() => makeFileResolver((listing?.files ?? []).map((f) => f.path)), [listing]);
+  const fileOfRef = useRef(fileOf);
+  fileOfRef.current = fileOf;
+  const links = useMemo(() => new LinkCache((t) => api.resolve(t).then((p) => p ?? fileOfRef.current(t))), [api]);
+  useEffect(() => links.clear(), [fileOf, links]);
   /** O rascunho achado ao abrir a nota, enquanto a pessoa não escolhe: ele não é sobrescrito nem apagado até lá. */
   const [draft, setDraft] = useState<Draft | null>(null);
   const undecided = useRef<Draft | null>(null);
@@ -692,15 +697,27 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     setNewProperty(added.key);
   };
 
+  /** Um arquivo do vault que não é nota, pela árvore ou por um `[[link]]` (T7616). */
+  const openVaultFile = (p: string) => {
+    // O quadro branco abre no Kiwi (T6600); o resto, no app padrão do Mac.
+    if (api.canvas && /\.canvas$/i.test(p)) return void openCanvas(p);
+    // O tipo que tem visualizador abre nas Notas (T7103, spec #7079).
+    if (api.files?.read && viewerFor(p)) return void openFileView(p);
+    setTreeOpen(false);
+    api.files?.open(p).catch(failed_("abrir o arquivo"));
+  };
+
   const onOpenLink = async (target: string) => {
     const hash = target.indexOf("#");
     const name = hash < 0 ? target : target.slice(0, hash);
     const heading = hash < 0 ? "" : target.slice(hash + 1);
     const path = name ? await api.resolve(name).catch(() => null) : current.current;
+    const file = path || !name ? null : fileOf(name);
     if (path) {
       if (path !== current.current) await open(path);
       if (heading && current.current === path) setHeadingJump((previous) => ({ path, heading, sequence: (previous?.sequence ?? 0) + 1 }));
     }
+    else if (file) openVaultFile(file);
     else if (api.extras) {
       if (!(await leave())) return;
       const n = await api.extras.createFromLink(name, current.current ?? undefined).catch(() => null);
@@ -1311,18 +1328,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             setCollapsed((s) => (s.has("notes") ? toggled(s, "notes") : s));
           }}
           onOpen={(p) => void open(p)}
-          onOpenFile={
-            api.files
-              ? (p) => {
-                  // O quadro branco abre no Kiwi (T6600); o resto, no app padrão do Mac.
-                  if (api.canvas && /\.canvas$/i.test(p)) return void openCanvas(p);
-                  // O tipo que tem visualizador abre nas Notas (T7103, spec #7079).
-                  if (api.files?.read && viewerFor(p)) return void openFileView(p);
-                  setTreeOpen(false);
-                  api.files?.open(p).catch(failed_("abrir o arquivo"));
-                }
-              : undefined
-          }
+          onOpenFile={api.files ? openVaultFile : undefined}
           onNewNote={(f) => void create("Sem título", true, f)}
           onNewFolder={folders ? (f) => void newFolder(f) : undefined}
           showExtensions={prefs.showExtensions}

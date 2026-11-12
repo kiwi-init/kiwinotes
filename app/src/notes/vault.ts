@@ -16,7 +16,7 @@ import { chmod, lstat, mkdir, open as openFile, readdir, readFile, rename, rm, s
 import type { Stats } from "node:fs";
 import path from "node:path";
 
-import { makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
+import { makeFileResolver, makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
 import { isEditableText, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
@@ -1064,12 +1064,14 @@ export class Vault {
   /** At most 100 source locations. Missing fragments are distinct from missing notes; code is never a link. */
   async linkWarnings(input: unknown): Promise<LinkWarning[]> {
     const p = notePath(input), source = await this.get(p), resolve = makeResolver([...this.notes.keys()], this.aliasMap());
+    const file = makeFileResolver([...this.files.keys()]);
     const warnings: LinkWarning[] = [];
     for (const ref of noteReferences(source.content)) {
       const target = referenceTarget(ref, p, resolve);
       let reason: LinkWarning["reason"] | undefined;
-      if (!target) reason = "note";
-      else if (ref.fragment && !ref.fragment.startsWith("^") && !headingFor(markdownStructure(target === p ? source.content : this.notes.get(target)?.content ?? "").headings, ref.fragment)) reason = "heading";
+      // Um `[[relatorio.pdf]]` que acha um arquivo do vault não está quebrado (T7616).
+      if (!target && !file(ref.target)) reason = "note";
+      else if (target && ref.fragment && !ref.fragment.startsWith("^") && !headingFor(markdownStructure(target === p ? source.content : this.notes.get(target)?.content ?? "").headings, ref.fragment)) reason = "heading";
       if (reason) warnings.push({ path: p, target: ref.target + (ref.fragment ? "#" + ref.fragment : ""), reason, line: source.content.slice(0, ref.from).split("\n").length });
       if (warnings.length === 100) break;
     }
@@ -1210,6 +1212,9 @@ export class Vault {
     if (typeof link !== "string" || link.length > 1024) throw new VaultError("E_BAD_ARGS", "link must be a string");
     const target = link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!.trim().replace(/\.md$/i, "");
     if (!target) throw new VaultError("E_BAD_ARGS", "link is empty");
+    // O link acha um arquivo do vault que não é nota (T7616): seguir abre o arquivo, nunca cria "relatorio.pdf.md".
+    const file = makeFileResolver([...this.files.keys()])(link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!);
+    if (file) throw new VaultError("E_EXISTS", `${file} is a file in the vault, not a note`);
     const found = this.resolve_()(target);
     if (found) return this.get(found);
     const parts = target.split("/").filter(Boolean);

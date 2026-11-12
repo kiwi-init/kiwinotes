@@ -149,6 +149,19 @@ describe("Vault (T1316)", () => {
     expect(await code(v.rename("Outra.md", "Diário.md"))).toBe("E_EXISTS");
   });
 
+  // T7437: um [[link]] para um arquivo que está no cofre (pdf, quadro, draw.io), comum num vault do Obsidian. Ele não é
+  // link quebrado, e seguir o link não cria uma nota vazia "relatorio.pdf.md" ao lado do pdf.
+  test("[[arquivo.pdf]] que existe no cofre não é link quebrado nem vira nota nova", async () => {
+    const { v, root } = await vault({
+      "Docs/relatorio.pdf": "%PDF-1.4\n",
+      "Mapa.canvas": '{"nodes":[],"edges":[]}',
+      "F.md": "ver [[relatorio.pdf]], ![[relatorio.pdf]] e [[Mapa.canvas]]\n",
+    });
+    expect(await v.linkWarnings("F.md")).toEqual([]);
+    await code(v.createFromLink("relatorio.pdf", "F.md"));
+    expect(existsSync(path.join(root, "relatorio.pdf.md"))).toBe(false);
+  });
+
   // T7436: `#`, `|`, `[`, `]` e `^` são sintaxe do [[link]]. Um nome com eles não pode virar links reescritos que não
   // acham mais a nota. Recusar o nome ou trocar o caractere resolve; o que não pode é dizer "atualizei" e quebrar.
   for (const name of ["Reunião #2", "Ana | Bia", "Plano [v2]"])

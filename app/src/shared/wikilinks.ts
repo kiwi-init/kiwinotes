@@ -88,6 +88,29 @@ export function makeResolver(paths: readonly string[], aliases?: ReadonlyMap<str
   };
 }
 
+/**
+ * Para qual arquivo do vault que não é nota (pdf, quadro, draw.io, imagem) um `[[alvo.ext]]` aponta (T7616), como o
+ * Obsidian: o alvo tem a extensão, e sem barra vale o nome do arquivo em qualquer pasta (o caminho mais curto ganha);
+ * com barra, o caminho a partir da raiz ou o fim de um caminho. Sem extensão, ou `.md`, é link de nota: `null`.
+ */
+export function makeFileResolver(files: readonly string[]): Resolver {
+  const byName = new Map<string, string[]>();
+  const byPath = new Map<string, string[]>();
+  for (const p of files) {
+    const n = key(p.slice(p.lastIndexOf("/") + 1));
+    byName.set(n, [...(byName.get(n) ?? []), p]);
+    const k = key(p);
+    byPath.set(k, [...(byPath.get(k) ?? []), p]);
+  }
+  return (target) => {
+    const t = target.trim().replace(/^\/+/, "");
+    if (!t || /\.md$/i.test(t) || !/\.[^./]+$/.test(t)) return null;
+    if (!t.includes("/")) return shortest(byName.get(key(t)) ?? []);
+    const want = key(t);
+    return shortest(byPath.get(want) ?? []) ?? shortest(files.filter((p) => key(p).endsWith(`/${want}`)));
+  };
+}
+
 /** Para qual nota um `[[alvo]]` aponta, entre `paths` (ver `makeResolver`). */
 export function resolveLink(target: string, paths: readonly string[]): string | null {
   return makeResolver(paths)(target);
