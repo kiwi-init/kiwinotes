@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { ExtrasApi, FoldersApi, TrashItem } from "./types.ts";
+import { errorCode } from "./errors.ts";
 
 const name = (p: string) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
 const where = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")).replace(/\//g, " / ") : "raiz");
@@ -47,7 +48,7 @@ export function TrashView({
       onRestored(i.path, i.kind);
       load();
     } catch (e) {
-      setError(/E_EXISTS/.test(String((e as Error)?.message ?? e)) ? `Já existe “${name(i.path)}” nesse lugar: renomeie e tente de novo.` : "Não deu para restaurar.");
+      setError(errorCode(e) === "E_EXISTS" ? `Já existe “${name(i.path)}” nesse lugar: renomeie e tente de novo.` : "Não deu para restaurar.");
     }
   };
 

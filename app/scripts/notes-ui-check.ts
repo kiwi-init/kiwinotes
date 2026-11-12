@@ -683,6 +683,26 @@ await step("nota que não é UTF-8: só leitura, com o aviso, e digitar não gra
   await page.evaluate(() => (window as any).__kiwiNotesMock.notUtf8.delete("Pessoas/Ana.md"));
 });
 
+// T7437: o AppEngine de verdade lança Error("<cap>: <mensagem>") com o código em `.code` (o mock põe o código na
+// mensagem). Restaurar com o nome ocupado tem que dizer por quê, com o erro no formato do app.
+await step("Lixeira: restaurar com o nome ocupado diz por quê, com o erro como o AppEngine manda", async () => {
+  await page.evaluate(async () => {
+    const m = (window as any).__kiwiNotesMock;
+    m.editOutside("Lixo teste.md", "# velho\n");
+    await m.delete("Lixo teste.md");
+    m.editOutside("Lixo teste.md", "# novo\n");
+    m.folders.restore = async () => {
+      throw Object.assign(new Error("notes.restore: Lixo teste.md is taken again"), { code: "E_EXISTS" });
+    };
+  });
+  await openTree();
+  await page.click(".kn-side-trash");
+  await page.locator(".kn-trash-item", { hasText: "Lixo teste" }).locator("text=Restaurar").click();
+  await page.waitForSelector(".kn-trash-error");
+  const msg = await page.textContent(".kn-trash-error");
+  if (!msg?.includes("Já existe")) throw new Error(`aviso: ${msg}`);
+});
+
 await page.keyboard.press("Meta+k");
 await page.keyboard.type("ana");
 await page.waitForTimeout(300);

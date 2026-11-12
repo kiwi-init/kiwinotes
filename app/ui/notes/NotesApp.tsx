@@ -35,6 +35,7 @@ import { Properties } from "./Properties.tsx";
 import { addProperty } from "./frontmatter-properties.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
+import { errorCode } from "./errors.ts";
 import { linkSafeName, makeFileResolver, type Resolver } from "../../src/shared/wikilinks.ts";
 import { focusEditor, insertIntoEditor,
   updateEditorDocument,
@@ -850,7 +851,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }, [pins]);
 
   const say = (text: string, undo?: () => void) => setToast({ text, undo });
-  const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${/E_EXISTS/.test(String(e)) ? ": já existe um com esse nome" : ""}.`,
+  const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${errorCode(e) === "E_EXISTS" ? ": já existe um com esse nome" : ""}.`,
     );
 
   /** Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. */
@@ -956,7 +957,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       const { file } = await ex(path, format, theme);
       say(`Exportada: ${file.slice(file.lastIndexOf("/") + 1)}`);
     } catch (e) {
-      if (/E_CANCELED/.test(String((e as Error)?.message ?? e))) return;
+      if (errorCode(e) === "E_CANCELED") return;
       failed_("exportar a nota")(e);
     }
   };

@@ -14,6 +14,14 @@ import { linkSpans, unlinkedSpans, contextOf } from "../../src/notes/mentions.ts
 import type { VersionsApi } from "./types.ts";
 import type { Backlink, ExtrasApi, FolderMoved, FoldersApi, Note, NoteMeta, NotesApi, SaveResult, SearchHit, TrashItem, VaultFile, VaultListing } from "./types.ts";
 
+/**
+ * Um erro como o AppEngine manda (T7656): `Error("<cap>: <mensagem>")` com o código em `.code`, e não no texto. Assim o
+ * `notes-ui-check` pega a UI que procura o código na mensagem, que no app de verdade nunca acha.
+ */
+function engineError(code: string, message = ""): Error {
+  return Object.assign(new Error(`notes: ${message || code}`.replace(/\bE_[A-Z0-9_]+\b/g, "")), { code });
+}
+
 interface Stored {
   content: string;
   version: number;
@@ -68,7 +76,7 @@ export class MockVault implements NotesApi {
 
   private note(path: string): Note {
     const s = this.notes.get(path);
-    if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
+    if (!s) throw engineError("E_NOT_FOUND", `${path}`);
     return {
       ...(this.notUtf8.has(path) ? { readOnly: true as const } : {}),
       path,
@@ -115,8 +123,8 @@ export class MockVault implements NotesApi {
 
   async save(path: string, content: string, baseVersion: string): Promise<SaveResult> {
     const s = this.notes.get(path);
-    if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
-    if (this.notUtf8.has(path)) throw new Error(`E_NOT_UTF8: ${path}`);
+    if (!s) throw engineError("E_NOT_FOUND", `${path}`);
+    if (this.notUtf8.has(path)) throw engineError("E_NOT_UTF8", `${path}`);
     if (String(s.version) !== baseVersion) return { saved: false, current: this.note(path) };
     // O histórico de versões de mentira (T2680): o texto de antes na 1ª vez, e cada save (sem o intervalo de 2 min).
     const h = this.versionsOf.get(path) ?? [];
@@ -133,7 +141,7 @@ export class MockVault implements NotesApi {
     const base = folder ? `${folder}/${clean}` : clean;
     let path = `${base}.md`;
     for (let n = 2; this.notes.has(path); n++) path = `${base} ${n}.md`;
-    if (template && content) throw new Error("E_BAD_ARGS: content e template juntos");
+    if (template && content) throw engineError("E_BAD_ARGS", "content e template juntos");
     const text = template ? fillTemplate(this.note(template).content, { title: noteName(path), now: this.clock() }) : content;
     this.write(path, text);
     this.emit([path]);
@@ -142,15 +150,15 @@ export class MockVault implements NotesApi {
 
   async rename(path: string, newPath: string): Promise<{ meta: NoteMeta; updatedLinks: number }> {
     const s = this.notes.get(path);
-    if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
+    if (!s) throw engineError("E_NOT_FOUND", `${path}`);
     if (!newPath.endsWith(".md")) newPath += ".md";
     // Como o engine (T7520): o nome novo sai sem `# ^ | [ ]`; mover de pasta não troca o nome.
     if (noteName(newPath) !== noteName(path)) {
       const safe = linkSafeName(noteName(newPath));
-      if (!safe) throw new Error("E_BAD_ARGS: the new name is empty");
+      if (!safe) throw engineError("E_BAD_ARGS", "the new name is empty");
       newPath = `${folderOf(newPath) ? `${folderOf(newPath)}/` : ""}${safe}.md`;
     }
-    if (newPath !== path && this.notes.has(newPath)) throw new Error(`E_EXISTS: ${newPath}`);
+    if (newPath !== path && this.notes.has(newPath)) throw engineError("E_EXISTS", `${newPath}`);
     const before = [...this.notes.keys()];
     const after = before.map((p) => (p === path ? newPath : p));
     let updatedLinks = 0;
@@ -174,7 +182,7 @@ export class MockVault implements NotesApi {
 
   async delete(path: string): Promise<true> {
     const s = this.notes.get(path);
-    if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
+    if (!s) throw engineError("E_NOT_FOUND", `${path}`);
     this.notes.delete(path);
     this.trash.set(path, { notes: new Map([[path, s]]), dirs: [], at: this.clock().toISOString() });
     this.unpin((p) => p === path);
@@ -244,8 +252,8 @@ export class MockVault implements NotesApi {
   readonly folders: FoldersApi = {
     create: async (path) => {
       const clean = path.replace(/^\/+|\/+$/g, "");
-      if (!clean || clean.split("/").some((p) => !p || p.startsWith(".") || p === "..")) throw new Error("E_BAD_ARGS");
-      if (this.dirs.has(clean)) throw new Error(`E_EXISTS: ${clean}`);
+      if (!clean || clean.split("/").some((p) => !p || p.startsWith(".") || p === "..")) throw engineError("E_BAD_ARGS");
+      if (this.dirs.has(clean)) throw engineError("E_EXISTS", `${clean}`);
       this.addFolder(clean);
       this.emit([clean]);
       return { path: clean };
@@ -256,7 +264,7 @@ export class MockVault implements NotesApi {
       return this.moveFolder(path, parent ? `${parent}/${name}` : name);
     },
     delete: async (path) => {
-      if (!this.dirs.has(path)) throw new Error(`E_NOT_FOUND: ${path}`);
+      if (!this.dirs.has(path)) throw engineError("E_NOT_FOUND", `${path}`);
       const inside = (p: string) => p === path || p.startsWith(`${path}/`);
       const notes = new Map([...this.notes].filter(([p]) => inside(folderOf(p))));
       const dirs = [...this.dirs].filter(inside);
@@ -277,8 +285,8 @@ export class MockVault implements NotesApi {
     },
     restore: async (path) => {
       const t = this.trash.get(path);
-      if (!t) throw new Error(`E_NOT_FOUND: ${path}`);
-      for (const p of t.notes.keys()) if (this.notes.has(p)) throw new Error(`E_EXISTS: ${p}`);
+      if (!t) throw engineError("E_NOT_FOUND", `${path}`);
+      for (const p of t.notes.keys()) if (this.notes.has(p)) throw engineError("E_EXISTS", `${p}`);
       for (const d of t.dirs) this.dirs.add(d);
       for (const [p, s] of t.notes) {
         this.notes.set(p, s);
@@ -289,17 +297,17 @@ export class MockVault implements NotesApi {
       return { path };
     },
     reveal: async (path) => {
-      if (!this.notes.has(path) && !this.dirs.has(path)) throw new Error(`E_NOT_FOUND: ${path}`);
+      if (!this.notes.has(path) && !this.dirs.has(path)) throw engineError("E_NOT_FOUND", `${path}`);
       this.revealed = path;
       return true as const;
     },
   };
 
   private async moveFolder(path: string, newPath: string): Promise<FolderMoved> {
-    if (!this.dirs.has(path)) throw new Error(`E_NOT_FOUND: ${path}`);
+    if (!this.dirs.has(path)) throw engineError("E_NOT_FOUND", `${path}`);
     if (newPath === path) return { path, moved: 0, updatedLinks: 0 };
-    if (newPath.startsWith(`${path}/`)) throw new Error("E_BAD_ARGS: para dentro de si mesma");
-    if (this.dirs.has(newPath)) throw new Error(`E_EXISTS: ${newPath}`);
+    if (newPath.startsWith(`${path}/`)) throw engineError("E_BAD_ARGS", "para dentro de si mesma");
+    if (this.dirs.has(newPath)) throw engineError("E_EXISTS", `${newPath}`);
     const inside = (p: string) => p === path || p.startsWith(`${path}/`);
     const swap = (p: string) => newPath + p.slice(path.length);
     const moves = [...this.notes.keys()].filter((p) => inside(folderOf(p))).map((p): [string, string] => [p, swap(p)]);
@@ -372,7 +380,7 @@ export class MockVault implements NotesApi {
     list: async (path) => [...(this.versionsOf.get(path) ?? [])].reverse().map((v) => ({ id: v.id, at: v.at, size: v.content.length })),
     get: async (path, id) => {
       const v = this.versionsOf.get(path)?.find((x) => x.id === id);
-      if (!v) throw new Error(`E_NOT_FOUND: ${id}`);
+      if (!v) throw engineError("E_NOT_FOUND", `${id}`);
       return { content: v.content, at: v.at };
     },
     restore: async (path, id) => {
@@ -419,7 +427,7 @@ export class MockVault implements NotesApi {
     },
     linkMentions: async (path, target) => {
       const st = this.notes.get(path);
-      if (!st) throw new Error(`E_NOT_FOUND: ${path}`);
+      if (!st) throw engineError("E_NOT_FOUND", `${path}`);
       const spans = unlinkedSpans(st.content, noteName(target));
       if (spans.length) {
         this.write(path, linkSpans(st.content, spans, noteName(target)));

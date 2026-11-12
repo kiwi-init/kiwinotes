@@ -114,9 +114,9 @@ describe("as pastas no vault de mentira (o contrato de #2475)", () => {
     const v = vault();
     expect(await v.folders.create("Arquivo/Velho")).toEqual({ path: "Arquivo/Velho" });
     expect((await v.list()).folders).toContain("Arquivo");
-    await expect(v.folders.create("../fora")).rejects.toThrow("E_BAD_ARGS");
-    await expect(v.folders.create(".obsidian")).rejects.toThrow("E_BAD_ARGS");
-    await expect(v.folders.create("Projetos")).rejects.toThrow("E_EXISTS");
+    await expect(v.folders.create("../fora")).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(v.folders.create(".obsidian")).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(v.folders.create("Projetos")).rejects.toMatchObject({ code: "E_EXISTS" });
   });
 
   test("renomear e mover pasta levam as notas de dentro e reescrevem os links", async () => {
@@ -127,7 +127,7 @@ describe("as pastas no vault de mentira (o contrato de #2475)", () => {
     expect(paths).toEqual(["Ana.md", "Reuniões/Planejamento.md", "Trabalho/2026/Plano.md", "Trabalho/Site.md"]);
     expect((await v.get("Trabalho/2026/Plano.md")).content).toContain("[[Site]]");
     expect((await v.folders.move("Trabalho/2026", "")).path).toBe("2026");
-    await expect(v.folders.move("Trabalho", "Trabalho/Sub")).rejects.toThrow("E_BAD_ARGS");
+    await expect(v.folders.move("Trabalho", "Trabalho/Sub")).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   });
 
   test("mover nota, duplicar e mostrar no Finder", async () => {
@@ -149,11 +149,11 @@ describe("as pastas no vault de mentira (o contrato de #2475)", () => {
     expect((await v.list()).notes.map((n) => n.path)).not.toContain("Projetos/Site.md");
     expect(await v.folders.restore("Projetos")).toEqual({ path: "Projetos" });
     expect((await v.list()).notes.map((n) => n.path)).toContain("Projetos/2026/Plano.md");
-    await expect(v.folders.restore("Projetos")).rejects.toThrow("E_NOT_FOUND");
+    await expect(v.folders.restore("Projetos")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
 
     await v.delete("Ana.md");
     await v.create("Ana");
-    await expect(v.folders.restore("Ana.md")).rejects.toThrow("E_EXISTS");
+    await expect(v.folders.restore("Ana.md")).rejects.toMatchObject({ code: "E_EXISTS" });
   });
 
   test("as fixadas seguem a nota ao renomear e mover, e saem quando ela é apagada", async () => {
