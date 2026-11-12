@@ -1,7 +1,7 @@
 // T6013: o download do modelo confere o SHA-256 e nunca deixa um arquivo errado no lugar.
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -129,4 +129,31 @@ test("um corpo que anda devagar, mas anda, não desiste; o signal de fora aborta
   expect(err.code).toBe("E_MODEL_DOWNLOAD");
   expect(err.message).toContain("aborted");
   expect(readdirSync(modelDir(other, manifest)).filter((n) => n.endsWith(".part"))).toEqual([]);
+});
+
+// T8159: o download que falha só devolve depois de fechar o `.part`. Antes, o stream do `.part` ainda abria ou escrevia
+// depois do `rm` do erro: o `.part` sobrava (~40% das vezes), ou, com a pasta já apagada pelo teste, o `ENOENT` do stream
+// caía sem dono no teste seguinte (o CI da main e o build da rc15).
+test("o download que falha (rede caiu ou parou) não deixa .part nem nada correndo depois de devolver, 50 vezes", async () => {
+  const body = files["onnx/model_quantized.onnx"];
+  let left = 0;
+  for (let i = 0; i < 50; i++) {
+    const root = tmp();
+    // O tokenizer já está na pasta: só o modelo baixa, e é ele que falha (um prazo curto não pega o tokenizer na carga).
+    mkdirSync(path.join(modelDir(root, manifest), "onnx"), { recursive: true });
+    writeFileSync(path.join(modelDir(root, manifest), "tokenizer.json"), files["tokenizer.json"]);
+    const fetch = async () =>
+      new Response(new ReadableStream({
+        start(c) {
+          c.enqueue(body.slice(0, 100));
+          if (i % 2 === 0) c.error(new Error("a rede caiu"));
+        },
+      }));
+    const err = await ensureModel(root, manifest, { fetch, stallMs: 50 }).catch((e) => e);
+    expect(err.code).toBe("E_MODEL_DOWNLOAD");
+    if (readdirSync(root, { recursive: true }).some((n) => String(n).endsWith(".part"))) left++;
+    // Como o afterEach, na hora: nada pode tentar abrir o `.part` depois disto.
+    rmSync(root, { recursive: true, force: true });
+  }
+  expect(left).toBe(0);
 });
