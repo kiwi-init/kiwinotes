@@ -1,0 +1,10 @@
+{
+  "range": [
+    0.5,
+    1.4
+  ],
+  "step": 0.01,
+  "frames": 91,
+  "minimum_channel_delta_as_exposure_increases": 0,
+  "scope": "whole output, noise/time0, 640x800; visual review still required"
+}

@@ -1,0 +1,117 @@
+{
+  "task": "T8487",
+  "scope": "standalone Playwright WebKit demo, NOT Electrobun WKWebView",
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "dpr": 1,
+  "cpuUnit": "percent of one CPU core",
+  "warmupSeconds": 10,
+  "sampleSeconds": 60,
+  "idleFPS": 12,
+  "noRecorder": true,
+  "samples": [
+    9.374149372109443,
+    11.110757891887546,
+    9.435680644021605,
+    7.394999672970007,
+    9.400150905698549,
+    9.302945417177225,
+    9.525883299531564,
+    9.355043426696263,
+    10.279768968248176,
+    11.457499804200836,
+    3.855276609436752,
+    3.868756153752341,
+    6.514509950418851,
+    8.340970209810619,
+    8.411341382806976,
+    7.3578387987855125,
+    8.328040909602167,
+    8.324516159974404,
+    7.53526592521421,
+    7.466505433952794,
+    8.414731902265952,
+    8.255948152645622,
+    9.304594751341458,
+    8.443114341227783,
+    8.561757862071978,
+    7.454238835442924,
+    8.554379895971639,
+    9.29471399743979,
+    10.261684226294316,
+    8.335628525493295,
+    9.30521416223967,
+    7.414700816075985,
+    8.461733614428475,
+    7.304435161724776,
+    9.272345002097083,
+    7.678806710979881,
+    5.559259582118383,
+    10.339669507560155,
+    7.469934675439896,
+    7.3516058261935875,
+    7.5227312890323,
+    6.68915416959465,
+    5.738121230486519,
+    9.39899423712416,
+    7.425590650624443,
+    7.480476249195704,
+    8.448546141418412,
+    7.459056191634369,
+    8.351972538714271,
+    6.6516076423497505,
+    9.281140114259419,
+    7.508847536608052,
+    6.513499656533371,
+    7.518287056182313,
+    7.586050409411212,
+    8.523319506220417,
+    6.59020460231645,
+    6.581885963994562,
+    6.731147048758683,
+    5.655905772707793
+  ],
+  "states": [
+    {
+      "state": "repouso",
+      "draws": 891,
+      "slow": false,
+      "fps": 11.99811053377416,
+      "p95FrameMs": 89.9999999999963
+    }
+  ],
+  "backend": "webgpu",
+  "processes": [
+    {
+      "pid": 17697,
+      "ppid": 17544,
+      "command": "bash /Users/davivicente/Library/Caches/ms-playwright/webkit-2370/pw_run.sh --inspector-pipe --headless --no-startup-window"
+    },
+    {
+      "pid": 17703,
+      "ppid": 17697,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/Playwright.app/Contents/MacOS/Playwright --inspector-pipe --headless --no-startup-window"
+    },
+    {
+      "pid": 17705,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking.Development"
+    },
+    {
+      "pid": 17706,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU.Development"
+    },
+    {
+      "pid": 17708,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent.Development"
+    }
+  ],
+  "cpuMean": 8.022248941541923,
+  "cpuP95": 10.279768968248176,
+  "errors": []
+}

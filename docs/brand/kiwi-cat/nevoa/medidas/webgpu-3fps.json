@@ -1,0 +1,159 @@
+{
+  "task": "T8487",
+  "scope": "standalone Playwright WebKit demo, NOT Electrobun WKWebView",
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "dpr": 1,
+  "cpuUnit": "percent of one CPU core",
+  "warmupSeconds": 10,
+  "sampleSeconds": 60,
+  "idleFPS": 3,
+  "noRecorder": true,
+  "samples": [
+    3.67829734293796,
+    3.6341114486531447,
+    2.7645727830804483,
+    4.638576249210452,
+    2.8523250302487697,
+    3.6808006611579325,
+    3.790111669718309,
+    2.8524440206743567,
+    3.7312329198382335,
+    4.576102471747436,
+    2.7987326405692654,
+    3.758853568455873,
+    3.7001741213137347,
+    4.653618386073958,
+    3.7008416886241484,
+    2.810295893712734,
+    3.820762615506723,
+    2.81072715404969,
+    5.640741856267086,
+    3.7777734228445303,
+    3.757050780885389,
+    4.652133069863689,
+    1.88661876999428,
+    3.7641132213977064,
+    2.813880888303811,
+    2.806314708741196,
+    2.835734412676875,
+    2.821055180427046,
+    3.761537927501356,
+    2.7800367738816454,
+    4.608619161038168,
+    2.436738297843343,
+    3.689287866023336,
+    2.8329023190492397,
+    3.6843937584892315,
+    4.724691440725461,
+    3.7127192241662756,
+    4.678552267326701,
+    3.7325242061916404,
+    5.538651555110692,
+    2.8044171439628824,
+    4.665035847884854,
+    3.7843154642532824,
+    1.8200385321449697,
+    4.644721391696256,
+    2.7538671553595946,
+    2.8459757902326066,
+    2.8424235023892126,
+    0.950067876411846,
+    3.701439714674977,
+    3.763500970508575,
+    2.7887687777434613,
+    3.7418545964415766,
+    2.7969927502190446,
+    3.6918154017871965,
+    3.708067408931478,
+    1.8773063001225974,
+    3.7346257409049106,
+    2.8276725628465815,
+    1.8925344792127379
+  ],
+  "states": [
+    {
+      "state": "repouso",
+      "draws": 225,
+      "slow": false,
+      "fps": 2.999811671016167,
+      "p95FrameMs": 344.0000000000012
+    },
+    {
+      "state": "dormindo",
+      "slow": false,
+      "fps": 3.000000000000014,
+      "p95FrameMs": 349.9999999999943
+    },
+    {
+      "state": "acordou",
+      "slow": false,
+      "fps": 59.980006664443955,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "ouvindo",
+      "slow": false,
+      "fps": 59.97349237906038,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "thinking",
+      "slow": false,
+      "fps": 59.97349237905897,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "agindo",
+      "slow": false,
+      "fps": 60.09296148738294,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "pronto",
+      "slow": false,
+      "fps": 59.93377483443519,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "erro",
+      "slow": false,
+      "fps": 60.020006668888875,
+      "p95FrameMs": 18.000000000000682
+    }
+  ],
+  "backend": "webgpu",
+  "processes": [
+    {
+      "pid": 17554,
+      "ppid": 17547,
+      "command": "bash /Users/davivicente/Library/Caches/ms-playwright/webkit-2370/pw_run.sh --inspector-pipe --headless --no-startup-window"
+    },
+    {
+      "pid": 17562,
+      "ppid": 17554,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/Playwright.app/Contents/MacOS/Playwright --inspector-pipe --headless --no-startup-window"
+    },
+    {
+      "pid": 17566,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking.Development"
+    },
+    {
+      "pid": 17567,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU.Development"
+    },
+    {
+      "pid": 17569,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent.Development"
+    }
+  ],
+  "cpuMean": 3.447068219700843,
+  "cpuP95": 4.678552267326701,
+  "errors": []
+}
