@@ -72,6 +72,10 @@ em repouso/sono, com comparação visual3/s ×2/s e três medidas na inteira.
 Os estados ativos mantêm o mesmo movimento e alvo60fps.
 Transições de cor/estado temporariamente usam30fps mesmo no repouso.
 Não extrapolar essas cadências para o movimento futuro do gato.
+O lead aceitou2/s após comparar o vídeo (#8900). Para a integração no app:
+se o harry notar um leve tique no repouso, avaliar mistura temporal entre o
+quadro anterior e o novo (#8527/#8900), medindo novamente no WKWebView.
+Essa mistura não faz parte desta entrega nem das provas atuais.
 
 Captura honra a mesma cadência: o relógio avança a 60 Hz e a exportação é 30 fps; quadros repetidos são
 repetidos de verdade; não há interpolação para fingir movimento contínuo.

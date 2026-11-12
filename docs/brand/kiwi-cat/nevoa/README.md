@@ -1,69 +1,83 @@
 # Névoa do Kiwi-cat — T8487
 
-Spec Kiwi #7549 v8466 · issue #376 · PR #377 (rascunho).
+Spec Kiwi #7549 · issue #376 · PR #377.
 
-O harry escolheu o movimento B (#8693) e pediu uma textura mais fofa (#8696).
-O harry escolheu a B1 algodão (#8754). O lead confirmou que as argolas nas
-pontas do aro e o contorno do corpo foram corrigidos (#8751). **B1 é a única
-textura do runtime; a aparência está congelada.**
+O harry escolheu **B1 algodão** (#8754). Ela é a única textura do runtime;
+A e B2 ficam apenas no histórico. O lead confirmou a correção das argolas
+nas pontas do aro e da linha no corpo (#8751), e aceitou a cadência quieta
+de 2/s após comparar os vídeos (#8900).
 
-## Comparação histórica: B1 algodão / B2 nuvem suave
+![Nove cenas finais](final-b1/videos/contato.webp)
 
-| Estado, cor padrão | B1 à esquerda / B2 à direita |
-| --- | --- |
-| Ouvindo, voz sintética | [vídeo](variantes-fofas/ouvindo-B1-B2.mp4) |
-| Thinking | [vídeo](variantes-fofas/thinking-B1-B2.mp4) |
+## Vídeos finais
 
-B1 tem tufos amplos e macios; B2 reduz o contraste e deixa quase só volume.
-As duas propostas preservavam a advecção e a resposta à voz da B. A e B2
-saíram da API e do renderer; permanecem apenas no histórico. O repouso
-permanece igual.
+Resolução inteira, 640 × 800 / DPR 1. Relógio, voz e semente controlados;
+simulação a 60 Hz e exportação a 30 fps. Quadros repetidos permanecem
+repetidos, sem interpolação, sem áudio. Não se mede FPS pelo MP4.
 
-As correções do aro/corpo não alteraram a função de densidade e movimento:
-[hashes antes/depois](variantes-fofas/density-preservada.json). A luz neutra
-pode preencher o centro das pontas; a emissão cromática do aro tem ganho
-limitado a 1. A curva escura dos estados ativos não tem a quebra que revelava
-a linha do corpo. Nenhum filtro de blur é aplicado durante o desenho.
+| Estado | Kiwi | Claude Code | Codex |
+| --- | --- | --- | --- |
+| Repouso | [vídeo](final-b1/videos/repouso-padrao.mp4) | [vídeo](final-b1/videos/repouso-claude.mp4) | [vídeo](final-b1/videos/repouso-codex.mp4) |
+| Ouvindo, voz sintética | [vídeo](final-b1/videos/ouvindo-padrao.mp4) | [vídeo](final-b1/videos/ouvindo-claude.mp4) | [vídeo](final-b1/videos/ouvindo-codex.mp4) |
+| Thinking | [vídeo](final-b1/videos/thinking-padrao.mp4) | [vídeo](final-b1/videos/thinking-claude.mp4) | [vídeo](final-b1/videos/thinking-codex.mp4) |
+
+[60 segundos de repouso](final-b1/videos/repouso-60s.mp4) ·
+[relatório da captura](final-b1/videos/report.json).
+
+## Desempenho da demonstração
+
+**Média das três rodadas: 2,897% de um núcleo.** Resultados individuais:
+2,598 / 3,013 / 3,080%; p95: 4,025 / 4,977 / 4,031%. Duas rodadas isoladas
+excederam 3%; o critério combinado é a média das três (#8651).
+
+Repouso e sono ficaram em 2 fps; os seis estados ativos, entre 59,98 e
+60,10 fps. Os intervalos reais dos desenhos fornecem esses números. Cada
+execução aquece 10 s e mede 60 s por prazo monotônico, somando os cinco
+processos próprios, sem gravar. As janelas de CPU dos outros estados são
+diagnósticas, de 3 s após 1 s de estabilização.
+
+[Resultados completos, CPU por processo e brutos](final-b1/medidas-finais/README.md).
+**Os números valem para a página de demonstração, não para o WKWebView do app.**
+
+As duas matrizes a 3/s reprovaram as três escalas; todos os resultados estão
+preservados: [inicial](final-b1/medidas-iniciais/README.md) e
+[após o ajuste de agendamento](final-b1/medidas-demanda/README.md).
+O plano B foi a [comparação 3/s × 2/s](final-b1/cadencia/README.md), sem mudar
+a função da B1 ou os estados ativos. Não se subtraiu a base parada do aceite.
 
 ## Verificações funcionais
 
-- [Varredura ativa](variantes-fofas/exposicao-ativa/report.json): 364 quadros,
-  dois estados × duas variantes × 91 exposições, de 0,50 a 1,40, com o campo
-  em 6 s e controles da voz máxima (`volume=1,16`, `upper=0,10`).
-- [Verificação dos pixels](variantes-fofas/exposicao-ativa/pixel-check.json):
-  nenhum canal decresce com a exposição; emissão do aro compatível com ganho
-  até 1 dentro de 2/255 de quantização. A inspeção visual continua necessária.
-- [Repouso](variantes-fofas/repouso-invariancia.json): em 12 s, semente 17,
-  as duas variantes são idênticas, pixel a pixel, à versão anterior.
-- [Referência v2](medidas/referencia.json): máximo 2/255 fora dos olhos +5px,
-  incluindo a névoa, em 2048×2560 e t=0.
+- [Referência final v2](final-b1/referencia.json): máximo 2/255 fora dos olhos
+  +5 px, incluindo a névoa, em 2048 × 2560 e t=0; limite pedido de 4/255.
+- [Apresentação nativa e invariância dos pixels](final-b1/cadencia/funcional-2fps/verification.json):
+  15 quadros na mesma cadência controlada idênticos ao `5a78555`. Vídeo nativo
+  comprova movimento quieto e mudança de cor com Reduzir movimento.
+- [WebGPU, WebGL2 e fallback sem GPU](final-b1/cadencia/funcional-2fps/backends.json):
+  ocultação para os desenhos; redução de movimento, baixa capacidade e
+  descarte passam. Nenhum heartbeat de RAF fica rodando quando parado.
+- [Varredura ativa B1](final-b1/exposicao-ativa/): 182 quadros, dois estados
+  × 91 exposições de 0,50 a 1,40, incluindo controles de voz máxima.
+  Monotonicidade e emissão do aro com ganho até 1 dentro de 2/255.
+- [Uso prolongado](final-b1/longa-duracao/): alongamento radial limitado para
+  evitar filamentos após uma hora virtual; fase e advecção continuam.
 - [Prova inicial de captura e aceleração](prova-captura/README.md): WebKit
   headless com WebGPU Apple, vídeo não preto. Nenhum outro navegador.
 
-Captura com relógio/voz/semente controlados, simulação 60 Hz, exportação
-30 fps, sem interpolação e sem áudio. Não se mede FPS pelo arquivo de vídeo.
-Não foram abertos app, helper, mic ou clipboard reais.
+A composição separa luz neutra e emissão cromática calibrada do aro,
+limitada a ganho 1. A curva escura ativa não revela a linha do corpo.
+Sem partículas, blur ao vivo ou imagens deslocadas. O
+[agendamento sob demanda](final-b1/agendamento/README.md) preserva os pixels.
 
-[Contrato e comandos](../../../../app/ui/kiwicat/README.md).
-
-## Próximos passos
-
-A [primeira matriz B1](final-b1/medidas-iniciais/README.md) reprovou as três
-escalas. A [otimização do agendamento](final-b1/agendamento/README.md) preserva
-os pixels e a apresentação nativa. Uma nova matriz mede três repetições por
-escala, base parada e CPU por processo, com prazo monotônico de 60 s após
-10 s de aquecimento. Depois dela saem os nove clipes finais e 60 s de repouso.
-Os números valem para a demonstração em 640×800/DPR1, não para o WKWebView
-de produção.
-
-As medidas antigas coletavam 60 intervalos de 1 s mais o custo de consultar
-os processos, chegando a cerca de 64 s; as taxas foram normalizadas pelo
-tempo real. Não são aceite de desempenho da textura atual.
+Não foram abertos app, helper, microfone ou clipboard reais.
+[Contrato, limitações e comandos](../../../../app/ui/kiwicat/README.md).
 
 ## Histórico
 
-[A/B ouvindo](variantes/ouvindo-A-B.mp4) ·
-[A/B thinking](variantes/thinking-A-B.mp4): comparação anterior à escolha B
-e ao pedido de textura fofa. [Clipes iniciais](videos/): anteriores às
-correções do contorno, preservados como histórico, não como entrega final.
-As medidas `medidas/webgpu-*.json` e `webgl2-12fps.json` também são históricas.
+- [B1/B2 ouvindo](variantes-fofas/ouvindo-B1-B2.mp4) e
+  [thinking](variantes-fofas/thinking-B1-B2.mp4): propostas antes da escolha.
+- [A/B ouvindo](variantes/ouvindo-A-B.mp4) e
+  [thinking](variantes/thinking-A-B.mp4): anteriores ao pedido de textura fofa.
+- [Clipes iniciais](videos/): anteriores à correção do contorno.
+- As medidas `medidas/webgpu-*.json` e `webgl2-12fps.json` coletavam 60
+  intervalos nominais mais as consultas de processos, cerca de 64 s; foram
+  normalizadas pelo tempo real e não são aceite da versão final.

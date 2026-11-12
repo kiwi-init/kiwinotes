@@ -1,0 +1,14 @@
+{
+  "backend": "webgpu",
+  "size": [
+    2048,
+    2560
+  ],
+  "time": 0,
+  "seed": 17,
+  "colour": "padrao",
+  "max_channel_error": 2,
+  "mean_channel_error": 0.04339306492127675,
+  "scope": "Full canvas outside source eye discs+5px, including mist; stricter than required cat/arc comparison",
+  "source_sha256": "307e26c0ceeda9850287880063b1a3d1e53c846df9e2826e4a6cc51fdd383e65"
+}
