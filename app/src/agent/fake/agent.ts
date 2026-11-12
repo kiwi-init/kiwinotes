@@ -72,7 +72,12 @@ function configOptions(sessionId: string) {
     name,
     type: "select" as const,
     currentValue,
-    options: values.map((value) => ({ value, name: value })),
+    // Como o adaptador de verdade: o "default" com o nome de recomendado e o modelo que ele usa na descrição (T8762).
+    options: values.map((value) =>
+      value === "default"
+        ? { value, name: "Default (recommended)", description: "Sonnet · o padrão da sua conta" }
+        : { value, name: value[0]!.toUpperCase() + value.slice(1) },
+    ),
   });
   return [select("model", "Modelo", c.model, MODELS), select("effort", "Esforço", c.effort, EFFORTS)];
 }

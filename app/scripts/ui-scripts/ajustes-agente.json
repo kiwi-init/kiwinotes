@@ -1,0 +1,257 @@
+{
+  "window": "hub",
+  "size": "900x1400",
+  "steps": [
+    {
+      "waitFor": ".kn-tab",
+      "name": "o hub abre"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "waitFor": ".kn-section:has(h2:text-is('Agente'))",
+      "name": "a seção Agente"
+    },
+    {
+      "expectText": ".kn-section:has(h2:text-is('Agente'))",
+      "text": "instalado e logado",
+      "name": "o Claude Code pronto, sem pedir senha"
+    },
+    {
+      "screenshot": "1-desligado.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) [role=switch]",
+      "name": "ligar, pela primeira vez"
+    },
+    {
+      "waitFor": ".kn-agent-consent",
+      "name": "a tela do ADR 0011 aparece antes de qualquer coisa"
+    },
+    {
+      "expectText": ".kn-agent-consent",
+      "text": "O que nunca vai",
+      "name": "com o que vai e o que nunca vai"
+    },
+    {
+      "invoke": "agent.status",
+      "args": {},
+      "name": "ainda desligado, nada baixado"
+    },
+    {
+      "screenshot": "2-aviso.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-agent-consent button:has-text('Agora não')",
+      "name": "agora não"
+    },
+    {
+      "waitFor": ".kn-agent-consent",
+      "state": "detached"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) .kn-row-hint",
+      "text": "Desligado",
+      "name": "continua desligado"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) [role=switch]"
+    },
+    {
+      "click": ".kn-agent-consent button:has-text('Ligar o Claude Code')",
+      "name": "aceita e liga"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Adaptador')) .kn-row-hint",
+      "text": "Baixando o adaptador",
+      "name": "o download começa só depois do Ligar"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "screenshot": "3-baixando.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Adaptador')) button:has-text('Cancelar')",
+      "name": "cancela o download"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Adaptador')) .kn-row-hint",
+      "text": "Download cancelado. Nada foi instalado.",
+      "name": "nada fica pela metade"
+    },
+    {
+      "screenshot": "4-cancelado.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Adaptador')) button:has-text('Tentar de novo')",
+      "name": "tenta de novo"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Adaptador')) .kn-row-hint",
+      "text": "baixado",
+      "timeout": 30000,
+      "name": "pronto"
+    },
+    {
+      "waitFor": ".kn-agent-test",
+      "name": "o Testar aparece"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')",
+      "name": "testa: diga oi"
+    },
+    {
+      "expectText": ".kn-agent-test-text",
+      "text": "Você disse",
+      "timeout": 20000,
+      "name": "a resposta chega ao vivo"
+    },
+    {
+      "screenshot": "5-resposta.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "fill": ".kn-agent-test-input",
+      "text": "/lento"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')",
+      "name": "um pedido longo"
+    },
+    {
+      "expectText": ".kn-agent-test-out",
+      "text": "pedaço 2",
+      "name": "o texto vai chegando"
+    },
+    {
+      "screenshot": "6-respondendo.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Cancelar')",
+      "name": "cancela no meio"
+    },
+    {
+      "expectText": ".kn-agent-test-status",
+      "text": "Cancelado.",
+      "name": "termina como cancelado"
+    },
+    {
+      "fill": ".kn-agent-test-input",
+      "text": "/limite"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')"
+    },
+    {
+      "expectText": ".kn-agent-test-error",
+      "text": "atingiu o limite de uso",
+      "name": "limite atingido, claro"
+    },
+    {
+      "screenshot": "7-limite.png",
+      "selector": ".kn-agent-test"
+    },
+    {
+      "fill": ".kn-agent-test-input",
+      "text": "/sem-rede"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')"
+    },
+    {
+      "expectText": ".kn-agent-test-error",
+      "text": "Sem conexão com a internet",
+      "name": "sem rede, claro"
+    },
+    {
+      "screenshot": "8-sem-rede.png",
+      "selector": ".kn-agent-test"
+    },
+    {
+      "fill": ".kn-agent-test-input",
+      "text": "/sem-login"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')"
+    },
+    {
+      "expectText": ".kn-agent-test-error",
+      "text": "não está logado",
+      "name": "login caído, claro"
+    },
+    {
+      "screenshot": "9-sem-login.png",
+      "selector": ".kn-agent-test"
+    },
+    {
+      "fill": ".kn-agent-test-input",
+      "text": "de novo, agora sim"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')",
+      "name": "tenta de novo e passa"
+    },
+    {
+      "expectText": ".kn-agent-test-text",
+      "text": "agora sim",
+      "timeout": 20000
+    },
+    {
+      "select": ".kn-row:has(.kn-row-label:text-is('Modelo')) select",
+      "value": "opus",
+      "name": "troca o modelo"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Modelo')) .kn-row-hint",
+      "text": "gasta mais do seu plano"
+    },
+    {
+      "screenshot": "10-modelo.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) [role=switch]",
+      "name": "desliga"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) .kn-row-hint",
+      "text": "Desligado. Nada vai",
+      "name": "desligado, na hora"
+    },
+    {
+      "invoke": "agent.status",
+      "args": {},
+      "name": "o programa fechou"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Adaptador')) button:has-text('Remover o adaptador')",
+      "name": "remove o adaptador"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Adaptador'))",
+      "state": "detached",
+      "name": "o download foi apagado"
+    },
+    {
+      "invoke": "agent.status",
+      "args": {},
+      "name": "adapter missing"
+    },
+    {
+      "screenshot": "11-desligado-removido.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "screenshot": "12-privacidade.png",
+      "selector": ".kn-section:has(h2:text-is('Privacidade'))"
+    }
+  ]
+}

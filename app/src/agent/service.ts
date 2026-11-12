@@ -10,14 +10,17 @@
 // - **Pedir e baixar voltam logo:** a chamada do AppEngine tem teto de 10 s. A resposta chega pelo evento `agent.turn`,
 //   e o progresso do download pelo `agent.status`.
 
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
 import { AgentError, type AgentErrorCode } from "./errors.ts";
 import type { AgentHost } from "./host.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
-import { adapterRoot } from "./adapter/open.ts";
-import type { AgentClaudeStatus, AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
+import { adapterRoot, agentDir } from "./adapter/open.ts";
+import type { AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
 import type { AgentSettings } from "../store/settings.ts";
 
 /** O teto sem uso: depois disso, o programa do agente fecha (a sessão fica guardada e volta no próximo pedido). */
@@ -90,6 +93,8 @@ export class AgentService {
   private download: { abort: AbortController; done: number; total: number; lastEmit: number } | null = null;
   private downloadError: { code: string; message: string } | undefined;
   private claude: AgentClaudeStatus | null = null;
+  /** Os modelos que o agente ofereceu da última vez que abriu (T8762), lidos de `<dados>/agent/models.json` na 1ª vez. */
+  private models: AgentModelChoice[] | null = null;
   private applied: Record<string, string> = {};
   private readonly statusListeners = new Set<(s: AgentStatus) => void>();
   private readonly turnListeners = new Set<(e: AgentTurnEvent) => void>();
@@ -138,7 +143,39 @@ export class AgentService {
       program: this.host?.running ? "open" : this.opening ? "opening" : "closed",
       busy: !!this.turn,
       session: values ? { model: values.model, effort: values.effort } : null,
+      models: this.knownModels(),
     };
+  }
+
+  private get modelsFile(): string {
+    return path.join(agentDir(this.d.data), "models.json");
+  }
+
+  /** A lista de modelos guardada: a seção mostra as escolhas mesmo com o programa fechado, depois de ele abrir uma vez. */
+  private knownModels(): AgentModelChoice[] {
+    if (this.models) return this.models;
+    try {
+      const saved = JSON.parse(readFileSync(this.modelsFile, "utf8")) as unknown;
+      this.models = Array.isArray(saved)
+        ? saved.filter((m): m is AgentModelChoice => !!m && typeof m.value === "string" && typeof m.name === "string")
+        : [];
+    } catch {
+      this.models = [];
+    }
+    return this.models;
+  }
+
+  /** Guarda os modelos que o agente acabou de oferecer (ao abrir, e depois de trocar as opções). */
+  private rememberModels(host: AgentHost): void {
+    const models = host.choices("model");
+    if (!models.length || JSON.stringify(models) === JSON.stringify(this.knownModels())) return;
+    this.models = models;
+    try {
+      mkdirSync(agentDir(this.d.data), { recursive: true, mode: 0o700 });
+      writeFileSync(this.modelsFile, JSON.stringify(models) + "\n", { mode: 0o600 });
+    } catch (e) {
+      this.d.log?.(`[agent] models: ${String((e as Error)?.message ?? e)}`);
+    }
   }
 
   private statusFrom(snap: ReturnType<AgentService["snapshot"]>, s: AgentSettings): AgentStatus {
@@ -265,6 +302,7 @@ export class AgentService {
       } else if (wanted.model !== this.applied.model || wanted.effort !== this.applied.effort) {
         await host.applyConfig(wanted);
         this.applied = { ...wanted };
+        this.rememberModels(host);
       }
       if (turn.cancelled) {
         this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: "" });
@@ -310,6 +348,7 @@ export class AgentService {
       }
       this.applied = wanted();
       this.host = host;
+      this.rememberModels(host);
       if (this.closed) {
         await this.stopProgram("o app saiu");
         throw new AgentError("E_AGENT_FAILED", this.name, "o app saiu");

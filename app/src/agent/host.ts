@@ -325,6 +325,24 @@ export class AgentHost {
   }
 
   /**
+   * As escolhas que o agente oferece numa opção da sessão (`model`, `effort`), com o nome e a descrição, na ordem dele.
+   * Os grupos (`options` dentro de `options`) viram uma lista só. Vazio sem a sessão aberta ou sem a opção (T8762).
+   */
+  choices(configId: string): { value: string; name: string; description?: string }[] {
+    const option = this.config.find((o) => o.id === configId);
+    if (!option || !("options" in option) || !Array.isArray(option.options)) return [];
+    type Choice = { value?: unknown; name?: unknown; description?: unknown; options?: Choice[] };
+    const flat = (option.options as unknown as Choice[]).flatMap((x) => (Array.isArray(x.options) ? x.options : [x]));
+    const out: { value: string; name: string; description?: string }[] = [];
+    for (const x of flat) {
+      if (typeof x.value !== "string" || !x.value || out.some((o) => o.value === x.value)) continue;
+      const name = typeof x.name === "string" && x.name ? x.name : x.value;
+      out.push(typeof x.description === "string" && x.description ? { value: x.value, name, description: x.description } : { value: x.value, name });
+    }
+    return out;
+  }
+
+  /**
    * Aplica os valores que o Kiwi escolheu, um por vez, só onde o atual é outro. Um valor que o agente não oferece fica
    * de fora (e volta na lista `refused`), e a sessão segue com o que tinha. Só com a sessão aberta e sem pedido em andamento.
    */

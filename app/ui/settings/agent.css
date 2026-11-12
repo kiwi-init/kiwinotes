@@ -1,0 +1,95 @@
+/* A seção Agente dos Ajustes (spec #8373, T8762): a tela de aviso do ADR 0011 e o "Testar". Os cartões e as linhas
+   são os do kit; aqui só o que é da seção. */
+
+.kn-agent-consent {
+  border-top: 0.5px solid var(--border);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--accent-soft);
+}
+
+.kn-agent-consent h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.kn-agent-consent h4 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.kn-agent-consent ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.kn-agent-consent li,
+.kn-agent-consent p {
+  margin: 2px 0;
+  font-size: var(--text-md);
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.kn-agent-consent-buttons {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.kn-agent-test {
+  border-top: 0.5px solid var(--border);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.kn-agent-test-form {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.kn-agent-test-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.kn-agent-test-out {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--text-md);
+  line-height: 1.45;
+}
+
+.kn-agent-test-out p {
+  margin: 0;
+}
+
+.kn-agent-test-status {
+  color: var(--text-2);
+}
+
+.kn-agent-test-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.kn-agent-test-status + .kn-agent-test-text {
+  margin-top: var(--space-1);
+}
+
+.kn-agent-test-error {
+  color: var(--danger);
+}
+
+.kn-agent-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}

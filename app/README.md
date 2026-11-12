@@ -99,6 +99,13 @@ bun run cli events --follow --data /tmp/kn-test                          # os ev
 bun run cli invoke agent.disable '{}' --data /tmp/kn-test                # fecha o programa do agente na hora
 ```
 
+**A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
+- o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
+- os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;
+- o download sem rede.
+
+Os prints de cada estado ficam na pasta.
+
 ### Ver as janelas pela CLI, fora da tela (T1742)
 
 Com o headless de pé (`bun run cli start --data DIR --no-helper`), as janelas de verdade abrem num WebKit headless, sem nada na tela de ninguém:
