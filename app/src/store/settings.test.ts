@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { DEFAULT_NOTES_SHORTCUT, DEFAULT_SHORTCUTS, NOTES_SHORTCUTS } from "../shared/shortcuts.ts";
 import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
-import { DEFAULT_SETTINGS, SettingsStore, sanitizeSettings } from "./settings.ts";
+import { DEFAULT_AGENT_SETTINGS, DEFAULT_SETTINGS, SettingsStore, sanitizeSettings } from "./settings.ts";
 
 import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
 let dir: string;
@@ -16,14 +16,14 @@ const notesOff = { shortcuts: { ...DEFAULT_SHORTCUTS, notes: null }, notesShortc
 
 test("sem arquivo, o padrão: ⌃⌥N abre a janela Notas (T1499)", async () => {
   fresh();
-  expect(await new SettingsStore(dir).load()).toEqual({ shortcuts: DEFAULT_SHORTCUTS, notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
+  expect(await new SettingsStore(dir).load()).toEqual({ shortcuts: DEFAULT_SHORTCUTS, notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS });
   expect(DEFAULT_SETTINGS.notesShortcut).toBe(DEFAULT_NOTES_SHORTCUT);
 });
 
 test("grava só o que mudou, só para o usuário, e lê de volta; null (desligado) fica", async () => {
   fresh();
   const store = new SettingsStore(dir);
-  const off = { ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 };
+  const off = { ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS };
   expect(await store.save({ notesShortcut: null })).toEqual(off);
   expect(await new SettingsStore(dir).load()).toEqual(off);
   expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual({ version: 1, ...off });
@@ -36,13 +36,13 @@ test("editado à mão com um valor que não existe: volta ao padrão, sem quebra
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: "q" }));
   expect(await new SettingsStore(dir).load()).toEqual(DEFAULT_SETTINGS);
   expect(sanitizeSettings(null)).toEqual(DEFAULT_SETTINGS);
-  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ shortcuts: { ...DEFAULT_SHORTCUTS, notes: "option+command+n" }, notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
+  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ shortcuts: { ...DEFAULT_SHORTCUTS, notes: "option+command+n" }, notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS });
 });
 
 test("a Aparência (T2503): um settings.json de antes dela abre no padrão, e um campo ruim volta sozinho", async () => {
   fresh();
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: null }));
-  expect(await new SettingsStore(dir).load()).toEqual({ ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760 });
+  expect(await new SettingsStore(dir).load()).toEqual({ ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS });
   const mixed = { mode: "light", lightTheme: "glacier-mint", darkTheme: 42, textSize: "huge", font: "lato", motion: "reduced" };
   expect(sanitizeSettings({ appearance: mixed }).appearance).toEqual({
     ...DEFAULT_APPEARANCE,
@@ -98,7 +98,19 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
     preciseDictation: false,
     meetings: DEFAULT_MEETING_SETTINGS,
     noteWidth: 760,
+    agent: DEFAULT_AGENT_SETTINGS,
   });
+});
+
+test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default" });
+  expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
+    enabled: true,
+    consented: true,
+    model: "opus",
+    effort: "high",
+  });
+  expect(sanitizeSettings({ agent: { enabled: "sim", model: "../x", effort: 3 } }).agent).toEqual(DEFAULT_AGENT_SETTINGS);
 });
 
 test("a largura da nota (T5299): arredonda, fica nos limites e um valor ruim volta ao padrão", () => {

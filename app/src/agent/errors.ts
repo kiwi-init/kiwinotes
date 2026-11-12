@@ -18,6 +18,7 @@ export type AgentErrorCode =
   | "E_ADAPTER_OFFLINE"
   | "E_ADAPTER_TAMPERED"
   | "E_ADAPTER_DOWNLOAD"
+  | "E_ADAPTER_CANCELLED"
   | "E_AGENT_TOO_OLD"
   | "E_AGENT_TOO_NEW";
 
@@ -37,6 +38,7 @@ export const AGENT_ERROR_MESSAGES: Record<AgentErrorCode, string> = {
   E_ADAPTER_TAMPERED:
     "Um pacote do adaptador do {agente} chegou diferente do esperado e foi apagado. Nada foi instalado. Tente de novo mais tarde.",
   E_ADAPTER_DOWNLOAD: "O download do adaptador do {agente} falhou. Nada foi instalado. Tente de novo mais tarde.",
+  E_ADAPTER_CANCELLED: "O download do adaptador do {agente} foi cancelado. Nada foi instalado.",
   E_AGENT_TOO_OLD:
     "O {agente} instalado (versão {instalada}) é mais antigo que o que este Kiwi usa ({esperada}). Atualize o {agente} e tente de novo.",
   E_AGENT_TOO_NEW:

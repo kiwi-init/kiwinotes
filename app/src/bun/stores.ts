@@ -15,6 +15,7 @@ import { assertHeadlessNotesFolder, resolveReal } from "../headless/guard.ts";
 import { headlessTrash } from "../headless/trash.ts";
 import { Vault } from "../notes/vault.ts";
 import { SemanticEngine } from "../notes/semantic/engine.ts";
+import { appAgentService } from "../agent/app-service.ts";
 
 /** `KIWI_DATA_DIR` troca a pasta (testes e agentes, sem mexer nos dados reais). */
 const dir = process.env.KIWI_DATA_DIR || dataDir();
@@ -41,6 +42,12 @@ folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,semanti
 });
 const fixed = folders.fixed;
 
+const settings = {
+  load: async () => (await folders.current()).settings.load(),
+  save: async (patch: SettingsPatch) => (await folders.current()).settings.save(patch),
+  update: async (change: (settings: AppSettings) => SettingsPatch | null) => (await folders.current()).settings.update(change),
+};
+
 export const stores = {
   dir,
   modelsDir,
@@ -51,11 +58,9 @@ export const stores = {
   snippets: new SnippetStore(dir),
   recoveries,
   history: new HistoryStore(dir, recoveries),
-  settings: {
-    load: async () => (await folders.current()).settings.load(),
-    save: async (patch: SettingsPatch) => (await folders.current()).settings.save(patch),
-    update: async (change: (settings: AppSettings) => SettingsPatch | null) => (await folders.current()).settings.update(change),
-  },
+  settings,
+  // O agente (T8678, spec #8339): o Claude Code pelo adaptador; desligado de fábrica, e nada abre sem um pedido.
+  agent: appAgentService({ data: dir, settings, log: (msg) => console.log(msg) }),
   // The app's fixed vault remains the home of meetings, independent of the selected folder for regular notes.
   notes: fixed.notes,
   meetingNotes: fixed.meetingNotes,

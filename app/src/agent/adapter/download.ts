@@ -56,8 +56,12 @@ export interface DownloadOptions extends AdapterLocation {
   packages?: readonly PinnedPackage[];
   fetch?: typeof fetch;
   agentName?: string;
-  /** Avisa cada pacote baixado, para a tela mostrar o progresso. */
+  /** Avisa cada pacote baixado. */
   onPackage?: (p: { name: string; version: string; bytes: number }) => void;
+  /** O progresso em bytes, a cada pedaço que chega (T8678): `total` é a soma dos `size` da lista. */
+  onProgress?: (p: { done: number; total: number }) => void;
+  /** Cancela o download: a pasta `.part` é apagada e nada fica instalado (`E_ADAPTER_CANCELLED`). */
+  signal?: AbortSignal;
 }
 
 export interface DownloadResult {
@@ -83,10 +87,17 @@ export async function downloadAdapter(o: DownloadOptions): Promise<DownloadResul
   mkdirSync(o.root, { recursive: true, mode: 0o700 });
   const part = `${dir}.part-${process.pid}-${Date.now()}`;
   const got: DownloadResult["packages"] = [];
+  const total = packages.reduce((sum, p) => sum + p.size, 0);
+  let before = 0;
   try {
     mkdirSync(path.join(part, "node_modules"), { recursive: true, mode: 0o700 });
+    o.onProgress?.({ done: 0, total });
     for (const pkg of packages) {
-      const bytes = await fetchPackage(pkg, o.registry ?? NPM_REGISTRY, o.fetch ?? fetch, name);
+      if (o.signal?.aborted) throw new AgentError("E_ADAPTER_CANCELLED", name);
+      const bytes = await fetchPackage(pkg, o.registry ?? NPM_REGISTRY, o.fetch ?? fetch, name, o.signal, (n) =>
+        o.onProgress?.({ done: Math.min(before + n, total), total }),
+      );
+      before += bytes.byteLength;
       const actual = integrityOf(bytes);
       if (actual !== pkg.integrity) {
         throw new AgentError("E_ADAPTER_TAMPERED", name, `${pkg.name}@${pkg.version}: esperado ${pkg.integrity}, chegou ${actual}`);
@@ -100,6 +111,7 @@ export async function downloadAdapter(o: DownloadOptions): Promise<DownloadResul
       JSON.stringify({ adapter: ADAPTER_PACKAGE, version: o.version ?? ADAPTER_VERSION, packages: packages.map(({ name, version, integrity }) => ({ name, version, integrity })) }, null, 2) + "\n",
       { mode: 0o600 },
     );
+    if (o.signal?.aborted) throw new AgentError("E_ADAPTER_CANCELLED", name);
     rmSync(dir, { recursive: true, force: true });
     renameSync(part, dir);
   } catch (e) {
@@ -118,20 +130,49 @@ export function removeAdapter(o: Pick<AdapterLocation, "root">): void {
   rmSync(o.root, { recursive: true, force: true });
 }
 
-async function fetchPackage(pkg: PinnedPackage, registry: string, fetcher: typeof fetch, name: string): Promise<Uint8Array> {
+async function fetchPackage(
+  pkg: PinnedPackage,
+  registry: string,
+  fetcher: typeof fetch,
+  name: string,
+  cancel: AbortSignal | undefined,
+  progress: (bytes: number) => void,
+): Promise<Uint8Array> {
   const url = tarballUrl(pkg, registry);
+  const signal = cancel ? AbortSignal.any([cancel, AbortSignal.timeout(PACKAGE_TIMEOUT_MS)]) : AbortSignal.timeout(PACKAGE_TIMEOUT_MS);
+  const failed = (e: unknown) =>
+    cancel?.aborted
+      ? new AgentError("E_ADAPTER_CANCELLED", name)
+      : new AgentError("E_ADAPTER_OFFLINE", name, `${url}: ${String((e as Error)?.message ?? e)}`);
   let res: Response;
   try {
-    res = await fetcher(url, { signal: AbortSignal.timeout(PACKAGE_TIMEOUT_MS), redirect: "follow" });
+    res = await fetcher(url, { signal, redirect: "follow" });
   } catch (e) {
-    throw new AgentError("E_ADAPTER_OFFLINE", name, `${url}: ${String((e as Error)?.message ?? e)}`);
+    throw failed(e);
   }
   if (!res.ok) throw new AgentError("E_ADAPTER_DOWNLOAD", name, `${url}: HTTP ${res.status}`);
+  // Lido aos pedaços, para o progresso andar dentro de um pacote e o cancelar parar no meio dele.
+  const chunks: Uint8Array[] = [];
+  let got = 0;
   try {
-    return new Uint8Array(await res.arrayBuffer());
+    const reader = res.body!.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      got += value.byteLength;
+      progress(got);
+    }
   } catch (e) {
-    throw new AgentError("E_ADAPTER_OFFLINE", name, `${url}: ${String((e as Error)?.message ?? e)}`);
+    throw failed(e);
   }
+  const bytes = new Uint8Array(got);
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.byteLength;
+  }
+  return bytes;
 }
 
 /**

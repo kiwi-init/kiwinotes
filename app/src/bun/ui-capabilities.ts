@@ -39,6 +39,8 @@ import type { MeetingNotes } from "../notes/meetings.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
 import { checkMeetingSettingsPatch, NOT_RECORDING } from "../shared/meetings.ts";
 import { listMeetings, type MeetingHost, MeetingHostError } from "./meetings.ts";
+import { type AgentService, AgentServiceError } from "../agent/service.ts";
+import { isAgentChoice } from "../store/settings.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
@@ -157,6 +159,8 @@ export interface CapabilityDeps {
    * isto (testes antigos), `meetings.live` diz que não grava, e parar ou pausar dá E_NO_HELPER.
    */
   meetings?: MeetingHost;
+  /** O agente (T8678, spec #8339). Sem ele (testes antigos), as capacidades `agent.*` dão E_NO_AGENT. */
+  agent?: AgentService;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
@@ -321,6 +325,17 @@ export function uiCapabilities(deps: CapabilityDeps,
       await call(host);
     } catch (e) {
       if (e instanceof MeetingHostError) throw new CapabilityError("E_HELPER", e.code);
+      throw e;
+    }
+  };
+  /** O agente (T8678): sem ele, E_NO_AGENT; os erros do serviço viram o código deles (`E_AGENT_DISABLED`, `E_ADAPTER_MISSING`…). */
+  const agentCall = async <T>(call: (agent: AgentService) => Promise<T>): Promise<T> => {
+    const agent = deps.agent;
+    if (!agent) throw new CapabilityError("E_NO_AGENT", "no agent in this build");
+    try {
+      return await call(agent);
+    } catch (e) {
+      if (e instanceof AgentServiceError) throw new CapabilityError(e.code, e.message);
       throw e;
     }
   };
@@ -921,6 +936,51 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (typeof paused !== "boolean") throw bad("meetings.pauseMine: paused must be true or false");
       await meetingCall((host) => host.setMinePaused(paused));
       return true as const;
+    },
+    // O agente (1.41.0, T8678): sem tela ainda; nada liga, baixa nem pede sozinho.
+    "agent.status": (args) => {
+      const a = object(args, "agent.status");
+      const extra = Object.keys(a).filter((k) => k !== "refresh");
+      if (extra.length) throw bad(`agent.status: unknown arg ${extra[0]}`);
+      if (a.refresh !== undefined && typeof a.refresh !== "boolean") throw bad("agent.status: refresh must be true or false");
+      return agentCall((agent) => agent.status(a.refresh === true));
+    },
+    "agent.enable": (args) => {
+      const a = object(args, "agent.enable");
+      const extra = Object.keys(a).filter((k) => k !== "consent");
+      if (extra.length) throw bad(`agent.enable: unknown arg ${extra[0]}`);
+      if (a.consent !== undefined && typeof a.consent !== "boolean") throw bad("agent.enable: consent must be true or false");
+      return agentCall((agent) => agent.enable(a.consent === true));
+    },
+    "agent.disable": (args) => {
+      noArgs(args, "agent.disable");
+      return agentCall((agent) => agent.disable());
+    },
+    "agent.download": (args) => {
+      noArgs(args, "agent.download");
+      return agentCall((agent) => agent.startDownload());
+    },
+    "agent.ask": (args) => {
+      const { text } = fields(args, "agent.ask", ["text"]);
+      if (typeof text !== "string") throw bad("agent.ask: text must be a string");
+      return agentCall((agent) => agent.ask(text));
+    },
+    "agent.cancel": (args) => {
+      noArgs(args, "agent.cancel");
+      return agentCall((agent) => agent.cancel());
+    },
+    "agent.remove": (args) => {
+      noArgs(args, "agent.remove");
+      return agentCall((agent) => agent.remove());
+    },
+    "agent.configure": (args) => {
+      const a = object(args, "agent.configure");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort");
+      if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
+      for (const k of ["model", "effort"] as const) {
+        if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
+      }
+      return agentCall((agent) => agent.configure({ model: a.model as string | undefined, effort: a.effort as string | undefined }));
     },
   };
   // A lista do contrato e os handlers andam juntos.

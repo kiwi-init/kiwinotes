@@ -283,6 +283,59 @@ describe("os erros", () => {
   });
 });
 
+describe("as opções da sessão: o modelo e o esforço (T8678)", () => {
+  test("o host aplica os valores do Kiwi ao abrir, só onde o atual é outro", async () => {
+    const dir = tmp();
+    const log = path.join(dir, "log.jsonl");
+    const h = new AgentHost({
+      name: "Agente falso",
+      command: FAKE_AGENT_COMMAND,
+      dir: path.join(dir, "agent"),
+      env: { ...process.env, KIWI_FAKE_AGENT_LOG: log, KIWI_FAKE_AGENT_MODEL: "fable" },
+      configOptions: () => ({ model: "default", effort: "high" }),
+    });
+    hosts.push(h);
+    await h.start();
+    expect(h.configValues).toEqual({ model: "default", effort: "high" });
+    const sets = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.method === "session/set_config_option");
+    expect(sets.map((l) => [l.params.configId, l.params.value])).toEqual([["model", "default"]]); // o esforço já era high
+  });
+
+  test("um valor que o agente não oferece fica de fora, e a sessão segue com o que tinha", async () => {
+    const { h } = fakeHost(tmp());
+    await h.start();
+    expect(await h.applyConfig({ model: "nao-existe", effort: "low" })).toEqual({ applied: ["effort"], refused: ["model"] });
+    expect(h.configValues).toEqual({ model: "fable", effort: "low" });
+  });
+
+  test("um agente que não responde ao abrir: o teto dá E_AGENT_FAILED claro, e o processo é fechado", async () => {
+    const h = new AgentHost({ name: "Agente falso", command: ["/bin/sleep", "30"], dir: path.join(tmp(), "agent"), startTimeoutMs: 300 });
+    hosts.push(h);
+    const t0 = Date.now();
+    const err = await rejection(h.start());
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect(err.code).toBe("E_AGENT_FAILED");
+    expect(err.detail).toContain("não abriu a sessão em 0 s");
+    expect(h.running).toBe(false);
+  });
+
+  test("o killNow manda o SIGTERM na hora (a saída do app)", async () => {
+    const { h } = fakeHost(tmp());
+    await h.start();
+    const pid = h.pid!;
+    h.killNow();
+    for (let i = 0; i < 100; i++) {
+      try {
+        process.kill(pid, 0);
+      } catch {
+        return;
+      }
+      await Bun.sleep(20);
+    }
+    throw new Error("o processo não saiu");
+  });
+});
+
 describe("nada liga sozinho", () => {
   test("criar o host não abre o agente nem cria a pasta", () => {
     const dir = tmp();

@@ -83,6 +83,7 @@ const capabilities = uiCapabilities({
   dictionaryChanged: (terms) => void session.get()?.dictionaryChanged(terms),
   snippetsChanged: (snippets) => session.get()?.snippetsChanged(snippets),
   settings: stores.settings,
+  agent: stores.agent,
   settingsChanged: (settings) => {
     void session.get()?.settingsChanged(settings);
     // A Aparência vale para todas as janelas abertas (T2503).
@@ -336,6 +337,14 @@ export function sendToWindow<E extends keyof UiEvents>(name: WindowName, event: 
   rpc.send.event({ name: event, payload });
   return true;
 }
+
+// O agente (T8678): o estado e a resposta ao vivo vão para todas as janelas abertas (a seção Agente fica no hub).
+stores.agent.onStatus((status) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.status", payload: status });
+});
+stores.agent.onTurn((turn) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.turn", payload: turn });
+});
 
 stores.recoveries.onChanged(()=>{
   for(const rpc of rpcs.values())rpc.send.event({name:"history.changed",payload:{}});

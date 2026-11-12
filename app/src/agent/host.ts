@@ -21,6 +21,7 @@ import type {
   InitializeResponse,
   NewSessionRequest,
   RequestPermissionResponse,
+  SessionConfigOption,
   SessionNotification,
 } from "@agentclientprotocol/sdk";
 
@@ -87,6 +88,17 @@ export interface AgentHostOptions {
    * nunca é trocada por aqui. A prova do #8368 manda o `persistSession: false`, para não deixar a sessão gravada.
    */
   sessionOptions?: Record<string, unknown>;
+  /**
+   * Os valores que o Kiwi escolhe para as opções da sessão (T8678), por id: `{ model: "default", effort: "default" }`.
+   * Ao abrir, o host aplica cada um pelo `session/set_config_option` do ACP, por cima do que o agente trouxe (na prova
+   * de verdade, o Claude Code abriu com o modelo e o esforço do terminal do harry, #8666).
+   */
+  configOptions?: () => Record<string, string>;
+  /**
+   * O teto da abertura (o `initialize`, o `session/new` ou a retomada e as opções), em ms. Um agente que não responde
+   * dá `E_AGENT_FAILED` e é fechado, em vez de deixar quem espera preso para sempre (revisão do T8678). Padrão: 60 s.
+   */
+  startTimeoutMs?: number;
 }
 
 export interface AgentSession {
@@ -100,6 +112,8 @@ export interface AgentSession {
 
 /** Quanto o host espera o agente sair por conta própria, no `stop()`, antes de matar. */
 const STOP_GRACE_MS = 2000;
+/** O teto padrão da abertura: o Claude Code de verdade abre em poucos segundos. */
+const START_TIMEOUT_MS = 60_000;
 /** O fim do stderr do agente que fica guardado para explicar uma queda. */
 const STDERR_KEEP = 8192;
 
@@ -117,6 +131,8 @@ export class AgentHost {
   private turn: Turn | null = null;
   /** Durante o `session/load`, o agente repete a conversa antiga em updates: eles não são do pedido de agora. */
   private replaying = false;
+  /** As opções da sessão aberta, como o agente respondeu por último. */
+  private config: SessionConfigOption[] = [];
 
   constructor(o: AgentHostOptions) {
     this.o = o;
@@ -191,20 +207,36 @@ export class AgentHost {
       });
     this.conn = app.connect(ndJsonStream(output, proc.stdout as ReadableStream<Uint8Array>));
 
-    try {
+    const conn = this.conn;
+    const open = async (): Promise<AgentSession> => {
       const hello: InitializeRequest = {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
         clientInfo: { name: "kiwi-notes", title: "Kiwi Notes", version: this.o.kiwiVersion ?? "dev" },
       };
-      const init = await this.untilExit(this.conn.agent.request("initialize", hello));
+      const init = await this.untilExit(conn.agent.request("initialize", hello));
       const { sessionId, resumed, details } = await this.openSession(init);
       this.sessionId = sessionId;
+      this.config = Array.isArray(details.configOptions) ? (details.configOptions as SessionConfigOption[]) : [];
+      if (this.o.configOptions) await this.applyConfig(this.o.configOptions());
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId }) + "\n", { mode: 0o600 });
       return { sessionId, resumed, agent: { name: init.agentInfo?.title ?? init.agentInfo?.name, version: init.agentInfo?.version }, details };
+    };
+    const limit = this.o.startTimeoutMs ?? START_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new AgentError("E_AGENT_FAILED", this.o.name, `o agente não abriu a sessão em ${Math.round(limit / 1000)} s`)),
+        limit,
+      );
+    });
+    try {
+      return await Promise.race([open(), timeout]);
     } catch (e) {
       await this.stop();
       throw classifyAgentError(e, this.o.name);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -282,6 +314,54 @@ export class AgentHost {
       throw classifyAgentError(e, this.o.name);
     } finally {
       this.turn = null;
+    }
+  }
+
+  /** O valor atual de cada opção da sessão aberta (`model`, `effort`, `mode`…), como o agente diz. */
+  get configValues(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const o of this.config) if ("currentValue" in o && typeof o.currentValue === "string") out[o.id] = o.currentValue;
+    return out;
+  }
+
+  /**
+   * Aplica os valores que o Kiwi escolheu, um por vez, só onde o atual é outro. Um valor que o agente não oferece fica
+   * de fora (e volta na lista `refused`), e a sessão segue com o que tinha. Só com a sessão aberta e sem pedido em andamento.
+   */
+  async applyConfig(wanted: Record<string, string>): Promise<{ applied: string[]; refused: string[] }> {
+    const applied: string[] = [];
+    const refused: string[] = [];
+    if (!this.conn || !this.sessionId) return { applied, refused };
+    for (const [configId, value] of Object.entries(wanted)) {
+      const option = this.config.find((o) => o.id === configId);
+      if (!option || !("options" in option)) continue;
+      if (option.currentValue === value) continue;
+      const offered = (option.options as unknown as { value?: string; options?: { value: string }[] }[]).flatMap(
+        (x): { value?: string }[] => (x.options ? x.options : [x]),
+      );
+      if (!offered.some((x) => x.value === value)) {
+        refused.push(configId);
+        continue;
+      }
+      try {
+        const res = await this.untilExit(this.conn.agent.request("session/set_config_option", { sessionId: this.sessionId, configId, value }));
+        if (Array.isArray(res.configOptions)) this.config = res.configOptions;
+        applied.push(configId);
+      } catch (e) {
+        const err = classifyAgentError(e, this.o.name);
+        if (err.code !== "E_AGENT_FAILED") throw err;
+        refused.push(configId);
+      }
+    }
+    return { applied, refused };
+  }
+
+  /** Mata o processo na hora, sem esperar (a saída do app, no `process.on("exit")`): o adaptador fecha limpo com o SIGTERM. */
+  killNow(): void {
+    try {
+      this.proc?.kill("SIGTERM");
+    } catch {
+      /* já saiu */
     }
   }
 

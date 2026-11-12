@@ -89,6 +89,16 @@ bun run cli agent remove --data /tmp/kn-test
 
 O `proof` abre uma sessão sem mandar pedido e mostra o processo que o adaptador abriu, as opções de isolamento e o que a sessão recebeu. **O `proof --real` abre o Claude Code de verdade: só o harry roda, quando o lead pede** (ADR 0011). `KIWI_ADAPTER_PROOF=1 bun test src/agent/adapter` roda a mesma prova do builder como teste (ela vai ao npm, por isso fica fora do `bun test` comum).
 
+**O agente dentro do app (T8678, spec #8339)**, pelas capacidades do contrato, com o headless de pé. As chaves de teste só valem no headless: `KIWI_FAKE_AGENT=1` (o agente falso), `KIWI_ADAPTER_REGISTRY` e `KIWI_ADAPTER_PACKAGES` (um registro do npm falso e a lista dele) e `KIWI_AGENT_IDLE_MS`:
+
+```sh
+bun run cli invoke agent.enable '{"consent":true}' --data /tmp/kn-test   # liga (a 1ª vez pede o aceite)
+bun run cli invoke agent.download '{}' --data /tmp/kn-test               # volta logo; o progresso sai no evento agent.status
+bun run cli invoke agent.ask '{"text":"oi"}' --data /tmp/kn-test         # volta com o id; a resposta sai no agent.turn
+bun run cli events --follow --data /tmp/kn-test                          # os eventos agent.status e agent.turn, ao vivo
+bun run cli invoke agent.disable '{}' --data /tmp/kn-test                # fecha o programa do agente na hora
+```
+
 ### Ver as janelas pela CLI, fora da tela (T1742)
 
 Com o headless de pé (`bun run cli start --data DIR --no-helper`), as janelas de verdade abrem num WebKit headless, sem nada na tela de ninguém:

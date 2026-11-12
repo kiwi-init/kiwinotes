@@ -17,6 +17,8 @@ export interface PinnedPackage {
   integrity: string;
   /** A licença, como o npm diz. O SDK do Claude é fechado: ele fica na pasta de dados, nunca dentro do app. */
   license: string;
+  /** O tamanho do .tgz, em bytes: o total do progresso do download (T8678). */
+  size: number;
 }
 
 export const ADAPTER_PACKAGE = "@agentclientprotocol/claude-agent-acp";
@@ -34,30 +36,35 @@ export const ADAPTER_PACKAGES: readonly PinnedPackage[] = [
     version: ADAPTER_VERSION,
     integrity: "sha512-jfwcUc7J+KTIOqsPPSDzCgh4WI+QgvbPEACPtibMV1e41spmsR2Wb5xEeO1lh0el/kLxi7nF3zqZ1RYpdoVw7Q==",
     license: "Apache-2.0",
+    size: 770884,
   },
   {
     name: "@anthropic-ai/claude-agent-sdk",
     version: "0.3.322",
     integrity: "sha512-r88ij7R3SPV2j3BtFuavgrbWZNE8SVVS42AOQ1KxlS+QnSwNNnUhmVXV3Es2dniZySBYX8ENebL43ffhiB0azw==",
     license: "SEE LICENSE IN README.md",
+    size: 1507429,
   },
   {
     name: "@agentclientprotocol/sdk",
     version: "2.6.0",
     integrity: "sha512-3FtL6MkAV5F9qxg0FQV8wmBszIm2xuVPoDWOILIFSDQ+Vq3Twdh7Cw6Hk2GOPUbevgrTUpUAqZXQy7Geaj79mw==",
     license: "Apache-2.0",
+    size: 829765,
   },
   {
     name: "diff",
     version: "9.0.0",
     integrity: "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==",
     license: "BSD-3-Clause",
+    size: 152500,
   },
   {
     name: "zod",
     version: "4.6.7",
     integrity: "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==",
     license: "MIT",
+    size: 1141941,
   },
 ];
 
