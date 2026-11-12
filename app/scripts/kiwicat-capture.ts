@@ -156,7 +156,8 @@ try {
         }
         const png = await page.screenshot();
         hashes.push(new Bun.CryptoHasher("sha256").update(png).digest("hex"));
-        if (frame === 90) writeFileSync(join(out, scene.name + ".png"), png);
+        if (frame === 90 && process.env.KIWI_FOG_STILLS === "1")
+          writeFileSync(join(out, scene.name + ".png"), png);
         if (!encoder.stdin!.write(png)) await once(encoder.stdin!, "drain");
         if (frame % 150 === 0)
           console.log(scene.name, frame, "/", scene.seconds * 30);

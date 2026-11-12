@@ -73,11 +73,8 @@ Não foram abertos app, helper, microfone ou clipboard reais.
 
 ## Histórico
 
-- [B1/B2 ouvindo](variantes-fofas/ouvindo-B1-B2.mp4) e
-  [thinking](variantes-fofas/thinking-B1-B2.mp4): propostas antes da escolha.
-- [A/B ouvindo](variantes/ouvindo-A-B.mp4) e
-  [thinking](variantes/thinking-A-B.mp4): anteriores ao pedido de textura fofa.
-- [Clipes iniciais](videos/): anteriores à correção do contorno.
-- As medidas `medidas/webgpu-*.json` e `webgl2-12fps.json` coletavam 60
-  intervalos nominais mais as consultas de processos, cerca de 64 s; foram
-  normalizadas pelo tempo real e não são aceite da versão final.
+O harry escolheu o movimento B no #8693 e a textura B1 no #8754. Os vídeos
+e as imagens dos estudos A/B/B2 foram retirados da entrega para reduzir o
+peso no repositório; os relatórios JSON permanecem preservados.
+As medidas antigas em `medidas/` usavam intervalos nominais e não são
+aceite de desempenho da textura final.

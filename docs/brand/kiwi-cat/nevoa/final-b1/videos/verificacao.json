@@ -1,95 +1,357 @@
 {
-  "scope": "export verification, not performance or final aesthetic approval",
+  "scope": "Final distribution after size reduction; original verification preserved separately; not performance or final aesthetic approval",
+  "total_nevoa_bytes": 5092010,
+  "encoding": "Only clips above300000bytes transcoded from original H264CRF18: libx264 presetveryslow CRF22 threads2 yuv420p +faststart. Existing smaller clips/60s preserved byte-for-byte. No retiming or scaling.",
   "videos": [
     {
       "file": "repouso-padrao.mp4",
+      "bytes": 128989,
+      "original_bytes": 128989,
+      "recompressed": false,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 36.41345638020833,
-      "decoded_sample_std": 40.430528730540246,
+      "frames": 240,
       "unique_rendered_hashes": 16,
-      "sha256": "cdc1263db88497fa377efac7880d94bbc951effc45b3fbec003df798c90776d7"
+      "sha256": "cdc1263db88497fa377efac7880d94bbc951effc45b3fbec003df798c90776d7",
+      "original_sha256": "cdc1263db88497fa377efac7880d94bbc951effc45b3fbec003df798c90776d7",
+      "whole_clip_ssim": 1.0,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        }
+      ]
     },
     {
       "file": "repouso-claude.mp4",
+      "bytes": 141096,
+      "original_bytes": 141096,
+      "recompressed": false,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 34.82779166666667,
-      "decoded_sample_std": 40.85332145906679,
+      "frames": 240,
       "unique_rendered_hashes": 16,
-      "sha256": "a5a9c318d382e8c8a672623ad5a8ab411a62337143163b80bc0c4b12cf589f09"
+      "sha256": "a5a9c318d382e8c8a672623ad5a8ab411a62337143163b80bc0c4b12cf589f09",
+      "original_sha256": "a5a9c318d382e8c8a672623ad5a8ab411a62337143163b80bc0c4b12cf589f09",
+      "whole_clip_ssim": 1.0,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        }
+      ]
     },
     {
       "file": "repouso-codex.mp4",
+      "bytes": 127254,
+      "original_bytes": 127254,
+      "recompressed": false,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 35.513763671875,
-      "decoded_sample_std": 39.18063091895241,
+      "frames": 240,
       "unique_rendered_hashes": 16,
-      "sha256": "a50c02cfee778bdf4cc7bc191debcecca427556167d47b7314bd4fed708ed0e5"
+      "sha256": "a50c02cfee778bdf4cc7bc191debcecca427556167d47b7314bd4fed708ed0e5",
+      "original_sha256": "a50c02cfee778bdf4cc7bc191debcecca427556167d47b7314bd4fed708ed0e5",
+      "whole_clip_ssim": 1.0,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        }
+      ]
     },
     {
       "file": "ouvindo-padrao.mp4",
+      "bytes": 216729,
+      "original_bytes": 412348,
+      "recompressed": true,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 47.01442903645833,
-      "decoded_sample_std": 54.66397433987975,
+      "frames": 240,
       "unique_rendered_hashes": 240,
-      "sha256": "a614628da48d480a9c29a7bbb1bb6203bb478760401cf9d23feed8f7f08afce2"
+      "sha256": "a227be7676d4da8308e86e6555c7f7b8a863cc3ad8de314ff3c3a8b1c92bdcc6",
+      "original_sha256": "a614628da48d480a9c29a7bbb1bb6203bb478760401cf9d23feed8f7f08afce2",
+      "whole_clip_ssim": 0.995928,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.5256471354166666,
+          "fog_mean_absolute_rgb_error": 0.6339000116473715,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 32
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.5483216145833333,
+          "fog_mean_absolute_rgb_error": 0.6572802784164871,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 32
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.6287174479166666,
+          "fog_mean_absolute_rgb_error": 0.7364898975940687,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 32
+        }
+      ]
     },
     {
       "file": "ouvindo-claude.mp4",
+      "bytes": 239020,
+      "original_bytes": 464397,
+      "recompressed": true,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 44.56792057291667,
-      "decoded_sample_std": 54.17779761104427,
+      "frames": 240,
       "unique_rendered_hashes": 240,
-      "sha256": "06c23f09f0a556450752fa4feb4b89ba9be32ef495ac267f14393927e6a855a3"
+      "sha256": "33f0ad83cc79ea3850c9f0917386fdb3c629777cf26226a8cfad2ab7f93181ee",
+      "original_sha256": "06c23f09f0a556450752fa4feb4b89ba9be32ef495ac267f14393927e6a855a3",
+      "whole_clip_ssim": 0.995353,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.6329498697916667,
+          "fog_mean_absolute_rgb_error": 0.8100699624838854,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 24
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.6686510416666667,
+          "fog_mean_absolute_rgb_error": 0.846878243675015,
+          "p95_channel_error": 3.0,
+          "max_channel_error": 24
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.7991927083333333,
+          "fog_mean_absolute_rgb_error": 0.9773134854454759,
+          "p95_channel_error": 3.0,
+          "max_channel_error": 25
+        }
+      ]
     },
     {
       "file": "ouvindo-codex.mp4",
+      "bytes": 213837,
+      "original_bytes": 400796,
+      "recompressed": true,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 45.877030598958335,
-      "decoded_sample_std": 53.33898310579967,
+      "frames": 240,
       "unique_rendered_hashes": 240,
-      "sha256": "a6f75470ba5b9c5757dbd5f87860b02be04272889488dc4cf20731a262801ff7"
+      "sha256": "75723167b7ceb77d4b4a66db59f047415340a66a72a8c536c3423595d6e02ab4",
+      "original_sha256": "a6f75470ba5b9c5757dbd5f87860b02be04272889488dc4cf20731a262801ff7",
+      "whole_clip_ssim": 0.996138,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.47907161458333336,
+          "fog_mean_absolute_rgb_error": 0.5790108203010194,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 21
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.5027942708333333,
+          "fog_mean_absolute_rgb_error": 0.5998316785581042,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 18
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.5782252604166667,
+          "fog_mean_absolute_rgb_error": 0.6736559601551165,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 18
+        }
+      ]
     },
     {
       "file": "thinking-padrao.mp4",
+      "bytes": 160050,
+      "original_bytes": 325389,
+      "recompressed": true,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 36.231541015625,
-      "decoded_sample_std": 42.92972503700524,
+      "frames": 240,
       "unique_rendered_hashes": 240,
-      "sha256": "9de78d36c890768fb8240b38e537af1b54f15078b96185c34360e1f5144aa5b2"
+      "sha256": "198132853fc96b48585272b4d363034e84ad87bdc2e2ae07c3ec86f1856b7316",
+      "original_sha256": "9de78d36c890768fb8240b38e537af1b54f15078b96185c34360e1f5144aa5b2",
+      "whole_clip_ssim": 0.996021,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.5265,
+          "fog_mean_absolute_rgb_error": 0.63539079272269,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 25
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.5442864583333333,
+          "fog_mean_absolute_rgb_error": 0.6534860717507164,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 25
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.56110546875,
+          "fog_mean_absolute_rgb_error": 0.6781528443172905,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 25
+        }
+      ]
     },
     {
       "file": "thinking-claude.mp4",
+      "bytes": 175114,
+      "original_bytes": 359312,
+      "recompressed": true,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 34.625536458333336,
-      "decoded_sample_std": 42.8554163058004,
+      "frames": 240,
       "unique_rendered_hashes": 240,
-      "sha256": "11b87765bb0ffe57409534de3a506aa03252e9fbc1a66eecc8a5dc1348450950"
+      "sha256": "59281fe2783c79d792e99a6aa96854cea3d820394afd6919771dbf5df537aafc",
+      "original_sha256": "11b87765bb0ffe57409534de3a506aa03252e9fbc1a66eecc8a5dc1348450950",
+      "whole_clip_ssim": 0.995481,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.6419114583333333,
+          "fog_mean_absolute_rgb_error": 0.8003103365958463,
+          "p95_channel_error": 3.0,
+          "max_channel_error": 28
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.659134765625,
+          "fog_mean_absolute_rgb_error": 0.820028371666962,
+          "p95_channel_error": 3.0,
+          "max_channel_error": 28
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.6747220052083334,
+          "fog_mean_absolute_rgb_error": 0.8460339776048037,
+          "p95_channel_error": 3.0,
+          "max_channel_error": 28
+        }
+      ]
     },
     {
       "file": "thinking-codex.mp4",
+      "bytes": 159510,
+      "original_bytes": 314348,
+      "recompressed": true,
       "duration": 8.0,
-      "decoded_frames": 240,
-      "decoded_sample_mean": 35.39934440104167,
-      "decoded_sample_std": 41.93708385862066,
+      "frames": 240,
       "unique_rendered_hashes": 240,
-      "sha256": "ef9723d39fb0a4dc2d8088dd61e1b771960e2ebd764cdd55cfe8bb50837c3f0c"
+      "sha256": "eb88f0cfa482bfacc732177b39e92e3da924f19dd9e159aecd9c935233ac8756",
+      "original_sha256": "ef9723d39fb0a4dc2d8088dd61e1b771960e2ebd764cdd55cfe8bb50837c3f0c",
+      "whole_clip_ssim": 0.996175,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.49747395833333335,
+          "fog_mean_absolute_rgb_error": 0.6003423416946191,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 30
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.5141399739583333,
+          "fog_mean_absolute_rgb_error": 0.6217528349746344,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 30
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.5277799479166667,
+          "fog_mean_absolute_rgb_error": 0.6425714908167808,
+          "p95_channel_error": 2.0,
+          "max_channel_error": 30
+        }
+      ]
     },
     {
       "file": "repouso-60s.mp4",
+      "bytes": 1025522,
+      "original_bytes": 1025522,
+      "recompressed": false,
       "duration": 60.0,
-      "decoded_frames": 1800,
-      "decoded_sample_mean": 36.41345638020833,
-      "decoded_sample_std": 40.430528730540246,
+      "frames": 1800,
       "unique_rendered_hashes": 120,
-      "sha256": "74a6482277bd448aa6b4597a2228e530a6d89989884e24165871853cee03a5eb"
+      "sha256": "74a6482277bd448aa6b4597a2228e530a6d89989884e24165871853cee03a5eb",
+      "original_sha256": "74a6482277bd448aa6b4597a2228e530a6d89989884e24165871853cee03a5eb",
+      "whole_clip_ssim": 1.0,
+      "decoded_comparisons": [
+        {
+          "seconds": 2.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 4.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        },
+        {
+          "seconds": 6.4,
+          "mean_absolute_rgb_error": 0.0,
+          "fog_mean_absolute_rgb_error": 0.0,
+          "p95_channel_error": 0.0,
+          "max_channel_error": 0
+        }
+      ]
     }
   ]
 }
