@@ -13,9 +13,12 @@
 // - **o que a sessão recebeu:** os comandos, os agentes e os modelos que o Claude Code anunciou. Um comando, um
 //   agente ou um plugin que o harry usa no terminal e aparece aqui é uma configuração pessoal que entrou.
 //
-// Nada é guardado: a sessão abre na pasta de dados que a CLI usa (um tmp), e a resposta não traz e-mail nem conta.
+// Nada é guardado: a sessão abre na pasta de dados que a CLI usa (um tmp), com o `persistSession: false` (o Claude Code
+// não grava a conversa em `~/.claude/projects/`, e a prova confere o `--no-session-persistence`), e a resposta não traz
+// e-mail nem conta.
 
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 
@@ -48,6 +51,8 @@ export interface Isolation {
   /** O `--permission-mode` (o esperado é `default`) e se o modo que pula permissões foi liberado. */
   modoDePermissao: string | null;
   pulaPermissoes: boolean;
+  /** `--no-session-persistence`: a sessão da prova não fica gravada em `~/.claude/projects/`. */
+  semRegistroDaSessao: boolean;
 }
 
 /** Lê as opções de isolamento na linha de comando do Claude Code. */
@@ -60,6 +65,7 @@ export function isolationOf(command: string): Isolation {
     semServidoresMcp: has("--strict-mcp-config") && !/(?:^|\s)--mcp-config(?:[= ]|$)/.test(command),
     modoDePermissao: mode,
     pulaPermissoes: has("--allow-dangerously-skip-permissions") || mode === "bypassPermissions",
+    semRegistroDaSessao: has("--no-session-persistence"),
   };
 }
 
@@ -74,6 +80,8 @@ export interface ProofReport {
   isolamento: Isolation | null;
   /** Os comandos (`/…`) que o Claude Code anunciou para a sessão. */
   comandos: string[];
+  /** Se a lista de comandos chegou. Sem ela, uma lista vazia não quer dizer "nada pessoal entrou". */
+  comandosChegaram: boolean;
   /** As opções da sessão (o modelo, o agente, o modo), com os valores que o Claude Code ofereceu. */
   opcoes: { id: string; atual?: unknown; valores: string[] }[];
   /** O que falta conferir a olho (o harry, contra o terminal dele). */
@@ -85,8 +93,8 @@ export interface ProofOptions {
   /** O `claude` a abrir: o instalado (`--real`) ou o falso. */
   claudePath: string;
   env?: Record<string, string | undefined>;
-  /** Quanto esperar a lista de comandos depois de a sessão abrir. */
-  settleMs?: number;
+  /** O teto da espera pela lista de comandos, depois de a sessão abrir. */
+  commandsTimeoutMs?: number;
 }
 
 function optionsOf(details: Record<string, unknown> | undefined): ProofReport["opcoes"] {
@@ -100,27 +108,55 @@ function optionsOf(details: Record<string, unknown> | undefined): ProofReport["o
 }
 
 /** Roda a prova. Lança o `AgentError` das conferências (não instalado, versão, login, adaptador que falta). */
+/** Os dois caminhos levam ao mesmo arquivo (o link `~/.local/bin/claude` e a versão para onde ele aponta)? */
+export function sameProgram(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    return realpathSync(a) === realpathSync(b);
+  } catch {
+    return false;
+  }
+}
+
+/** Roda a prova. Lança o `AgentError` das conferências (não instalado, versão, login, adaptador que falta). */
 export async function runAdapterProof(o: ProofOptions): Promise<ProofReport> {
   const commands = new Set<string>();
+  let commandsArrived: () => void = () => {};
+  const arrived = new Promise<boolean>((resolve) => {
+    commandsArrived = () => resolve(true);
+    setTimeout(() => resolve(false), o.commandsTimeoutMs ?? 5000);
+  });
   const onUpdate = (n: SessionNotification) => {
     const u = n.update as { sessionUpdate?: string; availableCommands?: { name?: string }[] };
-    if (u.sessionUpdate === "available_commands_update") for (const c of u.availableCommands ?? []) if (c.name) commands.add(c.name);
+    if (u.sessionUpdate !== "available_commands_update") return;
+    for (const c of u.availableCommands ?? []) if (c.name) commands.add(c.name);
+    commandsArrived();
   };
-  const { host, status, adapter } = await claudeAdapterHost({ data: o.data, claudePath: o.claudePath, env: o.env, host: { onUpdate } });
+  const { host, status, adapter } = await claudeAdapterHost({
+    data: o.data,
+    claudePath: o.claudePath,
+    env: o.env,
+    host: { onUpdate, sessionOptions: { persistSession: false } },
+  });
   host.forgetSession(); // a prova abre sempre uma sessão nova
   const session = await host.start();
   try {
-    await Bun.sleep(o.settleMs ?? 1500);
+    const gotCommands = await arrived;
     const kids = host.pid ? childProcesses(host.pid) : [];
     const child = kids.find((k) => /--input-format/.test(k.command)) ?? kids[0] ?? null;
     const isolation = child ? isolationOf(child.command) : null;
-    const opened = !!child && (child.command === o.claudePath || child.command.startsWith(`${o.claudePath} `));
+    // O executável é o começo da linha do `ps`: o caminho indicado, ou outro caminho para o mesmo arquivo (o Claude Code
+    // nativo pode aparecer pelo caminho da versão, `…/versions/2.1.322`, em vez do link).
+    const opened =
+      !!child && (child.command === o.claudePath || child.command.startsWith(`${o.claudePath} `) || sameProgram(child.command.split(" ")[0]!, o.claudePath));
     const ok =
       opened &&
+      gotCommands &&
       !!isolation &&
       isolation.semConfiguracoesPessoais &&
       isolation.semFerramentas &&
       isolation.semServidoresMcp &&
+      isolation.semRegistroDaSessao &&
       !isolation.pulaPermissoes;
     return {
       ok,
@@ -131,9 +167,12 @@ export async function runAdapterProof(o: ProofOptions): Promise<ProofReport> {
       abriuOClaudeIndicado: opened,
       isolamento: isolation,
       comandos: [...commands].sort(),
+      comandosChegaram: gotCommands,
       opcoes: optionsOf(session.details),
       conferir: [
-        "Os comandos: algum é um comando, uma skill ou um plugin seu, do terminal? Se for, uma configuração pessoal entrou.",
+        gotCommands
+          ? "Os comandos: algum é um comando, uma skill ou um plugin seu, do terminal? Se for, uma configuração pessoal entrou."
+          : "A lista de comandos não chegou: a prova não consegue dizer se uma configuração pessoal entrou. Avise o lead.",
         "As opções: os agentes listados são só os padrão do Claude Code, sem os seus?",
         "O processo: o caminho é o do seu Claude Code (o `which claude` do terminal)?",
       ],

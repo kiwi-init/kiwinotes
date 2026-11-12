@@ -82,6 +82,11 @@ export interface AgentHostOptions {
    * manda ao abrir). É para diagnóstico, como a prova do #8368; a tela usa os eventos do `ask`.
    */
   onUpdate?: (n: SessionNotification) => void;
+  /**
+   * Opções a mais para o `_meta.claudeCode.options` da sessão, por baixo do isolamento: uma chave do `ISOLATION_META`
+   * nunca é trocada por aqui. A prova do #8368 manda o `persistSession: false`, para não deixar a sessão gravada.
+   */
+  sessionOptions?: Record<string, unknown>;
 }
 
 export interface AgentSession {
@@ -206,7 +211,8 @@ export class AgentHost {
   /** Retoma a sessão guardada, se o agente sabe (`session/resume`, ou `session/load`); senão, abre uma nova. */
   private async openSession(init: InitializeResponse): Promise<{ sessionId: string; resumed: boolean; details: Record<string, unknown> }> {
     const agent = this.conn!.agent;
-    const base: NewSessionRequest = { cwd: this.workDir, mcpServers: [], _meta: structuredClone(ISOLATION_META) as unknown as Record<string, unknown> };
+    const options = { ...structuredClone(this.o.sessionOptions ?? {}), ...structuredClone(ISOLATION_META.claudeCode.options) };
+    const base: NewSessionRequest = { cwd: this.workDir, mcpServers: [], _meta: { claudeCode: { options } } };
     const saved = this.savedSessionId();
     if (saved) {
       const caps = init.agentCapabilities;

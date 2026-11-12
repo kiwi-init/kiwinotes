@@ -24,13 +24,17 @@ function tmp(): string {
 }
 
 /** Um host com o agente falso. `log` recebe cada abertura de sessão que o falso viu; `resume` muda como ele retoma. */
-function fakeHost(dir: string, extra: { resume?: "resume" | "load" | "none"; command?: readonly string[] } = {}) {
+function fakeHost(
+  dir: string,
+  extra: { resume?: "resume" | "load" | "none"; command?: readonly string[]; sessionOptions?: Record<string, unknown> } = {},
+) {
   const log = path.join(dir, "fake-log.jsonl");
   const h = new AgentHost({
     name: "Agente falso",
     command: extra.command ?? FAKE_AGENT_COMMAND,
     dir: path.join(dir, "agent"),
     env: { ...process.env, KIWI_FAKE_AGENT_LOG: log, KIWI_FAKE_AGENT_RESUME: extra.resume ?? "resume" },
+    sessionOptions: extra.sessionOptions,
   });
   hosts.push(h);
   const opened = () =>
@@ -195,6 +199,14 @@ describe("o isolamento", () => {
     expect(created!.params.mcpServers).toEqual([]);
     expect(created!.params._meta).toEqual(ISOLATION_META);
     expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: [], allowDangerouslySkipPermissions: false });
+  });
+
+  test("opções a mais vão junto, mas nunca trocam o isolamento (T8540)", async () => {
+    const dir = tmp();
+    const { h, opened } = fakeHost(dir, { sessionOptions: { persistSession: false, tools: ["Bash"], settingSources: ["user"] } });
+    await h.start();
+    const [created] = opened();
+    expect(created!.params._meta).toEqual({ claudeCode: { options: { persistSession: false, ...ISOLATION_META.claudeCode.options } } });
   });
 
   test("retomar a sessão manda o mesmo isolamento", async () => {

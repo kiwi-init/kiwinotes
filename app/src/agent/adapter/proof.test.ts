@@ -14,11 +14,11 @@ import path from "node:path";
 import { writeFakeClaudeExecutable } from "../fake/index.ts";
 import { downloadAdapter } from "./download.ts";
 import { adapterRoot } from "./open.ts";
-import { childProcesses, isolationOf, runAdapterProof } from "./proof.ts";
+import { childProcesses, isolationOf, runAdapterProof, sameProgram } from "./proof.ts";
 
 describe("ler o isolamento na linha de comando", () => {
   const isolated =
-    "/u/.local/bin/claude --output-format stream-json --verbose --input-format stream-json --tools= --setting-sources= --strict-mcp-config --permission-mode=default --session-id=x";
+    "/u/.local/bin/claude --output-format stream-json --verbose --input-format stream-json --tools= --setting-sources= --strict-mcp-config --permission-mode=default --session-id=x --no-session-persistence";
 
   test("o Claude Code isolado: sem configurações, sem ferramentas, sem MCP e no modo default", () => {
     expect(isolationOf(isolated)).toEqual({
@@ -27,6 +27,7 @@ describe("ler o isolamento na linha de comando", () => {
       semServidoresMcp: true,
       modoDePermissao: "default",
       pulaPermissoes: false,
+      semRegistroDaSessao: true,
     });
   });
 
@@ -38,8 +39,19 @@ describe("ler o isolamento na linha de comando", () => {
       semServidoresMcp: false,
       modoDePermissao: "bypassPermissions",
       pulaPermissoes: true,
+      semRegistroDaSessao: false,
     });
     expect(isolationOf(`${isolated} --mcp-config {"mcpServers":{}}`).semServidoresMcp).toBe(false);
+  });
+
+  test("o mesmo programa pelo link ou pelo caminho da versão (o Claude Code nativo usa um link)", async () => {
+    const { mkdirSync, symlinkSync, writeFileSync } = await import("node:fs");
+    const dir = mkdtempSync(path.join(tmpdir(), "kiwi-same-"));
+    mkdirSync(path.join(dir, "versions"));
+    writeFileSync(path.join(dir, "versions", "2.1.322"), "");
+    symlinkSync(path.join(dir, "versions", "2.1.322"), path.join(dir, "claude"));
+    expect(sameProgram(path.join(dir, "versions", "2.1.322"), path.join(dir, "claude"))).toBe(true);
+    expect(sameProgram(path.join(dir, "outro"), path.join(dir, "claude"))).toBe(false);
   });
 
   test("os processos filhos, com a linha de comando", async () => {
@@ -82,12 +94,16 @@ describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova do builder, com o adap
         semServidoresMcp: true,
         modoDePermissao: "default",
         pulaPermissoes: false,
+        semRegistroDaSessao: true,
       });
+      expect(report.comandosChegaram).toBe(true);
 
       // O próprio falso anotou como foi chamado: uma vez, na pasta de trabalho do agente, com o isolamento.
       const calls = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { argv: string[]; cwd: string });
       expect(calls).toHaveLength(1);
-      expect(calls[0]!.argv).toEqual(expect.arrayContaining(["--setting-sources=", "--tools=", "--strict-mcp-config", "--permission-mode=default"]));
+      expect(calls[0]!.argv).toEqual(
+        expect.arrayContaining(["--setting-sources=", "--tools=", "--strict-mcp-config", "--permission-mode=default", "--no-session-persistence"]),
+      );
       expect(calls[0]!.argv).not.toContain("--allow-dangerously-skip-permissions");
       expect(calls[0]!.argv.some((a) => a.startsWith("--mcp-config"))).toBe(false);
       expect(calls[0]!.cwd).toEndWith(path.join("agent", "work"));
