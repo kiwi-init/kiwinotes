@@ -75,9 +75,11 @@ não muda o instante já sorteado para tique ou olhar.
 ## 1. Repouso
 
 Só existe no app. Ao entrar, olhos e orelhas assentam por 240 ms antes de
-armar os agendadores. Depois de um tempo sorteado de [75;120] s sem pedido
-ou mudança de estado, entrar em `dormindo`. Interação que mantém o app em
-repouso reinicia só o tempo de sono, sem forçar uma piscada.
+armar os agendadores. `tempo_ate_dormir` é sorteado uma vez por episódio
+de inatividade na faixa de **4 a 6 minutos**, sem pedido ou mudança de
+estado. **Valor a ajustar com o harry vendo a animação.** Ao vencer, entrar
+em `dormindo`. Interação que mantém o app em repouso reinicia só o tempo
+de sono, sem forçar uma piscada.
 
 | elemento | quanto e o que faz | duração / curva |
 |---|---|---|
@@ -132,9 +134,13 @@ entrada: não simular localização espacial que o módulo não recebeu.
 | orelhas | `orientar_orelha`, um lado por vez; até 25° para dentro | conforme tabela de gestos, sem acompanhar cada pico de voz |
 | aro | ganho = mínimo entre 1 e exposição da névoa | mesmo envelope filtrado da voz; matiz fixa |
 | névoa | exposição 0,66→1,26; volume de luz 1→1,16 | nível filtrado `y` definido abaixo; subida rápida, descida suave |
-| símbolo | ondas aprovadas: de uma a três, abertas junto da orelha | faixas de y: <1/3, [1/3;2/3), ≥2/3; entrada/saída de cada onda em 100 ms, `suave`; uma onda em alfa 0,35 no silêncio |
+| símbolo | ondas aprovadas só com o microfone capturando; nenhuma onda se `voz` estiver ausente ou `null` | na captura, faixas de y: <1/3, [1/3;2/3), ≥2/3; transição entre ondas em 100 ms, `suave`; uma onda em alfa 0,35 no silêncio numérico; ao encerrar captura, remover todas no mesmo quadro |
 
-![Quadros-chave de ouvindo](roteiro/ouvindo.webp)
+A tira abaixo ilustra **microfone capturando**, inclusive no silêncio.
+No caminho de texto, a mesma atenção dos olhos e das orelhas aparece
+sem nenhuma onda; digitação não é captura.
+
+![Quadros-chave de ouvindo: microfone capturando](roteiro/ouvindo.webp)
 
 ## 5. Thinking
 
@@ -206,7 +212,7 @@ O caminho do rabisco não é redesenhado aleatoriamente a cada volta.
 
 ## Clique no gato e pedido por texto — proposta #8362 / #8386
 
-Proponho reutilizar **`acordou → ouvindo`, com `voz=0` durante a digitação**.
+Proponho reutilizar **`acordou → ouvindo`, com `voz=null` (sem microfone) durante a digitação**.
 Não há nono estado, novo símbolo ou quinto parâmetro. O gesto semântico
 `atender_clique` combina a reação de atenção já aprovada com a entrada em
 ouvindo. A composição de texto abre imediatamente no host; a reação visual
@@ -215,16 +221,17 @@ não atrasa a primeira tecla e não inicia gravação.
 | situação | gesto e duração | estado / símbolo |
 |---|---|---|
 | clique em repouso ou dormindo | `atender_clique`: começar o opa aprovado; cumprir só seus 320 ms mínimos e assentar em 220 ms, partindo da pose corrente | `acordou → ouvindo`; zZ sai, ! pode nascer em 300 ms e logo sair; ondas entram conforme a transição |
-| a pessoa digita ou pausa para pensar | círculos atentos, orelhas orientam uma por vez nos intervalos já definidos, sem acompanhar teclas | manter `ouvindo`, `voz=0`; exposição0,66 e uma onda em alfa0,35; sem pulsar névoa, ondas ou brilho a cada tecla |
+| a pessoa digita ou pausa para pensar | círculos atentos, orelhas orientam uma por vez nos intervalos já definidos, sem acompanhar teclas | manter `ouvindo`, `voz=null`; exposição0,66 e nenhuma onda; sem pulsar névoa ou brilho a cada tecla |
 | envio do texto | não inventar uma etapa de processamento nem replay do opa | host informa `thinking` ou `agindo`; retirar ondas e entrar no símbolo daquele estado |
 | fechar ou cancelar composição sem envio, estando o agente ocioso | assentar em 240 ms e rearmar agendadores | voltar a repouso, sem pronto nem erro; o host cuida do rascunho |
 | clique enquanto thinking/agindo já está ativo | abrir composição sem interromper a atividade visual já informada | manter thinking/agindo; não fingir que o trabalho parou para ouvir |
 
-O host fornece zero em `voz` no caminho de texto; não converte teclas,
+O host fornece `null` ou omite `voz` no caminho de texto; não converte teclas,
 velocidade de digitação, conteúdo ou pausas em um nível de voz falso.
-`ouvindo` aqui significa atenção ao pedido, não microfone ligado. A distinção
-entre campo de texto e captura de voz fica na interface do pedido, fora do
-desenho do gato. O canal de entrada não altera os olhos, símbolos, aro ou
+`ouvindo` aqui significa atenção ao pedido, não microfone ligado. No
+desenho, as ondas distinguem a captura ativa: elas nunca aparecem sem
+microfone, inclusive no quadro parado. O campo de texto e a indicação de
+captura na interface continuam sob responsabilidade do host. O canal de entrada não altera os olhos, símbolos, aro ou
 cores aprovados. A mesma regra de `parado` elimina o opa e as transições,
 mostrando diretamente o quadro fixo de ouvindo.
 
@@ -234,8 +241,15 @@ a composição nem a captura de voz nesta entrega.
 
 ## Voz, luz e cor
 
-`voz` é só o nível recebido, sem acesso ao áudio. Tratar valor não finito
-como zero e limitar a [0,1]. Aplicar um piso de silêncio de 0,04:
+`voz` representa também a presença de captura, sem uma quinta entrada:
+**ausente ou `null` = sem microfone**; **número = microfone capturando**.
+Zero numérico significa captura com silêncio e mantém uma onda em alfa0,35.
+Sem microfone, zerar o envelope, usar a exposição base0,66 e não desenhar
+ondas. Encerrar captura ou passar ao texto remove as ondas no mesmo quadro,
+sem esperar o decaimento ou o fade.
+
+Para o caminho numérico, tratar valor não finito como zero e limitar a
+[0,1]. Aplicar um piso de silêncio de 0,04:
 `v = max(0, (voz − 0,04) / 0,96)`. O envelope começa em zero ao iniciar uma
 escuta; usa o valor corrente em atualizações normais.
 
@@ -243,7 +257,8 @@ A cada tempo decorrido Δt em segundos, aproximar `v` por:
 `y_novo = v + (y_anterior − v) × exp(−Δt / τ)`.
 Usar **τ = 0,060 s** quando v sobe e **τ = 0,280 s** quando desce.
 Após um degrau 0→1, y chega a cerca de 0,632 em 60 ms e 0,950 em 180 ms.
-Após 1→0, chega a 0,368 em 280 ms. Sem voz, converge a zero sem piscar.
+Após 1→0, chega a 0,368 em 280 ms. Com captura ativa em silêncio numérico,
+converge a zero sem piscar; isso não se confunde com `voz=null`.
 Isso independe de 30/60/120 fps; Δt grande não cria overshoot.
 
 Em `ouvindo`: exposição = `0,66 + 0,60y`; volume de luz = `1 + 0,16y`.
@@ -274,14 +289,18 @@ pose corrente. `erro` e cancelamento interrompem qualquer reação de entrada.
 |---|---|---|---|
 | repouso → dormindo | 800 ms | olhos fecham; relaxar orelhas; exposição→0,50 | zZ entra nos últimos 240 ms |
 | repouso ou dormindo → acordou | 1400 ms nominal | reação opa; abre e ergue conforme tabela | retirar zZ em 80 ms; ! só nasce em 300 ms |
-| acordou → ouvindo | 220 ms; pode iniciar após mínimo visual de 320 ms de acordou | arredondar e assentar a partir da pose corrente; envelope de voz já acompanha o nível recebido | ! sai em 80 ms; ondas entram em 120 ms, sem sobreposição |
-| ouvindo → thinking | 240 ms | olhos sobem e semicerram; orelhas assentam; voz deixa de influir | ondas saem em 80 ms, balão entra nos 160 ms seguintes |
+| acordou → ouvindo | 220 ms; pode iniciar após mínimo visual de 320 ms de acordou | arredondar e assentar a partir da pose corrente; envelope de voz já acompanha o nível recebido | ! sai em 80 ms; ondas entram em 120 ms só com captura ativa, sem sobreposição; com voz ausente/null não entram |
+| ouvindo → thinking | 240 ms | olhos sobem e semicerram; orelhas assentam; voz deixa de influir | com captura ainda ativa, ondas saem em 80 ms; ao cessar captura, somem no mesmo quadro; balão entra nos 160 ms seguintes |
 | thinking ↔ agindo | 240 ms | interpolar abertura, olhar e alvos da névoa, sem resetar corpo/cabeça | antigo sai em 80 ms, novo entra nos 160 ms seguintes |
 | ouvindo/thinking/agindo → pronto | 180 ms de entrada; reação total 1100 ms | satisfação a partir do valor corrente | retirar antigo em 80 ms; estrelas a partir de 120 ms |
 | qualquer → erro | 200 ms de entrada; orelhas completam em 820 ms | preservar continuidade, assumir expressão de erro e perda de luz | retirar antigo em 80 ms; rabisco começa em 120 ms |
 | pronto → repouso (app) | 240 ms após reação | neutro; rearmar intervalos ao terminar | estrelas já invisíveis; nenhum símbolo novo |
 | erro → estado ativo informado | 240 ms | sair do avião a partir do ângulo corrente | rabisco para de traçar, some em 80 ms; novo símbolo em 160 ms |
 | demais pares válidos | 240 ms | interpolar canais presentes a partir da pose corrente; sem supor etapas não recebidas | saída 80 ms, entrada 160 ms |
+
+A retirada imediata das ondas ao encerrar captura tem prioridade sobre
+os fades de símbolo desta tabela. O host envia `voz=null` ou omite o nível
+na mesma atualização em que o microfone deixa de capturar.
 
 O controlador aceita os oito estados mesmo numa sequência incomum (por
 exemplo, `ouvindo → agindo` ou `erro → ouvindo`). Não inventa `pronto` nem
@@ -309,11 +328,23 @@ coerente com o estado atual, descartar gestos vencidos e sortear novos
 intervalos, sem reproduzir tudo que passou. Não abrir janela, ativar app
 ou pedir permissão a partir da máquina visual.
 
+## Ritmo de desenho
+
+`repouso` e `dormindo` podem ser desenhados a **até 30 quadros por segundo**;
+os estados ativos, a **60 quadros por segundo**. Todos os gestos e
+envelopes usam tempo decorrido, portanto essa escolha não altera duração
+ou velocidade. Com `parado`, desenhar só quando o quadro fixo mudar; com
+janela oculta, não desenhar. O limite de menos de 3% de CPU em repouso
+continua como critério a medir na implementação, não como número medido
+por este roteiro.
+
 ## Reduzir movimento: um quadro por estado
 
 Quando `parado=true`, cancelar todos os relógios de gesto, interpolação,
 ruído no tempo, jitter e agendamento. Mudar de estado ou cor desenha apenas
-um novo quadro; uma mudança contínua de voz não provoca redesenho. O estado
+um novo quadro; mudança entre captura ativa e sem microfone também
+atualiza uma vez a presença das ondas. Variações do nível numérico da voz
+não provocam redesenho. O estado
 continua reconhecível pelo mesmo desenho aprovado, sem trocar por texto.
 
 | estado | quadro fixo |
@@ -321,7 +352,7 @@ continua reconhecível pelo mesmo desenho aprovado, sem trocar por texto.
 | repouso | dois círculos, olhar central, orelhas neutras, sem símbolo, exposição 1 |
 | dormindo | arcos para baixo, orelhas +12°/−12°, zZ na posição média, exposição 0,50 |
 | acordou | círculos tamanho 1,24, orelhas −25°/+25°, ! em escala1 e posição final, exposição1,02 |
-| ouvindo | círculos atentos, orelhas neutras, uma onda fixa, exposição0,80; voz ignorada visualmente |
+| ouvindo | círculos atentos, orelhas neutras; sem microfone, nenhuma onda e exposição0,66; com captura ativa, uma onda fixa e exposição0,80; nível numérico da voz ignorado visualmente |
 | thinking | abertura0,58, olhar +30 px-fonte e −24 vertical; balão com três pontos fixos; exposição0,95 |
 | agindo | abertura0,60, olhar central, −10°/+10°, gotas e linhas na fase média; exposição1,12 |
 | pronto | arcos felizes, +8°/−8°, estrelas em escala1, exposição1,06 |
@@ -337,7 +368,7 @@ suavemente em 240 ms, sem reexecutar uma surpresa antiga.
 | entrada | valores | regra |
 |---|---|---|
 | `estado` | união dos oito nomes deste documento | fonte externa de atividade; sem inferir a atividade pelo tempo do shader |
-| `voz` | número [0,1], não finito→0 | só influencia ouvindo; nunca contém áudio |
+| `voz` | ausente ou `null` = sem microfone; número [0,1] = captura ativa, não finito→0 | só influencia ouvindo; ondas só com captura ativa; zero numérico mantém a onda de silêncio; nunca contém áudio |
 | `cor` | padrão ou cor sRGB válida | só névoa; piso Y0,28 e transição400ms |
 | `parado` | booleano | verdadeiro seleciona quadro fixo e suspende agendamento |
 
@@ -352,9 +383,13 @@ Nomes de gestos: `piscar_lento`, `piscar_duplo`, `tique_orelha`,
 `rabisco_loop`, `atender_clique` (composição dos gestos de acordou e
 entrada em ouvindo, sem desenho novo). Fases comuns: `entrada`, `sustentacao`, `saida`.
 Nenhum teste deve depender de uma imagem gerada aleatoriamente.
-No caminho de texto, verificar também `voz=0` durante toda a digitação,
-sem pulsos por tecla, e preservação de thinking/agindo em um clique durante
-atividade já em andamento.
+No caminho de texto, verificar `voz=null` ou ausente durante toda a
+digitação e nenhuma onda, sem pulsos por tecla. Com `voz=0` numérico,
+verificar captura ativa em silêncio com uma onda em alfa0,35. Na passagem
+de captura para `null`, remover todas as ondas no mesmo quadro, inclusive
+com `parado=true`. Preservar thinking/agindo em clique durante atividade
+já em andamento. Conferir também `tempo_ate_dormir` sorteado entre 4 e
+6 minutos, sem adormecer antes do prazo; o ritmo30/60fps não muda tempos.
 
 Casos para a futura máquina de estados: mesma semente e relógio geram os
 mesmos instantes; intervalos/amplitudes ficam nas faixas; só uma orelha dá
