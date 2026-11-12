@@ -141,3 +141,25 @@ harmonicamente, evitando discos com tom diferente.
 
 As três prévias devem ser revistas novamente; não há aprovação visual
 implícita nem avanço para o roteiro ou o app.
+
+## 12. Decisão vigente — spec #7591, versão #8293
+
+O harry aprovou a prancha (#8276). Olhos, símbolos, rabisco do erro, aro,
+cores, piscada e preenchimento dos olhos ficam preservados. A primeira
+entrega fecha com o limite medido de ±5° nas camadas estáticas da v2.
+Esta decisão substitui os pedidos de nova rodada e amplitude das seções
+10–11 acima; elas ficam como histórico.
+
+O movimento largo das orelhas, alvo ±25° e erro perto de ±20°, passa para a
+entrega do gato em código, onde névoa e aro serão desenhados ao vivo. Não
+é uma aprovação de ±5° como amplitude final. A entrega em código precisa
+resolver a luz/aro gravados na borda neutra, a oclusão da junção e a
+separação das superfícies foscas, sem mudar o visual aprovado.
+
+As tentativas de separação e halo, inclusive a tentativa única de #7963
+pedida em #8283, ficam em `experimentos/` com imagens e medidas. O README
+registra o limite e os problemas a resolver. A prancha principal mantém
+a recomposição neutra máximo 2/255, abaixo do limite de 4/255.
+
+Nenhum código do app pertence a esta entrega. Roteiro, névoa, gato em código
+e prova continuam como entregas separadas, na ordem do #7589.

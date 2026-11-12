@@ -1,10 +1,10 @@
-# Estados do Kiwi-cat — T7606, rodada 2
+# Estados do Kiwi-cat — T7606
 
 Spec #7591; instrução #7589; revisão #7630; adendo do harry #7649 entregue
 pelo lead no #7655, corrigido no #7657 e aprovado no #7671, no canal `kiwinotes` do Kiwi Channels.
 Issue [#309](https://github.com/kiwi-init/kiwinotes/issues/309), PR [#311](https://github.com/kiwi-init/kiwinotes/pull/311).
 
-**Referências documentais compostas com as camadas originais. Não são capturas da animação. Aprovação visual pendente.**
+**Referências documentais compostas com as camadas originais, não capturas da animação. Prancha aprovada pelo harry (#8276), conforme o spec #7591, versão #8293.**
 
 ![Resumo](prancha-estados.webp)
 
@@ -86,13 +86,18 @@ azul `#70a8ff` e quase preto `#030409`. A folha é reduzida uniformemente para
 A escolha em Ajustes foi registrada na seção 4 da instrução; este PR continua
 somente documental, sem implementar a tela de Ajustes.
 
-## Orelhas preparadas e prova de amplitude
+## Limite das orelhas nesta entrega
 
-A [prova de orelhas](prova-orelhas.webp) mostra a esquerda e a direita,
-independentemente, em −5°, −2,5°, 0°, +2,5° e +5°. A outra orelha fica parada.
-**Limite desta revisão: ±5°.** A tentativa de ±30° da rodada anterior
-achatava o triângulo; a conferência a 20° ainda expunha o encaixe da base.
-Na revisão #7890, a faixa de ±15° ainda expunha o recorte e foi reduzida a ±5°. A orelha gira como uma
+O spec #7591, versão #8293 aprovada pelo harry, encerra esta entrega com o
+limite medido das camadas estáticas da v2: **±5°**. O alvo de **±25°**, com
+`erro` perto de ±20°, passa para a entrega do gato em código. Não é uma
+redução do movimento final pedido pelo harry.
+
+A [prova de orelhas](prova-orelhas.webp) mostra cada uma sozinha em −5°,
+−2,5°, 0°, +2,5° e +5°. Amplitudes maiores expuseram a luz e o aro gravados
+com a orelha neutra; as tentativas e medidas estão em [experimentos/](experimentos/README.md).
+
+A orelha gira como uma
 peça quase rígida em torno
 do pivô; somente a faixa da base (80 px acima a 60 px abaixo do pivô, na
 fonte) flexiona. A largura, o comprimento e a ponta do triângulo ficam fora
@@ -126,8 +131,8 @@ A preparação não redesenha os pixels visíveis do gato: a comparação neutra
 olhos), antes de reduzir/comprimir. A invariância é da composição visível,
 não dos canais RGBA da separação antiga, que foram reorganizados. Fora da
 região de preparação o fundo é preservado exatamente; cabeça e corpo não
-recebem transformação. A prova de ±5° precisa também de julgamento visual,
-não é validada só pela comparação neutra. `verificacao.json` registra o método,
+recebem transformação. A comparação neutra valida apenas a referência parada; não valida
+o alvo de ±25° da futura entrega em código. `verificacao.json` registra o método,
 a região alterada e as métricas; `preparadas/manifest.json` guarda o contrato.
 
 O repouso demonstra um tique unilateral, o sono relaxa as duas orelhas, o
@@ -200,6 +205,25 @@ O script prepara só documentos: nada do app, shader, overlay, microfone ou
 interface do macOS é executado. O ok do harry continua necessário antes da
 entrega seguinte.
 
-Revisão #7890: amplitude reduzida para ±5° após os recortes aparecerem a
-±15°. O tique do repouso usa −4° só à direita; o erro usa +3°/−2°. As prévias
-são uma nova tentativa para revisão visual, sem atestar aprovação dos recortes.
+## O que a entrega em código precisa resolver
+
+A luz e o aro da v2 incluem a franja das orelhas na posição neutra. Não basta
+rotacionar esses pixels. A tentativa corrigida de #7963 calculou o halo
+inteiro, ajustou quatro escalas por mínimos quadrados e desfez o resíduo
+perto das orelhas nos primeiros 3°; ainda falhou. Em `E > 0,1`, o resíduo teve
+média **13,998/255** e máximo **34,903/255**. A nova extração de superfícies
+opacas também falhou na recomposição neutra (máximo 119/255), e o aro
+original repôs a franja antiga por cima das orelhas movidas. Esses números
+são do experimento rejeitado, não da prancha aprovada.
+
+A entrega em código precisa separar a superfície fosca da luz, desenhar a
+névoa e o aro ao vivo, resolver a oclusão nas bases e provar cada orelha em
+±25° e o erro em ±20°, sem linha antiga, faixa na junção ou luz dentro da
+orelha. Os olhos, a piscada, os símbolos, o rabisco, as cores e o desenho do
+aro aprovados permanecem a referência visual. O tique das prévias desta
+entrega é −4° só à direita; o erro usa +3°/−2°.
+
+A composição principal continua batendo com a v2: máximo **2/255**, média
+**0,043514/255**, fora dos discos dos olhos +5 px, em 2048 × 2560. As seis
+fontes originais permanecem intactas. Esta entrega não altera o app nem
+antecipa roteiro, shader ou implementação do gato.

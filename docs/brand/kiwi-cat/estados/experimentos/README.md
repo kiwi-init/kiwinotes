@@ -64,3 +64,11 @@ Nenhum clipe foi regenerado e nenhuma rodada foi aberta. A implementação
 para aqui, conforme #8283: sem diminuir os ângulos, sem mexer nos elementos
 aprovados e sem tentar uma terceira abordagem. O diagnóstico foi preparado
 para o lead decidir o próximo passo.
+
+## Decisão após os diagnósticos — #8293
+
+O spec #7591 foi atualizado e aprovado: a T7606 guarda o limite de ±5° nas
+camadas estáticas e os diagnósticos desta pasta. O alvo ±25° passa para a
+entrega do gato em código, com névoa e aro desenhados ao vivo. As indicações
+de aguardar uma decisão acima são históricas; esta é a decisão vigente.
+Os experimentos falhos não substituem a prancha aprovada pelo harry (#8276).
