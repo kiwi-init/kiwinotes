@@ -7,6 +7,7 @@ import { Highlight } from "./Highlight.tsx";
 import { type PaletteCommand, type PaletteItem, paletteItems, snippetRanges, titleRanges } from "./palette.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { NoteMeta, NotesApi, SearchHit } from "./types.ts";
+import { SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
 
 export interface PaletteProps {
   api: NotesApi;
@@ -28,11 +29,13 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
   const ranked = search?.query === query;
   const [sel, setSel] = useState(0);
   const seq = useRef(0);
+  const tooLong = searchTooLong(query);
 
   // O texto vem do engine, um pouco depois de parar de digitar; uma resposta velha não sobrescreve a nova.
   useEffect(() => {
     const my = ++seq.current;
-    if (!query.trim()) return setSearch(null);
+    // Longa demais (T7791): o engine recusaria; a lista dá lugar ao aviso.
+    if (!query.trim() || tooLong) return setSearch(null);
     const t = setTimeout(() => {
       api.search(query, 20).then(
         (h) => my === seq.current && setSearch({ query, hits: h }),
@@ -42,7 +45,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
     return () => clearTimeout(t);
   }, [query, api, notes]);
 
-  const items = paletteItems(notes, query, hits, commands, ranked);
+  const items = tooLong ? [] : paletteItems(notes, query, hits, commands, ranked);
   useEffect(() => setSel(0), [query]);
 
   const choose = (item: PaletteItem | undefined) => {
@@ -74,6 +77,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKey}
         />
+        {tooLong ? <div className="kn-palette-long" role="status">{SEARCH_TOO_LONG}</div> : null}
         <div className="kn-palette-list" role="listbox">
           {items.map((it, i) => (
             <div
@@ -106,7 +110,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
               )}
             </div>
           ))}
-          {!items.length ? <div className="kn-palette-empty">{query.trim() ? "Nenhuma nota com isso" : "Nenhuma nota ainda"}</div> : null}
+          {!items.length && !tooLong ? <div className="kn-palette-empty">{query.trim() ? "Nenhuma nota com isso" : "Nenhuma nota ainda"}</div> : null}
         </div>
       </div>
     </div>

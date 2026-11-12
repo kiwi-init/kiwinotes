@@ -21,7 +21,7 @@ import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
 import { isEditableText, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
-import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
+import { hasPositive, MAX_SEARCH_QUERY, oneSpace, parseQuery, searchTooLong } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
@@ -679,7 +679,9 @@ export class Vault {
    * depois do exato e antes do aproximado, sempre com os filtros valendo.
    */
   search(query: unknown, limit: unknown = 20, semantic?: readonly SemanticHit[]): SearchHit[] {
-    if (typeof query !== "string" || query.length > 500) throw new VaultError("E_BAD_ARGS", "query must be a string");
+    if (typeof query !== "string") throw new VaultError("E_BAD_ARGS", "query must be a string");
+    // T7791: o motivo vai na mensagem, para quem colou um texto longo saber que a busca tem limite.
+    if (searchTooLong(query)) throw new VaultError("E_BAD_ARGS", `query is longer than ${MAX_SEARCH_QUERY} characters`);
     const max = limit === undefined ? 20 : limit;
     if (typeof max !== "number" || !Number.isInteger(max) || max < 1 || max > 100_000) {
       throw new VaultError("E_BAD_ARGS", "limit must be an integer from 1 to 100000");

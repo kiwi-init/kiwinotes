@@ -703,6 +703,30 @@ await step("Lixeira: restaurar com o nome ocupado diz por quê, com o erro como 
   if (!msg?.includes("Já existe")) throw new Error(`aviso: ${msg}`);
 });
 
+// T7791: a busca tem limite de 500 caracteres. Colar mais que isso (um parágrafo, para achar a nota de onde ele veio)
+// diz o motivo no ⌘K e na árvore, em vez de cair calado na busca pelo título ou em "nada encontrado".
+await step("busca com mais de 500 caracteres: o ⌘K e a árvore dizem que é longa demais", async () => {
+  const long = "parágrafo colado ".repeat(30).slice(0, 501);
+  await page.keyboard.press("Meta+k");
+  await page.waitForSelector(".kn-palette-q");
+  await page.fill(".kn-palette-q", long);
+  await page.waitForSelector(".kn-palette-long", { timeout: 3000 });
+  expectEq(await page.textContent(".kn-palette-long"), "Busca longa demais: use até 500 caracteres.");
+  expectEq(await page.locator(".kn-palette-it").count(), 0);
+  // Só o motivo: o "Nenhuma nota com isso" diria outra coisa.
+  expectEq(await page.locator(".kn-palette-empty").count(), 0);
+  if (shots) await page.screenshot({ path: `${shots}/notas-busca-longa.png` });
+  // 500 cabe: a busca roda, e o aviso some.
+  await page.fill(".kn-palette-q", long.slice(0, 500));
+  await page.waitForSelector(".kn-palette-long", { state: "detached", timeout: 3000 });
+  await page.keyboard.press("Escape");
+  await openTree();
+  await page.fill(".kn-tree-pop .kn-side-search", long);
+  await page.waitForSelector(".kn-tree-pop .kn-side-empty:has-text('Busca longa demais')", { timeout: 3000 });
+  await page.fill(".kn-tree-pop .kn-side-search", "");
+  await closeTree();
+});
+
 await page.keyboard.press("Meta+k");
 await page.keyboard.type("ana");
 await page.waitForTimeout(300);

@@ -48,7 +48,7 @@ import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recen
 } from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
 import { VersionsDialog } from "./VersionsDialog.tsx";
-import { hasFilters, parseQuery, type SavedSearch,
+import { hasFilters, parseQuery, type SavedSearch, searchTooLong,
 } from "../../src/shared/query.ts";
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { CanvasView } from "./canvas/CanvasView.tsx";
@@ -1211,6 +1211,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const [queryPaths, setQueryPaths] = useState<Set<string> | null>(null);
   useEffect(() => {
     if (!query.trim()) return setQueryPaths(null);
+    // Longa demais (T7791): sem chamar o engine, a árvore fica vazia e diz por quê.
+    if (searchTooLong(query)) return setQueryPaths(new Set());
     setQueryPaths(null);
     let live = true;
     const t = setTimeout(() => {

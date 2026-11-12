@@ -418,6 +418,12 @@ button.kn-side-head:focus-visible {
   color: var(--text-3);
 }
 
+/* A busca longa demais (T7791): o aviso no lugar da lista. */
+.kn-palette-long {
+  padding: 10px 14px;
+  color: var(--text-3);
+}
+
 .kn-palette-list {
   max-height: 360px;
   overflow-y: auto;
