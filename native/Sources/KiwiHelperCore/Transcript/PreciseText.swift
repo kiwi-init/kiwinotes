@@ -110,6 +110,15 @@ public enum PreciseRoute {
     public static func usesWhisper(_ samples: [Float], sampleRate: Double = 16_000) -> Bool {
         speechSeconds(samples, sampleRate: sampleRate) >= minimumSpeechSeconds
     }
+
+    /// A rota com o VAD (T7454): o som acima do silêncio não é fala. Num zumbido ou num bipe, a regra da energia mandava
+    /// o clipe ao Whisper, que inventava texto ("Good morning.", "DICOM, Coalition."), e o texto era colado; o Parakeet
+    /// devolve vazio no mesmo áudio. Com `vadSpeechSeconds` (a fala que o Silero achou), o Whisper só entra com um
+    /// segundo de fala de verdade. Sem o VAD (`nil`: o modelo não carregou), vale a regra da energia, como antes.
+    public static func usesWhisper(_ samples: [Float], sampleRate: Double = 16_000, vadSpeechSeconds: Double?) -> Bool {
+        guard let vadSpeechSeconds else { return usesWhisper(samples, sampleRate: sampleRate) }
+        return vadSpeechSeconds >= minimumSpeechSeconds
+    }
 }
 
 public extension WhisperPrompt {

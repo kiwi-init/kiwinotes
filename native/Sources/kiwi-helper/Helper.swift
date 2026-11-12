@@ -605,11 +605,12 @@ final class Helper {
     }
 
     /// O texto de uma gravação e o motor que o fez (T6602): o Whisper do modo preciso quando ele está carregado e há
-    /// pelo menos um segundo de fala, e o Parakeet no resto do tempo: numa palavra solta, quando o Whisper falha ou
+    /// pelo menos um segundo de fala (pelo VAD, T7454), e o Parakeet no resto do tempo: numa palavra solta, quando o Whisper falha ou
     /// quando ele devolve o próprio prompt (o ditado nunca se perde por causa dele). Um ditado de mais de 28 s vai ao
     /// Whisper em pedaços, e o Parakeet cobre o pedaço que sair vazio (`PreciseChunks`, #7082).
     private func recognize(_ samples: [Float]) async throws -> (Transcriber.Output, String) {
-        if preciseReady, PreciseRoute.usesWhisper(samples, sampleRate: AudioCapture.sampleRate) {
+        // A rota pelo VAD (T7454): um som sem fala (zumbido, bipe) vai ao Parakeet, que não inventa nada nele.
+        if preciseReady, PreciseRoute.usesWhisper(samples, sampleRate: AudioCapture.sampleRate, vadSpeechSeconds: await stt.vadSpeechSeconds(samples)) {
             let dictionary = meetingDictionary
             let precise = precise
             let stt = stt

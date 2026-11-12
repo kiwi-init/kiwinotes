@@ -64,6 +64,19 @@ final class PreciseTextTests: XCTestCase {
         XCTAssertFalse(PreciseRoute.usesWhisper([]))
     }
 
+    /// T7454: um bipe tem som, mas não tem fala. Pela energia, 2 s de 440 Hz iam ao Whisper, que inventava texto;
+    /// com o VAD, só um segundo de fala de verdade leva ao Whisper. Sem o VAD, a regra da energia continua.
+    func testSoundWithoutSpeechGoesThroughParakeet() {
+        let rate = 16_000
+        let beep = (0..<rate * 2).map { Float(sin(2 * Double.pi * 440 * Double($0) / Double(rate)) * 0.3) }
+        XCTAssertTrue(PreciseRoute.usesWhisper(beep), "a regra da energia vê 2 s de som")
+        XCTAssertFalse(PreciseRoute.usesWhisper(beep, vadSpeechSeconds: 0), "o VAD não acha fala no bipe")
+        XCTAssertFalse(PreciseRoute.usesWhisper(beep, vadSpeechSeconds: 0.6), "menos de um segundo de fala")
+        XCTAssertTrue(PreciseRoute.usesWhisper(beep, vadSpeechSeconds: 1.4), "um segundo de fala ou mais")
+        XCTAssertTrue(PreciseRoute.usesWhisper(beep, vadSpeechSeconds: nil), "sem o VAD, vale a energia")
+        XCTAssertFalse(PreciseRoute.usesWhisper([], vadSpeechSeconds: nil))
+    }
+
     func testOneWordNeedsFiveRepeats() {
         XCTAssertEqual(RepetitionGuard.collapse("obrigado obrigado obrigado obrigado obrigado."), "obrigado.")
         XCTAssertEqual(RepetitionGuard.collapse("sim sim sim sim"), "sim sim sim sim")

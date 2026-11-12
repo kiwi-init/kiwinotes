@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { cutAtRelease, loadSpoken, PRECISE_CASES, withNoise } from "./dictation-fixtures.ts";
+import { cutAtRelease, loadSpoken, missingVoices, PRECISE_CASES, synthWav, withNoise } from "./dictation-fixtures.ts";
 
 /** Um WAV de 16 kHz, mono, 16 bits: `voiceMs` de som e `silenceMs` de silêncio no fim. */
 function wav(voiceMs: number, silenceMs: number): Buffer {
@@ -57,4 +57,23 @@ test("#7082: os casos do modo preciso têm um ditado longo (de arquivo) com ruí
   const long = cases.filter((c) => c.sayFile?.startsWith("longos/") && typeof c.noise === "number");
   expect(long.length).toBeGreaterThanOrEqual(1);
   expect(() => loadSpoken(PRECISE_CASES)).not.toThrow();
+});
+
+test("T7454: o synth gera o som sem fala na hora, e o caso é validado", () => {
+  // O zumbido do achado: pico de ~7200 (a média dos dois senos chega a ~0,88 da amplitude).
+  const w = synthWav({ hz: [120, 240], seconds: 3, amplitude: 0.25 });
+  expect(w.length).toBe(44 + 3 * 16_000 * 2);
+  expect(w.readUInt32LE(40)).toBe(3 * 16_000 * 2);
+  let peak = 0;
+  for (let i = 0; i < 3 * 16_000; i++) peak = Math.max(peak, Math.abs(w.readInt16LE(44 + i * 2)));
+  expect(peak).toBeGreaterThan(7000);
+  expect(peak).toBeLessThan(7400);
+  const beep = synthWav({ hz: [440], seconds: 2, amplitude: 0.3 });
+  let beepPeak = 0;
+  for (let i = 0; i < 2 * 16_000; i++) beepPeak = Math.max(beepPeak, Math.abs(beep.readInt16LE(44 + i * 2)));
+  expect(Math.abs(beepPeak - 0.3 * 32767)).toBeLessThan(50);
+  const synth = loadSpoken(PRECISE_CASES).filter((c) => c.synth);
+  expect(synth.length).toBeGreaterThanOrEqual(2);
+  for (const c of synth) expect(c.expect).toEqual({ text: "" });
+  expect(missingVoices(synth)).toEqual([]);
 });
