@@ -1,7 +1,7 @@
 // Arquivos do app: legíveis (JSON e JSONL), só do usuário (0700/0600), gravados de forma atômica.
 
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -49,9 +49,15 @@ export async function readJson<T>(file: string): Promise<T | undefined> {
 export async function writeAtomic(file: string, content: string): Promise<void> {
   await ensureDir(path.dirname(file));
   const tmp = `${file}.${process.pid}.${Date.now()}.${randomBytes(4).toString("hex")}.tmp`;
-  await writeFile(tmp, content, { mode: 0o600 });
-  await chmod(tmp, 0o600);
-  await rename(tmp, file);
+  try {
+    await writeFile(tmp, content, { mode: 0o600 });
+    await chmod(tmp, 0o600);
+    await rename(tmp, file);
+  } catch (e) {
+    // O disco cheio no meio (T7942): o temporário sai, o arquivo fica como estava, e o erro segue.
+    await rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
 }
 
 export const writeJson = (file: string, value: unknown) => writeAtomic(file, `${JSON.stringify(value, null, 2)}\n`);

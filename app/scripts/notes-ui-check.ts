@@ -313,6 +313,31 @@ await step("save que falha: aviso na tela, trocar de nota não descarta, 'Tentar
   if (await page.$(".kn-save-alert")) throw new Error("o aviso ficou");
 });
 
+// T7942: o disco cheio tem o seu aviso. O engine dá E_DISK_FULL (no .code, como o AppEngine), e a janela diz o porquê.
+await step("save com o disco cheio: o aviso diz que o disco está cheio, e 'Tentar de novo' grava depois", async () => {
+  await sideClick("Ana");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Ana");
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.__save = m.save;
+    m.save = async () => {
+      throw Object.assign(new Error("notes.save: ENOSPC: no space left on device, write"), { code: "E_DISK_FULL" });
+    };
+  });
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("\nTEXTO COM O DISCO CHEIO");
+  await page.waitForSelector(".kn-save-alert[data-reason='disk-full'] >> text=O disco está cheio", { timeout: 3000 });
+  if (shots) await page.screenshot({ path: `${shots}/notas-disco-cheio.png` });
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    m.save = m.__save;
+  });
+  await page.click("text=Tentar de novo");
+  await saved("Pessoas/Ana.md", (c) => c.includes("TEXTO COM O DISCO CHEIO"));
+  if (await page.$(".kn-save-alert")) throw new Error("o aviso ficou");
+});
+
 await step("save que falha: 'Descartar a edição' volta ao disco e deixa trocar", async () => {
   await page.evaluate(() => {
     (window as any).__kiwiNotesMock.save = async () => {

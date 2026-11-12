@@ -138,7 +138,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
    */
   const [conflict, setConflict] = useState<{ note: Note; merge: Extract<MergeResult, { clean: false }> } | null>(null);
   /** O último save falhou (disco cheio, nota apagada fora, grande demais): a edição fica e a pessoa decide. */
-  const [saveFailed, setSaveFailed] = useState(false);
+  /** O save falhou: `"disk-full"` quando o disco está cheio (T7942), para o aviso dizer o porquê. */
+  const [saveFailed, setSaveFailed] = useState<false | "error" | "disk-full">(false);
   // A nota aberta sumiu fora (apagada ou renomeada) com texto por gravar (T7513): o texto fica no editor e o aviso deixa
   // a pessoa escolher. Até lá não grava (não recria a nota calado) e não sai dela.
   const [gone, setGone] = useState(false);
@@ -351,8 +352,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           submitted, version.current,
           baseContent.current,
         );
-      } catch {
-        setSaveFailed(true);
+      } catch (e) {
+        setSaveFailed(errorCode(e) === "E_DISK_FULL" ? "disk-full" : "error");
         return "error";
       }
       if (!r.saved) {
@@ -1585,9 +1586,10 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
                 </span>
               </div>
             ) : saveFailed ? (
-              <div className="kn-conflict kn-save-alert" role="alert">
-                    Não deu para gravar esta nota. O que você escreveu continua
-                    aqui.
+              <div className="kn-conflict kn-save-alert" role="alert" data-reason={saveFailed}>
+                    {saveFailed === "disk-full"
+                      ? "O disco está cheio: não deu para gravar esta nota. Libere espaço e tente de novo; o que você escreveu continua aqui."
+                      : "Não deu para gravar esta nota. O que você escreveu continua aqui."}
                     <span className="kn-conflict-actions">
                   <button type="button" className="kn-bt" onClick={discard}>
                     Descartar a edição

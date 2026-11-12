@@ -1420,8 +1420,14 @@ export class Vault {
     const dir = path.join(this.root, UNDO_DIR);
     await mkdir(dir, { recursive: true });
     const tmp = path.join(dir, `.registry-${randomBytes(4).toString("hex")}.tmp`);
-    await writeDurable(tmp, JSON.stringify(this.registry));
-    await rename(tmp, path.join(dir, REGISTRY_FILE));
+    try {
+      await writeDurable(tmp, JSON.stringify(this.registry));
+      await rename(tmp, path.join(dir, REGISTRY_FILE));
+    } catch (e) {
+      // O disco cheio no meio (T7942): o temporário sai, e o erro segue.
+      await rm(tmp, { force: true }).catch(() => {});
+      throw e;
+    }
   }
 
   private resolve_(): Resolver {
@@ -1445,8 +1451,9 @@ export class Vault {
   private async replaceChecked(p: string, content: string, expect?: string | null): Promise<boolean> {
     const abs = inside(this.root, p);
     const temp = path.join(path.dirname(abs), `.kiwi-${randomBytes(6).toString("hex")}.tmp`);
-    await writeDurable(temp, content);
     try {
+      // Dentro do try (T7942): com o disco cheio, o `open` cria o temporário e a escrita falha; ele não fica na pasta.
+      await writeDurable(temp, content);
       this.beforeReplace?.();
       const raw = await readFile(abs).catch(() => null);
       // Um arquivo que não é UTF-8 (T7575): o texto que chega aqui já perdeu os acentos na leitura, e gravar por cima

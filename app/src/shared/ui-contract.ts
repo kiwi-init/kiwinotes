@@ -211,7 +211,10 @@ export interface UiCapabilities {
     };
   };
   "notes.get": { args: { path: string }; result: Note };
-  /** Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. */
+  /**
+   * Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. Com o disco cheio,
+   * E_DISK_FULL (T7942), e a nota fica como estava.
+   */
   "notes.save": { args: { path: string; content: string; baseVersion: string;
       baseContent?: string;
     }; result: SaveResult & { content?: string };
