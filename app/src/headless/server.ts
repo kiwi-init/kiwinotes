@@ -12,7 +12,7 @@ import { NO_SPELLING } from "../shared/spelling.ts";
 //
 // Controle: um socket unix (0600) em <data>/control.sock, com um JSON por linha (o protocolo do #1745).
 
-import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { statusLabel } from "../bun/session-status.ts";
 import { LineWriter } from "./lineWriter.ts";
 import path from "node:path";
@@ -75,13 +75,18 @@ type Line = Record<string, unknown>;
 
 const RING = 500;
 
-/** O helper do `swift build`: release se houver, senão debug. */
+/**
+ * O helper do `swift build`: o mais novo, pelo `mtime`, entre o release e o debug (T7684). Antes o release ganhava
+ * sempre, e um release esquecido rodava calado no lugar do código novo (#7082). Empate: o release.
+ */
 export function defaultHelper(appDir: string): string | undefined {
+  let newest: { path: string; mtime: number } | undefined;
   for (const config of ["release", "debug"]) {
     const p = path.join(appDir, "..", "native", ".build", config, "kiwi-helper");
-    if (existsSync(p)) return p;
+    const s = statSync(p, { throwIfNoEntry: false });
+    if (s && (!newest || s.mtimeMs > newest.mtime)) newest = { path: p, mtime: s.mtimeMs };
   }
-  return undefined;
+  return newest?.path;
 }
 
 export const controlSocket = (data: string) => path.join(data, "control.sock");
@@ -103,6 +108,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     const helper = o.helperPath ?? process.env.KIWI_HELPER ?? defaultHelper(path.resolve(import.meta.dirname, "..", ".."));
     if (!helper || !existsSync(helper)) throw new Error("no kiwi-helper: run `swift build` in native/, or start with --no-helper");
     process.env.KIWI_HELPER = helper;
+    // Qual helper roda (T7684): no log e no `status`, para ninguém medir um binário velho sem saber.
+    console.log(`[headless] helper: ${helper}`);
   }
 
   const { stores } = await import("../bun/stores.ts");
@@ -244,6 +251,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     contract: UI_CONTRACT_VERSION,
     capabilities: UI_CAPABILITIES,
     helper: !session ? "off" : session.sidecar.supervision().state === "failed" ? "failed" : session.sidecar.ready ? "ready" : "starting",
+    helperPath: session ? (process.env.KIWI_HELPER ?? null) : null,
     menuLabel: session ? statusLabel(session.status()) : "Helper desligado",
     session: session?.status() ?? null,
   });

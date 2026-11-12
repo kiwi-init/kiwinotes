@@ -1,9 +1,11 @@
 // T1739: o headless e a CLI de teste. Nada aqui abre janela nem toca no app de verdade: --no-helper e dados num tmp.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+import { defaultHelper } from "./server.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
 
@@ -116,4 +118,40 @@ describe("headless (T1739)", () => {
     },
     60_000,
   );
+});
+
+describe("o helper do headless (T7684)", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "kn-helper-"));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const helperAt = (config: string, mtime: Date) => {
+    const p = path.join(root, "native", ".build", config, "kiwi-helper");
+    mkdirSync(path.dirname(p), { recursive: true });
+    writeFileSync(p, config);
+    utimesSync(p, mtime, mtime);
+    return p;
+  };
+
+  test("sem KIWI_HELPER, usa o mais novo entre o release e o debug, não o release sempre", () => {
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const release = helperAt("release", yesterday);
+    const debug = helperAt("debug", now);
+    expect(defaultHelper(path.join(root, "app"))).toBe(debug);
+    // O contrário: um release mais novo que o debug ganha.
+    utimesSync(release, now, new Date(now.getTime() + 60_000));
+    expect(defaultHelper(path.join(root, "app"))).toBe(release);
+  });
+
+  test("só um dos dois, ou nenhum", () => {
+    const only = mkdtempSync(path.join(tmpdir(), "kn-helper-"));
+    try {
+      expect(defaultHelper(path.join(only, "app"))).toBeUndefined();
+      const p = path.join(only, "native", ".build", "debug", "kiwi-helper");
+      mkdirSync(path.dirname(p), { recursive: true });
+      writeFileSync(p, "debug");
+      expect(defaultHelper(path.join(only, "app"))).toBe(p);
+    } finally {
+      rmSync(only, { recursive: true, force: true });
+    }
+  });
 });
