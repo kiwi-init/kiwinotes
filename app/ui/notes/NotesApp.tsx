@@ -262,8 +262,9 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       setSaveFailed(false);
       markGone(false);
       // Um rascunho que não foi gravado (a janela fechou com conflito ou erro na tela): oferece de volta.
+      // Com o frontmatter também (T7516): a edição só das propriedades é um rascunho. O de antes do T1550 não tem o campo.
       const d = drafts.get(n.path);
-      if (d && d.body !== split.body) {
+      if (d && (d.body !== split.body || (d.frontmatter !== undefined && d.frontmatter !== split.frontmatter))) {
         undecided.current = d;
         setDraft(d);
       } else {
@@ -776,6 +777,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     if (!d) return;
     undecided.current = null;
     setDraft(null);
+    // As propriedades do rascunho voltam junto (T7516); o de antes do T1550 fica com as do disco.
+    if (d.frontmatter !== undefined) setFrontmatter(d.frontmatter);
     pending.current = d.body;
     setBody(d.body);
     setDocKey(`${d.path}@rascunho@${d.at}`);
