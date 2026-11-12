@@ -48,7 +48,24 @@ export class ModelError extends Error {
   }
 }
 
-export type Fetcher = (url: string) => Promise<Response>;
+/** O `fetch`: o `signal` aborta a conexão (desligar, sair do app, ou o prazo sem bytes). */
+export type Fetcher = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
+
+/**
+ * Sem nenhum byte por este tempo, o download desiste (T7941): o Wi-Fi de hotel ou a VPN que cai sem fechar a conexão
+ * deixavam o `fetch` do Bun, que não tem prazo, esperando para sempre. O arquivo inteiro pode demorar o quanto for.
+ */
+export const STALL_MS = 30_000;
+
+/** `p`, ou um erro quando o `signal` aborta antes. */
+function unlessAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
 
 async function sha256Of(file: string): Promise<string> {
   return createHash("sha256").update(await readFile(file)).digest("hex");
@@ -71,10 +88,11 @@ export async function modelPresent(root: string, m: ModelManifest): Promise<bool
 export async function ensureModel(
   root: string,
   m: ModelManifest,
-  o: { fetch?: Fetcher; onProgress?: (done: number, total: number) => void } = {},
+  o: { fetch?: Fetcher; onProgress?: (done: number, total: number) => void; signal?: AbortSignal; stallMs?: number } = {},
 ): Promise<string> {
   const dir = modelDir(root, m);
-  const get = o.fetch ?? ((url: string) => fetch(url, { redirect: "follow" }));
+  const get: Fetcher = o.fetch ?? ((url, init) => fetch(url, { redirect: "follow", signal: init?.signal }));
+  const stallMs = o.stallMs ?? STALL_MS;
   const total = modelBytes(m);
   let done = 0;
   for (const f of m.files) {
@@ -87,24 +105,48 @@ export async function ensureModel(
     }
     await mkdir(path.dirname(target), { recursive: true });
     const part = `${target}.part`;
-    const res = await get(fileUrl(m, f));
-    if (!res.ok || !res.body) throw new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} failed: HTTP ${res.status}`);
+    // Um controle por arquivo: aborta pelo `signal` de fora ou pelo prazo sem bytes, que recomeça a cada pedaço.
+    const abort = new AbortController();
+    const onOuter = () => abort.abort(new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} aborted`));
+    if (o.signal?.aborted) onOuter();
+    o.signal?.addEventListener("abort", onOuter, { once: true });
+    let stall: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      clearTimeout(stall);
+      stall = setTimeout(() => abort.abort(new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} stalled: no bytes for ${Math.round(stallMs / 1000)} s`)), stallMs);
+    };
     const hash = createHash("sha256");
-    const out = createWriteStream(part);
+    let out: ReturnType<typeof createWriteStream> | undefined;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let size = 0;
     try {
-      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      arm();
+      const res = await unlessAborted(get(fileUrl(m, f), { signal: abort.signal }), abort.signal);
+      if (!res.ok || !res.body) throw new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} failed: HTTP ${res.status}`);
+      const file = (out = createWriteStream(part));
+      reader = res.body.getReader();
+      for (;;) {
+        arm();
+        const { done: end, value: chunk } = await unlessAborted(reader.read(), abort.signal);
+        if (end) break;
         size += chunk.byteLength;
         if (size > f.size) throw new ModelError("E_MODEL_HASH", `${f.name} is larger than expected`);
         hash.update(chunk);
-        if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
+        if (!file.write(chunk)) await new Promise<void>((r) => file.once("drain", () => r()));
         o.onProgress?.(done + size, total);
       }
-      await new Promise<void>((resolve, reject) => out.end((e?: Error | null) => (e ? reject(e) : resolve())));
+      clearTimeout(stall);
+      await new Promise<void>((resolve, reject) => file.end((e?: Error | null) => (e ? reject(e) : resolve())));
     } catch (e) {
-      out.destroy();
+      // A leitura pendente e a conexão saem junto: o `cancel` solta o corpo, e o `abort` o `fetch`.
+      abort.abort(e);
+      void reader?.cancel().catch(() => {});
+      out?.destroy();
       await rm(part, { force: true });
       throw e instanceof ModelError ? e : new ModelError("E_MODEL_DOWNLOAD", `download of ${f.name} failed: ${String(e)}`);
+    } finally {
+      clearTimeout(stall);
+      o.signal?.removeEventListener("abort", onOuter);
     }
     const got = hash.digest("hex");
     if (got !== f.sha256 || size !== f.size) {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -25,7 +25,7 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 type Config = Extract<Command, { type: "config.set" }>;
 
-function setup(o: { fetch?: (url: string) => Promise<Response>; reply?: { ok: boolean; error?: string } | undefined; download?: boolean } = {}) {
+function setup(o: { fetch?: (url: string) => Promise<Response>; reply?: { ok: boolean; error?: string } | undefined; download?: boolean; stallMs?: number } = {}) {
   const sent: (string | null | undefined)[] = [];
   const urls: string[] = [];
   const phases: PreciseStatus["phase"][] = [];
@@ -33,6 +33,7 @@ function setup(o: { fetch?: (url: string) => Promise<Response>; reply?: { ok: bo
     modelsDir: dir,
     manifest: TINY,
     download: o.download,
+    ...(o.stallMs !== undefined ? { stallMs: o.stallMs } : {}),
     send: async (c: Config) => {
       sent.push(c.precise);
       return "reply" in o ? o.reply : { ok: true };
@@ -129,6 +130,17 @@ test("um download que falha vira erro e só tenta de novo depois de desligar e l
   await precise.apply(true);
   expect(calls).toBe(2);
   expect(sent.filter((s) => s !== null)).toEqual([]);
+});
+
+// T7941: a rede pendura no meio (8 bytes e depois nada, sem erro). Antes, "baixando" para sempre; agora vira erro.
+test("um download parado, sem bytes por um tempo, vira erro e não deixa nada na pasta", async () => {
+  const { precise, sent } = setup({ stallMs: 100, fetch: async () => new Response(new ReadableStream({ start: (c) => c.enqueue(BYTES.slice(0, 8)) })) });
+  const t0 = Date.now();
+  await precise.apply(true);
+  expect(Date.now() - t0).toBeLessThan(2000);
+  expect(precise.status()).toMatchObject({ enabled: true, phase: "error", error: "download" });
+  expect(sent.filter((s) => s !== null)).toEqual([]);
+  expect(readdirSync(dir, { recursive: true }).filter((n) => String(n).endsWith(".part"))).toEqual([]);
 });
 
 test("um arquivo com outro hash nunca vai para o helper", async () => {
