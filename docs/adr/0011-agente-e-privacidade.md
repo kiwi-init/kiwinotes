@@ -31,7 +31,7 @@ Só com o agente ligado, e só nestes dois momentos:
   - numa versão fixa e conferida;
   - é só um download: nada da pessoa vai junto.
 
-  O adaptador usa o Claude Code que já está instalado no Mac, com o login dele.
+  O download leva só o adaptador, sem a cópia do Claude Code que vem junto dele no pacote, e o Kiwi aponta o adaptador para o Claude Code que já está instalado no Mac, com o login dele (#8403).
 - **Só o agente escolhido faz o trabalho de IA:** ler, resumir, organizar e decidir (#7496, #7498). Nenhum outro modelo, nem um local, lê ou resume no meio do caminho. As ferramentas do Kiwi (o índice, a busca, o sumário, a leitura por seção, a montagem de arquivos e o medidor) não interpretam nada.
 
 ## O login é do agente, não do Kiwi
