@@ -11,7 +11,7 @@ Fonte: gerada/manifest.json e as seis camadas originais.
   "fog": 0.82,
   "side": 0,
   "upper": 0,
-  "symbol": "alert",
+  "symbol": "",
   "big": 1,
   "small": 1,
   "up": 0,

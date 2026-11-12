@@ -34,7 +34,7 @@ STATES = {
 }
 
 STATES['dormindo']=[pose('01 · sono / zZ nasce',blink=True,symbol='sleep',fog=.26),pose('02 · zZ sobe',blink=True,symbol='sleep',fog=.22,phase=1)]
-for j,p in enumerate(STATES['acordou']):p.update(symbol='alert',big=[1,1.24,1.10][j],phase=j)
+for j,p in enumerate(STATES['acordou']):p.update(symbol='alert' if j==1 else '',big=[1,1.24,1.10][j],phase=j)
 for j,p in enumerate(STATES['ouvindo']):p.update(symbol='sound',phase=j)
 for j,p in enumerate(STATES['thinking']):p.update(eye=.58,up=-24,symbol='thought',phase=j)
 for j,p in enumerate(STATES['agindo']):p.update(symbol='work',phase=j)
@@ -67,7 +67,7 @@ def eye_layer(size, scale, p):
         cx=(e['cx']+p['gaze'])*scale*2; cy=(e['cy']+p['up'])*scale*2; r=e['r']*scale*2*p['big']*(p['small'] if i else 1)
         opening = p['other'] if i==1 and p['other'] is not None else p['eye']
         if p['blink']:
-            d.arc((cx-r,cy-r*.45,cx+r,cy+r*.65),*( (10,170) if p['symbol']=='sleep' else (190,350) ),fill='white',width=max(2,round(9*scale*2)))
+            d.arc((cx-r,cy-r*.45,cx+r,cy+r*.65),*( (10,170) if p['symbol']=='sleep' else (190,350) ),fill='white',width=max(2,round(34*scale*2)))
         else:
             mask = Image.new('L',image.size)
             md=ImageDraw.Draw(mask);md.ellipse((cx-r,cy-r,cx+r,cy+r),fill=255)
@@ -179,29 +179,39 @@ def save(image,path):
 def symbol_layer(size,scale,p):
     im=Image.new('RGBA',(size[0]*2,size[1]*2));d=ImageDraw.Draw(im)
     k=scale*2;kind=p['symbol'];phase=p['phase'];white='#ffffff'
-    def points(ps):return [(x*k,y*k) for x,y in ps]
+    def point(x,y):
+        # Enlarge the marks towards the face, leaving a gap to the silhouette.
+        if kind=='thought':x=1560+(x-1560)*1.12
+        elif x>1024:x=1545+(x-1545)*1.18-45
+        else:x=400+(x-400)*1.18+25
+        y=850+(y-850)*1.15+35
+        return x*k,y*k
+    def points(ps):return [point(x,y) for x,y in ps]
+    def box(values):
+        x0,y0=point(values[0],values[1]);x1,y1=point(values[2],values[3])
+        return x0,y0,x1,y1
     def line(ps,width=14):
-        ps=points(ps);w=max(2,round(width*k));d.line(ps,fill=white,width=w,joint='curve')
+        ps=points(ps);w=max(2,round(max(width,34)*k));d.line(ps,fill=white,width=w,joint='curve')
         for x,y in [ps[0],ps[-1]]:d.ellipse((x-w/2,y-w/2,x+w/2,y+w/2),fill=white)
     def ellipse(box,width=12,fill=None):
-        d.ellipse(tuple(v*k for v in box),outline=white,fill=fill,width=round(width*k))
+        d.ellipse(tuple([*point(box[0],box[1]),*point(box[2],box[3])]),outline=white,fill=fill,width=round(max(width,34)*k))
     def drop(x,y):
         ps=[]
         for t in np.linspace(0,2*math.pi,100):
             ps.append((x+29*math.sin(t)*(1-math.cos(t)/2),y+50*math.cos(t)))
-        line(ps+[ps[0]],10)
+        d.polygon(points(ps),fill=white)
     def star(x,y,r=45):
         ps=[(x,y-r),(x+10,y-10),(x+r,y),(x+10,y+10),(x,y+r),(x-10,y+10),(x-r,y),(x-10,y-10),(x,y-r)]
         line(ps,9)
     if kind=='alert':
         x=1710;y=670-[0,85,25][phase];line([(x,y-70),(x,y+30)],24);ellipse((x-13,y+66,x+13,y+92),fill=white)
     elif kind=='sleep':
-        for x,y,z in [(1640,730-phase*60,45),(1800,550-phase*90,65)]:
+        for x,y,z in [(1640,730-phase*60,100),(1800,550-phase*90,140)]:
             line([(x-z/2,y-z/2),(x+z/2,y-z/2),(x-z/2,y+z/2),(x+z/2,y+z/2)],13)
     elif kind=='sound':
         for j in range(1,2+phase*2):
             x=1590;y=930;r=45+j*48
-            d.arc(tuple(v*k for v in (x-r,y-r,x+r,y+r)),-55,55,fill=white,width=round(12*k))
+            d.arc(box((x-r,y-r,x+r,y+r)),-55,55,fill=white,width=round(34*k))
     elif kind=='thought':
         ellipse((1570,450,1960,700),10)
         ellipse((1570,725,1610,765),8);ellipse((1545,790,1565,810),6)
@@ -283,7 +293,23 @@ def main():
         d.text((x+38,y+12),label.upper(),font=font(40),fill='white')
         summary.paste(thumb,(x+(1800-thumb.width)//2,y+90))
     save(summary,HERE/'prancha-estados.webp')
-    report.update(task='T7606',review='#7630',frames=len(records),frame_size=[W,H+FOOT],
+    real=Image.new('RGB',(8*360,780),'#08080b');rd=ImageDraw.Draw(real)
+    rd.text((20,16),'TAMANHO REAL · gato a 120 px e 240 px · REFERÊNCIA',font=font(24),fill='white')
+    chosen={'repouso':0,'dormindo':0,'acordou':1,'ouvindo':1,'thinking':0,'agindo':0,'pronto':0,'erro':0}
+    for i,state in enumerate(STATES):
+        rd.text((i*360+20,64),state,font=font(23),fill='white')
+        image=compose(assets,STATES[state][chosen[state]])
+        for height,top in [(120,112),(240,334)]:
+            factor=height/((2240-650)*SCALE)
+            small=image.resize((round(W*factor),round(H*factor)),Image.Resampling.LANCZOS)
+            real.paste(small,(i*360+(360-small.width)//2,top))
+            y0=round(top+650*SCALE*factor);y1=y0+height
+            rd.line((i*360+12,y0,i*360+12,y1),fill='#666271',width=1)
+            for end in [y0,y1]:rd.line((i*360+8,end,i*360+16,end),fill='#666271',width=1)
+            rd.text((i*360+20,top+small.height+8),f'gato {height} px',font=font(19),fill='#b6b1c7')
+    save(real,HERE/'tamanho-real.webp')
+    report.update(real_size=dict(cat_source_y=[650,2240],cat_heights=[120,240],selected_pose=chosen))
+    report.update(task='T7606' ,review='#7630',frames=len(records),frame_size=[W,H+FOOT],
                   sources_sha256={n+'.png':hashlib.sha256((ASSETS/(n+'.png')).read_bytes()).hexdigest() for n in NAMES},
                   body_transform='nenhuma; escala global de apresentação 0.75',fog='densidade e matiz da névoa visível após composição; silhueta fosca e aro protegidos; sem blur',
                   states=list(STATES))

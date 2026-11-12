@@ -16,11 +16,16 @@ O gato, das orelhas ao fim do corpo, ocupa mais de 1024 pixels de altura.
 Abra as imagens de estado no tamanho original para julgar o detalhe;
 o resumo é só navegação. Cada WebP tem no máximo 500.000 bytes.
 
+A [tira de tamanho real](tamanho-real.webp) mostra os oito estados lado a
+lado, com altura de referência do gato de 120 e 240 px (marcas verticais).
+A escala usa os mesmos pontos da v2, y=650 a y=2240 na fonte, em todos
+os estados; símbolos e margens não entram nessa medida. Veja a 100% de zoom.
+
 | Imagem | Poses e olhos | Símbolo e intenção |
 | --- | --- | --- |
 | [repouso](estado-repouso.webp) | Neutro, olhar discreto, piscada lenta | Sem símbolo; comportamento discreto |
 | [dormindo](estado-dormindo.webp) | Dois momentos de sono, arcos para baixo | zZ subindo; névoa mínima |
-| [acordou](estado-acordou.webp) | Antes, pico com olhos 24% maiores, assentando | Exclamação que salta; pulso de luz |
+| [acordou](estado-acordou.webp) | Antes, pico com olhos 24% maiores, assentando | Exclamação só no pico (02), ausente antes e assentando; pulso de luz |
 | [ouvindo](estado-ouvindo.webp) | Voz baixa e alta, olhos redondos | Uma e três ondas junto da orelha; a névoa acompanha a voz |
 | [thinking](estado-thinking.webp) | Semicerrados, olhar para cima e para cada lado | Balão de três pontos, um e dois pontos acesos; luz concentrada no alto |
 | [agindo](estado-agindo.webp) | Foco e execução, pálpebras superiores horizontais | Gotas de suor e linhas de movimento; luz lateral alterna |
@@ -41,7 +46,9 @@ nos pivôs originais. Corpo, cabeça e aro não recebem deformação, rotação 
 translação; só a escala global de apresentação.
 
 As pálpebras horizontais, círculos, arcos e símbolos são desenhados por código
-com supersampling 2× e redução Lanczos. O traço dos símbolos é branco, com
+com supersampling 2× e redução Lanczos. O traço dos símbolos e dos olhos fechados tem 34 px na fonte, perto de
+1/4 do diâmetro do olho. Os símbolos foram ampliados e aproximados da
+cabeça; as gotas são preenchidas. O traço é branco, com
 terminais arredondados, fora da silhueta, sem cobrir olhos ou aro. Não há
 notebook, livro, lupa nem logotipo. O desenho segue a tabela aprovada do adendo;
 a v2 é a única fonte visual do personagem.
@@ -90,7 +97,7 @@ estão em `verificacao.json`. A tolerância cobre só essa pose, não as orelhas
 giradas, as variações de luz ou o WebP com perdas. As poses alteradas e a
 compressão precisam também de inspeção visual.
 
-Os oito estados, a imagem de cores e o resumo são WebP de até 500 KB cada.
+Os oito estados, a imagem de cores, o resumo e a tira de tamanho real são WebP de até 500 KB cada.
 O script prepara só documentos: nada do app, shader, overlay, microfone ou
 interface do macOS é executado. O ok do harry continua necessário antes da
 entrega seguinte.

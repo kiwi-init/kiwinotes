@@ -6,6 +6,26 @@
     2560
   ],
   "scope": "pose neutra padrão, antes da redução; exclui discos dos olhos + 5 px",
+  "real_size": {
+    "cat_source_y": [
+      650,
+      2240
+    ],
+    "cat_heights": [
+      120,
+      240
+    ],
+    "selected_pose": {
+      "repouso": 0,
+      "dormindo": 0,
+      "acordou": 1,
+      "ouvindo": 1,
+      "thinking": 0,
+      "agindo": 0,
+      "pronto": 0,
+      "erro": 0
+    }
+  },
   "task": "T7606",
   "review": "#7630",
   "frames": 23,
