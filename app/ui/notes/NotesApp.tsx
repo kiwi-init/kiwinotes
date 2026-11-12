@@ -106,7 +106,6 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   // são de cada cofre (este componente remonta a cada troca de pasta das notas).
   const vaultKey = folderRef?.key ?? "";
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => loadOpenFolders(vaultKey));
-  useEffect(() => saveOpenFolders(vaultKey, openFolders), [vaultKey, openFolders]);
   const [collapsed, setCollapsed] = useState<Set<SectionId>>(() => loadCollapsed());
   useEffect(() => saveCollapsed(collapsed), [collapsed]);
   const [note, setNote] = useState<Note | null>(null);
@@ -1120,6 +1119,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   };
 
   const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy],
+  );
+  // Grava as pastas abertas; com o cofre lido, as que foram apagadas saem da lista (revisão do T7390).
+  useEffect(
+    () => saveOpenFolders(vaultKey, openFolders, listing ? new Set(allFolders(fullTree)) : undefined),
+    [vaultKey, openFolders, listing, fullTree],
   );
   // T6011: o engine decide as notas também sem filtros (raízes PT e conteúdo); a árvore mantém a hierarquia.
   const [queryPaths, setQueryPaths] = useState<Set<string> | null>(null);

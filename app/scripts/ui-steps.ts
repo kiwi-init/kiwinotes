@@ -31,7 +31,8 @@
 //                                                     edição no Obsidian): a janela vê pelos eventos. Nunca clipboard.
 //                                                     No notes.save, `"baseVersion": "current"` usa a versão de agora.
 //
-// Todo passo aceita `timeout` (ms, padrão 5000) e `name` (o rótulo no relatório). O arquivo é
+// Todo passo aceita `timeout` (ms, padrão 5000), `name` (o rótulo no relatório) e `maxMs` (o passo falha se levar mais
+// que isso, para medir uma trava; T7390). O arquivo é
 // `{"steps":[…]}` (com `window`, `scale`, `theme`, `size`, `browser` e `query` opcionais, que as flags sobrepõem)
 // ou só a lista de passos.
 
@@ -73,7 +74,7 @@ export type Step =
   | { pasteHtml: string; html: string; text?: string; shift?: boolean };
 
 type Modifier = "Alt" | "Control" | "Meta" | "Shift";
-export type StepWithMeta = Step & { timeout?: number; name?: string };
+export type StepWithMeta = Step & { timeout?: number; name?: string; maxMs?: number };
 
 export interface ScriptFile {
   window?: string;
@@ -121,6 +122,9 @@ export function parseScript(json: unknown): ScriptFile {
       throw new Error(`${at}: timeout em ms, de 1 a 60000`);
     }
     if (s.name !== undefined) str(s.name, `${at}.name`);
+    if (s.maxMs !== undefined && !(Number.isInteger(s.maxMs) && (s.maxMs as number) > 0 && (s.maxMs as number) <= 60_000)) {
+      throw new Error(`${at}: maxMs em ms, de 1 a 60000`);
+    }
     switch (action) {
       case "wait":
         if (!Number.isInteger(s.wait) || (s.wait as number) < 0 || (s.wait as number) > 10_000) throw new Error(`${at}: wait em ms, de 0 a 10000`);

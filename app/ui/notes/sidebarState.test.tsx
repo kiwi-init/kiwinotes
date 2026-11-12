@@ -36,15 +36,26 @@ describe("o que a barra guarda", () => {
 
   test("as pastas abertas são de cada cofre", () => {
     const store = memory();
-    saveOpenFolders("cofre-a", new Set(["Projetos", "Arquivo"]), store);
+    saveOpenFolders("cofre-a", new Set(["Projetos", "Arquivo"]), undefined, store);
     expect([...loadOpenFolders("cofre-a", store)]).toEqual(["Arquivo", "Projetos"]);
     expect([...loadOpenFolders("cofre-b", store)]).toEqual([]);
+  });
+
+  test("uma pasta apagada sai da lista guardada (revisão do T7390), e nada é gravado sem mudança", () => {
+    const store = memory();
+    let writes = 0;
+    const counting = { getItem: store.getItem, setItem: (k: string, v: string) => (writes++, store.setItem(k, v)) };
+    saveOpenFolders("c", new Set(["Projetos", "Velha"]), new Set(["Projetos", "Arquivo"]), counting);
+    expect([...loadOpenFolders("c", store)]).toEqual(["Projetos"]);
+    saveOpenFolders("c", new Set(["Projetos", "Velha"]), new Set(["Projetos", "Arquivo"]), counting);
+    expect(writes).toBe(1);
   });
 
   test("sem armazenamento (janela privada, teste), nada quebra e tudo abre", () => {
     const broken = { getItem: () => { throw new Error("sem storage"); }, setItem: () => { throw new Error("sem storage"); } };
     expect([...loadCollapsed(broken)]).toEqual([]);
     expect(() => saveCollapsed(new Set<SectionId>(["tags"]), broken)).not.toThrow();
+    expect(() => saveOpenFolders("x", new Set(["a"]), undefined, broken)).not.toThrow();
     expect([...loadOpenFolders("x", null)]).toEqual([]);
   });
 

@@ -1,9 +1,14 @@
 // T4363, spec #4357: a árvore abre no hover do botão do caminho, no topo, logo abaixo dele. Hover nunca rouba foco do
 // editor; o clique no caminho e o teclado continuam dando acesso à busca e à árvore.
-import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./tree-popover.css";
 
 const LAYERS = ".kn-menu, .kn-palette-scrim, .kn-toast";
+/**
+ * Fechada, a árvore desmonta o conteúdo depois da animação de saída (revisão do T7390). Montada e escondida, ela
+ * renderizava a barra inteira a cada save do editor: com todas as pastas abertas num cofre grande, digitar travava.
+ */
+const UNMOUNT_AFTER_MS = 400;
 
 export function TreePopover({ open, onOpenChange, anchor, busy, children }: {
   open: boolean;
@@ -25,6 +30,23 @@ export function TreePopover({ open, onOpenChange, anchor, busy, children }: {
   const restoring = useRef(false);
   const wasBusy = useRef(busy);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // O conteúdo existe enquanto está aberta e durante a animação de saída; a rolagem da árvore volta ao reabrir.
+  const [mounted, setMounted] = useState(open);
+  const scrollTop = useRef(0);
+  const sideScroll = () => panel.current?.querySelector<HTMLElement>(".kn-side");
+  useEffect(() => {
+    if (open) return setMounted(true);
+    const t = setTimeout(() => {
+      scrollTop.current = sideScroll()?.scrollTop ?? scrollTop.current;
+      setMounted(false);
+    }, UNMOUNT_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [open]);
+  const shown = open || mounted;
+  useLayoutEffect(() => {
+    const side = shown ? sideScroll() : null;
+    if (side && scrollTop.current) side.scrollTop = scrollTop.current;
+  }, [shown]);
   const state = useRef({ open, busy, onOpenChange });
   state.current = { open, busy, onOpenChange };
   const cancel = () => {
@@ -185,7 +207,7 @@ export function TreePopover({ open, onOpenChange, anchor, busy, children }: {
       onDragEndCapture={() => { dragging.current = false; leave(); }}
       onDropCapture={() => { dragging.current = false; leave(); }}
     >
-      {children}
+      {shown ? children : null}
     </div>
   );
 }

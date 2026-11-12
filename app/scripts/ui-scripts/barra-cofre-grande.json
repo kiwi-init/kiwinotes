@@ -1,0 +1,108 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre (antes, o cofre grande da revisão do T7390, 1665 pastas e 9150 notas: cd <data>/vault && for a in $(seq 15); do for b in $(seq 10); do for c in $(seq 10); do mkdir -p P$a/S$b/T$c; echo n > P$a/S$b/T$c/n.md; echo m > P$a/S$b/m.md; for i in 1 2 3 4 5; do echo x > P$a/S$b/T$c/k$i.md; done; done; done; done)"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content",
+      "name": "o editor"
+    },
+    {
+      "type": "abcdefghij",
+      "name": "digita com as pastas fechadas"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-new[data-all='expand']",
+      "timeout": 30000,
+      "name": "Expandir tudo"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder']",
+      "count": 1665,
+      "timeout": 30000,
+      "name": "as 1665 pastas abertas"
+    },
+    {
+      "press": "Escape",
+      "name": "fecha a árvore: o conteúdo dela sai da página depois da animação"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side",
+      "state": "detached",
+      "timeout": 30000
+    },
+    {
+      "click": ".cm-content",
+      "name": "volta ao editor, com tudo expandido"
+    },
+    {
+      "type": "0123456789",
+      "maxMs": 1500,
+      "timeout": 30000,
+      "name": "digita 10 letras depois do autosave 1: sem pagar pela árvore (antes da correção, de 5 a 8 s)"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "type": "0123456789",
+      "maxMs": 1500,
+      "timeout": 30000,
+      "name": "digita 10 letras depois do autosave 2: sem pagar pela árvore (antes da correção, de 5 a 8 s)"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "type": "0123456789",
+      "maxMs": 1500,
+      "timeout": 30000,
+      "name": "digita 10 letras depois do autosave 3: sem pagar pela árvore (antes da correção, de 5 a 8 s)"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "type": "0123456789",
+      "maxMs": 1500,
+      "timeout": 30000,
+      "name": "digita 10 letras depois do autosave 4: sem pagar pela árvore (antes da correção, de 5 a 8 s)"
+    },
+    {
+      "wait": 900
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "0123456789"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "timeout": 30000,
+      "name": "reabre a árvore: as pastas continuam abertas"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder']",
+      "count": 1665,
+      "timeout": 30000
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-new[data-all='collapse']",
+      "timeout": 30000,
+      "name": "Recolher tudo"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder']",
+      "count": 15,
+      "timeout": 30000
+    }
+  ]
+}

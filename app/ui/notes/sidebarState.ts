@@ -46,8 +46,18 @@ export const saveCollapsed = (collapsed: ReadonlySet<SectionId>, store = browser
 
 export const loadOpenFolders = (vault: string, store = browser()): Set<string> => new Set(readList(foldersKey(vault), store));
 
-export const saveOpenFolders = (vault: string, open: ReadonlySet<string>, store = browser()): void =>
-  writeList(foldersKey(vault), [...open].sort(), store);
+/**
+ * Grava as pastas abertas. Com `known` (as pastas que o cofre tem agora), as apagadas saem da lista: ela não cresce
+ * para sempre. Só escreve quando a lista muda.
+ */
+export function saveOpenFolders(vault: string, open: ReadonlySet<string>, known?: ReadonlySet<string>, store = browser()): void {
+  const list = JSON.stringify([...open].filter((f) => !known || known.has(f)).sort());
+  try {
+    if (store && store.getItem(foldersKey(vault)) !== list) store.setItem(foldersKey(vault), list);
+  } catch {
+    // Sem armazenamento: a barra só não lembra na próxima vez.
+  }
+}
 
 /** Todas as pastas da árvore, também as de dentro: o que o Expandir tudo abre. */
 export function allFolders(nodes: readonly TreeNode[]): string[] {

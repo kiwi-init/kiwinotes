@@ -55,6 +55,9 @@ describe("passos", () => {
     expect(() => parseScript([{ click: ".a", position: { x: -1, y: 0 } }])).toThrow("position");
     expect(() => parseScript([{ waitFor: ".a", state: "sumido" }])).toThrow("state");
     expect(() => parseScript([{ click: ".a", timeout: 0 }])).toThrow("timeout");
+    expect(() => parseScript([{ type: "abc", maxMs: 0 }])).toThrow("maxMs");
+    expect(() => parseScript([{ type: "abc", maxMs: 1.5 }])).toThrow("maxMs");
+    expect(parseScript([{ type: "abc", maxMs: 1500 }]).steps[0]).toEqual({ type: "abc", maxMs: 1500 });
     expect(() => parseScript({ scale: 3, steps: [{ wait: 1 }] })).toThrow("scale");
     expect(() => parseScript([{ scroll: ".a" }])).toThrow("scroll precisa de y ou x");
     expect(() => parseScript([{ scroll: ".a", y: "muito" }])).toThrow("scroll.y");
@@ -294,6 +297,17 @@ describe.skipIf(!hasWebkit)("no WebKit headless", () => {
     expect(r.failedAt).toBe(2);
     expect(r.skipped).toBe(1);
     expect(existsSync(r.steps[1].shot)).toBe(true);
+  }, 60_000);
+
+  test("ui: um passo mais lento que o maxMs falha, com o tempo e o limite (T7390)", async () => {
+    const { ctx } = fakeCtx(dir);
+    writeFileSync(join(dir, "lento.json"), JSON.stringify([{ waitFor: ".kn-segmented" }, { wait: 1, maxMs: 2000 }, { wait: 300, maxMs: 50 }]));
+    capture();
+    expect(await runUi(["settings", "--script", join(dir, "lento.json"), "--out", join(dir, "lento")], ctx)).toBe(1);
+    const r = lastJson();
+    expect(r.steps[1].ok).toBe(true);
+    expect(r.failedAt).toBe(3);
+    expect(r.steps[2].error).toMatch(/levou \d+ ms, e o limite \(maxMs\) é 50 ms/);
   }, 60_000);
 
   test("expectSame: o retângulo de um elemento contra o de outro, e a propriedade computada (T4671)", async () => {
