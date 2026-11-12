@@ -308,6 +308,17 @@ describe("as opções da sessão: o modelo e o esforço (T8678)", () => {
     expect(h.configValues).toEqual({ model: "fable", effort: "low" });
   });
 
+  test("um agente que não responde ao abrir: o teto dá E_AGENT_FAILED claro, e o processo é fechado", async () => {
+    const h = new AgentHost({ name: "Agente falso", command: ["/bin/sleep", "30"], dir: path.join(tmp(), "agent"), startTimeoutMs: 300 });
+    hosts.push(h);
+    const t0 = Date.now();
+    const err = await rejection(h.start());
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect(err.code).toBe("E_AGENT_FAILED");
+    expect(err.detail).toContain("não abriu a sessão em 0 s");
+    expect(h.running).toBe(false);
+  });
+
   test("o killNow manda o SIGTERM na hora (a saída do app)", async () => {
     const { h } = fakeHost(tmp());
     await h.start();

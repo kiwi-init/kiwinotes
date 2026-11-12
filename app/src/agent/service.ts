@@ -81,6 +81,10 @@ export class AgentService {
   private readonly name: string;
   private host: AgentHost | null = null;
   private opening: Promise<AgentHost> | null = null;
+  /** O host que ainda está abrindo: o `stopProgram` e o `killNow` fecham ele também, sem esperar a abertura (revisão). */
+  private pending: AgentHost | null = null;
+  /** Sobe a cada `stopProgram`: um host montado antes de um Desligar não chega a abrir. */
+  private epoch = 0;
   private turn: { id: string; cancelled: boolean } | null = null;
   private idle: ReturnType<typeof setTimeout> | null = null;
   private download: { abort: AbortController; done: number; total: number; lastEmit: number } | null = null;
@@ -289,15 +293,20 @@ export class AgentService {
   /** Abre o programa do agente (uma vez, mesmo com dois pedidos chegando juntos). */
   private openProgram(): Promise<AgentHost> {
     this.opening ??= (async () => {
+      const epoch = this.epoch;
       const s = await this.d.settings.load();
       const wanted = () => ({ model: s.model, effort: s.effort });
       const host = await this.d.openHost({ configOptions: wanted });
+      if (this.closed || epoch !== this.epoch) throw new AgentError("E_AGENT_FAILED", this.name, "o programa foi fechado antes de abrir");
+      this.pending = host;
       this.emitStatus();
       try {
         await host.start();
       } catch (e) {
         await host.stop();
         throw e;
+      } finally {
+        if (this.pending === host) this.pending = null;
       }
       this.applied = wanted();
       this.host = host;
@@ -359,11 +368,17 @@ export class AgentService {
   }
 
   private async stopProgram(why: string): Promise<void> {
+    this.epoch++;
     this.clearIdle();
     if (this.turn) {
       this.turn.cancelled = true;
       await this.host?.cancel().catch(() => {});
     }
+    // Um programa abrindo é parado na hora, sem esperar a abertura: um agente que não responde não pode prender o
+    // Desligar nem a saída do app. O `start()` dele falha, e o pedido acaba cancelado.
+    const pending = this.pending;
+    this.pending = null;
+    if (pending) await pending.stop();
     const opening = this.opening;
     if (opening) await opening.catch(() => {});
     const host = this.host;
@@ -385,6 +400,7 @@ export class AgentService {
   killNow(): void {
     this.closed = true;
     this.download?.abort.abort();
+    this.pending?.killNow();
     this.host?.killNow();
   }
 }

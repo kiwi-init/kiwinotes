@@ -49,7 +49,7 @@ interface Made {
   pid: () => number | null;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -66,6 +66,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
       return FAKE_CLAUDE;
     },
     openHost: async ({ configOptions }) =>
+      o.host?.(agentDir(data)) ??
       new AgentHost({
         name: "Claude Code",
         command: FAKE_AGENT_COMMAND,
@@ -347,6 +348,57 @@ describe("o programa do agente fecha", () => {
     const pid = m.pid();
     m.svc.killNow();
     await until(() => !alive(pid));
+  });
+});
+
+describe("um agente que não responde ao abrir (revisão do T8678)", () => {
+  /** No lugar do adaptador, um programa que nunca responde o `initialize`. */
+  function hanging() {
+    const hosts: AgentHost[] = [];
+    const host = (dir: string) => {
+      const h = new AgentHost({ name: "Claude Code", command: ["/bin/sleep", "30"], dir });
+      hosts.push(h);
+      return h;
+    };
+    return { host, pid: () => hosts.at(-1)?.pid ?? null };
+  }
+
+  test("o desligar volta logo, mata o programa que estava abrindo, e o pedido acaba cancelado", async () => {
+    const hang = hanging();
+    const m = make({ host: hang.host });
+    await readyNow(m);
+    const { id } = await m.svc.ask("oi");
+    const pid = await until(() => hang.pid());
+    expect(alive(pid)).toBe(true);
+    expect((await m.svc.status()).program).toBe("opening");
+    const t0 = Date.now();
+    const s = await m.svc.disable();
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect(s).toMatchObject({ enabled: false, program: "closed" });
+    await until(() => !alive(pid));
+    expect(await until(() => m.turns.find((e) => e.id === id && (e.type === "done" || e.type === "error")))).toMatchObject({ type: "done", stopReason: "cancelled" });
+  });
+
+  test("a saída do app (killNow) mata o programa que estava abrindo", async () => {
+    const hang = hanging();
+    const m = make({ host: hang.host });
+    await readyNow(m);
+    await m.svc.ask("oi");
+    const pid = await until(() => hang.pid());
+    m.svc.killNow();
+    await until(() => !alive(pid));
+  });
+
+  test("o close() (o quit do app) também volta logo", async () => {
+    const hang = hanging();
+    const m = make({ host: hang.host });
+    await readyNow(m);
+    await m.svc.ask("oi");
+    const pid = await until(() => hang.pid());
+    const t0 = Date.now();
+    await m.svc.close();
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect(alive(pid)).toBe(false);
   });
 });
 

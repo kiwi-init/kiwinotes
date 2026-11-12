@@ -94,6 +94,11 @@ export interface AgentHostOptions {
    * de verdade, o Claude Code abriu com o modelo e o esforço do terminal do harry, #8666).
    */
   configOptions?: () => Record<string, string>;
+  /**
+   * O teto da abertura (o `initialize`, o `session/new` ou a retomada e as opções), em ms. Um agente que não responde
+   * dá `E_AGENT_FAILED` e é fechado, em vez de deixar quem espera preso para sempre (revisão do T8678). Padrão: 60 s.
+   */
+  startTimeoutMs?: number;
 }
 
 export interface AgentSession {
@@ -107,6 +112,8 @@ export interface AgentSession {
 
 /** Quanto o host espera o agente sair por conta própria, no `stop()`, antes de matar. */
 const STOP_GRACE_MS = 2000;
+/** O teto padrão da abertura: o Claude Code de verdade abre em poucos segundos. */
+const START_TIMEOUT_MS = 60_000;
 /** O fim do stderr do agente que fica guardado para explicar uma queda. */
 const STDERR_KEEP = 8192;
 
@@ -200,22 +207,36 @@ export class AgentHost {
       });
     this.conn = app.connect(ndJsonStream(output, proc.stdout as ReadableStream<Uint8Array>));
 
-    try {
+    const conn = this.conn;
+    const open = async (): Promise<AgentSession> => {
       const hello: InitializeRequest = {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
         clientInfo: { name: "kiwi-notes", title: "Kiwi Notes", version: this.o.kiwiVersion ?? "dev" },
       };
-      const init = await this.untilExit(this.conn.agent.request("initialize", hello));
+      const init = await this.untilExit(conn.agent.request("initialize", hello));
       const { sessionId, resumed, details } = await this.openSession(init);
       this.sessionId = sessionId;
       this.config = Array.isArray(details.configOptions) ? (details.configOptions as SessionConfigOption[]) : [];
       if (this.o.configOptions) await this.applyConfig(this.o.configOptions());
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId }) + "\n", { mode: 0o600 });
       return { sessionId, resumed, agent: { name: init.agentInfo?.title ?? init.agentInfo?.name, version: init.agentInfo?.version }, details };
+    };
+    const limit = this.o.startTimeoutMs ?? START_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new AgentError("E_AGENT_FAILED", this.o.name, `o agente não abriu a sessão em ${Math.round(limit / 1000)} s`)),
+        limit,
+      );
+    });
+    try {
+      return await Promise.race([open(), timeout]);
     } catch (e) {
       await this.stop();
       throw classifyAgentError(e, this.o.name);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -296,7 +317,6 @@ export class AgentHost {
     }
   }
 
-  /** Cancela o pedido em andamento. O `ask` termina com `stopReason: "cancelled"`. Sem pedido, não faz nada. */
   /** O valor atual de cada opção da sessão aberta (`model`, `effort`, `mode`…), como o agente diz. */
   get configValues(): Record<string, string> {
     const out: Record<string, string> = {};
@@ -345,6 +365,7 @@ export class AgentHost {
     }
   }
 
+  /** Cancela o pedido em andamento. O `ask` termina com `stopReason: "cancelled"`. Sem pedido, não faz nada. */
   async cancel(): Promise<void> {
     if (!this.turn || !this.conn || !this.sessionId) return;
     await this.conn.agent.notify("session/cancel", { sessionId: this.sessionId });

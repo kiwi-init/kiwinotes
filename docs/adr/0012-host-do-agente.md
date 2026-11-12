@@ -121,12 +121,14 @@ O app passa a ligar o agente, baixar o adaptador, mandar um pedido e desligar, p
 - **O ciclo do programa:**
   - ele abre no primeiro pedido e fica aberto;
   - fecha ao desligar, ao remover o adaptador, depois de 10 minutos sem uso (`AGENT_IDLE_MS`) e quando o app sai: o `close()` no `quit()` espera o processo sair, e o `killNow()` no `process.on("exit")` manda o SIGTERM, que o adaptador trata limpo;
+  - **um programa ainda abrindo também fecha:** o desligar, o `close()` e o `killNow()` param ele na hora, sem esperar a abertura, e a abertura tem um teto de 60 s (`startTimeoutMs`), que dá `E_AGENT_FAILED`. Um agente que não responde nunca prende o Desligar nem a saída do app;
   - desligar ou sair no meio de um pedido termina ele como cancelado.
 - **O modelo e o esforço são do Kiwi.** Na prova de verdade (#8666), a sessão abriu com os do terminal do harry (`fable`, `high`), lidos pelo adaptador do `~/.claude/settings.json`. Agora:
   - o host aplica os valores dos ajustes do app pelo `session/set_config_option` do ACP, logo depois de abrir, e antes de um pedido se eles mudaram;
   - o padrão é `default` nos dois, o padrão do Claude Code;
   - um valor que o agente não oferece fica de fora, e a sessão segue com o que tinha (`applyConfig` devolve o `refused`);
-  - o `agent.status` mostra o que o Kiwi pede (`model`, `effort`) e o que a sessão aberta tem (`session`).
+  - o `agent.status` mostra o que o Kiwi pede (`model`, `effort`) e o que a sessão aberta tem (`session`);
+  - **a conferir no roteiro do harry:** o `fable` veio do `SettingsManager` do adaptador. O que o `setModel("default")` vira no Claude Code de verdade (o padrão da conta, ou de novo o do `settings.json`) só a sessão de verdade mostra.
 - **Desligado, nada abre nem vai à rede.** `agent.ask` e `agent.download` dão `E_AGENT_DISABLED`. O `agent.status` sem `refresh` não abre programa nenhum. O `refresh` (a seção abriu, o "Tentar de novo") roda só o `claude --version` e o `claude auth status`, como o `claudeStatus` do host.
 - **Os códigos novos:**
   - `E_AGENT_CONSENT`: ligar sem o aceite;
