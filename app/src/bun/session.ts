@@ -176,8 +176,9 @@ export class Session {
       console.warn(`[meetings] note recreated: ${path}`);
       this.meetings.feed({ type: "meeting.warning", session, warning: "note_recreated" });
     });
-    // O helper que caiu levou a captura junto (R6): o card ao vivo some.
+    // O helper que caiu levou a captura junto (R6): o card ao vivo some, e a nota da reunião ganha o fim (T7938).
     this.sidecar.onClose(() => this.meetings.reset());
+    this.sidecar.onClose(() => this.meetingNotes.interrupted());
     this.sidecar.onClose(() => void stores.recoveries.interrupted().catch(()=>console.warn("[recovery] interrupted_failed")));
     stores.recoveries.start();
     this.sidecar.on("ready", () => {

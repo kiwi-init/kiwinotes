@@ -68,6 +68,15 @@ test("os rótulos: duração, relógio e participantes", () => {
   expect(participantsLabel(["Você", "A", "B", "C", "D"])).toBe("Você, A e mais 3");
 });
 
+// T7938: uma nota sem `end` só é "gravando" se for a da sessão que o `meetings.live` grava agora.
+test("meetingFromNote com o liveSession: a nota que ficou sem end (o helper caiu) não está gravando", () => {
+  const stuck = "---\ntype: meeting\nstart: \"2026-11-05T17:32:00.000Z\"\nduration: 0\napp: Teams\nsession: \"s-velha\"\n---\n";
+  expect(meetingFromNote(meta("a.md"), stuck)?.live).toBe(true); // sem saber a sessão, como antes
+  expect(meetingFromNote(meta("a.md"), stuck, null)?.live).toBe(false);
+  expect(meetingFromNote(meta("a.md"), stuck, "s-nova")?.live).toBe(false);
+  expect(meetingFromNote(meta("a.md"), stuck, "s-velha")?.live).toBe(true);
+});
+
 test("listMeetings lê só as notas com type: e devolve as de reunião", async () => {
   const files: Record<string, string> = {
     "Reuniões/a.md": R4_NOTE,

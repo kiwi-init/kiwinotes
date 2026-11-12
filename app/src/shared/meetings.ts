@@ -183,7 +183,7 @@ export function localDay(d: Date): string {
  * A nota é uma reunião (`type: meeting`): o que a lista mostra dela, ou null. O que falta ou não serve fica vazio,
  * sem esconder a nota: uma reunião escrita à mão ainda aparece.
  */
-export function meetingFromNote(meta: { path: string; title: string; mtime: string }, content: string): MeetingNote | null {
+export function meetingFromNote(meta: { path: string; title: string; mtime: string }, content: string, liveSession?: string | null): MeetingNote | null {
   const fm = frontmatterOf(content);
   if (!fm || String(fm.type ?? "").trim().toLowerCase() !== "meeting") return null;
   const start = isoOrNull(fm.start);
@@ -195,7 +195,10 @@ export function meetingFromNote(meta: { path: string; title: string; mtime: stri
   const participants = Array.isArray(fm.participants)
     ? fm.participants.filter((p): p is string | number => typeof p === "string" || typeof p === "number").map(String).map((p) => p.trim()).filter(Boolean)
     : [];
-  return { path: meta.path, title: meta.title, date, start, end, duration, app, participants, live: start !== null && end === null, mtime: meta.mtime };
+  // Sem `end` é gravando. Com o `liveSession` (o `session` que o `meetings.live` grava agora, ou null), só a nota dessa
+  // sessão: uma que ficou sem `end` (o helper ou o app que caiu, T7938) não grava nada.
+  const live = start !== null && end === null && (liveSession === undefined || (liveSession !== null && fm.session === liveSession));
+  return { path: meta.path, title: meta.title, date, start, end, duration, app, participants, live, mtime: meta.mtime };
 }
 
 /** A mais nova primeiro: o início (ou o dia), e depois a última mudança. */

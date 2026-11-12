@@ -289,6 +289,39 @@ test("meeting: fake helper events create, append and finish a note without captu
   expect(metadata(c).duration).toBe(30);
 });
 
+// T7938: o helper cai com a reunião gravando e não manda o meeting.stopped. A nota ganha o fim na hora da queda, e a fala
+// que o helper novo recupera do spool depois continua entrando nela.
+test("meeting bridge: o helper caiu (interrupted) fecha a nota, e a fala recuperada depois entra nela", async () => {
+  const { notes, vault } = await rig();
+  const listeners = new Map<string, Function[]>();
+  const source = { on(type: string, fn: Function) { listeners.set(type, [...(listeners.get(type) ?? []), fn]); return () => {}; } };
+  let time = at.getTime();
+  const errors: unknown[] = [];
+  const bridge = new MeetingNoteSession(source as any, notes, () => time, (e) => errors.push(e));
+  bridge.attach();
+  const emit = (e: Event) => { for (const fn of listeners.get(e.type) ?? []) fn({ ...e, v: 1 }); };
+  emit({ type: "meeting.started", session: "s1", app: "Teams", sampleRate: 16000, output: "speaker" });
+  emit({ type: "meeting.segment", session: "s1", ...segment(1, "Pessoa 1", "Antes da queda.") });
+  time += 42_000;
+  bridge.interrupted();
+  bridge.interrupted(); // a segunda queda (ou o stop do app) não fecha de novo
+  await notes.flush();
+  const path = vault.list().notes[0]!.path;
+  let c = (await vault.get(path)).content;
+  expect(metadata(c).duration).toBe(42);
+  expect(metadata(c).end).toBe(new Date(at.getTime() + 42_000).toISOString());
+  // O helper novo transcreve o que sobrou no spool, com o mesmo session.
+  emit({ type: "meeting.segment", session: "s1", ...segment(30, "Pessoa 1", "Recuperada do spool.") });
+  await notes.flush();
+  c = (await vault.get(path)).content;
+  expect(c).toContain("Antes da queda.");
+  expect(c).toContain("Recuperada do spool.");
+  expect(metadata(c).duration).toBe(42);
+  expect(vault.list().notes.length).toBe(1);
+  await bridge.detach();
+  expect(errors).toEqual([]);
+});
+
 // R3 (T4943, option B of #5131): the VBx corrects the speakers after the meeting, over the saved blocks.
 const turn = (speaker: number, start: number, end: number) => ({ speaker, start, end });
 
