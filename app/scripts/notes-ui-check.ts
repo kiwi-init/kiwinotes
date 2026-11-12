@@ -820,10 +820,9 @@ await step("nota de um parágrafo enorme com links: ir ao fim e digitar lá não
   const after = await nodes();
   // O teto do DOM é o que não depende do navegador: com o widget, eram ~24 mil nós.
   if (before > 5000 || after > 5000) throw new Error(`o editor pôs ${before} → ${after} nós na página`);
-  // O tempo (T8214): o runner do CI já levou 7,4 s num engasgo, com o conserto no lugar, contra o teto de 3 s de antes.
-  // A guarda do bug é a contagem de nós, acima. O teto de 10 s fica só para uma volta do travamento (12 a 25 s), e o
-  // tempo de cada rodada vai para o log.
-  if (ms > 10_000) throw new Error(`⌘↓ e a 1ª tecla no fim levaram ${ms} ms`);
+  // O tempo só vai para o log (T8214): no runner do CI ele variou de ~0,3 a ~9,7 s com o conserto no lugar (2 de 5 runs
+  // entre 7 e 10 s), então ele não separa o bug do conserto. A guarda do bug é a contagem de nós, acima: 426 → 542 em
+  // todos os runs, contra ~24 mil com o bug.
   const tail = await page.evaluate(() => {
     const doc = (document.querySelector(".cm-content") as any).cmTile.view.state.doc;
     return doc.sliceString(Math.max(0, doc.length - 30));
