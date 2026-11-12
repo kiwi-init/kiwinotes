@@ -12,6 +12,7 @@ import { SnippetStore } from "../store/snippets.ts";
 import { DictationNotes } from "../notes/fromDictation.ts";
 import { NotesFolders } from "../notes/folders-workspace.ts";
 import { assertHeadlessNotesFolder, resolveReal } from "../headless/guard.ts";
+import { headlessTrash } from "../headless/trash.ts";
 import { Vault } from "../notes/vault.ts";
 import { SemanticEngine } from "../notes/semantic/engine.ts";
 
@@ -31,9 +32,12 @@ const semantic = new SemanticEngine({
   download: process.env.KIWI_HEADLESS !== "1",
 });
 let folders: NotesFolders;
-const internalNotes = new Vault({ root: defaultRoot, watch: true, onIndexProgress: p => folders?.indexProgress(defaultRoot,p) });
+// O headless apaga para `<data>/trash`, nunca para o Lixo do macOS da pessoa (T7681).
+const trash = process.env.KIWI_HEADLESS === "1" ? headlessTrash(path.join(dir, "trash")) : undefined;
+const internalNotes = new Vault({ root: defaultRoot, watch: true, onIndexProgress: p => folders?.indexProgress(defaultRoot,p), ...(trash ? { trash } : {}) });
 folders = new NotesFolders({dir,defaultRoot,globalSettings,internalNotes,semantic,
   guard: process.env.KIWI_HEADLESS === "1" ? root => assertHeadlessNotesFolder(root) : undefined,
+  ...(trash ? { trash } : {}),
 });
 const fixed = folders.fixed;
 
