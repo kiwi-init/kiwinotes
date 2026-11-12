@@ -986,7 +986,15 @@ export class Vault {
     const aliasesAfter = new Map([...aliasesBefore].map(([p, a]) => [p === from ? to : p, a] as const));
     const resolveBefore = makeResolver(before, aliasesBefore);
     const resolveAfter = makeResolver(after, aliasesAfter);
+    // Só lê do disco quem pode citar a nota (T7877): ler o cofre inteiro custava segundos com 10 mil notas. O [[link]]
+    // se confere pelo índice; o [texto](caminho.md), pelo nome do arquivo no texto (decodificado, sem maiúscula).
+    const fromKey = noteName(from).normalize("NFC").toLowerCase();
+    const mayCite = (e: Entry) =>
+      e.meta.path === to ||
+      e.links.some((t) => resolveBefore(t) === from) ||
+      ((e.content.includes("](") || e.content.includes("]:")) && looseDecode(e.content).normalize("NFC").toLowerCase().includes(fromKey));
     for (const e of [...this.notes.values()]) {
+      if (!mayCite(e)) continue;
       const result = await this.refactorNote(e.meta.path, disk => rewriteNoteReferences(
         disk, e.meta.path === to ? from : e.meta.path, e.meta.path, from, to, resolveBefore, resolveAfter));
       if (result.skipped) skippedPaths.push(e.meta.path);
@@ -1807,3 +1815,15 @@ export function buildTree(folders: readonly string[], notes: readonly { path: st
 }
 
 const noteFolder = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+/** O `%xx` vira o caractere, e o que não decodifica fica como está (T7877). */
+function looseDecode(text: string): string {
+  if (!text.includes("%")) return text;
+  return text.replace(/(?:%[0-9a-f]{2})+/gi, (s) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  });
+}
