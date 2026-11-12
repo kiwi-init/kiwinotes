@@ -791,6 +791,50 @@ await step("árvore com 600 notas expandidas: só a janela vai para o DOM, rola 
 
 // T7876: o Sumário, as palavras e o rascunho esperam a pessoa parar de digitar (numa nota grande, eles custavam dezenas de
 // ms por tecla). Depois da pausa, os três estão em dia.
+// T8046: uma nota de ~820 KB que é um parágrafo só (12 mil linhas, um [[link]] em cada, sem linha em branco). O bloco
+// inteiro virava um widget renderizado de ~24 mil nós, fora da virtualização do editor: ir ao fim e a 1ª tecla lá levavam
+// ~12 s cada no WebKit (~2 s aqui no Chromium). Grande demais, ele fica cru, e o editor só põe na página o que está na tela.
+await step("nota de um parágrafo enorme com links: ir ao fim e digitar lá não trava, e o editor fica pequeno no DOM", async () => {
+  await page.evaluate(async () => {
+    const m = (window as any).__kiwiNotesMock;
+    const body = Array.from({ length: 12000 }, (_, i) => `Linha ${i} com um texto qualquer para encher a nota, e um [[Ana]] aqui.`).join("\n");
+    await m.create("Parágrafo enorme", "", `# Parágrafo enorme\n\n${body}\n`);
+  });
+  await page.keyboard.press("Meta+k");
+  await page.keyboard.type("Parágrafo enorme");
+  await page.waitForTimeout(300);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Parágrafo enorme", undefined, { timeout: 10000 });
+  await page.waitForTimeout(500);
+  const frames = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const nodes = () => page.evaluate(() => document.querySelector(".cm-content")!.querySelectorAll("*").length);
+  const before = await nodes();
+  await page.click(".kn-title");
+  await page.click(".cm-content");
+  const t = Date.now();
+  await page.keyboard.press("Meta+ArrowDown");
+  await frames();
+  await page.keyboard.type("y");
+  await frames();
+  const ms = Date.now() - t;
+  const after = await nodes();
+  // O teto do DOM é o que não depende do navegador: com o widget, eram ~24 mil nós.
+  if (before > 5000 || after > 5000) throw new Error(`o editor pôs ${before} → ${after} nós na página`);
+  if (ms > 3000) throw new Error(`⌘↓ e a 1ª tecla no fim levaram ${ms} ms`);
+  const tail = await page.evaluate(() => {
+    const doc = (document.querySelector(".cm-content") as any).cmTile.view.state.doc;
+    return doc.sliceString(Math.max(0, doc.length - 30));
+  });
+  if (!tail.endsWith("y") && !tail.endsWith("y\n")) throw new Error(`a tecla não entrou no fim: ${JSON.stringify(tail)}`);
+  console.log(`        ⌘↓ + 1ª tecla: ${ms} ms; nós no editor: ${before} → ${after}`);
+  if (shots) {
+    await page.keyboard.press("Meta+ArrowUp");
+    await page.click(".kn-title");
+    await frames();
+    await page.screenshot({ path: `${shots}/notas-paragrafo-enorme.png` });
+  }
+});
+
 await step("o Sumário e as palavras se refazem quando a pessoa para de digitar", async () => {
   await page.keyboard.press("Meta+k");
   await page.keyboard.type("Ana");

@@ -65,8 +65,17 @@ export function keepsRaw(node: SyntaxNode, source: string): boolean {
 }
 
 /**
+ * O maior bloco que vira um widget só (T8046). O editor só põe na página as linhas que estão na tela, mas um bloco
+ * renderizado entra inteiro: um parágrafo de 12 mil linhas (uma reunião longa, um diário com uma linha por item, sem
+ * linha em branco) eram ~24 mil nós, e o WebKit levava ~12 s para medir ao ir para o fim. Maior que isto, o bloco fica
+ * cru, linha a linha, com o preview de cada linha (o `livePreview`).
+ */
+export const MAX_RENDERED_LINES = 300;
+export const MAX_RENDERED_CHARS = 30_000;
+
+/**
  * Os blocos que aparecem renderizados. Com o editor focado, o bloco onde está o cursor (ou a seleção) fica de fora;
- * sem foco, a nota inteira aparece renderizada.
+ * sem foco, a nota inteira aparece renderizada. Um bloco maior que `MAX_RENDERED_LINES` ou `MAX_RENDERED_CHARS` também.
  */
 export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree = fullTree(state)): RenderedBlock[] {
   const out: RenderedBlock[] = [];
@@ -90,6 +99,7 @@ export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree 
       }
     }
     if (focused && touches(state, from, to)) continue;
+    if (to - from > MAX_RENDERED_CHARS || state.doc.lineAt(to).number - state.doc.lineAt(from).number + 1 > MAX_RENDERED_LINES) continue;
     const source = state.doc.sliceString(from, to);
     if (!source.trim() || keepsRaw(n, source)) continue;
     out.push({ from, to, source });
@@ -136,6 +146,8 @@ function inAny(tree: Tree, pos: number, names: Set<string>): boolean {
 export function toRenderable(source: string, offset: number, tree: Tree, status: LinkStatusOf, notes?: Footnotes): string {
   const edits: { from: number; to: number; insert: string }[] = [];
   const end = offset + source.length;
+  // T8046: tudo aqui é linear no tamanho do bloco. Um parágrafo de 12 mil linhas com um [[link]] cada (uma reunião longa,
+  // um diário) tinha 12 mil trocas, e cada uma copiava o texto inteiro: ~12 s no WebKit ao ir para o fim da nota.
   for (const m of notes?.marks ?? []) {
     if (m.from < offset || m.to > end || inAny(tree, m.from + 1, CODE_INLINE)) continue;
     const url = m.kind === "inline" ? `${FOOTNOTE_INLINE_LINK}${m.n}` : `${notes!.def(m.label) ? FOOTNOTE_LINK : FOOTNOTE_MISSING_LINK}${labelUrl(m.label)}`;
@@ -146,9 +158,12 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
     if (marker < offset || d.markerTo > end) continue;
     edits.push({ from: marker - offset, to: d.markerTo - offset, insert: `[${escapeLabel(footnoteLabel(notes!, d.label))}](${FOOTNOTE_DEF_LINK}${labelUrl(d.label)})` });
   }
-  const inFootnote = (a: number) => edits.some((e) => a >= e.from && a < e.to);
+  // Só as trocas das notas de rodapé (poucas); as da linha de agora ficam à parte, para a #tag não olhar o bloco inteiro.
+  const footnoteEdits = [...edits];
+  const inFootnote = (a: number) => footnoteEdits.some((e) => a >= e.from && a < e.to);
   let lineStart = 0;
   for (const line of source.split("\n")) {
+    const lineFirst = edits.length;
     for (const link of parseLinks(line)) {
       const a = lineStart + link.from;
       if (inAny(tree, offset + a + 2, CODE_INLINE)) continue;
@@ -175,15 +190,21 @@ export function toRenderable(source: string, offset: number, tree: Tree, status:
     for (const t of tagsInLine(line)) {
       const a = lineStart + t.from;
       if (inAny(tree, offset + a, NO_TAG)) continue;
-      if (edits.some((e) => a >= e.from && a < e.to)) continue;
+      if (inFootnote(a) || edits.slice(lineFirst).some((e) => a >= e.from && a < e.to)) continue;
       edits.push({ from: a, to: lineStart + t.to, insert: `[${escapeLabel(line.slice(t.from, t.to))}](${TAG_LINK}${encodeURIComponent(t.tag)})` });
     }
     lineStart += line.length + 1;
   }
-  edits.sort((x, y) => y.from - x.from);
-  let out = source;
-  for (const e of edits) out = out.slice(0, e.from) + e.insert + out.slice(e.to);
-  return out;
+  // De uma vez, do começo ao fim: os pedaços entre as trocas e as trocas, num join só.
+  edits.sort((x, y) => x.from - y.from);
+  const parts: string[] = [];
+  let at = 0;
+  for (const e of edits) {
+    parts.push(source.slice(at, e.from), e.insert);
+    at = e.to;
+  }
+  parts.push(source.slice(at));
+  return parts.join("");
 }
 
 const CODE_INLINE = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText"]);
