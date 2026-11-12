@@ -1,0 +1,20 @@
+REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
+Fonte: gerada/manifest.json e as seis camadas originais.
+{
+  "label": "01 · voz baixa",
+  "left": -3,
+  "right": 3,
+  "gaze": 0,
+  "eye": 1,
+  "other": null,
+  "blink": false,
+  "fog": 0.66,
+  "side": 0,
+  "upper": 0,
+  "symbol": "sound",
+  "big": 1,
+  "small": 1,
+  "up": 0,
+  "phase": 0
+}
+Névoa: Densidade 0,66 → 1,26; voz alta ocupa mais o volume já existente.

@@ -1,0 +1,20 @@
+REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
+Fonte: gerada/manifest.json e as seis camadas originais.
+{
+  "label": "02 · busca à direita",
+  "left": 0,
+  "right": -2,
+  "gaze": 30,
+  "eye": 0.58,
+  "other": null,
+  "blink": false,
+  "fog": 0.95,
+  "side": 0.28,
+  "upper": 0.2,
+  "symbol": "thought",
+  "big": 1,
+  "small": 1,
+  "up": -24,
+  "phase": 1
+}
+Névoa: Densidade 0,95; peso desloca da esquerda à direita e concentra no alto.

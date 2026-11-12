@@ -1,0 +1,89 @@
+{
+  "task": "T7606",
+  "recipe": "#7963",
+  "instruction": "#8283",
+  "attempts": 1,
+  "size": [
+    620,
+    775
+  ],
+  "scale_search_source_pixels": [
+    20,
+    45,
+    90,
+    180,
+    300,
+    500
+  ],
+  "chosen_scales_source_pixels": [
+    20,
+    45,
+    90,
+    500
+  ],
+  "weights": [
+    0.0,
+    0.0,
+    0.0,
+    0.5171355673833335
+  ],
+  "colour": [
+    0.8841654658317566,
+    0.855749785900116,
+    1.0
+  ],
+  "residual_rgb_255": {
+    "mean": 13.997720718383789,
+    "max": 34.90332794189453,
+    "region": "E > .1",
+    "pixels": 89464,
+    "weighted_mean": 13.454066276550293
+  },
+  "neutral_preview_error_255": {
+    "max": 118,
+    "mean": 4.435032288822433,
+    "scope": "620x775 diagnostic only; source-size <=4 gate not claimed"
+  },
+  "light_neutral_identity_max_255": 7.599592208862305e-06,
+  "angles": [
+    -25,
+    25
+  ],
+  "error_angles": [
+    20,
+    -20
+  ],
+  "approved_features": "unchanged approved functions: eyes, blink, eye fill, symbols; original arc; no palette edits",
+  "original_sha256": {
+    "luz.png": "4a2161ebd3347663ced59040e46e13e16ab29ddaea7e5ff7537e2b3685982b90",
+    "corpo.png": "e2ce949258fc0eedb512d3552f8ec406f284656b0f2bcc0ef31ab2999bf4dacb",
+    "cabeca.png": "3e746771ebc5a4641e8176f4d433ebeb9de34672a16f7c87a28010b658970012",
+    "orelha-esquerda.png": "ff77bc41d4aab1cb7143b17098cbb1b9edccae408efa0c88f0fcd29b557149f9",
+    "orelha-direita.png": "6b6624c0c01f5216ec3914d218994ce29736b3694c958f98e74ddd3be74fd719",
+    "aro.png": "5411234791669369e77451cef7d46a85bfe7a1573aa05859abab0131237a1d14"
+  },
+  "neutral_native_error_255": {
+    "max": 119,
+    "mean": 4.440332144178954,
+    "size": [
+      2048,
+      2560
+    ],
+    "exclusion": "source eye disks +5px",
+    "passes": false
+  },
+  "fixed_arc_sample_rgba": {
+    "point_preview": [
+      155,
+      220
+    ],
+    "rgba": [
+      216,
+      210,
+      255,
+      92
+    ],
+    "finding": "unchanged source arc contains pale neutral-ear fringe; overlaid last it reintroduces old fringe and light inside moved opaque ears"
+  },
+  "status": "FAILED; stopped after one requested attempt; no clips generated, no review requested"
+}

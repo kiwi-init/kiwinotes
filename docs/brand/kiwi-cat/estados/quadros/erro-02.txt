@@ -1,0 +1,20 @@
+REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
+Fonte: gerada/manifest.json e as seis camadas originais.
+{
+  "label": "02 · embolando / 0,45 s",
+  "left": 2,
+  "right": -1.5,
+  "gaze": 0,
+  "eye": 1,
+  "other": null,
+  "blink": false,
+  "fog": 0.58,
+  "side": 0,
+  "upper": 0,
+  "symbol": "confusion",
+  "big": 0.67,
+  "small": 0.68,
+  "up": 0,
+  "phase": 1
+}
+Névoa: Densidade de 0,68 para 0,58 e 0,50; aro acompanha a luz; rabisco avança.

@@ -1,0 +1,19 @@
+REFERÊNCIA DOCUMENTAL — composição local.
+Cor: #030409; piso de luminância linear .28; aro ligado à luz, sem mudança de matiz.
+{
+  "label": "01 · neutro / fonte aprovada",
+  "left": 0,
+  "right": 0,
+  "gaze": 0,
+  "eye": 1,
+  "other": null,
+  "blink": false,
+  "fog": 1,
+  "side": 0,
+  "upper": 0,
+  "symbol": "",
+  "big": 1,
+  "small": 1,
+  "up": 0,
+  "phase": 0
+}

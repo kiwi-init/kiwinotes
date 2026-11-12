@@ -1,0 +1,20 @@
+REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
+Fonte: gerada/manifest.json e as seis camadas originais.
+{
+  "label": "02 · zZ sobe",
+  "left": 3,
+  "right": -3,
+  "gaze": 0,
+  "eye": 1,
+  "other": null,
+  "blink": true,
+  "fog": 0.22,
+  "side": 0,
+  "upper": 0,
+  "symbol": "sleep",
+  "big": 1,
+  "small": 1,
+  "up": 0,
+  "phase": 1
+}
+Névoa: Massa original com luz mínima; zZ sobe sem alterar a silhueta.
