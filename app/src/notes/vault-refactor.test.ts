@@ -75,3 +75,33 @@ test("heading source losing a write race aborts before any incoming reference ch
   expect(readFileSync(path.join(root,'A.md'),'utf8')).toBe('# Antigo\nexterno');
   expect(readFileSync(path.join(root,'B.md'),'utf8')).toBe('[[A#Antigo]]');
 });
+// Achado na revisão do T7877: o link de uma propriedade (`up: "[[A]]"`, o tipo "link" do painel de Propriedades, T6598)
+// conta nos backlinks, mas o renomear não o reescreve. Depois do rename, ele aponta para uma nota que não existe, e os
+// backlinks da nota nova não o mostram. O Obsidian reescreve os links das propriedades no rename.
+test("rename reescreve os [[links]] das propriedades do frontmatter, e mantém o resto do YAML", async()=>{
+  const {v}=await fixture({'A.md':'# A', 'B.md':'---\nup: "[[A]]"\nrel:\n  - "[[A|o A]]"\n  - "[[Outra]]"\ntitulo: A\n---\ncorpo\n', 'Outra.md':'x'});
+  expect((await v.backlinks('A.md')).map((b:any)=>b.path??b)).toContain('B.md');
+  const r=await v.rename('A.md','Nova.md');
+  expect((await v.get('B.md')).content).toBe('---\nup: "[[Nova]]"\nrel:\n  - "[[Nova|o A]]"\n  - "[[Outra]]"\ntitulo: A\n---\ncorpo\n');
+  expect(r.updatedLinks).toBe(2);
+  expect((await v.backlinks('Nova.md')).map((b:any)=>b.path??b)).toContain('B.md');
+});
+
+// T7986: o resto do jeito de escrever as propriedades, e o que não dá para trocar no lugar.
+test("propriedades: aspas simples, comentário, #título, [x](caminho) e texto com link ficam no estilo; bloco | e YAML ruim vão para o skippedPaths", async()=>{
+  const {v}=await fixture({
+    'Pessoas/A.md':'# A',
+    'B.md':"---\n# quem é o chefe\nup: '[[A#Topo|o chefe]]'\nveja: ver [[A]] e [[Outra]]\nsite: \"[a](Pessoas/A.md)\"\n---\ncorpo [[A]]\n",
+    'Bloco.md':'---\nnota: |\n  sobre [[A]]\n---\n',
+    'Ruim.md':'---\nup: "[[A]]\nx: [\n---\n[[A]]\n',
+    'Outra.md':'x',
+  });
+  const r=await v.rename('Pessoas/A.md','Gente/Nova.md');
+  expect((await v.get('B.md')).content).toBe("---\n# quem é o chefe\nup: '[[Nova#Topo|o chefe]]'\nveja: ver [[Nova]] e [[Outra]]\nsite: \"[a](Gente/Nova.md)\"\n---\ncorpo [[Nova]]\n");
+  // O bloco `|` não se troca no lugar; o corpo dele (sem link) fica, e a nota sai no skippedPaths.
+  expect((await v.get('Bloco.md')).content).toBe('---\nnota: |\n  sobre [[A]]\n---\n');
+  // O YAML que não se lê: o corpo é reescrito, o frontmatter fica, e ela também vai para o skippedPaths.
+  expect((await v.get('Ruim.md')).content).toBe('---\nup: "[[A]]\nx: [\n---\n[[Nova]]\n');
+  expect(r.skippedPaths.sort()).toEqual(['Bloco.md','Ruim.md']);
+  expect(r.updatedLinks).toBe(5);
+});
