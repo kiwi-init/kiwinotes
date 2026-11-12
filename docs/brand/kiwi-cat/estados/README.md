@@ -1,7 +1,7 @@
 # Estados do Kiwi-cat — T7606, rodada 2
 
 Spec #7591; instrução #7589; revisão #7630; adendo do harry #7649 entregue
-pelo lead no #7655, no canal `kiwinotes` do Kiwi Channels.
+pelo lead no #7655, corrigido no #7657 e aprovado no #7671, no canal `kiwinotes` do Kiwi Channels.
 Issue [#309](https://github.com/kiwi-init/kiwinotes/issues/309), PR [#311](https://github.com/kiwi-init/kiwinotes/pull/311).
 
 **Referências documentais compostas com as camadas originais. Não são capturas da animação. Aprovação visual pendente.**
@@ -43,8 +43,8 @@ translação; só a escala global de apresentação.
 As pálpebras horizontais, círculos, arcos e símbolos são desenhados por código
 com supersampling 2× e redução Lanczos. O traço dos símbolos é branco, com
 terminais arredondados, fora da silhueta, sem cobrir olhos ou aro. Não há
-notebook, livro, lupa nem logotipo. A referência antiga do #7649 foi usada
-somente para a intenção das expressões; o personagem continua sendo a v2.
+notebook, livro, lupa nem logotipo. O desenho segue a tabela aprovada do adendo;
+a v2 é a única fonte visual do personagem.
 
 Quando a pálpebra fecha ou o olhar desloca, o script estima somente os pixels
 antes ocultos pelos olhos (discos + 5 px), por ajuste quadrático à superfície

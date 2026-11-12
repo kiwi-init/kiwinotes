@@ -73,7 +73,7 @@ Cada entrega é uma task e um PR. **Não comece a seguinte antes do ok da anteri
 
 ## 9. Adendo do harry (#7649): estados bem diferentes e símbolos de mangá
 
-O harry viu a rodada 1 e gostou do visual. O problema dele: `repouso`, `acordou`, `ouvindo`, `thinking` e `erro` parecem a mesma imagem. Só `agindo` e `pronto` se diferenciam, porque o formato dos olhos muda, e **é isso que ele quer em todos**. A referência dele é a folha antiga de expressões (a imagem do #7649): olhos expressivos e símbolos de mangá.
+O harry viu a rodada 1 e gostou do visual. O problema dele: `repouso`, `acordou`, `ouvindo`, `thinking` e `erro` parecem a mesma imagem. Só `agindo` e `pronto` se diferenciam, porque o formato dos olhos muda, e **é isso que ele quer em todos**.
 
 **Cada estado se reconhece de relance por duas coisas: o formato dos olhos e um símbolo.**
 
@@ -96,6 +96,6 @@ O harry viu a rodada 1 e gostou do visual. O problema dele: `repouso`, `acordou`
 - **Adereços** (o notebook, o livro, a lupa da folha antiga) **ficam de fora por enquanto.** Só entram se o harry pedir.
 - O balão com `…` é um símbolo. Os balões de fala com texto (#7486) são outra peça, de outro spec, mas o traço dos dois deve combinar.
 
-**Na prancha:** cada imagem de estado mostra os olhos e o símbolo nas 2 ou 3 poses. A folha antiga do harry serve só para o espírito das expressões: aquele gato é anterior à v2 e não é a fonte da verdade.
+**Na prancha:** cada imagem de estado mostra os olhos e o símbolo nas 2 ou 3 poses.
 
 **Um ponto em aberto, só para anotar no README:** como o gato e os símbolos ficam no tema claro do app. O ícone é feito para fundo escuro.
