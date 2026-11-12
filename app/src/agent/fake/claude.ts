@@ -4,6 +4,7 @@
 //   bun src/agent/fake/claude.ts --version     "2.1.322 (Claude Code)"
 //   bun src/agent/fake/claude.ts auth status   o JSON do login; exit 0 logado, 1 não
 //
+// KIWI_FAKE_CLAUDE_DELAY_MS faz o `--version` e o `auth status` demorarem, como a 1ª abertura depois de uma atualização.
 // KIWI_FAKE_CLAUDE_LOGGED_IN=0 faz ele dizer que não está logado. O JSON traz uma conta e um e-mail de mentira, para os
 // testes provarem que o Kiwi não os lê.
 //
@@ -51,6 +52,9 @@ if (args.includes("--input-format")) {
   }
   process.exit(0);
 }
+
+const delay = Number(process.env.KIWI_FAKE_CLAUDE_DELAY_MS ?? 0);
+if (delay > 0 && (args[0] === "--version" || args[0] === "auth")) await Bun.sleep(delay);
 
 if (args[0] === "--version") {
   console.log(`${process.env.KIWI_FAKE_CLAUDE_VERSION ?? "2.1.322"} (Claude Code)`);

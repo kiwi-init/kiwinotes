@@ -101,6 +101,8 @@ O Claude Code não fala ACP sozinho. O harry escolheu o adaptador oficial do ACP
 - a versão e o login (só o método);
 - os comandos e as opções (o modelo, os agentes) que a sessão recebeu. Um comando, uma skill, um plugin ou um agente pessoal do harry nessa lista é uma configuração que entrou.
 
+A sessão da prova abre com `persistSession: false` (vira `--no-session-persistence`, e a prova confere), para não deixar nada gravado em `~/.claude/projects/`. Ela espera a lista de comandos chegar, com um teto de 5 s; se não chegar, o `ok` é `false` e o relatório diz isso, porque uma lista vazia não prova que nada pessoal entrou (T8603).
+
 O resultado entra aqui quando o harry rodar.
 
 ## Plano B: abrir o Claude Code direto, sem o adaptador
