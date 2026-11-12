@@ -32,7 +32,8 @@ export function claudeLine(name: string, c: AgentClaudeStatus | null): { text: s
 }
 
 /** A linha do interruptor. */
-export function switchHint(s: Pick<AgentStatus, "name" | "enabled" | "consented">): string {
+export function switchHint(s: Pick<AgentStatus, "name" | "enabled" | "consented">, confirming = false): string {
+  if (confirming) return `Leia abaixo o que vai para o ${s.name} e confirme para ligar.`;
   if (s.enabled) return `Ligado. Só o que você pedir vai para o ${s.name}, com a sua conta. Desligar para ele na hora.`;
   if (!s.consented) return `Desligado. Ligar mostra antes o que vai para o ${s.name} e o que nunca vai.`;
   return `Desligado. Nada vai para o ${s.name}.`;
@@ -84,6 +85,9 @@ export const IDLE_TEST: TestState = { id: null, phase: "idle", status: "", text:
 /** Aplica um evento `agent.turn` ao estado do teste. Eventos de outro pedido ficam de fora. */
 export function applyTurn(t: TestState, e: AgentTurnEvent, name: string): TestState {
   if (t.id && e.id !== t.id) return t;
+  // Sem pedido próprio ainda, só o `started` entra (ele traz o id): um evento atrasado de um pedido antigo, de antes do
+  // Desligar, não pode sujar o teste parado (revisão do T8762).
+  if (!t.id && e.type !== "started") return t;
   switch (e.type) {
     case "started":
       return { id: e.id, phase: "running", status: "Mandando o pedido…", text: "" };

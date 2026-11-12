@@ -79,6 +79,7 @@ describe("o interruptor e o adaptador", () => {
     expect(switchHint(base)).toBe("Desligado. Ligar mostra antes o que vai para o Claude Code e o que nunca vai.");
     expect(switchHint({ ...base, consented: true })).toBe("Desligado. Nada vai para o Claude Code.");
     expect(switchHint({ ...base, enabled: true, consented: true })).toContain("Ligado.");
+    expect(switchHint(base, true)).toBe("Leia abaixo o que vai para o Claude Code e confirme para ligar.");
   });
 
   test("falta baixar, baixando com a porcentagem, pronto, cancelado e o erro do engine", () => {
@@ -144,6 +145,13 @@ describe("o Testar", () => {
     expect(run([ev({ type: "started" }), ev({ type: "permission", tool: "Bash", decision: "denied" })]).status).toBe(
       "Recusei o Bash: nesta tela o agente só conversa.",
     );
+  });
+
+  test("sem pedido próprio, um evento atrasado de um pedido antigo não entra; só o started abre um teste (revisão)", () => {
+    expect(applyTurn(IDLE_TEST, { id: "antigo", type: "done", stopReason: "cancelled", text: "" }, "Claude Code")).toBe(IDLE_TEST);
+    expect(applyTurn(IDLE_TEST, { id: "antigo", type: "text", text: "velho" }, "Claude Code")).toBe(IDLE_TEST);
+    const sending: TestState = { ...IDLE_TEST, phase: "running", status: "Mandando o pedido…" };
+    expect(applyTurn(sending, { id: "novo", type: "started" }, "Claude Code")).toMatchObject({ id: "novo", phase: "running" });
   });
 
   test("os eventos de outro pedido ficam de fora", () => {

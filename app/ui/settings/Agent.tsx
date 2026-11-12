@@ -98,6 +98,10 @@ export function AgentSection() {
   };
 
   const toggle = (next: boolean) => {
+    if (consenting) {
+      setConsenting(false);
+      return;
+    }
     if (!next) {
       setConsenting(false);
       setTest(IDLE_TEST);
@@ -133,8 +137,8 @@ export function AgentSection() {
         </Button>
       </Row>
 
-      <Row label="Ligar o agente" hint={switchHint(status)}>
-        <Switch label="Ligar o agente" checked={status.enabled || consenting} onChange={toggle} />
+      <Row label="Ligar o agente" hint={switchHint(status, consenting)}>
+        <Switch label="Ligar o agente" checked={status.enabled} onChange={toggle} />
       </Row>
 
       {consenting ? <Consent name={name} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
