@@ -7,6 +7,7 @@
 //   bun run cli dictate …                             (T1740)
 //   bun run cli screenshot … | ui …                   (T1742)
 //   bun run cli events [--follow] | logs [--follow]
+//   bun run cli agent status | agent ask "…"          o host do agente, com os falsos (T8478, scripts/cli-agent.ts)
 //
 // Saída: JSON. Exit codes: 0 ok, 1 a capacidade (ou o comando) respondeu erro, 2 uso errado, 3 não está rodando.
 // Os dados ficam em --data, ou KIWI_HEADLESS_DATA, ou $TMPDIR/kiwinotes-headless: nunca os do app de verdade.
@@ -19,15 +20,17 @@ import path from "node:path";
 import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
 import { LineWriter } from "../src/headless/lineWriter.ts";
 import { controlSocket } from "../src/headless/server.ts";
+import { runAgent } from "./cli-agent.ts";
 import { runDictate } from "./cli-dictate.ts";
 import { runScreenshot, runUi, type UiContext } from "./cli-ui.ts";
 
 export const EXIT = { ok: 0, failed: 1, usage: 2, notRunning: 3 } as const;
 
-const USAGE = `usage: bun run cli <start|stop|status|invoke|dictate|screenshot|ui|events|logs> [--data DIR]
+const USAGE = `usage: bun run cli <start|stop|status|invoke|dictate|screenshot|ui|events|logs|agent> [--data DIR]
   start [--no-helper]          sobe o headless em segundo plano
   invoke <cap> ['<json>']      uma capacidade do contrato, pelo caminho da UI
-  events|logs [--follow]       o histórico recente; com --follow, continua até Ctrl-C`;
+  events|logs [--follow]       o histórico recente; com --follow, continua até Ctrl-C
+  agent status|ask "…"         o host do agente, com os falsos (sem o headless; T8478)`;
 
 type Reply = Record<string, unknown>;
 
@@ -201,6 +204,8 @@ export async function main(argv: string[]): Promise<number> {
     case "events":
     case "logs":
       return stream(data, cmd, rest.includes("--follow"));
+    case "agent":
+      return runAgent(rest, data);
     default:
       console.error(USAGE);
       return EXIT.usage;

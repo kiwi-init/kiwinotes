@@ -1,0 +1,35 @@
+{
+  "window": "hub",
+  "size": "900x1400",
+  "steps": [
+    {
+      "waitFor": ".kn-tab"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "waitFor": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) [role=switch]"
+    },
+    {
+      "click": ".kn-agent-consent button:has-text('Ligar o Claude Code')"
+    },
+    {
+      "expectText": ".kn-row:has(.kn-row-label:text-is('Adaptador')) .kn-row-hint",
+      "text": "Sem conexão com a internet",
+      "timeout": 20000,
+      "name": "sem rede: a mensagem clara"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('Adaptador')) button:has-text('Tentar de novo')",
+      "name": "e dá para tentar de novo"
+    },
+    {
+      "screenshot": "estado.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    }
+  ]
+}

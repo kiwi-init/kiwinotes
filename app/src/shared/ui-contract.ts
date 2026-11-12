@@ -121,7 +121,12 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   mostrarem na própria janela. Só acréscimo.
 // 1.40.0 (T7105, spec #7079): o `files.save`, que grava um texto do cofre (txt, log, json, yaml) aberto nas Notas, e
 //   o `readOnly` no `files.read` de um texto que não é UTF-8. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.40.0";
+// 1.41.0 (T8678, spec #8339): o agente dentro do app, ainda sem tela: `agent.status`, `agent.enable`, `agent.disable`,
+//   `agent.download`, `agent.ask`, `agent.cancel`, `agent.remove` e `agent.configure`, os eventos `agent.status` e
+//   `agent.turn`, e o `agent` nas settings (só leitura pelo `settings.set`). Só acréscimo.
+// 1.42.0 (T8762, spec #8373): o `models` no `AgentStatus`, os modelos que o agente oferece, para a seção Agente dos
+//   Ajustes deixar trocar. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.42.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -399,7 +404,92 @@ export interface UiCapabilities {
   "meetings.stop": { args: Record<string, never>; result: true };
   /** "Pausar meu mic" (ou voltar) no card ao vivo. Sem gravação, E_NOT_RECORDING. */
   "meetings.pauseMine": { args: { paused: boolean }; result: true };
+  /**
+   * O agente (1.41.0, T8678, spec #8339). O estado; com `refresh: true` (a seção abriu, o "Tentar de novo"), confere
+   * também o Claude Code instalado (`claude --version` e `auth status`). Sem `refresh`, nada abre programa.
+   */
+  "agent.status": { args: { refresh?: boolean }; result: AgentStatus };
+  /** Liga o agente. Na primeira vez, só com `consent: true` (a pessoa aceitou a tela do ADR 0011); senão, E_AGENT_CONSENT. Não baixa nem abre nada. */
+  "agent.enable": { args: { consent?: boolean }; result: AgentStatus };
+  /** Desliga: cancela o pedido e o download e fecha o programa do agente na hora. */
+  "agent.disable": { args: Record<string, never>; result: AgentStatus };
+  /** Começa o download do adaptador e volta logo; o progresso chega no evento `agent.status`. Desligado: E_AGENT_DISABLED. */
+  "agent.download": { args: Record<string, never>; result: AgentStatus };
+  /**
+   * Manda um pedido e volta logo, com o id; a resposta chega ao vivo no evento `agent.turn`. Abre o programa do agente
+   * no primeiro pedido. E_AGENT_DISABLED, E_ADAPTER_MISSING ou E_AGENT_BUSY antes de começar.
+   */
+  "agent.ask": { args: { text: string }; result: { id: string } };
+  /** Cancela o que estiver andando: o pedido ou o download. Sem nada andando, não faz nada. */
+  "agent.cancel": { args: Record<string, never>; result: AgentStatus };
+  /** Apaga o adaptador baixado (e fecha o programa). O agente continua ligado ou desligado como estava. */
+  "agent.remove": { args: Record<string, never>; result: AgentStatus };
+  /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
+  "agent.configure": { args: { model?: string; effort?: string }; result: AgentStatus };
 }
+
+/** O Claude Code instalado, quando conferido (`agent.status` com `refresh`). */
+export interface AgentClaudeStatus {
+  installed: boolean;
+  version?: string;
+  loggedIn: boolean;
+  /** Como ele está logado (`claude.ai`, `api_key`…); nunca a conta. */
+  method?: string;
+  versionOk: boolean;
+  versionError?: "E_AGENT_TOO_OLD" | "E_AGENT_TOO_NEW";
+}
+
+/** O estado do agente no app (1.41.0, T8678). */
+export interface AgentStatus {
+  /** O nome que a pessoa vê ("Claude Code"). */
+  name: string;
+  enabled: boolean;
+  /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
+  consented: boolean;
+  /** null até a primeira conferência (`agent.status {refresh: true}`). */
+  claude: AgentClaudeStatus | null;
+  adapter: {
+    version: string;
+    phase: "missing" | "downloading" | "ready" | "error";
+    /** Bytes baixados e o total, enquanto baixa. */
+    done?: number;
+    total?: number;
+    /** O último erro do download (sem rede, adulterado, cancelado…), até o próximo começar. */
+    error?: { code: string; message: string };
+  };
+  /** O programa do agente: fechado, abrindo (no primeiro pedido) ou aberto. */
+  program: "closed" | "opening" | "open";
+  /** Um pedido em andamento. */
+  busy: boolean;
+  /** O que o Kiwi pede ao abrir a sessão. */
+  model: string;
+  effort: string;
+  /** O modelo e o esforço da sessão aberta, como o agente diz; null com o programa fechado. */
+  session: { model?: string; effort?: string } | null;
+  /**
+   * Os modelos que o agente oferece (1.42.0, T8762), da última vez que o programa abriu: vazio até o primeiro pedido.
+   * `description` é o que o agente diz de cada um (no `default`, o modelo que ele usa de fato).
+   */
+  models: AgentModelChoice[];
+}
+
+/** Um modelo que o agente oferece (1.42.0). */
+export interface AgentModelChoice {
+  value: string;
+  name: string;
+  description?: string;
+}
+
+/** Um pedaço da resposta ao vivo de um pedido (`agent.turn`, 1.41.0). */
+export type AgentTurnEvent = { id: string } & (
+  | { type: "started" }
+  | { type: "status"; status: "opening" | "thinking" }
+  | { type: "status"; status: "running"; tool: string }
+  | { type: "text"; text: string }
+  | { type: "permission"; tool: string; decision: "denied" }
+  | { type: "done"; stopReason: string; text: string }
+  | { type: "error"; code: string; message: string }
+);
 
 export type UiCapability = keyof UiCapabilities;
 
@@ -482,6 +572,14 @@ export const UI_CAPABILITIES = [
   "meetings.live",
   "meetings.stop",
   "meetings.pauseMine",
+  "agent.status",
+  "agent.enable",
+  "agent.disable",
+  "agent.download",
+  "agent.ask",
+  "agent.cancel",
+  "agent.remove",
+  "agent.configure",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -504,6 +602,10 @@ export interface UiEvents {
   "audio.inputs.changed": Record<string, never>;
   /** A gravação começou, parou ou o canal "você" pausou (1.21.0): o card ao vivo da aba Reuniões. */
   "meetings.live": MeetingLive;
+  /** O estado do agente mudou (1.41.0): o download andou, o programa abriu ou fechou, um pedido começou ou acabou. */
+  "agent.status": AgentStatus;
+  /** A resposta ao vivo de um pedido (1.41.0): o status, o texto que vai chegando e o fim. */
+  "agent.turn": AgentTurnEvent;
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

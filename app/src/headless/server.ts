@@ -198,6 +198,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     dictionaryChanged: (terms) => void session?.dictionaryChanged(terms),
     snippetsChanged: (snippets) => session?.snippetsChanged(snippets),
     settings: stores.settings,
+    agent: stores.agent,
     settingsChanged: (settings) => {
       void session?.settingsChanged(settings);
       event("settings.changed", settings);
@@ -236,6 +237,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.history.onAdded((entry) => event("history.added", entry)),
     stores.recoveries.onChanged(()=>event("history.changed",{})),
     meetings?.onChange((live) => event("meetings.live", live)) ?? (() => {}),
+    stores.agent.onStatus((s) => event("agent.status", s)),
+    stores.agent.onTurn((e) => event("agent.turn", e)),
   ];
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));
@@ -337,6 +340,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       await stores.meetingNotes.flush();
       await stores.folders.close();
       await stores.semantic.close();
+      await stores.agent.close();
       server.stop(true);
       rmSync(sock, { force: true });
       rmSync(stateFile(data), { force: true });

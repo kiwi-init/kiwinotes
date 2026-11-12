@@ -218,7 +218,8 @@ function quit(): void {
   // O supervisor precisa de ~2 s para escalar SIGTERM → SIGKILL antes de o Bun sair.
   setTimeout(exit, 3_000);
   // O modelo da busca pelo sentido (T6013) solta o ONNX Runtime antes de sair: sair com ele carregado derruba o Bun.
-  void Promise.allSettled([meetingFlush, stores.folders.close().then(() => stores.semantic.close())]).then(exit, exit);
+  // O programa do agente (T8678) fecha junto: nunca sobra um Claude Code rodando sozinho.
+  void Promise.allSettled([meetingFlush, stores.folders.close().then(() => stores.semantic.close()), stores.agent.close()]).then(exit, exit);
 }
 
 // Um build novo pede para este sair (T992): sai limpo, parando o helper e soltando o socket.
@@ -228,6 +229,7 @@ process.on("SIGTERM", () => quit());
 process.on("exit", () => {
   void dictation.stop();
   dictation.sidecar.forceKill();
+  stores.agent.killNow();
   releaseInstance(stores.dir);
 });
 

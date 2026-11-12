@@ -56,12 +56,43 @@ export interface AppSettings {
   meetings: MeetingSettings;
   /** A largura máxima da coluna da nota, em px (T5299, issue #212): a alça na borda da nota muda, dentro dos limites. */
   noteWidth: number;
+  /**
+   * O agente (spec #8339, T8678): ligado, se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011), e o modelo
+   * e o esforço que o Kiwi pede ao abrir a sessão. Só muda pelas capacidades `agent.*`, nunca pelo `settings.set`.
+   */
+  agent: AgentSettings;
+}
+
+export interface AgentSettings {
+  enabled: boolean;
+  consented: boolean;
+  /** Um valor da opção `model` do agente; "default" é o padrão do Claude Code, e não o modelo do terminal da pessoa. */
+  model: string;
+  /** Um valor da opção `effort` do agente; "default" é o padrão. */
+  effort: string;
+}
+
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = { enabled: false, consented: false, model: "default", effort: "default" };
+
+/** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
+export function isAgentChoice(v: unknown): v is string {
+  return typeof v === "string" && /^[A-Za-z0-9][A-Za-z0-9.\-]{0,63}$/.test(v);
+}
+
+export function sanitizeAgentSettings(input: unknown): AgentSettings {
+  const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return {
+    enabled: o.enabled === true,
+    consented: o.consented === true,
+    model: isAgentChoice(o.model) ? o.model : DEFAULT_AGENT_SETTINGS.model,
+    effort: isAgentChoice(o.effort) ? o.effort : DEFAULT_AGENT_SETTINGS.effort,
+  };
 }
 
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -125,6 +156,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     preciseDictation: o.preciseDictation === true,
     meetings: sanitizeMeetingSettings(o.meetings),
     noteWidth: sanitizeNoteWidth(o.noteWidth),
+    agent: sanitizeAgentSettings(o.agent),
   });
 }
 

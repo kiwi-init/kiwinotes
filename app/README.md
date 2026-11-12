@@ -65,6 +65,47 @@ bun run cli stop --data /tmp/kn-test
 - **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`. Uma pasta que é (ou fica dentro de) `~/Library/Application Support/KiwiNotes`, `…/app.kiwinotes.desktop` ou `~/KiwiNotes`, symlinks resolvidos, é recusada com `E_REAL_DATA` (T1827).
 - **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
 
+### O host do agente pela CLI (T8478)
+
+O host que conversa com o agente pelo ACP (`src/agent/`, [ADR 0012](../docs/adr/0012-host-do-agente.md)) roda pela CLI sem o headless de pé. **Para os agentes do time, tudo usa os falsos** (ADR 0011): o `claude` falso e o agente falso, que fala ACP. O Claude Code de verdade, só o harry abre.
+
+```sh
+bun run cli agent status --data /tmp/kn-test            # instalado? qual versão? logado? (sem ler credencial)
+bun run cli agent ask "oi" --data /tmp/kn-test          # os eventos, um por linha, e a resposta no fim
+bun run cli agent ask "de novo" --data /tmp/kn-test     # retoma a sessão (turno 2); --new começa outra
+bun run cli agent ask "/limite" --data /tmp/kn-test     # o agente falso falha: /sem-login, /limite, /sem-rede, /cai
+```
+
+O agente falso também tem `/lento` (20 pedaços, um a cada 100 ms; Ctrl-C cancela) e `/permissao` (o host recusa). `KIWI_FAKE_CLAUDE_LOGGED_IN=0` faz o `claude` falso dizer que não está logado, e `--claude PATH` aponta outro programa no lugar dele. A sessão fica em `<data>/agent/`.
+
+**O adaptador do Claude Code (T8540, spec #8368).** O Kiwi liga o Claude Code pelo adaptador ACP, baixado a pedido numa versão fixa, com cada pacote conferido e sem a cópia do Claude Code que viria junto ([ADR 0012](../docs/adr/0012-host-do-agente.md)):
+
+```sh
+bun run cli agent download --data /tmp/kn-test          # a lista fixa do npm (4,4 MB), conferida; a única ida à rede
+bun run cli agent status --data /tmp/kn-test            # inclui o adaptador baixado e se a versão do Claude Code serve
+bun run cli agent proof --data /tmp/kn-test             # a prova do builder: o adaptador de verdade com um claude falso
+bun run cli agent remove --data /tmp/kn-test
+```
+
+O `proof` abre uma sessão sem mandar pedido e mostra o processo que o adaptador abriu, as opções de isolamento e o que a sessão recebeu. **O `proof --real` abre o Claude Code de verdade: só o harry roda, quando o lead pede** (ADR 0011). `KIWI_ADAPTER_PROOF=1 bun test src/agent/adapter` roda a mesma prova do builder como teste (ela vai ao npm, por isso fica fora do `bun test` comum).
+
+**O agente dentro do app (T8678, spec #8339)**, pelas capacidades do contrato, com o headless de pé. As chaves de teste só valem no headless: `KIWI_FAKE_AGENT=1` (o agente falso), `KIWI_ADAPTER_REGISTRY` e `KIWI_ADAPTER_PACKAGES` (um registro do npm falso e a lista dele) e `KIWI_AGENT_IDLE_MS`:
+
+```sh
+bun run cli invoke agent.enable '{"consent":true}' --data /tmp/kn-test   # liga (a 1ª vez pede o aceite)
+bun run cli invoke agent.download '{}' --data /tmp/kn-test               # volta logo; o progresso sai no evento agent.status
+bun run cli invoke agent.ask '{"text":"oi"}' --data /tmp/kn-test         # volta com o id; a resposta sai no agent.turn
+bun run cli events --follow --data /tmp/kn-test                          # os eventos agent.status e agent.turn, ao vivo
+bun run cli invoke agent.disable '{}' --data /tmp/kn-test                # fecha o programa do agente na hora
+```
+
+**A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
+- o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
+- os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;
+- o download sem rede.
+
+Os prints de cada estado ficam na pasta.
+
 ### Ver as janelas pela CLI, fora da tela (T1742)
 
 Com o headless de pé (`bun run cli start --data DIR --no-helper`), as janelas de verdade abrem num WebKit headless, sem nada na tela de ninguém:

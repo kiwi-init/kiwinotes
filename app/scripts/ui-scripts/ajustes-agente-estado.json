@@ -1,0 +1,26 @@
+{
+  "window": "hub",
+  "size": "900x1400",
+  "steps": [
+    {
+      "waitFor": ".kn-tab"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "waitFor": ".kn-section:has(h2:text-is('Agente')) .kn-row-hint:not(:has-text('Conferindo'))"
+    },
+    {
+      "expectText": ".kn-section:has(h2:text-is('Agente')) .kn-row-label",
+      "text": "Claude Code"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "estado.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    }
+  ]
+}
