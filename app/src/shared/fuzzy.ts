@@ -133,6 +133,21 @@ export function subsequence(query: string, text: string): SubsequenceMatch | nul
   return { score, ranges: toRanges([...positions].sort((a, b) => a - b), map) };
 }
 
+/**
+ * Só o ponto do `subsequence`, para quem já tem a busca e o texto dobrados (T8110): o ⌘K confere 10 mil títulos a cada
+ * letra, e dobrar cada título letra a letra (o `foldMap`), mais as posições, custava ~40 ms por letra.
+ */
+export function subsequenceScore(words: readonly string[], folded: string): number | null {
+  if (!words.length) return null;
+  let score = 0;
+  for (const w of words) {
+    const r = alignWord(w, folded);
+    if (!r) return null;
+    score += r.score;
+  }
+  return score;
+}
+
 /** Quantos erros a palavra aceita: 0 abaixo de 4 letras, 1 de 4 a 6, 2 de 7 em diante. Número puro não aceita erro. */
 export function typoBudget(word: string): number {
   if (!/^[\p{L}\p{N}]+$/u.test(word) || !/\p{L}/u.test(word)) return 0;
