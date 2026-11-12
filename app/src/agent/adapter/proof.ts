@@ -107,7 +107,6 @@ function optionsOf(details: Record<string, unknown> | undefined): ProofReport["o
   });
 }
 
-/** Roda a prova. Lança o `AgentError` das conferências (não instalado, versão, login, adaptador que falta). */
 /** Os dois caminhos levam ao mesmo arquivo (o link `~/.local/bin/claude` e a versão para onde ele aponta)? */
 export function sameProgram(a: string, b: string): boolean {
   if (a === b) return true;
@@ -118,19 +117,51 @@ export function sameProgram(a: string, b: string): boolean {
   }
 }
 
+/** A linha do `ps` começa por um caminho que leva ao mesmo arquivo do programa indicado? Aceita caminho com espaço. */
+export function opensProgram(command: string, program: string): boolean {
+  if (command === program || command.startsWith(`${program} `)) return true;
+  for (let i = command.indexOf(" "); ; i = command.indexOf(" ", i + 1)) {
+    const prefix = i < 0 ? command : command.slice(0, i);
+    if (sameProgram(prefix, program)) return true;
+    if (i < 0) return false;
+  }
+}
+
+/**
+ * A espera pela lista de comandos. Ela anota o primeiro `available_commands_update` desde já (ele pode chegar durante a
+ * abertura), mas o teto só começa a contar no `wait()`, depois de a sessão abrir: o `claude --version`, o `auth status`,
+ * o adaptador e o Claude Code abrindo não comem o tempo da lista (revisão do T8603).
+ */
+export function commandsWaiter(): { arrived(): void; wait(timeoutMs: number): Promise<boolean> } {
+  let resolveFirst: () => void = () => {};
+  const first = new Promise<true>((resolve) => {
+    resolveFirst = () => resolve(true);
+  });
+  return {
+    arrived: () => resolveFirst(),
+    wait: async (timeoutMs) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      });
+      try {
+        return await Promise.race([first, timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  };
+}
+
 /** Roda a prova. Lança o `AgentError` das conferências (não instalado, versão, login, adaptador que falta). */
 export async function runAdapterProof(o: ProofOptions): Promise<ProofReport> {
   const commands = new Set<string>();
-  let commandsArrived: () => void = () => {};
-  const arrived = new Promise<boolean>((resolve) => {
-    commandsArrived = () => resolve(true);
-    setTimeout(() => resolve(false), o.commandsTimeoutMs ?? 5000);
-  });
+  const waiter = commandsWaiter();
   const onUpdate = (n: SessionNotification) => {
     const u = n.update as { sessionUpdate?: string; availableCommands?: { name?: string }[] };
     if (u.sessionUpdate !== "available_commands_update") return;
     for (const c of u.availableCommands ?? []) if (c.name) commands.add(c.name);
-    commandsArrived();
+    waiter.arrived();
   };
   const { host, status, adapter } = await claudeAdapterHost({
     data: o.data,
@@ -141,14 +172,13 @@ export async function runAdapterProof(o: ProofOptions): Promise<ProofReport> {
   host.forgetSession(); // a prova abre sempre uma sessão nova
   const session = await host.start();
   try {
-    const gotCommands = await arrived;
+    const gotCommands = await waiter.wait(o.commandsTimeoutMs ?? 5000);
     const kids = host.pid ? childProcesses(host.pid) : [];
     const child = kids.find((k) => /--input-format/.test(k.command)) ?? kids[0] ?? null;
     const isolation = child ? isolationOf(child.command) : null;
     // O executável é o começo da linha do `ps`: o caminho indicado, ou outro caminho para o mesmo arquivo (o Claude Code
     // nativo pode aparecer pelo caminho da versão, `…/versions/2.1.322`, em vez do link).
-    const opened =
-      !!child && (child.command === o.claudePath || child.command.startsWith(`${o.claudePath} `) || sameProgram(child.command.split(" ")[0]!, o.claudePath));
+    const opened = !!child && opensProgram(child.command, o.claudePath);
     const ok =
       opened &&
       gotCommands &&

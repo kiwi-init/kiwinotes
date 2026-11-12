@@ -14,7 +14,7 @@ import path from "node:path";
 import { writeFakeClaudeExecutable } from "../fake/index.ts";
 import { downloadAdapter } from "./download.ts";
 import { adapterRoot } from "./open.ts";
-import { childProcesses, isolationOf, runAdapterProof, sameProgram } from "./proof.ts";
+import { childProcesses, commandsWaiter, isolationOf, opensProgram, runAdapterProof, sameProgram } from "./proof.ts";
 
 describe("ler o isolamento na linha de comando", () => {
   const isolated =
@@ -54,6 +54,16 @@ describe("ler o isolamento na linha de comando", () => {
     expect(sameProgram(path.join(dir, "outro"), path.join(dir, "claude"))).toBe(false);
   });
 
+  test("o programa aberto, mesmo com espaço no caminho", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const dir = path.join(mkdtempSync(path.join(tmpdir(), "kiwi-espaco-")), "Application Support");
+    mkdirSync(dir);
+    const claude = path.join(dir, "claude");
+    writeFileSync(claude, "");
+    expect(opensProgram(`${claude} --input-format stream-json`, claude)).toBe(true);
+    expect(opensProgram(`/outro/claude --input-format stream-json`, claude)).toBe(false);
+  });
+
   test("os processos filhos, com a linha de comando", async () => {
     const child = Bun.spawn(["/bin/sleep", "30"]);
     try {
@@ -63,6 +73,27 @@ describe("ler o isolamento na linha de comando", () => {
     } finally {
       child.kill();
     }
+  });
+});
+
+describe("a espera pela lista de comandos (T8603)", () => {
+  test("o teto só conta a partir do wait(): uma abertura lenta não come o tempo da lista", async () => {
+    const w = commandsWaiter();
+    await Bun.sleep(300); // a abertura (o claude, o adaptador) leva mais que o teto inteiro
+    setTimeout(() => w.arrived(), 50);
+    expect(await w.wait(200)).toBe(true);
+  });
+
+  test("a lista que chega durante a abertura conta, sem esperar", async () => {
+    const w = commandsWaiter();
+    w.arrived();
+    const t0 = performance.now();
+    expect(await w.wait(5000)).toBe(true);
+    expect(performance.now() - t0).toBeLessThan(1000);
+  });
+
+  test("sem a lista, o wait() dá false no teto", async () => {
+    expect(await commandsWaiter().wait(50)).toBe(false);
   });
 });
 
@@ -108,6 +139,26 @@ describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova do builder, com o adap
       expect(calls[0]!.argv.some((a) => a.startsWith("--mcp-config"))).toBe(false);
       expect(calls[0]!.cwd).toEndWith(path.join("agent", "work"));
       console.log(JSON.stringify({ download: { already: dl.already, packages: dl.packages.length }, report }, null, 2));
+    },
+    120_000,
+  );
+
+  test(
+    "um claude lento na versão e no login (2,6 s cada) ainda dá a lista de comandos, porque o teto conta depois de abrir",
+    async () => {
+      const data = mkdtempSync(path.join(tmpdir(), "kiwi-proof-lento-"));
+      const cache = process.env.KIWI_ADAPTER_CACHE;
+      const root = cache ? path.join(cache, "adapter") : adapterRoot(data);
+      await downloadAdapter({ root });
+      if (cache) {
+        const { mkdirSync, symlinkSync } = await import("node:fs");
+        mkdirSync(path.dirname(adapterRoot(data)), { recursive: true });
+        symlinkSync(root, adapterRoot(data));
+      }
+      const claude = writeFakeClaudeExecutable(path.join(data, "bin"), { KIWI_FAKE_CLAUDE_DELAY_MS: "2600" });
+      const report = await runAdapterProof({ data, claudePath: claude });
+      expect(report).toMatchObject({ ok: true, comandosChegaram: true });
+      expect(report.comandos.length).toBeGreaterThan(0);
     },
     120_000,
   );
