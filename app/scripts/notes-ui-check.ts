@@ -764,6 +764,46 @@ await step("árvore com 600 notas expandidas: só a janela vai para o DOM, rola 
   await closeTree();
 });
 
+// T7876: o Sumário, as palavras e o rascunho esperam a pessoa parar de digitar (numa nota grande, eles custavam dezenas de
+// ms por tecla). Depois da pausa, os três estão em dia.
+await step("o Sumário e as palavras se refazem quando a pessoa para de digitar", async () => {
+  await page.keyboard.press("Meta+k");
+  await page.keyboard.type("Ana");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
+  const words = async () => Number(/(\d+) palavras?/.exec((await page.textContent(".kn-meta")) ?? "")?.[1] ?? -1);
+  const before = await words();
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("\n\n## Seção da pausa\n\num dois três quatro");
+  await page.waitForSelector('.kn-outline-title:has-text("Seção da pausa")', { state: "attached", timeout: 3000 });
+  await until(words, (n) => n === before + 7, (n) => `palavras: ${n}, antes ${before}`);
+  const path = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith("kiwi.notes.draft.v1:")) ?? null);
+  // O save grava logo depois (500 ms), e o rascunho sai; se ele ficou, é o desta nota, com o texto todo.
+  if (path) expectEq((await page.evaluate((k) => localStorage.getItem(k), path))?.includes("um dois três quatro"), true);
+});
+
+// Revisão do T7876: quem digita sem parar (uma tecla a cada 120 ms, sem a pausa de 300 ms) também tem rascunho, pelo teto
+// de 1,5 s. Ele cobre o que o save não alcança: o WebView que cai ou o app morto no meio da digitação.
+await step("digitando sem parar, o rascunho anda a cada 1,5 s", async () => {
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  const typed = "zqsemparar";
+  const draft = () => page.evaluate(() => {
+    const k = Object.keys(localStorage).find((key) => key.startsWith("kiwi.notes.draft.v1:"));
+    return k ? localStorage.getItem(k) ?? "" : "";
+  });
+  let seen = "";
+  for (let i = 0; i < 26; i++) {
+    await page.keyboard.type(typed[i % typed.length]!);
+    await page.waitForTimeout(120);
+    // Depois de ~2,5 s digitando, sem nenhuma pausa: o rascunho tem que já ter o começo do que foi digitado.
+    if (i === 20) seen = await draft();
+  }
+  expectEq(seen.includes(typed), true);
+});
+
 await page.keyboard.press("Meta+k");
 await page.keyboard.type("ana");
 await page.waitForTimeout(300);
