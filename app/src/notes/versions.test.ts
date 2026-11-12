@@ -1,7 +1,7 @@
 // T2680: o histórico de versões das notas, fora do vault. Tudo num tmp, com o relógio na mão.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -175,5 +175,85 @@ describe("pelas capacidades (contrato 1.11.0)", () => {
     expect(readdirSync(path.join(data, "V")).sort()).toEqual(["Q"]);
     expect(await call("notes.version", { path: "Q/Nota.md", id: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(await call("notes.versions", { path: "../fora.md" })).toMatchObject({ ok: false, code: "E_OUTSIDE_VAULT" });
+  });
+});
+
+// T7444 (varredura de robustez): o index.json do histórico é só um atalho de caminho → pasta. Se ele chega vazio
+// (um crash ou falta de luz logo depois do rename, sem o fsync), cortado, ou com `null`, as versões que estão no disco
+// não podem sumir da janela Versões, e as próximas continuam entrando.
+describe("o index.json do histórico estragado (T7444)", () => {
+  async function withIndex(raw: string) {
+    let t = Date.parse("2026-11-04T10:00:00.000Z");
+    const dir = path.join(tmp(), "history", "notes");
+    const first = new NoteVersions({ dir, now: () => t, minGapMs: 0 });
+    await first.record("Diário.md", "dois", "um");
+    t += 1000;
+    await first.record("Diário.md", "três");
+    await first.close();
+    expect((await new NoteVersions({ dir, now: () => t, minGapMs: 0 }).list("Diário.md")).length).toBe(3);
+    writeFileSync(path.join(dir, "index.json"), raw);
+    t += 1000;
+    return new NoteVersions({ dir, now: () => t, minGapMs: 0 });
+  }
+
+  for (const [name, raw] of [["vazio", ""], ["cortado", '{"version":1,"paths":{"Di'], ["null", "null"]] as const) {
+    test(`index ${name}: as 3 versões continuam na lista, e a próxima entra junto`, async () => {
+      const v = await withIndex(raw);
+      expect((await v.list("Diário.md")).length).toBe(3);
+      await v.record("Diário.md", "quatro");
+      expect((await v.list("Diário.md")).length).toBe(4);
+    });
+  }
+
+  // T7940: o que mais segura o índice refeito pelas pastas.
+  test("index.json apagado também se refaz; os arquivos ficam só para a pessoa (0600)", async () => {
+    const v = await withIndex("{}");
+    rmSync(path.join((v as unknown as { dir: string }).dir, "index.json"));
+    const again = new NoteVersions({ dir: (v as unknown as { dir: string }).dir, now: () => Date.parse("2026-11-04T10:00:05.000Z"), minGapMs: 0 });
+    expect((await again.list("Diário.md")).length).toBe(3);
+    const dir = (v as unknown as { dir: string }).dir;
+    const [id] = readdirSync(dir).filter((n) => /^[0-9a-f]{16}$/.test(n));
+    for (const name of [...readdirSync(path.join(dir, id!)).map((n) => path.join(id!, n)), "index.json"])
+      expect((statSync(path.join(dir, name)).mode & 0o777).toString(8)).toBe("600");
+    expect(readdirSync(path.join(dir, id!)).filter((n) => n.endsWith(".tmp"))).toEqual([]);
+  });
+
+  test("depois de um move, o índice refeito põe o histórico no caminho novo, e o que perdeu o caminho não volta", async () => {
+    let t = Date.parse("2026-11-04T10:00:00.000Z");
+    const dir = path.join(tmp(), "history", "notes");
+    const v = new NoteVersions({ dir, now: () => t, minGapMs: 0 });
+    await v.record("Velha.md", "v2", "v1"); // uma nota apagada, com histórico em Velha.md
+    t += 1000;
+    await v.record("A.md", "a2", "a1");
+    await v.move((p) => (p === "A.md" ? "Velha.md" : p)); // A.md vai para onde a outra ficava
+    await v.close();
+    writeFileSync(path.join(dir, "index.json"), "");
+    const fresh = new NoteVersions({ dir, now: () => t, minGapMs: 0 });
+    expect(await Promise.all((await fresh.list("Velha.md")).map(async (x) => (await fresh.get("Velha.md", x.id)).content))).toEqual(["a2", "a1"]);
+    expect(await fresh.list("A.md")).toEqual([]);
+  });
+
+  test("uma pasta de antes do note.json: com o índice bom, ganha o seu; sem dono, só perde o que passou dos 30 dias", async () => {
+    let t = Date.parse("2026-11-04T10:00:00.000Z");
+    const dir = path.join(tmp(), "history", "notes");
+    // Como o app de antes gravava: o índice e as pastas, sem note.json.
+    const old = (id: string, stamps: string[]) => {
+      mkdirSync(path.join(dir, id), { recursive: true });
+      for (const st of stamps) writeFileSync(path.join(dir, id, `${st}.md`), st);
+    };
+    old("aaaaaaaaaaaaaaaa", ["2026-11-03T10-00-00-000Z"]);
+    old("bbbbbbbbbbbbbbbb", ["2026-09-01T10-00-00-000Z", "2026-11-01T10-00-00-000Z"]);
+    old("cccccccccccccccc", ["2026-09-01T10-00-00-000Z"]);
+    writeFileSync(path.join(dir, "index.json"), JSON.stringify({ version: 1, paths: { "Conhecida.md": "aaaaaaaaaaaaaaaa" } }));
+    const v = new NoteVersions({ dir, now: () => t, minGapMs: 0 });
+    expect((await v.list("Conhecida.md")).length).toBe(1);
+    expect(JSON.parse(readFileSync(path.join(dir, "aaaaaaaaaaaaaaaa", "note.json"), "utf8"))).toEqual({ path: "Conhecida.md" });
+    // As órfãs: a de setembro some (e a pasta vazia junto); a de novembro fica.
+    expect(readdirSync(path.join(dir, "bbbbbbbbbbbbbbbb"))).toEqual(["2026-11-01T10-00-00-000Z.md"]);
+    expect(existsSync(path.join(dir, "cccccccccccccccc"))).toBe(false);
+    // E a conhecida agora sobrevive a um índice perdido.
+    t += 1000;
+    writeFileSync(path.join(dir, "index.json"), "null");
+    expect((await new NoteVersions({ dir, now: () => t, minGapMs: 0 }).list("Conhecida.md")).length).toBe(1);
   });
 });
