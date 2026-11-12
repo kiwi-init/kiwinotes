@@ -1,0 +1,196 @@
+{
+  "task": "T8487",
+  "measuredCommit": "5a7855562ca0257fa6e480a49ff284945d40b1f1",
+  "scope": "standalone Playwright WebKit demo, NOT Electrobun WKWebView",
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "dpr": 1,
+  "cpuUnit": "percent of one CPU core",
+  "warmupSeconds": 10,
+  "sampleSeconds": 60,
+  "idleFPS": 3,
+  "fixed": false,
+  "samplingMode": "monotonic 60-second deadline",
+  "densityScale": 0.5,
+  "variant": "B1",
+  "source_sha256": {
+    "index.ts": "6c7110d32bd000a4285d57216a3e507f24f016183599017053093195721889f7",
+    "shader.ts": "8f04738fa8942546343fcf388fd095b29c0005a4bb6843ea0602455b6aaf64bd",
+    "state.ts": "68407a3d023176d2408d401bef200a89bcbabef5a38dccf6b145b5250311aa54",
+    "demo.ts": "5c97673ca0cc974ced7bac651bf9c0016e2959b013f389038b8fd1baca8b425a",
+    "assets/source.json": "2c80a303609b966e237ccd3114793109909febb25ab1c90bd8fc2b4a3a8bbc00"
+  },
+  "requestedBackend": "auto",
+  "noRecorder": true,
+  "samples": [
+    4.648471719070874,
+    3.00038104839315,
+    4.96981273621364,
+    4.050406638245454,
+    4.981426333475826,
+    3.9962724768472264,
+    4.956889928293634,
+    3.009807206969908,
+    5.019457298786606,
+    4.972958296025785,
+    3.019109580894855,
+    5.969004695596138,
+    4.997445890362014,
+    4.040199479799063,
+    4.961873992312852,
+    3.0009465495578294,
+    6.008094904532022,
+    5.002854128280179,
+    3.9990037481912357,
+    3.0688816909496337,
+    4.867048259019398,
+    5.024134899034922,
+    5.0142500825518495,
+    2.9949166261832043,
+    6.042300891744549,
+    3.990574928445019,
+    4.995393413042494,
+    5.945442391078556,
+    3.013092135415029,
+    4.0475081326454525,
+    2.9899080646424157,
+    3.9151085371543397,
+    5.125627421261165,
+    3.9752701741937733,
+    2.9626662106109576,
+    6.061708697664032,
+    4.074071716393662,
+    3.925381442808318,
+    3.0295187460419672,
+    6.0027812926674615,
+    3.9260892420775027,
+    2.046568908039071,
+    3.9586814288509893,
+    3.9731445228837194,
+    2.9895297937196825,
+    2.954995661342407,
+    3.081062498610235,
+    4.973301660576584,
+    1.9979422014481414,
+    5.027734663668165,
+    3.001927237286318,
+    5.963972631353481,
+    1.9969142682269962,
+    4.024979696166034,
+    2.980226444896898,
+    3.0699540199581,
+    3.912795365354947,
+    3.9996593650105057,
+    3.0141562349323436,
+    3.9874042882788916
+  ],
+  "states": [
+    {
+      "state": "repouso",
+      "draws": 212,
+      "slow": false,
+      "fps": 3.000200970399926,
+      "p95FrameMs": 344.99999999999886
+    },
+    {
+      "state": "dormindo",
+      "cpuDiagnosticSeconds": 3.115287583000012,
+      "cpuMeanDiagnostic": 3.209976521772683,
+      "slow": false,
+      "fps": 3.0130565785068826,
+      "p95FrameMs": 341.99999999999875
+    },
+    {
+      "state": "acordou",
+      "cpuDiagnosticSeconds": 3.142795457999993,
+      "cpuMeanDiagnostic": 29.27330181982214,
+      "slow": false,
+      "fps": 60.01905366783131,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "ouvindo",
+      "cpuDiagnosticSeconds": 3.142990583000006,
+      "cpuMeanDiagnostic": 25.77163305487378,
+      "slow": false,
+      "fps": 59.91077119184238,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "thinking",
+      "cpuDiagnosticSeconds": 3.1375362500000046,
+      "cpuMeanDiagnostic": 25.497713373032703,
+      "slow": false,
+      "fps": 60.00638365783521,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "agindo",
+      "cpuDiagnosticSeconds": 3.141727666999999,
+      "cpuMeanDiagnostic": 25.7819927713041,
+      "slow": false,
+      "fps": 60.01905366783077,
+      "p95FrameMs": 19.000000000005457
+    },
+    {
+      "state": "pronto",
+      "cpuDiagnosticSeconds": 3.109086624999996,
+      "cpuMeanDiagnostic": 25.087753867263224,
+      "slow": false,
+      "fps": 60.07067137809051,
+      "p95FrameMs": 18.000000000000682
+    },
+    {
+      "state": "erro",
+      "cpuDiagnosticSeconds": 3.105991166000007,
+      "cpuMeanDiagnostic": 24.79079813326159,
+      "slow": false,
+      "fps": 60.01283697047443,
+      "p95FrameMs": 18.000000000000682
+    }
+  ],
+  "backend": "webgpu",
+  "processDiscovery": "launch cohort frozen after warmup; browser + page + GPU + networking + launcher",
+  "elapsedSampleSeconds": 60.076014416999996,
+  "cpuWeightedMean": 4.111457832164466,
+  "processes": [
+    {
+      "pid": 94230,
+      "ppid": 94228,
+      "command": "bash /Users/davivicente/Library/Caches/ms-playwright/webkit-2370/pw_run.sh --inspector-pipe --headless --no-startup-window",
+      "cpuSecondsSampled": 0
+    },
+    {
+      "pid": 94236,
+      "ppid": 94230,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/Playwright.app/Contents/MacOS/Playwright --inspector-pipe --headless --no-startup-window",
+      "cpuSecondsSampled": 0.7000000000000001
+    },
+    {
+      "pid": 94239,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking.Development",
+      "cpuSecondsSampled": 0.009999999999999981
+    },
+    {
+      "pid": 94240,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU.Development",
+      "cpuSecondsSampled": 0.43
+    },
+    {
+      "pid": 94242,
+      "ppid": 1,
+      "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent.Development",
+      "cpuSecondsSampled": 1.33
+    }
+  ],
+  "cpuArithmeticMean": 4.10918404230129,
+  "cpuMean": 4.111457832164466,
+  "cpuMeanMethod": "totalCPU/elapsed",
+  "cpuP95": 6.0027812926674615,
+  "errors": []
+}

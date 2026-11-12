@@ -86,10 +86,16 @@ confundida com uma máquina incapaz. Sem ambos os backends, mostrar o ícone.
 
 **Integração sensível à versão:** three0.187 mantém um RAF interno depois
 de `render()`, mesmo com `setAnimationLoop(null)`. Um adaptador pequeno
-chama seu `_animation.stop()` após desenhar sob demanda. O pacote está
-fixado; sua ausência falha explicitamente e exige rever o pin. Os testes
+usa um contexto local sem agendamento, preservando a atualização síncrona
+da biblioteca, e chama `_animation.stop()` após desenhar sob demanda.
+O repouso desenha diretamente no prazo do temporizador; os ativos e as
+transições usam o RAF real. Isso evita despertar temporizador e display
+link para o mesmo quadro quieto. O pacote está fixado; a ausência do
+adaptador falha explicitamente e exige rever o pin. Os testes
 headless contam callbacks além de desenhos, para não deixar um heartbeat
 oculto queimando CPU. Nenhum código do pacote é modificado.
+Além dos pixels controlados, o teste grava a apresentação nativa do repouso,
+sem screenshots, para confirmar que o temporizador entrega quadros visíveis.
 
 ## Ferramentas de teste
 

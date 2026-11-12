@@ -157,13 +157,16 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   }
   function schedule() {
     if (!policy.continuous || disposed) return;
+    // Quiet motion is demand-driven at 3/s: draw on the deadline instead of
+    // waking a timer and then a display link for the same frame. Active
+    // states and transition boosts retain the real display RAF.
     if (idle() && elapsed >= boostUntil)
       timerId = window.setTimeout(
         () => {
           timerId = 0;
-          frameId = requestAnimationFrame(loop);
+          loop(performance.now());
         },
-        Math.max(0, (nextDraw - elapsed) * 1000 - 5),
+        Math.max(0, (nextDraw - elapsed) * 1000),
       );
     else frameId = requestAnimationFrame(loop);
   }
@@ -234,6 +237,27 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     renderer.outputColorSpace = LinearSRGBColorSpace;
     renderer.toneMapping = NoToneMapping;
     await renderer.init();
+    // Animation.start() advances three's bookkeeping synchronously, then
+    // queues a RAF that this demand renderer immediately cancels. Keep the
+    // bookkeeping but let the host (quiet timer / active RAF) schedule frames.
+    const demandAnimation = (
+      renderer as unknown as {
+        _animation?: {
+          stop(): void;
+          setContext(context: {
+            requestAnimationFrame(callback: FrameRequestCallback): number;
+            cancelAnimationFrame(handle: number): void;
+          }): void;
+        };
+      }
+    )._animation;
+    if (!demandAnimation || typeof demandAnimation.setContext !== "function")
+      throw new Error("three demand context changed; review the exact pin");
+    demandAnimation.stop();
+    demandAnimation.setContext({
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+    });
     stats.backend = (
       renderer.backend as unknown as { isWebGPUBackend?: boolean }
     ).isWebGPUBackend
