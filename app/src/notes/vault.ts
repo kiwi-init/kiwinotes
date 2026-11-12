@@ -442,6 +442,8 @@ export class Vault {
   private registry: RegistryEntry[] = [];
   /** Quantas notas os scans leram do disco (T5352): os testes e o bench conferem que o cache poupa a releitura. */
   scanReads = 0;
+  /** Quantas notas os refactors (renomear, mover, título) releram do disco (T7877): o bench mostra o que o filtro poupa. */
+  refactorReads = 0;
 
   constructor(o: VaultOptions) {
     this.root = o.root;
@@ -986,12 +988,29 @@ export class Vault {
     const aliasesAfter = new Map([...aliasesBefore].map(([p, a]) => [p === from ? to : p, a] as const));
     const resolveBefore = makeResolver(before, aliasesBefore);
     const resolveAfter = makeResolver(after, aliasesAfter);
-    for (const e of [...this.notes.values()]) {
-      const result = await this.refactorNote(e.meta.path, disk => rewriteNoteReferences(
-        disk, e.meta.path === to ? from : e.meta.path, e.meta.path, from, to, resolveBefore, resolveAfter));
-      if (result.skipped) skippedPaths.push(e.meta.path);
+    // Só lê do disco quem pode citar a nota (T7877): ler o cofre inteiro custava segundos com 10 mil notas. O [[link]]
+    // se confere pelo índice; o [texto](caminho.md), pelo nome do arquivo no texto (decodificado, sem maiúscula).
+    const fromKey = noteName(from).normalize("NFC").toLowerCase();
+    const mayCite = (e: Entry) =>
+      e.meta.path === to ||
+      e.links.some((t) => resolveBefore(t) === from) ||
+      ((e.content.includes("](") || e.content.includes("]:")) && looseDecode(e.content).normalize("NFC").toLowerCase().includes(fromKey));
+    const rewriteOne = async (p: string) => {
+      const result = await this.refactorNote(p, (disk) => rewriteNoteReferences(disk, p === to ? from : p, p, from, to, resolveBefore, resolveAfter));
+      if (result.skipped) skippedPaths.push(p);
       updatedLinks += result.count;
+    };
+    const discarded: Entry[] = [];
+    for (const e of [...this.notes.values()]) {
+      if (mayCite(e)) await rewriteOne(e.meta.path);
+      else discarded.push(e);
     }
+    // O filtro olha o índice do scan(): uma nota escrita por fora depois dele pode ter ganhado um link (revisão do T7877,
+    // #7980). As descartadas que mudaram no disco desde então são relidas e conferidas como as outras. O stat vai pelo
+    // caminho direto (o `inside` faz um lstat por pasta, e eram 20 mil a mais); a releitura passa pelo `inside` como sempre.
+    const changed = await Promise.all(discarded.map((e) =>
+      stat(path.join(this.root, e.meta.path)).then((st) => st.mtimeMs !== e.mtimeMs || st.size !== e.meta.size, () => false)));
+    for (const [i, e] of discarded.entries()) if (changed[i]) await rewriteOne(e.meta.path);
     this.emit([from, to]);
     return { meta: (this.notes.get(to) ?? entry).meta, updatedLinks, skippedPaths };
   }
@@ -1000,6 +1019,7 @@ export class Vault {
   private async refactorNote(p: string, rewrite: (content: string) => { content: string; count: number; unsupported?: boolean }) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const disk = await readFile(inside(this.root, p), "utf8").catch(() => null);
+      this.refactorReads++;
       if (disk === null) return { count: 0, skipped: true };
       const next = rewrite(disk);
       if (next.content === disk) return { count: 0, skipped: !!next.unsupported };
@@ -1807,3 +1827,15 @@ export function buildTree(folders: readonly string[], notes: readonly { path: st
 }
 
 const noteFolder = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+/** O `%xx` vira o caractere, e o que não decodifica fica como está (T7877). */
+function looseDecode(text: string): string {
+  if (!text.includes("%")) return text;
+  return text.replace(/(?:%[0-9a-f]{2})+/gi, (s) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  });
+}

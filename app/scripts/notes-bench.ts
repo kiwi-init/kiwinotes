@@ -64,11 +64,13 @@ try {
   }
   const bl = await time(() => v.backlinks("Pasta 1/Nota 1.md"));
   console.log(`backlinks: ${bl.ms.toFixed(1)} ms (${bl.out.length})`);
+  let reads = v.refactorReads;
   const rn = await time(() => v.rename("Pasta 1/Nota 1.md", "Pasta 1/Nota um.md"));
-  console.log(`rename com links: ${rn.ms.toFixed(0)} ms (${rn.out.updatedLinks} links atualizados, ${v.scanReads} leituras de nota no total)`);
+  console.log(`rename com links: ${rn.ms.toFixed(0)} ms (${rn.out.updatedLinks} links atualizados, ${v.refactorReads - reads} notas relidas pelo rename)`);
   // T5352: o rename sem link (só o índice) e reabrir o mesmo cofre, como o boot seguinte do app.
+  reads = v.refactorReads;
   const rn2 = await time(() => v.rename("Pasta 2/Nota 2.md", "Pasta 3/Nota dois.md"));
-  console.log(`rename para outra pasta: ${rn2.ms.toFixed(0)} ms (${rn2.out.updatedLinks} links atualizados, ${v.scanReads} leituras de nota no total)`);
+  console.log(`rename para outra pasta: ${rn2.ms.toFixed(0)} ms (${rn2.out.updatedLinks} links atualizados, ${v.refactorReads - reads} notas relidas pelo rename)`);
   v.close();
   const again = new Vault({ root });
   const reopen = await time(() => again.open());
