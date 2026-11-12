@@ -241,3 +241,12 @@ antecipa roteiro, shader ou implementação do gato.
 As três prévias ficam como estão: mostram o movimento dos olhos e dos
 símbolos; as orelhas nelas estão dentro de ±5°. O roteiro de movimento
 espera o merge desta entrega e o sinal do lead.
+
+## Roteiro de movimento — entrega 2
+
+A proposta de tempos, curvas, gestos, transições, voz, cor e Reduzir
+movimento está em [roteiro.md](roteiro.md) (T8377, spec #7718). As
+[tiras de quadros-chave](roteiro/) reutilizam a prancha aprovada; os ângulos
+indicados nas legendas são alvos do código futuro, não novas renderizações
+das orelhas largas. Inclui a proposta de atenção ao clicar e digitar
+(#8362/#8386), para revisão do lead.

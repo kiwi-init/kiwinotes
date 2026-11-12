@@ -478,7 +478,88 @@ def render_previews(native):
     return reports
 
 
+
+def render_roteiro():
+    """T8377: documentary keyframes, using only the approved board/preview.
+    This path never prepares ear textures or rewrites the original board.
+    Display times are an example of the proposed schedule, not a new clip.
+    """
+    folder=HERE/'roteiro';folder.mkdir(exist_ok=True)
+    # label, script time, existing source, source frame (animated WebP only),
+    # target angles in future code. Images themselves retain the static ±5 cap.
+    cases={
+      'repouso':[
+        ('neutro',0,'quadros/repouso-01.webp',None,[0,0]),
+        ('arcos na piscada',7.35,'previas/repouso.webp',45,[0,0]),
+        ('tique só à direita',12.34,'previas/repouso.webp',80,[0,-18]),
+        ('olhar lateral',14.0,'previas/repouso.webp',124,[0,0])],
+      'dormindo':[
+        ('antes do sono',0,'quadros/repouso-01.webp',None,[0,0]),
+        ('arcos / relaxou',.8,'quadros/dormindo-01.webp',None,[12,-12]),
+        ('zZ sobe',1.8,'quadros/dormindo-02.webp',None,[12,-12]),
+        ('próximo zZ',2.7,'quadros/dormindo-01.webp',None,[12,-12])],
+      'acordou':[
+        ('antes do opa',0,'quadros/acordou-01.webp',None,[0,0]),
+        ('pico / ! salta',.53,'quadros/acordou-02.webp',None,[-25,25]),
+        ('! começa a sair',.97,'quadros/acordou-02.webp',None,[-17.3,17.3]),
+        ('assentou',1.4,'quadros/repouso-01.webp',None,[0,0])],
+      'ouvindo':[
+        ('silêncio / uma onda',0,'quadros/ouvindo-01.webp',None,[0,0]),
+        ('voz cresce',.18,'quadros/ouvindo-02.webp',None,[0,0]),
+        ('atenção unilateral',3.2,'quadros/ouvindo-02.webp',None,[-25,0]),
+        ('voz cai',3.8,'quadros/ouvindo-01.webp',None,[0,0])],
+      'thinking':[
+        ('busca à esquerda',.26,'quadros/thinking-01.webp',None,[0,0]),
+        ('pontos acendem',.95,'quadros/thinking-01.webp',None,[0,0]),
+        ('busca à direita',2.8,'quadros/thinking-02.webp',None,[0,0]),
+        ('mantém a busca',3.5,'quadros/thinking-02.webp',None,[0,0])],
+      'agindo':[
+        ('foco',.24,'quadros/agindo-01.webp',None,[-10,10]),
+        ('gotas e linhas',.70,'quadros/agindo-02.webp',None,[-10,10]),
+        ('símbolo avança',1.4,'quadros/agindo-01.webp',None,[-10,10]),
+        ('execução continua',2.4,'quadros/agindo-02.webp',None,[-10,10])],
+      'pronto':[
+        ('arcos felizes',.16,'quadros/pronto-01.webp',None,[5,-5]),
+        ('brilhos / satisfação',.30,'quadros/pronto-01.webp',None,[8,-8]),
+        ('brilhos saindo',.70,'quadros/pronto-02.webp',None,[3,-3]),
+        ('volta ao repouso',1.1,'quadros/repouso-01.webp',None,[0,0])],
+      'erro':[
+        ('rabisco começa',0,'quadros/erro-01.webp',None,[0,0]),
+        ('embolando',.45,'quadros/erro-02.webp',None,[9,-9]),
+        ('embolado / avião',.90,'quadros/erro-03.webp',None,[20,-20]),
+        ('recomeça o traço',1.0,'quadros/erro-01.webp',None,[20,-20])],
+    }
+    records=[]
+    for state,keyframes in cases.items():
+        sheet=Image.new('RGB',(2048,900),'black');d=ImageDraw.Draw(sheet)
+        d.text((24,18),state.upper()+' · QUADROS-CHAVE DO ROTEIRO · REFERÊNCIA',font=font(28),fill='white')
+        d.text((24,58),'Imagem: camadas aprovadas, orelhas até ±5°. Legendas: alvos do código futuro, até ±25°.',font=font(23),fill='#c5c0d4')
+        for j,(label,time,source,index,angles) in enumerate(keyframes):
+            with Image.open(HERE/source) as original:
+                if index is not None:original.seek(index);original.load()
+                frame=original.convert('RGB')
+                # Remove only the old caption; preserve the cat proportions.
+                crop=(0,0,620,775) if index is not None else (0,0,W,H)
+                frame=frame.crop(crop).resize((512,640),Image.Resampling.LANCZOS)
+            x=j*512;sheet.paste(frame,(x,108))
+            d.text((x+16,766),f'{time:g} s · '+label,font=font(22),fill='white')
+            d.text((x+16,804),f'Alvo E/D (aprox.): {angles[0]:+g}° / {angles[1]:+g}°',font=font(21),fill='#b9b3cb')
+            d.text((x+16,844),'Exemplo de tempo; não é captura do app',font=font(18),fill='#a49db7')
+            records.append(dict(state=state,time_seconds=time,label=label,source=source,
+                                source_frame=index,target_ear_degrees=angles,rendered_ear_limit_degrees=5))
+        save(sheet,folder/(state+'.webp'))
+        print('roteiro:',state,folder/(state+'.webp'),flush=True)
+    sources={record['source'] for record in records}
+    manifest=dict(task='T8377',spec='#7718',referenceOnly=True,
+                  note='Static approved images illustrate poses; labels specify future motion. No wide-ear rendering claim.',
+                  size=[2048,900],frames=records,
+                  source_sha256={path:hashlib.sha256((HERE/path).read_bytes()).hexdigest() for path in sorted(sources)})
+    (folder/'quadros-chave.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+
+
 def main():
+    if '--roteiro' in sys.argv:
+        render_roteiro();return
     native={n:Image.open(ASSETS/f'{n}.png').convert('RGBA') for n in NAMES}
     native,preparation=prepare_ears(native)
     report=baseline_check(native)
