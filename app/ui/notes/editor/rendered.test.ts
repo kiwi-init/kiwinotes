@@ -8,7 +8,7 @@ import { EditorState } from "@codemirror/state";
 import { wikiLinkSyntax } from "./index.ts";
 import { scanFootnotes } from "./footnotes.ts";
 import { linksApart, mermaidCode, picturesOff, shapesWithoutPictures } from "./mermaid.tsx";
-import { fullTree, imagesUnderCursor, imageSource, linkAction, mermaidUnderCursor, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
+import { fullTree, imagesUnderCursor, imageSource, linkAction, MAX_RENDERED_CHARS, MAX_RENDERED_LINES, mermaidUnderCursor, renderedBlocks, sourceOffset, taskMarks, toRenderable } from "./rendered.ts";
 
 const md = markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] });
 const stateOf = (doc: string, cursor = 0) => EditorState.create({ doc, selection: { anchor: cursor }, extensions: [md] });
@@ -55,6 +55,18 @@ describe("blocos renderizados", () => {
   test("o cursor no fim de um bloco (depois do último caractere) também deixa ele cru", () => {
     const end = "# Reunião".length;
     expect(renderedBlocks(stateOf(NOTE, end), true).map((b) => b.source)).not.toContain("# Reunião");
+  });
+
+  // T8046: um bloco enorme num widget só não tem a virtualização do editor, e o WebKit levava ~12 s para medir.
+  test("um bloco grande demais (linhas ou caracteres) fica cru; o do limite ainda renderiza", () => {
+    const para = (lines: number, width = 40) => Array.from({ length: lines }, (_, i) => `Linha ${i} [[B]] ${"x".repeat(width)}`).join("\n");
+    const doc = (body: string) => `# Topo\n\n${body}\n\nFim.`;
+    const firsts = (body: string) => renderedBlocks(stateOf(doc(body)), false).map((b) => b.source.split("\n")[0]);
+    expect(firsts(para(MAX_RENDERED_LINES, 10))).toEqual(["# Topo", "Linha 0 [[B]] xxxxxxxxxx", "Fim."]);
+    expect(firsts(para(MAX_RENDERED_LINES + 1, 10))).toEqual(["# Topo", "Fim."]);
+    expect(firsts(para(12_000))).toEqual(["# Topo", "Fim."]);
+    // Poucas linhas, mas compridas demais.
+    expect(firsts(para(3, MAX_RENDERED_CHARS / 2))).toEqual(["# Topo", "Fim."]);
   });
 
   test("o bloco vai do começo da primeira linha ao fim da última", () => {
