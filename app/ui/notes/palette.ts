@@ -2,7 +2,7 @@
 // as notas mais recentes. Por último, "Criar" quando nenhum título é exatamente o que foi digitado.
 
 import { lexicalMatch, WORD } from "../../src/shared/lexical.ts";
-import { highlightRanges, type Range, subsequence } from "../../src/shared/fuzzy.ts";
+import { highlightRanges, type Range, subsequence, subsequenceScore } from "../../src/shared/fuzzy.ts";
 import { hasFilters, parseQuery } from "../../src/shared/query.ts";
 import type { NoteMeta, SearchHit } from "./types.ts";
 
@@ -28,6 +28,12 @@ export const fold = (s: string) =>
     .replace(/\p{M}/gu, "")
     .toLocaleLowerCase("pt-BR");
 
+/** Já existe uma nota com este título (sem acento nem maiúscula)? A busca dobrada uma vez só (T8110). */
+const hasTitle = (notes: NoteMeta[], q: string) => {
+  const f = fold(q);
+  return notes.some((n) => fold(n.title) === f);
+};
+
 const RECENT = 8;
 const MAX = 12;
 
@@ -43,20 +49,22 @@ export function titleMatches(notes: NoteMeta[], query: string): NoteMeta[] {
 export function titleRanks(notes: NoteMeta[], query: string): { n: NoteMeta; rank: number }[] {
   const q = fold(query.trim());
   if (!q) return [];
-  const words = q.split(/\s+/);
+  const words = q.split(/\s+/).filter(Boolean);
   return notes
     .map((n) => {
       const t = fold(n.title);
       let rank = t === q ? 0 : t.startsWith(q) ? 1 : words.every((w) => t.includes(w)) ? 2 : -1;
       let score = 0;
       if (rank < 0) {
-        const m = subsequence(q, n.title);
-        if (m) [rank, score] = [3, m.score];
+        // O título já dobrado, e só o ponto (T8110): o `subsequence` dobrava de novo letra a letra e montava os trechos.
+        const s = subsequenceScore(words, t);
+        if (s !== null) [rank, score] = [3, s];
       }
       return { n, rank, score };
     })
     .filter((x) => x.rank >= 0)
-    .sort((a, b) => a.rank - b.rank || b.score - a.score || b.n.mtime.localeCompare(a.n.mtime))
+    // A data ISO ordena como texto: o `<` basta, sem o `localeCompare`.
+    .sort((a, b) => a.rank - b.rank || b.score - a.score || (a.n.mtime < b.n.mtime ? 1 : a.n.mtime > b.n.mtime ? -1 : 0))
     .map(({ n, rank }) => ({ n, rank }));
 }
 
@@ -94,7 +102,7 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
       ...titleRanks(notes, q).filter(({ n }) => !seen.has(n.path)).map(({ n }): PaletteItem => ({ kind: "note", path: n.path, title: n.title, detail: n.folder })),
     ].slice(0, MAX);
     out.push(...cmds(false));
-    if (!notes.some(n => fold(n.title) === fold(q))) out.push({ kind: "create", title: q });
+    if (!hasTitle(notes, q)) out.push({ kind: "create", title: q });
     return out;
   }
   const titles = titleRanks(notes, q);
@@ -109,7 +117,7 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   for (const h of textHits) if (h.approx && once(h.path)) items.push(textItem(h));
   const out = items.slice(0, MAX);
   out.push(...cmds(false));
-  if (!notes.some((n) => fold(n.title) === fold(q))) out.push({ kind: "create", title: q });
+  if (!hasTitle(notes, q)) out.push({ kind: "create", title: q });
   return out;
 }
 

@@ -1,6 +1,6 @@
 // A busca rápida ⌘K (B v4): uma caixa só, sem borda, com o resultado selecionado em peso de texto.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { plainSnippet } from "./links.ts";
 import { Highlight } from "./Highlight.tsx";
@@ -45,7 +45,8 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
     return () => clearTimeout(t);
   }, [query, api, notes]);
 
-  const items = tooLong ? [] : paletteItems(notes, query, hits, commands, ranked);
+  // Uma vez por mudança (T8110): o `setSel(0)` de cada letra desenhava de novo e refazia a lista das 10 mil notas.
+  const items = useMemo(() => (tooLong ? [] : paletteItems(notes, query, hits, commands, ranked)), [tooLong, notes, query, hits, commands, ranked]);
   useEffect(() => setSel(0), [query]);
 
   const choose = (item: PaletteItem | undefined) => {
