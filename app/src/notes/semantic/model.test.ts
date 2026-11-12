@@ -86,3 +86,47 @@ test("maior que o esperado para no meio; HTTP de erro não deixa nada", async ()
   expect((err2 as ModelError).code).toBe("E_MODEL_DOWNLOAD");
   expect(existsSync(path.join(modelDir(root2, manifest), "tokenizer.json"))).toBe(false);
 });
+
+// T7941: a rede que pendura sem fechar a conexão. O prazo vale para os cabeçalhos e para cada pedaço do corpo.
+test("sem cabeçalho nenhum por um tempo, desiste com E_MODEL_DOWNLOAD, e o fetch recebe o signal abortado", async () => {
+  const root = tmp();
+  let seen: AbortSignal | undefined;
+  const hang = (_url: string, init?: { signal?: AbortSignal }) => {
+    seen = init?.signal;
+    return new Promise<Response>(() => {});
+  };
+  const t0 = Date.now();
+  const err = await ensureModel(root, manifest, { fetch: hang, stallMs: 100 }).catch((e) => e);
+  expect(err).toBeInstanceOf(ModelError);
+  expect(err.code).toBe("E_MODEL_DOWNLOAD");
+  expect(err.message).toContain("stalled");
+  expect(Date.now() - t0).toBeLessThan(1000);
+  expect(seen?.aborted).toBe(true);
+});
+
+test("um corpo que anda devagar, mas anda, não desiste; o signal de fora aborta e não deixa o .part", async () => {
+  const root = tmp();
+  const slow = async (url: string) => {
+    const b = files[url.split("/resolve/abc123/")[1] as keyof typeof files];
+    let i = 0;
+    return new Response(new ReadableStream({
+      async pull(c) {
+        await Bun.sleep(30); // cada pedaço chega antes do prazo de 100 ms
+        if (i >= b.length) return c.close();
+        c.enqueue(b.slice(i, (i += 1000)));
+      },
+    }));
+  };
+  expect(await ensureModel(root, manifest, { fetch: slow, stallMs: 100 })).toBe(modelDir(root, manifest));
+
+  const other = tmp();
+  const abort = new AbortController();
+  const stuck = async () => new Response(new ReadableStream({ start: (c) => c.enqueue(bytes("ON")) }));
+  const pending = ensureModel(other, manifest, { fetch: stuck, signal: abort.signal, stallMs: 60_000 }).catch((e) => e);
+  await Bun.sleep(50);
+  abort.abort();
+  const err = await pending;
+  expect(err.code).toBe("E_MODEL_DOWNLOAD");
+  expect(err.message).toContain("aborted");
+  expect(readdirSync(modelDir(other, manifest)).filter((n) => n.endsWith(".part"))).toEqual([]);
+});

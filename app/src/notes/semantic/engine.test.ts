@@ -123,3 +123,56 @@ test("sem uso por idleMs, o modelo sai da memória; a próxima busca o traz de v
   expect(s.fetched.length).toBe(1);
   await s.engine.close();
 });
+
+// T7444 (varredura de robustez): a rede pendura no meio do download (Wi-Fi de hotel, VPN que cai sem fechar a conexão).
+// O servidor mandou os cabeçalhos e 8 bytes, e depois nada, sem erro. O `fetch` do Bun não tem prazo: sem um, o estado
+// fica em "downloading 8/…" para sempre, não tenta de novo, e desligar a busca pelo sentido nunca termina.
+function stalled() {
+  const root = mkdtempSync(path.join(tmpdir(), "kn-engine-stall-"));
+  dirs.push(root);
+  let enabled = true;
+  let calls = 0;
+  let clock = 0;
+  const states: SemanticModelState[] = [];
+  const engine = new SemanticEngine({
+    modelsDir: root,
+    manifest,
+    enabled: async () => enabled,
+    // A 1ª resposta pendura; a 2ª (a nova tentativa) vem inteira.
+    fetch: async () =>
+      ++calls === 1
+        ? new Response(new ReadableStream({ start: (c) => c.enqueue(body.slice(0, 8)) }))
+        : new Response(new Uint8Array(body)),
+    load: async () => fakeEmbedder(),
+    now: () => clock,
+    // Sugestão de nome: sem nenhum byte por este tempo, o download desiste (o padrão do app seria de dezenas de s).
+    stallMs: 200,
+  } as ConstructorParameters<typeof SemanticEngine>[0]);
+  engine.onState((s) => states.push(s));
+  return { root, engine, states, off: () => (enabled = false), calls: () => calls, later: (ms: number) => (clock += ms) };
+}
+
+const within = <T>(p: Promise<T>, ms: number) =>
+  Promise.race([p.then(() => "terminou"), Bun.sleep(ms).then(() => `ainda esperando depois de ${ms} ms`)]);
+
+test("download pendurado: desligar a busca pelo sentido termina logo, e o .part sai (T7444)", async () => {
+  const s = stalled();
+  void s.engine.start();
+  await Bun.sleep(50);
+  expect(s.engine.state()).toMatchObject({ phase: "downloading", done: 8 });
+  s.off();
+  expect(await within(s.engine.disable(), 1000)).toBe("terminou");
+  expect(s.engine.state().phase).toBe("off");
+  expect(existsSync(path.join(modelDir(s.root, manifest), "onnx/model_quantized.onnx.part"))).toBe(false);
+});
+
+test("download pendurado: sem bytes por um tempo, vira erro, e a nova tentativa baixa (T7444)", async () => {
+  const s = stalled();
+  const first = await within(s.engine.start(), 2000);
+  expect(first).toBe("terminou");
+  expect(s.engine.state()).toMatchObject({ phase: "error" });
+  s.later(RETRY_MS + 1);
+  expect(await s.engine.start()).not.toBeNull();
+  expect(s.engine.state().phase).toBe("ready");
+  expect(s.calls()).toBe(2);
+});

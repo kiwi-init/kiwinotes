@@ -32,6 +32,8 @@ export interface PreciseDictationOptions {
   /** `false`: nunca baixa (o headless), só usa o modelo que já está na pasta. */
   download?: boolean;
   now?: () => number;
+  /** Sem nenhum byte por este tempo, o download desiste e vira erro (T7941). O padrão é o `STALL_MS` (30 s). */
+  stallMs?: number;
 }
 
 export class PreciseDictation {
@@ -126,9 +128,12 @@ export class PreciseDictation {
       if (!present && this.o.download === false) throw new Error("no download here, and the model isn't in the folder");
       if (!present) this.set({ phase: "downloading", done: 0, total: modelBytes(this.manifest) });
       const abort = (this.abort = new AbortController());
-      const get: Fetcher = this.o.fetch ?? ((url) => fetch(url, { redirect: "follow", signal: abort.signal }));
+      const get: Fetcher = this.o.fetch ?? ((url, init) => fetch(url, { redirect: "follow", signal: init?.signal ?? abort.signal }));
+      // O `signal` do ensureModel segue o daqui e também o prazo sem bytes (T7941): parado, vira erro.
       await ensureModel(this.o.modelsDir, this.manifest, {
-        fetch: (url) => (abort.signal.aborted ? Promise.reject(new Error("aborted")) : get(url)),
+        signal: abort.signal,
+        ...(this.o.stallMs !== undefined ? { stallMs: this.o.stallMs } : {}),
+        fetch: (url, init) => (abort.signal.aborted ? Promise.reject(new Error("aborted")) : get(url, init)),
         onProgress: (done, total) => {
           if (!present && this.enabled) this.set({ phase: "downloading", done, total });
         },

@@ -29,6 +29,8 @@ export interface SemanticEngineOptions {
   now?(): number;
   /** Sem uso por este tempo, o modelo sai da memória (~0,5 GB) e volta na próxima busca, em ~0,5 s. */
   idleMs?: number;
+  /** Sem nenhum byte por este tempo, o download desiste e vira erro (T7941). O padrão é o `STALL_MS` (30 s). */
+  stallMs?: number;
 }
 
 /** Depois de uma falha (sem rede, hash errado), espera isto antes de tentar de novo. */
@@ -38,6 +40,8 @@ export const IDLE_MS = 10 * 60_000;
 export class SemanticEngine {
   private model: Embedder | null = null;
   private starting: Promise<Embedder | null> | null = null;
+  /** O download em curso: desligar e sair o abortam, em vez de esperar uma conexão que pode nunca andar (T7941). */
+  private download: AbortController | null = null;
   private current: SemanticModelState = { phase: "idle" };
   private failedAt = -Infinity;
   private lastUse = 0;
@@ -108,6 +112,7 @@ export class SemanticEngine {
     }
     this.starting ??= this.boot().finally(() => {
       this.starting = null;
+      this.download = null;
     });
     return this.starting;
   }
@@ -125,8 +130,11 @@ export class SemanticEngine {
         return null;
       }
       if (!present) this.set({ phase: "downloading", done: 0, total: 0 });
+      const download = (this.download = new AbortController());
       const dir = await ensureModel(this.o.modelsDir, this.manifest, {
         fetch: this.o.fetch,
+        signal: download.signal,
+        ...(this.o.stallMs !== undefined ? { stallMs: this.o.stallMs } : {}),
         onProgress: (done, total) => {
           if (!present) this.set({ phase: "downloading", done, total });
         },
@@ -142,6 +150,8 @@ export class SemanticEngine {
       this.set({ phase: "ready" });
       return this.model;
     } catch (e) {
+      // Desligado ou saindo no meio do download: não é uma falha, e quem abortou põe o estado.
+      if (this.download?.signal.aborted) return null;
       this.failedAt = this.now();
       this.set({ phase: "error", error: e instanceof Error ? e.message : String(e) });
       console.error("[semantic] model:", e);
@@ -153,6 +163,7 @@ export class SemanticEngine {
   async disable(): Promise<void> {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
+    this.download?.abort();
     await this.starting?.catch(() => null);
     const model = this.model;
     this.model = null;
@@ -165,6 +176,7 @@ export class SemanticEngine {
   async close(): Promise<void> {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
+    this.download?.abort();
     await this.starting?.catch(() => null);
     const model = this.model;
     this.model = null;
