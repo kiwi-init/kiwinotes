@@ -118,6 +118,23 @@ export const api = {
     apply: () => invoke("updates.apply", {}),
     onStatus: (fn: (v: UiEvents["updates.status"]) => void) => on("updates.status", fn),
   },
+  /**
+   * O agente (1.41.0/1.42.0, T8762, spec #8373): a seção Agente dos Ajustes. Nada liga, baixa nem pede sozinho: cada
+   * chamada é um clique da pessoa. O progresso e a resposta chegam pelos eventos.
+   */
+  agent: {
+    /** `refresh`: confere o Claude Code instalado (abre o `claude --version` e o `auth status`). */
+    status: (refresh = false) => invoke("agent.status", refresh ? { refresh: true } : {}),
+    enable: (consent = false) => invoke("agent.enable", consent ? { consent: true } : {}),
+    disable: () => invoke("agent.disable", {}),
+    download: () => invoke("agent.download", {}),
+    ask: (text: string) => invoke("agent.ask", { text }),
+    cancel: () => invoke("agent.cancel", {}),
+    remove: () => invoke("agent.remove", {}),
+    configure: (o: UiCapabilities["agent.configure"]["args"]) => invoke("agent.configure", o),
+    onStatus: (fn: (s: UiEvents["agent.status"]) => void) => on("agent.status", fn),
+    onTurn: (fn: (e: UiEvents["agent.turn"]) => void) => on("agent.turn", fn),
+  },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {
     section: () => invoke("hub.section", {}),

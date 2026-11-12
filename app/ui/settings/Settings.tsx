@@ -2,7 +2,9 @@
 // ganham efeito quando o sidecar (T50) e o ditado entrarem.
 import { useState } from "react";
 
-import { Kbd, Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
+import { Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
+import { AgentSection } from "./Agent.tsx";
+import { PRIVACY_HINT, PRIVACY_RULE } from "./agentText.ts";
 import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
 import { ExtensionsRow } from "./ExtensionsRow.tsx";
@@ -58,10 +60,11 @@ export function Settings() {
         <SemanticRow />
       </Section>
 
+      {/* O agente (spec #8373): a seção antes da Privacidade, que diz a regra dele (ADR 0011). */}
+      <AgentSection />
+
       <Section title="Privacidade">
-        <Row label="Tudo roda neste Mac" hint="Áudio, transcrição e texto nunca saem daqui.">
-          <Kbd>100% local</Kbd>
-        </Row>
+        <Row label={PRIVACY_RULE} hint={PRIVACY_HINT} />
       </Section>
     </Window>
   );

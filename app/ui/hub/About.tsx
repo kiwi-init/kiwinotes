@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button } from "../src/kit/index.tsx";
+import { PRIVACY_RULE } from "../settings/agentText.ts";
 import { CHANNEL, creditsLine, statusLine } from "./aboutText.ts";
 
 /** Abre um link do GitHub fora do app (no navegador padrão, pelo `newWindow: "external"` da janela). */
@@ -101,6 +102,7 @@ export function About() {
           </p>
         </div>
       ) : null}
+      <p className="kn-about-hint kn-about-privacy">{PRIVACY_RULE}, e ele vem desligado.</p>
       <p className="kn-about-hint kn-about-credits">{creditsLine()}</p>
     </div>
   );

@@ -124,7 +124,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.41.0 (T8678, spec #8339): o agente dentro do app, ainda sem tela: `agent.status`, `agent.enable`, `agent.disable`,
 //   `agent.download`, `agent.ask`, `agent.cancel`, `agent.remove` e `agent.configure`, os eventos `agent.status` e
 //   `agent.turn`, e o `agent` nas settings (só leitura pelo `settings.set`). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.41.0";
+// 1.42.0 (T8762, spec #8373): o `models` no `AgentStatus`, os modelos que o agente oferece, para a seção Agente dos
+//   Ajustes deixar trocar. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.42.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -464,6 +466,18 @@ export interface AgentStatus {
   effort: string;
   /** O modelo e o esforço da sessão aberta, como o agente diz; null com o programa fechado. */
   session: { model?: string; effort?: string } | null;
+  /**
+   * Os modelos que o agente oferece (1.42.0, T8762), da última vez que o programa abriu: vazio até o primeiro pedido.
+   * `description` é o que o agente diz de cada um (no `default`, o modelo que ele usa de fato).
+   */
+  models: AgentModelChoice[];
+}
+
+/** Um modelo que o agente oferece (1.42.0). */
+export interface AgentModelChoice {
+  value: string;
+  name: string;
+  description?: string;
 }
 
 /** Um pedaço da resposta ao vivo de um pedido (`agent.turn`, 1.41.0). */

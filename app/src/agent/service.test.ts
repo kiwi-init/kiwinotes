@@ -298,6 +298,26 @@ describe("o modelo e o esforço são do app", () => {
   });
 });
 
+describe("os modelos que o agente oferece (T8762)", () => {
+  test("vazio até o programa abrir; depois, a lista do agente, que fica guardada para a próxima abertura do app", async () => {
+    const data = tmp();
+    const m = make({ data });
+    expect((await m.svc.status()).models).toEqual([]);
+    await readyNow(m);
+    await askAndWait(m, "oi");
+    const models = (await m.svc.status()).models;
+    expect(models.map((x) => x.value)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
+    expect(models[0]).toEqual({ value: "default", name: "Default (recommended)", description: "Sonnet · o padrão da sua conta" });
+    await m.svc.close();
+
+    // O app abriu de novo: a lista está lá, sem abrir o programa.
+    const again = make({ data, reg: m.reg });
+    const st = await again.svc.status();
+    expect(st.program).toBe("closed");
+    expect(st.models.map((x) => x.value)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
+  });
+});
+
 describe("o programa do agente fecha", () => {
   test("ao desligar, na hora, e o processo some", async () => {
     const m = make();
