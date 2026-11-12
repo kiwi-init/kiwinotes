@@ -9,9 +9,12 @@
 //   de volta quando a edição deu errado.
 // - Guarda até `maxCount` (50) versões e até `maxAgeMs` (30 dias) por nota. Uma versão igual à última não entra.
 // - Apagar a nota não apaga o histórico: se ela voltar (a Lixeira), ele está lá.
+// - Cada pasta guarda o caminho da nota num `note.json` (T7940): com o `index.json` vazio, cortado ou estragado, o índice
+//   se refaz pelas pastas, e as versões não somem. As duas escritas vão com `fsync` antes do rename, como o cofre.
+// - Uma pasta que ninguém reclama (de antes do `note.json`, com o índice perdido) só perde o que passou dos 30 dias.
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rename, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 
 export interface VersionInfo {
@@ -43,6 +46,9 @@ export function atOf(id: string): string {
   if (!m) throw new Error(`not a version id: ${id}`);
   return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`;
 }
+const isNoteId = (id: unknown): id is string => typeof id === "string" && /^[0-9a-f]{16}$/.test(id);
+/** O arquivo, em cada pasta de versões, que diz de que nota ela é (T7940). */
+const NOTE_FILE = "note.json";
 const isVersionId = (id: unknown): id is string => typeof id === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:~\d+)?$/.test(id);
 
 interface Pending {
@@ -174,6 +180,11 @@ export class NoteVersions {
         } else next[p] = id;
       }
       for (const [to, id] of moved) next[to] = id;
+      // O `note.json` de cada pasta acompanha (T7940): a que se moveu diz o caminho novo, e a que perdeu o caminho para ela
+      // não diz mais nenhum, para o índice refeito pelas pastas não a pôr de volta ali.
+      const owners = new Set(Object.values(next));
+      for (const [to, id] of moved) await this.writeOwner(id, to);
+      for (const id of Object.values(index)) if (!owners.has(id)) await this.writeOwner(id, null);
       for (const [p, item] of [...this.pending]) {
         const to = map(p);
         if (to !== p) {
@@ -210,28 +221,104 @@ export class NoteVersions {
     return names.filter((n) => n.endsWith(".md") && isVersionId(n.slice(0, -3))).sort();
   }
 
+  /**
+   * O índice, lido uma vez. Vazio, cortado, `null` ou sem `paths` (um crash logo depois do rename, um sync, uma edição à
+   * mão): refeito pelos `note.json` das pastas (T7940). Bom ou refeito, as pastas sem `note.json` que o índice conhece
+   * ganham o seu, e as que ninguém reclama passam pela poda dos 30 dias.
+   */
   private async loadIndex(): Promise<Record<string, string>> {
     if (this.index) return this.index;
     const raw = await readFile(path.join(this.dir, "index.json"), "utf8").catch(() => null);
-    let parsed: unknown = {};
+    let parsed: unknown = null;
     try {
-      parsed = raw ? JSON.parse(raw) : {};
+      parsed = raw ? JSON.parse(raw) : null;
     } catch {
-      parsed = {};
+      parsed = null;
     }
-    const paths = (parsed as { paths?: unknown }).paths;
-    this.index = {};
-    if (paths && typeof paths === "object") {
-      for (const [p, id] of Object.entries(paths)) if (typeof id === "string" && /^[0-9a-f]{16}$/.test(id)) this.index[p] = id;
+    const paths = parsed && typeof parsed === "object" ? (parsed as { paths?: unknown }).paths : undefined;
+    const index: Record<string, string> = {};
+    const valid = !!paths && typeof paths === "object" && !Array.isArray(paths);
+    if (valid) for (const [p, id] of Object.entries(paths as object)) if (isNoteId(id)) index[p] = id;
+    const dirs = (await readdir(this.dir, { withFileTypes: true }).catch(() => [])).filter((d) => d.isDirectory() && isNoteId(d.name)).map((d) => d.name);
+    const known = new Set(Object.values(index));
+    let rebuilt = false;
+    const claims = new Map<string, string[]>();
+    for (const id of dirs) {
+      if (known.has(id)) {
+        if ((await this.readOwner(id)) === undefined) await this.writeOwner(id, Object.keys(index).find((p) => index[p] === id)!).catch(() => {});
+        continue;
+      }
+      const owner = await this.readOwner(id);
+      if (typeof owner === "string") claims.set(owner, [...(claims.get(owner) ?? []), id]);
+      else await this.pruneOrphan(id);
+    }
+    // Duas pastas dizendo a mesma nota (raro: um note.json que não acompanhou um move): fica a de versão mais nova.
+    for (const [p, ids] of claims) {
+      if (index[p]) continue;
+      const newest = async (id: string) => (await this.files(id)).at(-1) ?? "";
+      let best = ids[0]!;
+      for (const id of ids.slice(1)) if ((await newest(id)) > (await newest(best))) best = id;
+      index[p] = best;
+      rebuilt = true;
+    }
+    this.index = index;
+    if (rebuilt || (raw !== null && !valid)) {
+      console.warn(`[notes] versions: index.json ${raw === null ? "missing" : "broken"}; rebuilt from ${Object.keys(index).length} folders`);
+      await this.saveIndex();
     }
     return this.index;
   }
 
   private async saveIndex(): Promise<void> {
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
-    const tmp = path.join(this.dir, `.index-${randomBytes(4).toString("hex")}.tmp`);
-    await writeFile(tmp, JSON.stringify({ version: 1, paths: this.index }), { mode: 0o600 });
-    await rename(tmp, path.join(this.dir, "index.json"));
+    await this.durable(this.dir, "index.json", JSON.stringify({ version: 1, paths: this.index }));
+  }
+
+  /**
+   * Grava `name` em `dir` pelo temporário, com `fsync` antes do rename (o 0 byte do APFS num crash, T7940), como o
+   * `writeDurable` do cofre, mas só para a pessoa (0600): é o texto das notas.
+   */
+  private async durable(dir: string, name: string, content: string): Promise<void> {
+    const tmp = path.join(dir, `.${name}-${randomBytes(4).toString("hex")}.tmp`);
+    try {
+      const fh = await open(tmp, "w", 0o600);
+      try {
+        await fh.writeFile(content);
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
+      await rename(tmp, path.join(dir, name));
+    } catch (error) {
+      await rm(tmp, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  /** O caminho da nota que a pasta diz (`note.json`): null quando ela perdeu o caminho; undefined sem o arquivo. */
+  private async readOwner(id: string): Promise<string | null | undefined> {
+    const raw = await readFile(path.join(this.noteDir(id), NOTE_FILE), "utf8").catch(() => null);
+    if (raw === null) return undefined;
+    try {
+      const p = (JSON.parse(raw) as { path?: unknown } | null)?.path;
+      return typeof p === "string" && p ? p : null;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async writeOwner(id: string, notePath: string | null): Promise<void> {
+    const dir = this.noteDir(id);
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await this.durable(dir, NOTE_FILE, JSON.stringify({ path: notePath }));
+  }
+
+  /** Uma pasta que nenhuma nota reclama: só a poda por idade, e a pasta vazia some (T7940). */
+  private async pruneOrphan(id: string): Promise<void> {
+    const oldest = this.now() - this.maxAgeMs;
+    for (const name of await this.files(id))
+      if (Date.parse(atOf(name.slice(0, -3))) < oldest) await rm(path.join(this.noteDir(id), name), { force: true });
+    if (!(await readdir(this.noteDir(id)).catch(() => ["?"])).length) await rmdir(this.noteDir(id)).catch(() => {});
   }
 
   private async idFor(notePath: string, create: true): Promise<string>;
@@ -242,6 +329,7 @@ export class NoteVersions {
     if (!create) return null;
     const id = randomBytes(8).toString("hex");
     index[notePath] = id;
+    await this.writeOwner(id, notePath);
     await this.saveIndex();
     return id;
   }
@@ -266,9 +354,7 @@ export class NoteVersions {
     let name = `${stampOf(at)}.md`;
     // Duas no mesmo milissegundo (raro): um sufixo que ordena depois da 1ª (o `~` vem depois do `.`, revisão #2826).
     for (let n = 2; (await this.files(id)).includes(name); n++) name = `${stampOf(at)}~${n}.md`;
-    const tmp = path.join(dir, `.v-${randomBytes(4).toString("hex")}.tmp`);
-    await writeFile(tmp, content, { mode: 0o600 });
-    await rename(tmp, path.join(dir, name));
+    await this.durable(dir, name, content);
     this.last.set(id, { at, hash: hash(content) });
     await this.prune(id);
   }
