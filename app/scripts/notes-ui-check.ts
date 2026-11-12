@@ -591,6 +591,23 @@ await step("⌘K cria nota nova quando não há título igual", async () => {
   if (!(await content("Ideia nova.md") === "")) throw new Error("não criou");
 });
 
+// T7616 (achado da T7437): um [[link]] para um arquivo que está no cofre (pdf, quadro) acha o arquivo. O link não fica
+// de quebrado, e clicar não cria uma nota vazia "relatorio.pdf.md" ao lado do pdf.
+await step("[[relatorio.pdf]] que está no cofre: o link acha o arquivo e o clique não cria nota", async () => {
+  await page.evaluate(() => (window as any).__kiwiNotesMock.otherFiles.push({ path: "Docs/relatorio.pdf", size: 9, mtime: new Date().toISOString() }));
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("\nver [[relatorio.pdf]] ");
+  await settle();
+  await page.click(".kn-title"); // tira o foco do editor: o link vira link
+  await noteLink("relatorio.pdf").waitFor({ timeout: 3000 });
+  expectEq(await noteLink("relatorio.pdf", true).count(), 0);
+  await noteLink("relatorio.pdf").click();
+  await page.waitForTimeout(500);
+  expectEq(await page.inputValue(".kn-title"), "Ideia nova");
+  expectEq(await content("relatorio.pdf.md"), undefined);
+});
+
 await step("clique num link para nota que não existe cria a nota", async () => {
   await page.click(".cm-content");
   await page.keyboard.type("veja [[Nota fantasma]] depois");
