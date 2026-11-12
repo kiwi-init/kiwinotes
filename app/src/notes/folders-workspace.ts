@@ -185,6 +185,8 @@ interface Options {
   guard?(path: string): void;
   /** O modelo da busca pelo sentido (T6013), um para todas as pastas. */
   semantic?: SemanticEngine;
+  /** Para onde vai o apagado de cada pasta (T7681: o headless passa o dele); sem, o Lixo do macOS. */
+  trash?: (abs: string) => Promise<void>;
 }
 /** Root-bound bundles never mutate their root during an in-flight save. The UI's id rejects calls from an old view. */
 export class NotesFolders {
@@ -235,6 +237,7 @@ export class NotesFolders {
           watch: this.options.watch ?? true,
           strictRoot: true,
           onIndexProgress: (p) => this.indexProgress(root, p),
+          ...(this.options.trash ? { trash: this.options.trash } : {}),
         });
     const ocr = new OcrIndex({
       root,

@@ -279,6 +279,9 @@ interface Staged {
 
 /** O `trash` do macOS (macOS 14+): a nota vai para a Lixeira, de onde dá para voltar. */
 export function macTrash(abs: string): Promise<void> {
+  // T7681: o headless (os testes dos agentes) nunca manda nada para o Lixo da pessoa do Mac. Ele passa o próprio lixo;
+  // um vault que escapou disso falha aqui em vez de apagar de verdade.
+  if (process.env.KIWI_HEADLESS === "1") return Promise.reject(new Error("the headless never uses the macOS Trash"));
   return new Promise((resolve, reject) => {
     const p = spawn("/usr/bin/trash", [abs], { stdio: "ignore" });
     p.on("error", reject);
