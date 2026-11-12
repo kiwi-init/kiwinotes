@@ -122,6 +122,8 @@ interface State {
   session: string;
   path: string;
   start: number;
+  /** O app da reunião, para recriar a nota igual se ela sumir no meio (T7723). */
+  app: string;
   pending: MeetingSegment[];
   end?: number;
 }
@@ -176,6 +178,24 @@ function validateSegment(s: MeetingSegment) {
 }
 
 /** One queue for all meeting mutations. Every retry starts from the current disk version (ADR 0007). */
+/** O texto de uma nota de reunião nova: o frontmatter (`type: meeting`, o `session`) e as duas seções. */
+function newMeetingNote(session: string, app: string, at: Date): string {
+  const fields = {
+    type: "meeting",
+    date: localDate(at.getTime()),
+    start: at.toISOString(),
+    duration: 0,
+    app,
+    participants: [],
+    session: session,
+    meeting_speakers: {},
+  };
+  const fm = Object.entries(fields)
+    .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+    .join("\n");
+  return `---\n${fm}\n---\n\n## Minhas notas\n\n\n## Transcrição\n\n`;
+}
+
 export class MeetingNotes {
   private queue: Promise<unknown> = Promise.resolve();
   private states = new Map<string, State>();
@@ -183,6 +203,16 @@ export class MeetingNotes {
   private committedListeners = new Set<
     (session: string, segments: MeetingSegment[]) => void
   >();
+  private recreatedListeners = new Set<(session: string, path: string) => void>();
+
+  /**
+   * A nota da reunião sumiu no meio da gravação (apagada, ou com o `type` mudado) e foi recriada (T7723): a fala que vem
+   * depois vai para a nota nova, e quem ouve avisa a pessoa.
+   */
+  onRecreated(listener: (session: string, path: string) => void): () => void {
+    this.recreatedListeners.add(listener);
+    return () => this.recreatedListeners.delete(listener);
+  }
 
   /** R3 can release audio only after this notification: the batch is already persisted in the vault. */
   onCommitted(
@@ -222,28 +252,12 @@ export class MeetingNotes {
       const existing = await this.find(session);
       if (existing) return existing;
       const title = `${localDate(at.getTime())} ${clock(at).replace(":", "h")} ${app === "Reunião" ? app : `Reunião do ${app}`}`;
-      const fields = {
-        type: "meeting",
-        date: localDate(at.getTime()),
-        start: at.toISOString(),
-        duration: 0,
-        app,
-        participants: [],
-        session: session,
-        meeting_speakers: {},
-      };
-      const fm = Object.entries(fields)
-        .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
-        .join("\n");
-      const note = await this.vault.create(
-        "Reuniões",
-        title,
-        `---\n${fm}\n---\n\n## Minhas notas\n\n\n## Transcrição\n\n`,
-      );
+      const note = await this.vault.create("Reuniões", title, newMeetingNote(session, app, at));
       this.states.set(session, {
         session,
         path: note.path,
         start: at.getTime(),
+        app,
         pending: [],
       });
       return note;
@@ -268,18 +282,42 @@ export class MeetingNotes {
         if (!Number.isFinite(start))
           throw new VaultError("E_BAD_ARGS", "invalid meeting date");
         if (state) state.path = path;
-        else this.states.set(session, { session, path, start, pending: [] });
+        else this.states.set(session, { session, path, start, app: typeof dataOf(note.content).app === "string" ? dataOf(note.content).app : "Reunião", pending: [] });
         return note;
       }
     }
     return null;
+  }
+  /**
+   * A nota da reunião, recriada se ela sumiu no meio da gravação (T7723): apagada, ou que deixou de ser reconhecida (o
+   * `type` ou o `session` mudados nas propriedades). Sem isso, a fala que vinha depois não ia para nota nenhuma, calada.
+   * A nova tem o mesmo `session`, a mesma pasta e o mesmo nome (com " 2" se o nome ainda está ocupado); a de antes, se
+   * ficou, não é mais da reunião, e o `find()` acha sempre a nova. Só com a reunião em curso neste processo (`state`).
+   */
+  private async noteFor(session: string): Promise<Note | null> {
+    const found = await this.find(session);
+    const state = this.states.get(session);
+    if (found || !state) return found;
+    const slash = state.path.lastIndexOf("/");
+    const folder = slash < 0 ? "" : state.path.slice(0, slash);
+    const title = state.path.slice(slash + 1).replace(/\.md$/i, "");
+    const note = await this.vault.create(folder, title, newMeetingNote(session, state.app, new Date(state.start)));
+    state.path = note.path;
+    for (const listener of this.recreatedListeners) {
+      try {
+        listener(session, note.path);
+      } catch (error) {
+        this.options.onError?.(error);
+      }
+    }
+    return note;
   }
   segment(session: string, segment: MeetingSegment): Promise<void> {
     return this.serialize(async () => {
       validateSession(session);
       validateSegment(segment);
       if (!segment.final || !segment.text.trim()) return;
-      const note = await this.find(session);
+      const note = await this.noteFor(session);
       if (!note) throw new VaultError("E_NOT_FOUND", "meeting note not found");
       // R3: after a crash the helper transcribes again what was left in its spool (the system channel stays whole
       // until the end, #5131). What ends before the saved progress of the channel is already in the note: it counts
@@ -323,7 +361,7 @@ export class MeetingNotes {
   ): Promise<void> {
     return this.serialize(async () => {
       validateSession(session);
-      if (!(await this.find(session)))
+      if (!(await this.noteFor(session)))
         throw new VaultError("E_NOT_FOUND", "meeting note not found");
       const state = this.states.get(session)!;
       if (!Number.isFinite(at.getTime()) || at.getTime() < state.start)
@@ -350,7 +388,7 @@ export class MeetingNotes {
     );
   }
   private async flushState(state: State): Promise<void> {
-    const note = await this.find(state.session);
+    const note = await this.noteFor(state.session);
     if (!note)
       throw new VaultError(
         "E_NOT_FOUND",

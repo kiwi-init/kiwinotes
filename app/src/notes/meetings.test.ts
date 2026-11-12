@@ -397,3 +397,56 @@ test("meeting recovery (#5168): a replay that crosses the saved progress goes in
   expect(after.match(/Antes da queda/g)?.length).toBe(1);
   expect(after).toMatch(/· Ana:\*\* Depois da queda\./);
 });
+
+// T7439: a nota da reunião some no meio da gravação (apagada, ou com o `type` mudado nas propriedades). A gravação
+// segue, e a fala que vem depois não pode sumir calada: ela vai para uma nota no cofre.
+const allText = async (vault: Vault) =>
+  (await Promise.all(vault.list().notes.map((n) => vault.get(n.path).then((x) => x.content, () => "")))).join("\n");
+test("meeting: a nota apagada no meio da gravação não leva a fala que vem depois", async () => {
+  const { notes, vault } = await rig();
+  const n = await notes.start("s1", "Teams", at);
+  await notes.segment("s1", segment(1, "Pessoa 1", "Antes."));
+  await notes.flush();
+  await vault.delete(n.path);
+  await notes.segment("s1", segment(5, "Pessoa 1", "Depois de apagar.")).catch(() => {});
+  await notes.finish("s1", new Date(at.getTime() + 60_000)).catch(() => {});
+  await notes.flush().catch(() => {});
+  expect(await allText(vault)).toContain("Depois de apagar.");
+});
+test("meeting: o type mudado nas propriedades no meio da gravação não leva a fala que vem depois", async () => {
+  const { notes, vault } = await rig();
+  const n = await notes.start("s1", "Teams", at);
+  await notes.segment("s1", segment(1, "Pessoa 1", "Antes."));
+  await notes.flush();
+  const base = await vault.get(n.path);
+  await notes.saveEdit(n.path, base.content.replace(/^type: .*$/m, 'type: "reunião"'), base.version, base.content);
+  await notes.segment("s1", segment(5, "Pessoa 1", "Depois do type.")).catch(() => {});
+  await notes.finish("s1", new Date(at.getTime() + 60_000)).catch(() => {});
+  await notes.flush().catch(() => {});
+  expect(await allText(vault)).toContain("Depois do type.");
+});
+test("meeting: a nota recriada (T7723) avisa uma vez, segue recebendo a fala, e a de antes não é mais mexida", async () => {
+  const { notes, vault } = await rig();
+  const recreated: { session: string; path: string }[] = [];
+  notes.onRecreated((session, path) => recreated.push({ session, path }));
+  const n = await notes.start("s1", "Teams", at);
+  await notes.segment("s1", segment(1, "Pessoa 1", "Antes."));
+  await notes.flush();
+  const base = await vault.get(n.path);
+  await notes.saveEdit(n.path, base.content.replace(/^type: .*$/m, 'type: "reunião"'), base.version, base.content);
+  const old = (await vault.get(n.path)).content;
+  await notes.segment("s1", segment(5, "Pessoa 1", "Primeira depois."));
+  await notes.segment("s1", segment(9, "Pessoa 1", "Segunda depois."));
+  await notes.finish("s1", new Date(at.getTime() + 60_000));
+  await notes.flush();
+  expect(recreated.length).toBe(1);
+  expect(recreated[0]!.session).toBe("s1");
+  // O mesmo nome, com " 2": a de antes ainda ocupa o nome.
+  expect(recreated[0]!.path).not.toBe(n.path);
+  const fresh = (await vault.get(recreated[0]!.path)).content;
+  expect(fresh).toContain('type: "meeting"');
+  expect(fresh).toContain('session: "s1"');
+  expect(fresh).toContain("Primeira depois.");
+  expect(fresh).toContain("Segunda depois.");
+  expect((await vault.get(n.path)).content).toBe(old);
+});

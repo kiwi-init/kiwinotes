@@ -88,13 +88,15 @@ export class FakeMeetingHost implements MeetingHost {
   private state: MeetingLive;
   private listeners = new Set<(live: MeetingLive) => void>();
 
-  constructor(app: string, minutesAgo = 12, now: () => Date = () => new Date()) {
+  constructor(app: string, minutesAgo = 12, now: () => Date = () => new Date(), warning?: string) {
     this.state = {
       recording: true,
       session: "fake-meeting",
       app: app || null,
       since: new Date(now().getTime() - minutesAgo * 60_000).toISOString(),
       minePaused: false,
+      // O aviso do card ao vivo (`KIWI_FAKE_MEETING_WARNING`), para ver cada um sem gravar (T7723).
+      ...(warning ? { warning } : {}),
     };
   }
 
