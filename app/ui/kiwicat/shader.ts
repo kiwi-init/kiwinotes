@@ -13,6 +13,7 @@ import {
   smoothstep,
   max,
   pow,
+  exp,
   normalize,
   min,
   dot,
@@ -90,7 +91,8 @@ export function fogMaterial(
   protection: Texture,
   densityTexture: Texture,
 ) {
-  const alive = uniform(0),
+  const arcGain = uniform(1),
+    alive = uniform(0),
     exposure = uniform(1),
     side = uniform(0),
     upper = uniform(0),
@@ -103,18 +105,34 @@ export function fogMaterial(
   material.toneMapped = false;
   material.fragmentNode = Fn(() => {
     const st = uv(),
-      base = texture(reference, st).rgb,
+      calibrated = texture(reference, st).rgb,
       coverage = texture(protection, st),
       solid = coverage.r,
-      foreground = coverage.g;
+      foreground = coverage.g,
+      arcCoverage = coverage.b.mul(alive),
+      neutral = vec3(min(min(calibrated.r, calibrated.g), calibrated.b)),
+      base = mix(calibrated, neutral, arcCoverage);
+    // Separate the calibrated chromatic emission from the neutral light.
+    // Its gain stays <=1; brighter fog can fill the tip centers instead of
+    // leaving a frozen colored rim around a dark hole. Screen composition
+    // has no negative/overflowing channels and keeps the calibrated hue.
+    const emission = calibrated.sub(base).div(max(vec3(1).sub(base), 0.001));
     const luminance = dot(base, vec3(0.2126, 0.7152, 0.0722));
     const high = max(max(base.r, base.g), base.b),
       low = min(min(base.r, base.g), base.b);
     const chroma = high.sub(low).div(max(high, 0.001));
-    const protectArc = smoothstep(0.28, 0.55, chroma);
+    const protectArc = smoothstep(0.28, 0.55, chroma).mul(float(1).sub(alive));
     // A monotone dark pedestal, independent of raster layer boundaries.
     // Freezing the source-layer matte created a dark rim during dimming.
-    const fogMask = max(luminance.sub(12 / 255), 0).div(max(luminance, 0.001));
+    const hardExcess = max(luminance.sub(12 / 255), 0);
+    // Smooth dark pedestal: no derivative kink at 12/255 to reveal a thin
+    // contour at high exposure. Quiet states retain their original transfer.
+    const softExcess = luminance.sub(
+      float(12 / 255).mul(float(1).sub(exp(luminance.mul(-255 / 12)))),
+    );
+    const fogMask = mix(hardExcess, softExcess, alive).div(
+      max(luminance, 0.001),
+    );
     const field = texture(densityTexture, st);
     const gain = field.r;
     const weight = max(
@@ -128,11 +146,14 @@ export function fogMaterial(
     const tinted = mix(
       base,
       luminance.mul(vec3(tint)),
-      custom.mul(float(1).sub(protectArc)).mul(float(1).sub(foreground)),
+      custom
+        .mul(float(1).sub(protectArc))
+        .mul(float(1).sub(foreground))
+        .mul(float(1).sub(arcCoverage)),
     );
     const effectiveGain = max(
       0.5,
-      weight.mul(mix(gain, 1, foreground)).mul(volume),
+      weight.mul(mix(mix(gain, 1, foreground), gain, alive)).mul(volume),
     );
     const cappedGain = mix(effectiveGain, min(1, effectiveGain), protectArc);
     const light = tinted.mul(cappedGain);
@@ -144,19 +165,31 @@ export function fogMaterial(
     const support = pow(max(luminance.sub(12 / 255), 0), 0.8);
     const wisp = field.g
       .mul(alive)
+      .mul(float(1).sub(arcCoverage))
       .mul(support)
       .mul(float(1).sub(foreground))
       .mul(vec3(tint));
-    return vec4(
-      mix(fog.add(wisp.mul(float(1).sub(protectArc))), base, solid),
-      1,
+    const lit = fog.add(wisp.mul(float(1).sub(protectArc)));
+    const limited = min(lit, vec3(1));
+    const layered = limited.add(
+      vec3(1).sub(limited).mul(emission).mul(arcGain),
     );
+    return vec4(mix(mix(lit, layered, alive), calibrated, solid), 1);
   })();
   return {
     material,
     apply(frame: FogFrame) {
       alive.value =
         frame.state === "ouvindo" || frame.state === "thinking" ? 1 : 0;
+      arcGain.value = Math.max(
+        0.5,
+        Math.min(
+          1,
+          frame.exposure *
+            (1 - Math.abs(frame.side) - Math.abs(frame.upper)) *
+            frame.volume,
+        ),
+      );
       exposure.value = frame.exposure;
       side.value = frame.side;
       upper.value = frame.upper;
@@ -173,7 +206,7 @@ export function fogMaterial(
 
 // Only the smooth scalar field is rendered at reduced resolution. The approved
 // reference, eyes, material mask and arc are composed at the output resolution.
-export function densityMaterial(seed: number, variant: "A" | "B" = "A") {
+export function densityMaterial(seed: number, variant: "B1" | "B2" = "B2") {
   const flow = uniform(0),
     time = uniform(0),
     activity = uniform(0),
@@ -205,15 +238,30 @@ export function densityMaterial(seed: number, variant: "A" | "B" = "A") {
       noise3(p.mul(0.71).add(vec3(13, 1, 11))),
       float(0),
     ).sub(vec3(0.5, 0.5, 0));
-    const density = fbm(p.add(warp.mul(float(0.85).add(activity.mul(0.1)))));
+    // Large, low-contrast volumes: no density threshold outlines, no fine
+    // octaves or strong warp that can turn the field into marbled filaments.
+    // The advected coordinates above are identical in both texture studies.
+    const scale = variant === "B1" ? 0.7 : 0.5;
+    const distortion = variant === "B1" ? 0.12 : 0.06;
+    const density = fbm(
+      mix(
+        p.add(warp.mul(0.85)),
+        p.mul(scale).add(warp.mul(distortion)),
+        activity,
+      ),
+    );
     const gain = mix(
       float(1),
-      float(1).add(density.sub(0.5).mul(float(0.6).add(activity.mul(1.6)))),
+      float(1).add(
+        density
+          .sub(0.5)
+          .mul(float(0.6).add(activity.mul(variant === "B1" ? 1 : 0.05))),
+      ),
       smoothstep(0, 2, time),
     );
-    const wisps = smoothstep(0.38, 0.72, density)
+    const wisps = density
       .mul(activity)
-      .mul(0.2)
+      .mul(variant === "B1" ? 0.05 : 0.03)
       .mul(smoothstep(0, 2, time));
     return vec4(gain, wisps, 0, 1);
   })();
@@ -221,10 +269,7 @@ export function densityMaterial(seed: number, variant: "A" | "B" = "A") {
     material,
     apply(frame: FogFrame) {
       activity.value =
-        variant === "B" &&
-        (frame.state === "ouvindo" || frame.state === "thinking")
-          ? 1
-          : 0;
+        frame.state === "ouvindo" || frame.state === "thinking" ? 1 : 0;
       push.value = Math.max(0, frame.volume - 1) * 5;
       drift.value = frame.side;
       flow.value = frame.flow;

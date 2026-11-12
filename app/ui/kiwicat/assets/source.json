@@ -10,6 +10,6 @@
   },
   "method": "approved montar.py compose, neutral, scale1; unchanged circles; lossless WebP",
   "sha256": "7c99f26d628c336c8463e2b3e95f7d4b5c59af0be2301c4430b9816ecf1e7ea2",
-  "material_mask": "R: approved eye discs+5px; G: static foreground occlusion for procedural density/wisps only; continuous exposure pedestal",
-  "mask_sha256": "b61adf08ebc0c05c2f2ff19419d64e6d6654e935d8018f69dcbea79a03192d15"
+  "material_mask": "R: approved eye discs+5px; G: static foreground occlusion for procedural density/wisps only; B: broad stationary arc protection with feather outside original chromatic footprint",
+  "mask_sha256": "68618fdab3d8078ab07454087736f406a7d1b45496c01cf1e015bd0446ddba58"
 }

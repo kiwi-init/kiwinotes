@@ -1,0 +1,15 @@
+{
+  "scope": "frozen composition; rest at12s, seed17,640x800,DPR1,scale.25 vs source90277f8",
+  "comparisons": [
+    {
+      "variant": "B1",
+      "max_channel_error": 0,
+      "mean_channel_error": 0.0
+    },
+    {
+      "variant": "B2",
+      "max_channel_error": 0,
+      "mean_channel_error": 0.0
+    }
+  ]
+}

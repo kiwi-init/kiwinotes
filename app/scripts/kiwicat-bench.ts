@@ -3,10 +3,12 @@ import { webkit } from "playwright-core";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { serveFogDemo } from "./kiwicat-demo";
+const fixed = process.argv.includes("--fixed"),
+  deadline = process.argv.includes("--deadline");
 const idleFPS = Number(process.argv[3] ?? 3),
   cpuOnly = process.argv.includes("--cpu-only"),
   requestedBackend = process.argv.includes("--webgl2") ? "webgl2" : "auto";
-const variant = process.env.KIWI_FOG_VARIANT === "B" ? "B" : "A";
+const variant = process.env.KIWI_FOG_VARIANT === "B1" ? "B1" : "B2";
 const densityScale = Number(process.env.KIWI_FOG_SCALE ?? 0.25);
 const out = resolve(process.argv[2] ?? "/tmp/kiwi-T8487-bench");
 mkdirSync(out, { recursive: true });
@@ -69,6 +71,10 @@ const report: Record<string, any> = {
   warmupSeconds: 10,
   sampleSeconds: 60,
   idleFPS,
+  fixed,
+  samplingMode: deadline
+    ? "monotonic 60-second deadline"
+    : "60 one-second intervals plus probe overhead",
   densityScale,
   variant,
   source_sha256: Object.fromEntries(
@@ -107,7 +113,8 @@ try {
       "&idleFPS=" +
       idleFPS +
       "&backend=" +
-      requestedBackend,
+      requestedBackend +
+      (fixed ? "&parado=1" : ""),
   );
   await page.waitForFunction(() => (window as any).kiwiFogReady, null, {
     timeout: 30000,
@@ -130,29 +137,49 @@ try {
     });
   await page.waitForTimeout(10000);
   console.log("CPU warmup complete; sampling60s");
+  const cpuByPID = new Map<number, number>();
   let previous = new Map(snapshot().map((p) => [p.pid, p.cpu])),
     last = performance.now();
+  const sampleStarted = last;
   for (let i = 0; i < 60; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        deadline
+          ? Math.max(0, sampleStarted + (i + 1) * 1000 - performance.now())
+          : 1000,
+      ),
+    );
     const current = snapshot(),
       now = performance.now();
-    const cpu = current.reduce(
-      (sum, p) => sum + Math.max(0, p.cpu - (previous.get(p.pid) ?? p.cpu)),
-      0,
-    );
+    const cpu = current.reduce((sum, p) => {
+      const delta = Math.max(0, p.cpu - (previous.get(p.pid) ?? p.cpu));
+      cpuByPID.set(p.pid, (cpuByPID.get(p.pid) ?? 0) + delta);
+      return sum + delta;
+    }, 0);
     report.samples.push((cpu / ((now - last) / 1000)) * 100);
     previous = new Map(current.map((p) => [p.pid, p.cpu]));
     last = now;
     if ((i + 1) % 10 === 0) console.log("CPU samples", i + 1);
   }
+  report.elapsedSampleSeconds = (last - sampleStarted) / 1000;
+  report.cpuWeightedMean =
+    ([...cpuByPID.values()].reduce((a, b) => a + b, 0) /
+      report.elapsedSampleSeconds) *
+    100;
   report.processes = snapshot().map((p) => ({
     pid: p.pid,
     ppid: p.ppid,
     command: p.command,
+    cpuSecondsSampled: cpuByPID.get(p.pid) ?? 0,
   }));
-  report.cpuMean =
+  report.cpuArithmeticMean =
     report.samples.reduce((a: number, b: number) => a + b, 0) /
     report.samples.length;
+  report.cpuMean = deadline ? report.cpuWeightedMean : report.cpuArithmeticMean;
+  report.cpuMeanMethod = deadline
+    ? "totalCPU/elapsed"
+    : "mean of normalized per-interval rates";
   report.cpuP95 = percentile(report.samples, 0.95);
   const idle = await page.evaluate(() => (window as any).kiwiFog.stats);
   report.states.push({

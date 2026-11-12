@@ -5,6 +5,9 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve, join } from "node:path";
 import { serveFogDemo } from "./kiwicat-demo";
+const variant = process.env.KIWI_FOG_VARIANT ?? "B2";
+if (variant !== "B1" && variant !== "B2")
+  throw new Error("Choose B1 or B2; A is historical only");
 const out = resolve(process.argv[2] ?? "/tmp/kiwi-T8487-videos");
 mkdirSync(out, { recursive: true });
 const server = await serveFogDemo(),
@@ -46,7 +49,7 @@ const report: Record<string, any> = {
   fps: 30,
   simulationHz: 60,
   seed: 17,
-  variant: process.env.KIWI_FOG_VARIANT ?? "A",
+  variant: variant,
   densityScale: Number(process.env.KIWI_FOG_SCALE ?? 1),
   scenes: [],
 };
@@ -68,7 +71,7 @@ try {
     await page.goto(
       server.url +
         "/?mode=capture&variant=" +
-        (process.env.KIWI_FOG_VARIANT ?? "A") +
+        variant +
         "&densityScale=" +
         (process.env.KIWI_FOG_SCALE ?? 1) +
         "&state=" +

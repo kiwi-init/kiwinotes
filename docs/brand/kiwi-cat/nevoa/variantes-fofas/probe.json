@@ -1,0 +1,56 @@
+[
+  {
+    "file": "ouvindo-B1-B2.mp4",
+    "width": 1280,
+    "height": 800,
+    "frames": 240,
+    "fps": "30/1",
+    "seconds": 8.0,
+    "audio": false
+  },
+  {
+    "file": "ouvindo-B1.mp4",
+    "width": 640,
+    "height": 800,
+    "frames": 240,
+    "fps": "30/1",
+    "seconds": 8.0,
+    "audio": false
+  },
+  {
+    "file": "ouvindo-B2.mp4",
+    "width": 640,
+    "height": 800,
+    "frames": 240,
+    "fps": "30/1",
+    "seconds": 8.0,
+    "audio": false
+  },
+  {
+    "file": "thinking-B1-B2.mp4",
+    "width": 1280,
+    "height": 800,
+    "frames": 240,
+    "fps": "30/1",
+    "seconds": 8.0,
+    "audio": false
+  },
+  {
+    "file": "thinking-B1.mp4",
+    "width": 640,
+    "height": 800,
+    "frames": 240,
+    "fps": "30/1",
+    "seconds": 8.0,
+    "audio": false
+  },
+  {
+    "file": "thinking-B2.mp4",
+    "width": 640,
+    "height": 800,
+    "frames": 240,
+    "fps": "30/1",
+    "seconds": 8.0,
+    "audio": false
+  }
+]

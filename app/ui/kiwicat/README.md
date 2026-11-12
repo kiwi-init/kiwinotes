@@ -29,16 +29,16 @@ do julgamento do harry.
 O campo escalar de ruído é calculado numa textura RGBA16F menor (`densityScale`: 1,
 0,5 ou 0,25), ampliada com filtro linear; a composição final continua na
 resolução de saída. Essa filtragem de amostragem não aplica blur à imagem.
-A escala final depende da comparação visual e das três medidas de cada
-configuração pedidas em #8561.
+A escala final depende da comparação visual e das medidas após a escolha
+da textura. A CPU está pausada por #8698.
 
 A máscara separada guarda os olhos no canal R e a cobertura opaca no G.
 A cobertura bloqueia apenas a variação procedural e as volutas, para a
 névoa ficar atrás do gato; não congela a exposição das bordas.
 Um pedestal de luminância
 contínuo protege o material escuro; congelar as bordas das camadas criava
-um contorno na exposição baixa (#8570). O aro preserva matiz/forma e usa
-o mesmo ganho local da luz, limitado a 1. A cor só atua na luz da névoa. Exposição local tem piso
+um contorno na exposição baixa (#8570). O aro preserva matiz/forma. No repouso mantém o ganho local anterior; nos
+estados ativos sua emissão é separada da luz neutra e limitada a 1. A cor só atua na luz da névoa. Exposição local tem piso
 0,50; a cor é interpolada emRGBlinear por400ms, com pisoY0,28. Voz usa
 τsubida60ms/τdescida280ms por tempo decorrido. Transições de estado usam
 240ms a partir da pose corrente. Cabeça, corpo, orelhas, olhos e símbolos
@@ -48,11 +48,14 @@ Os assets são reproduzidos com `python app/scripts/kiwicat-assets.py`
 (Pillow/NumPy). `assets/source.json` registra os hashes das seis fontes.
 Nenhum arquivo original em `docs/brand/kiwi-cat/gerada/` é alterado.
 
-`options.variant` preserva A (discreta) e permite a proposta B apenas em
-`ouvindo`/`thinking`: maior contraste espacial, advecção radial/ascendente
-do campo procedural, voz alterando sua expansão e peso lateral no pensar.
-A imagem de referência não se desloca. B ainda depende da escolha visual
-do harry; o repouso é idêntico nas duas opções.
+`options.variant` seleciona os estudos B1 (algodão) ou B2 (nuvem suave),
+ambos derivados da B escolhida pelo harry. A foi removida do runtime e só
+fica nos vídeos históricos. A textura ainda espera a escolha dele (#8751).
+A densidade/advecção ficou idêntica durante a correção de composição:
+região estática do aro no canal B da máscara, luz neutra separada da emissão
+cromática com ganho até 1 e composição por screen, sem estouro. Nos estados
+ativos, o pedestal escuro usa uma transição exponencial contínua; o repouso
+preserva o mapeamento anterior e foi comparado pixel a pixel em 12 s.
 
 ## Cadência e pausa
 
@@ -92,9 +95,9 @@ bun app/scripts/kiwicat-capture-proof.ts /tmp/kn-capture-proof
 bun app/scripts/kiwicat-demo-check.ts /tmp/kn-demo-check
 bun app/scripts/kiwicat-reference.ts /tmp/kn-reference
 bun app/scripts/kiwicat-exposure-check.ts /tmp/kn-exposure
-KIWI_FOG_VARIANT=B bun app/scripts/kiwicat-scale-check.ts /tmp/kn-scales
+KIWI_FOG_VARIANT=B2 bun app/scripts/kiwicat-scale-check.ts /tmp/kn-scales
 kiwi -c kiwinotes --as brave-egret lock bench --ttl 20m
-KIWI_FOG_SCALE=0.25 KIWI_FOG_VARIANT=B bun app/scripts/kiwicat-bench.ts /tmp/kn-bench3 3
+KIWI_FOG_SCALE=0.25 KIWI_FOG_VARIANT=B2 bun app/scripts/kiwicat-bench.ts /tmp/kn-bench3 3
 bun app/scripts/kiwicat-bench.ts /tmp/kn-bench12 12 --cpu-only
 bun app/scripts/kiwicat-capture.ts /tmp/kn-fog-videos
 ```

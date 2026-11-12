@@ -43,7 +43,7 @@ const target = new RenderTarget(640, 800, {
   depthBuffer: false,
 });
 const query = new URLSearchParams(location.search);
-const field = densityMaterial(17, query.get("variant") === "B" ? "B" : "A"),
+const field = densityMaterial(17, query.get("variant") === "B1" ? "B1" : "B2"),
   composite = fogMaterial(reference!, protection!, target.texture);
 const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1),
   fieldScene = new Scene(),
@@ -56,13 +56,17 @@ const dynamics = new FogDynamics(
   17,
 );
 Object.assign(window, {
-  sweep(exposure: number, time = 0) {
+  sweep(
+    exposure: number,
+    time = 0,
+    controls: { side?: number; upper?: number; volume?: number } = {},
+  ) {
     const frame = {
       ...dynamics.sample(time),
       exposure,
-      side: 0,
-      upper: 0,
-      volume: 1,
+      side: controls.side ?? 0,
+      upper: controls.upper ?? 0,
+      volume: controls.volume ?? 1,
     };
     field.apply(frame);
     composite.apply(frame);

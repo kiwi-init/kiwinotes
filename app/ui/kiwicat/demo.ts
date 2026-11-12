@@ -15,7 +15,7 @@ const backend =
       : "auto";
 const api = await createKiwiFog(document.getElementById("fog")!, {
   mode,
-  variant: query.get("variant") === "B" ? "B" : "A",
+  variant: query.get("variant") === "B1" ? "B1" : "B2",
   backend,
   width: Number(query.get("width") ?? 640),
   height: Number(query.get("height") ?? 800),
@@ -36,7 +36,7 @@ Object.assign(window, { kiwiFog: api, kiwiFogReady: true });
 if (query.get("caption") === "1") {
   const caption = document.createElement("div");
   caption.textContent =
-    (query.get("variant") ?? "A") +
+    (query.get("variant") ?? "B2") +
     " / " +
     estado +
     " / " +

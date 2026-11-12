@@ -30,7 +30,7 @@ export interface FogOptions {
   seed?: number;
   idleFPS?: number;
   densityScale?: 1 | 0.5 | 0.25;
-  variant?: "A" | "B";
+  variant?: "B1" | "B2";
   inputs?: Partial<FogInputs>;
 }
 export interface FogStats {

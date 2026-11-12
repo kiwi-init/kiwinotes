@@ -21,7 +21,7 @@ try {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto(
-      `${server.url}/?mode=capture&densityScale=${scale}&seed=17&variant=${process.env.KIWI_FOG_VARIANT ?? "A"}`,
+      `${server.url}/?mode=capture&densityScale=${scale}&seed=17&variant=${process.env.KIWI_FOG_VARIANT ?? "B2"}`,
     );
     await page.waitForFunction(() => (window as any).kiwiFogReady);
     let start = 0;
