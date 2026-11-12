@@ -233,6 +233,31 @@ describe("o index.json do histórico estragado (T7444)", () => {
     expect(await fresh.list("A.md")).toEqual([]);
   });
 
+  // T8073 (da revisão do T7940, #8060): a pasta que perde a disputa por um caminho não fica no disco para sempre.
+  test("duas pastas com o mesmo caminho: a que perde passa pela poda dos 30 dias e larga o caminho", async () => {
+    const t = Date.parse("2026-11-04T10:00:00.000Z");
+    const dir = path.join(tmp(), "history", "notes");
+    const folder = (id: string, owner: string, stamps: string[]) => {
+      mkdirSync(path.join(dir, id), { recursive: true });
+      writeFileSync(path.join(dir, id, "note.json"), JSON.stringify({ path: owner }));
+      for (const st of stamps) writeFileSync(path.join(dir, id, `${st}.md`), st);
+    };
+    // No índice bom: a do índice ganha, e a outra (que diz o mesmo caminho) perde.
+    folder("aaaaaaaaaaaaaaaa", "Diário.md", ["2026-11-03T10-00-00-000Z"]);
+    folder("bbbbbbbbbbbbbbbb", "Diário.md", ["2026-09-01T10-00-00-000Z", "2026-11-02T10-00-00-000Z"]);
+    // Sem índice para elas: a de versão mais nova ganha, e a outra perde.
+    folder("cccccccccccccccc", "Outra.md", ["2026-11-03T12-00-00-000Z"]);
+    folder("dddddddddddddddd", "Outra.md", ["2026-08-01T10-00-00-000Z"]);
+    writeFileSync(path.join(dir, "index.json"), JSON.stringify({ version: 1, paths: { "Diário.md": "aaaaaaaaaaaaaaaa" } }));
+    const v = new NoteVersions({ dir, now: () => t, minGapMs: 0 });
+    expect((await v.list("Diário.md")).map((x) => x.id)).toEqual(["2026-11-03T10-00-00-000Z"]);
+    expect((await v.list("Outra.md")).map((x) => x.id)).toEqual(["2026-11-03T12-00-00-000Z"]);
+    // As perdedoras: só o que passou dos 30 dias sai, a vazia some, e o note.json não reclama mais o caminho.
+    expect(readdirSync(path.join(dir, "bbbbbbbbbbbbbbbb")).sort()).toEqual(["2026-11-02T10-00-00-000Z.md", "note.json"]);
+    expect(JSON.parse(readFileSync(path.join(dir, "bbbbbbbbbbbbbbbb", "note.json"), "utf8"))).toEqual({ path: null });
+    expect(existsSync(path.join(dir, "dddddddddddddddd"))).toBe(false);
+  });
+
   test("uma pasta de antes do note.json: com o índice bom, ganha o seu; sem dono, só perde o que passou dos 30 dias", async () => {
     let t = Date.parse("2026-11-04T10:00:00.000Z");
     const dir = path.join(tmp(), "history", "notes");
