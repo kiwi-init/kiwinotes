@@ -7,6 +7,7 @@ after=pathlib.Path(sys.argv[2])
 diffs=[int(np.abs(np.array(Image.open(p).convert('RGB')).astype(int)-np.array(Image.open(after/p.name).convert('RGB')).astype(int)).max()) for p in before.glob('*.png')]
 assert len(diffs)==15 and max(diffs)==0, diffs
 r=json.loads((after/'report.json').read_text())
+assert r['liveHiddenNoDraw'], 'Hidden live renderer continued drawing'
 def frame(video,t):
     raw=subprocess.check_output(['ffmpeg','-v','error','-ss',str(t),'-i',str(after/video),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'])
     return np.frombuffer(raw,np.uint8).reshape(800,640,3)

@@ -76,7 +76,7 @@ test("all fixed frames stop the noise clock, including after updates", () => {
 });
 test("drawing policy has idle cap, hidden/reduced pause, sustained slow fallback", () => {
   const policy = new DrawingPolicy();
-  expect(policy.interval("repouso")).toBe(1 / 3);
+  expect(policy.interval("repouso")).toBe(1 / 2);
   expect(policy.interval("repouso", true)).toBe(1 / 30);
   expect(policy.interval("thinking")).toBe(1 / 60);
   policy.hidden = true;

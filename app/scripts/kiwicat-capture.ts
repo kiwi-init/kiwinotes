@@ -16,6 +16,9 @@ const server = await serveFogDemo(),
     throw error;
   });
 const selected = process.argv[3];
+const quietFPS = Number(process.env.KIWI_FOG_IDLE_FPS ?? 2);
+if (!Number.isFinite(quietFPS) || quietFPS < 1 || quietFPS > 30)
+  throw new Error("KIWI_FOG_IDLE_FPS must be between 1 and 30");
 const scenes = [
   ...["repouso", "ouvindo", "thinking"].flatMap((state) =>
     ["padrao", "claude", "codex"].map((colour) => ({
@@ -23,7 +26,7 @@ const scenes = [
       state,
       colour,
       seconds: 8,
-      idleFPS: 3,
+      idleFPS: quietFPS,
     })),
   ),
   {
@@ -31,7 +34,7 @@ const scenes = [
     state: "repouso",
     colour: "padrao",
     seconds: 60,
-    idleFPS: 3,
+    idleFPS: quietFPS,
   },
   {
     name: "repouso-12fps",
@@ -51,6 +54,7 @@ const report: Record<string, any> = {
   fps: 30,
   simulationHz: 60,
   seed: 17,
+  idleFPS: quietFPS,
   variant: variant,
   densityScale: Number(process.env.KIWI_FOG_SCALE ?? 1),
   scenes: [],

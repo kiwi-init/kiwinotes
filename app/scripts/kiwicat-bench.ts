@@ -5,7 +5,7 @@ import { resolve, join } from "node:path";
 import { serveFogDemo } from "./kiwicat-demo";
 const fixed = process.argv.includes("--fixed"),
   deadline = !process.argv.includes("--legacy-intervals");
-const idleFPS = Number(process.argv[3] ?? 3),
+const idleFPS = Number(process.argv[3] ?? 2),
   cpuOnly = process.argv.includes("--cpu-only"),
   requestedBackend = process.argv.includes("--webgl2") ? "webgl2" : "auto";
 const variant = "B1";

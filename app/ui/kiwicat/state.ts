@@ -320,8 +320,8 @@ export class FogDynamics {
 }
 export class DrawingPolicy {
   readonly idleFPS: number;
-  constructor(idleFPS = 3) {
-    this.idleFPS = Number.isFinite(idleFPS) ? clamp(idleFPS, 1, 30) : 3;
+  constructor(idleFPS = 2) {
+    this.idleFPS = Number.isFinite(idleFPS) ? clamp(idleFPS, 1, 30) : 2;
   }
   hidden = false;
   reduced = false;

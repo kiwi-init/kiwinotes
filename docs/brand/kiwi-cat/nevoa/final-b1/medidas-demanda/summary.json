@@ -1,0 +1,804 @@
+{
+  "task": "T8487",
+  "variant": "B1",
+  "scope": "standalone WebKit headless, NOT production WKWebView",
+  "measuredCommits": [
+    "3d64673f2cf73494e68ad1dcce84c0fe2b44eb67"
+  ],
+  "source_sha256": {
+    "assets/source.json": "2c80a303609b966e237ccd3114793109909febb25ab1c90bd8fc2b4a3a8bbc00",
+    "demo.ts": "5c97673ca0cc974ced7bac651bf9c0016e2959b013f389038b8fd1baca8b425a",
+    "index.ts": "a76bd4dfb7d1e30cecaa79a5ed15f44b41a2c5d46aecc773b062c2d32735a728",
+    "shader.ts": "8f04738fa8942546343fcf388fd095b29c0005a4bb6843ea0602455b6aaf64bd",
+    "state.ts": "68407a3d023176d2408d401bef200a89bcbabef5a38dccf6b145b5250311aa54"
+  },
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "dpr": 1,
+  "idleFPS": 3,
+  "warmupSeconds": 10,
+  "deadlineSeconds": 60,
+  "cpuUnit": "percent of one core; sum of own frozen browser/page/GPU/networking/launcher PIDs",
+  "baselines": [
+    {
+      "mean": 0.04993344405945063,
+      "p95": 0,
+      "seconds": 60.079973583000005,
+      "draws": 1,
+      "file": "kiwi-T8487-B1-demand-base-r1.json"
+    },
+    {
+      "mean": 0.01664606954847276,
+      "p95": 0,
+      "seconds": 60.074241375,
+      "draws": 1,
+      "file": "kiwi-T8487-B1-demand-base-r2.json"
+    },
+    {
+      "mean": 0.01665053837686615,
+      "p95": 0,
+      "seconds": 60.058118084,
+      "draws": 1,
+      "file": "kiwi-T8487-B1-demand-base-r3.json"
+    }
+  ],
+  "configs": [
+    {
+      "scale": 1,
+      "means": [
+        3.129774089035655,
+        3.911666890810089,
+        3.578458672418498
+      ],
+      "mean": 3.539966550754747,
+      "min": 3.129774089035655,
+      "max": 3.911666890810089,
+      "p95s": [
+        4.0477182140649965,
+        5.120036700423062,
+        5.1580861008591254
+      ],
+      "deltaFromFixed": [
+        3.0798406449762044,
+        3.895020821261616,
+        3.561808134041632
+      ],
+      "passes": false,
+      "states": [
+        {
+          "state": "repouso",
+          "fps": [
+            2.999828581223928,
+            2.999785729590742,
+            2.999957143469379
+          ],
+          "cpuMeanDiagnostic": [
+            null,
+            null,
+            null
+          ],
+          "cpuDiagnosticSeconds": [
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "state": "dormindo",
+          "fps": [
+            2.9990003332222543,
+            2.998001332445041,
+            2.997002997002997
+          ],
+          "cpuMeanDiagnostic": [
+            3.182809433383989,
+            2.865050168222211,
+            2.5424892662260814
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1418783340000083,
+            3.141306250000009,
+            3.1465226249999976
+          ]
+        },
+        {
+          "state": "acordou",
+          "fps": [
+            59.993583573948676,
+            60.02554278416257,
+            59.98095842589607
+          ],
+          "cpuMeanDiagnostic": [
+            28.797007801981007,
+            30.03415187243561,
+            29.2427750281005
+          ],
+          "cpuDiagnosticSeconds": [
+            3.125324708,
+            3.1297704159999995,
+            3.1460762499999984
+          ]
+        },
+        {
+          "state": "ouvindo",
+          "fps": [
+            59.99999999999962,
+            60.006383657835485,
+            60.07628734901597
+          ],
+          "cpuMeanDiagnostic": [
+            30.23167487138411,
+            29.02875834876583,
+            28.042698138500693
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1423994999999993,
+            3.1348223339999968,
+            3.1380717920000025
+          ]
+        },
+        {
+          "state": "thinking",
+          "fps": [
+            59.96810207336432,
+            60.006383657836295,
+            60.006383657836295
+          ],
+          "cpuMeanDiagnostic": [
+            26.80420948941609,
+            27.760009714114435,
+            28.737700114675334
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1338361250000015,
+            3.134004667000001,
+            3.1317746250000056
+          ]
+        },
+        {
+          "state": "agindo",
+          "fps": [
+            60.01283697047498,
+            59.9872367581371,
+            59.96810207336541
+          ],
+          "cpuMeanDiagnostic": [
+            27.82936027897819,
+            30.306607565447095,
+            29.77620738501147
+          ],
+          "cpuDiagnosticSeconds": [
+            3.126194749999995,
+            3.134629958000005,
+            3.123299042000013
+          ]
+        },
+        {
+          "state": "pronto",
+          "fps": [
+            60.006383657832764,
+            60.0000000000007,
+            59.987236758136014
+          ],
+          "cpuMeanDiagnostic": [
+            27.574900895293098,
+            26.99368225061724,
+            26.56664874379182
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1187782080000033,
+            3.148884957999995,
+            3.124217917000002
+          ]
+        },
+        {
+          "state": "erro",
+          "fps": [
+            60.09538950715402,
+            60.019053667830235,
+            59.98723675813683
+          ],
+          "cpuMeanDiagnostic": [
+            26.50524299237645,
+            23.539898681037787,
+            26.841216949551196
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1314559169999994,
+            3.143598916999996,
+            3.129515333000003
+          ]
+        }
+      ],
+      "processes": [
+        {
+          "repetition": 1,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.7824435222589138
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0.016647734516147115
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.8823299293557965
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.4483529029047977
+            }
+          ]
+        },
+        {
+          "repetition": 2,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.8489149422609131
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.948787288409256
+            },
+            {
+              "role": "page",
+              "cpuPercent": 2.1139646601399207
+            }
+          ]
+        },
+        {
+          "repetition": 3,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.8321996912601162
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.9487076480365323
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.7975513331218507
+            }
+          ]
+        }
+      ],
+      "reports": [
+        "kiwi-T8487-B1-demand-1-r1.json",
+        "kiwi-T8487-B1-demand-1-r2.json",
+        "kiwi-T8487-B1-demand-1-r3.json"
+      ]
+    },
+    {
+      "scale": 0.5,
+      "means": [
+        3.5296049258807263,
+        3.5287619741678147,
+        3.19587151102236
+      ],
+      "mean": 3.418079470356967,
+      "min": 3.19587151102236,
+      "max": 3.5296049258807263,
+      "p95s": [
+        5.016005657725335,
+        5.044207220221318,
+        4.658644426303154
+      ],
+      "deltaFromFixed": [
+        3.4796714818212755,
+        3.5121159046193418,
+        3.179220972645494
+      ],
+      "passes": false,
+      "states": [
+        {
+          "state": "repouso",
+          "fps": [
+            2.999871434081394,
+            2.999813408735345,
+            2.999985646001691
+          ],
+          "cpuMeanDiagnostic": [
+            null,
+            null,
+            null
+          ],
+          "cpuDiagnosticSeconds": [
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "state": "dormindo",
+          "fps": [
+            3.000000000000029,
+            2.9960053262317006,
+            2.9960053262317006
+          ],
+          "cpuMeanDiagnostic": [
+            2.858250883050668,
+            2.5426455289127743,
+            2.864357134321099
+          ],
+          "cpuDiagnosticSeconds": [
+            3.148778874999989,
+            3.1463292500000097,
+            3.1420662919999884
+          ]
+        },
+        {
+          "state": "acordou",
+          "fps": [
+            60.01283697047443,
+            60.01905366782968,
+            60.0447141488356
+          ],
+          "cpuMeanDiagnostic": [
+            21.462232297192003,
+            28.69394641195026,
+            27.763490120209312
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1217628750000004,
+            3.1365500829999946,
+            3.133611791000003
+          ]
+        },
+        {
+          "state": "ouvindo",
+          "fps": [
+            60.00638365783575,
+            59.98095842589662,
+            60.006383657836295
+          ],
+          "cpuMeanDiagnostic": [
+            28.179359977765973,
+            27.706517014099546,
+            29.68790233542039
+          ],
+          "cpuDiagnosticSeconds": [
+            3.122853040999995,
+            3.1400554590000103,
+            3.1325891249999986
+          ]
+        },
+        {
+          "state": "thinking",
+          "fps": [
+            60.00638365783521,
+            60.01905366783131,
+            60.01263423878664
+          ],
+          "cpuMeanDiagnostic": [
+            24.552936927754622,
+            27.009220908298715,
+            25.992776126964927
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1360810409999975,
+            3.1470733749999926,
+            3.1547226660000014
+          ]
+        },
+        {
+          "state": "agindo",
+          "fps": [
+            59.99368487527571,
+            60.02554278416338,
+            60.00638365783494
+          ],
+          "cpuMeanDiagnostic": [
+            28.800219641235415,
+            27.790114148395396,
+            28.034185571449115
+          ],
+          "cpuDiagnosticSeconds": [
+            3.15969812500001,
+            3.130609666999997,
+            3.1390246659999974
+          ]
+        },
+        {
+          "state": "pronto",
+          "fps": [
+            60.00638365783657,
+            59.715639810426694,
+            59.974342527261705
+          ],
+          "cpuMeanDiagnostic": [
+            26.739203121611016,
+            25.996573971118327,
+            24.742900775746133
+          ],
+          "cpuDiagnosticSeconds": [
+            3.141454874999996,
+            3.15426179199999,
+            3.1120037500000035
+          ]
+        },
+        {
+          "state": "erro",
+          "fps": [
+            59.99999999999881,
+            59.99999999999881,
+            60.08309364014025
+          ],
+          "cpuMeanDiagnostic": [
+            27.03051757359281,
+            26.712050304453665,
+            27.09536995867372
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1445938750000058,
+            3.144648165999999,
+            3.137067333999992
+          ]
+        }
+      ],
+      "processes": [
+        {
+          "repetition": 1,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.8158049121139415
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0.01664907983906
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.9156993911483016
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.7814515427794233
+            }
+          ]
+        },
+        {
+          "repetition": 2,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.8156100789350138
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0.016645103651734945
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.9487709081488938
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.7477358834321721
+            }
+          ]
+        },
+        {
+          "repetition": 3,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.8156130418754981
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.8988388624750389
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.4814196066718233
+            }
+          ]
+        }
+      ],
+      "reports": [
+        "kiwi-T8487-B1-demand-0.5-r1.json",
+        "kiwi-T8487-B1-demand-0.5-r2.json",
+        "kiwi-T8487-B1-demand-0.5-r3.json"
+      ]
+    },
+    {
+      "scale": 0.25,
+      "means": [
+        3.413878720220083,
+        2.9962743263845253,
+        3.462212575831362
+      ],
+      "mean": 3.2907885408119903,
+      "min": 2.9962743263845253,
+      "max": 3.462212575831362,
+      "p95s": [
+        5.0365838564140475,
+        4.975789881341757,
+        5.0103710471965295
+      ],
+      "deltaFromFixed": [
+        3.3639452761606323,
+        2.9796282568360524,
+        3.445562037454496
+      ],
+      "passes": false,
+      "states": [
+        {
+          "state": "repouso",
+          "fps": [
+            2.999770352508897,
+            2.9997857295907444,
+            2.999899524896294
+          ],
+          "cpuMeanDiagnostic": [
+            null,
+            null,
+            null
+          ],
+          "cpuDiagnosticSeconds": [
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "state": "dormindo",
+          "fps": [
+            2.9950083194675443,
+            2.998001332445041,
+            2.9960053262317006
+          ],
+          "cpuMeanDiagnostic": [
+            2.5550535871372904,
+            2.8648374467359075,
+            3.186223661032324
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1310497909999975,
+            3.141539499999999,
+            3.138511624999999
+          ]
+        },
+        {
+          "state": "acordou",
+          "fps": [
+            60.006383657834384,
+            60.00638365783575,
+            59.97434252725979
+          ],
+          "cpuMeanDiagnostic": [
+            29.076199612903086,
+            27.19038185269233,
+            28.878747724444892
+          ],
+          "cpuDiagnosticSeconds": [
+            3.129707500000004,
+            3.126105416999999,
+            3.116478625000003
+          ]
+        },
+        {
+          "state": "ouvindo",
+          "fps": [
+            59.993583573948946,
+            60.006383657836295,
+            60.006383657836025
+          ],
+          "cpuMeanDiagnostic": [
+            28.484268082729574,
+            28.93971906162206,
+            29.700999558397207
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1245317499999947,
+            3.144467291000008,
+            3.1312077500000015
+          ]
+        },
+        {
+          "state": "thinking",
+          "fps": [
+            59.349074664964625,
+            59.99999999999935,
+            59.796437659032435
+          ],
+          "cpuMeanDiagnostic": [
+            25.625248044393288,
+            24.508300884642672,
+            24.23519909953484
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1219209999999875,
+            3.1417926670000016,
+            3.135934624999994
+          ]
+        },
+        {
+          "state": "agindo",
+          "fps": [
+            60.050568900126926,
+            59.97434252726143,
+            59.96192893401148
+          ],
+          "cpuMeanDiagnostic": [
+            27.990434690073474,
+            27.00741269369647,
+            27.66031857056558
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1439311670000025,
+            3.1102572079999953,
+            3.145300000000003
+          ]
+        },
+        {
+          "state": "pronto",
+          "fps": [
+            59.98095842589472,
+            60.000000000000114,
+            60.019053667830235
+          ],
+          "cpuMeanDiagnostic": [
+            24.835909859975594,
+            22.900358024164994,
+            26.457984016420077
+          ],
+          "cpuDiagnosticSeconds": [
+            3.140613750000004,
+            3.1003882090000117,
+            3.137049291000003
+          ]
+        },
+        {
+          "state": "erro",
+          "fps": [
+            60.044714148832874,
+            59.98723675813411,
+            59.91077119184184
+          ],
+          "cpuMeanDiagnostic": [
+            27.48788425555113,
+            26.154039338964846,
+            26.125011976167507
+          ],
+          "cpuDiagnosticSeconds": [
+            3.1286511250000038,
+            3.1352709590000014,
+            3.138754541999995
+          ]
+        }
+      ],
+      "processes": [
+        {
+          "repetition": 1,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.7993472125393366
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.8992656141067537
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.7152658935739928
+            }
+          ]
+        },
+        {
+          "repetition": 2,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.7324226131162171
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0.016645968479913995
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.7657145500760452
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.4814911947123484
+            }
+          ]
+        },
+        {
+          "repetition": 3,
+          "items": [
+            {
+              "role": "launcher",
+              "cpuPercent": 0
+            },
+            {
+              "role": "browser",
+              "cpuPercent": 0.8156173856525805
+            },
+            {
+              "role": "networking",
+              "cpuPercent": 0
+            },
+            {
+              "role": "GPU-process",
+              "cpuPercent": 0.8988436494946807
+            },
+            {
+              "role": "page",
+              "cpuPercent": 1.7477515406841009
+            }
+          ]
+        }
+      ],
+      "reports": [
+        "kiwi-T8487-B1-demand-0.25-r1.json",
+        "kiwi-T8487-B1-demand-0.25-r2.json",
+        "kiwi-T8487-B1-demand-0.25-r3.json"
+      ]
+    }
+  ],
+  "proposedScale": null,
+  "requiresOptimization": true,
+  "selectionPolicy": "mean of3<3%; lowest mean; prefer full if eligible observed min/max ranges overlap; no repetitions discarded",
+  "activeCPU": "diagnostic3s after1s settle, not the60s idle measure"
+}

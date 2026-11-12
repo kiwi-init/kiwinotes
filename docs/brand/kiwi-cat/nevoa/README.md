@@ -3,11 +3,11 @@
 Spec Kiwi #7549 v8466 · issue #376 · PR #377 (rascunho).
 
 O harry escolheu o movimento B (#8693) e pediu uma textura mais fofa (#8696).
-As duas propostas atuais estão abaixo. O lead confirmou que as argolas nas
-pontas do aro e o contorno do corpo foram corrigidos (#8751) e levou a escolha
-ao harry por botão. **A aparência está congelada e a CPU espera essa escolha.**
+O harry escolheu a B1 algodão (#8754). O lead confirmou que as argolas nas
+pontas do aro e o contorno do corpo foram corrigidos (#8751). **B1 é a única
+textura do runtime; a aparência está congelada.**
 
-## B1 algodão / B2 nuvem suave
+## Comparação histórica: B1 algodão / B2 nuvem suave
 
 | Estado, cor padrão | B1 à esquerda / B2 à direita |
 | --- | --- |
@@ -15,8 +15,9 @@ ao harry por botão. **A aparência está congelada e a CPU espera essa escolha.
 | Thinking | [vídeo](variantes-fofas/thinking-B1-B2.mp4) |
 
 B1 tem tufos amplos e macios; B2 reduz o contraste e deixa quase só volume.
-Ambas preservam a advecção e a resposta à voz da B. A saiu da API e do
-renderer; permanece apenas no histórico. O repouso permanece igual.
+As duas propostas preservavam a advecção e a resposta à voz da B. A e B2
+saíram da API e do renderer; permanecem apenas no histórico. O repouso
+permanece igual.
 
 As correções do aro/corpo não alteraram a função de densidade e movimento:
 [hashes antes/depois](variantes-fofas/density-preservada.json). A luz neutra
@@ -47,10 +48,13 @@ Não foram abertos app, helper, mic ou clipboard reais.
 
 ## Próximos passos
 
-Depois da escolha: medidas da B escolhida (três repetições, base parada e CPU
-por processo), nove clipes finais nas três cores e 60 s de repouso. A validação
-final de CPU usa prazo monotônico de 60 s após 10 s de aquecimento. Os números
-valem para a demonstração em 640×800/DPR1, não para o WKWebView de produção.
+A [primeira matriz B1](final-b1/medidas-iniciais/README.md) reprovou as três
+escalas. A [otimização do agendamento](final-b1/agendamento/README.md) preserva
+os pixels e a apresentação nativa. Uma nova matriz mede três repetições por
+escala, base parada e CPU por processo, com prazo monotônico de 60 s após
+10 s de aquecimento. Depois dela saem os nove clipes finais e 60 s de repouso.
+Os números valem para a demonstração em 640×800/DPR1, não para o WKWebView
+de produção.
 
 As medidas antigas coletavam 60 intervalos de 1 s mais o custo de consultar
 os processos, chegando a cerca de 64 s; as taxas foram normalizadas pelo

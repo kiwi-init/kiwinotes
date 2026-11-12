@@ -66,9 +66,10 @@ pelas quatro entradas. Nenhum filtro é aplicado ao vivo.
 
 O desenho ativo acompanha os quadros do WebKit headless (alvo60fps).
 A névoa de repouso/sono admite uma cadência menor, abaixo do teto30 do
-roteiro; `options.idleFPS` permite a comparação controlada de3/s e12/s
-pedida pelo lead (#8527). O lead escolheu 3/s para repouso (#8561); os
-estados ativos ainda serão julgados pelo harry.
+roteiro; `options.idleFPS` permite comparações controladas. Depois das
+matrizes a3/s acima de3% de CPU, o plano B do lead (#8862/#8893) usa2/s
+em repouso/sono, com comparação visual3/s ×2/s e três medidas na inteira.
+Os estados ativos mantêm o mesmo movimento e alvo60fps.
 Transições de cor/estado temporariamente usam30fps mesmo no repouso.
 Não extrapolar essas cadências para o movimento futuro do gato.
 

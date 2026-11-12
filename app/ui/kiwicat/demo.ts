@@ -22,7 +22,7 @@ const api = await createKiwiFog(document.getElementById("fog")!, {
   densityScale: ([1, 0.5, 0.25].includes(Number(query.get("densityScale")))
     ? Number(query.get("densityScale"))
     : 1) as 1 | 0.5 | 0.25,
-  idleFPS: Number(query.get("idleFPS") ?? 3),
+  idleFPS: Number(query.get("idleFPS") ?? 2),
   inputs: {
     estado,
     cor: query.get("color") ?? "padrao",
@@ -43,7 +43,7 @@ if (query.get("caption") === "1") {
     " / " +
     api.stats.backend +
     " / idle " +
-    (query.get("idleFPS") ?? 3) +
+    (query.get("idleFPS") ?? 2) +
     "/s";
   caption.style.cssText =
     "position:absolute;top:12px;left:12px;color:white;font:13px system-ui;pointer-events:none";

@@ -25,7 +25,7 @@ try {
       errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto(
-      `${server.url}/?mode=capture&state=${state}&densityScale=1&seed=17`,
+      `${server.url}/?mode=capture&state=${state}&densityScale=1&seed=17&idleFPS=3`,
     );
     await page.waitForFunction(() => (window as any).kiwiFogReady);
     for (let i = 0; i <= 480; i++) {
@@ -90,8 +90,10 @@ try {
   await livePage.waitForTimeout(6000);
   report.live = await livePage.evaluate(() => (window as any).kiwiFog.stats);
   const liveVideo = livePage.video()!;
-  await livePage.evaluate(() => (window as any).kiwiFog.visibility(true));
-  const hiddenDraws = report.live.draws;
+  const hiddenDraws = await livePage.evaluate(() => {
+    (window as any).kiwiFog.visibility(true);
+    return (window as any).kiwiFog.stats.draws;
+  });
   await livePage.waitForTimeout(500);
   report.liveHiddenNoDraw = await livePage.evaluate(
     (n) => (window as any).kiwiFog.stats.draws === n,
@@ -113,8 +115,8 @@ if (
     (c: any) => c.errors.length || c.stats.backend !== "webgpu",
   ) ||
   report.fixed.stats.draws !== 2 ||
-  report.live.draws < 17 ||
-  report.live.draws > 21 ||
+  report.live.draws < 11 ||
+  report.live.draws > 15 ||
   !report.liveHiddenNoDraw
 )
   process.exitCode = 1;

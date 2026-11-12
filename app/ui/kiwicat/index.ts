@@ -157,7 +157,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   }
   function schedule() {
     if (!policy.continuous || disposed) return;
-    // Quiet motion is demand-driven at 3/s: draw on the deadline instead of
+    // Quiet motion is demand-driven at 2/s: draw on the deadline instead of
     // waking a timer and then a display link for the same frame. Active
     // states and transition boosts retain the real display RAF.
     if (idle() && elapsed >= boostUntil)
