@@ -1,5 +1,5 @@
 // T6014: original Kiwi refactoring. Foam is a behavior reference; no Foam code or telemetry is included.
-import { isMap, isScalar, isSeq, parseDocument, type Scalar } from "yaml";
+import { isMap, isScalar, isSeq, parseDocument, type Scalar, visit } from "yaml";
 import { applyTextEdits, headingFor, markdownStructure, type NoteHeading, type TextEdit } from "../shared/markdown-structure.ts";
 import { cleanTag, tagKey, tagsInLine } from "../shared/tags.ts";
 import { noteName, type Resolver } from "../shared/wikilinks.ts";
@@ -128,7 +128,53 @@ export function rewriteNoteReferences(content: string, sourceBefore: string, sou
             edits.push({ from: ref.targetFrom, to: ref.targetTo, insert: relative.split("/").map(encodeURIComponent).join("/") });
         }
     }
-    return { content: applyTextEdits(content, edits), count: edits.length };
+    // Os links das propriedades (T7986): `up: "[[A]]"` ou uma lista deles. O frontmatter não é prosa, então o laço de
+    // cima não os via; cada valor de texto passa pela mesma regra e volta no mesmo estilo (aspas), e o resto do YAML fica.
+    const fm = frontmatterLinks(content, (value) => rewriteNoteReferences(value, sourceBefore, sourceAfter, from, to, before, after));
+    const out: { content: string; count: number; unsupported?: boolean } = { content: applyTextEdits(content, [...edits, ...fm.edits]), count: edits.length + fm.count };
+    if (fm.unsupported)
+        out.unsupported = true;
+    return out;
+}
+
+const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/** O valor novo de um texto do YAML, no estilo do de antes: com aspas simples ou duplas, ou sem, quando dá. */
+function yamlString(scalar: Scalar<string>, next: string): string {
+    const parsed = parseDocument(next).contents;
+    const needsQuotes = !isScalar(parsed) || typeof parsed.value !== "string" || parsed.value !== next || /^[?!&*{}[\],#>|%@`"']/.test(next);
+    return scalar.type === "QUOTE_SINGLE" ? "'" + next.replace(/'/g, "''") + "'" : scalar.type === "QUOTE_DOUBLE" || needsQuotes ? JSON.stringify(next) : next;
+}
+
+/**
+ * Reescreve os links dos valores de texto do frontmatter com `rewrite` (T7986). Um YAML que não se lê, ou um valor que
+ * mudaria mas não dá para trocar no lugar (bloco `|`/`>`, âncora), fica como está e conta como `unsupported`.
+ */
+function frontmatterLinks(content: string, rewrite: (value: string) => { content: string; count: number }) {
+    const edits: TextEdit[] = [];
+    let count = 0, unsupported = false;
+    const fm = FRONTMATTER.exec(content);
+    if (!fm || !/\[\[|\]\(/.test(fm[1]!))
+        return { edits, count, unsupported };
+    const base = fm[0].indexOf("\n") + 1, doc = parseDocument(fm[1]!, { prettyErrors: false, strict: true });
+    if (doc.errors.length)
+        return { edits, count, unsupported: true };
+    visit(doc, {
+        Scalar(key, node) {
+            if (key === "key" || typeof node.value !== "string" || !/\[\[|\]\(/.test(node.value))
+                return;
+            const next = rewrite(node.value);
+            if (next.content === node.value)
+                return;
+            if (!node.range || node.anchor || ["BLOCK_LITERAL", "BLOCK_FOLDED"].includes(node.type ?? "")) {
+                unsupported = true;
+                return;
+            }
+            edits.push({ from: base + node.range[0], to: base + node.range[1], insert: yamlString(node as Scalar<string>, next.content) });
+            count += next.count;
+        },
+    });
+    return { edits, count, unsupported };
 }
 export function validTag(value: unknown): value is string { return typeof value === "string" && value.length <= 200 && !!cleanTag(value) && /^#?[\p{L}\p{N}_-]+(?:\/[\p{L}\p{N}_-]+)*$/u.test(value); }
 export function rewriteTag(content: string, from: string, to: string) {
@@ -177,11 +223,7 @@ export function rewriteTag(content: string, from: string, to: string) {
                     }).join("");
                     if (next === item.value)
                         continue;
-                    const scalar = item as Scalar<string>;
-                    const parsed = parseDocument(next).contents;
-                    const needsQuotes = !isScalar(parsed) || typeof parsed.value !== "string" || parsed.value !== next || /^[?!&*{}[\],#>|%@`"']/.test(next);
-                    const value = scalar.type === "QUOTE_SINGLE" ? "'" + next.replace(/'/g, "''") + "'" : scalar.type === "QUOTE_DOUBLE" || needsQuotes ? JSON.stringify(next) : next;
-                    edits.push({ from: base + item.range[0], to: base + item.range[1], insert: value });
+                    edits.push({ from: base + item.range[0], to: base + item.range[1], insert: yamlString(item as Scalar<string>, next) });
                 }
             }
     }
