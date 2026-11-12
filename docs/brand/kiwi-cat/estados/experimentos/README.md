@@ -1,4 +1,4 @@
-# Diagnóstico de #7924 / #7936 — ainda não aprovado
+# Diagnósticos das orelhas — limite registrado na entrega
 
 `mascara-contorno.py` tenta a abordagem pedida pelo lead: orelhas como
 máscaras foscas rígidas, cabeça e aro fixos, luz pela diferença entre
@@ -27,8 +27,9 @@ revelado da orelha. É necessário resolver a oclusão e o halo como uma única
 composição de referência antes de aprovar os ângulos maiores.
 
 A prancha é a evidência solicitada pelo lead caso o caminho travasse.
-Não é uma nova rodada de aprovação e não reduz o alvo de ±25°.
-As prévias principais no PR continuam sendo a rodada 7 rejeitada.
+Os diagnósticos não alteram o alvo final de ±25°. Por decisão posterior do
+lead (#8295), as prévias principais ficam como referência dos olhos e
+símbolos, com as orelhas dentro do limite estático de ±5°.
 
 ## Única tentativa corrigida de #7963, pedida em #8283
 
@@ -62,12 +63,14 @@ Há dois defeitos independentes a relatar:
 
 Nenhum clipe foi regenerado e nenhuma rodada foi aberta. A implementação
 para aqui, conforme #8283: sem diminuir os ângulos, sem mexer nos elementos
-aprovados e sem tentar uma terceira abordagem. O diagnóstico foi preparado
-para o lead decidir o próximo passo.
+aprovados e sem tentar uma terceira abordagem. O diagnóstico fundamentou a
+decisão do lead no #8295: guardar o limite estático nesta entrega e
+transferir o movimento largo para o gato em código.
 
 ## Decisão após os diagnósticos — #8293
 
-O spec #7591 foi atualizado e aprovado: a T7606 guarda o limite de ±5° nas
+O lead decidiu no #8295 e editou o spec #7591 na versão #8293, comunicando
+ao harry no #8296: a T7606 guarda o limite de ±5° nas
 camadas estáticas e os diagnósticos desta pasta. O alvo ±25° passa para a
 entrega do gato em código, com névoa e aro desenhados ao vivo. As indicações
 de aguardar uma decisão acima são históricas; esta é a decisão vigente.

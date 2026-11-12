@@ -4,7 +4,7 @@ Spec #7591; instrução #7589; revisão #7630; adendo do harry #7649 entregue
 pelo lead no #7655, corrigido no #7657 e aprovado no #7671, no canal `kiwinotes` do Kiwi Channels.
 Issue [#309](https://github.com/kiwi-init/kiwinotes/issues/309), PR [#311](https://github.com/kiwi-init/kiwinotes/pull/311).
 
-**Referências documentais compostas com as camadas originais, não capturas da animação. Prancha aprovada pelo harry (#8276), conforme o spec #7591, versão #8293.**
+**Referências documentais compostas com as camadas originais, não capturas da animação. Prancha aprovada pelo harry (#8276). O lead transferiu o movimento largo das orelhas para a entrega em código (#8295; comunicado ao harry no #8296).**
 
 ![Resumo](prancha-estados.webp)
 
@@ -88,8 +88,8 @@ somente documental, sem implementar a tela de Ajustes.
 
 ## Limite das orelhas nesta entrega
 
-O spec #7591, versão #8293 aprovada pelo harry, encerra esta entrega com o
-limite medido das camadas estáticas da v2: **±5°**. O alvo de **±25°**, com
+Por decisão do lead (#8295), registrada na edição #8293 do spec #7591,
+esta entrega fecha com **±5° sem defeito nas camadas estáticas da v2**. O alvo de **±25°**, com
 `erro` perto de ±20°, passa para a entrega do gato em código. Não é uma
 redução do movimento final pedido pelo harry.
 
@@ -109,6 +109,7 @@ célula continua acima de 1024 px.
 
 As quatro texturas derivadas em `preparadas/` são PNGs de preparação sem
 perda, 2048 × 2560: fundo sem orelhas, cabeça fixa e as duas orelhas RGBA.
+O `montar.py` gera esses PNGs; eles não ficam no repositório. O manifest fica.
 Não são imagens de revisão em WebP. Os seis arquivos em `gerada/` permanecem
 intactos. A extração anterior misturava parte da silhueta das orelhas na luz
 e no aro; girar apenas aqueles recortes deixava um fantasma no fundo.
@@ -205,10 +206,19 @@ O script prepara só documentos: nada do app, shader, overlay, microfone ou
 interface do macOS é executado. O ok do harry continua necessário antes da
 entrega seguinte.
 
-## O que a entrega em código precisa resolver
+## O que fica para a entrega em código
 
-A luz e o aro da v2 incluem a franja das orelhas na posição neutra. Não basta
-rotacionar esses pixels. A tentativa corrigida de #7963 calculou o halo
+A decisão de adiar o movimento largo é do lead (#8295), comunicada ao harry
+no #8296. Os três achados dos diagnósticos indicam o trabalho seguinte:
+
+- A `luz` carrega a borda da orelha neutra: a névoa precisa ser calculada ao
+  vivo a partir da silhueta da pose.
+- O `aro.png` carrega a franja clara da orelha neutra: o aro precisa ser
+  desenhado em código ou recortado de novo sem essa franja.
+- A extração das superfícies foscas altera a borda da cabeça e do corpo:
+  as máscaras da silhueta precisam ser refeitas e conferidas contra a v2.
+
+Não basta rotacionar os pixels das camadas atuais. A tentativa corrigida de #7963 calculou o halo
 inteiro, ajustou quatro escalas por mínimos quadrados e desfez o resíduo
 perto das orelhas nos primeiros 3°; ainda falhou. Em `E > 0,1`, o resíduo teve
 média **13,998/255** e máximo **34,903/255**. A nova extração de superfícies
@@ -227,3 +237,7 @@ A composição principal continua batendo com a v2: máximo **2/255**, média
 **0,043514/255**, fora dos discos dos olhos +5 px, em 2048 × 2560. As seis
 fontes originais permanecem intactas. Esta entrega não altera o app nem
 antecipa roteiro, shader ou implementação do gato.
+
+As três prévias ficam como estão: mostram o movimento dos olhos e dos
+símbolos; as orelhas nelas estão dentro de ±5°. O roteiro de movimento
+espera o merge desta entrega e o sinal do lead.

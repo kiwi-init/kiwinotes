@@ -142,9 +142,11 @@ harmonicamente, evitando discos com tom diferente.
 As três prévias devem ser revistas novamente; não há aprovação visual
 implícita nem avanço para o roteiro ou o app.
 
-## 12. Decisão vigente — spec #7591, versão #8293
+## 12. Decisão vigente — lead #8295, spec #7591 versão #8293
 
-O harry aprovou a prancha (#8276). Olhos, símbolos, rabisco do erro, aro,
+O harry aprovou a prancha (#8276). O lead decidiu transferir o movimento
+largo das orelhas para o código (#8295), comunicou ao harry (#8296) e editou
+o spec na versão #8293. Olhos, símbolos, rabisco do erro, aro,
 cores, piscada e preenchimento dos olhos ficam preservados. A primeira
 entrega fecha com o limite medido de ±5° nas camadas estáticas da v2.
 Esta decisão substitui os pedidos de nova rodada e amplitude das seções
