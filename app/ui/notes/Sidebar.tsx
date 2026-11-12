@@ -12,7 +12,7 @@ import { titleRanges } from "./palette.ts";
 import type { FileNode, TreeNode } from "./tree.ts";
 import { HoverLabel } from "../src/kit/index.tsx";
 import { TreeIcon, Twisty } from "./treeIcons.tsx";
-import type { SavedSearch } from "../../src/shared/query.ts";
+import { type SavedSearch, SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { SectionId } from "./sidebarState.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
@@ -452,7 +452,7 @@ export function Sidebar(p: SidebarProps) {
       {/* Na busca, o resultado vem inteiro, mesmo com a seção Notas recolhida. */}
       {searching ? <div className="kn-side-head" data-section="notes">Resultado</div> : head("notes", "Notas")}
       {searching || !shut("notes") ? items(p.tree, 0) : null}
-      {searching && !p.tree.length ? <div className="kn-side-empty">Nada com esse nome</div> : null}
+      {searching && !p.tree.length ? <div className="kn-side-empty">{searchTooLong(p.query) ? SEARCH_TOO_LONG : "Nada com esse nome"}</div> : null}
       {!searching && p.tags?.length && p.onTag ? (
         <>
           <div className="kn-side-gap" />

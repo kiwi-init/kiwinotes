@@ -117,3 +117,9 @@ export function semanticQueryText(query: string): string {
   const q = parseQuery(query, { preserveWords: true });
   return [...q.words, ...q.phrases].join(" ").trim();
 }
+
+/** O tamanho máximo de uma busca nas notas (T7791): mais que isso o engine recusa, e a janela diz por quê. */
+export const MAX_SEARCH_QUERY = 500;
+export const searchTooLong = (query: string) => query.length > MAX_SEARCH_QUERY;
+/** O aviso da janela para uma busca longa demais (quem colou um parágrafo para achar a nota de onde ele veio). */
+export const SEARCH_TOO_LONG = `Busca longa demais: use até ${MAX_SEARCH_QUERY} caracteres.`;

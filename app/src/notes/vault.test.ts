@@ -254,6 +254,19 @@ describe("Vault (T1316)", () => {
     expect(existsSync(path.join(root, ".kiwi-trash"))).toBe(true); // a pasta fica, vazia
   });
 
+  // T7441: a busca longa demais diz o motivo. Antes vinha "query must be a string", que não ajuda quem colou um texto.
+  test("search: mais de 500 caracteres dá E_BAD_ARGS que fala do tamanho", async () => {
+    const { v } = await vault({ "A.md": "a" });
+    let err: { code?: string; message?: string } = {};
+    try {
+      v.search("x".repeat(501));
+    } catch (e) {
+      err = e as typeof err;
+    }
+    expect(err.code).toBe("E_BAD_ARGS");
+    expect(err.message).toMatch(/500/);
+  });
+
   test("search: título vale mais, sem acento nem maiúscula, com o trecho; backlinks e resolve", async () => {
     const { v } = await vault({
       "Reunião.md": "pauta da semana",
