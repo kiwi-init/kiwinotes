@@ -204,8 +204,15 @@ export class SemanticIndex {
     this.lastSave = this.now();
     await mkdir(this.o.dir, { recursive: true });
     const tmp = `${this.file}.tmp`;
-    await writeFile(tmp, encodeIndex(this.dim, this.notes));
-    await rename(tmp, this.file);
+    try {
+      await writeFile(tmp, encodeIndex(this.dim, this.notes));
+      await rename(tmp, this.file);
+    } catch (e) {
+      // O disco cheio no meio (T7942): o temporário sai, e o índice continua por gravar.
+      await rm(tmp, { force: true }).catch(() => {});
+      this.dirty = true;
+      throw e;
+    }
   }
 
   /**

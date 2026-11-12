@@ -203,9 +203,28 @@ function optionalString(value: unknown, field: string, max: number,
 }
 
 /** Os handlers do contrato, por nome. O AppEngine recusa (`E_NO_CAPABILITY`) qualquer nome fora daqui. */
+/**
+ * O disco cheio (T7942): o `ENOSPC` do sistema vira `E_DISK_FULL`, para a janela dizer isso em vez do erro genérico. O
+ * AppEngine só passa adiante códigos `E_…`; o `ENOSPC` chegava como `E_FAILED`, com o motivo só na mensagem.
+ */
+export function diskFull<T extends Record<string, (args: unknown) => unknown>>(handlers: T): T {
+  const full = (e: unknown) => {
+    const err = e as { code?: unknown; errno?: unknown } | null;
+    return err?.code === "ENOSPC" || err?.errno === -28 ? new CapabilityError("E_DISK_FULL", (e as Error).message) : e;
+  };
+  return Object.fromEntries(Object.entries(handlers).map(([cap, fn]) => [cap, (args: unknown) => {
+    try {
+      const r = fn(args);
+      return r instanceof Promise ? r.catch((e) => { throw full(e); }) : r;
+    } catch (e) {
+      throw full(e);
+    }
+  }])) as T;
+}
+
 export function uiCapabilities(deps: CapabilityDeps,
 ): Record<UiCapability, (args: unknown) => Promise<unknown> | unknown> {
-  if (deps.notesFolders) return folderCapabilities(deps, uiCapabilities);
+  if (deps.notesFolders) return diskFull(folderCapabilities(deps, uiCapabilities));
   const now = deps.now ?? Date.now;
   // O main não vê o clique: a UI só chama no gesto (navigator.userActivation), e aqui vai um limite de ritmo para uma
   // UI que tente encher o clipboard sozinha.
@@ -904,7 +923,7 @@ export function uiCapabilities(deps: CapabilityDeps,
   };
   // A lista do contrato e os handlers andam juntos.
   for (const cap of UI_CAPABILITIES) if (!handlers[cap]) throw new Error(`no handler for ${cap}`);
-  return handlers;
+  return diskFull(handlers);
 }
 
 export type { HistoryEntry };
