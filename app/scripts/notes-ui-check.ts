@@ -226,6 +226,21 @@ await step("renomear pelo título atualiza os links de quem cita", async () => {
   if (!c.includes("[[Mudança do escritório]]")) throw new Error(c);
 });
 
+// T7520: `# ^ | [ ]` são sintaxe do [[link]]. O nome troca esses por espaço, o aviso diz, e os links seguem achando.
+await step("renomear pelo título para um nome com # | [ ]: troca por espaço e avisa", async () => {
+  await page.fill(".kn-title", "Mudança #2 | sala [b]");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Mudança 2 sala b");
+  await page.waitForSelector(".kn-toast >> text=sem # ^ | [ ]", { timeout: 3000 });
+  if (shots) await page.screenshot({ path: `${shots}/notas-renomear-sintaxe.png` });
+  const c = await content("Reuniões/2026-11-02 Planejamento.md");
+  if (!c.includes("[[Mudança 2 sala b]]")) throw new Error(c);
+  // Volta ao nome de antes: os passos de baixo usam a nota por ele.
+  await page.fill(".kn-title", "Mudança do escritório");
+  await page.keyboard.press("Enter");
+  await until(() => content("Reuniões/2026-11-02 Planejamento.md"), (t) => t.includes("[[Mudança do escritório]]"), (t) => t);
+});
+
 await step("edição de fora com edição pendente: aviso, e 'Manter a minha' grava", async () => {
   await page.click(".cm-content");
   await page.keyboard.press("Meta+ArrowDown");

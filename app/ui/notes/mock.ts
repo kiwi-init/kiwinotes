@@ -4,7 +4,7 @@
 
 import { approxWord, wordsOf } from "../../src/shared/fuzzy.ts";
 import { splitFrontmatter, tagsOf } from "./frontmatter.ts";
-import { makeResolver, parseLinks as sharedLinks, resolveLink, rewriteLinks } from "../../src/shared/wikilinks.ts";
+import { linkSafeName, makeResolver, parseLinks as sharedLinks, resolveLink, rewriteLinks } from "../../src/shared/wikilinks.ts";
 import { folderOf, noteName } from "./links.ts";
 import { hasTag, splitTagQuery, tagTree } from "../../src/shared/tags.ts";
 import { type SavedSearch, sanitizeSavedSearches } from "../../src/shared/query.ts";
@@ -135,6 +135,12 @@ export class MockVault implements NotesApi {
     const s = this.notes.get(path);
     if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
     if (!newPath.endsWith(".md")) newPath += ".md";
+    // Como o engine (T7520): o nome novo sai sem `# ^ | [ ]`; mover de pasta não troca o nome.
+    if (noteName(newPath) !== noteName(path)) {
+      const safe = linkSafeName(noteName(newPath));
+      if (!safe) throw new Error("E_BAD_ARGS: the new name is empty");
+      newPath = `${folderOf(newPath) ? `${folderOf(newPath)}/` : ""}${safe}.md`;
+    }
     if (newPath !== path && this.notes.has(newPath)) throw new Error(`E_EXISTS: ${newPath}`);
     const before = [...this.notes.keys()];
     const after = before.map((p) => (p === path ? newPath : p));

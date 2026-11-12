@@ -4,6 +4,7 @@
 
 import { lstatSync } from "node:fs";
 import path from "node:path";
+import { linkSafeName } from "../shared/wikilinks.ts";
 
 /** Um erro com código, que o AppEngine passa à UI como está. */
 export class VaultError extends Error {
@@ -81,6 +82,20 @@ export function inside(root: string, rel: string): string {
     if (stat.isSymbolicLink()) throw new VaultError("E_OUTSIDE_VAULT", `${rel} goes through a symbolic link`);
   }
   return path.join(root, rel);
+}
+
+/**
+ * O destino de um renomear (T7520): o nome novo sai sem `# ^ | [ ]`, que são sintaxe do [[link]] (os links reescritos
+ * não achariam mais a nota). Só quando o nome muda: mover de pasta uma nota que já tem esse nome (criada fora) não troca
+ * o nome dela.
+ */
+export function linkSafeTarget(from: string, to: string): string {
+  const cut = to.lastIndexOf("/");
+  const name = to.slice(cut + 1).replace(/\.md$/i, "");
+  if (name === from.slice(from.lastIndexOf("/") + 1).replace(/\.md$/i, "")) return to;
+  const clean = linkSafeName(name);
+  if (!clean) throw new VaultError("E_BAD_ARGS", "the new name is empty");
+  return clean === name ? to : notePath(`${to.slice(0, cut + 1)}${clean}.md`);
 }
 
 /** Um título vira nome de arquivo: sem os caracteres que o Obsidian e o macOS não aceitam num nome. */

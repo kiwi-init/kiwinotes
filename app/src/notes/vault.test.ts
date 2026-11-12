@@ -149,6 +149,27 @@ describe("Vault (T1316)", () => {
     expect(await code(v.rename("Outra.md", "Diário.md"))).toBe("E_EXISTS");
   });
 
+  // T7436: `#`, `|`, `[`, `]` e `^` são sintaxe do [[link]]. Um nome com eles não pode virar links reescritos que não
+  // acham mais a nota. Recusar o nome ou trocar o caractere resolve; o que não pode é dizer "atualizei" e quebrar.
+  for (const name of ["Reunião #2", "Ana | Bia", "Plano [v2]"])
+    test(`rename para "${name}" não quebra os links das outras notas`, async () => {
+      const { v } = await vault({ "Reuniao.md": "# Reuniao\n\n## Pauta\n", "L.md": "veja [[Reuniao]] e [[Reuniao#Pauta]]" });
+      const out = await v.rename("Reuniao.md", `${name}.md`).catch(() => null);
+      const path_ = out?.meta.path ?? "Reuniao.md";
+      expect((await v.backlinks(path_)).map((b) => b.path)).toEqual(["L.md"]);
+      for (const link of parseLinks(readFileSync(path.join(v.root, "L.md"), "utf8"))) expect(v.resolve(link.target)).toBe(path_);
+    });
+
+  test("rename troca # ^ | [ ] por espaço, como o create; mover não troca o nome que a nota já tem (T7520)", async () => {
+    const { v } = await vault({ "A.md": "a", "B.md": "b", "Pasta/C.md": "c", "Feita fora #1.md": "x", "L.md": "[[Feita fora #1]]" });
+    expect((await v.rename("A.md", "Reunião #2.md")).meta.path).toBe("Reunião 2.md");
+    expect((await v.rename("B.md", "Pasta/Ana | Bia [v2] ^3.md")).meta.path).toBe("Pasta/Ana Bia v2 3.md");
+    // Só mudar a pasta: o nome fica, mesmo com `#`.
+    expect((await v.moveNote("Feita fora #1.md", "Pasta")).meta.path).toBe("Pasta/Feita fora #1.md");
+    expect(await code(v.rename("Pasta/C.md", "Pasta/#|^.md"))).toBe("E_BAD_ARGS");
+    expect(existsSync(path.join(v.root, "Pasta/C.md"))).toBe(true);
+  });
+
   test("rename não apaga o que mudou fora e o índice ainda não viu (revisão #1397)", async () => {
     const { v, root } = await vault({ "A.md": "a", "B.md": "Veja [[A]].\n" });
     // Editada no Obsidian depois do open, antes do watcher (ou sem ele): o índice ainda tem a versão velha.
