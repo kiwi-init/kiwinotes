@@ -45,6 +45,8 @@ export const CREDITS: readonly { name: string; by: string; license: string; use:
   { name: "SheetJS Community Edition", by: "SheetJS LLC", license: "Apache-2.0", use: "abrir xlsx nas Notas", pkg: "xlsx" },
   // Não vem do npm: o viewer oficial vai no repo, com a licença (`scripts/drawio-viewer.ts`, T7112).
   { name: "draw.io", by: "JGraph Ltd", license: "Apache-2.0", use: "abrir diagramas .drawio nas Notas", pkg: "jgraph/drawio" },
+  // O host do agente (spec #4576): a biblioteca oficial do ACP, para o Kiwi conversar com o agente escolhido.
+  { name: "Agent Client Protocol SDK", by: "Zed Industries", license: "Apache-2.0", use: "conversar com o agente", pkg: "@agentclientprotocol/sdk" },
 ];
 
 /** O arquivo com o texto de cada licença, que vai no pack das Notas (`ui/notes/public/`, copiado para `dist/notes/`). */

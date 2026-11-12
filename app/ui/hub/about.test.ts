@@ -66,7 +66,11 @@ describe("os créditos (spec #7079)", () => {
     const xlsx = JSON.parse(readFileSync(new URL("../../node_modules/xlsx/package.json", import.meta.url), "utf8")) as { license: string };
     expect(CREDITS.find((c) => c.name === "Mammoth")?.license).toBe(mammoth.license);
     expect(CREDITS.find((c) => c.pkg === "xlsx")?.license).toBe(xlsx.license);
-    expect(creditsLine()).toBe("Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); SheetJS Community Edition, de SheetJS LLC (Apache-2.0); draw.io, de JGraph Ltd (Apache-2.0).");
+    const acp = JSON.parse(readFileSync(new URL("../../node_modules/@agentclientprotocol/sdk/package.json", import.meta.url), "utf8")) as { license: string; author: string };
+    expect(CREDITS.find((c) => c.pkg === "@agentclientprotocol/sdk")).toMatchObject({ license: acp.license, by: acp.author });
+    expect(creditsLine()).toBe(
+      "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); SheetJS Community Edition, de SheetJS LLC (Apache-2.0); draw.io, de JGraph Ltd (Apache-2.0); Agent Client Protocol SDK, de Zed Industries (Apache-2.0).",
+    );
     expect(creditsLine([])).toBe("");
     expect(creditsLine([CREDITS[0]!, { name: "X", by: "Y", license: "MIT", use: "z", pkg: "x" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, de Y (MIT).");
   });

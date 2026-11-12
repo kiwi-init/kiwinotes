@@ -65,6 +65,19 @@ bun run cli stop --data /tmp/kn-test
 - **A pasta dos dados:** sem `--data`, vale `KIWI_HEADLESS_DATA`, senão `$TMPDIR/kiwinotes-headless`. Uma pasta que é (ou fica dentro de) `~/Library/Application Support/KiwiNotes`, `…/app.kiwinotes.desktop` ou `~/KiwiNotes`, symlinks resolvidos, é recusada com `E_REAL_DATA` (T1827).
 - **O protocolo** (o socket `<data>/control.sock`, 0600, um JSON por linha: `status`, `invoke`, `dictate`, `subscribe`, `stop`) está em `src/headless/server.ts` e no #1745.
 
+### O host do agente pela CLI (T8478)
+
+O host que conversa com o agente pelo ACP (`src/agent/`, [ADR 0012](../docs/adr/0012-host-do-agente.md)) roda pela CLI sem o headless de pé. **Para os agentes do time, tudo usa os falsos** (ADR 0011): o `claude` falso e o agente falso, que fala ACP. O Claude Code de verdade, só o harry abre.
+
+```sh
+bun run cli agent status --data /tmp/kn-test            # instalado? qual versão? logado? (sem ler credencial)
+bun run cli agent ask "oi" --data /tmp/kn-test          # os eventos, um por linha, e a resposta no fim
+bun run cli agent ask "de novo" --data /tmp/kn-test     # retoma a sessão (turno 2); --new começa outra
+bun run cli agent ask "/limite" --data /tmp/kn-test     # o agente falso falha: /sem-login, /limite, /sem-rede, /cai
+```
+
+O agente falso também tem `/lento` (20 pedaços, um a cada 100 ms; Ctrl-C cancela) e `/permissao` (o host recusa). `KIWI_FAKE_CLAUDE_LOGGED_IN=0` faz o `claude` falso dizer que não está logado, e `--claude PATH` aponta outro programa no lugar dele. A sessão fica em `<data>/agent/`.
+
 ### Ver as janelas pela CLI, fora da tela (T1742)
 
 Com o headless de pé (`bun run cli start --data DIR --no-helper`), as janelas de verdade abrem num WebKit headless, sem nada na tela de ninguém:
