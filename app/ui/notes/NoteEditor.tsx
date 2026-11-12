@@ -23,6 +23,8 @@ import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
 
 const externalUpdates = new WeakSet<EditorView>();
+/** O Sumário se refaz depois disto sem tecla (T7876). */
+const OUTLINE_AFTER_MS = 300;
 
 /** Só leitura (T7575): a nota que não é UTF-8 aparece, mas não se edita (gravar apagaria os bytes que o Kiwi não leu). */
 const readOnlyCompartment = new Compartment();
@@ -74,7 +76,10 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   ];
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  // O texto do Sumário (e do mover seção), refeito quando a pessoa para de digitar (T7876): ele lê a nota inteira, e numa
+  // nota de 1 MB custava ~100 ms por tecla.
   const [editorDoc, setEditorDoc] = useState(doc);
+  const docTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const view = useRef<EditorView | null>(null);
   const spellingRequest = useRef(0);
   const splitting = useRef(false);
@@ -90,7 +95,8 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
     editorExtensions(
       {
         onChange: (d) => {
-          setEditorDoc(d);
+          clearTimeout(docTimer.current);
+          docTimer.current = setTimeout(() => setEditorDoc(d), OUTLINE_AFTER_MS);
           if (!view.current || !externalUpdates.has(view.current))
             latest.current.onChange(d);
         },
@@ -133,6 +139,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   useEffect(() => {
     spellingRequest.current++;
     setMenu(null);
+    clearTimeout(docTimer.current);
     setEditorDoc(doc);
     const v = view.current;
     if (!v) return;
@@ -227,7 +234,10 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   };
   const reorder = (offset: number, direction: "up" | "down") => {
     const v = view.current;
-    if (!v || v.state.doc.toString() !== editorDoc) return;
+    // O Sumário espera a pessoa parar de digitar (T7876): com o texto mudado depois dele, refaz e não move às cegas.
+    if (!v) return;
+    const now = v.state.doc.toString();
+    if (now !== editorDoc) return setEditorDoc(now);
     const next = moveSection(editorDoc, offset, direction);
     if (next === editorDoc) return;
     v.dispatch({ changes: lineChanges(editorDoc, next), annotations: isolateHistory.of("full"), userEvent: "input.move" });

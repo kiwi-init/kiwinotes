@@ -1,5 +1,5 @@
 // Portado de SilverBullet/client/codemirror/spell_checking.ts @ c3cbbeeceeb1e38e59f12b12cb8b07b722ff7868 (MIT).
-// Mudanças: StateField do Kiwi; exclusões para código/URLs/wiki; alvo e correção com guarda de documento.
+// Mudanças: as exclusões (código/URLs/wiki) num ViewPlugin, só nas linhas desenhadas (T7876); alvo e correção com guarda de documento.
 /*
 Copyright 2022, Zef Hemel
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -14,8 +14,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  DEALINGS IN THE SOFTWARE.
 */
-import { type EditorState, type Range, StateField, type TransactionSpec } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
+import { type EditorState, type Range, type TransactionSpec } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { isolateHistory } from "@codemirror/commands";
 import type { MenuItem } from "../ContextMenu.tsx";
@@ -23,21 +23,35 @@ import { isSpellingWord, NO_SPELLING, spellingResult, type SpellingResult } from
 
 export const SPELLING_EXCLUDED = ["FencedCode", "CodeBlock", "InlineCode", "URL", "Autolink", "WikiLink"] as const;
 const excluded = new Set<string>(SPELLING_EXCLUDED);
+/**
+ * O código, os links e as URLs ganham `spellcheck="false"`. Só nas linhas que o editor desenhou (T7876): o navegador só
+ * confere o que está no DOM, e varrer a árvore da nota inteira a cada tecla custava ~48 ms numa nota de 400 KB.
+ */
 export function disableSpellcheck(selectors: readonly string[]) {
-  const build = (state: EditorState) => {
+  const names = new Set(selectors);
+  const off = Decoration.mark({ attributes: { spellcheck: "false" } });
+  const build = (view: EditorView): DecorationSet => {
     const marks: Range<Decoration>[] = [];
-    syntaxTree(state).iterate({ enter(node) {
-      if (selectors.includes(node.name)) {
-        marks.push(Decoration.mark({ attributes: { spellcheck: "false" } }).range(node.from, node.to));
+    const tree = syntaxTree(view.state);
+    let last = -1;
+    for (const { from, to } of view.visibleRanges) {
+      tree.iterate({ from, to, enter(node) {
+        if (!names.has(node.name)) return;
+        // Um nó que cruza duas faixas visíveis entra uma vez só.
+        if (node.from > last) marks.push(off.range(node.from, node.to));
+        last = Math.max(last, node.from);
         return false;
-      }
-    } });
+      } });
+    }
     return Decoration.set(marks, true);
   };
-  return StateField.define<DecorationSet>({ create: build,
-    update(value, tr) { return tr.docChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state) ? build(tr.state) : value; },
-    provide: (field) => EditorView.decorations.from(field),
-  });
+  return ViewPlugin.fromClass(class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) { this.decorations = build(view); }
+    update(u: ViewUpdate) {
+      if (u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) this.decorations = build(u.view);
+    }
+  }, { decorations: (p) => p.decorations });
 }
 export const spellingAttributes = EditorView.contentAttributes.of({
   spellcheck: "true", autocorrect: "off", autocapitalize: "off", writingsuggestions: "false",

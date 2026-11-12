@@ -88,6 +88,12 @@ const join = (folder: string, name: string) =>
 
 /** Quanto esperar depois da última tecla para gravar. */
 const SAVE_AFTER_MS = 500;
+/**
+ * O que não precisa ir a cada tecla (T7876): a contagem de palavras e o rascunho no `localStorage` esperam a pessoa
+ * parar de digitar. Os dois leem a nota inteira, e numa nota de 400 KB custavam dezenas de ms por tecla. O rascunho
+ * também é gravado antes de cada save e ao esconder ou fechar a janela, então ele nunca fica para trás.
+ */
+const SETTLE_MS = 300;
 
 function useEnterAnimation() {
   const [n, setN] = useState(0);
@@ -204,6 +210,9 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
 
   // O que ainda não foi gravado: o corpo da nota aberta, o frontmatter que volta com ele e a versão que o disco tem.
   const pending = useRef<string | null>(null);
+  // T7876: a contagem de palavras e o rascunho do que foi digitado, um pouco depois da última tecla (SETTLE_MS).
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const settleRef = useRef<() => void>(() => {});
   const frontmatter = useRef("");
   /** O mesmo frontmatter, em estado: o painel de propriedades (T6598) desenha a partir dele. */
   const [frontmatterText, setFrontmatterText] = useState("");
@@ -321,6 +330,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const queue = useRef<Promise<SaveOutcome>>(Promise.resolve("clean"));
   const save = useCallback((): Promise<SaveOutcome> => {
     clearTimeout(timer.current);
+    // O rascunho do que foi digitado vai antes do save (T7876): se ele falhar, o texto já está guardado.
+    settleRef.current();
     const once = async (): Promise<SaveOutcome> => {
       const path = current.current;
       const text = pending.current;
@@ -539,6 +550,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   useEffect(
     () =>
       api.onChanged((paths) => {
+        // O rascunho do que foi digitado antes de olhar o disco (T7876): a nota pode ter sumido fora (T7513).
+        settleRef.current();
         setVaultVersion((n) => n + 1);
         void refresh().then((l) => {
           if (!l) return;
@@ -659,24 +672,37 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       e.preventDefault();
     };
     const onHide = () => document.visibilityState === "hidden" && void save();
+    // Fechar a janela no meio da digitação: o rascunho vai antes (T7876).
+    const onPageHide = () => settleRef.current();
     window.addEventListener("keydown", onKey);
     document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
     };
   }, [create, save]);
+
+  /** Faz agora o que esperava a pessoa parar de digitar: as palavras e o rascunho. Sem nada esperando, não faz nada. */
+  settleRef.current = () => {
+    if (settleTimer.current === undefined) return;
+    clearTimeout(settleTimer.current);
+    settleTimer.current = undefined;
+    const doc = pending.current;
+    if (doc === null) return;
+    setWords(wordCount(doc));
+    if (current.current && !undecided.current)
+      drafts.set({ path: current.current, body: doc, frontmatter: frontmatter.current, baseVersion: version.current });
+  };
 
   const onChange = (doc: string) => {
     // A nota que não é UTF-8 só é lida (T7575): nada fica por gravar, nem vira rascunho.
     if (readOnlyRef.current) return;
     pending.current = doc;
-    setWords(wordCount(doc));
-    // O rascunho anda junto com a edição, para sobreviver a um fechamento que o save não alcançou.
-    if (current.current && !undecided.current) {
-      drafts.set({ path: current.current, body: doc, frontmatter: frontmatter.current, baseVersion: version.current,
-      });
-    }
+    // As palavras e o rascunho quando a pessoa para (T7876); o rascunho sobrevive a um fechamento que o save não alcançou.
+    clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_MS);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_AFTER_MS);
   };
