@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 
 import type { FileType } from "./tree.ts";
 
-export type TreeIconName = "folder" | "folder-open" | "note" | "daily" | "today" | "search" | "tag" | "trash" | "note-plus" | "folder-plus" | FileType;
+export type TreeIconName = "folder" | "folder-open" | "note" | "daily" | "today" | "search" | "tag" | "trash" | "note-plus" | "folder-plus" | "collapse-all" | "expand-all" | FileType;
 
 const PATHS: Record<TreeIconName, ReactElement> = {
   folder: <path d="M2 4.5c0-.6.4-1 1-1h3.1l1.4 1.5H13c.6 0 1 .4 1 1v6c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1z" />,
@@ -48,6 +48,9 @@ const PATHS: Record<TreeIconName, ReactElement> = {
       <path d="M12 10v4.5M9.75 12.25h4.5" />
     </>
   ),
+  // Recolher tudo e Expandir tudo (T7390): as duas setas se juntam ou se afastam.
+  "collapse-all": <path d="m5 2.5 3 3 3-3M5 13.5l3-3 3 3M3 8h10" />,
+  "expand-all": <path d="m5 5.5 3-3 3 3M5 10.5l3 3 3-3M3 8h10" />,
   search: (
     <>
       <circle cx="7" cy="7" r="4" />
