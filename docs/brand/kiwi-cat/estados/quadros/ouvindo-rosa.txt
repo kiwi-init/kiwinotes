@@ -2,8 +2,8 @@ REFERÊNCIA DOCUMENTAL — composição local.
 Cor: #ff81c0; piso de luminância linear .28; aro ligado à luz, sem mudança de matiz.
 {
   "label": "02 · voz alta",
-  "left": -15,
-  "right": 15,
+  "left": -5,
+  "right": 5,
   "gaze": 0,
   "eye": 1,
   "other": null,

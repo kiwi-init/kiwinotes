@@ -125,3 +125,19 @@ com o gato a ~480 px, cada uma em WebP animado até ~1,5 MB e cópia GIF ou MP4
 para anexar no canal. Névoa pode ficar parada, pois o shader é da entrega 3.
 Marcar em todos os quadros: “prévia de movimento, não é a animação final”.
 O resto permanece como aprovado.
+
+## 11. Revisão #7890: junção, luz e piscada
+
+A preparação reconstrói o fundo oculto por interpolação harmônica e suaviza
+essa reconstrução. O recorte móvel inclui a superfície escura e uma faixa
+estreita de antialias; a névoa ampla fica fixa. A cabeça cobre a junção e a
+propriedade entre orelhas usa transição suave, sem corte vertical.
+
+A amplitude de ±15° ainda expunha o recorte. Esta revisão declara um limite
+menor de ±5°: o tique unilateral usa −4°, o acordar ±5° e o erro +3°/−2°.
+A piscada lenta mantém os arcos brancos na mesma espessura dos outros
+estados fechados. O preenchimento sob os olhos interpola a borda vizinha
+harmonicamente, evitando discos com tom diferente.
+
+As três prévias devem ser revistas novamente; não há aprovação visual
+implícita nem avanço para o roteiro ou o app.

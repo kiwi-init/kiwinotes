@@ -9,9 +9,9 @@
       856
     ],
     "cat_reference_height": 481.34765625,
-    "webp_bytes": 318404,
+    "webp_bytes": 320556,
     "webp_quality": 82,
-    "mp4_bytes": 93202,
+    "mp4_bytes": 93004,
     "mist": "static",
     "annotation": "prévia de movimento, não é a animação final"
   },
@@ -31,7 +31,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -48,7 +49,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -65,7 +67,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -82,7 +85,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -99,7 +103,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -116,7 +121,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -133,7 +139,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -150,7 +157,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -167,7 +175,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -184,7 +193,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -201,7 +211,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -218,7 +229,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -235,7 +247,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -252,7 +265,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -269,7 +283,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -286,7 +301,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -303,7 +319,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -320,7 +337,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -337,7 +355,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -354,7 +373,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -371,7 +391,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -388,7 +409,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -405,7 +427,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -422,7 +445,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -439,7 +463,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -456,7 +481,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -473,7 +499,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -490,7 +517,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -507,7 +535,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -524,7 +553,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -541,7 +571,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -558,7 +589,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -575,7 +607,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -592,7 +625,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -609,7 +643,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -626,7 +661,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -643,7 +679,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -660,7 +697,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -677,7 +715,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -694,7 +733,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -711,7 +751,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -728,7 +769,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -745,7 +787,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -762,7 +805,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -779,7 +823,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -796,7 +841,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -813,7 +859,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -830,7 +877,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -847,7 +895,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -864,7 +913,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -881,7 +931,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -898,7 +949,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -915,7 +967,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -932,7 +985,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -949,7 +1003,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -966,7 +1021,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -983,7 +1039,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1000,7 +1057,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1017,7 +1075,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1034,7 +1093,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1051,7 +1111,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1068,7 +1129,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1085,7 +1147,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1102,7 +1165,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1119,7 +1183,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1136,7 +1201,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1153,7 +1219,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1170,7 +1237,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1187,7 +1255,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1204,7 +1273,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1221,7 +1291,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1238,7 +1309,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1255,7 +1327,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1272,12 +1345,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -0.26080899386045747,
+      "right": -0.08693633128681916,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1289,12 +1363,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -2.0556932497448495,
+      "right": -0.6852310832482831,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1306,12 +1381,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -4.900293207626612,
+      "right": -1.633431069208871,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1323,12 +1399,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -8.017041680841075,
+      "right": -2.672347226947025,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1340,12 +1417,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -10.628371482723427,
+      "right": -3.5427904942411423,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1357,12 +1435,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -11.956715426608996,
+      "right": -3.9855718088696652,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1374,12 +1453,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -12.0,
+      "right": -4.0,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1391,12 +1471,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -12.0,
+      "right": -4.0,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1408,12 +1489,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -11.676594974783457,
+      "right": -3.892198324927819,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1425,12 +1507,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -10.79684284325034,
+      "right": -3.59894761441678,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1442,12 +1525,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -9.496438021575425,
+      "right": -3.165479340525142,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1459,12 +1543,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -7.9110749259334625,
+      "right": -2.6370249753111543,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1476,12 +1561,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -6.17644797249927,
+      "right": -2.05881599083309,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1493,12 +1579,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -4.428251577447599,
+      "right": -1.4760838591491994,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1510,12 +1597,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -2.8021801569532214,
+      "right": -0.9340600523177405,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1527,12 +1615,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -1.4339281271908977,
+      "right": -0.4779760423969659,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1544,12 +1633,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -0.4591899043354384,
+      "right": -0.15306330144514613,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1561,12 +1651,13 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
       "left": 0,
-      "right": -0.013659904561595049,
+      "right": -0.004553301520531683,
       "gaze": 0.0,
       "eye": 1.0,
       "other": null,
@@ -1578,41 +1669,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
-    },
-    {
-      "label": "prévia",
-      "left": 0,
-      "right": -0.0,
-      "gaze": 0.0,
-      "eye": 1.0,
-      "other": null,
-      "blink": false,
-      "fog": 1,
-      "side": 0,
-      "upper": 0,
-      "symbol": "",
-      "big": 1,
-      "small": 1,
-      "up": 0,
-      "phase": 0
-    },
-    {
-      "label": "prévia",
-      "left": 0,
-      "right": -0.0,
-      "gaze": 0.0,
-      "eye": 1.0,
-      "other": null,
-      "blink": false,
-      "fog": 1,
-      "side": 0,
-      "upper": 0,
-      "symbol": "",
-      "big": 1,
-      "small": 1,
-      "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1629,7 +1687,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1646,7 +1705,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1663,7 +1723,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1680,7 +1741,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1697,7 +1759,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1714,7 +1777,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1731,7 +1795,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1748,7 +1813,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1765,7 +1831,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1782,7 +1849,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1799,7 +1867,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1816,7 +1885,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1833,7 +1903,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1850,7 +1921,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1867,7 +1939,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1884,7 +1957,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1901,7 +1975,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1918,7 +1993,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1935,7 +2011,44 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
+    },
+    {
+      "label": "prévia",
+      "left": 0,
+      "right": -0.0,
+      "gaze": 0.0,
+      "eye": 1.0,
+      "other": null,
+      "blink": false,
+      "fog": 1,
+      "side": 0,
+      "upper": 0,
+      "symbol": "",
+      "big": 1,
+      "small": 1,
+      "up": 0,
+      "phase": 0,
+      "blink_curve": true
+    },
+    {
+      "label": "prévia",
+      "left": 0,
+      "right": -0.0,
+      "gaze": 0.0,
+      "eye": 1.0,
+      "other": null,
+      "blink": false,
+      "fog": 1,
+      "side": 0,
+      "upper": 0,
+      "symbol": "",
+      "big": 1,
+      "small": 1,
+      "up": 0,
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1952,7 +2065,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1969,7 +2083,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -1986,7 +2101,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2003,7 +2119,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2020,7 +2137,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2037,7 +2155,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2054,7 +2173,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2071,7 +2191,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2088,7 +2209,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2105,7 +2227,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2122,7 +2245,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2139,7 +2263,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2156,7 +2281,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2173,7 +2299,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2190,7 +2317,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2207,7 +2335,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2224,7 +2353,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2241,7 +2371,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2258,7 +2389,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2275,7 +2407,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2292,7 +2425,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2309,7 +2443,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2326,7 +2461,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2343,7 +2479,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2360,7 +2497,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2377,7 +2515,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2394,7 +2533,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2411,7 +2551,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2428,7 +2569,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2445,7 +2587,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2462,7 +2605,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2479,7 +2623,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2496,7 +2641,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2513,7 +2659,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2530,7 +2677,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2547,7 +2695,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2564,7 +2713,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2581,7 +2731,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2598,7 +2749,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2615,7 +2767,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2632,7 +2785,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2649,7 +2803,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2666,7 +2821,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2683,7 +2839,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2700,7 +2857,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2717,7 +2875,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2734,7 +2893,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2751,7 +2911,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2768,7 +2929,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2785,7 +2947,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2802,7 +2965,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2819,7 +2983,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2836,7 +3001,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2853,7 +3019,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2870,7 +3037,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2887,7 +3055,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2904,7 +3073,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2921,7 +3091,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2938,7 +3109,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2955,7 +3127,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2972,7 +3145,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -2989,7 +3163,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -3006,7 +3181,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -3023,7 +3199,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -3040,7 +3217,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -3057,7 +3235,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     },
     {
       "label": "prévia",
@@ -3074,7 +3253,8 @@
       "big": 1,
       "small": 1,
       "up": 0,
-      "phase": 0
+      "phase": 0,
+      "blink_curve": true
     }
   ]
 }

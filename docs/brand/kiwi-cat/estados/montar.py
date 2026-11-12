@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """T7606, revisão #7630: pranchas documentais com as camadas aprovadas.
-Não é código de animação nem captura do app. Sem rede, blur ou geração de gato.
+Não é código de animação nem captura do app. Sem rede ou geração de gato; suavização só nas máscaras e no fundo oculto.
 """
 from pathlib import Path
 import hashlib
@@ -10,7 +10,7 @@ import json
 import subprocess
 import sys
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageColor
+from PIL import Image, ImageDraw, ImageFont, ImageColor, ImageFilter
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent / 'gerada'
@@ -41,12 +41,12 @@ for j,p in enumerate(STATES['ouvindo']):p.update(symbol='sound',phase=j)
 for j,p in enumerate(STATES['thinking']):p.update(eye=.58,up=-24,symbol='thought',phase=j)
 for j,p in enumerate(STATES['agindo']):p.update(symbol='work',phase=j)
 for j,p in enumerate(STATES['pronto']):p.update(symbol='spark',blink=True,phase=j)
-STATES['erro']=[pose('01 · rabisco começa / 0,00 s',left=12,right=-12,big=.72,small=.62,symbol='confusion',fog=.68,phase=0),pose('02 · embolando / 0,45 s',left=14,right=-14,big=.67,small=.68,symbol='confusion',fog=.58,phase=1),pose('03 · embolado / 0,90 s',left=15,right=-15,big=.62,small=.62,symbol='confusion',fog=.50,phase=2)]
-STATES['repouso'][1].update(right=-12)
-for p in STATES['dormindo']:p.update(left=12,right=-12)
-STATES['acordou'][1].update(left=-15,right=15)
-STATES['ouvindo'][0].update(left=-12,right=12)
-STATES['ouvindo'][1].update(left=-15,right=15)
+STATES['erro']=[pose('01 · rabisco começa / 0,00 s',left=3,right=-2,big=.72,small=.62,symbol='confusion',fog=.68,phase=0),pose('02 · embolando / 0,45 s',left=2,right=-1.5,big=.67,small=.68,symbol='confusion',fog=.58,phase=1),pose('03 · embolado / 0,90 s',left=3,right=-2,big=.62,small=.62,symbol='confusion',fog=.50,phase=2)]
+STATES['repouso'][1].update(right=-4)
+for p in STATES['dormindo']:p.update(left=3,right=-3)
+STATES['acordou'][1].update(left=-5,right=5)
+STATES['ouvindo'][0].update(left=-3,right=3)
+STATES['ouvindo'][1].update(left=-5,right=5)
 STATES={k:STATES[k] for k in ['repouso','dormindo','acordou','ouvindo','thinking','agindo','pronto','erro']}
 
 FOG = {
@@ -73,7 +73,10 @@ def eye_layer(size, scale, p):
     for i,e in enumerate(META['eyes']):
         cx=(e['cx']+p['gaze'])*scale*2; cy=(e['cy']+p['up'])*scale*2; r=e['r']*scale*2*p['big']*(p['small'] if i else 1)
         opening = p['other'] if i==1 and p['other'] is not None else p['eye']
-        if p['blink']:
+        if p.get('blink_curve'):
+            if opening>.035:d.ellipse((cx-r,cy-r*opening,cx+r,cy+r*opening),fill='white')
+            if opening<.5:d.arc((cx-r,cy-r*.45,cx+r,cy+r*.65),190,350,fill='white',width=max(2,round(34*scale*2)))
+        elif p['blink']:
             d.arc((cx-r,cy-r*.45,cx+r,cy+r*.65),*( (10,170) if p['symbol']=='sleep' else (190,350) ),fill='white',width=max(2,round(34*scale*2)))
         else:
             mask = Image.new('L',image.size)
@@ -121,24 +124,26 @@ def fog_layer(image,p,palette,arc):
 
 
 def fill_hidden_eyes(image, scale):
-    # A extração antiga preencheu os olhos com discos quase uniformes.
-    # Ao fechar/mover os olhos, esses pixels antes ocultos ficam aparentes.
-    # Estima só os discos + 5 px a partir da superfície vizinha, sem blur.
+    # Boundary-matched harmonic fill; unlike a fitted dark disc it has no rim.
     a=np.array(image)
     for e in META['eyes']:
         cx=e['cx']*scale;cy=e['cy']*scale;r=e['r']*scale
-        extent=int(r+40*scale)
+        extent=int(r+9*scale+3)
         x0=max(0,int(cx)-extent);y0=max(0,int(cy)-extent)
         x1=min(image.width,int(cx)+extent+1);y1=min(image.height,int(cy)+extent+1)
-        patch=a[y0:y1,x0:x1,:3]
-        yy,xx=np.mgrid[y0:y1,x0:x1];dx=(xx-cx)/r;dy=(yy-cy)/r
-        radius=np.hypot(xx-cx,yy-cy)
-        ring=(radius>r+8*scale)&(radius<r+34*scale)
-        basis=np.stack([np.ones_like(dx),dx,dy,dx*dx,dx*dy,dy*dy],axis=-1)
-        coefficients=np.linalg.lstsq(basis[ring],patch[ring].astype(float),rcond=None)[0]
-        estimate=np.uint8(np.clip(np.rint(basis@coefficients),0,255))
-        hidden=radius<=r+5*scale
-        patch[hidden]=estimate[hidden]
+        patch=a[y0:y1,x0:x1,:3];yy,xx=np.mgrid[y0:y1,x0:x1]
+        distance=np.hypot(xx-cx,yy-cy);hidden=distance<=r+5*scale
+        ring=(distance>r+5*scale)&(distance<r+7*scale+1)
+        field=patch.astype(np.float32);field[hidden]=np.mean(field[ring],axis=0)
+        red=hidden&((xx+yy)%2==0);black=hidden&~red
+        for _ in range(320):
+            change=0.
+            for mask in [red,black]:
+                avg=(np.roll(field,1,0)+np.roll(field,-1,0)+np.roll(field,1,1)+np.roll(field,-1,1))/4
+                delta=1.85*(avg[mask]-field[mask]);field[mask]+=delta
+                if delta.size:change=max(change,float(np.abs(delta).max()))
+            if change<.005:break
+        patch[hidden]=np.uint8(np.clip(np.rint(field[hidden]),0,255))
     return Image.fromarray(a)
 
 
@@ -323,29 +328,45 @@ def prepare_ears(native):
     v=np.clip((luminous-.02)/.03,0,1);v=v*v*(3-2*v)
     fixed_arc=c*v*(x>560)*(x<1470)*(y>800)*(y<1600)
     h=np.maximum(h,fixed_arc)
-    remove=roi
+    # Inpaint close to the actual ear, so boundary samples are its adjacent
+    # mist rather than distant dark head/body pixels.
+    light_holes=Image.new('L',(2048,2560))
+    for key in ['orelhaEsquerda','orelhaDireita']:
+        vertices=np.array(meta[key],dtype=float);center=vertices.mean(axis=0)
+        vertices=center+(vertices-center)*1.30
+        ImageDraw.Draw(light_holes).polygon([tuple(v) for v in vertices],fill=255)
     grid=np.array(Image.fromarray(np.uint8(np.rint(target*255))).resize((128,160),Image.Resampling.BILINEAR),dtype=float)
-    unknown=np.array(Image.fromarray(np.uint8((roi>.05)*255)).resize((128,160),Image.Resampling.NEAREST))>127
-    for _ in range(1200):
+    unknown=np.array(light_holes.resize((128,160),Image.Resampling.NEAREST))>127
+    grid[unknown]=np.mean(grid[~unknown],axis=0)
+    for _ in range(3600):
         average=(np.roll(grid,1,0)+np.roll(grid,-1,0)+np.roll(grid,1,1)+np.roll(grid,-1,1))/4
         grid[unknown]=average[unknown]
     field=np.array(Image.fromarray(np.uint8(np.clip(np.rint(grid),0,255))).resize((2048,2560),Image.Resampling.BICUBIC),dtype=np.float32)/255
-    field=np.maximum(field,.22)
-    base=target*(1-remove[:,:,None])+field*remove[:,:,None]
-    base=np.uint8(np.clip(np.rint(base*255),0,255)).astype(np.float32)/255
-    minimum=np.max(np.maximum((base-target)/np.maximum(base,1e-6),(target-base)/np.maximum(1-base,1e-6)),axis=2)
-    dark=(target@np.array([.2126,.7152,.0722]))<.065
-    effective=np.clip(np.maximum(minimum,dark*remove),0,1)
-    source_alpha=effective.copy()
-    # Recompute the effective alpha after quantization; solve RGB against that.
-    source_alpha=np.rint(source_alpha*255)/255;effective=source_alpha
-    fg=np.divide(target-(1-effective[:,:,None])*base,effective[:,:,None],out=target.copy(),where=effective[:,:,None]>1e-6)
+    field=np.array(Image.fromarray(np.uint8(np.clip(field*255,0,255))).filter(ImageFilter.GaussianBlur(48)),dtype=np.float32)/255
+    # Only the dark surface and its narrow antialias belong to the ear.
+    visible=target@np.array([.2126,.7152,.0722])
+    dark_mask=Image.fromarray(np.uint8((visible<.20)*255)).resize((512,640),Image.Resampling.NEAREST)
+    support=dark_mask.filter(ImageFilter.MaxFilter(17)).resize((2048,2560),Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(6))
+    coverage=np.array(support,dtype=np.float32)/255*np.array(light_holes,dtype=np.float32)/255
+    base=target+(field-target)*coverage[:,:,None]
+    lower=np.maximum(0,np.max((base-target)/np.maximum(base,1e-6),axis=2))
+    bright=np.maximum(0,np.max((target-base)/np.maximum(1-base,1e-6),axis=2))
+    amount=np.maximum(np.maximum(lower,bright),coverage*.90)
+    core=(target.max(axis=2)<=40/255)&(roi>.999)
+    amount[core]=1
+    w=np.clip((1064-x)/80,0,1);w=w*w*(3-2*w)
+    left_alpha=np.floor(amount*w*255)/255
+    right_alpha=np.divide(amount-left_alpha,1-left_alpha,out=np.zeros_like(amount),where=(1-left_alpha)>1e-6)
+    right_alpha=np.floor(np.clip(right_alpha,0,1)*255)/255
+    combined=left_alpha+right_alpha*(1-left_alpha)
+    fg=np.divide(target-(1-combined[:,:,None])*base,combined[:,:,None],out=np.zeros_like(target),where=combined[:,:,None]>1e-6)
+    fg=np.clip(fg,0,1)
     result={n:im.copy() for n,im in native.items()}
     result['__base']=Image.fromarray(np.uint8(np.rint(base*255))).convert('RGBA')
     head_rgba=np.dstack([np.uint8(np.rint(target*255)),np.uint8(np.rint(h*255))])
     result['__head']=Image.fromarray(head_rgba)
     for n,left in [('orelha-esquerda',True),('orelha-direita',False)]:
-        a=source_alpha*((x<1024) if left else (x>=1024))
+        a=left_alpha if left else right_alpha
         rgba=np.dstack([np.uint8(np.clip(np.rint(fg*255),0,255)),np.uint8(np.rint(a*255))])
         # Inpaint only fully occluded root texels in premultiplied RGBA.
         # A flat opaque patch would introduce a cut as the base rotates out.
@@ -368,11 +389,11 @@ def prepare_ears(native):
     result['__base'].save(folder/'fundo-sem-orelhas.png');result['__head'].save(folder/'cabeca-fixa.png')
     for n in ['orelha-esquerda','orelha-direita']:result[n].save(folder/(n+'.png'))
     (folder/'manifest.json').write_text(json.dumps(dict(size=[2048,2560],blend='source-over',alpha='straight',order=['fundo-sem-orelhas.png','orelha-esquerda.png','orelha-direita.png','cabeca-fixa.png','eyes-by-code'],pivots=META['pivots'],source='../../gerada/manifest.json',deformation='near-rigid rotation about manifest pivot, flex only in root strip py-80..py+60',scope='documentary reference rig; original source assets unchanged'),ensure_ascii=False,indent=2)+'\n')
-    return result,dict(originals_untouched=True,ear_angles=[-15,-7.5,0,7.5,15],
-        method='ear-region source-over rematting of the original composite; original head and frontal arc mask hidden attachments',
+    return result,dict(originals_untouched=True,ear_angles=[-5,-2.5,0,2.5,5],
+        method='fixed harmonic light plate; dark surface and narrow antialias support; smooth ear ownership; opaque fixed junction',
         changed_base_pixels=int(np.any(np.abs(base-target)>0,axis=2).sum()),
         outside_ear_roi_unchanged=bool(np.array_equal(base[roi==0],target[roi==0])),
-        fog_fill='harmonic 128x160 / 1200 iterations; hidden root alpha 900 iterations float32, matte RGB',root_skinning='tip control angles; near-rigid triangle, flex only py-80..py+60 source pixels, 32px mesh, 7 inverse iterations')
+        fog_fill='harmonic 128x160 / 3600 iterations; 48px hidden-field smoothing; hidden root alpha 900 iterations float32, matte RGB',root_skinning='tip control angles; near-rigid triangle, flex only py-80..py+60 source pixels, 32px mesh, 7 inverse iterations')
 
 
 def smooth(a,b,t):
@@ -384,12 +405,12 @@ def preview_pose(state,t):
     p=pose('prévia',fog=1)
     if state=='repouso':
         closing=smooth(1.15,1.48,t);opening=smooth(1.56,2.02,t)
-        p['eye']=max(.005,1-closing+opening)
-        p['right']=-12*(smooth(2.45,2.64,t)-smooth(2.70,3.04,t))
+        p['eye']=max(.005,1-closing+opening);p['blink_curve']=True
+        p['right']=-4*(smooth(2.45,2.64,t)-smooth(2.70,3.04,t))
         p['gaze']=24*(smooth(3.75,4.14,t)-smooth(4.86,5.32,t))
     elif state=='acordou':
         rise=smooth(.20,.53,t);settle=smooth(.72,1.45,t)
-        p.update(left=-15*rise*(1-settle),right=15*rise*(1-settle),
+        p.update(left=-5*rise*(1-settle),right=5*rise*(1-settle),
                  eye=.65+.35*smooth(.12,.35,t),big=1+.24*rise*(1-settle))
         if .30<=t<1.20:
             p['symbol']='alert'
@@ -399,7 +420,7 @@ def preview_pose(state,t):
             p['symbol_opacity']=1-leave
     elif state=='erro':
         opening=smooth(.12,.82,t);cycle=t%1.0
-        p.update(left=15*opening,right=-15*opening,big=.72,small=.62,
+        p.update(left=3*opening,right=-2*opening,big=.72,small=.62,
                  symbol='confusion',phase=0,scribble_progress=min(cycle/.9,1),
                  scribble_jitter=t*22,symbol_opacity=1-smooth(.92,1,cycle))
     else:raise ValueError(state)
@@ -495,9 +516,9 @@ def main():
         summaries.append((state,thumb))
     # Each ear moves alone through the full requested range; the other stays still.
     proof=Image.new('RGB',(W*5,(H+FOOT)*2+150),'black');pd=ImageDraw.Draw(proof)
-    pd.text((44,28),'ORELHAS · limite -15 a +15 graus · triângulo quase rígido · independentes',font=font(42),fill='white')
+    pd.text((44,28),'ORELHAS · limite -5 a +5 graus · triângulo quase rígido · independentes',font=font(42),fill='white')
     for row,name in enumerate(['esquerda','direita']):
-        for col,angle in enumerate([-15,-7.5,0,7.5,15]):
+        for col,angle in enumerate([-5,-2.5,0,2.5,5]):
             args={'left' if row==0 else 'right':angle}
             p=pose(f'{name} {angle:+g} graus / base flexível / outra parada',**args)
             proof.paste(tile(compose(assets,p),p,'prova-orelhas','padrao'),(col*W,150+row*(H+FOOT)))

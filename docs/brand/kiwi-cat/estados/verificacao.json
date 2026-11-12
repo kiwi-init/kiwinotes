@@ -1,6 +1,6 @@
 {
   "max_channel_error_outside_eyes": 2,
-  "mean_channel_error_outside_eyes": 0.04339306492127675,
+  "mean_channel_error_outside_eyes": 0.04351374643010531,
   "native_size": [
     2048,
     2560
@@ -9,16 +9,16 @@
   "ear_preparation": {
     "originals_untouched": true,
     "ear_angles": [
-      -15,
-      -7.5,
+      -5,
+      -2.5,
       0,
-      7.5,
-      15
+      2.5,
+      5
     ],
-    "method": "ear-region source-over rematting of the original composite; original head and frontal arc mask hidden attachments",
-    "changed_base_pixels": 560376,
+    "method": "fixed harmonic light plate; dark surface and narrow antialias support; smooth ear ownership; opaque fixed junction",
+    "changed_base_pixels": 472249,
     "outside_ear_roi_unchanged": true,
-    "fog_fill": "harmonic 128x160 / 1200 iterations; hidden root alpha 900 iterations float32, matte RGB",
+    "fog_fill": "harmonic 128x160 / 3600 iterations; 48px hidden-field smoothing; hidden root alpha 900 iterations float32, matte RGB",
     "root_skinning": "tip control angles; near-rigid triangle, flex only py-80..py+60 source pixels, 32px mesh, 7 inverse iterations"
   },
   "real_size": {
@@ -82,9 +82,9 @@
         856
       ],
       "cat_reference_height": 481.34765625,
-      "webp_bytes": 318404,
+      "webp_bytes": 320556,
       "webp_quality": 82,
-      "mp4_bytes": 93202,
+      "mp4_bytes": 93004,
       "mist": "static",
       "annotation": "prévia de movimento, não é a animação final"
     },
@@ -98,9 +98,9 @@
         856
       ],
       "cat_reference_height": 481.34765625,
-      "webp_bytes": 205872,
+      "webp_bytes": 193742,
       "webp_quality": 82,
-      "mp4_bytes": 79563,
+      "mp4_bytes": 74470,
       "mist": "static",
       "annotation": "prévia de movimento, não é a animação final"
     },
@@ -114,9 +114,9 @@
         856
       ],
       "cat_reference_height": 481.34765625,
-      "webp_bytes": 378730,
+      "webp_bytes": 364634,
       "webp_quality": 82,
-      "mp4_bytes": 113469,
+      "mp4_bytes": 108904,
       "mist": "static",
       "annotation": "prévia de movimento, não é a animação final"
     }

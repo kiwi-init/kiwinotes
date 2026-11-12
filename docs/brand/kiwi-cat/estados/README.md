@@ -34,7 +34,7 @@ os estados; símbolos e margens não entram nessa medida. Veja a 100% de zoom.
 | [thinking](estado-thinking.webp) | Semicerrados, olhar para cima e para cada lado | Balão de três pontos, um e dois pontos acesos; luz concentrada no alto |
 | [agindo](estado-agindo.webp) | Foco e execução, pálpebras superiores horizontais | Gotas de suor e linhas de movimento; luz lateral alterna |
 | [pronto](estado-pronto.webp) | Dois momentos de arco feliz | Brilhos que abrem; névoa assenta |
-| [erro](estado-erro.webp) | Olhos menores e desiguais; orelhas em avião | Rabisco começando (0 s), no meio (0,45 s) e embolado (0,90 s) |
+| [erro](estado-erro.webp) | Olhos menores e desiguais; orelhas assimétricas | Rabisco começando (0 s), no meio (0,45 s) e embolado (0,90 s) |
 | [cores](cores.webp) | Repouso e voz alta × três paletas | Lilás, laranja, perolado, verde, rosa, azul e quase preto com piso |
 
 São **19 poses padrão e doze variações adicionais de cor**. Os parâmetros
@@ -60,9 +60,8 @@ notebook, livro, lupa nem logotipo. O desenho segue a tabela aprovada do adendo;
 a v2 é a única fonte visual do personagem.
 
 Quando a pálpebra fecha ou o olhar desloca, o script estima somente os pixels
-antes ocultos pelos olhos (discos + 5 px), por ajuste quadrático à superfície
-vizinha. Isso remove as manchas circulares do preenchimento antigo, sem blur
-e sem modificar as texturas de origem.
+antes ocultos pelos olhos (discos + 5 px), por interpolação harmônica com a borda
+vizinha fixa. A piscada lenta mantém os arcos brancos no fechamento, sem modificar as texturas de origem.
 
 A névoa mantém a massa orgânica da v2. Não há anel, partícula, forma sintética,
 blur ou nova geração por IA. Densidade, peso lateral/vertical e matiz são
@@ -90,16 +89,16 @@ somente documental, sem implementar a tela de Ajustes.
 ## Orelhas preparadas e prova de amplitude
 
 A [prova de orelhas](prova-orelhas.webp) mostra a esquerda e a direita,
-independentemente, em −15°, −7,5°, 0°, +7,5° e +15°. A outra orelha fica parada.
-**Limite desta versão: ±15°.** A tentativa de ±30° da rodada anterior
+independentemente, em −5°, −2,5°, 0°, +2,5° e +5°. A outra orelha fica parada.
+**Limite desta revisão: ±5°.** A tentativa de ±30° da rodada anterior
 achatava o triângulo; a conferência a 20° ainda expunha o encaixe da base.
-Foi mantida a faixa de ±15°, que preserva a forma. A orelha gira como uma
+Na revisão #7890, a faixa de ±15° ainda expunha o recorte e foi reduzida a ±5°. A orelha gira como uma
 peça quase rígida em torno
 do pivô; somente a faixa da base (80 px acima a 60 px abaixo do pivô, na
 fonte) flexiona. A largura, o comprimento e a ponta do triângulo ficam fora
 dessa faixa. Não há mais a deformação distribuída na borda interna ou por
 quase toda a orelha. A cabeça entre as orelhas permanece fixa.
-`erro` abre para os lados até 15°; nenhuma pose ou prévia usa ±30°.
+`erro` abre de forma assimétrica, até +3° à esquerda e −2° à direita; nenhuma pose ou prévia usa ±30°.
 A folha é reduzida globalmente para 7040 px de largura; a altura do gato por
 célula continua acima de 1024 px.
 
@@ -111,8 +110,11 @@ e no aro; girar apenas aqueles recortes deixava um fantasma no fundo.
 
 O script recompõe primeiro a cena original e refaz a separação de alfa
 somente nas regiões das orelhas. O fundo revelado recebe interpolação
-harmônica; o alfa e a cor das orelhas são resolvidos pela equação source-over,
-para preservar a imagem neutra. Uma placa fixa conserva os pixels da cabeça e do aro frontal; a extensão
+harmônica, com suavização apenas no fundo oculto. O recorte móvel abrange
+a superfície escura e uma faixa estreita de antialias ao redor; a névoa ampla
+fica fixa. Alfa e RGB são resolvidos pela equação source-over,
+para preservar a imagem neutra. A luz residual fica no fundo imóvel; não
+há corte vertical de propriedade entre orelhas, mas uma transição suave. Uma placa fixa conserva os pixels da cabeça e do aro frontal; a extensão
 antes escondida da cabeça usa uma máscara contínua, sem as pontas recortadas
 da separação antiga. Nas bases **completamente ocultas** por
 essa placa, o alfa faltante é continuado em RGBA premultiplicado,
@@ -124,12 +126,12 @@ A preparação não redesenha os pixels visíveis do gato: a comparação neutra
 olhos), antes de reduzir/comprimir. A invariância é da composição visível,
 não dos canais RGBA da separação antiga, que foram reorganizados. Fora da
 região de preparação o fundo é preservado exatamente; cabeça e corpo não
-recebem transformação. A prova de ±15° precisa também de julgamento visual,
+recebem transformação. A prova de ±5° precisa também de julgamento visual,
 não é validada só pela comparação neutra. `verificacao.json` registra o método,
 a região alterada e as métricas; `preparadas/manifest.json` guarda o contrato.
 
 O repouso demonstra um tique unilateral, o sono relaxa as duas orelhas, o
-acordar as ergue, a escuta vira para o som e o erro abre até 15° em avião.
+acordar as ergue, a escuta vira para o som e o erro abre suavemente até +3°/−2°.
 Na futura animação, os tiques são independentes, as piscadas são lentas e às
 vezes duplas, com intervalos variáveis. As três prévias abaixo demonstram
 movimento; continuam sendo documentos, sem código do app.
@@ -197,3 +199,7 @@ têm limite separado de 1,5 MB por WebP.
 O script prepara só documentos: nada do app, shader, overlay, microfone ou
 interface do macOS é executado. O ok do harry continua necessário antes da
 entrega seguinte.
+
+Revisão #7890: amplitude reduzida para ±5° após os recortes aparecerem a
+±15°. O tique do repouso usa −4° só à direita; o erro usa +3°/−2°. As prévias
+são uma nova tentativa para revisão visual, sem atestar aprovação dos recortes.
