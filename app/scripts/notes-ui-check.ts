@@ -501,6 +501,51 @@ await step("a legenda do ditado fica pequena e verde, sem mostrar o id", async (
 });
 
 // T6598: o painel de propriedades edita o frontmatter no lugar, e o resto do arquivo fica como estava.
+// T7436: o rascunho guarda o frontmatter (a edição das propriedades que não gravou). Recuperar volta com ele, e um
+// rascunho que só mudou as propriedades não some calado por ter o corpo igual ao do disco.
+const anaBody = "Cuida do financeiro e do texto do site.\n\n#pessoa\n";
+async function draftWithProperties(body: string, shot?: string) {
+  await page.evaluate((b) => localStorage.setItem("kiwi.notes.draft.v1:Pessoas/Ana.md",
+    JSON.stringify({ path: "Pessoas/Ana.md", body: b, frontmatter: "---\nstatus: PUBLICADO\n---\n", baseVersion: "1", at: new Date().toISOString() })), body);
+  await page.goto(`${URL}?note=${encodeURIComponent("Pessoas/Ana.md")}`);
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
+  await page.waitForSelector(".kn-draft >> text=Recuperar", { timeout: 3000 });
+  if (shots && shot) {
+    await page.waitForTimeout(600); // a página entra com fade
+    await page.screenshot({ path: `${shots}/${shot}-aviso.png` });
+  }
+  await page.click(".kn-draft >> text=Recuperar");
+}
+await step("rascunho só de propriedades: oferece Recuperar, e Recuperar grava o frontmatter", async () => {
+  await draftWithProperties(anaBody, "rascunho-propriedades");
+  await until(() => content("Pessoas/Ana.md"), (c) => c === "---\nstatus: PUBLICADO\n---\n" + anaBody, (c) => `gravou: ${JSON.stringify(c)}`);
+  if (shots) await page.screenshot({ path: `${shots}/rascunho-propriedades-recuperado.png` });
+});
+await step("rascunho de corpo e propriedades: Recuperar grava os dois", async () => {
+  await draftWithProperties(anaBody + "MAIS UMA LINHA\n");
+  await until(() => content("Pessoas/Ana.md"), (c) => c === "---\nstatus: PUBLICADO\n---\n" + anaBody + "MAIS UMA LINHA\n", (c) => `gravou: ${JSON.stringify(c)}`);
+});
+// T7516: um rascunho de antes do T1550 (sem o campo `frontmatter`) compara e recupera só o corpo, como antes: a nota
+// com frontmatter no disco não ganha um aviso à toa nem perde as tags.
+const siteBody = "Refazer o site com as fotos novas. Quem cuida do texto é a [[Ana]].\n\n```\nnpm run build\n```\n";
+async function oldDraft(body: string) {
+  await page.evaluate((b) => localStorage.setItem("kiwi.notes.draft.v1:Projetos/Site novo.md",
+    JSON.stringify({ path: "Projetos/Site novo.md", body: b, baseVersion: "1", at: new Date().toISOString() })), body);
+  await page.goto(`${URL}?note=${encodeURIComponent("Projetos/Site novo.md")}`);
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Site novo");
+}
+await step("rascunho antigo, sem frontmatter, com o corpo igual: nenhum aviso, e ele sai", async () => {
+  await oldDraft(siteBody);
+  await page.waitForTimeout(300);
+  if (await page.locator(".kn-draft").count()) throw new Error("ofereceu um rascunho igual ao disco");
+  await page.waitForFunction(() => !localStorage.getItem("kiwi.notes.draft.v1:Projetos/Site novo.md"), undefined, { timeout: 3000 });
+});
+await step("rascunho antigo, sem frontmatter: Recuperar grava o corpo e mantém as tags do disco", async () => {
+  await oldDraft(siteBody + "LINHA DO RASCUNHO\n");
+  await page.click(".kn-draft >> text=Recuperar");
+  await until(() => content("Projetos/Site novo.md"), (c) => c === "---\ntags: [projeto]\n---\n" + siteBody + "LINHA DO RASCUNHO\n", (c) => `gravou: ${JSON.stringify(c)}`);
+});
+
 await step("propriedades: editar, ligar a caixa e remover mexem só na sua chave", async () => {
   const fm = "---\n# da reunião\nstatus: aberto # revisar\nconcluída: false\nlista: [\"a b\", 'c']\n---\n";
   const body = "Corpo da Ana.\n";

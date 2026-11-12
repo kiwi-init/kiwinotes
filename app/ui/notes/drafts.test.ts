@@ -22,7 +22,7 @@ describe("rascunho do que não foi gravado", () => {
   test("guarda, lê e tira por nota", () => {
     const d = new Drafts(memory(), () => t0);
     d.set({ path: "Ana.md", body: "texto meu", baseVersion: "3" });
-    expect(d.get("Ana.md")).toEqual({ path: "Ana.md", body: "texto meu", frontmatter: "", baseVersion: "3", at: "2026-11-03T20:00:00.000Z" });
+    expect(d.get("Ana.md")).toEqual({ path: "Ana.md", body: "texto meu", baseVersion: "3", at: "2026-11-03T20:00:00.000Z" });
     expect(d.get("Outra.md")).toBeNull();
     d.remove("Ana.md");
     expect(d.get("Ana.md")).toBeNull();
@@ -81,15 +81,15 @@ describe("rascunho do que não foi gravado", () => {
     expect(api.other()).toBe("ok");
   });
 
-  test("guarda o frontmatter; rascunho antigo, sem ele, lê como vazio", () => {
+  test("guarda o frontmatter; rascunho antigo, sem ele (ou torto), lê sem o campo (T7516)", () => {
     const mem = memory();
     const d = new Drafts(mem, () => t0);
     d.set({ path: "A.md", body: "corpo", frontmatter: "---\ntags: [projeto]\n---\n", baseVersion: "1" });
     expect(d.get("A.md")?.frontmatter).toBe("---\ntags: [projeto]\n---\n");
     mem.setItem("kiwi.notes.draft.v1:Velho.md", JSON.stringify({ path: "Velho.md", body: "x", baseVersion: "1", at: new Date(t0).toISOString() }));
-    expect(d.get("Velho.md")?.frontmatter).toBe("");
+    expect(d.get("Velho.md")?.frontmatter).toBeUndefined();
     mem.setItem("kiwi.notes.draft.v1:Torto.md", JSON.stringify({ path: "Torto.md", body: "x", frontmatter: 42, baseVersion: "1", at: new Date(t0).toISOString() }));
-    expect(d.get("Torto.md")?.frontmatter).toBe("");
+    expect(d.get("Torto.md")?.frontmatter).toBeUndefined();
   });
 });
 

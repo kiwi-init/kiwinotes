@@ -11,7 +11,8 @@ export interface Draft {
   body: string;
   /**
    * O frontmatter da nota quando a edição começou (tags, propriedades), para o órfão recuperado como nota nova não
-   * perder nada (#1538). Rascunho de antes do T1550 não tem: vale "".
+   * perder nada (#1538), e a edição das propriedades que não gravou volta junto (T7516). Rascunho de antes do T1550 não
+   * tem: fica `undefined`, e quem usa decide (o órfão vira nota sem frontmatter; a própria nota fica com o do disco).
    */
   frontmatter?: string;
   /** A versão do disco em que a edição começou: se mudou, a nota foi mexida depois. */
@@ -52,7 +53,8 @@ export class Drafts {
       if (!raw) return null;
       const d = JSON.parse(raw) as Draft;
       if (d.path !== path || typeof d.body !== "string" || this.now() - Date.parse(d.at) > MAX_AGE_MS) return null;
-      return { ...d, frontmatter: typeof d.frontmatter === "string" ? d.frontmatter : "" };
+      if (typeof d.frontmatter !== "string") delete d.frontmatter;
+      return d;
     } catch {
       return null;
     }
