@@ -12,9 +12,19 @@ export type AgentErrorCode =
   | "E_AGENT_LIMIT"
   | "E_AGENT_OFFLINE"
   | "E_AGENT_BUSY"
-  | "E_AGENT_FAILED";
+  | "E_AGENT_FAILED"
+  // O adaptador do Claude Code (spec #8368): o download e a régua de versão.
+  | "E_ADAPTER_MISSING"
+  | "E_ADAPTER_OFFLINE"
+  | "E_ADAPTER_TAMPERED"
+  | "E_ADAPTER_DOWNLOAD"
+  | "E_AGENT_TOO_OLD"
+  | "E_AGENT_TOO_NEW";
 
-/** A mensagem de cada caso, para a pessoa ler. `{agente}` vira o nome do agente. */
+/**
+ * A mensagem de cada caso, para a pessoa ler. `{agente}` vira o nome do agente; `{instalada}` e `{esperada}` são as
+ * versões, nos dois erros de versão.
+ */
 export const AGENT_ERROR_MESSAGES: Record<AgentErrorCode, string> = {
   E_AGENT_NOT_INSTALLED: "O {agente} não está instalado neste Mac. Instale e tente de novo.",
   E_AGENT_NOT_LOGGED_IN: "O {agente} não está logado. Entre na sua conta pelo próprio {agente} e tente de novo.",
@@ -22,14 +32,25 @@ export const AGENT_ERROR_MESSAGES: Record<AgentErrorCode, string> = {
   E_AGENT_OFFLINE: "Sem conexão com a internet. O {agente} precisa de rede para responder.",
   E_AGENT_BUSY: "O {agente} ainda está respondendo o pedido anterior. Espere terminar ou cancele.",
   E_AGENT_FAILED: "O {agente} falhou ao responder. Tente de novo.",
+  E_ADAPTER_MISSING: "Falta baixar o adaptador do {agente}. Ele é baixado uma vez, quando você liga o agente.",
+  E_ADAPTER_OFFLINE: "Sem conexão com a internet. O Kiwi precisa de rede para baixar o adaptador do {agente}.",
+  E_ADAPTER_TAMPERED:
+    "Um pacote do adaptador do {agente} chegou diferente do esperado e foi apagado. Nada foi instalado. Tente de novo mais tarde.",
+  E_ADAPTER_DOWNLOAD: "O download do adaptador do {agente} falhou. Nada foi instalado. Tente de novo mais tarde.",
+  E_AGENT_TOO_OLD:
+    "O {agente} instalado (versão {instalada}) é mais antigo que o que este Kiwi usa ({esperada}). Atualize o {agente} e tente de novo.",
+  E_AGENT_TOO_NEW:
+    "O {agente} instalado (versão {instalada}) mudou de série, e este Kiwi só conhece a da {esperada}. O agente fica indisponível até sair uma atualização do Kiwi Notes.",
 };
 
 export class AgentError extends Error {
   readonly code: AgentErrorCode;
   /** O que o agente disse, cru, para o log. Nunca vai para a mensagem da pessoa. */
   readonly detail?: string;
-  constructor(code: AgentErrorCode, agentName = "agente", detail?: string) {
-    super(AGENT_ERROR_MESSAGES[code].replaceAll("{agente}", agentName));
+  constructor(code: AgentErrorCode, agentName = "agente", detail?: string, vars: Record<string, string> = {}) {
+    let message = AGENT_ERROR_MESSAGES[code].replaceAll("{agente}", agentName);
+    for (const [k, v] of Object.entries(vars)) message = message.replaceAll(`{${k}}`, v);
+    super(message);
     this.name = "AgentError";
     this.code = code;
     this.detail = detail;

@@ -194,7 +194,7 @@ describe("o isolamento", () => {
     expect(created!.params.cwd).toBe(path.join(dir, "agent", "work"));
     expect(created!.params.mcpServers).toEqual([]);
     expect(created!.params._meta).toEqual(ISOLATION_META);
-    expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: [] });
+    expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: [], allowDangerouslySkipPermissions: false });
   });
 
   test("retomar a sessão manda o mesmo isolamento", async () => {

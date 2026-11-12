@@ -32,7 +32,11 @@ import { AgentError, classifyAgentError } from "./errors.ts";
  * - `settingSources: []` não carrega as configurações da pessoa (`~/.claude`, as do projeto e as locais), com os
  *   hooks, as regras e os servidores MCP do terminal;
  * - `strictMcpConfig` usa só os servidores MCP que o Kiwi mandar (nenhum, neste spec);
- * - `tools: []` desliga as ferramentas embutidas (o shell, a edição de arquivos e a web).
+ * - `tools: []` desliga as ferramentas embutidas (o shell, a edição de arquivos e a web);
+ * - `allowDangerouslySkipPermissions: false` desliga o modo que pula as permissões (spec #8368). Sem ele, um
+ *   `"defaultMode": "bypassPermissions"` no `~/.claude/settings.json` da pessoa vira `--permission-mode=bypassPermissions`
+ *   no Claude Code: foi o que a prova do builder viu, com o adaptador de verdade e um `claude` falso. Com ele, a sessão
+ *   abre em `--permission-mode=default`, e toda ferramenta passa pelo pedido de permissão do Kiwi.
  * Um agente que não é o Claude Code ignora o `_meta`. A prova de ponta a ponta é do spec #8368, no Mac do harry.
  *
  * O que o `_meta` não segura (revisão do T8478): o próprio adaptador lê o `~/.claude/settings.json` da pessoa, com o
@@ -45,6 +49,7 @@ export const ISOLATION_META = {
       settingSources: [] as string[],
       strictMcpConfig: true,
       tools: [] as string[],
+      allowDangerouslySkipPermissions: false,
     },
   },
 } as const;
@@ -72,6 +77,11 @@ export interface AgentHostOptions {
   env?: Record<string, string | undefined>;
   /** A versão do Kiwi, que vai na apresentação do protocolo (`clientInfo`). */
   kiwiVersion?: string;
+  /**
+   * Cada `session/update` que chega, cru, inclusive fora de um pedido (por exemplo, a lista de comandos que o agente
+   * manda ao abrir). É para diagnóstico, como a prova do #8368; a tela usa os eventos do `ask`.
+   */
+  onUpdate?: (n: SessionNotification) => void;
 }
 
 export interface AgentSession {
@@ -79,6 +89,8 @@ export interface AgentSession {
   /** `true` quando a sessão anterior foi retomada, `false` quando começou uma nova. */
   resumed: boolean;
   agent: { name?: string; version?: string };
+  /** A resposta crua da abertura (`session/new`, `resume` ou `load`): os modos, os modelos e as opções do agente. */
+  details?: Record<string, unknown>;
 }
 
 /** Quanto o host espera o agente sair por conta própria, no `stop()`, antes de matar. */
@@ -119,6 +131,11 @@ export class AgentHost {
 
   get running(): boolean {
     return this.proc !== null;
+  }
+
+  /** O pid do processo do agente, enquanto ele está aberto (a prova do #8368 olha os filhos dele). */
+  get pid(): number | null {
+    return this.proc?.pid ?? null;
   }
 
   /** Abre o agente, faz a apresentação do protocolo e abre (ou retoma) a sessão. */
@@ -176,10 +193,10 @@ export class AgentHost {
         clientInfo: { name: "kiwi-notes", title: "Kiwi Notes", version: this.o.kiwiVersion ?? "dev" },
       };
       const init = await this.untilExit(this.conn.agent.request("initialize", hello));
-      const { sessionId, resumed } = await this.openSession(init);
+      const { sessionId, resumed, details } = await this.openSession(init);
       this.sessionId = sessionId;
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId }) + "\n", { mode: 0o600 });
-      return { sessionId, resumed, agent: { name: init.agentInfo?.title ?? init.agentInfo?.name, version: init.agentInfo?.version } };
+      return { sessionId, resumed, agent: { name: init.agentInfo?.title ?? init.agentInfo?.name, version: init.agentInfo?.version }, details };
     } catch (e) {
       await this.stop();
       throw classifyAgentError(e, this.o.name);
@@ -187,7 +204,7 @@ export class AgentHost {
   }
 
   /** Retoma a sessão guardada, se o agente sabe (`session/resume`, ou `session/load`); senão, abre uma nova. */
-  private async openSession(init: InitializeResponse): Promise<{ sessionId: string; resumed: boolean }> {
+  private async openSession(init: InitializeResponse): Promise<{ sessionId: string; resumed: boolean; details: Record<string, unknown> }> {
     const agent = this.conn!.agent;
     const base: NewSessionRequest = { cwd: this.workDir, mcpServers: [], _meta: structuredClone(ISOLATION_META) as unknown as Record<string, unknown> };
     const saved = this.savedSessionId();
@@ -195,13 +212,13 @@ export class AgentHost {
       const caps = init.agentCapabilities;
       try {
         if (caps?.sessionCapabilities?.resume) {
-          await this.untilExit(agent.request("session/resume", { ...base, sessionId: saved }));
-          return { sessionId: saved, resumed: true };
+          const details = await this.untilExit(agent.request("session/resume", { ...base, sessionId: saved }));
+          return { sessionId: saved, resumed: true, details: { ...details } };
         }
         if (caps?.loadSession) {
           this.replaying = true;
-          await this.untilExit(agent.request("session/load", { ...base, sessionId: saved }));
-          return { sessionId: saved, resumed: true };
+          const details = await this.untilExit(agent.request("session/load", { ...base, sessionId: saved }));
+          return { sessionId: saved, resumed: true, details: { ...details } };
         }
       } catch (e) {
         // A sessão guardada não existe mais (outro agente, ou o agente a apagou): começa uma nova. Um erro de login,
@@ -213,7 +230,7 @@ export class AgentHost {
       }
     }
     const created = await this.untilExit(agent.request("session/new", base));
-    return { sessionId: created.sessionId, resumed: false };
+    return { sessionId: created.sessionId, resumed: false, details: { ...created } };
   }
 
   private savedSessionId(): string | null {
@@ -314,6 +331,7 @@ export class AgentHost {
   }
 
   private onUpdate(n: SessionNotification): void {
+    this.o.onUpdate?.(n);
     if (this.replaying || n.sessionId !== this.sessionId) return;
     const turn = this.turn;
     if (!turn) return;

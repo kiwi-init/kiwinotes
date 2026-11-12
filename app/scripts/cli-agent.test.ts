@@ -95,3 +95,46 @@ describe("agent ask", () => {
     expect((await cli(["voar"])).exit).toBe(2);
   });
 });
+
+describe("o adaptador do Claude Code (spec #8368)", () => {
+  // A CLI usa a lista fixa de verdade: um registro falso serve outros bytes, então todo download dele é "adulterado".
+  // O download que dá certo está em `src/agent/adapter/download.test.ts` e na prova `KIWI_ADAPTER_PROOF=1`.
+  test("o status diz se o adaptador foi baixado e se a versão do Claude Code serve", async () => {
+    const r = await cli(["status", "--data", tmp()]);
+    expect(r.result!.value).toMatchObject({ versionOk: true, adapter: { installed: false, version: "0.106.0", claudeCode: "2.1.322" } });
+    const old = await cli(["status", "--data", tmp()], { KIWI_FAKE_CLAUDE_VERSION: "2.0.1" });
+    expect(old.result!.value).toMatchObject({ versionOk: false, versionError: "E_AGENT_TOO_OLD" });
+  });
+
+  test("um pacote que não confere com a lista fixa é recusado, com exit 1, e nada fica instalado", async () => {
+    const { fakeRegistry } = await import("../src/agent/fake/registry.ts");
+    const reg = fakeRegistry([{ name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } }]);
+    try {
+      const data = tmp();
+      const r = await cli(["download", "--data", data, "--registry", reg.url]);
+      expect(r.exit).toBe(1);
+      expect(r.result).toMatchObject({ ok: false, code: "E_ADAPTER_TAMPERED" });
+      expect(reg.requests).toHaveLength(1);
+      expect((await cli(["status", "--data", data])).result!.value.adapter.installed).toBe(false);
+    } finally {
+      reg.stop();
+    }
+  });
+
+  test("sem rede: o download e a prova param com um erro claro, sem abrir nada", async () => {
+    const closed = "http://127.0.0.1:9";
+    const data = tmp();
+    const dl = await cli(["download", "--data", data, "--registry", closed]);
+    expect(dl.result).toMatchObject({ ok: false, code: "E_ADAPTER_OFFLINE" });
+    expect(dl.result!.message).toContain("baixar o adaptador do Claude Code");
+    const proof = await cli(["proof", "--data", data, "--registry", closed]);
+    expect(proof.exit).toBe(1);
+    expect(proof.result).toMatchObject({ ok: false, code: "E_ADAPTER_OFFLINE" });
+  });
+
+  test("remover, e nunca nos dados do app de verdade", async () => {
+    expect((await cli(["remove", "--data", tmp()])).result).toMatchObject({ ok: true, value: { removed: true } });
+    const real = await cli(["download", "--data", path.join(os.homedir(), "KiwiNotes", "x")]);
+    expect(real.result!.code).toBe("E_REAL_DATA");
+  });
+});

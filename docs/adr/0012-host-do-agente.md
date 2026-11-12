@@ -1,13 +1,14 @@
 # ADR 0012: o host do agente
 
-- Status: aceito (T8478, spec #4576, aprovado pelo harry em #8474).
+- Status: aceito (T8478, spec #4576, aprovado pelo harry em #8474). O adaptador do Claude Code entrou no T8540 (spec #8368, aprovado em #8477).
 - Segue o [ADR 0011](0011-agente-e-privacidade.md) (o que vai para o agente) e a escolha do harry pelo adaptador ACP (#8368).
 - Código:
   - [`app/src/agent/host.ts`](../../app/src/agent/host.ts): abre o agente, fala ACP com ele e devolve os eventos;
   - [`app/src/agent/claude.ts`](../../app/src/agent/claude.ts): acha o Claude Code instalado e diz a versão e se ele está logado;
   - [`app/src/agent/errors.ts`](../../app/src/agent/errors.ts): os erros, com as mensagens que a pessoa lê;
   - [`app/src/agent/fake/`](../../app/src/agent/fake/): o agente falso, que fala ACP, e o `claude` falso;
-  - [`app/scripts/cli-agent.ts`](../../app/scripts/cli-agent.ts): `bun run cli agent status` e `agent ask "…"`.
+  - [`app/src/agent/adapter/`](../../app/src/agent/adapter/): o adaptador do Claude Code. A lista fixa (`pinned.ts`), o download (`download.ts`), a régua de versão (`version.ts`), a abertura (`open.ts`) e a prova (`proof.ts`);
+  - [`app/scripts/cli-agent.ts`](../../app/scripts/cli-agent.ts): `bun run cli agent status`, `ask "…"`, `download`, `remove` e `proof`.
 
 ## Contexto
 A mega-ideia precisa que o Kiwi converse com um agente de CLI: o Claude Code, para o harry, e outro agente para outra pessoa. O harry escolheu ligar o Claude Code pelo adaptador ACP (#8368), que o Kiwi baixa na primeira vez. O ACP (Agent Client Protocol) é um protocolo aberto: o cliente (o Kiwi) abre o programa do agente e conversa com ele em JSON-RPC pelo stdin e o stdout. O Gemini e o OpenCode falam ACP sozinhos; o Claude Code fala pelo adaptador.
@@ -37,7 +38,8 @@ Este ADR descreve a peça do Kiwi que faz isso, ainda sem tela e sem rede. O dow
   - **no `_meta.claudeCode.options`,** que o adaptador passa ao SDK do Claude Code por cima dos padrões dele:
     - `settingSources: []`: não carrega as configurações da pessoa (as de `~/.claude`, as do projeto e as locais), com os hooks, as regras, o CLAUDE.md e os servidores MCP do terminal;
     - `strictMcpConfig: true`: só valem os servidores que o Kiwi mandar;
-    - `tools: []`: nenhuma ferramenta embutida (o shell, a edição de arquivos e a web). Neste spec o agente só conversa.
+    - `tools: []`: nenhuma ferramenta embutida (o shell, a edição de arquivos e a web). Neste spec o agente só conversa;
+    - `allowDangerouslySkipPermissions: false`: o modo que pula as permissões fica desligado (T8540). A prova do builder mostrou por quê: sem isso, um `"defaultMode": "bypassPermissions"` no `~/.claude/settings.json` da pessoa virou `--permission-mode=bypassPermissions --allow-dangerously-skip-permissions` no Claude Code. Com isso, a sessão abre em `--permission-mode=default`, e toda ferramenta passa pelo pedido de permissão do Kiwi.
 
   Um agente que não é o Claude Code ignora esse `_meta`.
 
@@ -47,7 +49,7 @@ Este ADR descreve a peça do Kiwi que faz isso, ainda sem tela e sem rede. O dow
   - a escolha de modelo;
   - o `apiKeyHelper`.
 
-  Os hooks e os servidores MCP não voltam por esse caminho: a sessão recebe só o `settings` que o Kiwi mandar. Com `tools: []`, o modo de permissão não abre nada.
+  Os hooks e os servidores MCP não voltam por esse caminho: a sessão recebe só o `settings` que o Kiwi mandar. O modo de permissão que pula tudo está fechado pelo `allowDangerouslySkipPermissions: false`; um `acceptEdits` ou um `auto` da pessoa ainda passariam, e por isso a tela que der ferramentas ao agente fixa o modo pelo ACP (`session/set_mode`).
 - **Nenhuma permissão é dada.** Sem tela, todo `session/request_permission` é respondido com a opção de recusar (ou com `cancelled`), e o evento `permission` conta qual ferramenta foi recusada. O Kiwi também diz ao agente que não lê nem escreve arquivos por ele, e que não abre terminal (`clientCapabilities`).
 - **Os erros viram seis casos,** com mensagens em português:
   - os quatro do spec: `E_AGENT_NOT_INSTALLED`, `E_AGENT_NOT_LOGGED_IN`, `E_AGENT_LIMIT` e `E_AGENT_OFFLINE`;
@@ -61,6 +63,46 @@ Este ADR descreve a peça do Kiwi que faz isso, ainda sem tela e sem rede. O dow
 - **Nada liga sozinho.** Criar o host não abre nada. Só o `start()` abre o agente.
 - **Os falsos:** `fake/agent.ts` responde, demora (`/lento`), pede permissão (`/permissao`) e falha de cada um dos quatro jeitos (`/sem-login`, `/limite`, `/sem-rede`), e também cai no meio (`/cai`). Ele guarda as sessões na pasta onde roda, para provar a retomada entre aberturas. `fake/claude.ts` responde o `--version` e o `auth status`. Todo teste e a CLI dos agentes usam os dois.
 
+## O adaptador do Claude Code (T8540, spec #8368)
+O Claude Code não fala ACP sozinho. O harry escolheu o adaptador oficial do ACP, baixado na primeira vez que a pessoa liga o agente (#8368).
+
+- **A versão fixa:** `@agentclientprotocol/claude-agent-acp` 0.106.0, feito para o Claude Code 2.1.322 (a versão do `manifest.json` do SDK que ele usa). Ela só muda numa versão nova do Kiwi.
+- **A lista fixa de pacotes,** cada um conferido contra o `integrity` (sha512) que o npm publica, antes de ir para o disco:
+
+  | pacote | versão | licença |
+  |---|---|---|
+  | `@agentclientprotocol/claude-agent-acp` | 0.106.0 | Apache-2.0 |
+  | `@anthropic-ai/claude-agent-sdk` | 0.3.322 | fechada (da Anthropic) |
+  | `@agentclientprotocol/sdk` | 2.6.0 | Apache-2.0 |
+  | `diff` | 9.0.0 | BSD-3-Clause |
+  | `zod` | 4.6.7 | MIT |
+
+  São 4,4 MB baixados e 27 MB na pasta. As dependências "peer" do SDK (`@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`) ficam de fora: o adaptador só importa o `sdk.mjs` do SDK, e ele só usa módulos do próprio Node/Bun.
+- **Sem a cópia do Claude Code.** O SDK declara, como dependência opcional, um Claude Code inteiro para cada plataforma (`@anthropic-ai/claude-agent-sdk-darwin-arm64`, 324 MB). O Kiwi não instala pelo npm: ele baixa só a lista acima. E abre o adaptador com o `CLAUDE_CODE_EXECUTABLE` no `claude` instalado (no caminho como o Kiwi achou, sem resolver o link, para pegar a atualização sozinha do Claude Code). Sem a variável, o adaptador procuraria a cópia, que não existe, e falharia: ele nunca usa outra cópia.
+- **O download:**
+  - só a pedido: `bun run cli agent download`, e depois o clique em Ajustes › Agente;
+  - tudo ou nada: uma pasta `.part` que só vira `<dados>/agent/adapter/0.106.0` no fim, com o marcador `kiwi-adapter.json`;
+  - um pacote que chega diferente da lista (o sha512, ou o nome e a versão do `package.json` de dentro) é recusado, e nada fica instalado (`E_ADAPTER_TAMPERED`). A falta de rede é `E_ADAPTER_OFFLINE`, e um 404 é `E_ADAPTER_DOWNLOAD`;
+  - é um GET sem cookie, sem conta e sem token. `agent remove` apaga a pasta.
+- **Aberto pelo Bun do Kiwi** (`process.execPath`, no app o Bun de dentro do .app). A pessoa não instala Node nem mais nada.
+- **A régua de versão** (`version.ts`): serve o Claude Code igual ou mais novo que o 2.1.322, na mesma versão principal (`2.x`). Mais antigo é `E_AGENT_TOO_OLD` (a pessoa atualiza o Claude Code). Outra versão principal é `E_AGENT_TOO_NEW`: o agente fica indisponível até sair um Kiwi novo, e o plano B abaixo existe para esse caso. A prova de verdade confirma se essa régua funciona.
+- **Antes de abrir,** as conferências seguem a ordem das mensagens: instalado, a versão, o login e o adaptador baixado (`E_ADAPTER_MISSING`).
+- **A guarda de assinatura do adaptador** (`--hide-claude-auth`, que recusa uma conta da assinatura do Claude) só liga com essa opção na linha de comando. O Kiwi não passa a opção.
+
+### A prova do builder (feita, com um `claude` falso)
+`KIWI_ADAPTER_PROOF=1 bun test src/agent/adapter/proof.test.ts` (e `bun run cli agent proof`, sem `--real`) baixa a lista fixa do npm e abre o adaptador de verdade, pelo Bun, com um `claude` falso que anota como foi chamado e responde o mínimo do protocolo do SDK. Em 2026-11-12:
+- o adaptador abriu o programa indicado pelo Kiwi, uma vez, na pasta de trabalho do agente;
+- com `--tools= --setting-sources= --strict-mcp-config --permission-mode=default`, sem `--mcp-config` e sem `--allow-dangerously-skip-permissions`;
+- a sessão abriu sem nenhum pedido, em menos de 1 s.
+
+### A prova de verdade (do harry)
+`bun run cli agent proof --real`, que o lead pede ao harry. Ela baixa o adaptador se faltar, abre uma sessão no Claude Code instalado **sem mandar nenhum pedido** e mostra:
+- o processo que o adaptador abriu (o caminho tem de ser o do `claude` do terminal) e as opções de isolamento dele;
+- a versão e o login (só o método);
+- os comandos e as opções (o modelo, os agentes) que a sessão recebeu. Um comando, uma skill, um plugin ou um agente pessoal do harry nessa lista é uma configuração que entrou.
+
+O resultado entra aqui quando o harry rodar.
+
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:
 - `claude -p --input-format stream-json --output-format stream-json --verbose`;
@@ -70,7 +112,7 @@ Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um 
 A tela e as ferramentas não mudam, porque só falam com a interface. O custo é traduzir os eventos do `stream-json` nos mesmos `status`, `text` e `done`.
 
 ## O que só se prova com o Claude Code de verdade
-Fica para o spec #8368, na prova que o harry roda no Mac dele:
+Fica para a prova de verdade do harry (`bun run cli agent proof --real`, acima):
 - **o formato real dos erros pelo adaptador.** O adaptador manda a falha detalhada (`rate_limited`, `auth_required`…) só para os clientes da JetBrains (a extensão AIR). Para os outros, o que chega é a mensagem. Os casos de limite, de rede e de login precisam ser vistos acontecendo;
 - **o formato do `claude auth status`** no Claude Code instalado;
 - **o isolamento de ponta a ponta:**
@@ -79,7 +121,7 @@ Fica para o spec #8368, na prova que o harry roda no Mac dele:
   - se a memória automática e os plugins também ficam de fora;
   - e o que o adaptador ainda tira do `~/.claude/settings.json` (o modo de permissão, o modelo e o `apiKeyHelper`), e se algo disso pede um `settings` próprio do Kiwi no `_meta`.
 
-  A prova imprime as ferramentas e os servidores MCP da sessão;
+  A prova imprime as opções com que o Claude Code foi aberto e os comandos, os modelos e os agentes que a sessão recebeu;
 - **a retomada** (`session/resume`) com o adaptador, entre uma abertura e outra.
 
 ## Consequências

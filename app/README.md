@@ -78,6 +78,17 @@ bun run cli agent ask "/limite" --data /tmp/kn-test     # o agente falso falha: 
 
 O agente falso também tem `/lento` (20 pedaços, um a cada 100 ms; Ctrl-C cancela) e `/permissao` (o host recusa). `KIWI_FAKE_CLAUDE_LOGGED_IN=0` faz o `claude` falso dizer que não está logado, e `--claude PATH` aponta outro programa no lugar dele. A sessão fica em `<data>/agent/`.
 
+**O adaptador do Claude Code (T8540, spec #8368).** O Kiwi liga o Claude Code pelo adaptador ACP, baixado a pedido numa versão fixa, com cada pacote conferido e sem a cópia do Claude Code que viria junto ([ADR 0012](../docs/adr/0012-host-do-agente.md)):
+
+```sh
+bun run cli agent download --data /tmp/kn-test          # a lista fixa do npm (4,4 MB), conferida; a única ida à rede
+bun run cli agent status --data /tmp/kn-test            # inclui o adaptador baixado e se a versão do Claude Code serve
+bun run cli agent proof --data /tmp/kn-test             # a prova do builder: o adaptador de verdade com um claude falso
+bun run cli agent remove --data /tmp/kn-test
+```
+
+O `proof` abre uma sessão sem mandar pedido e mostra o processo que o adaptador abriu, as opções de isolamento e o que a sessão recebeu. **O `proof --real` abre o Claude Code de verdade: só o harry roda, quando o lead pede** (ADR 0011). `KIWI_ADAPTER_PROOF=1 bun test src/agent/adapter` roda a mesma prova do builder como teste (ela vai ao npm, por isso fica fora do `bun test` comum).
+
 ### Ver as janelas pela CLI, fora da tela (T1742)
 
 Com o headless de pé (`bun run cli start --data DIR --no-helper`), as janelas de verdade abrem num WebKit headless, sem nada na tela de ninguém:
