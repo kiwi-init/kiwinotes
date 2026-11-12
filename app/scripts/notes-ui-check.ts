@@ -107,8 +107,11 @@ const treeNames = () =>
     const head = [...document.querySelectorAll(".kn-side-head")].find((h) => h.textContent === "Notas");
     const names: string[] = [];
     for (let el = head?.nextElementSibling; el && !el.classList.contains("kn-side-head"); el = el.nextElementSibling) {
-      const name = el.querySelector(".kn-side-item:not(.kn-side-trash) .kn-side-name");
-      if (name) names.push(name.textContent ?? "");
+      // As linhas da árvore ficam na lista (T7875: a lista virtual), uma por filho.
+      for (const row of el.classList.contains("kn-side-list") ? [...el.children] : [el]) {
+        const name = row.querySelector(".kn-side-item:not(.kn-side-trash) .kn-side-name");
+        if (name) names.push(name.textContent ?? "");
+      }
     }
     return names;
   });
@@ -724,6 +727,40 @@ await step("busca com mais de 500 caracteres: o ⌘K e a árvore dizem que é lo
   await page.fill(".kn-tree-pop .kn-side-search", long);
   await page.waitForSelector(".kn-tree-pop .kn-side-empty:has-text('Busca longa demais')", { timeout: 3000 });
   await page.fill(".kn-tree-pop .kn-side-search", "");
+  await closeTree();
+});
+
+// T7875: a árvore virtual. Com centenas de notas expandidas, só a janela da rolagem vai para o DOM (antes, uma linha por
+// nota: 10 mil notas abriam em 4 a 8 s). Rolar mostra o resto, e fechar e reabrir volta ao mesmo lugar.
+await step("árvore com 600 notas expandidas: só a janela vai para o DOM, rola até o fim e reabre no mesmo lugar", async () => {
+  await page.evaluate(() => {
+    const m = (window as any).__kiwiNotesMock;
+    for (let i = 0; i < 600; i++) m.editOutside(`Muitas/Nota ${String(i).padStart(3, "0")}.md`, `# ${i}\n`);
+  });
+  await openTree();
+  await page.click(".kn-tree-pop button[data-all='expand']");
+  await page.waitForSelector('.kn-tree-pop .kn-side-item[data-path="Muitas/Nota 000.md"]');
+  const drawn = await page.locator(".kn-tree-pop .kn-side-item[data-kind='note']").count();
+  if (drawn > 200) throw new Error(`${drawn} linhas no DOM: a lista não é virtual`);
+  if (shots) await page.screenshot({ path: `${shots}/notas-arvore-virtual.png` });
+  // Até o fim: as notas da raiz (as últimas linhas) aparecem, e as primeiras saem.
+  await page.evaluate(() => { const s = document.querySelector(".kn-tree-pop .kn-side")!; s.scrollTop = s.scrollHeight; });
+  await page.waitForSelector('.kn-tree-pop .kn-side-item[data-path="Caixa de entrada.md"]', { timeout: 3000 });
+  expectEq(await page.locator('.kn-tree-pop .kn-side-item[data-path="Muitas/Nota 000.md"]').count(), 0);
+  // Fechar e reabrir: a posição volta, com as mesmas linhas na tela.
+  await closeTree();
+  await openTree();
+  await page.waitForSelector('.kn-tree-pop .kn-side-item[data-path="Caixa de entrada.md"]', { timeout: 3000 });
+  await page.click('.kn-tree-pop .kn-side-item[data-path="Caixa de entrada.md"]');
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Caixa de entrada");
+  // A pasta nova cai fora da janela (depois das 600 de "Muitas"): a lista rola até ela, e o campo do nome aparece.
+  await openTree();
+  await page.evaluate(() => { document.querySelector(".kn-tree-pop .kn-side")!.scrollTop = 0; });
+  await page.click(".kn-tree-pop button[data-new='folder']");
+  await page.waitForSelector(".kn-tree-pop .kn-side-rename", { timeout: 3000 });
+  await page.waitForFunction(() => document.activeElement?.classList.contains("kn-side-rename"));
+  await page.keyboard.press("Escape");
+  await page.click(".kn-tree-pop button[data-all='collapse']");
   await closeTree();
 });
 

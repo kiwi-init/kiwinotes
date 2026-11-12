@@ -3,7 +3,7 @@
 // pasta para outra pasta (ou para a raiz, na área vazia) e o menu de botão direito. Com o T3370 (spec #3272): um ícone
 // por tipo, a seta das pastas, os outros arquivos do cofre (abrem no app padrão do Mac) e a extensão, se a pessoa quiser.
 
-import { type CSSProperties, type DragEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type DragEvent, type ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./hover-rows.css";
 
 import { Highlight } from "./Highlight.tsx";
@@ -122,6 +122,38 @@ const Ext = ({ ext }: { ext: string }) => (ext ? <span className="kn-side-ext">.
 
 const DRAG = "application/x-kiwi-notes";
 
+/**
+ * A lista da árvore desenha só o que está na tela, mais uma margem, quando passa disto (T7875): um cofre de 10 mil notas
+ * com tudo expandido tinha 10 mil linhas no DOM, e abrir a árvore levava 4 a 8 s. Abaixo disto, tudo como antes.
+ */
+export const VIRTUAL_FROM = 300;
+/** As linhas desenhadas acima e abaixo da tela: o Tab e o rolar rápido não chegam ao vazio. */
+const OVERSCAN = 40;
+
+/** Uma linha da árvore: a nota, o arquivo ou a pasta, e o recuo. As pastas abertas trazem as de dentro logo depois. */
+export interface TreeRow {
+  node: TreeNode;
+  depth: number;
+}
+
+/** A árvore como as linhas que aparecem, na ordem: o que está dentro de uma pasta fechada não entra. */
+export function treeRows(nodes: TreeNode[], open: ReadonlySet<string>, depth = 0, out: TreeRow[] = []): TreeRow[] {
+  for (const node of nodes) {
+    out.push({ node, depth });
+    if (node.kind === "folder" && open.has(node.path)) treeRows(node.children, open, depth + 1, out);
+  }
+  return out;
+}
+
+/** As linhas `[first, last)` para desenhar: a janela da rolagem sobre a lista, com a margem. */
+export function visibleRange(count: number, rowHeight: number, listTop: number, scrollTop: number, viewHeight: number): [number, number] {
+  if (count <= VIRTUAL_FROM || rowHeight <= 0) return [0, count];
+  const from = scrollTop - listTop;
+  const first = Math.max(0, Math.floor(from / rowHeight) - OVERSCAN);
+  const last = Math.min(count, Math.ceil((from + viewHeight) / rowHeight) + OVERSCAN);
+  return [Math.min(first, last), last];
+}
+
 /** O campo de renomear: Enter grava, Esc desiste, sair do campo grava. */
 function RenameInput({ initial, depth, onDone }: { initial: string; depth: number; onDone(name: string | null): void }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -159,6 +191,34 @@ function RenameInput({ initial, depth, onDone }: { initial: string; depth: numbe
 
 export function Sidebar(p: SidebarProps) {
   const [dropOn, setDropOn] = useState<string | null>(null);
+  // A janela da rolagem, para a lista virtual (T7875): o `nav` é quem rola.
+  const navRef = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ top: 0, height: 900 });
+  const [rowHeight, setRowHeight] = useState(28);
+  const frame = useRef(0);
+  const measureView = () => {
+    const nav = navRef.current;
+    if (nav) setView((v) => (v.top === nav.scrollTop && v.height === nav.clientHeight ? v : { top: nav.scrollTop, height: nav.clientHeight }));
+  };
+  const onScroll = () => {
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      measureView();
+    });
+  };
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    measureView();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measureView);
+    ro?.observe(nav);
+    return () => {
+      ro?.disconnect();
+      cancelAnimationFrame(frame.current);
+    };
+  }, []);
   const newNoteKey = p.keys ? p.keys.newNote : "⌘N";
   const dailyKey = p.keys ? p.keys.dailyNote : "⇧⌘D";
   const shut = (id: SectionId) => Boolean(p.onSection && p.collapsed?.has(id));
@@ -303,13 +363,11 @@ export function Sidebar(p: SidebarProps) {
     </div>
   );
 
-  const items = (nodes: TreeNode[], depth: number): ReactElement[] =>
-    nodes.flatMap((n) => {
-      if (n.kind === "note") return [noteItem(n, depth, `n:${n.path}`)];
-      if (n.kind === "file") return [fileItem(n, depth)];
+  const row = ({ node: n, depth }: TreeRow): ReactElement => {
+      if (n.kind === "note") return noteItem(n, depth, `n:${n.path}`);
+      if (n.kind === "file") return fileItem(n, depth);
       const expanded = p.open.has(n.path);
-      const row =
-        p.renaming === `f:${n.path}` ? (
+      return p.renaming === `f:${n.path}` ? (
           <RenameInput key={`f:${n.path}`} initial={n.name} depth={depth} onDone={(name) => p.onRename({ kind: "folder", path: n.path }, name)} />
         ) : (
           <div key={`f:${n.path}`} className="kn-side-row" data-menu={p.menuOn === `f:${n.path}` || undefined} style={rowStyle(false, false)}>
@@ -339,13 +397,37 @@ export function Sidebar(p: SidebarProps) {
             {tools({ kind: "folder", path: n.path }, n.name)}
           </div>
         );
-      return [row, ...(expanded ? items(n.children, depth + 1) : [])];
-    });
+    };
+
+  // As linhas da árvore, e só as da janela quando são muitas (T7875). Em cima e embaixo, o espaço das que não estão
+  // desenhadas: a barra de rolagem e a posição seguem as de verdade.
+  const showTree = searching || !shut("notes");
+  const rows = useMemo(() => (showTree ? treeRows(p.tree, p.open) : []), [showTree, p.tree, p.open]);
+  const virtual = rows.length > VIRTUAL_FROM;
+  const [first, last] = visibleRange(rows.length, rowHeight, listRef.current?.offsetTop ?? 0, view.top, view.height);
+  // A altura de uma linha, medida (o tamanho do texto muda ela).
+  useLayoutEffect(() => {
+    if (!virtual) return;
+    const h = listRef.current?.querySelector<HTMLElement>(".kn-side-row")?.offsetHeight;
+    if (h && Math.abs(h - rowHeight) > 0.5) setRowHeight(h);
+  });
+  // Renomear (a pasta nova, o "Renomear" do menu) numa linha fora da janela: a lista rola até ela, e o campo aparece.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!virtual || !p.renaming || !nav) return;
+    const index = rows.findIndex((r) => `${r.node.kind === "folder" ? "f" : "n"}:${r.node.path}` === p.renaming);
+    if (index < 0) return;
+    const top = (listRef.current?.offsetTop ?? 0) + index * rowHeight;
+    if (top < nav.scrollTop || top + rowHeight > nav.scrollTop + nav.clientHeight) nav.scrollTop = top - nav.clientHeight / 2;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.renaming, virtual]);
 
   return (
     <nav
+      ref={navRef}
       className="kn-side"
       aria-label="Notas"
+      onScroll={onScroll}
       data-drop={dropOn === "" || undefined}
       onContextMenu={(e) => menu(e, { kind: "empty" })}
       onClick={(e) => e.target === e.currentTarget && p.onSelectFolder("")}
@@ -451,7 +533,16 @@ export function Sidebar(p: SidebarProps) {
       ) : null}
       {/* Na busca, o resultado vem inteiro, mesmo com a seção Notas recolhida. */}
       {searching ? <div className="kn-side-head" data-section="notes">Resultado</div> : head("notes", "Notas")}
-      {searching || !shut("notes") ? items(p.tree, 0) : null}
+      {showTree ? (
+        <div
+          ref={listRef}
+          className="kn-side-list"
+          data-virtual={virtual || undefined}
+          style={virtual ? { paddingTop: first * rowHeight, paddingBottom: (rows.length - last) * rowHeight } : undefined}
+        >
+          {rows.slice(first, last).map(row)}
+        </div>
+      ) : null}
       {searching && !p.tree.length ? <div className="kn-side-empty">{searchTooLong(p.query) ? SEARCH_TOO_LONG : "Nada com esse nome"}</div> : null}
       {!searching && p.tags?.length && p.onTag ? (
         <>

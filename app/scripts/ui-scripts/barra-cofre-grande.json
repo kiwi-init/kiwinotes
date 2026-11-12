@@ -26,10 +26,15 @@
       "name": "Expandir tudo"
     },
     {
-      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder']",
-      "count": 1665,
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][aria-expanded='false']",
+      "count": 0,
       "timeout": 30000,
-      "name": "as 1665 pastas abertas"
+      "name": "as 1665 pastas abertas: nenhuma pasta fechada na tela (T7875: a lista desenha só a janela, não as 1665)"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-list[data-virtual]",
+      "count": 1,
+      "name": "a lista da árvore é virtual (T7875)"
     },
     {
       "press": "Escape",
@@ -90,9 +95,15 @@
       "name": "reabre a árvore: as pastas continuam abertas"
     },
     {
-      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder']",
-      "count": 1665,
-      "timeout": 30000
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][aria-expanded='false']",
+      "count": 0,
+      "timeout": 30000,
+      "name": "as pastas continuam abertas: nenhuma pasta fechada na tela (T7875: a lista desenha só a janela, não as 1665)"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-list[data-virtual]",
+      "count": 1,
+      "name": "a lista da árvore é virtual (T7875)"
     },
     {
       "click": ".kn-tree-pop .kn-side-new[data-all='collapse']",
