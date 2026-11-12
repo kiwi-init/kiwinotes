@@ -19,7 +19,7 @@ const report: any = {
   cases: [],
 };
 try {
-  for (const variant of ["B1", "B2"])
+  for (const variant of ["B1"])
     for (const state of ["ouvindo", "thinking"]) {
       const name = variant + "-" + state,
         folder = join(out, name);

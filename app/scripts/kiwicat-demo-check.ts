@@ -57,7 +57,7 @@ try {
         "/?mode=capture&backend=" +
         (backend === "unavailable" ? "auto" : backend) +
         "&variant=" +
-        (process.env.KIWI_FOG_VARIANT ?? "B2"),
+        "B1",
     );
     await page.waitForFunction(() => (window as any).kiwiFogReady, null, {
       timeout: 30000,

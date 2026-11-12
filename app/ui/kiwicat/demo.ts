@@ -15,14 +15,13 @@ const backend =
       : "auto";
 const api = await createKiwiFog(document.getElementById("fog")!, {
   mode,
-  variant: query.get("variant") === "B1" ? "B1" : "B2",
   backend,
   width: Number(query.get("width") ?? 640),
   height: Number(query.get("height") ?? 800),
   seed: Number(query.get("seed") ?? 17),
   densityScale: ([1, 0.5, 0.25].includes(Number(query.get("densityScale")))
     ? Number(query.get("densityScale"))
-    : 0.25) as 1 | 0.5 | 0.25,
+    : 1) as 1 | 0.5 | 0.25,
   idleFPS: Number(query.get("idleFPS") ?? 3),
   inputs: {
     estado,
@@ -36,7 +35,7 @@ Object.assign(window, { kiwiFog: api, kiwiFogReady: true });
 if (query.get("caption") === "1") {
   const caption = document.createElement("div");
   caption.textContent =
-    (query.get("variant") ?? "B2") +
+    "B1" +
     " / " +
     estado +
     " / " +

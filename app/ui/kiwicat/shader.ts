@@ -179,8 +179,7 @@ export function fogMaterial(
   return {
     material,
     apply(frame: FogFrame) {
-      alive.value =
-        frame.state === "ouvindo" || frame.state === "thinking" ? 1 : 0;
+      alive.value = frame.activity;
       arcGain.value = Math.max(
         0.5,
         Math.min(
@@ -206,8 +205,10 @@ export function fogMaterial(
 
 // Only the smooth scalar field is rendered at reduced resolution. The approved
 // reference, eyes, material mask and arc are composed at the output resolution.
-export function densityMaterial(seed: number, variant: "B1" | "B2" = "B2") {
+export function densityMaterial(seed: number) {
   const flow = uniform(0),
+    activeFlow = uniform(0),
+    radialFlow = uniform(0),
     time = uniform(0),
     activity = uniform(0),
     push = uniform(0),
@@ -225,13 +226,13 @@ export function densityMaterial(seed: number, variant: "B1" | "B2" = "B2") {
     const p = vec3(
       st.x
         .mul(6.4)
-        .sub(st.x.sub(0.5).mul(clock).mul(activity).mul(2))
+        .sub(st.x.sub(0.5).mul(radialFlow).mul(2))
         .sub(drift.mul(activity).mul(1.4)),
       st.y
         .mul(8)
-        .sub(clock.mul(activity).mul(1.8))
+        .sub(activeFlow.mul(1.8))
         .sub(push.mul(activity).mul(st.y.sub(0.5)).mul(3)),
-      clock.mul(float(1).add(activity.mul(2))).add((seed % 997) / 53),
+      clock.add((seed % 997) / 53),
     );
     const warp = vec3(
       noise3(p.mul(0.67).add(vec3(3, 7, 2))),
@@ -241,8 +242,8 @@ export function densityMaterial(seed: number, variant: "B1" | "B2" = "B2") {
     // Large, low-contrast volumes: no density threshold outlines, no fine
     // octaves or strong warp that can turn the field into marbled filaments.
     // The advected coordinates above are identical in both texture studies.
-    const scale = variant === "B1" ? 0.7 : 0.5;
-    const distortion = variant === "B1" ? 0.12 : 0.06;
+    const scale = 0.7;
+    const distortion = 0.12;
     const density = fbm(
       mix(
         p.add(warp.mul(0.85)),
@@ -252,27 +253,24 @@ export function densityMaterial(seed: number, variant: "B1" | "B2" = "B2") {
     );
     const gain = mix(
       float(1),
-      float(1).add(
-        density
-          .sub(0.5)
-          .mul(float(0.6).add(activity.mul(variant === "B1" ? 1 : 0.05))),
-      ),
+      float(1).add(density.sub(0.5).mul(float(0.6).add(activity.mul(1)))),
       smoothstep(0, 2, time),
     );
     const wisps = density
       .mul(activity)
-      .mul(variant === "B1" ? 0.05 : 0.03)
+      .mul(0.05)
       .mul(smoothstep(0, 2, time));
     return vec4(gain, wisps, 0, 1);
   })();
   return {
     material,
     apply(frame: FogFrame) {
-      activity.value =
-        frame.state === "ouvindo" || frame.state === "thinking" ? 1 : 0;
+      activity.value = frame.activity;
       push.value = Math.max(0, frame.volume - 1) * 5;
       drift.value = frame.side;
-      flow.value = frame.flow;
+      flow.value = frame.phase;
+      activeFlow.value = frame.activeFlow;
+      radialFlow.value = frame.radialFlow;
       time.value = frame.time;
     },
   };

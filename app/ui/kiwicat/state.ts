@@ -46,7 +46,13 @@ export function voiceEnvelope(previous: number, target: number, dt: number) {
   const tau = target > previous ? 0.06 : 0.28;
   return target + (previous - target) * Math.exp(-Math.max(0, dt) / tau);
 }
+const activeState = (state: FogState) =>
+  state !== "repouso" && state !== "dormindo";
 export interface FogFrame {
+  activity: number;
+  activeFlow: number;
+  radialFlow: number;
+  phase: number;
   exposure: number;
   side: number;
   upper: number;
@@ -187,7 +193,9 @@ export class FogDynamics {
   private entered = 0;
   private transitionStart = -Infinity;
   private voice = 0;
+  private activityFrom: number;
   private flow = 0;
+  private activeFlow = 0;
   private origin: ReturnType<typeof pose>;
   private tintFrom: [number, number, number];
   private tintTo: [number, number, number];
@@ -206,6 +214,7 @@ export class FogDynamics {
       ...inputs,
     };
     this.origin = pose(this.inputs.estado, 0, 0);
+    this.activityFrom = activeState(this.inputs.estado) ? 1 : 0;
     this.drift = new Drift(this.inputs.estado, seed);
     this.tintFrom = this.tintTo = palette(this.inputs.cor);
     this.customFrom = this.customTo = this.inputs.cor === "padrao" ? 0 : 1;
@@ -215,6 +224,7 @@ export class FogDynamics {
       next = { ...this.inputs, ...patch };
     if (next.estado !== this.inputs.estado) {
       this.origin = current;
+      this.activityFrom = current.activity;
       this.entered = now;
       this.transitionStart = now;
       this.drift = new Drift(next.estado, this.seed + ++this.serial * 7919);
@@ -261,15 +271,40 @@ export class FogDynamics {
       : smooth((now - this.colourStart) / 0.4);
     const mix = (a: number, b: number, u: number) => a + (b - a) * u;
     const fields = {
+      activity: mix(
+        this.activityFrom,
+        activeState(this.inputs.estado) ? 1 : 0,
+        blend,
+      ),
       exposure: mix(this.origin.exposure, target.exposure, blend),
       side: mix(this.origin.side, target.side, blend),
       upper: mix(this.origin.upper, target.upper, blend),
       volume: mix(this.origin.volume, target.volume, blend),
       pace: mix(this.origin.pace, target.pace, blend),
     };
-    if (!this.inputs.parado) this.flow += dt * fields.pace;
+    if (!this.inputs.parado) {
+      const step = dt * fields.pace;
+      this.flow += step;
+      this.activeFlow += step * fields.activity;
+    }
+    // Keep the approved first eight seconds unchanged. Thereafter bound the
+    // radial stretch below the point where the spatial Jacobian collapses;
+    // upward drift and the third noise dimension continue without a loop.
+    const tail = Math.max(0, this.activeFlow - 0.5);
+    const radialFlow =
+      Math.min(this.activeFlow, 0.5) + tail / Math.hypot(1, tail / 1.5);
+    const phase =
+      this.activeFlow === this.flow
+        ? Math.fround(Math.fround(this.flow) * 3)
+        : Math.fround(
+            Math.fround(this.flow) +
+              Math.fround(Math.fround(this.activeFlow) * 2),
+          );
     return {
       ...fields,
+      activeFlow: this.inputs.parado ? 0 : this.activeFlow,
+      radialFlow: this.inputs.parado ? 0 : radialFlow,
+      phase: this.inputs.parado ? 0 : phase,
       flow: this.inputs.parado ? 0 : this.flow,
       exposure: Math.max(0.5, fields.exposure),
       time: this.inputs.parado ? 0 : now,

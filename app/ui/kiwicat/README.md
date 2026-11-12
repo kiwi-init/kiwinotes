@@ -30,7 +30,7 @@ O campo escalar de ruído é calculado numa textura RGBA16F menor (`densityScale
 0,5 ou 0,25), ampliada com filtro linear; a composição final continua na
 resolução de saída. Essa filtragem de amostragem não aplica blur à imagem.
 A escala final depende da comparação visual e das medidas após a escolha
-da textura. A CPU está pausada por #8698.
+da textura. A B1 foi escolhida no #8754; as medidas finais usam prazo monotônico de 60 s.
 
 A máscara separada guarda os olhos no canal R e a cobertura opaca no G.
 A cobertura bloqueia apenas a variação procedural e as volutas, para a
@@ -48,14 +48,19 @@ Os assets são reproduzidos com `python app/scripts/kiwicat-assets.py`
 (Pillow/NumPy). `assets/source.json` registra os hashes das seis fontes.
 Nenhum arquivo original em `docs/brand/kiwi-cat/gerada/` é alterado.
 
-`options.variant` seleciona os estudos B1 (algodão) ou B2 (nuvem suave),
-ambos derivados da B escolhida pelo harry. A foi removida do runtime e só
-fica nos vídeos históricos. A textura ainda espera a escolha dele (#8751).
-A densidade/advecção ficou idêntica durante a correção de composição:
-região estática do aro no canal B da máscara, luz neutra separada da emissão
-cromática com ganho até 1 e composição por screen, sem estouro. Nos estados
-ativos, o pedestal escuro usa uma transição exponencial contínua; o repouso
-preserva o mapeamento anterior e foi comparado pixel a pixel em 12 s.
+B1 algodão é a única textura do runtime, escolhida pelo harry (#8754).
+A e B2 ficam apenas nos clipes históricos. A atividade dos seis estados
+ativos parte do valor corrente e assenta em 240 ms; repouso/sono mantêm
+seu campo discreto. A fase de advecção é integrada sem saltos e o
+alongamento radial é limitado, para não criar filamentos em uso prolongado.
+A seleção e a proteção de duração mantêm os quadros aprovados dentro de
+1/255 em RGB8. O alvo de densidade começa em escala 1, como nos clipes
+aprovados; as medidas compararão também 0,5 e 0,25 antes de fechar a escala.
+
+A composição separa luz neutra e emissão cromática do aro com ganho até 1,
+sem estouro. Nos estados ativos, o pedestal escuro usa uma transição
+exponencial contínua; o campo e a paleta continuam locais e controlados
+pelas quatro entradas. Nenhum filtro é aplicado ao vivo.
 
 ## Cadência e pausa
 
@@ -95,9 +100,9 @@ bun app/scripts/kiwicat-capture-proof.ts /tmp/kn-capture-proof
 bun app/scripts/kiwicat-demo-check.ts /tmp/kn-demo-check
 bun app/scripts/kiwicat-reference.ts /tmp/kn-reference
 bun app/scripts/kiwicat-exposure-check.ts /tmp/kn-exposure
-KIWI_FOG_VARIANT=B2 bun app/scripts/kiwicat-scale-check.ts /tmp/kn-scales
+KIWI_FOG_VARIANT=B1 bun app/scripts/kiwicat-scale-check.ts /tmp/kn-scales
 kiwi -c kiwinotes --as brave-egret lock bench --ttl 20m
-KIWI_FOG_SCALE=0.25 KIWI_FOG_VARIANT=B2 bun app/scripts/kiwicat-bench.ts /tmp/kn-bench3 3
+KIWI_FOG_SCALE=0.25 KIWI_FOG_VARIANT=B1 bun app/scripts/kiwicat-bench.ts /tmp/kn-bench3 3
 bun app/scripts/kiwicat-bench.ts /tmp/kn-bench12 12 --cpu-only
 bun app/scripts/kiwicat-capture.ts /tmp/kn-fog-videos
 ```

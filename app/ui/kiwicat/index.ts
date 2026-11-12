@@ -30,7 +30,6 @@ export interface FogOptions {
   seed?: number;
   idleFPS?: number;
   densityScale?: 1 | 0.5 | 0.25;
-  variant?: "B1" | "B2";
   inputs?: Partial<FogInputs>;
 }
 export interface FogStats {
@@ -252,7 +251,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
       tex.magFilter = LinearFilter;
       tex.generateMipmaps = false;
     }
-    const scale = options.densityScale ?? 0.25;
+    const scale = options.densityScale ?? 1;
     densityTarget = new RenderTarget(
       Math.max(1, Math.round(width * scale)),
       Math.max(1, Math.round(height * scale)),
@@ -266,7 +265,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
       },
     );
     densityTarget.texture.colorSpace = NoColorSpace;
-    density = densityMaterial(seed, options.variant);
+    density = densityMaterial(seed);
     densityScene = new Scene();
     densityMesh = new Mesh(new PlaneGeometry(2, 2), density.material);
     densityMesh.frustumCulled = false;

@@ -4,12 +4,12 @@ import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { serveFogDemo } from "./kiwicat-demo";
 const fixed = process.argv.includes("--fixed"),
-  deadline = process.argv.includes("--deadline");
+  deadline = !process.argv.includes("--legacy-intervals");
 const idleFPS = Number(process.argv[3] ?? 3),
   cpuOnly = process.argv.includes("--cpu-only"),
   requestedBackend = process.argv.includes("--webgl2") ? "webgl2" : "auto";
-const variant = process.env.KIWI_FOG_VARIANT === "B1" ? "B1" : "B2";
-const densityScale = Number(process.env.KIWI_FOG_SCALE ?? 0.25);
+const variant = "B1";
+const densityScale = Number(process.env.KIWI_FOG_SCALE ?? 1);
 const out = resolve(process.argv[2] ?? "/tmp/kiwi-T8487-bench");
 mkdirSync(out, { recursive: true });
 function processes() {
@@ -63,6 +63,11 @@ const percentile = (values: number[], q: number) => {
 };
 const report: Record<string, any> = {
   task: "T8487",
+  measuredCommit: new TextDecoder()
+    .decode(
+      Bun.spawnSync(["git", "rev-parse", "HEAD"], { stdout: "pipe" }).stdout,
+    )
+    .trim(),
   scope: "standalone Playwright WebKit demo, NOT Electrobun WKWebView",
   browser: browser.version(),
   size: [640, 800],
@@ -137,8 +142,32 @@ try {
     });
   await page.waitForTimeout(10000);
   console.log("CPU warmup complete; sampling60s");
+  // Freeze the discovered launch cohort. New XPC processes from another
+  // headless browser must never be attributed to this page during sampling.
+  const discovered = snapshot();
+  const families = ["WebKit.GPU", "WebKit.WebContent", "WebKit.Networking"];
+  if (
+    discovered.length !== 5 ||
+    families.some(
+      (name) => discovered.filter((p) => p.command.includes(name)).length !== 1,
+    )
+  )
+    throw new Error(
+      "Ambiguous WebKit process discovery; coordinate the bench lease before measuring",
+    );
+  const measuredPIDs = new Set(discovered.map((p) => p.pid));
+  function measuredSnapshot() {
+    const current = processes().filter((p) => measuredPIDs.has(p.pid));
+    if (current.length !== measuredPIDs.size)
+      throw new Error(
+        "A measured browser process exited; this profile is invalid",
+      );
+    return current;
+  }
+  report.processDiscovery =
+    "launch cohort frozen after warmup; browser + page + GPU + networking + launcher";
   const cpuByPID = new Map<number, number>();
-  let previous = new Map(snapshot().map((p) => [p.pid, p.cpu])),
+  let previous = new Map(measuredSnapshot().map((p) => [p.pid, p.cpu])),
     last = performance.now();
   const sampleStarted = last;
   for (let i = 0; i < 60; i++) {
@@ -150,7 +179,7 @@ try {
           : 1000,
       ),
     );
-    const current = snapshot(),
+    const current = measuredSnapshot(),
       now = performance.now();
     const cpu = current.reduce((sum, p) => {
       const delta = Math.max(0, p.cpu - (previous.get(p.pid) ?? p.cpu));
@@ -167,7 +196,7 @@ try {
     ([...cpuByPID.values()].reduce((a, b) => a + b, 0) /
       report.elapsedSampleSeconds) *
     100;
-  report.processes = snapshot().map((p) => ({
+  report.processes = measuredSnapshot().map((p) => ({
     pid: p.pid,
     ppid: p.ppid,
     command: p.command,
@@ -216,9 +245,9 @@ try {
       () => (window as any).kiwiFog.stats.intervals.length,
     );
     const diagnosticStart = performance.now(),
-      diagnosticBefore = new Map(snapshot().map((p) => [p.pid, p.cpu]));
+      diagnosticBefore = new Map(measuredSnapshot().map((p) => [p.pid, p.cpu]));
     await page.waitForTimeout(3000);
-    const diagnosticAfter = snapshot(),
+    const diagnosticAfter = measuredSnapshot(),
       diagnosticSeconds = (performance.now() - diagnosticStart) / 1000,
       diagnosticCPU =
         (diagnosticAfter.reduce(

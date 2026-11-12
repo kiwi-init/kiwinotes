@@ -98,3 +98,41 @@ test("fixed awake/error frames use the settled exposure from the roteiro", () =>
     new FogDynamics({ estado: "erro", parado: true }).sample(0).exposure,
   ).toBe(0.5);
 });
+
+test("B1 covers active states and eases from the current activity on interruption", () => {
+  for (const estado of [
+    "acordou",
+    "ouvindo",
+    "thinking",
+    "agindo",
+    "pronto",
+    "erro",
+  ] as const)
+    expect(new FogDynamics({ estado }).sample(0).activity).toBe(1);
+  for (const estado of ["repouso", "dormindo"] as const)
+    expect(new FogDynamics({ estado }).sample(0).activity).toBe(0);
+  const model = new FogDynamics();
+  model.sample(0);
+  model.update({ estado: "ouvindo" }, 1);
+  expect(model.sample(1).activity).toBe(0);
+  const middle = model.sample(1.12).activity;
+  expect(middle).toBeCloseTo(0.5, 10);
+  model.update({ estado: "dormindo" }, 1.12);
+  expect(model.sample(1.12).activity).toBe(middle);
+  expect(model.sample(1.36).activity).toBe(0);
+});
+
+test("long advection stays soft and its phase remains continuous after long idle", () => {
+  const active = new FogDynamics({ estado: "ouvindo" });
+  const approved = active.sample(8);
+  expect(approved.radialFlow).toBe(approved.flow);
+  const hour = active.sample(3600);
+  expect(hour.activeFlow).toBeGreaterThan(200);
+  expect(hour.radialFlow).toBeLessThan(2);
+  expect(6.4 - 2 * hour.radialFlow).toBeGreaterThan(2.4);
+  const idle = new FogDynamics();
+  const before = idle.sample(3600);
+  idle.update({ estado: "ouvindo" }, 3600);
+  expect(idle.sample(3600).phase).toBe(before.phase);
+  expect(idle.sample(3600.12).phase - before.phase).toBeLessThan(0.1);
+});

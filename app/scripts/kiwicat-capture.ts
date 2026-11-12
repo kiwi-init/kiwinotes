@@ -5,9 +5,9 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve, join } from "node:path";
 import { serveFogDemo } from "./kiwicat-demo";
-const variant = process.env.KIWI_FOG_VARIANT ?? "B2";
-if (variant !== "B1" && variant !== "B2")
-  throw new Error("Choose B1 or B2; A is historical only");
+const variant = "B1";
+if (process.env.KIWI_FOG_VARIANT && process.env.KIWI_FOG_VARIANT !== variant)
+  throw new Error("Only the selected B1 texture is implemented");
 const out = resolve(process.argv[2] ?? "/tmp/kiwi-T8487-videos");
 mkdirSync(out, { recursive: true });
 const server = await serveFogDemo(),
@@ -40,7 +40,9 @@ const scenes = [
     seconds: 8,
     idleFPS: 12,
   },
-].filter((scene) => !selected || scene.name === selected);
+].filter((scene) =>
+  selected ? scene.name === selected : scene.name !== "repouso-12fps",
+);
 const report: Record<string, any> = {
   task: "T8487",
   scope: "controlled-clock visual capture; not a benchmark",

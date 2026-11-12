@@ -38,7 +38,7 @@ for folder in sorted(p for p in root.iterdir() if p.is_dir()):
     results.append(dict(case=folder.name, frames=len(paths), minimum_channel_delta=minimum,
         arc_core_pixels=int(core.sum()), max_channel_surplus_at_unity_emission_cap=surplus,
         peak126_max_absolute_error=peak if 'ouvindo' in folder.name else None))
-assert len(results) == 4
+assert len(results) == 2
 assert all(r['minimum_channel_delta'] >= 0 and r['max_channel_surplus_at_unity_emission_cap'] <= 2 for r in results)
 assert all(r['peak126_max_absolute_error'] <= 2 for r in results if r['peak126_max_absolute_error'] is not None)
 (root / 'pixel-check.json').write_text(json.dumps(results, indent=2) + '\n')

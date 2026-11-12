@@ -43,7 +43,7 @@ const target = new RenderTarget(640, 800, {
   depthBuffer: false,
 });
 const query = new URLSearchParams(location.search);
-const field = densityMaterial(17, query.get("variant") === "B1" ? "B1" : "B2"),
+const field = densityMaterial(17),
   composite = fogMaterial(reference!, protection!, target.texture);
 const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1),
   fieldScene = new Scene(),
