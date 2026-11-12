@@ -33,6 +33,14 @@ export function noteName(path: string): string {
   return path.split("/").at(-1)!.replace(/\.md$/i, "");
 }
 
+/**
+ * Um nome de nota sem `# ^ | [ ]` (T7520): são sintaxe do [[link]] (título, bloco, apelido) e um nome com eles quebra os
+ * links para a nota. Viram espaço, como no `notes.create`. Pode voltar "".
+ */
+export function linkSafeName(name: string): string {
+  return name.replace(/[#^|[\]]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 const key = (s: string) => fold(s.normalize("NFC"));
 
 /** O mais curto ganha; empate, o de menos pastas; depois a ordem alfabética. */

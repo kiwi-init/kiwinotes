@@ -24,7 +24,7 @@ import { hasPositive, oneSpace, parseQuery } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
 import { fillTemplate } from "../shared/templates.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
-import { canvasPath, fileNameFor, filePath, folderPath, inside, notePath, VaultError } from "./paths.ts";
+import { canvasPath, fileNameFor, filePath, folderPath, inside, linkSafeTarget, notePath, VaultError } from "./paths.ts";
 import { CanvasParseError, parseCanvas, stringifyCanvas } from "../shared/json-canvas.ts";
 import { applyTextEdits, headingFor, headingKey, markdownStructure } from "../shared/markdown-structure.ts";
 import { noteReferences, referenceTarget, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
@@ -943,7 +943,7 @@ export class Vault {
   /** Renomeia ou move, e atualiza os [[links]] das outras notas que apontavam para ela. */
   async rename(input: unknown, target: unknown): Promise<{ meta: NoteMeta; updatedLinks: number; skippedPaths: string[] }> {
     const from = notePath(input);
-    const to = notePath(target);
+    const to = linkSafeTarget(from, notePath(target));
     const fromAbs = inside(this.root, from);
     const toAbs = inside(this.root, to);
     if (!(await exists(fromAbs))) throw new VaultError("E_NOT_FOUND", `no note ${from}`);

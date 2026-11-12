@@ -35,6 +35,7 @@ import { Properties } from "./Properties.tsx";
 import { addProperty } from "./frontmatter-properties.ts";
 import { FolderPicker, ListPicker } from "./FolderPicker.tsx";
 import { folderOf, linkTextFor, noteName, plainContext } from "./links.ts";
+import { linkSafeName } from "../../src/shared/wikilinks.ts";
 import { focusEditor, insertIntoEditor,
   updateEditorDocument,
   NoteEditor,
@@ -61,6 +62,8 @@ type SaveOutcome = "clean" | "saved" | "conflict" | "error";
 
 /** Onde entram as notas que não têm lugar ainda: a nota rápida do A3 (#1509) e o rascunho órfão recuperado. */
 const INBOX = "Caixa de entrada";
+/** O porquê de um nome com `# ^ | [ ]` mudar ao renomear (T7520). */
+const LINK_SAFE_NOTE = " (sem # ^ | [ ], que quebram os [[links]] para ela)";
 
 /** A ordem da árvore fica no navegador da janela (uma conveniência de quem vê, T2469). */
 const SORT_KEY = "kiwi.notes.sort";
@@ -726,8 +729,15 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }, [api, vaultVersion]);
 
   const rename = async () => {
-    const wanted = title.trim().replace(/[\\/:]/g, "-");
-    if (!note || !wanted || wanted === note.title) return setTitle(note?.title ?? "");
+    const typed = title.trim().replace(/[\\/:]/g, "-");
+    // `# ^ | [ ]` quebram os [[links]] para a nota (T7520): viram espaço, e o aviso diz.
+    const wanted = linkSafeName(typed);
+    const cleaned = wanted !== typed ? LINK_SAFE_NOTE : "";
+    if (!note || !wanted || wanted === note.title) {
+      setTitle(note?.title ?? "");
+      if (note && cleaned) say(`O nome continua “${note.title}”${cleaned}.`);
+      return;
+    }
     const original = note.path, opened = shown.current;
     if (!(await leave())) return setTitle(note.title);
     if (current.current !== original) return;
@@ -735,7 +745,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     if (!r) return setTitle(note.title); // já existe uma nota com esse nome
     const n = await api.get(r.meta.path).catch(() => null);
     if (n && pending.current === null && (current.current === original || (current.current === null && shown.current === opened))) show(n);
-    say(r.skippedPaths?.length ? `Nota renomeada. Confira os links em: ${r.skippedPaths.join(", ")}.` : `Nota renomeada. ${r.updatedLinks} ${r.updatedLinks === 1 ? "link atualizado" : "links atualizados"}.`);
+    const done = cleaned ? `Nota renomeada para “${noteName(r.meta.path)}”${cleaned}.` : "Nota renomeada.";
+    say(r.skippedPaths?.length ? `${done} Confira os links em: ${r.skippedPaths.join(", ")}.` : `${done} ${r.updatedLinks} ${r.updatedLinks === 1 ? "link atualizado" : "links atualizados"}.`);
     void refresh();
   };
 
@@ -861,9 +872,12 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     if (!name || target.kind === "empty") return;
     const clean = name.replace(/[\\/:]/g, "-");
     if (target.kind === "note") {
+      const safe = linkSafeName(clean); // T7520: sem `# ^ | [ ]`, que quebram os [[links]]
+      if (!safe || safe === noteName(target.path)) return;
       if (current.current === target.path && !(await leave())) return;
-      const r = await api.rename(target.path, `${join(folderOf(target.path), clean)}.md`).catch(failed_("renomear a nota"));
+      const r = await api.rename(target.path, `${join(folderOf(target.path), safe)}.md`).catch(failed_("renomear a nota"));
       if (r) await after({ from: target.path, to: r.meta.path });
+      if (r && safe !== clean) say(`Nota renomeada para “${noteName(r.meta.path)}”${LINK_SAFE_NOTE}.`);
     } else if (folders) {
       if (current.current?.startsWith(`${target.path}/`) && !(await leave())) return;
       const r = await folders.rename(target.path, join(folderOf(target.path), clean)).catch(failed_("renomear a pasta"));
