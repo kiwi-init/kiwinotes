@@ -1,7 +1,7 @@
 // T7877: renomear ou mover lê do disco só as notas que podem citar a nota, e os links continuam todos certos.
 
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -74,4 +74,24 @@ test("mover para outra pasta sem ninguém citar relê só a própria nota (os [x
   await v.rename("A/Nota.md", "B/C/Nota.md");
   expect(read).toEqual(["B/C/Nota.md"]);
   expect(readFileSync(path.join(root, "B/C/Nota.md"), "utf8")).toBe("veja [o outro](../../Outra.md)");
+});
+
+test("uma nota escrita por fora depois do scan(), que passou a citar a nota, também é atualizada (#7980)", async () => {
+  const { v, root } = await vault({ ...loose, "Pessoas/João Silva.md": "sobre ele", "Tarde.md": "ainda nada" });
+  // Entre o scan() do rename e o laço: o Obsidian (ou outro app) grava um link para a nota.
+  const self = v as unknown as { scan: () => Promise<void> };
+  const scan = self.scan.bind(v);
+  self.scan = async () => {
+    await scan();
+    const abs = path.join(root, "Tarde.md");
+    writeFileSync(abs, "agora [[João Silva]]");
+    const t = statSync(abs).mtimeMs / 1000 + 5;
+    utimesSync(abs, t, t);
+  };
+  const read = countRefactors(v);
+  const r = await v.rename("Pessoas/João Silva.md", "Gente/João.md");
+  expect(readFileSync(path.join(root, "Tarde.md"), "utf8")).toBe("agora [[João]]");
+  expect(r.updatedLinks).toBe(1);
+  // As outras descartadas não mudaram: não são relidas.
+  expect(read.sort()).toEqual(["Gente/João.md", "Tarde.md"]);
 });
