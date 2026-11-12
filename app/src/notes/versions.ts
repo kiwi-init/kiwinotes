@@ -14,7 +14,7 @@
 // - Uma pasta que ninguém reclama (de antes do `note.json`, com o índice perdido) só perde o que passou dos 30 dias.
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, open, readdir, readFile, rename, rm, rmdir } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 export interface VersionInfo {
@@ -252,14 +252,25 @@ export class NoteVersions {
       if (typeof owner === "string") claims.set(owner, [...(claims.get(owner) ?? []), id]);
       else await this.pruneOrphan(id);
     }
-    // Duas pastas dizendo a mesma nota (raro: um note.json que não acompanhou um move): fica a de versão mais nova.
+    // Duas pastas dizendo a mesma nota (raro: um note.json que não acompanhou um move): fica a do índice, ou a de versão
+    // mais nova. As outras largam o caminho e passam pela poda dos 30 dias, como as órfãs (T8073); antes, ficavam no
+    // disco para sempre.
+    const losers: string[] = [];
     for (const [p, ids] of claims) {
-      if (index[p]) continue;
+      if (index[p]) {
+        losers.push(...ids);
+        continue;
+      }
       const newest = async (id: string) => (await this.files(id)).at(-1) ?? "";
       let best = ids[0]!;
       for (const id of ids.slice(1)) if ((await newest(id)) > (await newest(best))) best = id;
+      losers.push(...ids.filter((id) => id !== best));
       index[p] = best;
       rebuilt = true;
+    }
+    for (const id of losers) {
+      await this.pruneOrphan(id);
+      if ((await this.files(id)).length) await this.writeOwner(id, null).catch(() => {});
     }
     this.index = index;
     if (rebuilt || (raw !== null && !valid)) {
@@ -318,7 +329,8 @@ export class NoteVersions {
     const oldest = this.now() - this.maxAgeMs;
     for (const name of await this.files(id))
       if (Date.parse(atOf(name.slice(0, -3))) < oldest) await rm(path.join(this.noteDir(id), name), { force: true });
-    if (!(await readdir(this.noteDir(id)).catch(() => ["?"])).length) await rmdir(this.noteDir(id)).catch(() => {});
+    // Sem versão nenhuma, a pasta some, com o note.json junto (T8073).
+    if (!(await this.files(id)).length) await rm(this.noteDir(id), { recursive: true, force: true }).catch(() => {});
   }
 
   private async idFor(notePath: string, create: true): Promise<string>;
