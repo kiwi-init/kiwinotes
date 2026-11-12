@@ -43,6 +43,7 @@ export const CREDITS: readonly { name: string; by: string; license: string; use:
   { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas", pkg: "pdfjs-dist" },
   { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "abrir docx nas Notas", pkg: "mammoth" },
   { name: "SheetJS Community Edition", by: "SheetJS LLC", license: "Apache-2.0", use: "abrir xlsx nas Notas", pkg: "xlsx" },
+  { name: "three.js", by: "mrdoob e colaboradores", license: "MIT", use: "névoa do Kiwi-cat", pkg: "three" },
   // Não vem do npm: o viewer oficial vai no repo, com a licença (`scripts/drawio-viewer.ts`, T7112).
   { name: "draw.io", by: "JGraph Ltd", license: "Apache-2.0", use: "abrir diagramas .drawio nas Notas", pkg: "jgraph/drawio" },
   // O host do agente (spec #4576): a biblioteca oficial do ACP, para o Kiwi conversar com o agente escolhido.

@@ -1,0 +1,15 @@
+{
+  "source": "docs/brand/kiwi-cat/gerada/kiwi-cat-candidata-v2.png",
+  "layers": {
+    "luz": "4a2161ebd3347663ced59040e46e13e16ab29ddaea7e5ff7537e2b3685982b90",
+    "corpo": "e2ce949258fc0eedb512d3552f8ec406f284656b0f2bcc0ef31ab2999bf4dacb",
+    "cabeca": "3e746771ebc5a4641e8176f4d433ebeb9de34672a16f7c87a28010b658970012",
+    "orelha-esquerda": "ff77bc41d4aab1cb7143b17098cbb1b9edccae408efa0c88f0fcd29b557149f9",
+    "orelha-direita": "6b6624c0c01f5216ec3914d218994ce29736b3694c958f98e74ddd3be74fd719",
+    "aro": "5411234791669369e77451cef7d46a85bfe7a1573aa05859abab0131237a1d14"
+  },
+  "method": "approved montar.py compose, neutral, scale1; unchanged circles; lossless WebP",
+  "sha256": "7c99f26d628c336c8463e2b3e95f7d4b5c59af0be2301c4430b9816ecf1e7ea2",
+  "material_mask": "R: approved eye discs+5px; G: static foreground occlusion for procedural density/wisps only; B: broad stationary arc protection with feather outside original chromatic footprint",
+  "mask_sha256": "68618fdab3d8078ab07454087736f406a7d1b45496c01cf1e015bd0446ddba58"
+}

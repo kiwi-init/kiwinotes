@@ -1,0 +1,222 @@
+{
+  "task": "T8487",
+  "scope": "standalone Playwright WebKit demo, NOT Electrobun WKWebView",
+  "measuredCommit": "cba984acce9f97ee6908a1fdcc533936ac84da11",
+  "source_sha256": {
+    "index.ts": "9fa224860fd49331a4ed52312200b1e3f49f4fff3a781c39038f840bb7f37ad3",
+    "shader.ts": "8f04738fa8942546343fcf388fd095b29c0005a4bb6843ea0602455b6aaf64bd",
+    "state.ts": "6b0c72e06e875f442b24a7a7d29966b2feb290774aad7193bb3a33c5bf9fb099",
+    "demo.ts": "5e62bebfc1ce2c17870c90a4f2f389db8156ac8567825b5d98f5727f8ef312e0",
+    "assets/source.json": "2c80a303609b966e237ccd3114793109909febb25ab1c90bd8fc2b4a3a8bbc00"
+  },
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "dpr": 1,
+  "variant": "B1",
+  "densityScale": 1,
+  "idleFPS": 2,
+  "warmupSeconds": 10,
+  "deadlineSeconds": 60,
+  "cpuUnit": "percent of one CPU core",
+  "means": [
+    2.597561088548228,
+    3.012620522739552,
+    3.0795396099935375
+  ],
+  "meanOfThree": 2.896573740427106,
+  "p95s": [
+    4.024504872107861,
+    4.977239704984063,
+    4.0307177655416115
+  ],
+  "passes": true,
+  "criterion": "absolute mean of all three runs <3%; p95 separately reported",
+  "stateRows": [
+    {
+      "state": "repouso",
+      "fps": [
+        2.000200020002001,
+        2.00002877739248,
+        1.9998000199980006
+      ],
+      "diagnosticCPU": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "state": "dormindo",
+      "fps": [
+        2,
+        1.9999999999999907,
+        2
+      ],
+      "diagnosticCPU": [
+        2.5698921315885976,
+        2.547112155334546,
+        2.8613364936765273
+      ]
+    },
+    {
+      "state": "acordou",
+      "fps": [
+        59.99358357394977,
+        60.02554278416174,
+        59.98723675813657
+      ],
+      "diagnosticCPU": [
+        28.49900845561314,
+        30.06524157421605,
+        30.668955003482978
+      ]
+    },
+    {
+      "state": "ouvindo",
+      "fps": [
+        59.987236758134934,
+        60.01905366782968,
+        59.99999999999962
+      ],
+      "diagnosticCPU": [
+        30.65181115697951,
+        29.652636107393192,
+        21.233062289553633
+      ]
+    },
+    {
+      "state": "thinking",
+      "fps": [
+        59.98095842589526,
+        60.09538950715537,
+        59.99999999999962
+      ],
+      "diagnosticCPU": [
+        27.97010869446449,
+        26.778538977902972,
+        25.14927974972954
+      ]
+    },
+    {
+      "state": "agindo",
+      "fps": [
+        60.00638365783466,
+        59.98723675813629,
+        60.025542784163925
+      ],
+      "diagnosticCPU": [
+        29.34085762703027,
+        29.921338707228173,
+        26.132543682819083
+      ]
+    },
+    {
+      "state": "pronto",
+      "fps": [
+        59.98095842589635,
+        59.98723675813629,
+        60.03811944091494
+      ],
+      "diagnosticCPU": [
+        28.013458238340338,
+        25.59701266070605,
+        26.109952941703874
+      ]
+    },
+    {
+      "state": "erro",
+      "fps": [
+        60.012836970476066,
+        60.00638365783575,
+        60.00000000000044
+      ],
+      "diagnosticCPU": [
+        28.518430295929452,
+        28.128017319187425,
+        26.724484877600286
+      ]
+    }
+  ],
+  "processRows": [
+    {
+      "repetition": 1,
+      "processes": [
+        {
+          "role": "launcher",
+          "cpuPercent": 0
+        },
+        {
+          "role": "browser",
+          "cpuPercent": 0.4995309785669669
+        },
+        {
+          "role": "networking",
+          "cpuPercent": 0
+        },
+        {
+          "role": "GPU",
+          "cpuPercent": 0.5827861416614615
+        },
+        {
+          "role": "page",
+          "cpuPercent": 1.5152439683197996
+        }
+      ]
+    },
+    {
+      "repetition": 2,
+      "processes": [
+        {
+          "role": "launcher",
+          "cpuPercent": 0
+        },
+        {
+          "role": "browser",
+          "cpuPercent": 0.5659066175311865
+        },
+        {
+          "role": "networking",
+          "cpuPercent": 0.016644312280328987
+        },
+        {
+          "role": "GPU",
+          "cpuPercent": 0.6824168034934898
+        },
+        {
+          "role": "page",
+          "cpuPercent": 1.747652789434547
+        }
+      ]
+    },
+    {
+      "repetition": 3,
+      "processes": [
+        {
+          "role": "launcher",
+          "cpuPercent": 0
+        },
+        {
+          "role": "browser",
+          "cpuPercent": 0.5826156018906692
+        },
+        {
+          "role": "networking",
+          "cpuPercent": 0.016646160054019088
+        },
+        {
+          "role": "GPU",
+          "cpuPercent": 0.7157848823228222
+        },
+        {
+          "role": "page",
+          "cpuPercent": 1.764492965726027
+        }
+      ]
+    }
+  ],
+  "activeCPUScope": "3-second diagnostic windows after 1-second settle, not the 60-second idle measure",
+  "baseline": "The fixed baseline at3/s is preserved in ../medidas-demanda; not subtracted from this absolute criterion"
+}

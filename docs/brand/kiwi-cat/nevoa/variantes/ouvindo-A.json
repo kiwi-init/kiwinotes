@@ -1,0 +1,37 @@
+{
+  "task": "T8487",
+  "scope": "controlled-clock visual capture; not a benchmark",
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "fps": 30,
+  "simulationHz": 60,
+  "seed": 17,
+  "variant": "A",
+  "densityScale": 1,
+  "scenes": [
+    {
+      "name": "ouvindo-padrao",
+      "state": "ouvindo",
+      "colour": "padrao",
+      "seconds": 8,
+      "idleFPS": 3,
+      "file": "ouvindo-padrao.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "9fcded6d5b5d84bf13b32bd81a92d62f18e171053cb6306f2487d4619eb9c0e3",
+      "lastHash": "c3be125117d18dfb9a48ebd2c84e612bdb1497430fc959a591e835ca76345dd8",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    }
+  ]
+}

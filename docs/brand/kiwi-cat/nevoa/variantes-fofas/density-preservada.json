@@ -1,0 +1,6 @@
+{
+  "before_sha256": "5492c178f353b7acc176c48c9528bf252d97a6b18f1b766fb09d8b262a340b27",
+  "after_sha256": "5492c178f353b7acc176c48c9528bf252d97a6b18f1b766fb09d8b262a340b27",
+  "identical": true,
+  "scope": "densityMaterial function; B1/B2 texture and advection unchanged; only composition corrected"
+}

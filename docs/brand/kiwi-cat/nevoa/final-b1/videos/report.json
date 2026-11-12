@@ -1,0 +1,227 @@
+{
+  "task": "T8487",
+  "scope": "controlled-clock visual capture; not a benchmark",
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "fps": 30,
+  "simulationHz": 60,
+  "seed": 17,
+  "idleFPS": 2,
+  "variant": "B1",
+  "densityScale": 1,
+  "scenes": [
+    {
+      "name": "repouso-padrao",
+      "state": "repouso",
+      "colour": "padrao",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "repouso-padrao.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 16,
+      "firstHash": "9178b0269bb3d0e785c699dc29ae380731e3d05b58538b65daeba4dba55c6a86",
+      "lastHash": "7e728cb3e58d46dff57f2650b3ed1a5b7de6fa5c469fd7d957b9bd4b111f71da",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 16,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "repouso-claude",
+      "state": "repouso",
+      "colour": "claude",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "repouso-claude.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 16,
+      "firstHash": "54fc14244e8dbef1fbfb57e68516cb8009f974e01def192e77ba4ee035d9c887",
+      "lastHash": "ecac7235befbbee94f9fe2384967baa543a08ac07962119abe227a91b78288f4",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 16,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "repouso-codex",
+      "state": "repouso",
+      "colour": "codex",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "repouso-codex.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 16,
+      "firstHash": "b72f7c84e808f05ec60bf5ed558002fb2948d35d7b8ad288dab31391cbea3d8e",
+      "lastHash": "fc0745fd1021a9432a0c611f7d8b8a86ec17c8dc5d8c144fa2864fadfd0d1854",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 16,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "ouvindo-padrao",
+      "state": "ouvindo",
+      "colour": "padrao",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "ouvindo-padrao.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "366439d86334e5fee6884ddf5042916d194c2549f986b3925db743eb3c957559",
+      "lastHash": "c2d54505b8ab508e8db344221fb5ea49eb6d19e46e193b4cfc068e77a6c57799",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "ouvindo-claude",
+      "state": "ouvindo",
+      "colour": "claude",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "ouvindo-claude.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "345f477bea3b25446688628ebffdd25fffddafebe3c228452d6eaf8cd58161f5",
+      "lastHash": "56a18702c9bf45518f3eccbdd743f1b5654c738e647e8a5ee272779d36a0a293",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "ouvindo-codex",
+      "state": "ouvindo",
+      "colour": "codex",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "ouvindo-codex.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "ff91452ec263af047909defc2c3d8ecccec20d2d50ea62408f5c09aa7255f5f8",
+      "lastHash": "9a46a4fc6ee9f218aa769830b9d4601f7107f24935addd8c00ff4fac14bf6013",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "thinking-padrao",
+      "state": "thinking",
+      "colour": "padrao",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "thinking-padrao.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "8bb6398b821ef5034412d8772169f31023943253997d66e5a055ca6f3c7fc99f",
+      "lastHash": "0dcf4021d9c99f85e888ae7bf3ffc6d6c0b51772777178173dd4555b23243348",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "thinking-claude",
+      "state": "thinking",
+      "colour": "claude",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "thinking-claude.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "2f7dba0935819d0056f6c68166afec6496565cd4c87cd4f5a9307f1ce3ac35cb",
+      "lastHash": "a420fd0493d577fc52ef8e75b05eb0411bfad58609d43ad974a849a09debd9f1",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "thinking-codex",
+      "state": "thinking",
+      "colour": "codex",
+      "seconds": 8,
+      "idleFPS": 2,
+      "file": "thinking-codex.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "774665708b9009cff145cef43b28b4cd50cbe7add04565990eb47e2a31c47cf9",
+      "lastHash": "8d9d57dd4ea04a7fb79db1a55f47fe75b91e382e50ac6365cf2ef0eb3852e82e",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "name": "repouso-60s",
+      "state": "repouso",
+      "colour": "padrao",
+      "seconds": 60,
+      "idleFPS": 2,
+      "file": "repouso-60s.mp4",
+      "backend": "webgpu",
+      "frames": 1800,
+      "uniqueFrameHashes": 120,
+      "firstHash": "9178b0269bb3d0e785c699dc29ae380731e3d05b58538b65daeba4dba55c6a86",
+      "lastHash": "10a840e5914bcc40927533fa33f9db17dfb831375c5b668c804d3c22ef25908c",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 120,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    }
+  ]
+}

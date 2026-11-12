@@ -1,0 +1,38 @@
+{
+  "task": "T8487",
+  "scope": "controlled-clock visual capture; not a benchmark",
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "fps": 30,
+  "simulationHz": 60,
+  "seed": 17,
+  "idleFPS": 3,
+  "variant": "B1",
+  "densityScale": 1,
+  "scenes": [
+    {
+      "name": "repouso-padrao",
+      "state": "repouso",
+      "colour": "padrao",
+      "seconds": 8,
+      "idleFPS": 3,
+      "file": "repouso-padrao.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 24,
+      "firstHash": "542ca2f966edc795fef29f4edf1429ee9bda7d4717c32c4ca8d124a15539f2dd",
+      "lastHash": "22c0437e3fc9ece63932109fd692f56376fc703cdab825bde8b4c24a7a10cd73",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 24,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    }
+  ]
+}

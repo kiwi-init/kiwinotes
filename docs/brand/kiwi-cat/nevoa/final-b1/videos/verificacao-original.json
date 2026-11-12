@@ -1,0 +1,95 @@
+{
+  "scope": "export verification, not performance or final aesthetic approval",
+  "videos": [
+    {
+      "file": "repouso-padrao.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 36.41345638020833,
+      "decoded_sample_std": 40.430528730540246,
+      "unique_rendered_hashes": 16,
+      "sha256": "cdc1263db88497fa377efac7880d94bbc951effc45b3fbec003df798c90776d7"
+    },
+    {
+      "file": "repouso-claude.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 34.82779166666667,
+      "decoded_sample_std": 40.85332145906679,
+      "unique_rendered_hashes": 16,
+      "sha256": "a5a9c318d382e8c8a672623ad5a8ab411a62337143163b80bc0c4b12cf589f09"
+    },
+    {
+      "file": "repouso-codex.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 35.513763671875,
+      "decoded_sample_std": 39.18063091895241,
+      "unique_rendered_hashes": 16,
+      "sha256": "a50c02cfee778bdf4cc7bc191debcecca427556167d47b7314bd4fed708ed0e5"
+    },
+    {
+      "file": "ouvindo-padrao.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 47.01442903645833,
+      "decoded_sample_std": 54.66397433987975,
+      "unique_rendered_hashes": 240,
+      "sha256": "a614628da48d480a9c29a7bbb1bb6203bb478760401cf9d23feed8f7f08afce2"
+    },
+    {
+      "file": "ouvindo-claude.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 44.56792057291667,
+      "decoded_sample_std": 54.17779761104427,
+      "unique_rendered_hashes": 240,
+      "sha256": "06c23f09f0a556450752fa4feb4b89ba9be32ef495ac267f14393927e6a855a3"
+    },
+    {
+      "file": "ouvindo-codex.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 45.877030598958335,
+      "decoded_sample_std": 53.33898310579967,
+      "unique_rendered_hashes": 240,
+      "sha256": "a6f75470ba5b9c5757dbd5f87860b02be04272889488dc4cf20731a262801ff7"
+    },
+    {
+      "file": "thinking-padrao.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 36.231541015625,
+      "decoded_sample_std": 42.92972503700524,
+      "unique_rendered_hashes": 240,
+      "sha256": "9de78d36c890768fb8240b38e537af1b54f15078b96185c34360e1f5144aa5b2"
+    },
+    {
+      "file": "thinking-claude.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 34.625536458333336,
+      "decoded_sample_std": 42.8554163058004,
+      "unique_rendered_hashes": 240,
+      "sha256": "11b87765bb0ffe57409534de3a506aa03252e9fbc1a66eecc8a5dc1348450950"
+    },
+    {
+      "file": "thinking-codex.mp4",
+      "duration": 8.0,
+      "decoded_frames": 240,
+      "decoded_sample_mean": 35.39934440104167,
+      "decoded_sample_std": 41.93708385862066,
+      "unique_rendered_hashes": 240,
+      "sha256": "ef9723d39fb0a4dc2d8088dd61e1b771960e2ebd764cdd55cfe8bb50837c3f0c"
+    },
+    {
+      "file": "repouso-60s.mp4",
+      "duration": 60.0,
+      "decoded_frames": 1800,
+      "decoded_sample_mean": 36.41345638020833,
+      "decoded_sample_std": 40.430528730540246,
+      "unique_rendered_hashes": 120,
+      "sha256": "74a6482277bd448aa6b4597a2228e530a6d89989884e24165871853cee03a5eb"
+    }
+  ]
+}

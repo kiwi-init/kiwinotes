@@ -1,0 +1,56 @@
+{
+  "task": "T8487",
+  "scope": "functional pixel sweep, NOT CPU benchmark",
+  "time": 6,
+  "range": [
+    0.5,
+    1.4
+  ],
+  "step": 0.01,
+  "cases": [
+    {
+      "variant": "B1",
+      "state": "ouvindo",
+      "controls": {
+        "side": 0,
+        "upper": 0.1,
+        "volume": 1.16
+      },
+      "frames": 91,
+      "errors": []
+    },
+    {
+      "variant": "B1",
+      "state": "thinking",
+      "controls": {
+        "side": 0.28,
+        "upper": 0.2,
+        "volume": 1
+      },
+      "frames": 91,
+      "errors": []
+    },
+    {
+      "variant": "B2",
+      "state": "ouvindo",
+      "controls": {
+        "side": 0,
+        "upper": 0.1,
+        "volume": 1.16
+      },
+      "frames": 91,
+      "errors": []
+    },
+    {
+      "variant": "B2",
+      "state": "thinking",
+      "controls": {
+        "side": 0.28,
+        "upper": 0.2,
+        "volume": 1
+      },
+      "frames": 91,
+      "errors": []
+    }
+  ]
+}
