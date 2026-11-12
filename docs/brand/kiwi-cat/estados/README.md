@@ -1,59 +1,96 @@
-# Prancha dos estados — T7606
+# Estados do Kiwi-cat — T7606, rodada 2
 
-Spec #7591 do canal `kiwinotes`, aprovado pelo harry; instrução #7589.
-Issue: https://github.com/kiwi-init/kiwinotes/issues/309.
+Spec #7591; instrução #7589; revisão #7630; adendo do harry #7649 entregue
+pelo lead no #7655, no canal `kiwinotes` do Kiwi Channels.
+Issue [#309](https://github.com/kiwi-init/kiwinotes/issues/309), PR [#311](https://github.com/kiwi-init/kiwinotes/pull/311).
 
-**Referências conceituais geradas, não capturas da animação. Aprovação visual pendente.**
+**Referências documentais compostas com as camadas originais. Não são capturas da animação. Aprovação visual pendente.**
 
-![Prancha dos estados](prancha-estados.png)
+![Resumo](prancha-estados.webp)
 
-## Leitura
+## Imagens grandes
 
-As linhas são `repouso`, `acordou`, `ouvindo`, `thinking`, `agindo`, `pronto`
-e `erro`. As colunas são padrão (lilás), Claude Code (laranja) e Codex
-(branco perolado). Há uma pose por estado e paleta, sobre preto.
+Cada pose usa um palco de 1536 × 1920, mais 132 pixels de legenda. A fonte
+2048 × 2560 é reduzida uniformemente a 75%, sem alteração das proporções.
+O gato, das orelhas ao fim do corpo, ocupa mais de 1024 pixels de altura.
+Abra as imagens de estado no tamanho original para julgar o detalhe;
+o resumo é só navegação. Cada WebP tem no máximo 500.000 bytes.
 
-| Estado | Intenção da pose |
-| --- | --- |
-| repouso | Olhos abertos e névoa discreta |
-| acordou | Atenção breve, orelhas erguidas e névoa ampliada |
-| ouvindo | Atenção frontal e luz próxima do corpo |
-| thinking | Olhar deslocado e concentração junto à cabeça |
-| agindo | Olhos semicerrados e iluminação lateral mais ampla |
-| pronto | Piscada satisfeita, orelhas relaxadas |
-| erro | Hesitação sutil e névoa contraída, sem susto |
+| Imagem | Poses e olhos | Símbolo e intenção |
+| --- | --- | --- |
+| [repouso](estado-repouso.webp) | Neutro, olhar discreto, piscada lenta | Sem símbolo; comportamento discreto |
+| [dormindo](estado-dormindo.webp) | Dois momentos de sono, arcos para baixo | zZ subindo; névoa mínima |
+| [acordou](estado-acordou.webp) | Antes, pico com olhos 24% maiores, assentando | Exclamação que salta; pulso de luz |
+| [ouvindo](estado-ouvindo.webp) | Voz baixa e alta, olhos redondos | Uma e três ondas junto da orelha; a névoa acompanha a voz |
+| [thinking](estado-thinking.webp) | Semicerrados, olhar para cima e para cada lado | Balão de três pontos, um e dois pontos acesos; luz concentrada no alto |
+| [agindo](estado-agindo.webp) | Foco e execução, pálpebras superiores horizontais | Gotas de suor e linhas de movimento; luz lateral alterna |
+| [pronto](estado-pronto.webp) | Dois momentos de arco feliz | Brilhos que abrem; névoa assenta |
+| [erro](estado-erro.webp) | Olhos menores e desiguais; três poses | Opção A: ? e gota; opção B: rabisco de confusão; depois A recolhendo |
+| [cores](cores.webp) | Repouso e voz alta × três paletas | Lilás original, laranja Claude Code e branco perolado Codex |
 
-## Origem e arquivos
+São **19 poses padrão e quatro variações adicionais de cor**. Os parâmetros
+por pose estão em `quadros.json` e nos `.txt` junto dos quadros soltos.
+São poses documentais, não um roteiro temporal nem prova de animação fluida.
 
-A ferramenta integrada `image_gen` recebeu **a v2 aprovada como imagem de
-entrada**, `../gerada/kiwi-cat-candidata-v2.png`. O prompt integral está em
-`prompt-prancha.txt`. A saída nativa foi preservada em `prancha-estados.png`
-(948 × 1659 pixels), sem ampliação nem retoque.
+## Construção
 
-Os 21 PNGs de `quadros/` são recortes mecânicos dessa mesma geração, feitos
-com `sips --cropToHeightWidth H W --cropOffset Y X`, sem reamostragem.
-Cada `.txt` contém o prompt integral e identifica a célula correspondente;
-não são 21 gerações independentes. `quadros.json` registra as coordenadas.
-Todos os quadros mantêm a legenda de referência.
+A revisão #7630 pediu composição por script em vez de geração do personagem.
+`montar.py` usa literalmente `luz.png`, `corpo.png`, `cabeca.png`, as duas
+orelhas e `aro.png`, na ordem do `manifest.json`. As orelhas giram pela base,
+nos pivôs originais. Corpo, cabeça e aro não recebem deformação, rotação ou
+translação; só a escala global de apresentação.
 
-`INSTRUCAO.md` preserva a instrução completa entregue na T7606, incluindo a
-regra atualizada do Electrobun Livewire autorizada no #7590.
+As pálpebras horizontais, círculos, arcos e símbolos são desenhados por código
+com supersampling 2× e redução Lanczos. O traço dos símbolos é branco, com
+terminais arredondados, fora da silhueta, sem cobrir olhos ou aro. Não há
+notebook, livro, lupa nem logotipo. A referência antiga do #7649 foi usada
+somente para a intenção das expressões; o personagem continua sendo a v2.
 
-## Conferência e decisão visual
+Quando a pálpebra fecha ou o olhar desloca, o script estima somente os pixels
+antes ocultos pelos olhos (discos + 5 px), por ajuste quadrático à superfície
+vizinha. Isso remove as manchas circulares do preenchimento antigo, sem blur
+e sem modificar as texturas de origem.
 
-Foram conferidos o grid 7 × 3, os 21 recortes, as legendas, os prompts e a
-separação das paletas. O aro permanece ciano a púrpura nas três colunas;
-não há cauda, adereços nem mudança intencional de personagem.
+A névoa mantém a massa orgânica da v2. Não há anel, partícula, forma sintética,
+blur ou nova geração por IA. Densidade, peso lateral/vertical e matiz são
+aplicados **à névoa visível depois da composição**, protegendo a silhueta
+fosca escura e o aro. Assim, reduzir a luz não expõe os cortes retos da
+separação antiga de `luz.png`. A pose neutra padrão não recebe esse ajuste.
+A distribuição de densidade e a intenção de direção aparecem nas legendas.
+As paletas afetam a névoa, sem recolorir os olhos ou os símbolos.
 
-A geração é uma proposta visual, sujeita a variação de pixels. **Ela não
-comprova a tolerância de 4/255 da composição por camadas**, que será exigida
-na implementação, nem comprova movimento ou desempenho. A v2 continua sendo
-a fonte da verdade, e estes quadros não serão usados como sprites no app.
+As orelhas usam amplitudes conservadoras: esquerda de −5° a +7°, direita de
+−5° a +5°. São os limites usados nesta prancha, sujeitos à revisão visual,
+não uma garantia para qualquer interpolação. Rotações maiores expõem emendas
+dos pixels ocultos estimados nos recortes originais (`gerada/README.md`).
+Preparar melhor esses pixels fica antes da entrega 4 se o harry quiser um
+movimento maior. As texturas originais não foram retocadas.
 
-Pontos para o lead levar ao harry: a expressão de `agindo` pode ler como
-severa; `erro` é deliberadamente discreto; a leitura de névoa e a diferença
-entre `repouso`, `acordou` e `ouvindo` precisam do julgamento visual dele.
+**Tema claro permanece em aberto:** o ícone e os símbolos brancos foram
+preparados para fundo escuro. A solução para o tema claro precisa de decisão
+visual própria; esta prancha não decide contorno, fundo ou inversão de cor.
 
-Nenhum arquivo do app foi alterado. Não foram abertos app, janela ou
-microfone. Não há shader, roteiro de movimento ou teste de desempenho nesta
-entrega. A próxima entrega espera o ok do harry na prancha.
+`INSTRUCAO.md` preserva a instrução completa e seu novo adendo (seção 9).
+`prompt-prancha.txt` é o registro histórico da rodada 1 rejeitada; nenhum
+quadro daquela geração é usado aqui. Os `.txt` atuais descrevem a composição
+real, sem fingir que houve prompts de IA nesta rodada.
+
+## Reprodução e conferência
+
+```sh
+python3 -m venv /tmp/kiwi-cat-estados
+/tmp/kiwi-cat-estados/bin/pip install -r docs/brand/kiwi-cat/gerada/requirements.txt
+/tmp/kiwi-cat-estados/bin/python docs/brand/kiwi-cat/estados/montar.py
+```
+
+O script confere a composição neutra na resolução da fonte, **antes da redução
+e da compressão WebP**, contra a v2: máximo ≤4/255 e média <0,5/255 fora dos
+discos dos olhos com margem de 5 px. Os números e os hashes das seis camadas
+estão em `verificacao.json`. A tolerância cobre só essa pose, não as orelhas
+giradas, as variações de luz ou o WebP com perdas. As poses alteradas e a
+compressão precisam também de inspeção visual.
+
+Os oito estados, a imagem de cores e o resumo são WebP de até 500 KB cada.
+O script prepara só documentos: nada do app, shader, overlay, microfone ou
+interface do macOS é executado. O ok do harry continua necessário antes da
+entrega seguinte.

@@ -70,3 +70,32 @@ Cada entrega é uma task e um PR. **Não comece a seguinte antes do ok da anteri
 - **Nada baixa da internet no app.** O three.js vai no bundle, com o crédito no Sobre (licença MIT).
 - **A engine não é sua tarefa.** Se faltar algo no Electrobun Livewire, avise o lead: a correção vira uma task de um Builder. Um PR lá nunca recebe merge de um agente do harry: só do jow ou do Claude Code do jow (#7590). No `kiwi-init/channels`, nada: só leitura.
 - **Dúvida de gosto** (se uma pose está certa, se a névoa está densa demais): pergunte ao lead, que leva ao harry. Não decida sozinho.
+
+## 9. Adendo do harry (#7649): estados bem diferentes e símbolos de mangá
+
+O harry viu a rodada 1 e gostou do visual. O problema dele: `repouso`, `acordou`, `ouvindo`, `thinking` e `erro` parecem a mesma imagem. Só `agindo` e `pronto` se diferenciam, porque o formato dos olhos muda, e **é isso que ele quer em todos**. A referência dele é a folha antiga de expressões (a imagem do #7649): olhos expressivos e símbolos de mangá.
+
+**Cada estado se reconhece de relance por duas coisas: o formato dos olhos e um símbolo.**
+
+| estado | olhos | símbolo | orelhas e névoa |
+|---|---|---|---|
+| `repouso` | redondos; pisca e olha para os lados | nenhum | névoa lenta |
+| `dormindo` (novo: repouso há muito tempo) | fechados, em arco para baixo | `zZ` subindo | névoa mínima |
+| `acordou` | arregalados, maiores | `!` que salta | orelhas em pé, um pulso na névoa |
+| `ouvindo` | redondos e atentos | ondas de som junto da orelha, no ritmo da voz | névoa acompanha a voz |
+| `thinking` | semicerrados, olhando para cima e para o lado | balão com `…`, os pontos acendendo um a um | névoa junto da cabeça |
+| `agindo` | de foco: semicerrados e retos, sem cara de bravo | gotas de suor e linhas de movimento | névoa mais larga |
+| `pronto` | em arco feliz | brilhos em volta | a névoa abre e assenta |
+| `erro` | desiguais | proponha duas opções: `?` com uma gota, ou um rabisco de confusão | névoa perde luz |
+
+**As regras dos símbolos:**
+- **São desenhados em código**, como os olhos: forma limpa, traço arredondado. Nada de imagem gerada no app.
+- **A cor é a dos olhos:** branco, nítido. Podem levar um toque do aro (de ciano a púrpura). Nunca a cor do agente, que é só da névoa.
+- **Ficam fora da silhueta**, perto da cabeça, e entram com um salto curto. Não cobrem os olhos nem o aro.
+- **O gato continua o do ícone.** O símbolo é uma camada a mais, não um gato novo.
+- **Adereços** (o notebook, o livro, a lupa da folha antiga) **ficam de fora por enquanto.** Só entram se o harry pedir.
+- O balão com `…` é um símbolo. Os balões de fala com texto (#7486) são outra peça, de outro spec, mas o traço dos dois deve combinar.
+
+**Na prancha:** cada imagem de estado mostra os olhos e o símbolo nas 2 ou 3 poses. A folha antiga do harry serve só para o espírito das expressões: aquele gato é anterior à v2 e não é a fonte da verdade.
+
+**Um ponto em aberto, só para anotar no README:** como o gato e os símbolos ficam no tema claro do app. O ícone é feito para fundo escuro.

@@ -1,0 +1,20 @@
+REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
+Fonte: gerada/manifest.json e as seis camadas originais.
+{
+  "label": "01 · antes do atalho",
+  "left": 0,
+  "right": 0,
+  "gaze": 0,
+  "eye": 0.65,
+  "other": null,
+  "blink": false,
+  "fog": 0.82,
+  "side": 0,
+  "upper": 0,
+  "symbol": "alert",
+  "big": 1,
+  "small": 1,
+  "up": 0,
+  "phase": 0
+}
+Névoa: Densidade 0,82 → 1,16 → 1,02; sobe a luz acima da cabeça no pico.

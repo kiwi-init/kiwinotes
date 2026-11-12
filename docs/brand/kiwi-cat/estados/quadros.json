@@ -1,238 +1,511 @@
 {
-  "source": "prancha-estados.png",
-  "input": "../gerada/kiwi-cat-candidata-v2.png",
-  "tool": "image_gen integrado",
   "referenceOnly": true,
+  "method": "montar.py — camadas originais",
   "frames": [
     {
-      "file": "quadros/repouso-padrao.png",
+      "file": "quadros/repouso-01.webp",
       "state": "repouso",
       "palette": "padrao",
-      "crop": {
-        "x": 9,
-        "y": 7,
-        "width": 311,
-        "height": 238
+      "parameters": {
+        "label": "01 · neutro / fonte aprovada",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1,
+        "side": 0,
+        "upper": 0,
+        "symbol": "",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
       }
     },
     {
-      "file": "quadros/repouso-claude.png",
+      "file": "quadros/repouso-02.webp",
+      "state": "repouso",
+      "palette": "padrao",
+      "parameters": {
+        "label": "02 · olhar discreto",
+        "left": 0,
+        "right": -2,
+        "gaze": 15,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 0.94,
+        "side": 0,
+        "upper": 0,
+        "symbol": "",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/repouso-03.webp",
+      "state": "repouso",
+      "palette": "padrao",
+      "parameters": {
+        "label": "03 · piscada lenta",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 0.12,
+        "other": null,
+        "blink": false,
+        "fog": 0.9,
+        "side": 0,
+        "upper": 0,
+        "symbol": "",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/dormindo-01.webp",
+      "state": "dormindo",
+      "palette": "padrao",
+      "parameters": {
+        "label": "01 · sono / zZ nasce",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": true,
+        "fog": 0.26,
+        "side": 0,
+        "upper": 0,
+        "symbol": "sleep",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/dormindo-02.webp",
+      "state": "dormindo",
+      "palette": "padrao",
+      "parameters": {
+        "label": "02 · zZ sobe",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": true,
+        "fog": 0.22,
+        "side": 0,
+        "upper": 0,
+        "symbol": "sleep",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 1
+      }
+    },
+    {
+      "file": "quadros/acordou-01.webp",
+      "state": "acordou",
+      "palette": "padrao",
+      "parameters": {
+        "label": "01 · antes do atalho",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 0.65,
+        "other": null,
+        "blink": false,
+        "fog": 0.82,
+        "side": 0,
+        "upper": 0,
+        "symbol": "alert",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/acordou-02.webp",
+      "state": "acordou",
+      "palette": "padrao",
+      "parameters": {
+        "label": "02 · pico do opa",
+        "left": -5,
+        "right": 5,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1.16,
+        "side": 0,
+        "upper": 0.16,
+        "symbol": "alert",
+        "big": 1.24,
+        "small": 1,
+        "up": 0,
+        "phase": 1
+      }
+    },
+    {
+      "file": "quadros/acordou-03.webp",
+      "state": "acordou",
+      "palette": "padrao",
+      "parameters": {
+        "label": "03 · assentando",
+        "left": -1,
+        "right": 1,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1.02,
+        "side": 0,
+        "upper": 0,
+        "symbol": "alert",
+        "big": 1.1,
+        "small": 1,
+        "up": 0,
+        "phase": 2
+      }
+    },
+    {
+      "file": "quadros/ouvindo-01.webp",
+      "state": "ouvindo",
+      "palette": "padrao",
+      "parameters": {
+        "label": "01 · voz baixa",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 0.66,
+        "side": 0,
+        "upper": 0,
+        "symbol": "sound",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/ouvindo-02.webp",
+      "state": "ouvindo",
+      "palette": "padrao",
+      "parameters": {
+        "label": "02 · voz alta",
+        "left": -2,
+        "right": 2,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1.26,
+        "side": 0,
+        "upper": 0.1,
+        "symbol": "sound",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 1
+      }
+    },
+    {
+      "file": "quadros/thinking-01.webp",
+      "state": "thinking",
+      "palette": "padrao",
+      "parameters": {
+        "label": "01 · busca à esquerda",
+        "left": 2,
+        "right": 0,
+        "gaze": -30,
+        "eye": 0.58,
+        "other": null,
+        "blink": false,
+        "fog": 0.95,
+        "side": -0.28,
+        "upper": 0.2,
+        "symbol": "thought",
+        "big": 1,
+        "small": 1,
+        "up": -24,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/thinking-02.webp",
+      "state": "thinking",
+      "palette": "padrao",
+      "parameters": {
+        "label": "02 · busca à direita",
+        "left": 0,
+        "right": -2,
+        "gaze": 30,
+        "eye": 0.58,
+        "other": null,
+        "blink": false,
+        "fog": 0.95,
+        "side": 0.28,
+        "upper": 0.2,
+        "symbol": "thought",
+        "big": 1,
+        "small": 1,
+        "up": -24,
+        "phase": 1
+      }
+    },
+    {
+      "file": "quadros/agindo-01.webp",
+      "state": "agindo",
+      "palette": "padrao",
+      "parameters": {
+        "label": "01 · foco / pálpebras retas",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 0.6,
+        "other": null,
+        "blink": false,
+        "fog": 1.12,
+        "side": -0.12,
+        "upper": 0,
+        "symbol": "work",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/agindo-02.webp",
+      "state": "agindo",
+      "palette": "padrao",
+      "parameters": {
+        "label": "02 · execução / foco mantido",
+        "left": 0,
+        "right": 0,
+        "gaze": 10,
+        "eye": 0.6,
+        "other": null,
+        "blink": false,
+        "fog": 1.12,
+        "side": 0.12,
+        "upper": 0,
+        "symbol": "work",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 1
+      }
+    },
+    {
+      "file": "quadros/pronto-01.webp",
+      "state": "pronto",
+      "palette": "padrao",
+      "parameters": {
+        "label": "01 · piscada satisfeita",
+        "left": 2,
+        "right": -2,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": true,
+        "fog": 1.06,
+        "side": 0,
+        "upper": 0,
+        "symbol": "spark",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/pronto-02.webp",
+      "state": "pronto",
+      "palette": "padrao",
+      "parameters": {
+        "label": "02 · retorno tranquilo",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": true,
+        "fog": 0.96,
+        "side": 0,
+        "upper": 0,
+        "symbol": "spark",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 1
+      }
+    },
+    {
+      "file": "quadros/erro-01.webp",
+      "state": "erro",
+      "palette": "padrao",
+      "parameters": {
+        "label": "A · dúvida / ? e gota",
+        "left": 4,
+        "right": -3,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 0.68,
+        "side": 0,
+        "upper": 0,
+        "symbol": "question",
+        "big": 0.72,
+        "small": 0.62,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/erro-02.webp",
+      "state": "erro",
+      "palette": "padrao",
+      "parameters": {
+        "label": "B · confusão / rabisco",
+        "left": 7,
+        "right": -5,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 0.52,
+        "side": 0,
+        "upper": 0,
+        "symbol": "confusion",
+        "big": 0.67,
+        "small": 0.68,
+        "up": 0,
+        "phase": 0
+      }
+    },
+    {
+      "file": "quadros/erro-03.webp",
+      "state": "erro",
+      "palette": "padrao",
+      "parameters": {
+        "label": "A · recolher e aguardar",
+        "left": 6,
+        "right": -4,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 0.3,
+        "side": 0,
+        "upper": 0,
+        "symbol": "question",
+        "big": 0.62,
+        "small": 0.62,
+        "up": 0,
+        "phase": 1
+      }
+    },
+    {
+      "file": "quadros/repouso-claude.webp",
       "state": "repouso",
       "palette": "claude",
-      "crop": {
-        "x": 320,
-        "y": 7,
-        "width": 309,
-        "height": 238
+      "parameters": {
+        "label": "01 · neutro / fonte aprovada",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1,
+        "side": 0,
+        "upper": 0,
+        "symbol": "",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
       }
     },
     {
-      "file": "quadros/repouso-codex.png",
+      "file": "quadros/repouso-codex.webp",
       "state": "repouso",
       "palette": "codex",
-      "crop": {
-        "x": 629,
-        "y": 7,
-        "width": 310,
-        "height": 238
+      "parameters": {
+        "label": "01 · neutro / fonte aprovada",
+        "left": 0,
+        "right": 0,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1,
+        "side": 0,
+        "upper": 0,
+        "symbol": "",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 0
       }
     },
     {
-      "file": "quadros/acordou-padrao.png",
-      "state": "acordou",
-      "palette": "padrao",
-      "crop": {
-        "x": 9,
-        "y": 245,
-        "width": 311,
-        "height": 230
-      }
-    },
-    {
-      "file": "quadros/acordou-claude.png",
-      "state": "acordou",
-      "palette": "claude",
-      "crop": {
-        "x": 320,
-        "y": 245,
-        "width": 309,
-        "height": 230
-      }
-    },
-    {
-      "file": "quadros/acordou-codex.png",
-      "state": "acordou",
-      "palette": "codex",
-      "crop": {
-        "x": 629,
-        "y": 245,
-        "width": 310,
-        "height": 230
-      }
-    },
-    {
-      "file": "quadros/ouvindo-padrao.png",
-      "state": "ouvindo",
-      "palette": "padrao",
-      "crop": {
-        "x": 9,
-        "y": 475,
-        "width": 311,
-        "height": 232
-      }
-    },
-    {
-      "file": "quadros/ouvindo-claude.png",
+      "file": "quadros/ouvindo-claude.webp",
       "state": "ouvindo",
       "palette": "claude",
-      "crop": {
-        "x": 320,
-        "y": 475,
-        "width": 309,
-        "height": 232
+      "parameters": {
+        "label": "02 · voz alta",
+        "left": -2,
+        "right": 2,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1.26,
+        "side": 0,
+        "upper": 0.1,
+        "symbol": "sound",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 1
       }
     },
     {
-      "file": "quadros/ouvindo-codex.png",
+      "file": "quadros/ouvindo-codex.webp",
       "state": "ouvindo",
       "palette": "codex",
-      "crop": {
-        "x": 629,
-        "y": 475,
-        "width": 310,
-        "height": 232
-      }
-    },
-    {
-      "file": "quadros/thinking-padrao.png",
-      "state": "thinking",
-      "palette": "padrao",
-      "crop": {
-        "x": 9,
-        "y": 707,
-        "width": 311,
-        "height": 226
-      }
-    },
-    {
-      "file": "quadros/thinking-claude.png",
-      "state": "thinking",
-      "palette": "claude",
-      "crop": {
-        "x": 320,
-        "y": 707,
-        "width": 309,
-        "height": 226
-      }
-    },
-    {
-      "file": "quadros/thinking-codex.png",
-      "state": "thinking",
-      "palette": "codex",
-      "crop": {
-        "x": 629,
-        "y": 707,
-        "width": 310,
-        "height": 226
-      }
-    },
-    {
-      "file": "quadros/agindo-padrao.png",
-      "state": "agindo",
-      "palette": "padrao",
-      "crop": {
-        "x": 9,
-        "y": 933,
-        "width": 311,
-        "height": 221
-      }
-    },
-    {
-      "file": "quadros/agindo-claude.png",
-      "state": "agindo",
-      "palette": "claude",
-      "crop": {
-        "x": 320,
-        "y": 933,
-        "width": 309,
-        "height": 221
-      }
-    },
-    {
-      "file": "quadros/agindo-codex.png",
-      "state": "agindo",
-      "palette": "codex",
-      "crop": {
-        "x": 629,
-        "y": 933,
-        "width": 310,
-        "height": 221
-      }
-    },
-    {
-      "file": "quadros/pronto-padrao.png",
-      "state": "pronto",
-      "palette": "padrao",
-      "crop": {
-        "x": 9,
-        "y": 1154,
-        "width": 311,
-        "height": 226
-      }
-    },
-    {
-      "file": "quadros/pronto-claude.png",
-      "state": "pronto",
-      "palette": "claude",
-      "crop": {
-        "x": 320,
-        "y": 1154,
-        "width": 309,
-        "height": 226
-      }
-    },
-    {
-      "file": "quadros/pronto-codex.png",
-      "state": "pronto",
-      "palette": "codex",
-      "crop": {
-        "x": 629,
-        "y": 1154,
-        "width": 310,
-        "height": 226
-      }
-    },
-    {
-      "file": "quadros/erro-padrao.png",
-      "state": "erro",
-      "palette": "padrao",
-      "crop": {
-        "x": 9,
-        "y": 1380,
-        "width": 311,
-        "height": 243
-      }
-    },
-    {
-      "file": "quadros/erro-claude.png",
-      "state": "erro",
-      "palette": "claude",
-      "crop": {
-        "x": 320,
-        "y": 1380,
-        "width": 309,
-        "height": 243
-      }
-    },
-    {
-      "file": "quadros/erro-codex.png",
-      "state": "erro",
-      "palette": "codex",
-      "crop": {
-        "x": 629,
-        "y": 1380,
-        "width": 310,
-        "height": 243
+      "parameters": {
+        "label": "02 · voz alta",
+        "left": -2,
+        "right": 2,
+        "gaze": 0,
+        "eye": 1,
+        "other": null,
+        "blink": false,
+        "fog": 1.26,
+        "side": 0,
+        "upper": 0.1,
+        "symbol": "sound",
+        "big": 1,
+        "small": 1,
+        "up": 0,
+        "phase": 1
       }
     }
   ]

@@ -1,0 +1,20 @@
+REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
+Fonte: gerada/manifest.json e as seis camadas originais.
+{
+  "label": "01 · foco / pálpebras retas",
+  "left": 0,
+  "right": 0,
+  "gaze": 0,
+  "eye": 0.6,
+  "other": null,
+  "blink": false,
+  "fog": 1.12,
+  "side": -0.12,
+  "upper": 0,
+  "symbol": "work",
+  "big": 1,
+  "small": 1,
+  "up": 0,
+  "phase": 0
+}
+Névoa: Densidade 1,12; peso lateral alterna com olhos retos, sem expressão de raiva.
