@@ -24,25 +24,21 @@ import { isSpellingWord, NO_SPELLING, spellingResult, type SpellingResult } from
 export const SPELLING_EXCLUDED = ["FencedCode", "CodeBlock", "InlineCode", "URL", "Autolink", "WikiLink"] as const;
 const excluded = new Set<string>(SPELLING_EXCLUDED);
 /**
- * O código, os links e as URLs ganham `spellcheck="false"`. Só nas linhas que o editor desenhou (T7876): o navegador só
- * confere o que está no DOM, e varrer a árvore da nota inteira a cada tecla custava ~48 ms numa nota de 400 KB.
+ * O código, os links e as URLs ganham `spellcheck="false"`. Só nas linhas que o editor desenhou (T7876), o `viewport`
+ * com a margem acima e abaixo da tela: o navegador só confere o que está no DOM, e varrer a árvore da nota inteira a cada
+ * tecla custava ~48 ms numa nota de 400 KB.
  */
 export function disableSpellcheck(selectors: readonly string[]) {
   const names = new Set(selectors);
   const off = Decoration.mark({ attributes: { spellcheck: "false" } });
   const build = (view: EditorView): DecorationSet => {
     const marks: Range<Decoration>[] = [];
-    const tree = syntaxTree(view.state);
-    let last = -1;
-    for (const { from, to } of view.visibleRanges) {
-      tree.iterate({ from, to, enter(node) {
-        if (!names.has(node.name)) return;
-        // Um nó que cruza duas faixas visíveis entra uma vez só.
-        if (node.from > last) marks.push(off.range(node.from, node.to));
-        last = Math.max(last, node.from);
-        return false;
-      } });
-    }
+    const { from, to } = view.viewport;
+    syntaxTree(view.state).iterate({ from, to, enter(node) {
+      if (!names.has(node.name)) return;
+      marks.push(off.range(node.from, node.to));
+      return false;
+    } });
     return Decoration.set(marks, true);
   };
   return ViewPlugin.fromClass(class {

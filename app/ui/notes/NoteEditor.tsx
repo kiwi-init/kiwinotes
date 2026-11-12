@@ -129,6 +129,7 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
       scroller?.removeEventListener("scroll", remeasure);
       detach();
       spellingRequest.current++;
+      clearTimeout(docTimer.current);
       v.destroy();
       view.current = null;
     };

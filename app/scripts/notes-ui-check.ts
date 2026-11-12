@@ -784,6 +784,26 @@ await step("o Sumário e as palavras se refazem quando a pessoa para de digitar"
   if (path) expectEq((await page.evaluate((k) => localStorage.getItem(k), path))?.includes("um dois três quatro"), true);
 });
 
+// Revisão do T7876: quem digita sem parar (uma tecla a cada 120 ms, sem a pausa de 300 ms) também tem rascunho, pelo teto
+// de 1,5 s. Ele cobre o que o save não alcança: o WebView que cai ou o app morto no meio da digitação.
+await step("digitando sem parar, o rascunho anda a cada 1,5 s", async () => {
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  const typed = "zqsemparar";
+  const draft = () => page.evaluate(() => {
+    const k = Object.keys(localStorage).find((key) => key.startsWith("kiwi.notes.draft.v1:"));
+    return k ? localStorage.getItem(k) ?? "" : "";
+  });
+  let seen = "";
+  for (let i = 0; i < 26; i++) {
+    await page.keyboard.type(typed[i % typed.length]!);
+    await page.waitForTimeout(120);
+    // Depois de ~2,5 s digitando, sem nenhuma pausa: o rascunho tem que já ter o começo do que foi digitado.
+    if (i === 20) seen = await draft();
+  }
+  expectEq(seen.includes(typed), true);
+});
+
 await page.keyboard.press("Meta+k");
 await page.keyboard.type("ana");
 await page.waitForTimeout(300);

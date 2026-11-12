@@ -94,6 +94,11 @@ const SAVE_AFTER_MS = 500;
  * também é gravado antes de cada save e ao esconder ou fechar a janela, então ele nunca fica para trás.
  */
 const SETTLE_MS = 300;
+/**
+ * O teto da espera (revisão do T7876): quem digita sem parar não fica sem rascunho. Ele existe para o que o save não alcança
+ * (o WebView que cai, o app morto, a falta de luz), e a cada SETTLE_MAX_MS de digitação contínua ele é gravado.
+ */
+const SETTLE_MAX_MS = 1500;
 
 function useEnterAnimation() {
   const [n, setN] = useState(0);
@@ -213,6 +218,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   // T7876: a contagem de palavras e o rascunho do que foi digitado, um pouco depois da última tecla (SETTLE_MS).
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const settleRef = useRef<() => void>(() => {});
+  /** Quando começou a digitação que ainda espera (o primeiro onChange depois do último settle). */
+  const settleSince = useRef(0);
   const frontmatter = useRef("");
   /** O mesmo frontmatter, em estado: o painel de propriedades (T6598) desenha a partir dele. */
   const [frontmatterText, setFrontmatterText] = useState("");
@@ -701,8 +708,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     if (readOnlyRef.current) return;
     pending.current = doc;
     // As palavras e o rascunho quando a pessoa para (T7876); o rascunho sobrevive a um fechamento que o save não alcançou.
-    clearTimeout(settleTimer.current);
-    settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_MS);
+    // Com o teto SETTLE_MAX_MS: digitando sem parar, eles rodam assim mesmo.
+    const now = Date.now();
+    if (settleTimer.current === undefined) settleSince.current = now;
+    if (now - settleSince.current >= SETTLE_MAX_MS) settleRef.current();
+    else {
+      clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_MS);
+    }
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_AFTER_MS);
   };
