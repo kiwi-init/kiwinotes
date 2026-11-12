@@ -38,6 +38,7 @@ import { ContextMenu, type MenuItem } from "../ContextMenu.tsx";
 import type { AttachmentFile } from "../editor/attachments.ts";
 import { splitFrontmatter } from "../frontmatter.ts";
 import { externalUrl } from "../links.ts";
+import { errorCode } from "../errors.ts";
 import type { CanvasApi, CanvasFile, NotesApi } from "../types.ts";
 import { CanvasMarkdown, type CanvasLinks } from "./CanvasMarkdown.tsx";
 import { canvasName, noteSection } from "./names.ts";
@@ -543,7 +544,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
       onRenamed(r.path);
     } catch (e) {
       setTitle(canvasName(path));
-      onError(/E_EXISTS/.test(String(e)) ? "Já existe um quadro com esse nome." : "Não deu para renomear o quadro.");
+      onError(errorCode(e) === "E_EXISTS" ? "Já existe um quadro com esse nome." : "Não deu para renomear o quadro.");
     }
   };
 
