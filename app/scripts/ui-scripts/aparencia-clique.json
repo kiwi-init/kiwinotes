@@ -43,15 +43,16 @@
       "name": "o zoom assenta"
     },
     {
-      "click": ".kn-note-editor .cm-line:has-text('Linha 25 do teste')",
-      "name": "clica no meio da linha 25"
+      "clickText": "Linha 25 do teste de clique",
+      "within": ".kn-note-editor",
+      "name": "clica no meio do texto da linha 25 (desenhado ou não, T7843)"
     },
     {
       "type": "§default",
       "name": "escreve uma marca onde está o cursor"
     },
     {
-      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 25 do teste'):has-text('§default')",
+      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 25 do '):has-text('§default')",
       "count": 1,
       "name": "a marca caiu na linha 25"
     },
@@ -74,15 +75,16 @@
       "name": "o zoom assenta"
     },
     {
-      "click": ".kn-note-editor .cm-line:has-text('Linha 12 do teste')",
-      "name": "clica no meio da linha 12"
+      "clickText": "Linha 12 do teste de clique",
+      "within": ".kn-note-editor",
+      "name": "clica no meio do texto da linha 12 (desenhado ou não, T7843)"
     },
     {
       "type": "§large",
       "name": "escreve uma marca onde está o cursor"
     },
     {
-      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 12 do teste'):has-text('§large')",
+      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 12 do '):has-text('§large')",
       "count": 1,
       "name": "a marca caiu na linha 12"
     },
@@ -105,15 +107,16 @@
       "name": "o zoom assenta"
     },
     {
-      "click": ".kn-note-editor .cm-line:has-text('Linha 40 do teste')",
-      "name": "clica no meio da linha 40"
+      "clickText": "Linha 40 do teste de clique",
+      "within": ".kn-note-editor",
+      "name": "clica no meio do texto da linha 40 (desenhado ou não, T7843)"
     },
     {
       "type": "§larger",
       "name": "escreve uma marca onde está o cursor"
     },
     {
-      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 40 do teste'):has-text('§larger')",
+      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 40 do '):has-text('§larger')",
       "count": 1,
       "name": "a marca caiu na linha 40"
     },
@@ -136,15 +139,16 @@
       "name": "o zoom assenta"
     },
     {
-      "click": ".kn-note-editor .cm-line:has-text('Linha 33 do teste')",
-      "name": "clica no meio da linha 33"
+      "clickText": "Linha 33 do teste de clique",
+      "within": ".kn-note-editor",
+      "name": "clica no meio do texto da linha 33 (desenhado ou não, T7843)"
     },
     {
       "type": "§largest",
       "name": "escreve uma marca onde está o cursor"
     },
     {
-      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 33 do teste'):has-text('§largest')",
+      "expectCount": ".kn-note-editor .cm-line:has-text('Linha 33 do '):has-text('§largest')",
       "count": 1,
       "name": "a marca caiu na linha 33"
     },

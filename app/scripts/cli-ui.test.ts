@@ -310,6 +310,37 @@ describe.skipIf(!hasWebkit)("no WebKit headless", () => {
     expect(r.steps[2].error).toMatch(/levou \d+ ms, e o limite \(maxMs\) é 50 ms/);
   }, 60_000);
 
+  test("clickText: clica no meio de um texto dentro de um parágrafo só, sem um elemento por linha (T7843)", async () => {
+    const browser = await webkit.launch();
+    try {
+      const page = await browser.newPage();
+      // Como o editor desenha um parágrafo de várias linhas: um <p> com o texto todo, sem um elemento por linha.
+      await page.setContent(`<p id="p" style="width: 300px; font: 16px sans-serif">Linha 1 do teste aaa aaa aaa.
+        Linha 2 do teste bbb bbb bbb. Linha 3 do teste ccc ccc ccc.</p><script>
+        document.addEventListener("click", (e) => {
+          const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+          window.hit = r ? r.startContainer.nodeValue.slice(0, r.startOffset) : null;
+        });</script>`);
+      const send = async () => ({});
+      expect(parseScript([{ clickText: "Linha 2", within: "#p" }]).steps[0]).toEqual({ clickText: "Linha 2", within: "#p" });
+      expect(() => parseScript([{ clickText: "" }])).toThrow("passo 1.clickText");
+      await runStep(page, { clickText: "Linha 2 do teste", within: "#p" }, dir, send);
+      // O caret caiu dentro do "Linha 2 do teste": o texto antes dele termina num pedaço da Linha 2.
+      const before = (await page.evaluate(() => (window as unknown as { hit: string | null }).hit)) ?? "";
+      expect(before).toContain("Linha 1 do teste aaa aaa aaa.");
+      // O meio de "Linha 2 do teste" é o "d": o caret fica antes ou depois dele, mesmo com o texto quebrando de linha.
+      expect(before).toMatch(/Linha 2 d?$/);
+      try {
+        await runStep(page, { clickText: "Linha 9", within: "#p", timeout: 200 }, dir, send);
+        throw new Error("esperava falhar");
+      } catch (e) {
+        expect(String(e)).toContain('clickText: "Linha 9" não apareceu em #p');
+      }
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
+
   test("expectSame: o retângulo de um elemento contra o de outro, e a propriedade computada (T4671)", async () => {
     const browser = await webkit.launch();
     try {

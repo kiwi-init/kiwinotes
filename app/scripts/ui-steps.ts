@@ -7,6 +7,8 @@
 //   { "type": "…" }                                   digita no foco
 //   { "press": "Meta+k" }                             uma tecla ou combinação (⌘K é "Meta+k")
 //   { "hover": "SEL" }
+//   { "clickText": "…", "within"?: "SEL" }          clica no meio de um texto, onde ele estiver: dentro de um parágrafo
+//                                                     desenhado (o `.cm-rendered` do editor) ou numa linha (T7843)
 //   { "scroll": "SEL", "y": 400, "x"?: 0 }            o mouse no elemento e a roda: rola de verdade (T4505)
 //   { "expectScroll": "SEL", "min"?: 100, "max"?: 900 }  o scrollTop do elemento fica entre min e max (T4505)
 //   { "waitFor": "SEL", "state"?: "visible|hidden|attached|detached" }
@@ -51,6 +53,8 @@ export type Step =
   | { type: string }
   | { press: string }
   | { hover: string }
+  /** Clica com o mouse no meio de um texto (um `Range` sobre o nó), dentro de `within` (T7843). */
+  | { clickText: string; within?: string }
   /** O mouse no meio do elemento e a roda (`y` px para baixo, `x` para a direita), como um scroll de verdade (T4505). */
   | { scroll: string; y?: number; x?: number }
   /** O `scrollTop` do primeiro elemento fica entre `min` e `max` (px), esperando até o timeout (T4505). */
@@ -86,7 +90,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "expectNoHScroll", "drag", "expectWidth", "screenshot", "invoke", "drop", "pasteFile", "pasteHtml"] as const;
+const ACTIONS = ["click", "clickText", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "expectNoHScroll", "drag", "expectWidth", "screenshot", "invoke", "drop", "pasteFile", "pasteHtml"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -160,6 +164,10 @@ export function parseScript(json: unknown): ScriptFile {
         if (s.modifiers !== undefined && !(Array.isArray(s.modifiers) && s.modifiers.every((m) => MODIFIERS.has(m as string)))) {
           throw new Error(`${at}: modifiers entre Alt, Control, Meta, Shift`);
         }
+        break;
+      case "clickText":
+        str(s.clickText, `${at}.clickText`);
+        if (s.within !== undefined) str(s.within, `${at}.within`);
         break;
       case "scroll":
         str(s.scroll, `${at}.scroll`);
@@ -314,7 +322,42 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
     );
     return {};
   }
-  if ("click" in s) await page.click(s.click, { timeout, modifiers: s.modifiers, button: s.button, position: s.position });
+  if ("clickText" in s) {
+    // O texto pode estar num parágrafo desenhado (o editor fora do cursor junta as linhas num `<p>` só), onde não há um
+    // elemento por linha para o `click`: o meio do próprio texto, pelo retângulo de um `Range`, vale nos dois casos.
+    const until = Date.now() + timeout;
+    for (;;) {
+      const at = await page.evaluate(
+        ({ text, within }) => {
+          const root = within ? document.querySelector(within) : document.body;
+          if (!root) return null;
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const i = node.nodeValue?.indexOf(text) ?? -1;
+            if (i < 0) continue;
+            (node.parentElement as HTMLElement | null)?.scrollIntoView({ block: "center" });
+            // O caractere do meio do texto: um texto que quebra de linha tem dois retângulos, e o meio do primeiro
+            // podia cair no fim da linha de cima.
+            const mid = i + Math.floor(text.length / 2);
+            const range = document.createRange();
+            range.setStart(node, mid);
+            range.setEnd(node, mid + 1);
+            const r = range.getBoundingClientRect();
+            if (!r.width && !r.height) return null;
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+          }
+          return null;
+        },
+        { text: s.clickText, within: s.within ?? null },
+      );
+      if (at) {
+        await page.mouse.click(at.x, at.y);
+        break;
+      }
+      if (Date.now() > until) throw new Error(`clickText: "${s.clickText}" não apareceu${s.within ? ` em ${s.within}` : ""}`);
+      await page.waitForTimeout(100);
+    }
+  } else if ("click" in s) await page.click(s.click, { timeout, modifiers: s.modifiers, button: s.button, position: s.position });
   else if ("fill" in s) await page.fill(s.fill, s.text, { timeout });
   else if ("select" in s) await page.selectOption(s.select, s.value, { timeout });
   else if ("type" in s) await page.keyboard.type(s.type);
