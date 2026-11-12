@@ -540,6 +540,49 @@ await step("clique num link para nota que não existe cria a nota", async () => 
   await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement).value === "Nota fantasma");
 });
 
+// T7513 (achado da T7436): a nota aberta some fora (apagada no Finder, renomeada no Obsidian) com texto ainda por gravar.
+// O texto fica no editor com um aviso, e a janela não esvazia calada.
+await step("edição pendente e a nota some fora: o texto fica no editor, com aviso", async () => {
+  await page.waitForTimeout(800);
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("\nTEXTO QUE NAO PODE SUMIR");
+  await page.evaluate(() => (window as any).__kiwiNotesMock.delete("Nota fantasma.md"));
+  await page.waitForTimeout(1500);
+  if (!(await editorText().catch(() => "")).includes("TEXTO QUE NAO PODE SUMIR")) throw new Error("o texto sumiu do editor");
+  await page.waitForSelector(".kn-save-alert", { timeout: 3000 });
+});
+
+await step("com a nota sumida, trocar de nota não descarta o texto; Recuperar como nota nova grava", async () => {
+  await page.keyboard.press("Meta+k");
+  await page.keyboard.type("Ideia nova");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  if ((await page.inputValue(".kn-title")) !== "Nota fantasma") throw new Error("saiu da nota e o texto ficou para trás");
+  if (!(await editorText()).includes("TEXTO QUE NAO PODE SUMIR")) throw new Error("o texto sumiu ao trocar de nota");
+  await page.locator(".kn-save-alert button", { hasText: "Recuperar como nota nova" }).click();
+  await until(() => content("Nota fantasma.md"), (c) => !!c?.includes("TEXTO QUE NAO PODE SUMIR"), (c) => `recuperou: ${c}`);
+  await page.waitForSelector(".kn-save-alert", { state: "detached", timeout: 3000 });
+  const draft = await page.evaluate(() => localStorage.getItem("kiwi.notes.draft.v1:Nota fantasma.md"));
+  if (draft) throw new Error(`o rascunho ficou: ${draft}`);
+});
+
+await step("renomeada fora com texto por gravar: o aviso aparece, e Descartar limpa o rascunho", async () => {
+  await page.waitForTimeout(800);
+  await page.click(".cm-content");
+  await page.keyboard.press("Meta+ArrowDown");
+  await page.keyboard.type("\nOUTRO TEXTO");
+  await page.evaluate(() => (window as any).__kiwiNotesMock.rename("Nota fantasma.md", "Nota renomeada.md"));
+  await page.waitForSelector(".kn-save-alert", { timeout: 3000 });
+  if (!(await editorText()).includes("OUTRO TEXTO")) throw new Error("o texto sumiu do editor");
+  if ((await content("Nota renomeada.md"))?.includes("OUTRO TEXTO")) throw new Error("gravou na renomeada sem a pessoa escolher");
+  await page.locator(".kn-save-alert button", { hasText: "Descartar" }).click();
+  await page.waitForSelector(".kn-title", { state: "detached", timeout: 3000 });
+  const draft = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.includes("Nota fantasma")));
+  if (draft.length) throw new Error(`o rascunho ficou: ${draft.join(", ")}`);
+});
+
 await page.keyboard.press("Meta+k");
 await page.keyboard.type("ana");
 await page.waitForTimeout(300);
