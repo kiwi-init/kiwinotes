@@ -16,6 +16,11 @@
 //   KIWI_FAKE_AGENT_LOG      um arquivo JSONL onde ele anota cada `session/new`, `session/resume` e `session/load`
 //                            que recebeu, com os parâmetros (os testes conferem o isolamento por ele)
 //   KIWI_FAKE_AGENT_RESUME   "resume" (o padrão), "load" ou "none": como ele retoma uma sessão
+//   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
+//                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high"
+//
+// As opções da sessão (`model` e `effort`) vêm na resposta de `session/new|resume|load`, e o `session/set_config_option`
+// troca o valor e é anotado no log (T8678).
 
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -26,6 +31,9 @@ import type { AgentContext, InitializeResponse } from "@agentclientprotocol/sdk"
 
 const resumeMode = process.env.KIWI_FAKE_AGENT_RESUME ?? "resume";
 const log = process.env.KIWI_FAKE_AGENT_LOG;
+
+// O pid dele, na pasta onde roda: os testes conferem que o programa fechou de verdade (T8678).
+writeFileSync(path.join(process.cwd(), ".fake-agent.pid"), String(process.pid));
 
 /** As sessões e os turnos ficam num arquivo na pasta de trabalho, para valerem de uma abertura para outra. */
 const stateFile = path.join(process.cwd(), ".fake-agent-sessions.json");
@@ -45,6 +53,29 @@ function note(method: string, params: unknown): void {
 }
 
 const cancelled = new Set<string>();
+
+const MODELS = ["default", "opus", "fable", "sonnet", "haiku"];
+const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
+const config = new Map<string, { model: string; effort: string }>();
+function configOf(sessionId: string) {
+  let c = config.get(sessionId);
+  if (!c) {
+    c = { model: process.env.KIWI_FAKE_AGENT_MODEL ?? "fable", effort: "high" };
+    config.set(sessionId, c);
+  }
+  return c;
+}
+function configOptions(sessionId: string) {
+  const c = configOf(sessionId);
+  const select = (id: string, name: string, currentValue: string, values: string[]) => ({
+    id,
+    name,
+    type: "select" as const,
+    currentValue,
+    options: values.map((value) => ({ value, name: value })),
+  });
+  return [select("model", "Modelo", c.model, MODELS), select("effort", "Esforço", c.effort, EFFORTS)];
+}
 
 async function say(client: AgentContext, sessionId: string, text: string): Promise<void> {
   await client.notify("session/update", { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } });
@@ -71,19 +102,28 @@ const app = agent({ name: "kiwi-fake-agent" })
     note("session/new", params);
     const sessionId = crypto.randomUUID();
     saveSessions({ ...sessions(), [sessionId]: 0 });
-    return { sessionId };
+    return { sessionId, configOptions: configOptions(sessionId) };
   })
   .onRequest("session/resume", ({ params }) => {
     note("session/resume", params);
     if (!(params.sessionId in sessions())) throw RequestError.sessionNotFound(params.sessionId);
-    return {};
+    return { configOptions: configOptions(params.sessionId) };
   })
   .onRequest("session/load", async ({ params, client }) => {
     note("session/load", params);
     if (!(params.sessionId in sessions())) throw RequestError.sessionNotFound(params.sessionId);
     // O `session/load` repete a conversa antiga: o host não pode tomar isso pela resposta do pedido novo.
     await say(client, params.sessionId, "(a conversa antiga, repetida no load)");
-    return {};
+    return { configOptions: configOptions(params.sessionId) };
+  })
+  .onRequest("session/set_config_option", ({ params }) => {
+    note("session/set_config_option", params);
+    const value = (params as { value?: unknown }).value;
+    const c = configOf(params.sessionId);
+    if (params.configId === "model" && typeof value === "string" && MODELS.includes(value)) c.model = value;
+    else if (params.configId === "effort" && typeof value === "string" && EFFORTS.includes(value)) c.effort = value;
+    else throw RequestError.invalidParams(undefined, `não sei ${params.configId}=${String(value)}`);
+    return { configOptions: configOptions(params.sessionId) };
   })
   .onNotification("session/cancel", ({ params }) => {
     cancelled.add(params.sessionId);

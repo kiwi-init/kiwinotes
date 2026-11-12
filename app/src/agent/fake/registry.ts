@@ -13,8 +13,8 @@ import { tarballUrl, type PinnedPackage } from "../adapter/pinned.ts";
 export interface FakePackage {
   name: string;
   version: string;
-  /** Arquivos além do `package.json`, relativos à pasta do pacote. */
-  files?: Record<string, string>;
+  /** Arquivos além do `package.json`, relativos à pasta do pacote (bytes aleatórios não comprimem: o .tgz fica grande). */
+  files?: Record<string, string | Uint8Array>;
   /** O `package.json` que vai dentro (o padrão diz o mesmo nome e versão). */
   manifest?: Record<string, unknown>;
 }
@@ -49,7 +49,12 @@ export interface FakeRegistry {
   stop(): void;
 }
 
-export function fakeRegistry(packages: FakePackage[]): FakeRegistry {
+export interface FakeRegistryOptions {
+  /** Serve cada .tgz em pedaços de `chunk` bytes, com `delayMs` entre eles: o progresso anda aos poucos, e dá tempo de cancelar. */
+  slow?: { chunk: number; delayMs: number };
+}
+
+export function fakeRegistry(packages: FakePackage[], opts: FakeRegistryOptions = {}): FakeRegistry {
   const bodies = new Map<string, Uint8Array | null>();
   const pinned: PinnedPackage[] = [];
   const requests: FakeRegistry["requests"] = [];
@@ -60,7 +65,19 @@ export function fakeRegistry(packages: FakePackage[]): FakeRegistry {
       const u = new URL(req.url);
       requests.push({ path: u.pathname, headers: Object.fromEntries(req.headers.entries()) });
       const body = bodies.get(u.pathname);
-      return body ? new Response(body as unknown as BodyInit) : new Response("not found", { status: 404 });
+      if (!body) return new Response("not found", { status: 404 });
+      const slow = opts.slow;
+      if (!slow) return new Response(body as unknown as BodyInit);
+      let at = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (at >= body.byteLength) return controller.close();
+          await Bun.sleep(slow.delayMs);
+          controller.enqueue(body.slice(at, at + slow.chunk));
+          at += slow.chunk;
+        },
+      });
+      return new Response(stream, { headers: { "content-length": String(body.byteLength) } });
     },
   });
   const url = `http://127.0.0.1:${server.port}`;
@@ -68,7 +85,7 @@ export function fakeRegistry(packages: FakePackage[]): FakeRegistry {
   for (const p of packages) {
     const bytes = packTarball(p);
     bodies.set(pathOf(p.name, p.version), bytes);
-    pinned.push({ name: p.name, version: p.version, integrity: integrityOf(bytes), license: "MIT" });
+    pinned.push({ name: p.name, version: p.version, integrity: integrityOf(bytes), license: "MIT", size: bytes.byteLength });
   }
   return {
     url,

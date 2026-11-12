@@ -21,6 +21,7 @@ import type {
   InitializeResponse,
   NewSessionRequest,
   RequestPermissionResponse,
+  SessionConfigOption,
   SessionNotification,
 } from "@agentclientprotocol/sdk";
 
@@ -87,6 +88,12 @@ export interface AgentHostOptions {
    * nunca é trocada por aqui. A prova do #8368 manda o `persistSession: false`, para não deixar a sessão gravada.
    */
   sessionOptions?: Record<string, unknown>;
+  /**
+   * Os valores que o Kiwi escolhe para as opções da sessão (T8678), por id: `{ model: "default", effort: "default" }`.
+   * Ao abrir, o host aplica cada um pelo `session/set_config_option` do ACP, por cima do que o agente trouxe (na prova
+   * de verdade, o Claude Code abriu com o modelo e o esforço do terminal do harry, #8666).
+   */
+  configOptions?: () => Record<string, string>;
 }
 
 export interface AgentSession {
@@ -117,6 +124,8 @@ export class AgentHost {
   private turn: Turn | null = null;
   /** Durante o `session/load`, o agente repete a conversa antiga em updates: eles não são do pedido de agora. */
   private replaying = false;
+  /** As opções da sessão aberta, como o agente respondeu por último. */
+  private config: SessionConfigOption[] = [];
 
   constructor(o: AgentHostOptions) {
     this.o = o;
@@ -200,6 +209,8 @@ export class AgentHost {
       const init = await this.untilExit(this.conn.agent.request("initialize", hello));
       const { sessionId, resumed, details } = await this.openSession(init);
       this.sessionId = sessionId;
+      this.config = Array.isArray(details.configOptions) ? (details.configOptions as SessionConfigOption[]) : [];
+      if (this.o.configOptions) await this.applyConfig(this.o.configOptions());
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId }) + "\n", { mode: 0o600 });
       return { sessionId, resumed, agent: { name: init.agentInfo?.title ?? init.agentInfo?.name, version: init.agentInfo?.version }, details };
     } catch (e) {
@@ -286,6 +297,54 @@ export class AgentHost {
   }
 
   /** Cancela o pedido em andamento. O `ask` termina com `stopReason: "cancelled"`. Sem pedido, não faz nada. */
+  /** O valor atual de cada opção da sessão aberta (`model`, `effort`, `mode`…), como o agente diz. */
+  get configValues(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const o of this.config) if ("currentValue" in o && typeof o.currentValue === "string") out[o.id] = o.currentValue;
+    return out;
+  }
+
+  /**
+   * Aplica os valores que o Kiwi escolheu, um por vez, só onde o atual é outro. Um valor que o agente não oferece fica
+   * de fora (e volta na lista `refused`), e a sessão segue com o que tinha. Só com a sessão aberta e sem pedido em andamento.
+   */
+  async applyConfig(wanted: Record<string, string>): Promise<{ applied: string[]; refused: string[] }> {
+    const applied: string[] = [];
+    const refused: string[] = [];
+    if (!this.conn || !this.sessionId) return { applied, refused };
+    for (const [configId, value] of Object.entries(wanted)) {
+      const option = this.config.find((o) => o.id === configId);
+      if (!option || !("options" in option)) continue;
+      if (option.currentValue === value) continue;
+      const offered = (option.options as unknown as { value?: string; options?: { value: string }[] }[]).flatMap(
+        (x): { value?: string }[] => (x.options ? x.options : [x]),
+      );
+      if (!offered.some((x) => x.value === value)) {
+        refused.push(configId);
+        continue;
+      }
+      try {
+        const res = await this.untilExit(this.conn.agent.request("session/set_config_option", { sessionId: this.sessionId, configId, value }));
+        if (Array.isArray(res.configOptions)) this.config = res.configOptions;
+        applied.push(configId);
+      } catch (e) {
+        const err = classifyAgentError(e, this.o.name);
+        if (err.code !== "E_AGENT_FAILED") throw err;
+        refused.push(configId);
+      }
+    }
+    return { applied, refused };
+  }
+
+  /** Mata o processo na hora, sem esperar (a saída do app, no `process.on("exit")`): o adaptador fecha limpo com o SIGTERM. */
+  killNow(): void {
+    try {
+      this.proc?.kill("SIGTERM");
+    } catch {
+      /* já saiu */
+    }
+  }
+
   async cancel(): Promise<void> {
     if (!this.turn || !this.conn || !this.sessionId) return;
     await this.conn.agent.notify("session/cancel", { sessionId: this.sessionId });

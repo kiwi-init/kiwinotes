@@ -1,6 +1,6 @@
 # ADR 0012: o host do agente
 
-- Status: aceito (T8478, spec #4576, aprovado pelo harry em #8474). O adaptador do Claude Code entrou no T8540 (spec #8368, aprovado em #8477).
+- Status: aceito (T8478, spec #4576, aprovado pelo harry em #8474). O adaptador do Claude Code entrou no T8540 (spec #8368, aprovado em #8477), e o agente dentro do app no T8678 (spec #8339, aprovado em #8675).
 - Segue o [ADR 0011](0011-agente-e-privacidade.md) (o que vai para o agente) e a escolha do harry pelo adaptador ACP (#8368).
 - Código:
   - [`app/src/agent/host.ts`](../../app/src/agent/host.ts): abre o agente, fala ACP com ele e devolve os eventos;
@@ -8,7 +8,8 @@
   - [`app/src/agent/errors.ts`](../../app/src/agent/errors.ts): os erros, com as mensagens que a pessoa lê;
   - [`app/src/agent/fake/`](../../app/src/agent/fake/): o agente falso, que fala ACP, e o `claude` falso;
   - [`app/src/agent/adapter/`](../../app/src/agent/adapter/): o adaptador do Claude Code. A lista fixa (`pinned.ts`), o download (`download.ts`), a régua de versão (`version.ts`), a abertura (`open.ts`) e a prova (`proof.ts`);
-  - [`app/scripts/cli-agent.ts`](../../app/scripts/cli-agent.ts): `bun run cli agent status`, `ask "…"`, `download`, `remove` e `proof`.
+  - [`app/scripts/cli-agent.ts`](../../app/scripts/cli-agent.ts): `bun run cli agent status`, `ask "…"`, `download`, `remove` e `proof`;
+  - [`app/src/agent/service.ts`](../../app/src/agent/service.ts) e [`app-service.ts`](../../app/src/agent/app-service.ts): o agente dentro do app, que as capacidades `agent.*` chamam (T8678).
 
 ## Contexto
 A mega-ideia precisa que o Kiwi converse com um agente de CLI: o Claude Code, para o harry, e outro agente para outra pessoa. O harry escolheu ligar o Claude Code pelo adaptador ACP (#8368), que o Kiwi baixa na primeira vez. O ACP (Agent Client Protocol) é um protocolo aberto: o cliente (o Kiwi) abre o programa do agente e conversa com ele em JSON-RPC pelo stdin e o stdout. O Gemini e o OpenCode falam ACP sozinhos; o Claude Code fala pelo adaptador.
@@ -104,6 +105,38 @@ O Claude Code não fala ACP sozinho. O harry escolheu o adaptador oficial do ACP
 A sessão da prova abre com `persistSession: false` (vira `--no-session-persistence`, e a prova confere), para não deixar nada gravado em `~/.claude/projects/`. Ela espera a lista de comandos chegar, com um teto de 5 s; se não chegar, o `ok` é `false` e o relatório diz isso, porque uma lista vazia não prova que nada pessoal entrou (T8603).
 
 O resultado entra aqui quando o harry rodar.
+
+## O agente dentro do app (T8678, spec #8339)
+O app passa a ligar o agente, baixar o adaptador, mandar um pedido e desligar, por trás da tela (a seção de Ajustes é o spec #8373).
+
+- **As capacidades** (contrato 1.41.0):
+  - `agent.status`: o estado. Com `{refresh: true}`, confere também o Claude Code instalado;
+  - `agent.enable`: liga. Na primeira vez, só com `{consent: true}`, depois da tela do ADR 0011;
+  - `agent.disable`, `agent.download`, `agent.ask {text}`, `agent.cancel`, `agent.remove` e `agent.configure {model, effort}`.
+- **Os eventos:**
+  - `agent.status` leva o estado inteiro: o progresso do download em bytes, o programa abrindo ou fechando, um pedido começando ou acabando;
+  - `agent.turn` leva a resposta ao vivo de um pedido, com o id dele: `started`, `status` (`opening`, `thinking`, `running` com a ferramenta), `text`, `permission`, `done` (com o texto inteiro) ou `error` (com o código).
+- **Pedir e baixar voltam logo.** A chamada do AppEngine tem teto de 10 s (`maxRequestTime`), e uma resposta do agente leva mais. O `agent.ask` devolve o id, e o resto chega pelos eventos.
+- **O que o app lembra:** o `agent` nas settings (global), com `enabled`, `consented`, `model` e `effort`. Ele só muda pelas capacidades `agent.*`: o `settings.set` recusa a chave. A sessão do agente (`session.json`) e o adaptador baixado já ficavam no disco.
+- **O ciclo do programa:**
+  - ele abre no primeiro pedido e fica aberto;
+  - fecha ao desligar, ao remover o adaptador, depois de 10 minutos sem uso (`AGENT_IDLE_MS`) e quando o app sai: o `close()` no `quit()` espera o processo sair, e o `killNow()` no `process.on("exit")` manda o SIGTERM, que o adaptador trata limpo;
+  - desligar ou sair no meio de um pedido termina ele como cancelado.
+- **O modelo e o esforço são do Kiwi.** Na prova de verdade (#8666), a sessão abriu com os do terminal do harry (`fable`, `high`), lidos pelo adaptador do `~/.claude/settings.json`. Agora:
+  - o host aplica os valores dos ajustes do app pelo `session/set_config_option` do ACP, logo depois de abrir, e antes de um pedido se eles mudaram;
+  - o padrão é `default` nos dois, o padrão do Claude Code;
+  - um valor que o agente não oferece fica de fora, e a sessão segue com o que tinha (`applyConfig` devolve o `refused`);
+  - o `agent.status` mostra o que o Kiwi pede (`model`, `effort`) e o que a sessão aberta tem (`session`).
+- **Desligado, nada abre nem vai à rede.** `agent.ask` e `agent.download` dão `E_AGENT_DISABLED`. O `agent.status` sem `refresh` não abre programa nenhum. O `refresh` (a seção abriu, o "Tentar de novo") roda só o `claude --version` e o `claude auth status`, como o `claudeStatus` do host.
+- **Os códigos novos:**
+  - `E_AGENT_CONSENT`: ligar sem o aceite;
+  - `E_AGENT_DISABLED`;
+  - `E_ADAPTER_CANCELLED`: o download cancelado apaga a `.part`;
+  - `E_NO_AGENT`: um build sem o serviço.
+- **Para os testes, só no headless** (`KIWI_HEADLESS=1`), e o app de verdade não lê nenhuma delas:
+  - `KIWI_FAKE_AGENT=1`: o agente falso e o `claude` falso;
+  - `KIWI_ADAPTER_REGISTRY` e `KIWI_ADAPTER_PACKAGES`: um registro do npm falso e a lista de teste;
+  - `KIWI_AGENT_IDLE_MS`.
 
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:

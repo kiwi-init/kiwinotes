@@ -22,7 +22,7 @@ import {
 } from "electrobun/bun/appengine";
 
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION, type AppSettings } from "../shared/ui-contract.ts";
-import type { SettingsPatch } from "../store/settings.ts";
+import { DEFAULT_AGENT_SETTINGS, type SettingsPatch } from "../store/settings.ts";
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrl, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
@@ -83,7 +83,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760 };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS };
   let t = 0;
   return {
     calls,
