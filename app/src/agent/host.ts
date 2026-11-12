@@ -34,6 +34,10 @@ import { AgentError, classifyAgentError } from "./errors.ts";
  * - `strictMcpConfig` usa só os servidores MCP que o Kiwi mandar (nenhum, neste spec);
  * - `tools: []` desliga as ferramentas embutidas (o shell, a edição de arquivos e a web).
  * Um agente que não é o Claude Code ignora o `_meta`. A prova de ponta a ponta é do spec #8368, no Mac do harry.
+ *
+ * O que o `_meta` não segura (revisão do T8478): o próprio adaptador lê o `~/.claude/settings.json` da pessoa, com o
+ * `resolveSettings` do SDK, para o modo de permissão padrão, o bloqueio do bypass, a escolha de modelo e o
+ * `apiKeyHelper`. Os hooks e os servidores MCP não voltam por aí: a sessão recebe só o `settings` que o Kiwi mandar.
  */
 export const ISOLATION_META = {
   claudeCode: {
@@ -89,6 +93,8 @@ export class AgentHost {
   private proc: ReturnType<typeof Bun.spawn> | null = null;
   private conn: ClientConnection | null = null;
   private exited: Promise<AgentError> | null = null;
+  /** Por que o agente fechou sozinho, para o `ask` seguinte dizer isso em vez de "não está aberto". */
+  private lastExit: AgentError | null = null;
   private stderr = "";
   private sessionId: string | null = null;
   private turn: Turn | null = null;
@@ -132,10 +138,13 @@ export class AgentHost {
       throw classifyAgentError(e, this.o.name);
     }
     this.proc = proc;
+    this.lastExit = null;
     this.collectStderr(proc.stderr as ReadableStream<Uint8Array>);
-    this.exited = proc.exited.then(
-      (code) => new AgentError("E_AGENT_FAILED", this.o.name, `o agente fechou (saída ${code}): ${this.stderr.slice(-500)}`),
-    );
+    this.exited = proc.exited.then((code) => {
+      const err = new AgentError("E_AGENT_FAILED", this.o.name, `o agente fechou (saída ${code}): ${this.stderr.slice(-500)}`);
+      this.dropProcess(proc, err);
+      return err;
+    });
 
     const stdin = proc.stdin as import("bun").FileSink;
     const output = new WritableStream<Uint8Array>({
@@ -227,18 +236,26 @@ export class AgentHost {
 
   /** Manda um pedido e espera a resposta inteira. Os eventos chegam em `onEvent`, na ordem. Um pedido por vez. */
   async ask(text: string, onEvent?: (e: AgentEvent) => void): Promise<AgentAnswer> {
-    if (!this.conn || !this.sessionId) throw new Error("o agente não está aberto: chame start() antes");
+    if (!this.conn || !this.sessionId) {
+      if (this.lastExit) throw this.lastExit;
+      throw new Error("o agente não está aberto: chame start() antes");
+    }
     if (this.turn) throw new AgentError("E_AGENT_BUSY", this.o.name);
     const turn: Turn = { text: "", onEvent };
+    const { conn, proc } = this;
     this.turn = turn;
     this.status(turn, { type: "status", status: "thinking" });
     try {
-      const res = await this.untilExit(
-        this.conn.agent.request("session/prompt", { sessionId: this.sessionId, prompt: [{ type: "text", text }] }),
-      );
+      const res = await this.untilExit(conn.agent.request("session/prompt", { sessionId: this.sessionId, prompt: [{ type: "text", text }] }));
       onEvent?.({ type: "done", stopReason: res.stopReason });
       return { text: turn.text, stopReason: res.stopReason };
     } catch (e) {
+      // A conexão fechou no meio (o agente caiu): a biblioteca recusa o pedido antes de o processo terminar de sair.
+      if (conn.signal.aborted && proc) {
+        const err = e instanceof AgentError ? e : new AgentError("E_AGENT_FAILED", this.o.name, `a conexão fechou: ${this.stderr.slice(-500)}`);
+        this.dropProcess(proc, err);
+        throw err;
+      }
       throw classifyAgentError(e, this.o.name);
     } finally {
       this.turn = null;
@@ -251,7 +268,10 @@ export class AgentHost {
     await this.conn.agent.notify("session/cancel", { sessionId: this.sessionId });
   }
 
-  /** Fecha o agente: fecha a conexão e espera ele sair; se não sair, mata. */
+  /**
+   * Fecha o agente: fecha a conexão e o stdin, manda o SIGTERM (o adaptador do Claude Code fecha limpo com ele) e
+   * espera até 2 s; se o processo não sair, manda o SIGKILL.
+   */
   async stop(): Promise<void> {
     const proc = this.proc;
     this.conn?.close();
@@ -270,6 +290,20 @@ export class AgentHost {
       proc.kill("SIGKILL");
       await proc.exited;
     }
+  }
+
+  /**
+   * O agente fechou sozinho (caiu), e não pelo `stop()`: o host volta a "fechado", e um `start()` abre de novo
+   * (revisão do T8478). O `stop()` zera o `proc` antes de matar, então ele não passa por aqui.
+   */
+  private dropProcess(proc: ReturnType<typeof Bun.spawn>, err: AgentError): void {
+    if (this.proc !== proc) return;
+    this.lastExit = err;
+    this.conn?.close();
+    this.conn = null;
+    this.proc = null;
+    this.sessionId = null;
+    proc.kill("SIGKILL"); // a conexão fechou, mas o processo pode estar preso: não fica nada para trás
   }
 
   /** A promessa, ou o erro de o agente ter fechado no meio. */

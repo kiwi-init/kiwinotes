@@ -252,6 +252,17 @@ describe("os erros", () => {
     expect(h.busy).toBe(false);
   });
 
+  test("depois de cair, o host volta a fechado: o pedido seguinte diz que falhou, e um start() abre de novo e retoma", async () => {
+    const { h } = fakeHost(tmp());
+    const first = await h.start();
+    await rejection(h.ask("/cai"));
+    expect(h.running).toBe(false);
+    expect((await rejection(h.ask("oi"))).code).toBe("E_AGENT_FAILED");
+    const again = await h.start();
+    expect(again).toMatchObject({ sessionId: first.sessionId, resumed: true });
+    expect((await h.ask("voltei")).text).toContain("turno 2");
+  });
+
   test("um agente que sai antes da apresentação chega como E_AGENT_FAILED, e o processo é fechado", async () => {
     const { h } = fakeHost(tmp(), { command: [process.execPath, "-e", "process.exit(7)"] });
     const err = await rejection(h.start());

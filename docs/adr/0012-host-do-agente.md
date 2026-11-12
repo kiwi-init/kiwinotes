@@ -40,6 +40,14 @@ Este ADR descreve a peça do Kiwi que faz isso, ainda sem tela e sem rede. O dow
     - `tools: []`: nenhuma ferramenta embutida (o shell, a edição de arquivos e a web). Neste spec o agente só conversa.
 
   Um agente que não é o Claude Code ignora esse `_meta`.
+
+  **O que o `_meta` não segura** (revisão do T8478): o próprio adaptador lê o `~/.claude/settings.json` da pessoa, pelo `resolveSettings` do SDK, mesmo com `settingSources: []`. Ele usa esse arquivo para:
+  - o modo de permissão padrão (`permissions.defaultMode`);
+  - o bloqueio do bypass;
+  - a escolha de modelo;
+  - o `apiKeyHelper`.
+
+  Os hooks e os servidores MCP não voltam por esse caminho: a sessão recebe só o `settings` que o Kiwi mandar. Com `tools: []`, o modo de permissão não abre nada.
 - **Nenhuma permissão é dada.** Sem tela, todo `session/request_permission` é respondido com a opção de recusar (ou com `cancelled`), e o evento `permission` conta qual ferramenta foi recusada. O Kiwi também diz ao agente que não lê nem escreve arquivos por ele, e que não abre terminal (`clientCapabilities`).
 - **Os erros viram seis casos,** com mensagens em português:
   - os quatro do spec: `E_AGENT_NOT_INSTALLED`, `E_AGENT_NOT_LOGGED_IN`, `E_AGENT_LIMIT` e `E_AGENT_OFFLINE`;
@@ -68,7 +76,10 @@ Fica para o spec #8368, na prova que o harry roda no Mac dele:
 - **o isolamento de ponta a ponta:**
   - que o `settingSources: []` deixa de fora os hooks, as regras, o CLAUDE.md e os servidores MCP da pessoa;
   - que o `tools: []` desliga todas as ferramentas embutidas;
-  - e se a memória automática e os plugins também ficam de fora. A prova imprime as ferramentas e os servidores MCP da sessão;
+  - se a memória automática e os plugins também ficam de fora;
+  - e o que o adaptador ainda tira do `~/.claude/settings.json` (o modo de permissão, o modelo e o `apiKeyHelper`), e se algo disso pede um `settings` próprio do Kiwi no `_meta`.
+
+  A prova imprime as ferramentas e os servidores MCP da sessão;
 - **a retomada** (`session/resume`) com o adaptador, entre uma abertura e outra.
 
 ## Consequências
