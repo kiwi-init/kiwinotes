@@ -2,8 +2,8 @@ REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
 Fonte: gerada/manifest.json e as seis camadas originais.
 {
   "label": "02 · zZ sobe",
-  "left": 18,
-  "right": -18,
+  "left": 12,
+  "right": -12,
   "gaze": 0,
   "eye": 1,
   "other": null,

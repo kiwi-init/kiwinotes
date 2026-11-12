@@ -1,0 +1,50 @@
+[
+  {
+    "state": "repouso",
+    "fps": 30,
+    "frames": 180,
+    "seconds": 6.0,
+    "size": [
+      620,
+      856
+    ],
+    "cat_reference_height": 481.34765625,
+    "webp_bytes": 318404,
+    "webp_quality": 82,
+    "mp4_bytes": 93202,
+    "mist": "static",
+    "annotation": "prévia de movimento, não é a animação final"
+  },
+  {
+    "state": "acordou",
+    "fps": 30,
+    "frames": 72,
+    "seconds": 2.4,
+    "size": [
+      620,
+      856
+    ],
+    "cat_reference_height": 481.34765625,
+    "webp_bytes": 205872,
+    "webp_quality": 82,
+    "mp4_bytes": 79563,
+    "mist": "static",
+    "annotation": "prévia de movimento, não é a animação final"
+  },
+  {
+    "state": "erro",
+    "fps": 30,
+    "frames": 90,
+    "seconds": 3.0,
+    "size": [
+      620,
+      856
+    ],
+    "cat_reference_height": 481.34765625,
+    "webp_bytes": 378730,
+    "webp_quality": 82,
+    "mp4_bytes": 113469,
+    "mist": "static",
+    "annotation": "prévia de movimento, não é a animação final"
+  }
+]

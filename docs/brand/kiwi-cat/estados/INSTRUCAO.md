@@ -109,3 +109,19 @@ O harry viu a rodada 1 e gostou do visual. O problema dele: `repouso`, `acordou`
 **Na prancha:** cada imagem de estado mostra os olhos e o símbolo nas 2 ou 3 poses.
 
 **Um ponto em aberto, só para anotar no README:** como o gato e os símbolos ficam no tema claro do app. O ícone é feito para fundo escuro.
+
+
+## 10. Revisão #7832: orelha quase rígida e prévias de movimento
+
+O triângulo da orelha mantém largura, comprimento e ponta; só a base junto
+à cabeça flexiona. O topo da cabeça entre as orelhas não muda. Se amplitudes
+maiores que 20–25° não forem naturais, use o limite real e registre no README.
+Esta versão adota ±15°; o erro usa as duas para fora sem achatar.
+
+Entregar três prévias pelo próprio montar.py, sem código do app: repouso
+(~6 s: piscada lenta, tique unilateral e olhar); acordou (opa, orelhas em pé,
+! saltando e assentando); erro (rabisco em loop e orelhas abrindo). A 30 fps,
+com o gato a ~480 px, cada uma em WebP animado até ~1,5 MB e cópia GIF ou MP4
+para anexar no canal. Névoa pode ficar parada, pois o shader é da entrega 3.
+Marcar em todos os quadros: “prévia de movimento, não é a animação final”.
+O resto permanece como aprovado.

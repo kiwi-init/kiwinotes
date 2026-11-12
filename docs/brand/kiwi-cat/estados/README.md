@@ -8,7 +8,7 @@ Issue [#309](https://github.com/kiwi-init/kiwinotes/issues/309), PR [#311](https
 
 ![Resumo](prancha-estados.webp)
 
-Revisão #7713: aro acompanha a luz, símbolos de quadrinho em formas cheias
+Revisões #7713 e #7832: aro acompanha a luz, símbolos de quadrinho em formas cheias
 e cor livre por agente. A decisão posterior #7718/#7724 escolheu o rabisco (B), removeu a opção A
 e pediu orelhas com movimento amplo.
 
@@ -90,11 +90,16 @@ somente documental, sem implementar a tela de Ajustes.
 ## Orelhas preparadas e prova de amplitude
 
 A [prova de orelhas](prova-orelhas.webp) mostra a esquerda e a direita,
-independentemente, em −30°, −15°, 0°, +15° e +30°. A outra orelha fica parada.
-Os ângulos são controles da ponta ao redor dos pivôs do manifest, com
-flexão suave de cartilagem: o peso da rotação cai para zero na base e na
-borda interna. Não é uma placa rígida que se afasta da cabeça. A raiz
-permanece presa; só a orelha recebe essa deformação.
+independentemente, em −15°, −7,5°, 0°, +7,5° e +15°. A outra orelha fica parada.
+**Limite desta versão: ±15°.** A tentativa de ±30° da rodada anterior
+achatava o triângulo; a conferência a 20° ainda expunha o encaixe da base.
+Foi mantida a faixa de ±15°, que preserva a forma. A orelha gira como uma
+peça quase rígida em torno
+do pivô; somente a faixa da base (80 px acima a 60 px abaixo do pivô, na
+fonte) flexiona. A largura, o comprimento e a ponta do triângulo ficam fora
+dessa faixa. Não há mais a deformação distribuída na borda interna ou por
+quase toda a orelha. A cabeça entre as orelhas permanece fixa.
+`erro` abre para os lados até 15°; nenhuma pose ou prévia usa ±30°.
 A folha é reduzida globalmente para 7040 px de largura; a altura do gato por
 célula continua acima de 1024 px.
 
@@ -119,16 +124,40 @@ A preparação não redesenha os pixels visíveis do gato: a comparação neutra
 olhos), antes de reduzir/comprimir. A invariância é da composição visível,
 não dos canais RGBA da separação antiga, que foram reorganizados. Fora da
 região de preparação o fundo é preservado exatamente; cabeça e corpo não
-recebem transformação. A prova de ±30° precisa também de julgamento visual,
+recebem transformação. A prova de ±15° precisa também de julgamento visual,
 não é validada só pela comparação neutra. `verificacao.json` registra o método,
 a região alterada e as métricas; `preparadas/manifest.json` guarda o contrato.
 
 O repouso demonstra um tique unilateral, o sono relaxa as duas orelhas, o
-acordar as ergue, a escuta vira para o som e o erro abre até 30° em avião.
+acordar as ergue, a escuta vira para o som e o erro abre até 15° em avião.
 Na futura animação, os tiques são independentes, as piscadas são lentas e às
-vezes duplas, com intervalos variáveis. O rabisco de erro será desenhado em
-loop próximo de 1 s, com a ponta avançando e tremida leve. Esta entrega mostra
-três instantes de referência; não contém o relógio ou o loop do app.
+vezes duplas, com intervalos variáveis. As três prévias abaixo demonstram
+movimento; continuam sendo documentos, sem código do app.
+
+## Prévias de movimento — não são a animação final
+
+| Estado | Duração | WebP animado | Cópia para anexar |
+| --- | --- | --- | --- |
+| repouso | 6 s | [WebP](previas/repouso.webp) | [MP4](previas/repouso.mp4) |
+| acordou | 2,4 s | [WebP](previas/acordou.webp) | [MP4](previas/acordou.mp4) |
+| erro | 3 s | [WebP](previas/erro.webp) | [MP4](previas/erro.mp4) |
+
+Todas usam **30 fps**, quadro 620 × 856 e altura de referência do gato de
+aproximadamente 481 px. Cada WebP animado tem até 1,5 MB. O rodapé de todos os
+quadros diz “prévia de movimento, não é a animação final” e mostra o número
+do quadro. O contador também preserva quadros repetidos na cadência de 30 fps.
+
+`repouso` mostra uma piscada lenta, só a orelha direita dando um tique e o
+olhar para o lado; `acordou` mostra olhos e orelhas erguendo, `!` saltando e
+sumindo ao assentar; `erro` mostra as orelhas abrindo e o rabisco sendo traçado,
+embolando e recomeçando em cerca de 1 s, com leve tremida. A **névoa fica
+parada** nos três clipes: o shader e o movimento dela são da entrega 3.
+
+Os `.json` de `previas/` registram os parâmetros por quadro e o manifest
+registra duração, resolução, fps e pesos dos arquivos. A cópia MP4 usa H.264,
+sem áudio. A inspeção headless usa quadros de contato e os metadados; o
+julgamento do movimento é do harry. Tema claro e animação final continuam
+fora desta entrega.
 
 **Tema claro permanece em aberto:** o ícone e os símbolos brancos foram
 preparados para fundo escuro. A solução para o tema claro precisa de decisão
@@ -147,6 +176,10 @@ python3 -m venv /tmp/kiwi-cat-estados
 /tmp/kiwi-cat-estados/bin/python docs/brand/kiwi-cat/estados/montar.py
 ```
 
+A geração das prévias também usa `ffmpeg`/`ffprobe` locais. `--stills-only`
+refaz só as folhas; `--previews-only` refaz só os clipes. A exportação usa
+dois threads no encoder e não abre app ou janela.
+
 Também foram conferidos pixels sintéticos: uma névoa cinza de 120/255
 reduzida para 66/255 e um aro ciano reduzido exatamente à metade; o matte
 (11,11,14) permanece igual e o caso quase preto continua luminoso.
@@ -158,7 +191,9 @@ estão em `verificacao.json`. A tolerância cobre só essa pose, não as orelhas
 giradas, as variações de luz ou o WebP com perdas. As poses alteradas e a
 compressão precisam também de inspeção visual.
 
-Os oito estados, a prova de orelhas, a imagem de cores, o resumo e a tira de tamanho real são WebP de até 500 KB cada.
+Os oito estados, a prova de orelhas, a imagem de cores, o resumo e a tira de
+tamanho real são WebP estáticos de até 500 KB cada. As três prévias animadas
+têm limite separado de 1,5 MB por WebP.
 O script prepara só documentos: nada do app, shader, overlay, microfone ou
 interface do macOS é executado. O ok do harry continua necessário antes da
 entrega seguinte.

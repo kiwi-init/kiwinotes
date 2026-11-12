@@ -35,6 +35,6 @@
     ]
   },
   "source": "../../gerada/manifest.json",
-  "deformation": "tip rotation about manifest pivot; smooth skinning pins root and inner edge",
+  "deformation": "near-rigid rotation about manifest pivot, flex only in root strip py-80..py+60",
   "scope": "documentary reference rig; original source assets unchanged"
 }

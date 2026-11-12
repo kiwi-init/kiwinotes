@@ -7,6 +7,8 @@ import hashlib
 import io
 import math
 import json
+import subprocess
+import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageColor
 
@@ -39,13 +41,12 @@ for j,p in enumerate(STATES['ouvindo']):p.update(symbol='sound',phase=j)
 for j,p in enumerate(STATES['thinking']):p.update(eye=.58,up=-24,symbol='thought',phase=j)
 for j,p in enumerate(STATES['agindo']):p.update(symbol='work',phase=j)
 for j,p in enumerate(STATES['pronto']):p.update(symbol='spark',blink=True,phase=j)
-STATES['erro']=[pose('A · dúvida / ? e gota',left=4,right=-3,big=.72,small=.62,symbol='question',fog=.68),pose('B · confusão / rabisco',left=7,right=-5,big=.67,small=.68,symbol='confusion',fog=.52),pose('A · recolher e aguardar',left=6,right=-4,big=.62,small=.62,symbol='question',fog=.30,phase=1)]
-STATES['erro']=[pose('01 · rabisco começa / 0,00 s',left=12,right=-12,big=.72,small=.62,symbol='confusion',fog=.68,phase=0),pose('02 · embolando / 0,45 s',left=22,right=-22,big=.67,small=.68,symbol='confusion',fog=.58,phase=1),pose('03 · embolado / 0,90 s',left=30,right=-30,big=.62,small=.62,symbol='confusion',fog=.50,phase=2)]
-STATES['repouso'][1].update(right=-18)
-for p in STATES['dormindo']:p.update(left=18,right=-18)
-STATES['acordou'][1].update(left=-18,right=18)
+STATES['erro']=[pose('01 · rabisco começa / 0,00 s',left=12,right=-12,big=.72,small=.62,symbol='confusion',fog=.68,phase=0),pose('02 · embolando / 0,45 s',left=14,right=-14,big=.67,small=.68,symbol='confusion',fog=.58,phase=1),pose('03 · embolado / 0,90 s',left=15,right=-15,big=.62,small=.62,symbol='confusion',fog=.50,phase=2)]
+STATES['repouso'][1].update(right=-12)
+for p in STATES['dormindo']:p.update(left=12,right=-12)
+STATES['acordou'][1].update(left=-15,right=15)
 STATES['ouvindo'][0].update(left=-12,right=12)
-STATES['ouvindo'][1].update(left=-20,right=20)
+STATES['ouvindo'][1].update(left=-15,right=15)
 STATES={k:STATES[k] for k in ['repouso','dormindo','acordou','ouvindo','thinking','agindo','pronto','erro']}
 
 FOG = {
@@ -142,14 +143,13 @@ def fill_hidden_eyes(image, scale):
 
 
 def bend_ear(layer,angle,pivot,scale):
-    """Tip rotates around the manifest pivot; cartilage flexes into a fixed root."""
+    """Almost rigid triangle; only 140 source pixels around the root flex."""
     px,py=pivot;theta=math.radians(angle);step=32
     def source(x,y):
         sx,sy=x,y
         for _ in range(7):
-            t=float(np.clip((py-sy)/(300*scale),0,1))
-            side=(px+120*scale-sx)/(240*scale) if px<1024*scale else (sx-px+120*scale)/(240*scale)
-            u=float(np.clip(side,0,1));weight=t*t*(3-2*t)*u*u*(3-2*u)
+            t=float(np.clip((py+60*scale-sy)/(140*scale),0,1))
+            weight=t*t*(3-2*t)
             a=theta*weight;dx=x-px;dy=y-py
             sx=px+dx*math.cos(a)-dy*math.sin(a);sy=py+dx*math.sin(a)+dy*math.cos(a)
         return sx,sy
@@ -223,6 +223,8 @@ def symbol_layer(size,scale,p):
     im=Image.new('RGBA',(size[0]*2,size[1]*2));d=ImageDraw.Draw(im)
     k=scale*2;kind=p['symbol'];phase=p['phase'];white='#ffffff'
     def point(x,y):
+        zoom=p.get('symbol_scale',1)
+        x=1710+(x-1710)*zoom;y=700+(y-700)*zoom+p.get('symbol_offset_y',0)
         if kind in ['alert','question','sleep']:
             cx,cy=1710,700;theta=math.radians(12)
             x,y=cx+(x-cx)*math.cos(theta)-(y-cy)*math.sin(theta),cy+(x-cx)*math.sin(theta)+(y-cy)*math.cos(theta)
@@ -285,8 +287,13 @@ def symbol_layer(size,scale,p):
     elif kind=='spark':
         for x,y,r in [(350,1050,64),(1710,780,76),(1790,1210,49)]:star(x,y,r+(7 if phase else 0))
     elif kind=='confusion':
-        t=np.linspace(0,[1.4,4.3,7][phase]*math.pi,[70,155,240][phase]);ps=[(1740+110*math.cos(v)+3*math.sin(v*7+phase),650+60*math.sin(v)+28*math.sin(v*1.65)+3*math.cos(v*9+phase)) for v in t]
+        progress=p.get('scribble_progress')
+        end=[1.4,4.3,7][phase] if progress is None else .15+6.85*progress
+        count=[70,155,240][phase] if progress is None else max(8,round(240*progress))
+        jitter=p.get('scribble_jitter',phase)
+        t=np.linspace(0,end*math.pi,count);ps=[(1740+110*math.cos(v)+3*math.sin(v*7+jitter),650+60*math.sin(v)+28*math.sin(v*1.65)+3*math.cos(v*9+jitter)) for v in t]
         ribbon(ps,21+13*(1+np.sin(t*1.3))/2)
+    if p.get('symbol_opacity',1)!=1:im.putalpha(im.getchannel('A').point(lambda a:round(a*p['symbol_opacity'])))
     return im.resize(size,Image.Resampling.LANCZOS)
 
 
@@ -360,12 +367,94 @@ def prepare_ears(native):
         if old.name not in expected:old.unlink()
     result['__base'].save(folder/'fundo-sem-orelhas.png');result['__head'].save(folder/'cabeca-fixa.png')
     for n in ['orelha-esquerda','orelha-direita']:result[n].save(folder/(n+'.png'))
-    (folder/'manifest.json').write_text(json.dumps(dict(size=[2048,2560],blend='source-over',alpha='straight',order=['fundo-sem-orelhas.png','orelha-esquerda.png','orelha-direita.png','cabeca-fixa.png','eyes-by-code'],pivots=META['pivots'],source='../../gerada/manifest.json',deformation='tip rotation about manifest pivot; smooth skinning pins root and inner edge',scope='documentary reference rig; original source assets unchanged'),ensure_ascii=False,indent=2)+'\n')
-    return result,dict(originals_untouched=True,ear_angles=[-30,-15,0,15,30],
+    (folder/'manifest.json').write_text(json.dumps(dict(size=[2048,2560],blend='source-over',alpha='straight',order=['fundo-sem-orelhas.png','orelha-esquerda.png','orelha-direita.png','cabeca-fixa.png','eyes-by-code'],pivots=META['pivots'],source='../../gerada/manifest.json',deformation='near-rigid rotation about manifest pivot, flex only in root strip py-80..py+60',scope='documentary reference rig; original source assets unchanged'),ensure_ascii=False,indent=2)+'\n')
+    return result,dict(originals_untouched=True,ear_angles=[-15,-7.5,0,7.5,15],
         method='ear-region source-over rematting of the original composite; original head and frontal arc mask hidden attachments',
         changed_base_pixels=int(np.any(np.abs(base-target)>0,axis=2).sum()),
         outside_ear_roi_unchanged=bool(np.array_equal(base[roi==0],target[roi==0])),
-        fog_fill='harmonic 128x160 / 1200 iterations; hidden root alpha 900 iterations float32, matte RGB',root_skinning='tip control angles; fixed base and inner edge, 32px mesh and 7 inverse iterations')
+        fog_fill='harmonic 128x160 / 1200 iterations; hidden root alpha 900 iterations float32, matte RGB',root_skinning='tip control angles; near-rigid triangle, flex only py-80..py+60 source pixels, 32px mesh, 7 inverse iterations')
+
+
+def smooth(a,b,t):
+    z=float(np.clip((t-a)/(b-a),0,1));return z*z*(3-2*z)
+
+
+def preview_pose(state,t):
+    # Mist is intentionally frozen; delivery 3 owns its motion.
+    p=pose('prévia',fog=1)
+    if state=='repouso':
+        closing=smooth(1.15,1.48,t);opening=smooth(1.56,2.02,t)
+        p['eye']=max(.005,1-closing+opening)
+        p['right']=-12*(smooth(2.45,2.64,t)-smooth(2.70,3.04,t))
+        p['gaze']=24*(smooth(3.75,4.14,t)-smooth(4.86,5.32,t))
+    elif state=='acordou':
+        rise=smooth(.20,.53,t);settle=smooth(.72,1.45,t)
+        p.update(left=-15*rise*(1-settle),right=15*rise*(1-settle),
+                 eye=.65+.35*smooth(.12,.35,t),big=1+.24*rise*(1-settle))
+        if .30<=t<1.20:
+            p['symbol']='alert'
+            pop=smooth(.30,.46,t);leave=smooth(.97,1.20,t)
+            p['symbol_scale']=(.35+.65*pop)*(1-.35*leave)
+            p['symbol_offset_y']=70*(1-pop)-28*math.sin(math.pi*pop)*(1-leave)
+            p['symbol_opacity']=1-leave
+    elif state=='erro':
+        opening=smooth(.12,.82,t);cycle=t%1.0
+        p.update(left=15*opening,right=-15*opening,big=.72,small=.62,
+                 symbol='confusion',phase=0,scribble_progress=min(cycle/.9,1),
+                 scribble_jitter=t*22,symbol_opacity=1-smooth(.92,1,cycle))
+    else:raise ValueError(state)
+    return p
+
+
+def render_previews(native):
+    fps=30;scale=620/2048;size=(620,775);canvas=(620,856)
+    assets={name:image.resize(size,Image.Resampling.LANCZOS) for name,image in native.items()}
+    folder=HERE/'previas';folder.mkdir(exist_ok=True);reports=[]
+    for state,seconds in [('repouso',6.0),('acordou',2.4),('erro',3.0)]:
+        count=round(seconds*fps);frames=[];poses=[]
+        for i in range(count):
+            t=i/fps;p=preview_pose(state,t);poses.append(p)
+            frame=Image.new('RGB',canvas,'black')
+            frame.paste(compose(assets,p,scale=scale),(0,0));draw=ImageDraw.Draw(frame)
+            draw.text((18,789),'PRÉVIA DE MOVIMENTO · NÃO É A ANIMAÇÃO FINAL',font=font(16),fill='white')
+            draw.text((18,818),f'{state} · 30 fps · quadro {i+1:03d}/{count} · {t:0.3f} s',font=font(15),fill='#b6b1c7')
+            frames.append(frame)
+        durations=[round((i+1)*1000/fps)-round(i*1000/fps) for i in range(count)]
+        path=folder/(state+'.webp');quality=82
+        for quality in [82,74,66,58,50,42]:
+            frames[0].save(path,format='WEBP',save_all=True,append_images=frames[1:],duration=durations,
+                           loop=0,quality=quality,method=6,kmin=9,kmax=17)
+            if path.stat().st_size<=1_500_000:break
+        assert path.stat().st_size<=1_500_000,(path,path.stat().st_size)
+        # Frame-index caption makes even still frames unique, retaining the 30fps cadence.
+        check=Image.open(path);assert check.n_frames==count,(state,check.n_frames,count)
+        mp4=folder/(state+'.mp4')
+        process=subprocess.Popen(['ffmpeg','-hide_banner','-loglevel','error','-y','-f','rawvideo',
+            '-pixel_format','rgb24','-video_size','620x856','-framerate','30','-i','pipe:0','-an',
+            '-c:v','libx264','-preset','medium','-crf','18','-pix_fmt','yuv420p','-threads','2',
+            '-movflags','+faststart',str(mp4)],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
+        try:
+            for frame in frames:process.stdin.write(frame.tobytes())
+            process.stdin.close();error=process.stderr.read();code=process.wait()
+        except BaseException:
+            process.kill();process.wait();raise
+        if code:raise RuntimeError(error.decode())
+        probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-select_streams','v:0',
+            '-show_entries','stream=width,height,r_frame_rate,nb_frames,duration','-of','json',str(mp4)]))['streams'][0]
+        assert probe['r_frame_rate']=='30/1' and int(probe['nb_frames'])==count,probe
+        assert (int(probe['width']),int(probe['height']))==canvas
+        reports.append(dict(state=state,fps=fps,frames=count,seconds=seconds,size=list(canvas),
+            cat_reference_height=1590*scale,webp_bytes=path.stat().st_size,webp_quality=quality,
+            mp4_bytes=mp4.stat().st_size,mist='static',annotation='prévia de movimento, não é a animação final'))
+        (folder/(state+'.json')).write_text(json.dumps(dict(metadata=reports[-1],poses=poses),ensure_ascii=False,indent=2)+'\n')
+        # Contact sheets for headless inspection; keep them outside deliverables.
+        indices=[0,count//6,count//3,count//2,2*count//3,count-1]
+        sheet=Image.new('RGB',(620*3,856*2),'black')
+        for j,i in enumerate(indices):sheet.paste(frames[i],((j%3)*620,(j//3)*856))
+        sheet.save('/tmp/kiwi-T7606-'+state+'-movimento.png')
+        print(json.dumps(reports[-1],ensure_ascii=False),flush=True)
+    (folder/'manifest.json').write_text(json.dumps(reports,ensure_ascii=False,indent=2)+'\n')
+    return reports
 
 
 def main():
@@ -373,6 +462,8 @@ def main():
     native,preparation=prepare_ears(native)
     report=baseline_check(native)
     report['ear_preparation']=preparation
+    if '--previews-only' in sys.argv:
+        render_previews(native);return
     assets={n:i.resize((W,H),Image.Resampling.LANCZOS) for n,i in native.items()}
     out=HERE/'quadros';out.mkdir(exist_ok=True)
     # Remove apenas saídas geradas da rodada anterior, que constam do git.
@@ -404,11 +495,11 @@ def main():
         summaries.append((state,thumb))
     # Each ear moves alone through the full requested range; the other stays still.
     proof=Image.new('RGB',(W*5,(H+FOOT)*2+150),'black');pd=ImageDraw.Draw(proof)
-    pd.text((44,28),'ORELHAS · controle de ponta -30 a +30 graus · base flexível · independentes',font=font(42),fill='white')
+    pd.text((44,28),'ORELHAS · limite -15 a +15 graus · triângulo quase rígido · independentes',font=font(42),fill='white')
     for row,name in enumerate(['esquerda','direita']):
-        for col,angle in enumerate([-30,-15,0,15,30]):
+        for col,angle in enumerate([-15,-7.5,0,7.5,15]):
             args={'left' if row==0 else 'right':angle}
-            p=pose(f'{name} {angle:+d} graus / base flexível / outra parada',**args)
+            p=pose(f'{name} {angle:+g} graus / base flexível / outra parada',**args)
             proof.paste(tile(compose(assets,p),p,'prova-orelhas','padrao'),(col*W,150+row*(H+FOOT)))
     proof=proof.resize((7040,round(proof.height*7040/proof.width)),Image.Resampling.LANCZOS)
     save(proof,HERE/'prova-orelhas.webp')
@@ -457,6 +548,7 @@ def main():
                   sources_sha256={n+'.png':hashlib.sha256((ASSETS/(n+'.png')).read_bytes()).hexdigest() for n in NAMES},
                   body_transform='nenhuma; escala global de apresentação 0.75',fog='exposição mínima .50; aro acompanha a menor exposição local sem mudar matiz; cor livre com piso .28; sem blur',
                   states=list(STATES),fog_floor=FOG_FLOOR,color_linear_luminance_floor=.28,arc_rule='gain <= min(local fog gains, 1), hue unchanged')
+    if '--stills-only' not in sys.argv:report['previews']=render_previews(native)
     (HERE/'verificacao.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     (HERE/'quadros.json').write_text(json.dumps(dict(referenceOnly=True,method='montar.py — camadas originais',frames=records),ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))
