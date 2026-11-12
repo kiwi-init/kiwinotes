@@ -1,20 +1,20 @@
 REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
 Fonte: gerada/manifest.json e as seis camadas originais.
 {
-  "label": "B · confusão / rabisco",
-  "left": 7,
-  "right": -5,
+  "label": "02 · embolando / 0,45 s",
+  "left": 22,
+  "right": -22,
   "gaze": 0,
   "eye": 1,
   "other": null,
   "blink": false,
-  "fog": 0.52,
+  "fog": 0.58,
   "side": 0,
   "upper": 0,
   "symbol": "confusion",
   "big": 0.67,
   "small": 0.68,
   "up": 0,
-  "phase": 0
+  "phase": 1
 }
-Névoa: Densidade de 0,68 para 0,52 e 0,30; perde luz sem expor cortes retos.
+Névoa: Densidade de 0,68 para 0,58 e 0,50; aro acompanha a luz; rabisco avança.

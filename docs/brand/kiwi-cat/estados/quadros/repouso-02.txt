@@ -3,7 +3,7 @@ Fonte: gerada/manifest.json e as seis camadas originais.
 {
   "label": "02 · olhar discreto",
   "left": 0,
-  "right": -2,
+  "right": -18,
   "gaze": 15,
   "eye": 1,
   "other": null,

@@ -6,6 +6,21 @@
     2560
   ],
   "scope": "pose neutra padrão, antes da redução; exclui discos dos olhos + 5 px",
+  "ear_preparation": {
+    "originals_untouched": true,
+    "ear_angles": [
+      -30,
+      -15,
+      0,
+      15,
+      30
+    ],
+    "method": "ear-region source-over rematting of the original composite; original head and frontal arc mask hidden attachments",
+    "changed_base_pixels": 560376,
+    "outside_ear_roi_unchanged": true,
+    "fog_fill": "harmonic 128x160 / 1200 iterations; hidden root alpha 900 iterations float32, matte RGB",
+    "root_skinning": "tip control angles; fixed base and inner edge, 32px mesh and 7 inverse iterations"
+  },
   "real_size": {
     "cat_source_y": [
       650,
@@ -23,12 +38,12 @@
       "thinking": 0,
       "agindo": 0,
       "pronto": 0,
-      "erro": 0
+      "erro": 2
     }
   },
   "task": "T7606",
   "review": "#7630",
-  "frames": 23,
+  "frames": 31,
   "frame_size": [
     1536,
     2052
@@ -42,7 +57,7 @@
     "aro.png": "5411234791669369e77451cef7d46a85bfe7a1573aa05859abab0131237a1d14"
   },
   "body_transform": "nenhuma; escala global de apresentação 0.75",
-  "fog": "densidade e matiz da névoa visível após composição; silhueta fosca e aro protegidos; sem blur",
+  "fog": "exposição mínima .50; aro acompanha a menor exposição local sem mudar matiz; cor livre com piso .28; sem blur",
   "states": [
     "repouso",
     "dormindo",
@@ -52,5 +67,8 @@
     "agindo",
     "pronto",
     "erro"
-  ]
+  ],
+  "fog_floor": 0.5,
+  "color_linear_luminance_floor": 0.28,
+  "arc_rule": "gain <= min(local fog gains, 1), hue unchanged"
 }

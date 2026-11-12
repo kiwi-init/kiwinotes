@@ -8,7 +8,7 @@ import io
 import math
 import json
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageColor
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent / 'gerada'
@@ -40,6 +40,12 @@ for j,p in enumerate(STATES['thinking']):p.update(eye=.58,up=-24,symbol='thought
 for j,p in enumerate(STATES['agindo']):p.update(symbol='work',phase=j)
 for j,p in enumerate(STATES['pronto']):p.update(symbol='spark',blink=True,phase=j)
 STATES['erro']=[pose('A · dúvida / ? e gota',left=4,right=-3,big=.72,small=.62,symbol='question',fog=.68),pose('B · confusão / rabisco',left=7,right=-5,big=.67,small=.68,symbol='confusion',fog=.52),pose('A · recolher e aguardar',left=6,right=-4,big=.62,small=.62,symbol='question',fog=.30,phase=1)]
+STATES['erro']=[pose('01 · rabisco começa / 0,00 s',left=12,right=-12,big=.72,small=.62,symbol='confusion',fog=.68,phase=0),pose('02 · embolando / 0,45 s',left=22,right=-22,big=.67,small=.68,symbol='confusion',fog=.58,phase=1),pose('03 · embolado / 0,90 s',left=30,right=-30,big=.62,small=.62,symbol='confusion',fog=.50,phase=2)]
+STATES['repouso'][1].update(right=-18)
+for p in STATES['dormindo']:p.update(left=18,right=-18)
+STATES['acordou'][1].update(left=-18,right=18)
+STATES['ouvindo'][0].update(left=-12,right=12)
+STATES['ouvindo'][1].update(left=-20,right=20)
 STATES={k:STATES[k] for k in ['repouso','dormindo','acordou','ouvindo','thinking','agindo','pronto','erro']}
 
 FOG = {
@@ -49,7 +55,7 @@ FOG = {
  'thinking': 'Densidade 0,95; peso desloca da esquerda à direita e concentra no alto.',
  'agindo': 'Densidade 1,12; peso lateral alterna com olhos retos, sem expressão de raiva.',
  'pronto': 'Densidade 1,06 → 0,96; expansão de luz na piscada, depois assenta.',
- 'erro': 'Densidade de 0,68 para 0,52 e 0,30; perde luz sem expor cortes retos.',
+ 'erro': 'Densidade de 0,68 para 0,58 e 0,50; aro acompanha a luz; rabisco avança.',
 }
 
 FOG['dormindo']='Massa original com luz mínima; zZ sobe sem alterar a silhueta.'
@@ -78,23 +84,38 @@ def eye_layer(size, scale, p):
     return image.resize(size,Image.Resampling.LANCZOS)
 
 
+FOG_FLOOR=.50
+
+def tint_for(color):
+    presets={'claude':'#ff9b5e','codex':'#faf9ff'}
+    rgb=np.array(ImageColor.getrgb(presets.get(color,color))[:3],dtype=np.float32)/255
+    linear=np.where(rgb<=.04045,rgb/12.92,((rgb+.055)/1.055)**2.4)
+    luminance=float(linear@np.array([.2126,.7152,.0722]))
+    if luminance<.28:
+        linear=linear+(1-linear)*((.28-luminance)/(1-luminance))
+    rgb=np.where(linear<=.0031308,linear*12.92,1.055*linear**(1/2.4)-.055)
+    return rgb/float(rgb@np.array([.2126,.7152,.0722]))
+
+
 def fog_layer(image,p,palette,arc):
     if palette=='padrao' and p['fog']==1 and p['side']==0 and p['upper']==0:return image
     a=np.array(image);rgb=a[:,:,:3].astype(np.float32)
     lum=rgb@np.array([.2126,.7152,.0722],dtype=np.float32)
-    # Continuous chroma protection, independent of the old layer cuts.
     chroma=(rgb.max(axis=2)-rgb.min(axis=2))/np.maximum(rgb.max(axis=2),1)
     t=np.clip((chroma-.28)/.27,0,1);protect=t*t*(3-2*t)
-    mask=np.maximum(lum-12,0)/np.maximum(lum,1)*(1-protect)
     y,x=np.ogrid[:image.height,:image.width]
-    weight=p['fog']*(1+p['side']*(x/image.width-.5)*2+p['upper']*(.5-y/image.height)*2)
-    # An exposure around a dark floor is monotonic in luminance: dimming
-    # cannot turn a bright fog band darker than its own faint outskirts.
+    weight=np.maximum(FOG_FLOOR,p['fog']*(1+p['side']*(x/image.width-.5)*2+p['upper']*(.5-y/image.height)*2))
+    # Chromatic arc keeps its hue and never gains relative to the fog:
+    # its multiplier is at most the dimmest local fog multiplier, capped at 1.
+    arc_gain=min(1.,float(weight.min()))
     mist=rgb*weight[:,:,None]
-    if palette!='padrao':
-        tint=np.array([1.55,.79,.40] if palette=='claude' else [1.01,1.01,1.04])
-        mist=lum[:,:,None]*tint*weight[:,:,None]
-    a[:,:,:3]=np.uint8(np.rint(np.clip(rgb*(1-mask[:,:,None])+mist*mask[:,:,None],0,255)))
+    if palette!='padrao':mist=lum[:,:,None]*tint_for(palette)*weight[:,:,None]
+    # Monotone exposure with a dark matte floor. The arc gets no pedestal,
+    # so it can never become relatively brighter than the surrounding mist.
+    mask=np.maximum(lum-12,0)/np.maximum(lum,1)
+    fog_rgb=rgb*(1-mask[:,:,None])+mist*mask[:,:,None]
+    visible=fog_rgb*(1-protect[:,:,None])+rgb*arc_gain*protect[:,:,None]
+    a[:,:,:3]=np.uint8(np.rint(np.clip(visible,0,255)))
     return Image.fromarray(a)
 
 
@@ -120,17 +141,39 @@ def fill_hidden_eyes(image, scale):
     return Image.fromarray(a)
 
 
+def bend_ear(layer,angle,pivot,scale):
+    """Tip rotates around the manifest pivot; cartilage flexes into a fixed root."""
+    px,py=pivot;theta=math.radians(angle);step=32
+    def source(x,y):
+        sx,sy=x,y
+        for _ in range(7):
+            t=float(np.clip((py-sy)/(300*scale),0,1))
+            side=(px+120*scale-sx)/(240*scale) if px<1024*scale else (sx-px+120*scale)/(240*scale)
+            u=float(np.clip(side,0,1));weight=t*t*(3-2*t)*u*u*(3-2*u)
+            a=theta*weight;dx=x-px;dy=y-py
+            sx=px+dx*math.cos(a)-dy*math.sin(a);sy=py+dx*math.sin(a)+dy*math.cos(a)
+        return sx,sy
+    mesh=[]
+    for y in range(0,layer.height,step):
+        for x in range(0,layer.width,step):
+            x1=min(x+step,layer.width);y1=min(y+step,layer.height)
+            mesh.append(((x,y,x1,y1),(*source(x,y),*source(x,y1),*source(x1,y1),*source(x1,y))))
+    return layer.transform(layer.size,Image.Transform.MESH,mesh,Image.Resampling.BICUBIC)
+
+
 def compose(assets,p,palette='padrao',scale=SCALE):
     size=assets['cabeca'].size
-    out=Image.new('RGBA',size,'black')
-    for name in NAMES:
-        layer=assets[name]
-        if name.startswith('orelha'):
+    if '__base' in assets:
+        out=assets['__base'].copy()
+        for name in ['orelha-esquerda','orelha-direita']:
             angle=p['left'] if name.endswith('esquerda') else p['right']
-            if angle:
-                pivot=tuple(v*scale for v in META['pivots'][name])
-                layer=layer.rotate(angle,Image.Resampling.BICUBIC,center=pivot)
-        out=Image.alpha_composite(out,layer)
+            layer=assets[name]
+            if angle:layer=bend_ear(layer,angle,tuple(v*scale for v in META['pivots'][name]),scale)
+            out=Image.alpha_composite(out,layer)
+        out=Image.alpha_composite(out,assets['__head'])
+    else:
+        out=Image.new('RGBA',size,'black')
+        for name in NAMES:out=Image.alpha_composite(out,assets[name])
     out=fog_layer(out,p,palette,assets['aro'])
     if p['big']!=1 or p['small']!=1 or p['up'] or p['eye']<1 or p['other'] is not None or p['blink'] or p['gaze']:
         out=fill_hidden_eyes(out,scale)
@@ -169,7 +212,7 @@ def baseline_check(native):
 
 
 def save(image,path):
-    for quality in [90,86,82,78,74,70,64,58]:
+    for quality in [90,86,82,78,74,70,64,58,52,46,40]:
         data=io.BytesIO();image.save(data,format='WEBP',quality=quality,method=6)
         if data.tell()<=500_000:
             path.write_bytes(data.getvalue());return
@@ -180,68 +223,156 @@ def symbol_layer(size,scale,p):
     im=Image.new('RGBA',(size[0]*2,size[1]*2));d=ImageDraw.Draw(im)
     k=scale*2;kind=p['symbol'];phase=p['phase'];white='#ffffff'
     def point(x,y):
-        # Enlarge the marks towards the face, leaving a gap to the silhouette.
+        if kind in ['alert','question','sleep']:
+            cx,cy=1710,700;theta=math.radians(12)
+            x,y=cx+(x-cx)*math.cos(theta)-(y-cy)*math.sin(theta),cy+(x-cx)*math.sin(theta)+(y-cy)*math.cos(theta)
         if kind=='thought':x=1560+(x-1560)*1.12
         elif x>1024:x=1545+(x-1545)*1.18-45
         else:x=400+(x-400)*1.18+25
         y=850+(y-850)*1.15+35
         return x*k,y*k
-    def points(ps):return [point(x,y) for x,y in ps]
-    def box(values):
-        x0,y0=point(values[0],values[1]);x1,y1=point(values[2],values[3])
-        return x0,y0,x1,y1
-    def line(ps,width=14):
-        ps=points(ps);w=max(2,round(max(width,34)*k));d.line(ps,fill=white,width=w,joint='curve')
-        for x,y in [ps[0],ps[-1]]:d.ellipse((x-w/2,y-w/2,x+w/2,y+w/2),fill=white)
-    def ellipse(box,width=12,fill=None):
-        d.ellipse(tuple([*point(box[0],box[1]),*point(box[2],box[3])]),outline=white,fill=fill,width=round(max(width,34)*k))
+    def poly(ps,fill=white,rounds=0):
+        ps=np.array(ps,dtype=float)
+        # Two Chaikin passes soften the points without a uniform stroke.
+        for _ in range(rounds):
+            nxt=np.roll(ps,-1,axis=0);ps=np.stack([ps*.75+nxt*.25,ps*.25+nxt*.75],axis=1).reshape(-1,2)
+        d.polygon([point(x,y) for x,y in ps],fill=fill)
+    def disc(x,y,r,fill=white):
+        poly([(x+r*math.cos(t),y+r*(1+.04*math.sin(3*t))*math.sin(t)) for t in np.linspace(0,2*math.pi,90)],fill)
+    def ribbon(ps,widths):
+        ps=np.array(ps,dtype=float);tangent=np.gradient(ps,axis=0)
+        lengths=np.maximum(np.linalg.norm(tangent,axis=1),.001)
+        normal=np.stack([-tangent[:,1],tangent[:,0]],axis=1)/lengths[:,None]
+        widths=np.asarray(widths)
+        if widths.ndim==0:widths=np.full(len(ps),float(widths))
+        a=ps+normal*widths[:,None]/2;b=ps-normal*widths[:,None]/2
+        for j in range(len(ps)-1):poly([a[j],a[j+1],b[j+1],b[j]])
+        for q,w in [(ps[0],widths[0]),(ps[-1],widths[-1])]:disc(*q,max(1,float(w)/2))
+    def bezier(control,n=80):
+        c=np.array(control,dtype=float);t=np.linspace(0,1,n)[:,None]
+        return (1-t)**3*c[0]+3*(1-t)**2*t*c[1]+3*(1-t)*t*t*c[2]+t**3*c[3]
+    def dash(x,y,length=110,dy=-10):
+        ts=np.linspace(0,1,50);ps=[(x+t*length,y+dy*t+3*math.sin(t*math.pi)) for t in ts]
+        ribbon(ps,4+36*(1-ts)**.65)
     def drop(x,y):
-        ps=[]
-        for t in np.linspace(0,2*math.pi,100):
-            ps.append((x+29*math.sin(t)*(1-math.cos(t)/2),y+50*math.cos(t)))
-        d.polygon(points(ps),fill=white)
-    def star(x,y,r=45):
-        ps=[(x,y-r),(x+10,y-10),(x+r,y),(x+10,y+10),(x,y+r),(x-10,y+10),(x-r,y),(x-10,y-10),(x,y-r)]
-        line(ps,9)
+        left=bezier([(x,y-65),(x-10,y-45),(x-66,y+24),(x-38,y+51)])
+        right=bezier([(x-38,y+51),(x+43,y+98),(x+72,y+12),(x,y-65)])
+        poly(np.concatenate([left,right]))
+    def star(x,y,r=55):
+        poly([(x,y-r),(x+13,y-14),(x+r,y+3),(x+13,y+16),(x-2,y+r),(x-14,y+15),(x-r,y-2),(x-15,y-15)],rounds=2)
     if kind=='alert':
-        x=1710;y=670-[0,85,25][phase];line([(x,y-70),(x,y+30)],24);ellipse((x-13,y+66,x+13,y+92),fill=white)
+        x,y=1710,570
+        poly([(x-49,y-90),(x+48,y-100),(x+25,y+64),(x-16,y+74)],rounds=2)
+        disc(x+4,y+123,28)
+        dash(x+112,y+28,65,-35);dash(x+112,y+96,67,20)
     elif kind=='sleep':
-        for x,y,z in [(1640,730-phase*60,100),(1800,550-phase*90,140)]:
-            line([(x-z/2,y-z/2),(x+z/2,y-z/2),(x-z/2,y+z/2),(x+z/2,y+z/2)],13)
+        for x,y,z in [(1640,730-phase*60,105),(1800,530-phase*90,150)]:
+            u=z/2
+            poly([(x-u,y-u),(x+u+7,y-u-6),(x+u+1,y-u+35),(x-u+42,y+u-31),(x+u+8,y+u-30),(x+u,y+u+6),(x-u-6,y+u),(x-u+1,y+u-30),(x+u-43,y-u+33),(x-u+2,y-u+37)],rounds=1)
     elif kind=='sound':
         for j in range(1,2+phase*2):
-            x=1590;y=930;r=45+j*48
-            d.arc(box((x-r,y-r,x+r,y+r)),-55,55,fill=white,width=round(34*k))
+            r=45+j*48;t=np.linspace(-.96,.96,100);ps=[(1590+r*math.cos(v),930+r*math.sin(v)) for v in t]
+            ribbon(ps,3+38*np.sin(np.linspace(0,math.pi,len(t)))**.7)
     elif kind=='thought':
-        ellipse((1570,450,1960,700),10)
-        ellipse((1570,725,1610,765),8);ellipse((1545,790,1565,810),6)
-        for j in range(3):
-            x=1660+j*100;r=13 if j<=phase else 6
-            ellipse((x-r,575-r,x+r,575+r),fill=white)
+        angles=np.linspace(0,2*math.pi,200)
+        def cloud(rx,ry):return [(1765+rx*(1+.095*math.cos(7*t+.2))*math.cos(t),575+ry*(1+.095*math.cos(7*t+.2))*math.sin(t)) for t in angles]
+        poly(cloud(190,123));poly(cloud(153,86),fill='black')
+        disc(1590,751,23);disc(1558,807,14)
+        for j in range(3):disc(1665+j*95,575,23 if j<=phase else 16)
     elif kind=='work':
         drop(1680,820+phase*35);drop(1810,1010+phase*45)
-        for j in range(3):line([(245-j*20,1030+j*90),(375-j*20,1030+j*90)],10)
+        for j in range(3):dash(240-j*20,1030+j*90,135,-8+j*6)
     elif kind=='spark':
-        for x,y,r in [(350,1050,45),(1710,780,55),(1790,1210,32)]:star(x,y,r+(7 if phase else 0))
-    elif kind=='question':
-        # Cubic curve for a clean rounded question mark.
-        controls=[[(1630,610),(1625,480),(1840,470),(1830,600)],[(1830,600),(1820,680),(1720,650),(1720,750)]]
-        ps=[]
-        for c in controls:
-            c=np.array(c)
-            for t in np.linspace(0,1,60):ps.append(tuple((1-t)**3*c[0]+3*(1-t)**2*t*c[1]+3*(1-t)*t*t*c[2]+t**3*c[3]))
-        line(ps,19);ellipse((1707,790,1733,816),fill=white);drop(1830,900)
+        for x,y,r in [(350,1050,64),(1710,780,76),(1790,1210,49)]:star(x,y,r+(7 if phase else 0))
     elif kind=='confusion':
-        ps=[]
-        for t in np.linspace(0,7*math.pi,240):
-            ps.append((1740+110*math.cos(t),650+60*math.sin(t)+28*math.sin(t*1.65)))
-        line(ps,10)
+        t=np.linspace(0,[1.4,4.3,7][phase]*math.pi,[70,155,240][phase]);ps=[(1740+110*math.cos(v)+3*math.sin(v*7+phase),650+60*math.sin(v)+28*math.sin(v*1.65)+3*math.cos(v*9+phase)) for v in t]
+        ribbon(ps,21+13*(1+np.sin(t*1.3))/2)
     return im.resize(size,Image.Resampling.LANCZOS)
+
+
+def prepare_ears(native):
+    """A clean three-layer ear rig from the original six-layer visible scene."""
+    full=Image.new('RGBA',(2048,2560),'black')
+    for n in NAMES:full=Image.alpha_composite(full,native[n])
+    target=np.array(full)[:,:,:3].astype(np.float32)/255
+    meta=json.loads((ASSETS/'camadas.json').read_text());masks=[]
+    y,x=np.mgrid[:2560,:2048]
+    for key in ['orelhaEsquerda','orelhaDireita']:
+        vertices=np.array(meta[key],dtype=float);center=vertices.mean(axis=0)
+        vertices=center+(vertices-center)*1.45
+        hard=Image.new('L',(2048,2560));ImageDraw.Draw(hard).polygon([tuple(v) for v in vertices],fill=255)
+        inside=np.array(hard)>0;distance=np.full((2560,2048),1e6,dtype=np.float32)
+        for a,b in zip(vertices,np.roll(vertices,-1,axis=0)):
+            vx,vy=b-a;u=np.clip(((x-a[0])*vx+(y-a[1])*vy)/(vx*vx+vy*vy),0,1)
+            distance=np.minimum(distance,np.hypot(x-a[0]-u*vx,y-a[1]-u*vy))
+        t=np.clip(distance/75,0,1);masks.append(inside*t*t*(3-2*t))
+    roi=np.maximum(*masks)
+    # Dome is fixed; an ear pivots above it and its attachment disappears behind it.
+    radius=((x-1024)/510)**2+((y-1280)/430)**2
+    h=np.clip((1.035-radius)/.065,0,1);h=h*h*(3-2*h)
+    chroma=(target.max(axis=2)-target.min(axis=2))/np.maximum(target.max(axis=2),.001)
+    luminous=target@np.array([.2126,.7152,.0722])
+    c=np.clip((chroma-.45)/.25,0,1);c=c*c*(3-2*c)
+    v=np.clip((luminous-.02)/.03,0,1);v=v*v*(3-2*v)
+    fixed_arc=c*v*(x>560)*(x<1470)*(y>800)*(y<1600)
+    h=np.maximum(h,fixed_arc)
+    remove=roi
+    grid=np.array(Image.fromarray(np.uint8(np.rint(target*255))).resize((128,160),Image.Resampling.BILINEAR),dtype=float)
+    unknown=np.array(Image.fromarray(np.uint8((roi>.05)*255)).resize((128,160),Image.Resampling.NEAREST))>127
+    for _ in range(1200):
+        average=(np.roll(grid,1,0)+np.roll(grid,-1,0)+np.roll(grid,1,1)+np.roll(grid,-1,1))/4
+        grid[unknown]=average[unknown]
+    field=np.array(Image.fromarray(np.uint8(np.clip(np.rint(grid),0,255))).resize((2048,2560),Image.Resampling.BICUBIC),dtype=np.float32)/255
+    field=np.maximum(field,.22)
+    base=target*(1-remove[:,:,None])+field*remove[:,:,None]
+    base=np.uint8(np.clip(np.rint(base*255),0,255)).astype(np.float32)/255
+    minimum=np.max(np.maximum((base-target)/np.maximum(base,1e-6),(target-base)/np.maximum(1-base,1e-6)),axis=2)
+    dark=(target@np.array([.2126,.7152,.0722]))<.065
+    effective=np.clip(np.maximum(minimum,dark*remove),0,1)
+    source_alpha=effective.copy()
+    # Recompute the effective alpha after quantization; solve RGB against that.
+    source_alpha=np.rint(source_alpha*255)/255;effective=source_alpha
+    fg=np.divide(target-(1-effective[:,:,None])*base,effective[:,:,None],out=target.copy(),where=effective[:,:,None]>1e-6)
+    result={n:im.copy() for n,im in native.items()}
+    result['__base']=Image.fromarray(np.uint8(np.rint(base*255))).convert('RGBA')
+    head_rgba=np.dstack([np.uint8(np.rint(target*255)),np.uint8(np.rint(h*255))])
+    result['__head']=Image.fromarray(head_rgba)
+    for n,left in [('orelha-esquerda',True),('orelha-direita',False)]:
+        a=source_alpha*((x<1024) if left else (x>=1024))
+        rgba=np.dstack([np.uint8(np.clip(np.rint(fg*255),0,255)),np.uint8(np.rint(a*255))])
+        # Inpaint only fully occluded root texels in premultiplied RGBA.
+        # A flat opaque patch would introduce a cut as the base rotates out.
+        hidden=h>=1
+        premul=rgba.astype(np.float32);premul[:,:,:3]*=premul[:,:,3,None]/255
+        low=np.stack([np.array(Image.fromarray(premul[:,:,c]).resize((128,160),Image.Resampling.BILINEAR)) for c in range(4)],axis=2).astype(float)
+        holes=np.array(Image.fromarray(np.uint8(hidden*255)).resize((128,160),Image.Resampling.NEAREST))>127
+        low[holes]=0
+        for _ in range(900):
+            avg=(np.roll(low,1,0)+np.roll(low,-1,0)+np.roll(low,1,1)+np.roll(low,-1,1))/4
+            low[holes]=avg[holes]
+        filled=np.stack([np.array(Image.fromarray(low[:,:,c].astype(np.float32)).resize((2048,2560),Image.Resampling.BICUBIC)) for c in range(4)],axis=2).astype(float)
+        color=np.divide(filled[:,:,:3]*255,filled[:,:,3,None],out=np.zeros_like(filled[:,:,:3]),where=filled[:,:,3,None]>0)
+        rgba[hidden,:3]=(11,11,14);rgba[hidden,3]=np.uint8(np.clip(np.rint(filled[hidden,3]),0,255))
+        result[n]=Image.fromarray(rgba)
+    folder=HERE/'preparadas';folder.mkdir(exist_ok=True)
+    expected={'fundo-sem-orelhas.png','cabeca-fixa.png','orelha-esquerda.png','orelha-direita.png'}
+    for old in folder.glob('*.png'):
+        if old.name not in expected:old.unlink()
+    result['__base'].save(folder/'fundo-sem-orelhas.png');result['__head'].save(folder/'cabeca-fixa.png')
+    for n in ['orelha-esquerda','orelha-direita']:result[n].save(folder/(n+'.png'))
+    (folder/'manifest.json').write_text(json.dumps(dict(size=[2048,2560],blend='source-over',alpha='straight',order=['fundo-sem-orelhas.png','orelha-esquerda.png','orelha-direita.png','cabeca-fixa.png','eyes-by-code'],pivots=META['pivots'],source='../../gerada/manifest.json',deformation='tip rotation about manifest pivot; smooth skinning pins root and inner edge',scope='documentary reference rig; original source assets unchanged'),ensure_ascii=False,indent=2)+'\n')
+    return result,dict(originals_untouched=True,ear_angles=[-30,-15,0,15,30],
+        method='ear-region source-over rematting of the original composite; original head and frontal arc mask hidden attachments',
+        changed_base_pixels=int(np.any(np.abs(base-target)>0,axis=2).sum()),
+        outside_ear_roi_unchanged=bool(np.array_equal(base[roi==0],target[roi==0])),
+        fog_fill='harmonic 128x160 / 1200 iterations; hidden root alpha 900 iterations float32, matte RGB',root_skinning='tip control angles; fixed base and inner edge, 32px mesh and 7 inverse iterations')
 
 
 def main():
     native={n:Image.open(ASSETS/f'{n}.png').convert('RGBA') for n in NAMES}
+    native,preparation=prepare_ears(native)
     report=baseline_check(native)
+    report['ear_preparation']=preparation
     assets={n:i.resize((W,H),Image.Resampling.LANCZOS) for n,i in native.items()}
     out=HERE/'quadros';out.mkdir(exist_ok=True)
     # Remove apenas saídas geradas da rodada anterior, que constam do git.
@@ -271,19 +402,32 @@ def main():
         save(sheet,HERE/f'estado-{state}.webp')
         thumb=sheet.copy();thumb.thumbnail((1800,1000),Image.Resampling.LANCZOS)
         summaries.append((state,thumb))
-    # Uma imagem de cores: duas linhas, repouso e pico de voz, três paletas.
-    colors=Image.new('RGB',(W*3,(H+FOOT)*2+150),'black');d=ImageDraw.Draw(colors)
-    d.text((44,28),'CORES · só a névoa muda; cabeça, corpo e aro permanecem iguais',font=font(42),fill='white')
+    # Each ear moves alone through the full requested range; the other stays still.
+    proof=Image.new('RGB',(W*5,(H+FOOT)*2+150),'black');pd=ImageDraw.Draw(proof)
+    pd.text((44,28),'ORELHAS · controle de ponta -30 a +30 graus · base flexível · independentes',font=font(42),fill='white')
+    for row,name in enumerate(['esquerda','direita']):
+        for col,angle in enumerate([-30,-15,0,15,30]):
+            args={'left' if row==0 else 'right':angle}
+            p=pose(f'{name} {angle:+d} graus / base flexível / outra parada',**args)
+            proof.paste(tile(compose(assets,p),p,'prova-orelhas','padrao'),(col*W,150+row*(H+FOOT)))
+    proof=proof.resize((7040,round(proof.height*7040/proof.width)),Image.Resampling.LANCZOS)
+    save(proof,HERE/'prova-orelhas.webp')
+    # Seven freely chosen colors; the last is almost black, lifted by the floor.
+    palettes=[('padrao','padrao'),('claude','claude'),('codex','codex'),('verde','#63d997'),('rosa','#ff81c0'),('azul','#70a8ff'),('quase-preto','#030409')]
+    colors=Image.new('RGB',(W*7,(H+FOOT)*2+150),'black');d=ImageDraw.Draw(colors)
+    d.text((44,28),'CORES LIVRES · preto quase puro recebe piso de luminosidade · aro sempre ciano-púrpura',font=font(42),fill='white')
     for r,(state,p) in enumerate([('repouso',STATES['repouso'][0]),('ouvindo',STATES['ouvindo'][1])]):
-        for c,color in enumerate(['padrao','claude','codex']):
-            t=tile(compose(assets,p,color),p,state,color)
+        for c,(label,color) in enumerate(palettes):
+            t=tile(compose(assets,p,color),p,state,label if color in ['padrao','claude','codex'] else label+' '+color)
             colors.paste(t,(W*c,150+(H+FOOT)*r))
             if color!='padrao':
-                filename=f'{state}-{color}.webp';save(t,out/filename)
-                (out/filename.replace('.webp','.txt')).write_text('REFERÊNCIA DOCUMENTAL — composição local, sem IA.\n'
-                    +f'Paleta: {color}. Somente a névoa visível recebe matiz; silhueta fosca, aro, olhos e símbolos são protegidos.\n'
+                filename=f'{state}-{label}.webp';save(t,out/filename)
+                (out/filename.replace('.webp','.txt')).write_text('REFERÊNCIA DOCUMENTAL — composição local.\n'
+                    +f'Cor: {color}; piso de luminância linear .28; aro ligado à luz, sem mudança de matiz.\n'
                     +json.dumps(p,ensure_ascii=False,indent=2)+'\n')
                 records.append(dict(file='quadros/'+filename,state=state,palette=color,parameters=p))
+    # Character remains >1024 px tall in this sheet after uniform reduction.
+    colors=colors.resize((9856,round(colors.height*9856/colors.width)),Image.Resampling.LANCZOS)
     save(colors,HERE/'cores.webp')
     color_thumb=colors.copy();color_thumb.thumbnail((1800,1000),Image.Resampling.LANCZOS);summaries.append(('cores',color_thumb))
     summary=Image.new('RGB',(3600,5*1160+160),'#08080b');d=ImageDraw.Draw(summary)
@@ -295,7 +439,7 @@ def main():
     save(summary,HERE/'prancha-estados.webp')
     real=Image.new('RGB',(8*360,780),'#08080b');rd=ImageDraw.Draw(real)
     rd.text((20,16),'TAMANHO REAL · gato a 120 px e 240 px · REFERÊNCIA',font=font(24),fill='white')
-    chosen={'repouso':0,'dormindo':0,'acordou':1,'ouvindo':1,'thinking':0,'agindo':0,'pronto':0,'erro':0}
+    chosen={'repouso':0,'dormindo':0,'acordou':1,'ouvindo':1,'thinking':0,'agindo':0,'pronto':0,'erro':2}
     for i,state in enumerate(STATES):
         rd.text((i*360+20,64),state,font=font(23),fill='white')
         image=compose(assets,STATES[state][chosen[state]])
@@ -311,8 +455,8 @@ def main():
     report.update(real_size=dict(cat_source_y=[650,2240],cat_heights=[120,240],selected_pose=chosen))
     report.update(task='T7606' ,review='#7630',frames=len(records),frame_size=[W,H+FOOT],
                   sources_sha256={n+'.png':hashlib.sha256((ASSETS/(n+'.png')).read_bytes()).hexdigest() for n in NAMES},
-                  body_transform='nenhuma; escala global de apresentação 0.75',fog='densidade e matiz da névoa visível após composição; silhueta fosca e aro protegidos; sem blur',
-                  states=list(STATES))
+                  body_transform='nenhuma; escala global de apresentação 0.75',fog='exposição mínima .50; aro acompanha a menor exposição local sem mudar matiz; cor livre com piso .28; sem blur',
+                  states=list(STATES),fog_floor=FOG_FLOOR,color_linear_luminance_floor=.28,arc_rule='gain <= min(local fog gains, 1), hue unchanged')
     (HERE/'verificacao.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     (HERE/'quadros.json').write_text(json.dumps(dict(referenceOnly=True,method='montar.py — camadas originais',frames=records),ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(report,ensure_ascii=False,indent=2))

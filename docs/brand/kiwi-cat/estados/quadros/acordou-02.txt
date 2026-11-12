@@ -2,8 +2,8 @@ REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
 Fonte: gerada/manifest.json e as seis camadas originais.
 {
   "label": "02 · pico do opa",
-  "left": -5,
-  "right": 5,
+  "left": -18,
+  "right": 18,
   "gaze": 0,
   "eye": 1,
   "other": null,

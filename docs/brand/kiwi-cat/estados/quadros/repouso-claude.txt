@@ -1,5 +1,5 @@
-REFERÊNCIA DOCUMENTAL — composição local, sem IA.
-Paleta: claude. Somente a névoa visível recebe matiz; silhueta fosca, aro, olhos e símbolos são protegidos.
+REFERÊNCIA DOCUMENTAL — composição local.
+Cor: claude; piso de luminância linear .28; aro ligado à luz, sem mudança de matiz.
 {
   "label": "01 · neutro / fonte aprovada",
   "left": 0,

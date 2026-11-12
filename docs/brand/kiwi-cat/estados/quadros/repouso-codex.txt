@@ -1,5 +1,5 @@
-REFERÊNCIA DOCUMENTAL — composição local, sem IA.
-Paleta: codex. Somente a névoa visível recebe matiz; silhueta fosca, aro, olhos e símbolos são protegidos.
+REFERÊNCIA DOCUMENTAL — composição local.
+Cor: codex; piso de luminância linear .28; aro ligado à luz, sem mudança de matiz.
 {
   "label": "01 · neutro / fonte aprovada",
   "left": 0,

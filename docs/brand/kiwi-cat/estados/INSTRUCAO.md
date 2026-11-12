@@ -18,9 +18,9 @@ Você cuida do visual inteiro: as imagens de referência, o roteiro, o shader da
 - **A névoa** é um shader de ruído em camadas (ruído fractal com distorção de domínio), iluminado por trás: mais denso e mais claro junto da silhueta, sumindo para fora, como no ícone. Ela anda no tempo e nunca repete.
 - **O gato** são as camadas do ícone como texturas. Os olhos são dois círculos desenhados por código. As orelhas giram pela base, nos pivôs do `manifest.json`.
 - **As entradas do módulo:**
-  - `estado`: `repouso`, `acordou`, `ouvindo`, `thinking`, `agindo`, `pronto` ou `erro`;
+  - `estado`: `repouso`, `dormindo`, `acordou`, `ouvindo`, `thinking`, `agindo`, `pronto` ou `erro`;
   - `voz`: de 0 a 1, o nível da voz da pessoa;
-  - `cor`: a cor do agente;
+  - `cor`: qualquer cor sRGB escolhida pela pessoa para aquele agente, com piso de luminosidade;
   - `parado`: verdadeiro com o Reduzir movimento.
 - **A máquina de estados** é TypeScript puro, sem tela, com `bun test`.
 
@@ -28,6 +28,7 @@ Você cuida do visual inteiro: as imagens de referência, o roteiro, o shader da
 | estado | o que o gato faz |
 |---|---|
 | `repouso` | Pisca devagar, olha para um lado e para o outro, mexe um pouco a orelha. A névoa anda bem lenta, quase respirando. Não pode chamar a atenção. Só existe dentro do app. |
+| `dormindo` | Repouso prolongado: olhos em arco para baixo, zZ subindo, orelhas relaxadas para fora e luz mínima que mantém a silhueta legível. |
 | `acordou` | A reação "opa, estou ouvindo", curta, quando a pessoa aperta o atalho. No overlay, ele entra com uma animação fluida. |
 | `ouvindo` | Reage à voz: a névoa acompanha o nível, com subida rápida e descida suave. |
 | `thinking` | Pensando. Os olhos e a névoa mostram que ele está trabalhando por dentro. |
@@ -36,6 +37,15 @@ Você cuida do visual inteiro: as imagens de referência, o roteiro, o shader da
 | `erro` | Algo falhou. Uma reação clara, sem susto. |
 
 **As cores:** uma paleta inspirada em cada agente, nunca o logo. Comece com três: a padrão (o lilás do ícone), o Claude Code (laranja) e o Codex (branco perolado, porque uma névoa preta some num gato preto).
+
+**Adendo do harry #7709, entregue no #7713:** a cor da névoa é escolha da pessoa, por agente. Em Ajustes, cada agente pode usar a cor original do Kiwi, a cor padrão daquele agente ou uma cor personalizada. A entrada `cor` aceita qualquer cor; uma cor escura demais recebe um piso de luminosidade para não apagar a névoa. A prancha de cores inclui verde, rosa, azul e quase preto, além das três iniciais. O aro mantém sua matiz ciano a púrpura, mas seu brilho acompanha a luz da névoa, nunca ficando relativamente mais forte que na v2. Uma luz mínima mantém a cabeça e as orelhas legíveis no fundo preto.
+
+**Decisões do harry #7718, transmitidas no #7724:**
+- O `erro` usa só o rabisco (opção B). O traço se desenha aos poucos, com a ponta andando, embola e recomeça, em loop próximo de 1 s com leve tremida. Na prancha: começo, meio e embolado. A opção A sai.
+- As orelhas são independentes, como as de um gato real: uma dá um tique e volta enquanto a outra fica parada; viram para o som em `ouvindo`, ficam em pé no pico de `acordou`, abrem em avião no `erro` e relaxam para fora no `dormindo`.
+- A piscada é lenta, às vezes dupla. Os intervalos entre piscadas e tiques variam; não há periodicidade fixa.
+- Corpo e cabeça permanecem parados e de frente. Só orelhas, olhos, símbolos e névoa se movem.
+- As camadas são preparadas agora para movimento amplo: preenchimento por script só nos pixels ocultos atrás das orelhas e nas bases. Nenhum pixel visível da pose neutra muda; a composição mantém máximo ≤4/255 e média <0,5/255 fora dos olhos. A prova mostra cada orelha sozinha em −30°, −15°, 0°, +15° e +30°.
 
 ## 5. As entregas, nesta ordem
 Cada entrega é uma task e um PR. **Não comece a seguinte antes do ok da anterior.**
@@ -86,7 +96,7 @@ O harry viu a rodada 1 e gostou do visual. O problema dele: `repouso`, `acordou`
 | `thinking` | semicerrados, olhando para cima e para o lado | balão com `…`, os pontos acendendo um a um | névoa junto da cabeça |
 | `agindo` | de foco: semicerrados e retos, sem cara de bravo | gotas de suor e linhas de movimento | névoa mais larga |
 | `pronto` | em arco feliz | brilhos em volta | a névoa abre e assenta |
-| `erro` | desiguais | proponha duas opções: `?` com uma gota, ou um rabisco de confusão | névoa perde luz |
+| `erro` | desiguais | rabisco de confusão que se desenha, embola e recomeça (~1 s); escolha final #7718 | névoa perde luz |
 
 **As regras dos símbolos:**
 - **São desenhados em código**, como os olhos: forma limpa, traço arredondado. Nada de imagem gerada no app.

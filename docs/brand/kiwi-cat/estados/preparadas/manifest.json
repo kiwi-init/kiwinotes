@@ -1,0 +1,40 @@
+{
+  "size": [
+    2048,
+    2560
+  ],
+  "blend": "source-over",
+  "alpha": "straight",
+  "order": [
+    "fundo-sem-orelhas.png",
+    "orelha-esquerda.png",
+    "orelha-direita.png",
+    "cabeca-fixa.png",
+    "eyes-by-code"
+  ],
+  "pivots": {
+    "orelha-esquerda": [
+      740,
+      1040
+    ],
+    "orelha-direita": [
+      1312,
+      1040
+    ],
+    "cabeca": [
+      1024,
+      1280
+    ],
+    "corpo": [
+      1024,
+      1992
+    ],
+    "aro": [
+      1024,
+      1280
+    ]
+  },
+  "source": "../../gerada/manifest.json",
+  "deformation": "tip rotation about manifest pivot; smooth skinning pins root and inner edge",
+  "scope": "documentary reference rig; original source assets unchanged"
+}
