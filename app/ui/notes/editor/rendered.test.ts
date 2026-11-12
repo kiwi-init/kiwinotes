@@ -61,12 +61,33 @@ describe("blocos renderizados", () => {
   test("um bloco grande demais (linhas ou caracteres) fica cru; o do limite ainda renderiza", () => {
     const para = (lines: number, width = 40) => Array.from({ length: lines }, (_, i) => `Linha ${i} [[B]] ${"x".repeat(width)}`).join("\n");
     const doc = (body: string) => `# Topo\n\n${body}\n\nFim.`;
-    const firsts = (body: string) => renderedBlocks(stateOf(doc(body)), false).map((b) => b.source.split("\n")[0]);
+    // A árvore inteira, sem prazo (T8175): com os 200 ms da produção, um runner lento devolvia a árvore pela metade.
+    const firsts = (body: string) => {
+      const s = stateOf(doc(body));
+      return renderedBlocks(s, false, fullTree(s, 60_000)).map((b) => b.source.split("\n")[0]);
+    };
     expect(firsts(para(MAX_RENDERED_LINES, 10))).toEqual(["# Topo", "Linha 0 [[B]] xxxxxxxxxx", "Fim."]);
     expect(firsts(para(MAX_RENDERED_LINES + 1, 10))).toEqual(["# Topo", "Fim."]);
     expect(firsts(para(12_000))).toEqual(["# Topo", "Fim."]);
     // Poucas linhas, mas compridas demais.
     expect(firsts(para(3, MAX_RENDERED_CHARS / 2))).toEqual(["# Topo", "Fim."]);
+  });
+
+  // T8175: o parser que não chega ao fim no prazo (o runner lento, uma nota enorme). O que volta é coerente: os blocos que
+  // a árvore já cobre, iguais aos da árvore inteira, e nenhum erro.
+  test("com o prazo do parser curto demais, volta só o que já foi parseado, igual ao da árvore inteira", () => {
+    const body = Array.from({ length: 400 }, (_, i) => `## Seção ${i}\n\nTexto ${i} com [[B]] e *ênfase*.\n\n- item ${i}`).join("\n\n");
+    const s = stateOf(`# Topo\n\n${body}\n\nFim.`);
+    const all = renderedBlocks(s, false, fullTree(stateOf(s.doc.toString()), 60_000));
+    for (const budget of [0, 1]) {
+      const fresh = stateOf(s.doc.toString());
+      const part = renderedBlocks(fresh, false, fullTree(fresh, budget));
+      const key = (b: { from: number; to: number; source: string }) => `${b.from}:${b.to}:${b.source}`;
+      const whole = new Set(all.map(key));
+      expect(part.every((b) => whole.has(key(b)))).toBe(true);
+      expect(part.length).toBeLessThanOrEqual(all.length);
+    }
+    expect(all.at(-1)?.source).toBe("Fim.");
   });
 
   test("o bloco vai do começo da primeira linha ao fim da última", () => {

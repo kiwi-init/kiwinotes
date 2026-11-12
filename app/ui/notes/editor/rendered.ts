@@ -44,9 +44,16 @@ export interface RenderedBlock {
   source: string;
 }
 
-/** A árvore inteira: o parser anda aos poucos, e um bloco do fim da nota sem árvore ficaria cru. */
-export function fullTree(state: EditorState): Tree {
-  return ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state);
+/** Quanto o parser tem para chegar ao fim da nota de uma vez, a cada desenho do preview. */
+export const FULL_TREE_MS = 200;
+
+/**
+ * A árvore inteira: o parser anda aos poucos, e um bloco do fim da nota sem árvore ficaria cru. Se ele não termina em
+ * `budgetMs`, volta a árvore até onde chegou; o resto continua no parser de fundo do editor, e cada avanço dele refaz o
+ * preview (o `renderedPreview` compara as árvores). O orçamento é parâmetro para o teste não depender do relógio (T8175).
+ */
+export function fullTree(state: EditorState, budgetMs = FULL_TREE_MS): Tree {
+  return ensureSyntaxTree(state, state.doc.length, budgetMs) ?? syntaxTree(state);
 }
 
 function touches(state: EditorState, from: number, to: number): boolean {
