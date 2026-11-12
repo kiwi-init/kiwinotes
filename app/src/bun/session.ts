@@ -171,6 +171,11 @@ export class Session {
       );
     });
     this.sidecar.on("meeting.warning", (e) => console.warn(`[meetings] ${e.channel ?? ""} ${e.warning}`));
+    // A nota da reunião sumiu no meio e foi recriada (T7723): o card ao vivo avisa a pessoa.
+    stores.meetingNotes.onRecreated((session, path) => {
+      console.warn(`[meetings] note recreated: ${path}`);
+      this.meetings.feed({ type: "meeting.warning", session, warning: "note_recreated" });
+    });
     // O helper que caiu levou a captura junto (R6): o card ao vivo some.
     this.sidecar.onClose(() => this.meetings.reset());
     this.sidecar.onClose(() => void stores.recoveries.interrupted().catch(()=>console.warn("[recovery] interrupted_failed")));

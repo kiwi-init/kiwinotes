@@ -293,6 +293,8 @@ function LiveCard({ live }: { live: Extract<MeetingLive, { recording: true }> })
           <div className="kn-meet-live-error">Não estamos ouvindo o áudio da reunião. Confira a Gravação de áudio do sistema em Ajustes do Sistema › Privacidade.</div>
         ) : live.warning === "transcription_unavailable" ? (
           <div className="kn-meet-live-error">A transcrição não subiu. O áudio fica guardado e é transcrito depois.</div>
+        ) : live.warning === "note_recreated" ? (
+          <div className="kn-meet-live-error">A nota desta reunião foi apagada ou mudada. A transcrição segue numa nota nova, em Reuniões.</div>
         ) : null}
         {error ? <div className="kn-meet-live-error">{error}</div> : null}
       </div>

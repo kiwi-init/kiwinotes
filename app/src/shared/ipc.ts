@@ -307,7 +307,10 @@ export type Event =
    * salvos por ela. `failed`: o VBx não rodou nem na 2ª tentativa (#5176), e a nota ganha uma linha que diz isso.
    */
   | { type: "meeting.relabel"; session: string; turns: { speaker: number; start: number; end: number }[]; failed?: boolean }
-  /** R3: `system_audio_silent` (o canal sistema só trouxe zeros: a permissão, #5030) ou `transcription_unavailable`. */
+  /**
+   * R3: `system_audio_silent` (o canal sistema só trouxe zeros: a permissão, #5030) ou `transcription_unavailable`. O
+   * engine manda também `note_recreated` (T7723): a nota sumiu no meio da gravação e a transcrição segue numa nova.
+   */
   | { type: "meeting.warning"; session: string; channel?: "mine" | "system"; warning: string }
   | { type: "meeting.started"; session: string; app?: string; sampleRate: 16000; output: "headphones" | "speaker" | "unknown"; microphone?: Record<string, unknown> }
   /** `reason: "error"` (R6): a captura caiu (o mic sumiu, o tap falhou), e o `meeting.error` veio antes. */

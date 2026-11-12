@@ -161,7 +161,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // A gravação de reunião ao vivo (R6): a do helper, ou uma de mentira com `KIWI_FAKE_MEETING=<app>` para os prints e os
   // roteiros da aba Reuniões (o headless nunca grava de verdade: o helper recusa `meeting.start` sem mic).
   const { FakeMeetingHost } = await import("../bun/meetings.ts");
-  const meetings = process.env.KIWI_FAKE_MEETING ? new FakeMeetingHost(process.env.KIWI_FAKE_MEETING) : session?.meetings;
+  const meetings = process.env.KIWI_FAKE_MEETING ? new FakeMeetingHost(process.env.KIWI_FAKE_MEETING, 12, undefined, process.env.KIWI_FAKE_MEETING_WARNING || undefined) : session?.meetings;
   const spelling = process.env.KIWI_FAKE_SPELLING ? fakeSpelling(process.env.KIWI_FAKE_SPELLING)
     : (word: string, language?: string) => session?.checkSpelling(word, language) ?? NO_SPELLING;
   let fakeClipboard = "";
