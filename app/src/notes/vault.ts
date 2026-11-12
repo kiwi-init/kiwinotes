@@ -11,6 +11,7 @@ import { lexicalMatch, lexicalWords } from "../shared/lexical.ts";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { type FSWatcher, watch } from "node:fs";
+import { isUtf8 } from "node:buffer";
 import { chmod, lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import path from "node:path";
@@ -49,6 +50,11 @@ export interface NoteMeta {
 export interface Note extends NoteMeta {
   /** O .md inteiro, com o frontmatter. */
   content: string;
+  /**
+   * O arquivo não é UTF-8 (Latin-1 de um app antigo do Windows, T7575): o texto perdeu os bytes que o Kiwi não entendeu
+   * (viraram U+FFFD). A janela só mostra, e nada grava por cima: o `write` recusa com `E_NOT_UTF8`.
+   */
+  readOnly?: true;
 }
 
 export type SaveResult = { saved: true; meta: NoteMeta } | { saved: false; current: Note };
@@ -627,14 +633,15 @@ export class Vault {
   async get(input: unknown): Promise<Note> {
     const p = notePath(input);
     const abs = inside(this.root, p);
-    let content: string;
+    let bytes: Buffer;
     try {
-      content = await readFile(abs, "utf8");
+      bytes = await readFile(abs);
     } catch {
       throw new VaultError("E_NOT_FOUND", `no note ${p}`);
     }
+    const content = bytes.toString("utf8");
     const entry = await this.index(p, content, abs);
-    return { ...entry.meta, content };
+    return { ...entry.meta, content, ...(isUtf8(bytes) ? {} : { readOnly: true as const }) };
   }
 
   /**
@@ -994,7 +1001,7 @@ export class Vault {
       try {
         if (await this.write(p, next.content, versionOf(disk))) return { count: next.count, skipped: !!next.unsupported };
       } catch (error) {
-        if (["ENOENT", "EACCES", "EPERM", "EROFS", "ENOSPC"].includes((error as NodeJS.ErrnoException).code ?? "")) return { count: 0, skipped: true };
+        if (["ENOENT", "EACCES", "EPERM", "EROFS", "ENOSPC", "E_NOT_UTF8"].includes((error as NodeJS.ErrnoException).code ?? "")) return { count: 0, skipped: true };
         throw error;
       }
     }
@@ -1288,7 +1295,13 @@ export class Vault {
         if (disk === null) break;
         const { content: next, count } = rewriteLinksMany(disk, moves, before, after);
         if (!count) break;
-        if (await this.write(e.meta.path, next, versionOf(disk))) {
+        // Uma nota que não é UTF-8 fica como está (T7575): o resto da mudança de pasta segue.
+        const written = await this.write(e.meta.path, next, versionOf(disk)).catch((error: unknown) => {
+          if (error instanceof VaultError && error.code === "E_NOT_UTF8") return "skip" as const;
+          throw error;
+        });
+        if (written === "skip") break;
+        if (written) {
           updated += count;
           break;
         }
@@ -1405,8 +1418,12 @@ export class Vault {
     await writeDurable(temp, content);
     try {
       this.beforeReplace?.();
+      const raw = await readFile(abs).catch(() => null);
+      // Um arquivo que não é UTF-8 (T7575): o texto que chega aqui já perdeu os acentos na leitura, e gravar por cima
+      // apagaria os bytes de vez. Nada troca esse arquivo: quem reescreve outras notas pula este e conta como pulado.
+      if (raw && !isUtf8(raw)) throw new VaultError("E_NOT_UTF8", `${p} is not UTF-8; Kiwi won't write over it`);
       if (expect !== undefined) {
-        const now = await readFile(abs, "utf8").catch(() => null);
+        const now = raw === null ? null : raw.toString("utf8");
         if (expect === null ? now !== null : now === null || versionOf(now) !== expect) {
           await rm(temp, { force: true });
           return false;

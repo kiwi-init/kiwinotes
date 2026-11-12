@@ -63,10 +63,14 @@ export class MockVault implements NotesApi {
     return stored;
   }
 
+  /** Os caminhos que fazem de conta que não são UTF-8 (T7575): voltam com `readOnly`, e o save recusa, como no engine. */
+  notUtf8 = new Set<string>();
+
   private note(path: string): Note {
     const s = this.notes.get(path);
     if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
     return {
+      ...(this.notUtf8.has(path) ? { readOnly: true as const } : {}),
       path,
       title: noteName(path),
       folder: folderOf(path),
@@ -108,6 +112,7 @@ export class MockVault implements NotesApi {
   async save(path: string, content: string, baseVersion: string): Promise<SaveResult> {
     const s = this.notes.get(path);
     if (!s) throw new Error(`E_NOT_FOUND: ${path}`);
+    if (this.notUtf8.has(path)) throw new Error(`E_NOT_UTF8: ${path}`);
     if (String(s.version) !== baseVersion) return { saved: false, current: this.note(path) };
     // O histórico de versões de mentira (T2680): o texto de antes na 1ª vez, e cada save (sem o intervalo de 2 min).
     const h = this.versionsOf.get(path) ?? [];

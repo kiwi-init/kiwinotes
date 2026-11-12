@@ -643,6 +643,29 @@ await step("renomeada fora com texto por gravar: o aviso aparece, e Descartar li
   if (draft.length) throw new Error(`o rascunho ficou: ${draft.join(", ")}`);
 });
 
+// T7575: uma nota que não é UTF-8 (Latin-1 de um app antigo) só é lida: o aviso diz por quê, o editor não muda, e nada
+// vai para o disco nem para o rascunho.
+await step("nota que não é UTF-8: só leitura, com o aviso, e digitar não grava", async () => {
+  const before = await content("Pessoas/Ana.md");
+  await page.evaluate(() => (window as any).__kiwiNotesMock.notUtf8.add("Pessoas/Ana.md"));
+  await page.keyboard.press("Meta+k");
+  await page.keyboard.type("Ana");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => (document.querySelector(".kn-title") as HTMLInputElement)?.value === "Ana");
+  await page.waitForSelector(".kn-readonly", { timeout: 3000 });
+  if (shots) await page.screenshot({ path: `${shots}/notas-nao-utf8.png` });
+  expectEq(await page.getAttribute(".cm-content", "contenteditable"), "false");
+  await page.click(".cm-content");
+  await page.keyboard.type("NAO PODE ENTRAR");
+  await page.waitForTimeout(900);
+  if ((await editorText()).includes("NAO PODE ENTRAR")) throw new Error("o editor aceitou a digitação");
+  expectEq(await content("Pessoas/Ana.md"), before);
+  if (await page.locator(".kn-save-alert").count()) throw new Error("apareceu o aviso de erro do save");
+  expectEq(await page.evaluate(() => localStorage.getItem("kiwi.notes.draft.v1:Pessoas/Ana.md")), null);
+  await page.evaluate(() => (window as any).__kiwiNotesMock.notUtf8.delete("Pessoas/Ana.md"));
+});
+
 await page.keyboard.press("Meta+k");
 await page.keyboard.type("ana");
 await page.waitForTimeout(300);
