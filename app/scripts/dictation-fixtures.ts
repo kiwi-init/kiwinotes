@@ -74,12 +74,55 @@ export function withNoise(wav: Buffer, volume: number, noise: number, seed = 1):
   return out;
 }
 
+/**
+ * Um som sem fala (T7454): a média dos senos de `hz`, vezes `amplitude` (de 0 a 1; é o pico de um seno só), por `seconds`. É o zumbido de um
+ * ar-condicionado (120 Hz e 240 Hz) ou um bipe (440 Hz), que o Ditado preciso transcrevia como texto inventado.
+ */
+export interface Synth {
+  hz: number[];
+  seconds: number;
+  amplitude: number;
+}
+
+/** O WAV de um `Synth`: 16 kHz, mono, 16 bits, como o do `say`. */
+export function synthWav({ hz, seconds, amplitude }: Synth): Buffer {
+  const n = Math.round(seconds * 16_000);
+  const b = Buffer.alloc(44 + n * 2);
+  b.write("RIFF", 0, "ascii");
+  b.writeUInt32LE(b.length - 8, 4);
+  b.write("WAVEfmt ", 8, "ascii");
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(16_000, 24);
+  b.writeUInt32LE(32_000, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write("data", 36, "ascii");
+  b.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) {
+    const v = hz.reduce((sum, f) => sum + Math.sin((2 * Math.PI * f * i) / 16_000), 0) / hz.length;
+    b.writeInt16LE(Math.round(v * amplitude * 32767), 44 + i * 2);
+  }
+  return b;
+}
+
+const isSynth = (v: unknown): v is Synth => {
+  const s = v as Synth | null;
+  return (
+    !!s && typeof s === "object" && Array.isArray(s.hz) && s.hz.length > 0 && s.hz.every((f) => typeof f === "number" && f > 0 && f < 8000) &&
+    typeof s.seconds === "number" && s.seconds > 0 && s.seconds <= 30 && typeof s.amplitude === "number" && s.amplitude > 0 && s.amplitude <= 1
+  );
+};
+
 export interface SpokenCase {
   name: string;
-  /** O que o `say` fala; ou `sayFile`, um texto de test/dictation (os longos). */
+  /** O que o `say` fala; ou `sayFile`, um texto de test/dictation (os longos); ou `synth`, um som sem fala. */
   say?: string;
   sayFile?: string;
-  voice: string;
+  synth?: Synth;
+  /** A voz do `say` (não vale para o `synth`). */
+  voice?: string;
   /** Com `noise`, o áudio sai mais baixo e com chiado (`withNoise`). */
   volume?: number;
   noise?: number;
@@ -96,8 +139,12 @@ export function loadSpoken(file = SPOKEN_CASES): SpokenCase[] {
       const c = JSON.parse(line) as SpokenCase;
       const said = typeof c.say === "string" && c.say.trim() !== "";
       const fromFile = typeof c.sayFile === "string" && existsSync(path.join(CASES_DIR, c.sayFile));
-      if (typeof c.name !== "string" || said === fromFile) throw new Error(`${file}:${n}: precisa de name e de say ou sayFile (um arquivo de test/dictation)`);
-      if (!VOICES.has(c.voice)) throw new Error(`${file}:${n}: voice é Luciana ou Samantha (veio ${c.voice})`);
+      const synth = c.synth !== undefined;
+      if (synth && !isSynth(c.synth)) throw new Error(`${file}:${n}: synth é {hz: [Hz…], seconds (até 30), amplitude (de 0 a 1)}`);
+      if (typeof c.name !== "string" || [said, fromFile, synth].filter(Boolean).length !== 1) {
+        throw new Error(`${file}:${n}: precisa de name e de um só entre say, sayFile (um arquivo de test/dictation) e synth`);
+      }
+      if (!synth && !VOICES.has(c.voice ?? "")) throw new Error(`${file}:${n}: voice é Luciana ou Samantha (veio ${c.voice})`);
       if ("wav" in c || "text" in c) throw new Error(`${file}:${n}: o caso falado tem say, não wav nem text`);
       return c;
     });
@@ -106,9 +153,9 @@ export function loadSpoken(file = SPOKEN_CASES): SpokenCase[] {
 /** As vozes que faltam neste Mac (Ajustes › Acessibilidade › Conteúdo falado › Voz do sistema › Gerenciar vozes). */
 export function missingVoices(cases: SpokenCase[]): string[] {
   const r = spawnSync("say", ["-v", "?"], { encoding: "utf8" });
-  if (r.status !== 0) return [...new Set(cases.map((c) => c.voice))];
+  if (r.status !== 0) return [...new Set(cases.flatMap((c) => (c.voice ? [c.voice] : [])))];
   const have = new Set(r.stdout.split("\n").map((l) => l.split(/\s{2,}|\s\(/)[0]!.trim()));
-  return [...new Set(cases.map((c) => c.voice))].filter((v) => !have.has(v));
+  return [...new Set(cases.flatMap((c) => (c.voice ? [c.voice] : [])))].filter((v) => !have.has(v));
 }
 
 /** Gera um WAV por caso (16 kHz, mono, 16 bits) e o .jsonl do batch. Devolve o caminho do .jsonl. */
@@ -116,13 +163,16 @@ export function makeFixtures(outDir: string, cases: SpokenCase[]): string {
   mkdirSync(outDir, { recursive: true });
   const lines = cases.map((c, i) => {
     const wav = path.join(outDir, `${String(i + 1).padStart(2, "0")}.wav`);
-    const what = c.sayFile ? ["-f", path.join(CASES_DIR, c.sayFile)] : [c.say!];
-    const r = spawnSync("say", ["-v", c.voice, "-o", wav, "--file-format=WAVE", "--data-format=LEI16@16000", ...what], { encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`say (${c.voice}) falhou em "${c.name}": ${(r.stderr || "").trim()}`);
+    if (c.synth) writeFileSync(wav, synthWav(c.synth));
+    else {
+      const what = c.sayFile ? ["-f", path.join(CASES_DIR, c.sayFile)] : [c.say!];
+      const r = spawnSync("say", ["-v", c.voice!, "-o", wav, "--file-format=WAVE", "--data-format=LEI16@16000", ...what], { encoding: "utf8" });
+      if (r.status !== 0) throw new Error(`say (${c.voice}) falhou em "${c.name}": ${(r.stderr || "").trim()}`);
+    }
     if (typeof c.soltouAntesMs === "number") writeFileSync(wav, cutAtRelease(readFileSync(wav), c.soltouAntesMs));
     if (typeof c.noise === "number") writeFileSync(wav, withNoise(readFileSync(wav), c.volume ?? 1, c.noise));
     // O `known` é da bateria (scripts/test-dictation.ts), não do pedido do dictate.
-    const { say: _say, sayFile: _file, voice: _voice, known: _known, soltouAntesMs: _solta, volume: _volume, noise: _noise, ...request } = c;
+    const { say: _say, sayFile: _file, synth: _synth, voice: _voice, known: _known, soltouAntesMs: _solta, volume: _volume, noise: _noise, ...request } = c;
     return JSON.stringify({ ...request, wav });
   });
   const batch = path.join(outDir, "falados.batch.jsonl");

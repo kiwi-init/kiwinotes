@@ -7,3 +7,9 @@
 {"name": "preciso: ditado longo com ruído sai inteiro", "sayFile": "longos/servidor.txt", "voice": "Luciana", "volume": 0.25, "noise": 450, "expect": {"contains": ["sistema operacional", "usuário dedicado", "backup automático", "uso no hospital", "equipe de infraestrutura"]}}
 {"name": "preciso: ditado curto segue igual", "say": "me manda o relatório amanhã de manhã, por favor", "voice": "Luciana", "expect": {"contains": "relatório amanhã"}}
 {"name": "preciso: a fala que começa por um termo do dicionário fica inteira", "say": "Kiwi Notes é um aplicativo de notas que roda inteiro no computador, sem mandar nada para a nuvem", "voice": "Luciana", "expect": {"contains": "Kiwi Notes é um aplicativo"}}
+// Som sem fala (T7454, achado da varredura T7438): com o Ditado preciso, o Whisper inventava texto num zumbido ou num
+// bipe ("Okay, now blessing is set", "노!", "Paycheck"), e esse texto era colado. O Parakeet devolve vazio no mesmo áudio.
+// O `synth` gera o som na hora; nada de áudio no repo.
+{"name": "preciso: zumbido de 3 s (120 Hz e 240 Hz) não vira texto", "synth": {"hz": [120, 240], "seconds": 3, "amplitude": 0.25}, "expect": {"text": ""}}
+{"name": "preciso: bipe de 2 s (440 Hz) não vira texto", "synth": {"hz": [440], "seconds": 2, "amplitude": 0.3}, "expect": {"text": ""}}
+{"name": "preciso: bipe de 5 s (440 Hz) não vira texto", "synth": {"hz": [440], "seconds": 5, "amplitude": 0.3}, "expect": {"text": ""}}

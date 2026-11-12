@@ -166,6 +166,18 @@ actor Transcriber {
         return Output(raw: raw, text: text, lang: SpokenLanguage.detect(text))
     }
 
+    /// Seconds of speech in the clip by the same VAD (Silero, threshold 0.7), for the precise route (T7454): a hum or
+    /// a beep has sound but no speech, and the Whisper invents text on it. Runs whether or not `useVAD` is on, since it
+    /// only decides the route. `nil` when the VAD can't load: the route falls back to the energy rule.
+    func vadSpeechSeconds(_ samples: [Float]) async -> Double? {
+        do {
+            if vad == nil { vad = try await VadManager(config: VadConfig(defaultThreshold: 0.7)) }
+            return try await vad!.segmentSpeech(samples).reduce(0) { $0 + $1.duration }
+        } catch {
+            return nil
+        }
+    }
+
     /// VoiceInk's optional VAD (Silero, threshold 0.7): only the speech goes to the model, and audio without
     /// speech gives an empty transcript. If the VAD fails, the whole clip goes, as in VoiceInk.
     private func speechOnly(_ samples: [Float]) async -> [Float] {
