@@ -1,4 +1,4 @@
-# Prancha dos estados — T7604
+# Prancha dos estados — T7606
 
 Spec #7591 do canal `kiwinotes`, aprovado pelo harry; instrução #7589.
 Issue: https://github.com/kiwi-init/kiwinotes/issues/309.
@@ -36,7 +36,7 @@ Cada `.txt` contém o prompt integral e identifica a célula correspondente;
 não são 21 gerações independentes. `quadros.json` registra as coordenadas.
 Todos os quadros mantêm a legenda de referência.
 
-`INSTRUCAO.md` preserva a instrução completa entregue na T7604, incluindo a
+`INSTRUCAO.md` preserva a instrução completa entregue na T7606, incluindo a
 regra atualizada do Electrobun Livewire autorizada no #7590.
 
 ## Conferência e decisão visual
