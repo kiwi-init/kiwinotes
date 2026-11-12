@@ -14,12 +14,31 @@ export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 });
 }
 
+/**
+ * Lê um JSON do app. Sem o arquivo, `undefined`. Um arquivo que não é JSON (editado à mão, cortado por um disco cheio,
+ * restaurado pela metade de um backup) também volta `undefined`, e quem lê segue com o padrão (T7816): antes ele lançava,
+ * e quem lia em segundo plano (a busca pelo sentido, as pastas das notas) derrubava o processo ao abrir as Notas. O
+ * arquivo da pessoa não some: ele fica ao lado, como `<arquivo>.broken-<data>`, antes de a próxima gravação o trocar.
+ */
 export async function readJson<T>(file: string): Promise<T | undefined> {
+  let text: string;
   try {
-    return JSON.parse(await readFile(file, "utf8")) as T;
+    text = await readFile(file, "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw e;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch (e) {
+    if (!(e instanceof SyntaxError)) throw e;
+    const kept = `${file}.broken-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    // Outro leitor pode ter guardado o mesmo arquivo um instante antes: sem ele, só segue com o padrão.
+    await rename(file, kept).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    console.warn(`[store] ${path.basename(file)} is not JSON; kept as ${path.basename(kept)}, using the defaults`);
+    return undefined;
   }
 }
 

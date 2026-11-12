@@ -165,3 +165,19 @@ test("os sons de início e de fim (T5833): ligados por padrão, e só um false d
   expect(sanitizeSettings({ cues: false }).cues).toBe(false);
   expect(sanitizeSettings({ cues: "não" }).cues).toBe(true);
 });
+
+// T7442: um settings.json que não é JSON (editado à mão, cortado por um disco cheio) não pode derrubar o app. O engine
+// lê os ajustes em todo canto (a busca pelo sentido, as pastas das notas); um erro aqui virava rejeição sem dono, e o
+// processo caía ao abrir as Notas. Os ajustes voltam ao padrão, e o arquivo da pessoa não é apagado calado.
+test("settings.json que não é JSON: load devolve o padrão e o arquivo torto fica guardado", async () => {
+  fresh();
+  const broken = '{"cues": false, "dailyFolder": "Diário/2026", ';
+  writeFileSync(path.join(dir, "settings.json"), broken);
+  const store = new SettingsStore(dir);
+  expect(await store.load()).toEqual(DEFAULT_SETTINGS);
+  await store.update(() => ({ ocr: false }));
+  expect((await store.load()).ocr).toBe(false);
+  const { readdirSync } = await import("node:fs");
+  const kept = readdirSync(dir).filter((f) => f !== "settings.json").map((f) => readFileSync(path.join(dir, f), "utf8"));
+  expect(kept).toContain(broken);
+});

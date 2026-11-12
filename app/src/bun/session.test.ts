@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -24,19 +24,19 @@ test("do log do helper, só o diagnóstico do mic (ditado e reunião) vai para o
 });
 
 describe("loadLists", () => {
-  test("a hand-edited JSON that doesn't parse is an empty list with a warning, not a crash, and stays on disk (T914)", async () => {
+  test("a hand-edited JSON that doesn't parse is an empty list, not a crash, and stays on disk (T914), kept aside (T7816)", async () => {
     dir = mkdtempSync(path.join(tmpdir(), "kiwi-session-"));
     const broken = '{ "version": 1, "terms": [ { "term": "DICOM" } ';
     writeFileSync(path.join(dir, "dictionary.json"), broken);
     writeFileSync(path.join(dir, "snippets.json"), JSON.stringify({ version: 1, snippets: [{ trigger: "meu email", text: "a@b.c" }] }));
-    const warnings: string[] = [];
-    const lists = await loadLists({ dictionary: new DictionaryStore(dir), snippets: new SnippetStore(dir) }, (m) => warnings.push(m));
+    const lists = await loadLists({ dictionary: new DictionaryStore(dir), snippets: new SnippetStore(dir) });
     expect(lists.terms).toEqual([]);
     // The other file still loads.
     expect(lists.snippets).toEqual([{ trigger: "meu email", text: "a@b.c" }]);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("dictionary.json");
-    expect(readFileSync(path.join(dir, "dictionary.json"), "utf8")).toBe(broken);
+    // T7816: the person's file is kept as `dictionary.json.broken-<date>` (the readJson warns in the log), so the next
+    // save writes a good dictionary.json without overwriting what they had.
+    const kept = readdirSync(dir).filter((n) => n.startsWith("dictionary.json.broken-"));
+    expect(kept.map((n) => readFileSync(path.join(dir, n), "utf8"))).toEqual([broken]);
   });
 
   test("missing files are empty lists without a warning", async () => {
