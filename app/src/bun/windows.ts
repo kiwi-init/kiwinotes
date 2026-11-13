@@ -27,6 +27,7 @@ import { fetchRemoteImage } from "../notes/remote-image.ts";
 import { NOT_RECORDING } from "../shared/meetings.ts";
 import { MeetingHostError } from "./meetings.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
+import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 
@@ -206,6 +207,8 @@ const capabilities = uiCapabilities({
 // As ferramentas do agente (spec #7496) leem pelas mesmas capacidades das janelas, só as de leitura; e escrevem (spec
 // #8356) pelo mesmo salvar das Notas, com a cópia de antes nas Versões.
 stores.agent.useReader(readerFromCapabilities(capabilities));
+// O Modelo de nota (spec #11102) do cofre aberto, para o começo fixo do pedido.
+stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
 stores.agent.useWriter(writerFromCapabilities(capabilities));
 // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
 stores.agent.useUndo(undoNotesFromCapabilities(capabilities));

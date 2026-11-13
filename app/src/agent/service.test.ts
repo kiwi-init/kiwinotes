@@ -13,6 +13,7 @@ import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS } from "./service.ts";
+import { DEFAULT_NOTE_MODEL, noteModelText, sanitizeNoteModel } from "./note-model.ts";
 import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import { AgentActivity } from "./activity.ts";
@@ -912,6 +913,32 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(m.turns.length).toBe(before);
     expect(await m.svc.activityLog()).toEqual([]);
     expect(v.week.requests).toBe(0);
+  });
+
+  test("o Modelo de nota (spec #11102) vai no começo fixo do pedido, com os mesmos bytes entre dois pedidos com o mesmo modelo", async () => {
+    const m = make();
+    await readyNow(m);
+    let model = sanitizeNoteModel({ ...DEFAULT_NOTE_MODEL, body: "topicos" });
+    m.svc.useNoteModel(async () => model);
+    await askAndWait(m, "oi");
+    await askAndWait(m, "outra coisa");
+    const prompts = () => m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    const [a, b] = prompts().slice(-2);
+    const fixed = noteModelText(model);
+    expect(a!.startsWith(fixed)).toBe(true);
+    expect(b!.startsWith(fixed)).toBe(true);
+    expect(a!.slice(fixed.length)).toBe("oi");
+    // Com o modo econômico, o modelo vem antes, e as instruções econômicas depois: os dois sempre na mesma ordem.
+    await m.svc.configure({ economy: true });
+    await askAndWait(m, "oi");
+    expect(prompts().at(-1)).toBe(fixed + ECONOMY_INSTRUCTIONS + "oi");
+    // Mudar o modelo muda o começo fixo (vale para o que vem depois); um erro ao ler não derruba o pedido.
+    model = sanitizeNoteModel({ ...DEFAULT_NOTE_MODEL, numbered: true });
+    await askAndWait(m, "oi");
+    expect(prompts().at(-1)!.startsWith(noteModelText(model))).toBe(true);
+    m.svc.useNoteModel(async () => { throw new Error("sem cofre"); });
+    await askAndWait(m, "oi");
+    expect(prompts().at(-1)).toBe(ECONOMY_INSTRUCTIONS + "oi");
   });
 
   test("o modo econômico (spec #11084): as instruções e a lista das ferramentas idênticas, byte a byte, entre dois pedidos", async () => {

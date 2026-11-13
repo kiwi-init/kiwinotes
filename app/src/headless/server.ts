@@ -22,6 +22,7 @@ import type { Socket } from "bun";
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { assertNotRealData } from "./guard.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
+import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
@@ -242,6 +243,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   });
   // As ferramentas do agente (spec #7496), pelas capacidades de leitura, e as de escrita (spec #8356), como no app.
   stores.agent.useReader(readerFromCapabilities(capabilities));
+  // O Modelo de nota (spec #11102) do cofre aberto, para o começo fixo do pedido.
+  stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
   stores.agent.useWriter(writerFromCapabilities(capabilities));
   // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
   stores.agent.useUndo(undoNotesFromCapabilities(capabilities));

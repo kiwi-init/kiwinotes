@@ -1,3 +1,4 @@
+import type { NoteModel } from "../agent/note-model.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
@@ -156,7 +157,10 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   demanda), o `agent.usageClear`, o evento `agent.usageChanged` e o evento `limit` no `agent.turn`. Só acréscimo.
 // 1.55.0 (T11248, spec #9876): o atalho Control. O `controlShortcut` no `AgentStatus` e no `agent.configure` ("Falar
 //   com o agente pelo Control") e o evento `agent.voice` (o que o gato mostra durante a fala). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.55.0";
+// 1.56.0 (T11223, spec #11102): o Modelo de nota. O `agent.noteModel` (o modelo do cofre, ou o padrão) e o
+//   `agent.noteModelSet` (grava `.kiwi/modelo-de-nota.md`; não reescreve nenhuma nota). Só acréscimo.
+export type { NoteModel };
+export const UI_CONTRACT_VERSION = "1.56.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -535,6 +539,10 @@ export interface UiCapabilities {
   "agent.usageRefresh": { args: Record<string, never>; result: AgentUsageView };
   /** "Apagar o gasto guardado" (1.54.0): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
   "agent.usageClear": { args: Record<string, never>; result: AgentUsageView };
+  /** O Modelo de nota do cofre (1.56.0, spec #11102): o padrão quando ainda não há `.kiwi/modelo-de-nota.md`. */
+  "agent.noteModel": { args: Record<string, never>; result: NoteModel };
+  /** Grava o Modelo de nota (1.56.0). Só o arquivo do modelo: nenhuma nota é reescrita. */
+  "agent.noteModelSet": { args: { model: NoteModel }; result: NoteModel };
 }
 
 /** Uma soma de gasto do Kiwi (1.54.0). */
@@ -851,6 +859,8 @@ export const UI_CAPABILITIES = [
   "agent.usage",
   "agent.usageRefresh",
   "agent.usageClear",
+  "agent.noteModel",
+  "agent.noteModelSet",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
