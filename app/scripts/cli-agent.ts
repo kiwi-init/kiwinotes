@@ -9,6 +9,8 @@
 //                                                              programa aberto, o isolamento e o que a sessão recebeu;
 //                                                              --tools abre com as ferramentas do Kiwi (spec #7496),
 //                                                              sobre um cofre vazio, e mostra se o Claude Code pediu a lista
+//   bun run cli agent activity [--data DIR] [--limit N]        o registro do agente (spec #8356): os pedidos, do mais novo
+//                                                              para o mais velho, com o que cada um leu e mudou nas notas
 //
 // **O `proof --real` abre o Claude Code de verdade, logado: só o harry roda, quando o lead pede** (ADR 0011, #8368).
 // Sem `--real`, a prova usa um `claude` falso, que anota como foi chamado em `<data>/fake-claude/calls.jsonl`. As duas
@@ -24,23 +26,25 @@
 import path from "node:path";
 
 import { downloadAdapter, installedAdapter, removeAdapter } from "../src/agent/adapter/download.ts";
-import { adapterRoot } from "../src/agent/adapter/open.ts";
+import { adapterRoot, agentDir } from "../src/agent/adapter/open.ts";
 import { ADAPTER_VERSION, CLAUDE_CODE_FOR_ADAPTER } from "../src/agent/adapter/pinned.ts";
 import { runAdapterProof } from "../src/agent/adapter/proof.ts";
 import { checkClaudeVersion } from "../src/agent/adapter/version.ts";
 import { claudeStatus, findClaude, type ProgramArgv } from "../src/agent/claude.ts";
+import { AgentActivity, ACTIVITY_LIST_MAX } from "../src/agent/activity.ts";
 import { AgentError } from "../src/agent/errors.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, writeFakeClaudeExecutable } from "../src/agent/fake/index.ts";
 import { AgentHost } from "../src/agent/host.ts";
 import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
 
-const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof> [--data DIR]
+const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof|activity> [--data DIR]
   status [--claude PATH]       o Claude Code (o falso, para os agentes): instalado, versão, login e o adaptador
   ask "texto" [--new]          um pedido ao agente falso; --new começa uma sessão nova
   download [--registry URL]    baixa o adaptador do Claude Code (a lista fixa, conferida)
   remove                       apaga o adaptador baixado
   proof [--real] [--tools]     abre uma sessão pelo adaptador, sem pedido; --real usa o Claude Code de verdade (só o harry);
-                               --tools abre com as ferramentas do Kiwi, sobre um cofre vazio`;
+                               --tools abre com as ferramentas do Kiwi, sobre um cofre vazio
+  activity [--limit N]         o registro: o que cada pedido leu e mudou nas notas (os 50 últimos, ou N)`;
 
 const NAME = "Claude Code";
 
@@ -133,6 +137,23 @@ export async function runAgent(argv: string[], data: string): Promise<number> {
       const report = await runAdapterProof({ data, claudePath, env, tools });
       print({ ok: report.ok, value: { real, tools, ...report } });
       return report.ok ? 0 : 1;
+    } catch (e) {
+      return fail(e);
+    }
+  }
+  if (sub === "activity") {
+    const raw = option(rest, "--limit");
+    const limit = raw === undefined ? 50 : Number(raw);
+    if (!Number.isInteger(limit) || limit < 1 || limit > ACTIVITY_LIST_MAX) {
+      console.error(USAGE);
+      return 2;
+    }
+    try {
+      assertNotRealData(data);
+      // O mesmo registro que o app grava e o `agent.activity` lê: `<dados>/agent/activity`.
+      const requests = await new AgentActivity({ dir: path.join(agentDir(data), "activity") }).list(limit);
+      print({ ok: true, value: { requests } });
+      return 0;
     } catch (e) {
       return fail(e);
     }

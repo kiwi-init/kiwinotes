@@ -40,6 +40,7 @@ import type { ToNoteResult } from "../notes/fromDictation.ts";
 import { checkMeetingSettingsPatch, NOT_RECORDING } from "../shared/meetings.ts";
 import { listMeetings, type MeetingHost, MeetingHostError } from "./meetings.ts";
 import { type AgentService, AgentServiceError } from "../agent/service.ts";
+import { ACTIVITY_LIST_MAX } from "../agent/activity.ts";
 import { isAgentChoice } from "../store/settings.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
@@ -614,14 +615,19 @@ export function uiCapabilities(deps: CapabilityDeps,
     "notes.get": async (args) => (await vault()).get(fields(args, "notes.get", ["path"]).path),
     "notes.save": async (args) => {
       const a = fields(args, "notes.save", ["path", "content", "baseVersion",
-        "baseContent",
+        "baseContent", "snapshot",
       ]);
+      if (a.snapshot !== undefined && typeof a.snapshot !== "boolean") throw bad("snapshot must be true or false");
       const v = await vault();
       // O texto de antes, para a 1ª versão de uma nota sem histórico (T2680).
-      const before = deps.versions ? await v.get(a.path).then((n) => n.content, () => undefined,
-          ) : undefined;
+      const current = deps.versions ? await v.get(a.path).catch(() => undefined) : undefined;
+      const before = current?.content;
       if (a.baseContent !== undefined && typeof a.baseContent !== "string")
         throw bad("baseContent must be a string");
+      // `snapshot` (1.44.0, spec #8356): o texto de antes vira uma versão agora, sem o intervalo de 2 minutos. É o que
+      // o agente usa em cada escrita. Só quando a nota ainda está na versão que vai ser trocada: senão o save não grava.
+      if (a.snapshot === true && deps.versions && current && current.version === a.baseVersion)
+        await deps.versions.snapshot(current.path, current.content);
       const r =
         deps.meetingNotes &&
         typeof a.path === "string" &&
@@ -981,6 +987,14 @@ export function uiCapabilities(deps: CapabilityDeps,
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
       }
       return agentCall((agent) => agent.configure({ model: a.model as string | undefined, effort: a.effort as string | undefined }));
+    },
+    "agent.activity": (args) => {
+      const a = object(args, "agent.activity");
+      const extra = Object.keys(a).filter((k) => k !== "limit");
+      if (extra.length) throw bad(`agent.activity: unknown arg ${extra[0]}`);
+      if (a.limit !== undefined && (typeof a.limit !== "number" || !Number.isInteger(a.limit) || a.limit < 1 || a.limit > ACTIVITY_LIST_MAX))
+        throw bad(`agent.activity: limit must be an integer from 1 to ${ACTIVITY_LIST_MAX}`);
+      return agentCall(async (agent) => ({ requests: await agent.activityLog(a.limit as number | undefined) }));
     },
   };
   // A lista do contrato e os handlers andam juntos.

@@ -163,9 +163,71 @@ describe("o agente pela CLI headless (T8678)", () => {
     // A fronteira do cofre vale pelas ferramentas também.
     const outside = await ask('/tool notes_read {"path":"../fora.md"}');
     expect(outside.at(-1).text).toMatch(/^erro da ferramenta: E_OUTSIDE_VAULT/);
-    expect((await ask("/ferramentas")).at(-1).text).toBe("ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get");
+    // No app, as de escrita (spec #8356) vêm junto.
+    expect((await ask("/ferramentas")).at(-1).text).toBe(
+      "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, notes_create, notes_append, notes_write",
+    );
     await invoke("agent.disable");
   }, 60_000);
+
+  test("o agente escreve nas notas (spec #8356): cria, acrescenta e troca, com a cópia de antes nas Versões e no registro", async () => {
+    await invoke("agent.enable");
+    await invoke("agent.download");
+    await until(async () => (await invoke("agent.status")).json!.value.adapter.phase === "ready");
+    expect((await invoke("notes.create", { folder: "Projetos", title: "Lista", content: "# Lista\n\n## Fazer\n\n- comprar pão\n" })).json!.ok).toBe(true);
+
+    const ask = async (text: string) => {
+      const id = (await invoke("agent.ask", { text })).json!.value.id as string;
+      await until(async () => (await agentEvents()).some((e) => e.event === "agent.turn" && e.payload.id === id && (e.payload.type === "done" || e.payload.type === "error")));
+      return (await agentEvents()).filter((e) => e.event === "agent.turn" && e.payload.id === id).map((e) => e.payload);
+    };
+    const tool = async (name: string, args: unknown) => {
+      const done = (await ask(`/tool ${name} ${JSON.stringify(args)}`)).at(-1);
+      expect(done.type).toBe("done");
+      return done.text.startsWith("erro") ? { error: done.text as string } : { value: JSON.parse(done.text) };
+    };
+    const get = async (p: string) => (await invoke("notes.get", { path: p })).json!.value as { content: string; version: string };
+
+    const created = await tool("notes_create", { folder: "Projetos", title: "Resumo", text: "# Resumo\n\nfeito pelo agente\n" });
+    expect(created.value.path).toBe("Projetos/Resumo.md");
+    expect((await get("Projetos/Resumo.md")).content).toBe("# Resumo\n\nfeito pelo agente\n");
+
+    await tool("notes_append", { path: "Projetos/Lista.md", section: "Fazer", text: "- lavar o carro" });
+    expect((await get("Projetos/Lista.md")).content).toBe("# Lista\n\n## Fazer\n\n- comprar pão\n- lavar o carro\n");
+
+    const { versao } = (await tool("notes_read", { path: "Projetos/Lista.md" })).value;
+    const turn = await ask(`/tool notes_write ${JSON.stringify({ path: "Projetos/Lista.md", section: "Fazer", text: "- nada", version: versao })}`);
+    expect(turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "notes_write", target: "Projetos/Lista.md › Fazer" }));
+    expect((await get("Projetos/Lista.md")).content).toBe("# Lista\n\n## Fazer\n\n- nada\n");
+
+    // A versão lida, velha: nada é escrito.
+    expect((await tool("notes_write", { path: "Projetos/Lista.md", text: "x", version: versao })).error).toMatch(/^erro da ferramenta: E_CHANGED/);
+    // O agente não muda uma nota de reunião, nem apaga.
+    expect((await tool("notes_delete", { path: "Projetos/Lista.md" })).error).toContain("não tem a ferramenta");
+
+    // O texto de antes está nas Versões da nota, sem esperar os 2 minutos do histórico.
+    const versions = (await invoke("notes.versions", { path: "Projetos/Lista.md" })).json!.value.versions as { id: string }[];
+    const texts: string[] = [];
+    for (const v of versions) texts.push((await invoke("notes.version", { path: "Projetos/Lista.md", id: v.id })).json!.value.content);
+    expect(texts).toContain("# Lista\n\n## Fazer\n\n- comprar pão\n");
+    expect(texts).toContain("# Lista\n\n## Fazer\n\n- comprar pão\n- lavar o carro\n");
+
+    // O registro: pela capacidade do app e pela CLI, o mesmo.
+    const log = (await invoke("agent.activity", { limit: 10 })).json!.value.requests as { request: string; reads: unknown[]; changes: { kind: string; path: string; copy?: string }[] }[];
+    const changes = log.flatMap((r) => r.changes).map((c) => [c.kind, c.path, !!c.copy]);
+    expect(changes).toEqual([
+      ["replaced", "Projetos/Lista.md", true],
+      ["appended", "Projetos/Lista.md", true],
+      ["created", "Projetos/Resumo.md", false],
+    ]);
+    expect(log.some((r) => r.reads.some((x: any) => x.tool === "notes_read" && x.target === "Projetos/Lista.md"))).toBe(true);
+    const fromCli = await cli(["agent", "activity", "--limit", "10"]);
+    expect(fromCli.code).toBe(0);
+    expect(fromCli.json!.value.requests).toEqual(log);
+    expect((await cli(["agent", "activity", "--limit", "0"])).code).toBe(2);
+    expect((await invoke("agent.activity", { limit: 0 })).json!.code).toBe("E_BAD_ARGS");
+    await invoke("agent.disable");
+  }, 90_000);
 
   test("quando o app sai, o programa do agente sai junto", async () => {
     await invoke("agent.enable");

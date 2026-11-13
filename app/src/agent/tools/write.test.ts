@@ -1,0 +1,407 @@
+// As ferramentas de escrita do Kiwi (spec #8356), pelo servidor MCP de verdade, sobre um cofre de verdade num tmp, as
+// mesmas capacidades das janelas (`uiCapabilities`), o histórico de versões das Notas e o registro do agente. Nenhum
+// agente, nenhuma rede além do 127.0.0.1.
+
+import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { uiCapabilities } from "../../bun/ui-capabilities.ts";
+import { Vault } from "../../notes/vault.ts";
+import { MAX_VERSIONS, NoteVersions } from "../../notes/versions.ts";
+import { DEFAULT_SETTINGS } from "../../store/settings.ts";
+import { AgentActivity } from "../activity.ts";
+import { readerFromCapabilities } from "./reader.ts";
+import { KiwiToolServer, MAX_BODY, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
+import { WRITE_MAX_CHARS, type ToolChange, type WriteJournal } from "./tools.ts";
+import { WRITER_CAPABILITIES, writerFromCapabilities, type VaultWriter } from "./writer.ts";
+
+const dirs: string[] = [];
+const servers: KiwiToolServer[] = [];
+afterEach(() => {
+  for (const s of servers.splice(0)) s.stop();
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+const MEETING = "---\ntype: meeting\ndate: 2026-11-10\nduration: 60\n---\n\n## Minhas notas\n\norçamento\n\n## Transcrição\n\n**Ana** (00:00): Bom dia.\n";
+const KIWI = "# Kiwi\n\nO Kiwi é um app de notas.\n\n## Prazo\n\nO prazo do Kiwi é março.\n\n## Equipe\n\nharry e jow.\n";
+const versionOf = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+
+async function setup(o: { wrap?: (w: VaultWriter, root: string) => VaultWriter } = {}) {
+  const base = mkdtempSync(path.join(tmpdir(), "kiwi-write-"));
+  dirs.push(base);
+  const root = path.join(base, "KiwiNotes");
+  const files: Record<string, string> = { "Projetos/Kiwi.md": KIWI, "Ideias.md": "ideias soltas", "Reuniões/Orçamento.md": MEETING };
+  for (const [rel, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    writeFileSync(path.join(root, rel), content);
+  }
+  // Um segredo fora do cofre, com um link simbólico para ele e outro para a pasta de fora.
+  mkdirSync(path.join(base, "fora"));
+  writeFileSync(path.join(base, "fora.md"), "SEGREDO DE FORA");
+  symlinkSync(path.join(base, "fora.md"), path.join(root, "Atalho.md"));
+  symlinkSync(path.join(base, "fora"), path.join(root, "Link"));
+  // Uma nota em Latin-1 (um app antigo do Windows): o Kiwi só mostra.
+  writeFileSync(path.join(root, "Latin.md"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+  const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
+  const versions = new NoteVersions({ dir: path.join(base, "history") });
+  const caps = uiCapabilities({
+    dictionary: { load: async () => [], save: async (t) => t },
+    snippets: { load: async () => [], save: async (s) => s },
+    history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+    dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
+    settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
+    clipboardWrite: () => {},
+    notes: v,
+    versions,
+  });
+  // As capacidades que o escritor chama, anotadas: só as quatro dele passam por ele.
+  const called = new Set<string>();
+  const recorded = new Proxy(caps as Record<string, (a: unknown) => unknown>, {
+    get: (t, cap: string) => (args: unknown) => {
+      called.add(cap);
+      return t[cap]!(args);
+    },
+  });
+  const reader = readerFromCapabilities(caps as never);
+  const plain = writerFromCapabilities(recorded as never);
+  const writer = o.wrap ? o.wrap(plain, root) : plain;
+  const activity = new AgentActivity({ dir: path.join(base, "agent", "activity") });
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  const journal: WriteJournal = {
+    keep: async (_p, before) => {
+      const c = await activity.keep("pedido-1", before);
+      kept.push(c);
+      return c;
+    },
+    drop: async (c) => {
+      dropped.push(c);
+      await activity.drop(c);
+    },
+  };
+  const calls: ToolCallEvent[] = [];
+  const server = new KiwiToolServer({ reader, writer, journal, onCall: (e) => calls.push(e) });
+  servers.push(server);
+  const config = server.start();
+  const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
+  const changes = () => calls.filter((c) => c.change).map((c) => c.change as ToolChange);
+  return { base, root, v, caps, versions, activity, server, config, calls, called, kept, dropped, read, changes };
+}
+
+let id = 0;
+async function rpc(config: KiwiMcpServerConfig, method: string, params?: unknown) {
+  const h = Object.fromEntries(config.headers.map((x) => [x.name, x.value]));
+  return fetch(config.url, { method: "POST", headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }) });
+}
+
+async function tool(config: KiwiMcpServerConfig, name: string, args: unknown = {}): Promise<{ value: any; error?: string }> {
+  const res = await rpc(config, "tools/call", { name, arguments: args });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { result?: { content: { text: string }[]; isError?: boolean }; error?: { message: string } };
+  if (body.error) return { value: null, error: body.error.message };
+  const text = body.result!.content[0]!.text;
+  return body.result!.isError ? { value: null, error: text } : { value: JSON.parse(text) };
+}
+
+describe("o servidor com o escritor (spec #8356)", () => {
+  test("o tools/list traz as nove, e só as três de escrita dizem que mudam o cofre", async () => {
+    const { config } = await setup();
+    const init = (await (await rpc(config, "initialize", { protocolVersion: "2025-06-18" })).json()) as any;
+    expect(init.result.instructions).toContain("notes_write");
+    expect(init.result.instructions).toContain("Versões");
+    const list = (await (await rpc(config, "tools/list")).json()) as any;
+    const byName = Object.fromEntries(list.result.tools.map((t: any) => [t.name, t]));
+    expect(Object.keys(byName)).toEqual([
+      "notes_search",
+      "notes_outline",
+      "notes_read",
+      "notes_list",
+      "meetings_list",
+      "meetings_get",
+      "notes_create",
+      "notes_append",
+      "notes_write",
+    ]);
+    for (const name of ["notes_create", "notes_append", "notes_write"]) {
+      expect(byName[name].annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false, openWorldHint: false });
+      // Os campos internos da definição não vão para o agente.
+      expect(byName[name].writes).toBeUndefined();
+    }
+    expect(byName.notes_write.annotations.destructiveHint).toBe(true);
+    expect(byName.notes_append.annotations.destructiveHint).toBe(false);
+    expect(byName.notes_read.annotations.readOnlyHint).toBe(true);
+    expect(byName.notes_write.inputSchema.required).toEqual(["path", "text", "version"]);
+  });
+
+  test("não há ferramenta para apagar, renomear nem mover", async () => {
+    const { config, read } = await setup();
+    for (const name of ["notes_delete", "notes_rename", "notes_move", "folders_delete"]) {
+      expect((await tool(config, name, { path: "Ideias.md" })).error).toContain("não tem a ferramenta");
+    }
+    expect(read("Ideias.md")).toBe("ideias soltas");
+  });
+
+  test("o notes_read devolve a versão da nota, também numa seção", async () => {
+    const { config } = await setup();
+    expect((await tool(config, "notes_read", { path: "Projetos/Kiwi.md" })).value.versao).toBe(versionOf(KIWI));
+    expect((await tool(config, "notes_read", { path: "Projetos/Kiwi.md", section: "Prazo" })).value.versao).toBe(versionOf(KIWI));
+  });
+});
+
+describe("notes_create", () => {
+  test("cria a nota na pasta, criando a pasta, e diz o caminho e a versão", async () => {
+    const { config, read, calls, changes } = await setup();
+    const r = await tool(config, "notes_create", { folder: "Projetos/Novos", title: "Plano", text: "# Plano\n\n- um\n" });
+    expect(r.value).toEqual({ path: "Projetos/Novos/Plano.md", titulo: "Plano", versao: versionOf("# Plano\n\n- um\n"), caracteres: 14 });
+    expect(read("Projetos/Novos/Plano.md")).toBe("# Plano\n\n- um\n");
+    expect(calls.at(-1)).toMatchObject({ tool: "notes_create", target: "Projetos/Novos/Plano.md", ok: true });
+    expect(changes()).toEqual([{ kind: "created", path: "Projetos/Novos/Plano.md", before: 0, after: 14, version: versionOf("# Plano\n\n- um\n") }]);
+  });
+
+  test("com o título já usado, a nova ganha um número, e a outra fica como estava", async () => {
+    const { config, read } = await setup();
+    const r = await tool(config, "notes_create", { folder: "Projetos", title: "Kiwi", text: "outra" });
+    expect(r.value.path).toBe("Projetos/Kiwi 2.md");
+    expect(read("Projetos/Kiwi.md")).toBe(KIWI);
+  });
+
+  test("um título com barras ou pontos fica dentro da pasta; uma pasta com .. ou por link para fora é recusada", async () => {
+    const { config, base, root } = await setup();
+    const odd = (await tool(config, "notes_create", { title: "../../fora", text: "x" })).value.path as string;
+    expect(odd).not.toContain("/");
+    expect(odd.endsWith("fora.md")).toBe(true);
+    expect(readFileSync(path.join(root, odd), "utf8")).toBe("x");
+    expect(readFileSync(path.join(base, "fora.md"), "utf8")).toBe("SEGREDO DE FORA");
+    expect((await tool(config, "notes_create", { folder: "../fora", title: "x", text: "x" })).error).toMatch(/E_BAD_ARGS|E_OUTSIDE_VAULT/);
+    expect((await tool(config, "notes_create", { folder: "Link", title: "x", text: "x" })).error).toContain("E_OUTSIDE_VAULT");
+    expect(readdirSync(path.join(base, "fora"))).toEqual([]);
+  });
+
+  test("não cria uma nota de reunião", async () => {
+    const { config, root } = await setup();
+    const r = await tool(config, "notes_create", { folder: "Reuniões", title: "Falsa", text: "---\ntype: meeting\n---\n\nnada\n" });
+    expect(r.error).toContain("E_MEETING_NOTE");
+    expect(existsSync(path.join(root, "Reuniões/Falsa.md"))).toBe(false);
+  });
+});
+
+describe("notes_append", () => {
+  test("no fim da nota, numa linha nova, sem mudar o resto; e o texto de antes vai para as Versões e para o registro", async () => {
+    const { config, read, caps, activity, kept, changes } = await setup();
+    const r = await tool(config, "notes_append", { path: "Ideias.md", text: "- uma ideia nova" });
+    expect(read("Ideias.md")).toBe("ideias soltas\n- uma ideia nova\n");
+    expect(r.value.versao).toBe(versionOf("ideias soltas\n- uma ideia nova\n"));
+    // A cópia de antes, nos dois lugares.
+    expect(await activity.copy(kept[0]!)).toBe("ideias soltas");
+    const list = (await caps["notes.versions"]({ path: "Ideias.md" })) as { versions: { id: string }[] };
+    const texts = await Promise.all(list.versions.map(async (x) => ((await caps["notes.version"]({ path: "Ideias.md", id: x.id })) as { content: string }).content));
+    expect(texts).toContain("ideias soltas");
+    expect(changes()).toEqual([
+      { kind: "appended", path: "Ideias.md", before: 13, after: 31, version: versionOf("ideias soltas\n- uma ideia nova\n"), copy: kept[0] },
+    ]);
+    // A 2ª escrita, logo depois: a cópia de antes entra nas Versões na hora, sem os 2 minutos do histórico.
+    await tool(config, "notes_append", { path: "Ideias.md", text: "- outra" });
+    const again = (await caps["notes.versions"]({ path: "Ideias.md" })) as { versions: { id: string }[] };
+    const texts2 = await Promise.all(again.versions.map(async (x) => ((await caps["notes.version"]({ path: "Ideias.md", id: x.id })) as { content: string }).content));
+    expect(texts2).toContain("ideias soltas\n- uma ideia nova\n");
+    expect(await activity.copy(kept[1]!)).toBe("ideias soltas\n- uma ideia nova\n");
+  });
+
+  test("no fim de uma seção, antes do próximo título, com a linha em branco no lugar", async () => {
+    const { config, read, calls } = await setup();
+    await tool(config, "notes_append", { path: "Projetos/Kiwi.md", section: "Prazo", text: "Pode mudar para abril." });
+    expect(read("Projetos/Kiwi.md")).toBe(KIWI.replace("O prazo do Kiwi é março.\n\n", "O prazo do Kiwi é março.\nPode mudar para abril.\n\n"));
+    expect(calls.at(-1)).toMatchObject({ tool: "notes_append", target: "Projetos/Kiwi.md › Prazo" });
+    // A última seção vai até o fim da nota.
+    await tool(config, "notes_append", { path: "Projetos/Kiwi.md", section: "Equipe", text: "\nE o Kiwi-cat." });
+    expect(read("Projetos/Kiwi.md").endsWith("## Equipe\n\nharry e jow.\n\nE o Kiwi-cat.\n")).toBe(true);
+    expect((await tool(config, "notes_append", { path: "Projetos/Kiwi.md", section: "Não existe", text: "x" })).error).toContain("E_NOT_FOUND");
+  });
+
+  test("com a versão lida, recusa se a nota mudou depois, e nada é escrito", async () => {
+    const { config, read, root, kept, dropped } = await setup();
+    const { versao } = (await tool(config, "notes_read", { path: "Ideias.md" })).value;
+    writeFileSync(path.join(root, "Ideias.md"), "a pessoa mudou");
+    const r = await tool(config, "notes_append", { path: "Ideias.md", text: "do agente", version: versao });
+    expect(r.error).toContain("E_CHANGED");
+    expect(r.error).toContain("leia de novo");
+    expect(read("Ideias.md")).toBe("a pessoa mudou");
+    expect(kept).toEqual([]);
+    expect(dropped).toEqual([]);
+  });
+
+  test("um texto vazio é recusado", async () => {
+    const { config } = await setup();
+    expect((await tool(config, "notes_append", { path: "Ideias.md", text: "  \n" })).error).toContain("E_BAD_ARGS");
+  });
+});
+
+describe("notes_write", () => {
+  test("troca só o texto de uma seção, e o título fica (mandado junto ou não)", async () => {
+    const { config, read, changes } = await setup();
+    const v1 = (await tool(config, "notes_read", { path: "Projetos/Kiwi.md", section: "Prazo" })).value.versao;
+    const r = await tool(config, "notes_write", { path: "Projetos/Kiwi.md", section: "Prazo", text: "O prazo é abril.", version: v1 });
+    const after = KIWI.replace("O prazo do Kiwi é março.", "O prazo é abril.");
+    expect(read("Projetos/Kiwi.md")).toBe(after);
+    expect(r.value).toMatchObject({ path: "Projetos/Kiwi.md", secao: "Prazo", versao: versionOf(after) });
+    // O agente manda a seção como o notes_read devolveu, com o título: ele não sai em dobro.
+    await tool(config, "notes_write", { path: "Projetos/Kiwi.md", section: "Prazo", text: "## Prazo\n\nO prazo é maio.\n\n", version: versionOf(after) });
+    expect(read("Projetos/Kiwi.md")).toBe(KIWI.replace("O prazo do Kiwi é março.", "O prazo é maio."));
+    expect(changes().map((c) => [c.kind, c.section, c.before])).toEqual([
+      ["replaced", "Prazo", KIWI.length],
+      ["replaced", "Prazo", after.length],
+    ]);
+  });
+
+  test("um título parecido no começo do texto não é tomado pelo da seção", async () => {
+    const { config, read } = await setup();
+    await tool(config, "notes_write", { path: "Projetos/Kiwi.md", section: "Prazo", text: "## Prazos antigos\n\nnenhum", version: versionOf(KIWI) });
+    expect(read("Projetos/Kiwi.md")).toContain("## Prazo\n\n## Prazos antigos\n\nnenhum\n\n## Equipe");
+  });
+
+  test("sem seção, o texto vira a nota inteira", async () => {
+    const { config, read } = await setup();
+    await tool(config, "notes_write", { path: "Ideias.md", text: "---\ntags: [x]\n---\ntudo novo\n", version: versionOf("ideias soltas") });
+    expect(read("Ideias.md")).toBe("---\ntags: [x]\n---\ntudo novo\n");
+  });
+
+  test("sem a versão, ou com uma versão velha, nada é escrito", async () => {
+    const { config, read } = await setup();
+    expect((await tool(config, "notes_write", { path: "Ideias.md", text: "x" })).error).toContain("E_BAD_ARGS");
+    expect((await tool(config, "notes_write", { path: "Ideias.md", text: "x", version: "0000000000000000" })).error).toContain("E_CHANGED");
+    expect(read("Ideias.md")).toBe("ideias soltas");
+  });
+});
+
+describe("uma edição da pessoa nunca se perde", () => {
+  /** Um escritor que deixa a pessoa mudar a nota bem entre a leitura do agente e a gravação. */
+  const racing = (times: number) => (w: VaultWriter, root: string): VaultWriter => {
+    let left = times;
+    return {
+      ...w,
+      get: async (p) => {
+        const n = await w.get(p);
+        if (left-- > 0) writeFileSync(path.join(root, p), `${n.content}\nda pessoa ${times - left}`);
+        return n;
+      },
+    };
+  };
+
+  test("o notes_write com a nota mudada no meio: recusa, a edição da pessoa fica, e a cópia sai do registro", async () => {
+    const s = await setup({ wrap: racing(1) });
+    const r = await tool(s.config, "notes_write", { path: "Ideias.md", text: "do agente", version: versionOf("ideias soltas") });
+    expect(r.error).toContain("E_CHANGED");
+    expect(s.read("Ideias.md")).toBe("ideias soltas\nda pessoa 1");
+    expect(s.kept).toHaveLength(1);
+    expect(s.dropped).toEqual(s.kept);
+    expect(s.changes()).toEqual([]);
+    await expect(s.activity.copy(s.kept[0]!)).rejects.toThrow();
+  });
+
+  test("o notes_append sem versão lê de novo e acrescenta depois da edição da pessoa", async () => {
+    const s = await setup({ wrap: racing(2) });
+    await tool(s.config, "notes_append", { path: "Ideias.md", text: "do agente" });
+    expect(s.read("Ideias.md")).toBe("ideias soltas\nda pessoa 1\nda pessoa 2\ndo agente\n");
+    expect(s.changes()).toHaveLength(1);
+  });
+});
+
+describe("a cópia de antes", () => {
+  test(`a do registro sobrevive ao limite de ${MAX_VERSIONS} versões por nota`, async () => {
+    const { config, caps, activity, kept } = await setup();
+    let version = versionOf("ideias soltas");
+    for (let i = 0; i < MAX_VERSIONS + 5; i++) {
+      version = (await tool(config, "notes_write", { path: "Ideias.md", text: `versão ${i}`, version })).value.versao;
+    }
+    const list = (await caps["notes.versions"]({ path: "Ideias.md" })) as { versions: { id: string }[] };
+    expect(list.versions).toHaveLength(MAX_VERSIONS);
+    const texts = await Promise.all(list.versions.map(async (x) => ((await caps["notes.version"]({ path: "Ideias.md", id: x.id })) as { content: string }).content));
+    // Nas Versões, a mais velha já saiu; no registro, a cópia de antes da 1ª escrita continua.
+    expect(texts).not.toContain("ideias soltas");
+    expect(await activity.copy(kept[0]!)).toBe("ideias soltas");
+    expect(kept).toHaveLength(MAX_VERSIONS + 5);
+  }, 30_000);
+});
+
+describe("as notas de reunião ficam só para leitura", () => {
+  test("acrescentar ou trocar numa nota de reunião é recusado, e ela fica como estava", async () => {
+    const { config, read, kept } = await setup();
+    const v = versionOf(MEETING);
+    for (const [name, args] of [
+      ["notes_append", { path: "Reuniões/Orçamento.md", text: "x" }],
+      ["notes_append", { path: "Reuniões/Orçamento.md", section: "Minhas notas", text: "x" }],
+      ["notes_write", { path: "Reuniões/Orçamento.md", text: "nada de reunião", version: v }],
+      ["notes_write", { path: "Reuniões/Orçamento.md", section: "Minhas notas", text: "x", version: v }],
+    ] as const) {
+      expect((await tool(config, name, args)).error).toContain("E_MEETING_NOTE");
+    }
+    expect(read("Reuniões/Orçamento.md")).toBe(MEETING);
+    expect(kept).toEqual([]);
+  });
+
+  test("uma nota comum não vira nota de reunião", async () => {
+    const { config, read } = await setup();
+    const r = await tool(config, "notes_write", { path: "Ideias.md", text: "---\ntype: meeting\n---\nfalsa\n", version: versionOf("ideias soltas") });
+    expect(r.error).toContain("E_MEETING_NOTE");
+    // Nem acrescentando o frontmatter numa nota vazia.
+    await tool(config, "notes_create", { title: "Vazia", text: "" });
+    expect((await tool(config, "notes_append", { path: "Vazia.md", text: "---\ntype: meeting\n---" })).error).toContain("E_MEETING_NOTE");
+    expect(read("Ideias.md")).toBe("ideias soltas");
+    expect(read("Vazia.md")).toBe("");
+  });
+});
+
+describe("o teto de cada escrita", () => {
+  test(`acima de ${WRITE_MAX_CHARS} caracteres, o aviso claro, nas três; no teto, grava`, async () => {
+    const { config, read } = await setup();
+    const big = "a".repeat(WRITE_MAX_CHARS + 1);
+    for (const [name, args] of [
+      ["notes_create", { title: "Grande", text: big }],
+      ["notes_append", { path: "Ideias.md", text: big }],
+      ["notes_write", { path: "Ideias.md", text: big, version: versionOf("ideias soltas") }],
+    ] as const) {
+      const r = await tool(config, name, args);
+      expect(r.error).toContain("E_TOO_LARGE");
+      expect(r.error).toContain(`até ${WRITE_MAX_CHARS}`);
+      expect(r.error).toContain("por seção");
+    }
+    expect(read("Ideias.md")).toBe("ideias soltas");
+    expect((await tool(config, "notes_append", { path: "Ideias.md", text: "b".repeat(WRITE_MAX_CHARS) })).value.caracteres).toBe(13 + 1 + WRITE_MAX_CHARS + 1);
+  });
+
+  test("um texto de 3 bytes por caractere, no teto e acima dele, chega à ferramenta (sem o 413 do servidor)", async () => {
+    const { config, read } = await setup();
+    const at = "語".repeat(WRITE_MAX_CHARS);
+    expect(Buffer.byteLength(JSON.stringify({ text: at }))).toBeGreaterThan(64 * 1024);
+    expect(Buffer.byteLength(JSON.stringify({ text: at }))).toBeLessThan(MAX_BODY);
+    expect((await tool(config, "notes_create", { title: "Japonês", text: at })).value.caracteres).toBe(WRITE_MAX_CHARS);
+    expect((await tool(config, "notes_create", { title: "Japonês 2", text: at + "語" })).error).toContain("E_TOO_LARGE");
+    expect(read("Japonês.md")).toBe(at);
+  });
+});
+
+describe("a fronteira do cofre", () => {
+  test("fora do cofre, por link simbólico, uma nota que não é .md ou que não é UTF-8: nada é escrito", async () => {
+    const { config, base, root } = await setup();
+    for (const p of ["../fora.md", "Projetos/../../fora.md", path.join(base, "fora.md"), "Atalho.md", "Link/x.md"]) {
+      expect((await tool(config, "notes_append", { path: p, text: "x" })).error).toMatch(/E_BAD_ARGS|E_OUTSIDE_VAULT|E_NOT_FOUND/);
+      expect((await tool(config, "notes_write", { path: p, text: "x", version: "x" })).error).toMatch(/E_BAD_ARGS|E_OUTSIDE_VAULT|E_NOT_FOUND/);
+    }
+    expect((await tool(config, "notes_append", { path: "quadro.canvas", text: "x" })).error).toContain("E_BAD_ARGS");
+    expect((await tool(config, "notes_append", { path: "Latin.md", text: "x" })).error).toContain("E_READ_ONLY");
+    expect(readFileSync(path.join(base, "fora.md"), "utf8")).toBe("SEGREDO DE FORA");
+    expect(readdirSync(path.join(base, "fora"))).toEqual([]);
+    expect(readFileSync(path.join(root, "Latin.md"))).toEqual(Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+  });
+
+  test("o escritor só chama as quatro capacidades dele", async () => {
+    const { config, called } = await setup();
+    await tool(config, "notes_create", { title: "Nova", text: "x" });
+    await tool(config, "notes_append", { path: "Nova.md", text: "y" });
+    await tool(config, "notes_write", { path: "Nova.md", text: "z", version: versionOf("x\ny\n") });
+    expect([...called].sort()).toEqual([...WRITER_CAPABILITIES].sort());
+  });
+});

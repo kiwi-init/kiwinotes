@@ -11,7 +11,7 @@ import { uiCapabilities } from "../../bun/ui-capabilities.ts";
 import { Vault } from "../../notes/vault.ts";
 import { DEFAULT_SETTINGS } from "../../store/settings.ts";
 import { READER_CAPABILITIES, readerFromCapabilities, type VaultReader } from "./reader.ts";
-import { KIWI_TOOLS, LIST_PAGE, READ_MAX_CHARS, SEARCH_MAX } from "./tools.ts";
+import { KIWI_TOOLS, kiwiTools, LIST_PAGE, READ_MAX_CHARS, SEARCH_MAX } from "./tools.ts";
 import { KiwiToolServer, MCP_VERSIONS, TOKEN_HEADER, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
 
 const dirs: string[] = [];
@@ -173,7 +173,9 @@ describe("o servidor MCP do Kiwi", () => {
       expect(t.annotations.openWorldHint).toBe(false);
       expect(t.inputSchema.type).toBe("object");
     }
-    expect(KIWI_TOOLS).toHaveLength(6);
+    // Sem o escritor, só as seis de leitura; as três de escrita (spec #8356) existem, mas não aparecem.
+    expect(kiwiTools(false)).toHaveLength(6);
+    expect(KIWI_TOOLS).toHaveLength(9);
   });
 
   test("uma ferramenta que não existe é recusada, e um método desconhecido também", async () => {

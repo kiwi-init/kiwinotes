@@ -100,12 +100,21 @@ bun run cli events --follow --data /tmp/kn-test                          # os ev
 bun run cli invoke agent.disable '{}' --data /tmp/kn-test                # fecha o programa do agente na hora
 ```
 
+**O agente escreve nas notas (T9251, spec #8356)** pelas ferramentas `notes_create`, `notes_append` e `notes_write`, com a versão lida e a cópia de antes nas Versões da nota e no registro do agente. Com o agente falso, `/tool <nome> <json>` chama uma ferramenta. O registro, o que cada pedido leu e mudou, sai pela capacidade e pela CLI:
+
+```sh
+bun run cli invoke agent.ask '{"text":"/tool notes_append {\"path\":\"Ideias.md\",\"text\":\"mais uma\"}"}' --data /tmp/kn-test
+bun run cli invoke agent.activity '{"limit":10}' --data /tmp/kn-test    # os pedidos, do mais novo para o mais velho
+bun run cli agent activity --limit 10 --data /tmp/kn-test               # o mesmo registro, lido direto dos dados
+```
+
 **A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
 - o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
 - os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;
-- o download sem rede.
+- o download sem rede;
+- a escrita (spec #8356), na janela Notas: o agente falso acrescenta numa seção, troca outra e cria uma nota, e a janela mostra cada mudança.
 
-Os prints de cada estado ficam na pasta.
+Os prints de cada estado ficam na pasta. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário.
 
 ### Ver as janelas pela CLI, fora da tela (T1742)
 

@@ -1,16 +1,30 @@
-// As ferramentas do Kiwi para o agente (spec #7496): seis, todas só de leitura. Elas devolvem o texto como está, sem
-// resumir, classificar nem escolher pelo agente, e cada resposta tem um teto: o que passa dele vem com o `proximoOffset`
-// para continuar de onde parou, e um aviso de que há mais.
+// As ferramentas do Kiwi para o agente. As seis de leitura (spec #7496) devolvem o texto como está, sem resumir,
+// classificar nem escolher pelo agente, e cada resposta tem um teto: o que passa dele vem com o `proximoOffset` para
+// continuar de onde parou, e um aviso de que há mais.
+//
+// As três de escrita (spec #8356) só existem com um `writer`: `notes_create`, `notes_append` e `notes_write`.
+// - **Uma edição da pessoa nunca se perde:** o `notes_read` devolve a `versao` da nota, e trocar um texto exige a versão
+//   lida. A gravação confere de novo (o `save` condicional do cofre); se a nota mudou no meio, nada é escrito.
+// - **A cópia de antes:** antes de cada escrita, o `journal` guarda o texto anterior (o registro do agente), e o `writer`
+//   guarda o mesmo texto nas Versões da nota.
+// - **Só notas comuns:** uma nota de reunião é recusada, e também a escrita que deixaria uma nota com cara de reunião.
+// - **Nada apaga, renomeia nem move.** E cada escrita tem o teto de `WRITE_MAX_CHARS`.
 //
 // Os nomes usam sublinhado (`notes_search`): a API do Claude só aceita `[a-zA-Z0-9_-]` no nome de uma ferramenta. No
 // Claude Code, elas aparecem como `mcp__kiwi__notes_search` etc.
 
 import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared/meeting-note.ts";
-import { markdownStructure, headingFor } from "../../shared/markdown-structure.ts";
+import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import type { VaultReader } from "./reader.ts";
+import type { VaultWriter, WriterNote } from "./writer.ts";
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
 export const READ_MAX_CHARS = 12_000;
+/**
+ * O maior texto de uma escrita, em caracteres (spec #8356). Fica abaixo do teto do corpo do servidor (`MAX_BODY`),
+ * para o que passar chegar aqui e voltar com um aviso claro, e não com um erro do HTTP.
+ */
+export const WRITE_MAX_CHARS = 40_000;
 /** O máximo de resultados do `notes_search`, e o padrão. */
 export const SEARCH_MAX = 30;
 export const SEARCH_DEFAULT = 10;
@@ -20,7 +34,9 @@ export const MEETINGS_PAGE = 50;
 /** O máximo de seções no sumário. */
 export const OUTLINE_MAX = 300;
 
-export const KIWI_TOOL_NAMES = ["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get"] as const;
+export const KIWI_READ_TOOL_NAMES = ["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get"] as const;
+export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write"] as const;
+export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
 
 export interface KiwiToolDef {
@@ -28,6 +44,10 @@ export interface KiwiToolDef {
   title: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Escreve no cofre (spec #8356): só aparece com um `writer`. */
+  writes?: true;
+  /** Pode trocar um texto que já existia (o `notes_write`). */
+  replaces?: true;
 }
 
 const offsetProp = {
@@ -68,7 +88,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_read",
     title: "Ler uma nota",
-    description: `Lê uma nota inteira, ou só uma seção dela, como está no arquivo. Devolve até ${READ_MAX_CHARS} caracteres por vez: quando há mais, a resposta traz o proximoOffset para continuar.`,
+    description: `Lê uma nota inteira, ou só uma seção dela, como está no arquivo. Devolve até ${READ_MAX_CHARS} caracteres por vez: quando há mais, a resposta traz o proximoOffset para continuar. A resposta traz também a versao da nota, que o notes_write pede para mudar o texto.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -117,7 +137,63 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "notes_create",
+    title: "Criar uma nota",
+    description: `Cria uma nota nova numa pasta do Kiwi, com o título e o texto em Markdown. Se já existe uma nota com esse título na pasta, a nova ganha um número ("Título 2"): a resposta diz o caminho que ela ganhou. Até ${WRITE_MAX_CHARS} caracteres. Não cria notas de reunião.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        folder: { type: "string", description: "A pasta (ex.: Projetos). Vazio ou sem ele: a raiz. Uma pasta que não existe é criada." },
+        title: { type: "string", minLength: 1, maxLength: 200, description: "O título, que vira o nome do arquivo." },
+        text: { type: "string", maxLength: WRITE_MAX_CHARS, description: "O texto da nota, em Markdown." },
+      },
+      required: ["title", "text"],
+      additionalProperties: false,
+    },
+    writes: true,
+  },
+  {
+    name: "notes_append",
+    title: "Acrescentar numa nota",
+    description: `Acrescenta texto no fim de uma nota, ou no fim de uma seção dela, sem mudar o que já está lá. O texto entra numa linha nova, logo depois da última linha; para um parágrafo separado, comece o texto com uma linha em branco. Até ${WRITE_MAX_CHARS} caracteres. Com a versao (do notes_read), a escrita é recusada se a nota mudou depois que você leu.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "O caminho da nota (ex.: Projetos/Kiwi.md)." },
+        text: { type: "string", minLength: 1, maxLength: WRITE_MAX_CHARS, description: "O texto a acrescentar, em Markdown." },
+        section: { type: "string", description: "O título de uma seção, como o notes_outline mostra: o texto entra no fim dela. Sem ele, no fim da nota." },
+        version: { type: "string", description: "A versao que o notes_read devolveu. Opcional." },
+      },
+      required: ["path", "text"],
+      additionalProperties: false,
+    },
+    writes: true,
+  },
+  {
+    name: "notes_write",
+    title: "Trocar o texto de uma nota",
+    description: `Troca o texto de uma seção, ou da nota inteira. Leia antes com notes_read e mande a versao que ele devolveu: se a nota mudou depois disso, nada é escrito e você precisa ler de novo. Com section, troca só o que está abaixo do título (o título fica). Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para uma nota maior, troque por seção. O texto de antes fica guardado nas Versões da nota.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "O caminho da nota (ex.: Projetos/Kiwi.md)." },
+        text: { type: "string", maxLength: WRITE_MAX_CHARS, description: "O texto novo, em Markdown." },
+        version: { type: "string", description: "A versao que o notes_read devolveu." },
+        section: { type: "string", description: "O título de uma seção, como o notes_outline mostra. Sem ele, a nota inteira." },
+      },
+      required: ["path", "text", "version"],
+      additionalProperties: false,
+    },
+    writes: true,
+    replaces: true,
+  },
 ];
+
+/** As ferramentas que o servidor oferece: as de escrita só com um `writer`. */
+export function kiwiTools(writes: boolean): readonly KiwiToolDef[] {
+  return writes ? KIWI_TOOLS : KIWI_TOOLS.filter((t) => !t.writes);
+}
 
 /** Um erro que o agente lê: o código do Kiwi e o motivo. A ferramenta responde com `isError`. */
 export class ToolError extends Error {
@@ -129,11 +205,45 @@ export class ToolError extends Error {
   }
 }
 
+/** Uma mudança que uma ferramenta de escrita fez (spec #8356): vai para o registro do agente. */
+export interface ToolChange {
+  kind: "created" | "appended" | "replaced";
+  path: string;
+  section?: string;
+  /** O tamanho, em caracteres, antes (0 numa nota criada) e depois. */
+  before: number;
+  after: number;
+  /** A versão que a escrita deixou: o desfazer confere que a nota ainda está nela. */
+  version: string;
+  /** A cópia do texto de antes no registro (`journal.keep`); não há numa nota criada. */
+  copy?: string;
+  /** A pasta de notas aberta quando a escrita aconteceu (o id), se o app troca de pasta. */
+  folder?: string;
+}
+
 export interface ToolResult {
   /** O que o agente recebe, já em JSON. */
   value: Record<string, unknown>;
-  /** O que a pessoa vê no status ao vivo: o caminho lido, ou o que foi procurado. */
+  /** O que a pessoa vê no status ao vivo: o caminho lido ou escrito, ou o que foi procurado. */
   target?: string;
+  /** O que mudou no cofre, numa ferramenta de escrita. */
+  change?: ToolChange;
+}
+
+/**
+ * Onde fica a cópia do texto de antes de cada escrita (o registro do agente, spec #8356). O `keep` termina antes da
+ * escrita começar; se ela não acontece, o `drop` tira a cópia.
+ */
+export interface WriteJournal {
+  keep(path: string, before: string): Promise<string>;
+  drop(copy: string): Promise<void>;
+}
+
+/** O que as ferramentas usam: o leitor sempre; o escritor e o registro só para as de escrita. */
+export interface KiwiToolContext {
+  reader: VaultReader;
+  writer?: VaultWriter;
+  journal?: WriteJournal;
 }
 
 function args(raw: unknown, allowed: string[]): Record<string, unknown> {
@@ -188,20 +298,85 @@ export function chunk(text: string, offset = 0, max = READ_MAX_CHARS): { texto: 
 
 /** O texto de uma seção: do título até o próximo título do mesmo nível ou acima (como o `![[nota#Título]]`). */
 function sectionOf(content: string, title: string): { titulo: string; texto: string } | null {
+  const s = sectionSpan(content, title);
+  return s ? { titulo: s.heading.title, texto: content.slice(s.heading.from, s.end) } : null;
+}
+
+/**
+ * Onde fica uma seção: o título, onde começa o texto abaixo dele (depois da quebra de linha do título) e onde ela acaba
+ * (no próximo título do mesmo nível ou acima, ou no fim da nota). `last` diz se ela vai até o fim da nota.
+ */
+function sectionSpan(content: string, title: string): { heading: NoteHeading; body: number; end: number; last: boolean } | null {
   const headings = markdownStructure(content).headings;
   const h = headingFor(headings, title);
   if (!h) return null;
   const next = headings.find((x) => x.from > h.from && x.level <= h.level);
-  return { titulo: h.title, texto: content.slice(h.from, next ? next.from : content.length) };
+  const eol = /^\r?\n/.exec(content.slice(h.to));
+  return { heading: h, body: h.to + (eol ? eol[0].length : 0), end: next ? next.from : content.length, last: !next };
 }
+
+/** Tira as quebras de linha do fim. */
+const trimEndNewlines = (s: string) => s.replace(/(?:\r?\n)+$/, "");
+
+/**
+ * Acrescenta `text` a `base` (a nota inteira, ou o texto de uma seção), numa linha nova depois da última linha. O que
+ * já está lá não muda, menos as linhas em branco do fim. `last`: vai até o fim da nota (termina numa quebra de linha);
+ * senão, uma linha em branco separa do próximo título.
+ */
+function appendTo(base: string, text: string, last: boolean): string {
+  const core = trimEndNewlines(base);
+  const added = trimEndNewlines(text);
+  const joined = core ? `${core}\n${added}` : added;
+  return joined + (last ? "\n" : "\n\n");
+}
+
+/** O texto que fica abaixo de um título, trocado: a linha em branco depois do título se mantém, como estava. */
+function replaceBody(oldBody: string, text: string, last: boolean): string {
+  const lead = /^\r?\n/.test(oldBody) ? "\n" : "";
+  const core = trimEndNewlines(text.replace(/^(?:\r?\n)+/, ""));
+  if (!core) return last ? "" : "\n";
+  return lead + core + (last ? "\n" : "\n\n");
+}
+
+/** Recusa o que o agente não pode mudar: uma nota que não é UTF-8, ou uma nota de reunião (spec #8356). */
+function writable(n: WriterNote): void {
+  if (n.readOnly) throw new ToolError("E_READ_ONLY", `${n.path} não está em UTF-8: o Kiwi só mostra essa nota, e nada grava nela`);
+  if (isMeetingNote(n.content))
+    throw new ToolError("E_MEETING_NOTE", `${n.path} é a nota de uma reunião gravada: as reuniões são só para ler`);
+}
+
+/** O texto que vai ser gravado não pode virar uma nota de reunião (o `type: meeting` no frontmatter). */
+function notMeeting(path: string, content: string): void {
+  if (isMeetingNote(content))
+    throw new ToolError("E_MEETING_NOTE", `o texto deixaria ${path} com cara de nota de reunião (type: meeting no frontmatter), e o agente não cria nem muda reuniões`);
+}
+
+/** O teto de uma escrita, com o que fazer em vez disso. */
+function capped(text: string): void {
+  if (text.length > WRITE_MAX_CHARS)
+    throw new ToolError(
+      "E_TOO_LARGE",
+      `o texto tem ${text.length} caracteres, e cada escrita aceita até ${WRITE_MAX_CHARS}. Mude por seção (notes_write com section) ou acrescente em partes (notes_append).`,
+    );
+}
+
+const changed = (path: string) =>
+  new ToolError("E_CHANGED", `${path} mudou desde que você leu. Nada foi escrito: leia de novo com notes_read e mande a versao nova.`);
+
+/** Quantas vezes o `notes_append` sem versão tenta de novo, quando a nota muda no meio da gravação. */
+const APPEND_TRIES = 3;
 
 /** As marcas internas de cada bloco da transcrição (`%%meeting-segment:…%%`): são do Kiwi, não do que foi dito. */
 const SEGMENT_REF = /[ \t]*%%meeting-segment:[0-9a-f]{24} \{[^\n]*?\}%%/g;
 
 /** Roda uma ferramenta. Um erro do cofre (`E_NOT_FOUND`, `E_OUTSIDE_VAULT`, `E_BAD_ARGS`) vira um `ToolError`. */
-export async function runKiwiTool(reader: VaultReader, name: string, raw: unknown): Promise<ToolResult> {
+export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unknown): Promise<ToolResult> {
   try {
-    return await run(reader, name, raw);
+    if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
+      if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+      return await write(ctx.writer, ctx.journal, name, raw);
+    }
+    return await run(ctx.reader, name, raw);
   } catch (e) {
     if (e instanceof ToolError) throw e;
     const code = typeof (e as { code?: unknown })?.code === "string" ? (e as { code: string }).code : "E_FAILED";
@@ -249,12 +424,14 @@ async function run(reader: VaultReader, name: string, raw: unknown): Promise<Too
       const n = await reader.get(str(a, "path", true)!);
       const section = str(a, "section", false, 500);
       const offset = int(a, "offset", 0, Number.MAX_SAFE_INTEGER) ?? 0;
+      // A versão da nota inteira (spec #8356): é ela que o notes_write pede, mesmo lendo uma seção só.
+      const versao = n.version ? { versao: n.version } : {};
       if (section !== undefined && section.trim()) {
         const s = sectionOf(n.content, section);
         if (!s) throw new ToolError("E_NOT_FOUND", `a nota ${n.path} não tem a seção "${section}"; veja os títulos com notes_outline`);
-        return { value: { path: n.path, titulo: n.title, secao: s.titulo, ...chunk(s.texto, offset) }, target: `${n.path} › ${s.titulo}` };
+        return { value: { path: n.path, titulo: n.title, ...versao, secao: s.titulo, ...chunk(s.texto, offset) }, target: `${n.path} › ${s.titulo}` };
       }
-      return { value: { path: n.path, titulo: n.title, ...chunk(n.content, offset) }, target: n.path };
+      return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(n.content, offset) }, target: n.path };
     }
     case "notes_list": {
       const a = args(raw, ["folder", "offset"]);
@@ -320,6 +497,142 @@ async function run(reader: VaultReader, name: string, raw: unknown): Promise<Too
           ...chunk(transcript, offset),
         },
         target: n.path,
+      };
+    }
+    default:
+      throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+  }
+}
+
+/**
+ * Grava `next` por cima de `n`, só se a nota ainda está na versão lida. A cópia do texto de antes vai para o registro
+ * antes da gravação (e sai, se a gravação não acontece); o `writer` guarda o mesmo texto nas Versões da nota.
+ */
+async function commit(
+  writer: VaultWriter,
+  journal: WriteJournal,
+  n: WriterNote,
+  next: string,
+): Promise<{ saved: true; path: string; version: string; copy: string } | { saved: false }> {
+  const copy = await journal.keep(n.path, n.content);
+  let r: Awaited<ReturnType<VaultWriter["save"]>>;
+  try {
+    r = await writer.save(n.path, next, n.version);
+  } catch (e) {
+    await journal.drop(copy);
+    throw e;
+  }
+  if (!r.saved) {
+    await journal.drop(copy);
+    return { saved: false };
+  }
+  return { saved: true, path: r.path, version: r.version, copy };
+}
+
+async function write(writer: VaultWriter, journal: WriteJournal, name: string, raw: unknown): Promise<ToolResult> {
+  const folder = await writer.folder();
+  const where = folder ? { folder } : {};
+  switch (name) {
+    case "notes_create": {
+      const a = args(raw, ["folder", "title", "text"]);
+      const title = str(a, "title", true, 200)!;
+      const text = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
+      capped(text);
+      const dir = (str(a, "folder", false) ?? "").replace(/^\/+|\/+$/g, "");
+      notMeeting(title, text);
+      const n = await writer.create(dir, title, text);
+      return {
+        value: { path: n.path, titulo: n.title, versao: n.version, caracteres: n.content.length },
+        target: n.path,
+        change: { kind: "created", path: n.path, before: 0, after: n.content.length, version: n.version, ...where },
+      };
+    }
+    case "notes_append": {
+      const a = args(raw, ["path", "text", "section", "version"]);
+      const path = str(a, "path", true)!;
+      const text = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
+      capped(text);
+      if (!text.trim()) throw new ToolError("E_BAD_ARGS", "text está vazio");
+      const section = str(a, "section", false, 500)?.trim() || undefined;
+      const version = str(a, "version", false, 200);
+      // Sem a versão, o Kiwi usa a que acabou de ler; se a nota muda bem no meio, ele lê de novo e tenta outra vez.
+      for (let tries = 0; ; tries++) {
+        const n = await writer.get(path);
+        writable(n);
+        if (version !== undefined && version !== n.version) throw changed(n.path);
+        let next: string;
+        let titulo: string | undefined;
+        if (section) {
+          const s = sectionSpan(n.content, section);
+          if (!s) throw new ToolError("E_NOT_FOUND", `a nota ${n.path} não tem a seção "${section}"; veja os títulos com notes_outline`);
+          titulo = s.heading.title;
+          next = n.content.slice(0, s.body) + appendTo(n.content.slice(s.body, s.end), text, s.last) + n.content.slice(s.end);
+        } else {
+          next = appendTo(n.content, text, true);
+        }
+        notMeeting(n.path, next);
+        const r = await commit(writer, journal, n, next);
+        if (!r.saved) {
+          if (version !== undefined || tries + 1 >= APPEND_TRIES) throw changed(n.path);
+          continue;
+        }
+        return {
+          value: { path: r.path, ...(titulo ? { secao: titulo } : {}), versao: r.version, caracteres: next.length },
+          target: titulo ? `${r.path} › ${titulo}` : r.path,
+          change: {
+            kind: "appended",
+            path: r.path,
+            ...(titulo ? { section: titulo } : {}),
+            before: n.content.length,
+            after: next.length,
+            version: r.version,
+            copy: r.copy,
+            ...where,
+          },
+        };
+      }
+    }
+    case "notes_write": {
+      const a = args(raw, ["path", "text", "version", "section"]);
+      const path = str(a, "path", true)!;
+      const text = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
+      capped(text);
+      const version = str(a, "version", true, 200)!;
+      const section = str(a, "section", false, 500)?.trim() || undefined;
+      const n = await writer.get(path);
+      writable(n);
+      if (version !== n.version) throw changed(n.path);
+      let next: string;
+      let titulo: string | undefined;
+      if (section) {
+        const s = sectionSpan(n.content, section);
+        if (!s) throw new ToolError("E_NOT_FOUND", `a nota ${n.path} não tem a seção "${section}"; veja os títulos com notes_outline`);
+        titulo = s.heading.title;
+        // O agente pode mandar o título junto (como o notes_read devolve a seção): ele não sai em dobro.
+        const headingLine = n.content.slice(s.heading.from, s.heading.to);
+        const sent = text.replace(/^(?:\r?\n)*/, "");
+        const rest = sent.slice(headingLine.length);
+        const body = sent.startsWith(headingLine) && (rest === "" || /^[ \t]*\r?\n/.test(rest)) ? rest.replace(/^[ \t]*/, "") : text;
+        next = n.content.slice(0, s.body) + replaceBody(n.content.slice(s.body, s.end), body, s.last) + n.content.slice(s.end);
+      } else {
+        next = text;
+      }
+      notMeeting(n.path, next);
+      const r = await commit(writer, journal, n, next);
+      if (!r.saved) throw changed(n.path);
+      return {
+        value: { path: r.path, ...(titulo ? { secao: titulo } : {}), versao: r.version, caracteres: next.length },
+        target: titulo ? `${r.path} › ${titulo}` : r.path,
+        change: {
+          kind: "replaced",
+          path: r.path,
+          ...(titulo ? { section: titulo } : {}),
+          before: n.content.length,
+          after: next.length,
+          version: r.version,
+          copy: r.copy,
+          ...where,
+        },
       };
     }
     default:

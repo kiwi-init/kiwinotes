@@ -128,7 +128,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   Ajustes deixar trocar. Só acréscimo.
 // 1.43.0 (T8956, spec #7496): o `target` no status `running` do `agent.turn`, o que uma ferramenta do Kiwi leu ou
 //   procurou ("Projetos/Kiwi.md"). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.43.0";
+// 1.44.0 (T9251, spec #8356): o agente escreve nas notas. O `agent.activity` (o registro do que cada pedido leu e
+//   mudou) e o `snapshot` no `notes.save`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.44.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -224,6 +226,8 @@ export interface UiCapabilities {
    */
   "notes.save": { args: { path: string; content: string; baseVersion: string;
       baseContent?: string;
+      /** 1.44.0 (spec #8356): o texto de antes vira uma versão na hora, sem o intervalo de 2 minutos (o agente). */
+      snapshot?: boolean;
     }; result: SaveResult & { content?: string };
   };
   "meetings.speakers": {
@@ -428,6 +432,32 @@ export interface UiCapabilities {
   "agent.remove": { args: Record<string, never>; result: AgentStatus };
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   "agent.configure": { args: { model?: string; effort?: string }; result: AgentStatus };
+  /**
+   * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
+   * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
+   */
+  "agent.activity": { args: { limit?: number }; result: { requests: AgentActivityRequest[] } };
+}
+
+/** Um pedido no registro do agente (1.44.0). */
+export interface AgentActivityRequest {
+  id: string;
+  at: string;
+  /** O começo do texto do pedido. */
+  request: string;
+  reads: { at: string; tool: string; target?: string }[];
+  changes: {
+    at: string;
+    kind: "created" | "appended" | "replaced";
+    path: string;
+    section?: string;
+    before: number;
+    after: number;
+    version: string;
+    /** A cópia do texto de antes, no registro (o desfazer, spec seguinte). */
+    copy?: string;
+    folder?: string;
+  }[];
 }
 
 /** O Claude Code instalado, quando conferido (`agent.status` com `refresh`). */
@@ -583,6 +613,7 @@ export const UI_CAPABILITIES = [
   "agent.cancel",
   "agent.remove",
   "agent.configure",
+  "agent.activity",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
