@@ -68,8 +68,8 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   const image = document.createElement("img");
   const selectedReference = options.eyes === "hidden" ? eyeFreeUrl : referenceUrl;
   const fallbackReference = options.cutout ? (options.eyes === "hidden" ? cutoutEyeFreeUrl : cutoutReferenceUrl) : selectedReference;
-  image.src = fallbackReference;
   image.alt = "Kiwi-cat";
+  image.hidden = true;
   image.width = width;
   image.height = height;
   root.replaceChildren(image);
@@ -414,6 +414,9 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     },
   };
   function staticHandle() {
+    // Load the RGBA fallback only if this instance cannot draw with GPU.
+    image.src = fallbackReference;
+    image.hidden = false;
     return {
       stats,
       canvas: null,

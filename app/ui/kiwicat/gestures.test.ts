@@ -135,11 +135,13 @@ test("an existing lateral look freezes during blink closure", () => {
 test.each([21, 20, 19])("a double blink preserves a lateral look without a jump (seed %i)", seed => {
   const events: GestureEvent[] = [];
   const cat = new GestureMachine({ estado: "repouso" }, {
-    clock: () => 0, random: seededRandom(seed), sleepSeconds: () => 1e9,
+    clock: () => 0, random: seededRandom(seed), earRandom: seededRandom(2), sleepSeconds: () => 1e9,
     onEvent: event => events.push(event),
   });
   let previous = cat.sample(0).eyes.x, largestStep = 0, seen = events.length;
   const overlaps: Array<{ before: number; start: number; closing: number; arc: number }> = [];
+  // Pin the new ear stream too: this fixture retains the original eye seeds
+  // and actually exercises the double-blink/gaze overlap with ear exclusion.
   for (let tick = 1; tick <= 600 * 240; tick++) {
     const time = tick / 240, due = cat.nextBoundary();
     const before = due <= time ? cat.project(due - 1e-12).eyes.x : 0;
