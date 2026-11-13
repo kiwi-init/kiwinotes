@@ -35,6 +35,19 @@ inclusive durante a troca de símbolo. A animação normal mantém a onda com al
 O lead reconheceu os oito estados na tira corrigida sem legenda (Kiwi #9077,
 conferido em #9079) e aprovou a comparação de formas (#9078). O harry aprovou as caretas no Kiwi #9246, registrado pelo lead no #9249.
 
+## Provas e histórico
+
+A árvore final contém os materiais de leitura: imagens, vídeos, tabelas por
+série, resumos, auditoria e FPS. Os relatórios por par/processo, as janelas
+individuais, a prova funcional e o manifest completo dos vídeos estão
+preservados no [commit `f35a23d`](https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/).
+Os resumos desta árvore mantêm os valores medidos e apontam para esse arquivo
+histórico; apenas os detalhes repetidos foram retirados.
+
+O vídeo de repouso é o de `8bae2fd` (134.683 bytes), aprovado pelo harry e
+compatível com o renderer individual retido. O ensaio de camada compartilhada
+permanece documentado nos resumos e no histórico.
+
 ## Verificação
 
 Em `app/`:
@@ -68,8 +81,8 @@ até +0,5 ponto de CPU em repouso e pelo menos 55 fps nos estados ativos.
 As medidas são da página isolada no Playwright WebKit, não do WKWebView do app.
 
 A primeira sondagem, anterior à otimização de pausas dos gestos, está em
-[diagnostico-inicial/](diagnostico-inicial/). Ela falhou no teto de CPU e não
-é resultado de aceite. As medidas finais serão anexadas após a coleta pareada.
+[histórico `f35a23d`](https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/diagnostico-inicial/). Ela falhou no teto de CPU e não
+é resultado de aceite. As duas séries concluídas estão abaixo.
 
 ## CPU: primeira série de 12, acima do teto
 
@@ -100,9 +113,9 @@ O protocolo mudou durante a coleta (Kiwi #9209). Os primeiros seis pares
 preservam as ordens originais, incluindo as repetições antigas de névoa→caretas.
 Os seis finais, 7–12, alternam a ordem. Todos os 12 contam, incluindo os
 quatro inicialmente descartados por carga. A classificação estável usa
-variação ≤1,5; as amostras intermediárias estão no JSON. O registro da fase
-anterior fica em `fase1-antes-da-regra12.json`; o probe interrompido na troca
-de protocolo está em `protocolo-interrompido/` e não conta como par completo.
+variação ≤1,5. As amostras intermediárias, a fase anterior e o probe
+interrompido na troca de protocolo estão no histórico `f35a23d`; o probe
+interrompido não conta como par completo.
 
 O critério final é: ambas as medianas ≤+0,5. O lead pediu uma única rodada
 de otimização, seguida de outra série de 12; o resultado dessa última série
@@ -136,9 +149,9 @@ ou trajetórias. A rodada não demonstrou ganho de CPU; o caminho adicional
 foi revertido por acrescentar complexidade (decisão delegada no Kiwi #9265).
 A implementação retida usa os olhos individuais de `45a0f21`.
 
-![Experimento descartado: antes à esquerda, camada compartilhada à direita](desempenho/otimizacao-piscar/comparacao-olhos.webp)
+[Imagem do experimento descartado: antes à esquerda, camada compartilhada à direita](https://github.com/kiwi-init/kiwinotes/blob/f35a23d/docs/brand/kiwi-cat/caretas/desempenho/otimizacao-piscar/comparacao-olhos.webp)
 
-[Comparação](desempenho/otimizacao-piscar/pixel-diff.json): os sete outros
+[Comparação arquivada](https://github.com/kiwi-init/kiwinotes/blob/f35a23d/docs/brand/kiwi-cat/caretas/desempenho/otimizacao-piscar/pixel-diff.json): os sete outros
 estados são idênticos pixel a pixel; as diferenças dos olhos em repouso
 ficam nas bordas suavizadas (média ≤0,087/255 por canal nas poses verificadas).
 O comparador nativo confirmou quatro efeitos antes e dois depois.
