@@ -553,8 +553,14 @@ export class AgentService {
       }
       const answer = await host.ask(text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
-        // O uso de uma ferramenta do Kiwi sai do próprio servidor, com o que foi lido (`onToolCall`).
-        if (e.type === "status" && e.status === "running" && e.tool.startsWith(KIWI_TOOL_PREFIX)) return;
+        // Uma ferramenta do Kiwi sai duas vezes: aqui, quando ela começa, com o nome sem o `mcp__kiwi__` e ainda sem o
+        // que foi lido ("Lendo uma nota…"; o gato entra em `agindo` na hora, spec #9510), e de novo pelo próprio
+        // servidor, quando ela termina, com o `target` (`onToolCall`). O `thinking` de quando ela acaba vem do host
+        // (`tool_call_update`). O nome cru nunca chega à tela.
+        if (e.type === "status" && e.status === "running" && e.tool.startsWith(KIWI_TOOL_PREFIX)) {
+          this.emitTurn({ id: turn.id, type: "status", status: "running", tool: e.tool.slice(KIWI_TOOL_PREFIX.length) });
+          return;
+        }
         this.emitTurn({ id: turn.id, ...e } as AgentTurnEvent);
       });
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text });

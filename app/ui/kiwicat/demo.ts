@@ -1,4 +1,5 @@
 // Test-only page; no production UI route imports this entrypoint.
+import referenceUrl from "./assets/reference.webp";
 import { createKiwiFog } from "./index";
 import { STATES, type FogState } from "./state";
 const query = new URLSearchParams(location.search),
@@ -14,7 +15,7 @@ const backend =
       ? "webgl2"
       : "auto";
 const api = await createKiwiFog(document.getElementById("fog")!, {
-  mode,
+  mode, referenceUrl,
   backend,
   width: Number(query.get("width") ?? 640),
   height: Number(query.get("height") ?? 800),

@@ -78,6 +78,7 @@ describe("o pedido", () => {
     expect(events.filter((e) => e.type === "status")).toEqual([
       { type: "status", status: "thinking" },
       { type: "status", status: "running", tool: "Read" },
+      { type: "status", status: "thinking" },
     ]);
     expect(events.filter((e) => e.type === "text")).toHaveLength(20);
   });

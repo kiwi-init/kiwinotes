@@ -132,7 +132,7 @@ const START_TIMEOUT_MS = 60_000;
 /** O fim do stderr do agente que fica guardado para explicar uma queda. */
 const STDERR_KEEP = 8192;
 
-type Turn = { text: string; onEvent?: (e: AgentEvent) => void; lastStatus?: string };
+type Turn = { runningTools?: Set<string>; text: string; onEvent?: (e: AgentEvent) => void; lastStatus?: string };
 
 export class AgentHost {
   private readonly o: AgentHostOptions;
@@ -484,7 +484,14 @@ export class AgentHost {
         this.status(turn, { type: "status", status: "thinking" });
         break;
       case "tool_call":
+        (turn.runningTools ??= new Set()).add(u.toolCallId);
         this.status(turn, { type: "status", status: "running", tool: toolName(u as unknown as Record<string, unknown>) });
+        break;
+      case "tool_call_update":
+        if (u.status === "completed" || u.status === "failed") {
+          turn.runningTools?.delete(u.toolCallId);
+          if (!turn.runningTools?.size) this.status(turn, { type: "status", status: "thinking" });
+        }
         break;
       default:
         break;

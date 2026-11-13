@@ -94,12 +94,13 @@ async function mcp(sessionId: string, method: string, params?: unknown): Promise
 
 /** Usa uma ferramenta do Kiwi como o Claude Code: o `tool_call` no status, a chamada e o texto que voltou. */
 async function useTool(client: AgentContext, sessionId: string, name: string, args: unknown): Promise<{ text: string; isError: boolean }> {
+  const toolCallId = `k${++rpcId}`;
   await client.notify("session/update", {
     sessionId,
     // As de escrita (spec #8356) chegam como `edit`, como o Claude Code faz com uma ferramenta que muda arquivo.
     update: {
       sessionUpdate: "tool_call",
-      toolCallId: `k${++rpcId}`,
+      toolCallId,
       title: name,
       kind: /^notes_(create|append|write)$/.test(name) ? "edit" : "read",
       status: "in_progress",
@@ -109,6 +110,7 @@ async function useTool(client: AgentContext, sessionId: string, name: string, ar
   const r = await mcp(sessionId, "tools/call", { name, arguments: args });
   const pause = Number(process.env.KIWI_FAKE_AGENT_TOOL_DELAY_MS ?? 0);
   if (pause > 0) await Bun.sleep(pause);
+  await client.notify("session/update", { sessionId, update: { sessionUpdate: "tool_call_update", toolCallId, status: r.error || r.result?.isError ? "failed" : "completed" } });
   if (r.error) return { text: `erro: ${r.error.message}`, isError: true };
   return { text: String(r.result?.content?.[0]?.text ?? ""), isError: !!r.result?.isError };
 }
@@ -275,6 +277,7 @@ const app = agent({ name: "kiwi-fake-agent" })
           await say(client, sessionId, `pedaço ${i} `);
           await Bun.sleep(100);
         }
+        await client.notify("session/update", { sessionId, update: { sessionUpdate: "tool_call_update", toolCallId: "t2", status: "completed" } });
         return { stopReason: "end_turn" };
       }
       default:

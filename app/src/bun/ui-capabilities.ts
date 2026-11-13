@@ -477,7 +477,11 @@ export function uiCapabilities(deps: CapabilityDeps,
       // Os atalhos (1.24.0, T5349), também os que vêm nos campos de antes: conferidos juntos no fim, sem conflito.
       const shortcutPatch: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(a)) {
-        if (key === "notesShortcut") {
+        if (key === "kiwicat") {
+          const cat = object(value, "kiwicat");
+          if (Object.keys(cat).some(k => k !== "show") || typeof cat.show !== "boolean") throw bad("kiwicat.show must be true or false");
+          patch.kiwicat = { show: cat.show };
+        } else if (key === "notesShortcut") {
           if (!isNotesShortcut(value)) throw bad("notesShortcut must be a shortcut, or null");
           shortcutPatch.notes = value;
         } else if (key === "shortcuts") {

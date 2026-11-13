@@ -83,7 +83,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true } };
   let t = 0;
   return {
     calls,
@@ -236,6 +236,13 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(await call("history.delete", { id: "abc" })).toMatchObject({ ok: true, value: true });
     expect(await call("history.search", [])).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(f.calls).toEqual(["dictionary.load", "dictionary.save:1", 'history.search:{"query":"reunião","limit":10}', "history.delete:abc"]);
+  });
+
+  test("settings: Kiwi-cat validates only the show flag", async () => {
+    const f = fakeDeps(); const caps = uiCapabilities(f.deps);
+    for (const value of [null, false, {}, { show: "false" }, { show: true, extra: 1 }])
+      expect(await directInvoke(caps, "settings.set", { kiwicat: value })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { show: false } })).toMatchObject({ ok: true, value: { kiwicat: { show: false } } });
   });
 
   test("settings: a largura da nota, em px dentro dos limites (T5299)", async () => {
