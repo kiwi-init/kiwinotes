@@ -298,3 +298,10 @@
   min-height: 30px;
   font-size: var(--text-sm);
 }
+
+/* O medidor (spec #11084): os pedidos mais caros, a pergunta e, embaixo, a hora e o gasto. */
+.kn-usage-top { padding: var(--space-2) var(--space-4); }
+.kn-usage-top ol { margin: var(--space-1) 0 0; padding-left: 1.2em; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.kn-usage-top li { min-width: 0; font-size: var(--text-sm); }
+.kn-usage-q { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kn-usage-meta { display: block; color: var(--text-2); font-size: var(--text-xs, 0.85em); }

@@ -12,7 +12,7 @@ import { fakeNotices } from "./fake/notices.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
-import { AgentService, AgentServiceError } from "./service.ts";
+import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS } from "./service.ts";
 import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import { AgentActivity } from "./activity.ts";
@@ -850,5 +850,104 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(changes).toEqual([{ permission: "allowed", enabled: false }]);
     expect(await m.svc.noticeSet(true)).toEqual({ permission: "allowed", enabled: true });
     expect(notices.calls).toEqual([{ op: "request" }]);
+  });
+
+  test("o medidor (spec #11084): o gasto que o agente informa por pedido, os mais caros e o cache, sem dinheiro", async () => {
+    const m = make();
+    await readyNow(m);
+    const usage: unknown[] = [];
+    m.svc.onUsageChanged((v) => usage.push(v));
+    await askAndWait(m, "Primeiro pedido, curto");
+    await askAndWait(m, `Segundo pedido, bem mais longo: ${"palavra ".repeat(200)}`);
+    const v = m.svc.usageView();
+    expect(v.fiveHours.requests).toBe(2);
+    expect(v.week.requests).toBe(2);
+    expect(v.fiveHours.cacheRead).toBe(6000);
+    expect(v.top[0]!.question.startsWith("Segundo pedido")).toBe(true);
+    expect(v.top[0]!.tokens).toBeGreaterThan(v.top[1]!.tokens);
+    expect(usage.length).toBe(2);
+    expect(JSON.stringify(v)).not.toMatch(/cost|usd/i);
+    // "Apagar o gasto guardado": só o gasto; o registro do agente fica.
+    expect(m.svc.usageClear().week.requests).toBe(0);
+    expect((await m.svc.activityLog()).length).toBe(2);
+  });
+
+  test("o aviso do próprio agente (allowed_warning) vai ao balão uma vez por janela, sem parar o pedido", async () => {
+    const m = make();
+    await readyNow(m);
+    const first = await askAndWait(m, "/aviso");
+    expect(first.filter((e) => e.type === "limit")).toEqual([expect.objectContaining({ type: "limit", status: "warning", percent: 82 })]);
+    expect(first.at(-1)).toMatchObject({ type: "done", stopReason: "end_turn", text: "Começando. E terminando." });
+    const second = await askAndWait(m, "/aviso");
+    expect(second.some((e) => e.type === "limit")).toBe(false);
+    expect(m.svc.usageView().limit).toMatchObject({ status: "allowed_warning", window: "five_hour", percent: 82 });
+  });
+
+  test("o limite acabado: a hora de volta do agente (rateLimit ou a frase do erro); sem ela, só que acabou", async () => {
+    const m = make();
+    await readyNow(m);
+    const withTime = await askAndWait(m, "/limite-com-hora");
+    const out = withTime.find((e) => e.type === "limit") as { status: string; resetsAt?: string };
+    expect(out.status).toBe("out");
+    expect(Date.parse(out.resetsAt!)).toBeGreaterThan(Date.now() + 2.5 * 3_600_000);
+    expect(withTime.at(-1)).toMatchObject({ type: "error", code: "E_AGENT_LIMIT" });
+    expect(m.svc.usageView().out!.resetsAt).toBe(out.resetsAt);
+    // A frase da mensagem ("will reset at 5pm") também vale.
+    const m2 = make();
+    await readyNow(m2);
+    const phrase = await askAndWait(m2, "/limite");
+    const o2 = phrase.find((e) => e.type === "limit") as { resetsAt?: string };
+    expect(new Date(o2.resetsAt!).getHours()).toBe(17);
+  });
+
+  test("o /usage só sob demanda: fica fora do registro, sem evento de pedido, e mostra as janelas da assinatura", async () => {
+    const m = make();
+    await readyNow(m);
+    const before = m.turns.length;
+    const v = await m.svc.usageRefresh();
+    expect(v.subscription).toMatchObject({ fiveHour: { percent: 37 }, week: { percent: 12 } });
+    // A hora de volta veio e é uma data. A hora exata é do `usage.test.ts`: aqui o `bun test` roda em UTC e o agente
+    // falso, noutro processo, no fuso do Mac (no app de verdade os dois estão no mesmo fuso).
+    expect(Number.isFinite(Date.parse(v.subscription!.fiveHour!.resetsAt!))).toBe(true);
+    expect(m.turns.length).toBe(before);
+    expect(await m.svc.activityLog()).toEqual([]);
+    expect(v.week.requests).toBe(0);
+  });
+
+  test("o modo econômico (spec #11084): as instruções e a lista das ferramentas idênticas, byte a byte, entre dois pedidos", async () => {
+    const notes: Record<string, string> = { ...NOTES, "Longa.md": `# Longa\n\n## Um\n\n${"um texto ".repeat(600)}\n\n## Dois\n\n${"outro texto ".repeat(600)}\n` };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    const plain = (await askAndWait(m, "/ferramentas-cru")).at(-1) as { text: string };
+    expect((await m.svc.configure({ economy: true })).economy).toBe(true);
+    const a = (await askAndWait(m, "/ferramentas-cru")).at(-1) as { text: string };
+    const b = (await askAndWait(m, "/ferramentas-cru")).at(-1) as { text: string };
+    // A lista das ferramentas é a mesma nos dois pedidos, e a mesma sem o modo econômico (as descrições não mudam).
+    expect(a.text).toBe(b.text);
+    expect(a.text).toBe(plain.text);
+    // As instruções vão na frente, com os mesmos bytes, nos dois pedidos.
+    const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    const eco = prompts.slice(-2);
+    for (const p of eco) expect(p.startsWith(ECONOMY_INSTRUCTIONS)).toBe(true);
+    expect(eco[0]!.slice(0, ECONOMY_INSTRUCTIONS.length)).toBe(eco[1]!.slice(0, ECONOMY_INSTRUCTIONS.length));
+    expect(prompts[0]!.startsWith("[Modo econômico")).toBe(false);
+    // A nota longa, sem seção: o sumário e o "há mais", nunca a nota inteira; com a seção, em pedaços menores.
+    const read = (await askAndWait(m, '/tool notes_read {"path":"Longa.md"}')).at(-1) as { text: string };
+    expect(read.text).toContain("Modo econômico: a nota é longa");
+    expect(read.text).toContain('"titulo":"Um"');
+    expect(read.text).not.toContain("um texto um texto um texto");
+    const sec = (await askAndWait(m, '/tool notes_read {"path":"Longa.md","section":"Um"}')).at(-1) as { text: string };
+    expect(sec.text).toContain('"proximoOffset"');
+    // Desligado, volta ao de sempre: sem instruções e a nota inteira (até o teto normal).
+    await m.svc.configure({ economy: false });
+    const full = (await askAndWait(m, '/tool notes_read {"path":"Longa.md"}')).at(-1) as { text: string };
+    expect(full.text).toContain("um texto um texto");
+    expect(m.log().filter((l) => l.method === "session/prompt").at(-1)!.params.prompt).not.toMatchObject([{ text: expect.stringContaining("Modo econômico") }]);
+  });
+
+  test("o modelo mais barato que o agente oferece: Haiku, depois Sonnet; sem nenhum, nada muda", () => {
+    expect(cheapestModel([{ value: "default", name: "Padrão" }, { value: "opus", name: "Opus" }, { value: "haiku", name: "Haiku" }])).toBe("haiku");
+    expect(cheapestModel([{ value: "opus", name: "Opus" }, { value: "claude-sonnet-5", name: "Sonnet 5" }])).toBe("claude-sonnet-5");
+    expect(cheapestModel([{ value: "default", name: "Padrão" }])).toBeNull();
   });
 });

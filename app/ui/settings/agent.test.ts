@@ -24,6 +24,7 @@ const base: AgentStatus = {
   name: "Claude Code",
   enabled: false,
   consented: false,
+  economy: false,
   claude: { installed: true, version: "2.1.322", loggedIn: true, method: "claude.ai", versionOk: true },
   adapter: { version: "0.106.0", phase: "missing" },
   program: "closed",

@@ -37,9 +37,14 @@ function fakeHost(
     sessionOptions: extra.sessionOptions,
   });
   hosts.push(h);
+  // Como as sessões abriram: o agente falso também anota cada `session/prompt` (spec #11084), que fica de fora aqui.
   const opened = () =>
     existsSync(log)
-      ? readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { method: string; params: Record<string, unknown> })
+      ? readFileSync(log, "utf8")
+          .trim()
+          .split("\n")
+          .map((l) => JSON.parse(l) as { method: string; params: Record<string, unknown> })
+          .filter((l) => l.method !== "session/prompt")
       : [];
   return { h, opened };
 }
@@ -61,7 +66,12 @@ describe("o pedido", () => {
     expect(s.agent).toEqual({ name: "Agente falso", version: "1.0.0" });
     const events: AgentEvent[] = [];
     const a = await h.ask("oi", (e) => events.push(e));
-    expect(a).toEqual({ text: 'Você disse: "oi". Este é o turno 1 desta sessão.', stopReason: "end_turn" });
+    // O gasto que o agente informou no fim do pedido (spec #11084): no falso, de mentira.
+    expect(a).toEqual({
+      text: 'Você disse: "oi". Este é o turno 1 desta sessão.',
+      stopReason: "end_turn",
+      usage: { input: expect.any(Number), output: 120, cacheRead: expect.any(Number), cacheWrite: expect.any(Number) },
+    });
     expect(events).toEqual([
       { type: "status", status: "thinking" },
       { type: "text", text: 'Você disse: "oi". ' },
@@ -366,7 +376,12 @@ describe("as ferramentas do Kiwi no host (spec #7496)", () => {
       kiwiTools: { servers: () => [server], prefix: "mcp__kiwi__" },
     });
     hosts.push(h);
-    const opened = () => readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { method: string; params: Record<string, any> });
+    const opened = () =>
+      readFileSync(log, "utf8")
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l) as { method: string; params: Record<string, any> })
+        .filter((l) => l.method !== "session/prompt");
     return { h, opened };
   }
 

@@ -183,4 +183,29 @@ describe("o balão", () => {
     const { chunks } = play(f, 0);
     expect(chunks).toEqual(["um dois três", "quatro cinco", "seis sete", "oito"]);
   });
+
+  test("o limite (spec #11084): o aviso do agente entra como um trecho sem parar a resposta; o limite acabado mostra a hora de volta", () => {
+    const f = new BubbleFeed(fits(80), true);
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "text", text: "Começando." }), 0);
+    f.event(ev({ type: "limit", status: "warning", percent: 82 }), 10);
+    f.event(ev({ type: "text", text: " E terminando." }), 20);
+    f.event(ev({ type: "done", stopReason: "end_turn", text: "Começando. E terminando." }), 30);
+    const { chunks } = play(f, 30);
+    expect(chunks).toContain("Você já usou 82% do seu limite. Eu sigo, mas vale ir com calma.");
+    expect(chunks.join(" ")).toContain("E terminando.");
+    // O limite acabado: o erro de limite vem com a hora que o agente informou.
+    // O relógio do balão (aqui 0) não é o de parede: a hora de volta se lê no de parede.
+    const out = new BubbleFeed(fits(80), false, () => new Date(2026, 10, 13, 14, 0).getTime());
+    out.event(ev({ type: "started" }), 0);
+    const resetsAt = new Date(2026, 10, 13, 18, 40).toISOString();
+    out.event(ev({ type: "limit", status: "out", resetsAt }), 0);
+    out.event(ev({ type: "error", code: "E_AGENT_LIMIT", message: "O Claude Code atingiu o limite de uso da sua conta." }), 0);
+    expect(out.view(0)!.text).toBe("O seu limite acabou. Ele volta às 18h40.");
+    // Sem a hora, o erro do agente fica como está.
+    const plain = new BubbleFeed(fits(80));
+    plain.event(ev({ type: "started" }), 0);
+    plain.event(ev({ type: "error", code: "E_AGENT_LIMIT", message: "O Claude Code atingiu o limite de uso da sua conta." }), 0);
+    expect(plain.view(0)!.text).toBe("O Claude Code atingiu o limite de uso da sua conta.");
+  });
 });

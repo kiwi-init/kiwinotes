@@ -151,7 +151,10 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   evento `agent.noticeChanged`. Só acréscimo.
 // 1.53.0 (T10830, spec #9810): o gato no overlay. O `kiwicat.overlay` nas settings (o `settings.set` aceita só uma das
 //   chaves do `kiwicat`, e a outra fica) e o evento `kiwicat.where`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.53.0";
+// 1.54.0 (T11114, spec #11084): o agente econômico. O `agent.usage` (o gasto do Kiwi em 5 horas e na semana, os
+//   pedidos mais caros, o último uso da janela e o último `/usage`), o `agent.usageRefresh` (o `/usage`, só sob
+//   demanda), o `agent.usageClear`, o evento `agent.usageChanged` e o evento `limit` no `agent.turn`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.54.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -458,7 +461,7 @@ export interface UiCapabilities {
   /** Apaga o adaptador baixado (e fecha o programa). O agente continua ligado ou desligado como estava. */
   "agent.remove": { args: Record<string, never>; result: AgentStatus };
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
-  "agent.configure": { args: { model?: string; effort?: string }; result: AgentStatus };
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -523,6 +526,34 @@ export interface UiCapabilities {
   "agent.noticeAllow": { args: Record<string, never>; result: AgentNoticeState };
   /** Liga ou desliga o aviso (1.52.0). Desligado, uma notificação na tela sai. */
   "agent.noticeSet": { args: { enabled: boolean }; result: AgentNoticeState };
+  /** O medidor (1.54.0, spec #11084): só o que o agente informou. Nada em dinheiro. */
+  "agent.usage": { args: Record<string, never>; result: AgentUsageView };
+  /** "Atualizar" (1.54.0): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica. */
+  "agent.usageRefresh": { args: Record<string, never>; result: AgentUsageView };
+  /** "Apagar o gasto guardado" (1.54.0): só o gasto, o registro do agente fica. */
+  "agent.usageClear": { args: Record<string, never>; result: AgentUsageView };
+}
+
+/** Uma soma de gasto do Kiwi (1.54.0). */
+export interface AgentUsageSum {
+  requests: number;
+  tokens: number;
+  /** Os tokens que o agente leu do cache. */
+  cacheRead: number;
+}
+
+/** O medidor de Ajustes › Agente (1.54.0, spec #11084). As horas em ISO. */
+export interface AgentUsageView {
+  fiveHours: AgentUsageSum;
+  week: AgentUsageSum;
+  /** Os pedidos mais caros da semana. */
+  top: { request: string; at: string; question: string; tokens: number }[];
+  /** O último uso da janela que o agente informou no meio de um pedido, e quando chegou. */
+  limit: { status: "allowed" | "allowed_warning" | "rejected"; at: string; window?: string; percent?: number; resetsAt?: string } | null;
+  /** O limite acabou; a hora de volta só se o agente a informou. */
+  out: { at: string; resetsAt?: string } | null;
+  /** O último `/usage`, pedido pela pessoa; `unavailable` quando a resposta não trouxe as janelas. */
+  subscription: { at: string; fiveHour?: { percent: number; resetsAt?: string }; week?: { percent: number; resetsAt?: string }; unavailable?: true } | null;
 }
 
 /** A permissão de notificar e o liga/desliga do aviso (1.52.0). */
@@ -651,6 +682,8 @@ export interface AgentStatus {
   /** O nome que a pessoa vê ("Claude Code"). */
   name: string;
   enabled: boolean;
+  /** O modo econômico (1.54.0, spec #11084). */
+  economy: boolean;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */
@@ -699,6 +732,11 @@ export type AgentTurnEvent = { id: string } & (
   | { type: "permission"; tool: string; decision: "denied" }
   | { type: "done"; stopReason: string; text: string }
   | { type: "error"; code: string; message: string }
+  /**
+   * O limite (1.54.0, spec #11084): `warning` é o aviso do próprio agente (uma vez por janela, sem bloquear); `out`, o
+   * limite acabado. `resetsAt` (ISO) só quando o agente informou a hora de volta.
+   */
+  | { type: "limit"; status: "warning" | "out"; percent?: number; resetsAt?: string }
 );
 
 export type UiCapability = keyof UiCapabilities;
@@ -805,6 +843,9 @@ export const UI_CAPABILITIES = [
   "agent.notice",
   "agent.noticeAllow",
   "agent.noticeSet",
+  "agent.usage",
+  "agent.usageRefresh",
+  "agent.usageClear",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -850,6 +891,8 @@ export interface UiEvents {
    * esconde o gato do canto. Nunca dois gatos.
    */
   "kiwicat.where": { overlay: boolean };
+  /** O medidor mudou (1.54.0). */
+  "agent.usageChanged": AgentUsageView;
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */
