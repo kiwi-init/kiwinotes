@@ -20,6 +20,7 @@ import {
   EMPTY_ACTIVITY,
   goneRequest,
   heldLines,
+  doubtLine,
   removedLine,
   openChanges,
   readsLine,
@@ -177,6 +178,12 @@ export function AgentActivitySection() {
                 outcome={outcomes[r.id]}
                 onView={(n) => void toggleView(r.id, n)}
                 onUndo={(n) => void runUndo(r.id, n)}
+                onDoubt={(fingerprint, answer) =>
+                  void api.agent.answer({ request: r.id, fingerprint, answer }).then(
+                    () => load(),
+                    (e) => setFailure(e instanceof Error ? e.message : String(e)),
+                  )
+                }
               />
             ))}
           </ul>
@@ -198,6 +205,7 @@ function Request({
   outcome,
   onView,
   onUndo,
+  onDoubt,
 }: {
   r: AgentActivityRequest;
   busy: ReadonlySet<string>;
@@ -205,6 +213,7 @@ function Request({
   outcome?: Outcome;
   onView: (change: number) => void;
   onUndo: (change?: number) => void;
+  onDoubt: (fingerprint: string, answer: "send" | "hold") => void;
 }) {
   const open = openChanges(r);
   const running = [...busy].some((b) => b === r.id || b.startsWith(`${r.id}:`));
@@ -229,6 +238,23 @@ function Request({
           {l}
         </p>
       ))}
+      {r.doubts?.length ? (
+        <ul className="kn-activity-doubts" aria-label="Dúvidas sem resposta">
+          {r.doubts.map((d) => (
+            <li key={d.fingerprint} className="kn-activity-doubt">
+              <span className="kn-activity-what">{doubtLine(d)}</span>
+              {d.answered ? (
+                <span className="kn-activity-undone">{d.answered === "send" ? "Você deixou mandar." : "Você disse que é segredo."}</span>
+              ) : (
+                <span className="kn-activity-actions">
+                  <Button onClick={() => onDoubt(d.fingerprint, "hold")}>É segredo</Button>
+                  <Button onClick={() => onDoubt(d.fingerprint, "send")}>Pode mandar</Button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {r.changes.length === 0 ? (
         <p className="kn-activity-none">Não mudou nada.</p>
       ) : (

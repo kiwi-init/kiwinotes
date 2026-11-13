@@ -359,6 +359,10 @@ stores.agent.onTurn((turn) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.turn", payload: turn });
 });
 // O registro mudou (spec #9480): a tela "Atividade do agente" lê de novo.
+// A pergunta na dúvida (spec #9873): só os ids; a janela lê o cartão pelo `agent.question`.
+stores.agent.onQuestionChanged((e) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.questionChanged", payload: e });
+});
 stores.agent.onActivity((request) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.activityChanged", payload: { request } });
 });

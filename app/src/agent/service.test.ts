@@ -54,7 +54,7 @@ interface Made {
   pid: () => number | null;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -72,6 +72,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     },
     ...(o.reader ? { reader: o.reader } : {}),
     ...(o.writer ? { writer: o.writer } : {}),
+    ...(o.doubtTimeoutMs ? { doubtTimeoutMs: o.doubtTimeoutMs } : {}),
     openHost: async ({ configOptions, kiwiTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
@@ -744,5 +745,40 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     const dir = path.join(agentDir(m.data), "activity");
     for (const f of new Bun.Glob("*/request.json").scanSync(dir)) expect(readFileSync(path.join(dir, f), "utf8")).not.toContain(GH);
   });
-});
 
+  test("a pergunta na dúvida (spec #9873): o pedido espera, Pode mandar entrega o trecho, a resposta fica lembrada, e o prazo segura", async () => {
+    const DOUBT = "Qx7Lm2Vb9Rt4Wz8Np3Kd6Hs1Fg5Jc0Ya";
+    const notes: Record<string, string> = { ...NOTES, "Notas.md": `anotei ${DOUBT} aqui\n` };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes), doubtTimeoutMs: 600 });
+    await readyNow(m);
+    const read = '/tool notes_read {"path":"Notas.md"}';
+    // O pedido espera a pessoa: o status diz, e o cartão tem o trecho e a nota.
+    const { id } = await m.svc.ask(read);
+    await until(() => m.turns.some((e) => e.id === id && e.type === "status" && e.status === "waiting" && e.target === "Notas.md"));
+    const card = m.svc.question()!;
+    expect(card.items).toEqual([expect.objectContaining({ value: DOUBT, path: "Notas.md" })]);
+    await m.svc.answerDoubt({ card: card.id, fingerprint: card.items[0]!.fingerprint, answer: "send" });
+    await until(() => m.turns.some((e) => e.id === id && e.type === "done"));
+    expect((m.turns.findLast((e) => e.id === id && e.type === "done") as { text: string }).text).toContain(DOUBT);
+    // De novo: não pergunta, e passa.
+    const again = await askAndWait(m, read);
+    expect(again.some((e) => e.type === "status" && e.status === "waiting")).toBe(false);
+    expect((again.at(-1) as { text: string }).text).toContain(DOUBT);
+    expect(m.svc.answersList()).toEqual([expect.objectContaining({ answer: "send" })]);
+    // Esquecida a resposta e sem resposta no prazo: o trecho é segurado, o pedido segue, e a dúvida fica pendente.
+    expect(m.svc.forgetAnswer(card.items[0]!.fingerprint)).toBe(true);
+    const timeout = await askAndWait(m, read);
+    expect((timeout.at(-1) as { type: string; text: string }).type).toBe("done");
+    expect((timeout.at(-1) as { text: string }).text).not.toContain(DOUBT);
+    await until(async () => (await m.svc.activityLog())[0]!.doubts?.length === 1);
+    const [last] = await m.svc.activityLog();
+    expect(JSON.stringify(last)).not.toContain(DOUBT);
+    // A pessoa responde depois, na Atividade, pela impressão digital.
+    await m.svc.answerDoubt({ request: last!.id, fingerprint: last!.doubts![0]!.fingerprint, answer: "hold" });
+    expect(m.svc.answersList()).toEqual([expect.objectContaining({ answer: "hold" })]);
+    expect((await m.svc.activityLog())[0]!.doubts![0]!.answered).toBe("hold");
+    // O trecho não está em nenhum arquivo do registro nem das respostas.
+    const dir = agentDir(m.data);
+    for (const f of new Bun.Glob("**/*.json").scanSync(dir)) expect(readFileSync(path.join(dir, f), "utf8")).not.toContain(DOUBT);
+  });
+});

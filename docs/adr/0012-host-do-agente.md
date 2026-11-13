@@ -219,6 +219,15 @@ O detector de segredos (`src/guardrail/detector.ts`, spec #9690) passa a valer n
 - **O registro** guarda só contagens (`held` em cada leitura, `requestHeld` no pedido; contrato 1.47.0), e a Atividade diz "O Kiwi segurou 2 segredos em Projetos/Kiwi". O segredo só existe na memória do guard e na cópia de antes de cada escrita, que é do desfazer e nunca vai ao agente.
 - Títulos, caminhos e participantes passam sem filtro, como decidido no spec.
 
+## A pergunta na dúvida (T10122, spec #9873)
+O trecho em que o detector fica em dúvida não é mais segurado sempre: o Kiwi pergunta à pessoa antes de mandar (`src/guardrail/questions.ts`).
+- **O cartão** aparece na janela principal (`ui/hub/DoubtCard.tsx`): o trecho com o texto em volta, a nota e a linha, e "É segredo" ou "Pode mandar"; várias dúvidas do mesmo pedido vêm no mesmo cartão, com "É tudo segredo". O status do pedido diz `waiting` ("Esperando você: dúvida em …").
+- **A leitura espera** até 2 minutos (`SecretGuard.decide`), e o servidor de ferramentas deixa o prazo da conexão explícito (`idleTimeout: 150`). Sem resposta no prazo, se o agente desiste da chamada ou se o pedido é cancelado, o trecho é segurado, o pedido segue e a dúvida fica no registro, só com a impressão digital, a máscara, a nota e a linha, para a pessoa responder depois na Atividade.
+- **A dúvida do texto do pedido** é decidida no `runTurn`, antes de o texto ir ao agente; o registro guarda o pedido como ele foi.
+- **A resposta é lembrada** por uma impressão digital com chave (`src/guardrail/answers.ts`): `HMAC-SHA256` com uma chave do app (`<dados>/agent/guardrail.key`, 0600), em `<dados>/agent/guardrail-answers.json`. O trecho nunca é escrito: sem a chave, não se chega a ele nem por tentativa. "O que você já respondeu", em Ajustes › Agente, mostra a máscara e desfaz.
+- **O trecho só sai pela capacidade `agent.question`,** para a janela; o evento `agent.questionChanged` leva só os ids (contrato 1.48.0).
+- O que o detector tem certeza que é segredo nunca é perguntado. A notificação com a janela fora da vista é o spec #9839.
+
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:
 - `claude -p --input-format stream-json --output-format stream-json --verbose`;

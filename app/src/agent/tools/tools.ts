@@ -18,7 +18,7 @@ import { markdownStructure, headingFor, type NoteHeading } from "../../shared/ma
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
-import { removedSecrets, type SecretGuard } from "../../guardrail/filter.ts";
+import { removedSecrets, type DoubtDecider, type SecretGuard } from "../../guardrail/filter.ts";
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
 export const READ_MAX_CHARS = 12_000;
@@ -279,6 +279,8 @@ export interface KiwiToolContext {
   journal?: WriteJournal;
   /** O filtro do guardrail (spec #9818): o que sai para o agente vai sem os segredos, e a escrita os põe de volta. */
   guard?: SecretGuard;
+  /** Quem decide a dúvida (spec #9873): a resposta guardada ou a pergunta à pessoa. Sem ele, a dúvida é segurada. */
+  decider?: DoubtDecider;
 }
 
 function args(raw: unknown, allowed: string[]): Record<string, unknown> {
@@ -424,7 +426,7 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       return await write(ctx.writer, ctx.journal, name, raw, ctx.guard);
     }
-    const r = await run(ctx.reader, name, raw, ctx.guard);
+    const r = await run(ctx.reader, name, raw, ctx.guard, ctx.decider);
     if (ctx.guard) r.held = ctx.guard.heldIn(JSON.stringify(r.value));
     return r;
   } catch (e) {
@@ -455,9 +457,9 @@ function snippetOf(text: string, terms: string[]): string {
 }
 
 /** O texto de uma nota como o agente vê: com o filtro, sem os segredos; sem ele, como está. */
-const seen = (guard: SecretGuard | undefined, path: string, content: string) => (guard ? guard.read(path, content).text : content);
-
-async function run(reader: VaultReader, name: string, raw: unknown, guard?: SecretGuard): Promise<ToolResult> {
+async function run(reader: VaultReader, name: string, raw: unknown, guard?: SecretGuard, decider?: DoubtDecider): Promise<ToolResult> {
+  /** O texto de uma nota como o agente vê: com o filtro, sem os segredos (a dúvida decidida antes); sem ele, como está. */
+  const seen = async (path: string, content: string) => (guard ? (await guard.decide(path, content, decider)).text : content);
   switch (name) {
     case "notes_search": {
       const a = args(raw, ["query", "limit"]);
@@ -473,7 +475,7 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
           // O trecho sai da nota já filtrada, para um segredo partido na borda não escapar. E a busca não confirma
           // segredo: um achado cujas palavras só aparecem dentro de um segredo não volta.
           const content = (await reader.get(h.path)).content;
-          const masked = guard.read(h.path, content).text;
+          const masked = await seen(h.path, content);
           const inReal = terms.some((t) => fold(content).includes(t));
           const inMasked = terms.some((t) => fold(masked).includes(t));
           if (inReal && !inMasked) continue;
@@ -492,7 +494,7 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
       const a = args(raw, ["path"]);
       const n = await reader.get(str(a, "path", true)!);
       // Os títulos e os tamanhos do texto que o agente vê.
-      const content = seen(guard, n.path, n.content);
+      const content = await seen(n.path, n.content);
       const headings = markdownStructure(content).headings;
       const secoes = headings.slice(0, OUTLINE_MAX).map((h, i) => {
         const next = headings.slice(i + 1).find((x) => x.level <= h.level);
@@ -517,7 +519,7 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
       // A versão da nota inteira (spec #8356): é ela que o notes_write pede, mesmo lendo uma seção só.
       const versao = n.version ? { versao: n.version } : {};
       // A nota inteira passa pelo filtro, e só depois é cortada: os pedaços e os offsets são do texto que o agente vê.
-      const content = seen(guard, n.path, n.content);
+      const content = await seen(n.path, n.content);
       if (section !== undefined && section.trim()) {
         const s = sectionOf(content, section);
         if (!s) throw new ToolError("E_NOT_FOUND", `a nota ${n.path} não tem a seção "${section}"; veja os títulos com notes_outline`);
@@ -577,7 +579,7 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
       if (!isMeetingNote(n.content)) throw new ToolError("E_NOT_MEETING", `${n.path} não é a nota de uma reunião gravada; leia com notes_read`);
       const offset = int(a, "offset", 0, Number.MAX_SAFE_INTEGER) ?? 0;
       const meta = (await reader.meetings()).find((m) => m.path === n.path);
-      const { body } = splitMeetingNote(seen(guard, n.path, n.content));
+      const { body } = splitMeetingNote(await seen(n.path, n.content));
       const at = transcriptSection(body);
       const transcript = (at ? body.slice(at.from, at.to) : "").replace(SEGMENT_REF, "").trim();
       return {

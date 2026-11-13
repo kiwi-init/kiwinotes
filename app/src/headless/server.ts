@@ -249,6 +249,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.agent.onStatus((s) => event("agent.status", s)),
     stores.agent.onTurn((e) => event("agent.turn", e)),
     stores.agent.onActivity((request) => event("agent.activityChanged", { request })),
+    stores.agent.onQuestionChanged((e) => event("agent.questionChanged", e)),
   ];
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));

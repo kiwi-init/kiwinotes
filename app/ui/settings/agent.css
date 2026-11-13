@@ -284,3 +284,17 @@
   background: color-mix(in srgb, #e5a50a 14%, transparent);
   font-size: var(--text-sm);
 }
+
+/* As dúvidas sem resposta de um pedido (spec #9873), com os botões para responder depois. */
+.kn-activity-doubts {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+}
+.kn-activity-doubt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  font-size: var(--text-sm);
+}

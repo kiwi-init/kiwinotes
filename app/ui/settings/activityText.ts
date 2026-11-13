@@ -76,6 +76,15 @@ export function heldLines(r: Pick<AgentActivityRequest, "reads" | "requestHeld">
   return [...where].map(([k, n]) => `O Kiwi segurou ${plural(n, "segredo", "segredos")} ${k}.`);
 }
 
+/**
+ * Uma dúvida que ficou sem resposta (spec #9873): onde, e a máscara do trecho, nunca o trecho. "O Kiwi ficou em dúvida
+ * em Projetos/Kiwi, linha 4 (•••• (32 caracteres)) e segurou desta vez."
+ */
+export function doubtLine(d: { path: string; line: number; mask: string }): string {
+  const where = d.path ? `em ${noteName(d.path)}, linha ${d.line}` : "no seu pedido";
+  return `O Kiwi ficou em dúvida ${where} (${d.mask}) e segurou desta vez.`;
+}
+
 /** A mudança que tirou segredos da nota (spec #9818): o aviso, com o caminho de volta. */
 export const removedLine = (n: number) =>
   `Esta mudança tirou ${plural(n, "segredo", "segredos")} da nota. O Desfazer ${n === 1 ? "o traz" : "os traz"} de volta, e o texto de antes está nas Versões.`;

@@ -141,7 +141,10 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `projects.setMain` e o `projects.status`. Só acréscimo.
 // 1.49.0 (T10200, spec #9847): os projetos na barra lateral. O evento `projects.changed` e o `meetingsFolder` no
 //   `projects.list` (a pasta que não pode ser projeto). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.49.0";
+// 1.50.0 (T10122, spec #9873): a pergunta na dúvida. O `agent.question` (o cartão aberto, com os trechos, só para a
+//   tela), o `agent.answer`, o `agent.answers` e o `agent.forget`, o evento `agent.questionChanged` (só os ids), o status
+//   `waiting` no `agent.turn` e as `doubts` de cada pedido no `agent.activity`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.50.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -479,6 +482,41 @@ export interface UiCapabilities {
   "projects.setMain": { args: { folder: string; note: string }; result: { project: ProjectInfo } };
   /** O estado do projeto, só contado: o sumário da nota principal, as notas mudadas por último e as tarefas abertas. */
   "projects.status": { args: { folder: string }; result: ProjectStatus };
+  /**
+   * O cartão da pergunta na dúvida aberto agora (1.50.0, spec #9873), com os trechos, para a tela da pessoa; null sem
+   * cartão. É o único lugar por onde o trecho em dúvida sai, e só para a janela.
+   */
+  "agent.question": { args: Record<string, never>; result: AgentDoubtCard | null };
+  /**
+   * A resposta da pessoa (1.50.0): a um trecho do cartão (`card` e `fingerprint`), a todos ("É tudo segredo", `card` e
+   * `all: "hold"`), ou depois, na Atividade, a uma dúvida pendente (`request` e `fingerprint`). Fica lembrada.
+   */
+  "agent.answer": {
+    args: { card?: string; request?: string; fingerprint?: string; answer?: "send" | "hold"; all?: "hold" };
+    result: true;
+  };
+  /** O que a pessoa já respondeu (1.50.0), com a máscara do trecho, nunca o trecho. */
+  "agent.answers": { args: Record<string, never>; result: { answers: AgentDoubtAnswer[] } };
+  /** Esquece uma resposta (1.50.0): o trecho volta a ser perguntado. */
+  "agent.forget": { args: { fingerprint: string }; result: boolean };
+}
+
+/** O cartão da pergunta na dúvida (1.50.0). */
+export interface AgentDoubtCard {
+  id: string;
+  request: string;
+  /** Até quando o pedido espera (ISO 8601). */
+  deadline: string;
+  items: { fingerprint: string; value: string; context: string; mask: string; kind: string; path: string; line: number; answer?: "send" | "hold" }[];
+}
+
+/** Uma resposta guardada (1.50.0). */
+export interface AgentDoubtAnswer {
+  fingerprint: string;
+  answer: "send" | "hold";
+  at: string;
+  mask: string;
+  kind: string;
 }
 
 /** O antes e o depois de uma mudança do agente (`agent.change`, 1.46.0). */
@@ -545,6 +583,8 @@ export interface AgentActivityRequest {
   request: string;
   /** Quantos segredos o Kiwi segurou no texto do pedido (1.47.0). */
   requestHeld?: number;
+  /** As dúvidas sem resposta do pedido (1.50.0): a impressão digital, a máscara, a nota e a linha, nunca o trecho. */
+  doubts?: { fingerprint: string; mask: string; kind: string; path: string; line: number; answered?: "send" | "hold" }[];
   /** O que o agente leu; `held` é quantos segredos o Kiwi segurou naquela leitura (1.47.0), nunca o valor. */
   reads: { at: string; tool: string; target?: string; held?: number }[];
   changes: {
@@ -621,6 +661,8 @@ export interface AgentModelChoice {
 export type AgentTurnEvent = { id: string } & (
   | { type: "started" }
   | { type: "status"; status: "opening" | "thinking" }
+  /** O pedido espera a pessoa responder a dúvida (1.50.0, spec #9873); `target` é a nota do trecho. */
+  | { type: "status"; status: "waiting"; target?: string }
   /** `tool` é o nome da ferramenta; numa do Kiwi (spec #7496), `target` é o que ela leu ou procurou. */
   | { type: "status"; status: "running"; tool: string; target?: string }
   | { type: "text"; text: string }
@@ -726,6 +768,10 @@ export const UI_CAPABILITIES = [
   "projects.unmark",
   "projects.setMain",
   "projects.status",
+  "agent.question",
+  "agent.answer",
+  "agent.answers",
+  "agent.forget",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -762,6 +808,8 @@ export interface UiEvents {
    * ou a pasta seguida. A barra lateral relê o `projects.list`.
    */
   "projects.changed": { folderId?: string };
+  /** O cartão da pergunta na dúvida abriu, mudou ou fechou (1.50.0): só os ids; a tela lê o cartão pelo `agent.question`. */
+  "agent.questionChanged": { card: string; request: string; open: boolean };
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

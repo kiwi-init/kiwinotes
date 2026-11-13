@@ -127,6 +127,8 @@ export function applyTurn(t: TestState, e: AgentTurnEvent, name: string): TestSt
     case "status":
       if (e.status === "opening") return { ...t, status: `Abrindo o ${name}…` };
       if (e.status === "thinking") return { ...t, status: "Pensando…" };
+      // A pergunta na dúvida (spec #9873): o pedido espera a pessoa responder no cartão.
+      if (e.status === "waiting") return { ...t, status: waitingStatus("target" in e ? e.target : undefined) };
       return { ...t, status: "tool" in e ? toolStatus(e.tool, e.target) : "Usando uma ferramenta…" };
     case "permission":
       return { ...t, status: `Recusei o ${e.tool}: o agente só usa as suas notas e reuniões, pelo Kiwi.` };
@@ -177,3 +179,9 @@ export const TEST_HINT =
 /** A regra de privacidade, nos Ajustes e no Sobre (ADR 0011). */
 export const PRIVACY_RULE = "Tudo é local, menos o agente que você escolher";
 export const PRIVACY_HINT = "Áudio, transcrição e notas ficam neste Mac. Só o agente que você ligar recebe o que você pedir a ele, e ele vem desligado.";
+
+/** O status do pedido que espera a resposta da dúvida (spec #9873): "Esperando você: dúvida em Projetos/Kiwi". */
+export function waitingStatus(target?: string): string {
+  if (target === undefined || target === "") return "Esperando você: dúvida no seu pedido.";
+  return `Esperando você: dúvida em ${target.replace(/\.md$/i, "")}.`;
+}
