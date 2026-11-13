@@ -32,6 +32,8 @@ export interface FogOptions {
   cutout?: boolean;
   backing?: number;
   edgeBand?: number;
+  /** T10367: comparison envelope; unset preserves the approved straight band. */
+  edgeCurve?: "ellipse" | "superellipse";
   backend?: "auto" | "webgl2" | "none";
   width?: number;
   height?: number;
@@ -306,7 +308,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     densityMesh = new Mesh(new PlaneGeometry(2, 2), density.material);
     densityMesh.frustumCulled = false;
     densityScene.add(densityMesh);
-    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08);
+    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08, options.edgeCurve);
     scene = new Scene();
     camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     mesh = new Mesh(new PlaneGeometry(2, 2), material.material);

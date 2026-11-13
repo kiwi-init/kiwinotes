@@ -94,6 +94,7 @@ export function fogMaterial(
   cutout?: Texture,
   backing = 0.5,
   edgeBand = 0.08,
+  edgeCurve?: "ellipse" | "superellipse",
 ) {
   const arcGain = uniform(1),
     alive = uniform(0),
@@ -193,7 +194,13 @@ export function fogMaterial(
     const alpha = max(cutoutCoverage.r, lightAlpha);
     // Only left/right/bottom carry visible reference light. The top is <=1/255.
     // This prototype band is reviewed separately; no light is invented outside.
-    const edge = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
+    const legacyEdge = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
+    // T10367: compare two rounded envelopes. Body/arc coverage is stationary.
+    const p = edgeCurve === "superellipse" ? 4 : 2;
+    const q = st.sub(.5).mul(2);
+    const radius = pow(pow(q.x.abs(), p).add(pow(q.y.abs(), p)), 1 / p);
+    const rounded = float(1).sub(smoothstep(.82, 1, radius));
+    const edge = edgeCurve ? max(rounded, legacyEdge.mul(protectedMaterial)) : legacyEdge;
     const coat = cutoutCoverage.r;
     const lightFade = max(coat, edge);
     const finalRGB = lightRGB.mul(lightFade);

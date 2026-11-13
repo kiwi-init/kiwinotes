@@ -5,6 +5,7 @@ import { STATES, type FogState } from "./state";
 const q = new URLSearchParams(location.search), state = q.get("state") ?? "repouso";
 const options = {
   edgeBand: Number(q.get("edgeBand") ?? .08),
+  edgeCurve: q.get("edgeCurve") === "ellipse" ? "ellipse" as const : q.get("edgeCurve") === "superellipse" ? "superellipse" as const : undefined,
   cutout: q.get("cutout") === "1", backing: Number(q.get("backing") ?? .5),
   mode: q.get("mode") === "measure" ? "measure" as const : "capture" as const,
   width: Number(q.get("width") ?? 640), height: Number(q.get("height") ?? 800),
