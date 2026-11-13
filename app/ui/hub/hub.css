@@ -221,3 +221,6 @@
   font-size: var(--text-sm);
   color: var(--text-2);
 }
+/* Persistent across panes; all pixels pass clicks to the content below. */
+.kn-kiwicat { position: absolute !important; right: 12px; bottom: 12px; width: 96px; height: 120px; z-index: 6; pointer-events: none; }
+.kn-kiwicat * { pointer-events: none !important; }

@@ -4,6 +4,7 @@
 // montada (só escondida), para a nota em edição e o autosave não se perderem ao trocar de seção.
 import "./hub.css";
 import { DoubtCard } from "./DoubtCard";
+import { KiwiCat } from "./KiwiCat";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -177,6 +178,7 @@ function Hub() {
       </header>
       {/* A pergunta na dúvida do guardrail (spec #9873): por cima das seções, em qualquer aba. */}
       <DoubtCard />
+      <KiwiCat />
       <div className="kn-hub-main">
         {HUB_SECTIONS.filter((s) => visited.has(s)).map((s) => (
           <section key={s} className="kn-hub-pane" hidden={s !== section} aria-label={LABELS[s]}>

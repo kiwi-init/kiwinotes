@@ -39,7 +39,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   previousStamp = performance.now();
   let fogState = machine.visualState;
   function advance(stamp = performance.now()) {
-    if (options.mode === "measure" && !stats.hidden) elapsed += Math.max(0, (stamp - previousStamp) / 1000);
+    if (options.mode !== "capture" && !stats.hidden) elapsed += Math.max(0, (stamp - previousStamp) / 1000);
     previousStamp = stamp;
   }
   function quiet() { return machine.visualState === "repouso" || machine.visualState === "dormindo"; }
@@ -63,7 +63,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     cancel(); paint(machine.project(elapsed));
   }
   function schedule() {
-    if (disposed || stats.hidden || stats.reduced || options.mode !== "measure") return;
+    if (disposed || stats.hidden || stats.reduced || options.mode === "capture") return;
     if (!quiet()) { frameId = requestAnimationFrame(active); return; }
     const boundary = machine.nextWake();
     if (!Number.isFinite(boundary)) return;
@@ -86,7 +86,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     advance(stamp); const frame = machine.sample(); syncFog(frame); freezeIfSlow();
     if (stats.reduced) return;
     paint(frame);
-    if (!quiet() && previousFrame !== -Infinity) {
+    if ((options.instrument ?? options.mode === "measure") && !quiet() && previousFrame !== -Infinity) {
       stats.activeIntervals.push({ state: frame.state, seconds: elapsed - previousFrame });
       if (stats.activeIntervals.length > 10000) stats.activeIntervals.shift();
     }

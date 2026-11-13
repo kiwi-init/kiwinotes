@@ -21,6 +21,7 @@ import {
   type TestState,
 } from "./agentText.ts";
 import "./agent.css";
+import { CatRow } from "./CatRow";
 
 /** O pedido do "Testar" mais longo que a seção manda. */
 const TEST_MAX = 500;
@@ -141,6 +142,8 @@ export function AgentSection() {
       <Row label="Ligar o agente" hint={switchHint(status, consenting)}>
         <Switch label="Ligar o agente" checked={status.enabled} onChange={toggle} />
       </Row>
+
+      <CatRow />
 
       {consenting ? <Consent name={name} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
 

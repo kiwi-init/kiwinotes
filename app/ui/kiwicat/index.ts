@@ -12,10 +12,9 @@ import {
   UnsignedByteType,
   HalfFloatType,
 } from "three";
-import referenceUrl from "./assets/reference.webp";
+
 import eyeFreeUrl from "./assets/reference-no-eyes.webp";
 import cutoutMaskUrl from "./assets/cutout-mask.webp";
-import cutoutReferenceUrl from "./assets/reference-cutout.webp";
 import cutoutEyeFreeUrl from "./assets/reference-no-eyes-cutout.webp";
 import protectionUrl from "./assets/material-mask.webp";
 import {
@@ -27,11 +26,15 @@ import {
 import { densityMaterial, fogMaterial } from "./shader";
 export type { FogInputs, FogState } from "./state";
 export interface FogOptions {
-  mode: "capture" | "measure";
+  mode: "capture" | "measure" | "runtime";
+  /** Performance collection is opt-in outside the measure demo. */
+  instrument?: boolean;
   /** T9708: optional transparent composition; legacy opaque remains unchanged. */
   cutout?: boolean;
   backing?: number;
   edgeBand?: number;
+  /** The cut-out reference with eyes, for the demos (the app bundles only the eye-free one). */
+  cutoutReferenceUrl?: string;
   backend?: "auto" | "webgl2" | "none";
   width?: number;
   height?: number;
@@ -41,6 +44,8 @@ export interface FogOptions {
   inputs?: Partial<FogInputs>;
   /** Static composition option for the vector-eye layer; not an animation input. */
   eyes?: "reference" | "hidden";
+  /** Fog-only proof pages provide their baked-eye reference; production uses eye-free. */
+  referenceUrl?: string;
 }
 export interface FogStats {
   backend: string;
@@ -66,8 +71,8 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     intervals: [],
   };
   const image = document.createElement("img");
-  const selectedReference = options.eyes === "hidden" ? eyeFreeUrl : referenceUrl;
-  const fallbackReference = options.cutout ? (options.eyes === "hidden" ? cutoutEyeFreeUrl : cutoutReferenceUrl) : selectedReference;
+  const selectedReference = options.referenceUrl ?? eyeFreeUrl;
+  const fallbackReference = options.cutout ? (options.cutoutReferenceUrl ?? cutoutEyeFreeUrl) : selectedReference;
   image.src = fallbackReference;
   image.alt = "Kiwi-cat";
   image.width = width;
@@ -150,7 +155,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     render(state.sample(seconds));
   }
   function advance(stamp = performance.now()) {
-    if (options.mode === "measure" && lastTick !== undefined)
+    if (options.mode !== "capture" && lastTick !== undefined)
       elapsed += Math.max(0, (stamp - lastTick) / 1000);
     lastTick = stamp;
   }
@@ -188,7 +193,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     advance(t);
     const interval = policy.interval(state.inputs.estado, elapsed < boostUntil);
     if (!idle() || elapsed >= nextDraw - 0.002) {
-      if (lastDraw > 0) {
+      if ((options.instrument ?? options.mode === "measure") && lastDraw > 0) {
         stats.intervals.push(elapsed - lastDraw);
         if (stats.intervals.length > 10000) stats.intervals.shift();
       }
@@ -204,7 +209,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   }
   function resume() {
     if (
-      options.mode === "measure" &&
+      options.mode !== "capture" &&
       policy.continuous &&
       !frameId &&
       !timerId &&
@@ -350,7 +355,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
       if (options.mode === "capture" && Number.isFinite(seconds)) elapsed = Math.max(elapsed, seconds);
     },
     update(inputs: Partial<FogInputs>) {
-      if (options.mode === "measure") advance();
+      if (options.mode !== "capture") advance();
       const previous = { ...state.inputs };
       if (inputs.parado !== undefined) requestedReduced = inputs.parado;
       state.update(

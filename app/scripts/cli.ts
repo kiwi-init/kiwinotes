@@ -45,7 +45,7 @@ function dataDir(argv: string[]): string {
 }
 
 /** Uma conexão com o socket de controle: manda linhas e entrega cada resposta (ou evento) que chega. */
-async function connect(data: string, onLine: (line: Reply) => void): Promise<{ write(msg: Reply): void; close(): void } | null> {
+export async function connect(data: string, onLine: (line: Reply) => void): Promise<{ write(msg: Reply): void; close(): void } | null> {
   const sock = controlSocket(data);
   if (!existsSync(sock)) return null;
   let buf = "";

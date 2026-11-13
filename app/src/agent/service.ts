@@ -554,7 +554,7 @@ export class AgentService {
       const answer = await host.ask(text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso de uma ferramenta do Kiwi sai do próprio servidor, com o que foi lido (`onToolCall`).
-        if (e.type === "status" && e.status === "running" && e.tool.startsWith(KIWI_TOOL_PREFIX)) return;
+
         this.emitTurn({ id: turn.id, ...e } as AgentTurnEvent);
       });
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text });
