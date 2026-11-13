@@ -99,6 +99,41 @@
       "waitFor": ".kn-tree-pop .kn-side-item[data-kind='note'][data-path='Clientes/Acme/Plano.md']"
     },
     {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme/Docs']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Docs'][aria-expanded='true']",
+      "count": 1
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme/Docs']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowLeft"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Docs'][aria-expanded='false']",
+      "count": 1
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']:focus",
+      "count": 1
+    },
+    {
       "press": "Shift+F10"
     },
     {

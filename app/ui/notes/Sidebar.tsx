@@ -492,7 +492,11 @@ export function Sidebar(p: SidebarProps) {
             e.preventDefault();
             if (e.key === "ArrowRight") {
               if (!expanded) p.onToggle(path);
-              else items()[items().indexOf(el) + 1]?.focus();
+              else {
+                // Só entra se a linha seguinte é de dentro dela: numa pasta vazia, → não faz nada (revisão da T10353).
+                const next = items()[items().indexOf(el) + 1];
+                if (next?.dataset.path?.startsWith(`${path}/`)) next.focus();
+              }
             } else if (expanded) p.onToggle(path);
             else nav.querySelector<HTMLElement>(`.kn-side-item[data-kind="folder"][data-path="${CSS.escape(folderOf(path))}"]`)?.focus();
             return;
