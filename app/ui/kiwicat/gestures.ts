@@ -11,7 +11,7 @@ export interface CatFrame {
   waves: number[]; dots: number[]; work: number; workOffsets: number[];
 }
 interface Blink { at: number; close: number; hold: number; open: number; second: boolean }
-interface Look { at: number; to: number; up: number; go: number; hold: number; back: number; freezeAt: number; freezeFor: number }
+interface Look { at: number; to: number; up: number; go: number; hold: number; back: number; completedFreeze: number; freezeAt: number; freezeFor: number }
 export interface GestureEvent { kind: string; at: number; values: number[] }
 export interface GestureOptions {
   clock: () => number;
@@ -142,7 +142,7 @@ export class GestureMachine {
     return at >= this.now - 1e-9 ? Math.max(this.now, at) : Infinity;
   }
   private blinkEnd() { const b = this.blink; return b ? b.at + b.close + b.hold + b.open : Infinity; }
-  private lookEnd() { const l = this.look; return l ? l.at + l.go + l.hold + l.back + l.freezeFor : Infinity; }
+  private lookEnd() { const l = this.look; return l ? l.at + l.go + l.hold + l.back + l.completedFreeze + l.freezeFor : Infinity; }
   nextBoundary() {
     if (this.inputs.parado) return Infinity;
     return Math.min(this.pending?.at ?? Infinity, this.sleepAt, this.nextBlink, this.nextLook,
@@ -154,7 +154,10 @@ export class GestureMachine {
     if (this.blink) phases.push(this.blink.at + this.blink.close, this.blink.at + this.blink.close + this.blink.hold);
     if (this.look) {
       const l = this.look;
-      for (const at of [l.at + l.go, l.at + l.go + l.hold]) phases.push(at + (at >= l.freezeAt ? l.freezeFor : 0));
+      for (const phase of [l.at + l.go, l.at + l.go + l.hold]) {
+        const at = phase + l.completedFreeze;
+        phases.push(at + (at >= l.freezeAt ? l.freezeFor : 0));
+      }
       phases.push(l.freezeAt, l.freezeAt + l.freezeFor);
     }
     return Math.min(this.nextBoundary(), ...phases.filter(at => at > this.now + 1e-8),
@@ -168,7 +171,12 @@ export class GestureMachine {
   private startBlink(t: number, second: boolean) {
     this.blink = { at: t, close: this.range(.24, .32), hold: this.range(.06, .1), open: this.range(.3, .44), second };
     this.nextBlink = Infinity;
-    if (this.look) { this.look.freezeAt = t; this.look.freezeFor += this.blink.close + this.blink.hold; }
+    if (this.look) {
+      // A second blink starts a new pause without replaying elapsed look time.
+      this.look.completedFreeze += clamp(t - this.look.freezeAt, 0, this.look.freezeFor);
+      this.look.freezeAt = t;
+      this.look.freezeFor = this.blink.close + this.blink.hold;
+    }
     this.event(second ? "piscar_duplo" : "piscar_lento", t, this.blink.close, this.blink.hold, this.blink.open);
   }
   /** Consume due events at their exact deadlines, independent of display FPS. */
@@ -202,7 +210,7 @@ export class GestureMachine {
             this.lookSide = thinking ? -this.lookSide : this.range(0, 1) < .5 ? -1 : 1;
             this.look = { at: due, to: this.lookSide * (thinking ? 30 : this.range(18, 30)), up: thinking ? -24 : 0,
               go: thinking ? .26 : this.range(.18, .26), hold: thinking ? this.range(.6, 1.1) : this.range(.6, 1.5),
-              back: thinking ? .32 : this.range(.26, .36), freezeAt: Infinity, freezeFor: 0 };
+              back: thinking ? .32 : this.range(.26, .36), completedFreeze: 0, freezeAt: Infinity, freezeFor: 0 };
             this.nextLook = Infinity;
             this.event(thinking ? "olhar_busca" : "olhar_lateral", due, this.look.to, this.look.go, this.look.hold, this.look.back);
           }
@@ -311,7 +319,7 @@ export class GestureMachine {
     if (state === "erro") { eyes.size = .72; eyes.rightSize = .62; }
     if (!fixed && this.look) {
       const l = this.look;
-      const u = t - l.at - clamp(t - l.freezeAt, 0, l.freezeFor);
+      const u = t - l.at - l.completedFreeze - clamp(t - l.freezeAt, 0, l.freezeFor);
       const strength = u < l.go ? smooth(u / l.go) : u < l.go + l.hold ? 1 : 1 - smooth((u - l.go - l.hold) / l.back);
       eyes.x = l.to * strength;
     }

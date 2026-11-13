@@ -231,9 +231,13 @@ segue para revisão conforme o spec atualizado.
 
 Os olhos individuais de `45a0f21` foram restaurados após a rodada única.
 A camada compartilhada acrescentava um caminho condicional e geometria
-duplicada, sem ganho demonstrado. Os nove hashes do runtime retido coincidem
-exatamente com os da primeira série de 12 e da prova original de FPS:
-[verificação](desempenho/renderer-final.json). Não houve nova medição.
+duplicada, sem ganho demonstrado. A restauração partiu dos nove hashes da
+primeira série e do FPS original. Depois, a revisão #9363 corrigiu o
+congelamento do olhar na piscada dupla e o cancelamento de animações em
+elementos escondidos. Apenas `gestures.ts` e `vectors.ts` diferem da fonte
+medida; os hashes de antes e depois estão na [verificação](desempenho/renderer-final.json).
+Os números anteriores foram preservados, sem nova medição ou vídeo, conforme
+o pedido do revisor.
 A aparência é a mesma aprovada pelo harry (#9246/#9249).
 
 | Recorte observado | Névoa (mediana) | Delta (mediana) | Delta/névoa |
@@ -247,3 +251,16 @@ valores absolutos com o estado da máquina, como observado pelo revisor
 e manteve o gato como aprovado. A mediana de +0,67 do renderer retido
 atende a esse teto revisto (spec #8758, versão #9350). Não houve nova
 alteração de código ou medição para esse aceite.
+
+## Correções da revisão de código
+
+- A piscada dupla preserva o tempo de congelamento já cumprido pelo olhar,
+  evitando um salto ao começar o segundo fechamento. As sementes 21, 20 e
+  19 são amostradas por 600 s a 240 Hz nos testes; o olhar fica igual no
+  início, no meio do fechamento e no arco, sem passos maiores que 3 px.
+- `stop()` cancela todos os efeitos mesmo quando `commitStyles()` lança
+  `InvalidStateError`. A regressão roda em WebKit headless, com o pai em
+  `display:none` e com o alvo fora do documento, cobrindo `stop` e `dispose`.
+
+Ambos os casos falharam antes da correção e passaram depois. O desenho, os
+intervalos sorteados e os vídeos aprovados foram mantidos.

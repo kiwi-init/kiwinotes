@@ -159,7 +159,11 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
   }
   function stop() {
     if (!animations.length) return;
-    animations.splice(0).forEach(a => { try { a.commitStyles(); } finally { a.cancel(); } });
+    animations.splice(0).forEach(a => {
+      try { a.commitStyles(); }
+      catch { /* Hidden or detached targets cannot commit; cancellation is enough. */ }
+      finally { a.cancel(); }
+    });
     cache = new WeakMap();
   }
   return {

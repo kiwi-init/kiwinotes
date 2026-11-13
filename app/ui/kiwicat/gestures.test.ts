@@ -132,6 +132,41 @@ test("an existing lateral look freezes during blink closure", () => {
   }
   expect(checked).toBe(true);
 });
+test.each([21, 20, 19])("a double blink preserves a lateral look without a jump (seed %i)", seed => {
+  const events: GestureEvent[] = [];
+  const cat = new GestureMachine({ estado: "repouso" }, {
+    clock: () => 0, random: seededRandom(seed), sleepSeconds: () => 1e9,
+    onEvent: event => events.push(event),
+  });
+  let previous = cat.sample(0).eyes.x, largestStep = 0, seen = events.length;
+  const overlaps: Array<{ before: number; start: number; closing: number; arc: number }> = [];
+  for (let tick = 1; tick <= 600 * 240; tick++) {
+    const time = tick / 240, due = cat.nextBoundary();
+    const before = due <= time ? cat.project(due - 1e-12).eyes.x : 0;
+    const frame = cat.sample(time);
+    largestStep = Math.max(largestStep, Math.abs(frame.eyes.x - previous));
+    previous = frame.eyes.x;
+    const double = events.slice(seen).find(event => event.kind === "piscar_duplo");
+    seen = events.length;
+    const first = double && events.findLast(event => event.kind === "piscar_lento" && event.at < double.at);
+    const look = double && events.findLast(event => event.kind === "olhar_lateral" && event.at < double.at);
+    if (double && first && look && look.at < first.at && Math.abs(before) > 1) {
+      overlaps.push({
+        before,
+        start: cat.project(double.at).eyes.x,
+        closing: cat.project(double.at + double.values[0]! / 2).eyes.x,
+        arc: cat.project(double.at + double.values[0]! + double.values[1]! / 2).eyes.x,
+      });
+    }
+  }
+  expect(overlaps.length).toBeGreaterThan(0);
+  for (const overlap of overlaps) {
+    expect(overlap.start).toBeCloseTo(overlap.before, 8);
+    expect(overlap.closing).toBeCloseTo(overlap.before, 8);
+    expect(overlap.arc).toBeCloseTo(overlap.before, 8);
+  }
+  expect(largestStep).toBeLessThanOrEqual(3);
+});
 test("capture ending during a symbol fade removes waves on that same frame", () => {
   const m = machine("ouvindo"); m.update({ voz: 1 }, 0); m.at(.4);
   expect(m.update({ estado: "thinking", voz: null }, .4).waves).toEqual([0, 0, 0]);
