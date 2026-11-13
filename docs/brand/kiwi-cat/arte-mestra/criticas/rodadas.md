@@ -87,3 +87,43 @@ como uma faixa.
 - **Nos três:** as orelhas são triângulos simples. Falta a dobra na base do plano de dentro.
 
 Esses pontos vão para a rodada com o lead.
+
+## Nota do lead na rodada 3 (#11044)
+
+**7 / 8 / 9 / 7 / 9**, então ainda não vai ao harry. Os 4 pontos, nas três:
+1. **A dobra embaixo dos olhos**, que vira uma prateleira e faz boneco de neve ou máscara.
+2. **O aro parece pintado:** falta um fio de sombra embaixo, um fio de luz em cima e o meio mais fosco. Na B ele lê
+   como sobrancelha, e na C como arranhão.
+3. **As orelhas:** falta a dobra na base de dentro, e o plano de dentro tem de ser mais fundo no claro.
+4. **A C no escuro:** o lado direito está chapado.
+
+## Rodada 4 (`../candidatas/r4/folha.webp`, `cabecas.webp`, `120px.webp`, `detalhe-A4-claro.webp`)
+
+**Correções:**
+1. **O rosto desce liso:** sem as bochechas, sem o focinho e sem a depressão geométrica dos olhos. A prateleira era o
+   relevo dos dois encaixes dos olhos, lido de cima, mais a crista entre eles. Em volta dos olhos fica só a oclusão,
+   sem relevo. A junção da cabeça com o corpo não mudou.
+2. **O aro embutido:**
+   - um fio de sombra de 10 unidades sob a borda de baixo e um fio de luz sobre a de cima;
+   - o meio do aro 16% mais fosco, e o sulco antigo das bordas saiu;
+   - B: o aro subiu 40 e abriu a curva (−160°…−20°, −6°);
+   - C: o ângulo foi para −10°.
+3. **As orelhas:**
+   - uma dobra macia onde o plano de dentro termina, embaixo;
+   - o plano de dentro mais fundo no claro (0,78 → 0,66 do tom de fora).
+4. **A C no escuro:**
+   - um preenchimento de grafite fraco vindo da direita, só no lado da sombra e com transição suave, sem luz de borda;
+   - o piso do ambiente em 0,18.
+
+**O que apareceu ao conferir, e foi corrigido na mesma rodada:** o primeiro preenchimento da C tinha um corte duro, um
+degrau na cara e no corpo. Agora ele entra por uma curva suave.
+
+| | Acab. | Volume | 120 px | Fidel. | Neon |
+|---|---|---|---|---|---|
+| A4 | 8 | 8 | 9 | 8 | 9 |
+| B4 | 8 | 8 | 8 | 8 | 9 |
+| C4 | 8 | 8 | 9 | 8 | 9 |
+
+**O que ainda segura o 9:**
+- **B4:** o aro, mais fino e alto, perde força a 120 px.
+- **Nas três:** a cabeça ainda é um domo único. Um escultor marcaria a testa e o crânio com mais intenção.

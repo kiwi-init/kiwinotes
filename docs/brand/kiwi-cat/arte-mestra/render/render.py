@@ -156,19 +156,26 @@ def arc_band(P, shape, s, head_mask):
     cov = np.clip((half - dist) / edge + 0.5, 0, 1) * inside_u
     # it stays inside the head: it fades out before the silhouette (never reaches the edge)
     inner = nd.gaussian_filter(head_mask, P.get("arc_keep", 34) * s)
-    cov *= np.clip((inner - 0.93) / 0.05, 0, 1)
-    # across the band: -1 outer edge .. +1 inner edge (for the groove shading)
+    keep = np.clip((inner - 0.93) / 0.05, 0, 1)
+    cov *= keep
+    # across the band: +1 upper edge .. -1 lower edge (on the top of the skull, farther from the centre is higher)
     across = np.where(half > 0, (rad - 1) / np.maximum(half, 1e-6), 0)
-    return cov, np.clip(u, 0, 1), across
+    # the inlay's lips, in canvas units: a thin shadow under the lower edge and a thin light over the upper one
+    dc, hc, lw = (rad - 1) * (hh - inset), half * (hh - inset), P.get("lip_w", 9)
+    on = inside_u * keep * smoothstep(2, 10, hc)
+    aa = 1.2 / s
+    lip_dark = on * np.clip((dc + hc + lw) / aa, 0, 1) * np.clip((-hc - dc) / aa + 0.5, 0, 1) * np.clip(1 + (dc + hc) / lw, 0, 1)
+    lip_light = on * np.clip((dc - hc) / aa + 0.5, 0, 1) * np.clip((hc + lw - dc) / aa, 0, 1) * np.clip(1 - (dc - hc) / lw, 0, 1)
+    return cov, np.clip(u, 0, 1), across, lip_dark, lip_light
 
 
 PALETTES = {
     "dark": dict(
         coat=[(0.0, (6, 6, 9)), (0.32, (14, 14, 18)), (0.62, (30, 30, 36)), (0.86, (54, 54, 62)), (1.0, (74, 74, 84))],
-        inner_ear=0.62, occ=(0, 0, 0), spec=(96, 96, 106), bg=(0, 0, 0)),
+        inner_ear=0.62, occ=(0, 0, 0), spec=(96, 96, 106), bg=(0, 0, 0), lip_dark=(0, 0, 0), lip_light=(92, 92, 104)),
     "light": dict(
         coat=[(0.0, (122, 128, 142)), (0.32, (168, 173, 186)), (0.62, (212, 215, 223)), (0.86, (238, 239, 242)), (1.0, (250, 250, 250))],
-        inner_ear=0.78, occ=(92, 98, 112), spec=(255, 255, 255), bg=(255, 255, 255)),
+        inner_ear=0.66, occ=(92, 98, 112), spec=(255, 255, 255), bg=(255, 255, 255), lip_dark=(96, 102, 118), lip_light=(255, 255, 255)),
 }
 ARC = [(0.0, (88, 196, 214)), (0.5, (146, 120, 214)), (1.0, (214, 122, 172))]
 
@@ -221,7 +228,12 @@ def render(P, s, theme, layers_out=None):
         hu += nd.gaussian_filter(head, P.get("blend", 40) * s) * (hh_ - dome(head, P.get("R_head", 300), s)) * P.get("head_lift", 1.0)
         for ex, ey, er in EYES:
             hu -= P.get("socket", 26) * gauss(shp, ex, ey + 6, er * 1.5, s)
-        lam_u, _ = shade(hu, s, light); lam_h = lam_u
+        lam_u, _ = shade(hu, s, light)
+        if P.get("fill"):
+            # a weak graphite fill from the right, so the shadow side keeps its form (no rim light)
+            lam_f, _ = shade(hu, s, P.get("fill_dir", (0.75, -0.25, 0.6)))
+            lam_u = lam_u + P["fill"] * np.clip(lam_f, 0, 1) * (1 - smoothstep(-0.3, 0.6, lam_u))
+        lam_h = lam_u
         crease = nd.gaussian_filter(head, P.get("crease_w", 16) * s) * (1 - nd.gaussian_filter(head, 4 * s))
         ao_u = (1 - P.get("ao_crease", 0.55) * crease * (1 - head))
         ao_u *= 1 - 0.35 * smoothstep(0, 1, (np.mgrid[0:shp[0], 0:shp[1]][0] / s - (body_p[:, 1].max() - 260)) / 260)
@@ -233,6 +245,9 @@ def render(P, s, theme, layers_out=None):
     for lam, mi in zip(lam_e, ear_in):
         v = tone(lam, ao_ear)
         v = v * (1 - (1 - pal["inner_ear"]) * mi)  # the inner plane is a little darker
+        # the fold at the base of the inner plane: where the inner plane ends going down, a soft crease
+        g = -np.gradient(nd.gaussian_filter(mi, P.get("fold_w", 10) * s), axis=0) * s * P.get("fold_w", 10)
+        v = v * (1 - P.get("fold", 0.0) * np.clip(g * 2.5, 0, 1))
         v_ears.append(v)
     # composite back to front: ears, body, head
     alpha = np.zeros(shp, np.float32); val = np.zeros(shp, np.float32)
@@ -247,7 +262,7 @@ def render(P, s, theme, layers_out=None):
     sp = P.get("spec", 0.18) * gauss(shp, P["head"][0] - P["head"][2] * 0.35, P["head"][1] - P["head"][3] * 0.62, 70, s) * head
     rgb = rgb * (1 - sp[..., None]) + np.array(pal["spec"], np.float32) * sp[..., None]
     # the arc, inlaid: its colour along its length, lit by the head, with a thin groove at both edges
-    cov, u, across = arc_band(P, shp, s, head)
+    cov, u, across, lip_dark, lip_light = arc_band(P, shp, s, head)
     if P.get("arc_on", True):
         col = ramp(u, ARC)
         grey = col.mean(2, keepdims=True)
@@ -257,8 +272,13 @@ def render(P, s, theme, layers_out=None):
         if theme == "light":
             lit = 0.62 + 0.38 * lit
         groove = 1 - P.get("groove", 0.35) * smoothstep(0.45, 1.0, np.abs(across))
-        col = col * (lit * groove)[..., None]
+        matte = 1 - P.get("arc_matte", 0.0) * (1 - across ** 2)  # the middle a tone more matte
+        col = col * (lit * groove * matte)[..., None]
         rgb = rgb * (1 - cov[..., None]) + col * cov[..., None]
+        if P.get("lips", 0):
+            dark = np.array(pal["lip_dark"], np.float32); light_c = np.array(pal["lip_light"], np.float32)
+            a = (P["lips"] * lip_dark)[..., None]; rgb = rgb * (1 - a) + dark * a
+            b = (P["lips"] * P.get("lip_light_k", 0.6) * lip_light)[..., None]; rgb = rgb * (1 - b) + light_c * b
     out = np.dstack([np.clip(rgb, 0, 255), alpha * 255]).astype(np.uint8)
     if layers_out is not None:
         layers_out.update(head=head, body=body, ears=ear_m, arc=cov)
