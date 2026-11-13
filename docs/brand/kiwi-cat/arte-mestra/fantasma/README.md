@@ -3,13 +3,18 @@
 Substitui as candidatas esculpidas (`../candidatas/`), recusadas no #11067 porque fugiam da v2.
 
 **Um campo só, num shader.**
-- **O núcleo preto** é a silhueta da v2, calcada à mão: `ghost_shape.py`, com o contorno sobre a v2 para conferir. Ela
-  vira um campo de distância (`bake_sdf.py`, 512 × 640, em unidades do canvas de 2048 × 2560).
+- **O núcleo preto** é a máscara da própria v2 (`bake_sdf_v2.py`, depois do #11103). Ela é o núcleo escuro de
+  `kiwi-cat-candidata-v2.png` pela luminância: o núcleo denso com menos de 26, crescendo até 52 só perto dele, com o
+  arco fechado onde ele separa a orelha esquerda da cabeça. A máscara vira o campo de distância (512 × 640, em
+  unidades do canvas de 2048 × 2560) e uma cópia desfocada dele, que é a que o halo lê.
 - **A borda não é uma linha:** o preto se desfaz num halo que sai de dentro do corpo, no acabamento da referência 1
   (Bevel), com ruído lento.
-- **A cor no alto da cabeça** é o mesmo halo puxando para ciano, azul e lilás, e ela se apaga para os lados e para o
-  corpo.
-- **Embaixo,** o corpo vira fiapos que afundam devagar.
+- **A borda é macia em toda a volta**, num desfoque de cerca de 2–3% da largura, maior na cauda.
+- **A cor** é um arco dentro da cabeça, que segue o crânio da orelha esquerda até a bochecha esquerda. É o mesmo halo
+  mudando de tom: ciano por fora, azul e violeta, e rosa por dentro e na ponta da bochecha. Ele se apaga para a direita.
+- **A névoa lavanda** é o anel largo e suave da v2 em volta do corpo todo, mais forte embaixo. Por dentro da borda há
+  um brilho curto, como na referência 1.
+- **Embaixo,** o corpo vira fiapos lisos que afundam devagar, sem granulado.
 - **Ele flutua** 7 px a 120 px, num ciclo de 3,6 s, com a cauda atrasada. O halo respira junto.
 - **No claro,** o mesmo fantasma invertido: o núcleo claro e o halo escuro suave.
 - **Os olhos** continuam os do código, em (803, 1279) e (1243, 1279).

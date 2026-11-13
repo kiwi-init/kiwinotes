@@ -16,6 +16,7 @@ try {
   await p.goto(`file://${here}/ghost.html`);
   await p.evaluate(([s, u, pr]) => { Object.assign((window as any).PARAMS, pr); (window as any).init(s, u); }, [sdf, v2, params] as const);
   if (errors.length) throw new Error(errors.join("\n"));
+  await p.waitForFunction(() => { const i = document.getElementById("v2") as HTMLImageElement; return i.complete && i.naturalWidth > 0; });
   for (let i = 0; i < frames; i++) {
     await p.evaluate(t => (window as any).renderAt(t), i / fps);
     await p.screenshot({ path: `${out}/frame-${String(i).padStart(4, "0")}.png` });

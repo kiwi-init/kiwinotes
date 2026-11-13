@@ -41,7 +41,9 @@ float fbm(vec3 p) {
   return s;
 }
 // the outline's signed distance, canvas units (negative inside)
+float fbm2(vec3 p) { return 0.62 * noise(p) + 0.38 * noise(p * 2.03 + vec3(11.7, 3.1, 7.9)); }
 float sdf(vec2 q) { return texture(uSdf, q / vec2(2048.0, 2560.0)).r; }
+float sdfSoft(vec2 q) { return texture(uSdf, q / vec2(2048.0, 2560.0)).g; }
 
 const float TAU = 6.28318530718;
 uniform float uPeriod, uLift, uTailLag;
@@ -57,43 +59,47 @@ void main() {
   float t = uTime;
   vec2 q = p - vec2(0.0, bob(p.y, t));
   float low = smoothstep(1500.0, 2150.0, q.y);            // 0 at the head, 1 at the tail
-  // slow noise moves the edge a little at the top and a lot at the tail
-  float n1 = fbm(vec3(q * 0.0045, t * 0.11));
-  // wisps: a warped, slowly sinking noise, wide in x so it never reads as stripes
-  vec2 w = vec2(q.x + 90.0 * sin(q.y * 0.004 + t * 0.6), q.y);
-  float n2 = fbm(vec3(w.x * 0.0042, w.y * 0.0026 - t * 0.16, t * 0.05));
-  float d = sdf(q) + (n1 - 0.5) * mix(18.0, 110.0, low);
-  d += (30.0 + 300.0 * smoothstep(0.32, 0.72, n2)) * smoothstep(1650.0, 2150.0, q.y);
-  // the core: dense black, soft edge that widens toward the tail
-  float soft = mix(16.0, 90.0, low);
+  // slow, smooth noise (two octaves: no grain)
+  float n1 = fbm2(vec3(q * 0.0035, t * 0.10));
+  vec2 w = vec2(q.x + 70.0 * sin(q.y * 0.0035 + t * 0.55), q.y);
+  float n2 = fbm2(vec3(w.x * 0.0030, w.y * 0.0020 - t * 0.14, t * 0.05));
+  float d0 = sdf(q) + (n1 - 0.5) * mix(14.0, 80.0, low);
+  // wisps that sink: only the core's lower edge frays; the halo keeps the whole shape (no holes in the ring)
+  float d = d0 + (10.0 + 70.0 * smoothstep(0.30, 0.80, n2)) * smoothstep(1750.0, 2150.0, q.y);
+  // the core: dense black with a soft edge all the way round (about 2-3% of the width), wider toward the tail
+  float soft = mix(44.0, 150.0, low);
   float core = 1.0 - smoothstep(-soft, soft, d);
-  // the halo: light from inside the edge spreading out (Bevel), breathing with the float
   float breath = 0.88 + 0.12 * sin(TAU * t / uPeriod + 0.6);
-  float fall = mix(210.0, 260.0, low);
-  float halo = exp(-max(d + 24.0, 0.0) / fall) * breath * (0.86 + 0.36 * (n1 - 0.5));
-  halo *= 1.0 - 0.55 * smoothstep(1950.0, 2400.0, q.y);   // no floor: the halo fades below too
-  // the halo reaches zero before the box's edge (no visible rectangle in the app)
-  halo *= smoothstep(0.0, 260.0, min(min(p.x, 2048.0 - p.x), min(p.y, 2560.0 - p.y)));
-  // the top of the head: the same halo turning cyan, blue, lilac; fades toward the sides and the body
-  vec2 e = vec2(36.0, 0.0);
-  vec2 g = vec2(sdf(q + e.xy) - sdf(q - e.xy), sdf(q + e.yx) - sdf(q - e.yx));
-  vec2 nrm = normalize(g + 1e-5);
-  // by position, not by the outline's normal (the normal made rays converge on the V between the ears)
-  float up = smoothstep(1300.0, 860.0, q.y) * (1.0 - smoothstep(360.0, 600.0, abs(q.x - 1023.0)));
-  float hs = clamp((q.x - 1023.0) / 430.0 + (n1 - 0.5) * 0.5, -1.0, 1.0);
-  vec3 cyan = vec3(0.36, 0.82, 0.92), blue = vec3(0.38, 0.52, 0.98), lilac = vec3(0.72, 0.58, 0.96);
-  vec3 hue = hs < 0.0 ? mix(blue, cyan, -hs) : mix(blue, lilac, hs);
+  // the halo: a short glow from inside the edge (Bevel) and the wide lavender ring of v2, stronger below
+  float ds = sdfSoft(q) + (n1 - 0.5) * mix(14.0, 80.0, low);
+  float glow = 0.45 * exp(-max(d0 + 20.0, 0.0) / 100.0);
+  float ring = exp(-pow((ds - 150.0) / 170.0, 2.0)) * (0.16 + 0.74 * smoothstep(1350.0, 2150.0, q.y));
+  float halo = (glow + 0.85 * ring) * breath * (0.9 + 0.3 * (n1 - 0.5));
+  halo *= smoothstep(0.0, 260.0, min(min(p.x, 2048.0 - p.x), min(p.y, 2560.0 - p.y)));   // zero at the box's edge
   vec3 mist = vec3(0.72, 0.68, 0.82);                        // the v2 lavender grey
-  vec3 haloCol = mix(mist, hue, up * 0.92);
-  float haloA = halo * (0.92 + 0.08 * up);
+  float haloA = clamp(halo, 0.0, 1.0);
+  // the colour: an arc inside the head along the skull, from the left ear down to the left cheek, fading to the
+  // right; it is the halo changing hue there (soft across, no edge), as in v2
+  vec2 c0 = vec2(1104.0, 1304.0); vec2 r0 = q - c0;
+  float rad = length(r0), th = degrees(atan(r0.y, r0.x)); th = th < 0.0 ? th : th - 360.0;   // -70 right end .. -200 cheek
+  float along = smoothstep(-66.0, -118.0, th) * (1.0 - smoothstep(-188.0, -206.0, th));
+  float across = (rad - 405.0) / 58.0;                         // + outer .. - inner
+  float band = exp(-0.5 * across * across) * along * (0.92 + 0.16 * (n1 - 0.5));
+  float inside = 1.0 - smoothstep(-30.0, 70.0, d0);          // in the head, fading out through the edge into the halo
+  float k = clamp(across * 0.5 + 0.5, 0.0, 1.0);             // 0 inner .. 1 outer
+  float lowEnd = smoothstep(-150.0, -200.0, th);              // toward the cheek it turns pink
+  vec3 prism = k > 0.5 ? mix(vec3(0.42, 0.40, 0.95), vec3(0.30, 0.80, 0.94), (k - 0.5) * 2.0)
+                       : mix(mix(vec3(0.66, 0.36, 0.86), vec3(0.86, 0.38, 0.70), lowEnd), vec3(0.42, 0.40, 0.95), k * 2.0);
+  float arcA = band * inside * 0.95;
   vec3 coreCol = vec3(0.035, 0.035, 0.045);
+  vec3 haloCol = mist;
   if (uLight > 0.5) {
-    // the inverse: a light core, a soft dark halo, the same silhouette
+    // the inverse: a light core, a soft dark halo, the same silhouette; the arc in deeper tones
     coreCol = vec3(0.975, 0.975, 0.985);
-    mist = vec3(0.30, 0.28, 0.38);
-    hue = hs < 0.0 ? mix(vec3(0.16, 0.30, 0.66), vec3(0.10, 0.48, 0.60), -hs) : mix(vec3(0.16, 0.30, 0.66), vec3(0.42, 0.26, 0.62), hs);
-    haloCol = mix(mist, hue, up * 0.92);
-    haloA *= 0.62;
+    haloCol = vec3(0.30, 0.28, 0.38);
+    haloA *= 0.42;
+    prism = prism * 0.62;
+    arcA *= 0.8;
   }
   // eyes (in the app they are DOM and float with the head)
   float eyes = 0.0;
@@ -104,8 +110,13 @@ void main() {
   }
   vec3 eyeCol = uLight > 0.5 ? vec3(0.09, 0.09, 0.11) : vec3(1.0);
   // premultiplied: the halo under the core, the eyes on top
+  // straight-alpha layers, premultiplied only at the end (mixing premultiplied colours made fringes)
   float a = core + haloA * (1.0 - core);
-  vec3 rgb = coreCol * core + haloCol * haloA * (1.0 - core);
+  vec3 col = (coreCol * core + haloCol * haloA * (1.0 - core)) / max(a, 1e-4);
+  // the arc as a layer over the core and the near halo
+  float a2 = arcA + a * (1.0 - arcA);
+  col = (prism * arcA + col * a * (1.0 - arcA)) / max(a2, 1e-4); a = a2;
+  vec3 rgb = col * a;
   rgb = mix(rgb, eyeCol, eyes); a = max(a, eyes);
   outColor = vec4(rgb, a);
 }`;
@@ -124,7 +135,7 @@ function setup(canvas, sdf, light) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
   const loc = gl.getAttribLocation(prog, "pos"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, sdf.w, sdf.h, 0, gl.RED, gl.FLOAT, sdf.data);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, sdf.w, sdf.h, 0, gl.RG, gl.FLOAT, sdf.data);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   const U = n => gl.getUniformLocation(prog, n);
