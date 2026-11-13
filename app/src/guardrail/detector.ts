@@ -10,6 +10,8 @@
 // - **O que passa de propósito:** IP, nome de máquina, VPN, CSV de trabalho, nome de unidade, nome de pessoa, e-mail,
 //   telefone e endereço (#4717 e a aprovação do #9690). E, mesmo parecendo aleatório: UUID, hash em hexadecimal, UID de
 //   DICOM, nomes de recurso e de bucket do Google Cloud, imagem em base64 (`data:`) e endereço sem usuário e senha.
+// - **As notas são Markdown** (revisão do T9701): o rótulo em negrito ou itálico (`**Senha:** X`), a tabela (a célula
+//   ao lado do rótulo, e a coluna "senha" ou "cpf" inteira, também no CSV) e o valor na linha de baixo do rótulo.
 // - **Dúvida** é o que parece segredo sem nada que confirme: uma sequência longa e aleatória solta no texto, ou um rótulo
 //   de senha seguido de uma palavra comum ("senha: trocar").
 // - **O desenho** aproveita o filtro de segredos das permissões do Kiwi Channels (`packages/core/src/permission.ts`,
@@ -205,7 +207,7 @@ const TYPES = new Set(["string", "number", "boolean", "str", "bytes", "int", "bo
 /** Um valor que não é segredo de verdade: vazio, liga/desliga, tipo, referência a variável, exemplo mascarado. */
 export function placeholder(v: string): boolean {
   const s = v.replace(/^["'`]|["'`]$/g, "").trim();
-  if (!s) return true;
+  if (!s || /^[*_~`|]+$/.test(s)) return true;
   const l = s.toLowerCase().replace(/[,;.]$/, "");
   if (SWITCHES.has(l) || TYPES.has(l)) return true;
   return /^(?:\$\{?[\w.:-]+\}?|%[\w]+%|<[^>]*>|\{\{[^}]*\}\}|\[[^\]]*\]|x{3,}|\*{3,}|•+|\.{3,}|…|-+|redacted|removed|omitted|hidden|example|exemplo|your[_-]?[\w-]*|sua[_-]?[\w-]*|seu[_-]?[\w-]*|(?:process\.env|os\.environ|env)\b.*|secrets?\.[\w.]+|vault:.*|arn:aws:secretsmanager:.*|projects\/[\w-]+\/secrets\/.*)$/i.test(
@@ -265,15 +267,40 @@ function configFindings(text: string, out: Raw[]): void {
 
 /** As palavras de senha em prosa, em português e em inglês. */
 const LABEL = String.raw`(?:senha|palavra-passe|password|passwd|passphrase|pwd|token|api[ _-]?key|chave(?:[ \t]+(?:de|da)[ \t]+api|[ \t]+secreta|[ \t]+privada|[ \t]+de[ \t]+acesso)|secret[ \t]+key|access[ \t]+key|client[ \t]+secret|c[oó]digo[ \t]+de[ \t]+acesso)`;
-/** "senha: X" e "password = X" no meio do texto. */
+/** A ênfase de Markdown em volta do rótulo e do separador: `**Senha:**`, `_senha_:`, `~~token~~`. */
+const EMPH = String.raw`[*_~]{0,3}`;
+/** "senha: X" e "password = X" no meio do texto, também em Markdown (`**Senha:** X`, `- **Password**: X`). */
 const QUALIFIER = String.raw`(?:[ \t]+(?:do|da|de|dos|das|of|for|to)[ \t]+[^\n.:=]{1,40}?)?`;
-const LABEL_SEP = new RegExp(String.raw`(?<![\w-])${LABEL}${QUALIFIER}[ \t]*(?::|=(?!=))[ \t]*`, "dgi");
-/** "a senha é X", "a senha do wifi é X", "the password is X". */
-const LABEL_IS = new RegExp(String.raw`(?<![\w-])${LABEL}${QUALIFIER}[ \t]+(?:é|eh|is|was|era|vai[ \t]+ser|will[ \t]+be)(?:[ \t]*:)?[ \t]+`, "dgi");
+const LABEL_SEP = new RegExp(String.raw`(?<![\w-])${EMPH}${LABEL}${QUALIFIER}${EMPH}[ \t]*(?::|=(?!=))${EMPH}[ \t]*`, "dgi");
+/** "a senha é X", "a senha do wifi é X", "the password is X", "A **senha** é X". */
+const LABEL_IS = new RegExp(String.raw`(?<![\w-])${EMPH}${LABEL}${QUALIFIER}${EMPH}[ \t]+(?:é|eh|is|was|era|vai[ \t]+ser|will[ \t]+be)(?:[ \t]*:)?${EMPH}[ \t]+`, "dgi");
+
+/**
+ * O valor depois de um rótulo: o da mesma linha, ou, com o rótulo sozinho no fim dela (`Senha:`), o começo da linha de
+ * baixo. A ênfase em volta do valor (`**Kiwi#2024**`) não faz parte dele.
+ */
+function valueAfterLabel(text: string, at: number): { start: number; end: number } | null {
+  let i = at;
+  while (i < text.length && (text[i] === " " || text[i] === "\t")) i++;
+  if (i >= text.length || text[i] === "\n" || text[i] === "\r") {
+    // O rótulo fecha a linha: o valor é o começo da próxima, sem o marcador de lista ou de citação.
+    const nl = text.indexOf("\n", i);
+    if (nl < 0) return null;
+    i = nl + 1;
+    const lead = /^[ \t]*(?:[-*+>][ \t]+)?/.exec(text.slice(i, i + 20))![0].length;
+    i += lead;
+    if (i >= text.length || text[i] === "\n" || text[i] === "\r") return null;
+  }
+  const v = valueAt(text, i);
+  if (!v) return null;
+  const wrap = /^[*_~]{1,3}/.exec(text.slice(v.start, v.end))?.[0];
+  if (wrap && v.end - v.start > wrap.length * 2 && text.slice(v.end - wrap.length, v.end) === wrap) return { start: v.start + wrap.length, end: v.end - wrap.length };
+  return v;
+}
 
 function proseFindings(text: string, out: Raw[]): void {
   for (const m of text.matchAll(LABEL_SEP)) {
-    const v = valueAt(text, m.index! + m[0].length);
+    const v = valueAfterLabel(text, m.index! + m[0].length);
     if (!v) continue;
     const value = text.slice(v.start, v.end);
     if (placeholder(value)) continue;
@@ -282,7 +309,7 @@ function proseFindings(text: string, out: Raw[]): void {
     out.push({ start: v.start, end: v.end, kind: "password", verdict: quoted || passwordLike(value) ? "secret" : "doubt", rank: 2 });
   }
   for (const m of text.matchAll(LABEL_IS)) {
-    const v = valueAt(text, m.index! + m[0].length);
+    const v = valueAfterLabel(text, m.index! + m[0].length);
     if (!v) continue;
     const value = text.slice(v.start, v.end);
     const quoted = /["'`]/.test(text[v.start - 1] ?? "");
@@ -348,9 +375,157 @@ function personalFindings(text: string, out: Raw[]): void {
   }
 }
 
+// ------------------------------------------------------------------------------------------------- as tabelas
+
+/** Uma célula: o texto sem os espaços das pontas, e onde ele está no texto. */
+interface Cell {
+  text: string;
+  start: number;
+  end: number;
+}
+
+/** As células de uma linha, separadas por `delim` (com aspas no CSV; `|` na tabela em Markdown). */
+function splitCells(line: string, base: number, delim: string): Cell[] {
+  const out: Cell[] = [];
+  let i = 0;
+  let body = line;
+  if (delim === "|") {
+    // `| a | b |`: as barras das pontas não abrem célula.
+    const lead = /^[ \t]*\|/.exec(body)?.[0].length ?? 0;
+    i = lead;
+    body = body.replace(/\|[ \t]*$/, "");
+  }
+  let start = i;
+  let quoted = false;
+  const push = (end: number) => {
+    let s0 = start;
+    let e0 = end;
+    while (s0 < e0 && /\s/.test(body[s0]!)) s0++;
+    while (e0 > s0 && /\s/.test(body[e0 - 1]!)) e0--;
+    if (delim !== "|" && body[s0] === '"' && body[e0 - 1] === '"' && e0 - s0 >= 2) {
+      s0++;
+      e0--;
+    }
+    out.push({ text: body.slice(s0, e0), start: base + s0, end: base + e0 });
+  };
+  for (; i <= body.length; i++) {
+    const c = body[i];
+    if (i === body.length) {
+      push(i);
+      break;
+    }
+    if (delim !== "|" && c === '"') quoted = !quoted;
+    else if (c === delim && !quoted && !(delim === "|" && body[i - 1] === "\\")) {
+      push(i);
+      start = i + 1;
+    }
+  }
+  return out;
+}
+
+/** O nome de uma coluna ou de uma célula, sem a ênfase, os dois-pontos e as maiúsculas. */
+const cellName = (t: string) => t.replace(/[*_~`]/g, "").replace(/[:：]\s*$/, "").trim().toLowerCase();
+const LABEL_ONLY = new RegExp(String.raw`^${LABEL}$`, "i");
+/** A célula diz "senha" (ou token, api key…): a célula ao lado, ou a coluna, é segredo. */
+const secretName = (t: string) => {
+  const n = cellName(t);
+  return n.length > 0 && n.length <= 40 && (LABEL_ONLY.test(n) || secretKey(n.replace(/\s+/g, "_")));
+};
+const cpfName = (t: string) => /^(?:cpf|n[uú]mero do cpf|cpf do paciente|cpf_paciente|cpf paciente)$/.test(cellName(t));
+
+/**
+ * As tabelas em Markdown e os blocos de CSV: o nome da coluna dá o contexto aos valores dela (a coluna "senha", a
+ * coluna "cpf"), e uma célula com o rótulo faz da célula seguinte, na mesma linha, o valor (`| Senha | Kiwi#2024 |`).
+ */
+function tableFindings(text: string, out: Raw[]): void {
+  const lines: { text: string; start: number }[] = [];
+  for (let at = 0; at <= text.length; ) {
+    const nl = text.indexOf("\n", at);
+    const end = nl < 0 ? text.length : nl;
+    lines.push({ text: text.slice(at, end).replace(/\r$/, ""), start: at });
+    if (nl < 0) break;
+    at = nl + 1;
+  }
+  // Quantos separadores cada linha tem, numa passada só (sem aspas: só para achar os blocos).
+  const DELIMS = [",", ";", "\t"] as const;
+  const counts = lines.map((l) => {
+    const c = [0, 0, 0];
+    for (let k = 0; k < l.text.length; k++) {
+      const ch = l.text[k];
+      if (ch === ",") c[0]!++;
+      else if (ch === ";") c[1]!++;
+      else if (ch === "\t") c[2]!++;
+    }
+    return c;
+  });
+  const blocks: { lines: { text: string; start: number }[]; delim: string; header: boolean }[] = [];
+  for (let i = 0; i < lines.length; ) {
+    // A tabela em Markdown: linhas que começam com `|`; a 2ª, de traços, diz que a 1ª é o cabeçalho.
+    if (/^[ \t]*\|/.test(lines[i]!.text)) {
+      let j = i;
+      while (j < lines.length && /^[ \t]*\|/.test(lines[j]!.text)) j++;
+      const block = lines.slice(i, j);
+      const header = block.length > 1 && /^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(?:\|[ \t]*:?-{2,}:?[ \t]*)*\|?[ \t]*$/.test(block[1]!.text);
+      blocks.push({ lines: header ? [block[0]!, ...block.slice(2)] : block, delim: "|", header });
+      i = j;
+      continue;
+    }
+    // O CSV: duas linhas ou mais seguidas com o mesmo número de separadores (vírgula, ponto e vírgula ou tab).
+    let found = false;
+    for (let d = 0; d < DELIMS.length; d++) {
+      const n = counts[i]![d]!;
+      if (n < 1) continue;
+      let j = i + 1;
+      while (j < lines.length && lines[j]!.text.trim() && counts[j]![d] === n) j++;
+      if (j - i < 2) continue;
+      blocks.push({ lines: lines.slice(i, j), delim: DELIMS[d]!, header: true });
+      i = j;
+      found = true;
+      break;
+    }
+    if (!found) i++;
+  }
+  // Só olha de perto a linha que tem alguma palavra de segredo ou de CPF: um CSV de trabalho passa direto.
+  const HINT = /senha|passw|passphrase|pwd|token|api|chave|secret|segredo|credential|auth|acesso|cpf/i;
+  for (const b of blocks) {
+    const split = (l: { text: string; start: number }) => splitCells(l.text, l.start, b.delim);
+    let head: Cell[] = [];
+    if (b.header) {
+      head = split(b.lines[0]!);
+      // O cabeçalho do CSV é curto: uma frase com vírgulas não vira cabeçalho.
+      if (b.delim !== "|" && head.some((c) => c.text.length > 40)) head = [];
+    }
+    const columns = head.some((c) => secretName(c.text) || cpfName(c.text));
+    const bodyLines = b.header ? b.lines.slice(1) : b.lines;
+    const rows = b.lines.map((l, k) => ({ l, header: b.header && k === 0 })).filter(({ l }) => HINT.test(l.text));
+    const body = columns ? bodyLines.map(split) : [];
+    for (const row of body) {
+      row.forEach((c, k) => {
+        if (!c.text) return;
+        const name = head[k]?.text ?? "";
+        if (name && secretName(name) && !placeholder(c.text)) out.push({ start: c.start, end: c.end, kind: "password", verdict: "secret", rank: 2 });
+        else if (name && cpfName(name) && cpfValid(c.text.replace(/\D/g, ""))) out.push({ start: c.start, end: c.end, kind: "cpf", verdict: "secret", rank: 1 });
+      });
+    }
+    // O par rótulo e valor na mesma linha, também no cabeçalho de uma tabela sem traços.
+    for (const { l, header } of rows) {
+      const row = split(l);
+      for (let k = 0; k + 1 < row.length; k++) {
+        const v = row[k + 1]!;
+        if (!secretName(row[k]!.text) || !v.text || placeholder(v.text)) continue;
+        const like = passwordLike(v.text);
+        // No cabeçalho, a célula ao lado de "senha" costuma ser o nome de outra coluna: só vale se parece senha.
+        if (header && !like) continue;
+        out.push({ start: v.start, end: v.end, kind: "password", verdict: like ? "secret" : "doubt", rank: 2 });
+      }
+    }
+  }
+}
+
 // ------------------------------------------------------------------------------------------------- a dúvida
 
-const RUN = /[A-Za-z0-9+/=_-]{32,}/dg;
+// O `=` só no fim (o preenchimento do base64): `CHAVE=valor` são duas coisas, e o nome da chave não é segredo.
+const RUN = /[A-Za-z0-9+/_-]{32,}={0,2}/dg;
 const HEX = /^(?:0x)?[0-9a-fA-F]+$/;
 const FOLDER = /^[A-Za-z][a-z]+$/;
 /** "sha256:", "integrity=", "md5 -": o rótulo diz que é um resumo, não um segredo. */
@@ -452,6 +627,7 @@ export function detect(text: string): Finding[] {
   configFindings(text, raw);
   proseFindings(text, raw);
   personalFindings(text, raw);
+  tableFindings(text, raw);
   const data = regions(text, PUBLIC);
   const urls = regions(text, URL);
   const kept = raw.filter((f) => !inside(data, f.start, f.end));
@@ -459,14 +635,19 @@ export function detect(text: string): Finding[] {
   doubtFindings(text, doubts);
   for (const d of doubts) if (!inside(data, d.start, d.end) && !inside(urls, d.start, d.end)) kept.push(d);
 
-  // Na sobreposição ganha o segredo sobre a dúvida, depois o formato, depois o trecho mais longo. Uma varredura na
-  // ordem do texto: cada trecho só pode encostar no último escolhido.
+  // Dois trechos que se sobrepõem viram um só, do menor começo ao maior fim, com o tipo e o veredito do melhor (o
+  // segredo antes da dúvida, depois o formato, depois o mais longo): nada que era seguro deixa de ser. Uma varredura na
+  // ordem do texto, porque cada trecho só pode encostar no último.
   kept.sort((a, b) => a.start - b.start || b.end - a.end);
   const chosen: Raw[] = [];
   for (const f of kept) {
     const last = chosen.at(-1);
-    if (!last || f.start >= last.end) chosen.push(f);
-    else if (better(f, last)) chosen[chosen.length - 1] = f;
+    if (!last || f.start >= last.end) {
+      chosen.push({ ...f });
+      continue;
+    }
+    const top = better(f, last) ? f : last;
+    chosen[chosen.length - 1] = { ...top, start: Math.min(last.start, f.start), end: Math.max(last.end, f.end) };
   }
 
   const lines = lineStarts(text);

@@ -84,7 +84,8 @@ describe("o detector segura os segredos (spec #9690)", () => {
     const escaped = PRIVATE_KEY.replace(/\n/g, "\\n");
     const json = `{\n  "type": "service_account",\n  "private_key": "${escaped}\\n",\n  "client_email": "sa-legacy@prj-x.iam.gserviceaccount.com"\n}`;
     expect(found(json).map((f) => f.kind)).toEqual(["private-key"]);
-    expect(found(json)[0]!.value).toBe(escaped);
+    // O valor inteiro do campo, com o `\n` do fim: a chave e a linha de configuração viram um trecho só.
+    expect(found(json)[0]!.value).toBe(`${escaped}\\n`);
   });
 
   test("o cabeçalho Authorization, Bearer e Basic, e os cabeçalhos de chave", () => {
@@ -128,6 +129,41 @@ describe("o detector segura os segredos (spec #9690)", () => {
     caught("- db_password: segredo", "segredo", "config");
     caught("const config = { authToken: 'xyz' }", "xyz", "config");
     caught('SENHA_DO_BANCO="tem espaço"', "tem espaço", "config");
+  });
+
+  test("o rótulo escrito em Markdown: negrito, itálico, a tabela e o valor na linha de baixo (revisão do T9701)", () => {
+    caught("**Senha:** Kiwi#2024", "Kiwi#2024", "password");
+    caught("- **Password**: Kiwi#2024", "Kiwi#2024", "password");
+    caught("_senha:_ Kiwi#2024", "Kiwi#2024", "password");
+    caught("A **senha** é Kiwi#2024", "Kiwi#2024", "password");
+    caught("Senha: **Kiwi#2024**", "Kiwi#2024", "password");
+    caught("| Senha | Kiwi#2024 |", "Kiwi#2024", "password");
+    caught("| **Token** | `a1b2c3d4e5` |", "`a1b2c3d4e5`", "password");
+    caught("Senha:\nKiwi#2024", "Kiwi#2024", "password");
+    caught("**Acesso ao Orthanc**\n\n- Senha:\n  - Kiwi#2024", "Kiwi#2024", "password");
+    caught("senha: `Kiwi#2024`", "Kiwi#2024", "password");
+    // O token pelo formato depois do rótulo em negrito: um trecho só, e o `**` de fechamento não vira dúvida.
+    caught(`**Token:** ${T.github}`, T.github, "github");
+    // A coluna da tabela: cada valor dela é segredo, também o que não tem cara de senha.
+    const table = "| sistema | usuário | senha |\n|---|---|---|\n| Orthanc | admin | Kiwi#2024 |\n| VNA | ana | trocar |\n| PACS | ana | *** |";
+    expect(found(table).map((f) => [f.verdict, f.value])).toEqual([
+      ["secret", "Kiwi#2024"],
+      ["secret", "trocar"],
+    ]);
+    // No CSV também; e no cabeçalho, a coluna ao lado de "senha" é só o nome da coluna.
+    expect(found("sistema,senha,dono\nOrthanc,Kiwi#2024,Ana\nVNA,Gato2024!,Bruno").map((f) => f.value)).toEqual(["Kiwi#2024", "Gato2024!"]);
+    expect(found("senha,Kiwi#2024\nusuario,ana")[0]).toEqual({ kind: "password", verdict: "secret", value: "Kiwi#2024" });
+  });
+
+  test("a coluna CPF de um CSV ou de uma tabela dá o contexto aos valores (revisão do T9701)", () => {
+    expect(found("nome,cpf,exame\nAna Souza,52998224725,TC\nBruno Lima,111.444.777-35,RM").map((f) => [f.kind, f.value])).toEqual([
+      ["cpf", "52998224725"],
+      ["cpf", "111.444.777-35"],
+    ]);
+    expect(found("| paciente | CPF |\n|---|---|\n| Ana | 52998224725 |").map((f) => f.value)).toEqual(["52998224725"]);
+    // Fora da coluna CPF, o celular com os dígitos de um CPF válido continua passando.
+    expect(found("nome;telefone\nAna;11987654374\nBruno;11987654321")).toEqual([]);
+    expect(found("nome,cpf\nAna,123.456.789-00")).toEqual([]);
   });
 
   test("CPF e cartão válidos; os parecidos que não são válidos passam", () => {
@@ -217,6 +253,14 @@ describe("o resultado do detector", () => {
     expect([s.secrets, s.doubts, s.verdict]).toEqual([2, 1, "secret"]);
     expect(scan(`guarde: ${T.random}`).verdict).toBe("doubt");
     expect(scan("tudo limpo, 10.1.2.3").verdict).toBe("clean");
+  });
+
+  test("dois trechos que se sobrepõem viram um só, do menor começo ao maior fim, com o tipo do melhor (revisão do T9701)", () => {
+    // A linha de configuração com um token pelo formato: o valor inteiro, do tipo do token.
+    const t = `"private_key": "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\nresto"`;
+    const [f] = detect(t);
+    expect(f!.kind).toBe("private-key");
+    expect(t.slice(f!.start, f!.end)).toBe("-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\nresto");
   });
 
   test("o mesmo texto dá sempre o mesmo resultado, e os trechos vêm em ordem, sem sobreposição", () => {
