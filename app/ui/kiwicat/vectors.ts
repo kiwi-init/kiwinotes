@@ -51,11 +51,10 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
   const layer = document.createElement("div");
   layer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:visible";
   root.append(layer);
-  const eyeGeometry = [
+  const eyeNodes = [
     { cx: 802.823, cy: 1279.323, r: 68.251 },
     { cx: 1243.342, cy: 1279.308, r: 67.94 },
-  ];
-  const eyeNodes = eyeGeometry.map(e => {
+  ].map(e => {
     const outer = document.createElement("div");
     outer.style.cssText = `position:absolute;left:${e.cx / 2048 * 100}%;top:${e.cy / 2560 * 100}%;width:${e.r * 2 / 2048 * 100}%;height:${e.r * 2 / 2560 * 100}%;transform-origin:center;will-change:transform`;
     const disk = document.createElement("div"), happy = document.createElement("div"), asleep = document.createElement("div");
@@ -68,23 +67,6 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     layer.append(outer);
     return { outer, disk, happy, asleep };
   });
-  // The two idle eyes share blink/opacity effects. Individual eye layers are
-  // retained for state transitions and the asymmetric error expression.
-  const quietEyes = document.createElement("div");
-  const eyeBox = { x: 734.572, y: 1211.072, w: 576.71, h: 136.502 };
-  quietEyes.style.cssText = `position:absolute;left:${eyeBox.x / 2048 * 100}%;top:${eyeBox.y / 2560 * 100}%;width:${eyeBox.w / 2048 * 100}%;height:${eyeBox.h / 2560 * 100}%;will-change:transform;pointer-events:none`;
-  const quietDisk = document.createElement("div"), quietArc = document.createElement("div");
-  for (const node of [quietDisk, quietArc]) {
-    node.style.cssText = `position:absolute;inset:0;transform-origin:50% ${(1279.3155 - eyeBox.y) / eyeBox.h * 100}%;will-change:transform,opacity`;
-    quietEyes.append(node);
-  }
-  const pairSVG = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${eyeBox.x} ${eyeBox.y} ${eyeBox.w} ${eyeBox.h}" width="100%" height="100%" style="overflow:visible" aria-hidden="true">${body}</svg>`;
-  quietDisk.innerHTML = pairSVG(eyeGeometry.map(e => `<circle cx="${e.cx}" cy="${e.cy}" r="${e.r}" fill="white"/>`).join(""));
-  quietArc.innerHTML = pairSVG(eyeGeometry.map(e => {
-    const arc = path(points(64, u => { const a = (190 + 160 * u) * Math.PI / 180; return [e.cx + e.r * Math.cos(a), e.cy + e.r * (.1 + .55 * Math.sin(a))]; }), false);
-    return `<path d="${arc}" stroke="white" stroke-width="34" stroke-linecap="round" fill="none"/>`;
-  }).join(""));
-  layer.append(quietEyes);
   const sprites: Sprite[] = [];
   function sprite(state: FogState, body: string, pivot: Point, part?: number) {
     const element = document.createElement("div");
@@ -135,15 +117,11 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
   let cache = new WeakMap<Styled, string>();
   function styles(frame: CatFrame) {
     const result = new Map<Styled, Style>(), e = frame.eyes;
-    const paired = frame.state === "repouso" && e.size === 1 && e.rightSize === 1 && e.opening === 1 && e.happy === 0 && e.asleep === 0;
-    result.set(quietEyes, { opacity: paired ? "1" : "0", transform: paired ? `translate(${fmt(e.x * width / 2048)}px,${fmt(e.y * height / 2560)}px)` : "none" });
-    result.set(quietDisk, { transform: `scaleY(${fmt(paired ? e.blink : 1)})`, opacity: paired && e.blink > .035 ? "1" : "0" });
-    result.set(quietArc, { opacity: paired ? fmt(Math.min(1, Math.max(0, (.5 - e.blink) / .3))) : "0" });
     eyeNodes.forEach((nodes, i) => {
       const scale = e.size * (i ? e.rightSize : 1);
-      result.set(nodes.outer, { opacity: paired ? "0" : "1", transform: paired ? "translate(-50%,-50%)" : `translate(-50%,-50%) translate(${fmt(e.x * width / 2048)}px,${fmt(e.y * height / 2560)}px) scale(${fmt(scale)})` });
-      result.set(nodes.disk, { transform: `scaleY(${fmt(paired ? 1 : e.blink)})`, clipPath: `inset(${fmt((1 - e.opening) * 100)}% 0 0 0)`, opacity: paired ? "0" : fmt((1 - Math.max(e.happy, e.asleep)) * (e.blink > .035 ? 1 : 0)) });
-      result.set(nodes.happy, { opacity: paired ? "0" : fmt(Math.max(e.happy, Math.min(1, Math.max(0, (.5 - e.blink) / .3)))) });
+      result.set(nodes.outer, { transform: `translate(-50%,-50%) translate(${fmt(e.x * width / 2048)}px,${fmt(e.y * height / 2560)}px) scale(${fmt(scale)})` });
+      result.set(nodes.disk, { transform: `scaleY(${fmt(e.blink)})`, clipPath: `inset(${fmt((1 - e.opening) * 100)}% 0 0 0)`, opacity: fmt((1 - Math.max(e.happy, e.asleep)) * (e.blink > .035 ? 1 : 0)) });
+      result.set(nodes.happy, { opacity: fmt(Math.max(e.happy, Math.min(1, Math.max(0, (.5 - e.blink) / .3)))) });
       result.set(nodes.asleep, { opacity: fmt(e.asleep) });
     });
     for (const s of sprites) {

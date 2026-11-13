@@ -118,7 +118,7 @@ Os olhos ficaram com `faceUpdates` 1→1, `quietPlans=0` e zero animações; a
 névoa fez dez desenhos por janela. Não foi usado `parado`. Esse protocolo
 de contextos novos localiza o custo; o aceite usa as janelas contínuas de 60 s.
 
-## Perfil e única otimização final
+## Perfil e experimento de camadas (revertido)
 
 [Perfil anterior à mudança](desempenho/gestos-isolados-45a0f21/resumo.json),
 quatro ocorrências naturais por gesto/variante, névoa descontada:
@@ -130,12 +130,13 @@ quatro ocorrências naturais por gesto/variante, névoa descontada:
 | Piscada dupla | 152,5 ms |
 
 O contador do `ps` tem resolução de 10 ms. A névoa manteve 2/s durante
-esses gestos. A piscada dupla é a mais cara; o par de olhos do repouso agora
-compartilha suas camadas de disco e arco. Uma piscada usa dois efeitos
-nativos em vez de quatro. Tempos, sorteios e trajetórias da máquina não mudam.
-Os olhos individuais continuam disponíveis para as demais expressões.
+esses gestos. A piscada dupla foi a mais cara. O ensaio `78fbb51` compartilhou as camadas
+do par de olhos e reduziu quatro efeitos nativos para dois, sem mudar tempos
+ou trajetórias. A rodada não demonstrou ganho de CPU; o caminho adicional
+foi revertido por acrescentar complexidade (decisão delegada no Kiwi #9265).
+A implementação retida usa os olhos individuais de `45a0f21`.
 
-![Antes à esquerda, depois à direita: poses e keyframes nativos](desempenho/otimizacao-piscar/comparacao-olhos.webp)
+![Experimento descartado: antes à esquerda, camada compartilhada à direita](desempenho/otimizacao-piscar/comparacao-olhos.webp)
 
 [Comparação](desempenho/otimizacao-piscar/pixel-diff.json): os sete outros
 estados são idênticos pixel a pixel; as diferenças dos olhos em repouso
@@ -161,7 +162,7 @@ bun scripts/kiwicat-face-gesture-profile.ts /tmp/kiwi-T8959-perfil-novo
 
 A medição é da demonstração no Playwright WebKit, não do WKWebView do app.
 
-## Última série: resultado final acima do teto
+## Última série do experimento descartado: acima do teto
 
 Head `78fbb51`, 12 pares alternados, sem descarte ou repetição. CPU em
 percentual de um núcleo. A rodada única foi encerrada após o 12º par.
@@ -209,3 +210,23 @@ O [FPS deste head](desempenho/ultima-rodada/fps-por-estado.json) passou em
 O harry aprovou a aparência (#9246/#9249). O PR continua draft, pois falta
 a decisão sobre desempenho. Nenhum novo ajuste ou benchmark será feito
 sem o próximo encaminhamento do revisor/harry.
+
+## Implementação retida e decisão pendente
+
+Os olhos individuais de `45a0f21` foram restaurados após a rodada única.
+A camada compartilhada acrescentava um caminho condicional e geometria
+duplicada, sem ganho demonstrado. Os nove hashes do runtime retido coincidem
+exatamente com os da primeira série de 12 e da prova original de FPS:
+[verificação](desempenho/renderer-final.json). Não houve nova medição.
+A aparência é a mesma aprovada pelo harry (#9246/#9249).
+
+| Recorte observado | Névoa (mediana) | Delta (mediana) | Delta/névoa |
+| --- | ---: | ---: | ---: |
+| Primeiros 12, renderer retido | 2.280762% | +0.674382 ponto | 29.57% |
+| Após última pausa, ensaio compartilhado | 3.329142% | +1.031838 ponto | 30.99% |
+
+A proporção ficou próxima de 30% nos dois recortes, apesar da mudança dos
+valores absolutos com o estado da máquina, como observado pelo revisor
+(#9265). O renderer retido continua acima do teto original de +0,5.
+O lead levou ao harry a decisão de desempenho no #9263; o PR permanece draft.
+Não haverá novo ajuste ou benchmark até essa resposta.
