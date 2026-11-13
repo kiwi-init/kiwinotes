@@ -503,8 +503,15 @@ describe("as ferramentas do Kiwi (spec #7496)", () => {
     await readyNow(m);
     const turn = await askAndWait(m, '/tool notes_read {"path":"Projetos/Kiwi.md"}');
     expect(turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "notes_read", target: "Projetos/Kiwi.md" }));
-    // O `tool_call` cru do agente (`mcp__kiwi__notes_read`) não aparece duas vezes.
+    // O `tool_call` cru do agente (`mcp__kiwi__notes_read`) nunca aparece: no começo da ferramenta sai o nome limpo, sem o
+    // que foi lido (spec #9510, o gato entra em `agindo`), e no fim o servidor manda o mesmo nome com o `target`; quando
+    // ela acaba, o host volta a `thinking`.
     expect(turn.some((e) => e.type === "status" && e.status === "running" && e.tool.startsWith("mcp__kiwi__"))).toBe(false);
+    const statuses = turn.filter((e) => e.type === "status").map((e) => (e.status === "running" ? `running:${e.tool}:${e.target ?? ""}` : e.status));
+    const first = statuses.indexOf("running:notes_read:");
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(statuses.slice(first)).toEqual(expect.arrayContaining(["running:notes_read:Projetos/Kiwi.md", "thinking"]));
+    expect(statuses.lastIndexOf("thinking")).toBeGreaterThan(statuses.indexOf("running:notes_read:Projetos/Kiwi.md"));
     expect((turn.at(-1) as { text: string }).text).toContain("O prazo do Kiwi é março.");
     const search = await askAndWait(m, '/tool notes_search {"query":"gatos"}');
     expect(search).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "notes_search", target: '"gatos"' }));
