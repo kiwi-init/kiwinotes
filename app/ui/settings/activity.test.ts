@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentChangeView, AgentUndoNote } from "../../src/shared/ui-contract.ts";
-import { changeLine, goneRequest, hourOf, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf } from "./activityText.ts";
+import { changeLine, goneRequest, heldLines, hourOf, removedLine, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf } from "./activityText.ts";
 
 /** Uma hora local, em ISO: os testes não dependem do fuso da máquina. */
 const at = (day: number, h: number, m: number) => new Date(2026, 10, day, h, m).toISOString();
@@ -92,4 +92,22 @@ describe("a seção Atividade do agente: os textos", () => {
     // A escrita mais nova no mesmo pedido.
     expect(undoLine(n({ reason: "E_LATER_WRITE", later: { request: "p", change: 2, at: at(13, 14, 0) } }), "p", NOW)).toContain("neste mesmo pedido");
   });
+
+  test("o filtro do guardrail (spec #9818): quantos segredos o Kiwi segurou, por lugar, e a mudança que tirou um", () => {
+    const t = at(13, 10, 0);
+    expect(heldLines({ reads: [], requestHeld: 0 })).toEqual([]);
+    expect(
+      heldLines({
+        requestHeld: 1,
+        reads: [
+          { at: t, tool: "notes_read", target: "Projetos/Kiwi.md", held: 2 },
+          { at: t, tool: "notes_read", target: "Projetos/Kiwi.md › Acessos", held: 1 },
+          { at: t, tool: "notes_search", target: '"senha"', held: 3 },
+          { at: t, tool: "notes_read", target: "Ideias.md" },
+        ],
+      }),
+    ).toEqual(["O Kiwi segurou 1 segredo no pedido.", "O Kiwi segurou 2 segredos em Projetos/Kiwi.", "O Kiwi segurou 3 segredos nos resultados da busca."]);
+    expect(removedLine(1)).toBe("Esta mudança tirou 1 segredo da nota. O Desfazer o traz de volta, e o texto de antes está nas Versões.");
+  });
 });
+

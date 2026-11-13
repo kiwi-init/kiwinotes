@@ -22,6 +22,9 @@
 //   que a lista vê sozinha, um pedido novo que aparece sozinho, o agente desligado, o teclado e o escuro. O roteiro é
 //   montado depois dos pedidos, com o id de cada um. E a seção vazia, com o agente desligado (`atividade-vazia`), e o
 //   pedido que passa dos 30 dias com a tela aberta (`atividade-prazo`).
+// - o filtro do guardrail (spec #9818), em Ajustes › Agente: uma nota com um token e uma senha inventados; o agente
+//   falso lê (e recebe os marcadores), troca a seção da senha sem o marcador, e um pedido chega com um token colado. A
+//   Atividade diz quantos segredos o Kiwi segurou e onde, e avisa a escrita que tirou um segredo (`guardrail`).
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -357,6 +360,54 @@ function expiringScript(): string {
   return file;
 }
 
+/** O roteiro do filtro do guardrail (spec #9818): sai do `guardrailReady`. */
+const guardrailFile = path.join(work, "ajustes-guardrail.json");
+// Inventados, no formato de verdade.
+const FAKE_GH = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+const ACESSOS = `# Acessos\n\n## PACS\n\nservidor srv-pacs-01 (10.0.0.12)\nsenha: Kiwi#2024\n\n## GitHub\n\ntoken: ${FAKE_GH}\n`;
+
+async function guardrailReady(data: string, env: Record<string, string>): Promise<void> {
+  await agentReady(data, env);
+  const invoke = async (cap: string, args: unknown) => {
+    const r = await cli(["invoke", cap, JSON.stringify(args), "--data", data], env);
+    if (r.code !== 0) throw new Error(`${cap}: ${r.out}`);
+    return JSON.parse(r.out) as { value: any };
+  };
+  const tool = (name: string, args: unknown) => `/tool ${name} ${JSON.stringify(args)}`;
+  /** Um pedido até o fim; devolve o texto que o agente falso respondeu. */
+  const ask = async (text: string) => {
+    const { id } = (await invoke("agent.ask", { text })).value as { id: string };
+    for (const end = Date.now() + 30_000; ; ) {
+      const done = (await cli(["events", "--data", data], env)).out
+        .split("\n")
+        .find((l) => l.includes('"agent.turn"') && l.includes(`"${id}"`) && /"type":"(done|error)"/.test(l));
+      if (done) return (JSON.parse(done.slice(done.indexOf("{"))).payload?.text as string) ?? "";
+      if (Date.now() > end) throw new Error(`o pedido não terminou: ${text}`);
+      await Bun.sleep(200);
+    }
+  };
+  await invoke("notes.create", { title: "Acessos", content: ACESSOS });
+  const said = await ask(`Leia os acessos do PACS\n${tool("notes_read", { path: "Acessos.md" })}`);
+  if (said.includes(FAKE_GH) || said.includes("Kiwi#2024")) throw new Error("o segredo chegou ao agente");
+  const versao = /"versao":"([0-9a-f]{16})"/.exec(said)?.[1];
+  if (!versao) throw new Error(`sem a versão na leitura: ${said}`);
+  await ask(`Anote que a senha do PACS foi trocada\n${tool("notes_write", { path: "Acessos.md", section: "PACS", text: "servidor srv-pacs-01 (10.0.0.12)\nsenha: trocada em novembro", version: versao })}`);
+  await ask(`Guarde este token na nota: ${FAKE_GH}`);
+  await invoke("agent.disable", {});
+  const section = ".kn-section:has(h2:text-is('Atividade do agente'))";
+  const steps = [
+    { waitFor: ".kn-tab", name: "o hub abre" },
+    { click: ".kn-tab:has-text('Configurações')" },
+    { waitFor: section, name: "a seção Atividade do agente" },
+    { expectText: section, text: "O Kiwi segurou 2 segredos em Acessos.", name: "a leitura: 2 segredos segurados na nota" },
+    { expectText: section, text: "O Kiwi segurou 1 segredo no pedido.", name: "o pedido com um token colado" },
+    { expectText: section, text: "Esta mudança tirou 1 segredo da nota.", name: "a escrita que tirou a senha, avisada" },
+    { expectText: section, text: "Guarde este token na nota: ‹segredo", name: "o pedido aparece já filtrado" },
+    { screenshot: "guardrail.png", selector: section },
+  ];
+  writeFileSync(guardrailFile, JSON.stringify({ window: "hub", size: "900x1600", steps }, null, 2));
+}
+
 let ok = true;
 try {
   ok = (await scenario("fluxo", "ajustes-agente.json", {})) && ok;
@@ -370,6 +421,7 @@ try {
   ok = (await scenario("atividade", activityFile, {}, { before: activityReady, prefix: "atividade-" })) && ok;
   ok = (await scenario("atividade-vazia", emptyActivityScript(), {}, { prefix: "atividade-" })) && ok;
   ok = (await scenario("atividade-prazo", expiringScript(), {}, { before: expiringReady, prefix: "atividade-" })) && ok;
+  ok = (await scenario("guardrail", guardrailFile, {}, { before: guardrailReady, prefix: "guardrail-" })) && ok;
 } finally {
   reg.stop();
   rmSync(work, { recursive: true, force: true });

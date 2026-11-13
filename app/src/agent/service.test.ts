@@ -716,4 +716,31 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get" });
     expect((await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"x"}')).at(-1)).toMatchObject({ text: expect.stringContaining("não tem a ferramenta") });
   });
+
+  test("o filtro do guardrail (spec #9818): o pedido e as leituras saem sem o segredo, e a escrita o põe de volta", async () => {
+    const GH = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+    const notes: Record<string, string> = { ...NOTES, "Acessos.md": `# Acessos\n\ntoken: ${GH}\n` };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    // O pedido com um token colado: o agente recebe o marcador, e o registro guarda o pedido já filtrado.
+    const said = (await askAndWait(m, `Guarde o token ${GH} na nota`)).at(-1) as { text: string };
+    expect(said.text).not.toContain(GH);
+    expect(said.text).toMatch(/‹segredo \d+ · [a-z0-9]{4}›/);
+    // A leitura: o agente vê o marcador, e o registro conta.
+    const read = (await askAndWait(m, '/tool notes_read {"path":"Acessos.md"}')).at(-1) as { text: string };
+    expect(read.text).not.toContain(GH);
+    const marker = /‹segredo \d+ · [a-z0-9]{4}›/.exec(read.text)![0];
+    // A escrita com o marcador da própria nota: o original volta.
+    await askAndWait(m, `/tool notes_append ${JSON.stringify({ path: "Acessos.md", text: `de novo: ${marker}` })}`);
+    expect(notes["Acessos.md"]).toContain(`de novo: ${GH}`);
+    const log = await m.svc.activityLog();
+    const asked = log.find((r) => r.request.startsWith("Guarde o token"))!;
+    expect(asked.request).not.toContain(GH);
+    expect(asked.requestHeld).toBe(1);
+    expect(log.find((r) => r.reads.some((x) => x.tool === "notes_read"))!.reads[0]!.held).toBe(1);
+    // O segredo não está em nenhuma linha do registro no disco (a cópia de antes é a exceção, e fica fora daqui).
+    const dir = path.join(agentDir(m.data), "activity");
+    for (const f of new Bun.Glob("*/request.json").scanSync(dir)) expect(readFileSync(path.join(dir, f), "utf8")).not.toContain(GH);
+  });
 });
+

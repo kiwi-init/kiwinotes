@@ -46,8 +46,8 @@
     },
     {
       "expectText": ".kn-agent-test",
-      "text": "qualquer nota que pedir",
-      "name": "e avisa que pode ler qualquer uma"
+      "text": "ficam de fora, trocados por um marcador",
+      "name": "e avisa que as senhas e os tokens ficam de fora"
     },
     {
       "fill": ".kn-agent-test-input",

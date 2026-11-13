@@ -170,12 +170,12 @@ describe("o Testar", () => {
     expect(st("notes_write")).toBe("Escrevendo numa nota…");
   });
 
-  test("a dica do Testar diz que o agente lê e muda as notas, onde fica o texto de antes, e que pode ler qualquer uma", () => {
+  test("a dica do Testar diz que o agente lê e muda as notas, onde fica o texto de antes, e que as senhas e os tokens ficam de fora (spec #9818)", () => {
     expect(TEST_HINT).toContain("ler e mudar as suas notas");
     expect(TEST_HINT).toContain("ler as reuniões");
     expect(TEST_HINT).toContain("não apaga nada");
     expect(TEST_HINT).toContain("Versões da nota");
-    expect(TEST_HINT).toContain("qualquer nota");
+    expect(TEST_HINT).toContain("ficam de fora, trocados por um marcador");
     expect(TEST_HINT).not.toContain("não muda nada");
   });
 

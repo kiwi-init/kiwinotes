@@ -135,6 +135,13 @@ KIWI_AGENT_UI_ONLY=atividade bun scripts/agent-ui-check.ts                      
 KIWI_AGENT_UI_ONLY=atividade-vazia bun scripts/agent-ui-check.ts                        # sem pedidos, com o agente desligado
 ```
 
+**O filtro do guardrail (T9833, spec #9818)**: o que o agente lê e o que a pessoa pede saem sem os segredos (`src/guardrail/filter.ts`), cada um trocado por um marcador `‹segredo N · cccc›`, e a escrita do agente põe o original de volta, só na nota de onde ele saiu. Com o agente falso:
+
+```sh
+bun run cli invoke agent.ask '{"text":"/tool notes_read {\"path\":\"Acessos.md\"}"}' --data /tmp/kn-test   # a resposta traz o marcador, não o token
+KIWI_AGENT_UI_ONLY=guardrail bun scripts/agent-ui-check.ts                                               # a Atividade diz o que o Kiwi segurou
+```
+
 **A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
 - o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
 - os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;

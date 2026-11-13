@@ -207,6 +207,18 @@ A seção em Ajustes › Agente, logo abaixo do "Testar" (`ui/settings/AgentActi
 - **[Desfazer]** é o `agent.undo`, sem regra nova, de uma mudança ou do pedido inteiro (o do pedido aparece com mais de uma mudança e enquanto sobra alguma). Sem confirmação, porque nada se perde. O resultado vem nota por nota em palavras simples, e o `E_LATER_WRITE` traz o `later` (o pedido e a hora dele) para a tela dizer "desfaça antes o pedido de hoje, 14:32".
 - **Atualiza sozinha** pelo evento `agent.activityChanged`, que o registro manda quando um pedido começa, quando o agente lê ou muda uma nota e quando algo é desfeito, também pela CLI.
 
+## O filtro do guardrail (T9833, spec #9818)
+O detector de segredos (`src/guardrail/detector.ts`, spec #9690) passa a valer no caminho até o agente (`src/guardrail/filter.ts`):
+- **No acesso:** o `notes_read`, o `notes_outline`, o `notes_search` e o `meetings_get` entregam cada segredo, e cada dúvida (até a pergunta à pessoa, #8357), trocado por um marcador, `‹segredo 3 · k7q2›`.
+  - O detector olha a nota inteira, e só depois o texto é cortado. Os tamanhos e os offsets são os do texto que o agente vê, e o corte nunca parte um marcador.
+  - A busca monta o trecho do texto filtrado e não devolve um achado cujas palavras só aparecem dentro de um segredo.
+- **No pedido:** o texto da pessoa passa pelo mesmo filtro antes de ir ao agente, e é ele, filtrado, que o registro guarda.
+- **O marcador** leva o código da sessão (`SecretGuard`, um por vida do serviço) e um número que não se repete nela. O mesmo segredo da mesma nota leva sempre o mesmo número.
+- **A escrita** troca os marcadores pelo original antes de conferir e gravar, no texto e no nome da seção, e só na nota de onde eles saíram. Um marcador de outra nota, de um pedido, de outra sessão ou de antes de o app reabrir é recusado (`E_SECRET_MARKER`), e o agente lê de novo. Um texto que só parece marcador é texto.
+- **A escrita que tira um segredo** (o agente trocou o trecho sem mandar o marcador de volta) vale. O registro anota `removedSecrets`, e a tela avisa; o [Desfazer] e as Versões trazem o segredo de volta.
+- **O registro** guarda só contagens (`held` em cada leitura, `requestHeld` no pedido; contrato 1.47.0), e a Atividade diz "O Kiwi segurou 2 segredos em Projetos/Kiwi". O segredo só existe na memória do guard e na cópia de antes de cada escrita, que é do desfazer e nunca vai ao agente.
+- Títulos, caminhos e participantes passam sem filtro, como decidido no spec.
+
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:
 - `claude -p --input-format stream-json --output-format stream-json --verbose`;

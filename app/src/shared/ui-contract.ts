@@ -134,7 +134,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `baseVersion` no `notes.delete` (só apaga se a nota ainda está naquela versão). Só acréscimo.
 // 1.46.0 (T9493, spec #9480): a tela "Atividade do agente". O `agent.change` (o antes e o depois de uma mudança, só
 //   leitura), o `later` no `E_LATER_WRITE` do `agent.undo` e o evento `agent.activityChanged`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.46.0";
+// 1.47.0 (T9833, spec #9818): o filtro do guardrail. No `agent.activity`, o `held` de cada leitura e o `requestHeld`
+//   do pedido (quantos segredos o Kiwi segurou) e o `removedSecrets` de cada mudança. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.47.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -518,9 +520,12 @@ export interface AgentUndoNote {
 export interface AgentActivityRequest {
   id: string;
   at: string;
-  /** O começo do texto do pedido. */
+  /** O começo do texto do pedido, já sem os segredos (1.47.0). */
   request: string;
-  reads: { at: string; tool: string; target?: string }[];
+  /** Quantos segredos o Kiwi segurou no texto do pedido (1.47.0). */
+  requestHeld?: number;
+  /** O que o agente leu; `held` é quantos segredos o Kiwi segurou naquela leitura (1.47.0), nunca o valor. */
+  reads: { at: string; tool: string; target?: string; held?: number }[];
   changes: {
     at: string;
     kind: "created" | "appended" | "replaced";
@@ -534,6 +539,8 @@ export interface AgentActivityRequest {
     folder?: string;
     /** Quando a mudança foi desfeita (1.45.0). */
     undone?: string;
+    /** Quantos segredos da nota esta escrita tirou (1.47.0): o [Desfazer] os traz de volta. */
+    removedSecrets?: number;
   }[];
 }
 
