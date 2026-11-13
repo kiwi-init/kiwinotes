@@ -19,7 +19,8 @@ import { helperPdf } from "../notes/export.ts";
 import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
-import { closeWindow, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
+import { closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, provideAbout, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
+import { loadNotices, NOTIFY_LIBRARY } from "./notices.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
 // velho de pé é substituído. Com KIWI_DEBUG=1 nunca derruba outro.
@@ -45,6 +46,13 @@ const hub = new Hub({
 provideHubSection(() => hub.takeSection());
 onWindowClosed((name) => name === "hub" && hub.closed());
 const openHub = (section?: HubSection) => void hub.open(section);
+
+// A notificação quando o agente espera uma resposta (spec #9839): o próprio app notifica, pela dylib ao lado do helper.
+// Nada aqui pede a permissão; só o botão "Ligar as notificações" de Ajustes › Agente. O clique volta pela engine.
+void loadNotices(path.join(PATHS.VIEWS_FOLDER, "..", "bin", NOTIFY_LIBRARY), (m) => console.log(m)).then((notices) =>
+  stores.agent.attachNotice({ notices, inView: hubInView, show: () => openHub() }),
+);
+Electrobun.events.on("notification-response", (e) => stores.agent.noticeResponse(e.data));
 
 // Com o Dock, o app tem menu de app: ⌘Q sai pelo mesmo caminho do "Sair" da barra, ⌘W fecha o hub, e a edição
 // (⌘C, ⌘V, ⌘Z…) segue funcionando nas notas.

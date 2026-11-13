@@ -11,6 +11,8 @@ let package = Package(
         .library(name: "KiwiHelperCore", targets: ["KiwiHelperCore"]),
         // The same Whisper runtime as the helper's precise mode, for spikes/stt-bench (T6602).
         .library(name: "TranscribeCpp", targets: ["TranscribeCpp"]),
+        // A notificação do app (spec #9839): o processo do app carrega por `bun:ffi`, ao lado do helper em bin/.
+        .library(name: "KiwiNotify", type: .dynamic, targets: ["KiwiNotify"]),
     ],
     dependencies: [
         // Parakeet on the Neural Engine (ADR 0003, ADR 0004). A fixed release, not VoiceInk's `main`.
@@ -45,6 +47,8 @@ let package = Package(
         .target(name: "KiwiOCR"),
         // Exportar nota em PDF (T2684): um WKWebView fora da tela, sem janela, imprime o HTML que o app gera.
         .target(name: "KiwiExport"),
+        // A notificação quando o agente espera uma resposta (spec #9839, T10525). Nunca pede a permissão sozinha.
+        .target(name: "KiwiNotify", linkerSettings: [.linkedFramework("UserNotifications")]),
         // The sidecar the Bun app starts with `--socket <path>`.
         .executableTarget(
             name: "kiwi-helper",

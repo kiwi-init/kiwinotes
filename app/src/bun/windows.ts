@@ -243,6 +243,7 @@ async function openWindow(name: WindowName): Promise<void> {
   if (existing) {
     existing.show();
     existing.activate();
+    if (name === "hub") setHubFocused(true);
     existing.webview.executeJavascript("window.__kiwiEnter?.()");
     return;
   }
@@ -314,8 +315,14 @@ async function openWindow(name: WindowName): Promise<void> {
 
   // O Histórico aberto recebe cada ditado novo na hora.
   const off = name === "history" ? stores.history.onAdded((entry) => rpc.send.event({ name: "history.added", payload: entry })) : undefined;
+  // A janela principal na vista (spec #9839): com o foco. Fora da vista, a pergunta do agente vira notificação.
+  if (name === "hub") {
+    win.on("focus", () => setHubFocused(true));
+    win.on("blur", () => setHubFocused(false));
+  }
   win.on("close", () => {
     log(name, "window closed");
+    if (name === "hub") setHubFocused(false);
     rpcs.delete(name);
     off?.();
     engine?.stop();
@@ -323,9 +330,23 @@ async function openWindow(name: WindowName): Promise<void> {
     for (const fn of closeListeners) fn(name);
   });
   win.activate();
+  if (name === "hub") setHubFocused(true);
 }
 
 export const openWindows = (): WindowName[] => [...open.keys()];
+
+let hubFocused = false;
+function setHubFocused(focused: boolean): void {
+  if (hubFocused === focused) return;
+  hubFocused = focused;
+  stores.agent.noticeView(hubInView());
+}
+
+/** A janela principal está na vista: aberta, com o foco e não minimizada (spec #9839). */
+export function hubInView(): boolean {
+  const hub = open.get("hub");
+  return !!hub && hubFocused && !hub.isMinimized();
+}
 
 /** Fecha a janela, se estiver aberta (a intro, quando termina). */
 export function closeWindow(name: WindowName): void {
@@ -362,6 +383,9 @@ stores.agent.onTurn((turn) => {
 // A pergunta na dúvida (spec #9873): só os ids; a janela lê o cartão pelo `agent.question`.
 stores.agent.onQuestionChanged((e) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.questionChanged", payload: e });
+});
+stores.agent.onNoticeChanged((state) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.noticeChanged", payload: state });
 });
 stores.agent.onActivity((request) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.activityChanged", payload: { request } });

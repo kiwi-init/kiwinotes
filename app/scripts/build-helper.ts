@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
+import { NOTIFY_LIBRARY } from "../src/bun/notices.ts";
 import { bundleHelperLibraries } from "./helper-libs.ts";
 
 // O Hutch roda os hooks na raiz do projeto (app/).
@@ -35,8 +36,8 @@ function logHelper(source: string) {
 }
 
 if (process.env.KIWI_HELPER_CACHED === "1") {
-  if (config !== "release" || !existsSync(path.join(out, "kiwi-helper"))) {
-    throw new Error("build-helper: KIWI_HELPER_CACHED=1 needs a release build and a restored .helper/kiwi-helper");
+  if (config !== "release" || !existsSync(path.join(out, "kiwi-helper")) || !existsSync(path.join(out, NOTIFY_LIBRARY))) {
+    throw new Error(`build-helper: KIWI_HELPER_CACHED=1 needs a release build and a restored .helper/kiwi-helper and ${NOTIFY_LIBRARY}`);
   }
   logHelper("from the cache");
   process.exit(0);
@@ -47,6 +48,10 @@ if (process.env.KIWI_SKIP_HELPER_BUILD !== "1") {
   // A saída do build vai direto para o log (erros e o que recompila: no CI é assim que se vê se o cache serviu).
   const r = spawnSync("swift", ["build", "-c", config, "--product", "kiwi-helper"], { cwd: nativeDir, stdio: ["ignore", "inherit", "inherit"] });
   if (r.status !== 0) throw new Error(`build-helper: swift build -c ${config} failed`);
+  // A notificação do app (spec #9839): a dylib que o processo do app carrega, ao lado do helper.
+  console.log(`build-helper: swift build -c ${config} --product KiwiNotify`);
+  const n = spawnSync("swift", ["build", "-c", config, "--product", "KiwiNotify"], { cwd: nativeDir, stdio: ["ignore", "inherit", "inherit"] });
+  if (n.status !== 0) throw new Error(`build-helper: swift build -c ${config} --product KiwiNotify failed`);
 }
 const binDir = swift(["build", "-c", config, "--show-bin-path"]).split("\n").pop()!;
 const helper = path.join(binDir, "kiwi-helper");
@@ -55,6 +60,9 @@ if (!existsSync(helper)) throw new Error(`build-helper: no helper at ${helper}`)
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(helper, path.join(out, "kiwi-helper"));
+const notify = path.join(binDir, NOTIFY_LIBRARY);
+if (!existsSync(notify)) throw new Error(`build-helper: no ${NOTIFY_LIBRARY} at ${notify}`);
+cpSync(notify, path.join(out, NOTIFY_LIBRARY));
 // Bundle.module procura os recursos do SwiftPM ao lado do executável.
 for (const name of readdirSync(binDir)) {
   if (name.endsWith(".bundle")) cpSync(path.join(binDir, name), path.join(out, name), { recursive: true });

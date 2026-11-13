@@ -9,6 +9,7 @@ import path from "node:path";
 import type { AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
 import { SettingsStore } from "../store/settings.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
+import { fakeNotices } from "./fake/notices.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
@@ -787,5 +788,67 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     // O trecho não está em nenhum arquivo do registro nem das respostas.
     const dir = agentDir(m.data);
     for (const f of new Bun.Glob("**/*.json").scanSync(dir)) expect(readFileSync(path.join(dir, f), "utf8")).not.toContain(DOUBT);
+  });
+
+  test("a notificação quando o agente espera (spec #9839): uma por cartão, sem o trecho, sai na resposta e no prazo; o clique traz a janela", async () => {
+    const A = "Qx7Lm2Vb9Rt4Wz8Np3Kd6Hs1Fg5Jc0Ya";
+    const B = "Zp4Rt8Kw2Mn6Vb1Xc5Hj9Ld3Fs7Gq0Ue";
+    const notes: Record<string, string> = { ...NOTES, "Projetos/Kiwi.md": `um ${A} e outro ${B}\n`, "Outra.md": `só ${A}\n` };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes), doubtTimeoutMs: 600 });
+    const notices = fakeNotices({ permission: "allowed" });
+    let inView = false;
+    let shows = 0;
+    m.svc.attachNotice({ notices, inView: () => inView, show: () => void shows++ });
+    await readyNow(m);
+    // Duas dúvidas na mesma leitura, com a janela fora da vista: um cartão, uma notificação, com a nota e sem os trechos.
+    const { id } = await m.svc.ask('/tool notes_read {"path":"Projetos/Kiwi.md"}');
+    await until(() => m.turns.some((e) => e.id === id && e.type === "status" && e.status === "waiting"));
+    const card = m.svc.question()!;
+    expect(card.items.length).toBe(2);
+    await until(() => notices.calls.length > 0);
+    expect(notices.calls).toEqual([
+      { op: "post", id: `kiwi.doubt.${card.id}`, title: "O agente espera uma resposta sua", body: "Dúvida em Projetos/Kiwi. Clique para responder." },
+    ]);
+    // Responder um trecho não repete a notificação; o clique traz a janela.
+    await m.svc.answerDoubt({ card: card.id, fingerprint: card.items[0]!.fingerprint, answer: "hold" });
+    m.svc.noticeResponse({ id: `kiwi.doubt.${card.id}`, action: "default" });
+    expect(shows).toBe(1);
+    // Responder o último fecha o cartão e retira a notificação.
+    await m.svc.answerDoubt({ card: card.id, fingerprint: card.items[1]!.fingerprint, answer: "hold" });
+    await until(() => m.turns.some((e) => e.id === id && e.type === "done"));
+    await until(() => notices.calls.some((c) => c.op === "remove"));
+    expect(notices.calls.map((c) => c.op)).toEqual(["post", "remove"]);
+    // Sem resposta no prazo: a notificação também sai.
+    await m.svc.forgetAnswer(card.items[0]!.fingerprint);
+    const late = await askAndWait(m, '/tool notes_read {"path":"Outra.md"}');
+    expect(late.at(-1)!.type).toBe("done");
+    await until(() => notices.calls.length === 4);
+    expect(notices.calls.slice(2).map((c) => c.op)).toEqual(["post", "remove"]);
+    // Com a janela na vista: nada.
+    inView = true;
+    const seen = await askAndWait(m, '/tool notes_read {"path":"Outra.md"}');
+    expect(seen.some((e) => e.type === "status" && e.status === "waiting")).toBe(true);
+    expect(notices.calls.length).toBe(4);
+    // Nenhum trecho em nenhum pedido de notificação, e nada pediu a permissão.
+    expect(JSON.stringify(notices.calls)).not.toContain(A);
+    expect(JSON.stringify(notices.calls)).not.toContain(B);
+    expect(notices.calls.some((c) => c.op === "request")).toBe(false);
+  });
+
+  test("a linha de Ajustes (spec #9839): sem o aviso ligado ao app a permissão é unavailable; o liga/desliga fica nas settings", async () => {
+    const m = make();
+    expect(await m.svc.noticeState()).toEqual({ permission: "unavailable", enabled: true });
+    expect(await m.svc.noticeAllow()).toEqual({ permission: "unavailable", enabled: true });
+    expect(await m.svc.noticeSet(false)).toEqual({ permission: "unavailable", enabled: false });
+    const notices = fakeNotices({ permission: "notDetermined" });
+    const changes: unknown[] = [];
+    m.svc.onNoticeChanged((s) => changes.push(s));
+    m.svc.attachNotice({ notices, inView: () => false, show: () => {} });
+    expect(await m.svc.noticeState()).toEqual({ permission: "notDetermined", enabled: false });
+    await m.svc.noticeAllow();
+    await until(() => changes.length > 0);
+    expect(changes).toEqual([{ permission: "allowed", enabled: false }]);
+    expect(await m.svc.noticeSet(true)).toEqual({ permission: "allowed", enabled: true });
+    expect(notices.calls).toEqual([{ op: "request" }]);
   });
 });

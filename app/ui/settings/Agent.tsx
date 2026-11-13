@@ -20,6 +20,7 @@ import {
   TEST_HINT,
   type TestState,
 } from "./agentText.ts";
+import { NoticeRow } from "./NoticeRow.tsx";
 import "./agent.css";
 import { CatRow } from "./CatRow";
 
@@ -170,6 +171,9 @@ export function AgentSection() {
           <Select label="Modelo do agente" value={status.model} options={modelOptions(status)} onChange={(model) => void run(() => api.agent.configure({ model }))} />
         </Row>
       ) : null}
+
+      {/* A notificação quando o agente espera uma resposta (spec #9839): só com o agente ligado. */}
+      {status.enabled ? <NoticeRow /> : null}
 
       {ready ? (
         <div className="kn-agent-test">

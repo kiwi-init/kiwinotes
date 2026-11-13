@@ -145,6 +145,11 @@ export const api = {
     answers: () => invoke("agent.answers", {}),
     forget: (fingerprint: string) => invoke("agent.forget", { fingerprint }),
     onQuestion: (fn: (e: UiEvents["agent.questionChanged"]) => void) => on("agent.questionChanged", fn),
+    /** A notificação quando o agente espera (1.52.0, spec #9839). O `noticeAllow` só no clique da pessoa. */
+    notice: () => invoke("agent.notice", {}),
+    noticeAllow: () => invoke("agent.noticeAllow", {}),
+    noticeSet: (enabled: boolean) => invoke("agent.noticeSet", { enabled }),
+    onNotice: (fn: (e: UiEvents["agent.noticeChanged"]) => void) => on("agent.noticeChanged", fn),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {

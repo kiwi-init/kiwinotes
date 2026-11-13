@@ -146,7 +146,10 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `waiting` no `agent.turn` e as `doubts` de cada pedido no `agent.activity`. Só acréscimo.
 // 1.51.0 (T9567, spec #9510): o gato na janela principal. O `kiwicat.show` nas settings ("Mostrar o Kiwi-cat"). Só
 //   acréscimo.
-export const UI_CONTRACT_VERSION = "1.51.0";
+// 1.52.0 (T10525, spec #9839): a notificação quando o agente espera uma resposta. O `agent.notice` (a permissão do macOS
+//   e o liga/desliga), o `agent.noticeAllow` (o único que pede a permissão, no clique da pessoa), o `agent.noticeSet` e o
+//   evento `agent.noticeChanged`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.52.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -501,6 +504,24 @@ export interface UiCapabilities {
   "agent.answers": { args: Record<string, never>; result: { answers: AgentDoubtAnswer[] } };
   /** Esquece uma resposta (1.50.0): o trecho volta a ser perguntado. */
   "agent.forget": { args: { fingerprint: string }; result: boolean };
+  /**
+   * A linha "Avisar quando o agente esperar uma resposta" (1.52.0, spec #9839): a permissão de notificar do macOS
+   * (`notDetermined` quando o Kiwi nunca pediu, `denied`, `allowed`, ou `unavailable` fora do app) e o liga/desliga.
+   */
+  "agent.notice": { args: Record<string, never>; result: AgentNoticeState };
+  /**
+   * "Ligar as notificações" (1.52.0): pede a permissão ao macOS, só se ela nunca foi pedida. Só no clique da pessoa;
+   * volta na hora, e a resposta dela chega pelo `agent.noticeChanged`.
+   */
+  "agent.noticeAllow": { args: Record<string, never>; result: AgentNoticeState };
+  /** Liga ou desliga o aviso (1.52.0). Desligado, uma notificação na tela sai. */
+  "agent.noticeSet": { args: { enabled: boolean }; result: AgentNoticeState };
+}
+
+/** A permissão de notificar e o liga/desliga do aviso (1.52.0). */
+export interface AgentNoticeState {
+  permission: "unavailable" | "notDetermined" | "denied" | "allowed";
+  enabled: boolean;
 }
 
 /** O cartão da pergunta na dúvida (1.50.0). */
@@ -774,6 +795,9 @@ export const UI_CAPABILITIES = [
   "agent.answer",
   "agent.answers",
   "agent.forget",
+  "agent.notice",
+  "agent.noticeAllow",
+  "agent.noticeSet",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -812,6 +836,8 @@ export interface UiEvents {
   "projects.changed": { folderId?: string };
   /** O cartão da pergunta na dúvida abriu, mudou ou fechou (1.50.0): só os ids; a tela lê o cartão pelo `agent.question`. */
   "agent.questionChanged": { card: string; request: string; open: boolean };
+  /** A permissão de notificar ou o liga/desliga do aviso mudou (1.52.0). */
+  "agent.noticeChanged": AgentNoticeState;
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

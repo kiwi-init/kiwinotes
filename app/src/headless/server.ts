@@ -1,4 +1,5 @@
 import { fakeSpelling } from "./spelling.ts";
+import { fakeNotices, isNoticePermission } from "../agent/fake/notices.ts";
 import { NO_SPELLING } from "../shared/spelling.ts";
 // O Kiwi Notes sem nada na tela, para os agentes testarem o app inteiro (T1739, P0 do harry #1726; AGENTS.md, T1268).
 //
@@ -238,6 +239,23 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   stores.agent.useWriter(writerFromCapabilities(capabilities));
   // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
   stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
+  // A notificação quando o agente espera (spec #9839): na CLI, só o aviso falso (`KIWI_FAKE_NOTICES=<permissão>`), que
+  // registra em <dados>/fake-notices.jsonl. A "janela principal" é de mentira: fora da vista até o `notice {"view":true}`.
+  const fakeNoticePermission = process.env.KIWI_FAKE_NOTICES;
+  let fakeView = false;
+  const fakeShown: number[] = [];
+  if (isNoticePermission(fakeNoticePermission)) {
+    stores.agent.attachNotice({
+      notices: fakeNotices({ permission: fakeNoticePermission, file: path.join(data, "fake-notices.jsonl") }),
+      inView: () => fakeView,
+      show: () => {
+        fakeShown.push(Date.now());
+        fakeView = true;
+        appendFileSync(path.join(data, "fake-notices.jsonl"), `${JSON.stringify({ op: "show" })}\n`, { mode: 0o600 });
+        stores.agent.noticeView(true);
+      },
+    });
+  }
   stores.recoveries.start();
   const offs = [
     stores.folders.onNotesChanged((folder, paths) => event("notes.changed", { paths, folderId:folder.id })),
@@ -250,6 +268,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.agent.onTurn((e) => event("agent.turn", e)),
     stores.agent.onActivity((request) => event("agent.activityChanged", { request })),
     stores.agent.onQuestionChanged((e) => event("agent.questionChanged", e)),
+    stores.agent.onNoticeChanged((e) => event("agent.noticeChanged", e)),
   ];
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));
@@ -296,6 +315,16 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
         if (msg.backlog !== false) for (const t of topics) for (const line of backlog[t]) out(s).line(JSON.stringify(line));
         if (msg.follow !== false) subscribers.set(s, topics);
         return { id, ok: true, value: { topics: [...topics] } };
+      }
+      case "notice": {
+        // Só com o aviso falso: a janela entra ou sai da vista, ou a pessoa clica na notificação (spec #9839).
+        if (!isNoticePermission(fakeNoticePermission)) return { id, ok: false, code: "E_NO_FAKE_NOTICES", message: "start with KIWI_FAKE_NOTICES" };
+        if (typeof msg.view === "boolean") {
+          fakeView = msg.view;
+          stores.agent.noticeView(fakeView);
+        }
+        if (typeof msg.click === "string") stores.agent.noticeResponse({ id: msg.click, action: "default" });
+        return { id, ok: true, value: { view: fakeView, shown: fakeShown.length } };
       }
       case "stop":
         setTimeout(() => void stop(), 10);

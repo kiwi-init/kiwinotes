@@ -27,7 +27,8 @@
 //   Atividade diz quantos segredos o Kiwi segurou e onde, e avisa a escrita que tirou um segredo (`guardrail`).
 // - a pergunta na dúvida (spec #9873), na janela principal: o cartão com o trecho, "Pode mandar", um cartão com duas
 //   dúvidas e "É tudo segredo" (no escuro), uma dúvida sem resposta no prazo, que vai para a Atividade, a resposta
-//   depois e a lista "O que você já respondeu" (`duvida`).
+//   depois e a lista "O que você já respondeu" (`duvida`); a linha do aviso quando o agente espera (`aviso` e
+//   `aviso-negado`, spec #9839), com o aviso falso.
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -482,6 +483,43 @@ async function doubtReady(data: string, env: Record<string, string>): Promise<vo
   writeFileSync(doubtFile, JSON.stringify({ window: "hub", size: "1000x1600", steps }, null, 2));
 }
 
+/** Os roteiros da linha do aviso (spec #9839), com o aviso falso (`KIWI_FAKE_NOTICES`): nada chama o macOS. */
+const NOTICE_ROW = ".kn-row:has(.kn-row-label:text-is('Avisar quando o agente esperar uma resposta'))";
+const AGENT_SECTION = ".kn-section:has(h2:text-is('Agente'))";
+function noticeScript(denied: boolean): string {
+  const open = [
+    { waitFor: ".kn-tab", name: "o hub abre" },
+    { click: ".kn-tab:has-text('Configurações')" },
+    { waitFor: NOTICE_ROW, timeout: 10000, name: "a linha do aviso, com o agente ligado" },
+    // A troca de aba anima: o print espera ela terminar.
+    { wait: 1000 },
+  ];
+  const steps = denied
+    ? [
+        ...open,
+        { expectText: NOTICE_ROW, text: "Ajustes do Sistema › Notificações › Kiwi Notes", name: "negada: diz onde mudar" },
+        { expectCount: `${NOTICE_ROW} button, ${NOTICE_ROW} [role=switch]`, count: 0, name: "sem botão nem liga/desliga" },
+        { screenshot: "3-negado.png", selector: AGENT_SECTION },
+      ]
+    : [
+        ...open,
+        { expectText: NOTICE_ROW, text: "O macOS pergunta uma vez quando você liga.", name: "nunca pedida: o botão" },
+        { expectCount: `${NOTICE_ROW} [role=switch]`, count: 0, name: "ainda sem o liga/desliga" },
+        { screenshot: "1-botao.png", selector: AGENT_SECTION },
+        { click: `${NOTICE_ROW} button:has-text('Ligar as notificações')`, name: "o clique: o único lugar que pede" },
+        { waitFor: `${NOTICE_ROW} [role=switch][aria-checked=true]`, timeout: 5000, name: "dada: vira um liga/desliga, ligado" },
+        { screenshot: "2-ligado.png", selector: AGENT_SECTION },
+        { click: `${NOTICE_ROW} [role=switch]`, name: "desliga" },
+        { expectText: NOTICE_ROW, text: "Desligado: a pergunta do agente aparece só no cartão", name: "desligado" },
+        { invoke: "agent.notice", args: {}, name: "fica salvo" },
+        { click: `${NOTICE_ROW} [role=switch]`, name: "liga de novo" },
+        { waitFor: `${NOTICE_ROW} [role=switch][aria-checked=true]` },
+      ];
+  const file = path.join(work, denied ? "hub-aviso-negado.json" : "hub-aviso.json");
+  writeFileSync(file, JSON.stringify({ window: "hub", size: "900x1600", steps }, null, 2));
+  return file;
+}
+
 let ok = true;
 try {
   ok = (await scenario("fluxo", "ajustes-agente.json", {})) && ok;
@@ -496,6 +534,8 @@ try {
   ok = (await scenario("atividade-vazia", emptyActivityScript(), {}, { prefix: "atividade-" })) && ok;
   ok = (await scenario("atividade-prazo", expiringScript(), {}, { before: expiringReady, prefix: "atividade-" })) && ok;
   ok = (await scenario("guardrail", guardrailFile, {}, { before: guardrailReady, prefix: "guardrail-" })) && ok;
+  ok = (await scenario("aviso", noticeScript(false), { KIWI_FAKE_NOTICES: "notDetermined" }, { before: agentReady, prefix: "aviso-" })) && ok;
+  ok = (await scenario("aviso-negado", noticeScript(true), { KIWI_FAKE_NOTICES: "denied" }, { before: agentReady, prefix: "aviso-" })) && ok;
   ok = (await scenario("duvida", doubtFile, { KIWI_DOUBT_TIMEOUT_MS: "4000" }, { before: doubtReady, prefix: "duvida-" })) && ok;
 } finally {
   reg.stop();

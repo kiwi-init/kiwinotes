@@ -1,7 +1,7 @@
 // Os textos da seção Agente dos Ajustes (spec #8373, T8762), separados da tela para os testes lerem cada estado sem
 // navegador. O nome do agente ("Claude Code") aparece só como texto, sem logo (ADR 0011).
 
-import type { AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
+import type { AgentClaudeStatus, AgentModelChoice, AgentNoticeState, AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
 
 /** O tamanho do adaptador, para o texto antes do download (a lista fixa do #8368 soma uns 4,4 MB). */
 export const ADAPTER_SIZE_LABEL = "4,4 MB";
@@ -184,4 +184,19 @@ export const PRIVACY_HINT = "Áudio, transcrição e notas ficam neste Mac. Só 
 export function waitingStatus(target?: string): string {
   if (target === undefined || target === "") return "Esperando você: dúvida no seu pedido.";
   return `Esperando você: dúvida em ${target.replace(/\.md$/i, "")}.`;
+}
+
+/** A linha do aviso (spec #9839): o rótulo, e o que explica cada estado da permissão de notificar. */
+export const NOTICE_LABEL = "Avisar quando o agente esperar uma resposta";
+const NOTICE_WHAT = "Uma notificação do macOS quando o agente pergunta algo e o Kiwi não está na frente. Ela diz só de qual nota vem a dúvida, nunca o trecho.";
+
+export function noticeHint(s: AgentNoticeState, asking: boolean): string {
+  if (s.permission === "unavailable") return "As notificações do macOS não estão disponíveis neste build do Kiwi.";
+  if (s.permission === "denied") {
+    return "As notificações do Kiwi Notes estão desligadas no macOS. Para ligar: Ajustes do Sistema › Notificações › Kiwi Notes.";
+  }
+  if (s.permission === "notDetermined") {
+    return asking ? "O macOS está perguntando se o Kiwi Notes pode mandar notificações." : `${NOTICE_WHAT} O macOS pergunta uma vez quando você liga.`;
+  }
+  return s.enabled ? NOTICE_WHAT : "Desligado: a pergunta do agente aparece só no cartão, na janela do Kiwi.";
 }

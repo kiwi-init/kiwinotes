@@ -103,14 +103,21 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default" });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
     model: "opus",
     effort: "high",
+    notifyWaiting: true,
   });
   expect(sanitizeSettings({ agent: { enabled: "sim", model: "../x", effort: 3 } }).agent).toEqual(DEFAULT_AGENT_SETTINGS);
+});
+
+test("o aviso quando o agente espera (spec #9839): ligado por padrão, e só um false o desliga", () => {
+  expect(sanitizeSettings({ agent: { notifyWaiting: false } }).agent.notifyWaiting).toBe(false);
+  expect(sanitizeSettings({ agent: { notifyWaiting: "não" } }).agent.notifyWaiting).toBe(true);
+  expect(sanitizeSettings({}).agent.notifyWaiting).toBe(true);
 });
 
 test("a largura da nota (T5299): arredonda, fica nos limites e um valor ruim volta ao padrão", () => {
