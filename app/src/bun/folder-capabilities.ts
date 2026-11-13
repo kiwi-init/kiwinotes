@@ -35,6 +35,8 @@ export function folderCapabilities(
       meetingNotes: b.meetingNotes,
       dictationNotes: b.dictationNotes,
       meetingsFolder: b.ref.id.startsWith("internal:") ? MEETINGS_FOLDER : null,
+      // O evento leva a pasta de notas, para a janela de outra pasta não reler à toa.
+      projectsChanged: () => deps.projectsChangedIn?.(b.ref.id),
     });
     cached.set(b.ref.id, existing);
     return existing;

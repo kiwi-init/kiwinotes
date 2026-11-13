@@ -295,7 +295,11 @@ export class ProjectsFile {
   private cache: ProjectEntry[] | null = null;
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(readonly root: string) {}
+  constructor(
+    readonly root: string,
+    /** Depois de cada gravação: a lista mudou (spec #9847, o evento `projects.changed`). */
+    private readonly onChange: () => void = () => {},
+  ) {}
 
   get file(): string {
     return path.join(this.root, PROJECTS_DIR, PROJECTS_FILE);
@@ -321,6 +325,7 @@ export class ProjectsFile {
       if (same(next, current)) return current;
       await this.write(next);
       this.cache = next;
+      this.onChange();
       return next;
     });
     this.queue = run.catch(() => {});

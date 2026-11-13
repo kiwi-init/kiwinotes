@@ -92,6 +92,10 @@ const capabilities = uiCapabilities({
     // A Aparência vale para todas as janelas abertas (T2503).
     for (const rpc of rpcs.values()) rpc.send.event({ name: "settings.changed", payload: settings });
   },
+  // Os projetos (spec #9847): a barra lateral das Notas relê quando mudam por outro lugar.
+  projectsChangedIn: (folderId) => {
+    for (const rpc of rpcs.values()) rpc.send.event({ name: "projects.changed", payload: { folderId } });
+  },
   clipboardWrite: (text) => {
     if (process.env.KIWI_DEBUG === "1") { debugClipboard = text; return; }
     Utils.clipboardWriteText(text);

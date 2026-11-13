@@ -26,6 +26,12 @@ export interface SidebarProps {
   metadata?: ReadonlyMap<string, NoteMeta>;
   fileTimes?: ReadonlyMap<string, string>;
   onPin?(path: string): void | Promise<void>;
+  /**
+   * Os projetos (spec #9847), pela pasta: a pasta ganha o sinal, a nota principal também, e a pasta sem nota principal
+   * mostra o aviso. O clique no aviso chama `onProjectWarning`.
+   */
+  projects?: ReadonlyMap<string, { main: string | null }>;
+  onProjectWarning?(folder: string, at: { x: number; y: number }): void;
   tree: TreeNode[];
   open: Set<string>;
   current: string | null;
@@ -270,6 +276,7 @@ export function Sidebar(p: SidebarProps) {
       : {};
 
   const pinned = new Set(p.pinned.map((note) => note.path));
+  const mains = new Set([...(p.projects?.values() ?? [])].flatMap((x) => (x.main ? [x.main] : [])));
   const rowStyle = (date: boolean, pin: boolean): CSSProperties => ({
     "--row-tools": `${28 + (date ? 44 : 0) + (pin ? 26 : 0)}px`,
   } as CSSProperties);
@@ -329,6 +336,7 @@ export function Sidebar(p: SidebarProps) {
           {inTree ? <Twisty /> : null}
           <TreeIcon name={isDailyNote(n.path, p.dailyFolder) ? "daily" : "note"} />
           <span className="kn-side-name">{inTree && searching ? <Highlight text={n.name} ranges={titleRanges(n.name, p.query)} /> : n.name}</span>
+          {inTree && mains.has(n.path) ? <ProjectMark kind="main" /> : null}
           {p.showExtensions ? <Ext ext="md" /> : null}
         </button>
         {tools({ kind: "note", path: n.path }, n.name, p.metadata?.get(n.path)?.mtime)}
@@ -382,6 +390,13 @@ export function Sidebar(p: SidebarProps) {
               style={{ paddingLeft: depth * 14 }}
               onClick={(e) => {
                 if (e.ctrlKey) return; // o ⌃-clique é o menu, não abrir ou fechar a pasta (T2693)
+                // O aviso da nota principal apagada (spec #9847): o clique nele escolhe a nota, e a pasta fica como está.
+                const warn = (e.target as Element).closest?.(".kn-side-warn");
+                if (warn && p.onProjectWarning) {
+                  const rect = warn.getBoundingClientRect();
+                  p.onProjectWarning(n.path, { x: rect.left, y: rect.bottom });
+                  return;
+                }
                 p.onSelectFolder(n.path);
                 p.onToggle(n.path);
               }}
@@ -392,6 +407,12 @@ export function Sidebar(p: SidebarProps) {
               <Twisty open={expanded} />
               <TreeIcon name={expanded ? "folder-open" : "folder"} />
               <span className="kn-side-name">{n.name}</span>
+              {p.projects?.has(n.path) ? <ProjectMark kind="folder" /> : null}
+              {p.projects?.get(n.path)?.main === null ? (
+                <span className="kn-side-warn" title="A nota principal foi apagada: clique para escolher outra" aria-label="sem nota principal">
+                  !
+                </span>
+              ) : null}
               {n.count ? <span className="kn-side-count">{n.count}</span> : null}
             </button>
             {tools({ kind: "folder", path: n.path }, n.name)}
@@ -626,5 +647,25 @@ function RootFolder({ root }: { root: SideRoot }) {
       ) : null}
       {root.error ? <p className="kn-side-root-error" role="alert">{root.error}</p> : null}
     </div>
+  );
+}
+
+/**
+ * O sinal discreto de um projeto (spec #9847): na pasta, uma pastinha com uma marca; na nota principal, uma estrela
+ * pequena. Só a cor do texto secundário, para não brigar com o nome.
+ */
+function ProjectMark({ kind }: { kind: "folder" | "main" }) {
+  return kind === "folder" ? (
+    <span className="kn-side-project" data-project="folder" title="Projeto" aria-label="projeto">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+        <path d="M3 13V3.5h7.5L9 6l1.5 2.5H3" strokeLinejoin="round" />
+      </svg>
+    </span>
+  ) : (
+    <span className="kn-side-project" data-project="main" title="Nota principal do projeto" aria-label="nota principal">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 1.8l1.8 3.9 4.2.5-3.1 2.9.8 4.2L8 11.2l-3.7 2.1.8-4.2L2 6.2l4.2-.5Z" />
+      </svg>
+    </span>
   );
 }

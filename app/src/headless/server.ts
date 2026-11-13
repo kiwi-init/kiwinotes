@@ -206,6 +206,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
       void session?.settingsChanged(settings);
       event("settings.changed", settings);
     },
+    projectsChangedIn: (folderId) => event("projects.changed", { folderId }),
     dictationNotes: stores.dictationNotes,
     // Headless nunca encosta no clipboard da pessoa: o texto vai só para o log, como o dryRun do insert.
     clipboardWrite: (text) => { fakeClipboard = text; console.log(`[headless] clipboard.write (not written): ${text.length} chars`); },

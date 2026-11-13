@@ -43,6 +43,20 @@ export function engineNotes(
           ),
       }
     : undefined;
+  // Os projetos (1.49.0, spec #9847): o evento só vale para a pasta de notas desta janela.
+  const projects: NotesApi["projects"] = has("projects.list") && has("projects.mark")
+    ? {
+        list: () => call("projects.list"),
+        mark: (folder) => call("projects.mark", { folder }),
+        unmark: (folder) => call("projects.unmark", { folder }),
+        setMain: (folder, note) => call("projects.setMain", { folder, note }),
+        onChanged: (fn) =>
+          on("projects.changed", (e) => {
+            const event = (e ?? {}) as { folderId?: string };
+            if (!folderId || !event.folderId || event.folderId === folderId) fn();
+          }),
+      }
+    : undefined;
   // A nota do dia, os links e a Lixeira vêm no contrato 1.8.0 (T2593); num engine antigo, a janela esconde.
   const extras: ExtrasApi | undefined = has("notes.daily")
     ? {
@@ -122,6 +136,7 @@ export function engineNotes(
     ...(extras ? { extras } : {}),
     ...(savedSearches ? { savedSearches } : {}),
     ...(pins ? { pins } : {}),
+    ...(projects ? { projects } : {}),
     ...(attachments ? { attachments } : {}),
     ...(has("notes.export") ? { export: (path: string, format: ExportFormat, theme: Record<string, string>,
           ) => call<{ file: string }>("notes.export", { path, format, theme }),

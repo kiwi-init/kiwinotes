@@ -2,6 +2,17 @@
 // de pastas do contrato 1.7.0 (T2468): `folders.*`, `notes.move|duplicate|restore|reveal`, o `ctime` e o `pinned`.
 
 import type { UiCapabilities } from "../../src/shared/ui-contract.ts";
+
+/** Um projeto, como o `projects.list` devolve. */
+export type ProjectView = UiCapabilities["projects.list"]["result"]["projects"][number];
+export interface ProjectsApi {
+  list(): Promise<UiCapabilities["projects.list"]["result"]>;
+  mark(folder: string): Promise<unknown>;
+  unmark(folder: string): Promise<unknown>;
+  setMain(folder: string, note: string): Promise<unknown>;
+  /** Os projetos mudaram por outro lugar (a CLI, outra janela, a pasta seguida). */
+  onChanged(fn: () => void): () => void;
+}
 import type { AttachmentSource } from "./editor/attachments.ts";
 
 export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode,
@@ -89,6 +100,11 @@ export interface NotesApi {
    * da pessoa por uma preferência da janela. O engine corrige os paths quando a nota muda de nome, de pasta ou some.
    */
   pins?: { list(): Promise<string[]>; set(paths: string[]): Promise<string[]> };
+  /**
+   * Os projetos (spec #9847, contrato 1.49.0): uma pasta marcada, com a nota principal. As regras (um dentro do outro, a
+   * pasta das reuniões) são do engine; a janela só não oferece o que ele recusaria.
+   */
+  projects?: ProjectsApi;
   /** A nota do dia, o link que cria a nota, "Mencionada sem link" e a Lixeira (T2593, contrato 1.8.0). */
   extras?: ExtrasApi;
   /** O histórico de versões (T2680). Num engine sem ele, o "Versões…" não aparece. */
