@@ -77,6 +77,12 @@ DPR1. CPU soma os cinco processos próprios, em porcentagem de um núcleo,
 com 10 s de aquecimento e 60 s de amostra, sem captura. A meta é acréscimo
 máximo de 0,5 ponto sobre o opaco, em pares de ordem alternada.
 
+A série final após o ajuste dos SVGs teve média opaco 2,225%, recortado
+2,292%, delta médio +0,067 ponto e pior par +0,234 ponto. O p95 agregado
+foi 5,005% no opaco e 5,174% no recortado. Os três pares ficaram dentro
+do alvo de +0,5 ponto. Os hashes de runtime dos seis relatórios conferem
+com a fonte final. A série anterior está preservada em `serie-inicial/`.
+
 A primeira janela de FPS de `agindo` ficou em 54,74; o arquivo com a falha
 foi preservado. Duas repetições e o controle opaco passaram (mínimo posterior
 59,08). Não se usa a exportação dos vídeos para concluir sobre fluidez.
@@ -93,3 +99,11 @@ Validação local: typecheck limpo e 33 testes do módulo / 511 asserts. A suít
 completa teve 1785 pass, 5 skip e 1 falha no cancelamento do download em
 `precise-dictation.test.ts`; a execução isolada desse arquivo passou 11/11.
 O log completo foi preservado em `/tmp/kiwi-T9708-final-bun.log`.
+
+No CI do commit `a660d6b`, o job Bun (incluindo verificações de UI) e o
+typecheck passaram no run `43483983088`; Swift ainda estava na fila.
+
+A confirmação final de FPS, após o ajuste SVG, passou nos seis estados
+ativos: 57,16 a 60,00 FPS, sem fallback lento (`desempenho/fps-final.json`).
+O teste de altura de linha também confere os dois olhos dentro do quadro
+do gato, além do alinhamento de todos os SVGs às caixas.
