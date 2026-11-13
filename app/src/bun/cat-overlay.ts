@@ -13,7 +13,8 @@
 // - **A pílula do ditado tem a vez:** quem sabe se ela está na tela é o helper, que segura o gato até ela sair.
 
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
-import type { AgentTurnEvent } from "../shared/ui-contract.ts";
+import type { Command } from "../shared/ipc.ts";
+import type { AgentStatus, AgentTurnEvent, AppSettings } from "../shared/ui-contract.ts";
 
 /** Os tempos do roteiro, em ms. */
 export const OVERLAY_TIMES = {
@@ -160,6 +161,16 @@ export class CatOverlay {
     else if (state === "erro") this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
   }
 
+  /**
+   * O helper (re)começou: a página e a janela dele sumiram. Carrega de novo e, com o gato na tela, volta no mesmo
+   * estado, sem a entrada.
+   */
+  helperReady(): void {
+    if (!this.loaded) return;
+    this.host.send({ type: "catOverlay.load" });
+    if (this.overlayShown) this.host.send({ type: "catOverlay.show", estado: this.activity.state, fadeMs: 0 });
+  }
+
   /** Solta tudo (o app saindo). */
   dispose(): void {
     this.cancelTimer();
@@ -197,4 +208,87 @@ export class CatOverlay {
     this.clock.clearTimeout(this.timer);
     this.timer = null;
   }
+}
+
+/** O que o app (e o headless) ligam ao controlador. */
+export interface CatOverlayWiring {
+  agent: {
+    status(): Promise<AgentStatus>;
+    onStatus(fn: (s: AgentStatus) => void): () => void;
+    onTurn(fn: (e: AgentTurnEvent) => void): () => void;
+  };
+  settings: { load(): Promise<AppSettings> };
+  /** O helper; sem ele (`--no-helper`), o controlador roda e nada sai. */
+  helper?: {
+    send(command: Command): Promise<{ ok: boolean; error?: string }>;
+    onReady(fn: () => void): () => void;
+  };
+  /** A pasta da página (`views/ui/catoverlay`). */
+  pageDir: string;
+  /** O gato foi para o overlay, ou voltou (o evento `kiwicat.where`). */
+  where(overlay: boolean): void;
+  log?(message: string): void;
+  clock?: CatOverlayClock;
+}
+
+export interface AttachedCatOverlay {
+  readonly overlay: CatOverlay;
+  /** As Configurações mudaram (o interruptor `kiwicat.overlay`). */
+  settingsChanged(settings: AppSettings): void;
+  setHubInView(inView: boolean): void;
+  stop(): void;
+}
+
+/**
+ * Liga o controlador ao agente, às Configurações e ao helper: ligado só com o agente ligado e o interruptor
+ * `kiwicat.overlay`; carrega a página de novo quando o helper reinicia.
+ */
+export function attachCatOverlay(w: CatOverlayWiring): AttachedCatOverlay {
+  const toHelper = (c: CatOverlayCommand): Command => (c.type === "catOverlay.load" ? { type: "catOverlay.load", dir: w.pageDir } : c);
+  const overlay = new CatOverlay(
+    {
+      send: (c) => {
+        if (!w.helper) return;
+        w.helper.send(toHelper(c)).then(
+          (r) => r.ok || w.log?.(`[kiwicat] ${c.type}: ${r.error ?? "failed"}`),
+          // Sem o helper agora: o `ready` dele carrega de novo.
+          () => {},
+        );
+      },
+      where: w.where,
+    },
+    w.clock,
+  );
+  let agentOn: boolean | undefined;
+  let overlayOn: boolean | undefined;
+  const apply = () => overlay.configure(agentOn === true && overlayOn === true);
+  const offs = [
+    w.agent.onStatus((s) => {
+      agentOn = s.enabled;
+      apply();
+    }),
+    w.agent.onTurn((e) => overlay.turn(e)),
+    w.helper?.onReady(() => overlay.helperReady()) ?? (() => {}),
+  ];
+  // A primeira leitura não passa por cima de um evento que chegou antes dela.
+  void w.agent.status().then((s) => {
+    if (agentOn === undefined) agentOn = s.enabled;
+    apply();
+  }, () => {});
+  void w.settings.load().then((s) => {
+    if (overlayOn === undefined) overlayOn = s.kiwicat.overlay;
+    apply();
+  }, () => {});
+  return {
+    overlay,
+    settingsChanged: (s) => {
+      overlayOn = s.kiwicat.overlay;
+      apply();
+    },
+    setHubInView: (inView) => overlay.setHubInView(inView),
+    stop: () => {
+      for (const off of offs) off();
+      overlay.dispose();
+    },
+  };
 }

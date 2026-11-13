@@ -25,8 +25,11 @@ interface OverlayStats {
 const stats: OverlayStats = { ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso" };
 const dark = matchMedia("(prefers-color-scheme: dark)");
 const root = document.getElementById("root")!;
+// Só a prova do helper (`kiwi-helper --cat-probe --backend …`) pede um caminho: o app usa o automático.
+const asked = new URLSearchParams(location.search).get("backend");
 const cat = await createKiwiCat(root, {
   mode: "runtime",
+  backend: asked === "webgl2" || asked === "none" ? asked : "auto",
   width: 192,
   height: 240,
   cutout: true,

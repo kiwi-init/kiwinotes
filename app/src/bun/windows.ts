@@ -14,7 +14,9 @@ import { saveDiagnostics } from "./diagnostics.ts";
 import { appLog } from "./file-log.ts";
 import { WINDOW_SPECS as SPECS } from "../shared/window-specs.ts";
 import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
+import { type AttachedCatOverlay, attachCatOverlay } from "./cat-overlay.ts";
 import { session } from "./session.ts";
+import type { Sidecar } from "./sidecar.ts";
 import { stores } from "./stores.ts";
 import { type CapabilityDeps, uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime, servedDir } from "./ui-engine.ts";
@@ -89,6 +91,7 @@ const capabilities = uiCapabilities({
   agent: stores.agent,
   settingsChanged: (settings) => {
     void session.get()?.settingsChanged(settings);
+    catOverlay?.settingsChanged(settings);
     // A Aparência vale para todas as janelas abertas (T2503).
     for (const rpc of rpcs.values()) rpc.send.event({ name: "settings.changed", payload: settings });
   },
@@ -340,6 +343,25 @@ function setHubFocused(focused: boolean): void {
   if (hubFocused === focused) return;
   hubFocused = focused;
   stores.agent.noticeView(hubInView());
+  catOverlay?.setHubInView(hubInView());
+}
+
+// O gato no overlay (spec #9810): com o hub fora da vista, o gato de um pedido aparece por cima dos outros apps, numa
+// janela do helper. O hub esconde o do canto enquanto ele está lá (`kiwicat.where`).
+let catOverlay: AttachedCatOverlay | undefined;
+export function startCatOverlay(sidecar: Sidecar): void {
+  catOverlay?.stop();
+  catOverlay = attachCatOverlay({
+    agent: stores.agent,
+    settings: stores.settings,
+    helper: { send: (c) => sidecar.send(c), onReady: (fn) => sidecar.on("ready", fn) },
+    pageDir: path.join(PATHS.VIEWS_FOLDER, "ui", "catoverlay"),
+    where: (overlay) => {
+      for (const rpc of rpcs.values()) rpc.send.event({ name: "kiwicat.where", payload: { overlay } });
+    },
+    log: (m) => console.log(m),
+  });
+  catOverlay.setHubInView(hubInView());
 }
 
 /** A janela principal está na vista: aberta, com o foco e não minimizada (spec #9839). */

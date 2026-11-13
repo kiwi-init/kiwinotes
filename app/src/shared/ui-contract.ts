@@ -845,6 +845,11 @@ export interface UiEvents {
   "agent.questionChanged": { card: string; request: string; open: boolean };
   /** A permissão de notificar ou o liga/desliga do aviso mudou (1.52.0). */
   "agent.noticeChanged": AgentNoticeState;
+  /**
+   * O gato foi para o overlay, por cima dos outros apps, ou voltou (1.53.0, spec #9810): com `overlay: true`, o hub
+   * esconde o gato do canto. Nunca dois gatos.
+   */
+  "kiwicat.where": { overlay: boolean };
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

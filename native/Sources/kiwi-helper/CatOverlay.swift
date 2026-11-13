@@ -18,6 +18,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     /// Desligado no `--headless`: nada aparece na tela.
     var enabled = true
     var log: ((String) -> Void)?
+    /** A página terminou o carregamento inicial (para o `--cat-probe`). */
+    var onLoaded: (() -> Void)?
 
     private var panel: CatOverlayPanel?
     private var web: WKWebView?
@@ -28,16 +30,23 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     private var pageLoaded = false
     private var pendingLoad: URL?
 
-    /// Toda a rede bloqueada, inclusive o WebSocket: a página só usa os arquivos do app.
+    /// Toda a rede bloqueada, inclusive o WebSocket: a página só usa os arquivos do app. Uma regra por esquema: o
+    /// WebKit não aceita `|` no `url-filter` (a lista inteira falha, e a página não carrega).
     private static let blockAll = """
-    [{"trigger":{"url-filter":"^(https?|wss?|ftp)://"},"action":{"type":"block"}}]
+    [{"trigger":{"url-filter":"^https?://"},"action":{"type":"block"}},
+     {"trigger":{"url-filter":"^wss?://"},"action":{"type":"block"}},
+     {"trigger":{"url-filter":"^ftp://"},"action":{"type":"block"}}]
     """
 
-    func load(dir: String) -> String? {
+    /// `query`: só o `--cat-probe` usa (`backend=webgl2|none`, para provar cada caminho do desenho).
+    func load(dir: String, query: String? = nil) -> String? {
         guard enabled else { return nil }
         let folder = URL(fileURLWithPath: dir, isDirectory: true).standardizedFileURL
-        let index = folder.appendingPathComponent("index.html")
-        guard FileManager.default.fileExists(atPath: index.path) else { return "not_found" }
+        let file = folder.appendingPathComponent("index.html")
+        guard FileManager.default.fileExists(atPath: file.path) else { return "not_found" }
+        var parts = URLComponents(url: file, resolvingAgainstBaseURL: false)
+        parts?.query = query
+        let index = parts?.url ?? file
         if web != nil { unload() }
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
@@ -195,12 +204,35 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         ["repouso", "acordou", "thinking", "agindo", "pronto", "erro"].contains(estado) ? estado : "thinking"
     }
 
+    // MARK: - o `--cat-probe` (a prova da página fechada e a medida, fora da tela)
+
+    /// Roda um script na página e espera o resultado (uma Promise também).
+    func evaluate(_ js: String) async throws -> Any? {
+        guard let web else { return nil }
+        return try await web.callAsyncJavaScript(js, arguments: [:], in: nil, contentWorld: .page)
+    }
+
+    /// Põe a janela na frente, mas fora de todas as telas: o WebKit desenha como se o gato estivesse à vista, e nada
+    /// aparece na tela de ninguém.
+    func showOffscreen() {
+        guard let panel, let web else { return }
+        // Fora da tela, a janela conta como coberta, e o WebKit pararia o desenho (a página escondida).
+        let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
+        if web.responds(to: selector) {
+            typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+            unsafeBitCast(web.method(for: selector), to: Setter.self)(web, selector, false)
+        }
+        panel.setFrameOrigin(CGPoint(x: -20_000, y: -20_000))
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+    }
+
     // MARK: - WKNavigationDelegate: só o carregamento inicial da própria página
 
     nonisolated func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
         MainActor.assumeIsolated {
             let url = action.request.url
-            let initial = !pageLoaded && url?.isFileURL == true && url?.standardizedFileURL == pendingLoad?.standardizedFileURL
+            let initial = !pageLoaded && url?.isFileURL == true && url?.standardizedFileURL.path == pendingLoad?.standardizedFileURL.path
             decisionHandler(initial ? .allow : .cancel)
             if !initial { log?("cat overlay: navigation refused: \(url?.scheme ?? "?")") }
         }
@@ -212,6 +244,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             // Pronta e pausada até o primeiro `show`.
             script("window.kiwiOverlay?.set({visible: false})")
             if gate.shows { present() }
+            onLoaded?()
         }
     }
 }

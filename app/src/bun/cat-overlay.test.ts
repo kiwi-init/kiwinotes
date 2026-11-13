@@ -3,7 +3,10 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentTurnEvent } from "../shared/ui-contract.ts";
-import { CatOverlay, type CatOverlayCommand, OVERLAY_TIMES } from "./cat-overlay.ts";
+import type { Command } from "../shared/ipc.ts";
+import { DEFAULT_SETTINGS } from "../store/settings.ts";
+import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
+import { attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES } from "./cat-overlay.ts";
 
 function rig() {
   const sent: CatOverlayCommand[] = [];
@@ -169,5 +172,88 @@ describe("o gato no overlay", () => {
     cat.configure(false);
     expect(take()).toEqual([{ type: "catOverlay.hide", fadeMs: 0 }, { type: "catOverlay.unload" }]);
     expect(where).toEqual([true, false]);
+  });
+});
+
+describe("o gato no overlay ligado ao app", () => {
+  function wired(o: { enabled?: boolean; overlay?: boolean } = {}) {
+    const sent: Command[] = [];
+    const where: boolean[] = [];
+    const statusFns = new Set<(s: AgentStatus) => void>();
+    const turnFns = new Set<(e: AgentTurnEvent) => void>();
+    const readyFns = new Set<() => void>();
+    const status = (enabled: boolean) => ({ enabled }) as AgentStatus;
+    const settings = (overlay: boolean): AppSettings => ({ ...DEFAULT_SETTINGS, kiwicat: { show: true, overlay } });
+    const attached = attachCatOverlay({
+      agent: {
+        status: async () => status(o.enabled ?? true),
+        onStatus: (fn) => (statusFns.add(fn), () => void statusFns.delete(fn)),
+        onTurn: (fn) => (turnFns.add(fn), () => void turnFns.delete(fn)),
+      },
+      settings: { load: async () => settings(o.overlay ?? true) },
+      helper: {
+        send: async (c) => (sent.push(c), { ok: true }),
+        onReady: (fn) => (readyFns.add(fn), () => void readyFns.delete(fn)),
+      },
+      pageDir: "/app/views/ui/catoverlay",
+      where: (w) => where.push(w),
+    });
+    const emit = {
+      status: (enabled: boolean) => statusFns.forEach((fn) => fn(status(enabled))),
+      turn: (e: AgentTurnEvent) => turnFns.forEach((fn) => fn(e)),
+      ready: () => readyFns.forEach((fn) => fn()),
+    };
+    return { attached, sent, where, emit, settings, listeners: () => statusFns.size + turnFns.size + readyFns.size };
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  test("com o agente e o interruptor ligados, carrega a página da pasta do app", async () => {
+    const { sent } = wired();
+    await tick();
+    expect(sent).toEqual([{ type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
+  });
+
+  test("com o agente desligado ou o interruptor desligado, nada carrega", async () => {
+    for (const o of [{ enabled: false }, { overlay: false }]) {
+      const { sent, emit } = wired(o);
+      await tick();
+      emit.turn(started());
+      expect(sent).toEqual([]);
+    }
+  });
+
+  test("desligar o interruptor nos Ajustes solta a página; ligar carrega de novo", async () => {
+    const { attached, sent, settings } = wired();
+    await tick();
+    sent.splice(0);
+    attached.settingsChanged(settings(false));
+    attached.settingsChanged(settings(true));
+    expect(sent.map((c) => c.type)).toEqual(["catOverlay.unload", "catOverlay.load"]);
+  });
+
+  test("o helper reiniciou com o gato na tela: carrega e volta no mesmo estado, sem a entrada", async () => {
+    const { sent, emit } = wired();
+    await tick();
+    emit.turn(started());
+    emit.turn(status("running"));
+    sent.splice(0);
+    emit.ready();
+    expect(sent).toEqual([
+      { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" },
+      { type: "catOverlay.show", estado: "agindo", fadeMs: 0 },
+    ]);
+  });
+
+  test("com o hub na vista, o gato é o do canto; o stop solta tudo", async () => {
+    const { attached, sent, where, emit, listeners } = wired();
+    await tick();
+    sent.splice(0);
+    attached.setHubInView(true);
+    emit.turn(started());
+    expect(sent).toEqual([]);
+    expect(where).toEqual([]);
+    attached.stop();
+    expect(sent.map((c) => c.type)).toEqual(["catOverlay.unload"]);
+    expect(listeners()).toBe(0);
   });
 });

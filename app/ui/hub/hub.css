@@ -391,3 +391,5 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+/* O gato está no overlay, por cima dos outros apps (spec #9810): o do canto some. */
+.kn-kiwicat[data-away="true"] { visibility: hidden; }
