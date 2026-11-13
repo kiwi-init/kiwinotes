@@ -16,6 +16,8 @@ enum CatOverlayProbe {
         var blocked: String?
         var hold: Double = 0
         var estado = "thinking"
+        /// Com `--hold`: a página pausada, como entre os pedidos (a base da medida da CPU).
+        var paused = false
     }
 
     static func run(_ o: Options) async -> Int32 {
@@ -112,7 +114,7 @@ enum CatOverlayProbe {
         }
 
         if o.hold > 0 {
-            _ = try? await overlay.evaluate("window.kiwiOverlay.set({estado: \(json(o.estado)), visible: true})")
+            _ = try? await overlay.evaluate("window.kiwiOverlay.set({estado: \(json(o.estado)), visible: \(!o.paused)})")
             print(#"{"holding":\#(Int(ProcessInfo.processInfo.processIdentifier))}"#)
             fflush(stdout)
             try? await Task.sleep(for: .seconds(o.hold))

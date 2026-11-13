@@ -130,6 +130,9 @@ while let arg = args.next() {
     case "--hold":
         guard let v = args.next(), let s = Double(v), catProbe != nil else { fail("--hold <seconds>, after --cat-probe") }
         catProbe?.hold = s
+    case "--paused":
+        guard catProbe != nil else { fail("--paused, after --cat-probe") }
+        catProbe?.paused = true
     case "--estado":
         guard let v = args.next(), catProbe != nil else { fail("--estado <state>, after --cat-probe") }
         catProbe?.estado = v
