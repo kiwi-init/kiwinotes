@@ -56,9 +56,9 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     { cx: 1243.342, cy: 1279.308, r: 67.94 },
   ].map(e => {
     const outer = document.createElement("div");
-    outer.style.cssText = `position:absolute;left:${e.cx / 2048 * 100}%;top:${e.cy / 2560 * 100}%;width:${e.r * 2 / 2048 * 100}%;height:${e.r * 2 / 2560 * 100}%;transform-origin:center`;
+    outer.style.cssText = `position:absolute;left:${e.cx / 2048 * 100}%;top:${e.cy / 2560 * 100}%;width:${e.r * 2 / 2048 * 100}%;height:${e.r * 2 / 2560 * 100}%;transform-origin:center;will-change:transform`;
     const disk = document.createElement("div"), happy = document.createElement("div"), asleep = document.createElement("div");
-    for (const node of [disk, happy, asleep]) { node.style.cssText = "position:absolute;inset:0;transform-origin:center"; outer.append(node); }
+    for (const node of [disk, happy, asleep]) { node.style.cssText = "position:absolute;inset:0;transform-origin:center;will-change:transform,opacity"; outer.append(node); }
     const wrap = (body: string) => `<svg viewBox="-1 -1 2 2" width="100%" height="100%" style="overflow:visible" aria-hidden="true">${body}</svg>`;
     disk.innerHTML = wrap('<circle r="1" fill="white"/>');
     const arc = (start: number, end: number) => path(points(64, u => { const a = (start + (end - start) * u) * Math.PI / 180; return [Math.cos(a), .1 + .55 * Math.sin(a)]; }), false);
@@ -73,7 +73,20 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     element.dataset.symbol = state;
     if (part !== undefined) element.dataset.part = String(part);
     element.style.cssText = `position:absolute;inset:0;transform-origin:${pivot[0] / 2048 * 100}% ${pivot[1] / 2560 * 100}%;opacity:0`;
-    element.innerHTML = svg(body); layer.append(element); sprites.push({ state, element, pivot, part }); return element;
+    element.innerHTML = svg(body); layer.append(element);
+    // Rasterize only the motif bounds, rather than one full canvas per symbol.
+    // A local pivot preserves the exact approved position and scaling.
+    const graphic = element.querySelector<SVGSVGElement>("svg")!;
+    const box = graphic.getBBox();
+    // The animated error path starts empty; reserve its full source envelope.
+    const bounds = state === "erro" ? { x: 1500, y: 450, width: 500, height: 400 } : box;
+    const x = bounds.x - 4, y = bounds.y - 4, w = bounds.width + 8, h = bounds.height + 8;
+    graphic.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
+    element.style.inset = "auto";
+    Object.assign(element.style, { left: `${x / 2048 * 100}%`, top: `${y / 2560 * 100}%`,
+      width: `${w / 2048 * 100}%`, height: `${h / 2560 * 100}%`,
+      transformOrigin: `${(pivot[0] - x) / w * 100}% ${(pivot[1] - y) / h * 100}%` });
+    sprites.push({ state, element, pivot, part }); return element;
   }
   const alert = polygon([[1661, 480], [1758, 470], [1735, 634], [1694, 644]], "alert", 2) + disc(1714, 693, 28, "alert") + dash(1822, 598, 65, -35, "alert") + dash(1822, 666, 67, 20, "alert");
   sprite("acordou", white(alert), [1740, 640]);
