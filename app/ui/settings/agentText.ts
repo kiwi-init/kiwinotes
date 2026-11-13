@@ -89,6 +89,10 @@ export function toolStatus(tool: string, target?: string): string {
       return "Vendo as reuniões…";
     case "meetings_get":
       return target ? `Lendo a reunião ${target}…` : "Lendo uma reunião…";
+    case "projects_list":
+      return "Vendo os projetos…";
+    case "project_status":
+      return target ? `Vendo o projeto ${target}…` : "Vendo um projeto…";
     case "notes_create":
       return target ? `Criando ${target}…` : "Criando uma nota…";
     case "notes_append":

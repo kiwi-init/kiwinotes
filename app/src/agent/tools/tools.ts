@@ -15,6 +15,7 @@
 
 import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared/meeting-note.ts";
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
+import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
 import { removedSecrets, type SecretGuard } from "../../guardrail/filter.ts";
@@ -35,7 +36,16 @@ export const MEETINGS_PAGE = 50;
 /** O máximo de seções no sumário. */
 export const OUTLINE_MAX = 300;
 
-export const KIWI_READ_TOOL_NAMES = ["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get"] as const;
+export const KIWI_READ_TOOL_NAMES = [
+  "notes_search",
+  "notes_outline",
+  "notes_read",
+  "notes_list",
+  "meetings_list",
+  "meetings_get",
+  "projects_list",
+  "project_status",
+] as const;
 export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write"] as const;
 export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
@@ -135,6 +145,24 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
         offset: offsetProp,
       },
       required: ["path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "projects_list",
+    title: "Listar os projetos",
+    description:
+      "Os projetos do Kiwi: as pastas que a pessoa marcou como projeto, cada uma com a nota principal, a data da última mudança numa nota da pasta e quantas notas ela tem. Só a pessoa marca ou desmarca um projeto.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "project_status",
+    title: "Como está um projeto",
+    description: `O estado de um projeto, só contado, sem resumo: o sumário da nota principal (os títulos, até ${STATUS_OUTLINE_MAX}), as ${STATUS_RECENT} notas da pasta mudadas por último, com a data, e quantas caixas de tarefa abertas (- [ ]) há em cada nota da pasta, com o total. As datas são a hora do arquivo. Para ler uma nota, use notes_read.`,
+    inputSchema: {
+      type: "object",
+      properties: { projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve (ex.: Projetos/Kiwi ou Kiwi)." } },
+      required: ["projeto"],
       additionalProperties: false,
     },
   },
@@ -561,6 +589,50 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
           ...chunk(transcript, offset),
         },
         target: n.path,
+      };
+    }
+    case "projects_list": {
+      args(raw, []);
+      const projetos = (await reader.projects()).map((p) => ({
+        nome: p.name,
+        pasta: p.folder,
+        notaPrincipal: p.main,
+        mudou: p.updated,
+        notas: p.notes,
+        ...(p.main === null ? { aviso: "A nota principal foi apagada; a pessoa ainda não escolheu outra." } : {}),
+      }));
+      return { value: { projetos, total: projetos.length }, target: "os projetos" };
+    }
+    case "project_status": {
+      const a = args(raw, ["projeto"]);
+      const want = str(a, "projeto", true)!.replace(/^\/+|\/+$/g, "");
+      const all = await reader.projects();
+      const byFolder = all.find((p) => p.folder === want);
+      const byName = all.filter((p) => p.name.toLocaleLowerCase("pt-BR") === want.toLocaleLowerCase("pt-BR"));
+      const p = byFolder ?? (byName.length === 1 ? byName[0] : undefined);
+      if (!p) {
+        if (byName.length > 1) throw new ToolError("E_AMBIGUOUS", `há ${byName.length} projetos chamados ${want}; diga a pasta: ${byName.map((x) => x.folder).join(", ")}`);
+        throw new ToolError("E_NOT_FOUND", `${want} não é um projeto; veja os projetos com projects_list`);
+      }
+      const s = await reader.projectStatus(p.folder);
+      const avisos = [
+        ...(s.project.main === null ? ["A nota principal foi apagada; a pessoa ainda não escolheu outra."] : []),
+        ...(s.outlineTotal > s.outline.length ? [`A nota principal tem ${s.outlineTotal} títulos; o sumário mostra os ${s.outline.length} primeiros.`] : []),
+        ...(s.taskNotes > s.tasks.length ? [`${s.taskNotes} notas têm tarefas abertas; a lista mostra as ${s.tasks.length} com mais.`] : []),
+      ];
+      return {
+        value: {
+          projeto: s.project.name,
+          pasta: s.project.folder,
+          notaPrincipal: s.project.main,
+          notas: s.project.notes,
+          mudou: s.project.updated,
+          sumario: s.outline.map((h) => ({ nivel: h.level, titulo: h.title })),
+          recentes: s.recent.map((n) => ({ path: n.path, titulo: n.title, mudou: n.mtime })),
+          tarefasAbertas: { total: s.openTasks, notas: s.taskNotes, porNota: s.tasks.map((t) => ({ path: t.path, abertas: t.open })) },
+          ...(avisos.length ? { aviso: avisos.join(" ") } : {}),
+        },
+        target: s.project.name,
       };
     }
     default:

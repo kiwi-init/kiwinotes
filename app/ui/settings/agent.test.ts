@@ -158,6 +158,9 @@ describe("o Testar", () => {
     expect(st("notes_list", "Projetos")).toBe("Olhando Projetos…");
     expect(st("meetings_list")).toBe("Vendo as reuniões…");
     expect(st("meetings_get", "Reuniões/Orçamento.md")).toBe("Lendo a reunião Reuniões/Orçamento.md…");
+    expect(st("projects_list")).toBe("Vendo os projetos…");
+    expect(st("project_status", "Kiwi")).toBe("Vendo o projeto Kiwi…");
+    expect(st("project_status")).toBe("Vendo um projeto…");
     expect(st("Read")).toBe("Usando Read…");
   });
 

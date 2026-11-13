@@ -34,6 +34,8 @@ import { ExportError, type NoteExporter } from "../notes/export.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
 import type { NotesFolders } from "../notes/folders-workspace.ts";
+import { checkMark, followProjects, mainNoteFor, mapProjects, projectInfo, ProjectsFile, projectStatus } from "../notes/projects.ts";
+import { MEETINGS_FOLDER } from "../notes/meetings.ts";
 import { folderCapabilities } from "./folder-capabilities.ts";
 import type { MeetingNotes } from "../notes/meetings.ts";
 import type { ToNoteResult } from "../notes/fromDictation.ts";
@@ -46,6 +48,11 @@ import { isAgentChoice } from "../store/settings.ts";
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
   notesFolders?: NotesFolders;
+  /**
+   * A pasta das reuniões neste cofre, que não pode ser projeto (spec #9874). Sem ela, `Reuniões` (o cofre interno);
+   * `null`: uma pasta de notas escolhida pela pessoa, que não tem pasta de reuniões.
+   */
+  meetingsFolder?: string | null;
   chooseNotesFolder?(): Promise<string | null>;
   dictionary: { load(): Promise<DictionaryTerm[]>; save(terms: DictionaryTerm[]): Promise<DictionaryTerm[]>;
   };
@@ -109,7 +116,9 @@ export interface CapabilityDeps {
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile" | "embed"
     | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile"
-  >;
+  > &
+    // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu.
+    Partial<Pick<Vault, "noteInodes">>;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
@@ -291,6 +300,19 @@ export function uiCapabilities(deps: CapabilityDeps,
     await deps.versions?.move((p) => r.moves.get(p) ?? p);
     await changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()),
     );
+    // Os projetos também (spec #9874); na abertura (sem `moves`), a nota principal acha a pasta pelo inode.
+    await projectsFile().update((list) => followProjects(list, r, deps.notes.existing(), deps.notes.noteInodes?.()));
+  };
+  /** O arquivo dos projetos deste cofre (`.kiwi/projects.json`). */
+  let projects: ProjectsFile | null = null;
+  const projectsFile = () => (projects ??= new ProjectsFile(deps.notes.root));
+  /** A pasta das reuniões neste cofre: só o interno tem uma (`Reuniões`). */
+  const meetingsFolder = deps.meetingsFolder === undefined ? MEETINGS_FOLDER : deps.meetingsFolder;
+  const projectByFolder = async (folder: unknown, cap: string) => {
+    const p = folderPath(folder);
+    const e = (await projectsFile().load()).find((x) => x.folder === p);
+    if (!e) throw new CapabilityError("E_NOT_FOUND", `${cap}: ${p || "a raiz"} não é um projeto`);
+    return e;
   };
   /** Os argumentos de uma capacidade de notas: só os campos conhecidos, para um typo não passar calado. */
   const attachments = () => {
@@ -309,9 +331,16 @@ export function uiCapabilities(deps: CapabilityDeps,
    * As fixadas seguem a nota ou a pasta (T2468): `map` diz para onde foi cada caminho (null: saiu). Uma pasta movida
    * leva junto as fixadas de dentro dela.
    */
-  const fixPinned = (map: (p: string) => string | null) =>
-    changePinned((pinned) => [...new Set(pinned.map(map).filter((p): p is string => p !== null)),
+  const fixPinned = async (map: (p: string) => string | null) => {
+    await changePinned((pinned) => [...new Set(pinned.map(map).filter((p): p is string => p !== null)),
     ]);
+    // Os projetos (spec #9874) seguem o mesmo mapa: a pasta que saiu leva o projeto; a nota principal que saiu o deixa
+    // sem ela. Best effort, como a limpeza das fixadas: um `projects.json` estragado nunca desfaz o rename que já
+    // aconteceu.
+    await projectsFile()
+      .update((list) => mapProjects(list, map))
+      .catch((e) => console.error("[notes] projects:", e));
+  };
   /** A nota (ou a pasta) mudou de lugar pelo app: as fixadas e o histórico de versões vão junto. */
   const followMove = async (map: (p: string) => string) => {
     await deps.versions?.move(map);
@@ -818,6 +847,60 @@ export function uiCapabilities(deps: CapabilityDeps,
       const r = await (await vault()).deleteFolder(p);
       await fixPinned(dropUnder(p));
       return r;
+    },
+    "projects.list": async (args) => {
+      fields(args, "projects.list", []);
+      const v = await vault();
+      const { notes } = await v.list();
+      return { projects: (await projectsFile().load()).map((e) => projectInfo(e, notes)) };
+    },
+    "projects.mark": async (args) => {
+      const a = fields(args, "projects.mark", ["folder"]);
+      if (typeof a.folder !== "string") throw bad("projects.mark: folder must be a string");
+      const folder = folderPath(a.folder);
+      const v = await vault();
+      let created = false;
+      const list = await projectsFile().update(async (list) => {
+        if (list.some((e) => e.folder === folder)) return list;
+        checkMark(folder, list, v.existing().folders, meetingsFolder);
+        let main = mainNoteFor(folder);
+        // Sem a nota com o nome da pasta, ela nasce só com o título; nenhuma outra nota muda.
+        if (!v.existing().notes.has(main)) {
+          const name = main.slice(folder.length + 1, -3);
+          main = (await v.create(folder, name, `# ${name}\n`)).path;
+          created = true;
+        }
+        const ino = v.noteInodes?.().get(main);
+        return [...list, ino === undefined ? { folder, main } : { folder, main, mainIno: ino }];
+      });
+      const e = list.find((x) => x.folder === folder)!;
+      return { project: projectInfo(e, (await v.list()).notes), created };
+    },
+    "projects.unmark": async (args) => {
+      const a = fields(args, "projects.unmark", ["folder"]);
+      await vault();
+      const e = await projectByFolder(a.folder, "projects.unmark");
+      await projectsFile().update((list) => list.filter((x) => x.folder !== e.folder));
+      return true as const;
+    },
+    "projects.setMain": async (args) => {
+      const a = fields(args, "projects.setMain", ["folder", "note"]);
+      const v = await vault();
+      const e = await projectByFolder(a.folder, "projects.setMain");
+      const note = notePath(a.note);
+      if (!note.startsWith(`${e.folder}/`)) throw bad(`projects.setMain: ${note} não fica dentro de ${e.folder}`);
+      if (!v.existing().notes.has(note)) throw new CapabilityError("E_NOT_FOUND", `projects.setMain: a nota ${note} não existe`);
+      const ino = v.noteInodes?.().get(note);
+      const list = await projectsFile().update((list) =>
+        list.map((x) => (x.folder !== e.folder ? x : ino === undefined ? { folder: x.folder, main: note } : { folder: x.folder, main: note, mainIno: ino })),
+      );
+      return { project: projectInfo(list.find((x) => x.folder === e.folder)!, (await v.list()).notes) };
+    },
+    "projects.status": async (args) => {
+      const a = fields(args, "projects.status", ["folder"]);
+      const v = await vault();
+      const e = await projectByFolder(a.folder, "projects.status");
+      return projectStatus(e, (await v.list()).notes, async (p) => (await v.get(p)).content);
     },
     "notes.search": async (args) => {
       const a = fields(args, "notes.search", ["query", "limit"]);

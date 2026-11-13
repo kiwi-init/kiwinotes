@@ -36,12 +36,16 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
   let searches = 0;
   let listedNotes = false;
   let listedMeetings = false;
+  const projects = new Set<string>();
+  let listedProjects = false;
   for (const r of reads) {
     if (r.tool === "notes_read" || r.tool === "notes_outline") notes.add(r.target ?? `#${notes.size}`);
     else if (r.tool === "meetings_get") meetings.add(r.target ?? `#${meetings.size}`);
     else if (r.tool === "notes_search") searches++;
     else if (r.tool === "notes_list") listedNotes = true;
     else if (r.tool === "meetings_list") listedMeetings = true;
+    else if (r.tool === "project_status") projects.add(r.target ?? `#${projects.size}`);
+    else if (r.tool === "projects_list") listedProjects = true;
   }
   const parts: string[] = [];
   if (notes.size) parts.push(`leu ${plural(notes.size, "nota", "notas")}`);
@@ -49,6 +53,8 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
   if (searches) parts.push(`procurou ${plural(searches, "vez", "vezes")}`);
   if (listedNotes) parts.push("listou as notas");
   if (listedMeetings) parts.push("listou as reuniões");
+  if (projects.size) parts.push(`viu ${plural(projects.size, "projeto", "projetos")}`);
+  if (listedProjects) parts.push("listou os projetos");
   if (!parts.length) return "Não leu nenhuma nota.";
   const text = parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} e ${parts.at(-1)}`;
   return text[0]!.toUpperCase() + text.slice(1) + ".";

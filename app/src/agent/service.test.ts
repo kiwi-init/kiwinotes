@@ -13,7 +13,7 @@ import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService, AgentServiceError } from "./service.ts";
-import type { VaultReader } from "./tools/reader.ts";
+import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import { AgentActivity } from "./activity.ts";
 import type { UndoNotes } from "./undo.ts";
@@ -460,6 +460,8 @@ function memoryReader(notes: Record<string, string>): VaultReader {
       return { ...meta(p), content: notes[p]! };
     },
     meetings: async () => [],
+    projects: EMPTY_READER.projects,
+    projectStatus: EMPTY_READER.projectStatus,
   };
 }
 
@@ -474,7 +476,7 @@ describe("as ferramentas do Kiwi (spec #7496)", () => {
     const m = make({ reader: memoryReader(NOTES) });
     await readyNow(m);
     const turn = await askAndWait(m, "/ferramentas");
-    expect(turn.at(-1)).toMatchObject({ type: "done", text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get" });
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status" });
     const params = opened(m)[0]!.params as { mcpServers: KiwiServer[]; _meta: { claudeCode: { options: Record<string, unknown> } } };
     expect(params.mcpServers).toHaveLength(1);
     expect(params.mcpServers[0]).toMatchObject({ type: "http", name: "kiwi" });
@@ -637,7 +639,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, notes_create, notes_append, notes_write",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
@@ -710,10 +712,10 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await expect(m.svc.undo("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   });
 
-  test("sem o escritor, só as seis de leitura", async () => {
+  test("sem o escritor, só as oito de leitura", async () => {
     const m = make({ reader: memoryReader(NOTES) });
     await readyNow(m);
-    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get" });
+    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status" });
     expect((await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"x"}')).at(-1)).toMatchObject({ text: expect.stringContaining("não tem a ferramenta") });
   });
 

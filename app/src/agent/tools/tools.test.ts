@@ -63,6 +63,13 @@ async function setup(extra: Record<string, string> = {}) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     writeFileSync(path.join(root, rel), content);
   }
+  // Um projeto marcado (spec #9874), como o `projects.mark` grava: a pasta, a nota principal e o inode dela.
+  if (files["Projetos/Kiwi.md"] !== undefined) {
+    const main = "Projetos/Kiwi.md";
+    mkdirSync(path.join(root, ".kiwi"), { recursive: true });
+    const projects = [{ folder: "Projetos", main, mainIno: statSync(path.join(root, main)).ino }];
+    writeFileSync(path.join(root, ".kiwi/projects.json"), `${JSON.stringify({ version: 1, projects }, null, 2)}\n`);
+  }
   // Um segredo fora do cofre, e um link simbólico de dentro para ele.
   writeFileSync(path.join(base, "fora.md"), "SEGREDO DE FORA");
   symlinkSync(path.join(base, "fora.md"), path.join(root, "Atalho.md"));
@@ -153,7 +160,7 @@ describe("o servidor MCP do Kiwi", () => {
     expect((await fetch(config.url.replace("/mcp", "/outra"), { method: "POST", headers: h })).status).toBe(404);
   });
 
-  test("o initialize combina a versão do MCP, e o tools/list traz as seis, só de leitura", async () => {
+  test("o initialize combina a versão do MCP, e o tools/list traz as oito, só de leitura", async () => {
     const { config } = await setup();
     const init = (await (await rpc(config, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } })).json()) as any;
     expect(init.result.protocolVersion).toBe("2025-06-18");
@@ -166,16 +173,16 @@ describe("o servidor MCP do Kiwi", () => {
     expect(note.status).toBe(202);
     const list = (await (await rpc(config, "tools/list")).json()) as any;
     const names = list.result.tools.map((t: { name: string }) => t.name);
-    expect(names).toEqual(["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get"]);
+    expect(names).toEqual(["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get", "projects_list", "project_status"]);
     for (const t of list.result.tools) {
       expect(t.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/); // o que a API do Claude aceita
       expect(t.annotations.readOnlyHint).toBe(true);
       expect(t.annotations.openWorldHint).toBe(false);
       expect(t.inputSchema.type).toBe("object");
     }
-    // Sem o escritor, só as seis de leitura; as três de escrita (spec #8356) existem, mas não aparecem.
-    expect(kiwiTools(false)).toHaveLength(6);
-    expect(KIWI_TOOLS).toHaveLength(9);
+    // Sem o escritor, só as oito de leitura; as três de escrita (spec #8356) existem, mas não aparecem.
+    expect(kiwiTools(false)).toHaveLength(8);
+    expect(KIWI_TOOLS).toHaveLength(11);
   });
 
   test("uma ferramenta que não existe é recusada, e um método desconhecido também", async () => {
@@ -310,6 +317,69 @@ describe("as ferramentas", () => {
   });
 });
 
+describe("os projetos (spec #9874)", () => {
+  const projects = (root: string, list: { folder: string; main: string | null }[]) => {
+    mkdirSync(path.join(root, ".kiwi"), { recursive: true });
+    writeFileSync(path.join(root, ".kiwi/projects.json"), JSON.stringify({ version: 1, projects: list }));
+  };
+
+  test("projects_list devolve os projetos, e o project_status acha pelo nome ou pela pasta, só contando", async () => {
+    const { config, calls } = await setup({ "Projetos/Tarefas.md": "- [ ] a\n- [x] b\n\n```\n- [ ] código\n```\n" });
+    const list = await tool(config, "projects_list");
+    expect(list.value).toEqual({
+      projetos: [{ nome: "Projetos", pasta: "Projetos", notaPrincipal: "Projetos/Kiwi.md", mudou: expect.any(String), notas: 3 }],
+      total: 1,
+    });
+    for (const projeto of ["Projetos", "projetos", "/Projetos/"]) {
+      const s = await tool(config, "project_status", { projeto });
+      expect(s.value).toMatchObject({
+        projeto: "Projetos",
+        pasta: "Projetos",
+        notaPrincipal: "Projetos/Kiwi.md",
+        notas: 3,
+        sumario: [
+          { nivel: 1, titulo: "Kiwi" },
+          { nivel: 2, titulo: "Prazo" },
+          { nivel: 2, titulo: "Equipe" },
+        ],
+        tarefasAbertas: { total: 1, notas: 1, porNota: [{ path: "Projetos/Tarefas.md", abertas: 1 }] },
+      });
+      expect(s.value.recentes).toHaveLength(3);
+      // Só contado: nada do texto das notas vai junto.
+      expect(JSON.stringify(s.value)).not.toContain("março");
+      expect(s.value.aviso).toBeUndefined();
+    }
+    expect(calls.filter((c) => c.tool === "project_status").map((c) => c.target)).toEqual(["Projetos", "Projetos", "Projetos"]);
+  });
+
+  test("o projeto sem nota principal avisa; o nome repetido pede a pasta; o que não é projeto é E_NOT_FOUND", async () => {
+    const { config, root } = await setup({ "A/Kiwi/x.md": "", "B/Kiwi/y.md": "", "Solto/z.md": "" });
+    projects(root, [
+      { folder: "A/Kiwi", main: null },
+      { folder: "B/Kiwi", main: "B/Kiwi/y.md" },
+    ]);
+    const list = await tool(config, "projects_list");
+    expect(list.value.projetos[0]).toMatchObject({ pasta: "A/Kiwi", notaPrincipal: null, aviso: expect.stringContaining("apagada") });
+    expect((await tool(config, "project_status", { projeto: "Kiwi" })).error).toMatch(/E_AMBIGUOUS.*A\/Kiwi, B\/Kiwi/);
+    const a = await tool(config, "project_status", { projeto: "A/Kiwi" });
+    expect(a.value).toMatchObject({ pasta: "A/Kiwi", notaPrincipal: null, sumario: [], aviso: expect.stringContaining("apagada") });
+    expect((await tool(config, "project_status", { projeto: "Solto" })).error).toContain("E_NOT_FOUND");
+    expect((await tool(config, "project_status", {})).error).toContain("E_BAD_ARGS");
+    expect((await tool(config, "project_status", { projeto: "B/Kiwi", folder: "x" })).error).toContain("E_BAD_ARGS");
+  });
+
+  test("o agente não marca nem desmarca: não há ferramenta para isso", async () => {
+    const { config } = await setup();
+    for (const name of ["projects_mark", "projects_unmark", "projects_setMain"]) {
+      const bad = (await (await rpc(config, "tools/call", { name, arguments: { folder: "Projetos" } })).json()) as any;
+      expect(bad.error.code).toBe(-32602);
+    }
+    expect(READER_CAPABILITIES).not.toContain("projects.mark");
+    expect(READER_CAPABILITIES).not.toContain("projects.unmark");
+    expect(READER_CAPABILITIES).not.toContain("projects.setMain");
+  });
+});
+
 describe("a fronteira do cofre: nada escreve, nada sai", () => {
   test("caminho com .., absoluto ou por link simbólico para fora é recusado", async () => {
     const { config, base } = await setup();
@@ -337,12 +407,14 @@ describe("a fronteira do cofre: nada escreve, nada sai", () => {
     await tool(config, "notes_list", { folder: "Projetos" });
     await tool(config, "meetings_list", {});
     await tool(config, "meetings_get", { path: "Reuniões/Orçamento.md" });
+    expect((await tool(config, "projects_list", {})).value.total).toBe(1);
+    expect((await tool(config, "project_status", { projeto: "Projetos" })).value.pasta).toBe("Projetos");
     await Bun.sleep(50);
     expect(snapshot(root)).toEqual(before);
     expect([...called].sort()).toEqual([...READER_CAPABILITIES].sort());
   });
 
-  test("o leitor só conhece as quatro capacidades de leitura", () => {
+  test("o leitor só conhece as seis capacidades de leitura", () => {
     const reader: VaultReader = readerFromCapabilities(
       new Proxy({} as never, {
         get: (_t, cap: string) => {
@@ -351,6 +423,6 @@ describe("a fronteira do cofre: nada escreve, nada sai", () => {
         },
       }),
     );
-    expect(Object.keys(reader).sort()).toEqual(["get", "list", "meetings", "search"]);
+    expect(Object.keys(reader).sort()).toEqual(["get", "list", "meetings", "projectStatus", "projects", "search"]);
   });
 });

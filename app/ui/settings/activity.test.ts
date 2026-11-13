@@ -35,7 +35,15 @@ describe("a seção Atividade do agente: os textos", () => {
         { at: t, tool: "meetings_get", target: "Reuniões/2026-11-12.md" },
         { at: t, tool: "notes_list" },
       ]),
-    ).toBe("Leu 2 notas, leu 1 reunião, procurou 2 vezes e listou as notas.");
+    ).toBe("Leu 2 notas, leu 1 reunião, procurou 2 vezes e listou as notas.");    // Os projetos (spec #9874): os vistos, sem repetir, e a lista.
+    expect(
+      readsLine([
+        { at: t, tool: "projects_list", target: "os projetos" },
+        { at: t, tool: "project_status", target: "Kiwi" },
+        { at: t, tool: "project_status", target: "Kiwi" },
+        { at: t, tool: "project_status", target: "Acme" },
+      ]),
+    ).toBe("Viu 2 projetos e listou os projetos.");
   });
 
   test("cada mudança: o verbo, a nota sem o .md e a seção", () => {
