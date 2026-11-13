@@ -530,7 +530,7 @@ export interface UiCapabilities {
   "agent.usage": { args: Record<string, never>; result: AgentUsageView };
   /** "Atualizar" (1.54.0): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica. */
   "agent.usageRefresh": { args: Record<string, never>; result: AgentUsageView };
-  /** "Apagar o gasto guardado" (1.54.0): só o gasto, o registro do agente fica. */
+  /** "Apagar o gasto guardado" (1.54.0): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
   "agent.usageClear": { args: Record<string, never>; result: AgentUsageView };
 }
 

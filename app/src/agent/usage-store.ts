@@ -73,7 +73,11 @@ export class UsageStore {
     try {
       const raw = JSON.parse(readFileSync(this.file, "utf8")) as Partial<UsageFile>;
       if (raw.version !== 1 || !Array.isArray(raw.entries)) throw new Error("bad");
-      return { ...raw, version: 1, entries: raw.entries.filter((e) => e && typeof e.at === "number") } as UsageFile;
+      const f = { ...raw, version: 1, entries: raw.entries.filter((e) => e && typeof e.at === "number") } as UsageFile;
+      // Os 8 dias valem no disco também, mesmo sem pedido novo: o que passou deles sai na hora em que o arquivo é lido.
+      const now = this.now();
+      if (f.entries.length !== raw.entries.length || f.entries.some((e) => now - e.at >= USAGE_KEEP_MS)) this.save(f);
+      return f;
     } catch {
       // Um arquivo estragado vai para o lado; o medidor começa de novo, sem quebrar o pedido.
       try {
@@ -150,8 +154,13 @@ export class UsageStore {
     return { fiveHours: sum(five), week: sum(week), top, limit: f.limit ?? null, out };
   }
 
-  /** Apaga o gasto guardado. */
+  /**
+   * Apaga o gasto guardado: só os pedidos. O estado do limite (o limite acabado, a hora de volta e o aviso já dado
+   * nesta janela) fica, porque o limite continua o mesmo.
+   */
   clear(): void {
-    this.save({ ...EMPTY, entries: [] });
+    const f = this.load();
+    f.entries = [];
+    this.save(f);
   }
 }

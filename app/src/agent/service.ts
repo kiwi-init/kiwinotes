@@ -573,7 +573,7 @@ export class AgentService {
     return this.usageView();
   }
 
-  /** "Apagar o gasto guardado" (`agent.usageClear`): só o gasto; o registro do agente fica. */
+  /** "Apagar o gasto guardado" (`agent.usageClear`): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
   usageClear(): AgentUsageView {
     this.usage.clear();
     this.subscription = null;

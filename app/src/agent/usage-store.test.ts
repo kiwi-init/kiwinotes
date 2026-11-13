@@ -46,7 +46,31 @@ describe("o gasto guardado", () => {
     store.record("novo", "um pedido novo", u(10));
     expect(store.summary().top.map((t) => t.request)).toEqual(["novo"]);
     store.clear();
-    expect(store.summary()).toMatchObject({ week: { requests: 0 }, top: [], limit: null, out: null });
+    expect(store.summary()).toMatchObject({ week: { requests: 0 }, top: [] });
+  });
+
+  test("os 8 dias valem no disco: ler o medidor, sem pedido novo, já tira o que passou deles", () => {
+    const { dir, clock, store } = make();
+    store.record("velho", "um pedido de 9 dias atrás", u(100));
+    clock.now += 9 * 86_400_000;
+    expect(store.summary().week.requests).toBe(0);
+    expect(readFileSync(path.join(dir, "usage.json"), "utf8")).not.toContain("velho");
+  });
+
+  test("apagar o gasto leva só os pedidos: o limite acabado, a hora de volta e o aviso da janela ficam", () => {
+    const { clock, store } = make();
+    const resetsAt = clock.now + 3 * H;
+    expect(store.noteLimit({ status: "allowed_warning", window: "five_hour", percent: 85, resetsAt })).toBe(true);
+    store.record("p", "um pedido", u(10));
+    store.noteLimit({ status: "rejected", resetsAt });
+    store.clear();
+    const s = store.summary();
+    expect(s.week.requests).toBe(0);
+    expect(s.top).toEqual([]);
+    expect(s.out).toEqual({ at: clock.now, resetsAt });
+    expect(s.limit).toMatchObject({ status: "rejected" });
+    // O aviso já dado nesta janela não volta.
+    expect(store.noteLimit({ status: "allowed_warning", window: "five_hour", percent: 90, resetsAt })).toBe(false);
   });
 
   test("o aviso do agente (allowed_warning) aparece uma vez por janela", () => {

@@ -77,7 +77,7 @@ export function UsageMeter() {
         </div>
       ) : null}
       <Row label="Apagar o gasto guardado" hint="O gasto fica guardado só no Mac, por 8 dias. O registro do agente não muda.">
-        <Button onClick={() => void api.agent.usageClear().then(setView, () => {})} disabled={!view.week.requests && !view.limit && !view.out}>
+        <Button onClick={() => void api.agent.usageClear().then(setView, () => {})} disabled={!view.week.requests}>
           Apagar
         </Button>
       </Row>
