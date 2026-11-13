@@ -1118,6 +1118,28 @@ export function uiCapabilities(deps: CapabilityDeps,
         throw bad("agent.undo: change must be an integer from 1");
       return agentCall((agent) => agent.undo(a.request as string, a.change as number | undefined));
     },
+    // A pergunta na dúvida (spec #9873): o cartão, a resposta, a lista do que já foi respondido e o esquecer.
+    "agent.question": (args) => {
+      noArgs(args, "agent.question");
+      return agentCall(async (agent) => agent.question());
+    },
+    "agent.answer": (args) => {
+      const a = fields(args, "agent.answer", ["card", "request", "fingerprint", "answer", "all"]);
+      for (const k of ["card", "request", "fingerprint"] as const)
+        if (a[k] !== undefined && (typeof a[k] !== "string" || !a[k])) throw bad(`agent.answer: ${k} must be a string`);
+      if (a.answer !== undefined && a.answer !== "send" && a.answer !== "hold") throw bad('agent.answer: answer must be "send" or "hold"');
+      if (a.all !== undefined && a.all !== "hold") throw bad('agent.answer: all must be "hold"');
+      return agentCall((agent) => agent.answerDoubt(a as Parameters<typeof agent.answerDoubt>[0]));
+    },
+    "agent.answers": (args) => {
+      noArgs(args, "agent.answers");
+      return agentCall(async (agent) => ({ answers: agent.answersList() }));
+    },
+    "agent.forget": (args) => {
+      const a = fields(args, "agent.forget", ["fingerprint"]);
+      if (typeof a.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(a.fingerprint)) throw bad("agent.forget: fingerprint must be a fingerprint");
+      return agentCall(async (agent) => agent.forgetAnswer(a.fingerprint as string));
+    },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);
       if (typeof a.request !== "string" || !a.request) throw bad("agent.change: request must be the id of a request");

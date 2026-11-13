@@ -139,6 +139,12 @@ export const api = {
     change: (request: string, change: number) => invoke("agent.change", { request, change }),
     undo: (request: string, change?: number) => invoke("agent.undo", change ? { request, change } : { request }),
     onActivity: (fn: (e: UiEvents["agent.activityChanged"]) => void) => on("agent.activityChanged", fn),
+    /** A pergunta na dúvida (1.50.0, spec #9873). */
+    question: () => invoke("agent.question", {}),
+    answer: (a: UiCapabilities["agent.answer"]["args"]) => invoke("agent.answer", a),
+    answers: () => invoke("agent.answers", {}),
+    forget: (fingerprint: string) => invoke("agent.forget", { fingerprint }),
+    onQuestion: (fn: (e: UiEvents["agent.questionChanged"]) => void) => on("agent.questionChanged", fn),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {

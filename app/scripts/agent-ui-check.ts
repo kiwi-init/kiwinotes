@@ -25,6 +25,9 @@
 // - o filtro do guardrail (spec #9818), em Ajustes › Agente: uma nota com um token e uma senha inventados; o agente
 //   falso lê (e recebe os marcadores), troca a seção da senha sem o marcador, e um pedido chega com um token colado. A
 //   Atividade diz quantos segredos o Kiwi segurou e onde, e avisa a escrita que tirou um segredo (`guardrail`).
+// - a pergunta na dúvida (spec #9873), na janela principal: o cartão com o trecho, "Pode mandar", um cartão com duas
+//   dúvidas e "É tudo segredo" (no escuro), uma dúvida sem resposta no prazo, que vai para a Atividade, a resposta
+//   depois e a lista "O que você já respondeu" (`duvida`).
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -408,6 +411,77 @@ async function guardrailReady(data: string, env: Record<string, string>): Promis
   writeFileSync(guardrailFile, JSON.stringify({ window: "hub", size: "900x1600", steps }, null, 2));
 }
 
+/** O roteiro da pergunta na dúvida (spec #9873): sai do `doubtReady`. */
+const doubtFile = path.join(work, "hub-duvida.json");
+// Sequências longas e aleatórias, sem nada em volta: o detector fica em dúvida.
+const DOUBT_A = "Qx7Lm2Vb9Rt4Wz8Np3Kd6Hs1Fg5Jc0Ya";
+const DOUBT_B = "Zk4Pw8Rn2Tb6Ym1Vc5Xs9Lq3Hd7Gf0Ja";
+const DOUBT_C = "Mv3Qs7Tx1Wb5Yn9Rc2Kp6Lh0Jd4Fg8Ze";
+const DOUBT_D = "Nb6Hk2Sw9Pq4Xm7Ty1Vr5Lc3Jd8Fg0Za";
+
+async function doubtReady(data: string, env: Record<string, string>): Promise<void> {
+  await agentReady(data, env);
+  const invoke = async (cap: string, args: unknown) => {
+    const r = await cli(["invoke", cap, JSON.stringify(args), "--data", data], env);
+    if (r.code !== 0) throw new Error(`${cap}: ${r.out}`);
+    return JSON.parse(r.out) as { value: any };
+  };
+  await invoke("notes.create", { title: "Servidores", content: `# Servidores\n\nO id do PACS novo: ${DOUBT_A}\n` });
+  await invoke("notes.create", { title: "Chaves", content: `# Chaves\n\nprimeira ${DOUBT_B}\nsegunda ${DOUBT_C}\n` });
+  await invoke("notes.create", { title: "Rascunho", content: `# Rascunho\n\numa coisa ${DOUBT_D}\n` });
+  const tool = (name: string, args: unknown) => `/tool ${name} ${JSON.stringify(args)}`;
+  const card = ".kn-doubt";
+  const activity = ".kn-section:has(h2:text-is('Atividade do agente'))";
+  const answers = ".kn-section:has(h2:text-is('O que você já respondeu'))";
+  const steps = [
+    { waitFor: ".kn-tab", name: "o hub abre" },
+    { invoke: "agent.ask", args: { text: `Qual é o id do PACS novo?\n${tool("notes_read", { path: "Servidores.md" })}` }, name: "um pedido que lê uma nota com um trecho em dúvida" },
+    { waitFor: card, timeout: 20000, name: "o cartão abre e o pedido espera" },
+    { expectText: card, text: DOUBT_A, name: "com o trecho" },
+    { expectText: card, text: "em Servidores, linha 3", name: "e de onde ele vem" },
+    // Os dois botões com o mesmo peso, e nenhum com o foco: um Enter não manda nada (#10168).
+    { expectCount: `${card} .kn-button[data-variant='primary']`, count: 0, name: "nenhum botão principal" },
+    { press: "Enter", name: "um Enter apressado" },
+    { wait: 500 },
+    { expectCount: `${card} .kn-doubt-item:not([data-answer])`, count: 1, name: "não respondeu nada" },
+    { screenshot: "1-cartao.png", selector: card },
+    { click: `${card} button:has-text('Pode mandar')`, name: "Pode mandar" },
+    { waitFor: card, state: "detached", name: "o cartão fecha, e o pedido segue" },
+    {
+      invoke: "settings.set",
+      args: { appearance: { mode: "dark", darkTheme: "channels-oled", lightTheme: "channels-light", textSize: "default", font: "system", motion: "full" } },
+      name: "o escuro",
+    },
+    { wait: 1500 },
+    { invoke: "agent.ask", args: { text: `Leia as chaves\n${tool("notes_read", { path: "Chaves.md" })}` }, name: "um pedido com duas dúvidas na mesma leitura" },
+    { waitFor: card, timeout: 20000, name: "um cartão só" },
+    { expectCount: `${card} .kn-doubt-item`, count: 2, name: "com as duas" },
+    { screenshot: "2-duas-no-escuro.png", selector: card },
+    { click: `${card} button:has-text('É tudo segredo')`, name: "É tudo segredo" },
+    { waitFor: card, state: "detached", name: "o cartão fecha" },
+    { wait: 1500 },
+    { invoke: "agent.ask", args: { text: `Leia o rascunho\n${tool("notes_read", { path: "Rascunho.md" })}` }, name: "uma dúvida que ninguém responde" },
+    { waitFor: card, timeout: 20000, name: "o cartão abre" },
+    { waitFor: card, state: "detached", timeout: 20000, name: "o prazo passa, o Kiwi segura e o pedido segue" },
+    {
+      invoke: "settings.set",
+      args: { appearance: { mode: "light", darkTheme: "channels-oled", lightTheme: "channels-light", textSize: "default", font: "system", motion: "full" } },
+      name: "o claro",
+    },
+    { click: ".kn-tab:has-text('Configurações')" },
+    { waitFor: `${activity} .kn-activity-doubt`, timeout: 10000, name: "a dúvida aparece na Atividade, para responder depois" },
+    { expectText: `${activity} .kn-activity-doubt`, text: "em Rascunho, linha 3", name: "com a nota e a máscara, sem o trecho" },
+    { screenshot: "3-atividade.png", selector: `${activity} .kn-activity-req:has(.kn-activity-doubt)` },
+    { click: `${activity} .kn-activity-doubt button:has-text('É segredo')`, name: "responde depois: é segredo" },
+    { expectText: `${activity} .kn-activity-doubt`, text: "Você disse que é segredo.", name: "a resposta fica" },
+    { expectCount: `${answers} .kn-row`, count: 4, name: "a lista tem as quatro respostas" },
+    { screenshot: "4-respostas.png", selector: answers },
+    { click: `${answers} .kn-row:first-child button:has-text('Desfazer')`, name: "desfaz uma resposta" },
+    { expectCount: `${answers} .kn-row`, count: 3, name: "ela sai da lista" },
+  ];
+  writeFileSync(doubtFile, JSON.stringify({ window: "hub", size: "1000x1600", steps }, null, 2));
+}
+
 let ok = true;
 try {
   ok = (await scenario("fluxo", "ajustes-agente.json", {})) && ok;
@@ -422,6 +496,7 @@ try {
   ok = (await scenario("atividade-vazia", emptyActivityScript(), {}, { prefix: "atividade-" })) && ok;
   ok = (await scenario("atividade-prazo", expiringScript(), {}, { before: expiringReady, prefix: "atividade-" })) && ok;
   ok = (await scenario("guardrail", guardrailFile, {}, { before: guardrailReady, prefix: "guardrail-" })) && ok;
+  ok = (await scenario("duvida", doubtFile, { KIWI_DOUBT_TIMEOUT_MS: "4000" }, { before: doubtReady, prefix: "duvida-" })) && ok;
 } finally {
   reg.stop();
   rmSync(work, { recursive: true, force: true });

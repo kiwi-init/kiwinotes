@@ -142,6 +142,15 @@ bun run cli invoke agent.ask '{"text":"/tool notes_read {\"path\":\"Acessos.md\"
 KIWI_AGENT_UI_ONLY=guardrail bun scripts/agent-ui-check.ts                                               # a Atividade diz o que o Kiwi segurou
 ```
 
+**A pergunta na dúvida (T10122, spec #9873)**: o trecho em dúvida é perguntado à pessoa num cartão da janela principal, e a resposta fica lembrada por uma impressão digital com chave. Pela capacidade e num WebKit headless (o prazo menor, `KIWI_DOUBT_TIMEOUT_MS`, só vale com o agente falso):
+
+```sh
+bun run cli invoke agent.question '{}' --data /tmp/kn-test                                       # o cartão aberto, com os trechos
+bun run cli invoke agent.answer '{"card":"<id>","fingerprint":"<fp>","answer":"send"}' --data /tmp/kn-test
+bun run cli invoke agent.answers '{}' --data /tmp/kn-test                                        # o que já foi respondido, com a máscara
+KIWI_AGENT_UI_ONLY=duvida bun scripts/agent-ui-check.ts                                          # o cartão, a Atividade e a lista
+```
+
 **A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
 - o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
 - os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;

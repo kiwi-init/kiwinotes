@@ -24,7 +24,9 @@ import path from "node:path";
 import { AgentError, type AgentErrorCode } from "./errors.ts";
 import type { AgentHost, AgentHostOptions } from "./host.ts";
 import { KIWI_TOOL_PREFIX, KiwiToolServer, type ToolCallEvent } from "./tools/server.ts";
-import { SecretGuard } from "../guardrail/filter.ts";
+import { SecretGuard, type DoubtDecider } from "../guardrail/filter.ts";
+import { DoubtAnswers, type DoubtAnswer, type StoredAnswer } from "../guardrail/answers.ts";
+import { DoubtQuestions, type DoubtCardView } from "../guardrail/questions.ts";
 import type { VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import type { WriteJournal } from "./tools/tools.ts";
@@ -39,6 +41,12 @@ import { adapterRoot, agentDir } from "./adapter/open.ts";
 import type { AgentChangeView, AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult } from "../shared/ui-contract.ts";
 import type { AgentSettings } from "../store/settings.ts";
 
+/** O prazo da dúvida nos roteiros do WebKit (`KIWI_DOUBT_TIMEOUT_MS`), só com o agente falso (`KIWI_FAKE_AGENT=1`). */
+function testDoubtTimeout(): number | undefined {
+  const ms = Number(process.env.KIWI_DOUBT_TIMEOUT_MS);
+  return process.env.KIWI_FAKE_AGENT === "1" && Number.isInteger(ms) && ms > 0 ? ms : undefined;
+}
+
 /** O teto sem uso: depois disso, o programa do agente fecha (a sessão fica guardada e volta no próximo pedido). */
 export const AGENT_IDLE_MS = 10 * 60_000;
 /** O pedido mais longo que o app manda. */
@@ -51,6 +59,8 @@ export interface AgentServiceDeps {
   data: string;
   /** O nome que a pessoa vê. */
   name?: string;
+  /** O prazo da pergunta na dúvida (spec #9873); 2 minutos, e menos nos testes. */
+  doubtTimeoutMs?: number;
   settings: {
     load(): Promise<AgentSettings>;
     save(patch: Partial<AgentSettings>): Promise<AgentSettings>;
@@ -130,6 +140,11 @@ export class AgentService {
   private writer: VaultWriter | null;
   /** O registro do agente (spec #8356): o que cada pedido leu e mudou, e a cópia de antes de cada mudança. */
   private readonly activity: AgentActivity;
+  /** O que a pessoa já respondeu na dúvida (spec #9873), por impressão digital com chave. */
+  private readonly answers: DoubtAnswers;
+  /** O cartão da pergunta na dúvida, por pedido (spec #9873). */
+  private readonly questions: DoubtQuestions;
+  private readonly questionListeners = new Set<(e: { card: string; request: string; open: boolean }) => void>();
   /** O último pedido: uma ferramenta que chega sem pedido em andamento entra nele. */
   private lastTurn: string | null = null;
   /** O servidor de ferramentas do programa aberto (ou abrindo): fecha junto com ele. */
@@ -150,6 +165,15 @@ export class AgentService {
     this.reader = d.reader ?? null;
     this.writer = d.writer ?? null;
     this.activity = new AgentActivity({ dir: path.join(agentDir(d.data), "activity") });
+    this.answers = new DoubtAnswers(agentDir(d.data));
+    this.questions = new DoubtQuestions({
+      answers: this.answers,
+      // O prazo menor só nos testes: no app de verdade, sempre os 2 minutos.
+      ...(d.doubtTimeoutMs ? { timeoutMs: d.doubtTimeoutMs } : testDoubtTimeout() ? { timeoutMs: testDoubtTimeout() } : {}),
+      onChange: (e) => this.onQuestion(e),
+      onPending: (request, items) =>
+        void this.activity.doubts(request, items).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`)),
+    });
   }
 
   /**
@@ -211,6 +235,71 @@ export class AgentService {
   /** Avisa a cada mudança no registro (`agent.activityChanged`, spec #9480), com o id do pedido. */
   onActivity(fn: (request: string) => void): () => void {
     return this.activity.onChanged(fn);
+  }
+
+  /** Quem decide a dúvida agora: o pedido em andamento, com as respostas guardadas e o cartão (spec #9873). */
+  private decider(): DoubtDecider | undefined {
+    const turn = this.turn;
+    return turn && !turn.cancelled ? { answers: this.answers, questions: this.questions, request: turn.id } : undefined;
+  }
+
+  /** O cartão abriu, mudou ou fechou: avisa a tela (só os ids) e diz no status que o pedido espera a pessoa. */
+  private onQuestion(e: { card: string; request: string; open: boolean }): void {
+    for (const fn of this.questionListeners) {
+      try {
+        fn(e);
+      } catch {
+        // quem escuta cuida dos próprios erros
+      }
+    }
+    const turn = this.turn;
+    if (!turn || turn.id !== e.request || turn.cancelled) return;
+    const card = e.open ? this.questions.current() : null;
+    const open = card?.items.find((i) => !i.answer);
+    if (open) this.emitTurn({ id: turn.id, type: "status", status: "waiting", ...(open.path ? { target: open.path } : {}) });
+    else if (!e.open) this.emitTurn({ id: turn.id, type: "status", status: "thinking" });
+  }
+
+  /** Avisa a cada mudança no cartão da dúvida (`agent.questionChanged`): só os ids, nunca o trecho. */
+  onQuestionChanged(fn: (e: { card: string; request: string; open: boolean }) => void): () => void {
+    this.questionListeners.add(fn);
+    return () => this.questionListeners.delete(fn);
+  }
+
+  /** O cartão aberto, com os trechos, para a tela (`agent.question`); null sem cartão. */
+  question(): DoubtCardView | null {
+    return this.questions.current();
+  }
+
+  /**
+   * A resposta da pessoa (`agent.answer`): a um trecho do cartão aberto, a todos ("É tudo segredo"), ou, depois, a uma
+   * dúvida pendente de um pedido na Atividade (por `request` e impressão digital).
+   */
+  async answerDoubt(a: { card?: string; request?: string; fingerprint?: string; answer?: DoubtAnswer; all?: "hold" }): Promise<true> {
+    if (a.card && a.all === "hold") {
+      if (!this.questions.holdAll(a.card)) throw new AgentServiceError("E_NOT_FOUND", "Esse cartão já fechou.");
+      return true;
+    }
+    if (!a.fingerprint || !a.answer) throw new AgentServiceError("E_BAD_ARGS", "agent.answer: falta a impressão digital ou a resposta");
+    if (a.card) {
+      if (!this.questions.answer(a.card, a.fingerprint, a.answer)) throw new AgentServiceError("E_NOT_FOUND", "Esse cartão já fechou.");
+      return true;
+    }
+    if (!a.request) throw new AgentServiceError("E_BAD_ARGS", "agent.answer: falta o cartão ou o pedido");
+    const d = await this.activity.answerDoubt(a.request, a.fingerprint, a.answer);
+    if (!d) throw new AgentServiceError("E_NOT_FOUND", "Essa dúvida não está no registro.");
+    this.answers.set(a.fingerprint, a.answer, d.mask, d.kind);
+    return true;
+  }
+
+  /** O que a pessoa já respondeu (`agent.answers`), com a máscara, nunca o trecho. */
+  answersList(): StoredAnswer[] {
+    return this.answers.list();
+  }
+
+  /** Esquece uma resposta (`agent.forget`): o trecho volta a ser perguntado. */
+  forgetAnswer(fingerprint: string): boolean {
+    return this.answers.forget(fingerprint);
   }
 
   /** Os pedidos do registro, do mais novo para o mais velho (`agent.activity`). */
@@ -365,6 +454,7 @@ export class AgentService {
   async disable(): Promise<AgentStatus> {
     await this.d.settings.save({ enabled: false });
     this.download?.abort.abort();
+    this.questions.closeAll();
     await this.stopProgram("desligado");
     this.guard = new SecretGuard();
     this.emitStatus();
@@ -426,13 +516,14 @@ export class AgentService {
     const turn = { id: crypto.randomUUID(), cancelled: false };
     this.turn = turn;
     this.lastTurn = turn.id;
-    // O pedido sai pelo filtro (spec #9818): um segredo colado nele não vai ao agente nem ao registro.
+    // O pedido sai pelo filtro (spec #9818): um segredo colado nele não vai ao agente nem ao registro. O registro
+    // começa com a dúvida segurada; ela é decidida no `runTurn` (spec #9873), que grava o pedido como foi.
     const filtered = this.guard.request(text);
     void this.activity.begin(turn.id, filtered.text, filtered.held).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
     this.clearIdle();
     this.emitTurn({ id: turn.id, type: "started" });
     this.emitStatus();
-    void this.runTurn(turn, filtered.text, s);
+    void this.runTurn(turn, text, s);
     return { id: turn.id };
   }
 
@@ -448,6 +539,14 @@ export class AgentService {
         this.applied = { ...wanted };
         this.rememberModels(host);
       }
+      if (turn.cancelled) {
+        this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: "" });
+        return;
+      }
+      // A dúvida do texto do pedido é perguntada antes de ele ir ao agente (spec #9873).
+      const decided = await this.guard.decide("", text, this.decider(), true);
+      text = decided.text;
+      void this.activity.setRequest(turn.id, decided.text, decided.held).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
       if (turn.cancelled) {
         this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: "" });
         return;
@@ -489,6 +588,7 @@ export class AgentService {
             reader,
             ...(writer ? { writer, journal: this.journal } : {}),
             guard: this.guard,
+            decider: () => this.decider(),
             version: this.d.version,
             onCall: (e) => this.onToolCall(e),
           })
@@ -542,6 +642,8 @@ export class AgentService {
     this.download?.abort.abort();
     if (this.turn) {
       this.turn.cancelled = true;
+      // O cartão da dúvida fecha, e o que faltava fica como não respondido (spec #9873).
+      this.questions.cancel(this.turn.id);
       await this.host?.cancel();
     }
     return this.status();

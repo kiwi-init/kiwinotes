@@ -17,7 +17,14 @@ import { timingSafeEqual } from "node:crypto";
 import { kiwiTools, runKiwiTool, ToolError, type KiwiToolName, type ToolChange, type WriteJournal } from "./tools.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter } from "./writer.ts";
-import type { SecretGuard } from "../../guardrail/filter.ts";
+import type { DoubtDecider, SecretGuard } from "../../guardrail/filter.ts";
+
+/**
+ * Quanto uma conexão pode ficar parada (s), maior que o prazo da pergunta na dúvida (2 minutos, spec #9873). O Bun de
+ * hoje não derruba uma chamada cuja resposta ainda está sendo feita (o teste de 11,5 s passa com e sem este valor), mas
+ * o prazo fica explícito aqui, para uma versão que conte o tempo de outro jeito. O Bun aceita até 255.
+ */
+export const IDLE_TIMEOUT_S = 150;
 
 /** O nome do servidor para o agente: as ferramentas aparecem no Claude Code como `mcp__kiwi__<nome>`. */
 export const KIWI_MCP_NAME = "kiwi";
@@ -53,6 +60,8 @@ export interface KiwiToolServerOptions {
   journal?: WriteJournal;
   /** O filtro do guardrail (spec #9818): sem ele, o texto vai como está (os testes antigos). */
   guard?: SecretGuard;
+  /** Quem decide a dúvida agora (o pedido em andamento, spec #9873); sem ele, a dúvida é segurada. */
+  decider?: () => Omit<DoubtDecider, "signal"> | undefined;
   version?: string;
   onCall?: (e: ToolCallEvent) => void;
   /** Cada método MCP que chegou com a senha certa (a prova do #7496 confere o `tools/list` do Claude Code). */
@@ -88,7 +97,7 @@ export class KiwiToolServer {
   start(): KiwiMcpServerConfig {
     if (this.server) throw new Error("o servidor de ferramentas já está aberto");
     this.token = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
-    this.server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (req) => this.handle(req) });
+    this.server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: IDLE_TIMEOUT_S, fetch: (req) => this.handle(req) });
     return {
       type: "http",
       name: KIWI_MCP_NAME,
@@ -131,7 +140,7 @@ export class KiwiToolServer {
     const messages = (batch ? body : [body]) as JsonRpc[];
     const replies: unknown[] = [];
     for (const m of messages) {
-      const reply = await this.answer(m);
+      const reply = await this.answer(m, req.signal);
       if (reply) replies.push(reply);
     }
     if (!replies.length) return new Response(null, { status: 202 });
@@ -139,7 +148,7 @@ export class KiwiToolServer {
   }
 
   /** A resposta a uma mensagem JSON-RPC, ou null para uma notificação (sem `id`). */
-  private async answer(m: JsonRpc): Promise<unknown | null> {
+  private async answer(m: JsonRpc, signal?: AbortSignal): Promise<unknown | null> {
     if (!m || typeof m !== "object" || typeof m.method !== "string") {
       return m && typeof m === "object" && "id" in m ? null : { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request" } };
     }
@@ -181,7 +190,9 @@ export class KiwiToolServer {
         if (typeof name !== "string") return err(-32602, "tools/call: falta o name");
         if (!kiwiTools(this.writes).some((t) => t.name === name)) return err(-32602, `o Kiwi não tem a ferramenta ${name}`);
         try {
-          const guard = this.o.guard ? { guard: this.o.guard } : {};
+          // A dúvida espera a pessoa; se o agente desiste da chamada (`signal`), o que falta é segurado.
+          const decider = this.o.decider?.();
+          const guard = this.o.guard ? { guard: this.o.guard, ...(decider ? { decider: { ...decider, ...(signal ? { signal } : {}) } } : {}) } : {};
           const ctx = this.writes ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard } : { reader: this.o.reader, ...guard };
           const r = await runKiwiTool(ctx, name, m.params?.arguments);
           this.o.onCall?.({ tool: name, ...(r.target ? { target: r.target } : {}), ok: true, ...(r.change ? { change: r.change } : {}), ...(r.held ? { held: r.held } : {}) });

@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentChangeView, AgentUndoNote } from "../../src/shared/ui-contract.ts";
-import { changeLine, goneRequest, heldLines, hourOf, removedLine, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf } from "./activityText.ts";
+import { changeLine, doubtLine, goneRequest, heldLines, hourOf, removedLine, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf } from "./activityText.ts";
 
 /** Uma hora local, em ISO: os testes não dependem do fuso da máquina. */
 const at = (day: number, h: number, m: number) => new Date(2026, 10, day, h, m).toISOString();
@@ -117,5 +117,11 @@ describe("a seção Atividade do agente: os textos", () => {
     ).toEqual(["O Kiwi segurou 1 segredo no pedido.", "O Kiwi segurou 2 segredos em Projetos/Kiwi.", "O Kiwi segurou 3 segredos nos resultados da busca."]);
     expect(removedLine(1)).toBe("Esta mudança tirou 1 segredo da nota. O Desfazer o traz de volta, e o texto de antes está nas Versões.");
   });
-});
 
+  test("a dúvida sem resposta (spec #9873): onde e a máscara, nunca o trecho", () => {
+    expect(doubtLine({ path: "Projetos/Kiwi.md", line: 4, mask: "•••• (32 caracteres)" })).toBe(
+      "O Kiwi ficou em dúvida em Projetos/Kiwi, linha 4 (•••• (32 caracteres)) e segurou desta vez.",
+    );
+    expect(doubtLine({ path: "", line: 1, mask: "•••• (32 caracteres)" })).toContain("no seu pedido");
+  });
+});

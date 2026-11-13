@@ -12,7 +12,40 @@
 
 import { randomBytes } from "node:crypto";
 
-import { detect } from "./detector.ts";
+import { detect, mask as maskOf, type Finding } from "./detector.ts";
+import type { DoubtAnswers } from "./answers.ts";
+import type { DoubtItem, DoubtQuestions } from "./questions.ts";
+
+/** Quem decide a dúvida (spec #9873): a resposta guardada, ou a pergunta à pessoa no cartão do pedido. */
+export interface DoubtDecider {
+  answers: DoubtAnswers;
+  questions: DoubtQuestions;
+  /** O pedido em que a leitura acontece: as dúvidas dele vão para o mesmo cartão. */
+  request: string;
+  /** Abortado quando o agente desiste da chamada: o que falta é segurado. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Um pouco do texto em volta do trecho, numa linha, para a pessoa reconhecer no cartão. Os outros achados que caem ali
+ * (um segredo certo, outra dúvida) vão mascarados: no cartão só aparece, inteiro, o trecho perguntado (revisão do
+ * T10122).
+ */
+function contextOf(text: string, f: Finding, all: Finding[]): string {
+  const a = Math.max(0, f.start - 60);
+  const b = Math.min(text.length, f.end + 60);
+  let out = "";
+  let at = a;
+  for (const o of all) {
+    if (o === f || o.end <= a || o.start >= b) continue;
+    const s = Math.max(o.start, a);
+    if (s < at) continue;
+    out += text.slice(at, s) + maskOf(text, o);
+    at = Math.min(o.end, b);
+  }
+  out += text.slice(at, b);
+  return `${a > 0 ? "…" : ""}${out.replace(/\s+/g, " ")}${b < text.length ? "…" : ""}`;
+}
 
 /** O marcador exato: o número e o código da sessão. */
 export const MARKER = /‹segredo (\d{1,6}) · ([a-z0-9]{4})›/g;
@@ -66,8 +99,11 @@ export class SecretGuard {
    * O texto da nota `path` como o agente vê: cada segredo (ou dúvida) trocado pelo marcador dele. Olha o texto inteiro;
    * quem corta em pedaços corta o resultado. `held` é quantos segredos diferentes o texto tinha.
    */
-  read(path: string, text: string, keepOwn = false): { text: string; held: number } {
-    const spans: { start: number; end: number; literal: boolean }[] = detect(text).map((f) => ({ start: f.start, end: f.end, literal: false }));
+  read(path: string, text: string, keepOwn = false, send?: ReadonlySet<string>): { text: string; held: number } {
+    // `send`: os trechos em dúvida que a pessoa deixou ir como texto (spec #9873).
+    const spans: { start: number; end: number; literal: boolean }[] = detect(text)
+      .filter((f) => !(f.verdict === "doubt" && send?.has(text.slice(f.start, f.end))))
+      .map((f) => ({ start: f.start, end: f.end, literal: false }));
     for (const m of text.matchAll(MARKER)) {
       // No pedido, um marcador desta sessão é a referência que a pessoa copiou da resposta: fica como está.
       if (keepOwn && m[2] === this.code) continue;
@@ -85,6 +121,32 @@ export class SecretGuard {
       at = s.end;
     }
     return { text: out + text.slice(at), held: held.size };
+  }
+
+  /**
+   * Como o `read`, mas a dúvida é decidida antes (spec #9873): a resposta guardada vale ("Pode mandar" passa, "É
+   * segredo" segura), e o que nunca foi respondido é perguntado à pessoa, que tem até o prazo. Sem `decider`, a dúvida
+   * é segurada, como no filtro. `doubts` é quantas dúvidas foram perguntadas e ficaram seguras.
+   */
+  async decide(path: string, text: string, decider?: DoubtDecider, keepOwn = false): Promise<{ text: string; held: number }> {
+    if (!decider) return this.read(path, text, keepOwn);
+    const send = new Set<string>();
+    const ask = new Map<string, DoubtItem>();
+    const found = detect(text);
+    for (const f of found) {
+      if (f.verdict !== "doubt") continue;
+      const value = text.slice(f.start, f.end);
+      const fingerprint = decider.answers.fingerprint(value);
+      const known = decider.answers.get(fingerprint);
+      if (known === "send") send.add(value);
+      else if (known === null && !ask.has(fingerprint))
+        ask.set(fingerprint, { fingerprint, value, context: contextOf(text, f, found), mask: maskOf(text, f), kind: f.kind, path, line: f.line });
+    }
+    if (ask.size) {
+      const ok = await decider.questions.ask(decider.request, [...ask.values()], decider.signal);
+      for (const [fp, item] of ask) if (ok.has(fp)) send.add(item.value);
+    }
+    return this.read(path, text, keepOwn, send);
   }
 
   /**

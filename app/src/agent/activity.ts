@@ -47,6 +47,11 @@ export interface ActivityRequest {
   request: string;
   /** Quantos segredos o filtro segurou no texto do pedido. */
   requestHeld?: number;
+  /**
+   * As dúvidas que ficaram sem resposta neste pedido (spec #9873): só a impressão digital, a máscara, o tipo, a nota e a
+   * linha, nunca o trecho. `answered` é a resposta dada depois, na Atividade.
+   */
+  doubts?: { fingerprint: string; mask: string; kind: string; path: string; line: number; answered?: "send" | "hold" }[];
   reads: ActivityRead[];
   changes: ActivityChange[];
 }
@@ -126,6 +131,45 @@ export class AgentActivity {
       o.record.reads.push({ at: new Date(this.now()).toISOString(), tool: r.tool, ...(r.target ? { target: r.target } : {}), ...(r.held ? { held: r.held } : {}) });
       await this.save(o);
       this.changed(id);
+    });
+  }
+
+  /** O texto do pedido depois de decidida a dúvida (spec #9873): o registro guarda o pedido como foi ao agente. */
+  setRequest(id: string, request: string, held = 0): Promise<void> {
+    return this.serial(async () => {
+      const o = await this.ensure(id);
+      o.record.request = request.slice(0, ACTIVITY_REQUEST_CHARS);
+      if (held) o.record.requestHeld = held;
+      else delete o.record.requestHeld;
+      await this.save(o);
+      this.changed(id);
+    });
+  }
+
+  /** Dúvidas que ficaram sem resposta (spec #9873), sem o trecho. A mesma impressão digital não se repete no pedido. */
+  doubts(id: string, items: { fingerprint: string; mask: string; kind: string; path: string; line: number }[]): Promise<void> {
+    return this.serial(async () => {
+      const o = await this.ensure(id);
+      const list = (o.record.doubts ??= []);
+      for (const i of items) {
+        if (list.some((d) => d.fingerprint === i.fingerprint)) continue;
+        list.push({ fingerprint: i.fingerprint, mask: i.mask, kind: i.kind, path: i.path, line: i.line });
+      }
+      await this.save(o);
+      this.changed(id);
+    });
+  }
+
+  /** A pessoa respondeu depois, na Atividade, uma dúvida do pedido. */
+  answerDoubt(id: string, fingerprint: string, answer: "send" | "hold"): Promise<{ mask: string; kind: string } | null> {
+    return this.serial(async () => {
+      const o = await this.lookup(id);
+      const d = o?.record.doubts?.find((x) => x.fingerprint === fingerprint);
+      if (!o || !d) return null;
+      d.answered = answer;
+      await this.save(o);
+      this.changed(id);
+      return { mask: d.mask, kind: d.kind };
     });
   }
 
