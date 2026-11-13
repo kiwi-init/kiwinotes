@@ -61,8 +61,11 @@ export interface AppSettings {
    * e o esforço que o Kiwi pede ao abrir a sessão. Só muda pelas capacidades `agent.*`, nunca pelo `settings.set`.
    */
   agent: AgentSettings;
-  /** Mostrar o gato no hub (T9567), condicionado ao agente ligado. */
-  kiwicat: { show: boolean };
+  /**
+   * Mostrar o gato no hub (T9567), condicionado ao agente ligado; `overlay` (spec #9810): mostrar o gato por cima dos
+   * outros apps quando o Kiwi não está na frente, separado do gato do canto.
+   */
+  kiwicat: { show: boolean; overlay: boolean };
 }
 
 export interface AgentSettings {
@@ -97,7 +100,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true } };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true } };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -162,7 +165,10 @@ export function sanitizeSettings(input: unknown): AppSettings {
     meetings: sanitizeMeetingSettings(o.meetings),
     noteWidth: sanitizeNoteWidth(o.noteWidth),
     agent: sanitizeAgentSettings(o.agent),
-    kiwicat: { show: !o.kiwicat || typeof o.kiwicat !== "object" || (o.kiwicat as Record<string, unknown>).show !== false },
+    kiwicat: {
+      show: !o.kiwicat || typeof o.kiwicat !== "object" || (o.kiwicat as Record<string, unknown>).show !== false,
+      overlay: !o.kiwicat || typeof o.kiwicat !== "object" || (o.kiwicat as Record<string, unknown>).overlay !== false,
+    },
   });
 }
 

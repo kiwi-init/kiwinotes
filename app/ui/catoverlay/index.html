@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kiwi-cat</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+      #root { width: 192px; height: 240px; }
+      /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
+         da cor oposta à tinta, para ler sobre fundo claro e escuro (revisão do T10830). O desenho é o mesmo. */
+      .kn-cat-symbols[data-ink="dark"] svg { filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.85)); }
+      .kn-cat-symbols[data-ink="light"] svg { filter: drop-shadow(0 0 1px #17171c) drop-shadow(0 0 1.5px rgba(23, 23, 28, 0.85)); }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

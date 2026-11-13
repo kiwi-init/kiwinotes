@@ -1,0 +1,45 @@
+import CoreGraphics
+import XCTest
+@testable import KiwiHelperCore
+
+/// O gato no overlay (spec #9810): o lugar na tela e a vez da pílula do ditado.
+final class CatOverlayModelTests: XCTestCase {
+    func testCenteredOnTheVisibleArea() {
+        let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
+        let f = CatOverlayLayout.frame(visible: visible)
+        XCTAssertEqual(f.size, CGSize(width: 192, height: 240))
+        XCTAssertEqual(f.midX, visible.midX, accuracy: 1)
+        XCTAssertEqual(f.midY, visible.midY, accuracy: 1)
+    }
+
+    func testScreenOfTheFrontWindowThenMouseThenFirst() {
+        let left = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let right = CGRect(x: 1512, y: 0, width: 2560, height: 1440)
+        // A janela da frente está quase toda na tela da direita.
+        XCTAssertEqual(CatOverlayLayout.screen(screens: [left, right], frontWindow: CGRect(x: 1400, y: 100, width: 1200, height: 800), mouse: CGPoint(x: 10, y: 10)), 1)
+        // Sem janela: a tela do mouse.
+        XCTAssertEqual(CatOverlayLayout.screen(screens: [left, right], frontWindow: nil, mouse: CGPoint(x: 2000, y: 500)), 1)
+        // Sem nada: a primeira.
+        XCTAssertEqual(CatOverlayLayout.screen(screens: [left, right], frontWindow: nil, mouse: nil), 0)
+        XCTAssertNil(CatOverlayLayout.screen(screens: [], frontWindow: nil, mouse: nil))
+    }
+
+    func testThePillGoesFirst() {
+        var gate = CatOverlayGate()
+        XCTAssertFalse(gate.shows)
+        // A pílula na tela: o pedido do app espera.
+        XCTAssertFalse(gate.pill(true))
+        XCTAssertFalse(gate.want(true))
+        XCTAssertFalse(gate.shows)
+        // A pílula sai: o gato entra.
+        XCTAssertTrue(gate.pill(false))
+        XCTAssertTrue(gate.shows)
+        // A pílula volta no meio: o gato sai e volta depois.
+        XCTAssertTrue(gate.pill(true))
+        XCTAssertFalse(gate.shows)
+        XCTAssertTrue(gate.pill(false))
+        // O app esconde: some.
+        XCTAssertTrue(gate.want(false))
+        XCTAssertFalse(gate.shows)
+    }
+}

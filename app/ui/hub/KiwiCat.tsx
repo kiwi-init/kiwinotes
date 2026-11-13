@@ -12,10 +12,14 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
  * no `data-theme` do <html> (o `applyAppearance`), e muda sem recarregar quando a pessoa troca a Aparência ou o macOS.
  */
 const symbolBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
-function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
+// Com o gato no overlay (spec #9810), o do canto some e pausa o desenho: nunca dois gatos.
+function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; away: boolean }) {
   const handle = useRef<Cat | undefined>(undefined);
   const reducedRef = useRef(reduced); reducedRef.current = reduced;
+  const awayRef = useRef(away); awayRef.current = away;
+  const refresh = useRef<() => void>(() => {});
   useEffect(() => { handle.current?.update({ parado: reduced }); }, [reduced]);
+  useEffect(() => { refresh.current(); }, [away]);
   const root = useRef<HTMLDivElement>(null);
   // O estado do gato vive aqui, e não no efeito: o campo de texto (spec #9878) também o muda.
   const activityRef = useRef<CatActivity | null>(null);
@@ -49,23 +53,27 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
         const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, background: symbolBackground(),
           inputs: { estado: activity.state, cor: "claude", voz: null, parado: reducedRef.current } });
         if (gone) { await next.dispose(); return; }
-        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current }); cat.setBackground(symbolBackground()); cat.visibility(document.hidden); state(); el.dataset.ready = "true";
+        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current }); cat.setBackground(symbolBackground()); cat.visibility(hidden()); state(); el.dataset.ready = "true";
       } catch { el.replaceChildren(); }
       finally { loading = false; }
     }
     const off = api.agent.onTurn(e => { const previous = activity.state; activity.event(e); if (activity.state !== previous) state(); });
+    const hidden = () => document.hidden || awayRef.current;
     const visibility = () => {
+      el.dataset.away = String(awayRef.current);
       if (cat) {
-        cat.visibility(document.hidden);
-        if (!document.hidden && activity.state === "repouso") state();
+        cat.visibility(hidden());
+        // Na volta, o gato do canto mostra o estado de agora.
+        if (!hidden()) state();
       } else void create();
     };
+    refresh.current = visibility;
     document.addEventListener("visibilitychange", visibility);
     const theme = new MutationObserver(() => cat?.setBackground(symbolBackground()));
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     void create();
     return () => {
-      gone = true; off(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility);
+      gone = true; off(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
       handle.current = undefined;
       if (cat) void cat.dispose();
     };
@@ -114,6 +122,8 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
         ref={hit}
         type="button"
         className="kn-kiwicat-hit"
+        // Com o gato no overlay, o do canto some, e o botão dele também (nem clique nem Tab num gato invisível).
+        hidden={away}
         // No WebKit (o app e o Safari), o Tab pula um <button> sem tabIndex: com ele, o gato entra na ordem do Tab.
         tabIndex={0}
         // Com o tabIndex, o clique do mouse passaria o foco ao gato (e o anel ficaria nele): o mousedown não leva o foco,
@@ -137,13 +147,15 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
       ) : null}
       {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
           o que chega, e aparece depois que o pedido sai (#10868). */}
-      <CatBubble reduced={reduced} hidden={asking} />
+      <CatBubble reduced={reduced} hidden={asking || away} />
     </>
   );
 }
 export function KiwiCat() {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [away, setAway] = useState(false);
+  useEffect(() => api.agent.onCatWhere(e => setAway(e.overlay)), []);
   useEffect(() => {
     if (!has("agent.status") || !has("settings.get")) return;
     let alive = true, statusEvents = 0, settingsEvents = 0;
@@ -154,5 +166,5 @@ export function KiwiCat() {
     void api.settings.get().then(s => { if (alive && settingsEvents === se) setSettings(s); }, () => {});
     return () => { alive = false; offStatus(); offSettings(); };
   }, []);
-  return status?.enabled && settings?.kiwicat?.show === true ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} /> : null;
+  return status?.enabled && settings?.kiwicat?.show === true ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} away={away} /> : null;
 }

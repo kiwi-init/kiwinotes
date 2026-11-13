@@ -14,9 +14,12 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
   const maskPrefix = `kn-cat-symbol-${++vectorLayerSerial}`;
   const layer = document.createElement("div");
   layer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:visible";
+  // Um nome e a tinta no DOM, para quem hospeda o gato ajustar a camada (o overlay põe um contorno da cor oposta).
+  layer.className = "kn-cat-symbols";
   root.append(layer);
   function setBackground(value: SymbolBackground) {
     layer.style.color = value === "light" ? "#17171c" : "#fff";
+    layer.dataset.ink = value === "light" ? "dark" : "light";
   }
   setBackground(background);
   const eyeNodes = [

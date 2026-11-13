@@ -18,6 +18,8 @@ final class Helper {
     /// The app sent `microphone` in a `config.set`, so it knows `audio.inputs.changed`.
     private var appKnowsMicrophone = false
     private let overlay = Overlay()
+    /// O gato no overlay (spec #9810): a página do gato numa janela como a da pílula.
+    private lazy var catOverlay: CatOverlay = MainActor.assumeIsolated { CatOverlay() }
     /// L26 (T6910): the card that asks before a correction goes into the dictionary.
     private let learnPanel = LearnPanel()
     private let learnPrompt = LearnPrompt { delay, run in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: run) }
@@ -136,6 +138,8 @@ final class Helper {
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
         overlay.onVisibleChange = { [weak self] visible in
             self?.meeting.setDictating(visible)
+            // A pílula do ditado tem a vez: o gato do overlay espera ela sair (spec #9810).
+            if let cat = self?.catOverlay { MainActor.assumeIsolated { cat.setPillVisible(visible) } }
             if visible { self?.learnPrompt.dictationStarted() }
         }
         learnPanel.lift = { [weak self] in self?.meeting.panel.isShowing == true ? MeetingView.panelSize.height - MeetingView.bottom : 0 }
@@ -212,6 +216,11 @@ final class Helper {
         globeStarted = true
         if !headless { tap.start() }
         overlay.enabled = !headless
+        let catOn = !headless
+        MainActor.assumeIsolated {
+            catOverlay.enabled = catOn
+            catOverlay.log = { [weak self] line in self?.emit("log", ["level": "info", "message": line]) }
+        }
         learnPanel.enabled = !headless
         meeting.start()
         lastPermissions = Permission.snapshot()
@@ -812,6 +821,31 @@ final class Helper {
                 return reply(id, ok: false, error: "unknown_state")
             }
             overlay.set(phase, message: message.string("message"))
+            reply(id, ok: true)
+        case "catOverlay.load":
+            guard let dir = message.string("dir") else { return reply(id, ok: false, error: "invalid_value") }
+            let cat = catOverlay
+            let error = MainActor.assumeIsolated { cat.load(dir: dir) }
+            reply(id, ok: error == nil, error: error)
+        case "catOverlay.show":
+            guard let estado = message.string("estado") else { return reply(id, ok: false, error: "invalid_value") }
+            let fade = message.double("fadeMs") ?? 180
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.show(estado: estado, fadeMs: fade) }
+            reply(id, ok: true)
+        case "catOverlay.state":
+            guard let estado = message.string("estado") else { return reply(id, ok: false, error: "invalid_value") }
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.state(estado: estado) }
+            reply(id, ok: true)
+        case "catOverlay.hide":
+            let fade = message.double("fadeMs") ?? 0
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.hide(fadeMs: fade) }
+            reply(id, ok: true)
+        case "catOverlay.unload":
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.unload() }
             reply(id, ok: true)
         case "insert.text":
             guard let text = message.string("text") else { return reply(id, ok: false, error: "invalid_value") }

@@ -478,9 +478,14 @@ export function uiCapabilities(deps: CapabilityDeps,
       const shortcutPatch: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(a)) {
         if (key === "kiwicat") {
+          // `show` (o gato do canto) e `overlay` (por cima dos outros apps, spec #9810), cada um sozinho ou os dois: o que
+          // não vem fica como está.
           const cat = object(value, "kiwicat");
-          if (Object.keys(cat).some(k => k !== "show") || typeof cat.show !== "boolean") throw bad("kiwicat.show must be true or false");
-          patch.kiwicat = { show: cat.show };
+          const keys = Object.keys(cat);
+          if (!keys.length || keys.some(k => k !== "show" && k !== "overlay") || keys.some(k => typeof cat[k] !== "boolean"))
+            throw bad("kiwicat.show and kiwicat.overlay must be true or false");
+          const current = (await deps.settings.load()).kiwicat;
+          patch.kiwicat = { ...current, ...(cat as { show?: boolean; overlay?: boolean }) };
         } else if (key === "notesShortcut") {
           if (!isNotesShortcut(value)) throw bad("notesShortcut must be a shortcut, or null");
           shortcutPatch.notes = value;

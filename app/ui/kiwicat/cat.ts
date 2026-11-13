@@ -20,6 +20,8 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   const width = options.width ?? 640, height = options.height ?? 800;
   let elapsed = 0, previousStamp = performance.now(), disposed = false;
   let frameId = 0, timerId = 0, previousFrame = -Infinity;
+  /** Com o `activeFPS` (o overlay), o próximo quadro ativo só sai nesta hora (s). */
+  let nextActive = 0;
   let requestedReduced = options.inputs?.parado ?? false;
   const media = matchMedia("(prefers-reduced-motion: reduce)");
   const stats: CatStats = { faceUpdates: 0, quietPlans: 0, hidden: document.hidden,
@@ -92,7 +94,10 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   function active(stamp: number) {
     frameId = 0;
     if (disposed || stats.hidden || stats.reduced) return;
-    advance(stamp); const frame = machine.sample(); syncFog(frame); freezeIfSlow();
+    advance(stamp);
+    if (options.activeFPS !== undefined && elapsed < nextActive - 0.002) { schedule(); return; }
+    if (options.activeFPS !== undefined) nextActive = Math.max(nextActive + 1 / options.activeFPS, elapsed);
+    const frame = machine.sample(); syncFog(frame); freezeIfSlow();
     if (stats.reduced) return;
     paint(frame);
     if ((options.instrument ?? options.mode === "measure") && !quiet() && previousFrame !== -Infinity) {

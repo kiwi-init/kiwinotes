@@ -20,6 +20,10 @@ usage: kiwi-helper --socket <path> [--dump-wav <dir>]
                     no session, no mic, no permission asks (for the app's OCR queue, which runs it at background priority)
   --export-pdf <in.html> <out.pdf>  print a note's HTML to PDF in an off-screen WebKit view (T2684), then exit;
                     no window, no network, no permission asks
+  --cat-probe <dir> [--backend auto|webgl2|none] [--blocked <url>] [--hold <s>] [--estado <e>]  load the Kiwi-cat
+                    overlay page (spec #9810) the way the app does, in a window outside every screen: the cold load,
+                    show → first frame, and (with --blocked) a fetch, a WebSocket and a navigation that must be refused;
+                    one JSON line, then exit. No mic, no hotkey, no permission asks, nothing on screen
   --transcribe      transcribe 16 kHz mono WAV files the way a dictation is, one JSON line each, and exit
                     (--dictionary: one term per line; --ctc: also the CTC rescoring, on in the app since
                     T1973; downloads the model the first time and waits for it)
@@ -43,6 +47,7 @@ var dumpDirectory: URL?
 var transcribeFiles: [String] = []
 var ocrFiles: [String] = []
 var exportPDF: (String, String)?
+var catProbe: CatOverlayProbe.Options?
 var dictionaryFile: String?
 var language = TranscriptionLanguage.auto
 var useVAD = false
@@ -113,6 +118,24 @@ while let arg = args.next() {
     case "--export-pdf":
         guard let input = args.next(), let output = args.next() else { fail("--export-pdf needs <in.html> <out.pdf>") }
         exportPDF = (input, output)
+    case "--cat-probe":
+        guard let dir = args.next() else { fail("--cat-probe needs the page's folder") }
+        catProbe = CatOverlayProbe.Options(dir: dir)
+    case "--backend":
+        guard let v = args.next(), ["auto", "webgl2", "none"].contains(v), catProbe != nil else { fail("--backend auto|webgl2|none, after --cat-probe") }
+        catProbe?.backend = v
+    case "--blocked":
+        guard let v = args.next(), catProbe != nil else { fail("--blocked <url>, after --cat-probe") }
+        catProbe?.blocked = v
+    case "--hold":
+        guard let v = args.next(), let s = Double(v), catProbe != nil else { fail("--hold <seconds>, after --cat-probe") }
+        catProbe?.hold = s
+    case "--paused":
+        guard catProbe != nil else { fail("--paused, after --cat-probe") }
+        catProbe?.paused = true
+    case "--estado":
+        guard let v = args.next(), catProbe != nil else { fail("--estado <state>, after --cat-probe") }
+        catProbe?.estado = v
     case "--ocr":
         guard let path = args.next() else { fail("--ocr needs a file") }
         ocrFiles.append(path)
@@ -159,6 +182,13 @@ while let arg = args.next() {
 
 if !ocrFiles.isEmpty {
     exit(OCRFiles.run(ocrFiles))
+}
+
+if let catProbe {
+    // Como o `--export-pdf`: sem Dock e sem janela na tela; a do gato fica fora de todas as telas.
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    Task { @MainActor in exit(await CatOverlayProbe.run(catProbe)) }
+    NSApplication.shared.run()
 }
 
 if let (input, output) = exportPDF {

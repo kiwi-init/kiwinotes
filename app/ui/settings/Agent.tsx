@@ -22,7 +22,7 @@ import {
 } from "./agentText.ts";
 import { NoticeRow } from "./NoticeRow.tsx";
 import "./agent.css";
-import { CatRow } from "./CatRow";
+import { CatRow, OverlayCatRow } from "./CatRow";
 
 /** O pedido do "Testar" mais longo que a seção manda. */
 const TEST_MAX = 500;
@@ -145,6 +145,7 @@ export function AgentSection() {
       </Row>
 
       <CatRow />
+      <OverlayCatRow />
 
       {consenting ? <Consent name={name} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
 

@@ -134,6 +134,8 @@ export const api = {
     configure: (o: UiCapabilities["agent.configure"]["args"]) => invoke("agent.configure", o),
     onStatus: (fn: (s: UiEvents["agent.status"]) => void) => on("agent.status", fn),
     onTurn: (fn: (e: UiEvents["agent.turn"]) => void) => on("agent.turn", fn),
+    /** O gato foi para o overlay, ou voltou (1.53.0, spec #9810): o hub esconde o do canto. */
+    onCatWhere: (fn: (e: UiEvents["kiwicat.where"]) => void) => on("kiwicat.where", fn),
     /** A tela "Atividade do agente" (1.44.0–1.46.0, spec #9480): o registro, o [Ver] e o [Desfazer]. */
     activity: (limit?: number) => invoke("agent.activity", limit ? { limit } : {}),
     change: (request: string, change: number) => invoke("agent.change", { request, change }),

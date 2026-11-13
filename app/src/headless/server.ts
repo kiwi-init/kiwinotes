@@ -128,6 +128,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   const { uiCapabilities } = await import("../bun/ui-capabilities.ts");
   const { directInvoke } = await import("../bun/ui-engine.ts");
   const { dictate } = await import("../bun/dictate.ts");
+  const { attachCatOverlay } = await import("../bun/cat-overlay.ts");
 
   // ---------------------------------------------------------------- saídas: eventos e logs, com histórico curto
   const subscribers = new Map<Socket<unknown>, Set<Topic>>();
@@ -169,6 +170,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   const spelling = process.env.KIWI_FAKE_SPELLING ? fakeSpelling(process.env.KIWI_FAKE_SPELLING)
     : (word: string, language?: string) => session?.checkSpelling(word, language) ?? NO_SPELLING;
   let fakeClipboard = "";
+  let catOverlay: import("../bun/cat-overlay.ts").AttachedCatOverlay | undefined;
   const capabilities = uiCapabilities({
     spelling,
     meetings,
@@ -205,6 +207,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     agent: stores.agent,
     settingsChanged: (settings) => {
       void session?.settingsChanged(settings);
+      catOverlay?.settingsChanged(settings);
       event("settings.changed", settings);
     },
     projectsChangedIn: (folderId) => event("projects.changed", { folderId }),
@@ -270,6 +273,21 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.agent.onQuestionChanged((e) => event("agent.questionChanged", e)),
     stores.agent.onNoticeChanged((e) => event("agent.noticeChanged", e)),
   ];
+  // O gato no overlay (spec #9810): no headless não há hub, então os pedidos vão ao helper, que no `--headless` não mostra
+  // nada; os comandos aparecem no log, e o `kiwicat.where` sai como evento.
+  catOverlay = attachCatOverlay({
+    agent: stores.agent,
+    settings: stores.settings,
+    // Sem o helper (`--no-helper`), um helper falso: os comandos saem como o evento `catOverlay.command`, para a prova
+    // no WebKit headless aplicar à página do overlay.
+    helper: session
+      ? { send: (c) => session.sidecar.send(c), onReady: (fn) => session.sidecar.on("ready", fn) }
+      : { send: async (c) => (event("catOverlay.command", c), { ok: true }), onReady: () => () => {} },
+    pageDir: path.resolve(import.meta.dirname, "..", "..", "dist", "catoverlay"),
+    where: (overlay) => event("kiwicat.where", { overlay }),
+    log: (m) => console.log(m),
+  });
+  offs.push(() => catOverlay?.stop());
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));
     offs.push(session.sidecar.on("*", (e) => (e.type === "audio.level" ? undefined : event("helper.event", e))));
