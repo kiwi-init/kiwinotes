@@ -164,6 +164,37 @@
       "screenshot": "4-aviso-sem-principal.png"
     },
     {
+      "hover": ".kn-tree-pop .kn-side-row:has(.kn-side-item[data-kind='folder']:has-text('Acme'))"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-row:has(.kn-side-item[data-kind='folder']:has-text('Acme')) .kn-side-action[aria-haspopup='menu']"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Escolher a nota principal')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Criar “Acme”')"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Criar “Acme”')",
+      "state": "detached"
+    },
+    {
       "click": ".kn-tree-pop .kn-side-warn"
     },
     {

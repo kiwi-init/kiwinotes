@@ -1147,7 +1147,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         },
         // Os projetos (spec #9847): só o que o engine aceitaria aparece no menu.
         ...(projectsApi && projectByFolder.has(t.path)
-          ? [{ kind: "separator" as const }, { label: "Deixar de ser projeto", onSelect: () => projectAction("deixar de ser projeto", () => projectsApi.unmark(t.path)) }]
+          ? [
+              { kind: "separator" as const },
+              // Pelo teclado, o caminho até a escolha da nota principal apagada (o aviso é só do mouse).
+              ...(projectByFolder.get(t.path)!.main === null && menu
+                ? [{ label: "Escolher a nota principal…", onSelect: () => setProjectPick({ x: menu.x, y: menu.y, folder: t.path }) }]
+                : []),
+              { label: "Deixar de ser projeto", onSelect: () => projectAction("deixar de ser projeto", () => projectsApi.unmark(t.path)) },
+            ]
           : projectsApi && canMark(t.path)
             ? [{ kind: "separator" as const }, { label: "Marcar como projeto", onSelect: () => projectAction("marcar como projeto", () => projectsApi.mark(t.path)) }]
             : []),
