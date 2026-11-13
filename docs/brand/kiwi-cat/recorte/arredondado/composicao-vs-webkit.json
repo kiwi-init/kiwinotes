@@ -1,0 +1,86 @@
+[
+  {
+    "curve": "ellipse",
+    "state": "agindo",
+    "background": "cor",
+    "max": 2,
+    "mean": 0.032111979166666665
+  },
+  {
+    "curve": "ellipse",
+    "state": "agindo",
+    "background": "branco",
+    "max": 1,
+    "mean": 5.924479166666667e-05
+  },
+  {
+    "curve": "ellipse",
+    "state": "acordou",
+    "background": "cor",
+    "max": 2,
+    "mean": 0.032501302083333336
+  },
+  {
+    "curve": "ellipse",
+    "state": "acordou",
+    "background": "branco",
+    "max": 1,
+    "mean": 8.919270833333334e-05
+  },
+  {
+    "curve": "ellipse",
+    "state": "erro",
+    "background": "cor",
+    "max": 2,
+    "mean": 0.024415364583333335
+  },
+  {
+    "curve": "ellipse",
+    "state": "erro",
+    "background": "branco",
+    "max": 1,
+    "mean": 6.119791666666666e-05
+  },
+  {
+    "curve": "superellipse",
+    "state": "agindo",
+    "background": "cor",
+    "max": 2,
+    "mean": 0.033681640625
+  },
+  {
+    "curve": "superellipse",
+    "state": "agindo",
+    "background": "branco",
+    "max": 1,
+    "mean": 5.924479166666667e-05
+  },
+  {
+    "curve": "superellipse",
+    "state": "acordou",
+    "background": "cor",
+    "max": 2,
+    "mean": 0.034119140625
+  },
+  {
+    "curve": "superellipse",
+    "state": "acordou",
+    "background": "branco",
+    "max": 1,
+    "mean": 8.919270833333334e-05
+  },
+  {
+    "curve": "superellipse",
+    "state": "erro",
+    "background": "cor",
+    "max": 2,
+    "mean": 0.0249140625
+  },
+  {
+    "curve": "superellipse",
+    "state": "erro",
+    "background": "branco",
+    "max": 1,
+    "mean": 6.119791666666666e-05
+  }
+]

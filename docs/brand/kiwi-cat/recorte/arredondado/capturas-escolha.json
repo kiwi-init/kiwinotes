@@ -1,0 +1,138 @@
+{
+  "task": "T10367",
+  "seed": 17,
+  "size": [
+    640,
+    800
+  ],
+  "scope": "one real RGBA pose per curve, compared against fresh WebKit background pages",
+  "rows": [
+    {
+      "curve": "ellipse",
+      "state": "agindo",
+      "time": 1.2,
+      "background": "rgba",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "agindo",
+      "time": 1.2,
+      "background": "cor",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "agindo",
+      "time": 1.2,
+      "background": "branco",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "acordou",
+      "time": 0.53,
+      "background": "rgba",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "acordou",
+      "time": 0.53,
+      "background": "cor",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "acordou",
+      "time": 0.53,
+      "background": "branco",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "erro",
+      "time": 0.85,
+      "background": "rgba",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "erro",
+      "time": 0.85,
+      "background": "cor",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "ellipse",
+      "state": "erro",
+      "time": 0.85,
+      "background": "branco",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "agindo",
+      "time": 1.2,
+      "background": "rgba",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "agindo",
+      "time": 1.2,
+      "background": "cor",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "agindo",
+      "time": 1.2,
+      "background": "branco",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "acordou",
+      "time": 0.53,
+      "background": "rgba",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "acordou",
+      "time": 0.53,
+      "background": "cor",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "acordou",
+      "time": 0.53,
+      "background": "branco",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "erro",
+      "time": 0.85,
+      "background": "rgba",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "erro",
+      "time": 0.85,
+      "background": "cor",
+      "backend": "webgpu"
+    },
+    {
+      "curve": "superellipse",
+      "state": "erro",
+      "time": 0.85,
+      "background": "branco",
+      "backend": "webgpu"
+    }
+  ],
+  "errors": []
+}
