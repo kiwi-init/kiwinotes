@@ -61,7 +61,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     if (!Number.isFinite(boundary)) return;
     const duration = Math.max(0, boundary - elapsed);
     if (machine.moving && duration > 0) {
-      const count = Math.max(2, Math.ceil(duration * 30) + 1);
+      const count = Math.max(2, Math.floor(duration * 30) + 1);
       // Projection is read-only: no future RNG draws or scheduler events.
       const frames = Array.from({ length: count }, (_, i) => machine.project(elapsed + duration * i / (count - 1)));
       vectors.animate(frames, duration); stats.quietPlans++;

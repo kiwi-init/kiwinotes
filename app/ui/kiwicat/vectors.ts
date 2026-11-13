@@ -158,8 +158,11 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
       if (duration <= 0 || frames.length < 2) return;
       const all = frames.map(styles);
       for (const [element, first] of all[0]!) {
-        const keys = all.map((map, i) => ({ ...map.get(element)!, offset: i / (all.length - 1), easing: "steps(1,end)" }));
-        if (keys.every(k => Object.keys(first).every(p => k[p as keyof typeof k] === first[p]))) continue;
+        // Declaring even a constant clip-path in a transform animation can
+        // prevent compositor acceleration. Keep unchanged properties inline.
+        const changing = Object.keys(first).filter(p => all.some(map => map.get(element)![p] !== first[p]));
+        if (!changing.length) continue;
+        const keys = all.map((map, i) => ({ ...Object.fromEntries(changing.map(p => [p, map.get(element)![p]!])), offset: i / (all.length - 1), easing: "steps(1,end)" }));
         animations.push(element.animate(keys, { duration: duration * 1000, fill: "forwards" }));
       }
     },

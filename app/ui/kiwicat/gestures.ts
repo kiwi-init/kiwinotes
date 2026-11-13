@@ -150,7 +150,14 @@ export class GestureMachine {
       this.readyAt);
   }
   nextWake() {
-    return Math.min(this.nextBoundary(),
+    const phases: number[] = [];
+    if (this.blink) phases.push(this.blink.at + this.blink.close, this.blink.at + this.blink.close + this.blink.hold);
+    if (this.look) {
+      const l = this.look;
+      for (const at of [l.at + l.go, l.at + l.go + l.hold]) phases.push(at + (at >= l.freezeAt ? l.freezeFor : 0));
+      phases.push(l.freezeAt, l.freezeAt + l.freezeFor);
+    }
+    return Math.min(this.nextBoundary(), ...phases.filter(at => at > this.now + 1e-8),
       this.transitionAt + this.transition > this.now ? this.transitionAt + this.transition : Infinity,
       this.resumed && this.resumed.at + .24 > this.now ? this.resumed.at + .24 : Infinity);
   }
@@ -258,7 +265,7 @@ export class GestureMachine {
       if (!this.inputs.parado) {
         if (this.visualState === "pronto") this.readyAt = this.now + .24;
         if (["dormindo", "erro", "agindo"].includes(this.visualState)) {
-          const phase = this.visualState === "erro" ? .9 : .5;
+          const phase = this.visualState === "erro" ? 1 - .24 / this.cycleSeconds : .5;
           this.cycleAt = this.now - phase * this.cycleSeconds;
           this.nextCycle = this.cycleAt + this.cycleSeconds;
         }
@@ -347,11 +354,12 @@ export class GestureMachine {
       const u = smooth((t - this.resumed.at) / .24), previous = this.resumed.frame;
       alpha = mix(previous.symbolAlpha, alpha, u);
       scale = mix(previous.symbolScale, scale, u); y = mix(previous.symbolY, y, u);
+      if (state === "erro") progress = previous.progress;
       for (let i = 0; i < dots.length; i++) dots[i] = mix(previous.dots[i]!, dots[i]!, u);
     }
     return { state, eyes: pose, time: t, stateTime: age, symbol, symbolAlpha: clamp(alpha), symbolScale: scale,
       symbolY: y, progress, waves, dots: fading ? [...fading.dots] : dots, work: fading ? fading.work : cycle,
-      workOffsets: fixed ? [0, 0, 0] : fading ? [...fading.workOffsets] : [...this.workOffsets],
-      jitter: fixed ? [0, 0] : fading ? [...fading.jitter] : [2 * Math.sin(t * 19 + this.jitterPhase), 2 * Math.sin(t * 23 + this.jitterPhase + 1.1)] };
+      workOffsets: fixed ? [0, 0, 0] : fading ? [...fading.workOffsets] : this.workOffsets.map(v => v * (this.resumed ? smooth((t - this.resumed.at) / .24) : 1)),
+      jitter: fixed ? [0, 0] : fading ? [...fading.jitter] : [2 * Math.sin(t * 19 + this.jitterPhase), 2 * Math.sin(t * 23 + this.jitterPhase + 1.1)].map(v => v * (this.resumed ? smooth((t - this.resumed.at) / .24) : 1)) as [number, number] };
   }
 }

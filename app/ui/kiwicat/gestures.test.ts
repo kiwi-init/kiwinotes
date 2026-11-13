@@ -145,3 +145,19 @@ test("a departing symbol freezes at its displayed drawing and opacity", () => {
   expect(halfway.symbolAlpha).toBeLessThan(before.symbolAlpha);
   expect(m.at(.27).symbol).toBe("thinking");
 });
+test("quiet wake boundaries separate motion from stationary holds", () => {
+  const m = machine("repouso", () => .5);
+  // Start the first blink exactly on its scheduled boundary.
+  const due = m.cat.nextBoundary(); m.at(due);
+  const b = m.events.findLast(e => e.kind === "piscar_lento")!;
+  expect(b).toBeDefined();
+  expect(m.cat.nextWake()).toBeCloseTo(b.at + b.values[0]!, 10);
+  m.at(b.at + b.values[0]!);
+  expect(m.cat.nextWake()).toBeCloseTo(b.at + b.values[0]! + b.values[1]!, 10);
+});
+test("resuming the error freezes its complete drawing until the first fade finishes", () => {
+  const m = machine("erro"); m.update({ parado: true }, .1); m.at(20);
+  expect(m.update({ parado: false }, 20).progress).toBe(1);
+  expect(m.at(20.1).progress).toBe(1); expect(m.at(20.23).symbolAlpha).toBeLessThan(.1);
+  expect(m.at(20.24).symbolAlpha).toBeCloseTo(0, 8);
+});
