@@ -245,6 +245,9 @@ try {
     const start = await page.evaluate(
       () => { const a = (window as any).kiwiCat; return (a.fogStats ?? a.stats).intervals.length; },
     );
+    const vectorStart = await page.evaluate(
+      () => (window as any).kiwiCat.stats.activeIntervals?.length ?? 0,
+    );
     const diagnosticStart = performance.now(),
       diagnosticBefore = new Map(measuredSnapshot().map((p) => [p.pid, p.cpu]));
     await page.waitForTimeout(state === "pronto" ? 700 : 3000);
@@ -260,11 +263,18 @@ try {
         100;
     const stats = await page.evaluate(() => { const a = (window as any).kiwiCat; return a.fogStats ?? a.stats; }),
       intervals = stats.intervals.slice(start);
+    const vectorIntervals = await page.evaluate(
+      (start) => ((window as any).kiwiCat.stats.activeIntervals ?? []).slice(start),
+      vectorStart,
+    );
+    const vectorSeconds = vectorIntervals.reduce((sum: number, frame: { seconds: number }) => sum + frame.seconds, 0);
     report.states.push({
       state,
       cpuDiagnosticSeconds: diagnosticSeconds,
       cpuMeanDiagnostic: diagnosticCPU,
       slow: stats.slow,
+      vectorFrames: vectorIntervals.length,
+      vectorFPS: vectorSeconds > 0 ? vectorIntervals.length / vectorSeconds : null,
       fps:
         1 /
         (intervals.reduce((a: number, b: number) => a + b, 0) /

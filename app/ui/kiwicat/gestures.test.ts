@@ -161,3 +161,10 @@ test("resuming the error freezes its complete drawing until the first fade finis
   expect(m.at(20.1).progress).toBe(1); expect(m.at(20.23).symbolAlpha).toBeLessThan(.1);
   expect(m.at(20.24).symbolAlpha).toBeCloseTo(0, 8);
 });
+
+// The approved reduced-motion listening pose is the three white arcs, not numeric silence.
+test("fixed listening uses the approved high-voice pose only while capturing", () => {
+  const m = machine("ouvindo");
+  expect(m.update({ parado: true, voz: .8 }, 0).waves).toEqual([1, 1, 1, 0, 0]);
+  expect(m.update({ voz: null }, 10).waves).toEqual([0, 0, 0, 0, 0]);
+});
