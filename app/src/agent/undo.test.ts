@@ -309,6 +309,25 @@ describe("o desfazer das mudanças do agente (spec #9353)", () => {
     expect((await t.activity.get(id))!.changes[0]!.undone).toBeUndefined();
   });
 
+  test("uma ida à Lixeira recusada não leva embora o Desfazer de um apagar anterior do mesmo caminho (revisão do T9398)", async () => {
+    const t = await setup();
+    // Uma nota apagada (o Desfazer de 10 min começa), e outra criada com o mesmo nome.
+    const first = (await t.caps["notes.create"]!({ title: "Rascunho", content: "a primeira" })) as { path: string };
+    await t.caps["notes.delete"]!({ path: first.path });
+    const again = (await t.caps["notes.create"]!({ title: "Rascunho", content: "a segunda" })) as { path: string; version: string };
+    expect(again.path).toBe(first.path);
+    // O apagar conferido passa na 1ª conferência e é recusado na 2ª, logo antes de a nota sair do lugar.
+    (t.v as any).beforeReplace = () => writeFileSync(path.join(t.root, again.path), "a pessoa escreveu bem agora\n");
+    await expect(Promise.resolve(t.caps["notes.delete"]!({ path: again.path, baseVersion: again.version }))).rejects.toMatchObject({ code: "E_CONFLICT" });
+    (t.v as any).beforeReplace = undefined;
+    expect(t.read(again.path)).toBe("a pessoa escreveu bem agora\n");
+    // A primeira continua no Desfazer: nada foi para a Lixeira do macOS.
+    expect(t.trashed).toEqual([]);
+    rmSync(path.join(t.root, again.path));
+    await t.caps["notes.restore"]!({ path: first.path });
+    expect(t.read(first.path)).toBe("a primeira");
+  });
+
   test("a ida à Lixeira conferida: uma edição bem no meio deixa a nota criada no lugar", async () => {
     const t = await setup();
     const id = await t.request();
@@ -375,6 +394,46 @@ describe("o desfazer e a pasta de notas (spec #9353)", () => {
     await r.open(r.a);
     expect(((await r.caps["notes.folder"]!({})) as { current: { id: string } }).current.id).not.toBe(change.folder);
     expect((await r.undo(id)).notes[0]).toMatchObject({ result: "restored" });
+    expect(readFileSync(path.join(r.a, "Ideias.md"), "utf8")).toBe(IDEIAS);
+  });
+
+  test("a nota de mesmo nome em outra pasta é outra nota: a escrita nela não prende o desfazer desta (revisão do T9398)", async () => {
+    const r = await rig();
+    await r.open(r.a);
+    const p1 = await r.request();
+    await r.write(p1, "notes_append", { path: "Ideias.md", text: "- na pasta A" });
+    await r.open(r.b);
+    const p2 = await r.request();
+    await r.write(p2, "notes_append", { path: "Ideias.md", text: "- na pasta B" });
+    const inB = readFileSync(path.join(r.b, "Ideias.md"), "utf8");
+
+    await r.open(r.a);
+    // O p2 é da pasta B: daqui, ele avisa; o p1 volta, sem precisar do p2.
+    expect((await r.undo(p2)).notes[0]).toMatchObject({ result: "refused", reason: "E_OTHER_FOLDER" });
+    expect((await r.undo(p1)).notes).toEqual([{ path: "Ideias.md", result: "restored", changes: [1] }]);
+    expect(readFileSync(path.join(r.a, "Ideias.md"), "utf8")).toBe(IDEIAS);
+    expect(readFileSync(path.join(r.b, "Ideias.md"), "utf8")).toBe(inB);
+  });
+
+  test("um pedido que escreveu na mesma nota de duas pastas: cada pasta é uma nota no resultado", async () => {
+    const r = await rig();
+    await r.open(r.a);
+    const id = await r.request();
+    await r.write(id, "notes_append", { path: "Ideias.md", text: "- na pasta A" });
+    await r.open(r.b);
+    await r.write(id, "notes_append", { path: "Ideias.md", text: "- na pasta B" });
+    // Na pasta B: a mudança 2 volta, e a 1 (da pasta A) não fica presa pela 2.
+    expect((await r.undo(id, 1)).notes[0]).toMatchObject({ result: "refused", reason: "E_OTHER_FOLDER" });
+    expect((await r.undo(id)).notes).toEqual([
+      expect.objectContaining({ path: "Ideias.md", result: "refused", changes: [1], reason: "E_OTHER_FOLDER" }),
+      { path: "Ideias.md", result: "restored", changes: [2] },
+    ]);
+    expect(readFileSync(path.join(r.b, "Ideias.md"), "utf8")).toBe(IDEIAS);
+    await r.open(r.a);
+    expect((await r.undo(id)).notes).toEqual([
+      { path: "Ideias.md", result: "restored", changes: [1] },
+      expect.objectContaining({ result: "already", changes: [2] }),
+    ]);
     expect(readFileSync(path.join(r.a, "Ideias.md"), "utf8")).toBe(IDEIAS);
   });
 

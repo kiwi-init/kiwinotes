@@ -1354,8 +1354,6 @@ export class Vault {
    */
   private async stage(p: string, abs: string, kind: Staged["kind"], expect?: string): Promise<void> {
     if (expect !== undefined && !(await this.atVersion(abs, expect))) throw new VaultError("E_CONFLICT", `${p} changed; nothing was deleted`);
-    const old = this.staged.get(p);
-    if (old) await this.expire(p, old); // o mesmo caminho apagado de novo: o de antes segue para a Lixeira
     const box = path.join(this.root, UNDO_DIR, `${this.now()}-${randomBytes(4).toString("hex")}`);
     await mkdir(box, { recursive: true });
     const staged = path.join(box, path.basename(abs));
@@ -1367,6 +1365,10 @@ export class Vault {
       throw new VaultError("E_CONFLICT", `${p} changed; nothing was deleted`);
     }
     await rename(abs, staged);
+    // O mesmo caminho apagado de novo: o de antes segue para a Lixeira, só depois que este saiu do lugar. Uma recusa
+    // acima (`E_CONFLICT`) não leva embora o Desfazer de 10 min do apagar anterior (revisão do T9398).
+    const old = this.staged.get(p);
+    if (old) await this.expire(p, old);
     const item: Staged = { abs: staged, kind, at, timer: null };
     item.timer = setTimeout(() => void this.expire(p, item), this.undoMs);
     (item.timer as { unref?: () => void }).unref?.();

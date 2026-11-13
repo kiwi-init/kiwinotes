@@ -93,6 +93,13 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
 /** A chave da pasta a partir do id que o escritor anotou (`<chave>:<n>` ou `internal:<chave>`). */
 export const keyOf = (id: string) => id.replace(/^internal:/, "").replace(/:\d+$/, "");
 
+/**
+ * A mesma nota (revisão do T9398): o mesmo caminho na mesma pasta de notas. Uma nota de mesmo nome em outra pasta é
+ * outra nota. Uma mudança sem a pasta anotada (o engine sem pastas) vale para qualquer uma.
+ */
+const sameNote = (a: ActivityChange, b: ActivityChange) =>
+  a.path === b.path && (!a.folder || !b.folder || keyOf(a.folder) === keyOf(b.folder));
+
 /** O pedido (ou a mudança) não está no registro. */
 export class UndoError extends Error {
   readonly code = "E_NOT_FOUND";
@@ -164,9 +171,15 @@ export async function undo(d: UndoDeps, requestId: string, change?: number): Pro
     if (c.undone) notes.push({ path: c.path, result: "already", changes: [change], message: "Já tinha sido desfeita." });
     else groups.push({ path: c.path, indexes: [change - 1] });
   } else {
-    const byPath = new Map<string, number[]>();
-    changes.forEach((c, i) => byPath.set(c.path, [...(byPath.get(c.path) ?? []), i]));
-    for (const [p, all] of byPath) {
+    // Nota por nota: o caminho e a pasta (um pedido pode ter escrito em duas pastas).
+    const byNote: number[][] = [];
+    changes.forEach((c, i) => {
+      const same = byNote.find((g) => sameNote(changes[g[0]!]!, c));
+      if (same) same.push(i);
+      else byNote.push([i]);
+    });
+    for (const all of byNote) {
+      const p = changes[all[0]!]!.path;
       const open = all.filter((i) => !changes[i]!.undone);
       if (open.length) groups.push({ path: p, indexes: open });
       else notes.push({ path: p, result: "already", changes: all.map((i) => i + 1), message: "Já tinha sido desfeita." });
@@ -186,12 +199,12 @@ export async function undo(d: UndoDeps, requestId: string, change?: number): Pro
     const last = changes[g.indexes.at(-1)!]!;
     const created = first.kind === "created";
 
-    const laterHere = change !== undefined ? changes.findIndex((c, i) => i > g.indexes[0]! && c.path === g.path && !c.undone) : -1;
+    const laterHere = change !== undefined ? changes.findIndex((c, i) => i > g.indexes[0]! && sameNote(c, first) && !c.undone) : -1;
     if (laterHere >= 0) {
       refuse(MESSAGES.laterHere(g.path, laterHere + 1));
       continue;
     }
-    const laterElsewhere = later(others, g.path, last);
+    const laterElsewhere = later(others, last);
     if (laterElsewhere) {
       refuse(MESSAGES.laterElsewhere(g.path, laterElsewhere.request, laterElsewhere.n));
       continue;
@@ -250,17 +263,19 @@ export async function undo(d: UndoDeps, requestId: string, change?: number): Pro
       else throw e;
     }
   }
+  // Na ordem das mudanças do pedido.
+  notes.sort((a, b) => a.changes[0]! - b.changes[0]!);
   return { request: requestId, notes };
 }
 
-/** A escrita do agente na nota `p`, num outro pedido, depois de `after` e ainda não desfeita; a mais velha delas. */
-function later(others: { id: string; changes: ActivityChange[] }[], p: string, after: ActivityChange): { request: string; n: number } | null {
+/** A escrita do agente na mesma nota de `after`, num outro pedido, depois dela e ainda não desfeita; a mais velha. */
+function later(others: { id: string; changes: ActivityChange[] }[], after: ActivityChange): { request: string; n: number } | null {
   const t = Date.parse(after.at);
   let found: { request: string; n: number; t: number } | null = null;
   for (const r of others) {
     for (const [i, c] of r.changes.entries()) {
       const ct = Date.parse(c.at);
-      if (c.path === p && !c.undone && ct > t && (!found || ct < found.t)) found = { request: r.id, n: i + 1, t: ct };
+      if (sameNote(c, after) && !c.undone && ct > t && (!found || ct < found.t)) found = { request: r.id, n: i + 1, t: ct };
     }
   }
   return found && { request: found.request, n: found.n };
