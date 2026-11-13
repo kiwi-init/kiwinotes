@@ -8,7 +8,9 @@ o módulo, a aura nem a animação do app.
 
 Preparação, sem candidata gerada. O spec aprovado v10661 exige referências
 marcadas pelo harry antes de desenhar. O briefing textual dessas referências
-foi solicitado ao lead em #10742; não se presume uma seleção humana.
+foi solicitado ao lead em #10742. Ele pediu ao harry para marcar a folha
+em #10756/#10757 e confirmou em #10758 que não se deve gerar antes da
+resposta. Não se presume uma seleção humana.
 A regra #7652 permanece: imagens de referência do harry não são recebidas
 pelo Codex; o lead traduz a gramática em texto.
 
