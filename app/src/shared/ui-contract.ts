@@ -154,7 +154,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.54.0 (T11114, spec #11084): o agente econômico. O `agent.usage` (o gasto do Kiwi em 5 horas e na semana, os
 //   pedidos mais caros, o último uso da janela e o último `/usage`), o `agent.usageRefresh` (o `/usage`, só sob
 //   demanda), o `agent.usageClear`, o evento `agent.usageChanged` e o evento `limit` no `agent.turn`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.54.0";
+// 1.55.0 (T11248, spec #9876): o atalho Control. O `controlShortcut` no `AgentStatus` e no `agent.configure` ("Falar
+//   com o agente pelo Control") e o evento `agent.voice` (o que o gato mostra durante a fala). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.55.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -461,7 +463,8 @@ export interface UiCapabilities {
   /** Apaga o adaptador baixado (e fecha o programa). O agente continua ligado ou desligado como estava. */
   "agent.remove": { args: Record<string, never>; result: AgentStatus };
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean }; result: AgentStatus };
+  /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". */
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -701,6 +704,8 @@ export interface AgentStatus {
   program: "closed" | "opening" | "open";
   /** Um pedido em andamento. */
   busy: boolean;
+  /** "Falar com o agente pelo Control" (1.55.0, spec #9876), desligado por padrão. */
+  controlShortcut: boolean;
   /** O que o Kiwi pede ao abrir a sessão. */
   model: string;
   effort: string;
@@ -893,7 +898,20 @@ export interface UiEvents {
   "kiwicat.where": { overlay: boolean };
   /** O medidor mudou (1.54.0). */
   "agent.usageChanged": AgentUsageView;
+  /**
+   * A fala ao agente pelo Control (1.55.0, spec #9876): `listening` com a voz (as ondas do `ouvindo`), `processing` (a
+   * escuta encerrou: sem ondas, ainda em `ouvindo`), `asked` com o texto entendido (o balão, quando o pedido começa) e
+   * `idle` (cancelado, ou a fala vazia: o gato volta ao repouso, e no overlay sai pela saída de cancelamento).
+   */
+  "agent.voice": AgentVoiceUi;
 }
+
+/** O que o gato mostra durante a fala ao agente (1.55.0). `voz`: o nível do mic, de 0 a 1. */
+export type AgentVoiceUi =
+  | { phase: "listening"; voz: number }
+  | { phase: "processing" }
+  | { phase: "asked"; text: string; id: string }
+  | { phase: "idle"; cancelled: boolean };
 
 /** As seções do hub (#2100), na ordem da barra lateral. */
 export const HUB_SECTIONS = ["notes", "meetings", "dictation", "settings", "about",

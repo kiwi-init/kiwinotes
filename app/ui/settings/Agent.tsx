@@ -23,6 +23,7 @@ import {
   type TestState,
 } from "./agentText.ts";
 import { NoticeRow } from "./NoticeRow.tsx";
+import { ControlRow } from "./ControlRow.tsx";
 import "./agent.css";
 import { CatRow, OverlayCatRow } from "./CatRow";
 
@@ -184,6 +185,9 @@ export function AgentSection() {
 
       {/* A notificação quando o agente espera uma resposta (spec #9839): só com o agente ligado. */}
       {status.enabled ? <NoticeRow /> : null}
+
+      {/* O atalho Control (spec #9876): só com o agente ligado. */}
+      {status.enabled ? <ControlRow status={status} onStatus={setStatus} /> : null}
 
       {ready ? (
         <div className="kn-agent-test">

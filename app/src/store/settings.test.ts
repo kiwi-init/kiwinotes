@@ -103,7 +103,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
@@ -111,6 +111,7 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     effort: "high",
     notifyWaiting: true,
     economy: false,
+    controlShortcut: false,
   });
   // O modo econômico (spec #11084): desligado de fábrica, e só um true o liga.
   expect(sanitizeSettings({ agent: { economy: true } }).agent.economy).toBe(true);
@@ -122,6 +123,10 @@ test("o aviso quando o agente espera (spec #9839): ligado por padrão, e só um 
   expect(sanitizeSettings({ agent: { notifyWaiting: false } }).agent.notifyWaiting).toBe(false);
   expect(sanitizeSettings({ agent: { notifyWaiting: "não" } }).agent.notifyWaiting).toBe(true);
   expect(sanitizeSettings({}).agent.notifyWaiting).toBe(true);
+  // Spec #9876: o atalho Control vem desligado, e só `true` o liga.
+  expect(sanitizeSettings({}).agent.controlShortcut).toBe(false);
+  expect(sanitizeSettings({ agent: { controlShortcut: true } }).agent.controlShortcut).toBe(true);
+  expect(sanitizeSettings({ agent: { controlShortcut: "sim" } }).agent.controlShortcut).toBe(false);
 });
 
 test("a largura da nota (T5299): arredonda, fica nos limites e um valor ruim volta ao padrão", () => {

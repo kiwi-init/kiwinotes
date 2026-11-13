@@ -79,9 +79,11 @@ export interface AgentSettings {
   notifyWaiting: boolean;
   /** O modo econômico (spec #11084): o modelo mais barato, as ferramentas por seção e respostas curtas; desligado. */
   economy: boolean;
+  /** "Falar com o agente pelo Control" (spec #9876): segurar o Control ouve e soltar manda. Desligado por padrão. */
+  controlShortcut: boolean;
 }
 
-export const DEFAULT_AGENT_SETTINGS: AgentSettings = { enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false };
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = { enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false };
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
 export function isAgentChoice(v: unknown): v is string {
@@ -97,6 +99,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     effort: isAgentChoice(o.effort) ? o.effort : DEFAULT_AGENT_SETTINGS.effort,
     notifyWaiting: o.notifyWaiting !== false,
     economy: o.economy === true,
+    controlShortcut: o.controlShortcut === true,
   };
 }
 

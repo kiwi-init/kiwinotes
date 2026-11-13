@@ -1105,14 +1105,20 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
       }
       if (a.economy !== undefined && typeof a.economy !== "boolean") throw bad("agent.configure: economy must be true or false");
+      if (a.controlShortcut !== undefined && typeof a.controlShortcut !== "boolean") throw bad("agent.configure: controlShortcut must be a boolean");
       return agentCall((agent) =>
-        agent.configure({ model: a.model as string | undefined, effort: a.effort as string | undefined, economy: a.economy as boolean | undefined }),
+        agent.configure({
+          model: a.model as string | undefined,
+          effort: a.effort as string | undefined,
+          economy: a.economy as boolean | undefined,
+          ...(a.controlShortcut !== undefined ? { controlShortcut: a.controlShortcut as boolean } : {}),
+        }),
       );
     },
     "agent.activity": (args) => {

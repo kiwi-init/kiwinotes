@@ -129,6 +129,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   const { directInvoke } = await import("../bun/ui-engine.ts");
   const { dictate } = await import("../bun/dictate.ts");
   const { attachCatOverlay } = await import("../bun/cat-overlay.ts");
+  const { attachAgentVoice } = await import("../bun/agent-voice.ts");
 
   // ---------------------------------------------------------------- saídas: eventos e logs, com histórico curto
   const subscribers = new Map<Socket<unknown>, Set<Topic>>();
@@ -171,6 +172,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     : (word: string, language?: string) => session?.checkSpelling(word, language) ?? NO_SPELLING;
   let fakeClipboard = "";
   let catOverlay: import("../bun/cat-overlay.ts").AttachedCatOverlay | undefined;
+  let agentVoice: import("../bun/agent-voice.ts").AttachedAgentVoice | undefined;
   const capabilities = uiCapabilities({
     spelling,
     meetings,
@@ -208,6 +210,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     settingsChanged: (settings) => {
       void session?.settingsChanged(settings);
       catOverlay?.settingsChanged(settings);
+      agentVoice?.settingsChanged(settings);
       event("settings.changed", settings);
     },
     projectsChangedIn: (folderId) => event("projects.changed", { folderId }),
@@ -289,6 +292,17 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     log: (m) => console.log(m),
   });
   offs.push(() => catOverlay?.stop());
+  // O atalho Control (spec #9876): pelo helper headless, a fala vem do `debug.transcribe {target: "agent"}` (o `say`).
+  agentVoice = attachAgentVoice({
+    agent: stores.agent,
+    settings: stores.settings,
+    ...(session
+      ? { helper: { send: (c) => session.sidecar.send(c), on: (type, fn) => session.sidecar.on(type, fn), onReady: (fn) => session.sidecar.on("ready", fn) } }
+      : {}),
+    ui: (state) => event("agent.voice", state),
+    log: (m) => console.log(m),
+  });
+  offs.push(() => agentVoice?.stop());
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));
     offs.push(session.sidecar.on("*", (e) => (e.type === "audio.level" ? undefined : event("helper.event", e))));

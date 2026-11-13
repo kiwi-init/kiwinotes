@@ -137,7 +137,7 @@ export function Button({
   return <button type="button" className="kn-button" data-variant={variant} {...props} />;
 }
 
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button
       type="button"
@@ -145,6 +145,7 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
       aria-checked={checked}
       aria-label={label}
       className="kn-switch"
+      disabled={disabled}
       onClick={() => onChange(!checked)}
     />
   );
