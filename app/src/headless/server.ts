@@ -299,7 +299,10 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     ...(session
       ? { helper: { send: (c) => session.sidecar.send(c), on: (type, fn) => session.sidecar.on(type, fn), onReady: (fn) => session.sidecar.on("ready", fn) } }
       : {}),
-    ui: (state) => event("agent.voice", state),
+    ui: (state) => {
+      event("agent.voice", state);
+      catOverlay?.overlay.voice(state);
+    },
     log: (m) => console.log(m),
   });
   offs.push(() => agentVoice?.stop());

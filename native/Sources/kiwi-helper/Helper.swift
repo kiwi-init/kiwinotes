@@ -154,6 +154,8 @@ final class Helper {
             // Level queue: send straight away, the write queue serializes it.
             self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
             self?.overlay.push(level: level)
+            // Spec #9876: com a escuta do agente confirmada, as ondas do gato no overlay seguem a voz, direto do mic.
+            DispatchQueue.main.async { self?.catOverlayVoice(Double(level)) }
         }
         overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
@@ -502,6 +504,16 @@ final class Helper {
         DispatchQueue.main.asyncAfter(deadline: .now() + talk.agent.holdThreshold, execute: work)
     }
 
+    /// O gato no overlay carregou a página (`catOverlay.load`): só então o nível do mic vai a ela.
+    private var catOverlayLoaded = false
+
+    private func catOverlayVoice(_ level: Double?) {
+        guard catOverlayLoaded else { return }
+        if level != nil, !(recordingTarget == .agent && agentConfirmed) { return }
+        let cat = catOverlay
+        MainActor.assumeIsolated { cat.voice(level) }
+    }
+
     private func confirmAgent(latched: Bool) {
         agentConfirmTimer?.cancel()
         guard recordingTarget == .agent else { return }
@@ -671,6 +683,7 @@ final class Helper {
         if recordingTarget == .agent {
             // The waves stop the instant the listening ends, before the transcription (spec #9876).
             emit("agent.record.stopping", ["mode": mode])
+            catOverlayVoice(nil)
         } else {
             overlay.set(.processing)
         }
@@ -810,6 +823,7 @@ final class Helper {
             recordingTarget = nil
             recordingStartedAt = nil
             emit("agent.record.cancelled", ["reason": reason, "listened": agentConfirmed])
+            catOverlayVoice(nil)
             agentConfirmed = false
             return
         }
@@ -1003,6 +1017,7 @@ final class Helper {
             guard let dir = message.string("dir") else { return reply(id, ok: false, error: "invalid_value") }
             let cat = catOverlay
             let error = MainActor.assumeIsolated { cat.load(dir: dir) }
+            catOverlayLoaded = error == nil
             reply(id, ok: error == nil, error: error)
         case "catOverlay.show":
             guard let estado = message.string("estado") else { return reply(id, ok: false, error: "invalid_value") }
@@ -1021,6 +1036,7 @@ final class Helper {
             MainActor.assumeIsolated { cat.hide(fadeMs: fade) }
             reply(id, ok: true)
         case "catOverlay.unload":
+            catOverlayLoaded = false
             let cat = catOverlay
             MainActor.assumeIsolated { cat.unload() }
             reply(id, ok: true)

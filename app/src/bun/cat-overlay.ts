@@ -14,7 +14,7 @@
 
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import type { Command } from "../shared/ipc.ts";
-import type { AgentStatus, AgentTurnEvent, AppSettings } from "../shared/ui-contract.ts";
+import type { AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings } from "../shared/ui-contract.ts";
 
 /** Os tempos do roteiro, em ms. */
 export const OVERLAY_TIMES = {
@@ -159,6 +159,34 @@ export class CatOverlay {
     this.host.send({ type: "catOverlay.state", estado: state });
     if (state === "pronto") this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
     else if (state === "erro") this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+  }
+
+  /**
+   * A fala pelo Control (spec #9876): sem pedido em andamento, o gato entra pelo `acordou` e fica no `ouvindo` (as ondas
+   * o helper manda direto à página, do próprio mic). O pedido que começa daqui vai ao `thinking` sem repetir a entrada;
+   * cancelada ou vazia, o gato sai pela saída de cancelamento, sem `pronto`.
+   */
+  voice(v: AgentVoiceUi): void {
+    if (!this.enabled) return;
+    const before = this.activity.state;
+    if (v.phase === "listening") {
+      if (this.activity.attend(true) === before) return;
+      this.cancelTimer();
+      if (this.hubInView) {
+        this.phase = "corner";
+        return;
+      }
+      this.show("acordou", OVERLAY_TIMES.enter);
+      this.host.send({ type: "catOverlay.state", estado: "ouvindo" });
+    } else if (v.phase === "asked") {
+      this.activity.sent();
+    } else if (v.phase === "idle") {
+      if (this.activity.attend(false) === before) return;
+      if (this.phase === "corner") this.phase = "idle";
+      if (this.phase !== "shown") return;
+      this.phase = "idle";
+      this.hideNow(OVERLAY_TIMES.cancelExit);
+    }
   }
 
   /**

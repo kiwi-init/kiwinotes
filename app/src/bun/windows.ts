@@ -360,6 +360,7 @@ export function startAgentVoice(sidecar: Sidecar): void {
     helper: { send: (c) => sidecar.send(c), on: (type, fn) => sidecar.on(type, fn), onReady: (fn) => sidecar.on("ready", fn) },
     ui: (state) => {
       for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.voice", payload: state });
+      catOverlay?.overlay.voice(state);
     },
     log: (m) => console.log(m),
   });

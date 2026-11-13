@@ -257,3 +257,44 @@ describe("o gato no overlay ligado ao app", () => {
     expect(listeners()).toBe(0);
   });
 });
+
+describe("o gato no overlay e a fala pelo Control (spec #9876)", () => {
+  test("a fala entra pelo acordou e fica no ouvindo; o pedido segue sem repetir a entrada", () => {
+    const { cat, take } = rig();
+    cat.configure(true);
+    take();
+    cat.voice({ phase: "listening", voz: 0 });
+    expect(take()).toEqual([
+      { type: "catOverlay.show", estado: "acordou", fadeMs: OVERLAY_TIMES.enter },
+      { type: "catOverlay.state", estado: "ouvindo" },
+    ]);
+    cat.voice({ phase: "listening", voz: 0.5 });
+    cat.voice({ phase: "processing" });
+    expect(take()).toEqual([]);
+    cat.voice({ phase: "asked", text: "oi", id: "r1" });
+    cat.turn(started());
+    expect(take()).toEqual([{ type: "catOverlay.state", estado: "thinking" }]);
+  });
+
+  test("cancelada ou vazia, o gato sai pela saída de cancelamento, sem pronto", () => {
+    const { cat, take, advance } = rig();
+    cat.configure(true);
+    take();
+    cat.voice({ phase: "listening", voz: 0 });
+    take();
+    cat.voice({ phase: "idle", cancelled: true });
+    advance(5000);
+    expect(take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.cancelExit }]);
+    expect(cat.visible).toBe(false);
+  });
+
+  test("com o hub à vista, quem ouve é o gato do canto", () => {
+    const { cat, take } = rig();
+    cat.configure(true);
+    cat.setHubInView(true);
+    take();
+    cat.voice({ phase: "listening", voz: 0 });
+    cat.voice({ phase: "idle", cancelled: true });
+    expect(take()).toEqual([]);
+  });
+});
