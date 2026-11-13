@@ -127,6 +127,34 @@ export function ShortcutsSection() {
           ))}
         </Section>
       ))}
+      <SidebarKeysSection />
     </>
+  );
+}
+
+/**
+ * As teclas da barra lateral das Notas (spec #10211): fixas, só para ler. Elas valem com o foco na barra; com o foco no
+ * editor, as mesmas teclas fazem o que já faziam.
+ */
+export const SIDEBAR_KEYS: readonly { keys: string; label: string }[] = [
+  { keys: "↓", label: "Do campo “Ir para uma nota ou pasta” para a árvore" },
+  { keys: "↑ ↓", label: "Andar entre as pastas e as notas" },
+  { keys: "→ ←", label: "Abrir e fechar a pasta" },
+  { keys: "↩", label: "Abrir a nota" },
+  { keys: "⇧F10", label: "O menu da pasta ou da nota (ou a tecla de menu)" },
+  { keys: "esc", label: "Fechar o menu e voltar para a linha" },
+];
+
+export function SidebarKeysSection() {
+  return (
+    <Section title="Atalhos · Barra lateral das Notas">
+      {SIDEBAR_KEYS.map((k) => (
+        <Row key={k.keys} label={k.label}>
+          <kbd className="kn-kbd kn-shortcut-key" data-fixed="true">
+            {k.keys}
+          </kbd>
+        </Row>
+      ))}
+    </Section>
   );
 }
