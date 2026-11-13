@@ -305,3 +305,52 @@
 .kn-usage-top li { min-width: 0; font-size: var(--text-sm); }
 .kn-usage-q { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kn-usage-meta { display: block; color: var(--text-2); font-size: var(--text-xs, 0.85em); }
+
+/* O Modelo de nota (spec #11102): a lista dos blocos ao lado do desenho grande, que é só forma. */
+.kn-nm { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.kn-nm-head { display: flex; flex-direction: column; gap: 2px; }
+.kn-nm-grid { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1.1fr); gap: var(--space-4); align-items: start; }
+.kn-nm-blocks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.kn-nm-block { display: flex; align-items: center; gap: var(--space-2); padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: grab; transition: border-color var(--fast) var(--ease), opacity var(--fast) var(--ease); }
+.kn-nm-block[data-off] { opacity: 0.55; }
+.kn-nm-block[data-over] { border-color: var(--accent); }
+.kn-nm-grip { width: 10px; height: 14px; background: radial-gradient(circle, var(--text-2) 1.2px, transparent 1.4px) 0 0 / 5px 5px; opacity: 0.6; flex: none; }
+.kn-nm-block-name { flex: 1; font-size: var(--text-sm); }
+.kn-nm-move { display: flex; gap: 2px; }
+.kn-nm-arrow { width: 22px; height: 22px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font: inherit; font-size: 12px; line-height: 1; cursor: pointer; }
+.kn-nm-arrow:disabled { opacity: 0.35; cursor: default; }
+.kn-nm-arrow:focus-visible, .kn-nm-body-choice:focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: 1px; }
+
+/* O desenho: uma página de mentira. As formas usam a cor do texto bem esmaecida. */
+.kn-nm-page { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 18px 20px; min-height: 280px; display: flex; flex-direction: column; gap: 14px; --nm-ink: color-mix(in srgb, var(--text-2) 32%, transparent); --nm-ink-strong: color-mix(in srgb, var(--text-2) 55%, transparent); }
+.kn-nm-part { animation: kn-nm-in 160ms var(--ease, ease-out); }
+@keyframes kn-nm-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.kn-nm-title { height: 14px; width: 58%; border-radius: 4px; background: var(--nm-ink-strong); }
+.kn-nm-heading { display: block; height: 9px; width: 34%; border-radius: 3px; background: var(--nm-ink-strong); margin-bottom: 6px; }
+.kn-nm-heading-small { width: 24%; }
+.kn-nm-lines, .kn-nm-props, .kn-nm-toc, .kn-nm-body, .kn-nm-close { display: flex; flex-direction: column; gap: 5px; }
+.kn-nm-props { padding: 6px 8px; border-radius: 4px; background: color-mix(in srgb, var(--text-2) 7%, transparent); }
+.kn-nm-line-row { display: flex; align-items: center; gap: 6px; }
+.kn-nm-line { display: block; height: 6px; border-radius: 3px; background: var(--nm-ink); }
+.kn-nm-link { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.kn-nm-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--nm-ink-strong); flex: none; }
+.kn-nm-key { width: 14%; height: 6px; border-radius: 3px; background: var(--nm-ink-strong); flex: none; }
+.kn-nm-num { width: 10px; height: 6px; border-radius: 2px; background: var(--nm-ink-strong); flex: none; }
+.kn-nm-check { width: 7px; height: 7px; border-radius: 2px; border: 1.5px solid var(--nm-ink-strong); flex: none; }
+.kn-nm-gap { height: 4px; }
+
+/* Os estilos do corpo, cada um com a sua miniatura. */
+.kn-nm-bodies { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.kn-nm-body-choice { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: inherit; font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.kn-nm-body-choice[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.kn-nm-thumb { width: 100%; padding: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text-2) 5%, transparent); --nm-ink: color-mix(in srgb, var(--text-2) 32%, transparent); --nm-ink-strong: color-mix(in srgb, var(--text-2) 55%, transparent); }
+.kn-nm-thumb .kn-nm-lines { gap: 4px; }
+.kn-nm-thumb .kn-nm-line { height: 4px; }
+.kn-nm-options { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.kn-nm-option { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.kn-nm-first { display: flex; justify-content: flex-end; gap: var(--space-2); }
+@media (max-width: 640px) { .kn-nm-grid { grid-template-columns: 1fr; } .kn-nm-bodies { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Reduzir movimento: sem animação ao arrastar e ao trocar o estilo. */
+@media (prefers-reduced-motion: reduce) { .kn-nm-part { animation: none; } .kn-nm-block { transition: none; } }
+:root[data-motion="reduced"] .kn-nm-part { animation: none; }
+:root[data-motion="reduced"] .kn-nm-block { transition: none; }

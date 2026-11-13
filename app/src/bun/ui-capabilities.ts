@@ -1,4 +1,4 @@
-import { type NoteModel, readNoteModel, writeNoteModel } from "../agent/note-model.ts";
+import { type NoteModel, noteModelSaved, readNoteModel, writeNoteModel } from "../agent/note-model.ts";
 import { statSync } from "node:fs";
 import path from "node:path";
 
@@ -1187,7 +1187,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     // O Modelo de nota (spec #11102): um arquivo legível do cofre. Gravar não reescreve nenhuma nota.
     "agent.noteModel": async (args) => {
       noArgs(args, "agent.noteModel");
-      return readNoteModel(deps.notes.root);
+      return { model: readNoteModel(deps.notes.root), saved: noteModelSaved(deps.notes.root) };
     },
     "agent.noteModelSet": async (args) => {
       const a = fields(args, "agent.noteModelSet", ["model"]);

@@ -98,6 +98,11 @@ export function parseNoteModel(text: string): NoteModel {
   return sanitizeNoteModel({ blocks, body, numbered, tocDepth });
 }
 
+/** O cofre já tem o arquivo do modelo (a pessoa montou ou pulou a tela). */
+export function noteModelSaved(vaultRoot: string): boolean {
+  return existsSync(path.join(vaultRoot, NOTE_MODEL_FILE));
+}
+
 /** O modelo do cofre; sem o arquivo, o padrão. */
 export function readNoteModel(vaultRoot: string): NoteModel {
   const file = path.join(vaultRoot, NOTE_MODEL_FILE);

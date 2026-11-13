@@ -539,8 +539,11 @@ export interface UiCapabilities {
   "agent.usageRefresh": { args: Record<string, never>; result: AgentUsageView };
   /** "Apagar o gasto guardado" (1.54.0): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
   "agent.usageClear": { args: Record<string, never>; result: AgentUsageView };
-  /** O Modelo de nota do cofre (1.56.0, spec #11102): o padrão quando ainda não há `.kiwi/modelo-de-nota.md`. */
-  "agent.noteModel": { args: Record<string, never>; result: NoteModel };
+  /**
+   * O Modelo de nota do cofre (1.56.0, spec #11102): o padrão quando ainda não há `.kiwi/modelo-de-nota.md`. `saved`
+   * diz se o arquivo existe: sem ele, a tela aparece na primeira vez, com "Pular".
+   */
+  "agent.noteModel": { args: Record<string, never>; result: { model: NoteModel; saved: boolean } };
   /** Grava o Modelo de nota (1.56.0). Só o arquivo do modelo: nenhuma nota é reescrita. */
   "agent.noteModelSet": { args: { model: NoteModel }; result: NoteModel };
 }
