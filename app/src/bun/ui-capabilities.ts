@@ -1004,6 +1004,12 @@ export function uiCapabilities(deps: CapabilityDeps,
         throw bad("agent.undo: change must be an integer from 1");
       return agentCall((agent) => agent.undo(a.request as string, a.change as number | undefined));
     },
+    "agent.change": (args) => {
+      const a = fields(args, "agent.change", ["request", "change"]);
+      if (typeof a.request !== "string" || !a.request) throw bad("agent.change: request must be the id of a request");
+      if (!Number.isInteger(a.change) || (a.change as number) < 1) throw bad("agent.change: change must be an integer from 1");
+      return agentCall((agent) => agent.changeView(a.request as string, a.change as number));
+    },
   };
   // A lista do contrato e os handlers andam juntos.
   for (const cap of UI_CAPABILITIES) if (!handlers[cap]) throw new Error(`no handler for ${cap}`);

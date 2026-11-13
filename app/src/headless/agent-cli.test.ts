@@ -262,6 +262,20 @@ describe("o agente pela CLI headless (T8678)", () => {
     for (const v of versions) texts.push((await invoke("notes.version", { path: "Projetos/Plano.md", id: v.id })).json!.value.content);
     expect(texts).toContain("# Plano\n\n## Prazo\n\nO prazo é abril.\n");
 
+    // A tela "Atividade do agente" (spec #9480): o registro avisa, também num desfazer pela CLI, e o [Ver] mostra o antes.
+    expect(out.split("\n").some((l) => l.includes('"agent.activityChanged"') && l.includes(write))).toBe(true);
+    expect((await invoke("agent.change", { request: write, change: 1 })).json).toMatchObject({
+      ok: true,
+      value: { request: write, change: 1, path: "Projetos/Plano.md", kind: "replaced", section: "Prazo", before: PLANO, state: "undone" },
+    });
+    expect((await invoke("agent.change", { request: create, change: 1 })).json).toMatchObject({
+      ok: true,
+      value: { kind: "created", before: "", state: "exact", after: "criada pelo agente" },
+    });
+    expect((await invoke("agent.change", { request: write, change: 2 })).json).toMatchObject({ ok: false, code: "E_NOT_FOUND" });
+    expect((await invoke("agent.change", { request: write })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect((await invoke("agent.change", { request: write, change: 1, x: 1 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+
     // De novo: nada muda, e diz.
     expect((await cli(["agent", "undo", write])).json!.value.notes).toEqual([
       { path: "Projetos/Plano.md", result: "already", changes: [1], message: "Já tinha sido desfeita." },

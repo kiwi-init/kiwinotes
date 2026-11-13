@@ -134,6 +134,11 @@ export const api = {
     configure: (o: UiCapabilities["agent.configure"]["args"]) => invoke("agent.configure", o),
     onStatus: (fn: (s: UiEvents["agent.status"]) => void) => on("agent.status", fn),
     onTurn: (fn: (e: UiEvents["agent.turn"]) => void) => on("agent.turn", fn),
+    /** A tela "Atividade do agente" (1.44.0–1.46.0, spec #9480): o registro, o [Ver] e o [Desfazer]. */
+    activity: (limit?: number) => invoke("agent.activity", limit ? { limit } : {}),
+    change: (request: string, change: number) => invoke("agent.change", { request, change }),
+    undo: (request: string, change?: number) => invoke("agent.undo", change ? { request, change } : { request }),
+    onActivity: (fn: (e: UiEvents["agent.activityChanged"]) => void) => on("agent.activityChanged", fn),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {

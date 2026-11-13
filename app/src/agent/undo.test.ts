@@ -18,6 +18,7 @@ import { readerFromCapabilities } from "./tools/reader.ts";
 import { runKiwiTool } from "./tools/tools.ts";
 import { writerFromCapabilities } from "./tools/writer.ts";
 import { keyOf, undo, UNDO_CAPABILITIES, undoNotesFromCapabilities, UndoError } from "./undo.ts";
+import { viewChange } from "./change-view.ts";
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
@@ -60,6 +61,8 @@ function harness(caps: Caps, base: string) {
       return r.value as Record<string, any>;
     },
     undo: (id: string, change?: number) => undo({ activity, notes, now }, id, change),
+    /** O [Ver] da tela "Atividade do agente" (spec #9480). */
+    view: (id: string, change: number) => viewChange({ activity, notes }, id, change),
   };
 }
 
@@ -163,6 +166,8 @@ describe("o desfazer das mudanças do agente (spec #9353)", () => {
         changes: [1],
         reason: "E_LATER_WRITE",
         message: "Depois desta, o agente escreveu de novo em Ideias.md (a mudança 2 deste pedido). Desfaça primeiro a mais nova, ou o pedido inteiro.",
+        // Para a tela (spec #9480): a mudança e o pedido, com a hora dele.
+        later: { request: id, change: 2, at: "2026-11-13T12:00:00.000Z" },
       },
     ]);
     expect(t.read("Ideias.md")).toBe(afterSecond);
@@ -184,6 +189,7 @@ describe("o desfazer das mudanças do agente (spec #9353)", () => {
       result: "refused",
       reason: "E_LATER_WRITE",
       message: `Depois desta, o agente escreveu de novo em Ideias.md, no pedido ${p2} (a mudança 1). Desfaça primeiro aquele.`,
+      later: { request: p2, change: 1, at: (await t.activity.get(p2))!.at },
     });
     expect((await t.undo(p2)).notes[0]!.result).toBe("restored");
     expect((await t.undo(p1)).notes[0]!.result).toBe("restored");
@@ -437,8 +443,98 @@ describe("o desfazer e a pasta de notas (spec #9353)", () => {
     expect(readFileSync(path.join(r.a, "Ideias.md"), "utf8")).toBe(IDEIAS);
   });
 
+  test("o [Ver] com outra pasta de notas aberta: só o antes, e nunca lê a nota de mesmo nome da pasta errada (spec #9480)", async () => {
+    const r = await rig();
+    await r.open(r.a);
+    const id = await r.request();
+    await r.write(id, "notes_append", { path: "Ideias.md", text: "- na pasta A" });
+    const inA = readFileSync(path.join(r.a, "Ideias.md"), "utf8");
+    await r.open(r.b);
+    const other = await r.view(id, 1);
+    expect(other).toMatchObject({ before: IDEIAS, state: "otherFolder" });
+    expect(other.after).toBeUndefined();
+    await r.open(r.a);
+    expect(await r.view(id, 1)).toMatchObject({ state: "exact", after: inA });
+  });
+
   test("a chave da pasta sai do id que o escritor anotou", () => {
     expect(keyOf("0123456789abcdef0123:7")).toBe("0123456789abcdef0123");
     expect(keyOf("internal:0123456789abcdef0123")).toBe("0123456789abcdef0123");
   });
 });
+
+describe("o [Ver] de uma mudança do agente (spec #9480)", () => {
+  test("o antes e o depois exato; na 1ª de duas escritas na mesma nota, o depois é o que ela deixou, não a nota de agora", async () => {
+    const t = await setup();
+    const id = await t.request();
+    await t.write(id, "notes_append", { path: "Ideias.md", text: "- primeira" });
+    const afterFirst = t.read("Ideias.md");
+    await t.write(id, "notes_append", { path: "Ideias.md", text: "- segunda" });
+    const afterSecond = t.read("Ideias.md");
+
+    expect(await t.view(id, 1)).toMatchObject({ request: id, change: 1, path: "Ideias.md", kind: "appended", before: IDEIAS, state: "exact", after: afterFirst });
+    expect(await t.view(id, 2)).toMatchObject({ before: afterFirst, state: "exact", after: afterSecond });
+    // Só lê: nada mudou, e só as capacidades de leitura.
+    expect(t.read("Ideias.md")).toBe(afterSecond);
+    expect([...t.called].sort()).toEqual(["notes.folder", "notes.get"]);
+  });
+
+  test("a escrita seguinte num outro pedido também dá o depois exato", async () => {
+    const t = await setup();
+    const p1 = await t.request();
+    await t.write(p1, "notes_append", { path: "Ideias.md", text: "- do pedido 1" });
+    const afterP1 = t.read("Ideias.md");
+    const p2 = await t.request();
+    await t.write(p2, "notes_append", { path: "Ideias.md", text: "- do pedido 2" });
+    expect(await t.view(p1, 1)).toMatchObject({ state: "exact", after: afterP1 });
+  });
+
+  test("a nota criada: o antes é vazio, e o depois é o texto dela", async () => {
+    const t = await setup();
+    const id = await t.request();
+    const { path: p } = await t.write(id, "notes_create", { folder: "Projetos", title: "Resumo", text: "# Resumo\n\nfeito pelo agente\n" });
+    expect(await t.view(id, 1)).toMatchObject({ path: p, kind: "created", before: "", state: "exact", after: t.read(p) });
+  });
+
+  test("a nota mudada depois do agente: o depois é a nota de agora, marcado como mudado", async () => {
+    const t = await setup();
+    const id = await t.request();
+    await t.write(id, "notes_append", { path: "Ideias.md", text: "- do agente" });
+    const n = (await t.caps["notes.get"]!({ path: "Ideias.md" })) as { content: string; version: string };
+    await t.caps["notes.save"]!({ path: "Ideias.md", content: n.content + "- minha\n", baseVersion: n.version });
+    expect(await t.view(id, 1)).toMatchObject({ before: IDEIAS, state: "changed", after: t.read("Ideias.md") });
+  });
+
+  test("a nota que sumiu, a mudança já desfeita e a cópia que não está mais lá: só o antes (ou nada)", async () => {
+    const t = await setup();
+    const id = await t.request();
+    await t.write(id, "notes_append", { path: "Ideias.md", text: "- do agente" });
+    await t.write(id, "notes_append", { path: "Projetos/Kiwi.md", section: "Equipe", text: "e o gato." });
+    await t.caps["notes.rename"]!({ path: "Ideias.md", newPath: "Outras ideias.md" });
+    const gone = await t.view(id, 1);
+    expect(gone).toMatchObject({ before: IDEIAS, state: "gone" });
+    expect(gone.after).toBeUndefined();
+
+    t.tick(5000);
+    expect((await t.undo(id, 2)).notes[0]!.result).toBe("restored");
+    const undone = await t.view(id, 2);
+    expect(undone).toMatchObject({ before: KIWI, state: "undone", undone: expect.any(String) });
+    expect(undone.after).toBeUndefined();
+
+    // A cópia de antes sumiu do registro: o antes é null.
+    const copy = (await t.activity.get(id))!.changes[0]!.copy!;
+    const dir = path.join(t.base, "agent", "activity");
+    const folder = (await Array.fromAsync(new Bun.Glob(`*_${id}`).scan({ cwd: dir, onlyFiles: false })))[0]!;
+    rmSync(path.join(dir, folder, copy.split("/")[1]!));
+    expect((await t.view(id, 1)).before).toBeNull();
+  });
+
+  test("um pedido ou uma mudança que não está no registro", async () => {
+    const t = await setup();
+    await expect(t.view("nao-existe", 1)).rejects.toBeInstanceOf(UndoError);
+    const id = await t.request();
+    await expect(t.view(id, 1)).rejects.toBeInstanceOf(UndoError);
+    await expect(t.view("../fora", 1)).rejects.toBeInstanceOf(UndoError);
+  });
+});
+

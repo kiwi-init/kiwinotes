@@ -166,4 +166,32 @@ describe("o registro do agente", () => {
     await expect(a.begin("../fora", "x")).rejects.toThrow();
     expect(existsSync(dir)).toBe(false);
   });
+
+  test("avisa quem escuta (spec #9480): o pedido que começa, a leitura, a mudança e o desfazer; a cópia, não", async () => {
+    const { a } = make();
+    const seen: string[] = [];
+    const off = a.onChanged((id) => seen.push(id));
+    a.onChanged(() => {
+      throw new Error("quem escuta errou");
+    });
+    await a.begin("p1", "um pedido");
+    await a.read("p1", { tool: "notes_read", target: "Ideias.md" });
+    const copy = await a.keep("p1", "antes");
+    await a.change("p1", { ...change, copy });
+    await a.markUndone("p1", [0]);
+    expect(seen).toEqual(["p1", "p1", "p1", "p1"]);
+    off();
+    await a.begin("p2", "outro");
+    expect(seen).toHaveLength(4);
+  });
+
+  test("a lista só mostra os últimos 30 dias, mesmo antes de um pedido novo apagar os velhos (spec #9480)", async () => {
+    let t = Date.parse("2026-10-01T10:00:00.000Z");
+    const { a } = make(() => t);
+    await a.begin("velho", "antigo");
+    t += 1000;
+    await a.begin("novo", "recente");
+    t += ACTIVITY_KEEP_MS - 500;
+    expect((await a.list()).map((r) => r.id)).toEqual(["novo"]);
+  });
 });

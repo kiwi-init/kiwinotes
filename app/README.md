@@ -118,6 +118,14 @@ bun run cli invoke agent.undo '{"request":"<pedido>"}' --data /tmp/kn-test
 
 Na janela, num WebKit headless: `KIWI_AGENT_UI_ONLY=desfazer bun scripts/agent-ui-check.ts`.
 
+**A tela "Atividade do agente" (T9493, spec #9480)**, em Ajustes › Agente: a lista dos pedidos, o [Ver] e o [Desfazer]. O [Ver] é o `agent.change`, só de leitura, e a lista se atualiza pelo evento `agent.activityChanged`. Com o agente falso, um pedido pode chamar várias ferramentas, uma linha `/tool` para cada:
+
+```sh
+bun run cli invoke agent.change '{"request":"<pedido>","change":1}' --data /tmp/kn-test   # o antes e o depois da 1ª mudança
+KIWI_AGENT_UI_ONLY=atividade bun scripts/agent-ui-check.ts                              # a seção, num WebKit headless
+KIWI_AGENT_UI_ONLY=atividade-vazia bun scripts/agent-ui-check.ts                        # sem pedidos, com o agente desligado
+```
+
 **A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
 - o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
 - os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;

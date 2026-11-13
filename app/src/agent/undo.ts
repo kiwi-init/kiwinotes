@@ -37,7 +37,7 @@ const codeOf = (e: unknown) => (e as { code?: string })?.code;
 const withFolder = (args: Record<string, unknown>, folderId?: string) => (folderId ? { ...args, folderId } : args);
 
 /** A pasta trocou entre a conferência e a chamada: o `folderCapabilities` recusa o id velho. */
-class OtherFolder extends Error {}
+export class OtherFolder extends Error {}
 
 /** O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as quatro acima. */
 export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: unknown) => unknown>): UndoNotes {
@@ -97,7 +97,7 @@ export const keyOf = (id: string) => id.replace(/^internal:/, "").replace(/:\d+$
  * A mesma nota (revisão do T9398): o mesmo caminho na mesma pasta de notas. Uma nota de mesmo nome em outra pasta é
  * outra nota. Uma mudança sem a pasta anotada (o engine sem pastas) vale para qualquer uma.
  */
-const sameNote = (a: ActivityChange, b: ActivityChange) =>
+export const sameNote = (a: ActivityChange, b: ActivityChange) =>
   a.path === b.path && (!a.folder || !b.folder || keyOf(a.folder) === keyOf(b.folder));
 
 /** O pedido (ou a mudança) não está no registro. */
@@ -112,7 +112,7 @@ export interface UndoDeps {
   keepMs?: number;
 }
 
-type Refusal = Required<Pick<AgentUndoNote, "reason" | "message">>;
+type Refusal = Required<Pick<AgentUndoNote, "reason" | "message">> & Pick<AgentUndoNote, "later">;
 
 const MESSAGES = {
   expired: (): Refusal => ({ reason: "E_EXPIRED", message: "Essa mudança tem mais de 30 dias: não há mais o que desfazer." }),
@@ -131,12 +131,14 @@ const MESSAGES = {
       ? `${p} mudou depois que o agente a criou. Ela fica onde está.`
       : `${p} mudou depois do agente. Nada foi mudado; o texto de antes continua no registro e nas Versões da nota.`,
   }),
-  laterHere: (p: string, n: number): Refusal => ({
+  laterHere: (p: string, n: number, later: NonNullable<AgentUndoNote["later"]>): Refusal => ({
     reason: "E_LATER_WRITE",
+    later,
     message: `Depois desta, o agente escreveu de novo em ${p} (a mudança ${n} deste pedido). Desfaça primeiro a mais nova, ou o pedido inteiro.`,
   }),
-  laterElsewhere: (p: string, request: string, n: number): Refusal => ({
+  laterElsewhere: (p: string, request: string, n: number, later: NonNullable<AgentUndoNote["later"]>): Refusal => ({
     reason: "E_LATER_WRITE",
+    later,
     message: `Depois desta, o agente escreveu de novo em ${p}, no pedido ${request} (a mudança ${n}). Desfaça primeiro aquele.`,
   }),
 };
@@ -201,12 +203,13 @@ export async function undo(d: UndoDeps, requestId: string, change?: number): Pro
 
     const laterHere = change !== undefined ? changes.findIndex((c, i) => i > g.indexes[0]! && sameNote(c, first) && !c.undone) : -1;
     if (laterHere >= 0) {
-      refuse(MESSAGES.laterHere(g.path, laterHere + 1));
+      refuse(MESSAGES.laterHere(g.path, laterHere + 1, { request: requestId, change: laterHere + 1, at: record.at }));
       continue;
     }
     const laterElsewhere = later(others, last);
     if (laterElsewhere) {
-      refuse(MESSAGES.laterElsewhere(g.path, laterElsewhere.request, laterElsewhere.n));
+      const { request: r, n, at } = laterElsewhere;
+      refuse(MESSAGES.laterElsewhere(g.path, r, n, { request: r, change: n, at }));
       continue;
     }
     if (g.indexes.some((i) => now() - Date.parse(changes[i]!.at) > keepMs)) {
@@ -269,14 +272,17 @@ export async function undo(d: UndoDeps, requestId: string, change?: number): Pro
 }
 
 /** A escrita do agente na mesma nota de `after`, num outro pedido, depois dela e ainda não desfeita; a mais velha. */
-function later(others: { id: string; changes: ActivityChange[] }[], after: ActivityChange): { request: string; n: number } | null {
+function later(
+  others: { id: string; at: string; changes: ActivityChange[] }[],
+  after: ActivityChange,
+): { request: string; n: number; at: string } | null {
   const t = Date.parse(after.at);
-  let found: { request: string; n: number; t: number } | null = null;
+  let found: { request: string; n: number; at: string; t: number } | null = null;
   for (const r of others) {
     for (const [i, c] of r.changes.entries()) {
       const ct = Date.parse(c.at);
-      if (sameNote(c, after) && !c.undone && ct > t && (!found || ct < found.t)) found = { request: r.id, n: i + 1, t: ct };
+      if (sameNote(c, after) && !c.undone && ct > t && (!found || ct < found.t)) found = { request: r.id, n: i + 1, at: r.at, t: ct };
     }
   }
-  return found && { request: found.request, n: found.n };
+  return found && { request: found.request, n: found.n, at: found.at };
 }

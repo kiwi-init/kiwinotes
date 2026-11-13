@@ -16,6 +16,12 @@
 // - o desfazer (spec #9353), na janela Notas: o agente falso troca o prazo e cria uma nota, cada um num pedido; com a
 //   nota aberta, o `agent.undo` volta o texto de antes, e a nota criada sai da árvore (vai para a Lixeira). O roteiro é
 //   montado depois dos pedidos, com o id de cada um.
+// - a tela "Atividade do agente" (spec #9480), em Ajustes › Agente: cinco pedidos do agente falso (só leu; trocou o
+//   prazo; duas escritas na mesma nota; criou uma nota; acrescentou numa nota que a pessoa editou depois), a lista, o
+//   [Ver] da 1ª de duas escritas, os desfazer recusados com o motivo, o pedido inteiro desfeito, um desfazer de fora
+//   que a lista vê sozinha, um pedido novo que aparece sozinho, o agente desligado, o teclado e o escuro. O roteiro é
+//   montado depois dos pedidos, com o id de cada um. E a seção vazia, com o agente desligado (`atividade-vazia`), e o
+//   pedido que passa dos 30 dias com a tela aberta (`atividade-prazo`).
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -187,6 +193,170 @@ async function undoReady(data: string, env: Record<string, string>): Promise<voi
   writeFileSync(undoFile, JSON.stringify({ window: "notes", size: "1100x800", steps }, null, 2));
 }
 
+/** O roteiro da Atividade do agente (spec #9480): sai do `activityReady`, que sabe o id dos pedidos. */
+const activityFile = path.join(work, "ajustes-atividade.json");
+
+/** Antes da janela: o agente pronto, a nota Ideias, e os cinco pedidos dele, já terminados. */
+async function activityReady(data: string, env: Record<string, string>): Promise<void> {
+  await agentReady(data, env);
+  const invoke = async (cap: string, args: unknown) => {
+    const r = await cli(["invoke", cap, JSON.stringify(args), "--data", data], env);
+    if (r.code !== 0) throw new Error(`${cap}: ${r.out}`);
+    return JSON.parse(r.out) as { value: any };
+  };
+  const tool = (name: string, args: unknown) => `/tool ${name} ${JSON.stringify(args)}`;
+  const ask = async (text: string) => {
+    const { id } = (await invoke("agent.ask", { text })).value as { id: string };
+    for (const end = Date.now() + 30_000; ; ) {
+      const done = (await cli(["events", "--data", data], env)).out
+        .split("\n")
+        .some((l) => l.includes('"agent.turn"') && l.includes(`"${id}"`) && /"type":"(done|error)"/.test(l));
+      if (done) return id;
+      if (Date.now() > end) throw new Error(`o pedido não terminou: ${text}`);
+      await Bun.sleep(200);
+    }
+  };
+  await invoke("notes.create", { title: "Ideias", content: "# Ideias\n\n- um app de notas que escuta\n" });
+  const kiwi = "Projetos/Kiwi.md";
+  const read = await ask(`Qual é o prazo do Kiwi?\n${tool("notes_read", { path: kiwi })}`);
+  const prazo = await ask(
+    `Mude o prazo do Kiwi para abril\n${tool("notes_read", { path: kiwi })}\n${tool("notes_write", { path: kiwi, section: "Prazo", text: "O prazo do Kiwi é abril.", version: versionOf(KIWI) })}`,
+  );
+  const ideias = await ask(
+    `Anote duas ideias para o gato\n${tool("notes_append", { path: "Ideias.md", text: "- o gato acorda quando o agente pensa" })}\n${tool("notes_append", { path: "Ideias.md", text: "- o gato dorme depois de 5 minutos" })}`,
+  );
+  const resumo = await ask(`Faça um resumo do Kiwi\n${tool("notes_create", { folder: "Projetos", title: "Resumo do Kiwi", text: "# Resumo do Kiwi\n\nPrazo: abril.\n" })}`);
+  const equipe = await ask(`Ponha o gato na equipe\n${tool("notes_append", { path: kiwi, section: "Equipe", text: "E o Kiwi-cat." })}`);
+  // A pessoa escreve no Kiwi depois do agente: o desfazer do último pedido não pode passar por cima.
+  const now = (await invoke("notes.get", { path: kiwi })).value as { content: string; version: string };
+  await invoke("notes.save", { path: kiwi, content: `${now.content}\nUma linha da pessoa.\n`, baseVersion: now.version });
+  void read;
+
+  const section = ".kn-section:has(h2:text-is('Atividade do agente'))";
+  const req = (id: string) => `${section} .kn-activity-req[data-request='${id}']`;
+  const steps = [
+    { waitFor: ".kn-tab", name: "o hub abre" },
+    { click: ".kn-tab:has-text('Configurações')" },
+    { waitFor: section, name: "a seção Atividade do agente" },
+    { expectCount: `${section} .kn-activity-req`, count: 5, name: "os cinco pedidos" },
+    { expectText: `${section} .kn-activity-req:first-child .kn-activity-text`, text: "Ponha o gato na equipe", name: "do mais novo ao mais velho" },
+    { expectText: req(prazo), text: "Mude o prazo do Kiwi para abril", name: "o começo do pedido, sem as linhas do agente falso" },
+    { expectText: req(prazo), text: "Leu 1 nota.", name: "o que foi lido" },
+    { expectText: req(prazo), text: "Trocou Projetos/Kiwi › Prazo", name: "a mudança, com a seção" },
+    { expectText: req(read), text: "Não mudou nada.", name: "o pedido que só leu" },
+    { expectText: req(resumo), text: "Criou Projetos/Resumo do Kiwi", name: "a nota criada" },
+    { screenshot: "1-lista.png", selector: section },
+    { click: `${req(ideias)} .kn-activity-change:first-child button:has-text('Ver')`, name: "[Ver] da 1ª de duas escritas na mesma nota" },
+    { expectText: `${req(ideias)} .kn-activity-view .kn-diff-add`, text: "o gato acorda quando o agente pensa", name: "a linha que a 1ª escrita pôs" },
+    { expectCount: `${req(ideias)} .kn-activity-view .kn-diff-add`, count: 1, name: "só ela: não a 2ª escrita" },
+    { click: `${req(prazo)} .kn-activity-change:first-child button:has-text('Ver')`, name: "[Ver] da troca do prazo" },
+    { expectText: `${req(prazo)} .kn-activity-view .kn-diff-del`, text: "O prazo do Kiwi é março.", name: "o antes, riscado" },
+    { expectText: `${req(prazo)} .kn-activity-view .kn-diff-add`, text: "O prazo do Kiwi é abril.", name: "o que o agente deixou" },
+    // A pessoa e o agente mexeram no Kiwi depois, mas a escrita seguinte do agente guardou a cópia: o depois é exato.
+    { expectCount: `${req(prazo)} .kn-activity-view .kn-activity-notice`, count: 0, name: "o depois é o texto exato do agente, sem aviso" },
+    { screenshot: "2-ver.png", selector: section },
+    { click: `${req(prazo)} .kn-activity-change:first-child button:has-text('Desfazer')`, name: "desfaz a troca do prazo" },
+    { expectText: `${req(prazo)} .kn-activity-outcome`, text: "Desfaça antes aquele pedido", name: "recusado: o agente escreveu de novo no Kiwi depois" },
+    { expectText: `${req(prazo)} .kn-activity-outcome`, text: "no pedido de hoje, ", name: "pela hora do pedido, não por um código" },
+    { click: `${req(equipe)} .kn-activity-change:first-child button:has-text('Desfazer')`, name: "desfaz o pedido da equipe" },
+    { expectText: `${req(equipe)} .kn-activity-outcome`, text: "mudou depois do agente, então ficou como está", name: "recusado: a pessoa escreveu depois" },
+    { expectCount: `${req(equipe)} button:has-text('Desfazer')`, count: 1, name: "nada mudou: o botão continua" },
+    { expectCount: `${req(prazo)} .kn-activity-view .kn-diff-add`, count: 1, name: "e o [Ver] aberto continua, porque nada mudou" },
+    { screenshot: "3-recusado.png", selector: section },
+    { click: `${req(ideias)} button:has-text('Desfazer o pedido')`, name: "desfaz o pedido inteiro das ideias" },
+    { expectText: `${req(ideias)} .kn-activity-outcome`, text: "Ideias voltou ao texto de antes.", name: "a nota voltou" },
+    { expectCount: `${req(ideias)} .kn-activity-undone`, count: 2, name: "as duas mudanças dizem Desfeito, com a hora" },
+    { expectCount: `${req(ideias)} button:has-text('Desfazer')`, count: 0, name: "e os botões somem, o do pedido também" },
+    { screenshot: "4-desfeito.png", selector: section },
+    { invoke: "agent.undo", args: { request: resumo }, name: "um desfazer por fora (como a CLI): a nota criada vai para a Lixeira" },
+    { waitFor: `${req(resumo)} .kn-activity-undone`, timeout: 10000, name: "a lista vê sozinha" },
+    { invoke: "agent.ask", args: { text: `Releia a equipe\n${tool("notes_read", { path: kiwi })}` }, name: "um pedido novo" },
+    { expectCount: `${section} .kn-activity-req`, count: 6, timeout: 20000, name: "aparece sozinho na lista" },
+    { wait: 1500 },
+    { invoke: "agent.disable", args: {}, name: "desliga o agente" },
+    { waitFor: section, name: "a seção continua com o agente desligado" },
+    // Pelo teclado: o Tab chega ao [Ver] (no WebKit, o Alt+Tab, como o Tab do Safari com o acesso total pelo teclado), e o
+    // Enter abre e fecha.
+    { click: `${req(resumo)} .kn-activity-when`, name: "o ponto de partida do Tab: a hora do pedido" },
+    { press: "Alt+Tab", name: "o Tab vai para o [Ver]" },
+    { expectText: `${req(resumo)} button:focus`, text: "Ver", name: "o foco está no [Ver]" },
+    { press: "Enter", name: "o Enter abre o [Ver] da nota criada, já desfeita" },
+    { expectText: `${req(resumo)} .kn-activity-view`, text: "nas Versões da nota", name: "o aviso do desfeito" },
+    { press: "Enter", name: "o Enter fecha" },
+    { expectCount: `${req(resumo)} .kn-activity-view`, count: 0, name: "fechado" },
+    {
+      invoke: "settings.set",
+      args: { appearance: { mode: "dark", darkTheme: "channels-oled", lightTheme: "channels-light", textSize: "default", font: "system", motion: "full" } },
+      name: "o escuro",
+    },
+    { waitFor: "html[data-theme='dark'] body", name: "a janela pinta no escuro" },
+    // O [Ver] do prazo continua aberto: o desfazer dele foi recusado, e nada mudou.
+    { expectCount: `${req(prazo)} .kn-activity-view`, count: 1, name: "o [Ver] do prazo, aberto desde antes da recusa" },
+    { screenshot: "5-escuro.png", selector: section },
+  ];
+  writeFileSync(activityFile, JSON.stringify({ window: "hub", size: "900x2200", steps }, null, 2));
+}
+
+/** A seção vazia, com o agente desligado: ela aparece, e diz em uma linha que o agente ainda não fez nada. */
+function emptyActivityScript(): string {
+  const section = ".kn-section:has(h2:text-is('Atividade do agente'))";
+  const steps = [
+    { waitFor: ".kn-tab", name: "o hub abre" },
+    { click: ".kn-tab:has-text('Configurações')" },
+    { waitFor: section, name: "a seção aparece com o agente desligado" },
+    { expectText: section, text: "O agente ainda não fez nada.", name: "e diz que ainda não há nada" },
+    { expectCount: `${section} .kn-activity-req`, count: 0 },
+    { screenshot: "vazia.png", selector: section },
+  ];
+  const file = path.join(work, "ajustes-atividade-vazia.json");
+  writeFileSync(file, JSON.stringify({ window: "hub", size: "900x1400", steps }, null, 2));
+  return file;
+}
+
+/**
+ * O pedido que passa dos 30 dias com a tela aberta (revisão do T9493): um pedido gravado direto no registro, a 30 dias
+ * menos 45 s, sem agente. A seção abre com ele; passado o prazo, o [Desfazer] diz que não há mais o que desfazer, fora
+ * da lista, e o pedido sai dela.
+ */
+const EXPIRES_IN_MS = 45_000;
+async function expiringReady(data: string): Promise<void> {
+  const at = new Date(Date.now() - 30 * 24 * 3600_000 + EXPIRES_IN_MS);
+  const iso = at.toISOString();
+  const dir = path.join(data, "agent", "activity", `${iso.replace(/[:.]/g, "-")}_velho`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "copy-1.md"), "# Ideias\n");
+  writeFileSync(
+    path.join(dir, "request.json"),
+    JSON.stringify({
+      id: "velho",
+      at: iso,
+      request: "Um pedido de quase 30 dias",
+      reads: [],
+      copies: 1,
+      changes: [{ at: iso, kind: "appended", path: "Ideias.md", before: 9, after: 20, version: versionOf("# Ideias\n- do agente\n"), copy: "velho/copy-1.md" }],
+    }),
+  );
+}
+function expiringScript(): string {
+  const section = ".kn-section:has(h2:text-is('Atividade do agente'))";
+  const req = `${section} .kn-activity-req[data-request='velho']`;
+  const steps = [
+    { waitFor: ".kn-tab", name: "o hub abre" },
+    { click: ".kn-tab:has-text('Configurações')" },
+    { waitFor: req, name: "o pedido de quase 30 dias está na lista" },
+    // O roteiro espera no máximo 10 s por passo: o prazo passa em vários.
+    ...Array.from({ length: Math.ceil((EXPIRES_IN_MS + 3000) / 10_000) }, () => ({ wait: 10_000, name: "o prazo passa com a tela aberta" })),
+    { click: `${req} button:has-text('Desfazer')`, name: "o clique depois do prazo" },
+    { expectText: `${section} .kn-activity-gone`, text: "passou dos 30 dias: não há mais o que desfazer", name: "a seção diz, fora da lista" },
+    { expectCount: req, count: 0, name: "e tira o pedido da lista" },
+    { expectCount: `${section} .kn-activity-empty`, count: 0, name: "sem dizer que o agente nunca fez nada" },
+    { screenshot: "prazo.png", selector: section },
+  ];
+  const file = path.join(work, "ajustes-atividade-prazo.json");
+  writeFileSync(file, JSON.stringify({ window: "hub", size: "900x1400", steps }, null, 2));
+  return file;
+}
+
 let ok = true;
 try {
   ok = (await scenario("fluxo", "ajustes-agente.json", {})) && ok;
@@ -197,6 +367,9 @@ try {
   ok = (await scenario("notas", "ajustes-agente-notas.json", { KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500" })) && ok;
   ok = (await scenario("escrita", writeScript(), {}, { window: "notes", before: agentReady, prefix: "escrita-" })) && ok;
   ok = (await scenario("desfazer", undoFile, {}, { window: "notes", before: undoReady, prefix: "desfazer-" })) && ok;
+  ok = (await scenario("atividade", activityFile, {}, { before: activityReady, prefix: "atividade-" })) && ok;
+  ok = (await scenario("atividade-vazia", emptyActivityScript(), {}, { prefix: "atividade-" })) && ok;
+  ok = (await scenario("atividade-prazo", expiringScript(), {}, { before: expiringReady, prefix: "atividade-" })) && ok;
 } finally {
   reg.stop();
   rmSync(work, { recursive: true, force: true });
