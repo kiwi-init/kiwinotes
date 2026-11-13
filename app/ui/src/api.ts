@@ -139,7 +139,7 @@ export const api = {
     change: (request: string, change: number) => invoke("agent.change", { request, change }),
     undo: (request: string, change?: number) => invoke("agent.undo", change ? { request, change } : { request }),
     onActivity: (fn: (e: UiEvents["agent.activityChanged"]) => void) => on("agent.activityChanged", fn),
-    /** A pergunta na dúvida (1.49.0, spec #9873). */
+    /** A pergunta na dúvida (1.50.0, spec #9873). */
     question: () => invoke("agent.question", {}),
     answer: (a: UiCapabilities["agent.answer"]["args"]) => invoke("agent.answer", a),
     answers: () => invoke("agent.answers", {}),
