@@ -85,9 +85,8 @@ export function DoubtCard() {
               ) : (
                 <>
                   <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>É segredo</Button>
-                  <Button variant="primary" onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>
-                    Pode mandar
-                  </Button>
+                  {/* Os dois com o mesmo peso, sem principal e sem Enter padrão: a pessoa escolhe (#10168). */}
+                  <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>Pode mandar</Button>
                 </>
               )}
             </div>

@@ -439,6 +439,11 @@ async function doubtReady(data: string, env: Record<string, string>): Promise<vo
     { waitFor: card, timeout: 20000, name: "o cartão abre e o pedido espera" },
     { expectText: card, text: DOUBT_A, name: "com o trecho" },
     { expectText: card, text: "em Servidores, linha 3", name: "e de onde ele vem" },
+    // Os dois botões com o mesmo peso, e nenhum com o foco: um Enter não manda nada (#10168).
+    { expectCount: `${card} .kn-button[data-variant='primary']`, count: 0, name: "nenhum botão principal" },
+    { press: "Enter", name: "um Enter apressado" },
+    { wait: 500 },
+    { expectCount: `${card} .kn-doubt-item:not([data-answer])`, count: 1, name: "não respondeu nada" },
     { screenshot: "1-cartao.png", selector: card },
     { click: `${card} button:has-text('Pode mandar')`, name: "Pode mandar" },
     { waitFor: card, state: "detached", name: "o cartão fecha, e o pedido segue" },
