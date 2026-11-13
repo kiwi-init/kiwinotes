@@ -1,0 +1,147 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Kiwi-cat fantasma</title>
+<style>
+  body { margin: 0; background: #2a2a30; font: 600 14px -apple-system, Helvetica; color: #ddd; }
+  .row { display: flex; gap: 0; }
+  .panel { position: relative; width: 400px; height: 500px; }
+  .panel img, .panel canvas { width: 400px; height: 500px; display: block; }
+  .dark { background: #000; } .light { background: #fff; }
+  .cap { height: 26px; display: flex; }
+  .cap div { width: 400px; padding: 5px 10px; box-sizing: border-box; }
+</style>
+<div class="cap"><div>v2 (parada)</div><div>fantasma, escuro</div><div>fantasma, claro</div></div>
+<div class="row">
+  <div class="panel dark"><img id="v2"></div>
+  <div class="panel dark"><canvas id="cd" width="800" height="1000"></canvas></div>
+  <div class="panel light"><canvas id="cl" width="800" height="1000"></canvas></div>
+</div>
+<script>
+// T10727: the Kiwi-cat as one ghost field. The v2 silhouette (a traced outline, as a signed distance field) is the
+// black core; the black dissolves into a soft halo that comes out of the body itself, with slow noise. The colour at
+// the top of the head is the halo changing hue. Below, the body becomes wisps. It floats; the halo breathes with it.
+const FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSdf;
+uniform float uTime, uLight;
+uniform vec2 uRes;
+uniform vec4 uEye0, uEye1; // cx, cy, r, unused (canvas units)
+out vec4 outColor;
+
+float hash(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
+float noise(vec3 p) {
+  vec3 i = floor(p), f = fract(p); vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = hash(i), b = hash(i + vec3(1,0,0)), c = hash(i + vec3(0,1,0)), d = hash(i + vec3(1,1,0));
+  float e = hash(i + vec3(0,0,1)), g = hash(i + vec3(1,0,1)), h = hash(i + vec3(0,1,1)), k = hash(i + vec3(1,1,1));
+  return mix(mix(mix(a,b,u.x), mix(c,d,u.x), u.y), mix(mix(e,g,u.x), mix(h,k,u.x), u.y), u.z);
+}
+float fbm(vec3 p) {
+  float s = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + vec3(11.7, 3.1, 7.9); a *= 0.5; }
+  return s;
+}
+// the outline's signed distance, canvas units (negative inside)
+float sdf(vec2 q) { return texture(uSdf, q / vec2(2048.0, 2560.0)).r; }
+
+const float TAU = 6.28318530718;
+uniform float uPeriod, uLift, uTailLag;
+
+float bob(float y, float t) {
+  // the tail lags behind the head
+  float lag = uTailLag * smoothstep(1300.0, 2200.0, y);
+  return uLift * sin(TAU * t / uPeriod - lag);
+}
+
+void main() {
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * vec2(2048.0, 2560.0);
+  float t = uTime;
+  vec2 q = p - vec2(0.0, bob(p.y, t));
+  float low = smoothstep(1500.0, 2150.0, q.y);            // 0 at the head, 1 at the tail
+  // slow noise moves the edge a little at the top and a lot at the tail
+  float n1 = fbm(vec3(q * 0.0045, t * 0.11));
+  // wisps: a warped, slowly sinking noise, wide in x so it never reads as stripes
+  vec2 w = vec2(q.x + 90.0 * sin(q.y * 0.004 + t * 0.6), q.y);
+  float n2 = fbm(vec3(w.x * 0.0042, w.y * 0.0026 - t * 0.16, t * 0.05));
+  float d = sdf(q) + (n1 - 0.5) * mix(18.0, 110.0, low);
+  d += (30.0 + 300.0 * smoothstep(0.32, 0.72, n2)) * smoothstep(1650.0, 2150.0, q.y);
+  // the core: dense black, soft edge that widens toward the tail
+  float soft = mix(16.0, 90.0, low);
+  float core = 1.0 - smoothstep(-soft, soft, d);
+  // the halo: light from inside the edge spreading out (Bevel), breathing with the float
+  float breath = 0.88 + 0.12 * sin(TAU * t / uPeriod + 0.6);
+  float fall = mix(210.0, 260.0, low);
+  float halo = exp(-max(d + 24.0, 0.0) / fall) * breath * (0.86 + 0.36 * (n1 - 0.5));
+  halo *= 1.0 - 0.55 * smoothstep(1950.0, 2400.0, q.y);   // no floor: the halo fades below too
+  // the halo reaches zero before the box's edge (no visible rectangle in the app)
+  halo *= smoothstep(0.0, 260.0, min(min(p.x, 2048.0 - p.x), min(p.y, 2560.0 - p.y)));
+  // the top of the head: the same halo turning cyan, blue, lilac; fades toward the sides and the body
+  vec2 e = vec2(36.0, 0.0);
+  vec2 g = vec2(sdf(q + e.xy) - sdf(q - e.xy), sdf(q + e.yx) - sdf(q - e.yx));
+  vec2 nrm = normalize(g + 1e-5);
+  // by position, not by the outline's normal (the normal made rays converge on the V between the ears)
+  float up = smoothstep(1300.0, 860.0, q.y) * (1.0 - smoothstep(360.0, 600.0, abs(q.x - 1023.0)));
+  float hs = clamp((q.x - 1023.0) / 430.0 + (n1 - 0.5) * 0.5, -1.0, 1.0);
+  vec3 cyan = vec3(0.36, 0.82, 0.92), blue = vec3(0.38, 0.52, 0.98), lilac = vec3(0.72, 0.58, 0.96);
+  vec3 hue = hs < 0.0 ? mix(blue, cyan, -hs) : mix(blue, lilac, hs);
+  vec3 mist = vec3(0.72, 0.68, 0.82);                        // the v2 lavender grey
+  vec3 haloCol = mix(mist, hue, up * 0.92);
+  float haloA = halo * (0.92 + 0.08 * up);
+  vec3 coreCol = vec3(0.035, 0.035, 0.045);
+  if (uLight > 0.5) {
+    // the inverse: a light core, a soft dark halo, the same silhouette
+    coreCol = vec3(0.975, 0.975, 0.985);
+    mist = vec3(0.30, 0.28, 0.38);
+    hue = hs < 0.0 ? mix(vec3(0.16, 0.30, 0.66), vec3(0.10, 0.48, 0.60), -hs) : mix(vec3(0.16, 0.30, 0.66), vec3(0.42, 0.26, 0.62), hs);
+    haloCol = mix(mist, hue, up * 0.92);
+    haloA *= 0.62;
+  }
+  // eyes (in the app they are DOM and float with the head)
+  float eyes = 0.0;
+  for (int i = 0; i < 2; i++) {
+    vec4 E = i == 0 ? uEye0 : uEye1;
+    vec2 c = vec2(E.x, E.y + bob(E.y, t));
+    eyes = max(eyes, 1.0 - smoothstep(E.z - 1.6, E.z + 1.6, length(p - c)));
+  }
+  vec3 eyeCol = uLight > 0.5 ? vec3(0.09, 0.09, 0.11) : vec3(1.0);
+  // premultiplied: the halo under the core, the eyes on top
+  float a = core + haloA * (1.0 - core);
+  vec3 rgb = coreCol * core + haloCol * haloA * (1.0 - core);
+  rgb = mix(rgb, eyeCol, eyes); a = max(a, eyes);
+  outColor = vec4(rgb, a);
+}`;
+const VS = `#version 300 es
+in vec2 pos; void main() { gl_Position = vec4(pos, 0.0, 1.0); }`;
+
+window.PARAMS = { period: 3.6, lift: 150, tailLag: 0.9 };
+function setup(canvas, sdf, light) {
+  const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, preserveDrawingBuffer: true, alpha: true });
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog); if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, "pos"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, sdf.w, sdf.h, 0, gl.RED, gl.FLOAT, sdf.data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const U = n => gl.getUniformLocation(prog, n);
+  return t => {
+    gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(U("uTime"), t); gl.uniform1f(U("uLight"), light ? 1 : 0); gl.uniform2f(U("uRes"), canvas.width, canvas.height);
+    gl.uniform1f(U("uPeriod"), PARAMS.period); gl.uniform1f(U("uLift"), PARAMS.lift); gl.uniform1f(U("uTailLag"), PARAMS.tailLag);
+    gl.uniform4f(U("uEye0"), 802.823, 1279.323, 68.251, 0); gl.uniform4f(U("uEye1"), 1243.342, 1279.308, 67.94, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  };
+}
+window.init = (sdfJson, v2url) => {
+  const raw = Uint8Array.from(atob(sdfJson.data), c => c.charCodeAt(0));
+  const sdf = { w: sdfJson.w, h: sdfJson.h, data: new Float32Array(raw.buffer) };
+  document.getElementById("v2").src = v2url;
+  const d = setup(document.getElementById("cd"), sdf, false), l = setup(document.getElementById("cl"), sdf, true);
+  window.renderAt = t => { d(t); l(t); };
+  window.renderAt(0);
+};
+</script>
