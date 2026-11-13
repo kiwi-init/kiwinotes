@@ -138,7 +138,8 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("agent.ask", { text: 3 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("agent.ask", { text: "  " })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect((await invoke("settings.set", { agent: { enabled: true } })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
-  });
+    // Cinco chamadas à CLI: num runner lento do CI passam dos 5 s padrão (#394).
+  }, 30_000);
 
   test("o agente lê o cofre pelas ferramentas do Kiwi (spec #7496): responde a uma pergunta sobre uma nota", async () => {
     await invoke("agent.enable");
