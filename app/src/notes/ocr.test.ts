@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -9,17 +8,10 @@ import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Attachments } from "./attachments.ts";
 import { attachmentHits, lowBattery, OcrIndex, type OcrLine, snippetOf, whereLabel } from "./ocr.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
-let dirs: string[] = [];
-afterEach(() => {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-  dirs = [];
-});
-const tmp = (name: string) => {
-  const d = mkdtempSync(path.join(tmpdir(), `kiwi-ocr-${name}-`));
-  dirs.push(d);
-  return d;
-};
+// O tempDir apaga no fim do teste e, no fim da suíte, de novo: o índice grava o cache atrasado e recriava a pasta.
+const tmp = (name: string) => tempDir(`kiwi-ocr-${name}-`);
 
 /** Um helper de mentira: o "texto" de cada arquivo é o que o teste disse, e conta as chamadas. */
 function fakeRunner(texts: Record<string, string>) {
