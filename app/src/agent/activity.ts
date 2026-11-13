@@ -1,5 +1,5 @@
 // O registro do agente (spec #8356): para cada pedido, o que ele leu e o que mudou nas notas, com a cópia do texto de
-// antes de cada mudança. É o que o `agent activity` mostra, e o que o desfazer (o spec seguinte) vai usar.
+// antes de cada mudança. É o que o `agent activity` mostra, e o que o desfazer (`undo.ts`, spec #9353) usa.
 //
 // - **Fora do cofre,** nos dados do app: `<dados>/agent/activity/<carimbo>_<id do pedido>/`, com o `request.json` e as
 //   cópias (`copy-1.md`, `copy-2.md`…). Pastas 0700 e arquivos 0600, como a sessão do agente.
@@ -8,6 +8,8 @@
 //   não acontece (`drop`).
 // - **30 dias:** cada pedido novo apaga as pastas com mais de 30 dias, com as cópias.
 // - Uma operação por vez, na ordem em que chegaram: duas ferramentas ao mesmo tempo não atropelam o `request.json`.
+// - **O número de uma cópia nunca se repete** no pedido (spec #9353): o último usado fica no `request.json` antes de a
+//   cópia ser gravada, e um app reaberto continua dele, mesmo que uma cópia do meio tenha saído (`drop`).
 
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -29,6 +31,8 @@ export interface ActivityRead {
 
 export interface ActivityChange extends ToolChange {
   at: string;
+  /** Quando a mudança foi desfeita (spec #9353). */
+  undone?: string;
 }
 
 export interface ActivityRequest {
@@ -39,6 +43,11 @@ export interface ActivityRequest {
   request: string;
   reads: ActivityRead[];
   changes: ActivityChange[];
+}
+
+/** O `request.json` como fica no disco: com o último número de cópia usado, que não sai no `list`. */
+interface StoredRequest extends ActivityRequest {
+  copies?: number;
 }
 
 export interface ActivityOptions {
@@ -64,9 +73,12 @@ const COPY = /^copy-\d+\.md$/;
 
 interface Open {
   dir: string;
-  record: ActivityRequest;
-  copies: number;
+  record: StoredRequest;
 }
+
+/** O número de uma marca ou de um arquivo de cópia (`…copy-7.md` → 7). */
+const copyNumber = (name: string | undefined) => Number(/copy-(\d+)\.md$/.exec(name ?? "")?.[1] ?? 0);
+const shown = ({ copies: _, ...r }: StoredRequest): ActivityRequest => r;
 
 export class AgentActivity {
   private readonly dir: string;
@@ -111,7 +123,10 @@ export class AgentActivity {
   keep(id: string, before: string): Promise<string> {
     return this.serial(async () => {
       const o = await this.ensure(id);
-      const name = `copy-${++o.copies}.md`;
+      // O número vai para o `request.json` antes da cópia: um app que reabre nunca volta a usar este.
+      o.record.copies = (o.record.copies ?? 0) + 1;
+      await this.save(o);
+      const name = `copy-${o.record.copies}.md`;
       await writeFile(path.join(o.dir, name), before, { mode: 0o600 });
       return `${id}/${name}`;
     });
@@ -136,6 +151,31 @@ export class AgentActivity {
     }
   }
 
+  /** Um pedido do registro, ou null se ele não está (nunca existiu, ou passou dos 30 dias). Não cria nada. */
+  get(id: string): Promise<ActivityRequest | null> {
+    return this.serial(async () => {
+      const o = await this.lookup(id);
+      return o ? shown(structuredClone(o.record)) : null;
+    });
+  }
+
+  /**
+   * Anota o desfazer (spec #9353): as mudanças `indexes` (0 é a primeira) do pedido foram desfeitas agora. Uma já
+   * desfeita fica com a hora de antes.
+   */
+  markUndone(id: string, indexes: number[]): Promise<void> {
+    return this.serial(async () => {
+      const o = await this.lookup(id);
+      if (!o) throw Object.assign(new Error(`no request ${id}`), { code: "E_NOT_FOUND" });
+      const at = new Date(this.now()).toISOString();
+      for (const i of indexes) {
+        const c = o.record.changes[i];
+        if (c && !c.undone) c.undone = at;
+      }
+      await this.save(o);
+    });
+  }
+
   /** Os pedidos, do mais novo para o mais velho. */
   list(limit = 50): Promise<ActivityRequest[]> {
     return this.serial(async () => {
@@ -143,7 +183,7 @@ export class AgentActivity {
       for (const name of (await this.names()).reverse()) {
         if (out.length >= Math.min(Math.max(1, limit), ACTIVITY_LIST_MAX)) break;
         const r = await this.load(path.join(this.dir, name));
-        if (r) out.push(r);
+        if (r) out.push(shown(r));
       }
       return out;
     });
@@ -163,38 +203,43 @@ export class AgentActivity {
     return all.filter((n) => timeOf(n) !== null).sort();
   }
 
-  private async load(dir: string): Promise<ActivityRequest | null> {
+  private async load(dir: string): Promise<StoredRequest | null> {
     try {
-      const r = JSON.parse(await readFile(path.join(dir, "request.json"), "utf8")) as ActivityRequest;
+      const r = JSON.parse(await readFile(path.join(dir, "request.json"), "utf8")) as StoredRequest;
       return r && typeof r.id === "string" && Array.isArray(r.reads) && Array.isArray(r.changes) ? r : null;
     } catch {
       return null;
     }
   }
 
-  /** O pedido aberto, ou um novo (com o texto vazio, se a ferramenta chegou sem pedido). */
-  private async ensure(id: string, request = ""): Promise<Open> {
+  /** O pedido aberto, ou o de antes de o app reabrir (pela pasta); null se não há. */
+  private async lookup(id: string): Promise<Open | null> {
     const known = this.open.get(safeId(id));
     if (known) return known;
-    // Um pedido de antes de o app reabrir: acha a pasta dele.
     const existing = (await this.names()).find((n) => STAMP.exec(n)![6] === id);
-    if (existing) {
-      const dir = path.join(this.dir, existing);
-      const record = await this.load(dir);
-      if (record) {
-        const copies = (await readdir(dir).catch(() => [] as string[])).filter((n) => COPY.test(n)).length;
-        const o = { dir, record, copies };
-        this.open.set(id, o);
-        return o;
-      }
-    }
+    if (!existing) return null;
+    const dir = path.join(this.dir, existing);
+    const record = await this.load(dir);
+    if (!record) return null;
+    // Um registro de antes do spec #9353 não tem o último número: continua do maior que aparece, nos arquivos ou
+    // nas marcas das mudanças.
+    const files = (await readdir(dir).catch(() => [] as string[])).filter((n) => COPY.test(n));
+    record.copies = Math.max(record.copies ?? 0, ...files.map(copyNumber), ...record.changes.map((c) => copyNumber(c.copy)));
+    const o = { dir, record };
+    this.open.set(id, o);
+    return o;
+  }
+
+  /** O pedido aberto, ou um novo (com o texto vazio, se a ferramenta chegou sem pedido). */
+  private async ensure(id: string, request = ""): Promise<Open> {
+    const known = await this.lookup(id);
+    if (known) return known;
     const at = this.now();
     const dir = path.join(this.dir, `${stampOf(at)}_${id}`);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const o: Open = {
       dir,
       record: { id, at: new Date(at).toISOString(), request: request.slice(0, ACTIVITY_REQUEST_CHARS), reads: [], changes: [] },
-      copies: 0,
     };
     this.open.set(id, o);
     await this.save(o);

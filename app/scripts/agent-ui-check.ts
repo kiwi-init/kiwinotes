@@ -13,6 +13,9 @@
 //   do Kiwi ("Lendo Projetos/Kiwi.md…");
 // - a escrita (spec #8356), na janela Notas: com a nota aberta, o agente falso acrescenta numa seção, troca outra com a
 //   versão lida e cria uma nota nova, e a janela mostra cada mudança. O roteiro é montado aqui, com a versão da nota.
+// - o desfazer (spec #9353), na janela Notas: o agente falso troca o prazo e cria uma nota, cada um num pedido; com a
+//   nota aberta, o `agent.undo` volta o texto de antes, e a nota criada sai da árvore (vai para a Lixeira). O roteiro é
+//   montado depois dos pedidos, com o id de cada um.
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -136,6 +139,54 @@ function writeScript(): string {
   return file;
 }
 
+/** O roteiro do desfazer (spec #9353): o arquivo sai do `undoReady`, que sabe o id dos pedidos. */
+const undoFile = path.join(work, "notas-agente-desfaz.json");
+
+/** Antes da janela: o agente pronto, e dois pedidos dele (troca o prazo; cria uma nota), já terminados. */
+async function undoReady(data: string, env: Record<string, string>): Promise<void> {
+  await agentReady(data, env);
+  const invoke = async (cap: string, args: unknown) => {
+    const r = await cli(["invoke", cap, JSON.stringify(args), "--data", data], env);
+    if (r.code !== 0) throw new Error(`${cap}: ${r.out}`);
+    return JSON.parse(r.out) as { value: any };
+  };
+  const ask = async (name: string, args: unknown) => {
+    const { id } = (await invoke("agent.ask", { text: `/tool ${name} ${JSON.stringify(args)}` })).value as { id: string };
+    for (const end = Date.now() + 30_000; ; ) {
+      const done = (await cli(["events", "--data", data], env)).out
+        .split("\n")
+        .some((l) => l.includes('"agent.turn"') && l.includes(`"${id}"`) && /"type":"(done|error)"/.test(l));
+      if (done) return id;
+      if (Date.now() > end) throw new Error(`o pedido ${name} não terminou`);
+      await Bun.sleep(200);
+    }
+  };
+  const write = await ask("notes_write", { path: "Projetos/Kiwi.md", section: "Prazo", text: "O prazo é abril, diz o agente.", version: versionOf(KIWI) });
+  const create = await ask("notes_create", { folder: "Projetos", title: "Resumo do Kiwi", text: "# Resumo do Kiwi\n\nPrazo: abril.\n" });
+  await invoke("agent.disable", {});
+  const editor = ".kn-note-editor .cm-content";
+  const resumo = ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Resumo do Kiwi')";
+  const steps = [
+    { waitFor: ".kn-crumb-bt", name: "a janela Notas abre" },
+    { click: ".kn-crumb-bt", name: "abre a árvore" },
+    { click: ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')", name: "abre a pasta Projetos" },
+    { expectCount: resumo, count: 1, name: "a nota que o agente criou está na árvore" },
+    { click: ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Kiwi'):not(:has-text('Resumo'))", name: "abre a nota Kiwi" },
+    { expectText: editor, text: "O prazo é abril, diz o agente.", name: "a nota com a troca do agente" },
+    { screenshot: "1-o-agente-mudou.png" },
+    { invoke: "agent.undo", args: { request: write }, name: "desfaz o pedido que trocou o prazo" },
+    { expectText: editor, text: "O prazo do Kiwi é março.", timeout: 20000, name: "a janela mostra o texto de antes" },
+    { screenshot: "2-desfeito.png" },
+    { invoke: "agent.undo", args: { request: create }, name: "desfaz o pedido que criou a nota" },
+    { wait: 1500 },
+    { click: ".kn-crumb-bt", name: "abre a árvore" },
+    { waitFor: ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Kiwi')", name: "a árvore abriu" },
+    { expectCount: resumo, count: 0, name: "a nota criada saiu da árvore (foi para a Lixeira)" },
+    { screenshot: "3-criada-na-lixeira.png" },
+  ];
+  writeFileSync(undoFile, JSON.stringify({ window: "notes", size: "1100x800", steps }, null, 2));
+}
+
 let ok = true;
 try {
   ok = (await scenario("fluxo", "ajustes-agente.json", {})) && ok;
@@ -145,6 +196,7 @@ try {
   ok = (await scenario("sem-rede", "ajustes-agente-sem-rede.json", { KIWI_ADAPTER_REGISTRY: "http://127.0.0.1:9" })) && ok;
   ok = (await scenario("notas", "ajustes-agente-notas.json", { KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500" })) && ok;
   ok = (await scenario("escrita", writeScript(), {}, { window: "notes", before: agentReady, prefix: "escrita-" })) && ok;
+  ok = (await scenario("desfazer", undoFile, {}, { window: "notes", before: undoReady, prefix: "desfazer-" })) && ok;
 } finally {
   reg.stop();
   rmSync(work, { recursive: true, force: true });

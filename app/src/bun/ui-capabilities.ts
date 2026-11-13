@@ -723,8 +723,9 @@ export function uiCapabilities(deps: CapabilityDeps,
       return { warnings: await (await vault()).linkWarnings(a.path) };
     },
     "notes.delete": async (args) => {
-      const p = fields(args, "notes.delete", ["path"]).path;
-      const r = await (await vault()).delete(p);
+      const a = fields(args, "notes.delete", ["path", "baseVersion"]);
+      const p = a.path;
+      const r = await (await vault()).delete(p, a.baseVersion);
       await fixPinned(dropUnder(notePath(p)));
       return r;
     },
@@ -995,6 +996,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (a.limit !== undefined && (typeof a.limit !== "number" || !Number.isInteger(a.limit) || a.limit < 1 || a.limit > ACTIVITY_LIST_MAX))
         throw bad(`agent.activity: limit must be an integer from 1 to ${ACTIVITY_LIST_MAX}`);
       return agentCall(async (agent) => ({ requests: await agent.activityLog(a.limit as number | undefined) }));
+    },
+    "agent.undo": (args) => {
+      const a = fields(args, "agent.undo", ["request", "change"]);
+      if (typeof a.request !== "string" || !a.request) throw bad("agent.undo: request must be the id of a request");
+      if (a.change !== undefined && (!Number.isInteger(a.change) || (a.change as number) < 1))
+        throw bad("agent.undo: change must be an integer from 1");
+      return agentCall((agent) => agent.undo(a.request as string, a.change as number | undefined));
     },
   };
   // A lista do contrato e os handlers andam juntos.

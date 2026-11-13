@@ -130,7 +130,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   procurou ("Projetos/Kiwi.md"). Só acréscimo.
 // 1.44.0 (T9251, spec #8356): o agente escreve nas notas. O `agent.activity` (o registro do que cada pedido leu e
 //   mudou) e o `snapshot` no `notes.save`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.44.0";
+// 1.45.0 (T9398, spec #9353): o desfazer do agente. O `agent.undo`, o `undone` nas mudanças do `agent.activity` e o
+//   `baseVersion` no `notes.delete` (só apaga se a nota ainda está naquela versão). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.45.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -251,9 +253,10 @@ export interface UiCapabilities {
   };
   /**
    * Não apaga: espera 10 min (o `notes.restore`) numa pasta oculta do vault e então vai para a Lixeira do macOS (1.7.0;
-   * antes ia direto para a Lixeira).
+   * antes ia direto para a Lixeira). Com `baseVersion` (1.45.0), só apaga se a nota ainda está naquela versão, conferida
+   * logo antes de sair do lugar; senão E_CONFLICT, e nada muda.
    */
-  "notes.delete": { args: { path: string }; result: true };
+  "notes.delete": { args: { path: string; baseVersion?: string }; result: true };
   /** Para outra pasta ("" é a raiz), com o mesmo nome; os [[links]] seguem. */
   "notes.move": { args: { path: string; folder: string }; result: { meta: NoteMeta; updatedLinks: number };
   };
@@ -437,6 +440,40 @@ export interface UiCapabilities {
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
    */
   "agent.activity": { args: { limit?: number }; result: { requests: AgentActivityRequest[] } };
+  /**
+   * Desfaz o que o agente mudou (1.45.0, spec #9353): o pedido inteiro, ou só a mudança `change` dele (1 é a primeira,
+   * na ordem do `agent.activity`). Nota por nota, e só se a nota está exatamente como o agente deixou: senão aquela nota
+   * fica como está, com o motivo. O texto do agente vai antes para as Versões da nota; a nota que ele criou vai para a
+   * Lixeira. Não precisa do agente ligado. E_NOT_FOUND: o pedido (ou a mudança) não está no registro, ou passou dos 30
+   * dias.
+   */
+  "agent.undo": { args: { request: string; change?: number }; result: AgentUndoResult };
+}
+
+/** O que o `agent.undo` fez, nota por nota (1.45.0). */
+export interface AgentUndoResult {
+  request: string;
+  notes: AgentUndoNote[];
+}
+
+export interface AgentUndoNote {
+  path: string;
+  /**
+   * `restored`: a nota voltou ao texto de antes; `trashed`: a nota que o agente criou foi para a Lixeira (10 min no
+   * Desfazer do app); `already`: já tinha sido desfeita, nada mudou; `refused`: nada mudou, pelo `reason`.
+   */
+  result: "restored" | "trashed" | "already" | "refused";
+  /** As mudanças do pedido (1 é a primeira) que esta nota junta. */
+  changes: number[];
+  /**
+   * Por que nada mudou: `E_LATER_WRITE` outra escrita do agente depois, na mesma nota (desfaça primeiro a mais nova, ou
+   * o pedido inteiro); `E_CHANGED` a nota mudou depois do agente; `E_GONE` ela foi renomeada, movida ou apagada;
+   * `E_OTHER_FOLDER` outra pasta de notas está aberta; `E_EXPIRED` a mudança tem mais de 30 dias; `E_NO_COPY` a cópia
+   * de antes não está mais no registro.
+   */
+  reason?: "E_LATER_WRITE" | "E_CHANGED" | "E_GONE" | "E_OTHER_FOLDER" | "E_EXPIRED" | "E_NO_COPY";
+  /** O motivo, para a pessoa ler. */
+  message?: string;
 }
 
 /** Um pedido no registro do agente (1.44.0). */
@@ -454,9 +491,11 @@ export interface AgentActivityRequest {
     before: number;
     after: number;
     version: string;
-    /** A cópia do texto de antes, no registro (o desfazer, spec seguinte). */
+    /** A cópia do texto de antes, no registro (o desfazer). */
     copy?: string;
     folder?: string;
+    /** Quando a mudança foi desfeita (1.45.0). */
+    undone?: string;
   }[];
 }
 
@@ -614,6 +653,7 @@ export const UI_CAPABILITIES = [
   "agent.remove",
   "agent.configure",
   "agent.activity",
+  "agent.undo",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

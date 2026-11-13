@@ -2,7 +2,7 @@
 // permissões, numa pasta tmp.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -98,6 +98,58 @@ describe("o registro do agente", () => {
     expect(readdirSync(dir)).toHaveLength(1);
     expect((await b.list())[0]).toMatchObject({ id: "p1", request: "oi", reads: [{ tool: "notes_read", target: "A.md" }] });
     expect(await b.copy("p1/copy-1.md")).toBe("um");
+  });
+
+  test("o número de uma cópia nunca se repete, nem depois de uma cópia sair e o app reabrir (spec #9353)", async () => {
+    const { dir, a } = make();
+    await a.begin("p1", "oi");
+    const c1 = await a.keep("p1", "um");
+    const c2 = await a.keep("p1", "dois");
+    await a.change("p1", { ...change, copy: c2 });
+    await a.drop(c1); // a 1ª escrita não aconteceu
+    // Antes, o app reaberto contava os arquivos (1) e a próxima cópia voltava a ser a 2, por cima da que a mudança usa.
+    const b = new AgentActivity({ dir });
+    const c3 = await b.keep("p1", "três");
+    expect(c3).toBe("p1/copy-3.md");
+    expect(await b.copy(c2)).toBe("dois");
+    // A mais nova sai, e o app reabre: o número dela também não volta.
+    await b.drop(c3);
+    const c = new AgentActivity({ dir });
+    expect(await c.keep("p1", "quatro")).toBe("p1/copy-4.md");
+    // O último número fica no request.json, mas não sai no registro.
+    expect(Object.keys((await c.list())[0]!)).toEqual(["id", "at", "request", "reads", "changes"]);
+  });
+
+  test("um registro de antes do spec #9353, sem o último número, continua do maior que aparece", async () => {
+    const { dir, a } = make();
+    await a.begin("p1", "oi");
+    const c1 = await a.keep("p1", "um");
+    const c2 = await a.keep("p1", "dois");
+    await a.change("p1", { ...change, copy: c2 });
+    await a.drop(c1);
+    const file = path.join(dir, readdirSync(dir)[0]!, "request.json");
+    const { copies: _, ...old } = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, JSON.stringify(old));
+    expect(await new AgentActivity({ dir }).keep("p1", "três")).toBe("p1/copy-3.md");
+  });
+
+  test("o desfazer anota a hora em cada mudança desfeita, e uma já desfeita fica com a hora de antes", async () => {
+    let t = Date.parse("2026-11-13T10:00:00.000Z");
+    const { dir, a } = make(() => t);
+    await a.begin("p1", "oi");
+    await a.change("p1", change);
+    await a.change("p1", { ...change, path: "B.md" });
+    t += 60_000;
+    await a.markUndone("p1", [0]);
+    t += 60_000;
+    await a.markUndone("p1", [0, 1]);
+    const b = new AgentActivity({ dir });
+    expect((await b.get("p1"))!.changes.map((c) => c.undone)).toEqual(["2026-11-13T10:01:00.000Z", "2026-11-13T10:02:00.000Z"]);
+    expect((await b.list())[0]!.changes[0]!.undone).toBe("2026-11-13T10:01:00.000Z");
+    expect(await b.get("p2")).toBeNull();
+    await expect(b.markUndone("p2", [0])).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    // O `get` não cria pedido.
+    expect(readdirSync(dir)).toHaveLength(1);
   });
 
   test("muitas ferramentas ao mesmo tempo não perdem nada do registro", async () => {

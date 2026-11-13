@@ -229,6 +229,63 @@ describe("o agente pela CLI headless (T8678)", () => {
     await invoke("agent.disable");
   }, 90_000);
 
+  test("o desfazer (spec #9353): `agent undo` volta a nota, manda a criada para a Lixeira, e o registro anota", async () => {
+    await invoke("agent.enable");
+    await invoke("agent.download");
+    await until(async () => (await invoke("agent.status")).json!.value.adapter.phase === "ready");
+    const PLANO = "# Plano\n\n## Prazo\n\nO prazo do Kiwi é março.\n";
+    expect((await invoke("notes.create", { folder: "Projetos", title: "Plano", content: PLANO })).json!.ok).toBe(true);
+    const ask = async (text: string) => {
+      const id = (await invoke("agent.ask", { text })).json!.value.id as string;
+      await until(async () => (await agentEvents()).some((e) => e.event === "agent.turn" && e.payload.id === id && (e.payload.type === "done" || e.payload.type === "error")));
+      return id;
+    };
+    const get = async (p: string) => (await invoke("notes.get", { path: p })).json!.value as { content: string; version: string };
+
+    // O agente falso troca o prazo, e cria uma nota, cada um num pedido.
+    const { version } = await get("Projetos/Plano.md");
+    const write = await ask(`/tool notes_write ${JSON.stringify({ path: "Projetos/Plano.md", section: "Prazo", text: "O prazo é abril.", version })}`);
+    expect((await get("Projetos/Plano.md")).content).toBe("# Plano\n\n## Prazo\n\nO prazo é abril.\n");
+    const create = await ask(`/tool notes_create ${JSON.stringify({ folder: "Projetos", title: "Do agente", text: "criada pelo agente" })}`);
+    await invoke("agent.disable");
+
+    // O desfazer não precisa do agente ligado. A nota volta, e a janela recebe o `notes.changed`, como de qualquer mudança.
+    const undone = await cli(["agent", "undo", write, "--change", "1"]);
+    expect(undone.code).toBe(0);
+    expect(undone.json).toEqual({ ok: true, value: { request: write, notes: [{ path: "Projetos/Plano.md", result: "restored", changes: [1] }] } });
+    expect((await get("Projetos/Plano.md")).content).toBe(PLANO);
+    const { out } = await cli(["events"]);
+    expect(out.split("\n").filter((l) => l.includes('"notes.changed"') && l.includes("Projetos/Plano.md")).length).toBeGreaterThan(0);
+    // O texto do agente está nas Versões.
+    const versions = (await invoke("notes.versions", { path: "Projetos/Plano.md" })).json!.value.versions as { id: string }[];
+    const texts: string[] = [];
+    for (const v of versions) texts.push((await invoke("notes.version", { path: "Projetos/Plano.md", id: v.id })).json!.value.content);
+    expect(texts).toContain("# Plano\n\n## Prazo\n\nO prazo é abril.\n");
+
+    // De novo: nada muda, e diz.
+    expect((await cli(["agent", "undo", write])).json!.value.notes).toEqual([
+      { path: "Projetos/Plano.md", result: "already", changes: [1], message: "Já tinha sido desfeita." },
+    ]);
+
+    // A nota criada vai para a Lixeira; nos 10 minutos, o Desfazer das Notas a traz de volta.
+    expect((await cli(["agent", "undo", create])).json!.value.notes).toEqual([{ path: "Projetos/Do agente.md", result: "trashed", changes: [1] }]);
+    expect((await invoke("notes.get", { path: "Projetos/Do agente.md" })).json).toMatchObject({ ok: false, code: "E_NOT_FOUND" });
+    expect((await invoke("notes.restore", { path: "Projetos/Do agente.md" })).json).toMatchObject({ ok: true });
+    expect((await get("Projetos/Do agente.md")).content).toBe("criada pelo agente");
+
+    // O registro mostra o que foi desfeito e quando, pela capacidade e pela CLI.
+    const log = (await cli(["agent", "activity", "--limit", "20"])).json!.value.requests as { id: string; changes: { undone?: string }[] }[];
+    expect(log.find((r) => r.id === write)!.changes[0]!.undone).toBeString();
+    expect(log.find((r) => r.id === create)!.changes[0]!.undone).toBeString();
+
+    // Os erros: o pedido que não existe, e o uso errado.
+    expect(await cli(["agent", "undo", "nao-existe"])).toMatchObject({ code: 1, json: { ok: false, code: "E_NOT_FOUND" } });
+    expect((await cli(["agent", "undo"])).code).toBe(2);
+    expect((await cli(["agent", "undo", write, "--change", "0"])).code).toBe(2);
+    expect((await invoke("agent.undo", { request: write, change: 0 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect((await invoke("agent.undo", { request: write, x: 1 })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+  }, 90_000);
+
   test("quando o app sai, o programa do agente sai junto", async () => {
     await invoke("agent.enable");
     await invoke("agent.download");

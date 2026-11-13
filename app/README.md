@@ -108,6 +108,16 @@ bun run cli invoke agent.activity '{"limit":10}' --data /tmp/kn-test    # os ped
 bun run cli agent activity --limit 10 --data /tmp/kn-test               # o mesmo registro, lido direto dos dados
 ```
 
+**O desfazer (T9398, spec #9353)** volta o que um pedido mudou, nota por nota, só se a nota está como o agente deixou. Vai pelo headless de pé, e a janela das Notas vê a nota voltar:
+
+```sh
+bun run cli agent undo <pedido> --data /tmp/kn-test                     # o pedido inteiro (o id está no agent activity)
+bun run cli agent undo <pedido> --change 2 --data /tmp/kn-test          # só a 2ª mudança dele
+bun run cli invoke agent.undo '{"request":"<pedido>"}' --data /tmp/kn-test
+```
+
+Na janela, num WebKit headless: `KIWI_AGENT_UI_ONLY=desfazer bun scripts/agent-ui-check.ts`.
+
 **A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
 - o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
 - os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;

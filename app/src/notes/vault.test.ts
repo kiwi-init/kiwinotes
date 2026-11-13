@@ -389,7 +389,7 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
     });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
 
-    expect(UI_CONTRACT_VERSION).toBe("1.44.0");
+    expect(UI_CONTRACT_VERSION).toBe("1.45.0");
     expect(UI_CAPABILITIES).toContain("notes.resolve");
     expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
     expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
@@ -407,6 +407,13 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
       ok: true,
       value: { saved: false, current: { content: "mudou fora" } },
     });
+    // O apagar conferido (1.45.0): a versão velha não apaga; a de agora, sim.
+    expect(await call("notes.delete", { path: "Kiwi.md", baseVersion: version })).toMatchObject({ ok: false, code: "E_CONFLICT" });
+    expect(await call("notes.delete", { path: "Kiwi.md", baseVersion: 7 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(readFileSync(path.join(root, "Kiwi.md"), "utf8")).toBe("mudou fora");
+    const now = (await call("notes.get", { path: "Kiwi.md" })) as { value: { version: string } };
+    expect(await call("notes.delete", { path: "Kiwi.md", baseVersion: now.value.version })).toEqual({ ok: true, value: true });
+    expect(await call("notes.restore", { path: "Kiwi.md" })).toMatchObject({ ok: true });
     expect(await call("notes.create", { title: "Kiwi" })).toMatchObject({ ok: true, value: { path: "Kiwi 2.md" } });
     expect(await call("notes.rename", { path: "Ideias.md", newPath: "Kiwi.md" })).toMatchObject({ ok: false, code: "E_EXISTS" });
     expect(await call("notes.renameTag", { from: "old", to: "new", extra: true })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
