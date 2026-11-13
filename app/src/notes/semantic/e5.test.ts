@@ -1,17 +1,16 @@
 // T6013: com o modelo de verdade (KIWI_MODELS_DIR apontando para um já baixado), o e5 acha pelo sentido em PT e o
 // critério de "perto" deixa de fora as buscas sem nota certa. Sem o modelo (o CI), o teste é pulado: nada é baixado.
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { rmSync } from "node:fs";
 
 import { SemanticEngine } from "./engine.ts";
 import { SemanticIndex } from "./index.ts";
 import { E5_SMALL, modelPresent } from "./model.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const models = process.env.KIWI_MODELS_DIR ?? "";
 const ready = !!models && (await modelPresent(models, E5_SMALL));
-const dir = mkdtempSync(path.join(tmpdir(), "kn-e5-"));
+const dir = tempDir("kn-e5-");
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const NOTES: Record<string, string> = {

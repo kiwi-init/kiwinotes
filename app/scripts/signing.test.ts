@@ -2,16 +2,17 @@
 // escreve o version.json depois do postBuild). Um .app de mentira, sem rodar nada: só codesign, tar e zstd.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { detach, pack, resealBundles, signAdHoc, unpack, verifyApp, verifyBundle, withDmg } from "./signing.ts";
+import { tempDir } from "../test/tmp.ts";
 
 let dir: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-signing-test-"));
+  dir = tempDir("kiwinotes-signing-test-");
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });

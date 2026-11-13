@@ -1,9 +1,8 @@
 // O filtro do guardrail (spec #9818): o guard sozinho, e as ferramentas do Kiwi com ele, sobre um cofre de verdade num
 // tmp (as capacidades das janelas). Só exemplos inventados, no formato certo: nenhum segredo de verdade.
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -14,16 +13,13 @@ import { EMPTY_READER, readerFromCapabilities } from "../agent/tools/reader.ts";
 import { READ_MAX_CHARS, runKiwiTool, ToolError } from "../agent/tools/tools.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { GuardError, MARKER, removedSecrets, SecretGuard } from "./filter.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 // Inventados, no formato de verdade.
 const GH = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
 const AWS = "AKIA" + "Q7XZ3K9P2M4N8R6T";
 const PWD = "Kiwi#2024";
 
-const dirs: string[] = [];
-afterEach(() => {
-  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
-});
 
 const markers = (t: string) => [...t.matchAll(MARKER)].map((m) => m[0]);
 
@@ -106,8 +102,8 @@ describe("o guard (spec #9818)", () => {
 
 /** Um cofre de verdade num tmp, as capacidades das janelas e um guard, como o agente usa. */
 function vault(files: Record<string, string>) {
-  const base = mkdtempSync(path.join(tmpdir(), "kiwi-guard-"));
-  dirs.push(base);
+  // O tempDir apaga no fim do teste e, no fim da suíte, de novo: o vault grava atrasado e recriava a pasta.
+  const base = tempDir("kiwi-guard-");
   const root = path.join(base, "KiwiNotes");
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });

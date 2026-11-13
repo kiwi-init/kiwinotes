@@ -2,13 +2,13 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { DictionaryStore } from "./dictionary.ts";
 import { readJson } from "./files.ts";
+import { tempDir } from "../../test/tmp.ts";
 
-const root = mkdtempSync(path.join(tmpdir(), "kn-files-"));
+const root = tempDir("kn-files-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe("readJson (T7816)", () => {

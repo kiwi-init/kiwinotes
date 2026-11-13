@@ -2,7 +2,6 @@ import { afterEach, expect, test } from "bun:test";
 import {
   chmod,
   mkdir,
-  mkdtemp,
   readFile,
   readdir,
   realpath,
@@ -10,7 +9,6 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { NotesFolders, validateNotesRoot } from "./folders-workspace.ts";
 import { Vault } from "./vault.ts";
@@ -18,11 +16,12 @@ import { SettingsStore } from "../store/settings.ts";
 import { HistoryStore } from "../store/history.ts";
 import { uiCapabilities, type CapabilityDeps } from "../bun/ui-capabilities.ts";
 import { untilSeen } from "./watch-wait.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const rigs: { root: string; folders: NotesFolders }[] = [];
 async function rig(limit = 20_000, watch = false) {
   const root = await realpath(
-    await mkdtemp(path.join(os.tmpdir(), "kn-folders-")),
+    tempDir("kn-folders-"),
   );
   const home = path.join(root, "home"),
     dir = path.join(root, "data"),

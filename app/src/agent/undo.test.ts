@@ -3,8 +3,7 @@
 // verdade (`runKiwiTool`), como o agente falso as chama; nenhum agente roda aqui.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities, type CapabilityDeps } from "../bun/ui-capabilities.ts";
@@ -19,6 +18,7 @@ import { runKiwiTool } from "./tools/tools.ts";
 import { writerFromCapabilities } from "./tools/writer.ts";
 import { keyOf, undo, UNDO_CAPABILITIES, undoNotesFromCapabilities, UndoError } from "./undo.ts";
 import { viewChange } from "./change-view.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
@@ -67,8 +67,8 @@ function harness(caps: Caps, base: string) {
 }
 
 async function setup() {
-  const base = mkdtempSync(path.join(tmpdir(), "kiwi-undo-"));
-  cleanups.push(() => rmSync(base, { recursive: true, force: true }));
+  // O tempDir apaga no fim do teste e, no fim da suíte, de novo: o vault grava atrasado e recriava a pasta (#10966).
+  const base = tempDir("kiwi-undo-");
   const root = path.join(base, "KiwiNotes");
   for (const [rel, content] of Object.entries({ "Projetos/Kiwi.md": KIWI, "Ideias.md": IDEIAS })) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -348,7 +348,7 @@ describe("o desfazer das mudanças do agente (spec #9353)", () => {
 
 describe("o desfazer e a pasta de notas (spec #9353)", () => {
   async function rig() {
-    const root = realpathSync(mkdtempSync(path.join(tmpdir(), "kiwi-undo-folders-")));
+    const root = realpathSync(tempDir("kiwi-undo-folders-"));
     const home = path.join(root, "home");
     const dir = path.join(root, "data");
     const defaultRoot = path.join(home, "KiwiNotes");
@@ -359,10 +359,7 @@ describe("o desfazer e a pasta de notas (spec #9353)", () => {
     writeFileSync(path.join(b, "Ideias.md"), IDEIAS);
     const internalNotes = new Vault({ root: defaultRoot, watch: false, trash: async () => {} });
     const folders = new NotesFolders({ dir, defaultRoot, globalSettings: new SettingsStore(dir), internalNotes, home, watch: false, limit: 20_000 });
-    cleanups.push(async () => {
-      await folders.close();
-      rmSync(root, { recursive: true, force: true });
-    });
+    cleanups.push(() => folders.close());
     let chosen = a;
     const caps = uiCapabilities({
       ...folders.fixed,

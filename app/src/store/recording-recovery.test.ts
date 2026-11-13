@@ -1,14 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
 import {
   mkdir,
-  mkdtemp,
   readFile,
   readdir,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import {
   RecordingRecoveries,
@@ -16,10 +14,11 @@ import {
   recoveryHistoryId,
 } from "./recording-recovery.ts";
 import { HistoryStore } from "./history.ts";
+import { tempDir } from "../../test/tmp.ts";
 const rigs: { dir: string; recoveries: RecordingRecoveries }[] = [];
 const nowAt = Date.parse("2026-11-06T12:00:00Z");
 async function rig() {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "kn-recover-"));
+  const dir = tempDir("kn-recover-");
   let now = nowAt;
   const recoveries = new RecordingRecoveries(dir, () => now),
     history = new HistoryStore(dir, recoveries);

@@ -3,8 +3,7 @@
 // (`bunx playwright-core install webkit`).
 
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { webkit } from "playwright-core";
@@ -12,6 +11,7 @@ import { webkit } from "playwright-core";
 import { parseArgs, runScreenshot, runUi } from "./cli-ui.ts";
 import { buildStamp, noteProblem, type UiContext } from "./ui-page.ts";
 import { parseScript, runStep } from "./ui-steps.ts";
+import { tempDir } from "../test/tmp.ts";
 
 describe("flags", () => {
   test("janela, escalas e temas em lista, tamanho, nota; o --data é da CLI", () => {
@@ -104,7 +104,7 @@ describe("o --note confere o caminho exato, como a janela (#1864)", () => {
 
 describe("o carimbo do build (#1835)", () => {
   test("muda quando um arquivo muda, entra ou sai; teste não conta", () => {
-    const root = mkdtempSync(join(tmpdir(), "kn-stamp-"));
+    const root = tempDir("kn-stamp-");
     try {
       mkdirSync(join(root, "ui"));
       writeFileSync(join(root, "ui/a.ts"), "a");
@@ -223,7 +223,7 @@ function capture() {
 }
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "kn-cli-ui-"));
+  dir = tempDir("kn-cli-ui-");
 });
 // Os prints e as páginas de teste não ficam no $TMPDIR depois do `bun test` (T1958).
 afterAll(() => {

@@ -1,8 +1,8 @@
 // Real CLI/IPC with an inert Bun fixture. Never starts the Swift helper or opens UI.
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
+import { tempDir } from "../../test/tmp.ts";
 const app = path.resolve(import.meta.dirname, "../..");
 const helper = path.join(app, "test/helpers/supervisor-helper.ts");
 async function rig(
@@ -12,7 +12,7 @@ async function rig(
     data: string,
   ) => Promise<void>,
 ) {
-  const data = mkdtempSync(path.join(tmpdir(), "kn-supervisor-"));
+  const data = tempDir("kn-supervisor-");
   const cli = async (...args: string[]) => {
     const proc = Bun.spawn(
       [

@@ -1,12 +1,12 @@
 // T5352 (issue #171): o índice com cache por mtime e tamanho, os `aliases:` no resolver e a escrita com fsync.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { makeResolver, rewriteLinks, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { aliasesOf, Vault, writeDurable } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 async function vault(files: Record<string, string>) {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), "kiwinotes-cache-")), "KiwiNotes");
+  const root = path.join(tempDir("kiwinotes-cache-"), "KiwiNotes");
   dirs.push(path.dirname(root));
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -126,7 +126,7 @@ describe("o cache do índice por mtime e tamanho (T5352)", () => {
 
 describe("a escrita atômica com fsync (T5352)", () => {
   test("writeDurable grava o texto inteiro; o save não deixa .tmp para trás", async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-durable-"));
+    const dir = tempDir("kiwinotes-durable-");
     dirs.push(dir);
     await writeDurable(path.join(dir, "a.txt"), "olá ".repeat(10_000));
     expect(readFileSync(path.join(dir, "a.txt"), "utf8")).toBe("olá ".repeat(10_000));

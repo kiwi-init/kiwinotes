@@ -1,11 +1,11 @@
 // T7877: renomear ou mover lê do disco só as notas que podem citar a nota, e os links continuam todos certos.
 
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 async function vault(files: Record<string, string>) {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), "kiwinotes-rename-")), "KiwiNotes");
+  const root = path.join(tempDir("kiwinotes-rename-"), "KiwiNotes");
   dirs.push(path.dirname(root));
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });

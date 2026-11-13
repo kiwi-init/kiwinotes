@@ -3,8 +3,7 @@
 
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
 import { DEFAULT_SHORTCUTS } from "../shared/shortcuts.ts";
@@ -26,6 +25,7 @@ import { DEFAULT_AGENT_SETTINGS, type SettingsPatch } from "../store/settings.ts
 import { ENGINE_CONTRACT_GLOBAL } from "./appengine-devkit.ts";
 import { uiCapabilities } from "./ui-capabilities.ts";
 import { builtInFrom, channelUrl, channelUrlOrOff, createUiEngine, devServerAllowed, directInvoke, enginePreload, oneAtATime } from "./ui-engine.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const key = generateSigningKey();
 const trustedKeys = { [key.keyId]: key.publicKey };
@@ -166,7 +166,7 @@ afterEach(() => {
 });
 
 function rig(manifestUrl: string | null, opts: { readyTimeoutMs?: number } = {}) {
-  const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-ui-engine-test-"));
+  const dir = tempDir("kiwinotes-ui-engine-test-");
   const shown: HostUi[] = [];
   const events: AppEngineEvent[] = [];
   const { deps } = fakeDeps();
@@ -533,7 +533,7 @@ describe("partes do app", () => {
   });
 
   test("a UI de fábrica vem do ui.json e da pasta do bundle", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-builtin-test-"));
+    const dir = tempDir("kiwinotes-builtin-test-");
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
     mkdirSync(path.join(dir, "assets"));
     writeFileSync(path.join(dir, "index.html"), "<p>x</p>");

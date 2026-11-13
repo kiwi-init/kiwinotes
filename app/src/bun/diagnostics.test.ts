@@ -1,18 +1,18 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { crashReports, diagnosticsFileName, diagnosticsReport, saveDiagnostics } from "./diagnostics.ts";
 import { FileLog } from "./file-log.ts";
 import type { SessionDiagnostics } from "./session.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 let dir = "";
 afterEach(() => {
   if (dir) rmSync(dir, { recursive: true, force: true });
   dir = "";
 });
-const fresh = () => (dir = mkdtempSync(path.join(tmpdir(), "kiwi-diag-")));
+const fresh = () => (dir = tempDir("kiwi-diag-"));
 const system = { macos: "26.1 (Darwin 25.1.0)", arch: "arm64", cpu: "Apple M1 Pro", memoryGb: 16 };
 const session: SessionDiagnostics = {
   connected: true,

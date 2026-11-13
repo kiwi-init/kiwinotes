@@ -5,10 +5,10 @@
 //
 // O ENOSPC é simulado só neste arquivo: `mock.module` troca o `node:fs/promises` para o processo de teste inteiro.
 import { afterEach, expect, mock, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
+import { tempDir } from "../../test/tmp.ts";
 
 // As funções de verdade, copiadas antes do mock (o namespace importado passa a apontar para o mock).
 const real = { ...fsp };
@@ -44,7 +44,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const tmp = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-7444-full-"));
+  const d = tempDir("kn-7444-full-");
   dirs.push(d);
   return d;
 };

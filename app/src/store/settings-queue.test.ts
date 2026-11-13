@@ -2,21 +2,21 @@
 // fila e mandava a lista inteira: uma fixada nova da janela, gravada no meio, sumia.
 
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
 import { Vault } from "../notes/vault.ts";
 import { SettingsStore } from "./settings.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const tmp = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-2639-"));
+  const d = tempDir("kn-2639-");
   dirs.push(d);
   return d;
 };

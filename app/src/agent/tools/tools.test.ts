@@ -3,8 +3,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../../bun/ui-capabilities.ts";
@@ -13,6 +12,7 @@ import { DEFAULT_SETTINGS } from "../../store/settings.ts";
 import { READER_CAPABILITIES, readerFromCapabilities, type VaultReader } from "./reader.ts";
 import { KIWI_TOOLS, kiwiTools, LIST_PAGE, READ_MAX_CHARS, SEARCH_MAX } from "./tools.ts";
 import { KiwiToolServer, MCP_VERSIONS, TOKEN_HEADER, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const dirs: string[] = [];
 const servers: KiwiToolServer[] = [];
@@ -48,7 +48,7 @@ lembrar do orçamento
 const BIG = "# Grande\n\n" + Array.from({ length: 900 }, (_, i) => `Linha ${i} do texto grande, com algumas palavras.`).join("\n") + "\n";
 
 async function setup(extra: Record<string, string> = {}) {
-  const base = mkdtempSync(path.join(tmpdir(), "kiwi-tools-"));
+  const base = tempDir("kiwi-tools-");
   dirs.push(base);
   const root = path.join(base, "KiwiNotes");
   const files: Record<string, string> = {

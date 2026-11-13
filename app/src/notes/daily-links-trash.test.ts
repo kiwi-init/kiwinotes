@@ -1,8 +1,7 @@
 // T2593: a nota do dia, o link que cria a nota, "Mencionada sem link" e a Lixeira do app. Tudo num tmp.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -10,6 +9,7 @@ import { directInvoke } from "../bun/ui-engine.ts";
 import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
 import { isDate, localDate, UNDO_DIR, Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -24,7 +24,7 @@ function files(root: string, f: Record<string, string>) {
 }
 
 async function vault(f: Record<string, string> = {}, o: { undoMs?: number; now?: () => number } = {}) {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-2593-")), "V");
+  const root = path.join(tempDir("kn-2593-"), "V");
   dirs.push(path.dirname(root));
   files(root, f);
   const trashed: string[] = [];

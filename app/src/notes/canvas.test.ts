@@ -2,8 +2,7 @@
 // das notas, e nada grava um quadro que não abre.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -11,6 +10,7 @@ import { directInvoke } from "../bun/ui-engine.ts";
 import { parseCanvas, stringifyCanvas, updateNode } from "../shared/json-canvas.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Vault, versionOf } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -30,7 +30,7 @@ const BOARD = `{
 }`;
 
 async function vault(files: Record<string, string>) {
-  const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-canvas-test-"));
+  const dir = tempDir("kiwinotes-canvas-test-");
   dirs.push(dir);
   const root = path.join(dir, "KiwiNotes");
   mkdirSync(root, { recursive: true });

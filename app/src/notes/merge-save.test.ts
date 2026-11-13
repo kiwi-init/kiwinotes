@@ -1,19 +1,18 @@
 // T5454 (issue #170): o `notes.save` com a base junta a edição da pessoa com o que mudou fora (o Obsidian, um agente).
 
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { rm } from "node:fs/promises";
 
 import { MeetingNotes } from "./meetings.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const roots: string[] = [];
 afterEach(async () => {
   for (const r of roots.splice(0)) await rm(r, { recursive: true, force: true });
 });
 async function rig() {
-  const root = await mkdtemp(path.join(os.tmpdir(), "kiwi-merge-save-"));
+  const root = tempDir("kiwi-merge-save-");
   roots.push(root);
   const vault = new Vault({ root, watch: false });
   return { vault, notes: new MeetingNotes(vault, {}) };

@@ -2,8 +2,7 @@
 // Texto ou binário, com limite de tamanho, só de dentro do cofre e só arquivo de verdade.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -12,6 +11,7 @@ import { fileSize, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES } from "../shared/file-vi
 import { UI_CAPABILITIES } from "../shared/ui-contract.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Vault, versionOf } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 async function vault(files: Record<string, string | Uint8Array>) {
-  const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-read-test-"));
+  const dir = tempDir("kiwinotes-read-test-");
   dirs.push(dir);
   const root = path.join(dir, "KiwiNotes");
   mkdirSync(root, { recursive: true });

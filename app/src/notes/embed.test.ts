@@ -1,11 +1,11 @@
 // T6594 (E15): o pedaço que cada embed mostra, cortado no engine.
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { embedContent, parseEmbed } from "./embed.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const NOTE = `---
 tags: [projeto]
@@ -73,7 +73,7 @@ afterEach(() => {
 });
 
 test("Vault.embed resolve o link como o Obsidian e diz o que falta", async () => {
-  const root = mkdtempSync(path.join(tmpdir(), "kn-embed-"));
+  const root = tempDir("kn-embed-");
   dirs.push(root);
   mkdirSync(path.join(root, "Pasta"));
   writeFileSync(path.join(root, "Pasta", "Projeto.md"), NOTE);

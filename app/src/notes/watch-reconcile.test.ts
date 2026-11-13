@@ -1,12 +1,12 @@
 // T6412 (issue 254): o FSEvents perde a mudança feita logo depois de o `fs.watch` abrir. A conferida do disco, pouco
 // depois do `watch()`, acha o que mudou e avisa como o watcher avisaria, sem barra de progresso e sem reler o resto.
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync, renameSync, utimesSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, unlinkSync, writeFileSync, renameSync, utimesSync } from "node:fs";
 import path from "node:path";
 
 import { type IndexProgress, Vault } from "./vault.ts";
 import { until } from "./watch-wait.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 async function setup(files: Record<string, string>, o: { reconcileMs?: number } = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), "kn-reconcile-"));
+  const root = tempDir("kn-reconcile-");
   dirs.push(root);
   for (const [p, c] of Object.entries(files)) writeFileSync(path.join(root, p), c);
   const progress: IndexProgress[] = [];

@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { DictationOutcome } from "./dictation.ts";
 import { APP_ALIASES, dictate, parseRequest, report, resolveApp } from "./dictate.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 let dir: string;
 afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
 const wav = () => {
-  dir = mkdtempSync(path.join(tmpdir(), "kiwi-dictate-"));
+  dir = tempDir("kiwi-dictate-");
   const file = path.join(dir, "a.wav");
   writeFileSync(file, "RIFF");
   return file;

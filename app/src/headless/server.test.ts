@@ -1,11 +1,11 @@
 // T1739: o headless e a CLI de teste. Nada aqui abre janela nem toca no app de verdade: --no-helper e dados num tmp.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { defaultHelper } from "./server.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
 
@@ -49,7 +49,7 @@ describe("headless (T1739)", () => {
     }
   });
 
-  const data = mkdtempSync(path.join(tmpdir(), "kn-hl-"));
+  const data = tempDir("kn-hl-");
   afterAll(async () => {
     await cli(["stop"]);
     rmSync(data, { recursive: true, force: true });
@@ -121,7 +121,7 @@ describe("headless (T1739)", () => {
 });
 
 describe("o helper do headless (T7684)", () => {
-  const root = mkdtempSync(path.join(tmpdir(), "kn-helper-"));
+  const root = tempDir("kn-helper-");
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   const helperAt = (config: string, mtime: Date) => {
     const p = path.join(root, "native", ".build", config, "kiwi-helper");
@@ -143,7 +143,7 @@ describe("o helper do headless (T7684)", () => {
   });
 
   test("só um dos dois, ou nenhum", () => {
-    const only = mkdtempSync(path.join(tmpdir(), "kn-helper-"));
+    const only = tempDir("kn-helper-");
     try {
       expect(defaultHelper(path.join(only, "app"))).toBeUndefined();
       const p = path.join(only, "native", ".build", "debug", "kiwi-helper");

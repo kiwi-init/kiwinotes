@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { tempDir } from "../../test/tmp.ts";
 import path from "node:path";
 import { Vault } from "./vault.ts";
 const opened: Vault[] = [], dirs: string[] = [];
 afterEach(() => { for(const v of opened.splice(0))v.close(); for(const d of dirs.splice(0))rmSync(d,{recursive:true,force:true}); });
 async function fixture(files:Record<string,string>) {
-  const root=mkdtempSync(path.join(tmpdir(),'kiwi-e11-'));dirs.push(root);
+  const root=tempDir('kiwi-e11-');dirs.push(root);
   for(const [p,s] of Object.entries(files)){mkdirSync(path.dirname(path.join(root,p)),{recursive:true});writeFileSync(path.join(root,p),s);}
   const v=new Vault({root});opened.push(v);await v.open();return {v,root};
 }

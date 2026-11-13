@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { parseLinks, resolveLink, rewriteLinks } from "../shared/wikilinks.ts";
 import { Vault, versionOf } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 function tmp(): string {
-  const d = mkdtempSync(path.join(tmpdir(), "kiwinotes-vault-test-"));
+  const d = tempDir("kiwinotes-vault-test-");
   dirs.push(d);
   return d;
 }

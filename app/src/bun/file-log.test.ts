@@ -1,13 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { FileLog, levelFromEnv, teeConsole } from "./file-log.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 let dir: string;
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
-const fresh = () => (dir = mkdtempSync(path.join(tmpdir(), "kiwi-log-")));
+const fresh = () => (dir = tempDir("kiwi-log-"));
 const at = () => new Date("2026-11-06T03:40:00.000Z");
 
 test("uma linha por chamada, com a hora e o nível; o nível mínimo filtra; a pasta da pessoa vira ~", () => {

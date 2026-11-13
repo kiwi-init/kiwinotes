@@ -7,8 +7,7 @@
 //   `KIWI_ADAPTER_CACHE=<pasta>` guarda o download entre uma rodada e outra.
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { writeFakeClaudeExecutable } from "../fake/index.ts";
@@ -123,7 +122,7 @@ describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova do builder, com o adap
   test(
     "o adaptador, aberto pelo Bun, chama o claude indicado pelo Kiwi, isolado, e a sessão abre sem pedido",
     async () => {
-      const data = mkdtempSync(path.join(tmpdir(), "kiwi-proof-"));
+      const data = tempDir("kiwi-proof-");
       const cache = process.env.KIWI_ADAPTER_CACHE;
       const root = cache ? path.join(cache, "adapter") : adapterRoot(data);
       const dl = await downloadAdapter({ root });
@@ -171,7 +170,7 @@ describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova do builder, com o adap
   test(
     "um claude lento na versão e no login (2,6 s cada) ainda dá a lista de comandos, porque o teto conta depois de abrir",
     async () => {
-      const data = mkdtempSync(path.join(tmpdir(), "kiwi-proof-lento-"));
+      const data = tempDir("kiwi-proof-lento-");
       const cache = process.env.KIWI_ADAPTER_CACHE;
       const root = cache ? path.join(cache, "adapter") : adapterRoot(data);
       await downloadAdapter({ root });
@@ -218,7 +217,7 @@ describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova com as ferramentas do 
   test(
     "a sessão abre com só o servidor do Kiwi e só as ferramentas dele liberadas; o claude pede a lista; a senha não aparece",
     async () => {
-      const data = mkdtempSync(path.join(tmpdir(), "kiwi-proof-tools-"));
+      const data = tempDir("kiwi-proof-tools-");
       const cache = process.env.KIWI_ADAPTER_CACHE;
       const root = cache ? path.join(cache, "adapter") : adapterRoot(data);
       await downloadAdapter({ root });

@@ -2,13 +2,13 @@
 // nada encosta no ~/Library do harry.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { REGISTRY_NAME, repairInstallRegistry, runningBundle } from "./install-registry.ts";
+import { tempDir } from "../../test/tmp.ts";
 
-const home = realpathSync(mkdtempSync(path.join(tmpdir(), "kn-registry-")));
+const home = realpathSync(tempDir("kn-registry-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 /** Um .app de mentira, com o `bun` em Contents/MacOS. */

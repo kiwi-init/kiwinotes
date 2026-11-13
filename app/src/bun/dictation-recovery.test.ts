@@ -1,18 +1,18 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Dictation, type DictationSidecar } from "./dictation.ts";
 import { RecordingRecoveries } from "../store/recording-recovery.ts";
 import { HistoryStore } from "../store/history.ts";
 import type { Command, Event } from "../shared/ipc.ts";
+import { tempDir } from "../../test/tmp.ts";
 const all: {
   dir: string;
   dictation: Dictation;
   recoveries: RecordingRecoveries;
 }[] = [];
 async function rig(insertFails = false, noteFails = false) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "kn-dictation-recover-"));
+  const dir = tempDir("kn-dictation-recover-");
   const recoveries = new RecordingRecoveries(dir),
     history = new HistoryStore(dir, recoveries);
   const ref = { id: crypto.randomUUID(), at: new Date().toISOString() };

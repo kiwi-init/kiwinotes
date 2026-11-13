@@ -1,13 +1,13 @@
 // T2619: as tags e os modelos no engine, pelo vault e pelo caminho da UI.
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { directInvoke } from "../bun/ui-engine.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 async function setup(files: Record<string, string>) {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-tags-")), "V");
+  const root = path.join(tempDir("kn-tags-"), "V");
   dirs.push(path.dirname(root));
   for (const [p, c] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, p)), { recursive: true });

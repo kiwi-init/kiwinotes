@@ -2,12 +2,12 @@
 // sentido e as pastas das notas liam os ajustes em segundo plano, e a rejeição sem dono encerrava o processo).
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { tempDir } from "../../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
-const data = mkdtempSync(path.join(tmpdir(), "kn-settings-"));
+const data = tempDir("kn-settings-");
 
 async function cli(args: string[]) {
   const p = Bun.spawn([process.execPath, path.join(appDir, "scripts", "cli.ts"), ...args, "--data", data], {

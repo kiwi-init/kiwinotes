@@ -2,12 +2,12 @@
 // saída. Os exemplos são montados aqui, sem token inteiro escrito no código.
 
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { tempDir } from "../../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
-const dir = mkdtempSync(path.join(tmpdir(), "kn-guardrail-cli-"));
+const dir = tempDir("kn-guardrail-cli-");
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const token = ["gh", "p_"].join("") + "Ab1".repeat(12);

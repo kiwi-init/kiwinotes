@@ -1,15 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { webkit, type Browser } from "playwright-core";
+import { tempDir } from "../test/tmp.ts";
 
 const browserTests = existsSync(webkit.executablePath()) ? describe : describe.skip;
 
 browserTests("Kiwi-cat native animation cleanup", () => {
   let browser: Browser, bundle: string, directory: string;
   beforeAll(async () => {
-    directory = mkdtempSync(join(tmpdir(), "kiwi-vector-lifecycle-"));
+    directory = tempDir("kiwi-vector-lifecycle-");
     const entry = join(directory, "entry.ts");
     writeFileSync(entry, `
       import { createVectorLayer } from ${JSON.stringify(resolve(import.meta.dir, "../ui/kiwicat/vectors.ts"))};

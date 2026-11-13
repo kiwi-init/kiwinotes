@@ -1,18 +1,18 @@
 // T6013: o download do modelo confere o SHA-256 e nunca deixa um arquivo errado no lugar.
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { E5_SMALL, ensureModel, fileUrl, ModelError, type ModelManifest, modelBytes, modelDir, modelPresent, verifyModel } from "./model.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const tmp = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-model-"));
+  const d = tempDir("kn-model-");
   dirs.push(d);
   return d;
 };

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { directInvoke } from "../bun/ui-engine.ts";
@@ -20,6 +19,7 @@ import {
   titleFromDictation,
 } from "./fromDictation.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 function tmp(): string {
-  const d = mkdtempSync(path.join(tmpdir(), "kiwinotes-fromdictation-"));
+  const d = tempDir("kiwinotes-fromdictation-");
   dirs.push(d);
   return d;
 }

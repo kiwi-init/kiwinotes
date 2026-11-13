@@ -2,15 +2,15 @@
 // que não grava), mas a nota da reunião ficava sem `end` e com `duration: 0`, e a lista de Reuniões mostrava "gravando"
 // para sempre, mesmo depois de reabrir o app. CLI e IPC de verdade, com um helper falso em Bun: nada de mic nem de janela.
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
+import { tempDir } from "../../test/tmp.ts";
 
 const app = path.resolve(import.meta.dirname, "../..");
 const helper = path.join(app, "test/helpers/meeting-crash-helper.ts");
 
 test("o helper cai no meio da reunião: a nota ganha o fim, e a lista não diz mais gravando", async () => {
-  const data = mkdtempSync(path.join(tmpdir(), "kn-meeting-crash-"));
+  const data = tempDir("kn-meeting-crash-");
   const vault = path.join(data, "vault");
   mkdirSync(vault);
   chmodSync(helper, 0o755);

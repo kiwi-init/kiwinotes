@@ -2,11 +2,11 @@
 // permissões, numa pasta tmp.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { ACTIVITY_KEEP_MS, ACTIVITY_REQUEST_CHARS, AgentActivity } from "./activity.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 function make(now?: () => number) {
-  const base = mkdtempSync(path.join(tmpdir(), "kiwi-activity-"));
+  const base = tempDir("kiwi-activity-");
   dirs.push(base);
   const dir = path.join(base, "agent", "activity");
   return { dir, a: new AgentActivity({ dir, ...(now ? { now } : {}) }) };

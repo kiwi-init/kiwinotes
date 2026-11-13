@@ -1,16 +1,15 @@
 // L26: a correção depois de colar vira pergunta no cartão, no arquivo de verdade (o DictionaryStore numa pasta temporária).
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 
 import { DictionaryStore, type DictionaryTerm } from "../store/dictionary.ts";
 import { CorrectionOffers, declinedFile, type SendOffer } from "./learn-dictionary.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 let dir = "";
 beforeEach(() => {
-  dir = mkdtempSync(path.join(tmpdir(), "kn-learn-"));
+  dir = tempDir("kn-learn-");
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
