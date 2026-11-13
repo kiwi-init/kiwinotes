@@ -140,6 +140,26 @@ O app passa a ligar o agente, baixar o adaptador, mandar um pedido e desligar, p
   - `KIWI_ADAPTER_REGISTRY` e `KIWI_ADAPTER_PACKAGES`: um registro do npm falso e a lista de teste;
   - `KIWI_AGENT_IDLE_MS`.
 
+## As ferramentas do Kiwi (T8956, spec #7496)
+O agente lê o cofre por um servidor MCP do próprio app (`src/agent/tools/`), e só por ele:
+- **HTTP local dentro do app**, e não stdio. O servidor usa o cofre e o índice que já estão abertos (a busca pelo sentido e o texto dos anexos inclusos), pelas mesmas capacidades de leitura das janelas (`notes.search`, `notes.list`, `notes.get` e `meetings.list`). Um servidor stdio seria um 2º Bun, aberto pelo `claude`, com outro índice.
+- **Só no próprio Mac e só com o programa aberto.** Ele escuta em `127.0.0.1`, numa porta sorteada, com uma senha nova a cada abertura no cabeçalho `X-Kiwi-Token`, e recusa um pedido com `Origin` (uma página do navegador). Ele abre com o programa do agente e fecha junto: ao desligar, depois de 10 min sem uso e na saída do app.
+  - A senha aparece na linha de comando do `claude` (o `--mcp-config` do SDK). No macOS, só os processos da própria pessoa leem essa linha, e eles já leem o cofre direto. A prova troca a senha por `***`.
+- **Como chega ao Claude Code** (conferido no adaptador 0.106.0 e na doc do Agent SDK):
+  - o `mcpServers` do `session/new` vira o `--mcp-config` com o servidor `kiwi`, junto do `--strict-mcp-config`;
+  - o `tools: []` tira só as ferramentas embutidas, e as MCP continuam;
+  - o `allowedTools: ["mcp__kiwi__*"]` libera só as do Kiwi. Um curinga sem o servidor (`mcp__*`) seria ignorado.
+  - O host só manda o servidor a um agente que anuncia `mcpCapabilities.http`.
+- **A permissão:** um pedido de permissão que chegue ao host é aceito só para `mcp__kiwi__*`, e o resto continua recusado.
+- **As seis ferramentas** são só de leitura (`readOnlyHint`): `notes_search`, `notes_outline`, `notes_read`, `notes_list`, `meetings_list` e `meetings_get`.
+  - Os nomes usam sublinhado, porque a API do Claude não aceita ponto.
+  - O texto vem como está. Cada resposta tem um teto (12 mil caracteres de texto, 30 resultados, 200 notas, 50 reuniões), e o que passa vem com o `proximoOffset` e um aviso.
+  - A transcrição sai sem as marcas internas (`%%meeting-segment…%%`).
+- **O que a pessoa vê:** cada uso vira um status do pedido, com o que foi lido (`agent.turn`, o `target`, contrato 1.43.0), e o "Testar" mostra "Lendo Projetos/Kiwi.md…".
+- **A prova:** `bun run cli agent proof --tools` abre a sessão com o servidor do Kiwi sobre um cofre vazio, sem pedido, e diz se o Claude Code conectou e pediu o `tools/list`.
+  - A do builder (adaptador de verdade, `claude` falso que conecta como o Claude Code) passou em 2026-11-12: `--mcp-config` só com o `kiwi`, `--allowedTools=mcp__kiwi__*`, `--tools=`, `--strict-mcp-config`, e o `tools/list` chegou.
+  - A de verdade (`--real --tools`) é do harry, e quem pede é o lead.
+
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:
 - `claude -p --input-format stream-json --output-format stream-json --verbose`;
@@ -163,6 +183,6 @@ Fica para a prova de verdade do harry (`bun run cli agent proof --real`, acima):
 
 ## Consequências
 - **A tela de Ajustes › Agente** usa o `AgentHost` e o `claudeStatus()`. Ela troca a recusa automática das permissões por uma pergunta à pessoa, quando houver ferramentas.
-- **As ferramentas do Kiwi para o agente** (o índice, a busca, a leitura por seção) entram como um servidor MCP do próprio Kiwi, no `mcpServers` da sessão, sem mexer no isolamento.
+- **As ferramentas do Kiwi para o agente** (o índice, a busca, a leitura por seção) entram como um servidor MCP do próprio Kiwi, no `mcpServers` da sessão, sem mexer no isolamento (seção acima, T8956).
 - **Outro agente que fala ACP** (o Gemini, o OpenCode) entra trocando só o programa que o host abre.
 - **Atualizar a biblioteca do ACP:** trocar a versão fixa no `package.json` e rodar `bun scripts/third-party-notices.ts`. A 2.0 quebrou a API antiga, então uma versão nova pede rodar os testes do `src/agent/`.

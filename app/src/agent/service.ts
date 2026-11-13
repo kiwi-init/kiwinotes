@@ -9,12 +9,17 @@
 //   e antes de cada pedido, se mudaram. A prova de verdade mostrou que, sem isso, vinham os do terminal (#8666).
 // - **Pedir e baixar voltam logo:** a chamada do AppEngine tem teto de 10 s. A resposta chega pelo evento `agent.turn`,
 //   e o progresso do download pelo `agent.status`.
+// - **As ferramentas do Kiwi** (spec #7496): com o leitor do cofre (`useReader`), o servidor MCP do Kiwi abre junto
+//   com o programa do agente, com uma senha nova, e fecha junto com ele. Cada uso de ferramenta vira um status no
+//   pedido ("lendo Projetos/Kiwi.md").
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { AgentError, type AgentErrorCode } from "./errors.ts";
-import type { AgentHost } from "./host.ts";
+import type { AgentHost, AgentHostOptions } from "./host.ts";
+import { KIWI_TOOL_PREFIX, KiwiToolServer, type ToolCallEvent } from "./tools/server.ts";
+import type { VaultReader } from "./tools/reader.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
@@ -45,7 +50,11 @@ export interface AgentServiceDeps {
    * Monta o host do agente (sem abrir): no app, o adaptador apontado para o Claude Code instalado, depois das
    * conferências; nos testes, o agente falso. Recebe o que o host precisa do serviço.
    */
-  openHost(o: { configOptions: () => Record<string, string> }): Promise<AgentHost>;
+  openHost(o: { configOptions: () => Record<string, string>; kiwiTools?: AgentHostOptions["kiwiTools"] }): Promise<AgentHost>;
+  /** O leitor do cofre para as ferramentas do Kiwi (spec #7496). Também pode chegar depois, pelo `useReader`. */
+  reader?: VaultReader;
+  /** A versão do Kiwi, que o servidor de ferramentas diz ao agente. */
+  version?: string;
   /** O registro do npm e a lista de pacotes (nos testes, um registro falso e uma lista de teste). */
   registry?: string;
   packages?: readonly PinnedPackage[];
@@ -99,9 +108,28 @@ export class AgentService {
   private readonly statusListeners = new Set<(s: AgentStatus) => void>();
   private readonly turnListeners = new Set<(e: AgentTurnEvent) => void>();
   private closed = false;
+  private reader: VaultReader | null;
+  /** O servidor de ferramentas do programa aberto (ou abrindo): fecha junto com ele. */
+  private tools: KiwiToolServer | null = null;
 
   constructor(private readonly d: AgentServiceDeps) {
     this.name = d.name ?? "Claude Code";
+    this.reader = d.reader ?? null;
+  }
+
+  /**
+   * O leitor do cofre que as ferramentas do Kiwi usam (as capacidades de leitura das janelas). Vale a partir da próxima
+   * abertura do programa do agente.
+   */
+  useReader(reader: VaultReader): void {
+    this.reader = reader;
+  }
+
+  /** Um uso de ferramenta do Kiwi: vira um status do pedido em andamento. */
+  private onToolCall(e: ToolCallEvent): void {
+    const turn = this.turn;
+    if (!turn || turn.cancelled) return;
+    this.emitTurn({ id: turn.id, type: "status", status: "running", tool: e.tool, ...(e.target ? { target: e.target } : {}) });
   }
 
   onStatus(fn: (s: AgentStatus) => void): () => void {
@@ -310,6 +338,8 @@ export class AgentService {
       }
       const answer = await host.ask(text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
+        // O uso de uma ferramenta do Kiwi sai do próprio servidor, com o que foi lido (`onToolCall`).
+        if (e.type === "status" && e.status === "running" && e.tool.startsWith(KIWI_TOOL_PREFIX)) return;
         this.emitTurn({ id: turn.id, ...e } as AgentTurnEvent);
       });
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text });
@@ -334,14 +364,26 @@ export class AgentService {
       const epoch = this.epoch;
       const s = await this.d.settings.load();
       const wanted = () => ({ model: s.model, effort: s.effort });
-      const host = await this.d.openHost({ configOptions: wanted });
+      const reader = this.reader;
+      const tools = reader ? new KiwiToolServer({ reader, version: this.d.version, onCall: (e) => this.onToolCall(e) }) : null;
+      let config: ReturnType<KiwiToolServer["start"]> | null = null;
+      const kiwiTools = tools
+        ? {
+            prefix: KIWI_TOOL_PREFIX,
+            // O servidor abre só quando o host monta a sessão, e uma vez por abertura (a senha é desta sessão).
+            servers: () => [(config ??= tools.start())],
+          }
+        : undefined;
+      const host = await this.d.openHost({ configOptions: wanted, ...(kiwiTools ? { kiwiTools } : {}) });
       if (this.closed || epoch !== this.epoch) throw new AgentError("E_AGENT_FAILED", this.name, "o programa foi fechado antes de abrir");
       this.pending = host;
+      this.tools = tools;
       this.emitStatus();
       try {
         await host.start();
       } catch (e) {
         await host.stop();
+        this.stopTools(tools);
         throw e;
       } finally {
         if (this.pending === host) this.pending = null;
@@ -426,6 +468,14 @@ export class AgentService {
       this.d.log?.(`[agent] fechando o programa: ${why}`);
       await host.stop();
     }
+    this.stopTools(this.tools);
+  }
+
+  /** Fecha o servidor de ferramentas (e esquece a senha dele). */
+  private stopTools(tools: KiwiToolServer | null): void {
+    if (!tools) return;
+    tools.stop();
+    if (this.tools === tools) this.tools = null;
   }
 
   /** O app vai sair: cancela tudo e fecha o programa do agente, esperando ele sair. */
@@ -441,5 +491,6 @@ export class AgentService {
     this.download?.abort.abort();
     this.pending?.killNow();
     this.host?.killNow();
+    this.tools?.stop();
   }
 }

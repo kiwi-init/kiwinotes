@@ -84,6 +84,7 @@ O agente falso também tem `/lento` (20 pedaços, um a cada 100 ms; Ctrl-C cance
 bun run cli agent download --data /tmp/kn-test          # a lista fixa do npm (4,4 MB), conferida; a única ida à rede
 bun run cli agent status --data /tmp/kn-test            # inclui o adaptador baixado e se a versão do Claude Code serve
 bun run cli agent proof --data /tmp/kn-test             # a prova do builder: o adaptador de verdade com um claude falso
+bun run cli agent proof --tools --data /tmp/kn-test     # o mesmo, com as ferramentas do Kiwi: o claude pediu a lista?
 bun run cli agent remove --data /tmp/kn-test
 ```
 

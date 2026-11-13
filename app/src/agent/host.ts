@@ -6,8 +6,10 @@
 // - **um pedido por vez,** com cancelar;
 // - **a sessão retomada** entre um pedido e outro, e entre uma abertura e outra (o id fica em `session.json`);
 // - **o agente isolado:** uma pasta de trabalho só dele, sem as configurações pessoais do Claude Code (hooks, regras,
-//   servidores MCP) e sem as ferramentas que mexem no Mac. Neste spec ele só conversa;
-// - **erros claros** (`errors.ts`), e nenhum pedido de permissão aceito: sem tela, toda ferramenta é recusada.
+//   servidores MCP) e sem as ferramentas que mexem no Mac. Ele só conversa e, com `kiwiTools`, lê o cofre pelas
+//   ferramentas do Kiwi (spec #7496);
+// - **erros claros** (`errors.ts`), e nenhum pedido de permissão aceito, menos o das ferramentas do Kiwi (spec #7496):
+//   com `kiwiTools`, o agente recebe o servidor MCP do Kiwi e só as ferramentas dele são permitidas.
 //
 // Nada liga sozinho: o host só abre o agente quando alguém chama `start()`.
 
@@ -19,6 +21,7 @@ import type {
   ClientConnection,
   InitializeRequest,
   InitializeResponse,
+  McpServer,
   NewSessionRequest,
   RequestPermissionResponse,
   SessionConfigOption,
@@ -32,8 +35,9 @@ import { AgentError, classifyAgentError } from "./errors.ts";
  * ao SDK por cima dos padrões dele (`claude-agent-acp`, `v1/acp-agent.js` e `v2/agent.js`):
  * - `settingSources: []` não carrega as configurações da pessoa (`~/.claude`, as do projeto e as locais), com os
  *   hooks, as regras e os servidores MCP do terminal;
- * - `strictMcpConfig` usa só os servidores MCP que o Kiwi mandar (nenhum, neste spec);
- * - `tools: []` desliga as ferramentas embutidas (o shell, a edição de arquivos e a web);
+ * - `strictMcpConfig` usa só os servidores MCP que o Kiwi mandar (o das ferramentas do Kiwi, spec #7496, ou nenhum);
+ * - `tools: []` desliga as ferramentas embutidas (o shell, a edição de arquivos e a web). As ferramentas MCP não são
+ *   embutidas: as do Kiwi continuam visíveis ("`tools: []`: Claude can only use your MCP tools", doc do Agent SDK);
  * - `allowDangerouslySkipPermissions: false` desliga o modo que pula as permissões (spec #8368). Sem ele, um
  *   `"defaultMode": "bypassPermissions"` no `~/.claude/settings.json` da pessoa vira `--permission-mode=bypassPermissions`
  *   no Claude Code: foi o que a prova do builder viu, com o adaptador de verdade e um `claude` falso. Com ele, a sessão
@@ -99,6 +103,12 @@ export interface AgentHostOptions {
    * dá `E_AGENT_FAILED` e é fechado, em vez de deixar quem espera preso para sempre (revisão do T8678). Padrão: 60 s.
    */
   startTimeoutMs?: number;
+  /**
+   * As ferramentas do Kiwi (spec #7496): o servidor MCP que vai no `session/new` (montado a cada abertura, com a senha
+   * nova) e o prefixo das ferramentas dele (`mcp__kiwi__`). O host pede o `allowedTools` só desse servidor e, num
+   * pedido de permissão, aceita só as ferramentas com esse prefixo: o resto continua recusado.
+   */
+  kiwiTools?: { servers: () => McpServer[]; prefix: string };
 }
 
 export interface AgentSession {
@@ -198,6 +208,11 @@ export class AgentHost {
       .onNotification("session/update", ({ params }) => this.onUpdate(params))
       .onRequest("session/request_permission", ({ params }) => {
         const tool = toolName(params.toolCall as Record<string, unknown>);
+        const kiwi = this.o.kiwiTools;
+        if (kiwi && tool.startsWith(kiwi.prefix)) {
+          const allow = params.options.find((o) => o.kind === "allow_once");
+          if (allow) return { outcome: { outcome: "selected", optionId: allow.optionId } } satisfies RequestPermissionResponse;
+        }
         this.turn?.onEvent?.({ type: "permission", tool, decision: "denied" });
         const reject = params.options.find((o) => o.kind === "reject_once") ?? params.options.find((o) => o.kind === "reject_always");
         const answer: RequestPermissionResponse = reject
@@ -243,8 +258,15 @@ export class AgentHost {
   /** Retoma a sessão guardada, se o agente sabe (`session/resume`, ou `session/load`); senão, abre uma nova. */
   private async openSession(init: InitializeResponse): Promise<{ sessionId: string; resumed: boolean; details: Record<string, unknown> }> {
     const agent = this.conn!.agent;
-    const options = { ...structuredClone(this.o.sessionOptions ?? {}), ...structuredClone(ISOLATION_META.claudeCode.options) };
-    const base: NewSessionRequest = { cwd: this.workDir, mcpServers: [], _meta: { claudeCode: { options } } };
+    const kiwi = this.o.kiwiTools;
+    // O servidor do Kiwi vai pelo HTTP do MCP: só para um agente que diz saber (`mcpCapabilities.http`).
+    const mcpServers = kiwi && init.agentCapabilities?.mcpCapabilities?.http ? kiwi.servers() : [];
+    const options = {
+      ...structuredClone(this.o.sessionOptions ?? {}),
+      ...structuredClone(ISOLATION_META.claudeCode.options),
+      ...(mcpServers.length && kiwi ? { allowedTools: [`${kiwi.prefix}*`] } : {}),
+    };
+    const base: NewSessionRequest = { cwd: this.workDir, mcpServers, _meta: { claudeCode: { options } } };
     const saved = this.savedSessionId();
     if (saved) {
       const caps = init.agentCapabilities;

@@ -51,15 +51,17 @@ export function appAgentService(o: AppAgentOptions): AgentService {
       return found ? [found] : null;
     },
     openHost: fake
-      ? async ({ configOptions }) =>
+      ? async ({ configOptions, kiwiTools }) =>
           new AgentHost({
             name: CLAUDE_CODE,
             command: FAKE_AGENT_COMMAND,
             dir: agentDir(o.data),
             configOptions,
+            ...(kiwiTools ? { kiwiTools } : {}),
             env: { ...process.env, KIWI_FAKE_AGENT_LOG: path.join(o.data, "fake-agent.jsonl") },
           })
-      : async ({ configOptions }) => (await claudeAdapterHost({ data: o.data, claudePath: findClaude(), host: { configOptions } })).host,
+      : async ({ configOptions, kiwiTools }) =>
+          (await claudeAdapterHost({ data: o.data, claudePath: findClaude(), host: { configOptions, ...(kiwiTools ? { kiwiTools } : {}) } })).host,
     ...(headless && env.KIWI_ADAPTER_REGISTRY ? { registry: env.KIWI_ADAPTER_REGISTRY } : {}),
     ...(packages ? { packages } : {}),
     ...(idle && Number.isFinite(idle) && idle > 0 ? { idleMs: idle } : {}),

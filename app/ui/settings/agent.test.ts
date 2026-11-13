@@ -15,6 +15,7 @@ import {
   modelOptions,
   PRIVACY_RULE,
   switchHint,
+  TEST_HINT,
   type TestState,
 } from "./agentText.ts";
 
@@ -141,10 +142,29 @@ describe("o Testar", () => {
     expect(err).toMatchObject({ phase: "error", error: { code: "E_AGENT_LIMIT" } });
   });
 
-  test("a permissão recusada aparece no status: aqui o agente só conversa", () => {
+  test("a permissão recusada aparece no status: o agente só lê as notas e as reuniões", () => {
     expect(run([ev({ type: "started" }), ev({ type: "permission", tool: "Bash", decision: "denied" })]).status).toBe(
-      "Recusei o Bash: nesta tela o agente só conversa.",
+      "Recusei o Bash: o agente só lê as suas notas e reuniões.",
     );
+  });
+
+  test("as ferramentas do Kiwi dizem o que foi lido ou procurado (spec #7496)", () => {
+    const mid = run([ev({ type: "started" })]);
+    const st = (tool: string, target?: string) => run([ev({ type: "status", status: "running", tool, ...(target ? { target } : {}) })], mid).status;
+    expect(st("notes_read", "Projetos/Kiwi.md")).toBe("Lendo Projetos/Kiwi.md…");
+    expect(st("notes_read", "Projetos/Kiwi.md › Prazo")).toBe("Lendo Projetos/Kiwi.md › Prazo…");
+    expect(st("notes_search", '"prazo"')).toBe('Procurando "prazo" nas notas…');
+    expect(st("notes_outline", "Projetos/Kiwi.md")).toBe("Vendo o sumário de Projetos/Kiwi.md…");
+    expect(st("notes_list", "Projetos")).toBe("Olhando Projetos…");
+    expect(st("meetings_list")).toBe("Vendo as reuniões…");
+    expect(st("meetings_get", "Reuniões/Orçamento.md")).toBe("Lendo a reunião Reuniões/Orçamento.md…");
+    expect(st("Read")).toBe("Usando Read…");
+  });
+
+  test("a dica do Testar diz que o agente lê as notas, e avisa que pode ler qualquer uma", () => {
+    expect(TEST_HINT).toContain("ler as suas notas e reuniões");
+    expect(TEST_HINT).toContain("qualquer nota");
+    expect(TEST_HINT).not.toContain("só conversa");
   });
 
   test("sem pedido próprio, um evento atrasado de um pedido antigo não entra; só o started abre um teste (revisão)", () => {

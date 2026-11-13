@@ -140,6 +140,32 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect((await invoke("settings.set", { agent: { enabled: true } })).json).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
   });
 
+  test("o agente lê o cofre pelas ferramentas do Kiwi (spec #7496): responde a uma pergunta sobre uma nota", async () => {
+    await invoke("agent.enable");
+    await invoke("agent.download");
+    await until(async () => (await invoke("agent.status")).json!.value.adapter.phase === "ready");
+    expect((await invoke("notes.create", { folder: "Projetos", title: "Kiwi", content: "# Kiwi\n\n## Prazo\n\nO prazo do Kiwi é março.\n" })).json!.ok).toBe(true);
+
+    const ask = async (text: string) => {
+      const id = (await invoke("agent.ask", { text })).json!.value.id as string;
+      await until(async () => (await agentEvents()).some((e) => e.event === "agent.turn" && e.payload.id === id && (e.payload.type === "done" || e.payload.type === "error")));
+      return (await agentEvents()).filter((e) => e.event === "agent.turn" && e.payload.id === id).map((e) => e.payload);
+    };
+
+    const turn = await ask("Qual é o prazo do Kiwi?");
+    expect(turn.at(-1)).toMatchObject({ type: "done" });
+    expect(turn.at(-1).text).toContain("Pela nota Projetos/Kiwi.md");
+    expect(turn.at(-1).text).toContain("março");
+    // O que foi lido aparece no status ao vivo.
+    expect(turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "notes_read", target: "Projetos/Kiwi.md" }));
+
+    // A fronteira do cofre vale pelas ferramentas também.
+    const outside = await ask('/tool notes_read {"path":"../fora.md"}');
+    expect(outside.at(-1).text).toMatch(/^erro da ferramenta: E_OUTSIDE_VAULT/);
+    expect((await ask("/ferramentas")).at(-1).text).toBe("ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get");
+    await invoke("agent.disable");
+  }, 60_000);
+
   test("quando o app sai, o programa do agente sai junto", async () => {
     await invoke("agent.enable");
     await invoke("agent.download");

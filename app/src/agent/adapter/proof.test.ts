@@ -14,7 +14,9 @@ import path from "node:path";
 import { writeFakeClaudeExecutable } from "../fake/index.ts";
 import { downloadAdapter } from "./download.ts";
 import { adapterRoot } from "./open.ts";
-import { childProcesses, commandsWaiter, isolationOf, opensProgram, runAdapterProof, sameProgram } from "./proof.ts";
+import { childProcesses, commandsWaiter, isolationOf, mcpServerNames, opensProgram, redactToken, runAdapterProof, sameProgram } from "./proof.ts";
+import { EMPTY_READER } from "../tools/reader.ts";
+import { KiwiToolServer } from "../tools/server.ts";
 
 describe("ler o isolamento na linha de comando", () => {
   const isolated =
@@ -28,7 +30,24 @@ describe("ler o isolamento na linha de comando", () => {
       modoDePermissao: "default",
       pulaPermissoes: false,
       semRegistroDaSessao: true,
+      servidoresMcp: [],
+      liberadas: [],
     });
+  });
+
+  test("com as ferramentas do Kiwi (spec #7496): o servidor do --mcp-config e as ferramentas liberadas", () => {
+    const config = JSON.stringify({ mcpServers: { kiwi: { type: "http", url: "http://127.0.0.1:5/mcp", headers: { "X-Kiwi-Token": "abc}{\"" } } } });
+    const cmd = `${isolated} --mcp-config ${config} --allowedTools=mcp__kiwi__*`;
+    expect(isolationOf(cmd)).toMatchObject({ servidoresMcp: ["kiwi"], liberadas: ["mcp__kiwi__*"], semServidoresMcp: false });
+    const two = JSON.stringify({ mcpServers: { kiwi: {}, github: {} } });
+    expect(mcpServerNames(`${isolated} --mcp-config ${two}`)).toEqual(["github", "kiwi"]);
+    expect(mcpServerNames(`${isolated} --mcp-config {quebrado`)).toEqual(["?"]);
+    expect(mcpServerNames(isolated)).toEqual([]);
+  });
+
+  test("a senha do servidor sai da linha de comando do relatório", () => {
+    expect(redactToken('claude --mcp-config {"h":"segredo123"} --x', "segredo123")).toBe('claude --mcp-config {"h":"***"} --x');
+    expect(redactToken("claude --x", null)).toBe("claude --x");
   });
 
   test("o que não está isolado aparece", () => {
@@ -40,6 +59,8 @@ describe("ler o isolamento na linha de comando", () => {
       modoDePermissao: "bypassPermissions",
       pulaPermissoes: true,
       semRegistroDaSessao: false,
+      servidoresMcp: [],
+      liberadas: [],
     });
     expect(isolationOf(`${isolated} --mcp-config {"mcpServers":{}}`).semServidoresMcp).toBe(false);
   });
@@ -126,8 +147,11 @@ describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova do builder, com o adap
         modoDePermissao: "default",
         pulaPermissoes: false,
         semRegistroDaSessao: true,
+        servidoresMcp: [],
+        liberadas: [],
       });
       expect(report.comandosChegaram).toBe(true);
+      expect(report.ferramentasDoKiwi).toBeNull();
 
       // O próprio falso anotou como foi chamado: uma vez, na pasta de trabalho do agente, com o isolamento.
       const calls = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { argv: string[]; cwd: string });
@@ -159,6 +183,62 @@ describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova do builder, com o adap
       const report = await runAdapterProof({ data, claudePath: claude });
       expect(report).toMatchObject({ ok: true, comandosChegaram: true });
       expect(report.comandos.length).toBeGreaterThan(0);
+    },
+    120_000,
+  );
+});
+
+describe("o claude falso como cliente MCP (spec #7496)", () => {
+  test("com um --mcp-config, ele conecta no servidor do Kiwi ao abrir e pede a lista, como o Claude Code", async () => {
+    const methods: string[] = [];
+    const server = new KiwiToolServer({ reader: EMPTY_READER, onRequest: (m) => methods.push(m) });
+    const config = server.start();
+    const dir = mkdtempSync(path.join(tmpdir(), "kiwi-fake-mcp-"));
+    const log = path.join(dir, "calls.jsonl");
+    const claude = writeFakeClaudeExecutable(path.join(dir, "bin"), { KIWI_FAKE_CLAUDE_LOG: log });
+    const mcpConfig = JSON.stringify({ mcpServers: { kiwi: { type: "http", url: config.url, headers: Object.fromEntries(config.headers.map((h) => [h.name, h.value])) } } });
+    const p = Bun.spawn([claude, "--input-format", "stream-json", "--mcp-config", mcpConfig], { stdin: "pipe", stdout: "ignore", stderr: "ignore" });
+    try {
+      const end = Date.now() + 10_000;
+      while (!methods.includes("tools/list") && Date.now() < end) await Bun.sleep(20);
+      expect(methods).toEqual(["initialize", "notifications/initialized", "tools/list"]);
+      while (Date.now() < end && !readFileSync(log, "utf8").includes('"mcp"')) await Bun.sleep(20);
+      const mcp = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((l) => l.mcp)!.mcp;
+      expect(mcp).toEqual({ nome: "kiwi", ferramentas: ["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get"] });
+    } finally {
+      (p.stdin as import("bun").FileSink).end();
+      p.kill();
+      server.stop();
+    }
+  });
+});
+
+describe.skipIf(!process.env.KIWI_ADAPTER_PROOF)("a prova com as ferramentas do Kiwi (spec #7496), com o adaptador de verdade e um claude falso", () => {
+  test(
+    "a sessão abre com só o servidor do Kiwi e só as ferramentas dele liberadas; o claude pede a lista; a senha não aparece",
+    async () => {
+      const data = mkdtempSync(path.join(tmpdir(), "kiwi-proof-tools-"));
+      const cache = process.env.KIWI_ADAPTER_CACHE;
+      const root = cache ? path.join(cache, "adapter") : adapterRoot(data);
+      await downloadAdapter({ root });
+      if (cache) {
+        const { mkdirSync, symlinkSync } = await import("node:fs");
+        mkdirSync(path.dirname(adapterRoot(data)), { recursive: true });
+        symlinkSync(root, adapterRoot(data));
+      }
+      const log = path.join(data, "calls.jsonl");
+      const claude = writeFakeClaudeExecutable(path.join(data, "bin"), { KIWI_FAKE_CLAUDE_LOG: log });
+      const report = await runAdapterProof({ data, claudePath: claude, tools: true });
+      expect(report.ok).toBe(true);
+      expect(report.sessao).toMatchObject({ abriu: true, pedidosEnviados: 0 });
+      expect(report.isolamento).toMatchObject({ semConfiguracoesPessoais: true, semFerramentas: true, servidoresMcp: ["kiwi"], liberadas: ["mcp__kiwi__*"], pulaPermissoes: false });
+      expect(report.ferramentasDoKiwi).toMatchObject({ conectou: true, pediuALista: true });
+      expect(report.ferramentasDoKiwi!.metodos).toEqual(expect.arrayContaining(["initialize", "tools/list"]));
+      expect(report.processo!.comando).toContain('"X-Kiwi-Token":"***"');
+      expect(report.processo!.comando).not.toMatch(/"X-Kiwi-Token":"[0-9a-f]{64}"/);
+      const mcp = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((l) => l.mcp)?.mcp;
+      expect(mcp?.ferramentas).toHaveLength(6);
+      console.log(JSON.stringify(report, null, 2));
     },
     120_000,
   );

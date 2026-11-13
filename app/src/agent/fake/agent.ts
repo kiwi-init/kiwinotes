@@ -12,10 +12,18 @@
 //   /sem-rede          falha com um erro de rede (ENOTFOUND)
 //   /cai               o processo sai no meio do pedido
 //
+// Com o servidor de ferramentas do Kiwi no `session/new` (spec #7496), ele é um cliente MCP, como o Claude Code:
+//   /ferramentas       pede a lista (`tools/list`) e responde com os nomes
+//   /tool <nome> <json>  avisa o `tool_call` (`mcp__kiwi__<nome>`), chama a ferramenta e responde com o que voltou
+//   /permissao-kiwi    pede permissão para usar o `mcp__kiwi__notes_read` e conta o que o Kiwi respondeu
+//   (uma pergunta, com "?")  procura nas notas, lê a 1ª achada e responde com o começo dela: o "Testar" dos Ajustes
+//
 // O ambiente:
 //   KIWI_FAKE_AGENT_LOG      um arquivo JSONL onde ele anota cada `session/new`, `session/resume` e `session/load`
 //                            que recebeu, com os parâmetros (os testes conferem o isolamento por ele)
 //   KIWI_FAKE_AGENT_RESUME   "resume" (o padrão), "load" ou "none": como ele retoma uma sessão
+//   KIWI_FAKE_AGENT_TOOL_DELAY_MS  uma pausa depois de cada ferramenta do Kiwi, para um print pegar o status no meio
+//   KIWI_FAKE_AGENT_NO_MCP   "1": não anuncia o HTTP do MCP (`mcpCapabilities`), e o host não manda as ferramentas
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
 //                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high"
 //
@@ -27,7 +35,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { agent, ndJsonStream, PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
-import type { AgentContext, InitializeResponse } from "@agentclientprotocol/sdk";
+import type { AgentContext, InitializeResponse, McpServer } from "@agentclientprotocol/sdk";
 
 const resumeMode = process.env.KIWI_FAKE_AGENT_RESUME ?? "resume";
 const log = process.env.KIWI_FAKE_AGENT_LOG;
@@ -53,6 +61,63 @@ function note(method: string, params: unknown): void {
 }
 
 const cancelled = new Set<string>();
+
+/** O servidor de ferramentas do Kiwi que cada sessão recebeu (`type: "http"`, o nome `kiwi`). */
+const kiwiServers = new Map<string, { url: string; headers: Record<string, string>; ready?: Promise<void> }>();
+function rememberServers(sessionId: string, servers: McpServer[] | undefined): void {
+  const kiwi = (servers ?? []).find((x) => "type" in x && x.type === "http" && x.name === "kiwi") as
+    | { url: string; headers: { name: string; value: string }[] }
+    | undefined;
+  if (kiwi) kiwiServers.set(sessionId, { url: kiwi.url, headers: Object.fromEntries(kiwi.headers.map((h) => [h.name, h.value])) });
+  else kiwiServers.delete(sessionId);
+}
+
+let rpcId = 0;
+/** Uma chamada MCP pelo HTTP, como o cliente do Claude Code: o `initialize` uma vez, e depois o método. */
+async function mcp(sessionId: string, method: string, params?: unknown): Promise<{ result?: any; error?: { message: string } }> {
+  const server = kiwiServers.get(sessionId);
+  if (!server) throw new Error("esta sessão não recebeu as ferramentas do Kiwi");
+  const post = async (body: unknown) =>
+    fetch(server.url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", ...server.headers }, body: JSON.stringify(body) });
+  server.ready ??= (async () => {
+    const res = await post({ jsonrpc: "2.0", id: ++rpcId, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "kiwi-fake-agent", version: "1.0.0" } } });
+    if (!res.ok) throw new Error(`initialize: HTTP ${res.status}`);
+    await post({ jsonrpc: "2.0", method: "notifications/initialized" });
+  })();
+  await server.ready;
+  const res = await post({ jsonrpc: "2.0", id: ++rpcId, method, params });
+  if (!res.ok) throw new Error(`${method}: HTTP ${res.status}`);
+  return (await res.json()) as { result?: any; error?: { message: string } };
+}
+
+/** Usa uma ferramenta do Kiwi como o Claude Code: o `tool_call` no status, a chamada e o texto que voltou. */
+async function useTool(client: AgentContext, sessionId: string, name: string, args: unknown): Promise<{ text: string; isError: boolean }> {
+  await client.notify("session/update", {
+    sessionId,
+    update: { sessionUpdate: "tool_call", toolCallId: `k${++rpcId}`, title: name, kind: "read", status: "in_progress", _meta: { claudeCode: { toolName: `mcp__kiwi__${name}` } } },
+  });
+  const r = await mcp(sessionId, "tools/call", { name, arguments: args });
+  const pause = Number(process.env.KIWI_FAKE_AGENT_TOOL_DELAY_MS ?? 0);
+  if (pause > 0) await Bun.sleep(pause);
+  if (r.error) return { text: `erro: ${r.error.message}`, isError: true };
+  return { text: String(r.result?.content?.[0]?.text ?? ""), isError: !!r.result?.isError };
+}
+
+/** Responde a uma pergunta pelas notas: procura a pergunta, ou a palavra mais longa dela, lê a 1ª nota e cita o começo. */
+async function answerFromNotes(client: AgentContext, sessionId: string, question: string): Promise<string> {
+  const words = [...new Set(question.replace(/[?!.,;:"]/g, " ").split(/\s+/).filter((w) => w.length >= 4))].sort((a, b) => b.length - a.length);
+  for (const query of [question.replace(/\?+$/, ""), ...words]) {
+    const found = await useTool(client, sessionId, "notes_search", { query, limit: 3 });
+    if (found.isError) continue;
+    const first = (JSON.parse(found.text) as { resultados: { path: string }[] }).resultados[0];
+    if (!first) continue;
+    const read = await useTool(client, sessionId, "notes_read", { path: first.path });
+    if (read.isError) return `Não consegui ler ${first.path}: ${read.text}`;
+    const texto = (JSON.parse(read.text) as { texto: string }).texto.replace(/^---[\s\S]*?\n---\n/, "").trim();
+    return `Pela nota ${first.path}: ${texto.slice(0, 200)}`;
+  }
+  return "Não achei nada sobre isso nas suas notas.";
+}
 
 const MODELS = ["default", "opus", "fable", "sonnet", "haiku"];
 const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
@@ -99,6 +164,8 @@ const app = agent({ name: "kiwi-fake-agent" })
     agentInfo: { name: "kiwi-fake-agent", title: "Agente falso", version: "1.0.0" },
     agentCapabilities: {
       loadSession: resumeMode === "load",
+      // KIWI_FAKE_AGENT_NO_MCP=1: um agente que não sabe o HTTP do MCP (o host não manda o servidor do Kiwi).
+      mcpCapabilities: process.env.KIWI_FAKE_AGENT_NO_MCP === "1" ? {} : { http: true, sse: false },
       sessionCapabilities: resumeMode === "resume" ? { resume: {} } : {},
     },
     authMethods: [],
@@ -106,17 +173,20 @@ const app = agent({ name: "kiwi-fake-agent" })
   .onRequest("session/new", ({ params }) => {
     note("session/new", params);
     const sessionId = crypto.randomUUID();
+    rememberServers(sessionId, params.mcpServers);
     saveSessions({ ...sessions(), [sessionId]: 0 });
     return { sessionId, configOptions: configOptions(sessionId) };
   })
   .onRequest("session/resume", ({ params }) => {
     note("session/resume", params);
     if (!(params.sessionId in sessions())) throw RequestError.sessionNotFound(params.sessionId);
+    rememberServers(params.sessionId, params.mcpServers);
     return { configOptions: configOptions(params.sessionId) };
   })
   .onRequest("session/load", async ({ params, client }) => {
     note("session/load", params);
     if (!(params.sessionId in sessions())) throw RequestError.sessionNotFound(params.sessionId);
+    rememberServers(params.sessionId, params.mcpServers);
     // O `session/load` repete a conversa antiga: o host não pode tomar isso pela resposta do pedido novo.
     await say(client, params.sessionId, "(a conversa antiga, repetida no load)");
     return { configOptions: configOptions(params.sessionId) };
@@ -165,6 +235,25 @@ const app = agent({ name: "kiwi-fake-agent" })
         await say(client, sessionId, `permissão: ${outcome}`);
         return { stopReason: "end_turn" };
       }
+      case "/ferramentas": {
+        const r = await mcp(sessionId, "tools/list");
+        const names = ((r.result?.tools ?? []) as { name: string }[]).map((t) => t.name);
+        await say(client, sessionId, `ferramentas: ${names.join(", ")}`);
+        return { stopReason: "end_turn" };
+      }
+      case "/permissao-kiwi": {
+        const res = await client.request("session/request_permission", {
+          sessionId,
+          toolCall: { toolCallId: "t3", title: "notes_read", kind: "read", _meta: { claudeCode: { toolName: "mcp__kiwi__notes_read" } } },
+          options: [
+            { optionId: "allow", name: "Permitir", kind: "allow_once" },
+            { optionId: "reject", name: "Recusar", kind: "reject_once" },
+          ],
+        });
+        const outcome = res.outcome.outcome === "selected" ? res.outcome.optionId : res.outcome.outcome;
+        await say(client, sessionId, `permissão: ${outcome}`);
+        return { stopReason: "end_turn" };
+      }
       case "/lento": {
         await think(client, sessionId);
         await client.notify("session/update", {
@@ -180,6 +269,16 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
+        if (text.startsWith("/tool ")) {
+          const [, name = "", ...rest] = text.split(" ");
+          const r = await useTool(client, sessionId, name, rest.length ? JSON.parse(rest.join(" ")) : {});
+          await say(client, sessionId, r.isError ? `erro da ferramenta: ${r.text}` : r.text);
+          return { stopReason: "end_turn" };
+        }
+        if (text.endsWith("?") && kiwiServers.has(sessionId)) {
+          await say(client, sessionId, await answerFromNotes(client, sessionId, text));
+          return { stopReason: "end_turn" };
+        }
         await say(client, sessionId, `Você disse: "${text}". `);
         await say(client, sessionId, `Este é o turno ${turn} desta sessão.`);
         return { stopReason: "end_turn" };

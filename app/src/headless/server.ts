@@ -20,6 +20,7 @@ import type { Socket } from "bun";
 
 import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { assertNotRealData } from "./guard.ts";
+import { readerFromCapabilities } from "../agent/tools/reader.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
 import { type AudioInput, type AudioInputs, type MicInUse, type MicrophoneChoice, microphoneUid } from "../shared/microphone.ts";
 
@@ -229,6 +230,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
         }),
     },
   });
+  // As ferramentas do agente (spec #7496), pelas capacidades de leitura, como no app.
+  stores.agent.useReader(readerFromCapabilities(capabilities));
   stores.recoveries.start();
   const offs = [
     stores.folders.onNotesChanged((folder, paths) => event("notes.changed", { paths, folderId:folder.id })),

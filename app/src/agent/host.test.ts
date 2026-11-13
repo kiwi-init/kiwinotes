@@ -350,3 +350,49 @@ describe("nada liga sozinho", () => {
     expect(h.running).toBe(false);
   });
 });
+
+describe("as ferramentas do Kiwi no host (spec #7496)", () => {
+  const server = { type: "http" as const, name: "kiwi", url: "http://127.0.0.1:1/mcp", headers: [{ name: "X-Kiwi-Token", value: "t" }] };
+
+  function kiwiHost(dir: string, env: Record<string, string> = {}) {
+    const log = path.join(dir, "fake-log.jsonl");
+    const h = new AgentHost({
+      name: "Agente falso",
+      command: FAKE_AGENT_COMMAND,
+      dir: path.join(dir, "agent"),
+      env: { ...process.env, KIWI_FAKE_AGENT_LOG: log, ...env },
+      sessionOptions: { allowedTools: ["Bash"], tools: ["Bash"] },
+      kiwiTools: { servers: () => [server], prefix: "mcp__kiwi__" },
+    });
+    hosts.push(h);
+    const opened = () => readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { method: string; params: Record<string, any> });
+    return { h, opened };
+  }
+
+  test("vai o servidor no session/new e o allowedTools só dele, por cima do que vier de fora", async () => {
+    const { h, opened } = kiwiHost(tmp());
+    await h.start();
+    const p = opened().find((l) => l.method === "session/new")!.params;
+    expect(p.mcpServers).toEqual([server]);
+    expect(p._meta.claudeCode.options.allowedTools).toEqual(["mcp__kiwi__*"]);
+    expect(p._meta.claudeCode.options.tools).toEqual([]);
+  });
+
+  test("um agente que não diz saber o HTTP do MCP não recebe o servidor", async () => {
+    const { h, opened } = kiwiHost(tmp(), { KIWI_FAKE_AGENT_NO_MCP: "1" });
+    await h.start();
+    const p = opened().find((l) => l.method === "session/new")!.params;
+    expect(p.mcpServers).toEqual([]);
+    expect(p._meta.claudeCode.options.allowedTools).not.toContain("mcp__kiwi__*");
+    expect(p._meta.claudeCode.options.tools).toEqual([]);
+  });
+
+  test("a permissão: aceita a ferramenta do Kiwi, recusa o Bash", async () => {
+    const { h } = kiwiHost(tmp());
+    await h.start();
+    expect((await h.ask("/permissao-kiwi")).text).toBe("permissão: allow");
+    const events: AgentEvent[] = [];
+    expect((await h.ask("/permissao", (e) => events.push(e))).text).toBe("permissão: reject");
+    expect(events).toContainEqual({ type: "permission", tool: "Bash", decision: "denied" });
+  });
+});
