@@ -1,0 +1,11 @@
+{
+  "task": "T9708",
+  "sources": {
+    "cabeca": "3e746771ebc5a4641e8176f4d433ebeb9de34672a16f7c87a28010b658970012",
+    "corpo": "e2ce949258fc0eedb512d3552f8ec406f284656b0f2bcc0ef31ab2999bf4dacb",
+    "orelha-esquerda": "ff77bc41d4aab1cb7143b17098cbb1b9edccae408efa0c88f0fcd29b557149f9",
+    "orelha-direita": "6b6624c0c01f5216ec3914d218994ce29736b3694c958f98e74ddd3be74fd719",
+    "aro": "5411234791669369e77451cef7d46a85bfe7a1573aa05859abab0131237a1d14"
+  },
+  "method": "source layer coverage gated by smoothed dark observed material; smooth light above32/255 pedestal, sqrt encoded; prototype8pct side/bottom fade; straight-alpha static fallback"
+}

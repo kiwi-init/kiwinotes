@@ -47,10 +47,16 @@ const star = (x: number, y: number, r: number) => polygon([[x, y - r], [x + 13, 
 interface Sprite { state: FogState; element: HTMLDivElement; pivot: Point; part?: number }
 const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 2048 2560" style="overflow:visible" fill="white" aria-hidden="true">${body}</svg>`;
 const white = (d: string, hole = false) => `<path d="${d}" fill-rule="${hole ? "evenodd" : "nonzero"}"/>`;
-export function createVectorLayer(root: HTMLElement, width: number, height: number) {
+export function createVectorLayer(root: HTMLElement, width: number, height: number, backdrop = false) {
   const layer = document.createElement("div");
   layer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:visible";
   root.append(layer);
+  if (backdrop) {
+    layer.className = "kn-cat-backdrop";
+    const style = document.createElement("style");
+    style.textContent = ".kn-cat-backdrop svg { fill:black !important; stroke:black !important; stroke-width:18px; stroke-linejoin:round } .kn-cat-backdrop svg * { fill:black !important; stroke:black !important; paint-order:stroke fill }";
+    layer.append(style);
+  }
   const eyeNodes = [
     { cx: 802.823, cy: 1279.323, r: 68.251 },
     { cx: 1243.342, cy: 1279.308, r: 67.94 },
@@ -64,6 +70,7 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     const arc = (start: number, end: number) => path(points(64, u => { const a = (start + (end - start) * u) * Math.PI / 180; return [Math.cos(a), .1 + .55 * Math.sin(a)]; }), false);
     happy.innerHTML = wrap(`<path d="${arc(190, 350)}" stroke="white" stroke-width="${34 / e.r}" stroke-linecap="round" fill="none"/>`);
     asleep.innerHTML = wrap(`<path d="${arc(10, 170)}" stroke="white" stroke-width="${34 / e.r}" stroke-linecap="round" fill="none"/>`);
+    if (backdrop) outer.style.display = "none"; // Eyes sit on opaque coat; never add an eye halo.
     layer.append(outer);
     return { outer, disk, happy, asleep };
   });
@@ -80,7 +87,8 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     const box = graphic.getBBox();
     // The animated error path starts empty; reserve its full source envelope.
     const bounds = state === "erro" ? { x: 1500, y: 450, width: 500, height: 400 } : box;
-    const x = bounds.x - 4, y = bounds.y - 4, w = bounds.width + 8, h = bounds.height + 8;
+    const pad = backdrop ? 14 : 4;
+    const x = bounds.x - pad, y = bounds.y - pad, w = bounds.width + pad * 2, h = bounds.height + pad * 2;
     graphic.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
     element.style.inset = "auto";
     Object.assign(element.style, { left: `${x / 2048 * 100}%`, top: `${y / 2560 * 100}%`,
