@@ -25,6 +25,7 @@ import { NOT_RECORDING } from "../shared/meetings.ts";
 import { MeetingHostError } from "./meetings.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
+import { undoNotesFromCapabilities } from "../agent/undo.ts";
 
 export type WindowName = UiWindow;
 
@@ -197,6 +198,8 @@ const capabilities = uiCapabilities({
 // #8356) pelo mesmo salvar das Notas, com a cópia de antes nas Versões.
 stores.agent.useReader(readerFromCapabilities(capabilities));
 stores.agent.useWriter(writerFromCapabilities(capabilities));
+// O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
+stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */
 const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();

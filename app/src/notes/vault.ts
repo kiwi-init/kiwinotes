@@ -1110,12 +1110,16 @@ export class Vault {
   /**
    * Apaga a nota: ela espera 10 min em `.kiwi-trash` (o "Desfazer", `restore`) e então vai para a Lixeira do macOS. Não
    * vai direto para a Lixeira porque tirar de lá pede o Acesso Total ao Disco (o ~/.Trash é protegido pelo TCC).
+   *
+   * Com `baseVersion` (o desfazer do agente, spec #9353), só apaga se a nota ainda está naquela versão, relida logo
+   * antes de sair do lugar, como o `save`; senão `E_CONFLICT`, e nada muda.
    */
-  async delete(input: unknown): Promise<true> {
+  async delete(input: unknown, baseVersion?: unknown): Promise<true> {
     const p = notePath(input);
+    if (baseVersion !== undefined && typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
     const abs = inside(this.root, p);
     if (!(await exists(abs))) throw new VaultError("E_NOT_FOUND", `no note ${p}`);
-    await this.stage(p, abs, "note");
+    await this.stage(p, abs, "note", baseVersion);
     this.notes.delete(p);
     this.touch(p);
     this.searchDirty = true;
@@ -1344,8 +1348,12 @@ export class Vault {
     return updated;
   }
 
-  /** Tira o item do vault para `.kiwi-trash/<id>/`, e marca a hora de ir para a Lixeira do macOS. */
-  private async stage(p: string, abs: string, kind: Staged["kind"]): Promise<void> {
+  /**
+   * Tira o item do vault para `.kiwi-trash/<id>/`, e marca a hora de ir para a Lixeira do macOS. Com `expect`, confere a
+   * versão da nota logo antes do `rename`, sem nada no meio: mudou, a caixa sai e nada é apagado (`E_CONFLICT`).
+   */
+  private async stage(p: string, abs: string, kind: Staged["kind"], expect?: string): Promise<void> {
+    if (expect !== undefined && !(await this.atVersion(abs, expect))) throw new VaultError("E_CONFLICT", `${p} changed; nothing was deleted`);
     const old = this.staged.get(p);
     if (old) await this.expire(p, old); // o mesmo caminho apagado de novo: o de antes segue para a Lixeira
     const box = path.join(this.root, UNDO_DIR, `${this.now()}-${randomBytes(4).toString("hex")}`);
@@ -1353,11 +1361,22 @@ export class Vault {
     const staged = path.join(box, path.basename(abs));
     const at = this.now();
     await writeFile(path.join(box, BOX_META), JSON.stringify({ path: p, kind, deletedAt: new Date(at).toISOString() }));
+    this.beforeReplace?.();
+    if (expect !== undefined && !(await this.atVersion(abs, expect))) {
+      await rm(box, { recursive: true, force: true });
+      throw new VaultError("E_CONFLICT", `${p} changed; nothing was deleted`);
+    }
     await rename(abs, staged);
     const item: Staged = { abs: staged, kind, at, timer: null };
     item.timer = setTimeout(() => void this.expire(p, item), this.undoMs);
     (item.timer as { unref?: () => void }).unref?.();
     this.staged.set(p, item);
+  }
+
+  /** O arquivo está naquela versão agora (lido do disco, não do índice). */
+  private async atVersion(abs: string, version: string): Promise<boolean> {
+    const raw = await readFile(abs).catch(() => null);
+    return raw !== null && versionOf(raw.toString("utf8")) === version;
   }
 
   /** O "Desfazer" acabou: o item vai para a Lixeira do macOS. */

@@ -16,6 +16,7 @@ import { AgentService, AgentServiceError } from "./service.ts";
 import type { VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import { AgentActivity } from "./activity.ts";
+import type { UndoNotes } from "./undo.ts";
 import { createHash } from "node:crypto";
 
 const services: AgentService[] = [];
@@ -667,6 +668,38 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(r!.changes).toEqual([]);
     const dir = path.join(agentDir(m.data), "activity");
     expect(readdirSync(path.join(dir, readdirSync(dir)[0]!))).toEqual(["request.json"]);
+  });
+
+  test("o desfazer (spec #9353): sem o agente ligado, um por vez, e sem as notas do desfazer é E_NO_UNDO", async () => {
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
+    const [r] = await m.svc.activityLog();
+    await expect(m.svc.undo(r!.id)).rejects.toMatchObject({ code: "E_NO_UNDO" });
+    const undoNotes: UndoNotes = {
+      folder: async () => null,
+      get: async (p) => (notes[p] === undefined ? null : { content: notes[p]!, version: versionOf(notes[p]!) }),
+      save: async (p, content, base) => {
+        if (notes[p] === undefined || versionOf(notes[p]!) !== base) return false;
+        notes[p] = content;
+        return true;
+      },
+      trash: async () => "gone",
+    };
+    m.svc.useUndo(undoNotes);
+    const pid = m.pid();
+    expect((await m.svc.disable()).program).toBe("closed");
+    await until(() => !alive(pid));
+    // Dois ao mesmo tempo: um volta a nota, o outro vê que já foi.
+    const both = await Promise.all([m.svc.undo(r!.id), m.svc.undo(r!.id)]);
+    expect(both.map((x) => x.notes[0]!.result).sort()).toEqual(["already", "restored"]);
+    expect(notes["Ideias.md"]).toBe("gatos");
+    // Nada abriu o programa do agente de novo.
+    expect(m.pid()).toBe(pid);
+    expect(alive(pid)).toBe(false);
+    expect((await m.svc.status()).program).toBe("closed");
+    await expect(m.svc.undo("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   });
 
   test("sem o escritor, só as seis de leitura", async () => {

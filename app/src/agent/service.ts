@@ -15,6 +15,8 @@
 // - **A escrita** (spec #8356): com o escritor (`useWriter`), o servidor também oferece as ferramentas de escrita. O
 //   registro do agente (`activity.ts`) anota, para cada pedido, o que foi lido e o que mudou, e guarda a cópia do texto
 //   de antes de cada mudança, antes dela. O `agent.activity` mostra o registro.
+// - **O desfazer** (spec #9353): com as notas do desfazer (`useUndo`), o `agent.undo` volta o que um pedido mudou, pela
+//   cópia do registro (`undo.ts`). É da pessoa: não precisa do agente ligado e não vira ferramenta dele. Um por vez.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -26,12 +28,13 @@ import type { VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import type { WriteJournal } from "./tools/tools.ts";
 import { AgentActivity, type ActivityRequest } from "./activity.ts";
+import { undo, UndoError, type UndoNotes } from "./undo.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
-import type { AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
+import type { AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult } from "../shared/ui-contract.ts";
 import type { AgentSettings } from "../store/settings.ts";
 
 /** O teto sem uso: depois disso, o programa do agente fecha (a sessão fica guardada e volta no próximo pedido). */
@@ -75,7 +78,7 @@ export interface AgentServiceDeps {
   log?: (msg: string) => void;
 }
 
-type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS";
+type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO";
 
 /** Um erro de capacidade do agente, com o código que a tela entende. */
 export class AgentServiceError extends Error {
@@ -129,6 +132,10 @@ export class AgentService {
   private lastTurn: string | null = null;
   /** O servidor de ferramentas do programa aberto (ou abrindo): fecha junto com ele. */
   private tools: KiwiToolServer | null = null;
+  /** As notas do desfazer (spec #9353), pelas capacidades das janelas. */
+  private undoNotes: UndoNotes | null = null;
+  /** Um desfazer por vez: dois ao mesmo tempo não anotam o registro um por cima do outro. */
+  private undoing: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly d: AgentServiceDeps) {
     this.name = d.name ?? "Claude Code";
@@ -151,6 +158,31 @@ export class AgentService {
    */
   useWriter(writer: VaultWriter): void {
     this.writer = writer;
+  }
+
+  /** As notas que o desfazer usa (spec #9353): ler, voltar o texto e mandar para a Lixeira, pelas capacidades das Notas. */
+  useUndo(notes: UndoNotes): void {
+    this.undoNotes = notes;
+  }
+
+  /**
+   * Desfaz o pedido inteiro, ou só a mudança `change` dele (1 é a primeira), nota por nota (`agent.undo`, spec #9353).
+   * Não abre o programa do agente.
+   */
+  undo(request: string, change?: number): Promise<AgentUndoResult> {
+    const notes = this.undoNotes;
+    if (!notes) return Promise.reject(new AgentServiceError("E_NO_UNDO", "Este app não desfaz as mudanças do agente."));
+    const run = async () => {
+      try {
+        return await undo({ activity: this.activity, notes }, request, change);
+      } catch (e) {
+        if (e instanceof UndoError) throw new AgentServiceError("E_NOT_FOUND", e.message);
+        throw e;
+      }
+    };
+    const next = this.undoing.then(run, run);
+    this.undoing = next.catch(() => {});
+    return next;
   }
 
   /** Os pedidos do registro, do mais novo para o mais velho (`agent.activity`). */

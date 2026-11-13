@@ -174,7 +174,7 @@ O harry decidiu (#8356) que o agente escreve direto na nota, e a pessoa desfaz s
   - Com a nota aberta e uma edição por gravar, a janela junta a escrita do agente com a da pessoa (o merge do T5454). Sem edição pendente, ela só recarrega.
 - **A cópia de antes, em dois lugares, os dois fora do cofre:**
   - nas Versões da nota: o `notes.save` com `snapshot: true` (contrato 1.44.0) grava o texto de antes na hora, sem o intervalo de 2 minutos;
-  - no registro do agente (`src/agent/activity.ts`, em `<dados>/agent/activity/`), gravada antes da escrita e tirada se ela não acontece. É desta cópia que o desfazer vai precisar: o limite de 50 versões por nota não a apaga.
+  - no registro do agente (`src/agent/activity.ts`, em `<dados>/agent/activity/`), gravada antes da escrita e tirada se ela não acontece. É desta cópia que o desfazer precisa (abaixo): o limite de 50 versões por nota não a apaga.
 - **O registro de cada pedido:** o que foi lido e o que mudou, com a nota, a hora, o tipo, o tamanho antes e depois, a versão que a escrita deixou e a pasta de notas. Fica 30 dias, e o `agent.activity` (e o `bun run cli agent activity`) mostra.
 - **As notas de reunião ficam só para leitura.** A escrita numa nota com `type: meeting` é recusada, e também a que deixaria uma nota comum com esse frontmatter.
 - **O teto é de 40 mil caracteres por escrita.** O que passa volta com um aviso claro, dizendo para mudar por seção ou acrescentar em partes.
@@ -182,6 +182,19 @@ O harry decidiu (#8356) que o agente escreve direto na nota, e a pessoa desfaz s
   - Assim, o que passa do teto chega à ferramenta e volta com o aviso, e não com um 413 do servidor.
 - **O que a pessoa vê:** o status ao vivo diz "Escrevendo em Projetos/Kiwi.md…", e a dica do "Testar" diz que o agente pode mudar as notas e que o texto de antes fica nas Versões.
 - **Não entra em release** antes do desfazer e da tela "Atividade do agente" (os specs seguintes).
+
+## O desfazer (T9398, spec #9353)
+O agente escreve direto na nota, e a pessoa desfaz se não gostar. O `agent.undo` (e o `bun run cli agent undo <pedido> [--change N]`, pelo headless de pé) volta o pedido inteiro ou uma mudança dele, com a cópia do registro (`src/agent/undo.ts`):
+- **Nota por nota.** Cada nota volta ao texto de antes da primeira escrita do agente nela, ou fica como está, com o motivo (`E_LATER_WRITE`, `E_CHANGED`, `E_GONE`, `E_OTHER_FOLDER`, `E_EXPIRED`, `E_NO_COPY`). Uma recusada não impede as outras.
+- **Nunca por cima da pessoa.** Só age com a nota exatamente na versão que o agente deixou, e a conferência vai junto com a ação:
+  - voltar o texto é o `notes.save` com `baseVersion` (o cofre confere de novo logo antes de trocar o arquivo) e `snapshot: true`, que grava o texto do agente nas Versões na hora;
+  - a nota que o agente criou vai para a Lixeira pelo `notes.delete` com `baseVersion` (contrato 1.45.0): o cofre relê o arquivo logo antes de tirá-lo do lugar. São os 10 minutos do Desfazer do app, e depois a Lixeira do macOS.
+- **Uma mudança só,** se o agente não escreveu de novo naquela nota depois, nem no mesmo pedido nem num pedido seguinte. Senão a mais nova vem primeiro, e o aviso diz qual.
+- **A pasta de notas** é conferida pela chave (o caminho), não pelo id da abertura: a mesma pasta reaberta continua desfazendo. As chamadas levam o `folderId` de agora, e o app recusa se a pasta trocar no meio.
+- **O registro anota** a hora em cada mudança desfeita (`undone`). Desfazer de novo não faz nada e diz. Um desfazer que gravou e caiu antes de anotar só anota da próxima vez.
+- **30 dias pela idade da mudança.** Depois disso, não há mais o que desfazer, mesmo com a cópia no disco.
+- **O número de cada cópia nunca se repete** no pedido: o último usado fica no `request.json` antes de a cópia ser gravada.
+- **É da pessoa:** não vira ferramenta do agente e não precisa dele ligado. Sem "refazer": o texto do agente fica nas Versões.
 
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:

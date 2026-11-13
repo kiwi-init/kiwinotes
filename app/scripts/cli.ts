@@ -8,6 +8,7 @@
 //   bun run cli screenshot … | ui …                   (T1742)
 //   bun run cli events [--follow] | logs [--follow]
 //   bun run cli agent status | agent ask "…"          o host do agente, com os falsos (T8478, scripts/cli-agent.ts)
+//   bun run cli agent undo <pedido> [--change N]      desfaz o que o agente mudou (spec #9353), pelo headless de pé
 //
 // Saída: JSON. Exit codes: 0 ok, 1 a capacidade (ou o comando) respondeu erro, 2 uso errado, 3 não está rodando.
 // Os dados ficam em --data, ou KIWI_HEADLESS_DATA, ou $TMPDIR/kiwinotes-headless: nunca os do app de verdade.
@@ -30,7 +31,8 @@ const USAGE = `usage: bun run cli <start|stop|status|invoke|dictate|screenshot|u
   start [--no-helper]          sobe o headless em segundo plano
   invoke <cap> ['<json>']      uma capacidade do contrato, pelo caminho da UI
   events|logs [--follow]       o histórico recente; com --follow, continua até Ctrl-C
-  agent status|ask "…"         o host do agente, com os falsos (sem o headless; T8478)`;
+  agent status|ask "…"         o host do agente, com os falsos (sem o headless; T8478)
+  agent undo <pedido> [--change N]  desfaz o que o agente mudou, pelo headless de pé (spec #9353)`;
 
 type Reply = Record<string, unknown>;
 
@@ -205,7 +207,8 @@ export async function main(argv: string[]): Promise<number> {
     case "logs":
       return stream(data, cmd, rest.includes("--follow"));
     case "agent":
-      return runAgent(rest, data);
+      // O `agent undo` muda notas: vai pelo headless de pé, como a janela (spec #9353). O resto roda aqui mesmo.
+      return runAgent(rest, data, (msg) => request(data, msg));
     default:
       console.error(USAGE);
       return EXIT.usage;

@@ -11,6 +11,10 @@
 //                                                              sobre um cofre vazio, e mostra se o Claude Code pediu a lista
 //   bun run cli agent activity [--data DIR] [--limit N]        o registro do agente (spec #8356): os pedidos, do mais novo
 //                                                              para o mais velho, com o que cada um leu e mudou nas notas
+//   bun run cli agent undo <pedido> [--change N] [--data DIR]  desfaz o pedido inteiro, ou só a mudança N dele (1 é a
+//                                                              primeira), nota por nota (spec #9353). Este, só com o
+//                                                              headless de pé (`bun run cli start`): a nota muda pelo app,
+//                                                              e a janela das Notas vê. Exit 3 sem o headless.
 //
 // **O `proof --real` abre o Claude Code de verdade, logado: só o harry roda, quando o lead pede** (ADR 0011, #8368).
 // Sem `--real`, a prova usa um `claude` falso, que anota como foi chamado em `<data>/fake-claude/calls.jsonl`. As duas
@@ -37,14 +41,15 @@ import { FAKE_AGENT_COMMAND, FAKE_CLAUDE, writeFakeClaudeExecutable } from "../s
 import { AgentHost } from "../src/agent/host.ts";
 import { assertNotRealData, RealDataError } from "../src/headless/guard.ts";
 
-const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof|activity> [--data DIR]
+const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof|activity|undo> [--data DIR]
   status [--claude PATH]       o Claude Code (o falso, para os agentes): instalado, versão, login e o adaptador
   ask "texto" [--new]          um pedido ao agente falso; --new começa uma sessão nova
   download [--registry URL]    baixa o adaptador do Claude Code (a lista fixa, conferida)
   remove                       apaga o adaptador baixado
   proof [--real] [--tools]     abre uma sessão pelo adaptador, sem pedido; --real usa o Claude Code de verdade (só o harry);
                                --tools abre com as ferramentas do Kiwi, sobre um cofre vazio
-  activity [--limit N]         o registro: o que cada pedido leu e mudou nas notas (os 50 últimos, ou N)`;
+  activity [--limit N]         o registro: o que cada pedido leu e mudou nas notas (os 50 últimos, ou N)
+  undo <pedido> [--change N]   desfaz o pedido inteiro, ou só a mudança N (1 é a primeira), pelo headless de pé`;
 
 const NAME = "Claude Code";
 
@@ -74,8 +79,33 @@ function fail(e: unknown): number {
   return 1;
 }
 
-export async function runAgent(argv: string[], data: string): Promise<number> {
+/** Um pedido ao headless de pé (o `request` da CLI); null se ele não está rodando. */
+export type HeadlessRequest = (msg: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+
+export async function runAgent(argv: string[], data: string, headless?: HeadlessRequest): Promise<number> {
   const [sub, ...rest] = argv;
+  if (sub === "undo") {
+    const request = rest[0];
+    const raw = option(rest, "--change");
+    const change = raw === undefined ? undefined : Number(raw);
+    if (!request || request.startsWith("--") || (change !== undefined && (!Number.isInteger(change) || change < 1)) || !headless) {
+      console.error(USAGE);
+      return 2;
+    }
+    try {
+      assertNotRealData(data);
+    } catch (e) {
+      return fail(e);
+    }
+    const r = await headless({ cmd: "invoke", cap: "agent.undo", args: { request, ...(change !== undefined ? { change } : {}) } });
+    if (!r) {
+      print({ ok: false, code: "E_NOT_RUNNING", message: `no headless at ${data}: bun run cli start --data ${data}` });
+      return 3;
+    }
+    const { id: _, ...reply } = r;
+    print(reply);
+    return reply.ok ? 0 : 1;
+  }
   if (sub === "status") {
     const { program, fake } = claudeProgram(rest);
     const s = await claudeStatus(program);

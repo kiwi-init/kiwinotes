@@ -22,6 +22,7 @@ import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
 import { assertNotRealData } from "./guard.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
+import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { remoteImageUrl } from "../notes/remote-image.ts";
 import { type AudioInput, type AudioInputs, type MicInUse, type MicrophoneChoice, microphoneUid } from "../shared/microphone.ts";
 
@@ -234,6 +235,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // As ferramentas do agente (spec #7496), pelas capacidades de leitura, e as de escrita (spec #8356), como no app.
   stores.agent.useReader(readerFromCapabilities(capabilities));
   stores.agent.useWriter(writerFromCapabilities(capabilities));
+  // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
+  stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
   stores.recoveries.start();
   const offs = [
     stores.folders.onNotesChanged((folder, paths) => event("notes.changed", { paths, folderId:folder.id })),
