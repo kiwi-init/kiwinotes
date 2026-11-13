@@ -93,3 +93,179 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* A seção "Atividade do agente" (spec #9480): a lista dos pedidos, o [Ver] e o [Desfazer]. O comparador é o das
+   Versões (`ui/notes/diff.ts`); as cores dele vêm de `notes.css`, repetidas aqui porque os Ajustes não carregam as
+   Notas. */
+
+.kn-activity {
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.kn-activity p {
+  margin: 0;
+}
+
+.kn-activity-hint {
+  margin-bottom: var(--space-2) !important;
+}
+
+.kn-activity-empty,
+.kn-activity-failure {
+  font-size: var(--text-md);
+  color: var(--text-2);
+}
+
+.kn-activity-failure {
+  margin-bottom: var(--space-2) !important;
+}
+
+.kn-activity-list,
+.kn-activity-changes,
+.kn-activity-outcome {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kn-activity-req {
+  padding: var(--space-2) 0;
+  border-top: 0.5px solid var(--border);
+}
+
+.kn-activity-req:first-child {
+  border-top: 0;
+}
+
+.kn-activity-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.kn-activity-when {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.kn-activity-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+  font-weight: 500;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.kn-activity-head .kn-button {
+  flex: none;
+  align-self: center;
+}
+
+.kn-activity-reads,
+.kn-activity-none {
+  margin-top: 2px !important;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.kn-activity-changes {
+  margin-top: var(--space-1);
+}
+
+.kn-activity-change {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  font-size: var(--text-md);
+}
+
+.kn-activity-what {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kn-activity-change[data-undone] .kn-activity-what {
+  color: var(--text-2);
+}
+
+.kn-activity-undone {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.kn-activity-actions {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.kn-activity-view {
+  margin: var(--space-1) 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.kn-activity-notice {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  margin-bottom: var(--space-1) !important;
+}
+
+.kn-activity-view .kn-diff {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--mono, var(--font-mono));
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kn-activity-view .kn-diff-add {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.kn-activity-view .kn-diff-del {
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, #e5484d 50%, transparent);
+}
+
+.kn-activity-view .kn-diff-same {
+  color: var(--text-2);
+}
+
+.kn-activity-view .kn-diff-gap {
+  color: var(--text-3);
+  font-style: italic;
+  padding: 2px 0;
+}
+
+.kn-activity-outcome {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.kn-activity-outcome li {
+  padding: 2px 0;
+}
+
+.kn-activity-outcome li[data-ok="false"] {
+  color: var(--text-2);
+}
+
+.kn-activity-more {
+  margin-top: var(--space-2);
+}

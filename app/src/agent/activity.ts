@@ -8,6 +8,8 @@
 //   não acontece (`drop`).
 // - **30 dias:** cada pedido novo apaga as pastas com mais de 30 dias, com as cópias.
 // - Uma operação por vez, na ordem em que chegaram: duas ferramentas ao mesmo tempo não atropelam o `request.json`.
+// - **Avisa quem escuta** (`onChanged`, spec #9480) quando um pedido começa, quando o agente lê ou muda uma nota e
+//   quando algo é desfeito: a tela "Atividade do agente" lê de novo, também depois de um desfazer pela CLI.
 // - **O número de uma cópia nunca se repete** no pedido (spec #9353): o último usado fica no `request.json` antes de a
 //   cópia ser gravada, e um app reaberto continua dele, mesmo que uma cópia do meio tenha saído (`drop`).
 
@@ -86,6 +88,7 @@ export class AgentActivity {
   private readonly keepMs: number;
   private readonly open = new Map<string, Open>();
   private queue: Promise<unknown> = Promise.resolve();
+  private readonly listeners = new Set<(request: string) => void>();
 
   constructor(o: ActivityOptions) {
     this.dir = o.dir;
@@ -93,11 +96,18 @@ export class AgentActivity {
     this.keepMs = o.keepMs ?? ACTIVITY_KEEP_MS;
   }
 
+  /** Avisa `fn` (com o id do pedido) a cada mudança no registro (spec #9480). Devolve como parar. */
+  onChanged(fn: (request: string) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
   /** Um pedido começou. Apaga antes os pedidos com mais de 30 dias. */
   begin(id: string, request: string): Promise<void> {
     return this.serial(async () => {
       await this.prune();
       await this.ensure(id, request);
+      this.changed(id);
     });
   }
 
@@ -107,6 +117,7 @@ export class AgentActivity {
       const o = await this.ensure(id);
       o.record.reads.push({ at: new Date(this.now()).toISOString(), tool: r.tool, ...(r.target ? { target: r.target } : {}) });
       await this.save(o);
+      this.changed(id);
     });
   }
 
@@ -116,6 +127,7 @@ export class AgentActivity {
       const o = await this.ensure(id);
       o.record.changes.push({ at: new Date(this.now()).toISOString(), ...c });
       await this.save(o);
+      this.changed(id);
     });
   }
 
@@ -173,15 +185,19 @@ export class AgentActivity {
         if (c && !c.undone) c.undone = at;
       }
       await this.save(o);
+      this.changed(id);
     });
   }
 
-  /** Os pedidos, do mais novo para o mais velho. */
+  /** Os pedidos dos últimos 30 dias, do mais novo para o mais velho. */
   list(limit = 50): Promise<ActivityRequest[]> {
     return this.serial(async () => {
       const out: ActivityRequest[] = [];
+      const oldest = this.now() - this.keepMs;
       for (const name of (await this.names()).reverse()) {
         if (out.length >= Math.min(Math.max(1, limit), ACTIVITY_LIST_MAX)) break;
+        // Mais velho que o prazo: ainda no disco até o próximo pedido apagar, mas fora do registro.
+        if (timeOf(name)! < oldest) break;
         const r = await this.load(path.join(this.dir, name));
         if (r) out.push(shown(r));
       }
@@ -190,6 +206,17 @@ export class AgentActivity {
   }
 
   // ---------------------------------------------------------------- por dentro
+
+  /** Avisa quem escuta; um erro de quem escuta não derruba o registro. */
+  private changed(id: string): void {
+    for (const fn of this.listeners) {
+      try {
+        fn(id);
+      } catch {
+        // quem escuta cuida dos próprios erros
+      }
+    }
+  }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.queue.then(fn, fn);

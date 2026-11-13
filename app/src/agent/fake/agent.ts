@@ -14,7 +14,9 @@
 //
 // Com o servidor de ferramentas do Kiwi no `session/new` (spec #7496), ele é um cliente MCP, como o Claude Code:
 //   /ferramentas       pede a lista (`tools/list`) e responde com os nomes
-//   /tool <nome> <json>  avisa o `tool_call` (`mcp__kiwi__<nome>`), chama a ferramenta e responde com o que voltou
+//   /tool <nome> <json>  avisa o `tool_call` (`mcp__kiwi__<nome>`), chama a ferramenta e responde com o que voltou.
+//                        Várias ferramentas num pedido: uma linha `/tool` para cada, depois de uma linha de texto ou
+//                        não (spec #9480: "Mude o prazo\n/tool notes_read …\n/tool notes_write …")
 //   /permissao-kiwi    pede permissão para usar o `mcp__kiwi__notes_read` e conta o que o Kiwi respondeu
 //   (uma pergunta, com "?")  procura nas notas, lê a 1ª achada e responde com o começo dela: o "Testar" dos Ajustes
 //
@@ -277,10 +279,15 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
-        if (text.startsWith("/tool ")) {
-          const [, name = "", ...rest] = text.split(" ");
-          const r = await useTool(client, sessionId, name, rest.length ? JSON.parse(rest.join(" ")) : {});
-          await say(client, sessionId, r.isError ? `erro da ferramenta: ${r.text}` : r.text);
+        const tools = text.split("\n").filter((l) => l.startsWith("/tool "));
+        if (tools.length) {
+          const out: string[] = [];
+          for (const line of tools) {
+            const [, name = "", ...rest] = line.split(" ");
+            const r = await useTool(client, sessionId, name, rest.length ? JSON.parse(rest.join(" ")) : {});
+            out.push(r.isError ? `erro da ferramenta: ${r.text}` : r.text);
+          }
+          await say(client, sessionId, out.join("\n"));
           return { stopReason: "end_turn" };
         }
         if (text.endsWith("?") && kiwiServers.has(sessionId)) {

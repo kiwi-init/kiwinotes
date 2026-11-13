@@ -181,7 +181,7 @@ O harry decidiu (#8356) que o agente escreve direto na nota, e a pessoa desfaz s
   - O corpo que o servidor aceita subiu de 64 KB para 256 KB, para caber o teto mesmo no pior caso do JSON: 3 bytes por caractere (CJK) ou 6 num `\uXXXX`.
   - Assim, o que passa do teto chega à ferramenta e volta com o aviso, e não com um 413 do servidor.
 - **O que a pessoa vê:** o status ao vivo diz "Escrevendo em Projetos/Kiwi.md…", e a dica do "Testar" diz que o agente pode mudar as notas e que o texto de antes fica nas Versões.
-- **Não entra em release** antes do desfazer e da tela "Atividade do agente" (os specs seguintes).
+- **Não entrava em release** antes do desfazer e da tela "Atividade do agente". As duas chegaram (specs #9353 e #9480), e a escrita sai na próxima release que o harry aprovar.
 
 ## O desfazer (T9398, spec #9353)
 O agente escreve direto na nota, e a pessoa desfaz se não gostar. O `agent.undo` (e o `bun run cli agent undo <pedido> [--change N]`, pelo headless de pé) volta o pedido inteiro ou uma mudança dele, com a cópia do registro (`src/agent/undo.ts`):
@@ -195,6 +195,17 @@ O agente escreve direto na nota, e a pessoa desfaz se não gostar. O `agent.undo
 - **30 dias pela idade da mudança.** Depois disso, não há mais o que desfazer, mesmo com a cópia no disco.
 - **O número de cada cópia nunca se repete** no pedido: o último usado fica no `request.json` antes de a cópia ser gravada.
 - **É da pessoa:** não vira ferramenta do agente e não precisa dele ligado. Sem "refazer": o texto do agente fica nas Versões.
+
+## A tela "Atividade do agente" (T9493, spec #9480)
+A seção em Ajustes › Agente, logo abaixo do "Testar" (`ui/settings/AgentActivity.tsx`), põe na tela o registro e o desfazer. Aparece também com o agente desligado.
+- **A lista:** os pedidos dos últimos 30 dias, do mais novo ao mais velho; os 50 mais novos, e um "Mostrar mais" até 200 (o teto do `agent.activity`). Cada um com a hora, a primeira linha do pedido, o que o agente leu, resumido, e cada mudança.
+- **[Ver]** é o `agent.change` (contrato 1.46.0, `src/agent/change-view.ts`), que só lê:
+  - o antes é a cópia do registro ("" numa nota criada);
+  - o depois exato é a nota de agora, se ela ainda está na versão que o agente deixou, ou a cópia da escrita seguinte dele na mesma nota (a 1ª de duas escritas). Senão, é a nota de agora, com o aviso de que ela mudou depois;
+  - a nota que sumiu, outra pasta de notas aberta (conferida pela chave, como o desfazer) e a mudança já desfeita mostram só o antes, com o aviso.
+  O comparador é o das Versões (`ui/notes/diff.ts`).
+- **[Desfazer]** é o `agent.undo`, sem regra nova, de uma mudança ou do pedido inteiro (o do pedido aparece com mais de uma mudança e enquanto sobra alguma). Sem confirmação, porque nada se perde. O resultado vem nota por nota em palavras simples, e o `E_LATER_WRITE` traz o `later` (o pedido e a hora dele) para a tela dizer "desfaça antes o pedido de hoje, 14:32".
+- **Atualiza sozinha** pelo evento `agent.activityChanged`, que o registro manda quando um pedido começa, quando o agente lê ou muda uma nota e quando algo é desfeito, também pela CLI.
 
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:

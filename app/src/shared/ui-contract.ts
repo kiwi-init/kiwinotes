@@ -132,7 +132,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   mudou) e o `snapshot` no `notes.save`. Só acréscimo.
 // 1.45.0 (T9398, spec #9353): o desfazer do agente. O `agent.undo`, o `undone` nas mudanças do `agent.activity` e o
 //   `baseVersion` no `notes.delete` (só apaga se a nota ainda está naquela versão). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.45.0";
+// 1.46.0 (T9493, spec #9480): a tela "Atividade do agente". O `agent.change` (o antes e o depois de uma mudança, só
+//   leitura), o `later` no `E_LATER_WRITE` do `agent.undo` e o evento `agent.activityChanged`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.46.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -448,6 +450,37 @@ export interface UiCapabilities {
    * dias.
    */
   "agent.undo": { args: { request: string; change?: number }; result: AgentUndoResult };
+  /**
+   * O antes e o depois de uma mudança do agente (1.46.0, spec #9480), para o [Ver] da tela "Atividade do agente". Só
+   * lê: o registro e a nota, na pasta de notas em que o agente escreveu. E_NOT_FOUND: o pedido (ou a mudança) não está
+   * no registro.
+   */
+  "agent.change": { args: { request: string; change: number }; result: AgentChangeView };
+}
+
+/** O antes e o depois de uma mudança do agente (`agent.change`, 1.46.0). */
+export interface AgentChangeView {
+  request: string;
+  /** A mudança no pedido (1 é a primeira). */
+  change: number;
+  path: string;
+  kind: "created" | "appended" | "replaced";
+  section?: string;
+  at: string;
+  /** Quando a mudança foi desfeita. */
+  undone?: string;
+  /** O texto de antes: "" numa nota que o agente criou; null se a cópia não está mais no registro. */
+  before: string | null;
+  /**
+   * O que dá para mostrar como o depois:
+   * - `exact`: `after` é o texto exato que o agente deixou (a nota de agora, ou a cópia da escrita seguinte dele);
+   * - `changed`: `after` é a nota de agora, que mudou depois do agente;
+   * - `gone`: a nota não está mais lá (renomeada, movida ou apagada), sem `after`;
+   * - `otherFolder`: outra pasta de notas está aberta, sem `after` (nunca lê a nota de mesmo nome da pasta errada);
+   * - `undone`: a mudança foi desfeita, sem `after` (o texto do agente está nas Versões da nota).
+   */
+  state: "exact" | "changed" | "gone" | "otherFolder" | "undone";
+  after?: string;
 }
 
 /** O que o `agent.undo` fez, nota por nota (1.45.0). */
@@ -472,6 +505,11 @@ export interface AgentUndoNote {
    * de antes não está mais no registro.
    */
   reason?: "E_LATER_WRITE" | "E_CHANGED" | "E_GONE" | "E_OTHER_FOLDER" | "E_EXPIRED" | "E_NO_COPY";
+  /**
+   * No `E_LATER_WRITE` (1.46.0): a escrita mais nova do agente na mesma nota, que precisa ser desfeita antes. `request`
+   * é o pedido dela (o mesmo pedido, se foi nele), `change` a mudança nele (1 é a primeira) e `at` a hora do pedido.
+   */
+  later?: { request: string; change: number; at: string };
   /** O motivo, para a pessoa ler. */
   message?: string;
 }
@@ -654,6 +692,7 @@ export const UI_CAPABILITIES = [
   "agent.configure",
   "agent.activity",
   "agent.undo",
+  "agent.change",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -680,6 +719,11 @@ export interface UiEvents {
   "agent.status": AgentStatus;
   /** A resposta ao vivo de um pedido (1.41.0): o status, o texto que vai chegando e o fim. */
   "agent.turn": AgentTurnEvent;
+  /**
+   * O registro do agente mudou (1.46.0, spec #9480): um pedido começou, o agente leu ou mudou uma nota, ou algo foi
+   * desfeito (também pela CLI). A tela "Atividade do agente" lê de novo.
+   */
+  "agent.activityChanged": { request: string };
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

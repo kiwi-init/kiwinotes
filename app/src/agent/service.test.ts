@@ -677,6 +677,9 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
     const [r] = await m.svc.activityLog();
     await expect(m.svc.undo(r!.id)).rejects.toMatchObject({ code: "E_NO_UNDO" });
+    await expect(m.svc.changeView(r!.id, 1)).rejects.toMatchObject({ code: "E_NO_UNDO" });
+    const seen: string[] = [];
+    const off = m.svc.onActivity((id) => seen.push(id));
     const undoNotes: UndoNotes = {
       folder: async () => null,
       get: async (p) => (notes[p] === undefined ? null : { content: notes[p]!, version: versionOf(notes[p]!) }),
@@ -695,6 +698,11 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     const both = await Promise.all([m.svc.undo(r!.id), m.svc.undo(r!.id)]);
     expect(both.map((x) => x.notes[0]!.result).sort()).toEqual(["already", "restored"]);
     expect(notes["Ideias.md"]).toBe("gatos");
+    // O registro avisou o desfazer (spec #9480), e o [Ver] mostra o antes, também com o agente desligado.
+    expect(seen).toEqual([r!.id]);
+    off();
+    expect(await m.svc.changeView(r!.id, 1)).toMatchObject({ before: "gatos", state: "undone" });
+    await expect(m.svc.changeView("nao-existe", 1)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
     // Nada abriu o programa do agente de novo.
     expect(m.pid()).toBe(pid);
     expect(alive(pid)).toBe(false);

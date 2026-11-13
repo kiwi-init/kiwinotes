@@ -354,6 +354,10 @@ stores.agent.onStatus((status) => {
 stores.agent.onTurn((turn) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.turn", payload: turn });
 });
+// O registro mudou (spec #9480): a tela "Atividade do agente" lê de novo.
+stores.agent.onActivity((request) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.activityChanged", payload: { request } });
+});
 
 stores.recoveries.onChanged(()=>{
   for(const rpc of rpcs.values())rpc.send.event({name:"history.changed",payload:{}});

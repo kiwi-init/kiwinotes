@@ -29,12 +29,13 @@ import type { VaultWriter } from "./tools/writer.ts";
 import type { WriteJournal } from "./tools/tools.ts";
 import { AgentActivity, type ActivityRequest } from "./activity.ts";
 import { undo, UndoError, type UndoNotes } from "./undo.ts";
+import { viewChange } from "./change-view.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
-import type { AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult } from "../shared/ui-contract.ts";
+import type { AgentChangeView, AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult } from "../shared/ui-contract.ts";
 import type { AgentSettings } from "../store/settings.ts";
 
 /** O teto sem uso: depois disso, o programa do agente fecha (a sessão fica guardada e volta no próximo pedido). */
@@ -183,6 +184,26 @@ export class AgentService {
     const next = this.undoing.then(run, run);
     this.undoing = next.catch(() => {});
     return next;
+  }
+
+  /**
+   * O antes e o depois de uma mudança (`agent.change`, spec #9480), para o [Ver] da tela "Atividade do agente". Só lê;
+   * não precisa do agente ligado.
+   */
+  async changeView(request: string, change: number): Promise<AgentChangeView> {
+    const notes = this.undoNotes;
+    if (!notes) throw new AgentServiceError("E_NO_UNDO", "Este app não mostra as mudanças do agente.");
+    try {
+      return await viewChange({ activity: this.activity, notes }, request, change);
+    } catch (e) {
+      if (e instanceof UndoError) throw new AgentServiceError("E_NOT_FOUND", e.message);
+      throw e;
+    }
+  }
+
+  /** Avisa a cada mudança no registro (`agent.activityChanged`, spec #9480), com o id do pedido. */
+  onActivity(fn: (request: string) => void): () => void {
+    return this.activity.onChanged(fn);
   }
 
   /** Os pedidos do registro, do mais novo para o mais velho (`agent.activity`). */

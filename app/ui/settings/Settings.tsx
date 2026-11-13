@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
 import { AgentSection } from "./Agent.tsx";
+import { AgentActivitySection } from "./AgentActivity.tsx";
 import { PRIVACY_HINT, PRIVACY_RULE } from "./agentText.ts";
 import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
@@ -62,6 +63,8 @@ export function Settings() {
 
       {/* O agente (spec #8373): a seção antes da Privacidade, que diz a regra dele (ADR 0011). */}
       <AgentSection />
+      {/* A atividade do agente (spec #9480): logo abaixo, e também com o agente desligado (o desfazer não precisa dele). */}
+      <AgentActivitySection />
 
       <Section title="Privacidade">
         <Row label={PRIVACY_RULE} hint={PRIVACY_HINT} />
