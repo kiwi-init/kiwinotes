@@ -1,0 +1,20 @@
+[
+  {
+    "background": "branco",
+    "max": 1,
+    "mean": 7.682291666666666e-05,
+    "instant": 0
+  },
+  {
+    "background": "preto",
+    "max": 0,
+    "mean": 0.0,
+    "instant": 0
+  },
+  {
+    "background": "cor",
+    "max": 1,
+    "mean": 0.029922526041666668,
+    "instant": 0
+  }
+]

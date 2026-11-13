@@ -6,7 +6,7 @@ const baseline = process.env.KIWI_CAT_BASELINE ?? "/tmp/kiwi-T9708-baseline";
 const { serveFogDemo: serveBaseline } = await import(`${baseline}/app/scripts/kiwicat-demo.ts`);
 const out = process.argv[2] ?? "/tmp/kiwi-T9708-pixels"; mkdirSync(out, { recursive: true });
 const current = await serveFogDemo("cat-demo.ts"), old = await serveBaseline("cat-demo.ts"), browser = await webkit.launch({ headless: true });
-const report: any = { baseline: "d2df9d3", edgeBand: .08, backing: .5, errors: [], rows: [] };
+const report: any = { baseline: "d2df9d3", edgeBand: .08, backing: .5, weakLow: 16, weakHigh: 32, errors: [], rows: [] };
 try {
   const ctx = await browser.newContext({ viewport: { width: 640, height: 800 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage(); page.on("pageerror", e => report.errors.push(String(e)));
@@ -17,6 +17,11 @@ try {
       await page.waitForFunction(() => (window as any).kiwiCatReady);
       const prefix = `${out}/${backend}-${state}-${variant}`;
       await page.screenshot({ path: prefix + ".png" });
+      await page.evaluate(() => { [...document.getElementById("fog")!.children].slice(1).forEach(c => (c as HTMLElement).style.visibility = "hidden"); });
+      await page.screenshot({ path: prefix + "-fog.png" });
+      await page.evaluate(() => { [...document.getElementById("fog")!.children].forEach((c, i) => (c as HTMLElement).style.visibility = i ? "visible" : "hidden"); });
+      await page.screenshot({ path: prefix + "-vectors.png" });
+      await page.evaluate(() => { [...document.getElementById("fog")!.children].forEach(c => (c as HTMLElement).style.visibility = "visible"); });
       if (variant === "cutout") {
         await page.evaluate(() => { document.body.style.background = "transparent"; document.documentElement.style.background = "transparent"; });
         await page.screenshot({ path: prefix + "-alpha.png", omitBackground: true });

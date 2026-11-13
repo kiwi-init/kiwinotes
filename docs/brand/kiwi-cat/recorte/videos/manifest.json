@@ -1,0 +1,268 @@
+{
+  "task": "T9708",
+  "scope": "controlled RGBA frames from one WebKit renderer, composed on synchronized backgrounds; not performance",
+  "fps": 30,
+  "seed": 17,
+  "backing": "leve",
+  "raw": "/var/folders/3z/tyd_j34x15z6bhvn108d10r80000gn/T/kiwi-T9708-rgba-QsBsvN",
+  "compositionComparison": [
+    {
+      "background": "branco",
+      "max": 1,
+      "mean": 7.682291666666666e-05,
+      "instant": 0
+    },
+    {
+      "background": "preto",
+      "max": 0,
+      "mean": 0.0,
+      "instant": 0
+    },
+    {
+      "background": "cor",
+      "max": 1,
+      "mean": 0.029922526041666668,
+      "instant": 0
+    }
+  ],
+  "scenes": [
+    {
+      "state": "repouso",
+      "seconds": 60,
+      "uniqueFrames": 352,
+      "repeatedFrames": 1448,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 15,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "1800"
+          }
+        ],
+        "format": {
+          "duration": "60.000000",
+          "size": "2904170"
+        }
+      },
+      "sha256": "ee5165e68c5f8a6becdac7a1966bcc20c92389862d629fa5ec8bed4ecab85869"
+    },
+    {
+      "state": "dormindo",
+      "seconds": 6,
+      "uniqueFrames": 180,
+      "repeatedFrames": 0,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 15,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "479382"
+        }
+      },
+      "sha256": "8e5c21f14144c4cc54f8f4cff71a986ab9150bc097608f8eb526b0169e3535fd"
+    },
+    {
+      "state": "acordou",
+      "seconds": 3,
+      "uniqueFrames": 90,
+      "repeatedFrames": 0,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 18,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "90"
+          }
+        ],
+        "format": {
+          "duration": "3.000000",
+          "size": "389572"
+        }
+      },
+      "sha256": "42f1c20650e7d3996d935d30661589e453f2ec890e941726414cf87b54fdf07b"
+    },
+    {
+      "state": "ouvindo",
+      "seconds": 6,
+      "uniqueFrames": 180,
+      "repeatedFrames": 0,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 19,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "823937"
+        }
+      },
+      "sha256": "aa8820787a3de5a5de0b92d9e5ab693fcaa881741eb624a3fccd2e7ee8934a95"
+    },
+    {
+      "state": "thinking",
+      "seconds": 6,
+      "uniqueFrames": 180,
+      "repeatedFrames": 0,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 17,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "638251"
+        }
+      },
+      "sha256": "5931a0fb8221008563ce3eb8d39f95c6c4e371e7b46305d5667e39fe167cb76b"
+    },
+    {
+      "state": "agindo",
+      "seconds": 6,
+      "uniqueFrames": 180,
+      "repeatedFrames": 0,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 19,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "798751"
+        }
+      },
+      "sha256": "4bb35b847f2ecb694a572c644d060c979fe4fdecb5fc221de25d4558316cc7da"
+    },
+    {
+      "state": "pronto",
+      "seconds": 2,
+      "uniqueFrames": 43,
+      "repeatedFrames": 17,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 16,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "60"
+          }
+        ],
+        "format": {
+          "duration": "2.000000",
+          "size": "276188"
+        }
+      },
+      "sha256": "6a758fabc43341af6b37c8ad31842f2eed86a394da782638c8afe766295b4327"
+    },
+    {
+      "state": "erro",
+      "seconds": 6,
+      "uniqueFrames": 180,
+      "repeatedFrames": 0,
+      "cornerMax": 0,
+      "bodyMin": 255,
+      "bodyRGBMax": 15,
+      "farMaxAlpha": 0,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1920,
+            "height": 800,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "679528"
+        }
+      },
+      "sha256": "b0ce9a5a36fa7f872075ac9f64131fe5a6eaaf0af4c32a66c78f036313c7870f"
+    },
+    {
+      "state": "hub",
+      "seconds": 16,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 2000,
+            "height": 740,
+            "r_frame_rate": "30/1",
+            "nb_frames": "480"
+          }
+        ],
+        "format": {
+          "duration": "16.000000",
+          "size": "222266"
+        }
+      },
+      "scope": "same actual 96x120 WebKit RGBA sample over real headless hub screenshots",
+      "sha256": "d3f75810928a09e71edc19754f32ee2b8302491b9465ea81622a933dd58b55bf"
+    }
+  ]
+}

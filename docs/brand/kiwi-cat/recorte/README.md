@@ -1,54 +1,95 @@
-# Recorte do Kiwi-cat — T9708 / spec #9573
+# Kiwi-cat recortado — T9708 / spec #9573
 
-**Em revisão visual.** A folha `variantes-leve-forte.webp` é uma prévia parada
-para a escolha do harry, não vídeo final nem medição de desempenho. A faixa
-interna de 8% foi escolhida pelo lead (#9751), e a limpeza e o apoio dos
-símbolos passaram na revisão #9760. A força da base ainda depende do harry. Nenhuma tela do app muda aqui.
+A base **leve**, escolhida pelo harry (#9810), mantém o corpo escuro opaco e
+as áreas externas transparentes. O recorte é opt-in (`cutout: true`). Esta
+mudança entrega o módulo e suas provas; a integração ao hub está na T9567.
+O aceite visual dos vídeos finais ainda cabe ao harry.
 
-A folha reúne os oito estados, na mesma pose fixa e semente17, nas variantes
-leve (expoente0,5) e forte (0,35), em branco, preto e `#367a8e`. A última linha
-mostra `thinking` com e sem o apoio dos símbolos. São capturas do WebKit
-headless do módulo real, geradas por `kiwicat-cutout-variants.ts`, reduzidas
-de800×960 para200×240; o gato continua no seu quadro640×800, com margem80.
+## Provas visuais
 
-A composição recortada preserva o RGB do renderer opaco como RGB
-premultiplicado. A cobertura do material vem das camadas originais, separada
-da luz. O apoio usa a intensidade suavizada acima do pedestal, limitado à
-proximidade do material. Isso muda a opacidade do apoio, sem criar emissão.
-A faixa nas bordas esquerda/direita/inferior só reduz a luz; ela não estende
-o quadro nem atinge o corpo/aro/olhos/símbolos. Os olhos não têm apoio extra;
-os símbolos têm uma cópia preta embaixo da névoa, com as mesmas poses.
+- `oito-estados-leve.webp`: oito poses fixas, semente 17, em branco, preto e
+  `#367a8e`; capturas do módulo no WebKit headless.
+- `videos/*.mp4`: um quadro RGBA real do WebKit por instante, composto nos
+  três fundos. Cada coluna usa exatamente o mesmo quadro. Exportação com
+  relógio controlado a 30 amostras/s, sem interpolação; não é prova de FPS.
+  Quadros sem mudança são repetidos. `capture.json` descreve os instantes;
+  `manifest.json` contém contagem, duração, SHA256 e controles de alfa.
+- `videos/compose-vs-webkit.json`: o primeiro quadro composto fora do
+  navegador é comparado com capturas reais do WebKit nos três fundos,
+  sem rótulos nem redimensionamento (máximo permitido: 2/255).
+- `hub/` e `videos/hub.mp4`: composição sobre capturas reais do hub headless
+  claro e Channels Dark (`#111113`). O vídeo usa outro renderer real de
+  96×120 px. São provas de composição, não capturas da integração ao app.
+- `repouso-sem-veu-alpha.png`: RGBA em tamanho original.
 
-Os assets novos são reproduzidos por `app/scripts/kiwicat-cutout-assets.py`
-(Pillow13.0.0, NumPy2.5.4). Os assets opacos aprovados ficam intocados.
-A reserva sem GPU tem RGBA próprio e cobertura do corpo. O recorte é opt-in
-(`cutout:true`); o modo opaco conserva o caminho anterior.
+Tudo usa dados temporários, sem mic, agente real, app nativo na tela ou
+controle de outros apps. A voz de `ouvindo` é uma sequência numérica sintética.
 
-Verificação numérica: extrair `app/ui/kiwicat`,
-`app/scripts/kiwicat-demo.ts`, `app/src/bun/window-security.ts` e
-`app/package.json` do commit `d2df9d3` para uma pasta de teste, com o
-`node_modules` da versão fixa. Passar essa raiz em `KIWI_CAT_BASELINE` para
-`bun app/scripts/kiwicat-cutout-check.ts <saída>`, seguido de
-`python app/scripts/kiwicat-cutout-pixels.py <saída>`. São os oito estados
-nos caminhos WebGPU, WebGL2 e sem GPU, em modo parado. O teste compara o
-modo opaco byte a byte com o renderer anterior, o recorte fora da faixa
-(≤2/255), o alfa de um canto (0) e do centro do corpo (255).
+## Como o recorte funciona
 
-Ainda faltam o aceite visual, os vídeos finais sincronizados nos três
-fundos, as capturas do hub nos dois temas, CPU pareada da opção aprovada e
-FPS em movimento. Os números das experiências anteriores não substituem
-essas provas. Nenhuma captura usa mic, agente real, app nativo ou sessão
-de outra pessoa.
+O RGB original é tratado como luz premultiplicada. A cobertura do corpo/aro
+vem das camadas aprovadas e protege também a região sob os olhos. Uma base
+escura suave apoia a luz perto do material, sem criar emissão. Os símbolos
+recebem uma cópia preta por baixo da névoa, na mesma pose dos vetores brancos.
 
-A comparação ampliada `comparacao-base-400px.webp` tem três estados
-(repouso, agindo e dormindo), nas duas forças, em branco e cor. Cada quadro
-do gato tem400×500px. A folha tem118536bytes, em WebP com qualidade90; a
-compressão serve só para julgamento visual, nunca para o pixel-check.
+As exceções aprovadas no spec são a faixa interna de 8% nas bordas esquerda,
+direita e inferior (só reduz luz) e a curva suave de 16 a 32/255 que remove
+emissão fraca distante. Corpo e aro ficam protegidos. A composição dos pixels
+antialias dos símbolos pode mudar quando o véu de baixo é removido; os
+vetores isolados devem continuar idênticos. Não se estende nada fora do quadro.
 
-A rodada numérica depois da limpeza passou nos24casos: modo opaco com
-diferença0 contra d2df9d3; recorte com diferença máxima1/255 fora da faixa;
-canto com alfa0 e centro do corpo com alfa255 em todos. O relatório está
-em `pixels-parado.json`; é uma prova de quadros fixos, não de CPU/FPS.
-A suíte completa teve1786pass,5skip,0fail; o typecheck e os33testes do
-módulo/511asserts passaram. A escolha visual e a medição final continuam
-pendentes.
+As referências opacas originais ficam intocadas. O fallback sem GPU recebe
+novos arquivos RGBA. `kiwicat-cutout-assets.py` os reproduz com Pillow 13.0.0 e
+NumPy 2.5.4. SVGs de olhos e símbolos usam `display:block` para que a tipografia
+do host não os desloque para fora de suas caixas.
+
+## Verificação
+
+`pixels-camadas-curva16-32.json` registra 24 casos (oito estados × WebGPU,
+WebGL2 e sem GPU): modo opaco idêntico à base `d2df9d3`, luz forte/material
+fora da faixa com diferença máxima 1/255, vetores isolados idênticos, canto
+com alfa 0 e centro do corpo com alfa 255. A diferença da composição completa
+é registrada separadamente e inclui a remoção aprovada do véu.
+
+Para reproduzir, extraia `app/ui/kiwicat`, `app/scripts/kiwicat-demo.ts`,
+`app/src/bun/window-security.ts` e `app/package.json` de `d2df9d3`, forneça
+as dependências fixas e passe essa raiz em `KIWI_CAT_BASELINE`:
+
+```sh
+cd app
+bun scripts/kiwicat-cutout-check.ts /tmp/cat-pixels
+python scripts/kiwicat-cutout-pixels.py /tmp/cat-pixels
+bun scripts/kiwicat-vector-layout-check.ts /tmp/cat-layout
+bun scripts/kiwicat-cutout-pairs.ts /tmp/cat-cpu --leve-only
+bun scripts/kiwicat-cutout-fps.ts /tmp/cat-fps leve
+KIWI_CUTOUT_PYTHON=/caminho/python bun scripts/kiwicat-cutout-videos.ts ../docs/brand/kiwi-cat/recorte/videos /tmp/kiwi-T9708-hub-composed
+```
+
+Capturas, CPU e FPS exigem a lease `bench`; não execute medições em paralelo.
+O teste de layout monta o módulo com altura de linha de 200 px e confere a
+geometria real dos SVGs no WebKit. Sem a correção ele reproduz o deslocamento;
+com ela exige alinhamento menor que 0,5 px.
+
+## Desempenho e rastreabilidade
+
+Os relatórios em `desempenho/` medem somente a demo WebKit headless, 640×800,
+DPR1. CPU soma os cinco processos próprios, em porcentagem de um núcleo,
+com 10 s de aquecimento e 60 s de amostra, sem captura. A meta é acréscimo
+máximo de 0,5 ponto sobre o opaco, em pares de ordem alternada.
+
+A primeira janela de FPS de `agindo` ficou em 54,74; o arquivo com a falha
+foi preservado. Duas repetições e o controle opaco passaram (mínimo posterior
+59,08). Não se usa a exportação dos vídeos para concluir sobre fluidez.
+Os relatórios registram hashes das fontes efetivamente medidas; o HEAD WIP
+registrado não identifica sozinho alterações ainda não commitadas.
+
+Os pares originais terminaram entre 12:29 e 12:42 (-03) em 13/11/2026.
+A inicialização concorrente relatada em #10230 ocorreu às 13:36:23–35 e
+não se sobrepôs a eles. Os arquivos originais foram preservados.
+`historico/` contém experiências anteriores à escolha e à curva final;
+não são as provas finais nem opções ainda pendentes de escolha.
+
+Validação local: typecheck limpo e 33 testes do módulo / 511 asserts. A suíte
+completa teve 1785 pass, 5 skip e 1 falha no cancelamento do download em
+`precise-dictation.test.ts`; a execução isolada desse arquivo passou 11/11.
+O log completo foi preservado em `/tmp/kiwi-T9708-final-bun.log`.

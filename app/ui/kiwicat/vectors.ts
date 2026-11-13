@@ -45,7 +45,7 @@ const bezier = (p: Point[]) => points(80, t => [0, 1].map(i => (1 - t) ** 3 * p[
 const drop = (x: number, y: number) => polygon([...bezier([[x, y - 65], [x - 10, y - 45], [x - 66, y + 24], [x - 38, y + 51]]), ...bezier([[x - 38, y + 51], [x + 43, y + 98], [x + 72, y + 12], [x, y - 65]])], "work");
 const star = (x: number, y: number, r: number) => polygon([[x, y - r], [x + 13, y - 14], [x + r, y + 3], [x + 13, y + 16], [x - 2, y + r], [x - 14, y + 15], [x - r, y - 2], [x - 15, y - 15]], "spark", 2);
 interface Sprite { state: FogState; element: HTMLDivElement; pivot: Point; part?: number }
-const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 2048 2560" style="overflow:visible" fill="white" aria-hidden="true">${body}</svg>`;
+const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 2048 2560" style="display:block;overflow:visible" fill="white" aria-hidden="true">${body}</svg>`;
 const white = (d: string, hole = false) => `<path d="${d}" fill-rule="${hole ? "evenodd" : "nonzero"}"/>`;
 export function createVectorLayer(root: HTMLElement, width: number, height: number, backdrop = false) {
   const layer = document.createElement("div");
@@ -65,7 +65,7 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     outer.style.cssText = `position:absolute;left:${e.cx / 2048 * 100}%;top:${e.cy / 2560 * 100}%;width:${e.r * 2 / 2048 * 100}%;height:${e.r * 2 / 2560 * 100}%;transform-origin:center;will-change:transform`;
     const disk = document.createElement("div"), happy = document.createElement("div"), asleep = document.createElement("div");
     for (const node of [disk, happy, asleep]) { node.style.cssText = "position:absolute;inset:0;transform-origin:center;will-change:transform,opacity"; outer.append(node); }
-    const wrap = (body: string) => `<svg viewBox="-1 -1 2 2" width="100%" height="100%" style="overflow:visible" aria-hidden="true">${body}</svg>`;
+    const wrap = (body: string) => `<svg viewBox="-1 -1 2 2" width="100%" height="100%" style="display:block;overflow:visible" aria-hidden="true">${body}</svg>`;
     disk.innerHTML = wrap('<circle r="1" fill="white"/>');
     const arc = (start: number, end: number) => path(points(64, u => { const a = (start + (end - start) * u) * Math.PI / 180; return [Math.cos(a), .1 + .55 * Math.sin(a)]; }), false);
     happy.innerHTML = wrap(`<path d="${arc(190, 350)}" stroke="white" stroke-width="${34 / e.r}" stroke-linecap="round" fill="none"/>`);

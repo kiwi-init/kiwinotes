@@ -183,9 +183,12 @@ export function fogMaterial(
     // Canvas uses premultiplied alpha. RGB is the approved light over black;
     // coverage reveals the background without erasing the opaque dark coat.
     const alphaHigh = max(max(color.r, color.g), color.b);
-    const alphaSupport = smoothstep(0.5 / 255, 1.5 / 255, alphaHigh);
-    const lightRGB = color.mul(alphaSupport);
     const cutoutCoverage = texture(cutout, st);
+    // Remove only weak emission. Preserve the original coat/arc material even
+    // when dark; eyes and symbols live on their independent vector layer.
+    const protectedMaterial = smoothstep(.05, .2, max(max(coverage.g, coverage.b), cutoutCoverage.r));
+    const alphaSupport = max(smoothstep(16 / 255, 32 / 255, alphaHigh), protectedMaterial);
+    const lightRGB = color.mul(alphaSupport);
     const lightAlpha = max(max(max(lightRGB.r, lightRGB.g), lightRGB.b), pow(cutoutCoverage.g, backing * 2));
     const alpha = max(cutoutCoverage.r, lightAlpha);
     // Only left/right/bottom carry visible reference light. The top is <=1/255.

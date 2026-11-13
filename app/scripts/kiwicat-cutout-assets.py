@@ -49,8 +49,10 @@ Image.fromarray(np.uint8(np.rint(np.stack([coat,np.sqrt(light),np.zeros_like(coa
 for name in ['reference','reference-no-eyes']:
     rgb=np.asarray(Image.open(DEST/(name+'.webp')).convert('RGB'),np.float32)/255
     high=rgb.max(2)
-    # Original corner noise is <=2/255; remove it without disturbing the visible light.
-    v=np.clip((high-.5/255)/(1/255),0,1); support=v*v*(3-2*v)
+    protection=np.asarray(Image.open(DEST/'material-mask.webp').convert('RGB'),np.float32)/255
+    material=np.maximum(np.maximum(protection[:,:,1],protection[:,:,2]),coat)
+    v=np.clip((material-.05)/.15,0,1); protected=v*v*(3-2*v)
+    v=np.clip((high-16/255)/(16/255),0,1); support=np.maximum(v*v*(3-2*v),protected)
     rgb=rgb*support[:,:,None]
     alpha=np.maximum(coat,np.maximum(rgb.max(2),np.sqrt(light)))
     straight=np.divide(rgb,alpha[:,:,None],out=np.zeros_like(rgb),where=alpha[:,:,None]>0)
@@ -65,4 +67,4 @@ for name in ['reference','reference-no-eyes']:
     straight=np.divide(rgb,alpha[:,:,None],out=np.zeros_like(rgb),where=alpha[:,:,None]>0)
     rgba=np.dstack([np.clip(straight,0,1),alpha])
     Image.fromarray(np.uint8(np.rint(rgba*255))).save(DEST/(name+'-cutout.webp'),lossless=True,method=6)
-(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; prototype8pct side/bottom fade; straight-alpha static fallback'),indent=2)+'\n')
+(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade; weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback'),indent=2)+'\n')

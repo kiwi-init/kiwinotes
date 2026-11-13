@@ -1,0 +1,1760 @@
+[
+  {
+    "state": "repouso",
+    "boxes": [
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 13.8125,
+        "height": 14.6875,
+        "parentWidth": 13.8125,
+        "parentHeight": 14.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 21.015625,
+        "height": 17.78125,
+        "parentWidth": 21.015625,
+        "parentHeight": 17.78125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.71875,
+        "height": 9.6875,
+        "parentWidth": 4.71875,
+        "parentHeight": 9.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.84375,
+        "height": 13.921875,
+        "parentWidth": 5.84375,
+        "parentHeight": 13.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.984375,
+        "height": 18.15625,
+        "parentWidth": 6.984375,
+        "parentHeight": 18.15625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.828125,
+        "height": 21.609375,
+        "parentWidth": 23.828125,
+        "parentHeight": 21.609375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.203125,
+        "height": 13.21875,
+        "parentWidth": 12.203125,
+        "parentHeight": 13.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7,
+        "height": 6.890625,
+        "parentWidth": 7,
+        "parentHeight": 6.890625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 7.859375,
+        "parentWidth": 8,
+        "parentHeight": 7.859375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.75,
+        "height": 5.671875,
+        "parentWidth": 5.75,
+        "parentHeight": 5.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 24.75,
+        "height": 20.0625,
+        "parentWidth": 24.75,
+        "parentHeight": 20.0625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.875,
+        "height": 13.75,
+        "parentWidth": 12.875,
+        "parentHeight": 13.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 20.078125,
+        "height": 16.84375,
+        "parentWidth": 20.078125,
+        "parentHeight": 16.84375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 3.78125,
+        "height": 8.75,
+        "parentWidth": 3.78125,
+        "parentHeight": 8.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.90625,
+        "height": 12.984375,
+        "parentWidth": 4.90625,
+        "parentHeight": 12.984375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.046875,
+        "height": 17.21875,
+        "parentWidth": 6.046875,
+        "parentHeight": 17.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 22.890625,
+        "height": 20.671875,
+        "parentWidth": 22.890625,
+        "parentHeight": 20.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 11.265625,
+        "height": 12.28125,
+        "parentWidth": 11.265625,
+        "parentHeight": 12.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.0625,
+        "height": 5.953125,
+        "parentWidth": 6.0625,
+        "parentHeight": 5.953125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.0625,
+        "height": 6.921875,
+        "parentWidth": 7.0625,
+        "parentHeight": 6.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.8125,
+        "height": 4.734375,
+        "parentWidth": 4.8125,
+        "parentHeight": 4.734375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.8125,
+        "height": 19.125,
+        "parentWidth": 23.8125,
+        "parentHeight": 19.125
+      }
+    ]
+  },
+  {
+    "state": "dormindo",
+    "boxes": [
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 13.8125,
+        "height": 14.6875,
+        "parentWidth": 13.8125,
+        "parentHeight": 14.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 27.3203125,
+        "height": 23.11562728881836,
+        "parentWidth": 27.3203125,
+        "parentHeight": 23.11562728881836
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.71875,
+        "height": 9.6875,
+        "parentWidth": 4.71875,
+        "parentHeight": 9.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.84375,
+        "height": 13.921875,
+        "parentWidth": 5.84375,
+        "parentHeight": 13.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.984375,
+        "height": 18.15625,
+        "parentWidth": 6.984375,
+        "parentHeight": 18.15625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.828125,
+        "height": 21.609375,
+        "parentWidth": 23.828125,
+        "parentHeight": 21.609375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.203125,
+        "height": 13.21875,
+        "parentWidth": 12.203125,
+        "parentHeight": 13.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7,
+        "height": 6.890625,
+        "parentWidth": 7,
+        "parentHeight": 6.890625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 7.859375,
+        "parentWidth": 8,
+        "parentHeight": 7.859375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.75,
+        "height": 5.671875,
+        "parentWidth": 5.75,
+        "parentHeight": 5.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 24.75,
+        "height": 20.0625,
+        "parentWidth": 24.75,
+        "parentHeight": 20.0625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.875,
+        "height": 13.75,
+        "parentWidth": 12.875,
+        "parentHeight": 13.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 26.1015625,
+        "height": 21.896875381469727,
+        "parentWidth": 26.1015625,
+        "parentHeight": 21.896875381469727
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 3.78125,
+        "height": 8.75,
+        "parentWidth": 3.78125,
+        "parentHeight": 8.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.90625,
+        "height": 12.984375,
+        "parentWidth": 4.90625,
+        "parentHeight": 12.984375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.046875,
+        "height": 17.21875,
+        "parentWidth": 6.046875,
+        "parentHeight": 17.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 22.890625,
+        "height": 20.671875,
+        "parentWidth": 22.890625,
+        "parentHeight": 20.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 11.265625,
+        "height": 12.28125,
+        "parentWidth": 11.265625,
+        "parentHeight": 12.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.0625,
+        "height": 5.953125,
+        "parentWidth": 6.0625,
+        "parentHeight": 5.953125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.0625,
+        "height": 6.921875,
+        "parentWidth": 7.0625,
+        "parentHeight": 6.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.8125,
+        "height": 4.734375,
+        "parentWidth": 4.8125,
+        "parentHeight": 4.734375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.8125,
+        "height": 19.125,
+        "parentWidth": 23.8125,
+        "parentHeight": 19.125
+      }
+    ]
+  },
+  {
+    "state": "pronto",
+    "boxes": [
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 13.8125,
+        "height": 14.6875,
+        "parentWidth": 13.8125,
+        "parentHeight": 14.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 21.015625,
+        "height": 17.78125,
+        "parentWidth": 21.015625,
+        "parentHeight": 17.78125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.71875,
+        "height": 9.6875,
+        "parentWidth": 4.71875,
+        "parentHeight": 9.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.84375,
+        "height": 13.921875,
+        "parentWidth": 5.84375,
+        "parentHeight": 13.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.984375,
+        "height": 18.15625,
+        "parentWidth": 6.984375,
+        "parentHeight": 18.15625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.828125,
+        "height": 21.609375,
+        "parentWidth": 23.828125,
+        "parentHeight": 21.609375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.203125,
+        "height": 13.21875,
+        "parentWidth": 12.203125,
+        "parentHeight": 13.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 9.09999942779541,
+        "height": 8.957813262939453,
+        "parentWidth": 9.09999942779541,
+        "parentHeight": 8.957813262939453
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 10.400001525878906,
+        "height": 10.217185974121094,
+        "parentWidth": 10.400001525878906,
+        "parentHeight": 10.217185974121094
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.474998474121094,
+        "height": 7.373435974121094,
+        "parentWidth": 7.474998474121094,
+        "parentHeight": 7.373435974121094
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 24.75,
+        "height": 20.0625,
+        "parentWidth": 24.75,
+        "parentHeight": 20.0625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.875,
+        "height": 13.75,
+        "parentWidth": 12.875,
+        "parentHeight": 13.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 20.078125,
+        "height": 16.84375,
+        "parentWidth": 20.078125,
+        "parentHeight": 16.84375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 3.78125,
+        "height": 8.75,
+        "parentWidth": 3.78125,
+        "parentHeight": 8.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.90625,
+        "height": 12.984375,
+        "parentWidth": 4.90625,
+        "parentHeight": 12.984375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.046875,
+        "height": 17.21875,
+        "parentWidth": 6.046875,
+        "parentHeight": 17.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 22.890625,
+        "height": 20.671875,
+        "parentWidth": 22.890625,
+        "parentHeight": 20.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 11.265625,
+        "height": 12.28125,
+        "parentWidth": 11.265625,
+        "parentHeight": 12.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.88124942779541,
+        "height": 7.739063262939453,
+        "parentWidth": 7.88124942779541,
+        "parentHeight": 7.739063262939453
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 9.181251525878906,
+        "height": 8.998435974121094,
+        "parentWidth": 9.181251525878906,
+        "parentHeight": 8.998435974121094
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.256248474121094,
+        "height": 6.154685974121094,
+        "parentWidth": 6.256248474121094,
+        "parentHeight": 6.154685974121094
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.8125,
+        "height": 19.125,
+        "parentWidth": 23.8125,
+        "parentHeight": 19.125
+      }
+    ]
+  },
+  {
+    "state": "thinking",
+    "boxes": [
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 13.8125,
+        "height": 14.6875,
+        "parentWidth": 13.8125,
+        "parentHeight": 14.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 21.015625,
+        "height": 17.78125,
+        "parentWidth": 21.015625,
+        "parentHeight": 17.78125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.71875,
+        "height": 9.6875,
+        "parentWidth": 4.71875,
+        "parentHeight": 9.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.84375,
+        "height": 13.921875,
+        "parentWidth": 5.84375,
+        "parentHeight": 13.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.984375,
+        "height": 18.15625,
+        "parentWidth": 6.984375,
+        "parentHeight": 18.15625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 28.1171875,
+        "height": 25.499065399169922,
+        "parentWidth": 28.1171875,
+        "parentHeight": 25.499065399169922
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.203125,
+        "height": 13.21875,
+        "parentWidth": 12.203125,
+        "parentHeight": 13.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7,
+        "height": 6.890625,
+        "parentWidth": 7,
+        "parentHeight": 6.890625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 7.859375,
+        "parentWidth": 8,
+        "parentHeight": 7.859375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.75,
+        "height": 5.671875,
+        "parentWidth": 5.75,
+        "parentHeight": 5.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 24.75,
+        "height": 20.0625,
+        "parentWidth": 24.75,
+        "parentHeight": 20.0625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.875,
+        "height": 13.75,
+        "parentWidth": 12.875,
+        "parentHeight": 13.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 20.078125,
+        "height": 16.84375,
+        "parentWidth": 20.078125,
+        "parentHeight": 16.84375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 3.78125,
+        "height": 8.75,
+        "parentWidth": 3.78125,
+        "parentHeight": 8.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.90625,
+        "height": 12.984375,
+        "parentWidth": 4.90625,
+        "parentHeight": 12.984375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.046875,
+        "height": 17.21875,
+        "parentWidth": 6.046875,
+        "parentHeight": 17.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 27.01093292236328,
+        "height": 24.39281463623047,
+        "parentWidth": 27.01093292236328,
+        "parentHeight": 24.39281463623047
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 11.265625,
+        "height": 12.28125,
+        "parentWidth": 11.265625,
+        "parentHeight": 12.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.0625,
+        "height": 5.953125,
+        "parentWidth": 6.0625,
+        "parentHeight": 5.953125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.0625,
+        "height": 6.921875,
+        "parentWidth": 7.0625,
+        "parentHeight": 6.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.8125,
+        "height": 4.734375,
+        "parentWidth": 4.8125,
+        "parentHeight": 4.734375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.8125,
+        "height": 19.125,
+        "parentWidth": 23.8125,
+        "parentHeight": 19.125
+      }
+    ]
+  },
+  {
+    "state": "agindo",
+    "boxes": [
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 13.8125,
+        "height": 14.6875,
+        "parentWidth": 13.8125,
+        "parentHeight": 14.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 21.015625,
+        "height": 17.78125,
+        "parentWidth": 21.015625,
+        "parentHeight": 17.78125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.71875,
+        "height": 9.6875,
+        "parentWidth": 4.71875,
+        "parentHeight": 9.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.84375,
+        "height": 13.921875,
+        "parentWidth": 5.84375,
+        "parentHeight": 13.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.984375,
+        "height": 18.15625,
+        "parentWidth": 6.984375,
+        "parentHeight": 18.15625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.828125,
+        "height": 21.609375,
+        "parentWidth": 23.828125,
+        "parentHeight": 21.609375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.942192077636719,
+        "height": 10.765625,
+        "parentWidth": 7.942192077636719,
+        "parentHeight": 10.765625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.9421844482421875,
+        "height": 10.765625,
+        "parentWidth": 7.9421844482421875,
+        "parentHeight": 10.765625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 15.864063262939453,
+        "height": 17.184375762939453,
+        "parentWidth": 15.864063262939453,
+        "parentHeight": 17.184375762939453
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7,
+        "height": 6.890625,
+        "parentWidth": 7,
+        "parentHeight": 6.890625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 7.859375,
+        "parentWidth": 8,
+        "parentHeight": 7.859375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.75,
+        "height": 5.671875,
+        "parentWidth": 5.75,
+        "parentHeight": 5.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 24.75,
+        "height": 20.0625,
+        "parentWidth": 24.75,
+        "parentHeight": 20.0625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.390625,
+        "height": 6.390625,
+        "parentWidth": 6.390625,
+        "parentHeight": 6.390625
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.359375,
+        "height": 6.359375,
+        "parentWidth": 6.359375,
+        "parentHeight": 6.359375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.875,
+        "height": 13.75,
+        "parentWidth": 12.875,
+        "parentHeight": 13.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 20.078125,
+        "height": 16.84375,
+        "parentWidth": 20.078125,
+        "parentHeight": 16.84375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 3.78125,
+        "height": 8.75,
+        "parentWidth": 3.78125,
+        "parentHeight": 8.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.90625,
+        "height": 12.984375,
+        "parentWidth": 4.90625,
+        "parentHeight": 12.984375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.046875,
+        "height": 17.21875,
+        "parentWidth": 6.046875,
+        "parentHeight": 17.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 22.890625,
+        "height": 20.671875,
+        "parentWidth": 22.890625,
+        "parentHeight": 20.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.7234344482421875,
+        "height": 9.546875,
+        "parentWidth": 6.7234344482421875,
+        "parentHeight": 9.546875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.723442077636719,
+        "height": 9.546875,
+        "parentWidth": 6.723442077636719,
+        "parentHeight": 9.546875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 14.645313262939453,
+        "height": 15.965625762939453,
+        "parentWidth": 14.645313262939453,
+        "parentHeight": 15.965625762939453
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.0625,
+        "height": 5.953125,
+        "parentWidth": 6.0625,
+        "parentHeight": 5.953125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.0625,
+        "height": 6.921875,
+        "parentWidth": 7.0625,
+        "parentHeight": 6.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.8125,
+        "height": 4.734375,
+        "parentWidth": 4.8125,
+        "parentHeight": 4.734375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.8125,
+        "height": 19.125,
+        "parentWidth": 23.8125,
+        "parentHeight": 19.125
+      }
+    ]
+  },
+  {
+    "state": "erro",
+    "boxes": [
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 13.8125,
+        "height": 14.6875,
+        "parentWidth": 13.8125,
+        "parentHeight": 14.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 21.015625,
+        "height": 17.78125,
+        "parentWidth": 21.015625,
+        "parentHeight": 17.78125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.71875,
+        "height": 9.6875,
+        "parentWidth": 4.71875,
+        "parentHeight": 9.6875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.84375,
+        "height": 13.921875,
+        "parentWidth": 5.84375,
+        "parentHeight": 13.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.984375,
+        "height": 18.15625,
+        "parentWidth": 6.984375,
+        "parentHeight": 18.15625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 23.828125,
+        "height": 21.609375,
+        "parentWidth": 23.828125,
+        "parentHeight": 21.609375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.109375,
+        "height": 8.28125,
+        "parentWidth": 6.109375,
+        "parentHeight": 8.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.203125,
+        "height": 13.21875,
+        "parentWidth": 12.203125,
+        "parentHeight": 13.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7,
+        "height": 6.890625,
+        "parentWidth": 7,
+        "parentHeight": 6.890625
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 7.859375,
+        "parentWidth": 8,
+        "parentHeight": 7.859375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.75,
+        "height": 5.671875,
+        "parentWidth": 5.75,
+        "parentHeight": 5.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 32.17500305175781,
+        "height": 26.08125114440918,
+        "parentWidth": 32.17500305175781,
+        "parentHeight": 26.08125114440918
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 4.601249694824219,
+        "height": 4.601249694824219,
+        "parentWidth": 4.601249694824219,
+        "parentHeight": 4.601249694824219
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.601249694824219,
+        "height": 4.601249694824219,
+        "parentWidth": 4.601249694824219,
+        "parentHeight": 4.601249694824219
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.601249694824219,
+        "height": 4.601249694824219,
+        "parentWidth": 4.601249694824219,
+        "parentHeight": 4.601249694824219
+      },
+      {
+        "eye": true,
+        "x": 0,
+        "y": 0,
+        "width": 2.838825225830078,
+        "height": 2.838825225830078,
+        "parentWidth": 2.838825225830078,
+        "parentHeight": 2.838825225830078
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 2.838825225830078,
+        "height": 2.838825225830078,
+        "parentWidth": 2.838825225830078,
+        "parentHeight": 2.838825225830078
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 2.838825225830078,
+        "height": 2.838825225830078,
+        "parentWidth": 2.838825225830078,
+        "parentHeight": 2.838825225830078
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 12.875,
+        "height": 13.75,
+        "parentWidth": 12.875,
+        "parentHeight": 13.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 20.078125,
+        "height": 16.84375,
+        "parentWidth": 20.078125,
+        "parentHeight": 16.84375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 3.78125,
+        "height": 8.75,
+        "parentWidth": 3.78125,
+        "parentHeight": 8.75
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.90625,
+        "height": 12.984375,
+        "parentWidth": 4.90625,
+        "parentHeight": 12.984375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.046875,
+        "height": 17.21875,
+        "parentWidth": 6.046875,
+        "parentHeight": 17.21875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 22.890625,
+        "height": 20.671875,
+        "parentWidth": 22.890625,
+        "parentHeight": 20.671875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 5.171875,
+        "height": 7.34375,
+        "parentWidth": 5.171875,
+        "parentHeight": 7.34375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 11.265625,
+        "height": 12.28125,
+        "parentWidth": 11.265625,
+        "parentHeight": 12.28125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 6.0625,
+        "height": 5.953125,
+        "parentWidth": 6.0625,
+        "parentHeight": 5.953125
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 7.0625,
+        "height": 6.921875,
+        "parentWidth": 7.0625,
+        "parentHeight": 6.921875
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 4.8125,
+        "height": 4.734375,
+        "parentWidth": 4.8125,
+        "parentHeight": 4.734375
+      },
+      {
+        "eye": false,
+        "x": 0,
+        "y": 0,
+        "width": 30.95624542236328,
+        "height": 24.862499237060547,
+        "parentWidth": 30.95624542236328,
+        "parentHeight": 24.862499237060547
+      }
+    ]
+  }
+]
