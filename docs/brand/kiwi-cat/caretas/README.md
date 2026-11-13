@@ -78,9 +78,9 @@ Os três pares do head `1df775e` estão em [diagnostico-1df775e/](diagnostico-1d
 A média do delta foi +0,315 ponto, com faixa de −0,309 a +0,846: a variação
 é maior que o teto e o lead considerou a coleta inconclusiva (Kiwi #9130).
 O aceite será medido em oito pares alternados, com carga de 1 minuto abaixo
-de 4 no começo de cada par (espera máxima de 15 minutos); passa com mediana ≤+0,5 e pelo menos 6/8 pares
+de 4 no começo de cada par (espera máxima de 5 minutos no total da série); passa com mediana ≤+0,5 e pelo menos 6/8 pares
 em ≤+0,5. Pares cuja carga varie mais de 1,5 são preservados como descartados
-e repetidos (Kiwi #9140). Os números anteriores ficam preservados, sem contar como aceite.
+e repetidos (Kiwi #9140/#9166). Os números anteriores ficam preservados, sem contar como aceite.
 
 O check sem gravador `bun scripts/kiwicat-face-fps.ts` mede a janela inteiramente
 dentro da página, sem sondagem de processos entre o começo e o fim.

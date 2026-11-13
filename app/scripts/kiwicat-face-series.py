@@ -12,7 +12,7 @@ out = app.parent / "docs/brand/kiwi-cat/caretas/desempenho"
 out.mkdir(exist_ok=True)
 head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=app, text=True).strip()
 summary = {"task": "T8959", "measuredCommit": head, "loadLimit": 4,
-           "maxLoadWaitSeconds": 900, "maxLoadVariation": 1.5,
+           "maxLoadWaitSeconds": 300, "loadWaitScope": "whole series", "maxLoadVariation": 1.5,
            "cpuUnit": "percent of one core", "pairs": [], "discarded": [],
            "criterion": "median delta <= 0.5 and at least 6 of 8 deltas <= 0.5"}
 
@@ -25,12 +25,12 @@ def save():
     (out / "serie-8-pares.json").write_text(json.dumps(summary, indent=2) + "\n")
 
 attempt = 0
+deadline = time.monotonic() + 300
 while len(summary["pairs"]) < 8:
     number = len(summary["pairs"]) + 1
     attempt += 1
-    deadline = time.monotonic() + 900
     while os.getloadavg()[0] >= 4 and time.monotonic() < deadline:
-        print(f"WAIT pair {number}: load1={os.getloadavg()[0]:.3f} (need <4; max15min)", flush=True)
+        print(f"WAIT pair {number}: load1={os.getloadavg()[0]:.3f} (need <4; max5min total)", flush=True)
         time.sleep(45)
     if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=app, text=True).strip() != head:
         raise RuntimeError("Head changed during the frozen series")
