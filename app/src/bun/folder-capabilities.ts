@@ -1,10 +1,11 @@
 import { UI_CAPABILITIES, type UiCapability } from "../shared/ui-contract.ts";
 import type { CapabilityDeps } from "./ui-capabilities.ts";
 import { FolderError, type FolderBundle } from "../notes/folders-workspace.ts";
+import { MEETINGS_FOLDER } from "../notes/meetings.ts";
 
 type Handlers = Record<UiCapability, (args: unknown) => unknown>;
 const scoped = (cap: string) =>
-  /^(notes\.|folders\.|attachments\.|images\.|files\.|trash\.|settings\.)/.test(
+  /^(notes\.|folders\.|attachments\.|images\.|files\.|trash\.|settings\.|projects\.)/.test(
     cap,
   ) ||
   cap === "meetings.speakers" ||
@@ -33,6 +34,7 @@ export function folderCapabilities(
       exporter: b.exporter,
       meetingNotes: b.meetingNotes,
       dictationNotes: b.dictationNotes,
+      meetingsFolder: b.ref.id.startsWith("internal:") ? MEETINGS_FOLDER : null,
     });
     cached.set(b.ref.id, existing);
     return existing;

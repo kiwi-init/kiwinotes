@@ -18,6 +18,7 @@ import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
 import type { FolderView, OpenFolderResult } from "../notes/folders-workspace.ts";
 import type { MeetingLive, MeetingNote, MeetingSettings } from "./meetings.ts";
+import type { ProjectInfo, ProjectStatus } from "../notes/projects.ts";
 
 export type { AppSettings };
 export { NOTES_SHORTCUTS, type NotesShortcut } from "./shortcuts.ts";
@@ -136,7 +137,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   leitura), o `later` no `E_LATER_WRITE` do `agent.undo` e o evento `agent.activityChanged`. Só acréscimo.
 // 1.47.0 (T9833, spec #9818): o filtro do guardrail. No `agent.activity`, o `held` de cada leitura e o `requestHeld`
 //   do pedido (quantos segredos o Kiwi segurou) e o `removedSecrets` de cada mudança. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.47.0";
+// 1.48.0 (T10012, spec #9874): os projetos. O `projects.list`, o `projects.mark`, o `projects.unmark`, o
+//   `projects.setMain` e o `projects.status`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.48.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -458,6 +461,22 @@ export interface UiCapabilities {
    * no registro.
    */
   "agent.change": { args: { request: string; change: number }; result: AgentChangeView };
+  // Os projetos (spec #9874, 1.47.0): uma pasta do cofre marcada pela pessoa, mais a nota principal. A marcação fica em
+  // `.kiwi/projects.json`, dentro do cofre, e segue a pasta como as fixadas. E_NOT_FOUND: a pasta (ou a nota) não existe
+  // ou não é projeto; E_NESTED: um projeto dentro de outro; E_MEETINGS_FOLDER: a pasta das reuniões.
+  /** Os projetos do cofre aberto, com o nome, a nota principal, a última mudança e quantas notas têm. */
+  "projects.list": { args: Record<string, never>; result: { projects: ProjectInfo[] } };
+  /**
+   * Marca a pasta como projeto. Sem a nota com o nome da pasta, cria essa nota, só com o título (`created`); nenhuma
+   * outra nota muda. Marcar de novo não muda nada.
+   */
+  "projects.mark": { args: { folder: string }; result: { project: ProjectInfo; created: boolean } };
+  /** Desmarca: o projeto sai, e nenhuma nota muda. */
+  "projects.unmark": { args: { folder: string }; result: true };
+  /** Troca a nota principal por outra nota de dentro da pasta. */
+  "projects.setMain": { args: { folder: string; note: string }; result: { project: ProjectInfo } };
+  /** O estado do projeto, só contado: o sumário da nota principal, as notas mudadas por último e as tarefas abertas. */
+  "projects.status": { args: { folder: string }; result: ProjectStatus };
 }
 
 /** O antes e o depois de uma mudança do agente (`agent.change`, 1.46.0). */
@@ -700,6 +719,11 @@ export const UI_CAPABILITIES = [
   "agent.activity",
   "agent.undo",
   "agent.change",
+  "projects.list",
+  "projects.mark",
+  "projects.unmark",
+  "projects.setMain",
+  "projects.status",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

@@ -157,8 +157,8 @@ export class KiwiToolServer {
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: "kiwi-notes", title: "Kiwi Notes", version: this.o.version ?? "dev" },
           instructions: this.writes
-            ? "As notas e as reuniões da pessoa no Kiwi Notes. Procure com notes_search, veja o sumário com notes_outline e leia só a seção que precisa com notes_read. Para mudar uma nota, leia antes com notes_read e mande a versao que ele devolveu: notes_append acrescenta, notes_write troca uma seção ou a nota inteira, e notes_create cria uma nota nova. As reuniões são só para ler. Nada apaga, renomeia nem move notas, e o texto de antes de cada mudança fica nas Versões da nota."
-            : "As notas e as reuniões da pessoa no Kiwi Notes, só para ler. Procure com notes_search, veja o sumário com notes_outline e leia só a seção que precisa com notes_read. As ferramentas devolvem o texto como está.",
+            ? "As notas e as reuniões da pessoa no Kiwi Notes. Procure com notes_search, veja o sumário com notes_outline e leia só a seção que precisa com notes_read. Para mudar uma nota, leia antes com notes_read e mande a versao que ele devolveu: notes_append acrescenta, notes_write troca uma seção ou a nota inteira, e notes_create cria uma nota nova. As reuniões e os projetos são só para ler: veja os projetos com projects_list e como está um com project_status. Nada apaga, renomeia nem move notas, e o texto de antes de cada mudança fica nas Versões da nota."
+            : "As notas e as reuniões da pessoa no Kiwi Notes, só para ler. Procure com notes_search, veja o sumário com notes_outline e leia só a seção que precisa com notes_read. Veja os projetos com projects_list e como está um com project_status. As ferramentas devolvem o texto como está.",
         });
       }
       case "ping":

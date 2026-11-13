@@ -204,7 +204,7 @@ describe("o claude falso como cliente MCP (spec #7496)", () => {
       expect(methods).toEqual(["initialize", "notifications/initialized", "tools/list"]);
       while (Date.now() < end && !readFileSync(log, "utf8").includes('"mcp"')) await Bun.sleep(20);
       const mcp = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((l) => l.mcp)!.mcp;
-      expect(mcp).toEqual({ nome: "kiwi", ferramentas: ["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get"] });
+      expect(mcp).toEqual({ nome: "kiwi", ferramentas: ["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get", "projects_list", "project_status"] });
     } finally {
       (p.stdin as import("bun").FileSink).end();
       p.kill();

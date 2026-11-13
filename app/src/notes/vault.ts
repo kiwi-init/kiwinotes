@@ -484,6 +484,11 @@ export class Vault {
     return { notes: new Set(this.notes.keys()), folders: new Set(this.folders) };
   }
 
+  /** O inode de cada nota de agora (spec #9874): a nota principal de um projeto acha a pasta que mudou com o app fechado. */
+  noteInodes(): Map<string, number> {
+    return new Map([...this.notes].map(([p, e]) => [p, e.ino] as const));
+  }
+
   /** Avisa quando notas mudam, inclusive fora do app. */
   /** Arquivos do vault que não são nota (um anexo trocado por fora, T2709): os caminhos, como o watcher viu. */
   onOtherFiles(fn: (paths: string[]) => void): () => void {

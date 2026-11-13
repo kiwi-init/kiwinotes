@@ -35,6 +35,9 @@ interface SavedBlock {
   label: string;
 }
 
+/** A pasta das reuniões, no cofre interno (spec #9874: ela não pode ser um projeto). */
+export const MEETINGS_FOLDER = "Reuniões";
+
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 /**
  * The block's comment: the replay hash and, since R3, where the segment is (seconds, channel, ASR label), so the VBx
@@ -252,7 +255,7 @@ export class MeetingNotes {
       const existing = await this.find(session);
       if (existing) return existing;
       const title = `${localDate(at.getTime())} ${clock(at).replace(":", "h")} ${app === "Reunião" ? app : `Reunião do ${app}`}`;
-      const note = await this.vault.create("Reuniões", title, newMeetingNote(session, app, at));
+      const note = await this.vault.create(MEETINGS_FOLDER, title, newMeetingNote(session, app, at));
       this.states.set(session, {
         session,
         path: note.path,

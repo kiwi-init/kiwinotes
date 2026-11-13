@@ -2,10 +2,12 @@
 // agente vê a pasta de notas aberta agora, com a busca pelo sentido e o texto dos anexos quando estão ligados, e passa
 // pela mesma fronteira do cofre (sem `..`, sem link simbólico para fora: `E_OUTSIDE_VAULT`).
 //
-// Nada aqui escreve: o leitor só conhece quatro capacidades de leitura (`notes.search`, `notes.list`, `notes.get` e
-// `meetings.list`), e nenhuma outra passa por ele.
+// Nada aqui escreve: o leitor só conhece seis capacidades de leitura (`notes.search`, `notes.list`, `notes.get`,
+// `meetings.list`, `projects.list` e `projects.status`), e nenhuma outra passa por ele. Marcar ou desmarcar um projeto
+// é da pessoa (spec #9874): o leitor não tem como.
 
 import type { MeetingNote } from "../../shared/meetings.ts";
+import type { ProjectInfo, ProjectStatus } from "../../notes/projects.ts";
 
 export interface ReaderHit {
   path: string;
@@ -29,13 +31,17 @@ export interface VaultReader {
   /** `version` (spec #8356): a versão da nota, que o `notes_write` pede para mudar o texto. */
   get(path: string): Promise<{ path: string; title: string; mtime: string; content: string; version?: string }>;
   meetings(): Promise<MeetingNote[]>;
+  /** Os projetos (spec #9874). */
+  projects(): Promise<ProjectInfo[]>;
+  /** O estado de um projeto, só contado. */
+  projectStatus(folder: string): Promise<ProjectStatus>;
 }
 
 /** As únicas capacidades que o leitor chama. */
-export const READER_CAPABILITIES = ["notes.search", "notes.list", "notes.get", "meetings.list"] as const;
+export const READER_CAPABILITIES = ["notes.search", "notes.list", "notes.get", "meetings.list", "projects.list", "projects.status"] as const;
 type ReaderCapability = (typeof READER_CAPABILITIES)[number];
 
-/** O leitor sobre as capacidades do app (as de `uiCapabilities`): só as quatro de leitura. */
+/** O leitor sobre as capacidades do app (as de `uiCapabilities`): só as seis de leitura. */
 export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unknown) => unknown>): VaultReader {
   const call = async <T>(cap: ReaderCapability, args: unknown): Promise<T> => (await caps[cap](args)) as T;
   return {
@@ -43,6 +49,8 @@ export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unk
     list: () => call("notes.list", undefined),
     get: (path) => call("notes.get", { path }),
     meetings: async () => (await call<{ meetings: MeetingNote[] }>("meetings.list", undefined)).meetings,
+    projects: async () => (await call<{ projects: ProjectInfo[] }>("projects.list", undefined)).projects,
+    projectStatus: (folder) => call("projects.status", { folder }),
   };
 }
 
@@ -54,4 +62,8 @@ export const EMPTY_READER: VaultReader = {
     throw Object.assign(new Error(`no note ${path}`), { code: "E_NOT_FOUND" });
   },
   meetings: async () => [],
+  projects: async () => [],
+  projectStatus: async (folder) => {
+    throw Object.assign(new Error(`${folder} não é um projeto`), { code: "E_NOT_FOUND" });
+  },
 };

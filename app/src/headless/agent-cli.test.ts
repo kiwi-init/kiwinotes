@@ -165,8 +165,49 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect(outside.at(-1).text).toMatch(/^erro da ferramenta: E_OUTSIDE_VAULT/);
     // No app, as de escrita (spec #8356) vêm junto.
     expect((await ask("/ferramentas")).at(-1).text).toBe(
-      "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, notes_create, notes_append, notes_write",
+      "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write",
     );
+    await invoke("agent.disable");
+  }, 60_000);
+
+  test("o projeto marcado pela CLI (spec #9874): o agente falso vê como ele está, e não consegue marcar nem desmarcar", async () => {
+    await invoke("agent.enable");
+    await invoke("agent.download");
+    await until(async () => (await invoke("agent.status")).json!.value.adapter.phase === "ready");
+    const PLANO = "# Plano\n\n## Fazer\n\n- [ ] escrever o spec\n- [x] abrir a issue\n- [ ] testar\n\n```md\n- [ ] dentro do código não conta\n```\n";
+    expect((await invoke("notes.create", { folder: "Clientes/Acme", title: "Plano", content: PLANO })).json!.ok).toBe(true);
+
+    // A CLI marca: a nota com o nome da pasta nasce só com o título.
+    const marked = (await invoke("projects.mark", { folder: "Clientes/Acme" })).json!;
+    expect(marked).toMatchObject({ ok: true, value: { created: true, project: { name: "Acme", folder: "Clientes/Acme", main: "Clientes/Acme/Acme.md", notes: 2 } } });
+    expect((await invoke("notes.get", { path: "Clientes/Acme/Acme.md" })).json!.value.content).toBe("# Acme\n");
+
+    const ask = async (text: string) => {
+      const id = (await invoke("agent.ask", { text })).json!.value.id as string;
+      await until(async () => (await agentEvents()).some((e) => e.event === "agent.turn" && e.payload.id === id && (e.payload.type === "done" || e.payload.type === "error")));
+      return (await agentEvents()).filter((e) => e.event === "agent.turn" && e.payload.id === id).map((e) => e.payload);
+    };
+    const listed = JSON.parse((await ask("/tool projects_list {}")).at(-1).text);
+    expect(listed).toMatchObject({ total: 1, projetos: [{ nome: "Acme", pasta: "Clientes/Acme", notaPrincipal: "Clientes/Acme/Acme.md", notas: 2 }] });
+
+    const turn = await ask('/tool project_status {"projeto":"Acme"}');
+    const status = JSON.parse(turn.at(-1).text);
+    expect(status).toMatchObject({
+      projeto: "Acme",
+      pasta: "Clientes/Acme",
+      notaPrincipal: "Clientes/Acme/Acme.md",
+      sumario: [{ nivel: 1, titulo: "Acme" }],
+      tarefasAbertas: { total: 2, notas: 1, porNota: [{ path: "Clientes/Acme/Plano.md", abertas: 2 }] },
+    });
+    expect(status.recentes.map((n: { path: string }) => n.path).sort()).toEqual(["Clientes/Acme/Acme.md", "Clientes/Acme/Plano.md"]);
+    // O status ao vivo diz qual projeto foi visto.
+    expect(turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "project_status", target: "Acme" }));
+
+    // Marcar e desmarcar é da pessoa: o agente não tem essas ferramentas.
+    for (const name of ["projects_mark", "projects_unmark", "project_mark"]) {
+      expect((await ask(`/tool ${name} {"folder":"Clientes/Acme"}`)).at(-1).text).toMatch(/erro/);
+    }
+    expect((await invoke("projects.list")).json!.value.projects).toHaveLength(1);
     await invoke("agent.disable");
   }, 60_000);
 
