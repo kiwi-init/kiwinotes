@@ -220,7 +220,7 @@ não atrasa a primeira tecla e não inicia gravação.
 
 | situação | gesto e duração | estado / símbolo |
 |---|---|---|
-| clique em repouso ou dormindo | `atender_clique`: começar o opa aprovado; cumprir só seus 320 ms mínimos e assentar em 220 ms, partindo da pose corrente | `acordou → ouvindo`; zZ sai, ! pode nascer em 300 ms e logo sair; ondas entram conforme a transição |
+| clique em repouso ou dormindo | `atender_clique`: começar o opa aprovado; cumprir só seus 320 ms mínimos e assentar em 220 ms, partindo da pose corrente | `acordou → ouvindo`; zZ sai, ! pode nascer em 300 ms e logo sair; `voz=null` mantém todas as ondas ausentes durante a digitação |
 | a pessoa digita ou pausa para pensar | círculos atentos, orelhas orientam uma por vez nos intervalos já definidos, sem acompanhar teclas | manter `ouvindo`, `voz=null`; exposição0,66 e nenhuma onda; sem pulsar névoa ou brilho a cada tecla |
 | envio do texto | não inventar uma etapa de processamento nem replay do opa | host informa `thinking` ou `agindo`; retirar ondas e entrar no símbolo daquele estado |
 | fechar ou cancelar composição sem envio, estando o agente ocioso | assentar em 240 ms e rearmar agendadores | voltar a repouso, sem pronto nem erro; o host cuida do rascunho |

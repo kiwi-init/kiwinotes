@@ -13,6 +13,7 @@ import {
   HalfFloatType,
 } from "three";
 import referenceUrl from "./assets/reference.webp";
+import eyeFreeUrl from "./assets/reference-no-eyes.webp";
 import protectionUrl from "./assets/material-mask.webp";
 import {
   FogDynamics,
@@ -31,6 +32,8 @@ export interface FogOptions {
   idleFPS?: number;
   densityScale?: 1 | 0.5 | 0.25;
   inputs?: Partial<FogInputs>;
+  /** Static composition option for the vector-eye layer; not an animation input. */
+  eyes?: "reference" | "hidden";
 }
 export interface FogStats {
   backend: string;
@@ -56,7 +59,8 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     intervals: [],
   };
   const image = document.createElement("img");
-  image.src = referenceUrl;
+  const selectedReference = options.eyes === "hidden" ? eyeFreeUrl : referenceUrl;
+  image.src = selectedReference;
   image.alt = "Kiwi-cat";
   image.width = width;
   image.height = height;
@@ -264,7 +268,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
       ? "webgpu"
       : "webgl2";
     const [reference, protection] = await Promise.all(
-      [referenceUrl, protectionUrl].map((url) =>
+      [selectedReference, protectionUrl].map((url) =>
         new TextureLoader().loadAsync(url),
       ),
     );
@@ -294,7 +298,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     densityMesh = new Mesh(new PlaneGeometry(2, 2), density.material);
     densityMesh.frustumCulled = false;
     densityScene.add(densityMesh);
-    material = fogMaterial(reference!, protection!, densityTarget.texture);
+    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden");
     scene = new Scene();
     camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     mesh = new Mesh(new PlaneGeometry(2, 2), material.material);
