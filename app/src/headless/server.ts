@@ -346,6 +346,21 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
           return { id, ok: false, code: typeof code === "string" ? code : "E_FAILED", message: e instanceof Error ? e.message : String(e) };
         }
       }
+      case "hubView": {
+        // A janela principal à vista, ou não (o WebKit headless não tem foco de janela): com ela à vista, o gato é o do
+        // canto, e o overlay não toma o lugar dele (spec #9810). Para as provas do hub.
+        if (typeof msg.view !== "boolean") return { id, ok: false, code: "E_BAD_ARGS", message: "view must be a boolean" };
+        catOverlay?.setHubInView(msg.view);
+        return { id, ok: true, value: { view: msg.view } };
+      }
+      case "agentTalk": {
+        // O atalho Control (spec #9876) sem o mic nem a tecla: o helper toca o WAV (`say`) como uma fala ao agente, com
+        // os mesmos eventos `agent.*` da tecla segurada. Só com o helper em KIWI_DEBUG=1 (o `debug.transcribe`).
+        if (!session) return { id, ok: false, code: "E_NO_HELPER", message: "started with --no-helper" };
+        if (typeof msg.wav !== "string") return { id, ok: false, code: "E_BAD_ARGS", message: "wav must be a path" };
+        const r = await session.sidecar.send({ type: "debug.transcribe", path: msg.wav, target: "agent" });
+        return r.ok ? { id, ok: true, value: { playing: true } } : { id, ok: false, code: "E_HELPER", message: r.error ?? "failed" };
+      }
       case "subscribe": {
         const topics = new Set((Array.isArray(msg.topics) ? msg.topics : ["events"]).filter((t): t is Topic => t === "events" || t === "logs"));
         if (msg.backlog !== false) for (const t of topics) for (const line of backlog[t]) out(s).line(JSON.stringify(line));

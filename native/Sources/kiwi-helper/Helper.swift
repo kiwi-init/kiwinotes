@@ -1242,8 +1242,7 @@ final class Helper {
                 emit("agent.record.started", ["reason": "debug"])
                 emit("agent.listening", ["latched": false])
                 agentConfirmed = true
-                emit("agent.record.stopping", ["mode": "debug"])
-                return finishAgentRecording(samples, reason: "debug", mode: "debug", lost: nil, releasedAt: nil)
+                return playAgentDebug(samples)
             }
             guard target == "note" else { return reply(id, ok: false, error: "invalid_value") }
             started["target"] = "note"
@@ -1254,6 +1253,30 @@ final class Helper {
         emit("record.started", started)
         overlay.set(.listening)
         finishRecording(samples, reason: "debug", mode: "debug")
+    }
+
+    /// Spec #9876: the WAV plays in real time, like a key held while talking: its level goes out as `audio.level` (the
+    /// waves), at the mic's rate, and then the listening ends and the transcription runs.
+    private func playAgentDebug(_ samples: [Float]) {
+        var meter = LevelMeter()
+        let step = Int(AudioCapture.sampleRate / 30)
+        var at = 0
+        func tick() {
+            guard recordingTarget == .agent else { return } // cancelled meanwhile
+            guard at < samples.count else {
+                emit("agent.record.stopping", ["mode": "debug"])
+                catOverlayVoice(nil)
+                return finishAgentRecording(samples, reason: "debug", mode: "debug", lost: nil, releasedAt: nil)
+            }
+            let end = min(at + step, samples.count)
+            for level in meter.push(Array(samples[at..<end])) {
+                emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
+                catOverlayVoice(Double(level))
+            }
+            at = end
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 30, execute: tick)
+        }
+        tick()
     }
 
     /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, notesShortcut?, microphone?}` (ADR 0001; `microphone`:
