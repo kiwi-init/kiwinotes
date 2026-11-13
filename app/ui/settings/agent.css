@@ -307,7 +307,7 @@
 .kn-usage-meta { display: block; color: var(--text-2); font-size: var(--text-xs, 0.85em); }
 
 /* O Modelo de nota (spec #11102): a lista dos blocos ao lado do desenho grande, que é só forma. */
-.kn-nm { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.kn-nm { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-top: 0.5px solid var(--border); }
 .kn-nm-head { display: flex; flex-direction: column; gap: 2px; }
 .kn-nm-grid { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1.1fr); gap: var(--space-4); align-items: start; }
 .kn-nm-blocks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
