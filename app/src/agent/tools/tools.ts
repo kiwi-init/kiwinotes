@@ -624,7 +624,7 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
       if (guard && s.project.main !== null) {
         const main = await reader.get(s.project.main).catch(() => null);
         // Sem conseguir ler de novo (a nota mudou ou sumiu no meio), o sumário não vai: nunca o do texto sem o filtro.
-        const headings = main ? markdownStructure(seen(guard, main.path, main.content)).headings : [];
+        const headings = main ? markdownStructure(await seen(main.path, main.content)).headings : [];
         s.outlineTotal = headings.length;
         s.outline = headings.slice(0, STATUS_OUTLINE_MAX).map((h) => ({ level: h.level, title: h.title }));
         if (!main) unread = true;

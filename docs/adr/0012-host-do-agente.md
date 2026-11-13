@@ -225,7 +225,7 @@ O trecho em que o detector fica em dúvida não é mais segurado sempre: o Kiwi 
 - **A leitura espera** até 2 minutos (`SecretGuard.decide`), e o servidor de ferramentas deixa o prazo da conexão explícito (`idleTimeout: 150`). Sem resposta no prazo, se o agente desiste da chamada ou se o pedido é cancelado, o trecho é segurado, o pedido segue e a dúvida fica no registro, só com a impressão digital, a máscara, a nota e a linha, para a pessoa responder depois na Atividade.
 - **A dúvida do texto do pedido** é decidida no `runTurn`, antes de o texto ir ao agente; o registro guarda o pedido como ele foi.
 - **A resposta é lembrada** por uma impressão digital com chave (`src/guardrail/answers.ts`): `HMAC-SHA256` com uma chave do app (`<dados>/agent/guardrail.key`, 0600), em `<dados>/agent/guardrail-answers.json`. O trecho nunca é escrito: sem a chave, não se chega a ele nem por tentativa. "O que você já respondeu", em Ajustes › Agente, mostra a máscara e desfaz.
-- **O trecho só sai pela capacidade `agent.question`,** para a janela; o evento `agent.questionChanged` leva só os ids (contrato 1.48.0).
+- **O trecho só sai pela capacidade `agent.question`,** para a janela; o evento `agent.questionChanged` leva só os ids (contrato 1.49.0).
 - O que o detector tem certeza que é segredo nunca é perguntado. A notificação com a janela fora da vista é o spec #9839.
 
 ## Plano B: abrir o Claude Code direto, sem o adaptador
