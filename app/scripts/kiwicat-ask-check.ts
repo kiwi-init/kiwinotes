@@ -131,13 +131,26 @@ try {
 
   // 8. Pelo teclado: o gato é um botão com nome; Enter e Espaço abrem.
   assert.equal(await p.locator(".kn-kiwicat-hit").getAttribute("aria-label"), "Falar com o agente");
-  await p.locator(".kn-kiwicat-hit").focus(); await p.keyboard.press("Enter"); await p.waitForSelector(".kn-cat-ask");
+  // Chega pelo Tab, não pelo focus(): no WebKit o Tab pula um <button> sem tabIndex (revisão da T10872). Começa sem
+  // foco (o começo da página) e anda pelo Tab até o gato.
+  await p.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  let reached = false;
+  for (let i = 0; i < 60 && !reached; i++) {
+    await p.keyboard.press("Tab");
+    reached = await p.evaluate(() => !!document.activeElement?.classList.contains("kn-kiwicat-hit"));
+  }
+  assert.ok(reached, "Tab reaches the cat");
+  await p.keyboard.press("Enter"); await p.waitForSelector(".kn-cat-ask");
+  // Dentro do campo, o Tab passa do texto ao "Mandar".
+  await p.keyboard.type("oi"); await p.keyboard.press("Tab");
+  assert.ok(await p.evaluate(() => !!document.activeElement?.classList.contains("kn-cat-ask-send")), "Tab reaches Mandar");
+  await p.locator(".kn-cat-ask-field").fill("");
   await p.keyboard.press("Escape"); await p.waitForSelector(".kn-cat-ask", { state: "detached" });
   // Aberto pelo teclado no gato, o Esc devolve o foco ao gato, para seguir pelo teclado.
   assert.ok(await p.evaluate(() => document.activeElement?.classList.contains("kn-kiwicat-hit")));
   await p.keyboard.press("Space"); await p.waitForSelector(".kn-cat-ask");
   await p.keyboard.press("Escape");
-  report.checks.push("keyboard: a named button, Enter and Space open");
+  report.checks.push("keyboard: Tab reaches the named cat button and Mandar; Enter and Space open");
 
   report.page = w.report; assert.deepEqual(w.report.problems, []);
   await w.close();

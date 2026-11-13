@@ -113,6 +113,11 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
         ref={hit}
         type="button"
         className="kn-kiwicat-hit"
+        // No WebKit (o app e o Safari), o Tab pula um <button> sem tabIndex: com ele, o gato entra na ordem do Tab.
+        tabIndex={0}
+        // Com o tabIndex, o clique do mouse passaria o foco ao gato (e o anel ficaria nele): o mousedown não leva o foco,
+        // e ele volta para onde estava quando o campo fecha.
+        onMouseDown={(e) => e.preventDefault()}
         aria-label="Falar com o agente"
         aria-haspopup="dialog"
         aria-expanded={asking}

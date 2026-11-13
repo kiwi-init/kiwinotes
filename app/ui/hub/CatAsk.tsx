@@ -75,6 +75,7 @@ export function CatAsk(p: {
           <button
             type="button"
             className="kn-cat-ask-link"
+            tabIndex={0}
             onClick={() => {
               p.onCancelRequest();
               // O aviso some com o pedido cancelado, e o botão com ele: o foco volta ao texto, e o Esc segue fechando.
@@ -91,7 +92,7 @@ export function CatAsk(p: {
         </p>
       ) : null}
       <div className="kn-cat-ask-actions">
-        <button type="button" className="kn-cat-ask-send" disabled={!ok} onClick={send}>
+        <button type="button" className="kn-cat-ask-send" tabIndex={0} disabled={!ok} onClick={send}>
           Mandar
         </button>
       </div>
