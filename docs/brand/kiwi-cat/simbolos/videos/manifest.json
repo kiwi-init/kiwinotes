@@ -1,0 +1,162 @@
+{
+  "task": "T10437",
+  "scope": "actual module RGBA at controlled 30Hz, two theme renderers sampled sequentially; not performance",
+  "fps": 30,
+  "sameTimeline": true,
+  "scenes": [
+    {
+      "state": "dormindo",
+      "seconds": 6,
+      "uniqueFrames": 160,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1440,
+            "height": 880,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "314848"
+        }
+      },
+      "sha256": "9e691c84747e0e02c98ba0f90fe3cc6532a13ac8b5414b9c079ff56086f1599b"
+    },
+    {
+      "state": "acordou",
+      "seconds": 3,
+      "uniqueFrames": 70,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1440,
+            "height": 880,
+            "r_frame_rate": "30/1",
+            "nb_frames": "90"
+          }
+        ],
+        "format": {
+          "duration": "3.000000",
+          "size": "278864"
+        }
+      },
+      "sha256": "2a9737509a5218c8ca8c765ff397a3338bc87aa4331141a689b9ed549d536890"
+    },
+    {
+      "state": "ouvindo",
+      "seconds": 8,
+      "uniqueFrames": 220,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1440,
+            "height": 880,
+            "r_frame_rate": "30/1",
+            "nb_frames": "240"
+          }
+        ],
+        "format": {
+          "duration": "8.000000",
+          "size": "644078"
+        }
+      },
+      "sha256": "21c9f013f704c0a5d7a27863b54b184331521cb000b7181440ec5131d45a4fed"
+    },
+    {
+      "state": "thinking",
+      "seconds": 6,
+      "uniqueFrames": 160,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1440,
+            "height": 880,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "433607"
+        }
+      },
+      "sha256": "25c4696a95cd1e663d5a17f12c2d40fdafe45372987f466b554cb8ffb0388db2"
+    },
+    {
+      "state": "agindo",
+      "seconds": 6,
+      "uniqueFrames": 160,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1440,
+            "height": 880,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "489947"
+        }
+      },
+      "sha256": "7292b4158cc057633b373452d90d1f47b7222e4d504f3e56d511852e3ebda351"
+    },
+    {
+      "state": "pronto",
+      "seconds": 2.4,
+      "uniqueFrames": 44,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1440,
+            "height": 880,
+            "r_frame_rate": "30/1",
+            "nb_frames": "72"
+          }
+        ],
+        "format": {
+          "duration": "2.400000",
+          "size": "203755"
+        }
+      },
+      "sha256": "23b5992659f5f5c474924ad6edc6fd7bb079b8bbbcd0243c71bfade8eeb0c7a9"
+    },
+    {
+      "state": "erro",
+      "seconds": 6,
+      "uniqueFrames": 160,
+      "probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "width": 1440,
+            "height": 880,
+            "r_frame_rate": "30/1",
+            "nb_frames": "180"
+          }
+        ],
+        "format": {
+          "duration": "6.000000",
+          "size": "416512"
+        }
+      },
+      "sha256": "b7d40564fc74e84d14916d67ff0db5e2b9ede985f8cc52ad38e765b4b2158a0a"
+    }
+  ]
+}
