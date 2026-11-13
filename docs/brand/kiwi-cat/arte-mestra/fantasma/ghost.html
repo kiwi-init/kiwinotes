@@ -75,9 +75,9 @@ void main() {
   float glow = 0.45 * exp(-max(d0 + 20.0, 0.0) / 100.0);
   float ring = exp(-pow((ds - 150.0) / 170.0, 2.0)) * (0.16 + 0.74 * smoothstep(1350.0, 2150.0, q.y));
   // a density floor near the core, all the way round (also in the V and on the left of the head): no gaps
-  float floorD = 0.44 * exp(-max(ds, 0.0) / 280.0);
+  float floorD = 0.44 * exp(-max(ds, 0.0) / 280.0) * (1.0 - smoothstep(180.0, 420.0, ds));   // near the core only
   float halo = max(glow + 0.85 * ring, floorD) * breath * (0.92 + 0.16 * (n1 - 0.5));
-  halo *= smoothstep(0.0, 260.0, min(min(p.x, 2048.0 - p.x), min(p.y, 2560.0 - p.y)));   // zero at the box's edge
+  halo *= smoothstep(0.0, 340.0, min(min(p.x, 2048.0 - p.x), min(p.y, 2560.0 - p.y)));   // zero at the box's edge
   vec3 mist = vec3(0.72, 0.68, 0.82);                        // the v2 lavender grey
   float haloA = clamp(halo, 0.0, 1.0);
   // the colour: an arc inside the head along the skull, from the left ear down to the left cheek, fading to the
