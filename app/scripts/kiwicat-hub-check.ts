@@ -28,6 +28,10 @@ const ctx: UiContext = { data, send: async msg => { const r = await request(data
     c.write({ id: 0, cmd: "subscribe", topics, follow: true, backlog: false }); return () => c.close();
   } };
 async function invoke(cap: string, args: unknown = {}) { const r = await ctx.send({ cmd: "invoke", cap, args }); assert.equal(r.ok, true, JSON.stringify(r)); return r.value as any; }
+// A tinta dos símbolos (T10737): a cor da camada que tem os símbolos do gato.
+const INK = { dark: "rgb(255, 255, 255)", light: "rgb(23, 23, 28)" } as const;
+const inkOf = (page: import("playwright-core").Page) =>
+  page.evaluate(() => { const s = document.querySelector(".kn-kiwicat [data-symbol]"); return s?.parentElement ? getComputedStyle(s.parentElement).color : null; });
 const browser = await webkit.launch({ headless: true });
 const report: any = { scope: "WebKit headless hub with fake ACP agent; no native app", checks: [] };
 try {
@@ -78,6 +82,8 @@ try {
   for (const theme of ["dark", "light"] as const) {
     const big = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 1000, height: 740, motion: true, browser: "webkit", query: { section: "notes" } });
     const q = big.page; await q.waitForSelector('.kn-kiwicat[data-ready="true"]'); await q.waitForTimeout(1500);
+    // A tinta conforme o tema da janela (T10737): sem o background, o claro saía com os símbolos brancos.
+    assert.equal(await inkOf(q), INK[theme], `ink in ${theme}`);
     const clip = await q.locator(".kn-kiwicat").evaluate(c => { const r = c.getBoundingClientRect(); return { x: r.x - 12, y: r.y - 12, width: r.width + 24, height: r.height + 24 }; });
     await q.screenshot({ path: join(out, `cat-${theme}-repouso.png`), clip });
     await invoke("agent.ask", { text: "/lento" }); await q.waitForSelector('.kn-kiwicat[data-state="agindo"]'); await q.waitForTimeout(600);
@@ -86,6 +92,15 @@ try {
     await big.close();
   }
   report.checks.push("still prints at full size, rest and working, dark and light");
+  // A troca de tema ao vivo (a Aparência ou o macOS mudam o data-theme): a tinta acompanha, sem remontar o gato.
+  await p.evaluate(() => { (window as any).__inkCanvas = document.querySelector(".kn-kiwicat canvas"); });
+  for (const side of ["light", "dark"] as const) {
+    await p.evaluate(t => { document.documentElement.dataset.theme = t; }, side);
+    const ink: string = INK[side];
+    await p.waitForFunction((want: string) => { const s = document.querySelector(".kn-kiwicat [data-symbol]"); return !!s?.parentElement && getComputedStyle(s.parentElement).color === want; }, ink, { timeout: 3000 });
+  }
+  assert.ok(await p.evaluate(() => (window as any).__inkCanvas === document.querySelector(".kn-kiwicat canvas")));
+  report.checks.push("symbol ink follows the theme, also when it changes live");
   await invoke("agent.disable"); await p.waitForSelector(".kn-kiwicat", { state: "detached" });
   report.checks.push("show switch and agent disable unmount");
   report.page = w.report; report.requests = requested; assert.deepEqual(w.report.problems, []);

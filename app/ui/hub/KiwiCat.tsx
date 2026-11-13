@@ -5,6 +5,11 @@ import type { createKiwiCat } from "../kiwicat/cat";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
+/**
+ * A tinta dos símbolos segue o tema da janela (T10737, #428): escura no claro, branca no escuro. O tema resolvido fica
+ * no `data-theme` do <html> (o `applyAppearance`), e muda sem recarregar quando a pessoa troca a Aparência ou o macOS.
+ */
+const symbolBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
   const handle = useRef<Cat | undefined>(undefined);
   const reducedRef = useRef(reduced); reducedRef.current = reduced;
@@ -21,10 +26,10 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
       try {
         const { createKiwiCat } = await import("../kiwicat/cat");
         if (gone || document.hidden) return;
-        const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, outline: true,
+        const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, background: symbolBackground(),
           inputs: { estado: activity.state, cor: "claude", voz: null, parado: reducedRef.current } });
         if (gone) { await next.dispose(); return; }
-        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current }); cat.visibility(document.hidden); state(); el.dataset.ready = "true";
+        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current }); cat.setBackground(symbolBackground()); cat.visibility(document.hidden); state(); el.dataset.ready = "true";
       } catch { el.replaceChildren(); }
       finally { loading = false; }
     }
@@ -36,9 +41,11 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
       } else void create();
     };
     document.addEventListener("visibilitychange", visibility);
+    const theme = new MutationObserver(() => cat?.setBackground(symbolBackground()));
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     void create();
     return () => {
-      gone = true; off(); document.removeEventListener("visibilitychange", visibility);
+      gone = true; off(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility);
       handle.current = undefined;
       if (cat) void cat.dispose();
     };
