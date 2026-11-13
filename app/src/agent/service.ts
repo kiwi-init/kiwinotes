@@ -136,9 +136,10 @@ export class AgentService {
   private tools: KiwiToolServer | null = null;
   /**
    * O filtro do guardrail (spec #9818): um por vida do app. A sessão do agente continua de uma abertura para outra, e o
-   * guard também; com o app reaberto, um marcador de antes vira "de outra sessão".
+   * guard também; com o app reaberto, um marcador de antes vira "de outra sessão". Desligar o agente começa um guard
+   * novo: os segredos da sessão saem da memória (revisão do T9833).
    */
-  private readonly guard = new SecretGuard();
+  private guard = new SecretGuard();
   /** As notas do desfazer (spec #9353), pelas capacidades das janelas. */
   private undoNotes: UndoNotes | null = null;
   /** Um desfazer por vez: dois ao mesmo tempo não anotam o registro um por cima do outro. */
@@ -365,6 +366,7 @@ export class AgentService {
     await this.d.settings.save({ enabled: false });
     this.download?.abort.abort();
     await this.stopProgram("desligado");
+    this.guard = new SecretGuard();
     this.emitStatus();
     return this.status();
   }

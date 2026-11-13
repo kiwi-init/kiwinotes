@@ -169,6 +169,12 @@ describe("as ferramentas com o filtro (spec #9818)", () => {
     const hits = ok.value.resultados as { path: string; trecho: string }[];
     expect(hits.map((h) => h.path)).toContain("Acessos.md");
     for (const h of hits) expect(h.trecho).not.toContain(PWD);
+    // Um marcador na borda do trecho sai inteiro, nunca pela metade (revisão do T9833).
+    const t2 = vault({ "Borda.md": `servidor ${"palavra ".repeat(16)}senha: ${PWD} e depois ${"mais ".repeat(40)}\n` });
+    for (const h of (await t2.tool("notes_search", { query: "servidor" })).value.resultados as { trecho: string }[]) {
+      expect((h.trecho.match(/‹/g) ?? []).length).toBe((h.trecho.match(/›/g) ?? []).length);
+      expect(h.trecho).toMatch(/‹segredo 1 · k7q2›/);
+    }
     // Procurar o próprio segredo não confirma nada.
     const oracle = await t.tool("notes_search", { query: PWD });
     expect(oracle.value.resultados).toEqual([]);

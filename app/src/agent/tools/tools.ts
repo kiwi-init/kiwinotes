@@ -414,8 +414,15 @@ const queryTerms = (q: string) => [...new Set(fold(q).split(/[^\p{L}\p{N}_-]+/u)
 function snippetOf(text: string, terms: string[]): string {
   const f = fold(text);
   const at = terms.map((t) => f.indexOf(t)).filter((i) => i >= 0).sort((a, b) => a - b)[0] ?? 0;
-  const start = Math.max(0, at - 80);
-  const end = Math.min(text.length, at + 160);
+  let start = Math.max(0, at - 80);
+  let end = Math.min(text.length, at + 160);
+  // Nunca meio marcador do filtro (revisão do T9833): a borda que cai dentro de um vai para fora dele.
+  for (const m of text.matchAll(/‹segredo [^›\n]{0,40}›/g)) {
+    const a = m.index!;
+    const b = a + m[0].length;
+    if (a < start && start < b) start = a;
+    if (a < end && end < b) end = b;
+  }
   return `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ").trim()}${end < text.length ? "…" : ""}`;
 }
 
