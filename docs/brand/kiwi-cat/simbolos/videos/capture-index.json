@@ -1094,7 +1094,7 @@
       "themes": [
         {
           "theme": "dark",
-          "dir": "/var/folders/3z/tyd_j34x15z6bhvn108d10r80000gn/T/kiwi-T10437-video-kj85QZ/thinking-dark",
+          "dir": "/var/folders/3z/tyd_j34x15z6bhvn108d10r80000gn/T/kiwi-T10437-video-orQeN3/thinking-dark",
           "frames": [
             "000000.png",
             "000001.png",
@@ -1281,7 +1281,7 @@
         },
         {
           "theme": "light",
-          "dir": "/var/folders/3z/tyd_j34x15z6bhvn108d10r80000gn/T/kiwi-T10437-video-kj85QZ/thinking-light",
+          "dir": "/var/folders/3z/tyd_j34x15z6bhvn108d10r80000gn/T/kiwi-T10437-video-orQeN3/thinking-light",
           "frames": [
             "000000.png",
             "000001.png",
@@ -1466,7 +1466,11 @@
           ],
           "uniqueFrames": 160
         }
-      ]
+      ],
+      "revision": 2,
+      "rawManifest": "/var/folders/3z/tyd_j34x15z6bhvn108d10r80000gn/T/kiwi-T10437-video-orQeN3/capture-full.json",
+      "rawManifestSHA256": "842e214d07edde622214b9021a7d2f7e8c34fa0945e0c7c3c85c14973b9e875f",
+      "sourceCommit": "d7c478e"
     },
     {
       "state": "agindo",
@@ -2392,5 +2396,6 @@
         }
       ]
     }
-  ]
+  ],
+  "thinkingRevision": 2
 }

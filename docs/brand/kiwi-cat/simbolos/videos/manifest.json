@@ -87,10 +87,10 @@
         ],
         "format": {
           "duration": "6.000000",
-          "size": "433607"
+          "size": "431947"
         }
       },
-      "sha256": "25c4696a95cd1e663d5a17f12c2d40fdafe45372987f466b554cb8ffb0388db2"
+      "sha256": "dee760793b6765c0d470322eb990bb740b0bdfd6d2d1d501c4347b80543adc5f"
     },
     {
       "state": "agindo",
@@ -158,5 +158,7 @@
       },
       "sha256": "b7d40564fc74e84d14916d67ff0db5e2b9ede985f8cc52ad38e765b4b2158a0a"
     }
-  ]
+  ],
+  "thinkingRevision": 2,
+  "sameThinkingTimelineAsR1": true
 }

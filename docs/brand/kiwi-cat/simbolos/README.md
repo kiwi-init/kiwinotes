@@ -58,3 +58,35 @@ conferem com a fonte medida. CPU mede só a demo headless, não o app/helper.
 O CI do runtime `71b282b` passou Bun (incluindo verificações de UI),
 typecheck e Swift no run43493425473. O commit final acrescenta somente
 relatórios e documentação; seu CI também deve ser conferido antes do merge.
+
+
+## R2: furos reais no balão
+
+A revisão #10606 pediu que os pontos revelassem qualquer fundo, em vez de
+serem pintados com uma cor fixa. A nuvem agora é um caminho composto com
+as mesmas quatro circunferências, retângulo e duas bolinhas da referência.
+A máscara de luminância corta os três pontos, com a opacidade animada do
+canal existente. Um ID por instância evita compartilhar máscaras entre gatos.
+
+A pintura única é necessária no WebKit: quando a máscara parcial era posta
+no grupo de círculos sobrepostos, o recorte era aplicado várias vezes e a
+abertura ficava fraca. O teste de alfa pegou isso; a nuvem foi unida antes
+de aplicar a máscara. A primeira prova que falhou permanece em
+`/tmp/kiwi-T10437-holes-r2`; a versão correta em
+`/tmp/kiwi-T10437-holes-r2b` passou as12capturas.
+
+`thinking-furos-verificacao.json` confere alfa esperado0/166/255 (tolerância1)
+para aberturas1/0,35/0, nas duas tintas. Os pixels no centro dos furos
+coincidem com o módulo sem balão, sobre azul e sobre capturas reais do hub.
+`thinking-furos-hub.webp` é composição com capturas headless existentes da
+T9708, não teste de integração. O lead aprovou os furos em #10655.
+
+Só o vídeo `thinking.mp4` foi refeito. A timeline é idêntica à R1 e os hashes
+dos outros seis MP4 continuam iguais. O índice aponta o raw de cada revisão;
+a R1 do thinking está guardada em `/tmp/kiwi-T10437-thinking-video-r1.mp4`.
+A folha e a tira foram atualizadas apenas no thinking. Typecheck,33testes,
+runtime e o teste de alinhamento com altura de linha200px passaram de novo.
+
+CPU/FPS continuam sendo as medições da R1, antes da máscara, sem afirmar
+que os hashes da R2 são os mesmos. O revisor dispensou nova medição e a
+regravação dos outros seis vídeos em #10606.
