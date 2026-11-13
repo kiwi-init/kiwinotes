@@ -3,14 +3,15 @@
 // Nada chama o macOS: nem notificação, nem o pedido de permissão.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { fakeRegistry } from "../agent/fake/registry.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
-const root = mkdtempSync(path.join(tmpdir(), "kn-notice-cli-"));
+// O tempDir apaga de novo no fim da suíte: o headless que sai ainda grava nos dados e recriava a pasta (CI do #442).
+const root = tempDir("kn-notice-cli-");
 const data = path.join(root, "data");
 const reg = fakeRegistry([
   { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "// adaptador falso" } },
@@ -32,7 +33,6 @@ const env = {
 afterAll(async () => {
   await cli(["stop"]);
   reg.stop();
-  rmSync(root, { recursive: true, force: true });
 });
 
 async function cli(args: string[]): Promise<{ code: number; json: Record<string, any> | null }> {
