@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T9708: coverage from approved source layers, never from coat brightness.
+"""T9708: coverage from approved source layers, not brightness alone.
 Only generates new cutout files; opaque approved textures remain untouched.
 """
 from pathlib import Path
@@ -20,6 +20,9 @@ v=np.clip((observed-.08)/(.20-.08),0,1)
 # The layer alpha contains luminous feather outside the coat. Keep geometric
 # coverage only where the observed material is dark, not that luminous fringe.
 coat=coat*(1-v*v*(3-2*v))
+coat=np.asarray(Image.fromarray(np.uint8(np.rint(coat*255))).filter(ImageFilter.GaussianBlur(10)),np.float32)/255
+v=np.clip((coat-.003)/(.025-.003),0,1)
+coat=coat*v*v*(3-2*v)
 coat=np.where(coat>.98,1,coat)
 light=np.asarray(Image.open(DEST/'reference-no-eyes.webp').convert('RGB'),np.float32).max(2)
 light=np.asarray(Image.fromarray(light).resize((640,800),Image.Resampling.BILINEAR),np.float32)/255
@@ -33,9 +36,14 @@ def box(a,axis,r=10):
     hi=[slice(None),slice(None)]; lo=hi.copy(); hi[axis]=slice(2*r+1,None);lo[axis]=slice(None,-2*r-1)
     return ((c[tuple(hi)]-c[tuple(lo)])/(2*r+1)).astype(np.float32)
 for _ in range(3): light=box(box(light,0),1)
+proximity=np.asarray(Image.fromarray(coat).resize((640,800),Image.Resampling.BILINEAR),np.float32)
+for _ in range(3): proximity=box(box(proximity,0,r=25),1,r=25)
+proximity=np.clip(proximity*3,0,1)
+# Gate only the support opacity of existing light; never add emission. This
+# prevents the remote, straight source-image tail from becoming a dark plate.
+light=np.maximum(light-32/255,0)/(1-32/255)*proximity
 light=np.asarray(Image.fromarray(light).resize((2048,2560),Image.Resampling.BILINEAR),np.float32)
 # Coverage support is smooth, rather than magnifying byte noise in faint light.
-light=np.maximum(light-32/255,0)/(1-32/255)
 Image.fromarray(np.uint8(np.rint(np.stack([coat,np.sqrt(light),np.zeros_like(coat)],2)*255))).save(DEST/'cutout-mask.webp',lossless=True,method=6)
 # Static fallback: output premultiplied reference / coverage as straight RGBA.
 for name in ['reference','reference-no-eyes']:
@@ -57,4 +65,4 @@ for name in ['reference','reference-no-eyes']:
     straight=np.divide(rgb,alpha[:,:,None],out=np.zeros_like(rgb),where=alpha[:,:,None]>0)
     rgba=np.dstack([np.clip(straight,0,1),alpha])
     Image.fromarray(np.uint8(np.rint(rgba*255))).save(DEST/(name+'-cutout.webp'),lossless=True,method=6)
-(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; smooth light above32/255 pedestal, sqrt encoded; prototype8pct side/bottom fade; straight-alpha static fallback'),indent=2)+'\n')
+(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; prototype8pct side/bottom fade; straight-alpha static fallback'),indent=2)+'\n')

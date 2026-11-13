@@ -60,7 +60,7 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
   const eyeNodes = [
     { cx: 802.823, cy: 1279.323, r: 68.251 },
     { cx: 1243.342, cy: 1279.308, r: 67.94 },
-  ].map(e => {
+  ].filter(() => !backdrop).map(e => {
     const outer = document.createElement("div");
     outer.style.cssText = `position:absolute;left:${e.cx / 2048 * 100}%;top:${e.cy / 2560 * 100}%;width:${e.r * 2 / 2048 * 100}%;height:${e.r * 2 / 2560 * 100}%;transform-origin:center;will-change:transform`;
     const disk = document.createElement("div"), happy = document.createElement("div"), asleep = document.createElement("div");
@@ -70,7 +70,6 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     const arc = (start: number, end: number) => path(points(64, u => { const a = (start + (end - start) * u) * Math.PI / 180; return [Math.cos(a), .1 + .55 * Math.sin(a)]; }), false);
     happy.innerHTML = wrap(`<path d="${arc(190, 350)}" stroke="white" stroke-width="${34 / e.r}" stroke-linecap="round" fill="none"/>`);
     asleep.innerHTML = wrap(`<path d="${arc(10, 170)}" stroke="white" stroke-width="${34 / e.r}" stroke-linecap="round" fill="none"/>`);
-    if (backdrop) outer.style.display = "none"; // Eyes sit on opaque coat; never add an eye halo.
     layer.append(outer);
     return { outer, disk, happy, asleep };
   });
