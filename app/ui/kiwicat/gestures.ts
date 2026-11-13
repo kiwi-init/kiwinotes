@@ -154,6 +154,10 @@ export class GestureMachine {
       this.transitionAt + this.transition > this.now ? this.transitionAt + this.transition : Infinity,
       this.resumed && this.resumed.at + .24 > this.now ? this.resumed.at + .24 : Infinity);
   }
+  get moving() {
+    return !this.inputs.parado && (this.visualState !== "repouso" || !!this.blink || !!this.look ||
+      this.now < this.transitionAt + this.transition || !!this.resumed && this.now < this.resumed.at + .24);
+  }
   private startBlink(t: number, second: boolean) {
     this.blink = { at: t, close: this.range(.24, .32), hold: this.range(.06, .1), open: this.range(.3, .44), second };
     this.nextBlink = Infinity;
@@ -347,7 +351,7 @@ export class GestureMachine {
     }
     return { state, eyes: pose, time: t, stateTime: age, symbol, symbolAlpha: clamp(alpha), symbolScale: scale,
       symbolY: y, progress, waves, dots: fading ? [...fading.dots] : dots, work: fading ? fading.work : cycle,
-      workOffsets: fading ? [...fading.workOffsets] : [...this.workOffsets],
+      workOffsets: fixed ? [0, 0, 0] : fading ? [...fading.workOffsets] : [...this.workOffsets],
       jitter: fixed ? [0, 0] : fading ? [...fading.jitter] : [2 * Math.sin(t * 19 + this.jitterPhase), 2 * Math.sin(t * 23 + this.jitterPhase + 1.1)] };
   }
 }

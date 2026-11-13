@@ -337,6 +337,10 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   return {
     stats,
     canvas,
+    /** Test clock only: timestamp the next input without forcing a GPU draw. */
+    seek(seconds: number) {
+      if (options.mode === "capture" && Number.isFinite(seconds)) elapsed = Math.max(elapsed, seconds);
+    },
     update(inputs: Partial<FogInputs>) {
       if (options.mode === "measure") advance();
       const previous = { ...state.inputs };
@@ -405,6 +409,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     return {
       stats,
       canvas: null,
+      seek(_seconds: number) {},
       update(_inputs: Partial<FogInputs>) {},
       capture(_seconds: number) {},
       visibility(hidden: boolean) {

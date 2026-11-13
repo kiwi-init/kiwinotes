@@ -2,7 +2,8 @@
 Only the old eye discs+5px change; no source asset is overwritten.
 """
 from pathlib import Path
-import importlib.util, hashlib,json
+import importlib.util, hashlib,json,sys
+sys.dont_write_bytecode = True
 import numpy as np
 from PIL import Image
 root=Path(__file__).resolve().parents[2]
