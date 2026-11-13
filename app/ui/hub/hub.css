@@ -222,5 +222,8 @@
   color: var(--text-2);
 }
 /* Persistent across panes; all pixels pass clicks to the content below. */
-.kn-kiwicat { position: absolute !important; right: 12px; bottom: 12px; width: 96px; height: 120px; z-index: 6; pointer-events: none; }
+.kn-kiwicat { position: absolute !important; right: 12px; bottom: 12px; width: 96px; height: 120px; z-index: 6; pointer-events: none;
+  /* Os olhos e os símbolos são <svg> inline: com a altura de linha do hub, eles desciam 8 px da caixa deles, e o recorte
+     do olho os escondia (o gato sem olhos, #10039). */
+  line-height: 0; }
 .kn-kiwicat * { pointer-events: none !important; }

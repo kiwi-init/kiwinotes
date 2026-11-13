@@ -50,6 +50,16 @@ try {
     await p.screenshot({ path: join(out, `${section}.png`) });
   }
   report.checks.push("120px, five sections, same canvas, click-through");
+  // Os olhos ficam na caixa deles: um <svg> inline descia com a altura de linha do hub e o recorte o escondia (#10039).
+  const eyes = await p.evaluate(() => [...document.querySelectorAll(".kn-kiwicat circle")].filter(c => c.getAttribute("r") === "1").map(c => {
+    const svg = c.closest("svg")!, disk = svg.parentElement!, a = svg.getBoundingClientRect(), b = disk.getBoundingClientRect();
+    const box = document.querySelector(".kn-kiwicat")!.getBoundingClientRect();
+    const inside = a.left >= box.left && a.right <= box.right && a.top >= box.top && a.bottom <= box.bottom;
+    return { dy: Math.abs(a.y - b.y), dx: Math.abs(a.x - b.x), w: a.width, opacity: getComputedStyle(disk).opacity, inside };
+  }));
+  assert.equal(eyes.length, 2);
+  for (const e of eyes) { assert.ok(e.dx < 0.5 && e.dy < 0.5, JSON.stringify(eyes)); assert.ok(e.w > 4); assert.ok(e.inside); assert.equal(e.opacity, "1"); }
+  report.checks.push("eyes inside their box, visible at rest");
   await invoke("agent.ask", { text: "/lento" });
   await p.waitForSelector('.kn-kiwicat[data-state="agindo"]');
   await p.screenshot({ path: join(out, "agindo.png") });
@@ -64,6 +74,18 @@ try {
   report.checks.push("fake tool, ready, error, cancellation");
   await invoke("settings.set", { kiwicat: { show: false } }); await p.waitForSelector(".kn-kiwicat", { state: "detached" });
   await invoke("settings.set", { kiwicat: { show: true } }); await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
+  // Prints parados em tamanho real (o gato com 120 px, em 2×), em repouso e em agindo, nos dois temas (#10039).
+  for (const theme of ["dark", "light"] as const) {
+    const big = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 1000, height: 740, motion: true, browser: "webkit", query: { section: "notes" } });
+    const q = big.page; await q.waitForSelector('.kn-kiwicat[data-ready="true"]'); await q.waitForTimeout(1500);
+    const clip = await q.locator(".kn-kiwicat").evaluate(c => { const r = c.getBoundingClientRect(); return { x: r.x - 12, y: r.y - 12, width: r.width + 24, height: r.height + 24 }; });
+    await q.screenshot({ path: join(out, `cat-${theme}-repouso.png`), clip });
+    await invoke("agent.ask", { text: "/lento" }); await q.waitForSelector('.kn-kiwicat[data-state="agindo"]'); await q.waitForTimeout(600);
+    await q.screenshot({ path: join(out, `cat-${theme}-agindo.png`), clip });
+    await q.waitForSelector('.kn-kiwicat[data-state="pronto"]'); await q.waitForTimeout(1500);
+    await big.close();
+  }
+  report.checks.push("still prints at full size, rest and working, dark and light");
   await invoke("agent.disable"); await p.waitForSelector(".kn-kiwicat", { state: "detached" });
   report.checks.push("show switch and agent disable unmount");
   report.page = w.report; report.requests = requested; assert.deepEqual(w.report.problems, []);
