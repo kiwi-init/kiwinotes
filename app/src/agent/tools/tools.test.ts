@@ -67,7 +67,7 @@ async function setup(extra: Record<string, string> = {}) {
   if (files["Projetos/Kiwi.md"] !== undefined) {
     const main = "Projetos/Kiwi.md";
     mkdirSync(path.join(root, ".kiwi"), { recursive: true });
-    const projects = [{ folder: "Projetos", main, mainIno: statSync(path.join(root, main)).ino }];
+    const projects = [{ folder: "Projetos", main, mainIno: statSync(path.join(root, main)).ino, folderIno: statSync(path.join(root, "Projetos")).ino }];
     writeFileSync(path.join(root, ".kiwi/projects.json"), `${JSON.stringify({ version: 1, projects }, null, 2)}\n`);
   }
   // Um segredo fora do cofre, e um link simbólico de dentro para ele.

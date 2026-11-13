@@ -101,17 +101,47 @@ describe("followProjects: o que muda por fora", () => {
     expect(followProjects([acme], { moves: new Map(), gone: ["Clientes/Acme/Acme.md"] }, now([], ["Clientes"]))).toEqual([]);
   });
 
-  test("com o app fechado (sem moves), a nota principal acha a pasta pelo inode", () => {
-    // A pasta renomeada: a mesma nota, com o mesmo nome, em outro lugar.
-    expect(followProjects([acme], none, now(["Arquivo/Acme/Acme.md"], ["Arquivo", "Arquivo/Acme"]), new Map([["Arquivo/Acme/Acme.md", 7]]))).toEqual([
-      { folder: "Arquivo/Acme", main: "Arquivo/Acme/Acme.md", mainIno: 7 },
+  test("com o app fechado (sem moves): a pasta pelo inode dela, e a nota principal pelo inode dela", () => {
+    const withDir: ProjectEntry = { ...acme, folderIno: 70 };
+    const dirs = (m: Record<string, number>) => (f: string) => m[f];
+    // A pasta renomeada: o mesmo inode de pasta.
+    expect(followProjects([withDir], none, now(["Arquivo/Acme/Acme.md"], ["Arquivo", "Arquivo/Acme"]), new Map([["Arquivo/Acme/Acme.md", 7]]), dirs({ "Arquivo/Acme": 70 }))).toEqual([
+      { folder: "Arquivo/Acme", main: "Arquivo/Acme/Acme.md", mainIno: 7, folderIno: 70 },
     ]);
-    // A nota principal renomeada dentro da pasta.
-    expect(followProjects([acme], none, now(["Clientes/Acme/Visão.md"], ["Clientes", "Clientes/Acme"]), new Map([["Clientes/Acme/Visão.md", 7]]))).toEqual([
-      { folder: "Clientes/Acme", main: "Clientes/Acme/Visão.md", mainIno: 7 },
-    ]);
+    // A nota principal renomeada dentro da pasta, que ficou onde estava.
+    expect(
+      followProjects([withDir], none, now(["Clientes/Acme/Visão.md"], ["Clientes", "Clientes/Acme"]), new Map([["Clientes/Acme/Visão.md", 7]]), dirs({ "Clientes/Acme": 70 })),
+    ).toEqual([{ folder: "Clientes/Acme", main: "Clientes/Acme/Visão.md", mainIno: 7, folderIno: 70 }]);
+    // A nota principal arrastada para uma pasta que já existia, e a do projeto apagada: o inode da pasta é outro.
+    expect(followProjects([withDir], none, now(["Inbox/Acme.md"], ["Inbox"]), new Map([["Inbox/Acme.md", 7]]), dirs({ Inbox: 99 }))).toEqual([]);
     // O mesmo inode numa nota de outro nome e fora da pasta não é a nota principal (o cofre veio de outro disco).
-    expect(followProjects([acme], none, now(["Outra/Coisa.md"], ["Outra"]), new Map([["Outra/Coisa.md", 7]]))).toEqual([]);
+    expect(followProjects([withDir], none, now(["Outra/Coisa.md"], ["Outra"]), new Map([["Outra/Coisa.md", 7]]), dirs({ Outra: 70 }))).toEqual([]);
+  });
+
+  test("notas arrastadas para uma pasta que já existia, e a do projeto apagada: o projeto acaba (revisão #10099)", () => {
+    const proj: ProjectEntry = { folder: "Proj", main: "Proj/Proj.md" };
+    const r = { moves: new Map([["Proj/ideia.md", "Inbox/ideia.md"]]), gone: ["Proj/Proj.md"] };
+    const after = now(["Inbox/ideia.md", "Inbox/velha.md"], ["Inbox"]);
+    // Sem o inode da pasta (um projeto de antes dele): a Inbox tem uma nota que não veio do projeto.
+    expect(followProjects([proj], r, after)).toEqual([]);
+    // Com o inode: o da Inbox é outro.
+    expect(followProjects([{ ...proj, folderIno: 5 }], r, after, new Map(), (f) => (f === "Inbox" ? 6 : undefined))).toEqual([]);
+    // Sem o inode, todas as notas indo para a mesma pasta nova, só com elas: é um rename, e o projeto segue.
+    const renamed = { moves: new Map([["Proj/ideia.md", "Novo/ideia.md"], ["Proj/Proj.md", "Novo/Proj.md"]]), gone: [] };
+    expect(followProjects([proj], renamed, now(["Novo/ideia.md", "Novo/Proj.md"], ["Novo"]))).toEqual([{ folder: "Novo", main: "Novo/Proj.md" }]);
+    // Metade para um lado, metade para outro: não é a pasta que mudou.
+    const split = { moves: new Map([["Proj/ideia.md", "A/ideia.md"], ["Proj/Proj.md", "B/Proj.md"]]), gone: [] };
+    expect(followProjects([proj], split, now(["A/ideia.md", "B/Proj.md"], ["A", "B"]))).toEqual([]);
+  });
+
+  test("a pasta renomeada por fora para dentro de outro projeto, ou da pasta das reuniões, leva o projeto embora", () => {
+    const b: ProjectEntry = { folder: "B", main: "B/B.md", folderIno: 2 };
+    const a: ProjectEntry = { folder: "A", main: "A/A.md", folderIno: 1 };
+    const intoA = { moves: new Map([["B/B.md", "A/B/B.md"]]), gone: [] };
+    const dirs = (f: string) => ({ A: 1, "A/B": 2, "Reuniões/B": 2 })[f];
+    expect(followProjects([a, b], intoA, now(["A/A.md", "A/B/B.md"], ["A", "A/B"]), new Map(), dirs, "Reuniões")).toEqual([{ ...a }]);
+    const intoMeetings = { moves: new Map([["B/B.md", "Reuniões/B/B.md"]]), gone: [] };
+    expect(followProjects([b], intoMeetings, now(["Reuniões/B/B.md"], ["Reuniões", "Reuniões/B"]), new Map(), dirs, "Reuniões")).toEqual([]);
   });
 
   test("nada mudou: igual, e o inode de agora é guardado", () => {
@@ -233,7 +263,14 @@ describe("marcar, listar, trocar a nota principal e desmarcar", () => {
     // A marcação fica no arquivo oculto do cofre, que não vira nota.
     expect(fileOf(root)).toEqual({
       version: 1,
-      projects: [{ folder: "Clientes/Acme", main: "Clientes/Acme/Acme.md", mainIno: statSync(path.join(root, "Clientes/Acme/Acme.md")).ino }],
+      projects: [
+        {
+          folder: "Clientes/Acme",
+          main: "Clientes/Acme/Acme.md",
+          mainIno: statSync(path.join(root, "Clientes/Acme/Acme.md")).ino,
+          folderIno: statSync(path.join(root, "Clientes/Acme")).ino,
+        },
+      ],
     });
     expect((await value("notes.list")).notes.map((n: { path: string }) => n.path)).not.toContainEqual(expect.stringContaining(".kiwi"));
 
@@ -301,6 +338,27 @@ describe("o projeto acompanha a pasta pelo app", () => {
     expect((await value("projects.list")).projects[0]).toMatchObject({ folder: "Apps/Kiwi Notes", main: "Apps/Kiwi Notes/Kiwi.md" });
     await value("notes.rename", { path: "Apps/Kiwi Notes/Kiwi.md", newPath: "Apps/Kiwi Notes/Visão.md" });
     expect((await value("projects.list")).projects[0]).toMatchObject({ folder: "Apps/Kiwi Notes", main: "Apps/Kiwi Notes/Visão.md" });
+  });
+
+  test("mover uma pasta que poria um projeto dentro de outro, ou na pasta das reuniões, é recusado, e nada muda (revisão #10099)", async () => {
+    const root = newRoot({ "A/A.md": "", "B/B.md": "", "Solta/C/C.md": "", "Reuniões/r.md": "" });
+    const { call, value } = open(root);
+    await value("projects.mark", { folder: "A" });
+    await value("projects.mark", { folder: "B" });
+    await value("projects.mark", { folder: "Solta/C" });
+    const before = notesOf(root);
+    expect(await call("folders.move", { path: "B", parent: "A" })).toMatchObject({ ok: false, code: "E_NESTED" });
+    expect(await call("folders.rename", { path: "B", newPath: "A/Sub/B" })).toMatchObject({ ok: false, code: "E_NESTED" });
+    // Uma pasta que não é projeto, mas tem um dentro, também não entra num projeto.
+    expect(await call("folders.move", { path: "Solta", parent: "A" })).toMatchObject({ ok: false, code: "E_NESTED" });
+    // A pasta das reuniões também não.
+    expect(await call("folders.move", { path: "B", parent: "Reuniões" })).toMatchObject({ ok: false, code: "E_MEETINGS_FOLDER" });
+    expect(notesOf(root)).toEqual(before);
+    expect((await value("projects.list")).projects.map((p: { folder: string }) => p.folder)).toEqual(["A", "B", "Solta/C"]);
+    // Mover para um lugar livre continua valendo.
+    await value("folders.create", { path: "Trabalho" });
+    await value("folders.move", { path: "B", parent: "Trabalho" });
+    expect((await value("projects.list")).projects.map((p: { folder: string }) => p.folder)).toEqual(["A", "Trabalho/B", "Solta/C"]);
   });
 
   test("apagar a nota principal deixa o projeto sem ela; apagar a pasta acaba com ele", async () => {
@@ -450,6 +508,14 @@ describe("o projeto acompanha o que muda por fora (Finder, Obsidian)", () => {
     rmSync(path.join(root, "Kiwi/Visão.md"));
     await until(async () => (await list())[0]?.main === null);
     expect((await list())[0]).toMatchObject({ folder: "Kiwi", main: null });
+  });
+
+  test("a nota arrastada por fora para uma pasta que já existia, e a do projeto apagada: o projeto acaba", async () => {
+    const { root, list } = await watched({ "Kiwi/Kiwi.md": "# Kiwi\n", "Kiwi/ideia.md": "ideia", "Inbox/velha.md": "velha" });
+    renameSync(path.join(root, "Kiwi/ideia.md"), path.join(root, "Inbox/ideia.md"));
+    rmSync(path.join(root, "Kiwi"), { recursive: true });
+    await until(async () => (await list()).length === 0);
+    expect(await list()).toEqual([]);
   });
 
   test("a pasta apagada por fora acaba com o projeto", async () => {

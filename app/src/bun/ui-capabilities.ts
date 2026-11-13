@@ -1,3 +1,6 @@
+import { statSync } from "node:fs";
+import path from "node:path";
+
 import { isSpellingLanguage, isSpellingWord, NO_SPELLING, spellingResult, type SpellingResult } from "../shared/spelling.ts";
 // As capacidades do contrato 1.0.0 (src/shared/ui-contract.ts): o único jeito de uma UI do AppEngine pedir algo ao
 // main (T1192). Cada handler valida os argumentos e responde `E_BAD_ARGS` quando eles não servem. Nada genérico: não
@@ -34,7 +37,7 @@ import { ExportError, type NoteExporter } from "../notes/export.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
 import type { NotesFolders } from "../notes/folders-workspace.ts";
-import { checkMark, followProjects, mainNoteFor, mapProjects, projectInfo, ProjectsFile, projectStatus } from "../notes/projects.ts";
+import { checkMark, followProjects, layoutProblem, mainNoteFor, mapProjects, projectInfo, ProjectsFile, projectStatus } from "../notes/projects.ts";
 import { MEETINGS_FOLDER } from "../notes/meetings.ts";
 import { folderCapabilities } from "./folder-capabilities.ts";
 import type { MeetingNotes } from "../notes/meetings.ts";
@@ -301,11 +304,30 @@ export function uiCapabilities(deps: CapabilityDeps,
     await changePinned((pinned) => followPinned(pinned, r, deps.notes.existing()),
     );
     // Os projetos também (spec #9874); na abertura (sem `moves`), a nota principal acha a pasta pelo inode.
-    await projectsFile().update((list) => followProjects(list, r, deps.notes.existing(), deps.notes.noteInodes?.()));
+    await projectsFile().update((list) => followProjects(list, r, deps.notes.existing(), deps.notes.noteInodes?.(), dirIno, meetingsFolder));
   };
   /** O arquivo dos projetos deste cofre (`.kiwi/projects.json`). */
   let projects: ProjectsFile | null = null;
   const projectsFile = () => (projects ??= new ProjectsFile(deps.notes.root));
+  /** O inode de uma pasta do cofre (revisão da T10012): um rename a mantém, e é por ele que o projeto segue a pasta. */
+  const dirIno = (folder: string): number | undefined => {
+    try {
+      const st = statSync(path.join(deps.notes.root, folder));
+      return st.isDirectory() ? st.ino : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  /**
+   * Antes de mover uma pasta pelo app (revisão da T10012): um projeto não pode acabar dentro de outro, nem na pasta das
+   * reuniões. Recusa antes de mover, com o motivo, em vez de largar um projeto sem a pessoa ver.
+   */
+  const checkFolderMove = async (from: string, to: string) => {
+    const list = await projectsFile().load().catch(() => null);
+    if (!list?.length) return;
+    const problem = layoutProblem(mapProjects(list, moveUnder(from, to)), meetingsFolder);
+    if (problem) throw problem;
+  };
   /** A pasta das reuniões neste cofre: só o interno tem uma (`Reuniões`). */
   const meetingsFolder = deps.meetingsFolder === undefined ? MEETINGS_FOLDER : deps.meetingsFolder;
   const projectByFolder = async (folder: unknown, cap: string) => {
@@ -829,7 +851,9 @@ export function uiCapabilities(deps: CapabilityDeps,
       ),
     "folders.rename": async (args) => {
       const a = fields(args, "folders.rename", ["path", "newPath"]);
-      const r = await (await vault()).moveFolder(a.path, a.newPath);
+      const v = await vault();
+      await checkFolderMove(folderPath(a.path), folderPath(a.newPath));
+      const r = await v.moveFolder(a.path, a.newPath);
       await followMove(moveUnder(folderPath(a.path), r.path));
       return r;
     },
@@ -838,7 +862,9 @@ export function uiCapabilities(deps: CapabilityDeps,
       const from = folderPath(a.path);
       const parent = folderPath(a.parent ?? "");
       const name = from.split("/").at(-1) ?? "";
-      const r = await (await vault()).moveFolder(from, parent ? `${parent}/${name}` : name);
+      const v = await vault();
+      await checkFolderMove(from, parent ? `${parent}/${name}` : name);
+      const r = await v.moveFolder(from, parent ? `${parent}/${name}` : name);
       await followMove(moveUnder(from, r.path));
       return r;
     },
@@ -871,7 +897,8 @@ export function uiCapabilities(deps: CapabilityDeps,
           created = true;
         }
         const ino = v.noteInodes?.().get(main);
-        return [...list, ino === undefined ? { folder, main } : { folder, main, mainIno: ino }];
+        const fino = dirIno(folder);
+        return [...list, { folder, main, ...(ino !== undefined ? { mainIno: ino } : {}), ...(fino !== undefined ? { folderIno: fino } : {}) }];
       });
       const e = list.find((x) => x.folder === folder)!;
       return { project: projectInfo(e, (await v.list()).notes), created };
@@ -892,7 +919,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (!v.existing().notes.has(note)) throw new CapabilityError("E_NOT_FOUND", `projects.setMain: a nota ${note} não existe`);
       const ino = v.noteInodes?.().get(note);
       const list = await projectsFile().update((list) =>
-        list.map((x) => (x.folder !== e.folder ? x : ino === undefined ? { folder: x.folder, main: note } : { folder: x.folder, main: note, mainIno: ino })),
+        list.map((x) => (x.folder !== e.folder ? x : { ...x, main: note, ...(ino !== undefined ? { mainIno: ino } : { mainIno: undefined }) })),
       );
       return { project: projectInfo(list.find((x) => x.folder === e.folder)!, (await v.list()).notes) };
     },

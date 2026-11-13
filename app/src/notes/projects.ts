@@ -33,6 +33,11 @@ export interface ProjectEntry {
   main: string | null;
   /** O inode da nota principal: acha o projeto de novo quando a pasta mudou com o app fechado. */
   mainIno?: number;
+  /**
+   * O inode da própria pasta (revisão da T10012): um rename de pasta o mantém, e é só com ele que o projeto segue a
+   * pasta mudada por fora. Uma pasta que já existia (as notas arrastadas para outra, e a do projeto apagada) tem outro.
+   */
+  folderIno?: number;
 }
 
 /** Um projeto como as capacidades devolvem. */
@@ -102,24 +107,56 @@ export function mapProjects(list: readonly ProjectEntry[], map: (p: string) => s
     let main = e.main === null ? null : map(e.main);
     // A nota principal que saiu da pasta (movida para outra) deixa o projeto sem ela, como a apagada.
     if (main !== null && !under(folder, main)) main = null;
-    out.push(main === null ? { folder, main: null } : { ...e, folder, main });
+    out.push(entry(folder, main, main === null ? undefined : e.mainIno, e.folderIno));
   }
   return out;
 }
 
+/** Uma entrada, sem os campos vazios (o arquivo fica igual quando nada mudou). */
+function entry(folder: string, main: string | null, mainIno: number | undefined, folderIno: number | undefined): ProjectEntry {
+  return {
+    folder,
+    main,
+    ...(main !== null && mainIno !== undefined ? { mainIno } : {}),
+    ...(folderIno !== undefined ? { folderIno } : {}),
+  };
+}
+
 /**
- * Os projetos depois de uma mudança feita por fora (Finder, Obsidian): a pasta que sumiu vai para onde a nota principal
- * foi (ou, sem ela, para onde as outras notas foram, pelo mesmo resto de caminho); a nota principal que sumiu de vez
- * deixa o projeto sem ela; a pasta que sumiu de vez leva o projeto embora.
+ * Confere se a lista respeita as regras: nenhum projeto dentro de outro, nem na pasta das reuniões. Devolve o 1º
+ * problema, ou null.
+ */
+export function layoutProblem(list: readonly ProjectEntry[], meetingsFolder: string | null): ProjectError | null {
+  for (const e of list) {
+    if (meetingsFolder && under(meetingsFolder, e.folder))
+      return new ProjectError("E_MEETINGS_FOLDER", `o projeto ${e.folder} ficaria na pasta das reuniões (${meetingsFolder})`);
+    const outer = list.find((o) => o !== e && under(o.folder, e.folder));
+    if (outer) return new ProjectError("E_NESTED", `o projeto ${e.folder} ficaria dentro do projeto ${outer.folder}`);
+  }
+  return null;
+}
+
+/**
+ * Os projetos depois de uma mudança feita por fora (Finder, Obsidian):
+ * - a pasta que sumiu vai para a pasta nova que tem o **mesmo inode** dela (um rename de pasta o mantém); para achar a
+ *   candidata, a nota principal que mudou de lugar (ou, sem ela, as outras notas), pelo mesmo resto de caminho. Notas
+ *   arrastadas para uma pasta que já existia não levam o projeto: o inode é outro, e a pasta do projeto foi apagada;
+ * - sem o inode da pasta (um projeto anterior a ele), só segue se todas as notas que saíram foram para a mesma pasta
+ *   nova, e ela só tem essas notas;
+ * - a pasta de destino passa pelas regras (`layoutProblem`): dentro de outro projeto, ou na pasta das reuniões, o
+ *   projeto sai;
+ * - a nota principal que sumiu de vez deixa o projeto sem ela; a pasta que sumiu de vez leva o projeto embora.
  *
- * `inodes` é o inode de cada nota de agora: com ele, a nota principal acha o projeto mesmo sem o `moves` (o app estava
- * fechado quando a pasta mudou).
+ * `inodes` é o inode de cada nota de agora, e `dirIno` o de uma pasta: com eles, o projeto acha a pasta mesmo sem o
+ * `moves` (o app estava fechado quando a pasta mudou).
  */
 export function followProjects(
   list: readonly ProjectEntry[],
   r: ExternalMoves,
   now: { notes: ReadonlySet<string>; folders: ReadonlySet<string> },
   inodes: ReadonlyMap<string, number> = new Map(),
+  dirIno: (folder: string) => number | undefined = () => undefined,
+  meetingsFolder: string | null = null,
 ): ProjectEntry[] {
   const byIno = new Map<number, string>();
   for (const [p, ino] of inodes) byIno.set(ino, p);
@@ -140,21 +177,37 @@ export function followProjects(
         const rest = from.slice(e.folder.length);
         return to.endsWith(rest) && to.length > rest.length ? to.slice(0, to.length - rest.length) : null;
       };
-      if (main !== null && movedMain !== null) folder = follow(main, movedMain);
-      if (folder === null) {
-        for (const [from, to] of r.moves) {
-          if (!from.startsWith(`${e.folder}/`)) continue;
-          folder = follow(from, to);
-          if (folder !== null) break;
-        }
+      const candidates = new Set<string>();
+      if (main !== null && movedMain !== null) {
+        const c = follow(main, movedMain);
+        if (c !== null) candidates.add(c);
       }
-      if (folder !== null && !now.folders.has(folder)) folder = null;
+      const leaving = [...r.moves].filter(([from]) => from.startsWith(`${e.folder}/`));
+      for (const [from, to] of leaving) {
+        const c = follow(from, to);
+        if (c !== null) candidates.add(c);
+      }
+      for (const c of candidates) {
+        if (!now.folders.has(c)) continue;
+        if (e.folderIno !== undefined) {
+          if (dirIno(c) === e.folderIno) folder = c;
+        } else {
+          // Sem o inode: todas as notas que saíram foram para `c`, e `c` só tem as que vieram de lá.
+          const all = leaving.length > 0 && leaving.every(([from, to]) => follow(from, to) === c);
+          const came = new Set(leaving.map(([, to]) => to));
+          if (all && [...now.notes].every((n) => !under(c, n) || came.has(n))) folder = c;
+        }
+        if (folder !== null) break;
+      }
     }
     if (folder === null || out.some((o) => o.folder === folder)) continue;
     if (main !== null) main = movedMain ?? (now.notes.has(main) ? main : null);
     if (main !== null && !under(folder, main)) main = null;
-    const ino = main === null ? undefined : inodes.get(main);
-    out.push(main === null ? { folder, main: null } : ino === undefined ? { folder, main } : { folder, main, mainIno: ino });
+    const next = entry(folder, main, main === null ? undefined : inodes.get(main), dirIno(folder) ?? e.folderIno);
+    // A pasta de destino passa pelas regras: dentro de outro projeto, ou na pasta das reuniões, o projeto sai.
+    const others = [...out, ...list.filter((x) => x !== e && x.folder !== e.folder && now.folders.has(x.folder))];
+    if (folder !== e.folder && layoutProblem([...others, next], meetingsFolder)) continue;
+    out.push(next);
   }
   return out;
 }
@@ -225,13 +278,14 @@ function parse(text: string): ProjectEntry[] {
     const p = raw as Partial<ProjectEntry>;
     if (!p || typeof p.folder !== "string" || !p.folder || out.some((o) => o.folder === p.folder)) continue;
     const main = typeof p.main === "string" && under(p.folder, p.main) ? p.main : null;
-    out.push(main === null ? { folder: p.folder, main: null } : typeof p.mainIno === "number" ? { folder: p.folder, main, mainIno: p.mainIno } : { folder: p.folder, main });
+    out.push(entry(p.folder, main, typeof p.mainIno === "number" ? p.mainIno : undefined, typeof p.folderIno === "number" ? p.folderIno : undefined));
   }
   return out.slice(0, PROJECTS_MAX);
 }
 
 const same = (a: readonly ProjectEntry[], b: readonly ProjectEntry[]) =>
-  a.length === b.length && a.every((x, i) => x.folder === b[i]!.folder && x.main === b[i]!.main && x.mainIno === b[i]!.mainIno);
+  a.length === b.length &&
+  a.every((x, i) => x.folder === b[i]!.folder && x.main === b[i]!.main && x.mainIno === b[i]!.mainIno && x.folderIno === b[i]!.folderIno);
 
 /**
  * O arquivo dos projetos de um cofre. As mudanças passam numa fila: a leitura e a gravação de uma não deixam outra
