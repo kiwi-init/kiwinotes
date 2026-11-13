@@ -17,6 +17,7 @@ import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
+import { removedSecrets, type SecretGuard } from "../../guardrail/filter.ts";
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
 export const READ_MAX_CHARS = 12_000;
@@ -219,6 +220,8 @@ export interface ToolChange {
   copy?: string;
   /** A pasta de notas aberta quando a escrita aconteceu (o id), se o app troca de pasta. */
   folder?: string;
+  /** Quantos segredos da nota a escrita tirou (o agente trocou o trecho sem mandar o marcador de volta; spec #9818). */
+  removedSecrets?: number;
 }
 
 export interface ToolResult {
@@ -228,6 +231,8 @@ export interface ToolResult {
   target?: string;
   /** O que mudou no cofre, numa ferramenta de escrita. */
   change?: ToolChange;
+  /** Quantos segredos o filtro segurou no que esta leitura entregou (spec #9818): só a contagem, nunca o valor. */
+  held?: number;
 }
 
 /**
@@ -244,6 +249,8 @@ export interface KiwiToolContext {
   reader: VaultReader;
   writer?: VaultWriter;
   journal?: WriteJournal;
+  /** O filtro do guardrail (spec #9818): o que sai para o agente vai sem os segredos, e a escrita os põe de volta. */
+  guard?: SecretGuard;
 }
 
 function args(raw: unknown, allowed: string[]): Record<string, unknown> {
@@ -287,6 +294,12 @@ export function chunk(text: string, offset = 0, max = READ_MAX_CHARS): { texto: 
     // Não parte um par substituto (um emoji) ao meio.
     const code = text.charCodeAt(end - 1);
     if (code >= 0xd800 && code <= 0xdbff) end -= 1;
+    // Nem um marcador do filtro (spec #9818): metade dele não volta na escrita.
+    const open = text.lastIndexOf("‹segredo ", end - 1);
+    if (open > offset && open < end) {
+      const close = text.indexOf("›", open);
+      if (close >= end) end = open;
+    }
   }
   const out: { texto: string; offset: number; total: number; proximoOffset?: number; aviso?: string } = { texto: text.slice(offset, end), offset, total };
   if (end < total) {
@@ -381,9 +394,11 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
   try {
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
-      return await write(ctx.writer, ctx.journal, name, raw);
+      return await write(ctx.writer, ctx.journal, name, raw, ctx.guard);
     }
-    return await run(ctx.reader, name, raw);
+    const r = await run(ctx.reader, name, raw, ctx.guard);
+    if (ctx.guard) r.held = ctx.guard.heldIn(JSON.stringify(r.value));
+    return r;
   } catch (e) {
     if (e instanceof ToolError) throw e;
     const code = typeof (e as { code?: unknown })?.code === "string" ? (e as { code: string }).code : "E_FAILED";
@@ -391,7 +406,30 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
   }
 }
 
-async function run(reader: VaultReader, name: string, raw: unknown): Promise<ToolResult> {
+/** As palavras de uma busca, para saber onde ela casa: minúsculas e sem acento, de 2 letras ou mais. */
+const fold = (t: string) => t.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+const queryTerms = (q: string) => [...new Set(fold(q).split(/[^\p{L}\p{N}_-]+/u).filter((w) => w.length >= 2))];
+
+/** Um trecho de `text` em volta da primeira palavra da busca que aparece (ou o começo), como o agente vê. */
+function snippetOf(text: string, terms: string[]): string {
+  const f = fold(text);
+  const at = terms.map((t) => f.indexOf(t)).filter((i) => i >= 0).sort((a, b) => a - b)[0] ?? 0;
+  let start = Math.max(0, at - 80);
+  let end = Math.min(text.length, at + 160);
+  // Nunca meio marcador do filtro (revisão do T9833): a borda que cai dentro de um vai para fora dele.
+  for (const m of text.matchAll(/‹segredo [^›\n]{0,40}›/g)) {
+    const a = m.index!;
+    const b = a + m[0].length;
+    if (a < start && start < b) start = a;
+    if (a < end && end < b) end = b;
+  }
+  return `${start > 0 ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ").trim()}${end < text.length ? "…" : ""}`;
+}
+
+/** O texto de uma nota como o agente vê: com o filtro, sem os segredos; sem ele, como está. */
+const seen = (guard: SecretGuard | undefined, path: string, content: string) => (guard ? guard.read(path, content).text : content);
+
+async function run(reader: VaultReader, name: string, raw: unknown, guard?: SecretGuard): Promise<ToolResult> {
   switch (name) {
     case "notes_search": {
       const a = args(raw, ["query", "limit"]);
@@ -399,27 +437,44 @@ async function run(reader: VaultReader, name: string, raw: unknown): Promise<Too
       if (!query.trim()) throw new ToolError("E_BAD_ARGS", "query está vazio");
       const limit = int(a, "limit", 1, SEARCH_MAX) ?? SEARCH_DEFAULT;
       const hits = (await reader.search(query, limit)).slice(0, limit);
-      const resultados = hits.map((h) => ({
-        path: h.path,
-        titulo: h.title,
-        trecho: h.snippet,
-        ...(h.semantic ? { como: "pelo sentido" } : h.approx ? { como: "aproximado" } : {}),
-      }));
+      const resultados: Record<string, unknown>[] = [];
+      const terms = queryTerms(query);
+      for (const h of hits) {
+        let trecho = h.snippet;
+        if (guard) {
+          // O trecho sai da nota já filtrada, para um segredo partido na borda não escapar. E a busca não confirma
+          // segredo: um achado cujas palavras só aparecem dentro de um segredo não volta.
+          const content = (await reader.get(h.path)).content;
+          const masked = guard.read(h.path, content).text;
+          const inReal = terms.some((t) => fold(content).includes(t));
+          const inMasked = terms.some((t) => fold(masked).includes(t));
+          if (inReal && !inMasked) continue;
+          trecho = snippetOf(masked, inMasked ? terms : []);
+        }
+        resultados.push({
+          path: h.path,
+          titulo: h.title,
+          trecho,
+          ...(h.semantic ? { como: "pelo sentido" } : h.approx ? { como: "aproximado" } : {}),
+        });
+      }
       return { value: { query, resultados }, target: `"${query}"` };
     }
     case "notes_outline": {
       const a = args(raw, ["path"]);
       const n = await reader.get(str(a, "path", true)!);
-      const headings = markdownStructure(n.content).headings;
+      // Os títulos e os tamanhos do texto que o agente vê.
+      const content = seen(guard, n.path, n.content);
+      const headings = markdownStructure(content).headings;
       const secoes = headings.slice(0, OUTLINE_MAX).map((h, i) => {
         const next = headings.slice(i + 1).find((x) => x.level <= h.level);
-        return { nivel: h.level, titulo: h.title, caracteres: (next ? next.from : n.content.length) - h.from };
+        return { nivel: h.level, titulo: h.title, caracteres: (next ? next.from : content.length) - h.from };
       });
       return {
         value: {
           path: n.path,
           titulo: n.title,
-          caracteres: n.content.length,
+          caracteres: content.length,
           secoes,
           ...(headings.length > OUTLINE_MAX ? { aviso: `A nota tem ${headings.length} títulos; o sumário mostra os ${OUTLINE_MAX} primeiros.` } : {}),
         },
@@ -433,12 +488,14 @@ async function run(reader: VaultReader, name: string, raw: unknown): Promise<Too
       const offset = int(a, "offset", 0, Number.MAX_SAFE_INTEGER) ?? 0;
       // A versão da nota inteira (spec #8356): é ela que o notes_write pede, mesmo lendo uma seção só.
       const versao = n.version ? { versao: n.version } : {};
+      // A nota inteira passa pelo filtro, e só depois é cortada: os pedaços e os offsets são do texto que o agente vê.
+      const content = seen(guard, n.path, n.content);
       if (section !== undefined && section.trim()) {
-        const s = sectionOf(n.content, section);
+        const s = sectionOf(content, section);
         if (!s) throw new ToolError("E_NOT_FOUND", `a nota ${n.path} não tem a seção "${section}"; veja os títulos com notes_outline`);
         return { value: { path: n.path, titulo: n.title, ...versao, secao: s.titulo, ...chunk(s.texto, offset) }, target: `${n.path} › ${s.titulo}` };
       }
-      return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(n.content, offset) }, target: n.path };
+      return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(content, offset) }, target: n.path };
     }
     case "notes_list": {
       const a = args(raw, ["folder", "offset"]);
@@ -492,7 +549,7 @@ async function run(reader: VaultReader, name: string, raw: unknown): Promise<Too
       if (!isMeetingNote(n.content)) throw new ToolError("E_NOT_MEETING", `${n.path} não é a nota de uma reunião gravada; leia com notes_read`);
       const offset = int(a, "offset", 0, Number.MAX_SAFE_INTEGER) ?? 0;
       const meta = (await reader.meetings()).find((m) => m.path === n.path);
-      const { body } = splitMeetingNote(n.content);
+      const { body } = splitMeetingNote(seen(guard, n.path, n.content));
       const at = transcriptSection(body);
       const transcript = (at ? body.slice(at.from, at.to) : "").replace(SEGMENT_REF, "").trim();
       return {
@@ -536,14 +593,23 @@ async function commit(
   return { saved: true, path: r.path, version: r.version, copy };
 }
 
-async function write(writer: VaultWriter, journal: WriteJournal, name: string, raw: unknown): Promise<ToolResult> {
+/** Os marcadores do filtro de volta ao original, só na nota de onde saíram (spec #9818). */
+const restore = (guard: SecretGuard | undefined, path: string, text: string) => (guard ? guard.write(path, text) : text);
+/** Quantos segredos a escrita tirou, para o registro avisar. */
+const removed = (before: string, after: string) => {
+  const n = removedSecrets(before, after);
+  return n ? { removedSecrets: n } : {};
+};
+
+async function write(writer: VaultWriter, journal: WriteJournal, name: string, raw: unknown, guard?: SecretGuard): Promise<ToolResult> {
   const folder = await writer.folder();
   const where = folder ? { folder } : {};
   switch (name) {
     case "notes_create": {
       const a = args(raw, ["folder", "title", "text"]);
       const title = str(a, "title", true, 200)!;
-      const text = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
+      // Uma nota nova não tem segredo dela: um marcador aqui é de outra nota, e a escrita é recusada.
+      const text = restore(guard, "\u0000nova", str(a, "text", true, Number.MAX_SAFE_INTEGER)!);
       capped(text);
       const dir = (str(a, "folder", false) ?? "").replace(/^\/+|\/+$/g, "");
       notMeeting(title, text);
@@ -557,16 +623,19 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
     case "notes_append": {
       const a = args(raw, ["path", "text", "section", "version"]);
       const path = str(a, "path", true)!;
-      const text = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
-      capped(text);
-      if (!text.trim()) throw new ToolError("E_BAD_ARGS", "text está vazio");
-      const section = str(a, "section", false, 500)?.trim() || undefined;
+      const sent = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
+      if (!sent.trim()) throw new ToolError("E_BAD_ARGS", "text está vazio");
+      const sentSection = str(a, "section", false, 500)?.trim() || undefined;
       const version = str(a, "version", false, 200);
       // Sem a versão, o Kiwi usa a que acabou de ler; se a nota muda bem no meio, ele lê de novo e tenta outra vez.
       for (let tries = 0; ; tries++) {
         const n = await writer.get(path);
         writable(n);
         if (version !== undefined && version !== n.version) throw changed(n.path);
+        // Os marcadores voltam ao original (no texto e no nome da seção) antes de conferir e gravar.
+        const text = restore(guard, n.path, sent);
+        capped(text);
+        const section = sentSection && restore(guard, n.path, sentSection);
         let next: string;
         let titulo: string | undefined;
         if (section) {
@@ -595,6 +664,7 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
             version: r.version,
             copy: r.copy,
             ...where,
+            ...removed(n.content, next),
           },
         };
       }
@@ -602,13 +672,16 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
     case "notes_write": {
       const a = args(raw, ["path", "text", "version", "section"]);
       const path = str(a, "path", true)!;
-      const text = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
-      capped(text);
+      const sent = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
       const version = str(a, "version", true, 200)!;
-      const section = str(a, "section", false, 500)?.trim() || undefined;
+      const sentSection = str(a, "section", false, 500)?.trim() || undefined;
       const n = await writer.get(path);
       writable(n);
       if (version !== n.version) throw changed(n.path);
+      // Os marcadores voltam ao original (no texto e no nome da seção) antes de conferir e gravar.
+      const text = restore(guard, n.path, sent);
+      capped(text);
+      const section = sentSection && restore(guard, n.path, sentSection);
       let next: string;
       let titulo: string | undefined;
       if (section) {
@@ -639,6 +712,7 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
           version: r.version,
           copy: r.copy,
           ...where,
+          ...removed(n.content, next),
         },
       };
     }

@@ -21,7 +21,7 @@ Só com o agente ligado, e só nestes dois momentos:
 ## O que nunca vai
 - **O áudio** do ditado e das reuniões.
 - **Nada enquanto o agente está desligado.**
-- **O que o guardrail segura:** senha, token, credencial e dado pessoal sensível (#4717). IP, VPN e CSV de trabalho passam. Quando o Kiwi fica em dúvida se um trecho é sensível, ele pergunta a você, mostrando o trecho (#8357).
+- **O que o guardrail segura:** senha, token, credencial e dado pessoal sensível (#4717). IP, VPN e CSV de trabalho passam. Quando o Kiwi fica em dúvida se um trecho é sensível, ele pergunta a você, mostrando o trecho (#8357); até essa pergunta existir, o trecho em dúvida é segurado (spec #9818). O filtro troca cada segredo por um marcador antes de o texto sair, e a tela diz que nenhum detector pega 100%.
 - **Telemetria.** O Kiwi não tem servidor e não coleta nada.
 
 ## Quem envia
@@ -56,7 +56,7 @@ Só com o agente ligado, e só nestes dois momentos:
 > **O que nunca vai**
 > - O áudio do ditado e das reuniões.
 > - Nada enquanto ele estiver desligado.
-> - Senhas, tokens, credenciais e dados pessoais sensíveis. Se o Kiwi ficar em dúvida sobre um trecho, ele pergunta a você antes.
+> - Senhas, tokens, credenciais e dados pessoais sensíveis: o Kiwi troca cada um por um marcador antes de o texto sair, e na dúvida também segura. Nenhum detector pega 100%.
 >
 > **Quem envia**
 >

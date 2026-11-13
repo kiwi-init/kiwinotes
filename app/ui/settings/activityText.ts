@@ -54,6 +54,26 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
   return text[0]!.toUpperCase() + text.slice(1) + ".";
 }
 
+/**
+ * O que o filtro do guardrail segurou no pedido (spec #9818), uma linha por lugar: "O Kiwi segurou 2 segredos em
+ * Projetos/Kiwi.", "…no pedido.", "…nos resultados da busca.". Só a contagem, nunca o segredo.
+ */
+export function heldLines(r: Pick<AgentActivityRequest, "reads" | "requestHeld">): string[] {
+  const where = new Map<string, number>();
+  const add = (k: string, n: number) => where.set(k, Math.max(where.get(k) ?? 0, n));
+  if (r.requestHeld) add("no pedido", r.requestHeld);
+  for (const x of r.reads) {
+    if (!x.held) continue;
+    if (x.tool === "notes_search") add("nos resultados da busca", x.held);
+    else if (x.target) add(`em ${noteName(x.target.split(" › ")[0]!)}`, x.held);
+  }
+  return [...where].map(([k, n]) => `O Kiwi segurou ${plural(n, "segredo", "segredos")} ${k}.`);
+}
+
+/** A mudança que tirou segredos da nota (spec #9818): o aviso, com o caminho de volta. */
+export const removedLine = (n: number) =>
+  `Esta mudança tirou ${plural(n, "segredo", "segredos")} da nota. O Desfazer ${n === 1 ? "o traz" : "os traz"} de volta, e o texto de antes está nas Versões.`;
+
 /** Uma mudança: "Criou Projetos/Resumo", "Acrescentou em Ideias", "Trocou Kiwi › Prazo". */
 export function changeLine(c: Pick<ActivityChange, "kind" | "path" | "section">): string {
   const where = `${noteName(c.path)}${c.section ? ` › ${c.section}` : ""}`;

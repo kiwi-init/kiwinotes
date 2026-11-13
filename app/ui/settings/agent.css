@@ -269,3 +269,18 @@
 .kn-activity-more {
   margin-top: var(--space-2);
 }
+
+/* O filtro do guardrail (spec #9818): quantos segredos o Kiwi segurou, e a mudança que tirou um segredo da nota. */
+.kn-activity-held {
+  margin-top: 2px !important;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.kn-activity-removed {
+  margin: 0 0 var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #e5a50a 14%, transparent);
+  font-size: var(--text-sm);
+}

@@ -24,6 +24,7 @@ import path from "node:path";
 import { AgentError, type AgentErrorCode } from "./errors.ts";
 import type { AgentHost, AgentHostOptions } from "./host.ts";
 import { KIWI_TOOL_PREFIX, KiwiToolServer, type ToolCallEvent } from "./tools/server.ts";
+import { SecretGuard } from "../guardrail/filter.ts";
 import type { VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import type { WriteJournal } from "./tools/tools.ts";
@@ -133,6 +134,12 @@ export class AgentService {
   private lastTurn: string | null = null;
   /** O servidor de ferramentas do programa aberto (ou abrindo): fecha junto com ele. */
   private tools: KiwiToolServer | null = null;
+  /**
+   * O filtro do guardrail (spec #9818): um por vida do app. A sessão do agente continua de uma abertura para outra, e o
+   * guard também; com o app reaberto, um marcador de antes vira "de outra sessão". Desligar o agente começa um guard
+   * novo: os segredos da sessão saem da memória (revisão do T9833).
+   */
+  private guard = new SecretGuard();
   /** As notas do desfazer (spec #9353), pelas capacidades das janelas. */
   private undoNotes: UndoNotes | null = null;
   /** Um desfazer por vez: dois ao mesmo tempo não anotam o registro um por cima do outro. */
@@ -226,7 +233,9 @@ export class AgentService {
   private onToolCall(e: ToolCallEvent): void {
     if (e.ok) {
       const id = this.activityId();
-      const done = e.change ? this.activity.change(id, e.change) : this.activity.read(id, { tool: e.tool, ...(e.target ? { target: e.target } : {}) });
+      const done = e.change
+        ? this.activity.change(id, e.change)
+        : this.activity.read(id, { tool: e.tool, ...(e.target ? { target: e.target } : {}), ...(e.held ? { held: e.held } : {}) });
       void done.catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
     }
     const turn = this.turn;
@@ -357,6 +366,7 @@ export class AgentService {
     await this.d.settings.save({ enabled: false });
     this.download?.abort.abort();
     await this.stopProgram("desligado");
+    this.guard = new SecretGuard();
     this.emitStatus();
     return this.status();
   }
@@ -416,11 +426,13 @@ export class AgentService {
     const turn = { id: crypto.randomUUID(), cancelled: false };
     this.turn = turn;
     this.lastTurn = turn.id;
-    void this.activity.begin(turn.id, text).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
+    // O pedido sai pelo filtro (spec #9818): um segredo colado nele não vai ao agente nem ao registro.
+    const filtered = this.guard.request(text);
+    void this.activity.begin(turn.id, filtered.text, filtered.held).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
     this.clearIdle();
     this.emitTurn({ id: turn.id, type: "started" });
     this.emitStatus();
-    void this.runTurn(turn, text, s);
+    void this.runTurn(turn, filtered.text, s);
     return { id: turn.id };
   }
 
@@ -476,6 +488,7 @@ export class AgentService {
         ? new KiwiToolServer({
             reader,
             ...(writer ? { writer, journal: this.journal } : {}),
+            guard: this.guard,
             version: this.d.version,
             onCall: (e) => this.onToolCall(e),
           })

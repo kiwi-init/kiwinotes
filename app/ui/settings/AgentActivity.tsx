@@ -19,6 +19,8 @@ import {
   changeLine,
   EMPTY_ACTIVITY,
   goneRequest,
+  heldLines,
+  removedLine,
   openChanges,
   readsLine,
   requestLine,
@@ -222,6 +224,11 @@ function Request({
         ) : null}
       </div>
       <p className="kn-activity-reads">{readsLine(r.reads)}</p>
+      {heldLines(r).map((l) => (
+        <p key={l} className="kn-activity-held">
+          {l}
+        </p>
+      ))}
       {r.changes.length === 0 ? (
         <p className="kn-activity-none">Não mudou nada.</p>
       ) : (
@@ -247,6 +254,11 @@ function Request({
                     )}
                   </span>
                 </li>
+                {c.removedSecrets && !c.undone ? (
+                  <li className="kn-activity-removed" role="note">
+                    {removedLine(c.removedSecrets)}
+                  </li>
+                ) : null}
                 {view ? (
                   <li className="kn-activity-view" id={viewId}>
                     <ViewPanel view={view} />

@@ -17,6 +17,7 @@ import { timingSafeEqual } from "node:crypto";
 import { kiwiTools, runKiwiTool, ToolError, type KiwiToolName, type ToolChange, type WriteJournal } from "./tools.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter } from "./writer.ts";
+import type { SecretGuard } from "../../guardrail/filter.ts";
 
 /** O nome do servidor para o agente: as ferramentas aparecem no Claude Code como `mcp__kiwi__<nome>`. */
 export const KIWI_MCP_NAME = "kiwi";
@@ -41,6 +42,8 @@ export interface ToolCallEvent {
   code?: string;
   /** O que uma ferramenta de escrita mudou (spec #8356). */
   change?: ToolChange;
+  /** Quantos segredos o filtro segurou nesta leitura (spec #9818). */
+  held?: number;
 }
 
 export interface KiwiToolServerOptions {
@@ -48,6 +51,8 @@ export interface KiwiToolServerOptions {
   /** Com o escritor e o registro, as ferramentas de escrita aparecem (spec #8356). */
   writer?: VaultWriter;
   journal?: WriteJournal;
+  /** O filtro do guardrail (spec #9818): sem ele, o texto vai como está (os testes antigos). */
+  guard?: SecretGuard;
   version?: string;
   onCall?: (e: ToolCallEvent) => void;
   /** Cada método MCP que chegou com a senha certa (a prova do #7496 confere o `tools/list` do Claude Code). */
@@ -176,9 +181,10 @@ export class KiwiToolServer {
         if (typeof name !== "string") return err(-32602, "tools/call: falta o name");
         if (!kiwiTools(this.writes).some((t) => t.name === name)) return err(-32602, `o Kiwi não tem a ferramenta ${name}`);
         try {
-          const ctx = this.writes ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal } : { reader: this.o.reader };
+          const guard = this.o.guard ? { guard: this.o.guard } : {};
+          const ctx = this.writes ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard } : { reader: this.o.reader, ...guard };
           const r = await runKiwiTool(ctx, name, m.params?.arguments);
-          this.o.onCall?.({ tool: name, ...(r.target ? { target: r.target } : {}), ok: true, ...(r.change ? { change: r.change } : {}) });
+          this.o.onCall?.({ tool: name, ...(r.target ? { target: r.target } : {}), ok: true, ...(r.change ? { change: r.change } : {}), ...(r.held ? { held: r.held } : {}) });
           return ok({ content: [{ type: "text", text: JSON.stringify(r.value) }] });
         } catch (e) {
           const code = e instanceof ToolError ? e.code : "E_FAILED";

@@ -153,7 +153,7 @@ export function consentText(name: string, company = "Anthropic"): { title: strin
     never: [
       "O áudio do ditado e das reuniões.",
       "Nada enquanto ele estiver desligado.",
-      "Senhas, tokens, credenciais e dados pessoais sensíveis. Se o Kiwi ficar em dúvida sobre um trecho, ele pergunta a você antes.",
+      "Senhas, tokens, credenciais e dados pessoais sensíveis: o Kiwi troca cada um por um marcador antes de o texto sair, e na dúvida também segura. Nenhum detector pega 100%.",
     ],
     who: [
       `O Kiwi conversa com o ${name} aqui no seu Mac. Quem manda para a nuvem é o ${name}, com a sua conta, e vale a política de dados da ${company}. O Kiwi não tem servidor e nunca vê a sua senha.`,
@@ -165,11 +165,10 @@ export function consentText(name: string, company = "Anthropic"): { title: strin
 
 /**
  * A dica do "Testar": o agente lê as notas e as reuniões (spec #7496) e pode mudar as notas (spec #8356), com o texto de
- * antes guardado nas Versões da nota. Até o guardrail de segredos entrar (outro spec), ela avisa que ele pode ler
- * qualquer nota que pedir.
+ * antes guardado nas Versões da nota. Com o guardrail (spec #9818), as senhas e os tokens ficam de fora.
  */
 export const TEST_HINT =
-  "Cada teste gasta um pedido do seu plano. O agente pode procurar, ler e mudar as suas notas, e ler as reuniões, mas não apaga nada nem mexe no Mac. O texto de antes de cada mudança fica nas Versões da nota. Por enquanto, ele pode ler qualquer nota que pedir.";
+  "Cada teste gasta um pedido do seu plano. O agente pode procurar, ler e mudar as suas notas, e ler as reuniões, mas não apaga nada nem mexe no Mac. O texto de antes de cada mudança fica nas Versões da nota. As senhas e os tokens que o Kiwi acha ficam de fora, trocados por um marcador; nenhum detector pega 100%.";
 
 /** A regra de privacidade, nos Ajustes e no Sobre (ADR 0011). */
 export const PRIVACY_RULE = "Tudo é local, menos o agente que você escolher";

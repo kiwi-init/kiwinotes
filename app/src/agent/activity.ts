@@ -29,6 +29,8 @@ export interface ActivityRead {
   at: string;
   tool: string;
   target?: string;
+  /** Quantos segredos o filtro segurou nesta leitura (spec #9818): só a contagem. */
+  held?: number;
 }
 
 export interface ActivityChange extends ToolChange {
@@ -41,8 +43,10 @@ export interface ActivityRequest {
   id: string;
   /** Quando o pedido começou (ISO 8601). */
   at: string;
-  /** O começo do texto do pedido. */
+  /** O começo do texto do pedido, já filtrado (spec #9818): um segredo colado no pedido não vai para o disco. */
   request: string;
+  /** Quantos segredos o filtro segurou no texto do pedido. */
+  requestHeld?: number;
   reads: ActivityRead[];
   changes: ActivityChange[];
 }
@@ -103,19 +107,23 @@ export class AgentActivity {
   }
 
   /** Um pedido começou. Apaga antes os pedidos com mais de 30 dias. */
-  begin(id: string, request: string): Promise<void> {
+  begin(id: string, request: string, held = 0): Promise<void> {
     return this.serial(async () => {
       await this.prune();
-      await this.ensure(id, request);
+      const o = await this.ensure(id, request);
+      if (held && !o.record.requestHeld) {
+        o.record.requestHeld = held;
+        await this.save(o);
+      }
       this.changed(id);
     });
   }
 
   /** O agente leu (ou procurou) algo pelas ferramentas do Kiwi. */
-  read(id: string, r: { tool: string; target?: string }): Promise<void> {
+  read(id: string, r: { tool: string; target?: string; held?: number }): Promise<void> {
     return this.serial(async () => {
       const o = await this.ensure(id);
-      o.record.reads.push({ at: new Date(this.now()).toISOString(), tool: r.tool, ...(r.target ? { target: r.target } : {}) });
+      o.record.reads.push({ at: new Date(this.now()).toISOString(), tool: r.tool, ...(r.target ? { target: r.target } : {}), ...(r.held ? { held: r.held } : {}) });
       await this.save(o);
       this.changed(id);
     });
