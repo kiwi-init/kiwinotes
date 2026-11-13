@@ -74,7 +74,9 @@ void main() {
   float ds = sdfSoft(q) + (n1 - 0.5) * mix(14.0, 80.0, low);
   float glow = 0.45 * exp(-max(d0 + 20.0, 0.0) / 100.0);
   float ring = exp(-pow((ds - 150.0) / 170.0, 2.0)) * (0.16 + 0.74 * smoothstep(1350.0, 2150.0, q.y));
-  float halo = (glow + 0.85 * ring) * breath * (0.9 + 0.3 * (n1 - 0.5));
+  // a density floor near the core, all the way round (also in the V and on the left of the head): no gaps
+  float floorD = 0.44 * exp(-max(ds, 0.0) / 280.0);
+  float halo = max(glow + 0.85 * ring, floorD) * breath * (0.92 + 0.16 * (n1 - 0.5));
   halo *= smoothstep(0.0, 260.0, min(min(p.x, 2048.0 - p.x), min(p.y, 2560.0 - p.y)));   // zero at the box's edge
   vec3 mist = vec3(0.72, 0.68, 0.82);                        // the v2 lavender grey
   float haloA = clamp(halo, 0.0, 1.0);
@@ -82,8 +84,9 @@ void main() {
   // right; it is the halo changing hue there (soft across, no edge), as in v2
   vec2 c0 = vec2(1104.0, 1304.0); vec2 r0 = q - c0;
   float rad = length(r0), th = degrees(atan(r0.y, r0.x)); th = th < 0.0 ? th : th - 360.0;   // -70 right end .. -200 cheek
-  float along = smoothstep(-66.0, -118.0, th) * (1.0 - smoothstep(-188.0, -206.0, th));
-  float across = (rad - 405.0) / 58.0;                         // + outer .. - inner
+  // across the top of the head: from the left cheek, over the crown, to just right of the centre
+  float along = smoothstep(-28.0, -70.0, th) * (1.0 - smoothstep(-188.0, -206.0, th));
+  float across = (rad - 405.0) / 66.0;                         // + outer .. - inner
   float band = exp(-0.5 * across * across) * along * (0.92 + 0.16 * (n1 - 0.5));
   float inside = 1.0 - smoothstep(-30.0, 70.0, d0);          // in the head, fading out through the edge into the halo
   float k = clamp(across * 0.5 + 0.5, 0.0, 1.0);             // 0 inner .. 1 outer
@@ -92,12 +95,14 @@ void main() {
                        : mix(mix(vec3(0.66, 0.36, 0.86), vec3(0.86, 0.38, 0.70), lowEnd), vec3(0.42, 0.40, 0.95), k * 2.0);
   float arcA = band * inside * 0.95;
   vec3 coreCol = vec3(0.035, 0.035, 0.045);
-  vec3 haloCol = mist;
+  // the touch of blue on the right side of the head, as in v2: the halo there turns blue
+  float blueW = 0.75 * exp(-dot(q - vec2(1500.0, 1170.0), q - vec2(1500.0, 1170.0)) / (2.0 * 150.0 * 150.0));
+  vec3 haloCol = mix(mist, vec3(0.42, 0.66, 0.95), blueW);
   if (uLight > 0.5) {
     // the inverse: a light core, a soft dark halo, the same silhouette; the arc in deeper tones
     coreCol = vec3(0.975, 0.975, 0.985);
-    haloCol = vec3(0.30, 0.28, 0.38);
-    haloA *= 0.42;
+    haloCol = mix(vec3(0.30, 0.28, 0.38), vec3(0.14, 0.30, 0.62), blueW);
+    haloA *= 0.50;
     prism = prism * 0.62;
     arcA *= 0.8;
   }
@@ -123,7 +128,7 @@ void main() {
 const VS = `#version 300 es
 in vec2 pos; void main() { gl_Position = vec4(pos, 0.0, 1.0); }`;
 
-window.PARAMS = { period: 3.6, lift: 150, tailLag: 0.9 };
+window.PARAMS = { period: 6.5, lift: 64, tailLag: 0.3 };   // about 3 px at 120 px, one slow cycle
 function setup(canvas, sdf, light) {
   const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, preserveDrawingBuffer: true, alpha: true });
   const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);

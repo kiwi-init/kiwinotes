@@ -15,7 +15,9 @@ Substitui as candidatas esculpidas (`../candidatas/`), recusadas no #11067 porqu
 - **A névoa lavanda** é o anel largo e suave da v2 em volta do corpo todo, mais forte embaixo. Por dentro da borda há
   um brilho curto, como na referência 1.
 - **Embaixo,** o corpo vira fiapos lisos que afundam devagar, sem granulado.
-- **Ele flutua** 7 px a 120 px, num ciclo de 3,6 s, com a cauda atrasada. O halo respira junto.
+- **Ele flutua** cerca de 3 px a 120 px, num ciclo de 6,5 s, suave e com pouco atraso da cauda. O halo respira junto.
+- **A aura é contínua:** um piso de densidade perto do núcleo. `gapcheck.py` mede o alfa nas curvas a 40, 100 e 160
+  unidades fora do núcleo em 40 quadros de 10 s; o resultado está em `gapcheck.txt`.
 - **No claro,** o mesmo fantasma invertido: o núcleo claro e o halo escuro suave.
 - **Os olhos** continuam os do código, em (803, 1279) e (1243, 1279).
 
@@ -23,6 +25,6 @@ Substitui as candidatas esculpidas (`../candidatas/`), recusadas no #11067 porqu
 um quadro transparente para colar no hub. O módulo do app (`app/ui/kiwicat/shader.ts`) recebe isto depois da aprovação.
 
 **Provas:**
-- `fantasma-6s.mp4`: a v2 parada, o fantasma no escuro e no claro;
+- `fantasma-10s.mp4`: a v2 parada, o fantasma no escuro e no claro;
 - `fantasma-120px.webp`: no hub, em 2x e em 1x;
 - `quadro.webp`: um quadro do vídeo.

@@ -1,0 +1,6 @@
+('dark', 40) min alpha 0.247 at t=4.25 (x 1510, y 593), median 0.282, min/median 0.87
+('dark', 100) min alpha 0.200 at t=4.25 (x 506, y 1097), median 0.216, min/median 0.93
+('dark', 160) min alpha 0.165 at t=3.75 (x 450, y 1144), median 0.176, min/median 0.93
+('light', 40) min alpha 0.125 at t=3.75 (x 522, y 608), median 0.149, min/median 0.84
+('light', 100) min alpha 0.102 at t=3.50 (x 506, y 1134), median 0.114, min/median 0.90
+('light', 160) min alpha 0.082 at t=3.75 (x 1654, y 568), median 0.090, min/median 0.91
