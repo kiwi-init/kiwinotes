@@ -32,6 +32,8 @@ final class Helper {
     /// modifier. Only then the sound and the cat's `ouvindo` (`agent.listening`), so ⌃C never flashes them.
     private var agentConfirmed = false
     private var agentConfirmTimer: DispatchWorkItem?
+    /// Spec #9876 (#11393): the agent's mic opens only after the hold time or on the 2nd tap, never at the press.
+    private var agentGate = AgentMicGate()
     /// The agent's transcription is under way; Esc now drops it (`agentDropped`), and nothing is sent.
     private var agentTranscribing = false
     private var agentDropped = false
@@ -189,6 +191,7 @@ final class Helper {
             guard let self else { return }
             self.media.end()
             let target = self.recordingTarget ?? .dictation
+            if target == .agent { self.agentGate.reset() }
             guard !samples.isEmpty else {
                 self.talk.reset(target)
                 self.recordingTarget = nil
@@ -359,7 +362,7 @@ final class Helper {
             emit("hotkey.down", ["key": dictationSpec])
             // A recording this press starts is a quick note (T1320); the 2nd tap of a double tap keeps the 1st's.
             nextIsNote = dictationKey?.noteModifierHeld(flags: flags) ?? false
-            actions = talk.press(.dictation, at: ProcessInfo.processInfo.systemUptime, otherRecording: recordingTarget == .agent)
+            actions = talk.press(.dictation, at: ProcessInfo.processInfo.systemUptime, otherRecording: recordingTarget == .agent || agentGate.armed)
         case .release("dictation", _):
             emit("hotkey.up", ["key": dictationSpec])
             actions = talk.release(.dictation, at: ProcessInfo.processInfo.systemUptime)
@@ -471,16 +474,21 @@ final class Helper {
     /// A key's action, for its own recording only: one key never stops or cancels the other's.
     private func apply(_ action: GestureAction, for target: TalkTarget) {
         switch action {
+        case .startRecording where target == .agent:
+            // Armed only: the mic waits for the hold time or the 2nd tap (#11393).
+            run(agentGate.start())
+            scheduleAgentConfirm()
+        case .latch where target == .agent:
+            run(agentGate.latch())
+        case .stopRecording(let mode) where target == .agent:
+            run(agentGate.stop(mode))
+        case .cancelRecording where target == .agent:
+            run(agentGate.cancel())
         case .startRecording:
-            if target == .agent {
-                startRecording(reason: "hotkey", target: .agent)
-                scheduleAgentConfirm()
-            } else {
-                startRecording(reason: "hotkey", note: nextIsNote)
-            }
+            startRecording(reason: "hotkey", note: nextIsNote)
         case .latch:
             guard recordingTarget == target else { return }
-            if target == .agent { confirmAgent(latched: true) } else { emit("hotkey.toggle", ["on": true]) }
+            emit("hotkey.toggle", ["on": true])
         case .stopRecording(let mode):
             guard recordingTarget == target else { return }
             if mode == .toggle, target == .dictation { emit("hotkey.toggle", ["on": false]) }
@@ -491,14 +499,37 @@ final class Helper {
         }
     }
 
-    /// Spec #9876: held past the hold time (or latched), the Control is a talk to the agent: the start sound and
-    /// `agent.listening` (the cat goes to `ouvindo`). The mic opened at the press, so no syllable is lost.
+    /// What the gate says to do with the agent's mic.
+    private func run(_ effects: [AgentMicGate.Effect]) {
+        for effect in effects {
+            switch effect {
+            case .openMic(let latched):
+                // Only now the mic opens: then the sound and `agent.listening` (the cat goes to `ouvindo`).
+                if startRecording(reason: "hotkey", target: .agent) == nil, recordingTarget == .agent {
+                    confirmAgent(latched: latched)
+                } else {
+                    agentGate.reset()
+                }
+            case .stopMic(let mode):
+                guard recordingTarget == .agent else { continue }
+                stopRecording(reason: "hotkey", mode: mode.rawValue)
+            case .cancelMic:
+                guard recordingTarget == .agent else { continue }
+                cancelRecording(reason: "hotkey")
+            }
+        }
+    }
+
+    /// Spec #9876 (#11393): held past the hold time, the Control is a talk to the agent: the mic opens now. A ⌃C or a
+    /// tap before that never opened it.
     private func scheduleAgentConfirm() {
         agentConfirmTimer?.cancel()
-        guard recordingTarget == .agent else { return }
+        guard agentGate.armed else { return }
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.recordingTarget == .agent, case .pressed = self.talk.agent.state else { return }
-            self.confirmAgent(latched: false)
+            guard let self else { return }
+            let pressed: Bool
+            if case .pressed = self.talk.agent.state { pressed = true } else { pressed = false }
+            self.run(self.agentGate.holdPassed(stillPressed: pressed))
         }
         agentConfirmTimer = work
         DispatchQueue.main.asyncAfter(deadline: .now() + talk.agent.holdThreshold, execute: work)
@@ -656,6 +687,7 @@ final class Helper {
             try audio.start()
         } catch {
             talk.reset(.agent)
+            agentGate.reset()
             recordingTarget = nil
             agentConfirmTimer?.cancel()
             let microphone = Permission.microphone.status
@@ -722,6 +754,7 @@ final class Helper {
     /// nothing when Esc came first. The samples live only in memory: no dump, no journal; the audio is gone after.
     private func finishAgentRecording(_ samples: [Float], reason: String, mode: String, lost: String?, releasedAt: TimeInterval?) {
         recordingTarget = nil
+        agentGate.reset()
         agentConfirmTimer?.cancel()
         if agentConfirmed { cues.playEnd() }
         agentConfirmed = false
@@ -820,6 +853,7 @@ final class Helper {
             _ = audio.stop()
             agentConfirmTimer?.cancel()
             if agentConfirmed { cues.playEnd() }
+            agentGate.reset()
             recordingTarget = nil
             recordingStartedAt = nil
             emit("agent.record.cancelled", ["reason": reason, "listened": agentConfirmed])

@@ -161,3 +161,85 @@ final class TalkKeysTests: XCTestCase {
         XCTAssertEqual(k.release(.agent, at: 1), [])
     }
 }
+
+/// Spec #9876 (#11393): the agent's mic only opens after the hold time or on the 2nd tap, never at the press.
+final class AgentMicGateTests: XCTestCase {
+    /// The gesture and the gate together, as the helper drives them.
+    struct Rig {
+        var keys = TalkKeys()
+        var gate = AgentMicGate()
+        var effects: [AgentMicGate.Effect] = []
+        mutating func feed(_ actions: [GestureAction]) {
+            for a in actions {
+                switch a {
+                case .startRecording: effects += gate.start()
+                case .latch: effects += gate.latch()
+                case .stopRecording(let mode): effects += gate.stop(mode)
+                case .cancelRecording: effects += gate.cancel()
+                }
+            }
+        }
+        mutating func hold(at t: TimeInterval) {
+            effects += gate.holdPassed(stillPressed: { if case .pressed = keys.agent.state { return true }; return false }())
+            _ = t
+        }
+    }
+
+    func testControlCDoesNotOpenTheMic() {
+        var r = Rig()
+        r.feed(r.keys.press(.agent, at: 0))
+        r.feed(r.keys.interrupt(.agent)) // C, 80 ms later
+        r.hold(at: 0.25)
+        r.feed(r.keys.release(.agent, at: 0.3))
+        XCTAssertEqual(r.effects, [], "⌃C: the mic never opened")
+        XCTAssertFalse(r.gate.open)
+    }
+
+    func testAControlClickDoesNotOpenTheMic() {
+        var r = Rig()
+        r.feed(r.keys.press(.agent, at: 0))
+        r.feed(r.keys.interrupt(.agent)) // the click
+        r.feed(r.keys.release(.agent, at: 0.5))
+        r.hold(at: 0.25)
+        XCTAssertEqual(r.effects, [])
+    }
+
+    func testALoneTapDoesNotOpenTheMic() {
+        var r = Rig()
+        r.feed(r.keys.press(.agent, at: 0))
+        r.feed(r.keys.release(.agent, at: 0.1))
+        r.hold(at: 0.25) // the key is up: it was a tap
+        r.feed(r.keys.tick(now: 0.5).map(\.1))
+        XCTAssertEqual(r.effects, [])
+    }
+
+    func testHoldingOpensAfterTheHoldTimeAndLettingGoSends() {
+        var r = Rig()
+        r.feed(r.keys.press(.agent, at: 0))
+        XCTAssertEqual(r.effects, [], "not at the press")
+        r.hold(at: 0.25)
+        XCTAssertEqual(r.effects, [.openMic(latched: false)])
+        r.feed(r.keys.release(.agent, at: 2))
+        XCTAssertEqual(r.effects.last, .stopMic(.pushToTalk))
+    }
+
+    func testTheSecondTapOpensAndOneMoreSends() {
+        var r = Rig()
+        r.feed(r.keys.press(.agent, at: 0))
+        r.feed(r.keys.release(.agent, at: 0.1))
+        r.hold(at: 0.25)
+        r.feed(r.keys.press(.agent, at: 0.3))
+        XCTAssertEqual(r.effects, [.openMic(latched: true)])
+        r.feed(r.keys.release(.agent, at: 0.35))
+        r.feed(r.keys.press(.agent, at: 4))
+        XCTAssertEqual(r.effects.last, .stopMic(.toggle))
+    }
+
+    func testEscAfterOpeningCancels() {
+        var g = AgentMicGate()
+        _ = g.start()
+        XCTAssertEqual(g.holdPassed(stillPressed: true), [.openMic(latched: false)])
+        XCTAssertEqual(g.cancel(), [.cancelMic])
+        XCTAssertEqual(g.cancel(), [])
+    }
+}
