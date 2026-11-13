@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesa de ajuste do Kiwi-cat</title>
+<style>
+  :root { --bg: #1d1d22; --panel: #27272e; --line: #3a3a44; --text: #ecebf2; --muted: #a3a1b2; --accent: #8f86f0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+  header { padding: 14px 20px 6px; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .stage { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 20px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .big { width: 300px; height: 375px; display: block; border-radius: 8px; }
+  .dark { background: #000; } .light { background: #fff; }
+  .small { display: flex; flex-direction: column; gap: 10px; }
+  .hub { width: 200px; height: 150px; border-radius: 8px; position: relative; overflow: hidden; }
+  .hub canvas { position: absolute; right: 12px; bottom: 12px; width: 96px; height: 120px; }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; padding: 4px 20px 20px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin: 0; padding: 8px 12px 10px; }
+  legend { padding: 0 6px; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 150px 1fr 56px; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { color: var(--muted); font-size: 13px; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=color] { width: 48px; height: 24px; border: 0; padding: 0; background: none; }
+  select { background: #1b1b20; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+  .actions { display: flex; gap: 8px; padding: 0 20px 8px; flex-wrap: wrap; align-items: center; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; font-weight: 600; cursor: pointer; }
+  button.secondary { background: #3a3a44; }
+  #status { color: var(--muted); font-size: 13px; }
+  textarea { width: calc(100% - 40px); margin: 0 20px 20px; height: 0; opacity: 0; position: absolute; }
+  textarea.shown { position: static; height: 170px; opacity: 1; background: #141418; color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: 12px/1.4 ui-monospace, Menlo, monospace; padding: 8px; }
+</style>
+<header>
+  <h1>Mesa de ajuste do gato fantasma</h1>
+  <p>O repouso em loop. Mexa nos controles, depois use "Copiar os valores" e cole no canal (spec #11176).</p>
+</header>
+<div class="stage">
+  <figure><img class="big dark" id="v2" src="../../gerada/kiwi-cat-candidata-v2.png" alt="A v2 parada"><figcaption>v2 (parada)</figcaption></figure>
+  <figure><canvas class="big dark" id="cd"></canvas><figcaption>escuro</figcaption></figure>
+  <figure><canvas class="big light" id="cl"></canvas><figcaption>claro</figcaption></figure>
+  <div class="small">
+    <figure><div class="hub dark"><canvas id="sd"></canvas></div><figcaption>a 120 px, escuro</figcaption></figure>
+    <figure><div class="hub light"><canvas id="sl"></canvas></div><figcaption>a 120 px, claro</figcaption></figure>
+  </div>
+</div>
+<div class="actions">
+  <button id="copy">Copiar os valores</button>
+  <button id="reset" class="secondary">Voltar ao padrão</button>
+  <span id="status"></span>
+</div>
+<textarea id="out" readonly aria-label="Os valores"></textarea>
+<div class="controls" id="controls"></div>
+<script>
+// T11191 (spec #11176): the tuning desk for the ghost cat (spec #10508). A local tool: nothing goes to the network.
+// The parameter names are the ones the module's shader will use (app/ui/kiwicat), so the copied block becomes the
+// cat's default in the app.
+const MASK = "data:image/png;base64,__MASK__";   // the v2 core (bake_sdf_v2.py), 512 x 640, 4 canvas units per pixel
+
+const DEFAULTS = {
+  auraAmount: 1.0, auraRadius: 140, edgeSoftness: 44, auraFloor: 0.5, mistColor: "#b8add1",
+  arcIntensity: 0.95, arcWidth: 62, arcFrom: -206, arcTo: -28,
+  arcCyan: "#4dccf0", arcBlue: "#6b66f2", arcViolet: "#a85cdb", arcPink: "#db61b3",
+  breathOn: true, breathType: "respirar", breathPeriod: 6.5, breathAmount: 0.12,
+  floatOn: true, floatHeight: 3, floatPeriod: 6.5,
+  wispAmount: 0.5, wispSpeed: 1.0,
+};
+const GROUPS = [
+  ["Aura", [
+    ["auraAmount", "quantidade", 0, 1.6, 0.01, v => `${Math.round(v * 100)}%`],
+    ["auraRadius", "raio", 40, 320, 1, v => `${v}`],
+    ["edgeSoftness", "suavidade da borda", 8, 140, 1, v => `${v}`],
+    ["auraFloor", "densidade perto do corpo", 0, 1, 0.01, v => `${Math.round(v * 100)}%`],
+    ["mistColor", "cor da névoa", "color"],
+  ]],
+  ["Arco de cor", [
+    ["arcIntensity", "intensidade", 0, 1.5, 0.01, v => `${Math.round(v * 100)}%`],
+    ["arcWidth", "largura", 20, 140, 1, v => `${v}`],
+    ["arcFrom", "começa (bochecha)", -260, -120, 1, v => `${v}°`],
+    ["arcTo", "termina (direita)", -110, 20, 1, v => `${v}°`],
+    ["arcCyan", "ciano", "color"], ["arcBlue", "azul", "color"], ["arcViolet", "violeta", "color"], ["arcPink", "rosa", "color"],
+  ]],
+  ["Respiração", [
+    ["breathOn", "ligada", "check"],
+    ["breathType", "tipo", "select", ["respirar", "pulsar", "ondular"]],
+    ["breathPeriod", "ciclo", 1, 14, 0.1, v => `${v.toFixed(1)} s`],
+    ["breathAmount", "amplitude", 0, 0.5, 0.01, v => `${Math.round(v * 100)}%`],
+  ]],
+  ["Flutuação", [
+    ["floatOn", "ligada", "check"],
+    ["floatHeight", "altura (a 120 px)", 0, 10, 0.1, v => `${v.toFixed(1)} px`],
+    ["floatPeriod", "ciclo", 1, 14, 0.1, v => `${v.toFixed(1)} s`],
+  ]],
+  ["Fiapos de baixo", [
+    ["wispAmount", "quantidade", 0, 1.5, 0.01, v => `${Math.round(v * 100)}%`],
+    ["wispSpeed", "velocidade", 0, 3, 0.01, v => `${Math.round(v * 100)}%`],
+  ]],
+];
+
+const KEY = "kiwi-cat-ajuste-v1";
+let P = { ...DEFAULTS };
+try { Object.assign(P, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch {} };
+
+// ---- the controls ----
+const inputs = {};
+function buildControls() {
+  const root = document.getElementById("controls");
+  for (const [title, rows] of GROUPS) {
+    const fs = document.createElement("fieldset"); fs.innerHTML = `<legend>${title}</legend>`;
+    for (const [key, label, a, b, step, fmt] of rows) {
+      const row = document.createElement("div"); row.className = "row";
+      const id = `c-${key}`; let input, out = document.createElement("output");
+      if (a === "color") { input = Object.assign(document.createElement("input"), { type: "color" }); }
+      else if (a === "check") { input = Object.assign(document.createElement("input"), { type: "checkbox" }); }
+      else if (a === "select") { input = document.createElement("select"); for (const o of b) input.append(new Option(o, o)); }
+      else { input = Object.assign(document.createElement("input"), { type: "range", min: a, max: b, step }); }
+      input.id = id;
+      const show = () => { out.textContent = a === "color" ? P[key] : a === "check" ? (P[key] ? "sim" : "não") : a === "select" ? "" : fmt(P[key]); };
+      const set = () => { if (a === "color" || a === "select") input.value = P[key]; else if (a === "check") input.checked = P[key]; else input.value = P[key]; show(); };
+      input.addEventListener("input", () => {
+        P[key] = a === "check" ? input.checked : a === "color" || a === "select" ? input.value : Number(input.value);
+        show(); save();
+      });
+      inputs[key] = set;
+      row.append(Object.assign(document.createElement("label"), { htmlFor: id, textContent: label }), input, out);
+      fs.append(row); set();
+    }
+    root.append(fs);
+  }
+}
+
+// ---- the v2 core as a signed distance field ----
+function edt1(f, n) {   // Felzenszwalb & Huttenlocher, squared distance in 1D
+  const d = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1); let k = 0; v[0] = 0; z[0] = -Infinity; z[1] = Infinity;
+  for (let q = 1; q < n; q++) {
+    let s; do { const r = v[k]; s = ((f[q] + q * q) - (f[r] + r * r)) / (2 * q - 2 * r); if (s <= z[k]) k--; else break; } while (k >= 0);
+    k++; v[k] = q; z[k] = s; z[k + 1] = Infinity;
+  }
+  k = 0; for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; const r = v[k]; d[q] = (q - r) * (q - r) + f[r]; }
+  return d;
+}
+function edt2(grid, w, h) {   // squared distance to the nearest true cell
+  const INF = 1e20, g = new Float64Array(w * h);
+  for (let i = 0; i < w * h; i++) g[i] = grid[i] ? 0 : INF;
+  const col = new Float64Array(h);
+  for (let x = 0; x < w; x++) { for (let y = 0; y < h; y++) col[y] = g[y * w + x]; const r = edt1(col, h); for (let y = 0; y < h; y++) g[y * w + x] = r[y]; }
+  const row = new Float64Array(w);
+  for (let y = 0; y < h; y++) { for (let x = 0; x < w; x++) row[x] = g[y * w + x]; const r = edt1(row, w); for (let x = 0; x < w; x++) g[y * w + x] = r[x]; }
+  return g;
+}
+function blur(src, w, h, sigma) {
+  const r = Math.ceil(sigma * 3), k = []; let sum = 0;
+  for (let i = -r; i <= r; i++) { const v = Math.exp(-(i * i) / (2 * sigma * sigma)); k.push(v); sum += v; }
+  for (let i = 0; i < k.length; i++) k[i] /= sum;
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let i = -r; i <= r; i++) s += src[y * w + Math.min(w - 1, Math.max(0, x + i))] * k[i + r]; tmp[y * w + x] = s; }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let s = 0; for (let i = -r; i <= r; i++) s += tmp[Math.min(h - 1, Math.max(0, y + i)) * w + x] * k[i + r]; out[y * w + x] = s; }
+  return out;
+}
+async function sdfFromMask() {
+  const img = new Image(); img.src = MASK; await img.decode();
+  const w = img.width, h = img.height, c = Object.assign(document.createElement("canvas"), { width: w, height: h });
+  const ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, w, h).data, inside = new Uint8Array(w * h), outside = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) { inside[i] = px[i * 4] > 127 ? 1 : 0; outside[i] = 1 - inside[i]; }
+  const dOut = edt2(inside, w, h), dIn = edt2(outside, w, h), d = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) d[i] = (Math.sqrt(dOut[i]) - Math.sqrt(dIn[i])) * 4;   // canvas units, negative inside
+  const soft = blur(d, w, h, 14), rg = new Float32Array(w * h * 2);
+  for (let i = 0; i < w * h; i++) { rg[i * 2] = d[i]; rg[i * 2 + 1] = soft[i]; }
+  return { w, h, data: rg };
+}
+
+// ---- the ghost shader (one field) ----
+const FS = `__FS__`;
+const VS = `#version 300 es
+in vec2 pos; void main() { gl_Position = vec4(pos, 0.0, 1.0); }`;
+const hex = s => [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16) / 255);
+const BREATH = { respirar: 0, pulsar: 1, ondular: 2 };
+function setup(canvas, sdf, light) {
+  const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, preserveDrawingBuffer: true });
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, "pos"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, sdf.w, sdf.h, 0, gl.RG, gl.FLOAT, sdf.data);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  const U = {}; const u = n => U[n] ??= gl.getUniformLocation(prog, n);
+  return t => {
+    gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(u("uTime"), t); gl.uniform1f(u("uLight"), light ? 1 : 0); gl.uniform2f(u("uRes"), canvas.width, canvas.height);
+    gl.uniform4f(u("uEye0"), 802.823, 1279.323, 68.251, 0); gl.uniform4f(u("uEye1"), 1243.342, 1279.308, 67.94, 0);
+    gl.uniform1f(u("auraAmount"), P.auraAmount); gl.uniform1f(u("auraRadius"), P.auraRadius); gl.uniform1f(u("edgeSoftness"), P.edgeSoftness);
+    gl.uniform1f(u("auraFloor"), P.auraFloor); gl.uniform3fv(u("mistColor"), hex(P.mistColor));
+    gl.uniform1f(u("arcIntensity"), P.arcIntensity); gl.uniform1f(u("arcWidth"), P.arcWidth);
+    gl.uniform1f(u("arcFrom"), P.arcFrom); gl.uniform1f(u("arcTo"), P.arcTo);
+    for (const k of ["arcCyan", "arcBlue", "arcViolet", "arcPink"]) gl.uniform3fv(u(k), hex(P[k]));
+    gl.uniform1f(u("breathOn"), P.breathOn ? 1 : 0); gl.uniform1f(u("breathType"), BREATH[P.breathType] ?? 0);
+    gl.uniform1f(u("breathPeriod"), P.breathPeriod); gl.uniform1f(u("breathAmount"), P.breathAmount);
+    gl.uniform1f(u("floatOn"), P.floatOn ? 1 : 0); gl.uniform1f(u("floatHeight"), P.floatHeight); gl.uniform1f(u("floatPeriod"), P.floatPeriod);
+    gl.uniform1f(u("wispAmount"), P.wispAmount); gl.uniform1f(u("wispSpeed"), P.wispSpeed);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  };
+}
+
+// ---- the loop ----
+const dpr = Math.min(2, window.devicePixelRatio || 1);
+function size(c, w, h) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+let draw = null, running = false, t0 = performance.now();
+const smalls = [["sd", "cd"], ["sl", "cl"]].map(([s, big]) => [document.getElementById(s), document.getElementById(big)]);
+function frame(now) {
+  if (!running) return;
+  draw((now - t0) / 1000);
+  requestAnimationFrame(frame);
+}
+function renderAt(t) { draw(t); }   // for the headless print
+function start() { if (!running && draw && document.visibilityState === "visible") { running = true; requestAnimationFrame(frame); } }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") start(); else running = false; });
+
+// ---- copy and reset ----
+function block() {
+  const keys = Object.keys(DEFAULTS);
+  const lines = keys.map(k => `  "${k}": ${JSON.stringify(P[k])}`);
+  return `Kiwi-cat, repouso (spec #11176):\n{\n${lines.join(",\n")}\n}`;
+}
+document.getElementById("copy").addEventListener("click", async () => {
+  const text = block(), area = document.getElementById("out"), status = document.getElementById("status");
+  area.value = text; area.classList.add("shown");
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch {}
+  if (!ok) { area.select(); try { ok = document.execCommand("copy"); } catch {} }
+  status.textContent = ok ? "Copiado. Cole no canal." : "Selecione o texto abaixo e copie (⌘C).";
+});
+document.getElementById("reset").addEventListener("click", () => {
+  P = { ...DEFAULTS }; save(); for (const set of Object.values(inputs)) set();
+  document.getElementById("status").textContent = "Valores do padrão.";
+});
+
+buildControls();
+(async () => {
+  const sdf = await sdfFromMask();
+  const cd = document.getElementById("cd"), cl = document.getElementById("cl");
+  size(cd, 300, 375); size(cl, 300, 375);
+  for (const [s] of smalls) size(s, 96, 120);
+  const d = setup(cd, sdf, false), l = setup(cl, sdf, true);
+  draw = t => {
+    d(t); l(t);
+    for (const [s, big] of smalls) { const c = s.getContext("2d"); c.clearRect(0, 0, s.width, s.height); c.imageSmoothingQuality = "high"; c.drawImage(big, 0, 0, s.width, s.height); }
+  };
+  window.renderAt = renderAt; window.ready = true;
+  start();
+})();
+</script>
+</html>
