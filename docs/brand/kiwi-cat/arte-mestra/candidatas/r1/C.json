@@ -1,0 +1,1 @@
+{"head": [1024, 1225, 470, 370], "head_sq": 2.3, "cheek": 0.06, "body": [380, 1260, 560, 2010, 200], "ear": [[470, 700], [560, 1150], [945, 880], 52], "ear_bow": 36, "ear_inner": 0.6, "arc": [-178, -40, 58, 56, -26], "arc_taper": 0.8, "R_body": 520, "R_head": 360, "R_ear": 120, "socket": 14, "eye_ao": 0.18, "label": "C: perto da v2: orelhas abertas, aro diagonal"}

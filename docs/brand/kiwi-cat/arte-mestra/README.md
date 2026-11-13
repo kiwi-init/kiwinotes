@@ -6,13 +6,10 @@ o módulo, a aura nem a animação do app.
 
 ## Estado
 
-Preparação, sem candidata gerada. O spec aprovado v10661 exige referências
-marcadas pelo harry antes de desenhar. O briefing textual dessas referências
-foi solicitado ao lead em #10742. Ele pediu ao harry para marcar a folha
-em #10756/#10757 e confirmou em #10758 que não se deve gerar antes da
-resposta. Não se presume uma seleção humana.
-A regra #7652 permanece: imagens de referência do harry não são recebidas
-pelo Codex; o lead traduz a gramática em texto.
+Lote 1 com três rodadas de crítica (A, B, C), à espera da nota do lead: veja
+[criticas/rodadas.md](criticas/rodadas.md) e `candidatas/r3/folha.webp`. Sem gerador de imagem desde o #10981: a arte
+sai em código (`render/render.py`), no estilo da referência escolhida pelo harry (a escultura 3D, #10794), pelo
+briefing em texto do lead (#10795).
 
 ## Invariantes aprovados
 
