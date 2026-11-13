@@ -71,3 +71,21 @@ As medidas são da página isolada no Playwright WebKit, não do WKWebView do ap
 A primeira sondagem, anterior à otimização de pausas dos gestos, está em
 [diagnostico-inicial/](diagnostico-inicial/). Ela falhou no teto de CPU e não
 é resultado de aceite. As medidas finais serão anexadas após a coleta pareada.
+
+## Diagnóstico de CPU e verificação de quadros
+
+Os três pares do head `1df775e` estão em [diagnostico-1df775e/](diagnostico-1df775e/).
+A média do delta foi +0,315 ponto, com faixa de −0,309 a +0,846: a variação
+é maior que o teto e o lead considerou a coleta inconclusiva (Kiwi #9130).
+O aceite será medido em oito pares alternados, com carga de 1 minuto abaixo
+de 2 no começo de cada par; passa com mediana ≤+0,5 e pelo menos 6/8 pares
+em ≤+0,5. Os números anteriores ficam preservados, sem contar como aceite.
+
+O check sem gravador `bun scripts/kiwicat-face-fps.ts` mede a janela inteiramente
+dentro da página, sem sondagem de processos entre o começo e o fim.
+[Resultado](desempenho/fps-por-estado.json): 59,88–60,06 fps em névoa e vetores.
+Em `pronto`, a amostra foi de 101 a 802 ms após entrar no estado (701 ms),
+antes do retorno automático em 1,1 s: 59,89 fps. Os outros estados tiveram
+1 s de assentamento e 3 s de amostra. Nenhuma janela trocou de estado.
+A primeira amostra de `pronto` do benchmark de CPU atravessou o retorno
+ao repouso; seu FPS agregado não é a medida da reação.
