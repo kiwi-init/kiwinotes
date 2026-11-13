@@ -1,0 +1,285 @@
+{
+  "scene": "double",
+  "seed": 17,
+  "gestureStart": 4.8841150312218815,
+  "gestureEnd": 6.535531696942635,
+  "variant": "fog",
+  "windows": [
+    {
+      "index": 1,
+      "elapsedSeconds": 2.398349833000015,
+      "pageWindow": {
+        "elapsedMs": 2333,
+        "relativeStart": 4.453,
+        "relativeEnd": 6.786
+      },
+      "initial": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 10,
+        "reduced": false,
+        "slow": false
+      },
+      "final": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 15,
+        "reduced": false,
+        "slow": false
+      },
+      "isolatedGesture": true,
+      "cpuSeconds": 0.06000000000000005,
+      "processes": [
+        {
+          "pid": 76909,
+          "ppid": 76783,
+          "cpu": 0.01,
+          "command": "bash /Users/davivicente/Library/Caches/ms-playwright/webkit-2370/pw_run.sh --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0
+        },
+        {
+          "pid": 76915,
+          "ppid": 76909,
+          "cpu": 0.45,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/Playwright.app/Contents/MacOS/Playwright --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0.010000000000000009
+        },
+        {
+          "pid": 76916,
+          "ppid": 1,
+          "cpu": 0.22,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking.Development",
+          "cpuSecondsSampled": 0
+        },
+        {
+          "pid": 76917,
+          "ppid": 1,
+          "cpu": 0.4,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU.Development",
+          "cpuSecondsSampled": 0.010000000000000009
+        },
+        {
+          "pid": 76924,
+          "ppid": 1,
+          "cpu": 0.66,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent.Development",
+          "cpuSecondsSampled": 0.040000000000000036
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "elapsedSeconds": 2.394330291999999,
+      "pageWindow": {
+        "elapsedMs": 2331,
+        "relativeStart": 4.456,
+        "relativeEnd": 6.787
+      },
+      "initial": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 10,
+        "reduced": false,
+        "slow": false
+      },
+      "final": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 15,
+        "reduced": false,
+        "slow": false
+      },
+      "isolatedGesture": true,
+      "cpuSeconds": 0.08000000000000007,
+      "processes": [
+        {
+          "pid": 76909,
+          "ppid": 76783,
+          "cpu": 0.01,
+          "command": "bash /Users/davivicente/Library/Caches/ms-playwright/webkit-2370/pw_run.sh --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0
+        },
+        {
+          "pid": 76915,
+          "ppid": 76909,
+          "cpu": 0.53,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/Playwright.app/Contents/MacOS/Playwright --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0.020000000000000018
+        },
+        {
+          "pid": 76916,
+          "ppid": 1,
+          "cpu": 0.25,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking.Development",
+          "cpuSecondsSampled": 0
+        },
+        {
+          "pid": 76917,
+          "ppid": 1,
+          "cpu": 0.49,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU.Development",
+          "cpuSecondsSampled": 0.010000000000000009
+        },
+        {
+          "pid": 76927,
+          "ppid": 1,
+          "cpu": 0.64,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent.Development",
+          "cpuSecondsSampled": 0.050000000000000044
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "elapsedSeconds": 2.392242957999988,
+      "pageWindow": {
+        "elapsedMs": 2324,
+        "relativeStart": 4.461,
+        "relativeEnd": 6.785
+      },
+      "initial": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 10,
+        "reduced": false,
+        "slow": false
+      },
+      "final": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 15,
+        "reduced": false,
+        "slow": false
+      },
+      "isolatedGesture": true,
+      "cpuSeconds": 0.06000000000000005,
+      "processes": [
+        {
+          "pid": 76909,
+          "ppid": 76783,
+          "cpu": 0.01,
+          "command": "bash /Users/davivicente/Library/Caches/ms-playwright/webkit-2370/pw_run.sh --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0
+        },
+        {
+          "pid": 76915,
+          "ppid": 76909,
+          "cpu": 0.61,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/Playwright.app/Contents/MacOS/Playwright --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0.010000000000000009
+        },
+        {
+          "pid": 76916,
+          "ppid": 1,
+          "cpu": 0.27,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking.Development",
+          "cpuSecondsSampled": 0
+        },
+        {
+          "pid": 76917,
+          "ppid": 1,
+          "cpu": 0.58,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU.Development",
+          "cpuSecondsSampled": 0.010000000000000009
+        },
+        {
+          "pid": 76930,
+          "ppid": 1,
+          "cpu": 0.65,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent.Development",
+          "cpuSecondsSampled": 0.040000000000000036
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "elapsedSeconds": 2.39991754200001,
+      "pageWindow": {
+        "elapsedMs": 2332,
+        "relativeStart": 4.455,
+        "relativeEnd": 6.787
+      },
+      "initial": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 10,
+        "reduced": false,
+        "slow": false
+      },
+      "final": {
+        "state": "repouso",
+        "faceUpdates": null,
+        "quietPlans": null,
+        "animations": 0,
+        "animationStates": [],
+        "draws": 15,
+        "reduced": false,
+        "slow": false
+      },
+      "isolatedGesture": true,
+      "cpuSeconds": 0.07999999999999996,
+      "processes": [
+        {
+          "pid": 76909,
+          "ppid": 76783,
+          "cpu": 0.01,
+          "command": "bash /Users/davivicente/Library/Caches/ms-playwright/webkit-2370/pw_run.sh --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0
+        },
+        {
+          "pid": 76915,
+          "ppid": 76909,
+          "cpu": 0.69,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/Playwright.app/Contents/MacOS/Playwright --inspector-pipe --headless --no-startup-window",
+          "cpuSecondsSampled": 0.019999999999999907
+        },
+        {
+          "pid": 76916,
+          "ppid": 1,
+          "cpu": 0.3,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking.Development",
+          "cpuSecondsSampled": 0.010000000000000009
+        },
+        {
+          "pid": 76917,
+          "ppid": 1,
+          "cpu": 0.67,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU.Development",
+          "cpuSecondsSampled": 0.010000000000000009
+        },
+        {
+          "pid": 76933,
+          "ppid": 1,
+          "cpu": 0.64,
+          "command": "/Users/davivicente/Library/Caches/ms-playwright/webkit-2370/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent.Development",
+          "cpuSecondsSampled": 0.040000000000000036
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "elapsedSeconds": 9.584840625000012,
+  "cpuSeconds": 0.28000000000000014,
+  "cpuMean": 2.921279663948505
+}
