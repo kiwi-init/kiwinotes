@@ -1,0 +1,78 @@
+{
+  "task": "T10437",
+  "revision": 2,
+  "checks": [
+    {
+      "theme": "dark",
+      "opacity": 1,
+      "expectedAlpha": 0,
+      "actualAlpha": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "theme": "dark",
+      "opacity": 0.35,
+      "expectedAlpha": 166,
+      "actualAlpha": [
+        166,
+        166,
+        166
+      ]
+    },
+    {
+      "theme": "dark",
+      "opacity": 0,
+      "expectedAlpha": 255,
+      "actualAlpha": [
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "theme": "light",
+      "opacity": 1,
+      "expectedAlpha": 0,
+      "actualAlpha": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "theme": "light",
+      "opacity": 0.35,
+      "expectedAlpha": 166,
+      "actualAlpha": [
+        166,
+        166,
+        166
+      ]
+    },
+    {
+      "theme": "light",
+      "opacity": 0,
+      "expectedAlpha": 255,
+      "actualAlpha": [
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "theme": "dark",
+      "blueCompositionMax": 1,
+      "holePixelsMatchUnderlyingBodyAndHub": true,
+      "hubSource": "/tmp/kiwi-T9708-hub-composed/hub-dark.png"
+    },
+    {
+      "theme": "light",
+      "blueCompositionMax": 2,
+      "holePixelsMatchUnderlyingBodyAndHub": true,
+      "hubSource": "/tmp/kiwi-T9708-hub-composed/hub-light.png"
+    }
+  ]
+}

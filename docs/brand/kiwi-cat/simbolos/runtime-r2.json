@@ -1,0 +1,100 @@
+{
+  "task": "T10437",
+  "checks": [
+    {
+      "name": "host metadata changes only symbol ink",
+      "colors": [
+        "rgb(255, 255, 255)",
+        "rgb(23, 23, 28)",
+        "rgb(255, 255, 255)"
+      ],
+      "sameFrame": true,
+      "sameDraws": true,
+      "backing": 0
+    },
+    {
+      "name": "voice waves",
+      "voice": 0,
+      "count": 1,
+      "parts": [
+        "0",
+        "1",
+        "2"
+      ]
+    },
+    {
+      "name": "voice waves",
+      "voice": 0.5,
+      "count": 2,
+      "parts": [
+        "0",
+        "1",
+        "2"
+      ]
+    },
+    {
+      "name": "voice waves",
+      "voice": 1,
+      "count": 3,
+      "parts": [
+        "0",
+        "1",
+        "2"
+      ]
+    },
+    {
+      "name": "voice waves",
+      "voice": null,
+      "count": 0,
+      "parts": [
+        "0",
+        "1",
+        "2"
+      ]
+    },
+    {
+      "name": "fixed error curve traced by dash without reshaping",
+      "trace": [
+        {
+          "time": 0.1,
+          "d": "M10 54 C16 14 44 10 46 40 S18 82 40 80 S76 16 62 20 S50 74 76 70 S96 36 84 30",
+          "length": 313.954833984375,
+          "offset": 281.04758,
+          "progress": 0.10481523905210495
+        },
+        {
+          "time": 0.3,
+          "d": "M10 54 C16 14 44 10 46 40 S18 82 40 80 S76 16 62 20 S50 74 76 70 S96 36 84 30",
+          "length": 313.954833984375,
+          "offset": 215.23308,
+          "progress": 0.3144457171563148
+        },
+        {
+          "time": 0.6,
+          "d": "M10 54 C16 14 44 10 46 40 S18 82 40 80 S76 16 62 20 S50 74 76 70 S96 36 84 30",
+          "length": 313.954833984375,
+          "offset": 116.51133,
+          "progress": 0.6288914343126296
+        },
+        {
+          "time": 0.85,
+          "d": "M10 54 C16 14 44 10 46 40 S18 82 40 80 S76 16 62 20 S50 74 76 70 S96 36 84 30",
+          "length": 313.954833984375,
+          "offset": 34.2432,
+          "progress": 0.890929531942892
+        },
+        {
+          "time": 1.2,
+          "d": "M10 54 C16 14 44 10 46 40 S18 82 40 80 S76 16 62 20 S50 74 76 70 S96 36 84 30",
+          "length": 313.954833984375,
+          "offset": 262.67667,
+          "progress": 0.16332975373175376
+        }
+      ]
+    },
+    {
+      "name": "dispose empties module"
+    }
+  ],
+  "errors": []
+}

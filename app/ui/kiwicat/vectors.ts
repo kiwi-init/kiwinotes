@@ -1,67 +1,30 @@
-// T8959: vector forms ported from this repository's approved estados/montar.py.
-// No raster symbols, new motifs, glow or agent-coloured strokes.
+// T10437: fixed approved symbol curves; eyes and gesture timing unchanged.
 import type { CatFrame } from "./gestures";
 import type { FogState } from "./state";
+import { SYMBOL_SHAPES, type SymbolBackground } from "./symbols";
 type Point = [number, number];
 type Style = Record<string, string>;
 type Styled = HTMLElement | SVGElement;
-const TAU = Math.PI * 2;
 const fmt = (n: number) => Number(n.toFixed(5)).toString();
 const points = (n: number, fn: (u: number) => Point) => Array.from({ length: n }, (_, i) => fn(i / (n - 1)));
 const path = (p: Point[], close = true) => p.length ? "M" + p.map(v => v.map(fmt).join(",")).join("L") + (close ? "Z" : "") : "";
-function transform([x, y]: Point, kind: string): Point {
-  if (kind === "alert" || kind === "sleep") {
-    const dx = x - 1710, dy = y - 700, a = Math.PI / 15;
-    x = 1710 + dx * Math.cos(a) - dy * Math.sin(a); y = 700 + dx * Math.sin(a) + dy * Math.cos(a);
-  }
-  x = kind === "thought" ? 1560 + (x - 1560) * 1.12 : x > 1024 ? 1545 + (x - 1545) * 1.18 - 45 : 400 + (x - 400) * 1.18 + 25;
-  return [x, 850 + (y - 850) * 1.15 + 35];
-}
-function polygon(p: Point[], kind: string, rounds = 0) {
-  for (let pass = 0; pass < rounds; pass++) p = p.flatMap((a, i): Point[] => {
-    const b = p[(i + 1) % p.length]!;
-    return [[a[0] * .75 + b[0] * .25, a[1] * .75 + b[1] * .25], [a[0] * .25 + b[0] * .75, a[1] * .25 + b[1] * .75]];
-  });
-  return path(p.map(p => transform(p, kind)));
-}
-const disc = (x: number, y: number, r: number, kind: string) => polygon(points(90, u => [x + r * Math.cos(u * TAU), y + r * (1 + .04 * Math.sin(u * TAU * 3)) * Math.sin(u * TAU)]), kind);
-function ribbon(p: Point[], widths: number[], kind: string) {
-  if (p.length < 2) return "";
-  const a: Point[] = [], b: Point[] = [];
-  for (let i = 0; i < p.length; i++) {
-    const before = p[Math.max(0, i - 1)]!, after = p[Math.min(p.length - 1, i + 1)]!, q = p[i]!;
-    const dx = after[0] - before[0], dy = after[1] - before[1], length = Math.max(.001, Math.hypot(dx, dy)), half = widths[i]! / 2;
-    a.push([q[0] - dy / length * half, q[1] + dx / length * half]);
-    b.push([q[0] + dy / length * half, q[1] - dx / length * half]);
-  }
-  const first = p[0]!, last = p[p.length - 1]!;
-  // The approved brush unions each ribbon quad; even-odd filling an entire
-  // self-crossing outline would cut new holes in the error scribble.
-  return p.slice(1).map((_, i) => polygon([a[i]!, a[i + 1]!, b[i + 1]!, b[i]!], kind)).join("") +
-    disc(...first, widths[0]! / 2, kind) + disc(...last, widths[widths.length - 1]! / 2, kind);
-}
-const dash = (x: number, y: number, length: number, dy: number, kind: string) => ribbon(points(50, t => [x + t * length, y + dy * t + 3 * Math.sin(t * Math.PI)]), points(50, t => [4 + 36 * (1 - t) ** .65, 0]).map(p => p[0]), kind);
-const bezier = (p: Point[]) => points(80, t => [0, 1].map(i => (1 - t) ** 3 * p[0]![i]! + 3 * (1 - t) ** 2 * t * p[1]![i]! + 3 * (1 - t) * t ** 2 * p[2]![i]! + t ** 3 * p[3]![i]!) as Point);
-const drop = (x: number, y: number) => polygon([...bezier([[x, y - 65], [x - 10, y - 45], [x - 66, y + 24], [x - 38, y + 51]]), ...bezier([[x - 38, y + 51], [x + 43, y + 98], [x + 72, y + 12], [x, y - 65]])], "work");
-const star = (x: number, y: number, r: number) => polygon([[x, y - r], [x + 13, y - 14], [x + r, y + 3], [x + 13, y + 16], [x - 2, y + r], [x - 14, y + 15], [x - r, y - 2], [x - 15, y - 15]], "spark", 2);
-interface Sprite { state: FogState; element: HTMLDivElement; pivot: Point; part?: number }
-const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 2048 2560" style="display:block;overflow:visible" fill="white" aria-hidden="true">${body}</svg>`;
-const white = (d: string, hole = false) => `<path d="${d}" fill-rule="${hole ? "evenodd" : "nonzero"}"/>`;
-export function createVectorLayer(root: HTMLElement, width: number, height: number, backdrop = false) {
+let vectorLayerSerial = 0;
+interface Sprite { state: FogState; element: HTMLDivElement; part?: number }
+export function createVectorLayer(root: HTMLElement, width: number, height: number, background: SymbolBackground = "dark") {
+  const maskPrefix = `kn-cat-symbol-${++vectorLayerSerial}`;
   const layer = document.createElement("div");
   layer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:visible";
   root.append(layer);
-  if (backdrop) {
-    layer.className = "kn-cat-backdrop";
-    const style = document.createElement("style");
-    style.textContent = ".kn-cat-backdrop svg { fill:black !important; stroke:black !important; stroke-width:18px; stroke-linejoin:round } .kn-cat-backdrop svg * { fill:black !important; stroke:black !important; paint-order:stroke fill }";
-    layer.append(style);
+  function setBackground(value: SymbolBackground) {
+    layer.style.color = value === "light" ? "#17171c" : "#fff";
   }
+  setBackground(background);
   const eyeNodes = [
     { cx: 802.823, cy: 1279.323, r: 68.251 },
     { cx: 1243.342, cy: 1279.308, r: 67.94 },
-  ].filter(() => !backdrop).map(e => {
+  ].map((e, index) => {
     const outer = document.createElement("div");
+    outer.dataset.eye = String(index);
     outer.style.cssText = `position:absolute;left:${e.cx / 2048 * 100}%;top:${e.cy / 2560 * 100}%;width:${e.r * 2 / 2048 * 100}%;height:${e.r * 2 / 2560 * 100}%;transform-origin:center;will-change:transform`;
     const disk = document.createElement("div"), happy = document.createElement("div"), asleep = document.createElement("div");
     for (const node of [disk, happy, asleep]) { node.style.cssText = "position:absolute;inset:0;transform-origin:center;will-change:transform,opacity"; outer.append(node); }
@@ -74,51 +37,30 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     return { outer, disk, happy, asleep };
   });
   const sprites: Sprite[] = [];
-  function sprite(state: FogState, body: string, pivot: Point, part?: number) {
+  for (const shape of SYMBOL_SHAPES) {
+    const [left, top, size] = shape.box, scale = size / 100;
+    const pivot = [left + shape.pivot[0] * scale, top + shape.pivot[1] * scale];
     const element = document.createElement("div");
-    element.dataset.symbol = state;
-    if (part !== undefined) element.dataset.part = String(part);
-    element.style.cssText = `position:absolute;inset:0;transform-origin:${pivot[0] / 2048 * 100}% ${pivot[1] / 2560 * 100}%;opacity:0`;
-    element.innerHTML = svg(body); layer.append(element);
-    // Rasterize only the motif bounds, rather than one full canvas per symbol.
-    // A local pivot preserves the exact approved position and scaling.
-    const graphic = element.querySelector<SVGSVGElement>("svg")!;
-    const box = graphic.getBBox();
-    // The animated error path starts empty; reserve its full source envelope.
-    const bounds = state === "erro" ? { x: 1500, y: 450, width: 500, height: 400 } : box;
-    const pad = backdrop ? 14 : 4;
-    const x = bounds.x - pad, y = bounds.y - pad, w = bounds.width + pad * 2, h = bounds.height + pad * 2;
+    element.dataset.symbol = shape.state;
+    if (shape.part !== undefined) element.dataset.part = String(shape.part);
+    element.style.cssText = "position:absolute;inset:0;opacity:0";
+    element.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 2048 2560" style="display:block;overflow:visible" fill="currentColor" aria-hidden="true"><g transform="translate(${left} ${top}) scale(${scale})">${shape.body.replaceAll("__THINKING_MASK__", maskPrefix + "-thinking")}</g></svg>`;
+    layer.append(element);
+    const graphic = element.querySelector<SVGSVGElement>("svg")!, box = graphic.getBBox();
+    // getBBox excludes stroke. Reserve the full 11-unit Z stroke and AA fringe.
+    const pad = 48, x = box.x - pad, y = box.y - pad, w = box.width + pad * 2, h = box.height + pad * 2;
     graphic.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
     element.style.inset = "auto";
     Object.assign(element.style, { left: `${x / 2048 * 100}%`, top: `${y / 2560 * 100}%`,
       width: `${w / 2048 * 100}%`, height: `${h / 2560 * 100}%`,
-      transformOrigin: `${(pivot[0] - x) / w * 100}% ${(pivot[1] - y) / h * 100}%` });
-    sprites.push({ state, element, pivot, part }); return element;
+      transformOrigin: `${(pivot[0]! - x) / w * 100}% ${(pivot[1]! - y) / h * 100}%` });
+    sprites.push({ state: shape.state, element, part: shape.part });
   }
-  const alert = polygon([[1661, 480], [1758, 470], [1735, 634], [1694, 644]], "alert", 2) + disc(1714, 693, 28, "alert") + dash(1822, 598, 65, -35, "alert") + dash(1822, 666, 67, 20, "alert");
-  sprite("acordou", white(alert), [1740, 640]);
-  const zs = [[1640, 730, 105], [1800, 530, 150]].map(([x, y, z]) => {
-    const u = z! / 2;
-    return polygon([[x! - u, y! - u], [x! + u + 7, y! - u - 6], [x! + u + 1, y! - u + 35], [x! - u + 42, y! + u - 31], [x! + u + 8, y! + u - 30], [x! + u, y! + u + 6], [x! - u - 6, y! + u], [x! - u + 1, y! + u - 30], [x! + u - 43, y! - u + 33], [x! - u + 2, y! - u + 37]], "sleep", 1);
-  }).join("");
-  sprite("dormindo", white(zs), [1740, 680]);
-  for (let j = 1; j <= 3; j++) {
-    const r = 45 + j * 48, ps = points(100, u => { const t = -.96 + u * 1.92; return [1590 + r * Math.cos(t), 930 + r * Math.sin(t)]; });
-    const widths = points(100, u => [3 + 38 * Math.sin(u * Math.PI) ** .7, 0]).map(p => p[0]);
-    sprite("ouvindo", white(ribbon(ps, widths, "sound")), [1760, 970], j - 1);
-  }
-  const cloud = (rx: number, ry: number) => polygon(points(200, u => { const t = u * TAU, ripple = 1 + .095 * Math.cos(7 * t + .2); return [1765 + rx * ripple * Math.cos(t), 575 + ry * ripple * Math.sin(t)]; }), "thought");
-  const thought = sprite("thinking", white(cloud(190, 123) + cloud(153, 86), true) + white(disc(1590, 751, 23, "thought") + disc(1558, 807, 14, "thought")) + [0, 1, 2].map(j => `<g data-dot="${j}">${white(disc(1665 + j * 95, 575, 23, "thought"))}</g>`).join(""), [1770, 590]);
-  const dots = [...thought.querySelectorAll<SVGGElement>("[data-dot]")];
-  sprite("agindo", white(drop(1680, 820)), [1660, 890], 0);
-  sprite("agindo", white(drop(1810, 1010)), [1810, 1100], 1);
-  sprite("agindo", white([0, 1, 2].map(j => dash(240 - j * 20, 1030 + j * 90, 135, -8 + j * 6, "work")).join("")), [280, 1170], 2);
-  for (const [x, y, r] of [[350, 1050, 64], [1710, 780, 76], [1790, 1210, 49]]) sprite("pronto", white(star(x!, y!, r!)), transform([x!, y!], "spark"));
-  const scribble = points(240, u => { const t = u * 7 * Math.PI; return [1740 + 110 * Math.cos(t) + 3 * Math.sin(t * 7), 650 + 60 * Math.sin(t) + 28 * Math.sin(t * 1.65) + 3 * Math.cos(t * 9)]; });
-  const scribbleWidths = points(240, u => [21 + 13 * (1 + Math.sin(u * 7 * Math.PI * 1.3)) / 2, 0]).map(p => p[0]);
-  const error = sprite("erro", '<path data-scribble=""/>', [1740, 655]);
-  const errorPath = error.querySelector<SVGPathElement>("[data-scribble]")!;
-  const scribbleCache = new Map<number, string>();
+  const dots = [...layer.querySelectorAll<SVGElement>("[data-dot]")];
+  const errorPath = layer.querySelector<SVGPathElement>("[data-scribble]")!;
+  const errorLength = errorPath.getTotalLength();
+  errorPath.style.strokeDasharray = `${errorLength} ${errorLength}`;
+  errorPath.style.strokeDashoffset = String(errorLength);
   let lastProgress = -1;
   const animations: Animation[] = [];
   let cache = new WeakMap<Styled, string>();
@@ -141,11 +83,7 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
         if (s.part === 2) x += phase * 30; else y += phase * 24;
       }
       if (s.state === "erro") { x += frame.jitter[0]; y += frame.jitter[1]; }
-      // Same approved motifs, enlarged independently around their local pivots.
-      const emphasis = s.state === "thinking" ? 1.18 : 1.3;
-      const shiftX = s.state === "thinking" ? -45 : s.state === "ouvindo" ? -25 : 0;
-      const shiftY = s.state === "thinking" ? -60 : 0;
-      result.set(s.element, { opacity: fmt(alpha), transform: `translate(${fmt((x + shiftX) * width / 2048)}px,${fmt((y + shiftY) * height / 2560)}px) scale(${fmt(frame.symbolScale * emphasis)})` });
+      result.set(s.element, { opacity: fmt(alpha), transform: `translate(${fmt(x * width / 2048)}px,${fmt(y * height / 2560)}px) scale(${fmt(frame.symbolScale)})` });
     }
     dots.forEach((node, i) => result.set(node, { opacity: frame.symbol === "thinking" ? fmt(frame.dots[i]!) : "1" }));
     return result;
@@ -157,9 +95,8 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
       if (cache.get(element) !== key) { Object.assign(element.style, values); cache.set(element, key); changed = true; }
     }
     if (frame.symbol === "erro" && frame.progress !== lastProgress) {
-      const count = Math.max(2, Math.ceil(frame.progress * scribble.length));
-      if (!scribbleCache.has(count)) scribbleCache.set(count, ribbon(scribble.slice(0, count), scribbleWidths.slice(0, count), "confusion"));
-      errorPath.setAttribute("d", frame.progress <= 0 ? "" : scribbleCache.get(count)!); lastProgress = frame.progress;
+      errorPath.style.strokeDashoffset = fmt(errorLength * (1 - frame.progress));
+      lastProgress = frame.progress;
       changed = true;
     }
     return changed;
@@ -176,6 +113,7 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
   return {
     apply,
     stop,
+    setBackground,
     /** Quiet gestures use cached transform/opacity layers, not a shader RAF. */
     animate(frames: CatFrame[], duration: number) {
       stop(); apply(frames[0]!);
