@@ -2,8 +2,6 @@
 // Bun do Kiwi e o Claude Code instalado. Tudo com o `claude` falso e um adaptador de mentira: nada abre aqui.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { AgentError } from "../errors.ts";
@@ -12,6 +10,7 @@ import { fakeRegistry, type FakeRegistry } from "../fake/registry.ts";
 import { adapterEntry, downloadAdapter, installedAdapter } from "./download.ts";
 import { adapterCommand, adapterEnv, adapterRoot, agentDir, claudeAdapterHost } from "./open.ts";
 import { ADAPTER_PACKAGE, ADAPTER_VERSION } from "./pinned.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const registries: FakeRegistry[] = [];
 afterEach(() => {
@@ -19,7 +18,7 @@ afterEach(() => {
 });
 
 function tmp(): string {
-  return mkdtempSync(path.join(tmpdir(), "kiwi-open-"));
+  return tempDir("kiwi-open-");
 }
 
 async function rejection(p: Promise<unknown>): Promise<AgentError> {

@@ -2,8 +2,7 @@
 // registro do npm falso e local e os ajustes de verdade numa pasta tmp. Nada aqui abre o Claude Code nem vai à internet.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
@@ -19,6 +18,7 @@ import type { VaultWriter } from "./tools/writer.ts";
 import { AgentActivity } from "./activity.ts";
 import type { UndoNotes } from "./undo.ts";
 import { createHash } from "node:crypto";
+import { tempDir } from "../../test/tmp.ts";
 
 const services: AgentService[] = [];
 const registries: FakeRegistry[] = [];
@@ -28,7 +28,7 @@ afterEach(async () => {
 });
 
 function tmp(): string {
-  return mkdtempSync(path.join(tmpdir(), "kiwi-agent-svc-"));
+  return tempDir("kiwi-agent-svc-");
 }
 
 /** Um registro com o "adaptador" (bytes aleatórios não comprimem: o .tgz tem ~256 KB). */

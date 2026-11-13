@@ -2,7 +2,7 @@
 // escreve o version.json depois do postBuild). Um .app de mentira, sem rodar nada: só codesign, tar e zstd.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -119,9 +119,16 @@ describe("detach", () => {
 
   test("withDmg returns what the check found even when the detach never works", () => {
     const { calls, exec } = busy(99);
-    const result = withDmg("/tmp/fake.dmg", () => 7, { exec, tries: 2, sleep: () => {}, warn: () => {} });
-    expect(result).toBe(7);
-    expect(calls[0]!.slice(0, 2)).toEqual(["hdiutil", "attach"]);
+    // Sem o detach, o withDmg deixa a pasta do ponto de montagem de propósito (o volume pode estar montado). Aqui não
+    // há volume: o teste apaga só a pasta que ele fez aparecer (spec #10077).
+    const before = new Set(readdirSync(tmpdir()));
+    try {
+      const result = withDmg("/tmp/fake.dmg", () => 7, { exec, tries: 2, sleep: () => {}, warn: () => {} });
+      expect(result).toBe(7);
+      expect(calls[0]!.slice(0, 2)).toEqual(["hdiutil", "attach"]);
+    } finally {
+      for (const name of readdirSync(tmpdir())) if (!before.has(name) && name.startsWith("kiwinotes-sign-")) rmSync(path.join(tmpdir(), name), { recursive: true, force: true });
+    }
   });
 
   test("a failing check still fails, and the volume is detached", () => {

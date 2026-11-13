@@ -76,11 +76,16 @@ const style = (p: Page, section: string) => p.locator(`.kn-tab[data-section=${se
 // solto: o Ctrl-C e o timeout do passo do CI (SIGINT, SIGTERM) não passam pelo `finally`, então também derrubam ele.
 const cli = resolve(import.meta.dir, "cli.ts");
 let running = false;
-/** Derruba o nosso headless e apaga a pasta de dados que o roteiro criou no tmp (a de OUT fica: são os prints). */
+/**
+ * Derruba o nosso headless e apaga o que o roteiro criou no tmp, também quando ele falha (spec #10077): a pasta de
+ * dados e a dos prints. Os prints ficam quando a pessoa deu a pasta deles, ou com KIWI_KEEP_OUT=1.
+ */
+const keepOut = !!outArg || process.env.KIWI_KEEP_OUT === "1";
 const cleanup = () => {
   if (running) spawnSync(process.execPath, [cli, "stop", "--data", data], { encoding: "utf8", timeout: 15_000 });
   running = false;
   if (!dataArg && ownHeadless) rmSync(data, { recursive: true, force: true });
+  if (!keepOut) rmSync(out, { recursive: true, force: true });
 };
 for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
   process.on(signal, () => {
@@ -220,4 +225,4 @@ try {
   await browser.close();
   cleanup();
 }
-console.log(`prints e vídeos em ${out}`);
+console.log(keepOut ? `prints e vídeos em ${out}` : "prints e vídeos apagados (para guardar: KIWI_KEEP_OUT=1, ou a pasta como 2º argumento)");
