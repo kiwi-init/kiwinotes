@@ -612,6 +612,32 @@ button.kn-side-head:focus-visible {
   text-overflow: ellipsis;
 }
 
+/* Os projetos (spec #9847): o sinal discreto na pasta e na nota principal, e o aviso da nota principal apagada. */
+.kn-side-project {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: 4px;
+  color: var(--text-3);
+}
+.kn-side-project[data-project="main"] {
+  color: var(--accent-text);
+}
+.kn-side-warn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
 .kn-side-count {
   margin-left: auto;
   flex: none;

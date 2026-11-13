@@ -89,6 +89,10 @@ export interface CapabilityDeps {
   };
   /** O helper passa a vigiar o atalho novo (T1499). */
   settingsChanged?(settings: AppSettings): void;
+  /** Os projetos desta pasta de notas mudaram (spec #9847): vira o evento `projects.changed`. */
+  projectsChanged?(): void;
+  /** Com várias pastas de notas: o mesmo aviso, com a pasta (o `folderId` do evento). */
+  projectsChangedIn?(folderId: string): void;
   /** O STT e a limpeza passam a usar o dicionário e os snippets novos já no próximo ditado. */
   dictionaryChanged?(terms: DictionaryTerm[]): void;
   snippetsChanged?(snippets: Snippet[]): void;
@@ -308,7 +312,7 @@ export function uiCapabilities(deps: CapabilityDeps,
   };
   /** O arquivo dos projetos deste cofre (`.kiwi/projects.json`). */
   let projects: ProjectsFile | null = null;
-  const projectsFile = () => (projects ??= new ProjectsFile(deps.notes.root));
+  const projectsFile = () => (projects ??= new ProjectsFile(deps.notes.root, () => deps.projectsChanged?.()));
   /** O inode de uma pasta do cofre (revisão da T10012): um rename a mantém, e é por ele que o projeto segue a pasta. */
   const dirIno = (folder: string): number | undefined => {
     try {
@@ -878,7 +882,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       fields(args, "projects.list", []);
       const v = await vault();
       const { notes } = await v.list();
-      return { projects: (await projectsFile().load()).map((e) => projectInfo(e, notes)) };
+      return { projects: (await projectsFile().load()).map((e) => projectInfo(e, notes)), meetingsFolder };
     },
     "projects.mark": async (args) => {
       const a = fields(args, "projects.mark", ["folder"]);

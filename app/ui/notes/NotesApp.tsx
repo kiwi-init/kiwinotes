@@ -56,7 +56,7 @@ import { FileView, type FilesApi } from "./files/FileView.tsx";
 import { viewerFor } from "./files/viewers.ts";
 import { allFolders, loadCollapsed, loadOpenFolders, saveCollapsed, saveOpenFolders, type SectionId, toggled } from "./sidebarState.ts";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
-import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs,
+import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, ExportFormat, TreePrefs, ProjectView,
 } from "./types.ts";
 
 type SaveOutcome = "clean" | "saved" | "conflict" | "error";
@@ -211,6 +211,9 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   }, [api, note?.path, note?.version, vaultVersion]);
   const [trashCount, setTrashCount] = useState(0);
   const [pinned, setPinned] = useState<string[]>([]);
+  // Os projetos (spec #9847): a lista do engine e a pasta das reuniões, que não pode ser projeto.
+  const [projectList, setProjectList] = useState<{ projects: ProjectView[]; meetingsFolder: string | null }>({ projects: [], meetingsFolder: null });
+  const [projectPick, setProjectPick] = useState<{ x: number; y: number; folder: string } | null>(null);
   const [words, setWords] = useState(0);
   const entered = useEnterAnimation();
 
@@ -889,6 +892,39 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   useEffect(() => {
     pins?.list().then(setPinned, () => {});
   }, [pins]);
+  const projectsApi = api.projects;
+  const reloadProjects = () => void projectsApi?.list().then(setProjectList, () => {});
+  // Relê quando os projetos mudam por outro lugar (a CLI, outra janela), e quando as notas mudam: a nota principal
+  // apagada ou a pasta renomeada por fora o engine já corrigiu.
+  useEffect(() => {
+    if (!projectsApi) return;
+    reloadProjects();
+    const offs = [projectsApi.onChanged(reloadProjects), api.onChanged(() => reloadProjects())];
+    return () => offs.forEach((off) => off());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectsApi, api]);
+  const projectByFolder = useMemo(() => new Map(projectList.projects.map((x) => [x.folder, x] as const)), [projectList]);
+  const projectMains = useMemo(() => new Set(projectList.projects.flatMap((x) => (x.main ? [x.main] : []))), [projectList]);
+  const insideOrIs = (folder: string, p: string) => p === folder || p.startsWith(`${folder}/`);
+  /** Pode virar projeto: não a raiz, não a pasta das reuniões (nem dentro dela), nem dentro ou em volta de outro. */
+  const canMark = (folder: string) =>
+    !!folder &&
+    !(projectList.meetingsFolder && insideOrIs(projectList.meetingsFolder, folder)) &&
+    !projectList.projects.some((x) => insideOrIs(x.folder, folder) || insideOrIs(folder, x.folder));
+  const projectAction = (what: string, run: () => Promise<unknown>) =>
+    void run().then(
+      () => reloadProjects(),
+      (e) => {
+        const code = errorCode(e);
+        say(
+          code === "E_NESTED"
+            ? `Não deu para ${what}: um projeto não fica dentro de outro.`
+            : code === "E_MEETINGS_FOLDER"
+              ? `Não deu para ${what}: a pasta das reuniões não pode ser um projeto.`
+              : `Não deu para ${what}.`,
+        );
+      },
+    );
 
   const say = (text: string, undo?: () => void) => setToast({ text, undo });
   const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${errorCode(e) === "E_EXISTS" ? ": já existe um com esse nome" : ""}.`,
@@ -900,6 +936,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
     links.clear();
     // O engine corrige as fixadas (renomear, mover, apagar); a janela só relê.
     pins?.list().then(setPinned, () => {});
+    reloadProjects();
     // A pasta escolhida acompanha o renomear e o mover (T3371): a "Nova pasta" que virou "Ideias" continua sendo onde
     // o + Nota e o + Pasta criam.
     if (moved) {
@@ -1108,6 +1145,12 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         },
         { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders,
         },
+        // Os projetos (spec #9847): só o que o engine aceitaria aparece no menu.
+        ...(projectsApi && projectByFolder.has(t.path)
+          ? [{ kind: "separator" as const }, { label: "Deixar de ser projeto", onSelect: () => projectAction("deixar de ser projeto", () => projectsApi.unmark(t.path)) }]
+          : projectsApi && canMark(t.path)
+            ? [{ kind: "separator" as const }, { label: "Marcar como projeto", onSelect: () => projectAction("marcar como projeto", () => projectsApi.mark(t.path)) }]
+            : []),
         { kind: "separator" },
         { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !folders,
         },
@@ -1118,6 +1161,13 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       { label: "Abrir", onSelect: () => void open(t.path) },
       { label: isPinned ? "Desafixar" : "Fixar", onSelect: () => void togglePin(t.path), disabled: !pins,
       },
+      ...(() => {
+        // A nota dentro de um projeto, que ainda não é a principal (spec #9847).
+        const project = projectsApi ? projectList.projects.find((x) => insideOrIs(x.folder, t.path)) : undefined;
+        return project && project.main !== t.path
+          ? [{ label: "Usar como nota principal", onSelect: () => projectAction("trocar a nota principal", () => projectsApi!.setMain(project.folder, t.path)) }]
+          : [];
+      })(),
       { kind: "separator" },
       { label: "Renomear", onSelect: () => setRenaming(`n:${t.path}`) },
       ...(api.meetings && note?.path === t.path && isMeetingNote(note.content)
@@ -1240,7 +1290,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       }));
   };
 
-  const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy) : []), [listing, sortBy],
+  const fullTree = useMemo(() => (listing ? buildTree(listing, sortBy, projectMains) : []), [listing, sortBy, projectMains],
   );
   // Grava as pastas abertas; com o cofre lido, as que foram apagadas saem da lista (revisão do T7390).
   useEffect(
@@ -1337,12 +1387,14 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           </span>
         }
       />
-      <TreePopover open={treeOpen} onOpenChange={setTreeOpen} anchor={crumbEl} busy={Boolean(renaming || menu || moving || picking)}>
+      <TreePopover open={treeOpen} onOpenChange={setTreeOpen} anchor={crumbEl} busy={Boolean(renaming || menu || moving || picking || projectPick)}>
         <Sidebar
           autoFocus={false}
           metadata={byPath}
           fileTimes={fileTimes}
           onPin={pins ? togglePin : undefined}
+          projects={projectsApi ? projectByFolder : undefined}
+          onProjectWarning={projectsApi ? (folder, at) => setProjectPick({ ...at, folder }) : undefined}
           tree={found.tree}
           open={openNow}
           current={note?.path ?? null}
@@ -1698,6 +1750,36 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
       ) : null}
       {menu ? (
         <ContextMenu x={menu.x} y={menu.y} items={menuFor(menu.target)} onClose={() => setMenu(null)} />
+      ) : null}
+      {projectPick && projectsApi ? (
+        // A nota principal apagada (spec #9847): escolher outra nota da pasta, ou criar a do nome da pasta.
+        <ContextMenu
+          x={projectPick.x}
+          y={projectPick.y}
+          onClose={() => setProjectPick(null)}
+          items={(() => {
+            const folder = projectPick.folder;
+            const name = folder.slice(folder.lastIndexOf("/") + 1);
+            const notes = (listing?.notes ?? []).filter((n) => n.path.startsWith(`${folder}/`)).sort((a, b) => a.path.localeCompare(b.path, "pt-BR"));
+            return [
+              { kind: "title" as const, label: `A nota principal de “${name}”` },
+              ...notes.map((n) => ({
+                label: n.path.slice(folder.length + 1).replace(/\.md$/i, ""),
+                onSelect: () => projectAction("trocar a nota principal", () => projectsApi.setMain(folder, n.path)),
+              })),
+              ...(notes.length ? [{ kind: "separator" as const }] : []),
+              {
+                label: `Criar “${name}”`,
+                onSelect: () =>
+                  projectAction("criar a nota principal", async () => {
+                    const created = await api.create(name, folder, `# ${name}\n`);
+                    await projectsApi.setMain(folder, created.path);
+                    await refresh();
+                  }),
+              },
+            ];
+          })()}
+        />
       ) : null}
       {moving && moving.kind !== "empty" ? (
         <FolderPicker

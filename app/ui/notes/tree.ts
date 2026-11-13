@@ -63,8 +63,11 @@ const byName = (a: TreeNode, b: TreeNode) => a.name.localeCompare(b.name, "pt-BR
 /**
  * Pastas primeiro (por nome), depois as notas: por nome (números em ordem de número: "2" antes de "10"), ou pela edição
  * ou criação mais recente primeiro. Uma nota sem `ctime` (um engine antigo) ordena pela edição.
+ *
+ * `mains`: as notas principais dos projetos (spec #9847). Cada uma vem primeiro dentro da pasta dela, antes das
+ * subpastas; marcar um projeto não muda a ordem do resto.
  */
-export function buildTree({ folders, notes, files = [] }: VaultListing, sortBy: SortBy = "name"): TreeNode[] {
+export function buildTree({ folders, notes, files = [] }: VaultListing, sortBy: SortBy = "name", mains: ReadonlySet<string> = new Set()): TreeNode[] {
   const root: FolderNode = { kind: "folder", path: "", name: "", children: [], count: 0 };
   const index = new Map<string, FolderNode>([["", root]]);
   const folderNode = (path: string): FolderNode => {
@@ -94,6 +97,9 @@ export function buildTree({ folders, notes, files = [] }: VaultListing, sortBy: 
     return (sortBy === "created" ? (m?.ctime ?? m?.mtime) : m?.mtime) ?? "";
   };
   const order = (a: TreeNode, b: TreeNode) => {
+    const am = a.kind === "note" && mains.has(a.path);
+    const bm = b.kind === "note" && mains.has(b.path);
+    if (am !== bm) return am ? -1 : 1;
     if ((a.kind === "folder") !== (b.kind === "folder")) return a.kind === "folder" ? -1 : 1;
     if (a.kind === "folder" || sortBy === "name") return byName(a, b);
     return when(b).localeCompare(when(a)) || byName(a, b);

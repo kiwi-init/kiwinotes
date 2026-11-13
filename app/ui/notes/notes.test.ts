@@ -97,6 +97,28 @@ describe("árvore", () => {
     expect(projetos.kind === "folder" && projetos.children.map((n) => n.name)).toEqual(["2026", "Nota 2", "Nota 10"]);
   });
 
+  test("a nota principal de um projeto vem primeiro na pasta dela, antes das subpastas; o resto não muda (spec #9847)", () => {
+    const listing = {
+      folders: ["Kiwi", "Kiwi/Docs", "Outra"],
+      notes: [
+        { path: "Kiwi/Alfa.md", title: "Alfa" },
+        { path: "Kiwi/Zeta.md", title: "Zeta" },
+        { path: "Kiwi/Docs/D.md", title: "D" },
+        { path: "Outra/Zeta.md", title: "Zeta" },
+      ].map((n) => ({ ...n, folder: folderOf(n.path), mtime: "", ctime: "", size: 0, version: "1", tags: [] })),
+    };
+    const names = (tree: ReturnType<typeof buildTree>, folder: string) => {
+      const f = tree.find((n) => n.kind === "folder" && n.path === folder);
+      return f && f.kind === "folder" ? f.children.map((n) => n.name) : [];
+    };
+    expect(names(buildTree(listing), "Kiwi")).toEqual(["Docs", "Alfa", "Zeta"]);
+    const marked = buildTree(listing, "name", new Set(["Kiwi/Zeta.md"]));
+    expect(names(marked, "Kiwi")).toEqual(["Zeta", "Docs", "Alfa"]);
+    // A nota de mesmo nome em outra pasta, e as pastas de cima, ficam onde estavam.
+    expect(names(marked, "Outra")).toEqual(["Zeta"]);
+    expect(marked.map((n) => n.name)).toEqual(["Kiwi", "Outra"]);
+  });
+
   test("as pastas acima da nota, de fora para dentro", () => {
     expect(ancestors("A/B/C.md")).toEqual(["A", "A/B"]);
     expect(ancestors("C.md")).toEqual([]);
@@ -209,6 +231,42 @@ describe("as capacidades pelo engine", () => {
       ["notes.search", { query: "oi", limit: 8 }],
       ["notes.resolve", { link: "Ana" }],
     ]);
+  });
+
+  test("os projetos só num engine com o contrato 1.49.0 (spec #9847); o evento só vale para a pasta desta janela", async () => {
+    expect(engineNotes(async () => null, () => () => {}, (c) => c === "notes.list").projects).toBeUndefined();
+    const calls: [string, unknown][] = [];
+    const listeners: ((p: unknown) => void)[] = [];
+    const api = engineNotes(
+      async (cap, args) => {
+        calls.push([cap, args]);
+        return cap === "projects.list" ? { projects: [], meetingsFolder: "Reuniões" } : true;
+      },
+      (name, fn) => {
+        if (name === "projects.changed") listeners.push(fn);
+        return () => {};
+      },
+      () => true,
+      "pasta-1",
+    );
+    expect(await api.projects!.list()).toEqual({ projects: [], meetingsFolder: "Reuniões" });
+    await api.projects!.mark("Kiwi");
+    await api.projects!.setMain("Kiwi", "Kiwi/Visão.md");
+    await api.projects!.unmark("Kiwi");
+    expect(calls).toEqual([
+      ["projects.list", { folderId: "pasta-1" }],
+      ["projects.mark", { folder: "Kiwi", folderId: "pasta-1" }],
+      ["projects.setMain", { folder: "Kiwi", note: "Kiwi/Visão.md", folderId: "pasta-1" }],
+      ["projects.unmark", { folder: "Kiwi", folderId: "pasta-1" }],
+    ]);
+    let seen = 0;
+    api.projects!.onChanged(() => seen++);
+    for (const l of listeners) {
+      l({ folderId: "pasta-1" });
+      l({ folderId: "outra-pasta" });
+      l({});
+    }
+    expect(seen).toBe(2);
   });
 
   test("pastas e fixadas só num engine com o contrato 1.7.0 (T2468), com os nomes de #2493", async () => {

@@ -139,7 +139,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   do pedido (quantos segredos o Kiwi segurou) e o `removedSecrets` de cada mudança. Só acréscimo.
 // 1.48.0 (T10012, spec #9874): os projetos. O `projects.list`, o `projects.mark`, o `projects.unmark`, o
 //   `projects.setMain` e o `projects.status`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.48.0";
+// 1.49.0 (T10200, spec #9847): os projetos na barra lateral. O evento `projects.changed` e o `meetingsFolder` no
+//   `projects.list` (a pasta que não pode ser projeto). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.49.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -465,7 +467,7 @@ export interface UiCapabilities {
   // `.kiwi/projects.json`, dentro do cofre, e segue a pasta como as fixadas. E_NOT_FOUND: a pasta (ou a nota) não existe
   // ou não é projeto; E_NESTED: um projeto dentro de outro; E_MEETINGS_FOLDER: a pasta das reuniões.
   /** Os projetos do cofre aberto, com o nome, a nota principal, a última mudança e quantas notas têm. */
-  "projects.list": { args: Record<string, never>; result: { projects: ProjectInfo[] } };
+  "projects.list": { args: Record<string, never>; result: { projects: ProjectInfo[]; meetingsFolder: string | null } };
   /**
    * Marca a pasta como projeto. Sem a nota com o nome da pasta, cria essa nota, só com o título (`created`); nenhuma
    * outra nota muda. Marcar de novo não muda nada.
@@ -755,6 +757,11 @@ export interface UiEvents {
    * desfeito (também pela CLI). A tela "Atividade do agente" lê de novo.
    */
   "agent.activityChanged": { request: string };
+  /**
+   * Os projetos de uma pasta de notas mudaram (spec #9847, 1.49.0): marcados, desmarcados, a nota principal trocada,
+   * ou a pasta seguida. A barra lateral relê o `projects.list`.
+   */
+  "projects.changed": { folderId?: string };
 }
 
 /** As seções do hub (#2100), na ordem da barra lateral. */

@@ -134,6 +134,22 @@ describe("a barra", () => {
     expect(count(searching, 'data-kind="folder"')).toBeGreaterThan(0);
   });
 
+  test("os projetos (spec #9847): o sinal na pasta e na nota principal, e o aviso só na que está sem ela", () => {
+    const open = new Set(allFolders(tree));
+    const without = html({ open });
+    expect(count(without, "kn-side-project")).toBe(0);
+    expect(count(without, "kn-side-warn")).toBe(0);
+    const marked = html({ open, projects: new Map([["Projetos/2026/Q4", { main: "Projetos/2026/Q4/Plano.md" }]]) });
+    expect(count(marked, 'data-project="folder"')).toBe(1);
+    expect(count(marked, 'data-project="main"')).toBeGreaterThanOrEqual(1);
+    expect(count(marked, "kn-side-warn")).toBe(0);
+    const orphan = html({ open, projects: new Map([["Projetos/2026/Q4", { main: null }]]) });
+    expect(count(orphan, 'data-project="folder"')).toBe(1);
+    expect(count(orphan, 'data-project="main"')).toBe(0);
+    expect(count(orphan, "kn-side-warn")).toBe(1);
+    expect(orphan).toContain("A nota principal foi apagada");
+  });
+
   test("as pastas abertas aparecem com as de dentro, e as fechadas não", () => {
     expect(count(html({ open: new Set(allFolders(tree)) }), 'data-kind="folder"')).toBe(4);
     expect(count(html({ open: new Set() }), 'data-kind="folder"')).toBe(2);

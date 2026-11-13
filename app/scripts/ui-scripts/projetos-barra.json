@@ -1,0 +1,219 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "folders.create",
+      "args": {
+        "path": "Clientes/Acme/Docs"
+      }
+    },
+    {
+      "invoke": "folders.create",
+      "args": {
+        "path": "Reuniões"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Clientes/Acme",
+        "title": "Plano",
+        "content": "# Plano\n\n- [ ] escrever o spec\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Clientes/Acme",
+        "title": "Kickoff",
+        "content": "# Kickoff\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Clientes')"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Clientes')"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Acme')"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Acme')"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Plano')"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Acme')",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Marcar como projeto')"
+    },
+    {
+      "screenshot": "1-menu-marcar.png"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Marcar como projeto')"
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-project='folder']"
+    },
+    {
+      "expectCount": ".kn-tree-pop [data-project='folder']",
+      "count": 1
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-project='main']"
+    },
+    {
+      "expectText": ".kn-tree-pop .kn-side-row:has([data-project='main'])",
+      "text": "Acme"
+    },
+    {
+      "screenshot": "2-projeto-marcado.png"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Docs')",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Renomear')"
+    },
+    {
+      "expectCount": ".kn-menu-item:has-text('Marcar como projeto')",
+      "count": 0
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Reuniões')",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Renomear')"
+    },
+    {
+      "expectCount": ".kn-menu-item:has-text('Marcar como projeto')",
+      "count": 0
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Kickoff')",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Usar como nota principal')"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Usar como nota principal')"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-row:has-text('Kickoff') [data-project='main']"
+    },
+    {
+      "expectCount": ".kn-tree-pop [data-project='main']",
+      "count": 1
+    },
+    {
+      "screenshot": "3-nota-principal-trocada.png"
+    },
+    {
+      "invoke": "projects.unmark",
+      "args": {
+        "folder": "Clientes/Acme"
+      }
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-project='folder']",
+      "state": "detached"
+    },
+    {
+      "expectCount": ".kn-tree-pop [data-project]",
+      "count": 0
+    },
+    {
+      "invoke": "projects.mark",
+      "args": {
+        "folder": "Clientes/Acme"
+      }
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-project='folder']"
+    },
+    {
+      "invoke": "notes.delete",
+      "args": {
+        "path": "Clientes/Acme/Acme.md"
+      }
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-warn"
+    },
+    {
+      "screenshot": "4-aviso-sem-principal.png"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-warn"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Criar “Acme”')"
+    },
+    {
+      "expectCount": ".kn-menu-item:has-text('Kickoff')",
+      "count": 1
+    },
+    {
+      "screenshot": "5-escolher-principal.png"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Criar “Acme”')"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-warn",
+      "state": "detached"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-row:has-text('Acme') [data-project='main']"
+    },
+    {
+      "hover": ".kn-tree-pop .kn-side-row:has(.kn-side-item[data-kind='folder']:has-text('Acme'))"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-row:has(.kn-side-item[data-kind='folder']:has-text('Acme')) .kn-side-action[aria-haspopup='menu']"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Deixar de ser projeto')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "screenshot": "6-teclado.png"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-project='folder']",
+      "state": "detached"
+    },
+    {
+      "expectCount": ".kn-tree-pop [data-project]",
+      "count": 0
+    }
+  ]
+}
