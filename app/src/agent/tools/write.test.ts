@@ -221,6 +221,23 @@ describe("notes_append", () => {
     expect((await tool(config, "notes_append", { path: "Projetos/Kiwi.md", section: "Não existe", text: "x" })).error).toContain("E_NOT_FOUND");
   });
 
+  test("um texto que começa com --- ou === não transforma o parágrafo de antes em título (revisão do T9251)", async () => {
+    const { config, read } = await setup();
+    const titles = async (p: string) => ((await tool(config, "notes_outline", { path: p })).value.secoes as { nivel: number; titulo: string }[]).map((x) => `${x.nivel} ${x.titulo}`);
+    const before = await titles("Projetos/Kiwi.md");
+    await tool(config, "notes_append", { path: "Projetos/Kiwi.md", section: "Prazo", text: "---\nResumo de hoje: nada mudou." });
+    expect(await titles("Projetos/Kiwi.md")).toEqual(before);
+    expect(read("Projetos/Kiwi.md")).toContain("O prazo do Kiwi é março.\n\n---\nResumo de hoje: nada mudou.\n\n## Equipe");
+    await tool(config, "notes_append", { path: "Projetos/Kiwi.md", section: "Equipe", text: "  ===" });
+    expect(await titles("Projetos/Kiwi.md")).toEqual(before);
+    // No fim da nota também; e uma lista acrescentada a uma lista continua colada (#9305).
+    await tool(config, "notes_create", { title: "Lista", text: "Compras\n- pão" });
+    await tool(config, "notes_append", { path: "Lista.md", text: "- leite" });
+    await tool(config, "notes_append", { path: "Lista.md", text: "===" });
+    expect(read("Lista.md")).toBe("Compras\n- pão\n- leite\n\n===\n");
+    expect(await titles("Lista.md")).toEqual([]);
+  });
+
   test("com a versão lida, recusa se a nota mudou depois, e nada é escrito", async () => {
     const { config, read, root, kept, dropped } = await setup();
     const { versao } = (await tool(config, "notes_read", { path: "Ideias.md" })).value;

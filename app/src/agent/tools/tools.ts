@@ -326,9 +326,16 @@ const trimEndNewlines = (s: string) => s.replace(/(?:\r?\n)+$/, "");
 function appendTo(base: string, text: string, last: boolean): string {
   const core = trimEndNewlines(base);
   const added = trimEndNewlines(text);
-  const joined = core ? `${core}\n${added}` : added;
+  // Uma 1ª linha só de `=` ou de `-` (um separador `---`) colada abaixo de um parágrafo o transformaria num título
+  // setext: a frase da pessoa viraria título (revisão do T9251). Só aí entra a linha em branco; o resto continua colado,
+  // para uma lista acrescentada a uma lista seguir a mesma lista (#9305).
+  const sep = SETEXT_UNDERLINE.test(added.split(/\r?\n/, 1)[0]!) ? "\n\n" : "\n";
+  const joined = core ? `${core}${sep}${added}` : added;
   return joined + (last ? "\n" : "\n\n");
 }
+
+/** Uma linha que sublinha o parágrafo de cima e o faz título (o "setext" do Markdown). */
+const SETEXT_UNDERLINE = /^ {0,3}(?:=+|-+)[ \t]*$/;
 
 /** O texto que fica abaixo de um título, trocado: a linha em branco depois do título se mantém, como estava. */
 function replaceBody(oldBody: string, text: string, last: boolean): string {
