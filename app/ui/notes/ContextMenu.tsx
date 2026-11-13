@@ -21,7 +21,8 @@ export function ContextMenu({ x, y, items, onClose, onRestoreFocus }: {
     addEventListener("blur", onClose);
     return () => { removeEventListener("mousedown", away, true); removeEventListener("blur", onClose); };
   }, [owner, onClose]);
-  return <MenuPanel {...{ x, y, items, owner, onClose }} autoFocus onBack={() => { onClose(); onRestoreFocus?.(); }} />;
+  // Escolher um item, ou o Esc, devolvem o foco a quem abriu o menu (spec #10211); o clique fora, não.
+  return <MenuPanel {...{ x, y, items, owner }} onClose={() => { onClose(); onRestoreFocus?.(); }} autoFocus onBack={() => { onClose(); onRestoreFocus?.(); }} />;
 }
 
 function MenuPanel({ x, y, parentLeft, items, owner, onClose, onBack, autoFocus, label }: {

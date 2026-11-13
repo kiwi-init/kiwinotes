@@ -322,6 +322,8 @@ export function Sidebar(p: SidebarProps) {
           type="button"
           className="kn-side-item"
           data-kind="note"
+          data-tree={inTree || undefined}
+          aria-keyshortcuts="Shift+F10"
           data-path={n.path}
           title={n.name}
           aria-current={n.path === p.current ? "page" : undefined}
@@ -383,6 +385,8 @@ export function Sidebar(p: SidebarProps) {
               type="button"
               className="kn-side-item"
               data-kind="folder"
+              data-path={n.path}
+              aria-keyshortcuts="Shift+F10"
               data-selected={p.selectedFolder === n.path || undefined}
               data-menu={p.menuOn === `f:${n.path}` || undefined}
               data-drop={dropOn === n.path || undefined}
@@ -452,6 +456,70 @@ export function Sidebar(p: SidebarProps) {
       data-drop={dropOn === "" || undefined}
       onContextMenu={(e) => menu(e, { kind: "empty" })}
       onClick={(e) => e.target === e.currentTarget && p.onSelectFolder("")}
+      onKeyDown={(e) => {
+        // O teclado na árvore (spec #9847): no WebKit, como no Safari, o Tab pula os botões, e as linhas e o "…" não
+        // recebiam foco. ↓ no campo de busca entra na árvore, ↑/↓ andam entre as linhas, e ⇧F10 (ou a tecla de menu)
+        // abre o menu da linha em foco, como o clique direito.
+        const nav = e.currentTarget;
+        const items = () => [...nav.querySelectorAll<HTMLElement>('.kn-side-item[data-kind="note"], .kn-side-item[data-kind="folder"]')];
+        const el = e.target as HTMLElement;
+        if (el.classList.contains("kn-side-search")) {
+          if (e.key !== "ArrowDown") return;
+          const first = items()[0];
+          if (!first) return;
+          e.preventDefault();
+          first.focus();
+          return;
+        }
+        if (!el.classList.contains("kn-side-item")) return;
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          const all = items();
+          const i = all.indexOf(el);
+          const next = e.key === "ArrowDown" ? all[i + 1] : i > 0 ? all[i - 1] : nav.querySelector<HTMLElement>(".kn-side-search");
+          if (!next) return;
+          e.preventDefault();
+          next.focus();
+          next.scrollIntoView?.({ block: "nearest" });
+          return;
+        }
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          const kind = el.dataset.kind;
+          const path = el.dataset.path;
+          if (path === undefined) return;
+          if (kind === "folder") {
+            // → abre a pasta fechada (ou entra na 1ª linha dela, já aberta); ← fecha a aberta (ou sobe para a de cima).
+            const expanded = el.getAttribute("aria-expanded") === "true";
+            e.preventDefault();
+            if (e.key === "ArrowRight") {
+              if (!expanded) p.onToggle(path);
+              else {
+                // Só entra se a linha seguinte é de dentro dela: numa pasta vazia, → não faz nada (revisão da T10353).
+                const next = items()[items().indexOf(el) + 1];
+                if (next?.dataset.path?.startsWith(`${path}/`)) next.focus();
+              }
+            } else if (expanded) p.onToggle(path);
+            else nav.querySelector<HTMLElement>(`.kn-side-item[data-kind="folder"][data-path="${CSS.escape(folderOf(path))}"]`)?.focus();
+            return;
+          }
+          if (kind === "note" && e.key === "ArrowLeft" && el.dataset.tree) {
+            // Numa nota da árvore, ← sobe para a pasta dela.
+            const up = nav.querySelector<HTMLElement>(`.kn-side-item[data-kind="folder"][data-path="${CSS.escape(folderOf(path))}"]`);
+            if (up) {
+              e.preventDefault();
+              up.focus();
+            }
+          }
+          return;
+        }
+        if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+          const kind = el.dataset.kind;
+          const path = el.dataset.path;
+          if ((kind !== "note" && kind !== "folder") || path === undefined) return;
+          e.preventDefault();
+          const rect = el.getBoundingClientRect();
+          p.onMenu({ x: rect.left + 24, y: rect.bottom }, { kind, path });
+        }
+      }}
       {...dropZone("")}
     >
       <div className="kn-side-top">

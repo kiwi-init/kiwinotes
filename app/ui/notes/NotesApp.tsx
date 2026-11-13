@@ -214,6 +214,20 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   // Os projetos (spec #9847): a lista do engine e a pasta das reuniões, que não pode ser projeto.
   const [projectList, setProjectList] = useState<{ projects: ProjectView[]; meetingsFolder: string | null }>({ projects: [], meetingsFolder: null });
   const [projectPick, setProjectPick] = useState<{ x: number; y: number; folder: string } | null>(null);
+  /** A linha (ou o "…") que abriu o menu da barra lateral: o Esc devolve o foco a ela (spec #10211). */
+  const menuOpener = useRef<HTMLElement | null>(null);
+  const restoreMenuFocus = () => {
+    const el = menuOpener.current;
+    // Só se o foco ficou solto: o item que abre um campo (Renomear) ou outro menu fica com ele.
+    requestAnimationFrame(() => {
+      // Solto: no body, ou num contêiner da própria linha (o painel da árvore, a barra), nunca num campo ou noutro menu.
+      const a = document.activeElement;
+      // O painel da árvore devolve o foco à busca quando o menu fecha; com uma linha como dona do menu, ela fica com ele.
+      const free =
+        !a || a === document.body || (a instanceof HTMLElement && !!el && (a.contains(el) || (a.classList.contains("kn-side-search") && el.classList.contains("kn-side-item"))));
+      if (el?.isConnected && free) el.focus();
+    });
+  };
   const [words, setWords] = useState(0);
   const entered = useEnterAnimation();
 
@@ -1372,6 +1386,9 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             ref={setCrumbEl}
             type="button"
             className="kn-float kn-crumb-bt"
+            // No WebKit, como no Safari, o Tab pula os botões sem um tabIndex explícito (spec #10211): com ele, o Tab
+            // chega aqui e abre a árvore, como o código do TreePopover já esperava.
+            tabIndex={0}
             aria-expanded={treeOpen}
             aria-haspopup="dialog"
             title="Pastas e notas"
@@ -1418,7 +1435,11 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           menuOn={menu && menu.target.kind !== "empty" ? `${menu.target.kind === "note" ? "n" : "f"}:${menu.target.path}` : null}
           onRename={(t, name) => void renameItem(t, name)}
           onSelectFolder={setSelectedFolder}
-          onMenu={(at, target) => setMenu({ ...at, target })}
+          onMenu={(at, target) => {
+            // Quem abriu o menu (a linha, pelo teclado, ou o "…"): o Esc devolve o foco a ela (spec #10211).
+            menuOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            setMenu({ ...at, target });
+          }}
           onDrop={folders ? (what, folder) => void moveItem(what, folder) : undefined}
           onToggle={(f) => setOpenFolders((s) => toggled(s, f))}
           collapsed={collapsed}
@@ -1756,11 +1777,12 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         />
       ) : null}
       {menu ? (
-        <ContextMenu x={menu.x} y={menu.y} items={menuFor(menu.target)} onClose={() => setMenu(null)} />
+        <ContextMenu x={menu.x} y={menu.y} items={menuFor(menu.target)} onClose={() => setMenu(null)} onRestoreFocus={restoreMenuFocus} />
       ) : null}
       {projectPick && projectsApi ? (
         // A nota principal apagada (spec #9847): escolher outra nota da pasta, ou criar a do nome da pasta.
         <ContextMenu
+          onRestoreFocus={restoreMenuFocus}
           x={projectPick.x}
           y={projectPick.y}
           onClose={() => setProjectPick(null)}

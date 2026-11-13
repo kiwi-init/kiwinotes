@@ -1,0 +1,456 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "folders.create",
+      "args": {
+        "path": "Clientes/Acme/Docs"
+      }
+    },
+    {
+      "invoke": "folders.create",
+      "args": {
+        "path": "Reuniões"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Clientes/Acme",
+        "title": "Plano",
+        "content": "# Plano\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Clientes/Acme",
+        "title": "Kickoff",
+        "content": "# Kickoff\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Tab"
+    },
+    {
+      "waitFor": ".kn-side-search:focus"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'][data-path='Clientes/Acme/Kickoff.md']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowLeft"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowLeft"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']",
+      "state": "detached"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='note'][data-path='Clientes/Acme/Plano.md']"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme/Docs']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Docs'][aria-expanded='true']",
+      "count": 1
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme/Docs']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowLeft"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Docs'][aria-expanded='false']",
+      "count": 1
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']:focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Marcar como projeto')"
+    },
+    {
+      "screenshot": "1-menu-pelo-teclado.png"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-project='folder']"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']:focus",
+      "count": 1
+    },
+    {
+      "screenshot": "2-marcado-foco-na-linha.png"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'][data-path='Clientes/Acme/Acme.md']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'][data-path='Clientes/Acme/Kickoff.md']:focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Usar como nota principal')"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-row:has([data-path='Clientes/Acme/Kickoff.md']) [data-project='main']"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'][data-path='Clientes/Acme/Kickoff.md']:focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Fixar')"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-section='pinned']"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'][data-path='Clientes/Acme/Kickoff.md']:focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Renomear')"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-menu",
+      "state": "detached"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Kickoff.md']:focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Renomear')"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-side-rename:focus"
+    },
+    {
+      "press": "Meta+a"
+    },
+    {
+      "type": "Abertura"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Abertura.md']"
+    },
+    {
+      "screenshot": "3-principal-fixada-renomeada.png"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-tree-pop",
+      "state": "hidden"
+    },
+    {
+      "expectCount": ".kn-crumb-bt:focus",
+      "count": 1
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-side-search:focus"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Abertura.md']:not([data-tree]):focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Desafixar')"
+    },
+    {
+      "screenshot": "4-menu-nas-fixadas.png"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-menu",
+      "state": "detached"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-path='Clientes/Acme/Abertura.md']:not([data-tree]):focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note']:not([data-tree]):focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Abrir')"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-menu",
+      "state": "detached"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note']:not([data-tree]):focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "waitFor": ".kn-side-search:focus"
+    },
+    {
+      "type": "Acme"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']:focus",
+      "count": 1
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Deixar de ser projeto')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "press": "ArrowUp"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-project='folder']",
+      "state": "detached"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Clientes/Acme']:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='note'][data-tree]:focus",
+      "count": 1
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop",
+      "state": "hidden"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "expectCount": ".cm-content:focus",
+      "count": 1
+    },
+    {
+      "press": "ArrowDown"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "5-editor-sem-menu-da-barra.png"
+    },
+    {
+      "waitFor": ".kn-tree-pop",
+      "state": "hidden"
+    },
+    {
+      "expectCount": ".kn-menu-item:has-text('Desafixar')",
+      "count": 0
+    },
+    {
+      "expectCount": ".kn-menu-item:has-text('Marcar como projeto')",
+      "count": 0
+    },
+    {
+      "expectCount": ".kn-menu-item:has-text('Usar como nota principal')",
+      "count": 0
+    },
+    {
+      "press": "Escape"
+    }
+  ]
+}
