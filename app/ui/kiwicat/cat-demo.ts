@@ -17,6 +17,7 @@ const options = {
 const api = q.get("fogOnly") === "1" ? await createKiwiFog(document.getElementById("fog")!, options) :
   await createKiwiCat(document.getElementById("fog")!, { ...options,
     outline: q.get("outline") === "1",
+    background: q.get("symbolTheme") === "light" ? "light" : "dark",
     sleepSeconds: q.has("sleepSeconds") ? () => Number(q.get("sleepSeconds")) : undefined });
 document.body.style.background = q.get("background") ?? "#000";
 Object.assign(window, { kiwiCat: api, kiwiCatReady: true });
