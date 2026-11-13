@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { createKiwiCat } from "../kiwicat/cat";
+import { type CatColorChoice, catColorHex, catColorOptions } from "../../src/shared/kiwicat-colors";
+import type { AppSettings } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
-import { Row, Switch } from "../src/kit/index";
+import { Row, Swatches, Switch } from "../src/kit/index";
 export function CatRow() {
   const [show, setShow] = useState<boolean | null>(null);
   const [failed, setFailed] = useState(false);
@@ -40,4 +43,79 @@ export function OverlayCatRow() {
       void api.settings.set({ kiwicat: { overlay: next } }).then(s => setOn(s.kiwicat.overlay), () => setFailed(true));
     }} />
   </Row>;
+}
+
+type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
+
+/**
+ * A cor da névoa do gato (spec #9349): só amostras prontas, com a do agente marcada por padrão, e uma amostra pequena e
+ * parada do gato ao lado. Com o agente ou o "Mostrar o Kiwi-cat" desligado, a linha fica desabilitada, sem amostra, e o
+ * módulo do gato não é carregado.
+ */
+export function CatColorRow({ agentEnabled }: { agentEnabled: boolean }) {
+  const [cat, setCat] = useState<AppSettings["kiwicat"] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true, changes = 0;
+    const off = api.settings.onChanged(s => { changes++; if (alive) setCat(s.kiwicat ?? null); });
+    void api.settings.get().then(s => { if (alive && !changes) setCat(s.kiwicat ?? null); }, () => {});
+    return () => { alive = false; off(); };
+  }, []);
+  if (!cat) return null;
+  const on = agentEnabled && cat.show;
+  const label = "Cor do Kiwi-cat";
+  const hint = failed ? "Não deu para salvar. Tente de novo."
+    : !agentEnabled ? "Ligue o agente para escolher a cor do gato."
+    : !cat.show ? "Mostre o Kiwi-cat para escolher a cor dele."
+    : "A cor da névoa em volta do gato. O gato continua preto.";
+  const options = catColorOptions().map(o => ({ value: o.id, label: o.label, color: o.hex }));
+  return <Row label={label} hint={hint}>
+    <div className="kn-cat-color">
+      {on ? <CatPreview cor={catColorHex(cat.cor)} /> : null}
+      <Swatches<CatColorChoice> label={label} value={cat.cor} options={options} disabled={!on} onChange={next => {
+        if (next === cat.cor) return;
+        setFailed(false);
+        // Na hora: a amostra e o gato do canto trocam antes de o arquivo ser salvo.
+        setCat({ ...cat, cor: next });
+        void api.settings.set({ kiwicat: { cor: next } }).then(s => setCat(s.kiwicat), () => { setCat(cat); setFailed(true); });
+      }} />
+    </div>
+  </Row>;
+}
+
+const previewBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
+
+/** O gato pequeno e parado da linha da cor: só existe enquanto os Ajustes estão abertos, e não anima. */
+function CatPreview({ cor }: { cor: string }) {
+  const root = useRef<HTMLDivElement>(null);
+  const handle = useRef<Cat | undefined>(undefined);
+  const corRef = useRef(cor); corRef.current = cor;
+  useEffect(() => {
+    if (root.current) root.current.dataset.cor = cor;
+    handle.current?.update({ cor });
+  }, [cor]);
+  useEffect(() => {
+    const el = root.current!;
+    let gone = false;
+    void (async () => {
+      try {
+        const { createKiwiCat } = await import("../kiwicat/cat");
+        if (gone) return;
+        const cat = await createKiwiCat(el, { mode: "runtime", width: 48, height: 60, cutout: true, background: previewBackground(),
+          inputs: { estado: "repouso", cor: corRef.current, voz: null, parado: true } });
+        if (gone) { await cat.dispose(); return; }
+        handle.current = cat;
+        cat.update({ cor: corRef.current });
+        el.dataset.ready = "true";
+      } catch { el.replaceChildren(); }
+    })();
+    const theme = new MutationObserver(() => handle.current?.setBackground(previewBackground()));
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => {
+      gone = true; theme.disconnect();
+      const cat = handle.current; handle.current = undefined;
+      if (cat) void cat.dispose();
+    };
+  }, []);
+  return <div className="kn-cat-preview" aria-hidden="true" ref={root} data-cor={cor} />;
 }

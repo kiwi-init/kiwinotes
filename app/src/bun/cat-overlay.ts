@@ -14,6 +14,7 @@
 
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import type { Command } from "../shared/ipc.ts";
+import { catColorHex } from "../shared/kiwicat-colors.ts";
 import type { AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings } from "../shared/ui-contract.ts";
 
 /** Os tempos do roteiro, em ms. */
@@ -32,7 +33,8 @@ export type CatOverlayCommand =
   | { type: "catOverlay.show"; estado: CatState; fadeMs: number }
   | { type: "catOverlay.state"; estado: CatState }
   | { type: "catOverlay.hide"; fadeMs: number }
-  | { type: "catOverlay.unload" };
+  | { type: "catOverlay.unload" }
+  | { type: "catOverlay.color"; cor: string };
 
 export interface CatOverlayHost {
   /** Manda um comando ao helper. */
@@ -69,6 +71,8 @@ export class CatOverlay {
   private timer: unknown = null;
   /** O helper carregou a página (o overlay e o agente ligados). */
   private loaded = false;
+  /** A cor da névoa (`#rrggbb`), da escolha em Ajustes › Agente. */
+  private cor: string | null = null;
   private overlayShown = false;
 
   constructor(
@@ -93,8 +97,7 @@ export class CatOverlay {
     if (enabled === this.enabled) return;
     this.enabled = enabled;
     if (enabled) {
-      this.loaded = true;
-      this.host.send({ type: "catOverlay.load" });
+      this.load();
       return;
     }
     this.hideNow(0);
@@ -195,7 +198,7 @@ export class CatOverlay {
    */
   helperReady(): void {
     if (!this.loaded) return;
-    this.host.send({ type: "catOverlay.load" });
+    this.load();
     if (this.overlayShown) this.host.send({ type: "catOverlay.show", estado: this.activity.state, fadeMs: 0 });
   }
 
@@ -203,6 +206,23 @@ export class CatOverlay {
   dispose(): void {
     this.cancelTimer();
     this.configure(false);
+  }
+
+  /**
+   * A cor da névoa (spec #9349). Com a página carregada, ela troca na hora (a passagem de 400 ms do módulo, mesmo com o
+   * gato na tela); senão, fica para o próximo `load`.
+   */
+  setColor(cor: string): void {
+    if (cor === this.cor) return;
+    this.cor = cor;
+    if (this.loaded) this.host.send({ type: "catOverlay.color", cor });
+  }
+
+  /** A cor vai antes do `load`: o helper a passa à página que ele abre. */
+  private load(): void {
+    this.loaded = true;
+    if (this.cor) this.host.send({ type: "catOverlay.color", cor: this.cor });
+    this.host.send({ type: "catOverlay.load" });
   }
 
   private show(estado: CatState, fadeMs: number): void {
@@ -303,14 +323,18 @@ export function attachCatOverlay(w: CatOverlayWiring): AttachedCatOverlay {
     if (agentOn === undefined) agentOn = s.enabled;
     apply();
   }, () => {});
+  let colorSet = false;
   void w.settings.load().then((s) => {
     if (overlayOn === undefined) overlayOn = s.kiwicat.overlay;
+    if (!colorSet) overlay.setColor(catColorHex(s.kiwicat.cor));
     apply();
   }, () => {});
   return {
     overlay,
     settingsChanged: (s) => {
       overlayOn = s.kiwicat.overlay;
+      colorSet = true;
+      overlay.setColor(catColorHex(s.kiwicat.cor));
       apply();
     },
     setHubInView: (inView) => overlay.setHubInView(inView),

@@ -62,3 +62,14 @@ public struct CatOverlayGate: Equatable {
         return before != shows
     }
 }
+
+/// A cor da névoa (spec #9349): só `#rrggbb` chega à página, e vai sem o `#` (`rrggbb`, em minúsculas), que serve tanto
+/// na URL (`cor=rrggbb`) quanto no script. Qualquer outra coisa é recusada.
+public enum CatOverlayColor {
+    public static func normalized(_ input: String) -> String? {
+        guard input.count == 7, input.first == "#" else { return nil }
+        let hex = input.dropFirst().lowercased()
+        guard hex.allSatisfy({ $0.isHexDigit && $0.isASCII }) else { return nil }
+        return hex
+    }
+}

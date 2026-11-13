@@ -164,6 +164,8 @@ export type Command =
   | { type: "catOverlay.state"; estado: CatOverlayState }
   | { type: "catOverlay.hide"; fadeMs: number }
   | { type: "catOverlay.unload" }
+  /** A cor da névoa (spec #9349), `#rrggbb`: o helper a guarda para o próximo `load` e a passa à página aberta. */
+  | { type: "catOverlay.color"; cor: string }
   /**
    * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
    * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.
@@ -253,6 +255,7 @@ export interface CommandResults {
   "catOverlay.state": Record<string, never>;
   "catOverlay.hide": Record<string, never>;
   "catOverlay.unload": Record<string, never>;
+  "catOverlay.color": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
    * `no_focus` (nenhum app na frente) ou `no_accessibility` (falta a permissão). Com um app na frente o ⌘V vai sempre,
@@ -529,6 +532,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "catOverlay.state",
   "catOverlay.hide",
   "catOverlay.unload",
+  "catOverlay.color",
   "insert.text",
   "notify",
   "permissions.request",

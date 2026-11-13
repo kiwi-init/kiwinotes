@@ -183,7 +183,7 @@ describe("o gato no overlay ligado ao app", () => {
     const turnFns = new Set<(e: AgentTurnEvent) => void>();
     const readyFns = new Set<() => void>();
     const status = (enabled: boolean) => ({ enabled }) as AgentStatus;
-    const settings = (overlay: boolean): AppSettings => ({ ...DEFAULT_SETTINGS, kiwicat: { show: true, overlay } });
+    const settings = (overlay: boolean, cor: AppSettings["kiwicat"]["cor"] = "agente"): AppSettings => ({ ...DEFAULT_SETTINGS, kiwicat: { show: true, overlay, cor } });
     const attached = attachCatOverlay({
       agent: {
         status: async () => status(o.enabled ?? true),
@@ -210,7 +210,7 @@ describe("o gato no overlay ligado ao app", () => {
   test("com o agente e o interruptor ligados, carrega a página da pasta do app", async () => {
     const { sent } = wired();
     await tick();
-    expect(sent).toEqual([{ type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
+    expect(sent).toEqual([{ type: "catOverlay.color", cor: "#ff9b5e" }, { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
   });
 
   test("com o agente desligado ou o interruptor desligado, nada carrega", async () => {
@@ -228,7 +228,7 @@ describe("o gato no overlay ligado ao app", () => {
     sent.splice(0);
     attached.settingsChanged(settings(false));
     attached.settingsChanged(settings(true));
-    expect(sent.map((c) => c.type)).toEqual(["catOverlay.unload", "catOverlay.load"]);
+    expect(sent.map((c) => c.type)).toEqual(["catOverlay.unload", "catOverlay.color", "catOverlay.load"]);
   });
 
   test("o helper reiniciou com o gato na tela: carrega e volta no mesmo estado, sem a entrada", async () => {
@@ -239,9 +239,29 @@ describe("o gato no overlay ligado ao app", () => {
     sent.splice(0);
     emit.ready();
     expect(sent).toEqual([
+      { type: "catOverlay.color", cor: "#ff9b5e" },
       { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" },
       { type: "catOverlay.show", estado: "agindo", fadeMs: 0 },
     ]);
+  });
+
+  test("a cor dos Ajustes vai à página aberta na hora, também com o gato na tela, e só quando muda (spec #9349)", async () => {
+    const { attached, sent, emit, settings } = wired();
+    await tick();
+    emit.turn(started());
+    sent.splice(0);
+    attached.settingsChanged(settings(true, "azul"));
+    attached.settingsChanged(settings(true, "azul"));
+    expect(sent).toEqual([{ type: "catOverlay.color", cor: "#6ea8ff" }]);
+  });
+
+  test("com o overlay desligado, a cor fica guardada e vai antes do próximo load (spec #9349)", async () => {
+    const { attached, sent, settings } = wired({ overlay: false });
+    await tick();
+    attached.settingsChanged(settings(false, "verde"));
+    expect(sent).toEqual([]);
+    attached.settingsChanged(settings(true, "verde"));
+    expect(sent).toEqual([{ type: "catOverlay.color", cor: "#3cc47c" }, { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
   });
 
   test("com o hub na vista, o gato é o do canto; o stop solta tudo", async () => {

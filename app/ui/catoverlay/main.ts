@@ -20,13 +20,20 @@ interface OverlayStats {
   shows: number;
   visible: boolean;
   estado: string;
+  cor: string;
 }
 
-const stats: OverlayStats = { ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso" };
+const stats: OverlayStats = { ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "" };
 const dark = matchMedia("(prefers-color-scheme: dark)");
 const root = document.getElementById("root")!;
 // Só a prova do helper (`kiwi-helper --cat-probe --backend …`) pede um caminho: o app usa o automático.
-const asked = new URLSearchParams(location.search).get("backend");
+const query = new URLSearchParams(location.search);
+const asked = query.get("backend");
+/** A cor da névoa (spec #9349), que o helper passa ao carregar (`cor=rrggbb`) e muda depois com `set({cor})`. */
+const HEX = /^#[0-9a-f]{6}$/i;
+const startColour = `#${query.get("cor") ?? ""}`;
+let colour = HEX.test(startColour) ? startColour.toLowerCase() : "claude";
+stats.cor = colour;
 const cat = await createKiwiCat(root, {
   mode: "runtime",
   backend: asked === "webgl2" || asked === "none" ? asked : "auto",
@@ -38,7 +45,7 @@ const cat = await createKiwiCat(root, {
   activeFPS: 30,
   densityScale: 0.5,
   background: dark.matches ? "dark" : "light",
-  inputs: { estado: "repouso", cor: "claude", voz: null, parado: false },
+  inputs: { estado: "repouso", cor: colour, voz: null, parado: false },
 });
 cat.visibility(true);
 dark.addEventListener("change", () => cat.setBackground(dark.matches ? "dark" : "light"));
@@ -53,7 +60,12 @@ function measureFirstFrame(start: number) {
 }
 
 const api = {
-  set(input: { estado?: string; visible?: boolean; voz?: number | null }) {
+  set(input: { estado?: string; visible?: boolean; voz?: number | null; cor?: string }) {
+    // A cor da névoa (spec #9349): troca com a passagem de 400 ms do módulo, sem reiniciar o gato.
+    if (typeof input.cor === "string" && HEX.test(input.cor) && input.cor.toLowerCase() !== colour) {
+      colour = stats.cor = input.cor.toLowerCase();
+      cat.update({ cor: colour });
+    }
     // A fala pelo Control (spec #9876): o nível do mic, que o helper manda direto; null tira as ondas.
     if (input.voz !== undefined) cat.update({ voz: input.voz });
     if (input.estado && STATES.includes(input.estado) && input.estado !== stats.estado) {

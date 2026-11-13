@@ -1,5 +1,6 @@
 // T8487: pure fog inputs/time policy. The cat, eyes and symbols never animate here.
 import { Color, SRGBColorSpace } from "three";
+import { AGENT_CAT_COLORS } from "../../src/shared/kiwicat-colors";
 export const STATES = [
   "repouso",
   "dormindo",
@@ -22,9 +23,10 @@ export const smooth = (n: number) => {
   const x = clamp(n);
   return x * x * (3 - 2 * x);
 };
+// A cor de cada agente vem do lugar único (spec #9349). O `codex` é só da demo do módulo: o Kiwi não o usa.
 const presets: Record<string, string> = {
   padrao: "#a69ac5",
-  claude: "#ff9b5e",
+  ...AGENT_CAT_COLORS,
   codex: "#faf9ff",
 };
 export function palette(input: string): [number, number, number] {

@@ -43,3 +43,13 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertFalse(gate.shows)
     }
 }
+
+final class CatOverlayColorTests: XCTestCase {
+    func testOnlySixDigitHexPasses() {
+        XCTAssertEqual(CatOverlayColor.normalized("#FF9B5E"), "ff9b5e")
+        XCTAssertEqual(CatOverlayColor.normalized("#6ea8ff"), "6ea8ff")
+        for bad in ["", "#fff", "ff9b5e", "#ff9b5e0", "#gg9b5e", "#ff9b5'", "#ff9b5e');alert(1)//", "#１２３４５６"] {
+            XCTAssertNil(CatOverlayColor.normalized(bad), bad)
+        }
+    }
+}

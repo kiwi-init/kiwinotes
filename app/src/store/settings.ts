@@ -11,6 +11,7 @@ import { DEFAULT_TEMPLATES_FOLDER } from "../shared/templates.ts";
 import { DEFAULT_MICROPHONE, isMicrophoneChoice, type MicrophoneChoice } from "../shared/microphone.ts";
 import { type NotesShortcut, sanitizeShortcuts, type Shortcuts } from "../shared/shortcuts.ts";
 import { DEFAULT_MEETING_SETTINGS, type MeetingSettings, sanitizeMeetingSettings } from "../shared/meetings.ts";
+import { type CatColorChoice, DEFAULT_CAT_COLOR, isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { folderPath } from "../notes/paths.ts";
 import { readJson, writeJson } from "./files.ts";
 
@@ -63,9 +64,10 @@ export interface AppSettings {
   agent: AgentSettings;
   /**
    * Mostrar o gato no hub (T9567), condicionado ao agente ligado; `overlay` (spec #9810): mostrar o gato por cima dos
-   * outros apps quando o Kiwi não está na frente, separado do gato do canto.
+   * outros apps quando o Kiwi não está na frente, separado do gato do canto. `cor` (spec #9349): a cor da névoa, a do
+   * agente ou uma das prontas (`src/shared/kiwicat-colors.ts`).
    */
-  kiwicat: { show: boolean; overlay: boolean };
+  kiwicat: { show: boolean; overlay: boolean; cor: CatColorChoice };
 }
 
 export interface AgentSettings {
@@ -159,7 +161,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true } };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR } };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -227,6 +229,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
     kiwicat: {
       show: !o.kiwicat || typeof o.kiwicat !== "object" || (o.kiwicat as Record<string, unknown>).show !== false,
       overlay: !o.kiwicat || typeof o.kiwicat !== "object" || (o.kiwicat as Record<string, unknown>).overlay !== false,
+      cor: o.kiwicat && typeof o.kiwicat === "object" && isCatColorChoice((o.kiwicat as Record<string, unknown>).cor) ? (o.kiwicat as { cor: CatColorChoice }).cor : DEFAULT_CAT_COLOR,
     },
   });
 }

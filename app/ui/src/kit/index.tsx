@@ -3,6 +3,7 @@ import "./kit.css";
 
 import {
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type ReactNode,
   useCallback,
   useEffect,
@@ -204,6 +205,56 @@ export function Kbd({ children }: { children: ReactNode }) {
  * Controle segmentado com um só pill que desliza entre as opções (`--glide`),
  * em vez de cada opção acender sozinha.
  */
+/**
+ * Amostras de cor prontas (spec #9349): um grupo de rádios, sem campo de código e sem o painel de cores do macOS. As
+ * setas andam entre as amostras e escolhem (o padrão dos rádios); só a marcada entra no Tab.
+ */
+export function Swatches<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  value: T;
+  options: { value: T; label: string; color: string }[];
+  onChange: (v: T) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const move = (from: number, step: number) => {
+    const next = options[(from + step + options.length) % options.length]!;
+    onChange(next.value);
+    requestAnimationFrame(() => ref.current?.querySelector<HTMLButtonElement>(`[data-value="${next.value}"]`)?.focus());
+  };
+  return (
+    <div className="kn-swatches" role="radiogroup" aria-label={label} aria-disabled={disabled || undefined} ref={ref}>
+      {options.map((o, i) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={o.value === value}
+          aria-label={o.label}
+          title={o.label}
+          data-value={o.value}
+          disabled={disabled}
+          tabIndex={o.value === value ? 0 : -1}
+          style={{ "--swatch": o.color } as CSSProperties}
+          onClick={() => onChange(o.value)}
+          onKeyDown={(e) => {
+            const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+            if (!step) return;
+            e.preventDefault();
+            move(i, step);
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function Segmented<T extends string>({
   value,
   options,

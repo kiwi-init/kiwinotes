@@ -83,7 +83,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true } };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: "agente" } };
   let t = 0;
   return {
     calls,
@@ -245,6 +245,16 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(await directInvoke(caps, "settings.set", { kiwicat: { show: false } })).toMatchObject({ ok: true, value: { kiwicat: { show: false, overlay: true } } });
     expect(await directInvoke(caps, "settings.set", { kiwicat: { overlay: false } })).toMatchObject({ ok: true, value: { kiwicat: { show: false, overlay: false } } });
     expect(await directInvoke(caps, "settings.set", { kiwicat: { show: true } })).toMatchObject({ ok: true, value: { kiwicat: { show: true, overlay: false } } });
+  });
+
+  test("settings: a cor da névoa do gato, só entre as prontas, e as outras chaves ficam (spec #9349)", async () => {
+    const f = fakeDeps(); const caps = uiCapabilities(f.deps);
+    expect((await directInvoke(caps, "settings.get", {}) as { value: AppSettings }).value.kiwicat.cor).toBe("agente");
+    for (const cor of ["#ffffff", "branco", "", null, 1, "padrao"])
+      expect(await directInvoke(caps, "settings.set", { kiwicat: { cor } })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { overlay: false } })).toMatchObject({ ok: true });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { cor: "azul" } })).toMatchObject({ ok: true, value: { kiwicat: { show: true, overlay: false, cor: "azul" } } });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { cor: "agente" } })).toMatchObject({ ok: true, value: { kiwicat: { cor: "agente" } } });
   });
 
   test("settings: a largura da nota, em px dentro dos limites (T5299)", async () => {
