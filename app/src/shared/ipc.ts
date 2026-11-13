@@ -43,6 +43,9 @@ export interface LlmStatus {
 }
 
 /** O que o overlay mostra. `level` vem do próprio sidecar (audio.level). */
+/** Os estados do gato que aparecem no overlay (spec #9810): o `repouso` só no fim de um pedido cancelado. */
+export type CatOverlayState = "repouso" | "acordou" | "thinking" | "agindo" | "pronto" | "erro";
+
 export type OverlayState = "hidden" | "listening" | "processing" | "done" | "error";
 
 /** Quem começou ou terminou a gravação. `config`: o atalho mudou no meio. */
@@ -146,6 +149,17 @@ export type Command =
   /** `message` vale no `error` e no `done` (secure input, #224): com mensagem, o `done` fica 2,5 s em vez de 0,7 s. */
   | { type: "overlay.state"; state: OverlayState; message?: string }
   /**
+   * O gato no overlay (spec #9810), numa janela do helper como a pílula. `load` prepara a página do gato (os arquivos
+   * do app em `dir`), pronta e pausada; `show` mostra no centro da tela do app da frente, entrando em `fadeMs` (a partir
+   * da opacidade de agora: um pedido novo durante a saída não pisca); `state` troca o estado; `hide` pausa o desenho e
+   * some em `fadeMs`; `unload` solta a página e o desenho. Com a pílula do ditado na tela, o helper segura o gato.
+   */
+  | { type: "catOverlay.load"; dir: string }
+  | { type: "catOverlay.show"; estado: CatOverlayState; fadeMs: number }
+  | { type: "catOverlay.state"; estado: CatOverlayState }
+  | { type: "catOverlay.hide"; fadeMs: number }
+  | { type: "catOverlay.unload" }
+  /**
    * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
    * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.
    * `autoSpace` (padrão `true`, T733): se o cursor está logo depois de um texto (letra, número, pontuação), o sidecar
@@ -228,6 +242,11 @@ export interface CommandResults {
   "record.start": Record<string, never>;
   "record.stop": Record<string, never>;
   "overlay.state": Record<string, never>;
+  "catOverlay.load": Record<string, never>;
+  "catOverlay.show": Record<string, never>;
+  "catOverlay.state": Record<string, never>;
+  "catOverlay.hide": Record<string, never>;
+  "catOverlay.unload": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
    * `no_focus` (nenhum app na frente) ou `no_accessibility` (falta a permissão). Com um app na frente o ⌘V vai sempre,
@@ -474,6 +493,11 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "record.start",
   "record.stop",
   "overlay.state",
+  "catOverlay.load",
+  "catOverlay.show",
+  "catOverlay.state",
+  "catOverlay.hide",
+  "catOverlay.unload",
   "insert.text",
   "notify",
   "permissions.request",

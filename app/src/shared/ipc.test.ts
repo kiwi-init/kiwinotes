@@ -24,6 +24,21 @@ function collect() {
 }
 
 describe("encode/parseLine", () => {
+  test("os comandos do gato no overlay (spec #9810) vão e voltam, e um tipo errado é recusado", () => {
+    const cmds: Message[] = [
+      { v: 1, id: "c1", type: "catOverlay.load", dir: "/Applications/Kiwi Notes.app/Contents/Resources/app/views/ui/catoverlay" },
+      { v: 1, id: "c2", type: "catOverlay.show", estado: "acordou", fadeMs: 180 },
+      { v: 1, id: "c3", type: "catOverlay.state", estado: "thinking" },
+      { v: 1, id: "c4", type: "catOverlay.hide", fadeMs: 160 },
+      { v: 1, id: "c5", type: "catOverlay.unload" },
+    ];
+    for (const m of cmds) {
+      expect(parseLine(encode(m).slice(0, -1))).toEqual(m);
+      expect(isCommand(m)).toBe(true);
+    }
+    expect(() => parseLine(JSON.stringify({ v: 1, id: "x", type: "catOverlay.explode" }))).toThrow();
+  });
+
   test("round-trips a command, an event and a result", () => {
     const cmd: Message = { v: 1, id: "1", type: "insert.text", text: "olá", restoreClipboard: true };
     const ev: Message = { v: 1, type: "transcript.final", text: "oi", raw: "oi", lang: "pt", durationMs: 820, latencyMs: 160 };
