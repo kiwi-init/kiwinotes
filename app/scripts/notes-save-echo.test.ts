@@ -12,7 +12,7 @@ import { webkit } from "playwright-core";
 
 import { MockVault } from "../ui/notes/mock.ts";
 import { runUi } from "./cli-ui.ts";
-import type { UiContext } from "./ui-page.ts";
+import { ensureBuild, type UiContext } from "./ui-page.ts";
 
 const hasWebkit = (() => {
   try {
@@ -87,6 +87,16 @@ afterEach(() => {
 type Report = { steps: { ok: boolean; error?: string }[] };
 
 describe.skipIf(!hasWebkit)("o save da própria janela volta pelo notes.changed antes da resposta", () => {
+  // O `vite build` da janela fica fora do teto do teste (issue #396). Com o cache dele vazio, como no CI, o build leva
+  // de 10 a 35 s e varia com a carga da máquina; quente, leva milissegundos. Com ele dentro do teto do teste, um
+  // runner lento passava dos 60 s sem a troca de nota ter travado. Aqui ele tem um prazo próprio, e o tempo vai
+  // para o log.
+  beforeAll(() => {
+    const t0 = performance.now();
+    ensureBuild("notes");
+    console.error(`notes-save-echo: build da janela notes em ${Math.round(performance.now() - t0)} ms`);
+  }, 180_000);
+
   test("a nota fica limpa: trocar de nota não regrava nem trava", async () => {
     const { ctx, saves } = vaultCtx(dir);
     const script = join(dir, "save-echo.json");
@@ -116,5 +126,7 @@ describe.skipIf(!hasWebkit)("o save da própria janela volta pelo notes.changed 
     expect(report.steps.filter((s) => !s.ok)).toEqual([]);
     expect(code === 0 || code === 1).toBe(true);
     expect(saves).toEqual(["Pessoas/Ana.md"]);
+    // Sem o build, o teste leva uns 4 s, e 12 s no pior caso medido com a máquina ocupada (o WebKit e as esperas do
+    // script); o teto de 60 s fica só para ele.
   }, 60_000);
 });
