@@ -29,6 +29,7 @@ const base: AgentStatus = {
   adapter: { version: "0.106.0", phase: "missing" },
   program: "closed",
   busy: false,
+  controlShortcut: false,
   model: "default",
   effort: "default",
   session: null,

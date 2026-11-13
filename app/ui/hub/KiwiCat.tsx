@@ -58,6 +58,31 @@ function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; aw
       finally { loading = false; }
     }
     const off = api.agent.onTurn(e => { const previous = activity.state; activity.event(e); if (activity.state !== previous) state(); });
+    // A fala pelo Control (spec #9876): `ouvindo` com as ondas seguindo a voz; ao soltar as ondas somem na hora, e o
+    // gato segue atento até o pedido começar. Cancelada ou vazia, ele volta ao repouso.
+    let talking = false;
+    const offVoice = api.agent.onVoice(v => {
+      const before = activity.state;
+      if (v.phase === "listening") {
+        if (!talking) {
+          talking = true;
+          activity.attend(true);
+          if (activity.state !== before) { cat?.update({ estado: "acordou" }); state(); }
+        }
+        cat?.update({ voz: v.voz });
+      } else if (v.phase === "processing") {
+        cat?.update({ voz: null });
+      } else if (v.phase === "asked") {
+        talking = false;
+        cat?.update({ voz: null });
+        activity.sent();
+      } else {
+        talking = false;
+        cat?.update({ voz: null });
+        activity.attend(false);
+        if (activity.state !== before) state();
+      }
+    });
     const hidden = () => document.hidden || awayRef.current;
     const visibility = () => {
       el.dataset.away = String(awayRef.current);
@@ -73,7 +98,7 @@ function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; aw
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     void create();
     return () => {
-      gone = true; off(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
+      gone = true; off(); offVoice(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};
       handle.current = undefined;
       if (cat) void cat.dispose();
     };

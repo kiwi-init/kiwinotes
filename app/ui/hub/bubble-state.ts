@@ -88,6 +88,8 @@ interface Head {
   complete: boolean;
   shownAt: number;
   completeAt: number;
+  /** O texto entendido da fala pelo Control (spec #9876): sai quando a resposta começa a chegar. */
+  heard?: boolean;
 }
 
 export class BubbleFeed {
@@ -150,6 +152,7 @@ export class BubbleFeed {
       return;
     }
     if (e.type === "text") {
+      if (this.head?.heard) this.head = null;
       this.said += e.text;
       this.open += e.text;
       this.chunkOpen(now, false);
@@ -198,6 +201,20 @@ export class BubbleFeed {
       this.head = { text: line, complete: true, shownAt: now, completeAt: now };
       this.dismissed = false;
     }
+  }
+
+  /**
+   * O texto entendido da fala pelo Control (spec #9876): aparece no balão, entre aspas, enquanto o pedido começa. A
+   * resposta do agente, quando chega, toma o lugar dele.
+   */
+  heard(id: string, text: string, now: number): void {
+    if (this.finished.has(id) || !text.trim()) return;
+    if (this.request !== id) {
+      if (this.request) this.finished.add(this.request);
+      this.reset(id);
+    }
+    if (this.said || this.dismissed || this.head) return;
+    this.head = { text: `“${text.trim()}”`, complete: true, shownAt: now, completeAt: now, heard: true };
   }
 
   /** O clique no balão: fecha (o resto deste pedido não aparece mais no balão; o [Ver mais] não abre mais). */

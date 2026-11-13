@@ -395,7 +395,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -445,7 +445,7 @@ export class AgentService {
   }
 
   private statusFrom(snap: ReturnType<AgentService["snapshot"]>, s: AgentSettings): AgentStatus {
-    return { name: this.name, enabled: s.enabled, consented: s.consented, ...snap, model: s.model, effort: s.effort, economy: s.economy === true };
+    return { name: this.name, enabled: s.enabled, consented: s.consented, ...snap, model: s.model, effort: s.effort, economy: s.economy === true, controlShortcut: s.controlShortcut === true };
   }
 
   /** O modelo e o esforço que o Kiwi pede: no modo econômico, o modelo mais barato que o agente oferece (spec #11084). */
@@ -828,7 +828,7 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     if (o.model !== undefined) patch.model = o.model;
     if (o.effort !== undefined) patch.effort = o.effort;
@@ -836,6 +836,8 @@ export class AgentService {
       patch.economy = o.economy;
       this.economyNow = o.economy;
     }
+    // Spec #9876: "Falar com o agente pelo Control".
+    if (o.controlShortcut !== undefined) patch.controlShortcut = o.controlShortcut;
     if (Object.keys(patch).length) await this.d.settings.save(patch);
     this.emitStatus();
     return this.status();

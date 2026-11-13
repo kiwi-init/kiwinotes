@@ -129,6 +129,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   const { directInvoke } = await import("../bun/ui-engine.ts");
   const { dictate } = await import("../bun/dictate.ts");
   const { attachCatOverlay } = await import("../bun/cat-overlay.ts");
+  const { attachAgentVoice } = await import("../bun/agent-voice.ts");
 
   // ---------------------------------------------------------------- saídas: eventos e logs, com histórico curto
   const subscribers = new Map<Socket<unknown>, Set<Topic>>();
@@ -171,6 +172,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     : (word: string, language?: string) => session?.checkSpelling(word, language) ?? NO_SPELLING;
   let fakeClipboard = "";
   let catOverlay: import("../bun/cat-overlay.ts").AttachedCatOverlay | undefined;
+  let agentVoice: import("../bun/agent-voice.ts").AttachedAgentVoice | undefined;
   const capabilities = uiCapabilities({
     spelling,
     meetings,
@@ -208,6 +210,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     settingsChanged: (settings) => {
       void session?.settingsChanged(settings);
       catOverlay?.settingsChanged(settings);
+      agentVoice?.settingsChanged(settings);
       event("settings.changed", settings);
     },
     projectsChangedIn: (folderId) => event("projects.changed", { folderId }),
@@ -289,6 +292,20 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     log: (m) => console.log(m),
   });
   offs.push(() => catOverlay?.stop());
+  // O atalho Control (spec #9876): pelo helper headless, a fala vem do `debug.transcribe {target: "agent"}` (o `say`).
+  agentVoice = attachAgentVoice({
+    agent: stores.agent,
+    settings: stores.settings,
+    ...(session
+      ? { helper: { send: (c) => session.sidecar.send(c), on: (type, fn) => session.sidecar.on(type, fn), onReady: (fn) => session.sidecar.on("ready", fn) } }
+      : {}),
+    ui: (state) => {
+      event("agent.voice", state);
+      catOverlay?.overlay.voice(state);
+    },
+    log: (m) => console.log(m),
+  });
+  offs.push(() => agentVoice?.stop());
   if (session) {
     offs.push(session.onStatus((s) => event("status", s)));
     offs.push(session.sidecar.on("*", (e) => (e.type === "audio.level" ? undefined : event("helper.event", e))));
@@ -328,6 +345,21 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
           const code = (e as { code?: unknown }).code;
           return { id, ok: false, code: typeof code === "string" ? code : "E_FAILED", message: e instanceof Error ? e.message : String(e) };
         }
+      }
+      case "hubView": {
+        // A janela principal à vista, ou não (o WebKit headless não tem foco de janela): com ela à vista, o gato é o do
+        // canto, e o overlay não toma o lugar dele (spec #9810). Para as provas do hub.
+        if (typeof msg.view !== "boolean") return { id, ok: false, code: "E_BAD_ARGS", message: "view must be a boolean" };
+        catOverlay?.setHubInView(msg.view);
+        return { id, ok: true, value: { view: msg.view } };
+      }
+      case "agentTalk": {
+        // O atalho Control (spec #9876) sem o mic nem a tecla: o helper toca o WAV (`say`) como uma fala ao agente, com
+        // os mesmos eventos `agent.*` da tecla segurada. Só com o helper em KIWI_DEBUG=1 (o `debug.transcribe`).
+        if (!session) return { id, ok: false, code: "E_NO_HELPER", message: "started with --no-helper" };
+        if (typeof msg.wav !== "string") return { id, ok: false, code: "E_BAD_ARGS", message: "wav must be a path" };
+        const r = await session.sidecar.send({ type: "debug.transcribe", path: msg.wav, target: "agent" });
+        return r.ok ? { id, ok: true, value: { playing: true } } : { id, ok: false, code: "E_HELPER", message: r.error ?? "failed" };
       }
       case "subscribe": {
         const topics = new Set((Array.isArray(msg.topics) ? msg.topics : ["events"]).filter((t): t is Topic => t === "events" || t === "logs"));

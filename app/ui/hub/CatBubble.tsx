@@ -63,8 +63,15 @@ export function CatBubble({ reduced, hidden = false }: { reduced: boolean; hidde
       f.event(e, performance.now());
       refresh();
     });
+    // A fala pelo Control (spec #9876): o texto entendido aparece no balão quando o pedido começa.
+    const offVoice = api.agent.onVoice((v) => {
+      if (v.phase !== "asked") return;
+      f.heard(v.id, v.text, performance.now());
+      refresh();
+    });
     return () => {
       off();
+      offVoice();
       clearTimeout(timer);
       m.dispose();
       feed.current = null;

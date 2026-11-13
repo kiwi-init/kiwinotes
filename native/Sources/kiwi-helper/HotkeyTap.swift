@@ -60,7 +60,9 @@ final class HotkeyTap {
     @discardableResult
     func start() -> Bool {
         guard tap == nil else { return true }
+        // The mouse buttons too (spec #9876): a click with the agent's Control held is "another key". Clicks always pass.
         let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+            | (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue) | (1 << CGEventType.otherMouseDown.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             let me = Unmanaged<HotkeyTap>.fromOpaque(refcon!).takeUnretainedValue()
             return me.handle(type: type, event: event) ? nil : Unmanaged.passUnretained(event)
@@ -133,6 +135,13 @@ final class HotkeyTap {
         // The same for the keys of a broken sequence, which this tap posts again.
         if event.getIntegerValueField(.eventSourceUnixProcessID) == Self.ownPID
             || event.getIntegerValueField(.eventSourceUserData) == Self.replayMark { return false }
+        if type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown {
+            // Never dropped, and never the recorder's: only "another key" for a held talk key.
+            guard recorder == nil else { return false }
+            let result = engine.handle(.mouseDown, payload: event, at: ProcessInfo.processInfo.systemUptime)
+            result.outputs.forEach { onEvent(.shortcut($0)) }
+            return false
+        }
         let code = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags.rawValue
         let input: KeyInput

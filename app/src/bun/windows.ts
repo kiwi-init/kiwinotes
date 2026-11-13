@@ -15,6 +15,7 @@ import { appLog } from "./file-log.ts";
 import { WINDOW_SPECS as SPECS } from "../shared/window-specs.ts";
 import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
 import { type AttachedCatOverlay, attachCatOverlay } from "./cat-overlay.ts";
+import { type AttachedAgentVoice, attachAgentVoice } from "./agent-voice.ts";
 import { session } from "./session.ts";
 import type { Sidecar } from "./sidecar.ts";
 import { stores } from "./stores.ts";
@@ -92,6 +93,7 @@ const capabilities = uiCapabilities({
   settingsChanged: (settings) => {
     void session.get()?.settingsChanged(settings);
     catOverlay?.settingsChanged(settings);
+    agentVoice?.settingsChanged(settings);
     // A Aparência vale para todas as janelas abertas (T2503).
     for (const rpc of rpcs.values()) rpc.send.event({ name: "settings.changed", payload: settings });
   },
@@ -348,6 +350,22 @@ function setHubFocused(focused: boolean): void {
 
 // O gato no overlay (spec #9810): com o hub fora da vista, o gato de um pedido aparece por cima dos outros apps, numa
 // janela do helper. O hub esconde o do canto enquanto ele está lá (`kiwicat.where`).
+let agentVoice: AttachedAgentVoice | undefined;
+/** O atalho Control (spec #9876): fala ao agente pelo helper; o gato das janelas segue o `agent.voice`. */
+export function startAgentVoice(sidecar: Sidecar): void {
+  agentVoice?.stop();
+  agentVoice = attachAgentVoice({
+    agent: stores.agent,
+    settings: stores.settings,
+    helper: { send: (c) => sidecar.send(c), on: (type, fn) => sidecar.on(type, fn), onReady: (fn) => sidecar.on("ready", fn) },
+    ui: (state) => {
+      for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.voice", payload: state });
+      catOverlay?.overlay.voice(state);
+    },
+    log: (m) => console.log(m),
+  });
+}
+
 let catOverlay: AttachedCatOverlay | undefined;
 export function startCatOverlay(sidecar: Sidecar): void {
   catOverlay?.stop();

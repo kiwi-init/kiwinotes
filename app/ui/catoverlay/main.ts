@@ -53,7 +53,9 @@ function measureFirstFrame(start: number) {
 }
 
 const api = {
-  set(input: { estado?: string; visible?: boolean }) {
+  set(input: { estado?: string; visible?: boolean; voz?: number | null }) {
+    // A fala pelo Control (spec #9876): o nível do mic, que o helper manda direto; null tira as ondas.
+    if (input.voz !== undefined) cat.update({ voz: input.voz });
     if (input.estado && STATES.includes(input.estado) && input.estado !== stats.estado) {
       stats.estado = input.estado;
       cat.update({ estado: input.estado as FogState });

@@ -136,6 +136,8 @@ export const api = {
     onTurn: (fn: (e: UiEvents["agent.turn"]) => void) => on("agent.turn", fn),
     /** O gato foi para o overlay, ou voltou (1.53.0, spec #9810): o hub esconde o do canto. */
     onCatWhere: (fn: (e: UiEvents["kiwicat.where"]) => void) => on("kiwicat.where", fn),
+    /** A fala ao agente pelo Control (1.55.0, spec #9876): o `ouvindo` com as ondas e o texto no balão. */
+    onVoice: (fn: (e: UiEvents["agent.voice"]) => void) => on("agent.voice", fn),
     /** A tela "Atividade do agente" (1.44.0–1.46.0, spec #9480): o registro, o [Ver] e o [Desfazer]. */
     activity: (limit?: number) => invoke("agent.activity", limit ? { limit } : {}),
     change: (request: string, change: number) => invoke("agent.change", { request, change }),

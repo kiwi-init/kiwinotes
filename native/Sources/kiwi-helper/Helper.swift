@@ -24,7 +24,21 @@ final class Helper {
     private let learnPanel = LearnPanel()
     private let learnPrompt = LearnPrompt { delay, run in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: run) }
     private let inserter = Inserter()
-    private var gesture = HotkeyGesture()
+    /// The two talk keys (spec #9876): Fn for the dictation, Control for the agent. They never record together.
+    private var talk = TalkKeys()
+    /// Whose recording is on (or finishing its tail): the dictation's or the agent's.
+    private var recordingTarget: TalkTarget?
+    /// The agent's recording passed the hold (or was latched): the person is talking to the agent, not using ⌃ as a
+    /// modifier. Only then the sound and the cat's `ouvindo` (`agent.listening`), so ⌃C never flashes them.
+    private var agentConfirmed = false
+    private var agentConfirmTimer: DispatchWorkItem?
+    /// Spec #9876 (#11393): the agent's mic opens only after the hold time or on the 2nd tap, never at the press.
+    private var agentGate = AgentMicGate()
+    /// The agent's transcription is under way; Esc now drops it (`agentDropped`), and nothing is sent.
+    private var agentTranscribing = false
+    private var agentDropped = false
+    /// The app says the agent is busy with a request: the Control doesn't start listening (one request at a time).
+    private var agentBusy = false
     /// T5833 (#213): os sons de início e de fim. Ligados por padrão; o app manda o ajuste no `config.set {cues}`.
     private let cues: RecordingCues
     /// ⌥ was held when the dictation key last went down: the recording it starts is a quick note (T1320).
@@ -40,7 +54,7 @@ final class Helper {
         // L9 (T5459): paste the last dictation again, from any app. ⌃⌥V, next to Kiwi's other ⌃⌥ shortcuts.
         "pasteLast": Shortcut("control+option+v")!,
     ]
-    static let shortcutIds: Set<String> = ["dictation", "cancel", "pasteLast", "notes", "meeting", "meetingPause"]
+    static let shortcutIds: Set<String> = ["dictation", "cancel", "pasteLast", "notes", "meeting", "meetingPause", "agent"]
     /// A `shortcut.record` waiting for the person to press the shortcut.
     private var recordingShortcutId: String?
     private var tickTimer: DispatchWorkItem?
@@ -106,7 +120,16 @@ final class Helper {
             if let app { fields["app"] = app }
             self?.emit("paste.edited", fields)
         }
-        tap.isActive = { [weak self] id in id != "cancel" || self?.audio.isRecording == true }
+        tap.isActive = { [weak self] id in
+            guard let self else { return false }
+            switch id {
+            // Esc: while recording, and while the agent's text is being transcribed (it drops it).
+            case "cancel": return self.audio.isRecording || self.agentTranscribing
+            // The Control: not while the agent is busy (spec #9876).
+            case "agent": return !self.agentBusy
+            default: return true
+            }
+        }
         // A preferência de verdade só no app. No headless e com KIWI_DEBUG (os agentes), uma falsa num arquivo, e o
         // AppleFnUsageType do Mac nunca é tocado (AGENTS.md, #4871).
         let fake = headless || ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1"
@@ -133,6 +156,8 @@ final class Helper {
             // Level queue: send straight away, the write queue serializes it.
             self?.emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
             self?.overlay.push(level: level)
+            // Spec #9876: com a escuta do agente confirmada, as ondas do gato no overlay seguem a voz, direto do mic.
+            DispatchQueue.main.async { self?.catOverlayVoice(Double(level)) }
         }
         overlay.onCancel = { [weak self] in self?.endFromOverlay(finish: false) }
         overlay.onFinish = { [weak self] in self?.endFromOverlay(finish: true) }
@@ -165,22 +190,26 @@ final class Helper {
         audio.onLost = { [weak self] code, samples in
             guard let self else { return }
             self.media.end()
+            let target = self.recordingTarget ?? .dictation
+            if target == .agent { self.agentGate.reset() }
             guard !samples.isEmpty else {
-                self.gesture.reset()
+                self.talk.reset(target)
+                self.recordingTarget = nil
                 self.recordingStartedAt = nil
                 // No audio while another app holds the mic (#5154): say which one.
                 let busy = MicBusy.classify(code, otherApps: MicDiagnostics.otherApps())
                 var fields: [String: Any] = ["reason": "hotkey", "error": busy.code, "microphone": Permission.microphone.status]
                 if let app = busy.app { fields["busyApp"] = app }
                 if let recovery = self.finishRecovery() { fields["recovery"] = recovery.fields }
+                if target == .agent { return self.emit("agent.record.error", fields) }
                 self.emit("record.error", fields)
                 return self.overlay.set(.error, message: busy.app.map(MicBusy.message) ?? OverlayText.error(busy.code))
             }
             // T883: the mic went away mid-dictation. What it heard is transcribed like a normal end (as the pill's ✓:
             // the key still held doesn't start another one), and `lost` tells the app to say the mic dropped.
-            let mode = self.gesture.endedFromOverlay()
+            let mode = self.talk.ended(target)
             self.tickTimer?.cancel()
-            if mode == .toggle { self.emit("hotkey.toggle", ["on": false]) }
+            if mode == .toggle, target == .dictation { self.emit("hotkey.toggle", ["on": false]) }
             self.finishRecording(samples, reason: "hotkey", mode: mode.rawValue, lost: code)
         }
     }
@@ -333,26 +362,42 @@ final class Helper {
             emit("hotkey.down", ["key": dictationSpec])
             // A recording this press starts is a quick note (T1320); the 2nd tap of a double tap keeps the 1st's.
             nextIsNote = dictationKey?.noteModifierHeld(flags: flags) ?? false
-            actions = gesture.keyDown(at: ProcessInfo.processInfo.systemUptime)
+            actions = talk.press(.dictation, at: ProcessInfo.processInfo.systemUptime, otherRecording: recordingTarget == .agent || agentGate.armed)
         case .release("dictation", _):
             emit("hotkey.up", ["key": dictationSpec])
-            actions = gesture.keyUp(at: ProcessInfo.processInfo.systemUptime)
+            actions = talk.release(.dictation, at: ProcessInfo.processInfo.systemUptime)
         case .interrupt("dictation", let code):
             // Letting go of ⌥ in a quick note is part of the gesture.
-            if nextIsNote, gesture.isRecording, dictationKey?.isNoteModifier(keyCode: code) == true { return }
-            actions = gesture.otherKeyDown()
+            if nextIsNote, talk.dictation.isRecording, dictationKey?.isNoteModifier(keyCode: code) == true { return }
+            // A click is "another key" only for the agent's Control (spec #9876): the dictation doesn't change.
+            if code == ShortcutOutput.mouseKeyCode { return }
+            actions = talk.interrupt(.dictation)
         case .trigger("dictation"):
+            if recordingTarget == .agent { return }
             if audio.isRecording {
-                gesture.reset()
+                talk.reset(.dictation)
                 emit("hotkey.toggle", ["on": false])
                 stopRecording(reason: "hotkey", mode: StopMode.toggle.rawValue)
             } else {
                 nextIsNote = false
                 if startRecording(reason: "hotkey") == nil, audio.isRecording {
-                    gesture.reset(latched: true)
+                    talk.reset(.dictation, latched: true)
                     emit("hotkey.toggle", ["on": true])
                 }
             }
+            return
+        // Spec #9876: the Control talks to the agent, with the dictation's gesture.
+        case .press("agent", _):
+            apply(talk.press(.agent, at: ProcessInfo.processInfo.systemUptime, otherRecording: recordingTarget == .dictation), for: .agent)
+            scheduleTick()
+            return
+        case .release("agent", _):
+            apply(talk.release(.agent, at: ProcessInfo.processInfo.systemUptime), for: .agent)
+            scheduleTick()
+            return
+        case .interrupt("agent", _):
+            apply(talk.interrupt(.agent), for: .agent)
+            scheduleTick()
             return
         case .press("cancel", _), .trigger("cancel"):
             cancelFromShortcut()
@@ -371,7 +416,7 @@ final class Helper {
         default:
             return
         }
-        actions.forEach(apply)
+        apply(actions, for: .dictation)
         scheduleTick()
     }
 
@@ -394,7 +439,12 @@ final class Helper {
 
     private func applyShortcuts() {
         // A fixed order, so two shortcuts on the same keys always resolve the same way.
-        tap.bindings = ["dictation", "cancel", "pasteLast", "notes", "meeting", "meetingPause"].compactMap { id in shortcuts[id].map { (id: id, shortcut: $0) } }
+        // Spec #9876: the agent's Control is off while the dictation is on a Control (the app says so in Settings).
+        let dictationOnControl = dictationKey == .rightControl || dictationKey == .control
+        tap.bindings = ["dictation", "agent", "cancel", "pasteLast", "notes", "meeting", "meetingPause"].compactMap { id in
+            guard id != "agent" || !dictationOnControl else { return nil }
+            return shortcuts[id].map { (id: id, shortcut: $0) }
+        }
         // L6 (T5457): trocar o atalho para outra tecla devolve a ação do 🌐; voltar para o Fn troca de novo.
         if globeStarted { globe.set(fnIsShortcut: dictationKey == .fn) }
     }
@@ -417,25 +467,104 @@ final class Helper {
         exit(0)
     }
 
-    private func apply(_ action: GestureAction) {
+    private func apply(_ actions: [GestureAction], for target: TalkTarget) {
+        for action in actions { apply(action, for: target) }
+    }
+
+    /// A key's action, for its own recording only: one key never stops or cancels the other's.
+    private func apply(_ action: GestureAction, for target: TalkTarget) {
         switch action {
+        case .startRecording where target == .agent:
+            // Armed only: the mic waits for the hold time or the 2nd tap (#11393).
+            run(agentGate.start())
+            scheduleAgentConfirm()
+        case .latch where target == .agent:
+            run(agentGate.latch())
+        case .stopRecording(let mode) where target == .agent:
+            run(agentGate.stop(mode))
+        case .cancelRecording where target == .agent:
+            run(agentGate.cancel())
         case .startRecording:
             startRecording(reason: "hotkey", note: nextIsNote)
         case .latch:
+            guard recordingTarget == target else { return }
             emit("hotkey.toggle", ["on": true])
         case .stopRecording(let mode):
-            if mode == .toggle { emit("hotkey.toggle", ["on": false]) }
+            guard recordingTarget == target else { return }
+            if mode == .toggle, target == .dictation { emit("hotkey.toggle", ["on": false]) }
             stopRecording(reason: "hotkey", mode: mode.rawValue)
         case .cancelRecording:
+            guard recordingTarget == target else { return }
             cancelRecording(reason: "hotkey")
         }
+    }
+
+    /// What the gate says to do with the agent's mic.
+    private func run(_ effects: [AgentMicGate.Effect]) {
+        for effect in effects {
+            switch effect {
+            case .openMic(let latched):
+                // Only now the mic opens: then the sound and `agent.listening` (the cat goes to `ouvindo`).
+                if startRecording(reason: "hotkey", target: .agent) == nil, recordingTarget == .agent {
+                    confirmAgent(latched: latched)
+                } else {
+                    agentGate.reset()
+                }
+            case .stopMic(let mode):
+                guard recordingTarget == .agent else { continue }
+                stopRecording(reason: "hotkey", mode: mode.rawValue)
+            case .cancelMic:
+                guard recordingTarget == .agent else { continue }
+                cancelRecording(reason: "hotkey")
+            }
+        }
+    }
+
+    /// Spec #9876 (#11393): held past the hold time, the Control is a talk to the agent: the mic opens now. A ⌃C or a
+    /// tap before that never opened it.
+    private func scheduleAgentConfirm() {
+        agentConfirmTimer?.cancel()
+        guard agentGate.armed else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let pressed: Bool
+            if case .pressed = self.talk.agent.state { pressed = true } else { pressed = false }
+            self.run(self.agentGate.holdPassed(stillPressed: pressed))
+        }
+        agentConfirmTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + talk.agent.holdThreshold, execute: work)
+    }
+
+    /// O gato no overlay carregou a página (`catOverlay.load`): só então o nível do mic vai a ela.
+    private var catOverlayLoaded = false
+
+    private func catOverlayVoice(_ level: Double?) {
+        guard catOverlayLoaded else { return }
+        if level != nil, !(recordingTarget == .agent && agentConfirmed) { return }
+        let cat = catOverlay
+        MainActor.assumeIsolated { cat.voice(level) }
+    }
+
+    private func confirmAgent(latched: Bool) {
+        agentConfirmTimer?.cancel()
+        guard recordingTarget == .agent else { return }
+        if !agentConfirmed { cues.playStart() }
+        agentConfirmed = true
+        emit("agent.listening", ["latched": latched])
     }
 
     /// L5 (T5458): the cancel shortcut (Esc) during a dictation, like the pill's ✕: the audio is thrown away and
     /// nothing is pasted. A key still held for push-to-talk does nothing when it comes up.
     private func cancelFromShortcut() {
-        guard audio.isRecording else { return }
-        _ = gesture.endedFromOverlay()
+        guard audio.isRecording else {
+            // Spec #9876: Esc while the agent's speech is being transcribed: the text that comes is dropped.
+            if agentTranscribing, !agentDropped {
+                agentDropped = true
+                emit("agent.record.cancelled", ["reason": "escape", "phase": "transcribing"])
+            }
+            return
+        }
+        _ = talk.ended(recordingTarget ?? .dictation)
         tickTimer?.cancel()
         cancelRecording(reason: "escape")
     }
@@ -443,7 +572,7 @@ final class Helper {
     /// The pill's ✕ (cancel) or ✓ (finish, like letting go of the key).
     private func endFromOverlay(finish: Bool) {
         guard audio.isRecording else { return }
-        let mode = gesture.endedFromOverlay()
+        let mode = talk.ended(recordingTarget ?? .dictation)
         tickTimer?.cancel()
         if finish {
             if mode == .toggle { emit("hotkey.toggle", ["on": false]) }
@@ -455,10 +584,11 @@ final class Helper {
 
     private func scheduleTick() {
         tickTimer?.cancel()
-        guard let deadline = gesture.deadline else { return }
+        guard let deadline = talk.deadline?.at else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.gesture.tick(now: ProcessInfo.processInfo.systemUptime).forEach(self.apply)
+            for (target, action) in self.talk.tick(now: ProcessInfo.processInfo.systemUptime) { self.apply(action, for: target) }
+            self.scheduleTick()
         }
         tickTimer = work
         let delay = max(0, deadline - ProcessInfo.processInfo.systemUptime) + 0.01
@@ -485,14 +615,18 @@ final class Helper {
     }
 
     @discardableResult
-    private func startRecording(reason: String, note: Bool = false) -> String? {
+    private func startRecording(reason: String, note: Bool = false, target: TalkTarget = .dictation) -> String? {
         // Pressed again while the last one is still recording its tail (T5456): that one ends now, with what it has.
         if audio.isFinishing { audio.finishNow() }
         guard !audio.isRecording else { return nil }
+        // Spec #9876: the agent's recording has events of its own (`agent.*`), so the dictation never sees it: it's
+        // never pasted, never journaled for recovery, never dumped, and the pill doesn't show (the cat does).
+        if target == .agent { return startAgentRecording(reason: reason) }
         // Tell the app first, so the overlay shows up while the engine comes up. If the mic then fails,
         // record.error follows record.started (ADR 0001).
         var started: [String: Any] = ["reason": reason]
         if note { started["target"] = "note" }
+        recordingTarget = .dictation
         let front = FrontApp.current
         if let app = front { started["app"] = ["bundleId": app.bundleId, "name": app.name] }
         // Which mic (T3229): the app tells the person when the chosen one wasn't connected (`fellBack`).
@@ -514,7 +648,8 @@ final class Helper {
                 if let app = front { reportSite(app) }
             }
         } catch {
-            gesture.reset()
+            talk.reset(.dictation)
+            recordingTarget = nil
             // A stable code for the app; AVAudioEngine's own errors are long sentences.
             var code = (error as? AudioCaptureError)?.description ?? "engine_start_failed"
             let microphone = Permission.microphone.status
@@ -541,13 +676,49 @@ final class Helper {
         return nil
     }
 
+    /// The agent's recording (spec #9876): the mic opens at once; the sound and the cat wait for the confirmation.
+    private func startAgentRecording(reason: String) -> String? {
+        recordingTarget = .agent
+        agentConfirmed = false
+        agentDropped = false
+        // The media (L8) isn't lowered: pausing the music is only for the dictation (#4756).
+        do {
+            emit("agent.record.started", ["reason": reason])
+            try audio.start()
+        } catch {
+            talk.reset(.agent)
+            agentGate.reset()
+            recordingTarget = nil
+            agentConfirmTimer?.cancel()
+            let microphone = Permission.microphone.status
+            var code = (error as? AudioCaptureError)?.description ?? "engine_start_failed"
+            var fields: [String: Any] = ["reason": reason, "microphone": microphone]
+            if microphone == "granted" {
+                let busy = MicBusy.classify(code, otherApps: MicDiagnostics.otherApps())
+                code = busy.code
+                if let app = busy.app { fields["busyApp"] = app }
+            }
+            fields["error"] = code
+            emit("agent.record.error", fields)
+            return code
+        }
+        recordingStartedAt = ProcessInfo.processInfo.systemUptime
+        return nil
+    }
+
     private func stopRecording(reason: String, mode: String) {
         guard audio.isRecording, !audio.isFinishing else { return }
         // Let go (or the pill's ✓): the pill says "processing" now, and the mic takes in `releaseTail` more, so the last
         // word isn't cut (T5456, issue #155). `record.stop` from the app ends right away.
         guard reason != "command" else { return finishRecording(audio.stop(), reason: reason, mode: mode) }
         let releasedAt = ProcessInfo.processInfo.systemUptime
-        overlay.set(.processing)
+        if recordingTarget == .agent {
+            // The waves stop the instant the listening ends, before the transcription (spec #9876).
+            emit("agent.record.stopping", ["mode": mode])
+            catOverlayVoice(nil)
+        } else {
+            overlay.set(.processing)
+        }
         audio.stop(after: AudioCapture.releaseTail) { [weak self] samples in
             self?.finishRecording(samples, reason: reason, mode: mode, releasedAt: releasedAt)
         }
@@ -555,6 +726,8 @@ final class Helper {
 
     /// The end of a recording, from the mic or from `debug.transcribe`: `record.stopped`, the pill, the transcript.
     private func finishRecording(_ samples: [Float], reason: String, mode: String, lost: String? = nil, releasedAt: TimeInterval? = nil) {
+        if recordingTarget == .agent { return finishAgentRecording(samples, reason: reason, mode: mode, lost: lost, releasedAt: releasedAt) }
+        recordingTarget = nil
         media.end()
         // T5833: o mic já fechou e a mídia já voltou (L8): o som de fim. O `debug.transcribe` não grava.
         if reason != "debug" { cues.playEnd() }
@@ -575,6 +748,43 @@ final class Helper {
         // or the engine never delivered) there is nothing to transcribe, so no `done` would come: hide now.
         overlay.set(samples.isEmpty ? .hidden : .processing)
         transcribe(samples, durationMs: fields["durationMs"] as! Int, audioPath: audioPath, releasedAt: releasedAt, recovery: recovery)
+    }
+
+    /// Spec #9876: the end of the agent's recording. `agent.record.stopped`, then `agent.transcript` with the text, or
+    /// nothing when Esc came first. The samples live only in memory: no dump, no journal; the audio is gone after.
+    private func finishAgentRecording(_ samples: [Float], reason: String, mode: String, lost: String?, releasedAt: TimeInterval?) {
+        recordingTarget = nil
+        agentGate.reset()
+        agentConfirmTimer?.cancel()
+        if agentConfirmed { cues.playEnd() }
+        agentConfirmed = false
+        let durationMs = Int(Double(samples.count) / AudioCapture.sampleRate * 1000)
+        var fields: [String: Any] = ["reason": reason, "mode": mode, "durationMs": durationMs, "samples": samples.count]
+        if let lost { fields["lost"] = lost }
+        recordingStartedAt = nil
+        emit("agent.record.stopped", fields)
+        guard !samples.isEmpty else { return }
+        let stoppedAt = releasedAt ?? ProcessInfo.processInfo.systemUptime
+        agentTranscribing = true
+        agentDropped = false
+        let previous = sttChain
+        sttChain = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self else { return }
+            defer { self.agentTranscribing = false }
+            do {
+                let (output, engine) = try await self.recognize(samples)
+                // Esc during the transcription: the text is dropped here, and nothing is sent.
+                guard !self.agentDropped else { return }
+                self.emit("agent.transcript", [
+                    "text": output.text, "raw": output.raw, "lang": output.lang, "engine": engine,
+                    "durationMs": durationMs, "latencyMs": Int((ProcessInfo.processInfo.systemUptime - stoppedAt) * 1000),
+                ])
+            } catch {
+                guard !self.agentDropped else { return }
+                self.emit("agent.transcript.error", ["error": (error as? Transcriber.Failure)?.rawValue ?? Transcriber.Failure.failed.rawValue])
+            }
+        }
     }
 
     /// `transcript.final` for a finished recording, or `transcript.error`. `latencyMs` goes from the end of the
@@ -638,6 +848,20 @@ final class Helper {
 
     private func cancelRecording(reason: String) {
         guard audio.isRecording else { return }
+        if recordingTarget == .agent {
+            // Spec #9876: the audio is thrown away; the sound only if the listening had been confirmed.
+            _ = audio.stop()
+            agentConfirmTimer?.cancel()
+            if agentConfirmed { cues.playEnd() }
+            agentGate.reset()
+            recordingTarget = nil
+            recordingStartedAt = nil
+            emit("agent.record.cancelled", ["reason": reason, "listened": agentConfirmed])
+            catOverlayVoice(nil)
+            agentConfirmed = false
+            return
+        }
+        recordingTarget = nil
         _ = audio.stop()
         media.end()
         cues.playEnd() // T5833: cancelar também termina a gravação, com o mic fechado e a mídia de volta
@@ -782,7 +1006,7 @@ final class Helper {
             guard let id else { return }
             recordingShortcutId = id
             if audio.isRecording { cancelRecording(reason: "config") }
-            gesture.reset()
+            talk.reset(.dictation); talk.reset(.agent)
             // `bareKey`: recording the cancel (L5), where ⌫ or ↩ alone is a shortcut too.
             tap.record(bareKey: message.fields["bareKey"] as? Bool == true)
         case "shortcut.cancel":
@@ -797,11 +1021,12 @@ final class Helper {
             if let error = startRecording(reason: "command") {
                 reply(id, ok: false, error: error)
             } else {
-                gesture.reset(latched: true) // a tap on the hotkey ends it, as in toggle mode
+                talk.reset(.dictation, latched: true) // a tap on the hotkey ends it, as in toggle mode
                 reply(id, ok: true)
             }
         case "record.stop":
-            gesture.reset()
+            guard recordingTarget != .agent else { return reply(id, ok: false, error: "not_recording") }
+            talk.reset(.dictation)
             stopRecording(reason: "command", mode: "command")
             reply(id, ok: true)
         case "permissions.request":
@@ -826,6 +1051,7 @@ final class Helper {
             guard let dir = message.string("dir") else { return reply(id, ok: false, error: "invalid_value") }
             let cat = catOverlay
             let error = MainActor.assumeIsolated { cat.load(dir: dir) }
+            catOverlayLoaded = error == nil
             reply(id, ok: error == nil, error: error)
         case "catOverlay.show":
             guard let estado = message.string("estado") else { return reply(id, ok: false, error: "invalid_value") }
@@ -844,6 +1070,7 @@ final class Helper {
             MainActor.assumeIsolated { cat.hide(fadeMs: fade) }
             reply(id, ok: true)
         case "catOverlay.unload":
+            catOverlayLoaded = false
             let cat = catOverlay
             MainActor.assumeIsolated { cat.unload() }
             reply(id, ok: true)
@@ -1040,6 +1267,17 @@ final class Helper {
             started["app"] = ["bundleId": app.bundleId, "name": app.name]
         }
         if let target = message.string("target") {
+            // Spec #9876: `target: "agent"` plays a WAV as a talk to the agent through the Control (no mic, no key):
+            // the agent's events, the confirmation and the transcription, as with the key held.
+            if target == "agent" {
+                reply(id, ok: true)
+                recordingTarget = .agent
+                agentConfirmed = false
+                emit("agent.record.started", ["reason": "debug"])
+                emit("agent.listening", ["latched": false])
+                agentConfirmed = true
+                return playAgentDebug(samples)
+            }
             guard target == "note" else { return reply(id, ok: false, error: "invalid_value") }
             started["target"] = "note"
         }
@@ -1049,6 +1287,30 @@ final class Helper {
         emit("record.started", started)
         overlay.set(.listening)
         finishRecording(samples, reason: "debug", mode: "debug")
+    }
+
+    /// Spec #9876: the WAV plays in real time, like a key held while talking: its level goes out as `audio.level` (the
+    /// waves), at the mic's rate, and then the listening ends and the transcription runs.
+    private func playAgentDebug(_ samples: [Float]) {
+        var meter = LevelMeter()
+        let step = Int(AudioCapture.sampleRate / 30)
+        var at = 0
+        func tick() {
+            guard recordingTarget == .agent else { return } // cancelled meanwhile
+            guard at < samples.count else {
+                emit("agent.record.stopping", ["mode": "debug"])
+                catOverlayVoice(nil)
+                return finishAgentRecording(samples, reason: "debug", mode: "debug", lost: nil, releasedAt: nil)
+            }
+            let end = min(at + step, samples.count)
+            for level in meter.push(Array(samples[at..<end])) {
+                emit("audio.level", ["rms": (Double(level) * 1000).rounded() / 1000])
+                catOverlayVoice(Double(level))
+            }
+            at = end
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 30, execute: tick)
+        }
+        tick()
     }
 
     /// `config.set {hotkey?, holdThresholdMs?, doubleTapMs?, notesShortcut?, microphone?}` (ADR 0001; `microphone`:
@@ -1106,14 +1368,16 @@ final class Helper {
         if let value = message.fields["meetingSuggest"], !(value is Bool) { return "invalid_value" }
         // T5833: os sons de início e de fim (padrão: ligados).
         if let value = message.fields["cues"], !(value is Bool) { return "invalid_value" }
+        if let value = message.fields["agentBusy"], !(value is Bool) { return "invalid_value" }
         if let value = message.fields["meetingApps"], MeetingApps.parse(value) == nil { return "invalid_value" }
         // T6602: `precise`, o caminho do GGUF do Whisper do modo preciso, ou null para desligar.
         if let value = message.fields["precise"], !(value is NSNull), (value as? String)?.isEmpty != false { return "invalid_value" }
         if !changed.isEmpty {
             let dictationChanged = changed["dictation"].map { $0 != shortcuts["dictation"] } ?? false
             for (id, shortcut) in changed { shortcuts[id] = shortcut }
-            if dictationChanged {
-                gesture.reset()
+            let agentChanged = changed["agent"].map { $0 != shortcuts["agent"] } ?? false
+            if dictationChanged || agentChanged {
+                talk.reset(.dictation); talk.reset(.agent)
                 if audio.isRecording { cancelRecording(reason: "config") }
             }
             applyShortcuts()
@@ -1129,9 +1393,10 @@ final class Helper {
         }
         if let on = message.fields["cues"] as? Bool { cues.enabled = on }
         if let value = message.fields["precise"] { setPrecise(value as? String) }
-        if let ms = hold { gesture.holdThreshold = ms / 1000 }
-        if let ms = doubleTap { gesture.doubleTapWindow = ms / 1000 }
-        if hold != nil || doubleTap != nil { tap.timings = (doubleTap: gesture.doubleTapWindow, tap: gesture.holdThreshold) }
+        talk.setTimings(holdThreshold: hold.map { $0 / 1000 }, doubleTapWindow: doubleTap.map { $0 / 1000 })
+        if hold != nil || doubleTap != nil { tap.timings = (doubleTap: talk.dictation.doubleTapWindow, tap: talk.dictation.holdThreshold) }
+        // Spec #9876: the agent is busy with a request: the Control doesn't start listening.
+        if let busy = message.fields["agentBusy"] as? Bool { agentBusy = busy }
         if language != nil || dictionary != nil || vad != nil {
             let prepared = dictionary.map(TranscriptDictionary.init)
             if let prepared {

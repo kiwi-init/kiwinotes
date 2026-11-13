@@ -95,6 +95,13 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         if gate.shows { script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true})") }
     }
 
+    /// A fala pelo Control (spec #9876): o nível do mic, para as ondas do `ouvindo`; nil tira as ondas.
+    func voice(_ level: Double?) {
+        guard gate.shows else { return }
+        let value = level.map { String(format: "%.3f", min(max($0, 0), 1)) } ?? "null"
+        script("window.kiwiOverlay?.set({voz: \(value)})")
+    }
+
     func hide(fadeMs: Double) {
         self.fadeMs = fadeMs
         if gate.want(false) { dismiss() }

@@ -116,7 +116,12 @@ export type Command =
        * "control+option+r", "control+k r r"), ou null para desligar. Só os dados mudam. Substitui o `hotkey`, o
        * `notesShortcut`, o `meetingShortcut` e o `meetingPauseShortcut`, que ainda valem.
        */
-      shortcuts?: Partial<Record<"dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause", string | null>>;
+      shortcuts?: Partial<Record<"dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause" | "agent", string | null>>;
+      /**
+       * Spec #9876: o agente está com um pedido em andamento. Enquanto for true, o Control (`shortcuts.agent`) não
+       * começa a ouvir: é um pedido por vez.
+       */
+      agentBusy?: boolean;
       /** Os sons de início e de fim do ditado e da reunião (T5833; padrão: ligados). */
       cues?: boolean;
       /**
@@ -201,7 +206,8 @@ export type Command =
    * `transcript.final`), para testar o app sem o mic. `invalid_value` se o arquivo não abre; `already_recording`.
    */
   /** `app` e `target` (T1740): a CLI dos agentes diz qual app está na frente e se é a nota rápida. */
-  | { type: "debug.transcribe"; path: string; app?: AppRef; target?: "note" }
+  /** `target: "agent"` (spec #9876): o arquivo vira uma fala ao agente pelo Control, com os eventos `agent.*`. */
+  | { type: "debug.transcribe"; path: string; app?: AppRef; target?: "note" | "agent" }
   /** KIWI_DEBUG=1: processos inventados usando o mic, para testar o perceber a reunião sem olhar o áudio de verdade (R2). */
   | { type: "debug.meetingMicUsers"; users: { pid: number; bundleId: string }[] };
 
@@ -402,6 +408,31 @@ export type Event =
   /** Batida curta sozinha ou tecla usada como modificador (Fn+F5): esconda o overlay sem esperar transcrição. */
   | { type: "record.cancelled"; reason: RecordReason }
   /**
+   * Spec #9876: a fala ao agente pelo Control. Eventos próprios, que a fila do ditado nunca vê: nada disso é colado.
+   * - `agent.record.started`: o mic abriu, na hora da tecla. `agent.listening`: a pessoa está falando com o agente
+   *   (passou o tempo de segurar ou fixou com dois toques); só então o gato vai a `ouvindo`. Um ⌃C não chega aqui.
+   * - `agent.record.stopping`: a escuta encerrou (as ondas param agora). `agent.record.stopped`: o áudio fechou.
+   * - `agent.transcript`: o texto, no Mac. Depois de um Esc, ele não vem.
+   * - `agent.record.cancelled`: o Esc, outra tecla ou um clique. `phase: "transcribing"`: o Esc veio durante a
+   *   transcrição. `listened`: a escuta tinha sido confirmada (o gato estava em `ouvindo`).
+   */
+  | { type: "agent.record.started"; reason: string }
+  | { type: "agent.listening"; latched: boolean }
+  | { type: "agent.record.stopping"; mode: string }
+  | { type: "agent.record.stopped"; reason: string; mode: string; durationMs: number; samples: number; lost?: string }
+  | {
+      type: "agent.transcript";
+      text: string;
+      raw: string;
+      lang: "pt" | "en" | "mix" | "";
+      engine?: SttEngine;
+      durationMs: number;
+      latencyMs: number;
+    }
+  | { type: "agent.transcript.error"; error: string }
+  | { type: "agent.record.cancelled"; reason: string; phase?: "transcribing"; listened?: boolean }
+  | { type: "agent.record.error"; reason: string; error: string; microphone: PermissionState; busyApp?: string }
+  /**
    * Não deu para gravar: sem microfone, sem permissão, `device_changed` (o mic trocou no meio e o novo não subiu)
    * ou `no_audio` (o mic parou de mandar áudio, mesmo depois de um engine novo; T590). Nesses dois, só quando havia
    * menos de 0,3 s gravado; com mais, vem `record.stopped` com `lost` (T883).
@@ -537,6 +568,14 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "record.started",
   "record.stopped",
   "record.cancelled",
+  "agent.record.started",
+  "agent.listening",
+  "agent.record.stopping",
+  "agent.record.stopped",
+  "agent.transcript",
+  "agent.transcript.error",
+  "agent.record.cancelled",
+  "agent.record.error",
   "record.error",
   "audio.level",
   "app.active",

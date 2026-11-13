@@ -210,3 +210,18 @@ export function economyHint(s: AgentStatus): string {
   const what = "Gasta menos do seu limite: o modelo mais barato que o agente oferece, as notas lidas por seção e respostas curtas.";
   return s.economy ? `Ligado. ${what} Trocar de modelo começa um cache novo, então o primeiro pedido depois gasta um pouco mais.` : `${what} Trocar de modelo começa um cache novo.`;
 }
+
+/** O atalho Control (spec #9876), em Ajustes › Agente. */
+export const CONTROL_LABEL = "Falar com o agente pelo Control";
+
+/**
+ * A dica da linha do Control. `blocked`: o ditado já está num Control, e o do agente fica desligado. Sempre o aviso do
+ * Ditado da Apple, que em alguns Macs usa "pressionar Control duas vezes": o Kiwi não mexe nos ajustes do sistema.
+ */
+export function controlHint(blocked: boolean): string {
+  if (blocked) return "O ditado já usa o Control (Ajustes › Atalhos). Troque a tecla do ditado para ligar este.";
+  return (
+    "Segure o Control para falar com o agente e solte para mandar; dois toques fixam a escuta, e o Esc cancela. " +
+    "O ditado da Apple pode usar \"pressionar Control duas vezes\": troque em Ajustes do Sistema › Teclado › Ditado › Atalho."
+  );
+}

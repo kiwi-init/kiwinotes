@@ -19,7 +19,7 @@ import { helperPdf } from "../notes/export.ts";
 import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
-import { closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, provideAbout, startCatOverlay, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
+import { closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, provideAbout, startCatOverlay, startAgentVoice, provideHubSection, sendToWindow, showWindow, type WindowName } from "./windows.ts";
 import { loadNotices, NOTIFY_LIBRARY } from "./notices.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
@@ -186,6 +186,7 @@ dictation.onStatus(setMenu);
 dictation.sidecar.on("hotkey.notes", () => openHub("notes"));
 dictation.start();
 startCatOverlay(dictation.sidecar);
+startAgentVoice(dictation.sidecar);
 updates.onChange(() => setMenu(dictation.status()));
 void updates.start();
 
