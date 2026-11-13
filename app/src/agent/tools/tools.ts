@@ -615,18 +615,20 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
         throw new ToolError("E_NOT_FOUND", `${want} não é um projeto; veja os projetos com projects_list`);
       }
       const s = await reader.projectStatus(p.folder);
+      let unread = false;
       // O sumário são os títulos de dentro da nota principal, texto da nota: com o filtro do guardrail (spec #9818),
       // saem do texto que o agente vê, como no notes_outline (revisão da T10012). Os caminhos, os títulos das notas, as
       // datas e as contagens vão como estão.
       if (guard && s.project.main !== null) {
         const main = await reader.get(s.project.main).catch(() => null);
-        if (main) {
-          const headings = markdownStructure(seen(guard, main.path, main.content)).headings;
-          s.outlineTotal = headings.length;
-          s.outline = headings.slice(0, STATUS_OUTLINE_MAX).map((h) => ({ level: h.level, title: h.title }));
-        }
+        // Sem conseguir ler de novo (a nota mudou ou sumiu no meio), o sumário não vai: nunca o do texto sem o filtro.
+        const headings = main ? markdownStructure(seen(guard, main.path, main.content)).headings : [];
+        s.outlineTotal = headings.length;
+        s.outline = headings.slice(0, STATUS_OUTLINE_MAX).map((h) => ({ level: h.level, title: h.title }));
+        if (!main) unread = true;
       }
       const avisos = [
+        ...(unread ? ["Não deu para ler a nota principal agora; o sumário ficou de fora. Tente de novo."] : []),
         ...(s.project.main === null ? ["A nota principal foi apagada; a pessoa ainda não escolheu outra."] : []),
         ...(s.outlineTotal > s.outline.length ? [`A nota principal tem ${s.outlineTotal} títulos; o sumário mostra os ${s.outline.length} primeiros.`] : []),
         ...(s.taskNotes > s.tasks.length ? [`${s.taskNotes} notas têm tarefas abertas; a lista mostra as ${s.tasks.length} com mais.`] : []),
