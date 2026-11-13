@@ -151,6 +151,16 @@ bun run cli invoke agent.answers '{}' --data /tmp/kn-test                       
 KIWI_AGENT_UI_ONLY=duvida bun scripts/agent-ui-check.ts                                          # o cartão, a Atividade e a lista
 ```
 
+**A notificação quando o agente espera uma resposta (T10525, spec #9839)**: com a janela principal fora da vista, a pergunta na dúvida vira uma notificação do macOS, uma por cartão, que diz só de qual nota vem a dúvida. Quem notifica é o próprio app, pela dylib `libKiwiNotify.dylib` (native/Sources/KiwiNotify, ao lado do helper em `bin/`); o helper não é um `.app` e não pode. A permissão só é pedida no botão "Ligar as notificações" de Ajustes › Agente. Na CLI, o aviso falso `KIWI_FAKE_NOTICES=<notDetermined|denied|allowed>` registra cada pedido em `<dados>/fake-notices.jsonl`, e nada chama o macOS:
+
+```sh
+KIWI_FAKE_NOTICES=notDetermined KIWI_FAKE_AGENT=1 bun run cli start --no-helper --data /tmp/kn-test
+bun run cli invoke agent.noticeAllow '{}' --data /tmp/kn-test          # o "clique" no botão: o pedido falso
+bun run cli notice '{"view":false}' --data /tmp/kn-test                # a janela de mentira fora da vista
+bun run cli notice '{"click":"kiwi.doubt.<cartão>"}' --data /tmp/kn-test  # o clique na notificação
+KIWI_AGENT_UI_ONLY=aviso bun scripts/agent-ui-check.ts                 # a linha de Ajustes (e aviso-negado)
+```
+
 **A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
 - o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
 - os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;

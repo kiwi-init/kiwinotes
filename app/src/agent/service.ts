@@ -40,6 +40,8 @@ import { checkClaudeVersion } from "./adapter/version.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
 import type { AgentChangeView, AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult } from "../shared/ui-contract.ts";
 import type { AgentSettings } from "../store/settings.ts";
+import type { Notices } from "../bun/notices.ts";
+import { WaitingNotice, type NoticeState } from "./notice.ts";
 
 /** O prazo da dúvida nos roteiros do WebKit (`KIWI_DOUBT_TIMEOUT_MS`), só com o agente falso (`KIWI_FAKE_AGENT=1`). */
 function testDoubtTimeout(): number | undefined {
@@ -145,6 +147,12 @@ export class AgentService {
   /** O cartão da pergunta na dúvida, por pedido (spec #9873). */
   private readonly questions: DoubtQuestions;
   private readonly questionListeners = new Set<(e: { card: string; request: string; open: boolean }) => void>();
+  /**
+   * A notificação quando o agente espera uma resposta (spec #9839): o app liga com o `attachNotice`, que sabe da janela;
+   * sem ela (a CLI sem o aviso falso, os testes), a permissão é "unavailable" e nada notifica.
+   */
+  private notice: WaitingNotice | null = null;
+  private readonly noticeListeners = new Set<(s: NoticeState) => void>();
   /** O último pedido: uma ferramenta que chega sem pedido em andamento entra nele. */
   private lastTurn: string | null = null;
   /** O servidor de ferramentas do programa aberto (ou abrindo): fecha junto com ele. */
@@ -245,6 +253,7 @@ export class AgentService {
 
   /** O cartão abriu, mudou ou fechou: avisa a tela (só os ids) e diz no status que o pedido espera a pessoa. */
   private onQuestion(e: { card: string; request: string; open: boolean }): void {
+    void this.notice?.onQuestion(e).catch((err) => this.d.log?.(`[agent] notice: ${String((err as Error)?.message ?? err)}`));
     for (const fn of this.questionListeners) {
       try {
         fn(e);
@@ -720,8 +729,61 @@ export class AgentService {
     if (this.tools === tools) this.tools = null;
   }
 
+  /**
+   * Liga a notificação (spec #9839) à janela do app: as notificações do macOS (a dylib, ou o aviso falso da CLI), se a
+   * janela principal está na vista, e como trazê-la. A janela avisa quando entra e sai da vista pelo `noticeView`.
+   */
+  attachNotice(o: { notices: Notices; inView: () => boolean; show: () => void }): void {
+    this.notice?.stop();
+    this.notice = new WaitingNotice({
+      ...o,
+      card: () => this.questions.current(),
+      enabled: async () => (await this.d.settings.load()).notifyWaiting !== false,
+      setEnabled: async (on) => void (await this.d.settings.save({ notifyWaiting: on })),
+      onChange: (s) => {
+        for (const fn of this.noticeListeners) fn(s);
+      },
+      log: (m) => this.d.log?.(`[agent] ${m}`),
+    });
+  }
+
+  /** A linha de Ajustes › Agente (`agent.notice`): a permissão do macOS e o liga/desliga. */
+  async noticeState(): Promise<NoticeState> {
+    if (this.notice) return this.notice.state();
+    return { permission: "unavailable", enabled: (await this.d.settings.load()).notifyWaiting !== false };
+  }
+
+  /** "Ligar as notificações" (`agent.noticeAllow`): o único caminho que pede a permissão ao macOS. */
+  async noticeAllow(): Promise<NoticeState> {
+    return this.notice ? this.notice.allow() : this.noticeState();
+  }
+
+  /** O liga/desliga "Avisar quando o agente esperar uma resposta" (`agent.noticeSet`). */
+  async noticeSet(on: boolean): Promise<NoticeState> {
+    if (this.notice) return this.notice.setEnabled(on);
+    await this.d.settings.save({ notifyWaiting: on });
+    return this.noticeState();
+  }
+
+  /** A permissão ou o liga/desliga mudou (o evento `agent.noticeChanged`). */
+  onNoticeChanged(fn: (s: NoticeState) => void): () => void {
+    this.noticeListeners.add(fn);
+    return () => this.noticeListeners.delete(fn);
+  }
+
+  /** A janela principal entrou ou saiu da vista. */
+  noticeView(inView: boolean): void {
+    void this.notice?.onView(inView).catch((err) => this.d.log?.(`[agent] notice: ${String((err as Error)?.message ?? err)}`));
+  }
+
+  /** O clique numa notificação do app (o `notification-response` da engine). */
+  noticeResponse(e: { id: string; action: string }): void {
+    this.notice?.onResponse(e);
+  }
+
   /** O app vai sair: cancela tudo e fecha o programa do agente, esperando ele sair. */
   async close(): Promise<void> {
+    this.notice?.stop();
     this.closed = true;
     this.download?.abort.abort();
     await this.stopProgram("o app saiu");
@@ -729,6 +791,7 @@ export class AgentService {
 
   /** A saída do processo (`process.on("exit")`), sem tempo de esperar: o SIGTERM, que o adaptador trata limpo. */
   killNow(): void {
+    this.notice?.stop();
     this.closed = true;
     this.download?.abort.abort();
     this.pending?.killNow();

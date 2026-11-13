@@ -72,9 +72,11 @@ export interface AgentSettings {
   model: string;
   /** Um valor da opção `effort` do agente; "default" é o padrão. */
   effort: string;
+  /** "Avisar quando o agente esperar uma resposta" (spec #9839): a notificação do macOS; ligado por padrão. */
+  notifyWaiting: boolean;
 }
 
-export const DEFAULT_AGENT_SETTINGS: AgentSettings = { enabled: false, consented: false, model: "default", effort: "default" };
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = { enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true };
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
 export function isAgentChoice(v: unknown): v is string {
@@ -88,6 +90,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     consented: o.consented === true,
     model: isAgentChoice(o.model) ? o.model : DEFAULT_AGENT_SETTINGS.model,
     effort: isAgentChoice(o.effort) ? o.effort : DEFAULT_AGENT_SETTINGS.effort,
+    notifyWaiting: o.notifyWaiting !== false,
   };
 }
 

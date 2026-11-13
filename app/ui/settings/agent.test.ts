@@ -13,6 +13,7 @@ import {
   IDLE_TEST,
   modelHint,
   modelOptions,
+  noticeHint,
   PRIVACY_RULE,
   switchHint,
   TEST_HINT,
@@ -222,4 +223,13 @@ describe("a tela de aviso e a regra de privacidade (ADR 0011)", () => {
     expect(settings).toContain("PRIVACY_RULE");
     expect(about).toContain("PRIVACY_RULE");
   });
+});
+
+test("a linha do aviso (spec #9839): o botão antes de pedir, o liga/desliga com a permissão, e onde mudar quando negada", () => {
+  expect(noticeHint({ permission: "notDetermined", enabled: true }, false)).toContain("O macOS pergunta uma vez quando você liga.");
+  expect(noticeHint({ permission: "notDetermined", enabled: true }, true)).toBe("O macOS está perguntando se o Kiwi Notes pode mandar notificações.");
+  expect(noticeHint({ permission: "allowed", enabled: true }, false)).toContain("nunca o trecho");
+  expect(noticeHint({ permission: "allowed", enabled: false }, false)).toContain("Desligado");
+  expect(noticeHint({ permission: "denied", enabled: true }, false)).toContain("Ajustes do Sistema › Notificações › Kiwi Notes");
+  expect(noticeHint({ permission: "unavailable", enabled: true }, false)).toContain("não estão disponíveis");
 });

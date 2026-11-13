@@ -1144,6 +1144,19 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (typeof a.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(a.fingerprint)) throw bad("agent.forget: fingerprint must be a fingerprint");
       return agentCall(async (agent) => agent.forgetAnswer(a.fingerprint as string));
     },
+    "agent.notice": (args) => {
+      noArgs(args, "agent.notice");
+      return agentCall((agent) => agent.noticeState());
+    },
+    "agent.noticeAllow": (args) => {
+      noArgs(args, "agent.noticeAllow");
+      return agentCall((agent) => agent.noticeAllow());
+    },
+    "agent.noticeSet": (args) => {
+      const a = fields(args, "agent.noticeSet", ["enabled"]);
+      if (typeof a.enabled !== "boolean") throw bad("agent.noticeSet: enabled must be true or false");
+      return agentCall((agent) => agent.noticeSet(a.enabled as boolean));
+    },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);
       if (typeof a.request !== "string" || !a.request) throw bad("agent.change: request must be the id of a request");

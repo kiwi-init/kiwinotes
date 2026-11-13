@@ -29,11 +29,12 @@ import { runScreenshot, runUi, type UiContext } from "./cli-ui.ts";
 
 export const EXIT = { ok: 0, failed: 1, usage: 2, notRunning: 3 } as const;
 
-const USAGE = `usage: bun run cli <start|stop|status|invoke|dictate|screenshot|ui|events|logs|agent|guardrail> [--data DIR]
+const USAGE = `usage: bun run cli <start|stop|status|invoke|dictate|screenshot|ui|events|logs|agent|guardrail|notice> [--data DIR]
   start [--no-helper]          sobe o headless em segundo plano
   invoke <cap> ['<json>']      uma capacidade do contrato, pelo caminho da UI
   events|logs [--follow]       o histórico recente; com --follow, continua até Ctrl-C
   agent status|ask "…"         o host do agente, com os falsos (sem o headless; T8478)
+  notice '{"view":bool,"click":id}'  a janela de mentira e o clique, com KIWI_FAKE_NOTICES (spec #9839)
   guardrail scan <arquivo|->   o que o detector de segredos seguraria, com o trecho mascarado (sem o headless; T9701)
   agent undo <pedido> [--change N]  desfaz o que o agente mudou, pelo headless de pé (spec #9353)`;
 
@@ -209,6 +210,23 @@ export async function main(argv: string[]): Promise<number> {
     case "events":
     case "logs":
       return stream(data, cmd, rest.includes("--follow"));
+    case "notice": {
+      // O aviso falso (KIWI_FAKE_NOTICES, spec #9839): '{"view":true}' põe a janela de mentira na vista, '{"click":"<id>"}'
+      // é o clique na notificação.
+      let args: Record<string, unknown> = {};
+      if (rest[0] && !rest[0].startsWith("--")) {
+        try {
+          args = JSON.parse(rest[0]) as Record<string, unknown>;
+        } catch {
+          console.error(`notice: the args aren't JSON: ${rest[0]}`);
+          return EXIT.usage;
+        }
+      }
+      const r = await request(data, { ...args, cmd: "notice" });
+      if (!r) return notRunning(data);
+      print(r);
+      return r.ok ? EXIT.ok : EXIT.failed;
+    }
     case "guardrail":
       return runGuardrail(rest);
     case "agent":

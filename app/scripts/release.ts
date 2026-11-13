@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 
 import pkg from "../package.json" with { type: "json" };
+import { NOTIFY_LIBRARY } from "../src/bun/notices.ts";
 import { pack, unpack } from "./signing.ts";
 import { updateManifest } from "./update-feed.ts";
 
@@ -131,7 +132,9 @@ try {
   const mainExe = path.join(app, "Contents", "MacOS", plist(app, "CFBundleExecutable"));
   const bun = path.join(app, "Contents", "MacOS", "bun");
   const helper = path.join(app, "Contents", "Resources", "app", "bin", "kiwi-helper");
-  for (const need of [mainExe, bun, helper]) if (!fs.existsSync(need)) throw new Error(`release: ${path.relative(app, need)} is missing`);
+  // A notificação do app (spec #9839): a dylib que o processo do app carrega. Assinada no laço abaixo, como todo Mach-O.
+  const notify = path.join(app, "Contents", "Resources", "app", "bin", NOTIFY_LIBRARY);
+  for (const need of [mainExe, bun, helper, notify]) if (!fs.existsSync(need)) throw new Error(`release: ${path.relative(app, need)} is missing`);
 
   // De dentro para fora: cada Mach-O, depois o app (que assina o executável principal, o launcher, com o mic).
   for (const f of machOs(app).filter((f) => f !== mainExe)) {
