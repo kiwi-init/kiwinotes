@@ -18,7 +18,7 @@
   "fpsProofRuntimeHashesMatch": true,
   "baselineMedianDelta": 0.6743821008758147,
   "baselineStableMedianDelta": 0.6743821008758147,
-  "cpuAccepted": false,
+  "cpuAccepted": true,
   "appearanceApprovedBy": "harry Kiwi #9246, lead #9249",
   "relativeObservation": {
     "first12MedianFog": 2.2807616209205928,
@@ -29,5 +29,14 @@
     "postPauseDeltaOverFog": 0.30994124077533036
   },
   "pairedExperimentRetainedAt": "ultima-rodada/serie-12-pares.json",
-  "noNewMeasurementAfterRestoration": true
+  "noNewMeasurementAfterRestoration": true,
+  "cpuAcceptance": {
+    "decision": "harry Kiwi #9349, option A of #9263",
+    "specVersion": 9350,
+    "ceilingDescription": "about +1 percentage point of one CPU core above fog alone",
+    "acceptedMedianDelta": 0.6743821008758147,
+    "originalCeiling": 0.5,
+    "originalCriterionMet": false,
+    "newMeasurement": false
+  }
 }

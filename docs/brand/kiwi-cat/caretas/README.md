@@ -1,6 +1,6 @@
 # Caretas do Kiwi-cat
 
-T8959 · spec Kiwi #8758, versão aprovada #8870 · issue [#392](https://github.com/kiwi-init/kiwinotes/issues/392).
+T8959 · spec Kiwi #8758, versão aprovada #9350 · issue [#392](https://github.com/kiwi-init/kiwinotes/issues/392).
 
 Demonstração isolada dos oito estados com olhos e símbolos vetoriais sobre a
 névoa B1. Cabeça, corpo e orelhas permanecem imóveis. Não há importação do módulo
@@ -77,14 +77,15 @@ bun scripts/kiwicat-face-bench.ts /tmp/kiwi-T8959-faces 2
 A coleta de aceite usa 12 pares alternados, conforme o protocolo abaixo. Cada execução aquece por 10 segundos e
 mede por 60 segundos, congelando os cinco PIDs do seu WebKit. Os relatórios
 registram CPU por processo e hashes dos arquivos da implementação. O alvo é
-até +0,5 ponto de CPU em repouso e pelo menos 55 fps nos estados ativos.
+até cerca de +1 ponto de CPU em repouso, aceito pelo harry no #9349
+e registrado no spec #8758, versão #9350; os estados ativos exigem pelo
+menos 55 fps. O teto anterior era +0,5 ponto.
 As medidas são da página isolada no Playwright WebKit, não do WKWebView do app.
 
 A primeira sondagem, anterior à otimização de pausas dos gestos, está em
-[histórico `f35a23d`](https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/diagnostico-inicial/). Ela falhou no teto de CPU e não
-é resultado de aceite. As duas séries concluídas estão abaixo.
+[histórico `f35a23d`](https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/diagnostico-inicial/). Ela foi avaliada sob o teto antigo de +0,5 e ficou como diagnóstico histórico. As duas séries concluídas estão abaixo.
 
-## CPU: primeira série de 12, acima do teto
+## CPU da implementação retida: aceita no teto revisto
 
 Head medido `45a0f21`. CPU em percentual de um núcleo, por cinco processos
 próprios do WebKit; 10 s de aquecimento e 60 s de coleta por variante.
@@ -106,7 +107,7 @@ Amostras sem vídeo, com hashes dos nove arquivos de runtime em cada JSON.
 | 12 | faces→fog | 2.530500 | 3.229419 | +0.698918788 | 3.028→3.159 | 1.474 | sim |
 
 **Mediana de todos: +0.674382100875815. Mediana dos 4 estáveis: +0.674382100875815.**
-Faixa: +0.284124406 a +1.116699335. **Reprovado no teto de +0,5.**
+Faixa: +0.284124406 a +1.116699335. **A mediana de +0,67 atende ao teto de cerca de +1 ponto aceito pelo harry no #9349.**
 [Dados integrais](desempenho/serie-12-pares.json).
 
 O protocolo mudou durante a coleta (Kiwi #9209). Os primeiros seis pares
@@ -117,9 +118,11 @@ variação ≤1,5. As amostras intermediárias, a fase anterior e o probe
 interrompido na troca de protocolo estão no histórico `f35a23d`; o probe
 interrompido não conta como par completo.
 
-O critério final é: ambas as medianas ≤+0,5. O lead pediu uma única rodada
-de otimização, seguida de outra série de 12; o resultado dessa última série
-será anexado sem nova tentativa para forçar aprovação (Kiwi #9221).
+O protocolo original de coleta comparava as duas medianas a +0,5. Os
+campos `criterion` e `passes` dos JSONs preservam essa avaliação histórica,
+assim como os números. O aceite atual é o teto de cerca de +1 ponto do
+#9349, registrado na versão #9350 do spec. A implementação retida, com
+medianas de +0,67, atende ao critério revisto. Não houve nova medição.
 
 ## Diagnóstico sem gestos
 
@@ -175,7 +178,7 @@ bun scripts/kiwicat-face-gesture-profile.ts /tmp/kiwi-T8959-perfil-novo
 
 A medição é da demonstração no Playwright WebKit, não do WKWebView do app.
 
-## Última série do experimento descartado: acima do teto
+## Série histórica do experimento descartado
 
 Head `78fbb51`, 12 pares alternados, sem descarte ou repetição. CPU em
 percentual de um núcleo. A rodada única foi encerrada após o 12º par.
@@ -195,7 +198,7 @@ percentual de um núcleo. A rodada única foi encerrada após o 12º par.
 | 11 | fog→faces | 3.245674 | 4.460706 | +1.215032632 | 2.539→2.510 | 1.485 | sim | depois |
 | 12 | faces→fog | 3.578192 | 4.393876 | +0.815683951 | 2.510→2.138 | 0.911 | sim | depois |
 
-**Mediana dos 12: +0.8736326333018039. Mediana dos 5 estáveis: +1.0320958932963875 ponto. Não atende ao teto de +0,5.**
+**Mediana dos 12: +0.8736326333018039. Mediana dos 5 estáveis: +1.0320958932963875 ponto. Avaliação histórica sob o teto antigo de +0,5; o experimento não é a implementação retida.**
 
 Faixa: +0.366143802 a +1.398364342, amplitude 1.032220540.
 A mudança de camadas não demonstrou ganho de CPU nesta coleta.
@@ -220,11 +223,11 @@ O [FPS deste head](desempenho/ultima-rodada/fps-por-estado.json) passou em
 (702 ms), 60,17 fps. Testes e typecheck passaram. O CI do head de runtime
 `78fbb51` está verde.
 
-O harry aprovou a aparência (#9246/#9249). O PR continua draft, pois falta
-a decisão sobre desempenho. Nenhum novo ajuste ou benchmark será feito
-sem o próximo encaminhamento do revisor/harry.
+O harry aprovou a aparência (#9246/#9249) e aceitou o teto de cerca de
++1 ponto no #9349. O código e os números medidos permanecem iguais; o PR
+segue para revisão conforme o spec atualizado.
 
-## Implementação retida e decisão pendente
+## Implementação retida e aceite
 
 Os olhos individuais de `45a0f21` foram restaurados após a rodada única.
 A camada compartilhada acrescentava um caminho condicional e geometria
@@ -240,6 +243,7 @@ A aparência é a mesma aprovada pelo harry (#9246/#9249).
 
 A proporção ficou próxima de 30% nos dois recortes, apesar da mudança dos
 valores absolutos com o estado da máquina, como observado pelo revisor
-(#9265). O renderer retido continua acima do teto original de +0,5.
-O lead levou ao harry a decisão de desempenho no #9263; o PR permanece draft.
-Não haverá novo ajuste ou benchmark até essa resposta.
+(#9265). No #9349, em resposta ao #9263, o harry aceitou cerca de +1 ponto
+e manteve o gato como aprovado. A mediana de +0,67 do renderer retido
+atende a esse teto revisto (spec #8758, versão #9350). Não houve nova
+alteração de código ou medição para esse aceite.
