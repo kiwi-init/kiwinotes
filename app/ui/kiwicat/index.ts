@@ -40,6 +40,11 @@ export interface FogOptions {
   height?: number;
   seed?: number;
   idleFPS?: number;
+  /**
+   * O teto de quadros nos estados ativos (o overlay, spec #9810: 30). Sem ele, desenha a cada quadro da tela, como no
+   * hub. Só o ritmo muda; o desenho é o mesmo.
+   */
+  activeFPS?: number;
   densityScale?: 1 | 0.5 | 0.25;
   inputs?: Partial<FogInputs>;
   /** Static composition option for the vector-eye layer; not an animation input. */
@@ -191,8 +196,9 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     frameId = 0;
     if (!policy.continuous || disposed) return;
     advance(t);
-    const interval = policy.interval(state.inputs.estado, elapsed < boostUntil);
-    if (!idle() || elapsed >= nextDraw - 0.002) {
+    const paced = options.activeFPS !== undefined && !idle();
+    const interval = paced ? 1 / options.activeFPS! : policy.interval(state.inputs.estado, elapsed < boostUntil);
+    if ((!idle() && !paced) || elapsed >= nextDraw - 0.002) {
       if ((options.instrument ?? options.mode === "measure") && lastDraw > 0) {
         stats.intervals.push(elapsed - lastDraw);
         if (stats.intervals.length > 10000) stats.intervals.shift();

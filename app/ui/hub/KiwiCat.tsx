@@ -147,7 +147,7 @@ function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; aw
       ) : null}
       {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
           o que chega, e aparece depois que o pedido sai (#10868). */}
-      <CatBubble reduced={reduced} hidden={asking} />
+      <CatBubble reduced={reduced} hidden={asking || away} />
     </>
   );
 }

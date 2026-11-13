@@ -33,6 +33,10 @@ const cat = await createKiwiCat(root, {
   width: 192,
   height: 240,
   cutout: true,
+  // O overlay fica por cima de tudo enquanto o agente trabalha: metade dos quadros e a névoa em meia resolução
+  // (o spec #9810 mede a CPU; o lead aprovou o ritmo e a resolução em #11135). O desenho é o mesmo do hub.
+  activeFPS: 30,
+  densityScale: 0.5,
   background: dark.matches ? "dark" : "light",
   inputs: { estado: "repouso", cor: "claude", voz: null, parado: false },
 });
