@@ -33,8 +33,7 @@ inclusive durante a troca de símbolo. A animação normal mantém a onda com al
 0,35 no silêncio numérico e aumenta as ondas pelas faixas do roteiro.
 
 O lead reconheceu os oito estados na tira corrigida sem legenda (Kiwi #9077,
-conferido em #9079) e aprovou a comparação de formas (#9078). O aceite visual
-do harry será registrado depois de ele ver os vídeos.
+conferido em #9079) e aprovou a comparação de formas (#9078). O harry aprovou as caretas no Kiwi #9246, registrado pelo lead no #9249.
 
 ## Verificação
 
@@ -161,3 +160,52 @@ bun scripts/kiwicat-face-gesture-profile.ts /tmp/kiwi-T8959-perfil-novo
 ```
 
 A medição é da demonstração no Playwright WebKit, não do WKWebView do app.
+
+## Última série: resultado final acima do teto
+
+Head `78fbb51`, 12 pares alternados, sem descarte ou repetição. CPU em
+percentual de um núcleo. A rodada única foi encerrada após o 12º par.
+
+| Par | Ordem | Névoa | Caretas | Delta (ponto) | Carga início→fim | Variação | Estável | Período |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| 1 | fog→faces | 2.197142 | 2.913260 | +0.716118421 | 3.825→2.491 | 1.536 | não | antes |
+| 2 | faces→fog | 1.664727 | 3.063091 | +1.398364342 | 2.491→14.004 | 11.514 | não | antes |
+| 3 | fog→faces | 1.998254 | 2.780489 | +0.782235219 | 14.004→7.656 | 13.708 | não | antes |
+| 4 | faces→fog | 2.297092 | 2.663236 | +0.366143802 | 7.656→13.834 | 8.161 | não | antes |
+| 5 | fog→faces | 2.579899 | 3.511480 | +0.931581315 | 13.834→25.003 | 20.947 | não | transição |
+| 6 | faces→fog | 3.295747 | 4.327585 | +1.031838436 | 25.003→5.407 | 19.597 | não | depois |
+| 7 | fog→faces | 3.080174 | 4.227636 | +1.147462032 | 5.407→4.427 | 1.395 | sim | depois |
+| 8 | faces→fog | 3.329142 | 3.994664 | +0.665521762 | 4.427→3.292 | 1.365 | sim | depois |
+| 9 | fog→faces | 3.512187 | 4.544282 | +1.032095893 | 3.292→3.316 | 1.252 | sim | depois |
+| 10 | faces→fog | 3.681057 | 4.077772 | +0.396715287 | 3.316→2.539 | 3.682 | não | depois |
+| 11 | fog→faces | 3.245674 | 4.460706 | +1.215032632 | 2.539→2.510 | 1.485 | sim | depois |
+| 12 | faces→fog | 3.578192 | 4.393876 | +0.815683951 | 2.510→2.138 | 0.911 | sim | depois |
+
+**Mediana dos 12: +0.8736326333018039. Mediana dos 5 estáveis: +1.0320958932963875 ponto. Não atende ao teto de +0,5.**
+
+Faixa: +0.366143802 a +1.398364342, amplitude 1.032220540.
+A mudança de camadas não demonstrou ganho de CPU nesta coleta.
+[Dados completos](desempenho/ultima-rodada/serie-12-pares.json).
+
+| Grupo | Pares | Mediana de todos | Estáveis | Mediana dos estáveis |
+| --- | --- | ---: | ---: | ---: |
+| Antes das pausas | 1,2,3,4 | +0.749176820 | 0 | — |
+| Transição entre pausas | 5 | +0.931581315 | 0 | — |
+| Após a última pausa | 6,7,8,9,10,11,12 | +1.031838436 | 5 | +1.032095893 |
+
+Os grupos seguem os saltos observados entre horários de início; a hipótese
+de sono veio do revisor (#9243). O par 5 é de transição. O lease expirou
+durante a série e foi readquirido até 06:26 UTC; o lead confirmou que ninguém
+usou o bench no intervalo (#9241). O ocorrido está preservado na auditoria.
+O `caffeinate -i` foi vinculado ao PID da coleta às 06:28:42 UTC e encerrou
+com ela; o processo desta task não ficou rodando. Nenhum processo de outra
+sessão foi encerrado. [Auditoria e grupos](desempenho/ultima-rodada/auditoria-e-grupos.json).
+
+O [FPS deste head](desempenho/ultima-rodada/fps-por-estado.json) passou em
+59,98–60,17 fps para névoa e vetores. `Pronto`: 101 a 803 ms após a entrada
+(702 ms), 60,17 fps. Testes e typecheck passaram. O CI do head de runtime
+`78fbb51` está verde.
+
+O harry aprovou a aparência (#9246/#9249). O PR continua draft, pois falta
+a decisão sobre desempenho. Nenhum novo ajuste ou benchmark será feito
+sem o próximo encaminhamento do revisor/harry.
