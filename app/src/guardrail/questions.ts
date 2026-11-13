@@ -2,7 +2,8 @@
 // Kiwi pergunta à pessoa antes de mandar ("É segredo" ou "Pode mandar"), num cartão por pedido.
 //
 // - **Um cartão por pedido:** as dúvidas de outra leitura do mesmo pedido entram no cartão aberto.
-// - **Até 2 minutos:** sem resposta, o que falta é segurado desta vez, o pedido segue, e a dúvida fica pendente para a
+// - **Até 2 minutos, contados do cartão:** uma leitura que entra num cartão já aberto espera só o que sobra do prazo
+//   dele (até 2 minutos, como diz o spec). Sem resposta, o que falta é segurado desta vez, o pedido segue, e a dúvida fica pendente para a
 //   pessoa responder depois (na Atividade, pela impressão digital). Se o agente desiste antes (a chamada caiu), o mesmo.
 // - **A resposta é lembrada** (`DoubtAnswers`), e a próxima leitura do mesmo trecho não pergunta.
 // - **O trecho só existe aqui, na memória, enquanto o cartão está aberto,** e só sai pela capacidade da tela

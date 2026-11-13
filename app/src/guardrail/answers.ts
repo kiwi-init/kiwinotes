@@ -52,10 +52,19 @@ export class DoubtAnswers {
 
   private load(): Record<string, Omit<StoredAnswer, "fingerprint">> {
     if (this.cache) return this.cache;
+    if (!existsSync(this.file)) return (this.cache = {});
     try {
       const raw = JSON.parse(readFileSync(this.file, "utf8")) as unknown;
-      this.cache = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, Omit<StoredAnswer, "fingerprint">>) : {};
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("not an object");
+      this.cache = raw as Record<string, Omit<StoredAnswer, "fingerprint">>;
     } catch {
+      // Um arquivo estragado não é sobrescrito calado: ele vai para o lado (`.bad`), e as respostas recomeçam (revisão do
+      // T10122).
+      try {
+        renameSync(this.file, `${this.file}.bad`);
+      } catch {
+        // sem como mover: segue com as respostas vazias
+      }
       this.cache = {};
     }
     return this.cache;

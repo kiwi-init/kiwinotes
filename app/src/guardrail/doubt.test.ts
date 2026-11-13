@@ -3,7 +3,7 @@
 // Só exemplos inventados.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -55,6 +55,14 @@ describe("a memória das respostas (spec #9873)", () => {
     expect(a.list()).toEqual([expect.objectContaining({ fingerprint: fp, answer: "send", mask: "•••• (32 caracteres)" })]);
     expect(a.forget(fp)).toBe(true);
     expect(a.get(fp)).toBeNull();
+  });
+
+  test("um arquivo de respostas estragado vai para o lado, e não é sobrescrito calado", () => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, "guardrail-answers.json"), "{ estragado");
+    const a = new DoubtAnswers(dir);
+    expect(a.list()).toEqual([]);
+    expect(readFileSync(path.join(dir, "guardrail-answers.json.bad"), "utf8")).toBe("{ estragado");
   });
 });
 
@@ -131,6 +139,10 @@ describe("o guard decide a dúvida antes do marcador (spec #9873)", () => {
     await Bun.sleep(5);
     const card = q.current()!;
     expect(card.items.map((i) => i.value)).toEqual([OTHER]);
+    // No texto em volta, o token certo vai mascarado: só o trecho perguntado aparece inteiro (revisão do T10122).
+    expect(card.items[0]!.context).toContain(OTHER);
+    expect(card.items[0]!.context).not.toContain(GH);
+    expect(card.items[0]!.context).toContain("ghp_••••");
     q.answer(card.id, card.items[0]!.fingerprint, "hold");
     expect((await waiting).text).not.toContain(OTHER);
   });

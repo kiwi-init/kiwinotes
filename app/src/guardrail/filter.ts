@@ -12,7 +12,7 @@
 
 import { randomBytes } from "node:crypto";
 
-import { detect, mask as maskOf } from "./detector.ts";
+import { detect, mask as maskOf, type Finding } from "./detector.ts";
 import type { DoubtAnswers } from "./answers.ts";
 import type { DoubtItem, DoubtQuestions } from "./questions.ts";
 
@@ -26,11 +26,25 @@ export interface DoubtDecider {
   signal?: AbortSignal;
 }
 
-/** Um pouco do texto em volta do trecho, numa linha, para a pessoa reconhecer no cartão. */
-function contextOf(text: string, start: number, end: number): string {
-  const a = Math.max(0, start - 60);
-  const b = Math.min(text.length, end + 60);
-  return `${a > 0 ? "…" : ""}${text.slice(a, b).replace(/\s+/g, " ")}${b < text.length ? "…" : ""}`;
+/**
+ * Um pouco do texto em volta do trecho, numa linha, para a pessoa reconhecer no cartão. Os outros achados que caem ali
+ * (um segredo certo, outra dúvida) vão mascarados: no cartão só aparece, inteiro, o trecho perguntado (revisão do
+ * T10122).
+ */
+function contextOf(text: string, f: Finding, all: Finding[]): string {
+  const a = Math.max(0, f.start - 60);
+  const b = Math.min(text.length, f.end + 60);
+  let out = "";
+  let at = a;
+  for (const o of all) {
+    if (o === f || o.end <= a || o.start >= b) continue;
+    const s = Math.max(o.start, a);
+    if (s < at) continue;
+    out += text.slice(at, s) + maskOf(text, o);
+    at = Math.min(o.end, b);
+  }
+  out += text.slice(at, b);
+  return `${a > 0 ? "…" : ""}${out.replace(/\s+/g, " ")}${b < text.length ? "…" : ""}`;
 }
 
 /** O marcador exato: o número e o código da sessão. */
@@ -118,14 +132,15 @@ export class SecretGuard {
     if (!decider) return this.read(path, text, keepOwn);
     const send = new Set<string>();
     const ask = new Map<string, DoubtItem>();
-    for (const f of detect(text)) {
+    const found = detect(text);
+    for (const f of found) {
       if (f.verdict !== "doubt") continue;
       const value = text.slice(f.start, f.end);
       const fingerprint = decider.answers.fingerprint(value);
       const known = decider.answers.get(fingerprint);
       if (known === "send") send.add(value);
       else if (known === null && !ask.has(fingerprint))
-        ask.set(fingerprint, { fingerprint, value, context: contextOf(text, f.start, f.end), mask: maskOf(text, f), kind: f.kind, path, line: f.line });
+        ask.set(fingerprint, { fingerprint, value, context: contextOf(text, f, found), mask: maskOf(text, f), kind: f.kind, path, line: f.line });
     }
     if (ask.size) {
       const ok = await decider.questions.ask(decider.request, [...ask.values()], decider.signal);
