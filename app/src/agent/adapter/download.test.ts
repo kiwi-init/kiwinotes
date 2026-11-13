@@ -1,14 +1,14 @@
 // O download do adaptador (spec #8368), contra um registro do npm falso e local: nada aqui vai à internet.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { AgentError } from "../errors.ts";
 import { fakeRegistry, packTarball, type FakeRegistry } from "../fake/registry.ts";
 import { adapterDir, adapterEntry, downloadAdapter, installedAdapter, integrityOf, removeAdapter } from "./download.ts";
 import { ADAPTER_PACKAGE, ADAPTER_PACKAGES, ADAPTER_VERSION, tarballUrl } from "./pinned.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const registries: FakeRegistry[] = [];
 afterEach(() => {
@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 function tmp(): string {
-  return mkdtempSync(path.join(tmpdir(), "kiwi-adapter-"));
+  return tempDir("kiwi-adapter-");
 }
 
 /** Um registro com o adaptador (com o `dist/index.js`) e duas dependências. */

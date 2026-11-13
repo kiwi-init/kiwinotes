@@ -17,6 +17,7 @@ import { adapterRoot } from "./open.ts";
 import { childProcesses, commandsWaiter, isolationOf, mcpServerNames, opensProgram, redactToken, runAdapterProof, sameProgram } from "./proof.ts";
 import { EMPTY_READER } from "../tools/reader.ts";
 import { KiwiToolServer } from "../tools/server.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 describe("ler o isolamento na linha de comando", () => {
   const isolated =
@@ -67,7 +68,7 @@ describe("ler o isolamento na linha de comando", () => {
 
   test("o mesmo programa pelo link ou pelo caminho da versão (o Claude Code nativo usa um link)", async () => {
     const { mkdirSync, symlinkSync, writeFileSync } = await import("node:fs");
-    const dir = mkdtempSync(path.join(tmpdir(), "kiwi-same-"));
+    const dir = tempDir("kiwi-same-");
     mkdirSync(path.join(dir, "versions"));
     writeFileSync(path.join(dir, "versions", "2.1.322"), "");
     symlinkSync(path.join(dir, "versions", "2.1.322"), path.join(dir, "claude"));
@@ -77,7 +78,7 @@ describe("ler o isolamento na linha de comando", () => {
 
   test("o programa aberto, mesmo com espaço no caminho", async () => {
     const { mkdirSync, writeFileSync } = await import("node:fs");
-    const dir = path.join(mkdtempSync(path.join(tmpdir(), "kiwi-espaco-")), "Application Support");
+    const dir = path.join(tempDir("kiwi-espaco-"), "Application Support");
     mkdirSync(dir);
     const claude = path.join(dir, "claude");
     writeFileSync(claude, "");
@@ -193,7 +194,7 @@ describe("o claude falso como cliente MCP (spec #7496)", () => {
     const methods: string[] = [];
     const server = new KiwiToolServer({ reader: EMPTY_READER, onRequest: (m) => methods.push(m) });
     const config = server.start();
-    const dir = mkdtempSync(path.join(tmpdir(), "kiwi-fake-mcp-"));
+    const dir = tempDir("kiwi-fake-mcp-");
     const log = path.join(dir, "calls.jsonl");
     const claude = writeFakeClaudeExecutable(path.join(dir, "bin"), { KIWI_FAKE_CLAUDE_LOG: log });
     const mcpConfig = JSON.stringify({ mcpServers: { kiwi: { type: "http", url: config.url, headers: Object.fromEntries(config.headers.map((h) => [h.name, h.value])) } } });

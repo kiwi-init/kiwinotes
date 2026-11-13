@@ -1,6 +1,6 @@
 // T4945: real Notes view + AppEngine capabilities in headless WebKit, driven by fake helper events. No helper/mic.
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { webkit } from "playwright-core";
@@ -213,4 +213,6 @@ try {
   await browser.close();
   await bridge.detach();
   await server.stop();
+  // A pasta de dados é do tmp e só deste roteiro (spec #10077); os prints ficam em `out`, no repo.
+  await rm(data, { recursive: true, force: true });
 }

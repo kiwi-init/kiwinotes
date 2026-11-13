@@ -40,6 +40,8 @@ As janelas são UIs do AppEngine (ADR 0006). Para testar uma troca de UI sem reb
 
 Na primeira vez, `scripts/hutch.ts` baixa o Hutch fixado em `hutch-pin.json` (confere o sha256) para `~/.hutch/kiwinotes/`, e o Hutch baixa o Livewire 2026.10.2 de `kiwi-init/electrobun-livewire`.
 
+**Pastas temporárias nos testes (spec #10077):** use `tempDir("kiwi-algo-")` de `test/tmp.ts`, e não `mkdtemp` solto. Ela apaga a pasta no fim do teste, mesmo quando ele falha ou estoura o tempo; criada num `beforeAll`, sai no fim da suíte. O preload (`test/preload.ts`, ligado no `bunfig.toml`) põe cada rodada do `bun test` numa pasta própria (o `TMPDIR` dos testes e dos processos que eles abrem). No fim, se sobrar alguma pasta `kiwi-*` ou `kn-*`, a suíte falha e diz o prefixo. `KIWI_TMP_STRICT=0` só mostra, e `KIWI_TMP_KEEP=1` mantém a pasta da rodada para olhar.
+
 ## Testar sem tela: a CLI headless (agentes, T1739)
 
 O jeito padrão de um agente testar o app inteiro. Roda o motor do app (o `Session`, o helper Swift e as capacidades do contrato do AppEngine) no **Bun puro, fora do Electrobun**: não existe ícone na barra, janela nem pílula. Fica forçado:

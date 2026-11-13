@@ -3,8 +3,7 @@
 // `src/headless/agent-cli.test.ts`, e as ferramentas pelo MCP em `src/agent/tools/tools.test.ts`.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -12,6 +11,7 @@ import { directInvoke } from "../bun/ui-engine.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { checkMark, followProjects, mapProjects, openTasks, type ProjectEntry, ProjectError, STATUS_OUTLINE_MAX } from "./projects.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const now = (notes: string[], folders: string[]) => ({ notes: new Set(notes), folders: new Set(folders) });
 const none = { moves: new Map<string, string>(), gone: [] as string[] };
@@ -197,8 +197,7 @@ function writeAll(root: string, files: Record<string, string>) {
 }
 
 function newRoot(files: Record<string, string> = {}): string {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-projects-")), "V");
-  dirs.push(path.dirname(root));
+  const root = path.join(tempDir("kn-projects-"), "V");
   mkdirSync(root, { recursive: true });
   writeAll(root, files);
   return root;
