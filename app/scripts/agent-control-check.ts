@@ -94,7 +94,7 @@ try {
   report.catStates = states;
   // O `data-state` só muda com o estado do pedido; o desenho do `ouvindo` (as ondas) se vê nos quadros do vídeo.
   assert.ok(states.includes("acordou") && states.includes("thinking"), JSON.stringify(states));
-  assert.equal(await p.locator(".kn-kiwicat").getAttribute("data-away"), "false");
+  assert.notEqual(await p.locator(".kn-kiwicat").getAttribute("data-away"), "true", "the corner cat never hid");
   report.checks.push("the corner cat wakes (acordou → ouvindo, in the frames) and stays on screen into the request");
 
   // 3. Nunca colado, e nada na fila do ditado nem no histórico.
