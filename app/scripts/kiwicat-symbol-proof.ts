@@ -5,7 +5,7 @@ import { mkdirSync,writeFileSync } from 'node:fs';
 import { serveFogDemo } from './kiwicat-demo';
 const out=process.argv[2]??'/tmp/kiwi-T10437-symbols';mkdirSync(out,{recursive:true});
 const server=await serveFogDemo('cat-demo.ts'),browser=await webkit.launch({headless:true});
-const states=['dormindo','acordou','ouvindo','thinking','agindo','pronto','erro'];
+const states=process.argv.includes('--thinking-only')?['thinking']:['dormindo','acordou','ouvindo','thinking','agindo','pronto','erro'];
 const report:any={task:'T10437',seed:17,scope:'real module, unchanged fog/eyes, approved symbols; headless only',rows:[],errors:[]};
 try {
  for(const size of [800,120]) for(const theme of ['dark','light']) for(const state of states){
@@ -36,4 +36,4 @@ try {
   report.rows.push({size,theme,...data});await context.close();
  }
 }finally{await browser.close();server.close();writeFileSync(`${out}/capture.json`,JSON.stringify(report,null,2)+'\n');}
-assert.deepEqual(report.errors,[]);console.log('42 module symbol captures saved',out);
+assert.deepEqual(report.errors,[]);console.log(report.rows.length,'module symbol captures saved',out);

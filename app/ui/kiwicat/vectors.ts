@@ -8,21 +8,23 @@ type Styled = HTMLElement | SVGElement;
 const fmt = (n: number) => Number(n.toFixed(5)).toString();
 const points = (n: number, fn: (u: number) => Point) => Array.from({ length: n }, (_, i) => fn(i / (n - 1)));
 const path = (p: Point[], close = true) => p.length ? "M" + p.map(v => v.map(fmt).join(",")).join("L") + (close ? "Z" : "") : "";
+let vectorLayerSerial = 0;
 interface Sprite { state: FogState; element: HTMLDivElement; part?: number }
 export function createVectorLayer(root: HTMLElement, width: number, height: number, background: SymbolBackground = "dark") {
+  const maskPrefix = `kn-cat-symbol-${++vectorLayerSerial}`;
   const layer = document.createElement("div");
   layer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:visible";
   root.append(layer);
   function setBackground(value: SymbolBackground) {
     layer.style.color = value === "light" ? "#17171c" : "#fff";
-    layer.style.setProperty("--kn-symbol-hole", value === "light" ? "#fff" : "#111113");
   }
   setBackground(background);
   const eyeNodes = [
     { cx: 802.823, cy: 1279.323, r: 68.251 },
     { cx: 1243.342, cy: 1279.308, r: 67.94 },
-  ].map(e => {
+  ].map((e, index) => {
     const outer = document.createElement("div");
+    outer.dataset.eye = String(index);
     outer.style.cssText = `position:absolute;left:${e.cx / 2048 * 100}%;top:${e.cy / 2560 * 100}%;width:${e.r * 2 / 2048 * 100}%;height:${e.r * 2 / 2560 * 100}%;transform-origin:center;will-change:transform`;
     const disk = document.createElement("div"), happy = document.createElement("div"), asleep = document.createElement("div");
     for (const node of [disk, happy, asleep]) { node.style.cssText = "position:absolute;inset:0;transform-origin:center;will-change:transform,opacity"; outer.append(node); }
@@ -42,7 +44,7 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     element.dataset.symbol = shape.state;
     if (shape.part !== undefined) element.dataset.part = String(shape.part);
     element.style.cssText = "position:absolute;inset:0;opacity:0";
-    element.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 2048 2560" style="display:block;overflow:visible" fill="currentColor" aria-hidden="true"><g transform="translate(${left} ${top}) scale(${scale})">${shape.body}</g></svg>`;
+    element.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 2048 2560" style="display:block;overflow:visible" fill="currentColor" aria-hidden="true"><g transform="translate(${left} ${top}) scale(${scale})">${shape.body.replaceAll("__THINKING_MASK__", maskPrefix + "-thinking")}</g></svg>`;
     layer.append(element);
     const graphic = element.querySelector<SVGSVGElement>("svg")!, box = graphic.getBBox();
     // getBBox excludes stroke. Reserve the full 11-unit Z stroke and AA fringe.

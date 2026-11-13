@@ -1,0 +1,96 @@
+{
+  "task": "T10437",
+  "seed": 17,
+  "scope": "real module, unchanged fog/eyes, approved symbols; headless only",
+  "rows": [
+    {
+      "size": 800,
+      "theme": "dark",
+      "state": "thinking",
+      "ink": "rgb(255, 255, 255)",
+      "backing": 0,
+      "symbols": [
+        {
+          "state": "thinking",
+          "box": {
+            "x": 510.0625,
+            "y": 132.828125,
+            "width": 223.09375,
+            "height": 225.28125,
+            "top": 132.828125,
+            "right": 733.15625,
+            "bottom": 358.109375,
+            "left": 510.0625
+          }
+        }
+      ]
+    },
+    {
+      "size": 800,
+      "theme": "light",
+      "state": "thinking",
+      "ink": "rgb(23, 23, 28)",
+      "backing": 0,
+      "symbols": [
+        {
+          "state": "thinking",
+          "box": {
+            "x": 510.0625,
+            "y": 132.828125,
+            "width": 223.09375,
+            "height": 225.28125,
+            "top": 132.828125,
+            "right": 733.15625,
+            "bottom": 358.109375,
+            "left": 510.0625
+          }
+        }
+      ]
+    },
+    {
+      "size": 120,
+      "theme": "dark",
+      "state": "thinking",
+      "ink": "rgb(255, 255, 255)",
+      "backing": 0,
+      "symbols": [
+        {
+          "state": "thinking",
+          "box": {
+            "x": 96.5,
+            "y": 27.921875,
+            "width": 33.453125,
+            "height": 33.78125,
+            "top": 27.921875,
+            "right": 129.953125,
+            "bottom": 61.703125,
+            "left": 96.5
+          }
+        }
+      ]
+    },
+    {
+      "size": 120,
+      "theme": "light",
+      "state": "thinking",
+      "ink": "rgb(23, 23, 28)",
+      "backing": 0,
+      "symbols": [
+        {
+          "state": "thinking",
+          "box": {
+            "x": 96.5,
+            "y": 27.921875,
+            "width": 33.453125,
+            "height": 33.78125,
+            "top": 27.921875,
+            "right": 129.953125,
+            "bottom": 61.703125,
+            "left": 96.5
+          }
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

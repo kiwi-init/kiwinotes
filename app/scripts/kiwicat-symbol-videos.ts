@@ -11,7 +11,7 @@ const manifestFile=join(raw,'capture-full.json');
 const server=await serveFogDemo('cat-demo.ts'),browser=await webkit.launch({headless:true});
 const manifest:any={task:'T10437',scope:'actual module RGBA at controlled 30Hz, two theme renderers sampled sequentially; not performance',fps,seed:17,raw,scenes:[],errors:[]};
 try {
- for(const [state,seconds] of [['dormindo',6],['acordou',3],['ouvindo',8],['thinking',6],['agindo',6],['pronto',2.4],['erro',6]] as const){
+ for(const [state,seconds] of ([['dormindo',6],['acordou',3],['ouvindo',8],['thinking',6],['agindo',6],['pronto',2.4],['erro',6]] as const).filter(([state])=>!process.env.KIWI_SYMBOL_STATE||state===process.env.KIWI_SYMBOL_STATE)){
   const themes:any[]=[];
   for(const theme of ['dark','light']){
    const dir=join(raw,`${state}-${theme}`);mkdirSync(dir,{recursive:true});
