@@ -144,7 +144,9 @@ export class GestureMachine {
   private blinkEnd() { const b = this.blink; return b ? b.at + b.close + b.hold + b.open : Infinity; }
   private lookEnd() { const l = this.look; return l ? l.at + l.go + l.hold + l.back + l.completedFreeze + l.freezeFor : Infinity; }
   nextBoundary() {
-    if (this.inputs.parado) return Infinity;
+    // O Reduzir movimento para a animação, não a máquina de estados (#434): parado, só as trocas de estado contam (a
+    // entrada adiada, o pronto que volta ao repouso e o sono), e cada uma entra direto no quadro parado.
+    if (this.inputs.parado) return Math.min(this.pending?.at ?? Infinity, this.sleepAt, this.readyAt);
     return Math.min(this.pending?.at ?? Infinity, this.sleepAt, this.nextBlink, this.nextLook,
       this.blinkEnd(), this.lookEnd(), this.nextCycle, this.nextDot, this.nextWave(),
       this.readyAt);
@@ -182,7 +184,7 @@ export class GestureMachine {
   /** Consume due events at their exact deadlines, independent of display FPS. */
   sample(t = this.options.clock()): CatFrame {
     const end = Math.max(this.now, Number.isFinite(t) ? t : this.now);
-    if (!this.inputs.parado) {
+    {
       for (let count = 0; ; count++) {
         const due = this.nextBoundary();
         if (due > end || !Number.isFinite(due)) break;

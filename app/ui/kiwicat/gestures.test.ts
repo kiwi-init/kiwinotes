@@ -81,7 +81,8 @@ test("voice attack/release is elapsed time, and threshold cross-fades are contin
   expect(m.at(2).waves.slice(1)).toEqual([0, 0]);
 });
 test("reduced motion holds one exact pose, ignores voice level and freezes schedules", () => {
-  for (const state of STATES) {
+  // O pronto é o único com troca de estado antes dos 100 s (volta ao repouso): ele tem o teste dele, abaixo (#434).
+  for (const state of STATES.filter(s => s !== "pronto")) {
     const m = machine(state); const a = m.update({ parado: true, voz: 0 }, .1);
     const b = m.at(100); expect(b.state).toBe(state); expect(b.eyes).toEqual(a.eyes);
     expect(b.symbolAlpha).toBe(a.symbolAlpha); expect(b.progress).toBe(a.progress);
@@ -99,8 +100,22 @@ test("leaving reduced motion preserves its pose and never replays old surprise",
   m.at(20); const resumed = m.update({ parado: false }, 20);
   expect(resumed.eyes).toEqual(fixed.eyes);
   expect(m.at(20.24).eyes.size).toBe(1); expect(m.at(20.3).symbolAlpha).toBe(0);
+  // Parado, o pronto já voltou ao repouso no tempo dele (#434); sair do parado não traz o pronto de volta.
   const n = machine("pronto"); n.update({ parado: true }, .1); n.at(20); n.update({ parado: false }, 20);
-  expect(n.at(20.23).state).toBe("pronto"); expect(n.at(20.24).state).toBe("repouso");
+  expect(n.at(20.24).state).toBe("repouso");
+});
+test("reduced motion stops the animation, not the state machine: ready returns to rest and the cat sleeps (#434)", () => {
+  const m = machine("pronto"); const still = m.update({ parado: true }, .1);
+  // O pronto fica parado e inteiro até o tempo dele, e volta ao repouso direto no quadro parado.
+  const before = m.at(1.09); expect(before.state).toBe("pronto"); expect(before.eyes).toEqual(still.eyes);
+  const rest = m.at(1.11); expect(rest.state).toBe("repouso");
+  expect(m.at(5).eyes).toEqual(rest.eyes);
+  // O sono no tempo de sempre (4 a 6 min), também parado.
+  expect(m.at(1.1 + 239).state).toBe("repouso");
+  expect(m.at(1.1 + 361).state).toBe("dormindo");
+  // Nada de gesto com o Reduzir movimento: nem piscar nem olhar para o lado, só as trocas de estado.
+  const gestures = m.events.filter(e => e.at > .1 && /piscar|olhar|ciclo/.test(e.kind));
+  expect(gestures).toEqual([]);
 });
 test("projecting compositor keyframes never consumes randomness or events", () => {
   let draws = 0; const random = seededRandom(8);
