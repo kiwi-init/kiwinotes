@@ -140,6 +140,10 @@ describe("o balão", () => {
     k.event(ev({ type: "done", stopReason: "end_turn", text: "um texto e mais" }), 20);
     expect(k.view(30)).toBeNull();
     expect(k.all()).toBe("um texto e mais");
+    // Fechado o balão, o leitor de tela ainda ouve a resposta inteira, uma vez (#10936). O cancelado, nada.
+    expect(k.takeAnnouncement()).toBe("um texto e mais");
+    expect(k.takeAnnouncement()).toBeNull();
+    expect(c.takeAnnouncement()).toBeNull();
   });
 
   test("com o Reduzir movimento, cada trecho aparece inteiro pelo mesmo tempo de leitura", () => {

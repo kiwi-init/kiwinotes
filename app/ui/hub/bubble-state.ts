@@ -158,7 +158,11 @@ export class BubbleFeed {
       this.finish(e.id);
       if (e.stopReason !== "end_turn" || this.dismissed) {
         this.clear();
-        if (e.stopReason === "end_turn" && e.text) this.said = e.text;
+        if (e.stopReason === "end_turn") {
+          if (e.text) this.said = e.text;
+          // Fechar o balão é fechar o desenho: o leitor de tela ainda ouve a resposta, uma vez, no fim (revisão #10936).
+          if (this.said.trim()) this.announced = this.said;
+        }
         return;
       }
       if (e.text) {
