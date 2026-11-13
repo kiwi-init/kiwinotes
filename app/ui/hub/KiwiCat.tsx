@@ -21,7 +21,7 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
       try {
         const { createKiwiCat } = await import("../kiwicat/cat");
         if (gone || document.hidden) return;
-        const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120,
+        const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, outline: true,
           inputs: { estado: activity.state, cor: "claude", voz: null, parado: reducedRef.current } });
         if (gone) { await next.dispose(); return; }
         cat = next; handle.current = cat; cat.update({ parado: reducedRef.current }); cat.visibility(document.hidden); state(); el.dataset.ready = "true";

@@ -1,6 +1,7 @@
 // T8959 standalone test entry: same loopback page as the fog; no app route.
 import { createKiwiCat } from "./cat";
 import referenceUrl from "./assets/reference.webp";
+import cutoutReferenceUrl from "./assets/reference-cutout.webp";
 import { createKiwiFog } from "./index";
 import { STATES, type FogState } from "./state";
 const q = new URLSearchParams(location.search), state = q.get("state") ?? "repouso";
@@ -15,7 +16,7 @@ const options = {
     voz: q.has("voice") ? Number(q.get("voice")) : null,
     cor: q.get("color") ?? "padrao", parado: q.get("parado") === "1" },
 };
-const api = q.get("fogOnly") === "1" ? await createKiwiFog(document.getElementById("fog")!, { ...options, referenceUrl }) :
+const api = q.get("fogOnly") === "1" ? await createKiwiFog(document.getElementById("fog")!, { ...options, referenceUrl, cutoutReferenceUrl }) :
   await createKiwiCat(document.getElementById("fog")!, { ...options,
     outline: q.get("outline") === "1",
     sleepSeconds: q.has("sleepSeconds") ? () => Number(q.get("sleepSeconds")) : undefined });
