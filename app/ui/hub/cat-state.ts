@@ -11,13 +11,19 @@
 
 import type { AgentTurnEvent } from "../../src/shared/ui-contract";
 
-export type CatState = "repouso" | "acordou" | "thinking" | "agindo" | "pronto" | "erro";
+export type CatState = "repouso" | "acordou" | "ouvindo" | "thinking" | "agindo" | "pronto" | "erro";
 
 /** Quantos pedidos terminados o gato lembra, para ignorar um evento atrasado deles. */
 export const CAT_FINISHED_MAX = 64;
 
 export class CatActivity {
   state: CatState;
+  /**
+   * O campo de "falar por texto" está aberto (spec #9878): sem pedido em andamento, o gato fica atento (`ouvindo`, sem
+   * ondas); um pedido que começa daqui vai direto ao `thinking`, sem repetir o `acordou`; e um pedido que termina com o
+   * campo aberto volta à atenção, sem `pronto`.
+   */
+  private attentive = false;
   private current: string | null = null;
   /** O gato nasceu com o agente ocupado: o primeiro pedido desconhecido é o que estava rodando. */
   private adoptable: boolean;
@@ -34,13 +40,43 @@ export class CatActivity {
     if (this.finished.size > CAT_FINISHED_MAX) this.finished.delete(this.finished.values().next().value!);
   }
 
+  /**
+   * Abre ou fecha o campo de texto. Com um pedido em andamento, nada muda no gato (ele segue mostrando o pedido); sem
+   * pedido, abrir deixa o gato atento e fechar volta ao `repouso`.
+   */
+  attend(on: boolean): CatState {
+    this.attentive = on;
+    this.sending = false;
+    if (this.current !== null || this.adoptable) return this.state;
+    this.state = on ? "ouvindo" : "repouso";
+    return this.state;
+  }
+
+  /**
+   * O pedido saiu do campo: o campo fecha, mas o gato continua atento até o `started` chegar, para não repetir a
+   * entrada. Se o pedido nem começa (o envio falhou), `attend(false)` volta ao repouso.
+   */
+  sent(): CatState {
+    this.attentive = false;
+    this.sending = true;
+    return this.state;
+  }
+  private sending = false;
+
+  /** O pedido em andamento, que o campo usa para não mandar outro por cima. */
+  get busy(): boolean {
+    return this.current !== null || this.adoptable;
+  }
+
   event(e: AgentTurnEvent): CatState {
     if (this.finished.has(e.id)) return this.state;
     if (e.type === "started") {
       if (this.current && this.current !== e.id) this.finish(this.current);
       this.current = e.id;
       this.adoptable = false;
-      this.state = "acordou";
+      // Atento, o gato já tinha entrado: o pedido segue direto para o que o agente faz.
+      this.state = this.attentive || this.sending ? "thinking" : "acordou";
+      this.sending = false;
       return this.state;
     }
     if (this.current !== e.id) {
@@ -51,7 +87,8 @@ export class CatActivity {
     }
     if (e.type === "status") this.state = e.status === "running" ? "agindo" : "thinking";
     else if (e.type === "done" || e.type === "error") {
-      this.state = e.type === "error" ? "erro" : e.stopReason === "end_turn" ? "pronto" : "repouso";
+      // Com o campo aberto, o fim do pedido volta à atenção do `ouvindo`, sem nova entrada; o erro continua aparecendo.
+      this.state = e.type === "error" ? "erro" : this.attentive ? "ouvindo" : e.stopReason === "end_turn" ? "pronto" : "repouso";
       this.finish(e.id);
       this.current = null;
     }

@@ -85,4 +85,39 @@ describe("o gato segue o pedido atual (spec #9510)", () => {
     expect(finished.has("p0")).toBe(false);
     expect(finished.has(`p${CAT_FINISHED_MAX + 9}`)).toBe(true);
   });
+
+  test("o campo de texto (spec #9878): abrir deixa atento, fechar volta ao repouso, e mandar não repete a entrada", () => {
+    const a = new CatActivity(false);
+    expect(a.attend(true)).toBe("ouvindo");
+    expect(a.attend(false)).toBe("repouso");
+    // Mandar: o campo fecha, o gato fica atento até o pedido começar, e o pedido entra direto no thinking.
+    a.attend(true);
+    expect(a.sent()).toBe("ouvindo");
+    expect(a.event(started("1"))).toBe("thinking");
+    expect(a.event(running("1"))).toBe("agindo");
+    expect(a.event(done("1"))).toBe("pronto");
+    // O envio que falha (sem started): fechar volta ao repouso, e o próximo pedido de fora entra normal.
+    const b = new CatActivity(false);
+    b.attend(true); b.sent();
+    expect(b.attend(false)).toBe("repouso");
+    expect(b.event(started("2"))).toBe("acordou");
+  });
+
+  test("com o agente ocupado, o campo abre e fecha sem mudar o gato; o fim do pedido com o campo aberto volta à atenção", () => {
+    const a = new CatActivity(false);
+    a.event(started("1")); a.event(running("1"));
+    expect(a.busy).toBe(true);
+    expect(a.attend(true)).toBe("agindo");
+    expect(a.attend(false)).toBe("agindo");
+    a.attend(true);
+    expect(a.event(done("1"))).toBe("ouvindo");
+    expect(a.busy).toBe(false);
+    // O erro continua aparecendo, mesmo com o campo aberto.
+    a.event(started("2"));
+    expect(a.event(error("2"))).toBe("erro");
+    // O gato que nasce com o agente ocupado também conta como ocupado.
+    const b = new CatActivity(true);
+    expect(b.busy).toBe(true);
+    expect(b.attend(true)).toBe("thinking");
+  });
 });

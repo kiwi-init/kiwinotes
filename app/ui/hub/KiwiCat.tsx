@@ -4,6 +4,7 @@ import type { AgentStatus, AppSettings } from "../../src/shared/ui-contract";
 import type { createKiwiCat } from "../kiwicat/cat";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
+import { CatAsk } from "./CatAsk";
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 /**
  * A tinta dos símbolos segue o tema da janela (T10737, #428): escura no claro, branca no escuro. O tema resolvido fica
@@ -15,11 +16,29 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
   const reducedRef = useRef(reduced); reducedRef.current = reduced;
   useEffect(() => { handle.current?.update({ parado: reduced }); }, [reduced]);
   const root = useRef<HTMLDivElement>(null);
+  // O estado do gato vive aqui, e não no efeito: o campo de texto (spec #9878) também o muda.
+  const activityRef = useRef<CatActivity | null>(null);
+  if (!activityRef.current) activityRef.current = new CatActivity(busy);
+  const applyRef = useRef<() => void>(() => {});
+  const hit = useRef<HTMLButtonElement>(null);
+  const [asking, setAsking] = useState(false);
+  // De onde o foco veio: o campo devolve o foco a quem o tinha (o editor, por exemplo) e, aberto pelo teclado no gato,
+  // de volta ao gato. Nunca deixa o anel de foco no gato depois de um clique.
+  const returnFocus = useRef<{ el: Element | null; keyboard: boolean }>({ el: null, keyboard: false });
+  const giveBackFocus = () => {
+    const { el, keyboard } = returnFocus.current;
+    if (keyboard) hit.current?.focus();
+    else if (el instanceof HTMLElement && el.isConnected && el !== document.body) el.focus();
+    else (document.activeElement as HTMLElement | null)?.blur?.();
+  };
+  // O rascunho volta no próximo clique, até ser mandado ou apagado.
+  const [draft, setDraft] = useState("");
   useEffect(() => {
     const el = root.current!;
     let gone = false, loading = false, cat: Cat | undefined;
-    const activity = new CatActivity(busy);
+    const activity = activityRef.current!;
     const state = () => { if (cat) { cat.update({ estado: activity.state }); el.dataset.state = cat.visualState; } };
+    applyRef.current = state;
     async function create() {
       if (gone || cat || loading || document.hidden) return;
       loading = true;
@@ -50,7 +69,68 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
       if (cat) void cat.dispose();
     };
   }, []);
-  return <div className="kn-kiwicat" aria-hidden="true" ref={root} />;
+  const activity = activityRef.current;
+  const openAsk = (keyboard: boolean) => {
+    if (asking) return;
+    returnFocus.current = { el: keyboard ? hit.current : document.activeElement, keyboard };
+    setAsking(true);
+    const before = activity.state;
+    activity.attend(true);
+    // Sem pedido em andamento, o gato passa pelo `acordou` e fica no `ouvindo` (o módulo segura o ouvindo 0,32 s); a
+    // entrada do gato não atrasa o campo, que já abriu.
+    if (activity.state !== before) { handle.current?.update({ estado: "acordou" }); applyRef.current(); }
+  };
+  const closeAsk = (giveBack: boolean) => {
+    setAsking(false);
+    const before = activity.state;
+    activity.attend(false);
+    if (activity.state !== before) applyRef.current();
+    if (giveBack) giveBackFocus();
+  };
+  const send = (text: string) => {
+    activity.sent();
+    setAsking(false);
+    setDraft("");
+    giveBackFocus();
+    api.agent.ask(text).catch(() => { activity.attend(false); applyRef.current(); });
+  };
+  // Clique fora fecha o campo (sem mandar); o clique no próprio gato não conta.
+  useEffect(() => {
+    if (!asking) return;
+    const away = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (t instanceof Element && (t.closest(".kn-cat-ask") || t.closest(".kn-kiwicat-hit"))) return;
+      closeAsk(false);
+    };
+    document.addEventListener("mousedown", away, true);
+    return () => document.removeEventListener("mousedown", away, true);
+  });
+  return (
+    <>
+      <div className="kn-kiwicat" aria-hidden="true" ref={root} />
+      {/* Só o corpo do gato recebe o clique (spec #9878); a névoa e o resto do canto deixam passar. */}
+      <button
+        ref={hit}
+        type="button"
+        className="kn-kiwicat-hit"
+        aria-label="Falar com o agente"
+        aria-haspopup="dialog"
+        aria-expanded={asking}
+        // `detail === 0`: o clique veio do teclado (Enter ou Espaço no botão), não do mouse.
+        onClick={(e) => (asking ? closeAsk(true) : openAsk(e.detail === 0))}
+      />
+      {asking ? (
+        <CatAsk
+          draft={draft}
+          busy={busy || activity.busy}
+          onDraft={setDraft}
+          onSend={send}
+          onClose={() => closeAsk(true)}
+          onCancelRequest={() => void api.agent.cancel().catch(() => {})}
+        />
+      ) : null}
+    </>
+  );
 }
 export function KiwiCat() {
   const [status, setStatus] = useState<AgentStatus | null>(null);
