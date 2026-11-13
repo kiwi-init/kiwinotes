@@ -45,6 +45,8 @@ bun test
 bun run typecheck
 bun scripts/kiwicat-face-check.ts /tmp/kiwi-T8959-render
 bun scripts/kiwicat-face-videos.ts
+# Pillow in an isolated environment; keeps the answer key outside the repo:
+python scripts/kiwicat-face-sheet.py /tmp/kiwi-T8959-render --key /tmp/kiwi-T8959-key.json
 ```
 
 O check funcional percorre os oito estados, WebGPU/WebGL2/sem GPU,

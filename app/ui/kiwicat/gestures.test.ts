@@ -67,18 +67,18 @@ test("interrupted eye transitions start at the displayed pose, never neutral", (
 });
 test("numeric silence has one wave; null/absent removes every wave immediately", () => {
   const m = machine("ouvindo");
-  expect(m.at(0).waves).toEqual([0, 0, 0, 0, 0]);
-  expect(m.update({ voz: 0 }, .1).waves).toEqual([.35, 0, 0, 0, 0]);
-  m.update({ voz: 1 }, .2); expect(m.at(.5).waves[4]).toBe(1);
-  expect(m.update({ voz: null }, .5).waves).toEqual([0, 0, 0, 0, 0]);
-  m.update({ voz: NaN }, .6); expect(m.at(.7).waves).toEqual([.35, 0, 0, 0, 0]);
-  expect(m.update({ voz: undefined }, .7).waves).toEqual([0, 0, 0, 0, 0]);
+  expect(m.at(0).waves).toEqual([0, 0, 0]);
+  expect(m.update({ voz: 0 }, .1).waves).toEqual([.35, 0, 0]);
+  m.update({ voz: 1 }, .2); expect(m.at(.5).waves[2]).toBe(1);
+  expect(m.update({ voz: null }, .5).waves).toEqual([0, 0, 0]);
+  m.update({ voz: NaN }, .6); expect(m.at(.7).waves).toEqual([.35, 0, 0]);
+  expect(m.update({ voz: undefined }, .7).waves).toEqual([0, 0, 0]);
 });
 test("voice attack/release is elapsed time, and threshold cross-fades are continuous", () => {
   const m = machine("ouvindo"); m.update({ voz: 1 }, 0);
   const first = m.at(.06); expect(first.waves[1]).toBeGreaterThan(0); expect(first.waves[1]).toBeLessThan(1);
-  m.at(.4); m.update({ voz: 0 }, .4); expect(m.at(.45).waves[4]).toBeGreaterThan(0);
-  expect(m.at(2).waves.slice(1)).toEqual([0, 0, 0, 0]);
+  m.at(.4); m.update({ voz: 0 }, .4); expect(m.at(.45).waves[2]).toBeGreaterThan(0);
+  expect(m.at(2).waves.slice(1)).toEqual([0, 0]);
 });
 test("reduced motion holds one exact pose, ignores voice level and freezes schedules", () => {
   for (const state of STATES) {
@@ -86,7 +86,7 @@ test("reduced motion holds one exact pose, ignores voice level and freezes sched
     const b = m.at(100); expect(b.state).toBe(state); expect(b.eyes).toEqual(a.eyes);
     expect(b.symbolAlpha).toBe(a.symbolAlpha); expect(b.progress).toBe(a.progress);
     expect(m.update({ voz: 1 }, 100).waves).toEqual(a.waves);
-    expect(m.update({ voz: null }, 100).waves).toEqual([0, 0, 0, 0, 0]);
+    expect(m.update({ voz: null }, 100).waves).toEqual([0, 0, 0]);
   }
 });
 test("reducing motion resolves a deferred listening state without waiting", () => {
@@ -134,7 +134,7 @@ test("an existing lateral look freezes during blink closure", () => {
 });
 test("capture ending during a symbol fade removes waves on that same frame", () => {
   const m = machine("ouvindo"); m.update({ voz: 1 }, 0); m.at(.4);
-  expect(m.update({ estado: "thinking", voz: null }, .4).waves).toEqual([0, 0, 0, 0, 0]);
+  expect(m.update({ estado: "thinking", voz: null }, .4).waves).toEqual([0, 0, 0]);
 });
 test("a departing symbol freezes at its displayed drawing and opacity", () => {
   const m = machine("erro"); const before = m.at(.18);
@@ -165,6 +165,15 @@ test("resuming the error freezes its complete drawing until the first fade finis
 // The approved reduced-motion listening pose is the three white arcs, not numeric silence.
 test("fixed listening uses the approved high-voice pose only while capturing", () => {
   const m = machine("ouvindo");
-  expect(m.update({ parado: true, voz: .8 }, 0).waves).toEqual([1, 1, 1, 0, 0]);
-  expect(m.update({ voz: null }, 10).waves).toEqual([0, 0, 0, 0, 0]);
+  expect(m.update({ parado: true, voz: .8 }, 0).waves).toEqual([1, 1, 1]);
+  expect(m.update({ voz: null }, 10).waves).toEqual([0, 0, 0]);
+});
+
+test("listening bands contain one, two or three approved arcs", () => {
+  for (const [voice, count] of [[0, 1], [.5, 2], [1, 3]]) {
+    const m = machine("ouvindo"); m.update({ voz: voice }, 0);
+    const waves = m.at(1).waves;
+    expect(waves).toHaveLength(3);
+    expect(waves.filter(alpha => alpha > 0)).toHaveLength(count);
+  }
 });

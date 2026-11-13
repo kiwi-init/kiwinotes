@@ -33,7 +33,7 @@ const blend = (a: EyePose, b: EyePose, u: number): EyePose => Object.fromEntries
   Object.keys(a).map((k) => [k, mix(a[k as keyof EyePose], b[k as keyof EyePose], u)]),
 ) as unknown as EyePose;
 const out = (u: number) => 1 - (1 - clamp(u)) ** 3;
-const waveMask = (band: number) => [1, ...[1, 2, 3, 4].map((j) => j <= band * 2 ? 1 : 0)];
+const waveMask = (band: number) => [1, ...[1, 2].map((j) => j <= band ? 1 : 0)];
 export class GestureMachine {
   readonly inputs: FogInputs;
   visualState: FogState;
@@ -348,7 +348,7 @@ export class GestureMachine {
     }
     const capturing = typeof this.inputs.voz === "number";
     const fading = !fixed && this.previousFrame?.symbol && age < .08 ? this.previousFrame : null;
-    const waves = symbol === "ouvindo" && capturing ? fixed ? [1, 1, 1, 0, 0] : fading ? [...fading.waves] : this.waveValues(t).map((a, i) => i ? a : .35 + .65 * clamp(this.voice(t) * 3)) : [0, 0, 0, 0, 0];
+    const waves = symbol === "ouvindo" && capturing ? fixed ? [1, 1, 1] : fading ? [...fading.waves] : this.waveValues(t).map((a, i) => i ? a : .35 + .65 * clamp(this.voice(t) * 3)) : [0, 0, 0];
     const dots = [0, 1, 2].map((j) => fixed ? 1 : mix(j === (this.dotIndex + 2) % 3 ? 1 : .35, j === this.dotIndex ? 1 : .35, smooth((t - this.dotAt) / .1)));
     if (!fixed && this.resumed && t < this.resumed.at + .24) {
       const u = smooth((t - this.resumed.at) / .24), previous = this.resumed.frame;

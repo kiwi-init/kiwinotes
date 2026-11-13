@@ -82,7 +82,7 @@ export function createVectorLayer(root: HTMLElement, width: number, height: numb
     return polygon([[x! - u, y! - u], [x! + u + 7, y! - u - 6], [x! + u + 1, y! - u + 35], [x! - u + 42, y! + u - 31], [x! + u + 8, y! + u - 30], [x! + u, y! + u + 6], [x! - u - 6, y! + u], [x! - u + 1, y! + u - 30], [x! + u - 43, y! - u + 33], [x! - u + 2, y! - u + 37]], "sleep", 1);
   }).join("");
   sprite("dormindo", white(zs), [1740, 680]);
-  for (let j = 1; j <= 5; j++) {
+  for (let j = 1; j <= 3; j++) {
     const r = 45 + j * 48, ps = points(100, u => { const t = -.96 + u * 1.92; return [1590 + r * Math.cos(t), 930 + r * Math.sin(t)]; });
     const widths = points(100, u => [3 + 38 * Math.sin(u * Math.PI) ** .7, 0]).map(p => p[0]);
     sprite("ouvindo", white(ribbon(ps, widths, "sound")), [1760, 970], j - 1);
