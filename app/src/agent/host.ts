@@ -109,6 +109,11 @@ export interface AgentHostOptions {
    * pedido de permissão, aceita só as ferramentas com esse prefixo: o resto continua recusado.
    */
   kiwiTools?: { servers: () => McpServer[]; prefix: string };
+  /**
+   * O agente fechou sozinho (caiu), e não pelo `stop()`. O serviço fecha junto o servidor de ferramentas daquela
+   * abertura (revisão do T8956).
+   */
+  onExit?: (err: AgentError) => void;
 }
 
 export interface AgentSession {
@@ -442,6 +447,11 @@ export class AgentHost {
   private dropProcess(proc: ReturnType<typeof Bun.spawn>, err: AgentError): void {
     if (this.proc !== proc) return;
     this.lastExit = err;
+    try {
+      this.o.onExit?.(err);
+    } catch {
+      /* quem ouve não derruba o host */
+    }
     this.conn?.close();
     this.conn = null;
     this.proc = null;

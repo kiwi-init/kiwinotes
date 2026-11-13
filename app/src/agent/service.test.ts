@@ -67,13 +67,14 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
       return FAKE_CLAUDE;
     },
     ...(o.reader ? { reader: o.reader } : {}),
-    openHost: async ({ configOptions, kiwiTools }) =>
+    openHost: async ({ configOptions, kiwiTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
         name: "Claude Code",
         command: FAKE_AGENT_COMMAND,
         dir: agentDir(data),
         configOptions,
+        onExit,
         ...(kiwiTools ? { kiwiTools } : {}),
         env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}) },
       }),
@@ -571,5 +572,32 @@ describe("as ferramentas do Kiwi (spec #7496)", () => {
     const s2 = (opened(m2)[0]!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
     m2.svc.killNow();
     await expect(fetch(s2.url, { method: "POST", headers: { [s2.headers[0]!.name]: s2.headers[0]!.value }, body: "{}" })).rejects.toThrow();
+  });
+});
+
+describe("o agente que cai sozinho não deixa o servidor aberto (revisão do T8956)", () => {
+  test("depois do /cai, a senha velha não responde mais; a nova abertura tem outro servidor, e Desligar fecha tudo", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    await askAndWait(m, "/ferramentas");
+    const first = (opened(m)[0]!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    const ping = (s: KiwiServer) =>
+      fetch(s.url, { method: "POST", headers: { [s.headers[0]!.name]: s.headers[0]!.value }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }) }).then(
+        (r) => r.status,
+        () => "fechado",
+      );
+    expect(await ping(first)).toBe(200);
+    const crash = await askAndWait(m, "/cai");
+    expect(crash.at(-1)!.type).toBe("error");
+    // Logo depois da queda, o servidor daquela abertura já fechou.
+    expect(await ping(first)).toBe("fechado");
+    await askAndWait(m, "/ferramentas");
+    const second = (opened(m).at(-1)!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    expect(second.headers[0]!.value).not.toBe(first.headers[0]!.value);
+    expect(await ping(first)).toBe("fechado");
+    expect(await ping(second)).toBe(200);
+    await m.svc.disable();
+    expect(await ping(first)).toBe("fechado");
+    expect(await ping(second)).toBe("fechado");
   });
 });

@@ -50,7 +50,12 @@ export interface AgentServiceDeps {
    * Monta o host do agente (sem abrir): no app, o adaptador apontado para o Claude Code instalado, depois das
    * conferências; nos testes, o agente falso. Recebe o que o host precisa do serviço.
    */
-  openHost(o: { configOptions: () => Record<string, string>; kiwiTools?: AgentHostOptions["kiwiTools"] }): Promise<AgentHost>;
+  openHost(o: {
+    configOptions: () => Record<string, string>;
+    kiwiTools?: AgentHostOptions["kiwiTools"];
+    /** O programa caiu sozinho: o serviço fecha o servidor de ferramentas daquela abertura. */
+    onExit: () => void;
+  }): Promise<AgentHost>;
   /** O leitor do cofre para as ferramentas do Kiwi (spec #7496). Também pode chegar depois, pelo `useReader`. */
   reader?: VaultReader;
   /** A versão do Kiwi, que o servidor de ferramentas diz ao agente. */
@@ -364,6 +369,8 @@ export class AgentService {
       const epoch = this.epoch;
       const s = await this.d.settings.load();
       const wanted = () => ({ model: s.model, effort: s.effort });
+      // Um servidor que tenha sobrado de uma abertura anterior fecha antes do novo (revisão do T8956).
+      this.stopTools(this.tools);
       const reader = this.reader;
       const tools = reader ? new KiwiToolServer({ reader, version: this.d.version, onCall: (e) => this.onToolCall(e) }) : null;
       let config: ReturnType<KiwiToolServer["start"]> | null = null;
@@ -374,7 +381,14 @@ export class AgentService {
             servers: () => [(config ??= tools.start())],
           }
         : undefined;
-      const host = await this.d.openHost({ configOptions: wanted, ...(kiwiTools ? { kiwiTools } : {}) });
+      const host = await this.d.openHost({
+        configOptions: wanted,
+        ...(kiwiTools ? { kiwiTools } : {}),
+        onExit: () => {
+          this.stopTools(tools);
+          this.emitStatus();
+        },
+      });
       if (this.closed || epoch !== this.epoch) throw new AgentError("E_AGENT_FAILED", this.name, "o programa foi fechado antes de abrir");
       this.pending = host;
       this.tools = tools;

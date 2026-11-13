@@ -396,3 +396,20 @@ describe("as ferramentas do Kiwi no host (spec #7496)", () => {
     expect(events).toContainEqual({ type: "permission", tool: "Bash", decision: "denied" });
   });
 });
+
+describe("o onExit (revisão do T8956)", () => {
+  test("avisa quando o agente cai sozinho, e não quando o Kiwi fecha com stop()", async () => {
+    const dir = tmp();
+    const exits: string[] = [];
+    const h = new AgentHost({ name: "Agente falso", command: FAKE_AGENT_COMMAND, dir: path.join(dir, "agent"), onExit: (e) => exits.push(e.code) });
+    hosts.push(h);
+    await h.start();
+    await h.ask("/cai").catch(() => {});
+    for (const end = Date.now() + 5000; !exits.length && Date.now() < end; ) await Bun.sleep(10);
+    expect(exits).toEqual(["E_AGENT_FAILED"]);
+    await h.start();
+    await h.stop();
+    await Bun.sleep(100);
+    expect(exits).toEqual(["E_AGENT_FAILED"]);
+  });
+});
