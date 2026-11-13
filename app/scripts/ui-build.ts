@@ -9,7 +9,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import pkg from "../package.json" with { type: "json" };
-import { UI_DATA_SCHEMA, UI_REQUIRES_CONTRACT, UI_WINDOWS } from "../src/shared/ui-contract.ts";
+import { HELPER_PAGES, UI_DATA_SCHEMA, UI_REQUIRES_CONTRACT, UI_WINDOWS } from "../src/shared/ui-contract.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..");
 const dist = path.join(appDir, "dist");
@@ -23,4 +23,10 @@ for (const window of UI_WINDOWS) {
   const ui = { uiVersion: pkg.version, requiresContract: UI_REQUIRES_CONTRACT, dataSchema: UI_DATA_SCHEMA, seq };
   writeFileSync(path.join(dist, window, "ui.json"), `${JSON.stringify(ui, null, 2)}\n`);
   console.log(`ui-build: ${window} ${ui.uiVersion} (seq ${seq})`);
+}
+// As páginas do helper (o gato no overlay, spec #9810): o mesmo build, sem ui.json.
+for (const page of HELPER_PAGES) {
+  const r = spawnSync("bun", ["x", "vite", "build"], { cwd: appDir, stdio: "inherit", env: { ...process.env, KIWI_UI_WINDOW: page } });
+  if (r.status !== 0) throw new Error(`ui-build: vite build failed for ${page}`);
+  console.log(`ui-build: ${page} (página do helper)`);
 }

@@ -851,6 +851,11 @@ export const isHubSection = (v: unknown): v is HubSection => (HUB_SECTIONS as re
 export const UI_WINDOWS = ["settings", "history", "notes", "hub", "intro",
 ] as const;
 export type UiWindow = (typeof UI_WINDOWS)[number];
+/**
+ * As páginas que o helper abre, fora das janelas do app (spec #9810): o gato no overlay. Saem no mesmo build
+ * (`dist/<página>/`, copiado para `views/ui/<página>/` no .app), sem ui.json: não são UI do AppEngine.
+ */
+export const HELPER_PAGES = ["catoverlay"] as const;
 
 /** O canal do build: as rc recebem as rc (o feed `updates-rc`), a estável só a estável, e o dev nunca checa. */
 export type AppChannel = "rc" | "stable" | "dev";
