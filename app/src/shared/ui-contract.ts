@@ -126,7 +126,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 //   `agent.turn`, e o `agent` nas settings (só leitura pelo `settings.set`). Só acréscimo.
 // 1.42.0 (T8762, spec #8373): o `models` no `AgentStatus`, os modelos que o agente oferece, para a seção Agente dos
 //   Ajustes deixar trocar. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.42.0";
+// 1.43.0 (T8956, spec #7496): o `target` no status `running` do `agent.turn`, o que uma ferramenta do Kiwi leu ou
+//   procurou ("Projetos/Kiwi.md"). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.43.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -484,7 +486,8 @@ export interface AgentModelChoice {
 export type AgentTurnEvent = { id: string } & (
   | { type: "started" }
   | { type: "status"; status: "opening" | "thinking" }
-  | { type: "status"; status: "running"; tool: string }
+  /** `tool` é o nome da ferramenta; numa do Kiwi (spec #7496), `target` é o que ela leu ou procurou. */
+  | { type: "status"; status: "running"; tool: string; target?: string }
   | { type: "text"; text: string }
   | { type: "permission"; tool: string; decision: "denied" }
   | { type: "done"; stopReason: string; text: string }

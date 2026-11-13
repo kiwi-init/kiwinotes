@@ -13,6 +13,9 @@
 // `KIWI_FAKE_CLAUDE_LOG`, e responde às mensagens de controle do SDK o mínimo para a sessão abrir: o `initialize` com
 // um modelo de mentira e nenhum comando, e as outras com sucesso vazio. Ele não chama modelo nenhum e não vai à rede.
 // É a prova do builder de que o adaptador, aberto pelo Bun do app, chama o programa que o Kiwi indicou.
+//
+// Com um `--mcp-config` (spec #7496), ele conecta em cada servidor HTTP ao abrir, como o Claude Code: `initialize`, o
+// `notifications/initialized` e o `tools/list`. Anota no mesmo log uma linha `{ mcp: { nome, ferramentas } }`.
 
 import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -28,6 +31,7 @@ if (args.includes("--input-format")) {
       JSON.stringify({ argv: args, cwd: process.cwd(), entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT ?? null, script: import.meta.path }) + "\n",
     );
   }
+  void connectMcp(args, log);
   const send = (x: unknown) => process.stdout.write(JSON.stringify(x) + "\n");
   for await (const line of createInterface({ input: process.stdin })) {
     let msg: { type?: string; request_id?: string; request?: { subtype?: string } };
@@ -51,6 +55,34 @@ if (args.includes("--input-format")) {
     send({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response } });
   }
   process.exit(0);
+}
+
+/** Conecta nos servidores HTTP do `--mcp-config` e pede a lista de ferramentas, como o Claude Code ao abrir. */
+async function connectMcp(argv: string[], log: string | undefined): Promise<void> {
+  const at = argv.findIndex((a) => a === "--mcp-config" || a.startsWith("--mcp-config="));
+  if (at < 0) return;
+  const raw = argv[at]!.includes("=") ? argv[at]!.slice(argv[at]!.indexOf("=") + 1) : argv[at + 1];
+  let servers: Record<string, { type?: string; url?: string; headers?: Record<string, string> }> = {};
+  try {
+    servers = (JSON.parse(raw ?? "{}") as { mcpServers?: typeof servers }).mcpServers ?? {};
+  } catch {
+    return;
+  }
+  for (const [nome, s] of Object.entries(servers)) {
+    if (s.type !== "http" || !s.url) continue;
+    let id = 0;
+    const post = (body: unknown) =>
+      fetch(s.url!, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", ...s.headers }, body: JSON.stringify(body) });
+    try {
+      await post({ jsonrpc: "2.0", id: ++id, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "claude-falso", version: "0" } } });
+      await post({ jsonrpc: "2.0", method: "notifications/initialized" });
+      const list = (await (await post({ jsonrpc: "2.0", id: ++id, method: "tools/list" })).json()) as { result?: { tools?: { name: string }[] } };
+      const ferramentas = (list.result?.tools ?? []).map((t) => t.name);
+      if (log) appendFileSync(log, JSON.stringify({ mcp: { nome, ferramentas } }) + "\n");
+    } catch (e) {
+      if (log) appendFileSync(log, JSON.stringify({ mcp: { nome, erro: String((e as Error)?.message ?? e) } }) + "\n");
+    }
+  }
 }
 
 const delay = Number(process.env.KIWI_FAKE_CLAUDE_DELAY_MS ?? 0);

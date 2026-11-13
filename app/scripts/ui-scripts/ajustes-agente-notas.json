@@ -1,0 +1,86 @@
+{
+  "window": "hub",
+  "size": "900x1400",
+  "steps": [
+    {
+      "waitFor": ".kn-tab",
+      "name": "o hub abre"
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Projetos",
+        "title": "Kiwi",
+        "content": "# Kiwi\n\nO app de notas do harry.\n\n## Prazo\n\nO prazo do Kiwi é março.\n"
+      },
+      "name": "uma nota no cofre"
+    },
+    {
+      "invoke": "agent.enable",
+      "args": {
+        "consent": true
+      },
+      "name": "liga (o aceite já dado)"
+    },
+    {
+      "invoke": "agent.download",
+      "args": {},
+      "name": "baixa o adaptador do registro falso"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "waitFor": ".kn-section:has(h2:text-is('Agente'))",
+      "name": "a seção Agente"
+    },
+    {
+      "waitFor": ".kn-agent-test",
+      "timeout": 30000,
+      "name": "o Testar aparece"
+    },
+    {
+      "expectText": ".kn-agent-test",
+      "text": "pode procurar e ler as suas notas e reuniões",
+      "name": "a dica diz que ele lê as notas"
+    },
+    {
+      "expectText": ".kn-agent-test",
+      "text": "qualquer nota que pedir",
+      "name": "e avisa que pode ler qualquer uma"
+    },
+    {
+      "fill": ".kn-agent-test-input",
+      "text": "Qual é o prazo do Kiwi?"
+    },
+    {
+      "click": ".kn-agent-test button:has-text('Testar')",
+      "name": "pergunta sobre a nota"
+    },
+    {
+      "expectText": ".kn-agent-test-out",
+      "text": "Lendo Projetos/Kiwi.md",
+      "timeout": 20000,
+      "name": "o status diz o que está lendo"
+    },
+    {
+      "screenshot": "1-lendo.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "expectText": ".kn-agent-test-text",
+      "text": "Pela nota Projetos/Kiwi.md",
+      "timeout": 20000,
+      "name": "a resposta vem da nota"
+    },
+    {
+      "expectText": ".kn-agent-test-text",
+      "text": "março",
+      "name": "com o prazo"
+    },
+    {
+      "screenshot": "2-resposta.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    }
+  ]
+}

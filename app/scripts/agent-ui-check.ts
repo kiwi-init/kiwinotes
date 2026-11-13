@@ -8,7 +8,9 @@
 // - `ajustes-agente.json`: ligar com a tela do aviso, baixar, cancelar e tentar de novo, testar, cancelar no meio, os
 //   erros do agente, trocar o modelo, desligar e remover;
 // - `ajustes-agente-estado.json`, com o `claude` falso não instalado, não logado e numa versão antiga;
-// - `ajustes-agente-sem-rede.json`, com o registro fora do ar.
+// - `ajustes-agente-sem-rede.json`, com o registro fora do ar;
+// - `ajustes-agente-notas.json` (spec #7496): o Testar pergunta sobre uma nota, e o agente falso lê pelas ferramentas
+//   do Kiwi ("Lendo Projetos/Kiwi.md…").
 // Sai com 1 se algum roteiro falhar.
 
 import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -60,7 +62,10 @@ async function scenario(name: string, script: string, env: Record<string, string
     if (up.code !== 0) throw new Error(`o headless não subiu: ${up.out}`);
     const r = await cli(["ui", "hub", "--script", path.join(scripts, script), "--out", shots, "--data", data]);
     const report = JSON.parse(r.out.slice(r.out.indexOf("{"))) as { ok: boolean; failedAt?: number; problems?: string[]; steps?: { error?: string }[] };
-    for (const f of new Bun.Glob("*.png").scanSync(shots)) renameSync(path.join(shots, f), path.join(out, script === "ajustes-agente.json" ? f : `0-${name}.png`));
+    for (const f of new Bun.Glob("*.png").scanSync(shots)) {
+      const to = script === "ajustes-agente.json" ? f : script === "ajustes-agente-notas.json" ? `notas-${f}` : `0-${name}.png`;
+      renameSync(path.join(shots, f), path.join(out, to));
+    }
     const failed = report.steps?.find((s) => s.error)?.error;
     console.log(`${report.ok ? "ok  " : "FALHOU"} ${name}${failed ? `: ${failed}` : ""}${report.problems?.length ? ` · ${report.problems.join(" | ")}` : ""}`);
     return report.ok && !report.problems?.length;
@@ -76,6 +81,7 @@ try {
   ok = (await scenario("nao-logado", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_LOGGED_IN: "0" })) && ok;
   ok = (await scenario("versao-antiga", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_VERSION: "2.0.9" })) && ok;
   ok = (await scenario("sem-rede", "ajustes-agente-sem-rede.json", { KIWI_ADAPTER_REGISTRY: "http://127.0.0.1:9" })) && ok;
+  ok = (await scenario("notas", "ajustes-agente-notas.json", { KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500" })) && ok;
 } finally {
   reg.stop();
   rmSync(work, { recursive: true, force: true });

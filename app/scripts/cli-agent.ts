@@ -5,8 +5,10 @@
 //   bun run cli agent ask "texto" [--data DIR] [--new]         um pedido; os eventos saem um por linha, e a resposta no fim
 //   bun run cli agent download [--data DIR] [--registry URL]   baixa o adaptador do Claude Code (spec #8368), a lista fixa
 //   bun run cli agent remove [--data DIR]                      apaga o adaptador baixado
-//   bun run cli agent proof [--data DIR] [--real]              abre uma sessão pelo adaptador, sem pedido, e mostra o
-//                                                              programa aberto, o isolamento e o que a sessão recebeu
+//   bun run cli agent proof [--data DIR] [--real] [--tools]    abre uma sessão pelo adaptador, sem pedido, e mostra o
+//                                                              programa aberto, o isolamento e o que a sessão recebeu;
+//                                                              --tools abre com as ferramentas do Kiwi (spec #7496),
+//                                                              sobre um cofre vazio, e mostra se o Claude Code pediu a lista
 //
 // **O `proof --real` abre o Claude Code de verdade, logado: só o harry roda, quando o lead pede** (ADR 0011, #8368).
 // Sem `--real`, a prova usa um `claude` falso, que anota como foi chamado em `<data>/fake-claude/calls.jsonl`. As duas
@@ -37,7 +39,8 @@ const USAGE = `usage: bun run cli agent <status|ask|download|remove|proof> [--da
   ask "texto" [--new]          um pedido ao agente falso; --new começa uma sessão nova
   download [--registry URL]    baixa o adaptador do Claude Code (a lista fixa, conferida)
   remove                       apaga o adaptador baixado
-  proof [--real]               abre uma sessão pelo adaptador, sem pedido; --real usa o Claude Code de verdade (só o harry)`;
+  proof [--real] [--tools]     abre uma sessão pelo adaptador, sem pedido; --real usa o Claude Code de verdade (só o harry);
+                               --tools abre com as ferramentas do Kiwi, sobre um cofre vazio`;
 
 const NAME = "Claude Code";
 
@@ -115,6 +118,7 @@ export async function runAgent(argv: string[], data: string): Promise<number> {
     try {
       assertNotRealData(data);
       const real = rest.includes("--real");
+      const tools = rest.includes("--tools");
       await downloadAdapter({ root: adapterRoot(data), registry: option(rest, "--registry") });
       let claudePath: string | null;
       let env: Record<string, string | undefined> = process.env;
@@ -126,8 +130,8 @@ export async function runAgent(argv: string[], data: string): Promise<number> {
         env = { ...process.env, KIWI_FAKE_CLAUDE_LOG: path.join(dir, "calls.jsonl") };
       }
       if (!claudePath) throw new AgentError("E_AGENT_NOT_INSTALLED", NAME);
-      const report = await runAdapterProof({ data, claudePath, env });
-      print({ ok: report.ok, value: { real, ...report } });
+      const report = await runAdapterProof({ data, claudePath, env, tools });
+      print({ ok: report.ok, value: { real, tools, ...report } });
       return report.ok ? 0 : 1;
     } catch (e) {
       return fail(e);

@@ -17,6 +17,7 @@ import {
   modelHint,
   modelOptions,
   switchHint,
+  TEST_HINT,
   type TestState,
 } from "./agentText.ts";
 import "./agent.css";
@@ -171,7 +172,7 @@ export function AgentSection() {
         <div className="kn-agent-test">
           <div className="kn-row-text">
             <div className="kn-row-label">Testar</div>
-            <div className="kn-row-hint">Cada teste gasta um pedido do seu plano. Aqui o agente só conversa: não mexe nas notas nem no Mac.</div>
+            <div className="kn-row-hint">{TEST_HINT}</div>
           </div>
           <form
             className="kn-agent-test-form"

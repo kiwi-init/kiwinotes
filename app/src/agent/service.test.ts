@@ -13,6 +13,7 @@ import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService, AgentServiceError } from "./service.ts";
+import type { VaultReader } from "./tools/reader.ts";
 
 const services: AgentService[] = [];
 const registries: FakeRegistry[] = [];
@@ -49,7 +50,7 @@ interface Made {
   pid: () => number | null;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -65,13 +66,16 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
       checks++;
       return FAKE_CLAUDE;
     },
-    openHost: async ({ configOptions }) =>
+    ...(o.reader ? { reader: o.reader } : {}),
+    openHost: async ({ configOptions, kiwiTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
         name: "Claude Code",
         command: FAKE_AGENT_COMMAND,
         dir: agentDir(data),
         configOptions,
+        onExit,
+        ...(kiwiTools ? { kiwiTools } : {}),
         env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}) },
       }),
     registry: reg.url,
@@ -436,3 +440,164 @@ describe("remover o adaptador", () => {
   });
 });
 
+
+/** Um cofre de mentira, na memória: a semântica das ferramentas é provada em `tools/tools.test.ts`. */
+function memoryReader(notes: Record<string, string>): VaultReader {
+  const meta = (p: string) => ({ path: p, title: path.basename(p, ".md"), folder: path.dirname(p) === "." ? "" : path.dirname(p), size: notes[p]!.length, mtime: "2026-11-12T00:00:00.000Z" });
+  return {
+    search: async (query) =>
+      Object.keys(notes)
+        .filter((p) => notes[p]!.toLowerCase().includes(query.toLowerCase()))
+        .map((p) => ({ path: p, title: meta(p).title, snippet: notes[p]!.slice(0, 40) })),
+    list: async () => ({ folders: [...new Set(Object.keys(notes).map((p) => meta(p).folder).filter(Boolean))], notes: Object.keys(notes).map(meta) }),
+    get: async (p) => {
+      if (!(p in notes)) throw Object.assign(new Error(`no note ${p}`), { code: "E_NOT_FOUND" });
+      return { ...meta(p), content: notes[p]! };
+    },
+    meetings: async () => [],
+  };
+}
+
+const NOTES = { "Projetos/Kiwi.md": "# Kiwi\n\n## Prazo\n\nO prazo do Kiwi é março.\n", "Ideias.md": "gatos" };
+
+type KiwiServer = { type: string; name: string; url: string; headers: { name: string; value: string }[] };
+const opened = (m: Made) =>
+  m.log().filter((l) => l.method === "session/new" || l.method === "session/resume" || l.method === "session/load");
+
+describe("as ferramentas do Kiwi (spec #7496)", () => {
+  test("o agente recebe o servidor do Kiwi ao abrir a sessão, com a senha, e só as ferramentas dele são liberadas", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    const turn = await askAndWait(m, "/ferramentas");
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get" });
+    const params = opened(m)[0]!.params as { mcpServers: KiwiServer[]; _meta: { claudeCode: { options: Record<string, unknown> } } };
+    expect(params.mcpServers).toHaveLength(1);
+    expect(params.mcpServers[0]).toMatchObject({ type: "http", name: "kiwi" });
+    expect(params.mcpServers[0]!.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    expect(params.mcpServers[0]!.headers[0]!.name).toBe("X-Kiwi-Token");
+    const options = params._meta.claudeCode.options;
+    expect(options.allowedTools).toEqual(["mcp__kiwi__*"]);
+    // O isolamento continua: nenhuma ferramenta embutida, nenhuma configuração pessoal, só os servidores do Kiwi.
+    expect(options).toMatchObject({ tools: [], settingSources: [], strictMcpConfig: true, allowDangerouslySkipPermissions: false });
+  });
+
+  test("sem o leitor do cofre, nenhum servidor vai e nada é liberado", async () => {
+    const m = make();
+    await readyNow(m);
+    await askAndWait(m, "oi");
+    const params = opened(m)[0]!.params as { mcpServers: unknown[]; _meta: { claudeCode: { options: Record<string, unknown> } } };
+    expect(params.mcpServers).toEqual([]);
+    expect(params._meta.claudeCode.options.allowedTools).toBeUndefined();
+  });
+
+  test("cada uso de ferramenta vira um status ao vivo, com o que foi lido", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    const turn = await askAndWait(m, '/tool notes_read {"path":"Projetos/Kiwi.md"}');
+    expect(turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "notes_read", target: "Projetos/Kiwi.md" }));
+    // O `tool_call` cru do agente (`mcp__kiwi__notes_read`) não aparece duas vezes.
+    expect(turn.some((e) => e.type === "status" && e.status === "running" && e.tool.startsWith("mcp__kiwi__"))).toBe(false);
+    expect((turn.at(-1) as { text: string }).text).toContain("O prazo do Kiwi é março.");
+    const search = await askAndWait(m, '/tool notes_search {"query":"gatos"}');
+    expect(search).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "notes_search", target: '"gatos"' }));
+  });
+
+  test("o agente falso responde a uma pergunta sobre uma nota, procurando e lendo pelas ferramentas", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    const turn = await askAndWait(m, "Qual é o prazo do Kiwi?");
+    const done = turn.at(-1) as { type: string; text: string };
+    expect(done.type).toBe("done");
+    expect(done.text).toContain("Pela nota Projetos/Kiwi.md");
+    expect(done.text).toContain("março");
+    const used = turn.filter((e) => e.type === "status" && e.status === "running").map((e) => (e as { tool: string }).tool);
+    expect(used).toEqual(expect.arrayContaining(["notes_search", "notes_read"]));
+  });
+
+  test("a permissão: a ferramenta do Kiwi é aceita, e qualquer outra continua recusada", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    expect((await askAndWait(m, "/permissao-kiwi")).at(-1)).toMatchObject({ type: "done", text: "permissão: allow" });
+    const bash = await askAndWait(m, "/permissao");
+    expect(bash).toContainEqual(expect.objectContaining({ type: "permission", tool: "Bash", decision: "denied" }));
+    expect(bash.at(-1)).toMatchObject({ type: "done", text: "permissão: reject" });
+  });
+
+  test("sem o leitor, nem a do Kiwi é aceita", async () => {
+    const m = make();
+    await readyNow(m);
+    expect((await askAndWait(m, "/permissao-kiwi")).at(-1)).toMatchObject({ type: "done", text: "permissão: reject" });
+  });
+
+  test("o servidor só existe com o programa aberto: desligar fecha, e a próxima abertura vem com outra senha", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    await askAndWait(m, "/ferramentas");
+    const first = (opened(m)[0]!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    const call = (s: KiwiServer) =>
+      fetch(s.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", [s.headers[0]!.name]: s.headers[0]!.value },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+    expect((await call(first)).status).toBe(200);
+    await m.svc.disable();
+    await expect(call(first)).rejects.toThrow(); // ninguém escuta mais
+    await m.svc.enable();
+    await askAndWait(m, "/ferramentas");
+    const second = (opened(m).at(-1)!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    expect(second.headers[0]!.value).not.toBe(first.headers[0]!.value);
+    // A senha velha não abre o servidor novo.
+    expect((await call({ ...second, headers: first.headers })).status).toBe(401);
+  });
+
+  test("o servidor fecha também depois do tempo sem uso e na saída do app", async () => {
+    const m = make({ reader: memoryReader(NOTES), idleMs: 150 });
+    await readyNow(m);
+    await askAndWait(m, "/ferramentas");
+    const s = (opened(m)[0]!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    const ping = () =>
+      fetch(s.url, { method: "POST", headers: { [s.headers[0]!.name]: s.headers[0]!.value }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }) });
+    expect((await ping()).status).toBe(200);
+    const closed = async () => {
+      for (const end = Date.now() + 5000; Date.now() < end; await Bun.sleep(20)) {
+        if ((await m.svc.status()).program === "closed" && (await ping().then(() => false, () => true))) return true;
+      }
+      return false;
+    };
+    expect(await closed()).toBe(true);
+    const m2 = make({ reader: memoryReader(NOTES) });
+    await readyNow(m2);
+    await askAndWait(m2, "/ferramentas");
+    const s2 = (opened(m2)[0]!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    m2.svc.killNow();
+    await expect(fetch(s2.url, { method: "POST", headers: { [s2.headers[0]!.name]: s2.headers[0]!.value }, body: "{}" })).rejects.toThrow();
+  });
+});
+
+describe("o agente que cai sozinho não deixa o servidor aberto (revisão do T8956)", () => {
+  test("depois do /cai, a senha velha não responde mais; a nova abertura tem outro servidor, e Desligar fecha tudo", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    await askAndWait(m, "/ferramentas");
+    const first = (opened(m)[0]!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    const ping = (s: KiwiServer) =>
+      fetch(s.url, { method: "POST", headers: { [s.headers[0]!.name]: s.headers[0]!.value }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }) }).then(
+        (r) => r.status,
+        () => "fechado",
+      );
+    expect(await ping(first)).toBe(200);
+    const crash = await askAndWait(m, "/cai");
+    expect(crash.at(-1)!.type).toBe("error");
+    // Logo depois da queda, o servidor daquela abertura já fechou.
+    expect(await ping(first)).toBe("fechado");
+    await askAndWait(m, "/ferramentas");
+    const second = (opened(m).at(-1)!.params as { mcpServers: KiwiServer[] }).mcpServers[0]!;
+    expect(second.headers[0]!.value).not.toBe(first.headers[0]!.value);
+    expect(await ping(first)).toBe("fechado");
+    expect(await ping(second)).toBe(200);
+    await m.svc.disable();
+    expect(await ping(first)).toBe("fechado");
+    expect(await ping(second)).toBe("fechado");
+  });
+});

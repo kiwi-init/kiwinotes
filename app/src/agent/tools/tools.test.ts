@@ -1,0 +1,354 @@
+// As ferramentas do Kiwi para o agente (spec #7496), pelo servidor MCP de verdade, sobre um cofre de verdade num tmp e
+// as mesmas capacidades das janelas (`uiCapabilities`). Nenhum agente, nenhuma rede além do 127.0.0.1.
+
+import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { uiCapabilities } from "../../bun/ui-capabilities.ts";
+import { Vault } from "../../notes/vault.ts";
+import { DEFAULT_SETTINGS } from "../../store/settings.ts";
+import { READER_CAPABILITIES, readerFromCapabilities, type VaultReader } from "./reader.ts";
+import { KIWI_TOOLS, LIST_PAGE, READ_MAX_CHARS, SEARCH_MAX } from "./tools.ts";
+import { KiwiToolServer, MCP_VERSIONS, TOKEN_HEADER, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
+
+const dirs: string[] = [];
+const servers: KiwiToolServer[] = [];
+afterEach(() => {
+  for (const s of servers.splice(0)) s.stop();
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+const SEG = (n: number, who: string) => `%%meeting-segment:${n.toString(16).padStart(24, "0")} {"s":${n},"e":${n + 1},"c":"system","l":"${who}"}%%`;
+
+const MEETING = `---
+type: meeting
+date: 2026-11-10
+start: 2026-11-10T14:00:00.000Z
+end: 2026-11-10T14:30:00.000Z
+duration: 1800
+app: Teams
+participants:
+  - Ana
+  - Bruno
+---
+
+## Minhas notas
+
+lembrar do orçamento
+
+## Transcrição
+
+**Ana** (00:00): Bom dia, vamos falar do orçamento. ${SEG(1, "Ana")}
+**Bruno** (00:05): O orçamento fecha em dezembro. ${SEG(2, "Bruno")}
+`;
+
+const BIG = "# Grande\n\n" + Array.from({ length: 900 }, (_, i) => `Linha ${i} do texto grande, com algumas palavras.`).join("\n") + "\n";
+
+async function setup(extra: Record<string, string> = {}) {
+  const base = mkdtempSync(path.join(tmpdir(), "kiwi-tools-"));
+  dirs.push(base);
+  const root = path.join(base, "KiwiNotes");
+  const files: Record<string, string> = {
+    "Projetos/Kiwi.md": "---\ntags: [app]\n---\n# Kiwi\n\nO Kiwi é um app de notas.\n\n## Prazo\n\nO prazo do Kiwi é março.\n\n## Equipe\n\nharry e jow.\n",
+    "Projetos/Antigo/Velho.md": "nada",
+    "Ideias.md": "ideias soltas sobre gatos",
+    "Grande.md": BIG,
+    "Reuniões/Orçamento.md": MEETING,
+    ...extra,
+  };
+  for (const [rel, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    writeFileSync(path.join(root, rel), content);
+  }
+  // Um segredo fora do cofre, e um link simbólico de dentro para ele.
+  writeFileSync(path.join(base, "fora.md"), "SEGREDO DE FORA");
+  symlinkSync(path.join(base, "fora.md"), path.join(root, "Atalho.md"));
+  const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
+  const caps = uiCapabilities({
+    dictionary: { load: async () => [], save: async (t) => t },
+    snippets: { load: async () => [], save: async (s) => s },
+    history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+    dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
+    settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
+    clipboardWrite: () => {},
+    notes: v,
+  });
+  // As capacidades que o leitor chama, anotadas: o teste confere que só as de leitura passam por ele.
+  const called = new Set<string>();
+  const recorded = new Proxy(caps as Record<string, (a: unknown) => unknown>, {
+    get: (t, cap: string) => (args: unknown) => {
+      called.add(cap);
+      return t[cap]!(args);
+    },
+  });
+  const reader = readerFromCapabilities(recorded as never);
+  const calls: ToolCallEvent[] = [];
+  const methods: string[] = [];
+  const server = new KiwiToolServer({ reader, onCall: (e) => calls.push(e), onRequest: (m) => methods.push(m) });
+  servers.push(server);
+  const config = server.start();
+  return { root, base, v, reader, server, config, calls, methods, called };
+}
+
+let id = 0;
+async function rpc(config: KiwiMcpServerConfig, method: string, params?: unknown, headers?: Record<string, string>) {
+  const h = Object.fromEntries(config.headers.map((x) => [x.name, x.value]));
+  return fetch(config.url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...h, ...headers },
+    body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }),
+  });
+}
+
+async function tool(config: KiwiMcpServerConfig, name: string, args: unknown = {}): Promise<{ value: any; error?: string }> {
+  const res = await rpc(config, "tools/call", { name, arguments: args });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { result: { content: { text: string }[]; isError?: boolean } };
+  const text = body.result.content[0]!.text;
+  return body.result.isError ? { value: null, error: text } : { value: JSON.parse(text) };
+}
+
+/** O hash e o mtime de cada arquivo do cofre: nada pode mudar depois das ferramentas. */
+function snapshot(root: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) walk(abs);
+      else if (e.isFile()) out[path.relative(root, abs)] = `${createHash("sha256").update(readFileSync(abs)).digest("hex")} ${statSync(abs).mtimeMs}`;
+    }
+  };
+  walk(root);
+  return out;
+}
+
+describe("o servidor MCP do Kiwi", () => {
+  test("só escuta no 127.0.0.1, numa porta sorteada, e cada abertura tem uma senha nova", async () => {
+    const { server, config } = await setup();
+    expect(config.type).toBe("http");
+    expect(config.name).toBe("kiwi");
+    expect(config.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    const token = config.headers.find((h) => h.name === TOKEN_HEADER)!.value;
+    expect(token).toMatch(/^[0-9a-f]{64}$/);
+    server.stop();
+    const again = server.start();
+    expect(again.headers[0]!.value).not.toBe(token);
+    // A senha velha não vale mais.
+    const res = await rpc({ ...again, headers: [{ name: TOKEN_HEADER, value: token }] }, "tools/list");
+    expect(res.status).toBe(401);
+  });
+
+  test("sem a senha, com a senha errada ou de uma página do navegador, nada entra", async () => {
+    const { config, methods } = await setup();
+    expect((await rpc({ ...config, headers: [] }, "tools/list")).status).toBe(401);
+    expect((await rpc({ ...config, headers: [{ name: TOKEN_HEADER, value: "x".repeat(64) }] }, "tools/list")).status).toBe(401);
+    expect((await rpc(config, "tools/list", undefined, { Origin: "http://evil.example" })).status).toBe(403);
+    expect(methods).toEqual([]);
+    // O GET (stream do servidor) não existe; outro caminho, 404.
+    const h = Object.fromEntries(config.headers.map((x) => [x.name, x.value]));
+    expect((await fetch(config.url, { headers: h })).status).toBe(405);
+    expect((await fetch(config.url.replace("/mcp", "/outra"), { method: "POST", headers: h })).status).toBe(404);
+  });
+
+  test("o initialize combina a versão do MCP, e o tools/list traz as seis, só de leitura", async () => {
+    const { config } = await setup();
+    const init = (await (await rpc(config, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } })).json()) as any;
+    expect(init.result.protocolVersion).toBe("2025-06-18");
+    expect(init.result.capabilities.tools).toBeDefined();
+    const unknown = (await (await rpc(config, "initialize", { protocolVersion: "1999-01-01" })).json()) as any;
+    expect(unknown.result.protocolVersion).toBe(MCP_VERSIONS[0]);
+    // Uma notificação não tem resposta: 202.
+    const h = Object.fromEntries(config.headers.map((x) => [x.name, x.value]));
+    const note = await fetch(config.url, { method: "POST", headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+    expect(note.status).toBe(202);
+    const list = (await (await rpc(config, "tools/list")).json()) as any;
+    const names = list.result.tools.map((t: { name: string }) => t.name);
+    expect(names).toEqual(["notes_search", "notes_outline", "notes_read", "notes_list", "meetings_list", "meetings_get"]);
+    for (const t of list.result.tools) {
+      expect(t.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/); // o que a API do Claude aceita
+      expect(t.annotations.readOnlyHint).toBe(true);
+      expect(t.annotations.openWorldHint).toBe(false);
+      expect(t.inputSchema.type).toBe("object");
+    }
+    expect(KIWI_TOOLS).toHaveLength(6);
+  });
+
+  test("uma ferramenta que não existe é recusada, e um método desconhecido também", async () => {
+    const { config } = await setup();
+    const bad = (await (await rpc(config, "tools/call", { name: "notes_write", arguments: {} })).json()) as any;
+    expect(bad.error.code).toBe(-32602);
+    const other = (await (await rpc(config, "resources/list")).json()) as any;
+    expect(other.error.code).toBe(-32601);
+  });
+
+  test("fechado, ninguém mais conecta", async () => {
+    const { server, config } = await setup();
+    server.stop();
+    await expect(rpc(config, "tools/list")).rejects.toThrow();
+  });
+});
+
+describe("as ferramentas", () => {
+  test("notes_search: o caminho, o título e o trecho, com o teto de resultados", async () => {
+    const { config, calls } = await setup();
+    const r = await tool(config, "notes_search", { query: "prazo" });
+    expect(r.value.resultados[0].path).toBe("Projetos/Kiwi.md");
+    expect(r.value.resultados[0].titulo).toBe("Kiwi");
+    expect(r.value.resultados[0].trecho).toContain("prazo");
+    expect(calls.at(-1)).toEqual({ tool: "notes_search", target: '"prazo"', ok: true });
+    const tooMany = await tool(config, "notes_search", { query: "prazo", limit: SEARCH_MAX + 1 });
+    expect(tooMany.error).toContain("E_BAD_ARGS");
+    expect((await tool(config, "notes_search", { query: "prazo", extra: 1 })).error).toContain("campo desconhecido");
+  });
+
+  test("notes_outline: os títulos e o tamanho de cada seção", async () => {
+    const { config } = await setup();
+    const r = await tool(config, "notes_outline", { path: "Projetos/Kiwi.md" });
+    expect(r.value.secoes.map((s: { titulo: string; nivel: number }) => [s.nivel, s.titulo])).toEqual([[1, "Kiwi"], [2, "Prazo"], [2, "Equipe"]]);
+    const prazo = r.value.secoes[1];
+    expect(prazo.caracteres).toBe("## Prazo\n\nO prazo do Kiwi é março.\n\n".length);
+  });
+
+  test("notes_read: a nota como está, ou só uma seção", async () => {
+    const { config, root, calls } = await setup();
+    const whole = await tool(config, "notes_read", { path: "Projetos/Kiwi.md" });
+    expect(whole.value.texto).toBe(readFileSync(path.join(root, "Projetos/Kiwi.md"), "utf8"));
+    expect(whole.value.proximoOffset).toBeUndefined();
+    const section = await tool(config, "notes_read", { path: "Projetos/Kiwi.md", section: "Prazo" });
+    expect(section.value.secao).toBe("Prazo");
+    expect(section.value.texto).toBe("## Prazo\n\nO prazo do Kiwi é março.\n\n");
+    expect(calls.at(-1)).toEqual({ tool: "notes_read", target: "Projetos/Kiwi.md › Prazo", ok: true });
+    expect((await tool(config, "notes_read", { path: "Projetos/Kiwi.md", section: "Não existe" })).error).toContain("E_NOT_FOUND");
+  });
+
+  test("notes_read: o teto, o aviso de que há mais e a continuação, até o fim", async () => {
+    const { config } = await setup();
+    expect(BIG.length).toBeGreaterThan(READ_MAX_CHARS * 2);
+    let offset: number | undefined = 0;
+    let text = "";
+    let rounds = 0;
+    while (offset !== undefined) {
+      const r = await tool(config, "notes_read", { path: "Grande.md", offset });
+      expect(r.value.texto.length).toBeLessThanOrEqual(READ_MAX_CHARS);
+      expect(r.value.total).toBe(BIG.length);
+      if (r.value.proximoOffset !== undefined) {
+        expect(r.value.aviso).toContain(`offset=${r.value.proximoOffset}`);
+        // Corta numa quebra de linha.
+        expect(r.value.texto.endsWith("\n")).toBe(true);
+      }
+      text += r.value.texto;
+      offset = r.value.proximoOffset;
+      rounds++;
+    }
+    expect(text).toBe(BIG);
+    expect(rounds).toBeGreaterThanOrEqual(3);
+    expect((await tool(config, "notes_read", { path: "Grande.md", offset: BIG.length + 1 })).error).toContain("E_BAD_ARGS");
+  });
+
+  test("notes_list: as pastas e as notas de uma pasta, só o 1º nível", async () => {
+    const { config } = await setup();
+    const top = await tool(config, "notes_list", {});
+    expect(top.value.pastas).toEqual(expect.arrayContaining(["Projetos", "Reuniões"]));
+    expect(top.value.pastas).not.toContain("Projetos/Antigo");
+    expect(top.value.notas.map((n: { path: string }) => n.path)).toEqual(expect.arrayContaining(["Ideias.md", "Grande.md"]));
+    expect(top.value.notas.map((n: { path: string }) => n.path)).not.toContain("Projetos/Kiwi.md");
+    const proj = await tool(config, "notes_list", { folder: "Projetos" });
+    expect(proj.value.pastas).toEqual(["Projetos/Antigo"]);
+    expect(proj.value.notas.map((n: { path: string }) => n.path)).toEqual(["Projetos/Kiwi.md"]);
+    expect((await tool(config, "notes_list", { folder: "Nada" })).error).toContain("E_NOT_FOUND");
+    expect((await tool(config, "notes_list", { folder: "../.." })).error).toContain("E_NOT_FOUND");
+  });
+
+  test("notes_list: uma pasta grande vem em páginas, com a continuação", async () => {
+    const many = Object.fromEntries(Array.from({ length: LIST_PAGE + 5 }, (_, i) => [`Muitas/N${String(i).padStart(3, "0")}.md`, "x"]));
+    const { config } = await setup(many);
+    const first = await tool(config, "notes_list", { folder: "Muitas" });
+    expect(first.value.notas).toHaveLength(LIST_PAGE);
+    expect(first.value.total).toBe(LIST_PAGE + 5);
+    expect(first.value.proximoOffset).toBe(LIST_PAGE);
+    const rest = await tool(config, "notes_list", { folder: "Muitas", offset: first.value.proximoOffset });
+    expect(rest.value.notas).toHaveLength(5);
+    expect(rest.value.proximoOffset).toBeUndefined();
+  });
+
+  test("meetings_list e meetings_get: as reuniões e a transcrição, sem as marcas internas", async () => {
+    const { config } = await setup();
+    const list = await tool(config, "meetings_list", {});
+    expect(list.value.reunioes).toEqual([
+      { path: "Reuniões/Orçamento.md", titulo: "Orçamento", dia: "2026-11-10", inicio: "2026-11-10T14:00:00.000Z", duracaoSegundos: 1800, app: "Teams", participantes: ["Ana", "Bruno"] },
+    ]);
+    const get = await tool(config, "meetings_get", { path: "Reuniões/Orçamento.md" });
+    expect(get.value.participantes).toEqual(["Ana", "Bruno"]);
+    expect(get.value.texto).toBe("**Ana** (00:00): Bom dia, vamos falar do orçamento.\n**Bruno** (00:05): O orçamento fecha em dezembro.");
+    expect(get.value.texto).not.toContain("meeting-segment");
+    // Por trecho: a partir de um offset.
+    const part = await tool(config, "meetings_get", { path: "Reuniões/Orçamento.md", offset: get.value.texto.indexOf("**Bruno**") });
+    expect(part.value.texto).toBe("**Bruno** (00:05): O orçamento fecha em dezembro.");
+    // Uma nota comum não é reunião.
+    expect((await tool(config, "meetings_get", { path: "Ideias.md" })).error).toContain("E_NOT_MEETING");
+  });
+
+  test("meetings_get: uma transcrição longa vem em trechos, com a continuação", async () => {
+    const lines = Array.from({ length: 600 }, (_, i) => `**Ana** (00:${String(i % 60).padStart(2, "0")}): fala número ${i} sobre o orçamento do ano. ${SEG(i + 10, "Ana")}`).join("\n");
+    const { config } = await setup({ "Reuniões/Longa.md": MEETING.replace(/## Transcrição[\s\S]*$/, `## Transcrição\n\n${lines}\n`) });
+    const first = await tool(config, "meetings_get", { path: "Reuniões/Longa.md" });
+    expect(first.value.proximoOffset).toBeGreaterThan(0);
+    let text = first.value.texto;
+    let next = first.value.proximoOffset;
+    while (next !== undefined) {
+      const r = await tool(config, "meetings_get", { path: "Reuniões/Longa.md", offset: next });
+      text += r.value.texto;
+      next = r.value.proximoOffset;
+    }
+    expect(text.split("\n")).toHaveLength(600);
+    expect(text).not.toContain("%%");
+  });
+});
+
+describe("a fronteira do cofre: nada escreve, nada sai", () => {
+  test("caminho com .., absoluto ou por link simbólico para fora é recusado", async () => {
+    const { config, base } = await setup();
+    for (const p of ["../fora.md", "Projetos/../../fora.md", path.join(base, "fora.md"), "Atalho.md"]) {
+      for (const name of ["notes_read", "notes_outline", "meetings_get"]) {
+        const r = await tool(config, name, { path: p });
+        expect(r.error ?? "").toMatch(/E_BAD_ARGS|E_OUTSIDE_VAULT|E_NOT_FOUND/);
+        expect(r.error ?? "").not.toContain("SEGREDO");
+      }
+    }
+    // O link simbólico é recusado pela fronteira das Notas, e não por não existir.
+    expect((await tool(config, "notes_read", { path: "Atalho.md" })).error).toContain("E_OUTSIDE_VAULT");
+    const search = await tool(config, "notes_search", { query: "SEGREDO" });
+    expect(search.value.resultados).toEqual([]);
+  });
+
+  test("depois de usar todas as ferramentas, nenhum arquivo do cofre mudou, e só as capacidades de leitura foram chamadas", async () => {
+    const { config, root, called } = await setup();
+    await Bun.sleep(30);
+    const before = snapshot(root);
+    await tool(config, "notes_search", { query: "Kiwi" });
+    await tool(config, "notes_outline", { path: "Projetos/Kiwi.md" });
+    await tool(config, "notes_read", { path: "Projetos/Kiwi.md" });
+    await tool(config, "notes_read", { path: "Grande.md", offset: 100 });
+    await tool(config, "notes_list", { folder: "Projetos" });
+    await tool(config, "meetings_list", {});
+    await tool(config, "meetings_get", { path: "Reuniões/Orçamento.md" });
+    await Bun.sleep(50);
+    expect(snapshot(root)).toEqual(before);
+    expect([...called].sort()).toEqual([...READER_CAPABILITIES].sort());
+  });
+
+  test("o leitor só conhece as quatro capacidades de leitura", () => {
+    const reader: VaultReader = readerFromCapabilities(
+      new Proxy({} as never, {
+        get: (_t, cap: string) => {
+          if (!(READER_CAPABILITIES as readonly string[]).includes(cap)) throw new Error(`chamou ${cap}`);
+          return () => ({ meetings: [] });
+        },
+      }),
+    );
+    expect(Object.keys(reader).sort()).toEqual(["get", "list", "meetings", "search"]);
+  });
+});
