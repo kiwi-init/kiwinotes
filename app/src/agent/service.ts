@@ -38,7 +38,9 @@ import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/down
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
-import type { AgentChangeView, AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult } from "../shared/ui-contract.ts";
+import type { AgentChangeView, AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult, AgentUsageView } from "../shared/ui-contract.ts";
+import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
+import { UsageStore } from "./usage-store.ts";
 import type { AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
@@ -53,6 +55,23 @@ function testDoubtTimeout(): number | undefined {
 export const AGENT_IDLE_MS = 10 * 60_000;
 /** O pedido mais longo que o app manda. */
 export const AGENT_MAX_TEXT = 20_000;
+/** O comando local do Claude Code que diz o uso da assinatura (spec #11084): só sob demanda. */
+export const USAGE_COMMAND = "/usage";
+/**
+ * As instruções do modo econômico (spec #11084), no começo do pedido: sempre os mesmos bytes, na mesma ordem, para o
+ * cache do agente reaproveitar. Nada da pessoa vai aqui.
+ */
+export const ECONOMY_INSTRUCTIONS =
+  "[Modo econômico do Kiwi: responda curto e direto, em poucas linhas. Leia as notas por seção (notes_outline e section), não inteiras.]\n\n";
+
+/** O modelo mais barato que o agente oferece (spec #11084): Haiku, depois Sonnet; null se a lista não tem nenhum. */
+export function cheapestModel(models: { value: string; name: string }[]): string | null {
+  for (const family of [/haiku/i, /sonnet/i]) {
+    const m = models.find((x) => family.test(x.value) || family.test(x.name));
+    if (m) return m.value;
+  }
+  return null;
+}
 /** O progresso do download sai no máximo uma vez a cada tanto, para não inundar as janelas de eventos. */
 const PROGRESS_EVERY_MS = 100;
 
@@ -63,6 +82,8 @@ export interface AgentServiceDeps {
   name?: string;
   /** O prazo da pergunta na dúvida (spec #9873); 2 minutos, e menos nos testes. */
   doubtTimeoutMs?: number;
+  /** O relógio do medidor (spec #11084); os testes andam com ele. */
+  now?: () => number;
   settings: {
     load(): Promise<AgentSettings>;
     save(patch: Partial<AgentSettings>): Promise<AgentSettings>;
@@ -146,6 +167,13 @@ export class AgentService {
   private readonly answers: DoubtAnswers;
   /** O cartão da pergunta na dúvida, por pedido (spec #9873). */
   private readonly questions: DoubtQuestions;
+  /** O gasto que o agente informa, por 8 dias (spec #11084). */
+  private readonly usage: UsageStore;
+  /** O último `/usage` que a pessoa pediu (só sob demanda), e o erro, se não deu. Só na memória. */
+  private subscription: { at: number; usage: SubscriptionUsage | null } | null = null;
+  private readonly usageListeners = new Set<(v: AgentUsageView) => void>();
+  /** O modo econômico agora, para as ferramentas lerem a cada chamada (spec #11084). */
+  private economyNow = false;
   private readonly questionListeners = new Set<(e: { card: string; request: string; open: boolean }) => void>();
   /**
    * A notificação quando o agente espera uma resposta (spec #9839): o app liga com o `attachNotice`, que sabe da janela;
@@ -174,6 +202,7 @@ export class AgentService {
     this.writer = d.writer ?? null;
     this.activity = new AgentActivity({ dir: path.join(agentDir(d.data), "activity") });
     this.answers = new DoubtAnswers(agentDir(d.data));
+    this.usage = new UsageStore(agentDir(d.data), d.now);
     this.questions = new DoubtQuestions({
       answers: this.answers,
       // O prazo menor só nos testes: no app de verdade, sempre os 2 minutos.
@@ -366,7 +395,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -416,7 +445,13 @@ export class AgentService {
   }
 
   private statusFrom(snap: ReturnType<AgentService["snapshot"]>, s: AgentSettings): AgentStatus {
-    return { name: this.name, enabled: s.enabled, consented: s.consented, ...snap, model: s.model, effort: s.effort };
+    return { name: this.name, enabled: s.enabled, consented: s.consented, ...snap, model: s.model, effort: s.effort, economy: s.economy === true };
+  }
+
+  /** O modelo e o esforço que o Kiwi pede: no modo econômico, o modelo mais barato que o agente oferece (spec #11084). */
+  private wantedConfig(s: AgentSettings): { model: string; effort: string } {
+    const cheap = s.economy ? cheapestModel(this.knownModels()) : null;
+    return { model: cheap ?? s.model, effort: s.effort };
   }
 
   private async checkClaude(): Promise<void> {
@@ -448,6 +483,102 @@ export class AgentService {
 
   private emitTurn(e: AgentTurnEvent): void {
     for (const fn of this.turnListeners) fn(e);
+  }
+
+  /** O medidor não derruba o pedido: um erro ao gravar o gasto vai para o log. */
+  private safely(fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
+      this.d.log?.(`[agent] usage: ${String((err as Error)?.message ?? err)}`);
+    }
+  }
+
+  /** O uso da janela que chegou no meio de um pedido (spec #11084). */
+  private noteLimit(request: string, limit: AgentLimit): void {
+    let warn = false;
+    this.safely(() => {
+      warn = this.usage.noteLimit(limit);
+    });
+    const resetsAt = limit.resetsAt !== undefined ? { resetsAt: new Date(limit.resetsAt).toISOString() } : {};
+    if (warn) this.emitTurn({ id: request, type: "limit", status: "warning", ...(limit.percent !== undefined ? { percent: Math.round(limit.percent) } : {}), ...resetsAt });
+    this.emitUsage();
+  }
+
+  private emitUsage(): void {
+    if (!this.usageListeners.size) return;
+    const v = this.usageView();
+    for (const fn of this.usageListeners) fn(v);
+  }
+
+  /** O medidor mudou (`agent.usageChanged`). */
+  onUsageChanged(fn: (v: AgentUsageView) => void): () => void {
+    this.usageListeners.add(fn);
+    return () => this.usageListeners.delete(fn);
+  }
+
+  /** O medidor de Ajustes › Agente (`agent.usage`): o gasto do Kiwi, o último uso da janela e o último `/usage`. */
+  usageView(): AgentUsageView {
+    const s = this.usage.summary();
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const win = (w: UsageWindow | undefined) => (w ? { percent: Math.round(w.percent), ...(w.resetsAt !== undefined ? { resetsAt: iso(w.resetsAt) } : {}) } : undefined);
+    const sub = this.subscription;
+    return {
+      fiveHours: s.fiveHours,
+      week: s.week,
+      top: s.top.map((t) => ({ request: t.request, at: iso(t.at), question: t.question, tokens: t.tokens })),
+      limit: s.limit
+        ? {
+            status: s.limit.status,
+            at: iso(s.limit.at),
+            ...(s.limit.window ? { window: s.limit.window } : {}),
+            ...(s.limit.percent !== undefined ? { percent: Math.round(s.limit.percent) } : {}),
+            ...(s.limit.resetsAt !== undefined ? { resetsAt: iso(s.limit.resetsAt) } : {}),
+          }
+        : null,
+      out: s.out ? { at: iso(s.out.at), ...(s.out.resetsAt !== undefined ? { resetsAt: iso(s.out.resetsAt) } : {}) } : null,
+      subscription: sub
+        ? {
+            at: iso(sub.at),
+            ...(sub.usage ? { ...(sub.usage.fiveHour ? { fiveHour: win(sub.usage.fiveHour)! } : {}), ...(sub.usage.week ? { week: win(sub.usage.week)! } : {}) } : { unavailable: true }),
+          }
+        : null,
+    };
+  }
+
+  /**
+   * "Atualizar" (`agent.usageRefresh`): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica.
+   * Vai como um pedido interno: fora do registro, sem evento de pedido e sem balão. Nada da pessoa vai junto.
+   */
+  async usageRefresh(): Promise<AgentUsageView> {
+    const s = await this.d.settings.load();
+    if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
+    if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
+    if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
+    const marker = { id: `usage-${crypto.randomUUID()}`, cancelled: false };
+    this.turn = marker;
+    try {
+      const host = this.host?.running ? this.host : await this.openProgram();
+      const answer = await host.ask(USAGE_COMMAND);
+      const now = (this.d.now ?? Date.now)();
+      this.subscription = { at: now, usage: parseUsageMarkdown(answer.text, now) };
+    } catch (e) {
+      throw fromAgentError(e, this.name);
+    } finally {
+      if (this.turn === marker) this.turn = null;
+      this.armIdle();
+      this.emitStatus();
+    }
+    this.emitUsage();
+    return this.usageView();
+  }
+
+  /** "Apagar o gasto guardado" (`agent.usageClear`): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
+  usageClear(): AgentUsageView {
+    this.usage.clear();
+    this.subscription = null;
+    this.emitUsage();
+    return this.usageView();
   }
 
   /** Liga. Na primeira vez, só com o aceite da tela do ADR 0011. Não baixa nem abre nada. */
@@ -537,7 +668,8 @@ export class AgentService {
   }
 
   private async runTurn(turn: { id: string; cancelled: boolean }, text: string, s: AgentSettings): Promise<void> {
-    const wanted = { model: s.model, effort: s.effort };
+    const wanted = this.wantedConfig(s);
+    this.economyNow = s.economy;
     try {
       let host = this.host?.running ? this.host : null;
       if (!host) {
@@ -560,8 +692,14 @@ export class AgentService {
         this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: "" });
         return;
       }
-      const answer = await host.ask(text, (e) => {
+      // O modo econômico (spec #11084): as instruções fixas vão na frente do pedido, sempre iguais (o cache).
+      const answer = await host.ask(s.economy ? ECONOMY_INSTRUCTIONS + text : text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
+        // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
+        if (e.type === "limit") {
+          this.noteLimit(turn.id, e.limit);
+          return;
+        }
         // Uma ferramenta do Kiwi sai duas vezes: aqui, quando ela começa, com o nome sem o `mcp__kiwi__` e ainda sem o
         // que foi lido ("Lendo uma nota…"; o gato entra em `agindo` na hora, spec #9510), e de novo pelo próprio
         // servidor, quando ela termina, com o `target` (`onToolCall`). O `thinking` de quando ela acaba vem do host
@@ -572,6 +710,11 @@ export class AgentService {
         }
         this.emitTurn({ id: turn.id, ...e } as AgentTurnEvent);
       });
+      if (answer.usage) {
+        // A pergunta guardada é a que já passou pelo guardrail (sem segredo).
+        this.safely(() => this.usage.record(turn.id, decided.text, answer.usage!));
+        this.emitUsage();
+      }
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text });
     } catch (e) {
       if (turn.cancelled) {
@@ -579,6 +722,14 @@ export class AgentService {
         this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: "" });
       } else {
         const err = fromAgentError(e, this.name);
+        if (err.code === "E_AGENT_LIMIT") {
+          // A hora de volta só quando o agente a informou: no `rateLimit` de antes, ou na frase da mensagem dele.
+          const raw = e instanceof AgentError ? `${e.detail ?? ""} ${e.message}` : e instanceof Error ? e.message : "";
+          this.safely(() => this.usage.noteOut(parseResetFromError(raw, (this.d.now ?? Date.now)())));
+          const out = this.usageView().out;
+          this.emitTurn({ id: turn.id, type: "limit", status: "out", ...(out?.resetsAt ? { resetsAt: out.resetsAt } : {}) });
+          this.emitUsage();
+        }
         this.emitTurn({ id: turn.id, type: "error", code: err.code, message: err.message });
       }
     } finally {
@@ -593,7 +744,8 @@ export class AgentService {
     this.opening ??= (async () => {
       const epoch = this.epoch;
       const s = await this.d.settings.load();
-      const wanted = () => ({ model: s.model, effort: s.effort });
+      this.economyNow = s.economy;
+      const wanted = () => this.wantedConfig(s);
       // Um servidor que tenha sobrado de uma abertura anterior fecha antes do novo (revisão do T8956).
       this.stopTools(this.tools);
       const reader = this.reader;
@@ -604,6 +756,7 @@ export class AgentService {
             ...(writer ? { writer, journal: this.journal } : {}),
             guard: this.guard,
             decider: () => this.decider(),
+            economy: () => this.economyNow,
             version: this.d.version,
             onCall: (e) => this.onToolCall(e),
           })
@@ -675,10 +828,14 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     if (o.model !== undefined) patch.model = o.model;
     if (o.effort !== undefined) patch.effort = o.effort;
+    if (o.economy !== undefined) {
+      patch.economy = o.economy;
+      this.economyNow = o.economy;
+    }
     if (Object.keys(patch).length) await this.d.settings.save(patch);
     this.emitStatus();
     return this.status();

@@ -152,6 +152,11 @@ export const api = {
     noticeAllow: () => invoke("agent.noticeAllow", {}),
     noticeSet: (enabled: boolean) => invoke("agent.noticeSet", { enabled }),
     onNotice: (fn: (e: UiEvents["agent.noticeChanged"]) => void) => on("agent.noticeChanged", fn),
+    /** O medidor (1.54.0, spec #11084). O `usageRefresh` (o `/usage`) só quando a pessoa abre ou clica em Atualizar. */
+    usage: () => invoke("agent.usage", {}),
+    usageRefresh: () => invoke("agent.usageRefresh", {}),
+    usageClear: () => invoke("agent.usageClear", {}),
+    onUsage: (fn: (e: UiEvents["agent.usageChanged"]) => void) => on("agent.usageChanged", fn),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {

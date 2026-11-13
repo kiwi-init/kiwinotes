@@ -22,6 +22,8 @@ import { removedSecrets, type DoubtDecider, type SecretGuard } from "../../guard
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
 export const READ_MAX_CHARS = 12_000;
+/** O pedaço de texto no modo econômico (spec #11084). */
+export const ECONOMY_READ_MAX_CHARS = 4_000;
 /**
  * O maior texto de uma escrita, em caracteres (spec #8356). Fica abaixo do teto do corpo do servidor (`MAX_BODY`),
  * para o que passar chegar aqui e voltar com um aviso claro, e não com um erro do HTTP.
@@ -281,6 +283,11 @@ export interface KiwiToolContext {
   guard?: SecretGuard;
   /** Quem decide a dúvida (spec #9873): a resposta guardada ou a pergunta à pessoa. Sem ele, a dúvida é segurada. */
   decider?: DoubtDecider;
+  /**
+   * O modo econômico (spec #11084): o `notes_read` sem seção devolve o sumário, nunca a nota inteira, e o texto sai em
+   * pedaços menores, com o "há mais". As descrições das ferramentas não mudam (o começo do pedido fica igual, para o cache).
+   */
+  economy?: boolean;
 }
 
 function args(raw: unknown, allowed: string[]): Record<string, unknown> {
@@ -426,7 +433,7 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       return await write(ctx.writer, ctx.journal, name, raw, ctx.guard);
     }
-    const r = await run(ctx.reader, name, raw, ctx.guard, ctx.decider);
+    const r = await run(ctx.reader, name, raw, ctx.guard, ctx.decider, ctx.economy);
     if (ctx.guard) r.held = ctx.guard.heldIn(JSON.stringify(r.value));
     return r;
   } catch (e) {
@@ -457,7 +464,7 @@ function snippetOf(text: string, terms: string[]): string {
 }
 
 /** O texto de uma nota como o agente vê: com o filtro, sem os segredos; sem ele, como está. */
-async function run(reader: VaultReader, name: string, raw: unknown, guard?: SecretGuard, decider?: DoubtDecider): Promise<ToolResult> {
+async function run(reader: VaultReader, name: string, raw: unknown, guard?: SecretGuard, decider?: DoubtDecider, economy = false): Promise<ToolResult> {
   /** O texto de uma nota como o agente vê: com o filtro, sem os segredos (a dúvida decidida antes); sem ele, como está. */
   const seen = async (path: string, content: string) => (guard ? (await guard.decide(path, content, decider)).text : content);
   switch (name) {
@@ -520,12 +527,20 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
       const versao = n.version ? { versao: n.version } : {};
       // A nota inteira passa pelo filtro, e só depois é cortada: os pedaços e os offsets são do texto que o agente vê.
       const content = await seen(n.path, n.content);
+      const max = economy ? ECONOMY_READ_MAX_CHARS : READ_MAX_CHARS;
       if (section !== undefined && section.trim()) {
         const s = sectionOf(content, section);
         if (!s) throw new ToolError("E_NOT_FOUND", `a nota ${n.path} não tem a seção "${section}"; veja os títulos com notes_outline`);
-        return { value: { path: n.path, titulo: n.title, ...versao, secao: s.titulo, ...chunk(s.texto, offset) }, target: `${n.path} › ${s.titulo}` };
+        return { value: { path: n.path, titulo: n.title, ...versao, secao: s.titulo, ...chunk(s.texto, offset, max) }, target: `${n.path} › ${s.titulo}` };
       }
-      return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(content, offset) }, target: n.path };
+      // Modo econômico (spec #11084): sem seção, o sumário no lugar da nota longa, e o caminho para ler o resto.
+      const headings = economy && offset === 0 && content.length > max ? markdownStructure(content).headings : [];
+      if (headings.length) {
+        const secoes = headings.slice(0, OUTLINE_MAX).map((h) => ({ nivel: h.level, titulo: h.title }));
+        const aviso = "Modo econômico: a nota é longa, então vai o sumário. Há mais: peça uma seção com section, ou o texto em pedaços com offset.";
+        return { value: { path: n.path, titulo: n.title, ...versao, caracteres: content.length, secoes, aviso }, target: n.path };
+      }
+      return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(content, offset, max) }, target: n.path };
     }
     case "notes_list": {
       const a = args(raw, ["folder", "offset"]);

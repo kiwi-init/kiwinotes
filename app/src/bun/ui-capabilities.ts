@@ -1105,12 +1105,15 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
       }
-      return agentCall((agent) => agent.configure({ model: a.model as string | undefined, effort: a.effort as string | undefined }));
+      if (a.economy !== undefined && typeof a.economy !== "boolean") throw bad("agent.configure: economy must be true or false");
+      return agentCall((agent) =>
+        agent.configure({ model: a.model as string | undefined, effort: a.effort as string | undefined, economy: a.economy as boolean | undefined }),
+      );
     },
     "agent.activity": (args) => {
       const a = object(args, "agent.activity");
@@ -1161,6 +1164,18 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = fields(args, "agent.noticeSet", ["enabled"]);
       if (typeof a.enabled !== "boolean") throw bad("agent.noticeSet: enabled must be true or false");
       return agentCall((agent) => agent.noticeSet(a.enabled as boolean));
+    },
+    "agent.usage": (args) => {
+      noArgs(args, "agent.usage");
+      return agentCall(async (agent) => agent.usageView());
+    },
+    "agent.usageRefresh": (args) => {
+      noArgs(args, "agent.usageRefresh");
+      return agentCall((agent) => agent.usageRefresh());
+    },
+    "agent.usageClear": (args) => {
+      noArgs(args, "agent.usageClear");
+      return agentCall(async (agent) => agent.usageClear());
     },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);

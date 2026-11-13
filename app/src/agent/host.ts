@@ -13,6 +13,7 @@
 //
 // Nada liga sozinho: o host só abre o agente quando alguém chama `start()`.
 
+import { type AgentLimit, type AgentUsage, parseLimit, parseUsage } from "./usage.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -64,11 +65,15 @@ export type AgentEvent =
   | { type: "status"; status: "running"; tool: string }
   | { type: "text"; text: string }
   | { type: "permission"; tool: string; decision: "denied" }
+  /** O uso da janela que o agente informou num `usage_update` (spec #11084): só quando ele solta um `rate_limit_event`. */
+  | { type: "limit"; limit: AgentLimit }
   | { type: "done"; stopReason: string };
 
 export interface AgentAnswer {
   text: string;
   stopReason: string;
+  /** O gasto do pedido que o agente informou no fim (spec #11084), se informou. */
+  usage?: AgentUsage;
 }
 
 export interface AgentHostOptions {
@@ -330,7 +335,8 @@ export class AgentHost {
     try {
       const res = await this.untilExit(conn.agent.request("session/prompt", { sessionId: this.sessionId, prompt: [{ type: "text", text }] }));
       onEvent?.({ type: "done", stopReason: res.stopReason });
-      return { text: turn.text, stopReason: res.stopReason };
+      const usage = parseUsage((res as { usage?: unknown }).usage);
+      return usage ? { text: turn.text, stopReason: res.stopReason, usage } : { text: turn.text, stopReason: res.stopReason };
     } catch (e) {
       // A conexão fechou no meio (o agente caiu): a biblioteca recusa o pedido antes de o processo terminar de sair.
       if (conn.signal.aborted && proc) {
@@ -493,6 +499,12 @@ export class AgentHost {
           if (!turn.runningTools?.size) this.status(turn, { type: "status", status: "thinking" });
         }
         break;
+      case "usage_update": {
+        // Só o uso da janela (o `rateLimit`); o `cost` em dólar fica de fora (spec #11084).
+        const limit = parseLimit((u as { _meta?: unknown })._meta);
+        if (limit) turn.onEvent?.({ type: "limit", limit });
+        break;
+      }
       default:
         break;
     }

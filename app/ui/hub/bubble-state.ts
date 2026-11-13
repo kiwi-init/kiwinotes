@@ -11,6 +11,7 @@
 // - O texto nunca é reescrito: só cortado. Nada aqui interpreta HTML (a tela mostra como texto).
 
 import type { AgentTurnEvent } from "../../src/shared/ui-contract";
+import { limitBubble } from "../settings/usageText";
 
 /** A largura máxima do balão, em pixels, e quantas linhas cabem. */
 export const BUBBLE_WIDTH = 280;
@@ -105,10 +106,14 @@ export class BubbleFeed {
   private error = false;
   private dismissed = false;
   private announced: string | null = null;
+  /** O limite acabado com a hora de volta (spec #11084): o erro de limite que vem depois mostra esta linha. */
+  private outLine: string | null = null;
 
   constructor(
     private readonly fits: (s: string) => boolean,
     private reduced = false,
+    /** O relógio de parede, para dizer a hora de volta do limite (spec #11084). */
+    private readonly wall: () => number = Date.now,
   ) {}
 
   setReduced(on: boolean): void {
@@ -174,12 +179,22 @@ export class BubbleFeed {
       this.chunkOpen(now, true);
       if (this.said.trim()) this.announced = this.said;
       if (!this.head && !this.queue.length) this.clear();
+    } else if (e.type === "limit") {
+      // O limite (spec #11084): o aviso do agente entra como um trecho, logo depois do que está na tela, sem parar a
+      // resposta; o limite acabado troca a mensagem do erro que vem em seguida pela hora de volta, se o agente disse.
+      // A hora de volta se lê no relógio de parede: o `now` daqui é o do balão (o `performance.now()` da tela).
+      const line = limitBubble(e.status, e.percent, e.resetsAt, this.wall());
+      if (e.status === "out") this.outLine = line;
+      else if (!this.dismissed) {
+        this.queue.unshift(line);
+        if (!this.head) this.next(now);
+      }
     } else if (e.type === "error") {
       this.finish(e.id);
       this.queue = [];
       this.open = "";
       this.error = true;
-      const line = (e.message || e.code).split("\n")[0]!.trim();
+      const line = (e.code === "E_AGENT_LIMIT" && this.outLine ? this.outLine : e.message || e.code).split("\n")[0]!.trim();
       this.head = { text: line, complete: true, shownAt: now, completeAt: now };
       this.dismissed = false;
     }
@@ -226,6 +241,7 @@ export class BubbleFeed {
     this.error = false;
     this.dismissed = false;
     this.announced = null;
+    this.outLine = null;
   }
 
   private clear(): void {

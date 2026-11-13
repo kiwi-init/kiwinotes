@@ -62,6 +62,8 @@ export interface KiwiToolServerOptions {
   guard?: SecretGuard;
   /** Quem decide a dúvida agora (o pedido em andamento, spec #9873); sem ele, a dúvida é segurada. */
   decider?: () => Omit<DoubtDecider, "signal"> | undefined;
+  /** O modo econômico agora (spec #11084): lido a cada chamada, para valer sem reabrir o agente. */
+  economy?: () => boolean;
   version?: string;
   onCall?: (e: ToolCallEvent) => void;
   /** Cada método MCP que chegou com a senha certa (a prova do #7496 confere o `tools/list` do Claude Code). */
@@ -193,7 +195,10 @@ export class KiwiToolServer {
           // A dúvida espera a pessoa; se o agente desiste da chamada (`signal`), o que falta é segurado.
           const decider = this.o.decider?.();
           const guard = this.o.guard ? { guard: this.o.guard, ...(decider ? { decider: { ...decider, ...(signal ? { signal } : {}) } } : {}) } : {};
-          const ctx = this.writes ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard } : { reader: this.o.reader, ...guard };
+          const economy = this.o.economy?.() ? { economy: true } : {};
+          const ctx = this.writes
+            ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard, ...economy }
+            : { reader: this.o.reader, ...guard, ...economy };
           const r = await runKiwiTool(ctx, name, m.params?.arguments);
           this.o.onCall?.({ tool: name, ...(r.target ? { target: r.target } : {}), ok: true, ...(r.change ? { change: r.change } : {}), ...(r.held ? { held: r.held } : {}) });
           return ok({ content: [{ type: "text", text: JSON.stringify(r.value) }] });

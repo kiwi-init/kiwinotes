@@ -14,6 +14,8 @@ import {
   claudeLine,
   consentText,
   IDLE_TEST,
+  economyHint,
+  ECONOMY_LABEL,
   modelHint,
   modelOptions,
   switchHint,
@@ -170,6 +172,13 @@ export function AgentSection() {
       {status.enabled && a.phase === "ready" ? (
         <Row label="Modelo" hint={modelHint(status)}>
           <Select label="Modelo do agente" value={status.model} options={modelOptions(status)} onChange={(model) => void run(() => api.agent.configure({ model }))} />
+        </Row>
+      ) : null}
+
+      {/* O modo econômico (spec #11084): só aqui, em Ajustes › Agente. */}
+      {status.enabled && a.phase === "ready" ? (
+        <Row label={ECONOMY_LABEL} hint={economyHint(status)}>
+          <Switch label={ECONOMY_LABEL} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
         </Row>
       ) : null}
 

@@ -132,6 +132,9 @@ export function applyTurn(t: TestState, e: AgentTurnEvent, name: string): TestSt
       return { ...t, status: "tool" in e ? toolStatus(e.tool, e.target) : "Usando uma ferramenta…" };
     case "permission":
       return { ...t, status: `Recusei o ${e.tool}: o agente só usa as suas notas e reuniões, pelo Kiwi.` };
+    case "limit":
+      // O limite (spec #11084) aparece no balão e no medidor; o "Testar" mostra o erro, que vem logo depois.
+      return t;
     case "text":
       return { ...t, status: "Respondendo…", text: t.text + e.text };
     case "done":
@@ -199,4 +202,11 @@ export function noticeHint(s: AgentNoticeState, asking: boolean): string {
     return asking ? "O macOS está perguntando se o Kiwi Notes pode mandar notificações." : `${NOTICE_WHAT} O macOS pergunta uma vez quando você liga.`;
   }
   return s.enabled ? NOTICE_WHAT : "Desligado: a pergunta do agente aparece só no cartão, na janela do Kiwi.";
+}
+
+/** O modo econômico (spec #11084): o rótulo e o que ele faz, com o aviso do cache. */
+export const ECONOMY_LABEL = "Modo econômico";
+export function economyHint(s: AgentStatus): string {
+  const what = "Gasta menos do seu limite: o modelo mais barato que o agente oferece, as notas lidas por seção e respostas curtas.";
+  return s.economy ? `Ligado. ${what} Trocar de modelo começa um cache novo, então o primeiro pedido depois gasta um pouco mais.` : `${what} Trocar de modelo começa um cache novo.`;
 }

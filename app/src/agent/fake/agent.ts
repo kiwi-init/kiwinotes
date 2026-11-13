@@ -21,7 +21,8 @@
 //   (uma pergunta, com "?")  procura nas notas, lê a 1ª achada e responde com o começo dela: o "Testar" dos Ajustes
 //
 // O ambiente:
-//   KIWI_FAKE_AGENT_LOG      um arquivo JSONL onde ele anota cada `session/new`, `session/resume` e `session/load`
+//   KIWI_FAKE_AGENT_LOG      um arquivo JSONL onde ele anota cada `session/new`, `session/resume`, `session/load` e
+//                            `session/prompt` (o pedido como chegou: o teste do começo fixo, spec #11084, lê daqui)
 //                            que recebeu, com os parâmetros (os testes conferem o isolamento por ele)
 //   KIWI_FAKE_AGENT_RESUME   "resume" (o padrão), "load" ou "none": como ele retoma uma sessão
 //   KIWI_FAKE_AGENT_TOOL_DELAY_MS  uma pausa depois de cada ferramenta do Kiwi, para um print pegar o status no meio
@@ -37,7 +38,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { agent, ndJsonStream, PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
-import type { AgentContext, InitializeResponse, McpServer } from "@agentclientprotocol/sdk";
+import type { AgentContext, InitializeResponse, McpServer, PromptResponse } from "@agentclientprotocol/sdk";
 
 const resumeMode = process.env.KIWI_FAKE_AGENT_RESUME ?? "resume";
 const log = process.env.KIWI_FAKE_AGENT_LOG;
@@ -159,6 +160,41 @@ function configOptions(sessionId: string) {
   return [select("model", "Modelo", c.model, MODELS), select("effort", "Esforço", c.effort, EFFORTS)];
 }
 
+/** O `usage_update` com o uso da janela (o `SDKRateLimitInfo` em `_meta["_claude/rateLimit"]`), como o adaptador manda. */
+async function rateLimit(client: AgentContext, sessionId: string, info: Record<string, unknown>): Promise<void> {
+  await client.notify("session/update", {
+    sessionId,
+    update: { sessionUpdate: "usage_update", used: 12_000, size: 200_000, _meta: { "_claude/rateLimit": info } },
+  } as never);
+}
+
+/** A resposta do `/usage` como o adaptador formata (markdown), com horas de volta de mentira, no fuso do Mac. */
+const FAKE_USAGE_MARKDOWN = () => {
+  const fmt = (ms: number) =>
+    new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms));
+  return [
+    "> Claude Max subscription usage",
+    "",
+    `**5-hour limit** — **37%** · Resets ${fmt(Date.now() + 2 * 3_600_000)}`,
+    "",
+    "`███████░░░░░░░░░░░░░`",
+    "",
+    `**Weekly · all models** — **12%** · Resets ${fmt(Date.now() + 4 * 86_400_000)}`,
+  ].join("\n");
+};
+
+/** O gasto de mentira do pedido: entrada pelo tamanho do texto, e o cache lido a partir do segundo pedido. */
+let fakeTurns = 0;
+type FakeAnswer = PromptResponse & { noUsage?: boolean };
+function withUsage(params: { prompt: { type: string; text?: string }[] }, r: FakeAnswer): PromptResponse {
+  const { noUsage, ...out } = r;
+  if (noUsage || r.stopReason !== "end_turn") return out;
+  const chars = params.prompt.reduce((n, b) => n + (b.type === "text" ? (b.text ?? "").length : 0), 0);
+  const inputTokens = 800 + chars, outputTokens = 120, cachedReadTokens = fakeTurns++ ? 6_000 : 0, cachedWriteTokens = fakeTurns === 1 ? 6_000 : 0;
+  // O `usage` do adaptador (o `PromptResponse` do ACP v1 não o declara: ele vai como campo a mais).
+  return { ...out, usage: { inputTokens, outputTokens, cachedReadTokens, cachedWriteTokens, totalTokens: inputTokens + outputTokens + cachedReadTokens + cachedWriteTokens } } as PromptResponse;
+}
+
 async function say(client: AgentContext, sessionId: string, text: string): Promise<void> {
   await client.notify("session/update", { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } });
 }
@@ -215,15 +251,45 @@ const app = agent({ name: "kiwi-fake-agent" })
   .onNotification("session/cancel", ({ params }) => {
     cancelled.add(params.sessionId);
   })
-  .onRequest("session/prompt", async ({ params, client }) => {
+  // O gasto que o agente informa no fim do pedido (spec #11084): no agente falso, de mentira e previsível.
+  .onRequest("session/prompt", async (ctx) => withUsage(ctx.params, await (async ({ params, client }: typeof ctx): Promise<FakeAnswer> => {
     const { sessionId } = params;
+    note("session/prompt", params);
     const all = sessions();
     if (!(sessionId in all)) throw RequestError.sessionNotFound(sessionId);
     const turn = (all[sessionId] ?? 0) + 1;
     saveSessions({ ...all, [sessionId]: turn });
     cancelled.delete(sessionId);
-    const text = params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+    // As instruções do modo econômico (spec #11084) vêm na frente do pedido: o agente falso as ignora para achar o comando.
+    const text = params.prompt
+      .map((b) => (b.type === "text" ? b.text : ""))
+      .join("")
+      .replace(/^\[Modo econômico do Kiwi:[^\]]*\]\s*/, "")
+      .trim();
 
+    // O agente econômico (spec #11084): o aviso do próprio agente, o limite acabado com a hora de volta e o `/usage`.
+    // A lista das ferramentas como chega ao agente, crua (spec #11084: o começo fixo, comparado byte a byte).
+    if (text.endsWith("/ferramentas-cru")) {
+      const r = await mcp(sessionId, "tools/list");
+      await say(client, sessionId, JSON.stringify(r.result?.tools ?? null));
+      return { stopReason: "end_turn" };
+    }
+    if (text === "/aviso") {
+      await think(client, sessionId);
+      await say(client, sessionId, "Começando. ");
+      await rateLimit(client, sessionId, { status: "allowed_warning", rateLimitType: "five_hour", utilization: 0.82, resetsAt: Math.floor(Date.now() / 1000) + 2 * 3600 });
+      await say(client, sessionId, "E terminando.");
+      return { stopReason: "end_turn" };
+    }
+    if (text === "/limite-com-hora") {
+      await think(client, sessionId);
+      await rateLimit(client, sessionId, { status: "rejected", rateLimitType: "five_hour", utilization: 1, resetsAt: Math.floor(Date.now() / 1000) + 3 * 3600 });
+      throw RequestError.internalError({ message: "Claude usage limit reached." });
+    }
+    if (text === "/usage") {
+      await say(client, sessionId, FAKE_USAGE_MARKDOWN());
+      return { stopReason: "end_turn", noUsage: true };
+    }
     // Os balões do gato (spec #9495): um texto que chega palavra por palavra, e uma fala antes de uma ferramenta.
     if (text.startsWith("/conta ")) {
       await think(client, sessionId);
@@ -325,7 +391,7 @@ const app = agent({ name: "kiwi-fake-agent" })
         await say(client, sessionId, `Este é o turno ${turn} desta sessão.`);
         return { stopReason: "end_turn" };
     }
-  });
+  })(ctx)));
 
 const stream = ndJsonStream(
   Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,

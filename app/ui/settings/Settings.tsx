@@ -6,6 +6,7 @@ import { Row, Section, Segmented, Switch, Window } from "../src/kit/index.tsx";
 import { AgentSection } from "./Agent.tsx";
 import { AgentActivitySection } from "./AgentActivity.tsx";
 import { DoubtAnswersSection } from "./DoubtAnswers.tsx";
+import { UsageMeter } from "./UsageMeter.tsx";
 import { PRIVACY_HINT, PRIVACY_RULE } from "./agentText.ts";
 import { AppearanceSection } from "./Appearance.tsx";
 import { DictionarySection } from "./Dictionary.tsx";
@@ -64,6 +65,8 @@ export function Settings() {
 
       {/* O agente (spec #8373): a seção antes da Privacidade, que diz a regra dele (ADR 0011). */}
       <AgentSection />
+      {/* O medidor do agente (spec #11084): o gasto que o agente informa, e o `/usage` só ao abrir ou em Atualizar. */}
+      <UsageMeter />
       {/* A atividade do agente (spec #9480): logo abaixo, e também com o agente desligado (o desfazer não precisa dele). */}
       <AgentActivitySection />
       {/* O que a pessoa já respondeu na dúvida do guardrail (spec #9873). */}
