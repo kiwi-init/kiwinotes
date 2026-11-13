@@ -3,13 +3,13 @@
 // e não no app da pessoa.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import config from "../electrobun.config.ts";
 import { machoLoadsOf } from "./macho.ts";
 import { ONNX_BUNDLE_DIR, ONNX_DYLIB, ONNX_FILES, ONNX_PACKAGE, ONNX_STAGE, onnxSourceDir, stageOnnxRuntime } from "./onnxruntime.ts";
+import { tempDir } from "../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dir, "..");
 const pkgDir = path.join(appDir, "node_modules", ONNX_PACKAGE);
@@ -48,7 +48,7 @@ describe("o onnxruntime-node instalado", () => {
 describe("stageOnnxRuntime", () => {
   let dir: string;
   beforeEach(() => {
-    dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-onnx-test-"));
+    dir = tempDir("kiwinotes-onnx-test-");
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });

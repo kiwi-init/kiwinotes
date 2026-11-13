@@ -2,14 +2,14 @@
 // o watcher de verdade, num tmp.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
 import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { followPinned, reconcileMoves, Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const snap = (o: Record<string, [number, string]>) => new Map(Object.entries(o).map(([p, [ino, version]]) => [p, { ino, version }]));
 
@@ -62,7 +62,7 @@ describe("de ponta a ponta, com o watcher", () => {
   });
 
   async function setup(files: Record<string, string>, pinned: string[]) {
-    const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-pins-")), "V");
+    const root = path.join(tempDir("kn-pins-"), "V");
     dirs.push(path.dirname(root));
     for (const [rel, content] of Object.entries(files)) {
       mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -110,7 +110,7 @@ describe("de ponta a ponta, com o watcher", () => {
   };
 
   test("a limpeza das fixadas falhando (o settings) não derruba as notas (revisão #2574)", async () => {
-    const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-pins-")), "V");
+    const root = path.join(tempDir("kn-pins-"), "V");
     dirs.push(path.dirname(root));
     mkdirSync(root, { recursive: true });
     writeFileSync(path.join(root, "A.md"), "");

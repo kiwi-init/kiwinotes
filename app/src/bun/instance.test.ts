@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 
 import { appOf, claimInstance, decideInstance, instanceFile, isKiwiProcess, readRecord, releaseInstance } from "./instance.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const NEW = { pid: 200, app: "/x/main-teste3/app/build/stable-macos-arm64/Kiwi Notes.app" };
 const OLD = { pid: 100, app: "/x/main-teste2/app/build/stable-macos-arm64/Kiwi Notes.app" };
@@ -39,7 +38,7 @@ describe("decideInstance (T992)", () => {
 describe("claimInstance", () => {
   let dir: string;
   beforeEach(() => {
-    dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-instance-test-"));
+    dir = tempDir("kiwinotes-instance-test-");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 

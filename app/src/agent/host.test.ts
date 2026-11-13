@@ -1,13 +1,13 @@
 // O host do agente (spec #4576) contra o agente falso, que fala ACP de verdade. Nenhum teste abre o Claude Code.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { FAKE_AGENT_COMMAND } from "./fake/index.ts";
 import { AgentHost, ISOLATION_META, type AgentEvent } from "./host.ts";
 import type { AgentError } from "./errors.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const hosts: AgentHost[] = [];
@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 function tmp(): string {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-agent-"));
+  const d = tempDir("kn-agent-");
   dirs.push(d);
   return d;
 }

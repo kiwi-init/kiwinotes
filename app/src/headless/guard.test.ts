@@ -1,13 +1,14 @@
 // T1827: o headless recusa os dados reais. O `home` é falso (um tmp): o teste nunca encosta nas pastas de verdade.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { assertHeadlessNotesFolder, assertNotRealData, realDataRoots, resolveReal } from "./guard.ts";
+import { tempDir } from "../../test/tmp.ts";
 
-const home = realpathSync(mkdtempSync(path.join(tmpdir(), "kn-guard-")));
+const home = realpathSync(tempDir("kn-guard-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 const support = path.join(home, "Library", "Application Support");
 const refused = (data: string) => expect(() => assertNotRealData(data, home)).toThrow(expect.objectContaining({ code: "E_REAL_DATA" }));
@@ -65,7 +66,7 @@ test("a CLI: `start` nos dados reais sai com E_REAL_DATA, exit 1, sem criar nada
 
 
 test("configured notes folders and their recents are protected, including symlinks and ancestors",()=>{
- const fake=realpathSync(mkdtempSync(path.join(tmpdir(),"kn-configured-guard-")));
+ const fake=realpathSync(tempDir("kn-configured-guard-"));
  try{
   const support=path.join(fake,"Library","Application Support","KiwiNotes");mkdirSync(support,{recursive:true});
   const current=path.join(fake,"Documents","Obsidian"),recent=path.join(fake,"Work","Notes");

@@ -1,13 +1,13 @@
 // T6013: o modelo baixa uma vez, carrega, avisa o estado, espera depois de uma falha e some quando é desligado.
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { RETRY_MS, SemanticEngine, type SemanticModelState } from "./engine.ts";
 import { fakeEmbedder } from "./fake.ts";
 import { type ModelManifest, modelDir } from "./model.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -23,7 +23,7 @@ const manifest: ModelManifest = {
 };
 
 function setup(o: { enabled?: boolean; fail?: boolean; download?: boolean } = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), "kn-engine-"));
+  const root = tempDir("kn-engine-");
   dirs.push(root);
   let enabled = o.enabled ?? true;
   let fail = o.fail ?? false;
@@ -128,7 +128,7 @@ test("sem uso por idleMs, o modelo sai da memória; a próxima busca o traz de v
 // O servidor mandou os cabeçalhos e 8 bytes, e depois nada, sem erro. O `fetch` do Bun não tem prazo: sem um, o estado
 // fica em "downloading 8/…" para sempre, não tenta de novo, e desligar a busca pelo sentido nunca termina.
 function stalled() {
-  const root = mkdtempSync(path.join(tmpdir(), "kn-engine-stall-"));
+  const root = tempDir("kn-engine-stall-");
   dirs.push(root);
   let enabled = true;
   let calls = 0;

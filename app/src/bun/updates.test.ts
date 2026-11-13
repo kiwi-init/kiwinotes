@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -19,6 +19,7 @@ import {
   type UpdateCheck,
   type UpdaterApi,
 } from "./updates.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const INFO: LocalInfo = {
   identifier: "app.kiwinotes.desktop",
@@ -76,7 +77,7 @@ function fakeUpdater(opts: { found?: Partial<UpdateCheck>; downloadOk?: boolean;
 }
 
 function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = mkdtempSync(path.join(tmpdir(), "kn-updates-"));
+  const dir = tempDir("kn-updates-");
   return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }));
 }
 

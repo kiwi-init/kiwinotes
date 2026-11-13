@@ -1,20 +1,20 @@
 // T6013: o índice do sentido acompanha as notas pela versão, guarda só vetores fora do cofre e acha pelo assunto.
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { noteChunks, plainText } from "./chunks.ts";
 import { DIM, fakeEmbedder } from "./fake.ts";
 import { decodeIndex, encodeIndex, type SemanticDocument, SemanticIndex } from "./index.ts";
 import { meanPool } from "./embedder.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const tmp = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-semantic-"));
+  const d = tempDir("kn-semantic-");
   dirs.push(d);
   return d;
 };

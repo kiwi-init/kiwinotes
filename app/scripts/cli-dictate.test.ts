@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { check, loadBatch, parseArgs, runBatch, runDictate, type Send } from "./cli-dictate.ts";
+import { tempDir } from "../test/tmp.ts";
 
 let dir: string;
 afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
-const tmp = () => (dir = mkdtempSync(path.join(tmpdir(), "kiwi-cli-dictate-")));
+const tmp = () => (dir = tempDir("kiwi-cli-dictate-"));
 
 const reportFor = (text: string, extra: Record<string, unknown> = {}) => ({
   text,

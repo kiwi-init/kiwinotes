@@ -56,8 +56,7 @@ describe("Markdown → HTML (T2684)", () => {
 
 // ---------------------------------------------------------------- os arquivos
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach } from "bun:test";
 
@@ -69,7 +68,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const tmp = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-export-"));
+  const d = tempDir("kn-export-");
   dirs.push(d);
   return d;
 };
@@ -145,6 +144,7 @@ describe("exportar para arquivo (T2684)", () => {
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 describe("notes.export pelo caminho da UI (T2684)", () => {
   const caps = (v: Vault, chooser?: () => Promise<string | null>) =>

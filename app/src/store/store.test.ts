@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { DictionaryStore, MAX_ALIASES, sanitizeTerms, sttVocabulary } from "./dictionary.ts";
 import { HistoryStore } from "./history.ts";
 import { expandSnippets, sanitizeSnippets, SnippetStore } from "./snippets.ts";
 import { fold, foldWithMap } from "./text.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), "kiwi-store-"));
+  dir = tempDir("kiwi-store-");
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });

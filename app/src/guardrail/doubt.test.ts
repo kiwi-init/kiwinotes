@@ -3,8 +3,7 @@
 // Só exemplos inventados.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { DoubtAnswers } from "./answers.ts";
@@ -12,6 +11,7 @@ import { SecretGuard } from "./filter.ts";
 import { DoubtQuestions, type DoubtItem, type PendingDoubt } from "./questions.ts";
 import { KiwiToolServer } from "../agent/tools/server.ts";
 import type { VaultReader } from "../agent/tools/reader.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 // Uma sequência longa e aleatória, sem nada em volta: o detector fica em dúvida.
 const DOUBT = "Qx7Lm2Vb9Rt4Wz8Np3Kd6Hs1Fg5Jc0Ya";
@@ -23,7 +23,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const tmp = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "kiwi-doubt-"));
+  const d = tempDir("kiwi-doubt-");
   dirs.push(d);
   return d;
 };

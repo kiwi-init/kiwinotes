@@ -1,13 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { MeetingNotes, type MeetingSegment } from "./meetings.ts";
 import { Vault } from "./vault.ts";
 import { rebaseMeetingEdit, setMeetingField } from "../shared/meeting-note.ts";
 import { MeetingNoteSession } from "../bun/meeting-notes.ts";
 import type { Event } from "../shared/ipc.ts";
+import { tempDir } from "../../test/tmp.ts";
 const at = new Date(2026, 10, 5, 14, 30);
 const segment = (
   start = 1,
@@ -23,7 +23,7 @@ const segment = (
 });
 const rigs: { root: string; vault: Vault; notes: MeetingNotes }[] = [];
 async function rig(flushMs = 5000) {
-  const root = await mkdtemp(path.join(os.tmpdir(), "kiwi-meeting-note-"));
+  const root = tempDir("kiwi-meeting-note-");
   const vault = new Vault({ root, watch: false });
   const notes = new MeetingNotes(vault, { flushMs });
   const r = { root, vault, notes };

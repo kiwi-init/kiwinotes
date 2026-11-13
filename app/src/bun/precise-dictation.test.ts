@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import type { ModelManifest } from "../notes/semantic/model.ts";
 import type { Command } from "../shared/ipc.ts";
 import type { PreciseStatus } from "../shared/ui-contract.ts";
 import { PreciseDictation, WHISPER_SMALL } from "./precise-dictation.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const BYTES = new TextEncoder().encode("um gguf de mentira");
 const TINY: ModelManifest = {
@@ -19,7 +19,7 @@ const TINY: ModelManifest = {
 
 let dir: string;
 beforeEach(() => {
-  dir = mkdtempSync(path.join(tmpdir(), "kn-precise-"));
+  dir = tempDir("kn-precise-");
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 

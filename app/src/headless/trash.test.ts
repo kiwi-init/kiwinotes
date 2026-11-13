@@ -2,15 +2,15 @@
 // o headless de ponta a ponta sobe com `KIWI_HEADLESS=1`, e o `macTrash` recusa nesse modo antes de rodar qualquer coisa.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { macTrash } from "../notes/vault.ts";
 import { headlessTrash } from "./trash.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
-const scratch = mkdtempSync(path.join(tmpdir(), "kn-trash-"));
+const scratch = tempDir("kn-trash-");
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 describe("o lixo do headless (T7681)", () => {

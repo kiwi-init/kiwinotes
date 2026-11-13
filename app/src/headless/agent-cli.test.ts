@@ -3,14 +3,14 @@
 // `KIWI_ADAPTER_PACKAGES`, que só valem no headless). Nada abre na tela, nada vai à internet.
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { fakeRegistry } from "../agent/fake/registry.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
-const root = mkdtempSync(path.join(tmpdir(), "kn-agent-cli-"));
+const root = tempDir("kn-agent-cli-");
 const data = path.join(root, "data");
 const reg = fakeRegistry(
   [

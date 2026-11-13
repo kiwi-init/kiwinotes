@@ -1,10 +1,10 @@
 // T2660: a busca com filtros no engine, e o trecho sem o frontmatter (revisão #2654).
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 async function vault(files: Record<string, string>) {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-search-")), "V");
+  const root = path.join(tempDir("kn-search-"), "V");
   dirs.push(path.dirname(root));
   for (const [p, c] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, p)), { recursive: true });
@@ -47,7 +47,7 @@ test("o trecho não sai do frontmatter", async () => {
 });
 
 test("o modelo usa o relógio do vault (revisão #2654)", async () => {
-  const root = path.join(mkdtempSync(path.join(tmpdir(), "kn-search-")), "V");
+  const root = path.join(tempDir("kn-search-"), "V");
   dirs.push(path.dirname(root));
   mkdirSync(path.join(root, "Modelos"), { recursive: true });
   writeFileSync(path.join(root, "Modelos", "D.md"), "{{date}}");

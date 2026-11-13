@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { DEFAULT_NOTES_SHORTCUT, DEFAULT_SHORTCUTS, NOTES_SHORTCUTS } from "../shared/shortcuts.ts";
@@ -8,9 +7,10 @@ import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
 import { DEFAULT_AGENT_SETTINGS, DEFAULT_SETTINGS, SettingsStore, sanitizeSettings } from "./settings.ts";
 
 import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
+import { tempDir } from "../../test/tmp.ts";
 let dir: string;
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
-const fresh = () => (dir = mkdtempSync(path.join(tmpdir(), "kiwi-settings-")));
+const fresh = () => (dir = tempDir("kiwi-settings-"));
 /** Os padrões, com o atalho das Notas desligado (nos `shortcuts` e no campo de antes, iguais). */
 const notesOff = { shortcuts: { ...DEFAULT_SHORTCUTS, notes: null }, notesShortcut: null };
 

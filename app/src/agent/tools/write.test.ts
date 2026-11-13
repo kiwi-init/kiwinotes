@@ -4,8 +4,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../../bun/ui-capabilities.ts";
@@ -17,6 +16,7 @@ import { readerFromCapabilities } from "./reader.ts";
 import { KiwiToolServer, MAX_BODY, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
 import { WRITE_MAX_CHARS, type ToolChange, type WriteJournal } from "./tools.ts";
 import { WRITER_CAPABILITIES, writerFromCapabilities, type VaultWriter } from "./writer.ts";
+import { tempDir } from "../../../test/tmp.ts";
 
 const dirs: string[] = [];
 const servers: KiwiToolServer[] = [];
@@ -30,7 +30,7 @@ const KIWI = "# Kiwi\n\nO Kiwi é um app de notas.\n\n## Prazo\n\nO prazo do Kiw
 const versionOf = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
 async function setup(o: { wrap?: (w: VaultWriter, root: string) => VaultWriter } = {}) {
-  const base = mkdtempSync(path.join(tmpdir(), "kiwi-write-"));
+  const base = tempDir("kiwi-write-");
   dirs.push(base);
   const root = path.join(base, "KiwiNotes");
   const files: Record<string, string> = { "Projetos/Kiwi.md": KIWI, "Ideias.md": "ideias soltas", "Reuniões/Orçamento.md": MEETING };

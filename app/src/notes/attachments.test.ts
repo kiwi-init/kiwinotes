@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -17,6 +16,7 @@ import {
   rewriteAttachmentLinks,
 } from "./attachments.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4ab0000000049454e44ae426082", "hex");
 const b64 = PNG.toString("base64");
@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 async function setup(folder = "Anexos") {
-  const root = mkdtempSync(path.join(tmpdir(), "kiwi-anexos-"));
+  const root = tempDir("kiwi-anexos-");
   dirs.push(root);
   const vault = new Vault({ root, trash: async () => {} });
   await vault.open();
@@ -111,7 +111,7 @@ describe("attachments.save, read e rename", () => {
 
   test("uma pasta de anexos que é link simbólico para fora é recusada", async () => {
     const { root, vault } = await setup();
-    const outside = mkdtempSync(path.join(tmpdir(), "kiwi-fora-"));
+    const outside = tempDir("kiwi-fora-");
     dirs.push(outside);
     symlinkSync(outside, path.join(root, "Anexos"));
     const att = new Attachments(vault, () => "Anexos");

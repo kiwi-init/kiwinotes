@@ -2,14 +2,14 @@
 // "Desfazer" do apagar e as fixadas. Tudo num tmp, com a Lixeira de mentira.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { directInvoke } from "./../bun/ui-engine.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { buildTree, UNDO_DIR, Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 async function vault(files: Record<string, string> = {}, undoMs = 60_000) {
-  const tmp = mkdtempSync(path.join(tmpdir(), "kn-folders-"));
+  const tmp = tempDir("kn-folders-");
   dirs.push(tmp);
   const root = path.join(tmp, "KiwiNotes");
   for (const [rel, content] of Object.entries(files)) {

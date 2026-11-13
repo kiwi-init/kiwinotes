@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { cleanLaunchServices, type Disco, type LsRegister, registeredPaths, staleRegistrations } from "./launch-services.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const ID = "app.kiwinotes.desktop";
 const APP = "/Applications/Kiwi Notes.app";
@@ -59,7 +59,7 @@ const disco = (existe: (p: string) => boolean = () => true, montados: string[] =
 
 const dirs: string[] = [];
 const marca = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "ls-"));
+  const d = tempDir("ls-");
   dirs.push(d);
   return path.join(d, "launch-services.json");
 };

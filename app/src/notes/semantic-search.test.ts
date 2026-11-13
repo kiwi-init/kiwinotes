@@ -1,13 +1,13 @@
 // T6013: o BM25 somado ao sentido no `Vault.search`. Sem o sentido, a busca é a de antes; com ele, os filtros valem,
 // o exato vem antes, o achado só pelo sentido vem marcado com o trecho, e o aproximado fica por último.
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { DIM, fakeEmbedder } from "./semantic/fake.ts";
 import { SemanticIndex } from "./semantic/index.ts";
 import { SEMANTIC_LIMIT, Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -23,7 +23,7 @@ const FILES = {
 };
 
 async function setup() {
-  const base = mkdtempSync(path.join(tmpdir(), "kn-semantic-search-"));
+  const base = tempDir("kn-semantic-search-");
   dirs.push(base);
   const root = path.join(base, "V");
   for (const [p, c] of Object.entries(FILES)) {
@@ -112,7 +112,7 @@ test("pelo contrato: o notes.search soma o sentido, o status conta as notas e de
   const { DEFAULT_SETTINGS } = await import("../store/settings.ts");
   const { SemanticEngine } = await import("./semantic/engine.ts");
   type AppSettings = import("../store/settings.ts").AppSettings;
-  const base = mkdtempSync(path.join(tmpdir(), "kn-semantic-caps-"));
+  const base = tempDir("kn-semantic-caps-");
   dirs.push(base);
   const root = path.join(base, "V");
   for (const [p, c] of Object.entries(FILES)) {

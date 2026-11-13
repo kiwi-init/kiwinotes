@@ -1,9 +1,10 @@
 // `bun run cli agent …` (T8478): a CLI de ponta a ponta, com o `claude` falso e o agente falso.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import os, { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { tempDir } from "../test/tmp.ts";
 
 const CLI = path.join(import.meta.dir, "cli.ts");
 const dirs: string[] = [];
@@ -12,7 +13,7 @@ afterEach(() => {
 });
 
 function tmp(): string {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-cli-agent-"));
+  const d = tempDir("kn-cli-agent-");
   dirs.push(d);
   return d;
 }

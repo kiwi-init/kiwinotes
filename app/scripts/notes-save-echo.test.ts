@@ -4,8 +4,7 @@
 // três vezes e desistia. Roda o build de verdade no WebKit headless, contra um engine que é o `MockVault`.
 
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { webkit } from "playwright-core";
@@ -13,6 +12,7 @@ import { webkit } from "playwright-core";
 import { MockVault } from "../ui/notes/mock.ts";
 import { runUi } from "./cli-ui.ts";
 import { ensureBuild, type UiContext } from "./ui-page.ts";
+import { tempDir } from "../test/tmp.ts";
 
 const hasWebkit = (() => {
   try {
@@ -74,7 +74,7 @@ let logs: string[] = [];
 let spy: ReturnType<typeof spyOn> | undefined;
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "kn-save-echo-"));
+  dir = tempDir("kn-save-echo-");
 });
 afterAll(() => {
   if (dir) rmSync(dir, { recursive: true, force: true });

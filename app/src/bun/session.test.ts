@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { DictionaryStore } from "../store/dictionary.ts";
 import { SnippetStore } from "../store/snippets.ts";
 import { DEFAULT_SETTINGS, SettingsStore } from "../store/settings.ts";
 import { helperLogLine, loadLists, shortcutsConfig } from "./session.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 let dir = "";
 afterEach(() => {
@@ -25,7 +25,7 @@ test("do log do helper, só o diagnóstico do mic (ditado e reunião) vai para o
 
 describe("loadLists", () => {
   test("a hand-edited JSON that doesn't parse is an empty list, not a crash, and stays on disk (T914), kept aside (T7816)", async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "kiwi-session-"));
+    dir = tempDir("kiwi-session-");
     const broken = '{ "version": 1, "terms": [ { "term": "DICOM" } ';
     writeFileSync(path.join(dir, "dictionary.json"), broken);
     writeFileSync(path.join(dir, "snippets.json"), JSON.stringify({ version: 1, snippets: [{ trigger: "meu email", text: "a@b.c" }] }));
@@ -40,7 +40,7 @@ describe("loadLists", () => {
   });
 
   test("missing files are empty lists without a warning", async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "kiwi-session-"));
+    dir = tempDir("kiwi-session-");
     const warnings: string[] = [];
     const lists = await loadLists({ dictionary: new DictionaryStore(dir), snippets: new SnippetStore(dir) }, (m) => warnings.push(m));
     expect(lists).toEqual({ terms: [], snippets: [] });
@@ -50,7 +50,7 @@ describe("loadLists", () => {
 
 describe("shortcutsConfig (T5349)", () => {
   test("bug corrigido: a tecla do ditado escolhida é guardada e vai para o helper (antes ficava sempre no Fn)", async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "kiwi-session-"));
+    dir = tempDir("kiwi-session-");
     expect(shortcutsConfig(DEFAULT_SETTINGS)).toEqual({
       type: "config.set",
       shortcuts: { dictation: "fn", cancel: "escape", pasteLast: "control+option+v", notes: "control+option+n", meeting: "control+option+r", meetingPause: "control+option+m" },

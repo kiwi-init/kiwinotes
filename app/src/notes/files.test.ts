@@ -2,8 +2,7 @@
 // `files.open` abre no app padrão do Mac (ou só no Finder, se o arquivo rodaria algo).
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -11,6 +10,7 @@ import { directInvoke } from "../bun/ui-engine.ts";
 import { openMode } from "../shared/attachments.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Vault } from "./vault.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 const vaults: Vault[] = [];
@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 async function vault(files: Record<string, string>) {
-  const dir = mkdtempSync(path.join(tmpdir(), "kiwinotes-files-test-"));
+  const dir = tempDir("kiwinotes-files-test-");
   dirs.push(dir);
   const root = path.join(dir, "KiwiNotes");
   mkdirSync(root, { recursive: true });

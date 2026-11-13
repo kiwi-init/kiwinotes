@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { encode, LineDecoder, type Message } from "../shared/ipc.ts";
 import { Sidecar, SidecarError, type SidecarOptions } from "./sidecar.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const READY = {
   v: 1,
@@ -120,7 +120,7 @@ function make(
   requestTimeoutMs?: number,
   overrides: Partial<SidecarOptions> = {},
 ) {
-  dir = mkdtempSync(path.join(tmpdir(), "kiwi-sidecar-"));
+  dir = tempDir("kiwi-sidecar-");
   sidecar = new Sidecar({
     helper: "kiwi-helper",
     socketPath: path.join(dir, "s.sock"),
@@ -208,7 +208,7 @@ describe("Sidecar", () => {
   test("a helper that can't start (ENOENT) doesn't take the app down: it's tried again", async () => {
     const helper = fakeHelper();
     let attempts = 0;
-    dir = mkdtempSync(path.join(tmpdir(), "kiwi-sidecar-"));
+    dir = tempDir("kiwi-sidecar-");
     sidecar = new Sidecar({
       helper: "/no/such/kiwi-helper",
       socketPath: path.join(dir, "s.sock"),

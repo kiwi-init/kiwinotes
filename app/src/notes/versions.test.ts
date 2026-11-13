@@ -1,8 +1,7 @@
 // T2680: o histórico de versões das notas, fora do vault. Tudo num tmp, com o relógio na mão.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -10,13 +9,14 @@ import { directInvoke } from "../bun/ui-engine.ts";
 import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Vault } from "./vault.ts";
 import { atOf, NoteVersions } from "./versions.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const tmp = () => {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-2680-"));
+  const d = tempDir("kn-2680-");
   dirs.push(d);
   return d;
 };

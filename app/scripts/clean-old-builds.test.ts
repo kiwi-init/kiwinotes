@@ -1,13 +1,13 @@
 // T2399: a limpeza dos builds velhos só escolhe `<worktree>/app/build`, e deixa de fora o que está rodando ou pedido.
 
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { plan, worktrees } from "./clean-old-builds.ts";
+import { tempDir } from "../test/tmp.ts";
 
-const root = realpathSync(mkdtempSync(path.join(tmpdir(), "kn-clean-")));
+const root = realpathSync(tempDir("kn-clean-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 function wt(name: string, app?: string): string {

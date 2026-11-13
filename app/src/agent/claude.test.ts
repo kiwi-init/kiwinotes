@@ -1,12 +1,12 @@
 // Achar o Claude Code, a versão e o login (spec #4576), com o `claude` falso. Nenhum teste roda o de verdade.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { claudeAuth, claudeSearchDirs, claudeStatus, claudeVersion, findClaude } from "./claude.ts";
 import { FAKE_CLAUDE } from "./fake/index.ts";
+import { tempDir } from "../../test/tmp.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 function tmp(): string {
-  const d = mkdtempSync(path.join(tmpdir(), "kn-claude-"));
+  const d = tempDir("kn-claude-");
   dirs.push(d);
   return d;
 }
