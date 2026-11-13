@@ -1,0 +1,164 @@
+{
+  "task": "T8959",
+  "measuredCommit": "45a0f215229418479398f53ca58dff7a5c123936",
+  "source_sha256": {
+    "index.ts": "bebd8964addce120914fd1e28fdca8db3bece237d705077d617bdaa61a16b211",
+    "shader.ts": "2dd00db1f8af84ad6a6ac1d39c210e35e98433218f8dac55389fcd79eb49354f",
+    "state.ts": "6b0c72e06e875f442b24a7a7d29966b2feb290774aad7193bb3a33c5bf9fb099",
+    "cat-demo.ts": "615c39450ed54614df289c05d56753895e2f2b40e9d2fc4d13bce7245d2962cc",
+    "cat.ts": "6f597f7fc6426661c37c5255e9b94593746df5eeddc2382b80c95e197df6d1b9",
+    "gestures.ts": "e26e4d5a1c48b07a03a03d7b962b4463d047d6009f5ddc77e1a527a9ef264f25",
+    "vectors.ts": "a7a49a14d1b3fd78b4c008880bc13db844f2f2781208d2582a16591c79c7659d",
+    "assets/reference-no-eyes.webp": "01a6e6743be6489acd5887f0d5102982279552793549e2e762670c196f490e74",
+    "assets/source.json": "2c80a303609b966e237ccd3114793109909febb25ab1c90bd8fc2b4a3a8bbc00"
+  },
+  "scope": "isolated natural gesture diagnostic; four windows per variant and gesture, not CPU acceptance",
+  "variantWarmupSeconds": 10,
+  "noRecorder": true,
+  "variants": [
+    {
+      "scene": "blink",
+      "seed": 3,
+      "gestureStart": 4.514717240002938,
+      "gestureEnd": 5.275265883277171,
+      "variant": "fog",
+      "errors": [],
+      "elapsedSeconds": 6.043730748999995,
+      "cpuSeconds": 0.1400000000000001,
+      "cpuMean": 2.316449984525944,
+      "windowCount": 4,
+      "allWindowsIsolatedGesture": true,
+      "finalEffectCounts": [
+        0
+      ],
+      "fogDrawsPerWindowRange": [
+        3,
+        3
+      ]
+    },
+    {
+      "scene": "blink",
+      "seed": 3,
+      "gestureStart": 4.514717240002938,
+      "gestureEnd": 5.275265883277171,
+      "variant": "faces",
+      "errors": [],
+      "elapsedSeconds": 6.040704874999989,
+      "cpuSeconds": 0.4700000000000001,
+      "cpuMean": 7.780548954562209,
+      "windowCount": 4,
+      "allWindowsIsolatedGesture": true,
+      "finalEffectCounts": [
+        4
+      ],
+      "fogDrawsPerWindowRange": [
+        3,
+        3
+      ]
+    },
+    {
+      "scene": "look",
+      "seed": 12,
+      "gestureStart": 6.265356957912445,
+      "gestureEnd": 7.645720715438947,
+      "variant": "fog",
+      "errors": [],
+      "elapsedSeconds": 8.505554874999987,
+      "cpuSeconds": 0.27000000000000013,
+      "cpuMean": 3.17439607371883,
+      "windowCount": 4,
+      "allWindowsIsolatedGesture": true,
+      "finalEffectCounts": [
+        0
+      ],
+      "fogDrawsPerWindowRange": [
+        4,
+        4
+      ]
+    },
+    {
+      "scene": "look",
+      "seed": 12,
+      "gestureStart": 6.265356957912445,
+      "gestureEnd": 7.645720715438947,
+      "variant": "faces",
+      "errors": [],
+      "elapsedSeconds": 8.509737625999987,
+      "cpuSeconds": 0.5700000000000001,
+      "cpuMean": 6.698208864377518,
+      "windowCount": 4,
+      "allWindowsIsolatedGesture": true,
+      "finalEffectCounts": [
+        2
+      ],
+      "fogDrawsPerWindowRange": [
+        4,
+        4
+      ]
+    },
+    {
+      "scene": "double",
+      "seed": 17,
+      "gestureStart": 4.8841150312218815,
+      "gestureEnd": 6.535531696942635,
+      "variant": "fog",
+      "errors": [],
+      "elapsedSeconds": 9.584840625000012,
+      "cpuSeconds": 0.28000000000000014,
+      "cpuMean": 2.921279663948505,
+      "windowCount": 4,
+      "allWindowsIsolatedGesture": true,
+      "finalEffectCounts": [
+        0
+      ],
+      "fogDrawsPerWindowRange": [
+        5,
+        5
+      ]
+    },
+    {
+      "scene": "double",
+      "seed": 17,
+      "gestureStart": 4.8841150312218815,
+      "gestureEnd": 6.535531696942635,
+      "variant": "faces",
+      "errors": [],
+      "elapsedSeconds": 9.58520250100002,
+      "cpuSeconds": 0.8900000000000002,
+      "cpuMean": 9.28514551369308,
+      "windowCount": 4,
+      "allWindowsIsolatedGesture": true,
+      "finalEffectCounts": [
+        4
+      ],
+      "fogDrawsPerWindowRange": [
+        5,
+        5
+      ]
+    }
+  ],
+  "costs": [
+    {
+      "scene": "blink",
+      "gestureSeconds": 0.760548643274233,
+      "netCPUSecondsPerGesture": 0.08251752321445123,
+      "netCPUPercentageDuringGesture": 10.849736429639211
+    },
+    {
+      "scene": "look",
+      "gestureSeconds": 1.380363757526502,
+      "netCPUSecondsPerGesture": 0.07496680572912062,
+      "netCPUPercentageDuringGesture": 5.430945670687192
+    },
+    {
+      "scene": "double",
+      "gestureSeconds": 1.6514166657207534,
+      "netCPUSecondsPerGesture": 0.1524973571475008,
+      "netCPUPercentageDuringGesture": 9.234335604875588
+    }
+  ],
+  "method": "Four natural occurrences per gesture/variant, scene-specific seeds and exact start/end in each variant. Raw summary retains legacy no-gesture header fields, not used to select windows.",
+  "derivedFrom": "https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/desempenho/gestos-isolados-45a0f21",
+  "rawEvidenceCommit": "f35a23d",
+  "rawEvidenceURL": "https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/desempenho/gestos-isolados-45a0f21"
+}

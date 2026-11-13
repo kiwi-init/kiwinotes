@@ -1,0 +1,318 @@
+{
+  "task": "T8959",
+  "measuredCommit": "78fbb512129ab2e27547abde51dc976b914befdb",
+  "pairs": [
+    {
+      "pair": 1,
+      "startedUTC": "2026-11-13T05:13:06.678883+00:00",
+      "initialLoad": [
+        3.8251953125,
+        3.81884765625,
+        3.96826171875
+      ],
+      "uptimeAtStart": "2:13  up  1:53, 6 users, load averages: 3.83 3.82 3.97",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "fog": 2.1971415645982395,
+      "faces": 2.9132599854098116,
+      "delta": 0.7161184208115721,
+      "finalLoad": [
+        2.49072265625,
+        3.36865234375,
+        3.767578125
+      ],
+      "loadVariation": 1.53564453125,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 2,
+      "startedUTC": "2026-11-13T05:15:29.467877+00:00",
+      "initialLoad": [
+        2.49072265625,
+        3.36865234375,
+        3.767578125
+      ],
+      "uptimeAtStart": "2:15  up  1:55, 6 users, load averages: 2.49 3.37 3.77",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "faces": 3.063090890937858,
+      "fog": 1.6647265492598156,
+      "delta": 1.3983643416780425,
+      "finalLoad": [
+        14.00439453125,
+        6.68994140625,
+        4.96142578125
+      ],
+      "loadVariation": 11.513671875,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 3,
+      "startedUTC": "2026-11-13T05:17:52.466359+00:00",
+      "initialLoad": [
+        14.00439453125,
+        6.68994140625,
+        4.96142578125
+      ],
+      "uptimeAtStart": "2:17  up  1:58, 6 users, load averages: 14.00 6.69 4.96",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "fog": 1.998254178045248,
+      "faces": 2.780489396644269,
+      "delta": 0.7822352185990211,
+      "finalLoad": [
+        7.65625,
+        8.21044921875,
+        5.97509765625
+      ],
+      "loadVariation": 13.70751953125,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 4,
+      "startedUTC": "2026-11-13T05:20:16.638414+00:00",
+      "initialLoad": [
+        7.65625,
+        8.21044921875,
+        5.97509765625
+      ],
+      "uptimeAtStart": "2:20  up 2 hrs, 6 users, load averages: 7.66 8.21 5.98",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "faces": 2.6632356405203503,
+      "fog": 2.2970918386617822,
+      "delta": 0.3661438018585681,
+      "finalLoad": [
+        13.83447265625,
+        9.72509765625,
+        6.865234375
+      ],
+      "loadVariation": 8.16064453125,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 5,
+      "startedUTC": "2026-11-13T05:47:06.029109+00:00",
+      "initialLoad": [
+        13.83447265625,
+        9.72509765625,
+        6.865234375
+      ],
+      "uptimeAtStart": "2:47  up  2:27, 6 users, load averages: 13.83 9.73 6.87",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "fog": 2.579898968257927,
+      "faces": 3.5114802834438588,
+      "delta": 0.9315813151859316,
+      "finalLoad": [
+        25.00341796875,
+        15.04345703125,
+        9.361328125
+      ],
+      "loadVariation": 20.947265625,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 6,
+      "startedUTC": "2026-11-13T06:21:45.897968+00:00",
+      "initialLoad": [
+        25.00341796875,
+        15.04345703125,
+        9.361328125
+      ],
+      "uptimeAtStart": "3:21  up  3:01, 6 users, load averages: 25.00 15.04 9.36",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "faces": 4.327585443363262,
+      "fog": 3.2957470078328583,
+      "delta": 1.0318384355304033,
+      "finalLoad": [
+        5.40673828125,
+        10.74169921875,
+        8.48291015625
+      ],
+      "loadVariation": 19.5966796875,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 7,
+      "startedUTC": "2026-11-13T06:24:08.511049+00:00",
+      "initialLoad": [
+        5.40673828125,
+        10.74169921875,
+        8.48291015625
+      ],
+      "uptimeAtStart": "3:24  up  3:04, 6 users, load averages: 5.41 10.74 8.48",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "fog": 3.080174323641974,
+      "faces": 4.2276363555396985,
+      "delta": 1.1474620318977244,
+      "finalLoad": [
+        4.42724609375,
+        8.20556640625,
+        7.7939453125
+      ],
+      "loadVariation": 1.39501953125,
+      "loadStable": true,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 8,
+      "startedUTC": "2026-11-13T06:26:31.102295+00:00",
+      "initialLoad": [
+        4.42724609375,
+        8.20556640625,
+        7.7939453125
+      ],
+      "uptimeAtStart": "3:26  up  3:06, 6 users, load averages: 4.43 8.21 7.79",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "faces": 3.994663869747276,
+      "fog": 3.329142107546638,
+      "delta": 0.6655217622006382,
+      "finalLoad": [
+        3.29248046875,
+        6.2763671875,
+        7.06787109375
+      ],
+      "loadVariation": 1.36474609375,
+      "loadStable": true,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 9,
+      "startedUTC": "2026-11-13T06:28:53.701493+00:00",
+      "initialLoad": [
+        3.29248046875,
+        6.2763671875,
+        7.06787109375
+      ],
+      "uptimeAtStart": "3:28  up  3:09, 6 users, load averages: 3.29 6.28 7.07",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "fog": 3.5121865946171273,
+      "faces": 4.544282487913515,
+      "delta": 1.0320958932963875,
+      "finalLoad": [
+        3.31640625,
+        5.017578125,
+        6.42236328125
+      ],
+      "loadVariation": 1.25244140625,
+      "loadStable": true,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 10,
+      "startedUTC": "2026-11-13T06:31:16.265513+00:00",
+      "initialLoad": [
+        3.31640625,
+        5.017578125,
+        6.42236328125
+      ],
+      "uptimeAtStart": "3:31  up  3:11, 6 users, load averages: 3.32 5.02 6.42",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "faces": 4.077771889627739,
+      "fog": 3.6810566024014877,
+      "delta": 0.39671528722625116,
+      "finalLoad": [
+        2.53857421875,
+        4.498046875,
+        6.025390625
+      ],
+      "loadVariation": 3.68212890625,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 11,
+      "startedUTC": "2026-11-13T06:33:38.884123+00:00",
+      "initialLoad": [
+        2.53857421875,
+        4.498046875,
+        6.025390625
+      ],
+      "uptimeAtStart": "3:33  up  3:13, 6 users, load averages: 2.54 4.50 6.03",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "fog": 3.245673589213626,
+      "faces": 4.46070622149966,
+      "delta": 1.2150326322860336,
+      "finalLoad": [
+        2.509765625,
+        3.748046875,
+        5.48193359375
+      ],
+      "loadVariation": 1.4853515625,
+      "loadStable": true,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 12,
+      "startedUTC": "2026-11-13T06:36:01.523869+00:00",
+      "initialLoad": [
+        2.509765625,
+        3.748046875,
+        5.48193359375
+      ],
+      "uptimeAtStart": "3:36  up  3:16, 6 users, load averages: 2.51 3.75 5.48",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "faces": 4.393875867736514,
+      "fog": 3.578191916318838,
+      "delta": 0.8156839514176761,
+      "finalLoad": [
+        2.1376953125,
+        3.09130859375,
+        4.94775390625
+      ],
+      "loadVariation": 0.91064453125,
+      "loadStable": true,
+      "loadSampleCount": 17
+    }
+  ],
+  "criterion": "both all-pair and stable-load medians <= +0.5 point",
+  "stableLoadVariation": 1.5,
+  "maxLoadWaitSeconds": 300,
+  "medianAll": 0.8736326333018039,
+  "medianStable": 1.0320958932963875,
+  "stableCount": 5,
+  "minDelta": 0.3661438018585681,
+  "maxDelta": 1.3983643416780425,
+  "range": 1.0322205398194744,
+  "passes": false,
+  "rawEvidenceCommit": "f35a23d",
+  "rawEvidenceURL": "https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/desempenho/ultima-rodada"
+}

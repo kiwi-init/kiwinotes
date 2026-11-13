@@ -1,0 +1,12 @@
+{
+  "method": "existing approved montar.py fill_hidden_eyes; boundary-matched harmonic fill only inside source eye discs+5px",
+  "outside_eye_discs_max_channel_error": 0,
+  "size": [
+    2048,
+    2560
+  ],
+  "source_sha256": "7c99f26d628c336c8463e2b3e95f7d4b5c59af0be2301c4430b9816ecf1e7ea2",
+  "derived_sha256": "01a6e6743be6489acd5887f0d5102982279552793549e2e762670c196f490e74",
+  "bytes": 1906014,
+  "source_unchanged": true
+}

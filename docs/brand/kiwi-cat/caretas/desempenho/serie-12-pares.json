@@ -1,0 +1,348 @@
+{
+  "task": "T8959",
+  "measuredCommit": "45a0f215229418479398f53ca58dff7a5c123936",
+  "criterion": "both median(all12) and median(load variation <=1.5) <=0.5",
+  "protocol": "Kiwi #9209; first6 under earlier repeat rule, final6 alternating; all completed pairs count",
+  "pairs": [
+    {
+      "pair": 1,
+      "attempt": 1,
+      "startedUTC": "2026-11-13T04:19:37.869430+00:00",
+      "initialLoad": [
+        3.91552734375,
+        8.9541015625,
+        13.021484375
+      ],
+      "uptimeAtStart": "1:19  up 59 mins, 6 users, load averages: 3.92 8.95 13.02",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "startedAfterMaxWait": false,
+      "fog": 1.9145506693690548,
+      "faces": 2.5809199849553175,
+      "delta": 0.6663693155862627,
+      "finalLoad": [
+        3.8662109375,
+        7.10400390625,
+        11.658203125
+      ],
+      "loadVariation": 1.296875,
+      "phase1Discarded": false,
+      "loadStable": true,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 2,
+      "attempt": 2,
+      "startedUTC": "2026-11-13T04:22:01.176662+00:00",
+      "initialLoad": [
+        3.8662109375,
+        7.10400390625,
+        11.658203125
+      ],
+      "uptimeAtStart": "1:22  up  1:02, 6 users, load averages: 3.87 7.10 11.66",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "startedAfterMaxWait": false,
+      "faces": 2.580680401063934,
+      "fog": 2.0814068929421294,
+      "delta": 0.4992735081218047,
+      "finalLoad": [
+        4.54931640625,
+        6.2392578125,
+        10.59423828125
+      ],
+      "loadVariation": 1.41162109375,
+      "phase1Discarded": false,
+      "loadStable": true,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 3,
+      "attempt": 3,
+      "startedUTC": "2026-11-13T04:24:23.980617+00:00",
+      "initialLoad": [
+        4.54931640625,
+        6.2392578125,
+        10.59423828125
+      ],
+      "uptimeAtStart": "1:24  up  1:04, 6 users, load averages: 4.55 6.24 10.59",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "startedAfterMaxWait": true,
+      "fog": 2.247531461278363,
+      "faces": 2.5316558669323115,
+      "delta": 0.2841244056539485,
+      "finalLoad": [
+        3.12451171875,
+        4.96923828125,
+        9.4111328125
+      ],
+      "loadVariation": 1.6826171875,
+      "phase1Discarded": true,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 3,
+      "attempt": 4,
+      "startedUTC": "2026-11-13T04:26:46.679615+00:00",
+      "initialLoad": [
+        3.12451171875,
+        4.96923828125,
+        9.4111328125
+      ],
+      "uptimeAtStart": "1:26  up  1:06, 6 users, load averages: 3.12 4.97 9.41",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "startedAfterMaxWait": false,
+      "fog": 2.0641257364855767,
+      "faces": 3.1808250716163764,
+      "delta": 1.1166993351307997,
+      "finalLoad": [
+        3.23193359375,
+        4.41455078125,
+        8.49658203125
+      ],
+      "loadVariation": 1.669921875,
+      "phase1Discarded": true,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 3,
+      "attempt": 5,
+      "startedUTC": "2026-11-13T04:29:10.078560+00:00",
+      "initialLoad": [
+        3.23193359375,
+        4.41455078125,
+        8.49658203125
+      ],
+      "uptimeAtStart": "1:29  up  1:09, 6 users, load averages: 3.23 4.41 8.50",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "startedAfterMaxWait": false,
+      "fog": 2.447306260196511,
+      "faces": 2.8301659687967757,
+      "delta": 0.3828597086002645,
+      "finalLoad": [
+        4.88232421875,
+        4.7314453125,
+        8.0068359375
+      ],
+      "loadVariation": 3.48193359375,
+      "phase1Discarded": true,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 3,
+      "attempt": 6,
+      "startedUTC": "2026-11-13T04:31:32.829169+00:00",
+      "initialLoad": [
+        4.88232421875,
+        4.7314453125,
+        8.0068359375
+      ],
+      "uptimeAtStart": "1:31  up  1:11, 6 users, load averages: 4.88 4.73 8.01",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "startedAfterMaxWait": true,
+      "fog": 2.581350230722887,
+      "faces": 3.096341455413681,
+      "delta": 0.5149912246907942,
+      "finalLoad": [
+        3.412109375,
+        4.14697265625,
+        7.251953125
+      ],
+      "loadVariation": 2.1904296875,
+      "phase1Discarded": true,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 3,
+      "attempt": 7,
+      "startedUTC": "2026-11-13T04:33:55.585822+00:00",
+      "initialLoad": [
+        3.412109375,
+        4.14697265625,
+        7.251953125
+      ],
+      "uptimeAtStart": "1:33  up  1:14, 6 users, load averages: 3.41 4.15 7.25",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "startedAfterMaxWait": false,
+      "fog": 2.364167093557743,
+      "faces": 2.8473193891679442,
+      "delta": 0.48315229561020123,
+      "finalLoad": [
+        7.5859375,
+        4.71728515625,
+        6.94775390625
+      ],
+      "loadVariation": 4.63134765625,
+      "phase1Discarded": true,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 8,
+      "attempt": 8,
+      "startedUTC": "2026-11-13T04:37:41.159939+00:00",
+      "initialLoad": [
+        5.4287109375,
+        4.703125,
+        6.73974609375
+      ],
+      "uptimeAtStart": "1:37  up  1:17, 6 users, load averages: 5.43 4.70 6.74",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "phase1Discarded": false,
+      "faces": 2.946540511818035,
+      "fog": 2.2475126948940325,
+      "delta": 0.6990278169240023,
+      "finalLoad": [
+        3.51025390625,
+        4.18017578125,
+        6.20654296875
+      ],
+      "loadVariation": 2.1103515625,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 9,
+      "attempt": 9,
+      "startedUTC": "2026-11-13T04:40:03.896188+00:00",
+      "initialLoad": [
+        3.51025390625,
+        4.18017578125,
+        6.20654296875
+      ],
+      "uptimeAtStart": "1:40  up  1:20, 6 users, load averages: 3.51 4.18 6.21",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "phase1Discarded": false,
+      "fog": 2.3139917805628225,
+      "faces": 3.129770593770531,
+      "delta": 0.8157788132077086,
+      "finalLoad": [
+        2.41357421875,
+        3.693359375,
+        5.71435546875
+      ],
+      "loadVariation": 1.84814453125,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 10,
+      "attempt": 10,
+      "startedUTC": "2026-11-13T04:42:26.635322+00:00",
+      "initialLoad": [
+        2.41357421875,
+        3.693359375,
+        5.71435546875
+      ],
+      "uptimeAtStart": "1:42  up  1:22, 6 users, load averages: 2.41 3.69 5.71",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "phase1Discarded": false,
+      "faces": 3.1295331890116156,
+      "fog": 2.447138302846249,
+      "delta": 0.6823948861653668,
+      "finalLoad": [
+        3.087890625,
+        3.48779296875,
+        5.31005859375
+      ],
+      "loadVariation": 1.10009765625,
+      "loadStable": true,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 11,
+      "attempt": 11,
+      "startedUTC": "2026-11-13T04:44:49.448779+00:00",
+      "initialLoad": [
+        3.087890625,
+        3.48779296875,
+        5.31005859375
+      ],
+      "uptimeAtStart": "1:44  up  1:24, 6 users, load averages: 3.09 3.49 5.31",
+      "order": [
+        "fog",
+        "faces"
+      ],
+      "phase1Discarded": false,
+      "fog": 2.2309528214504475,
+      "faces": 3.1962518264931328,
+      "delta": 0.9652990050426853,
+      "finalLoad": [
+        3.02783203125,
+        3.3623046875,
+        4.9833984375
+      ],
+      "loadVariation": 1.54296875,
+      "loadStable": false,
+      "loadSampleCount": 17
+    },
+    {
+      "pair": 12,
+      "attempt": 12,
+      "startedUTC": "2026-11-13T04:47:12.268215+00:00",
+      "initialLoad": [
+        3.02783203125,
+        3.3623046875,
+        4.9833984375
+      ],
+      "uptimeAtStart": "1:47  up  1:27, 6 users, load averages: 3.03 3.36 4.98",
+      "order": [
+        "faces",
+        "fog"
+      ],
+      "phase1Discarded": false,
+      "faces": 3.2294189344590065,
+      "fog": 2.530500146694617,
+      "delta": 0.6989187877643896,
+      "finalLoad": [
+        3.1591796875,
+        3.32470703125,
+        4.7158203125
+      ],
+      "loadVariation": 1.4736328125,
+      "loadStable": true,
+      "loadSampleCount": 17
+    }
+  ],
+  "medianAll": 0.6743821008758147,
+  "medianStable": 0.6743821008758147,
+  "minDelta": 0.2841244056539485,
+  "maxDelta": 1.1166993351307997,
+  "stableCount": 4,
+  "range": 0.8325749294768512,
+  "passes": false,
+  "rawEvidenceCommit": "f35a23d",
+  "rawEvidenceURL": "https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/desempenho"
+}

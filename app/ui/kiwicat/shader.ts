@@ -90,6 +90,7 @@ export function fogMaterial(
   reference: Texture,
   protection: Texture,
   densityTexture: Texture,
+  protectEyes = true,
 ) {
   const arcGain = uniform(1),
     alive = uniform(0),
@@ -107,7 +108,7 @@ export function fogMaterial(
     const st = uv(),
       calibrated = texture(reference, st).rgb,
       coverage = texture(protection, st),
-      solid = coverage.r,
+      solid = protectEyes ? coverage.r : float(0),
       foreground = coverage.g,
       arcCoverage = coverage.b.mul(alive),
       neutral = vec3(min(min(calibrated.r, calibrated.g), calibrated.b)),

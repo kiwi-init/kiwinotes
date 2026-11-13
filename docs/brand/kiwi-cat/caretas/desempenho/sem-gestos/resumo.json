@@ -1,0 +1,62 @@
+{
+  "task": "T8959",
+  "measuredCommit": "45a0f215229418479398f53ca58dff7a5c123936",
+  "source_sha256": {
+    "index.ts": "bebd8964addce120914fd1e28fdca8db3bece237d705077d617bdaa61a16b211",
+    "shader.ts": "2dd00db1f8af84ad6a6ac1d39c210e35e98433218f8dac55389fcd79eb49354f",
+    "state.ts": "6b0c72e06e875f442b24a7a7d29966b2feb290774aad7193bb3a33c5bf9fb099",
+    "cat-demo.ts": "615c39450ed54614df289c05d56753895e2f2b40e9d2fc4d13bce7245d2962cc",
+    "cat.ts": "6f597f7fc6426661c37c5255e9b94593746df5eeddc2382b80c95e197df6d1b9",
+    "gestures.ts": "e26e4d5a1c48b07a03a03d7b962b4463d047d6009f5ddc77e1a527a9ef264f25",
+    "vectors.ts": "a7a49a14d1b3fd78b4c008880bc13db844f2f2781208d2582a16591c79c7659d",
+    "assets/reference-no-eyes.webp": "01a6e6743be6489acd5887f0d5102982279552793549e2e762670c196f490e74",
+    "assets/source.json": "2c80a303609b966e237ccd3114793109909febb25ab1c90bd8fc2b4a3a8bbc00"
+  },
+  "scope": "no-gesture diagnostic; 12 separate pre-gesture windows, not CPU acceptance",
+  "seed": 386,
+  "expectedFirstBlinkSeconds": 8.993828538805246,
+  "expectedFirstLookSeconds": 11.62525993771851,
+  "nominalWindowSeconds": 5,
+  "variantWarmupSeconds": 10,
+  "noRecorder": true,
+  "variants": [
+    {
+      "variant": "fog",
+      "errors": [],
+      "elapsedSeconds": 60.833247876000016,
+      "cpuSeconds": 2.07,
+      "cpuMean": 3.4027445061282977,
+      "windowCount": 12,
+      "allWindowsWithoutGestures": true,
+      "maxAnimations": 0,
+      "fogDrawsPerWindowRange": [
+        10,
+        10
+      ]
+    },
+    {
+      "variant": "faces",
+      "errors": [],
+      "elapsedSeconds": 60.83960404399997,
+      "cpuSeconds": 2.0399999999999996,
+      "cpuMean": 3.3530790215607684,
+      "windowCount": 12,
+      "allWindowsWithoutGestures": true,
+      "maxAnimations": 0,
+      "faceUpdatesInitial": [
+        1
+      ],
+      "faceUpdatesFinal": [
+        1
+      ],
+      "maxQuietPlans": 0,
+      "fogDrawsPerWindowRange": [
+        10,
+        10
+      ]
+    }
+  ],
+  "delta": -0.04966548456752928,
+  "rawEvidenceCommit": "f35a23d",
+  "rawEvidenceURL": "https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/brand/kiwi-cat/caretas/desempenho/sem-gestos"
+}
