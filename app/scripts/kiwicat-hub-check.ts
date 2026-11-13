@@ -101,6 +101,16 @@ try {
   }
   assert.ok(await p.evaluate(() => (window as any).__inkCanvas === document.querySelector(".kn-kiwicat canvas")));
   report.checks.push("symbol ink follows the theme, also when it changes live");
+  // O Reduzir movimento para a animação, não o estado (#434): o pronto volta sozinho ao repouso, no quadro parado.
+  {
+    const still = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "dark", width: 1000, height: 740, motion: false, browser: "webkit", query: { section: "notes" } });
+    const r = still.page; await r.waitForSelector('.kn-kiwicat[data-ready="true"]');
+    await invoke("agent.ask", { text: "oi" }); await r.waitForSelector('.kn-kiwicat[data-state="pronto"]');
+    await r.waitForFunction(() => getComputedStyle(document.querySelector('.kn-kiwicat [data-symbol="pronto"]')!).opacity === "1", null, { timeout: 2000 });
+    await r.waitForFunction(() => getComputedStyle(document.querySelector('.kn-kiwicat [data-symbol="pronto"]')!).opacity === "0", null, { timeout: 4000 });
+    await still.close();
+  }
+  report.checks.push("reduced motion: ready goes back to rest on its own");
   await invoke("agent.disable"); await p.waitForSelector(".kn-kiwicat", { state: "detached" });
   report.checks.push("show switch and agent disable unmount");
   report.page = w.report; report.requests = requested; assert.deepEqual(w.report.problems, []);

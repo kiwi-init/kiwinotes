@@ -62,7 +62,18 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     cancel(); paint(machine.project(elapsed));
   }
   function schedule() {
-    if (disposed || stats.hidden || stats.reduced || options.mode === "capture") return;
+    if (disposed || stats.hidden || options.mode === "capture") return;
+    if (stats.reduced) {
+      // Reduzir movimento (#434): sem quadros nem gestos, mas o estado segue (o pronto volta ao repouso, o gato dorme).
+      // Um timer só até a próxima troca de estado, que já entra no quadro parado.
+      const boundary = machine.nextBoundary();
+      if (!Number.isFinite(boundary)) return;
+      timerId = window.setTimeout(() => {
+        timerId = 0; advance();
+        const frame = machine.sample(); syncFog(frame); paint(frame); schedule();
+      }, Math.ceil(Math.max(0, boundary - elapsed) * 1000) + 1);
+      return;
+    }
     if (!quiet()) { frameId = requestAnimationFrame(active); return; }
     const boundary = machine.nextWake();
     if (!Number.isFinite(boundary)) return;
