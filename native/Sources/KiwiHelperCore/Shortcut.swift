@@ -84,6 +84,9 @@ public enum ShortcutOutput: Equatable, Sendable {
     case interrupt(String, keyCode: Int64)
     /// A double tap or a sequence was completed.
     case trigger(String)
+
+    /// The `keyCode` of an `.interrupt` caused by a mouse click (spec #9876).
+    public static let mouseKeyCode: Int64 = -1
 }
 
 /// Recognizes the shortcuts in the keyboard's events and says which events are Kiwi's (T5349, #175). Pure: the
@@ -98,8 +101,6 @@ public enum ShortcutOutput: Equatable, Sendable {
 /// reaches the app.
 public struct ShortcutEngine<Payload> {
     public typealias Input = KeyInput
-    /// The `keyCode` of an `.interrupt` caused by a mouse click (spec #9876).
-    public static var mouseKeyCode: Int64 { -1 }
 
     public struct Result {
         /// The event is Kiwi's: the tap drops it.
@@ -182,7 +183,7 @@ public struct ShortcutEngine<Payload> {
         case .mouseDown:
             // A click with a modifier key held (⌃+click): that key is being used as a modifier. Never consumed.
             var result = Result()
-            result.outputs = interruptHeld(by: Self.mouseKeyCode)
+            result.outputs = interruptHeld(by: ShortcutOutput.mouseKeyCode)
             return result
         }
     }

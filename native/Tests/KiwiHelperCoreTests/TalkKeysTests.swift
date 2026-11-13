@@ -48,7 +48,7 @@ final class AgentControlKeyTests: XCTestCase {
         var e = engine()
         _ = e.handle(.flags(keyCode: right, flags: rightBit), payload: 0, at: 0)
         let r = e.handle(.mouseDown, payload: 0, at: 0.05)
-        XCTAssertEqual(r.outputs, [.interrupt("agent", keyCode: ShortcutEngine<Int>.mouseKeyCode)])
+        XCTAssertEqual(r.outputs, [.interrupt("agent", keyCode: ShortcutOutput.mouseKeyCode)])
         XCTAssertFalse(r.consume, "⌃+click still opens the context menu")
         _ = e.handle(.flags(keyCode: right, flags: 0), payload: 0, at: 0.5)
         XCTAssertEqual(e.handle(.mouseDown, payload: 0, at: 1).outputs, [], "a click with nothing held is nobody's")
