@@ -10,9 +10,12 @@
 // - `ajustes-agente-estado.json`, com o `claude` falso não instalado, não logado e numa versão antiga;
 // - `ajustes-agente-sem-rede.json`, com o registro fora do ar;
 // - `ajustes-agente-notas.json` (spec #7496): o Testar pergunta sobre uma nota, e o agente falso lê pelas ferramentas
-//   do Kiwi ("Lendo Projetos/Kiwi.md…").
-// Sai com 1 se algum roteiro falhar.
+//   do Kiwi ("Lendo Projetos/Kiwi.md…");
+// - a escrita (spec #8356), na janela Notas: com a nota aberta, o agente falso acrescenta numa seção, troca outra com a
+//   versão lida e cria uma nota nova, e a janela mostra cada mudança. O roteiro é montado aqui, com a versão da nota.
+// Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -53,17 +56,24 @@ async function cli(args: string[], env: Record<string, string> = {}): Promise<{ 
 }
 
 /** Um cenário: o headless com o ambiente dele, um roteiro, e os prints com um prefixo. */
-async function scenario(name: string, script: string, env: Record<string, string>): Promise<boolean> {
+async function scenario(
+  name: string,
+  script: string,
+  env: Record<string, string>,
+  o: { window?: string; before?: (data: string, env: Record<string, string>) => Promise<void>; prefix?: string } = {},
+): Promise<boolean> {
+  if (process.env.KIWI_AGENT_UI_ONLY && process.env.KIWI_AGENT_UI_ONLY !== name) return true;
   const data = path.join(work, name);
   const shots = path.join(work, `shots-${name}`);
   const base = { KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: reg.url, KIWI_ADAPTER_PACKAGES: packages, ...env };
   try {
     const up = await cli(["start", "--no-helper", "--data", data], base);
     if (up.code !== 0) throw new Error(`o headless não subiu: ${up.out}`);
-    const r = await cli(["ui", "hub", "--script", path.join(scripts, script), "--out", shots, "--data", data]);
+    await o.before?.(data, base);
+    const r = await cli(["ui", o.window ?? "hub", "--script", path.isAbsolute(script) ? script : path.join(scripts, script), "--out", shots, "--data", data]);
     const report = JSON.parse(r.out.slice(r.out.indexOf("{"))) as { ok: boolean; failedAt?: number; problems?: string[]; steps?: { error?: string }[] };
     for (const f of new Bun.Glob("*.png").scanSync(shots)) {
-      const to = script === "ajustes-agente.json" ? f : script === "ajustes-agente-notas.json" ? `notas-${f}` : `0-${name}.png`;
+      const to = o.prefix ? `${o.prefix}${f}` : script === "ajustes-agente.json" ? f : script === "ajustes-agente-notas.json" ? `notas-${f}` : `0-${name}.png`;
       renameSync(path.join(shots, f), path.join(out, to));
     }
     const failed = report.steps?.find((s) => s.error)?.error;
@@ -74,6 +84,58 @@ async function scenario(name: string, script: string, env: Record<string, string
   }
 }
 
+const KIWI = "# Kiwi\n\nO app de notas do harry.\n\n## Prazo\n\nO prazo do Kiwi é março.\n\n## Equipe\n\nharry e jow.\n";
+const APPENDED = KIWI.replace("O prazo do Kiwi é março.\n", "O prazo do Kiwi é março.\nPode mudar para abril, diz o agente.\n");
+const versionOf = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+
+/** Antes da janela: a nota no cofre, e o agente ligado com o adaptador baixado. */
+async function agentReady(data: string, env: Record<string, string>): Promise<void> {
+  const invoke = async (cap: string, args: unknown) => {
+    const r = await cli(["invoke", cap, JSON.stringify(args), "--data", data], env);
+    if (r.code !== 0) throw new Error(`${cap}: ${r.out}`);
+    return JSON.parse(r.out) as { value: any };
+  };
+  await invoke("notes.create", { folder: "Projetos", title: "Kiwi", content: KIWI });
+  await invoke("agent.enable", { consent: true });
+  await invoke("agent.download", {});
+  for (const end = Date.now() + 60_000; (await invoke("agent.status", {})).value.adapter.phase !== "ready"; ) {
+    if (Date.now() > end) throw new Error("o adaptador não baixou");
+    await Bun.sleep(200);
+  }
+}
+
+/** O roteiro da escrita na janela Notas (spec #8356), com a versão que o notes_write pede. */
+function writeScript(): string {
+  const ask = (name: string, args: unknown) => ({ invoke: "agent.ask", args: { text: `/tool ${name} ${JSON.stringify(args)}` }, name: `o agente: ${name}` });
+  const editor = ".kn-note-editor .cm-content";
+  const steps = [
+    { waitFor: ".kn-crumb-bt", name: "a janela Notas abre" },
+    { click: ".kn-crumb-bt", name: "abre a árvore" },
+    { click: ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')", name: "abre a pasta Projetos" },
+    { click: ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Kiwi')", name: "abre a nota Kiwi" },
+    { expectText: editor, text: "O prazo do Kiwi é março.", name: "a nota aberta, como estava" },
+    { screenshot: "1-antes.png" },
+    ask("notes_append", { path: "Projetos/Kiwi.md", section: "Prazo", text: "Pode mudar para abril, diz o agente." }),
+    { expectText: editor, text: "Pode mudar para abril, diz o agente.", timeout: 20000, name: "a janela mostra o que o agente acrescentou na seção" },
+    { screenshot: "2-acrescentou.png" },
+    { wait: 1500 },
+    ask("notes_write", { path: "Projetos/Kiwi.md", section: "Equipe", text: "harry, jow e o Kiwi-cat.", version: versionOf(APPENDED) }),
+    { expectText: editor, text: "harry, jow e o Kiwi-cat.", timeout: 20000, name: "a janela mostra a seção trocada pelo agente" },
+    { screenshot: "3-trocou.png" },
+    { wait: 1500 },
+    ask("notes_create", { folder: "Projetos", title: "Resumo do Kiwi", text: "# Resumo do Kiwi\n\nPrazo: março, talvez abril.\n" }),
+    { wait: 1500 },
+    { click: ".kn-crumb-bt", name: "abre a árvore" },
+    { waitFor: ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Resumo do Kiwi')", timeout: 20000, name: "a nota que o agente criou aparece na árvore" },
+    { click: ".kn-tree-pop .kn-side-item[data-kind='note']:has-text('Resumo do Kiwi')", name: "abre a nota criada" },
+    { expectText: editor, text: "Prazo: março, talvez abril.", name: "com o texto do agente" },
+    { screenshot: "4-criou.png" },
+  ];
+  const file = path.join(work, "notas-agente-escreve.json");
+  writeFileSync(file, JSON.stringify({ window: "notes", size: "1100x800", steps }, null, 2));
+  return file;
+}
+
 let ok = true;
 try {
   ok = (await scenario("fluxo", "ajustes-agente.json", {})) && ok;
@@ -82,6 +144,7 @@ try {
   ok = (await scenario("versao-antiga", "ajustes-agente-estado.json", { KIWI_FAKE_CLAUDE_VERSION: "2.0.9" })) && ok;
   ok = (await scenario("sem-rede", "ajustes-agente-sem-rede.json", { KIWI_ADAPTER_REGISTRY: "http://127.0.0.1:9" })) && ok;
   ok = (await scenario("notas", "ajustes-agente-notas.json", { KIWI_FAKE_AGENT_TOOL_DELAY_MS: "1500" })) && ok;
+  ok = (await scenario("escrita", writeScript(), {}, { window: "notes", before: agentReady, prefix: "escrita-" })) && ok;
 } finally {
   reg.stop();
   rmSync(work, { recursive: true, force: true });

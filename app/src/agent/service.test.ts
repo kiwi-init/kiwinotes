@@ -14,6 +14,9 @@ import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService, AgentServiceError } from "./service.ts";
 import type { VaultReader } from "./tools/reader.ts";
+import type { VaultWriter } from "./tools/writer.ts";
+import { AgentActivity } from "./activity.ts";
+import { createHash } from "node:crypto";
 
 const services: AgentService[] = [];
 const registries: FakeRegistry[] = [];
@@ -50,7 +53,7 @@ interface Made {
   pid: () => number | null;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -67,6 +70,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
       return FAKE_CLAUDE;
     },
     ...(o.reader ? { reader: o.reader } : {}),
+    ...(o.writer ? { writer: o.writer } : {}),
     openHost: async ({ configOptions, kiwiTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
@@ -599,5 +603,76 @@ describe("o agente que cai sozinho não deixa o servidor aberto (revisão do T89
     await m.svc.disable();
     expect(await ping(first)).toBe("fechado");
     expect(await ping(second)).toBe("fechado");
+  });
+});
+
+/** O escritor de mentira, sobre o mesmo cofre na memória do `memoryReader` (a semântica está em `tools/write.test.ts`). */
+const versionOf = (c: string) => createHash("sha256").update(c).digest("hex").slice(0, 16);
+function memoryWriter(notes: Record<string, string>): VaultWriter {
+  const note = (p: string) => ({ path: p, title: path.basename(p, ".md"), content: notes[p]!, version: versionOf(notes[p]!) });
+  return {
+    get: async (p) => {
+      if (!(p in notes)) throw Object.assign(new Error(`no note ${p}`), { code: "E_NOT_FOUND" });
+      return note(p);
+    },
+    save: async (p, content, base) => {
+      if (versionOf(notes[p]!) !== base) return { saved: false };
+      notes[p] = content;
+      return { saved: true, path: p, version: versionOf(content) };
+    },
+    create: async (folder, title, content) => {
+      const p = `${folder ? `${folder}/` : ""}${title}.md`;
+      notes[p] = content;
+      return note(p);
+    },
+    folder: async () => null,
+  };
+}
+
+describe("a escrita e o registro do agente (spec #8356)", () => {
+  test("com o escritor, as três de escrita aparecem; cada pedido entra no registro com o que leu e mudou, e a cópia de antes", async () => {
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
+      type: "done",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, notes_create, notes_append, notes_write",
+    });
+    await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
+    const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
+    expect(notes["Ideias.md"]).toBe("gatos\ne cachorros\n");
+    // A escrita aparece no status ao vivo, como a leitura.
+    expect(turn).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "notes_append", target: "Ideias.md" }));
+    const log = await m.svc.activityLog();
+    expect(log.map((r) => r.request)).toEqual(['/tool notes_append {"path":"Ideias.md","text":"e cachorros"}', '/tool notes_read {"path":"Ideias.md"}', "/ferramentas"]);
+    expect(log[1]!.reads).toEqual([expect.objectContaining({ tool: "notes_read", target: "Ideias.md" })]);
+    expect(log[0]!.changes).toEqual([
+      expect.objectContaining({ kind: "appended", path: "Ideias.md", before: 5, after: 18, version: versionOf("gatos\ne cachorros\n") }),
+    ]);
+    // A cópia de antes está no registro, nos dados do app, e o registro é o mesmo que a CLI lê.
+    const copy = log[0]!.changes[0]!.copy!;
+    const fromDisk = new AgentActivity({ dir: path.join(agentDir(m.data), "activity") });
+    expect(await fromDisk.copy(copy)).toBe("gatos");
+    expect((await fromDisk.list()).map((r) => r.id)).toEqual(log.map((r) => r.id));
+  });
+
+  test("uma escrita recusada não entra no registro, e não deixa cópia", async () => {
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    const turn = await askAndWait(m, '/tool notes_write {"path":"Ideias.md","text":"x","version":"velha"}');
+    expect((turn.at(-1) as { text: string }).text).toMatch(/^erro da ferramenta: E_CHANGED/);
+    expect(notes["Ideias.md"]).toBe("gatos");
+    const [r] = await m.svc.activityLog();
+    expect(r!.changes).toEqual([]);
+    const dir = path.join(agentDir(m.data), "activity");
+    expect(readdirSync(path.join(dir, readdirSync(dir)[0]!))).toEqual(["request.json"]);
+  });
+
+  test("sem o escritor, só as seis de leitura", async () => {
+    const m = make({ reader: memoryReader(NOTES) });
+    await readyNow(m);
+    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get" });
+    expect((await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"x"}')).at(-1)).toMatchObject({ text: expect.stringContaining("não tem a ferramenta") });
   });
 });

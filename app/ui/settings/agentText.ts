@@ -72,8 +72,8 @@ export function modelHint(s: Pick<AgentStatus, "model" | "models">): string {
 }
 
 /**
- * O status de uma ferramenta em uso. As do Kiwi (spec #7496) dizem o que foi lido ou procurado ("Lendo
- * Projetos/Kiwi.md…"); as outras, o nome.
+ * O status de uma ferramenta em uso. As do Kiwi dizem o que foi lido ou procurado ("Lendo Projetos/Kiwi.md…", spec
+ * #7496) e o que foi escrito ("Escrevendo em Projetos/Kiwi.md…", spec #8356); as outras, o nome.
  */
 export function toolStatus(tool: string, target?: string): string {
   switch (tool) {
@@ -89,6 +89,12 @@ export function toolStatus(tool: string, target?: string): string {
       return "Vendo as reuniões…";
     case "meetings_get":
       return target ? `Lendo a reunião ${target}…` : "Lendo uma reunião…";
+    case "notes_create":
+      return target ? `Criando ${target}…` : "Criando uma nota…";
+    case "notes_append":
+      return target ? `Acrescentando em ${target}…` : "Acrescentando numa nota…";
+    case "notes_write":
+      return target ? `Escrevendo em ${target}…` : "Escrevendo numa nota…";
     default:
       return `Usando ${tool}…`;
   }
@@ -119,7 +125,7 @@ export function applyTurn(t: TestState, e: AgentTurnEvent, name: string): TestSt
       if (e.status === "thinking") return { ...t, status: "Pensando…" };
       return { ...t, status: "tool" in e ? toolStatus(e.tool, e.target) : "Usando uma ferramenta…" };
     case "permission":
-      return { ...t, status: `Recusei o ${e.tool}: o agente só lê as suas notas e reuniões.` };
+      return { ...t, status: `Recusei o ${e.tool}: o agente só usa as suas notas e reuniões, pelo Kiwi.` };
     case "text":
       return { ...t, status: "Respondendo…", text: t.text + e.text };
     case "done":
@@ -158,11 +164,12 @@ export function consentText(name: string, company = "Anthropic"): { title: strin
 }
 
 /**
- * A dica do "Testar" (spec #7496): o agente lê as notas e as reuniões, sem mudar nada. Até o guardrail de segredos
- * entrar (outro spec), ela avisa que ele pode ler qualquer nota que pedir.
+ * A dica do "Testar": o agente lê as notas e as reuniões (spec #7496) e pode mudar as notas (spec #8356), com o texto de
+ * antes guardado nas Versões da nota. Até o guardrail de segredos entrar (outro spec), ela avisa que ele pode ler
+ * qualquer nota que pedir.
  */
 export const TEST_HINT =
-  "Cada teste gasta um pedido do seu plano. O agente pode procurar e ler as suas notas e reuniões, mas não muda nada nem mexe no Mac. Por enquanto, ele pode ler qualquer nota que pedir.";
+  "Cada teste gasta um pedido do seu plano. O agente pode procurar, ler e mudar as suas notas, e ler as reuniões, mas não apaga nada nem mexe no Mac. O texto de antes de cada mudança fica nas Versões da nota. Por enquanto, ele pode ler qualquer nota que pedir.";
 
 /** A regra de privacidade, nos Ajustes e no Sobre (ADR 0011). */
 export const PRIVACY_RULE = "Tudo é local, menos o agente que você escolher";

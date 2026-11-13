@@ -160,6 +160,29 @@ O agente lê o cofre por um servidor MCP do próprio app (`src/agent/tools/`), e
   - A do builder (adaptador de verdade, `claude` falso que conecta como o Claude Code) passou em 2026-11-12: `--mcp-config` só com o `kiwi`, `--allowedTools=mcp__kiwi__*`, `--tools=`, `--strict-mcp-config`, e o `tools/list` chegou.
   - A de verdade (`--real --tools`) é do harry, e quem pede é o lead.
 
+## A escrita nas notas (T9251, spec #8356)
+O harry decidiu (#8356) que o agente escreve direto na nota, e a pessoa desfaz se não gostar. O mesmo servidor ganha três ferramentas, que só aparecem quando o app dá a ele o escritor (`src/agent/tools/writer.ts`):
+- **`notes_create`, `notes_append` e `notes_write`.** Criar, acrescentar (no fim da nota ou de uma seção) e trocar (uma seção, ou a nota inteira). Nenhuma apaga, renomeia nem move.
+  - As anotações do MCP dizem que elas escrevem (`readOnlyHint: false`), e só o `notes_write` troca texto que já existia (`destructiveHint`).
+  - A permissão não muda: o `mcp__kiwi__*` já cobre as três.
+- **Pelo mesmo salvar das Notas.** O escritor só chama `notes.get`, `notes.save`, `notes.create` e `notes.folder`, na pasta de notas aberta, com a fronteira do cofre (só `.md`, sem `..`, sem link simbólico para fora).
+- **Uma edição da pessoa nunca se perde.**
+  - O `notes_read` devolve a `versao` da nota, e o `notes_write` exige a versão lida.
+  - O `notes.save` grava só se o arquivo ainda está naquela versão: o cofre confere de novo logo antes de trocar o arquivo.
+  - Se a nota mudou no meio, nada é escrito, e o agente recebe `E_CHANGED` com o pedido de ler de novo.
+  - O `notes_append` sem versão lê de novo e tenta outra vez, até 3 vezes.
+  - Com a nota aberta e uma edição por gravar, a janela junta a escrita do agente com a da pessoa (o merge do T5454). Sem edição pendente, ela só recarrega.
+- **A cópia de antes, em dois lugares, os dois fora do cofre:**
+  - nas Versões da nota: o `notes.save` com `snapshot: true` (contrato 1.44.0) grava o texto de antes na hora, sem o intervalo de 2 minutos;
+  - no registro do agente (`src/agent/activity.ts`, em `<dados>/agent/activity/`), gravada antes da escrita e tirada se ela não acontece. É desta cópia que o desfazer vai precisar: o limite de 50 versões por nota não a apaga.
+- **O registro de cada pedido:** o que foi lido e o que mudou, com a nota, a hora, o tipo, o tamanho antes e depois, a versão que a escrita deixou e a pasta de notas. Fica 30 dias, e o `agent.activity` (e o `bun run cli agent activity`) mostra.
+- **As notas de reunião ficam só para leitura.** A escrita numa nota com `type: meeting` é recusada, e também a que deixaria uma nota comum com esse frontmatter.
+- **O teto é de 40 mil caracteres por escrita.** O que passa volta com um aviso claro, dizendo para mudar por seção ou acrescentar em partes.
+  - O corpo que o servidor aceita subiu de 64 KB para 256 KB, para caber o teto mesmo no pior caso do JSON: 3 bytes por caractere (CJK) ou 6 num `\uXXXX`.
+  - Assim, o que passa do teto chega à ferramenta e volta com o aviso, e não com um 413 do servidor.
+- **O que a pessoa vê:** o status ao vivo diz "Escrevendo em Projetos/Kiwi.md…", e a dica do "Testar" diz que o agente pode mudar as notas e que o texto de antes fica nas Versões.
+- **Não entra em release** antes do desfazer e da tela "Atividade do agente" (os specs seguintes).
+
 ## Plano B: abrir o Claude Code direto, sem o adaptador
 Se o adaptador deixar de servir (uma versão que não roda com o Bun do app, um isolamento que não segura, ou o projeto parado), entra um segundo motor por trás da mesma interface `AgentHost`. Ele abre o `claude` instalado em modo de programa:
 - `claude -p --input-format stream-json --output-format stream-json --verbose`;

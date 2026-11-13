@@ -94,7 +94,15 @@ async function mcp(sessionId: string, method: string, params?: unknown): Promise
 async function useTool(client: AgentContext, sessionId: string, name: string, args: unknown): Promise<{ text: string; isError: boolean }> {
   await client.notify("session/update", {
     sessionId,
-    update: { sessionUpdate: "tool_call", toolCallId: `k${++rpcId}`, title: name, kind: "read", status: "in_progress", _meta: { claudeCode: { toolName: `mcp__kiwi__${name}` } } },
+    // As de escrita (spec #8356) chegam como `edit`, como o Claude Code faz com uma ferramenta que muda arquivo.
+    update: {
+      sessionUpdate: "tool_call",
+      toolCallId: `k${++rpcId}`,
+      title: name,
+      kind: /^notes_(create|append|write)$/.test(name) ? "edit" : "read",
+      status: "in_progress",
+      _meta: { claudeCode: { toolName: `mcp__kiwi__${name}` } },
+    },
   });
   const r = await mcp(sessionId, "tools/call", { name, arguments: args });
   const pause = Number(process.env.KIWI_FAKE_AGENT_TOOL_DELAY_MS ?? 0);

@@ -26,7 +26,8 @@ export interface ReaderNoteMeta {
 export interface VaultReader {
   search(query: string, limit: number): Promise<ReaderHit[]>;
   list(): Promise<{ folders: string[]; notes: ReaderNoteMeta[] }>;
-  get(path: string): Promise<{ path: string; title: string; mtime: string; content: string }>;
+  /** `version` (spec #8356): a versão da nota, que o `notes_write` pede para mudar o texto. */
+  get(path: string): Promise<{ path: string; title: string; mtime: string; content: string; version?: string }>;
   meetings(): Promise<MeetingNote[]>;
 }
 

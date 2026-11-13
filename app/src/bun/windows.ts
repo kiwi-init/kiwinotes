@@ -24,6 +24,7 @@ import { fetchRemoteImage } from "../notes/remote-image.ts";
 import { NOT_RECORDING } from "../shared/meetings.ts";
 import { MeetingHostError } from "./meetings.ts";
 import { readerFromCapabilities } from "../agent/tools/reader.ts";
+import { writerFromCapabilities } from "../agent/tools/writer.ts";
 
 export type WindowName = UiWindow;
 
@@ -192,8 +193,10 @@ const capabilities = uiCapabilities({
     apply: () => about?.apply() ?? Promise.resolve({ state: "off", reason: "o atualizador ainda não subiu", lastCheck: null }),
   },
 });
-// As ferramentas do agente (spec #7496) leem pelas mesmas capacidades das janelas, só as de leitura.
+// As ferramentas do agente (spec #7496) leem pelas mesmas capacidades das janelas, só as de leitura; e escrevem (spec
+// #8356) pelo mesmo salvar das Notas, com a cópia de antes nas Versões.
 stores.agent.useReader(readerFromCapabilities(capabilities));
+stores.agent.useWriter(writerFromCapabilities(capabilities));
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */
 const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();

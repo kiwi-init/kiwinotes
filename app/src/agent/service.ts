@@ -12,6 +12,9 @@
 // - **As ferramentas do Kiwi** (spec #7496): com o leitor do cofre (`useReader`), o servidor MCP do Kiwi abre junto
 //   com o programa do agente, com uma senha nova, e fecha junto com ele. Cada uso de ferramenta vira um status no
 //   pedido ("lendo Projetos/Kiwi.md").
+// - **A escrita** (spec #8356): com o escritor (`useWriter`), o servidor também oferece as ferramentas de escrita. O
+//   registro do agente (`activity.ts`) anota, para cada pedido, o que foi lido e o que mudou, e guarda a cópia do texto
+//   de antes de cada mudança, antes dela. O `agent.activity` mostra o registro.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -20,6 +23,9 @@ import { AgentError, type AgentErrorCode } from "./errors.ts";
 import type { AgentHost, AgentHostOptions } from "./host.ts";
 import { KIWI_TOOL_PREFIX, KiwiToolServer, type ToolCallEvent } from "./tools/server.ts";
 import type { VaultReader } from "./tools/reader.ts";
+import type { VaultWriter } from "./tools/writer.ts";
+import type { WriteJournal } from "./tools/tools.ts";
+import { AgentActivity, type ActivityRequest } from "./activity.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
@@ -58,6 +64,8 @@ export interface AgentServiceDeps {
   }): Promise<AgentHost>;
   /** O leitor do cofre para as ferramentas do Kiwi (spec #7496). Também pode chegar depois, pelo `useReader`. */
   reader?: VaultReader;
+  /** O escritor do cofre (spec #8356): com ele, as ferramentas de escrita aparecem. Também pelo `useWriter`. */
+  writer?: VaultWriter;
   /** A versão do Kiwi, que o servidor de ferramentas diz ao agente. */
   version?: string;
   /** O registro do npm e a lista de pacotes (nos testes, um registro falso e uma lista de teste). */
@@ -114,12 +122,19 @@ export class AgentService {
   private readonly turnListeners = new Set<(e: AgentTurnEvent) => void>();
   private closed = false;
   private reader: VaultReader | null;
+  private writer: VaultWriter | null;
+  /** O registro do agente (spec #8356): o que cada pedido leu e mudou, e a cópia de antes de cada mudança. */
+  private readonly activity: AgentActivity;
+  /** O último pedido: uma ferramenta que chega sem pedido em andamento entra nele. */
+  private lastTurn: string | null = null;
   /** O servidor de ferramentas do programa aberto (ou abrindo): fecha junto com ele. */
   private tools: KiwiToolServer | null = null;
 
   constructor(private readonly d: AgentServiceDeps) {
     this.name = d.name ?? "Claude Code";
     this.reader = d.reader ?? null;
+    this.writer = d.writer ?? null;
+    this.activity = new AgentActivity({ dir: path.join(agentDir(d.data), "activity") });
   }
 
   /**
@@ -130,8 +145,37 @@ export class AgentService {
     this.reader = reader;
   }
 
-  /** Um uso de ferramenta do Kiwi: vira um status do pedido em andamento. */
+  /**
+   * O escritor do cofre (spec #8356): as ferramentas de escrita, pelas capacidades das Notas. Vale a partir da próxima
+   * abertura do programa do agente.
+   */
+  useWriter(writer: VaultWriter): void {
+    this.writer = writer;
+  }
+
+  /** Os pedidos do registro, do mais novo para o mais velho (`agent.activity`). */
+  activityLog(limit?: number): Promise<ActivityRequest[]> {
+    return this.activity.list(limit);
+  }
+
+  /** O pedido em que uma ferramenta entra no registro: o em andamento, ou o último. */
+  private activityId(): string {
+    return (this.lastTurn ??= `sem-pedido-${crypto.randomUUID()}`);
+  }
+
+  /** A cópia de antes de cada escrita vai para o registro, no pedido em que ela acontece. */
+  private readonly journal: WriteJournal = {
+    keep: (_path, before) => this.activity.keep(this.activityId(), before),
+    drop: (copy) => this.activity.drop(copy),
+  };
+
+  /** Um uso de ferramenta do Kiwi: entra no registro e vira um status do pedido em andamento. */
   private onToolCall(e: ToolCallEvent): void {
+    if (e.ok) {
+      const id = this.activityId();
+      const done = e.change ? this.activity.change(id, e.change) : this.activity.read(id, { tool: e.tool, ...(e.target ? { target: e.target } : {}) });
+      void done.catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
+    }
     const turn = this.turn;
     if (!turn || turn.cancelled) return;
     this.emitTurn({ id: turn.id, type: "status", status: "running", tool: e.tool, ...(e.target ? { target: e.target } : {}) });
@@ -318,6 +362,8 @@ export class AgentService {
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
     const turn = { id: crypto.randomUUID(), cancelled: false };
     this.turn = turn;
+    this.lastTurn = turn.id;
+    void this.activity.begin(turn.id, text).catch((err) => this.d.log?.(`[agent] activity: ${String((err as Error)?.message ?? err)}`));
     this.clearIdle();
     this.emitTurn({ id: turn.id, type: "started" });
     this.emitStatus();
@@ -372,7 +418,15 @@ export class AgentService {
       // Um servidor que tenha sobrado de uma abertura anterior fecha antes do novo (revisão do T8956).
       this.stopTools(this.tools);
       const reader = this.reader;
-      const tools = reader ? new KiwiToolServer({ reader, version: this.d.version, onCall: (e) => this.onToolCall(e) }) : null;
+      const writer = this.writer;
+      const tools = reader
+        ? new KiwiToolServer({
+            reader,
+            ...(writer ? { writer, journal: this.journal } : {}),
+            version: this.d.version,
+            onCall: (e) => this.onToolCall(e),
+          })
+        : null;
       let config: ReturnType<KiwiToolServer["start"]> | null = null;
       const kiwiTools = tools
         ? {

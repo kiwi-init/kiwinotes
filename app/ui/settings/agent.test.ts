@@ -144,7 +144,7 @@ describe("o Testar", () => {
 
   test("a permissão recusada aparece no status: o agente só lê as notas e as reuniões", () => {
     expect(run([ev({ type: "started" }), ev({ type: "permission", tool: "Bash", decision: "denied" })]).status).toBe(
-      "Recusei o Bash: o agente só lê as suas notas e reuniões.",
+      "Recusei o Bash: o agente só usa as suas notas e reuniões, pelo Kiwi.",
     );
   });
 
@@ -161,10 +161,22 @@ describe("o Testar", () => {
     expect(st("Read")).toBe("Usando Read…");
   });
 
-  test("a dica do Testar diz que o agente lê as notas, e avisa que pode ler qualquer uma", () => {
-    expect(TEST_HINT).toContain("ler as suas notas e reuniões");
+  test("as ferramentas de escrita dizem o que estão mudando (spec #8356)", () => {
+    const mid = run([ev({ type: "started" })]);
+    const st = (tool: string, target?: string) => run([ev({ type: "status", status: "running", tool, ...(target ? { target } : {}) })], mid).status;
+    expect(st("notes_create", "Projetos/Novo.md")).toBe("Criando Projetos/Novo.md…");
+    expect(st("notes_append", "Projetos/Kiwi.md › Prazo")).toBe("Acrescentando em Projetos/Kiwi.md › Prazo…");
+    expect(st("notes_write", "Projetos/Kiwi.md")).toBe("Escrevendo em Projetos/Kiwi.md…");
+    expect(st("notes_write")).toBe("Escrevendo numa nota…");
+  });
+
+  test("a dica do Testar diz que o agente lê e muda as notas, onde fica o texto de antes, e que pode ler qualquer uma", () => {
+    expect(TEST_HINT).toContain("ler e mudar as suas notas");
+    expect(TEST_HINT).toContain("ler as reuniões");
+    expect(TEST_HINT).toContain("não apaga nada");
+    expect(TEST_HINT).toContain("Versões da nota");
     expect(TEST_HINT).toContain("qualquer nota");
-    expect(TEST_HINT).not.toContain("só conversa");
+    expect(TEST_HINT).not.toContain("não muda nada");
   });
 
   test("sem pedido próprio, um evento atrasado de um pedido antigo não entra; só o started abre um teste (revisão)", () => {
