@@ -65,6 +65,17 @@ async function waitStatus(
   } while (Date.now() < until);
   throw new Error(`status deadline: ${JSON.stringify(value)}`);
 }
+/** O `headless.out` quando ele já tem a linha esperada; no prazo, devolve o que tiver, e o `expect` mostra o que faltou. */
+async function waitLog(data: string, line: RegExp, timeout = 5000) {
+  const file = path.join(data, "headless.out");
+  const until = Date.now() + timeout;
+  let log = readFileSync(file, "utf8");
+  while (!line.test(log) && Date.now() < until) {
+    await Bun.sleep(30);
+    log = readFileSync(file, "utf8");
+  }
+  return log;
+}
 test("CLI: five ready/crash cycles stop and show the real tray warning; exits reach diagnostics", async () => {
   await rig("crash", async (cli, data) => {
     const status = await waitStatus(cli, (s) => s.helper === "failed");
@@ -107,7 +118,9 @@ test("CLI: stop kills an actual fake process that ignores SIGTERM and socket clo
       await Bun.sleep(30);
     }
     expect(() => process.kill(pid, 0)).toThrow();
-    const log = readFileSync(path.join(data, "headless.out"), "utf8");
+    // A linha `supervisor exit` sai no `proc.exited` do headless, um instante depois de o pid sumir; num runner lento,
+    // ler o log uma vez só chegava antes dela (issue #403). Espera a linha, com prazo.
+    const log = await waitLog(data, /supervisor exit .*signal=SIGKILL/);
     expect(log).toContain("signal=SIGKILL reason=stop");
     expect(log).toMatch(/supervisor exit .*signal=SIGKILL/);
   });
