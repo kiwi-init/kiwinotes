@@ -56,6 +56,8 @@ export interface PageOptions {
   query: Record<string, string>;
   /** Uma pasta com um build pronto da janela (index.html na raiz) em vez do build da CLI. */
   dist?: string;
+  /** Grava um vídeo da página nesta pasta (o Playwright salva o .webm quando a página fecha). */
+  video?: string;
 }
 
 export interface PageReport {
@@ -269,6 +271,7 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
       colorScheme: opts.theme,
       reducedMotion: opts.motion ? "no-preference" : "reduce",
       locale: "pt-BR",
+      ...(opts.video ? { recordVideo: { dir: opts.video, size: { width: opts.width, height: opts.height } } } : {}),
     });
     // Nada de rede: só o build. (O WebSocket da ponte do app não existe aqui; a ponte é o binding.)
     await context.route("**/*", (route) => {
