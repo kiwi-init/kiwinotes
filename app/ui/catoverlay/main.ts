@@ -10,7 +10,7 @@
 import { createKiwiCat } from "../kiwicat/cat";
 import type { FogState } from "../kiwicat/state";
 
-const STATES: readonly string[] = ["repouso", "acordou", "thinking", "agindo", "pronto", "erro"];
+const STATES: readonly string[] = ["repouso", "acordou", "ouvindo", "thinking", "agindo", "pronto", "erro"];
 
 interface OverlayStats {
   ready: boolean;

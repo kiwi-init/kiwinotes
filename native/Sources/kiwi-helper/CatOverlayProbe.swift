@@ -36,6 +36,7 @@ enum CatOverlayProbe {
         }
 
         let start = Date()
+        func step(_ s: String) { FileHandle.standardError.write(Data("probe: \(s) +\(ms(since: start))ms\n".utf8)) }
         let loaded = AsyncStream<Void> { c in overlay.onLoaded = { c.yield(); c.finish() } }
         if let error = overlay.load(dir: o.dir, query: o.backend == "auto" ? nil : "backend=\(o.backend)") {
             result["error"] = error
@@ -48,18 +49,20 @@ enum CatOverlayProbe {
             return finish()
         }
         result["loadMs"] = ms(since: start)
+        step("loaded")
         guard await waitFor("window.kiwiOverlayStats?.ready === true", overlay, timeout: 15) else {
             result["error"] = "ready_timeout"
-            result["page"] = (try? await overlay.evaluate("return {state: document.readyState, overlay: typeof window.kiwiOverlay, scripts: [...document.scripts].map(s => s.type + ' ' + s.src), errors: window.__kiwiErrors ?? null}")) ?? NSNull()
+            result["page"] = (try? await overlay.evaluate("return {state: document.readyState, overlay: typeof window.kiwiOverlay, scripts: [...document.scripts].map(s => s.type + ' ' + s.src), errors: window.__kiwiErrors ?? null, importTry: await import(document.scripts[0]?.src ?? '').then(() => 'ok', e => String(e))}")) ?? NSNull()
             ok = false
             return finish()
         }
         result["coldReadyMs"] = ms(since: start)
+        step("ready")
+        overlay.showOffscreen()
         result["backend"] = (try? await overlay.evaluate("return window.kiwiOverlayStats.backend")) ?? NSNull()
         result["origin"] = (try? await overlay.evaluate("return location.protocol")) ?? NSNull()
 
         // Do `show` ao primeiro quadro apresentado, com a página já pronta: cinco vezes.
-        overlay.showOffscreen()
         var frames: [Double] = []
         for _ in 0..<5 {
             _ = try? await overlay.evaluate("window.kiwiOverlayStats.firstFrameMs = null; window.kiwiOverlay.set({estado: 'acordou', visible: true})")
@@ -75,6 +78,7 @@ enum CatOverlayProbe {
             try? await Task.sleep(for: .milliseconds(300))
         }
         result["firstFrameMs"] = frames
+        step("frames")
         if frames.contains(where: { $0 < 0 || $0 > 300 }) { ok = false }
 
         if let url = o.blocked {
@@ -82,19 +86,29 @@ enum CatOverlayProbe {
                 try { const r = await fetch(\(json(url)), {cache: 'no-store'}); return 'loaded ' + r.status } catch (e) { return 'blocked' }
                 """)) as? String ?? "error"
             result["fetch"] = fetch
+            step("fetch")
             if fetch != "blocked" { ok = false }
             let socket = (try? await overlay.evaluate("""
                 return await new Promise(done => { try { const ws = new WebSocket(\(json(url.replacingOccurrences(of: "http", with: "ws"))));
                   ws.onopen = () => done('open'); ws.onerror = () => done('blocked'); setTimeout(() => done('blocked'), 2000) } catch (e) { done('blocked') } })
                 """)) as? String ?? "error"
             result["websocket"] = socket
+            step("socket")
             if socket != "blocked" { ok = false }
+            // Fora da pasta da página, pelo próprio esquema: o handler recusa.
+            let outside = (try? await overlay.evaluate("""
+                const r = []; for (const p of ['/../package.json', '/%2E%2E/package.json', '/..%2Fpackage.json']) {
+                  try { const x = await fetch(p, {cache: 'no-store'}); r.push(x.ok ? 'read' : 'refused') } catch (e) { r.push('refused') } }
+                return r.every(x => x === 'refused') ? 'refused' : 'read'
+                """)) as? String ?? "error"
+            result["outsideFolder"] = outside
+            if outside != "refused" { ok = false }
             _ = try? await overlay.evaluate("location.href = \(json(url))")
             try? await Task.sleep(for: .milliseconds(800))
             let after = (try? await overlay.evaluate("return location.protocol")) as? String ?? "?"
             result["navigation"] = refused.isEmpty ? "allowed" : "refused"
             result["afterNavigation"] = after
-            if refused.isEmpty || after != "file:" { ok = false }
+            if refused.isEmpty || after != "\(CatPageScheme.scheme):" { ok = false }
         }
 
         if o.hold > 0 {

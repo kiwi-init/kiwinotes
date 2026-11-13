@@ -8,7 +8,7 @@ import WebKit
 ///
 /// - `load` cria a janela fora da tela, já do tamanho certo (os símbolos medem o próprio tamanho ao nascer), e carrega a
 ///   página, que fica pronta e pausada. `unload` solta a página e o desenho.
-/// - A página roda fechada: só os arquivos do app (`loadFileURL` limitado à pasta), sem guardar dados
+/// - A página roda fechada: só os arquivos do app (o esquema `kiwi-cat://`, limitado à pasta, `CatPageScheme`), sem guardar dados
 ///   (`nonPersistent`), toda a rede bloqueada (uma regra de conteúdo) e nenhuma navegação depois do carregamento.
 /// - `show` entra a partir da opacidade de agora (um pedido novo durante a saída não pisca); `hide` pausa o desenho
 ///   antes de a janela sumir, sem depender do aviso de página escondida.
@@ -44,12 +44,17 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         let folder = URL(fileURLWithPath: dir, isDirectory: true).standardizedFileURL
         let file = folder.appendingPathComponent("index.html")
         guard FileManager.default.fileExists(atPath: file.path) else { return "not_found" }
-        var parts = URLComponents(url: file, resolvingAgainstBaseURL: false)
-        parts?.query = query
-        let index = parts?.url ?? file
+        var parts = URLComponents()
+        parts.scheme = CatPageScheme.scheme
+        parts.host = CatPageScheme.host
+        parts.path = "/index.html"
+        parts.query = query
+        guard let index = parts.url else { return "not_found" }
         if web != nil { unload() }
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
+        // Os arquivos do app por um esquema próprio: pelo `file://`, o WebKit recusa os módulos ES (a origem nula).
+        config.setURLSchemeHandler(CatPageScheme(root: folder), forURLScheme: CatPageScheme.scheme)
         let size = CatOverlayLayout.size
         let view = WKWebView(frame: CGRect(origin: .zero, size: size), configuration: config)
         view.navigationDelegate = self
@@ -58,6 +63,10 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         let panel = makePanel(size: size)
         panel.contentView = view
         self.panel = panel
+        // A página só roda numa janela na frente: fora dela, o WebKit suspende o processo da página, e ela nem fica
+        // pronta. A janela fica estacionada fora de todas as telas, transparente, e a página não se acha coberta.
+        Self.keepRunningWhenCovered(view)
+        park(panel)
         pageLoaded = false
         pendingLoad = index
         WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "kiwi-cat-overlay-no-network", encodedContentRuleList: Self.blockAll) { [weak self] list, error in
@@ -69,7 +78,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
                     return
                 }
                 view.configuration.userContentController.add(list)
-                view.loadFileURL(index, allowingReadAccessTo: folder)
+                view.load(URLRequest(url: index))
             }
         }
         return nil
@@ -95,6 +104,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         _ = gate.want(false)
         script("window.kiwiOverlay?.dispose()")
         panel?.orderOut(nil)
+        parked = false
         web?.navigationDelegate = nil
         web?.stopLoading()
         web = nil
@@ -113,23 +123,42 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
 
     private func present() {
         guard enabled, let panel else { return }
+        if parked {
+            // Sai do estacionamento já transparente: nada pisca no lugar.
+            panel.alphaValue = 0
+            parked = false
+        }
         panel.setFrame(CatOverlayLayout.frame(visible: targetVisibleFrame()), display: false)
         script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true})")
-        if !panel.isVisible {
-            panel.alphaValue = 0
-            panel.orderFrontRegardless()
-        }
+        if !panel.isVisible { panel.orderFrontRegardless() }
         animate(panel, to: 1, ms: fadeMs)
     }
 
     private func dismiss() {
-        guard let panel, panel.isVisible else { return }
+        guard let panel, panel.isVisible, !parked else { return }
         // Pausa o desenho antes de a janela sumir.
         script("window.kiwiOverlay?.set({visible: false})")
         animate(panel, to: 0, ms: fadeMs) { [weak self, weak panel] in
             guard let self, let panel, !self.gate.shows else { return }
-            panel.orderOut(nil)
+            self.park(panel)
         }
+    }
+
+    /// Entre os pedidos: fora de todas as telas e transparente, mas na frente, para a página seguir pronta (pausada).
+    private var parked = false
+    private func park(_ panel: NSPanel) {
+        panel.alphaValue = 0
+        panel.setFrameOrigin(CGPoint(x: -20_000, y: -20_000))
+        panel.orderFrontRegardless()
+        parked = true
+    }
+
+    /// Fora da tela, a janela conta como coberta, e o WebKit pararia a página (como uma aba escondida).
+    private static func keepRunningWhenCovered(_ web: WKWebView) {
+        let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
+        guard web.responds(to: selector) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(web.method(for: selector), to: Setter.self)(web, selector, false)
     }
 
     /// Anima a partir da opacidade de agora: uma volta no meio da saída não pisca. Com o Reduzir movimento, sem
@@ -201,7 +230,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
 
     /// Só os nomes de estado conhecidos chegam ao script.
     private static func safe(_ estado: String) -> String {
-        ["repouso", "acordou", "thinking", "agindo", "pronto", "erro"].contains(estado) ? estado : "thinking"
+        ["repouso", "acordou", "ouvindo", "thinking", "agindo", "pronto", "erro"].contains(estado) ? estado : "thinking"
     }
 
     // MARK: - o `--cat-probe` (a prova da página fechada e a medida, fora da tela)
@@ -215,16 +244,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     /// Põe a janela na frente, mas fora de todas as telas: o WebKit desenha como se o gato estivesse à vista, e nada
     /// aparece na tela de ninguém.
     func showOffscreen() {
-        guard let panel, let web else { return }
-        // Fora da tela, a janela conta como coberta, e o WebKit pararia o desenho (a página escondida).
-        let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
-        if web.responds(to: selector) {
-            typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
-            unsafeBitCast(web.method(for: selector), to: Setter.self)(web, selector, false)
-        }
-        panel.setFrameOrigin(CGPoint(x: -20_000, y: -20_000))
+        guard let panel else { return }
         panel.alphaValue = 1
-        panel.orderFrontRegardless()
     }
 
     // MARK: - WKNavigationDelegate: só o carregamento inicial da própria página
@@ -232,7 +253,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
         MainActor.assumeIsolated {
             let url = action.request.url
-            let initial = !pageLoaded && url?.isFileURL == true && url?.standardizedFileURL.path == pendingLoad?.standardizedFileURL.path
+            let initial = !pageLoaded && url?.scheme == CatPageScheme.scheme && url?.host == CatPageScheme.host
+                && url?.path == pendingLoad?.path
             decisionHandler(initial ? .allow : .cancel)
             if !initial { log?("cat overlay: navigation refused: \(url?.scheme ?? "?")") }
         }

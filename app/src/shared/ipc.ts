@@ -44,7 +44,7 @@ export interface LlmStatus {
 
 /** O que o overlay mostra. `level` vem do próprio sidecar (audio.level). */
 /** Os estados do gato que aparecem no overlay (spec #9810): o `repouso` só no fim de um pedido cancelado. */
-export type CatOverlayState = "repouso" | "acordou" | "thinking" | "agindo" | "pronto" | "erro";
+export type CatOverlayState = "repouso" | "acordou" | "ouvindo" | "thinking" | "agindo" | "pronto" | "erro";
 
 export type OverlayState = "hidden" | "listening" | "processing" | "done" | "error";
 
