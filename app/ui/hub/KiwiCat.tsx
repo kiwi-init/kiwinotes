@@ -5,6 +5,7 @@ import type { createKiwiCat } from "../kiwicat/cat";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
+import { CatBubble } from "./CatBubble";
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 /**
  * A tinta dos símbolos segue o tema da janela (T10737, #428): escura no claro, branca no escuro. O tema resolvido fica
@@ -134,6 +135,9 @@ function CatMount({ busy, reduced }: { busy: boolean; reduced: boolean }) {
           onCancelRequest={() => void api.agent.cancel().catch(() => {})}
         />
       ) : null}
+      {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
+          o que chega, e aparece depois que o pedido sai (#10868). */}
+      <CatBubble reduced={reduced} hidden={asking} />
     </>
   );
 }

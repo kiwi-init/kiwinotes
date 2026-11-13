@@ -228,9 +228,10 @@
   line-height: 0; }
 .kn-kiwicat * { pointer-events: none !important; }
 
-/* A casca do balão do gato, dividida com o balão da resposta (T10832, `c3d543f`; combinado no #10871): o contorno grosso
-   na cor do texto, o fundo da superfície, a sombra dura e a ponta à direita, virada para o gato. Quem entrar depois na
-   main fica com uma cópia só. */
+/* O balão do gato (spec #9495, T10832). A casca (`.kn-bubble-shell`) é o desenho do balão de quadrinho: o contorno
+   grosso na cor do texto, o fundo da superfície, a sombra dura e a ponta à direita, virada para o gato, ancorado à
+   esquerda dele. Ela é dividida com o campo de "falar por texto" (#9878): os dois aparecem no mesmo lugar e com o mesmo
+   traço. A altura vem do conteúdo. Só o balão recebe clique; o resto do canto deixa passar. */
 .kn-bubble-shell {
   position: absolute;
   right: 116px;
@@ -248,6 +249,7 @@
   box-shadow: 3px 3px 0 var(--text);
   pointer-events: auto;
 }
+/* A ponta: dois triângulos, o contorno e o fundo, saindo do lado direito, embaixo, na direção do gato. */
 .kn-bubble-shell::before,
 .kn-bubble-shell::after {
   content: "";
@@ -308,3 +310,84 @@
   cursor: pointer;
 }
 .kn-cat-ask-send:disabled { opacity: 0.45; cursor: default; }
+
+/* O balão da resposta: a casca, com a entrada animada. */
+.kn-bubble {
+  cursor: default;
+  user-select: none;
+  animation: kn-bubble-in 160ms ease-out;
+}
+.kn-bubble[data-error] { border-color: var(--danger); box-shadow: 3px 3px 0 var(--danger); }
+.kn-bubble[data-error]::before { border-left-color: var(--danger); }
+.kn-bubble[data-error] .kn-bubble-text { white-space: nowrap; }
+.kn-bubble[data-error] .kn-bubble-ghost,
+.kn-bubble[data-error] .kn-bubble-typed,
+.kn-bubble[data-error] .kn-bubble-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kn-bubble[data-reduced] { animation: none; }
+@keyframes kn-bubble-in { from { opacity: 0; transform: translateY(4px) scale(0.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .kn-bubble { animation: none; } }
+
+/* O trecho inteiro, invisível, dá o tamanho; a parte digitada fica por cima. */
+.kn-bubble-text { display: grid; overflow-wrap: anywhere; white-space: pre-wrap; }
+.kn-bubble-ghost, .kn-bubble-typed { grid-area: 1 / 1; }
+.kn-bubble-ghost { visibility: hidden; }
+.kn-bubble-line, .kn-bubble-li { display: block; }
+.kn-bubble-mark { font-weight: 600; }
+.kn-bubble code, .kn-bubble-big code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+.kn-bubble-pre { margin: 2px 0; font: 0.92em / 1.35 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.kn-bubble-more {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* O balão grande do [Ver mais]: a resposta inteira, com rolagem, ancorado no mesmo canto. */
+.kn-bubble-big {
+  position: absolute;
+  right: 116px;
+  bottom: 56px;
+  z-index: 8;
+  box-sizing: border-box;
+  width: min(420px, calc(100% - 140px));
+  max-height: min(60%, 420px);
+  overflow: auto;
+  padding: 12px 14px;
+  border: 2px solid var(--text);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  font: var(--text-sm) / 1.45 var(--ui);
+  box-shadow: 3px 3px 0 var(--text);
+  pointer-events: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A régua do balão: o mesmo texto, fora da tela, para medir se um trecho cabe. */
+.kn-bubble-measure {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  box-sizing: content-box;
+  width: 252px; /* 280 menos o padding e o contorno */
+  font: var(--text-sm) / 1.35 var(--ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  visibility: hidden;
+}
+
+.kn-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

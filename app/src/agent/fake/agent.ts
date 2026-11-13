@@ -224,6 +224,30 @@ const app = agent({ name: "kiwi-fake-agent" })
     cancelled.delete(sessionId);
     const text = params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
 
+    // Os balões do gato (spec #9495): um texto que chega palavra por palavra, e uma fala antes de uma ferramenta.
+    if (text.startsWith("/conta ")) {
+      await think(client, sessionId);
+      for (const w of text.slice("/conta ".length).split(/(?<=\s)/)) {
+        if (cancelled.has(sessionId)) return { stopReason: "cancelled" };
+        await say(client, sessionId, w);
+        await Bun.sleep(40);
+      }
+      return { stopReason: "end_turn" };
+    }
+    if (text === "/antes-da-ferramenta") {
+      await think(client, sessionId);
+      await say(client, sessionId, "Vou ler a nota do Kiwi antes de responder.");
+      await Bun.sleep(1500);
+      await client.notify("session/update", {
+        sessionId,
+        update: { sessionUpdate: "tool_call", toolCallId: "t4", title: "Read", kind: "read", status: "in_progress", _meta: { claudeCode: { toolName: "Read" } } },
+      });
+      await Bun.sleep(800);
+      await client.notify("session/update", { sessionId, update: { sessionUpdate: "tool_call_update", toolCallId: "t4", status: "completed" } });
+      await say(client, sessionId, "Pronto: o prazo do Kiwi é março.");
+      return { stopReason: "end_turn" };
+    }
+
     switch (text) {
       case "/sem-login":
         throw RequestError.authRequired(undefined, "Please run /login");
