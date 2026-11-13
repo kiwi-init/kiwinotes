@@ -915,6 +915,61 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(v.week.requests).toBe(0);
   });
 
+  test("com o agente falso, uma nota criada segue a ordem e os blocos do modelo, e organizar uma nota passa pelo [Desfazer] (spec #11102)", async () => {
+    const notes: Record<string, string> = { "Ideias.md": "# Ideias\n\nGatos dormem muito.\nO Kiwi anota.\n" };
+    // O leitor com a versão, como o de verdade: o notes_write pede a versão que o notes_read devolveu.
+    const base = memoryReader(notes);
+    const reader: VaultReader = { ...base, get: async (p) => ({ ...(await base.get(p)), version: versionOf(notes[p]!) }) };
+    const m = make({ reader, writer: memoryWriter(notes) });
+    await readyNow(m);
+    // O modelo da pessoa: a introdução antes do título, sem o sumário nem as propriedades, e o corpo em tópicos.
+    m.svc.useNoteModel(async () =>
+      sanitizeNoteModel({
+        blocks: [
+          { block: "introducao", on: true },
+          { block: "titulo", on: true },
+          { block: "corpo", on: true },
+          { block: "fechamento", on: true },
+          { block: "sumario", on: false },
+          { block: "propriedades", on: false },
+        ],
+        body: "topicos",
+      }),
+    );
+    await askAndWait(m, "/nota-modelo Viagem");
+    const created = Object.keys(notes).find((p) => p.includes("Viagem"))!;
+    const text = notes[created]!;
+    const at = (s: string) => text.indexOf(s);
+    expect(at("Esta nota resume")).toBeLessThan(at("# Viagem"));
+    expect(at("# Viagem")).toBeLessThan(at("## Assunto"));
+    expect(at("## Assunto")).toBeLessThan(at("## Próximos passos"));
+    expect(text).not.toContain("## Sumário");
+    expect(text).not.toContain("tags:");
+    expect(text).toContain("- Primeira parte do assunto.");
+    // Organizar uma nota que já existe: no modelo, sem perder o conteúdo, e com o [Desfazer] no registro.
+    const org = (await askAndWait(m, "/organiza Ideias.md")).at(-1) as { text: string };
+    expect(org.text).toBe("Organizei Ideias.md no Modelo de nota.");
+    expect(notes["Ideias.md"]).toContain("- Gatos dormem muito.");
+    expect(notes["Ideias.md"]).toContain("- O Kiwi anota.");
+    expect(notes["Ideias.md"]!.indexOf("Esta nota resume")).toBeLessThan(notes["Ideias.md"]!.indexOf("# Ideias"));
+    const [r] = await m.svc.activityLog();
+    expect(r!.changes.map((c) => c.path)).toContain("Ideias.md");
+    const undoNotes: UndoNotes = {
+      folder: async () => null,
+      get: async (p) => (notes[p] === undefined ? null : { content: notes[p]!, version: versionOf(notes[p]!) }),
+      save: async (p, content, base) => {
+        if (notes[p] === undefined || versionOf(notes[p]!) !== base) return false;
+        notes[p] = content;
+        return true;
+      },
+      trash: async () => "gone",
+    };
+    m.svc.useUndo(undoNotes);
+    const back = await m.svc.undo(r!.id);
+    expect(back.notes[0]!.result).toBe("restored");
+    expect(notes["Ideias.md"]).toBe("# Ideias\n\nGatos dormem muito.\nO Kiwi anota.\n");
+  });
+
   test("o Modelo de nota (spec #11102) vai no começo fixo do pedido, com os mesmos bytes entre dois pedidos com o mesmo modelo", async () => {
     const m = make();
     await readyNow(m);

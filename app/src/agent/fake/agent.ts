@@ -260,12 +260,39 @@ const app = agent({ name: "kiwi-fake-agent" })
     const turn = (all[sessionId] ?? 0) + 1;
     saveSessions({ ...all, [sessionId]: turn });
     cancelled.delete(sessionId);
-    // As instruções do modo econômico (spec #11084) vêm na frente do pedido: o agente falso as ignora para achar o comando.
-    const text = params.prompt
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("")
+    // As instruções fixas vêm na frente do pedido: o Modelo de nota (spec #11102) e o modo econômico (spec #11084). O
+    // agente falso as tira para achar o comando, e guarda o modelo para o `/nota-modelo` e o `/organiza`.
+    const raw = params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("");
+    const modelText = /^\[Modelo de nota do Kiwi:([^\]]*)\]\s*/.exec(raw)?.[1] ?? "";
+    const text = raw
+      .replace(/^\[Modelo de nota do Kiwi:[^\]]*\]\s*/, "")
       .replace(/^\[Modo econômico do Kiwi:[^\]]*\]\s*/, "")
       .trim();
+
+    // O Modelo de nota (spec #11102): uma nota nova na ordem e com os blocos do modelo que chegou nas instruções.
+    if (text.startsWith("/nota-modelo ")) {
+      await think(client, sessionId);
+      const title = text.slice("/nota-modelo ".length).trim() || "Nota";
+      const r = await useTool(client, sessionId, "notes_create", { title, text: fakeNoteByModel(modelText, title, ["Primeira parte do assunto.", "Segunda parte."]) });
+      await say(client, sessionId, r.isError ? `erro da ferramenta: ${r.text}` : `Criei a nota ${title}, no Modelo de nota.`);
+      return { stopReason: "end_turn" };
+    }
+    // Organizar uma nota que já existe: lê, monta de novo no modelo, mantendo o conteúdo, e grava pelo notes_write.
+    if (text.startsWith("/organiza ")) {
+      await think(client, sessionId);
+      const path = text.slice("/organiza ".length).trim();
+      const read = await useTool(client, sessionId, "notes_read", { path });
+      if (read.isError) {
+        await say(client, sessionId, `erro da ferramenta: ${read.text}`);
+        return { stopReason: "end_turn" };
+      }
+      const note = JSON.parse(read.text) as { texto: string; versao: string; titulo?: string };
+      const body = note.texto.replace(/^---[\s\S]*?---\n/, "").split("\n").filter((l) => l.trim() && !l.startsWith("#"));
+      const title = note.titulo ?? path.replace(/\.md$/, "").split("/").at(-1)!;
+      const w = await useTool(client, sessionId, "notes_write", { path, text: fakeNoteByModel(modelText, title, body), version: note.versao });
+      await say(client, sessionId, w.isError ? `erro da ferramenta: ${w.text}` : `Organizei ${path} no Modelo de nota.`);
+      return { stopReason: "end_turn" };
+    }
 
     // O agente econômico (spec #11084): o aviso do próprio agente, o limite acabado com a hora de volta e o `/usage`.
     // A lista das ferramentas como chega ao agente, crua (spec #11084: o começo fixo, comparado byte a byte).
@@ -392,6 +419,26 @@ const app = agent({ name: "kiwi-fake-agent" })
         return { stopReason: "end_turn" };
     }
   })(ctx)));
+
+/**
+ * Uma nota montada como o modelo pede (spec #11102): os blocos na ordem das linhas numeradas das instruções, só os que
+ * vieram. `body` são as linhas de conteúdo, que ficam todas. Sem modelo, título e corpo.
+ */
+function fakeNoteByModel(model: string, title: string, body: string[]): string {
+  const steps = model.split("\n").filter((l) => /^\d+\. /.test(l)).map((l) => l.replace(/^\d+\. /, ""));
+  const order = steps.length ? steps : ["o título", "o corpo"];
+  const bulleted = /o corpo, em tópicos/.test(model);
+  const parts: string[] = [];
+  for (const step of order) {
+    if (step.startsWith("o título")) parts.push(`# ${title}`);
+    else if (step.startsWith("as propriedades")) parts.push("---\ntags: [kiwi]\n---");
+    else if (step.startsWith("uma introdução")) parts.push("Esta nota resume o assunto.");
+    else if (step.startsWith("o sumário")) parts.push("## Sumário\n\n- [[#Assunto]]");
+    else if (step.startsWith("o corpo")) parts.push(`## Assunto\n\n${body.map((l) => (bulleted ? `- ${l.replace(/^- /, "")}` : l)).join("\n")}`);
+    else if (step.startsWith("o fechamento")) parts.push("## Próximos passos\n\n- [ ] Rever a nota");
+  }
+  return `${parts.join("\n\n")}\n`;
+}
 
 const stream = ndJsonStream(
   Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,
