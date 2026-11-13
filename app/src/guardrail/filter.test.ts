@@ -134,13 +134,27 @@ function vault(files: Record<string, string>) {
   };
   const tool = async (name: string, a: unknown) => runKiwiTool(ctx, name, a);
   const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
-  return { tool, read, guard };
+  /** Marca um projeto como a pessoa, pela capacidade (o agente não tem como). */
+  const mark = async (folder: string) => (caps as Record<string, (a: unknown) => Promise<unknown>>)["projects.mark"]!({ folder });
+  return { tool, read, guard, mark };
 }
 
 const ACESSOS = `# Acessos\n\n## PACS\n\nservidor srv-pacs-01 (10.0.0.12)\nsenha: ${PWD}\n\n## GitHub ${GH}\n\nO token do deploy.\n`;
 const REUNIAO = `---\ntype: meeting\ndate: 2026-11-13\nduration: 60\n---\n\n## Transcrição\n\n**Ana** (00:00): A chave da AWS é ${AWS}, anota aí.\n`;
 
 describe("as ferramentas com o filtro (spec #9818)", () => {
+  test("o project_status (spec #9874): o sumário da nota principal vem do texto filtrado; caminhos e contagens, como estão", async () => {
+    const t = vault({ "Infra/Infra.md": ACESSOS, "Infra/Fazer.md": "- [ ] trocar o token\n" });
+    await t.mark("Infra");
+    const s = await t.tool("project_status", { projeto: "Infra" });
+    expect(JSON.stringify(s.value)).not.toContain(GH);
+    const titulos = (s.value.sumario as { titulo: string }[]).map((h) => h.titulo);
+    expect(titulos).toEqual(["Acessos", "PACS", expect.stringMatching(/^GitHub /)]);
+    expect(titulos[2]).not.toContain(GH);
+    expect(s.value).toMatchObject({ pasta: "Infra", notaPrincipal: "Infra/Infra.md", tarefasAbertas: { total: 1 } });
+    expect(s.held).toBe(1);
+  });
+
   test("as quatro de leitura entregam o segredo trocado e o resto igual; o registro conta quantos", async () => {
     const t = vault({ "Acessos.md": ACESSOS, "Reunião.md": REUNIAO, "Ideias.md": "o prazo do Kiwi é março\n" });
     const r = await t.tool("notes_read", { path: "Acessos.md" });

@@ -615,6 +615,17 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
         throw new ToolError("E_NOT_FOUND", `${want} não é um projeto; veja os projetos com projects_list`);
       }
       const s = await reader.projectStatus(p.folder);
+      // O sumário são os títulos de dentro da nota principal, texto da nota: com o filtro do guardrail (spec #9818),
+      // saem do texto que o agente vê, como no notes_outline (revisão da T10012). Os caminhos, os títulos das notas, as
+      // datas e as contagens vão como estão.
+      if (guard && s.project.main !== null) {
+        const main = await reader.get(s.project.main).catch(() => null);
+        if (main) {
+          const headings = markdownStructure(seen(guard, main.path, main.content)).headings;
+          s.outlineTotal = headings.length;
+          s.outline = headings.slice(0, STATUS_OUTLINE_MAX).map((h) => ({ level: h.level, title: h.title }));
+        }
+      }
       const avisos = [
         ...(s.project.main === null ? ["A nota principal foi apagada; a pessoa ainda não escolheu outra."] : []),
         ...(s.outlineTotal > s.outline.length ? [`A nota principal tem ${s.outlineTotal} títulos; o sumário mostra os ${s.outline.length} primeiros.`] : []),
