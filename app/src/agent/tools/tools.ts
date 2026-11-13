@@ -48,7 +48,9 @@ export const KIWI_READ_TOOL_NAMES = [
   "projects_list",
   "project_status",
 ] as const;
-export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write"] as const;
+export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write", "notes_organize_folder"] as const;
+/** O máximo de notas que um "organizar a pasta" libera de uma vez (spec #11102). */
+export const ORGANIZE_MAX = 200;
 export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
 
@@ -218,6 +220,18 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
     writes: true,
     replaces: true,
+  },
+  {
+    name: "notes_organize_folder",
+    title: "Organizar uma pasta inteira",
+    description: `Antes de organizar várias notas de uma pasta pelo Modelo de nota: o Kiwi conta as notas e pergunta à pessoa, na tela, se pode. Só use quando a pessoa pedir para organizar a pasta. Com o sim, devolve as notas (até ${ORGANIZE_MAX}); organize cada uma com notes_read e notes_write, mantendo todo o conteúdo. Com o não, não mude nenhuma nota da pasta.`,
+    inputSchema: {
+      type: "object",
+      properties: { folder: { type: "string", description: "A pasta (ex.: Projetos). As subpastas entram junto." } },
+      required: ["folder"],
+      additionalProperties: false,
+    },
+    writes: true,
   },
 ];
 
@@ -429,6 +443,10 @@ const SEGMENT_REF = /[ \t]*%%meeting-segment:[0-9a-f]{24} \{[^\n]*?\}%%/g;
 /** Roda uma ferramenta. Um erro do cofre (`E_NOT_FOUND`, `E_OUTSIDE_VAULT`, `E_BAD_ARGS`) vira um `ToolError`. */
 export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unknown): Promise<ToolResult> {
   try {
+    if (name === "notes_organize_folder") {
+      if (!ctx.writer) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+      return await organizeFolder(ctx.reader, raw, ctx.decider);
+    }
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       return await write(ctx.writer, ctx.journal, name, raw, ctx.guard);
@@ -441,6 +459,33 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     const code = typeof (e as { code?: unknown })?.code === "string" ? (e as { code: string }).code : "E_FAILED";
     throw new ToolError(code, String((e as Error)?.message ?? e));
   }
+}
+
+/**
+ * "Organizar a pasta inteira" (spec #11102): conta as notas e pergunta à pessoa no cartão, no mesmo pedido. A resposta
+ * nunca é lembrada; sem resposta no prazo, é não. Só com o sim as notas são devolvidas, e cada escrita depois passa
+ * pelo `notes_write` (o snapshot, o [Desfazer] e a Atividade).
+ */
+async function organizeFolder(reader: VaultReader, raw: unknown, decider?: DoubtDecider): Promise<ToolResult> {
+  const a = args(raw, ["folder"]);
+  const folder = (str(a, "folder", true) ?? "").replace(/^\/+|\/+$/g, "");
+  const all = await reader.list();
+  if (folder && !all.folders.includes(folder)) throw new ToolError("E_NOT_FOUND", `a pasta ${folder} não existe`);
+  const notes = all.notes.filter((n) => !folder || n.folder === folder || n.folder.startsWith(`${folder}/`));
+  if (!notes.length) return { value: { pasta: folder, total: 0, confirmou: false, aviso: "A pasta não tem notas." } };
+  const where = folder ? `${folder}/` : "a raiz do cofre";
+  const question = `Organizar ${notes.length} ${notes.length === 1 ? "nota" : "notas"} em ${where} pelo Modelo de nota?`;
+  const yes = decider ? await decider.questions.confirm(decider.request, question, decider.signal) : false;
+  if (!yes) return { value: { pasta: folder, total: notes.length, confirmou: false, aviso: "A pessoa não confirmou: não mude nenhuma nota desta pasta." } };
+  return {
+    value: {
+      pasta: folder,
+      total: notes.length,
+      confirmou: true,
+      notas: notes.slice(0, ORGANIZE_MAX).map((n) => n.path),
+      ...(notes.length > ORGANIZE_MAX ? { aviso: `Só as primeiras ${ORGANIZE_MAX} desta vez.` } : {}),
+    },
+  };
 }
 
 /** As palavras de uma busca, para saber onde ela casa: minúsculas e sem acento, de 2 letras ou mais. */

@@ -3,6 +3,9 @@
 // sem resposta, o Kiwi segura o trecho e a dúvida fica na Atividade do agente.
 //
 // O trecho só chega aqui pela capacidade `agent.question`; o evento `agent.questionChanged` traz só os ids.
+//
+// O mesmo cartão leva a confirmação de "organizar a pasta inteira" (spec #11102, `kind: "confirm"`): a pergunta e
+// [Agora não] [Organizar]. A resposta vale só para aquele pedido, e sem ela no prazo é "Agora não".
 
 import { useEffect, useState } from "react";
 
@@ -60,39 +63,66 @@ export function DoubtCard() {
       setFailure(e instanceof Error ? e.message : String(e));
     }
   };
-  const open = card.items.filter((i) => !i.answer).length;
+  const confirms = card.items.filter((i) => i.kind === "confirm");
+  const doubts = card.items.filter((i) => i.kind !== "confirm");
+  const open = doubts.filter((i) => !i.answer).length;
 
   return (
     <section className="kn-doubt" role="dialog" aria-modal="false" aria-labelledby="kn-doubt-title">
       <h2 id="kn-doubt-title" className="kn-doubt-title">
-        O Kiwi ficou em dúvida
+        {doubts.length ? "O Kiwi ficou em dúvida" : "O agente pede a sua confirmação"}
       </h2>
-      <p className="kn-doubt-hint">
-        {card.items.length === 1 ? "Isto pode ser uma senha ou um token." : "Estes trechos podem ser senhas ou tokens."} O agente espera a sua resposta;
-        sem ela até as {hourOf(card.deadline)}, o Kiwi segura e você responde depois, na Atividade do agente.
-      </p>
-      <ul className="kn-doubt-list">
-        {card.items.map((i) => (
-          <li key={i.fingerprint} className="kn-doubt-item" data-answer={i.answer}>
-            <div className="kn-doubt-where">
-              em {whereOf(i.path)}
-              {i.path ? `, linha ${i.line}` : ""}
-            </div>
-            <Context context={i.context} value={i.value} />
-            <div className="kn-doubt-buttons">
-              {i.answer ? (
-                <span className="kn-doubt-answered">{i.answer === "send" ? "Vai para o agente." : "Fica de fora."}</span>
-              ) : (
-                <>
-                  <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>É segredo</Button>
-                  {/* Os dois com o mesmo peso, sem principal e sem Enter padrão: a pessoa escolhe (#10168). */}
-                  <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>Pode mandar</Button>
-                </>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      {confirms.length ? (
+        <ul className="kn-doubt-list">
+          {confirms.map((i) => (
+            <li key={i.fingerprint} className="kn-doubt-item kn-confirm-item" data-answer={i.answer}>
+              <p className="kn-confirm-question">{i.value}</p>
+              <p className="kn-doubt-hint">Sem resposta até as {hourOf(card.deadline)}, o agente não muda nada.</p>
+              <div className="kn-doubt-buttons">
+                {i.answer ? (
+                  <span className="kn-doubt-answered">{i.answer === "send" ? "Pode organizar." : "Não organiza."}</span>
+                ) : (
+                  <>
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>Agora não</Button>
+                    {/* Os dois com o mesmo peso, sem principal: a pessoa escolhe. */}
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>Organizar</Button>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {doubts.length ? (
+        <>
+        <p className="kn-doubt-hint">
+          {doubts.length === 1 ? "Isto pode ser uma senha ou um token." : "Estes trechos podem ser senhas ou tokens."} O agente espera a sua resposta;
+          sem ela até as {hourOf(card.deadline)}, o Kiwi segura e você responde depois, na Atividade do agente.
+        </p>
+        <ul className="kn-doubt-list">
+          {doubts.map((i) => (
+            <li key={i.fingerprint} className="kn-doubt-item" data-answer={i.answer}>
+              <div className="kn-doubt-where">
+                em {whereOf(i.path)}
+                {i.path ? `, linha ${i.line}` : ""}
+              </div>
+              <Context context={i.context} value={i.value} />
+              <div className="kn-doubt-buttons">
+                {i.answer ? (
+                  <span className="kn-doubt-answered">{i.answer === "send" ? "Vai para o agente." : "Fica de fora."}</span>
+                ) : (
+                  <>
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "hold" })}>É segredo</Button>
+                    {/* Os dois com o mesmo peso, sem principal e sem Enter padrão: a pessoa escolhe (#10168). */}
+                    <Button onClick={() => void answer({ card: card.id, fingerprint: i.fingerprint, answer: "send" })}>Pode mandar</Button>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+        </>
+      ) : null}
       {open > 1 ? (
         <div className="kn-doubt-all">
           <Button onClick={() => void answer({ card: card.id, all: "hold" })}>É tudo segredo</Button>
