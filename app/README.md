@@ -118,6 +118,15 @@ bun run cli invoke agent.undo '{"request":"<pedido>"}' --data /tmp/kn-test
 
 Na janela, num WebKit headless: `KIWI_AGENT_UI_ONLY=desfazer bun scripts/agent-ui-check.ts`.
 
+**O detector de segredos (T9701, spec #9690)** diz, trecho por trecho, o que o guardrail seguraria antes de o texto ir ao agente: **segredo** (tokens e chaves pelo formato, senhas pelo contexto, linhas de configuração, CPF e cartão válidos), **dúvida** (uma sequência aleatória solta, ou "senha:" seguida de uma palavra comum) ou limpo. IP, máquina, VPN, CSV de trabalho, nomes, e-mail, telefone, endereço, UUID, hash, UID DICOM, recursos do Google Cloud, base64 de imagem e chave pública passam. Local, sem IA, em `src/guardrail/detector.ts`; ainda não é ligado ao agente (o filtro é o spec seguinte). Para conferir num texto, sem o headless:
+
+```sh
+bun run cli guardrail scan nota.md                 # cada trecho com a linha, o veredito, o tipo e a máscara
+pbpaste | bun run cli guardrail scan -             # o texto copiado
+```
+
+A saída nunca traz o segredo: só o prefixo público do formato (`ghp_`, `AKIA`…) e o tamanho.
+
 **A tela "Atividade do agente" (T9493, spec #9480)**, em Ajustes › Agente: a lista dos pedidos, o [Ver] e o [Desfazer]. O [Ver] é o `agent.change`, só de leitura, e a lista se atualiza pelo evento `agent.activityChanged`. Com o agente falso, um pedido pode chamar várias ferramentas, uma linha `/tool` para cada:
 
 ```sh
