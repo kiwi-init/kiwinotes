@@ -113,7 +113,7 @@ public struct KeyCombo: Hashable, Sendable {
         case .fn: return nil
         case .rightOption: return .option
         case .rightCommand: return .command
-        case .rightControl: return .control
+        case .rightControl, .control: return .control
         }
     }
 

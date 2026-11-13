@@ -6,6 +6,9 @@ public enum HotkeyKey: String, CaseIterable, Sendable {
     case rightOption
     case rightCommand
     case rightControl
+    /// O atalho do agente (spec #9876): o Control, o da esquerda ou o da direita. Só para o agente: não é uma tecla
+    /// de ditado do Ajustes (o gravador de atalhos não a oferece).
+    case control
 
     /// Carbon virtual key codes (kVK_Function, kVK_RightOption, kVK_RightCommand, kVK_RightControl).
     public var keyCode: Int64 {
@@ -14,8 +17,12 @@ public enum HotkeyKey: String, CaseIterable, Sendable {
         case .rightOption: return 61
         case .rightCommand: return 54
         case .rightControl: return 62
+        case .control: return 59
         }
     }
+
+    /// Every key code that is this key: the two Controls for `.control`.
+    public var keyCodes: Set<Int64> { self == .control ? [59, 62] : [keyCode] }
 
     /// The flag bit that says this key is down (kCGEventFlagMaskSecondaryFn and the NX_DEVICER*KEYMASK bits).
     public var flagMask: UInt64 {
@@ -24,12 +31,14 @@ public enum HotkeyKey: String, CaseIterable, Sendable {
         case .rightOption: return 0x40
         case .rightCommand: return 0x10
         case .rightControl: return 0x2000
+        // NX_DEVICELCTLKEYMASK | NX_DEVICERCTLKEYMASK: down while either Control is.
+        case .control: return 0x2001
         }
     }
 
     /// For a `flagsChanged` event: whether this key is now down, or nil when the event is about another key.
     public func isDown(keyCode: Int64, flags: UInt64) -> Bool? {
-        guard keyCode == self.keyCode else { return nil }
+        guard keyCodes.contains(keyCode) else { return nil }
         return flags & flagMask != 0
     }
 }

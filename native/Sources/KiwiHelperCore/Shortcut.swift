@@ -69,6 +69,8 @@ public enum KeyInput: Equatable, Sendable {
     case flags(keyCode: Int64, flags: UInt64)
     case keyDown(keyCode: Int64, flags: UInt64, autorepeat: Bool)
     case keyUp(keyCode: Int64, flags: UInt64)
+    /// A mouse button went down (spec #9876): for a held key it is "another key", and the click always passes.
+    case mouseDown
 }
 
 /// What the person does with a shortcut, for whoever uses it.
@@ -96,6 +98,8 @@ public enum ShortcutOutput: Equatable, Sendable {
 /// reaches the app.
 public struct ShortcutEngine<Payload> {
     public typealias Input = KeyInput
+    /// The `keyCode` of an `.interrupt` caused by a mouse click (spec #9876).
+    public static var mouseKeyCode: Int64 { -1 }
 
     public struct Result {
         /// The event is Kiwi's: the tap drops it.
@@ -175,6 +179,11 @@ public struct ShortcutEngine<Payload> {
         case .flags(let code, let flags): return modifierChanged(code: code, flags: flags, at: t)
         case .keyDown(let code, let flags, let autorepeat): return keyDown(code: code, flags: flags, autorepeat: autorepeat, payload: payload, at: t)
         case .keyUp(let code, _): return keyUp(code: code, payload: payload)
+        case .mouseDown:
+            // A click with a modifier key held (⌃+click): that key is being used as a modifier. Never consumed.
+            var result = Result()
+            result.outputs = interruptHeld(by: Self.mouseKeyCode)
+            return result
         }
     }
 
@@ -182,44 +191,58 @@ public struct ShortcutEngine<Payload> {
 
     private mutating func modifierChanged(code: Int64, flags: UInt64, at t: TimeInterval) -> Result {
         var result = Result()
-        guard let key = HotkeyKey.allCases.first(where: { $0.keyCode == code }), let down = key.isDown(keyCode: code, flags: flags) else {
-            // ⌃, ⌥ or ⇧ on the left side, Caps Lock: another key, for whoever is held.
+        // One key code can be more than one key: the ⌃ right is `.rightControl` and `.control` (spec #9876).
+        let changes = HotkeyKey.allCases.compactMap { key in key.isDown(keyCode: code, flags: flags).map { (key: key, down: $0) } }
+        guard !changes.isEmpty else {
+            // ⌥ or ⇧ on the left side, Caps Lock: another key, for whoever is held.
             if isDown(code: code, flags: flags) { result.outputs = interruptHeld(by: code) }
             return result
         }
-        if down {
-            guard held[key] == nil else { return result }
-            // Another held modifier key is now being used as a modifier.
-            result.outputs = interruptHeld(by: code)
-            let chord = bindings.contains { binding in
-                if case .combo(let combo) = binding.shortcut { return combo.startsWith(key, flags: flags) }
-                if case .sequence(let steps) = binding.shortcut { return steps[0].startsWith(key, flags: flags) }
-                return false
-            }
-            held[key] = Held(since: t, chord: chord)
-            guard !chord else { return result }
-            for binding in bindings where isActive(binding.id) {
-                switch binding.shortcut {
-                case .key(key):
-                    result.outputs.append(.press(binding.id, flags: flags))
-                case .doubleTap(key):
-                    if let last = lastTap[key], t - last <= doubleTapWindow {
-                        result.outputs.append(.trigger(binding.id))
-                        lastTap[key] = nil
-                        held[key]?.clean = false // this press is spent: it doesn't start another double tap
-                    }
-                default:
-                    break
-                }
-            }
-        } else {
-            guard let was = held.removeValue(forKey: key), !was.chord else { return result }
-            for binding in bindings {
-                if case .key(key) = binding.shortcut { result.outputs.append(.release(binding.id, clean: was.clean)) }
-            }
-            if was.clean, t - was.since <= tapThreshold { lastTap[key] = t } else { lastTap[key] = nil }
+        let pressed = changes.filter { $0.down && held[$0.key] == nil }.map(\.key)
+        // This physical key went down: every other held key is now being used as a modifier (before the new ones count
+        // as held). A key this code is part of isn't "another key" for itself: the 2nd ⌃ while `.control` is held.
+        if sideIsDown(code: code, flags: flags) {
+            result.outputs = interruptHeld(by: code, sparing: Set(changes.map(\.key)))
         }
+        for key in pressed { result.outputs += keyWentDown(key, flags: flags, at: t) }
+        for change in changes where !change.down { result.outputs += keyWentUp(change.key, at: t) }
         return result
+    }
+
+    private mutating func keyWentDown(_ key: HotkeyKey, flags: UInt64, at t: TimeInterval) -> [ShortcutOutput] {
+        var outputs: [ShortcutOutput] = []
+        let chord = bindings.contains { binding in
+            if case .combo(let combo) = binding.shortcut { return combo.startsWith(key, flags: flags) }
+            if case .sequence(let steps) = binding.shortcut { return steps[0].startsWith(key, flags: flags) }
+            return false
+        }
+        held[key] = Held(since: t, chord: chord)
+        guard !chord else { return outputs }
+        for binding in bindings where isActive(binding.id) {
+            switch binding.shortcut {
+            case .key(key):
+                outputs.append(.press(binding.id, flags: flags))
+            case .doubleTap(key):
+                if let last = lastTap[key], t - last <= doubleTapWindow {
+                    outputs.append(.trigger(binding.id))
+                    lastTap[key] = nil
+                    held[key]?.clean = false // this press is spent: it doesn't start another double tap
+                }
+            default:
+                break
+            }
+        }
+        return outputs
+    }
+
+    private mutating func keyWentUp(_ key: HotkeyKey, at t: TimeInterval) -> [ShortcutOutput] {
+        var outputs: [ShortcutOutput] = []
+        guard let was = held.removeValue(forKey: key), !was.chord else { return outputs }
+        for binding in bindings {
+            if case .key(key) = binding.shortcut { outputs.append(.release(binding.id, clean: was.clean)) }
+        }
+        if was.clean, t - was.since <= tapThreshold { lastTap[key] = t } else { lastTap[key] = nil }
+        return outputs
     }
 
     /// Whether a modifier that isn't one of the four keys went down (its flag bit is now set).
@@ -230,9 +253,15 @@ public struct ShortcutEngine<Payload> {
         return flags & bit != 0
     }
 
-    private mutating func interruptHeld(by code: Int64) -> [ShortcutOutput] {
+    /// Whether this one physical modifier key is down now (its own device bit, not the other side's).
+    private func sideIsDown(code: Int64, flags: UInt64) -> Bool {
+        let bits: [Int64: UInt64] = [59: 0x1, 62: 0x2000, 58: 0x20, 61: 0x40, 55: 0x8, 54: 0x10, 63: 0x80_0000]
+        return bits[code].map { flags & $0 != 0 } ?? true
+    }
+
+    private mutating func interruptHeld(by code: Int64, sparing: Set<HotkeyKey> = []) -> [ShortcutOutput] {
         var outputs: [ShortcutOutput] = []
-        for key in held.keys where held[key]?.chord == false {
+        for key in held.keys where held[key]?.chord == false && !sparing.contains(key) {
             held[key]?.clean = false
             lastTap[key] = nil
             for binding in bindings {

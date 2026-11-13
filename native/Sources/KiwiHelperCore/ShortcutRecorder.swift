@@ -44,7 +44,8 @@ public struct ShortcutRecorder {
         guard outcome == nil else { return }
         switch input {
         case .flags(let code, let flags):
-            if let key = HotkeyKey.allCases.first(where: { $0.keyCode == code }), let down = key.isDown(keyCode: code, flags: flags) {
+            // O Control dos dois lados é só do agente (spec #9876): o gravador oferece o ⌃ direito, como antes.
+            if let key = HotkeyKey.allCases.first(where: { $0 != .control && $0.keyCode == code }), let down = key.isDown(keyCode: code, flags: flags) {
                 lastActivity = t
                 if down {
                     if heldModifier != nil { heldModifier?.clean = false } else { heldModifier = (key, steps.isEmpty) }
@@ -77,6 +78,8 @@ public struct ShortcutRecorder {
         case .keyUp(let code, _):
             heldKeys.remove(code)
             lastActivity = t
+        case .mouseDown:
+            break // the tap only sends clicks to the shortcuts (spec #9876)
         }
     }
 
