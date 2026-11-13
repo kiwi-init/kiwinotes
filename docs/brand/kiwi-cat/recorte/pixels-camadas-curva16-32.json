@@ -1,0 +1,273 @@
+{
+  "band": 0.08,
+  "baseline": "d2df9d3",
+  "weakLow": 16,
+  "weakHigh": 32,
+  "scope": "24 fixed-state real renderer cases, 640x800 DPR1 seed17; FOG-only strong>=32 plus coat/arc outside8pct; vectors compared separately; composite changes also reported; not performance",
+  "rows": [
+    {
+      "backend": "auto",
+      "state": "repouso",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "dormindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 32,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "acordou",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 51,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "ouvindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 38,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "thinking",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 46,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "agindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 55,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "pronto",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 52,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "erro",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 32,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "repouso",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "dormindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 32,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "acordou",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 51,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "ouvindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 38,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "thinking",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 46,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "agindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 55,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "pronto",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 52,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "erro",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 32,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "none",
+      "state": "repouso",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "dormindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "acordou",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "ouvindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "thinking",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "agindo",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "pronto",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "erro",
+      "opaqueMax": 0,
+      "stableMax": 1,
+      "vectorMax": 0,
+      "compositeMax": 50,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    }
+  ]
+}

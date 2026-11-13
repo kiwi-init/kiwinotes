@@ -1,0 +1,223 @@
+{
+  "band": 0.08,
+  "baseline": "d2df9d3",
+  "scope": "24 fixed-state real renderer cases, 640x800 DPR1 seed17; not performance",
+  "rows": [
+    {
+      "backend": "auto",
+      "state": "repouso",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "dormindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "acordou",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "ouvindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "thinking",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "agindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "pronto",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "auto",
+      "state": "erro",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "repouso",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "dormindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "acordou",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "ouvindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "thinking",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "agindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "pronto",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "erro",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 0
+    },
+    {
+      "backend": "none",
+      "state": "repouso",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "dormindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "acordou",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "ouvindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "thinking",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "agindo",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "pronto",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    },
+    {
+      "backend": "none",
+      "state": "erro",
+      "opaqueMax": 0,
+      "outsideMax": 1,
+      "cornerAlpha": 0,
+      "coatAlpha": 255,
+      "brighteningMax": 1
+    }
+  ]
+}

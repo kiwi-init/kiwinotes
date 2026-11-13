@@ -1,0 +1,48 @@
+{
+  "task": "T9708",
+  "variant": "leve",
+  "baselineCommit": "d2df9d3",
+  "scope": "standalone WebKit demo 640x800 DPR1, not app/helper",
+  "pairs": [
+    {
+      "pair": 1,
+      "originalPair": 1,
+      "order": [
+        "baseline",
+        "leve"
+      ],
+      "baseline": 2.9965165910645255,
+      "candidate": 3.279905790783143,
+      "delta": 0.2833891997186173
+    },
+    {
+      "pair": 2,
+      "originalPair": 3,
+      "order": [
+        "leve",
+        "baseline"
+      ],
+      "baseline": 3.27967826626307,
+      "candidate": 3.1631375694216803,
+      "delta": -0.11654069684138957
+    },
+    {
+      "pair": 3,
+      "originalPair": 5,
+      "order": [
+        "baseline",
+        "leve"
+      ],
+      "baseline": 2.6651737899124077,
+      "candidate": 2.4312196613500014,
+      "delta": -0.23395412856240627
+    }
+  ],
+  "baselineMean": 2.9804562157466674,
+  "candidateMean": 2.958087673851608,
+  "meanDelta": -0.022368541895059508,
+  "maxDelta": 0.2833891997186173,
+  "baselineP95": 6.050319246708486,
+  "candidateP95": 5.969794089593628,
+  "passes": true
+}

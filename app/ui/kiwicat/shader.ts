@@ -91,6 +91,9 @@ export function fogMaterial(
   protection: Texture,
   densityTexture: Texture,
   protectEyes = true,
+  cutout?: Texture,
+  backing = 0.5,
+  edgeBand = 0.08,
 ) {
   const arcGain = uniform(1),
     alive = uniform(0),
@@ -175,7 +178,28 @@ export function fogMaterial(
     const layered = limited.add(
       vec3(1).sub(limited).mul(emission).mul(arcGain),
     );
-    return vec4(mix(mix(lit, layered, alive), calibrated, solid), 1);
+    const color = mix(mix(lit, layered, alive), calibrated, solid);
+    if (!cutout) return vec4(color, 1);
+    // Canvas uses premultiplied alpha. RGB is the approved light over black;
+    // coverage reveals the background without erasing the opaque dark coat.
+    const alphaHigh = max(max(color.r, color.g), color.b);
+    const cutoutCoverage = texture(cutout, st);
+    // Remove only weak emission. Preserve the original coat/arc material even
+    // when dark; eyes and symbols live on their independent vector layer.
+    const protectedMaterial = smoothstep(.05, .2, max(max(coverage.g, coverage.b), cutoutCoverage.r));
+    const alphaSupport = max(smoothstep(16 / 255, 32 / 255, alphaHigh), protectedMaterial);
+    const lightRGB = color.mul(alphaSupport);
+    const lightAlpha = max(max(max(lightRGB.r, lightRGB.g), lightRGB.b), pow(cutoutCoverage.g, backing * 2));
+    const alpha = max(cutoutCoverage.r, lightAlpha);
+    // Only left/right/bottom carry visible reference light. The top is <=1/255.
+    // This prototype band is reviewed separately; no light is invented outside.
+    const edge = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
+    const coat = cutoutCoverage.r;
+    const lightFade = max(coat, edge);
+    const finalRGB = lightRGB.mul(lightFade);
+    const topSupport = smoothstep(0, edgeBand * .8, float(1).sub(st.y));
+    const alphaFloor = max(max(finalRGB.r, finalRGB.g), finalRGB.b);
+    return vec4(finalRGB, max(max(coat, alphaFloor), alpha.mul(edge).mul(topSupport)));
   })();
   return {
     material,

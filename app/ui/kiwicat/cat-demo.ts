@@ -4,6 +4,8 @@ import { createKiwiFog } from "./index";
 import { STATES, type FogState } from "./state";
 const q = new URLSearchParams(location.search), state = q.get("state") ?? "repouso";
 const options = {
+  edgeBand: Number(q.get("edgeBand") ?? .08),
+  cutout: q.get("cutout") === "1", backing: Number(q.get("backing") ?? .5),
   mode: q.get("mode") === "measure" ? "measure" as const : "capture" as const,
   width: Number(q.get("width") ?? 640), height: Number(q.get("height") ?? 800),
   seed: Number(q.get("seed") ?? 17),
@@ -14,5 +16,7 @@ const options = {
 };
 const api = q.get("fogOnly") === "1" ? await createKiwiFog(document.getElementById("fog")!, options) :
   await createKiwiCat(document.getElementById("fog")!, { ...options,
+    outline: q.get("outline") === "1",
     sleepSeconds: q.has("sleepSeconds") ? () => Number(q.get("sleepSeconds")) : undefined });
+document.body.style.background = q.get("background") ?? "#000";
 Object.assign(window, { kiwiCat: api, kiwiCatReady: true });

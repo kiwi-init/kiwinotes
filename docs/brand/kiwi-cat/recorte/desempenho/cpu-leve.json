@@ -1,0 +1,91 @@
+{
+  "task": "T9708",
+  "protocol": "3 alternating pairs/candidate, 10s+60s, 640x800 DPR1, five owned WebKit processes, no capture",
+  "summary": [
+    {
+      "variant": "leve",
+      "pairs": 3,
+      "meanDelta": 0.06726139436945015,
+      "medianDelta": 0.0345036743901348,
+      "maxDelta": 0.23402192147762402,
+      "baselineMean": 2.22478591829625,
+      "candidateMean": 2.2920473126657,
+      "p95s": [
+        5.074691635703029,
+        5.8060028201226395,
+        5.1497970865107305
+      ]
+    }
+  ],
+  "baselineCommit": "d2df9d3",
+  "measuredCommit": "a660d6b",
+  "pairs": [
+    {
+      "pair": 1,
+      "variant": "leve",
+      "order": [
+        "baseline",
+        "leve"
+      ],
+      "baseline": {
+        "variant": "baseline",
+        "mean": 1.8977641807598402,
+        "p95": 4.925377045665835,
+        "dir": "/tmp/kiwi-T9708-cpu-final/pair-1-1-baseline"
+      },
+      "candidate": {
+        "variant": "leve",
+        "mean": 2.1317861022374642,
+        "p95": 5.074691635703029,
+        "dir": "/tmp/kiwi-T9708-cpu-final/pair-1-2-leve"
+      },
+      "delta": 0.23402192147762402
+    },
+    {
+      "pair": 2,
+      "variant": "leve",
+      "order": [
+        "leve",
+        "baseline"
+      ],
+      "baseline": {
+        "variant": "baseline",
+        "mean": 2.347159522938305,
+        "p95": 4.937551492922184,
+        "dir": "/tmp/kiwi-T9708-cpu-final/pair-2-2-baseline"
+      },
+      "candidate": {
+        "variant": "leve",
+        "mean": 2.2804181101788967,
+        "p95": 5.8060028201226395,
+        "dir": "/tmp/kiwi-T9708-cpu-final/pair-2-1-leve"
+      },
+      "delta": -0.06674141275940837
+    },
+    {
+      "pair": 3,
+      "variant": "leve",
+      "order": [
+        "baseline",
+        "leve"
+      ],
+      "baseline": {
+        "variant": "baseline",
+        "mean": 2.429434051190605,
+        "p95": 5.083540360514515,
+        "dir": "/tmp/kiwi-T9708-cpu-final/pair-3-1-baseline"
+      },
+      "candidate": {
+        "variant": "leve",
+        "mean": 2.46393772558074,
+        "p95": 5.1497970865107305,
+        "dir": "/tmp/kiwi-T9708-cpu-final/pair-3-2-leve"
+      },
+      "delta": 0.0345036743901348
+    }
+  ],
+  "baselineP95": 5.005302702773452,
+  "candidateP95": 5.17370498752099,
+  "allRuntimeHashesMatch": true,
+  "passes": true
+}

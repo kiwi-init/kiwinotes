@@ -14,6 +14,9 @@ import {
 } from "three";
 import referenceUrl from "./assets/reference.webp";
 import eyeFreeUrl from "./assets/reference-no-eyes.webp";
+import cutoutMaskUrl from "./assets/cutout-mask.webp";
+import cutoutReferenceUrl from "./assets/reference-cutout.webp";
+import cutoutEyeFreeUrl from "./assets/reference-no-eyes-cutout.webp";
 import protectionUrl from "./assets/material-mask.webp";
 import {
   FogDynamics,
@@ -25,6 +28,10 @@ import { densityMaterial, fogMaterial } from "./shader";
 export type { FogInputs, FogState } from "./state";
 export interface FogOptions {
   mode: "capture" | "measure";
+  /** T9708: optional transparent composition; legacy opaque remains unchanged. */
+  cutout?: boolean;
+  backing?: number;
+  edgeBand?: number;
   backend?: "auto" | "webgl2" | "none";
   width?: number;
   height?: number;
@@ -60,7 +67,8 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   };
   const image = document.createElement("img");
   const selectedReference = options.eyes === "hidden" ? eyeFreeUrl : referenceUrl;
-  image.src = selectedReference;
+  const fallbackReference = options.cutout ? (options.eyes === "hidden" ? cutoutEyeFreeUrl : cutoutReferenceUrl) : selectedReference;
+  image.src = fallbackReference;
   image.alt = "Kiwi-cat";
   image.width = width;
   image.height = height;
@@ -89,7 +97,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   canvas.width = width;
   canvas.height = height;
   let renderer: WebGPURenderer | undefined;
-  let textures: Array<{ dispose(): void }> = [];
+  let textures: import("three").Texture[] = [];
   let scene: Scene | undefined,
     camera: OrthographicCamera | undefined,
     mesh: Mesh | undefined,
@@ -231,7 +239,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   try {
     renderer = new WebGPURenderer({
       canvas,
-      alpha: false,
+      alpha: options.cutout === true,
       antialias: false,
       forceWebGL: options.backend === "webgl2",
       outputBufferType: UnsignedByteType,
@@ -267,13 +275,13 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     ).isWebGPUBackend
       ? "webgpu"
       : "webgl2";
-    const [reference, protection] = await Promise.all(
-      [selectedReference, protectionUrl].map((url) =>
+    const [reference, protection, cutout] = await Promise.all(
+      [selectedReference, protectionUrl, ...(options.cutout ? [cutoutMaskUrl] : [])].map((url) =>
         new TextureLoader().loadAsync(url),
       ),
     );
-    textures = [reference!, protection!];
-    for (const tex of [reference!, protection!]) {
+    textures = [reference!, protection!, ...(cutout ? [cutout] : [])];
+    for (const tex of textures) {
       tex.colorSpace = NoColorSpace;
       tex.minFilter = LinearFilter;
       tex.magFilter = LinearFilter;
@@ -298,7 +306,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     densityMesh = new Mesh(new PlaneGeometry(2, 2), density.material);
     densityMesh.frustumCulled = false;
     densityScene.add(densityMesh);
-    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden");
+    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08);
     scene = new Scene();
     camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     mesh = new Mesh(new PlaneGeometry(2, 2), material.material);

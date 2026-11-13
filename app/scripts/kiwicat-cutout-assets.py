@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""T9708: coverage from approved source layers, not brightness alone.
+Only generates new cutout files; opaque approved textures remain untouched.
+"""
+from pathlib import Path
+import json, hashlib
+import numpy as np
+from PIL import Image, ImageFilter
+ROOT=Path(__file__).resolve().parents[2]
+SRC=ROOT/'docs/brand/kiwi-cat/gerada'; DEST=ROOT/'app/ui/kiwicat/assets'
+coat=np.zeros((2560,2048),np.float32)
+hashes={}
+for name in ['cabeca','corpo','orelha-esquerda','orelha-direita','aro']:
+    file=SRC/(name+'.png'); rgba=np.asarray(Image.open(file).convert('RGBA'),np.float32)/255
+    coat=1-(1-coat)*(1-rgba[:,:,3]); hashes[name]=hashlib.sha256(file.read_bytes()).hexdigest()
+# Source-over coverage with tiny residual alpha removed; preserve the opaque dark coat.
+observed=np.asarray(Image.open(DEST/'reference-no-eyes.webp').convert('RGB'),np.float32).max(2)/255
+observed=np.asarray(Image.fromarray(observed).resize((512,640),Image.Resampling.BOX).resize((2048,2560),Image.Resampling.BILINEAR),np.float32)
+v=np.clip((observed-.08)/(.20-.08),0,1)
+# The layer alpha contains luminous feather outside the coat. Keep geometric
+# coverage only where the observed material is dark, not that luminous fringe.
+coat=coat*(1-v*v*(3-2*v))
+coat=np.asarray(Image.fromarray(np.uint8(np.rint(coat*255))).filter(ImageFilter.GaussianBlur(10)),np.float32)/255
+v=np.clip((coat-.003)/(.025-.003),0,1)
+coat=coat*v*v*(3-2*v)
+coat=np.where(coat>.98,1,coat)
+light=np.asarray(Image.open(DEST/'reference-no-eyes.webp').convert('RGB'),np.float32).max(2)
+light=np.asarray(Image.fromarray(light).resize((640,800),Image.Resampling.BILINEAR),np.float32)/255
+# Three separable float box passes approximate a soft field without quantizing
+# weak light before sqrt (byte-space blur produced visible opacity terraces).
+def box(a,axis,r=10):
+    pad=[(0,0),(0,0)]; pad[axis]=(r,r)
+    p=np.pad(a,pad,mode='reflect'); c=np.cumsum(p,axis=axis,dtype=np.float64)
+    shape=list(c.shape); shape[axis]=1
+    c=np.concatenate([np.zeros(shape),c],axis=axis)
+    hi=[slice(None),slice(None)]; lo=hi.copy(); hi[axis]=slice(2*r+1,None);lo[axis]=slice(None,-2*r-1)
+    return ((c[tuple(hi)]-c[tuple(lo)])/(2*r+1)).astype(np.float32)
+for _ in range(3): light=box(box(light,0),1)
+proximity=np.asarray(Image.fromarray(coat).resize((640,800),Image.Resampling.BILINEAR),np.float32)
+for _ in range(3): proximity=box(box(proximity,0,r=25),1,r=25)
+proximity=np.clip(proximity*3,0,1)
+# Gate only the support opacity of existing light; never add emission. This
+# prevents the remote, straight source-image tail from becoming a dark plate.
+light=np.maximum(light-32/255,0)/(1-32/255)*proximity
+light=np.asarray(Image.fromarray(light).resize((2048,2560),Image.Resampling.BILINEAR),np.float32)
+# Coverage support is smooth, rather than magnifying byte noise in faint light.
+Image.fromarray(np.uint8(np.rint(np.stack([coat,np.sqrt(light),np.zeros_like(coat)],2)*255))).save(DEST/'cutout-mask.webp',lossless=True,method=6)
+# Static fallback: output premultiplied reference / coverage as straight RGBA.
+for name in ['reference','reference-no-eyes']:
+    rgb=np.asarray(Image.open(DEST/(name+'.webp')).convert('RGB'),np.float32)/255
+    high=rgb.max(2)
+    protection=np.asarray(Image.open(DEST/'material-mask.webp').convert('RGB'),np.float32)/255
+    material=np.maximum(np.maximum(protection[:,:,1],protection[:,:,2]),coat)
+    v=np.clip((material-.05)/.15,0,1); protected=v*v*(3-2*v)
+    v=np.clip((high-16/255)/(16/255),0,1); support=np.maximum(v*v*(3-2*v),protected)
+    rgb=rgb*support[:,:,None]
+    alpha=np.maximum(coat,np.maximum(rgb.max(2),np.sqrt(light)))
+    straight=np.divide(rgb,alpha[:,:,None],out=np.zeros_like(rgb),where=alpha[:,:,None]>0)
+    # Prototype default band: only source light at left/right/bottom tapers.
+    band=.08*2048
+    y,x=np.mgrid[:2560,:2048]
+    def smooth(v):
+        v=np.clip(v,0,1);return v*v*(3-2*v)
+    fade=smooth(x/band)*smooth((2047-x)/band)*smooth((2559-y)/band)
+    rgb=rgb*np.maximum(coat,fade)[:,:,None]
+    alpha=np.maximum(np.maximum(coat,rgb.max(2)),alpha*fade*smooth(y/band))
+    straight=np.divide(rgb,alpha[:,:,None],out=np.zeros_like(rgb),where=alpha[:,:,None]>0)
+    rgba=np.dstack([np.clip(straight,0,1),alpha])
+    Image.fromarray(np.uint8(np.rint(rgba*255))).save(DEST/(name+'-cutout.webp'),lossless=True,method=6)
+(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade; weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback'),indent=2)+'\n')

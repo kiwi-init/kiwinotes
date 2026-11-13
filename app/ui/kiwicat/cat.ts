@@ -6,6 +6,7 @@ import type { FogInputs, FogState } from "./state";
 export interface CatOptions extends FogOptions {
   random?: () => number;
   sleepSeconds?: () => number;
+  outline?: boolean;
 }
 export interface CatStats {
   faceUpdates: number; quietPlans: number; hidden: boolean; reduced: boolean;
@@ -25,7 +26,13 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   });
   const fogRoot = document.createElement("div"); root.replaceChildren(fogRoot);
   root.style.cssText = `position:relative;width:${width}px;height:${height}px;isolation:isolate`;
+  const backdrop = options.cutout && options.outline ? createVectorLayer(root, width, height, true) : undefined;
+  // Dark symbol support lives UNDER the premultiplied fog, preserving RGB on black.
+  if (backdrop) { const layer = root.lastElementChild as HTMLElement; layer.style.zIndex = "0"; }
+  fogRoot.style.cssText = "position:relative;z-index:1";
   const vectors = createVectorLayer(root, width, height);
+  (root.lastElementChild as HTMLElement).style.zIndex = "2";
+  backdrop?.apply(machine.sample());
   if (vectors.apply(machine.sample())) stats.faceUpdates++;
   const fog = await createKiwiFog(fogRoot, { ...options, eyes: "hidden",
     inputs: { ...options.inputs, estado: machine.visualState, parado: stats.reduced } });
@@ -40,13 +47,14 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     if (frameId) cancelAnimationFrame(frameId);
     if (timerId) clearTimeout(timerId);
     frameId = timerId = 0;
-    vectors.stop();
+    vectors.stop(); backdrop?.stop();
   }
   function syncFog(frame: CatFrame) {
     if (fogState !== frame.state) { fogState = frame.state; fog.update({ estado: frame.state }); }
   }
   function paint(frame: CatFrame) {
     if (disposed || stats.hidden) return;
+    backdrop?.apply(frame);
     if (vectors.apply(frame)) stats.faceUpdates++;
   }
   function freezeIfSlow() {
@@ -64,6 +72,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
       const count = Math.max(2, Math.floor(duration * 30) + 1);
       // Projection is read-only: no future RNG draws or scheduler events.
       const frames = Array.from({ length: count }, (_, i) => machine.project(elapsed + duration * i / (count - 1)));
+      backdrop?.animate(frames, duration);
       vectors.animate(frames, duration); stats.quietPlans++;
     }
     timerId = window.setTimeout(() => {
@@ -131,7 +140,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
       disposed = true; cancel();
       document.removeEventListener("visibilitychange", onVisibility);
       media.removeEventListener("change", onReduced);
-      vectors.dispose(); await fog.dispose(); root.replaceChildren();
+      vectors.dispose(); backdrop?.dispose(); await fog.dispose(); root.replaceChildren();
     },
   };
 }
