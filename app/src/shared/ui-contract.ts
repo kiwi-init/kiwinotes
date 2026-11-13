@@ -149,7 +149,9 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.52.0 (T10525, spec #9839): a notificação quando o agente espera uma resposta. O `agent.notice` (a permissão do macOS
 //   e o liga/desliga), o `agent.noticeAllow` (o único que pede a permissão, no clique da pessoa), o `agent.noticeSet` e o
 //   evento `agent.noticeChanged`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.52.0";
+// 1.53.0 (T10830, spec #9810): o gato no overlay. O `kiwicat.overlay` nas settings (o `settings.set` aceita só uma das
+//   chaves do `kiwicat`, e a outra fica) e o evento `kiwicat.where`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.53.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -186,7 +188,12 @@ export interface UiCapabilities {
   "settings.get": { args: Record<string, never>; result: AppSettings };
   /** Muda só os campos dados e devolve tudo. Um valor que não existe dá E_INVALID, sem mudar nada. */
   "settings.set": {
-    args: Partial<Omit<AppSettings, "meetings" | "shortcuts">> & { meetings?: Partial<MeetingSettings>; shortcuts?: Partial<Shortcuts> };
+    args: Partial<Omit<AppSettings, "meetings" | "shortcuts" | "kiwicat">> & {
+      meetings?: Partial<MeetingSettings>;
+      shortcuts?: Partial<Shortcuts>;
+      /** O que não vem fica como está (spec #9810): o gato do canto e o do overlay mudam cada um sozinho. */
+      kiwicat?: Partial<AppSettings["kiwicat"]>;
+    };
     result: AppSettings;
   };
   /**

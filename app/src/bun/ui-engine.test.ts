@@ -83,7 +83,7 @@ const notesStub = {
 function fakeDeps() {
   const calls: string[] = [];
   const copied: string[] = [];
-  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true } };
+  const settings: AppSettings = { shortcuts: { ...DEFAULT_SHORTCUTS }, notesShortcut: "control+option+n", pinned: [], appearance: { ...DEFAULT_APPEARANCE }, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: { ...DEFAULT_MEETING_SETTINGS }, noteWidth: 760, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true } };
   let t = 0;
   return {
     calls,
@@ -238,11 +238,13 @@ describe("contrato 1.0.0 (T1192)", () => {
     expect(f.calls).toEqual(["dictionary.load", "dictionary.save:1", 'history.search:{"query":"reunião","limit":10}', "history.delete:abc"]);
   });
 
-  test("settings: Kiwi-cat validates only the show flag", async () => {
+  test("settings: Kiwi-cat validates the show and overlay flags, and one alone keeps the other (spec #9810)", async () => {
     const f = fakeDeps(); const caps = uiCapabilities(f.deps);
-    for (const value of [null, false, {}, { show: "false" }, { show: true, extra: 1 }])
+    for (const value of [null, false, {}, { show: "false" }, { overlay: 1 }, { show: true, extra: 1 }])
       expect(await directInvoke(caps, "settings.set", { kiwicat: value })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
-    expect(await directInvoke(caps, "settings.set", { kiwicat: { show: false } })).toMatchObject({ ok: true, value: { kiwicat: { show: false } } });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { show: false } })).toMatchObject({ ok: true, value: { kiwicat: { show: false, overlay: true } } });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { overlay: false } })).toMatchObject({ ok: true, value: { kiwicat: { show: false, overlay: false } } });
+    expect(await directInvoke(caps, "settings.set", { kiwicat: { show: true } })).toMatchObject({ ok: true, value: { kiwicat: { show: true, overlay: false } } });
   });
 
   test("settings: a largura da nota, em px dentro dos limites (T5299)", async () => {
