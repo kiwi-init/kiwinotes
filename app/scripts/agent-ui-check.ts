@@ -20,7 +20,8 @@
 //   prazo; duas escritas na mesma nota; criou uma nota; acrescentou numa nota que a pessoa editou depois), a lista, o
 //   [Ver] da 1ª de duas escritas, os desfazer recusados com o motivo, o pedido inteiro desfeito, um desfazer de fora
 //   que a lista vê sozinha, um pedido novo que aparece sozinho, o agente desligado, o teclado e o escuro. O roteiro é
-//   montado depois dos pedidos, com o id de cada um. E a seção vazia, com o agente desligado (`atividade-vazia`).
+//   montado depois dos pedidos, com o id de cada um. E a seção vazia, com o agente desligado (`atividade-vazia`), e o
+//   pedido que passa dos 30 dias com a tela aberta (`atividade-prazo`).
 // Sai com 1 se algum roteiro falhar. `KIWI_AGENT_UI_ONLY=escrita` roda só um cenário (pelo nome).
 
 import { createHash } from "node:crypto";
@@ -312,6 +313,50 @@ function emptyActivityScript(): string {
   return file;
 }
 
+/**
+ * O pedido que passa dos 30 dias com a tela aberta (revisão do T9493): um pedido gravado direto no registro, a 30 dias
+ * menos 45 s, sem agente. A seção abre com ele; passado o prazo, o [Desfazer] diz que não há mais o que desfazer, fora
+ * da lista, e o pedido sai dela.
+ */
+const EXPIRES_IN_MS = 45_000;
+async function expiringReady(data: string): Promise<void> {
+  const at = new Date(Date.now() - 30 * 24 * 3600_000 + EXPIRES_IN_MS);
+  const iso = at.toISOString();
+  const dir = path.join(data, "agent", "activity", `${iso.replace(/[:.]/g, "-")}_velho`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "copy-1.md"), "# Ideias\n");
+  writeFileSync(
+    path.join(dir, "request.json"),
+    JSON.stringify({
+      id: "velho",
+      at: iso,
+      request: "Um pedido de quase 30 dias",
+      reads: [],
+      copies: 1,
+      changes: [{ at: iso, kind: "appended", path: "Ideias.md", before: 9, after: 20, version: versionOf("# Ideias\n- do agente\n"), copy: "velho/copy-1.md" }],
+    }),
+  );
+}
+function expiringScript(): string {
+  const section = ".kn-section:has(h2:text-is('Atividade do agente'))";
+  const req = `${section} .kn-activity-req[data-request='velho']`;
+  const steps = [
+    { waitFor: ".kn-tab", name: "o hub abre" },
+    { click: ".kn-tab:has-text('Configurações')" },
+    { waitFor: req, name: "o pedido de quase 30 dias está na lista" },
+    // O roteiro espera no máximo 10 s por passo: o prazo passa em vários.
+    ...Array.from({ length: Math.ceil((EXPIRES_IN_MS + 3000) / 10_000) }, () => ({ wait: 10_000, name: "o prazo passa com a tela aberta" })),
+    { click: `${req} button:has-text('Desfazer')`, name: "o clique depois do prazo" },
+    { expectText: `${section} .kn-activity-gone`, text: "passou dos 30 dias: não há mais o que desfazer", name: "a seção diz, fora da lista" },
+    { expectCount: req, count: 0, name: "e tira o pedido da lista" },
+    { expectCount: `${section} .kn-activity-empty`, count: 0, name: "sem dizer que o agente nunca fez nada" },
+    { screenshot: "prazo.png", selector: section },
+  ];
+  const file = path.join(work, "ajustes-atividade-prazo.json");
+  writeFileSync(file, JSON.stringify({ window: "hub", size: "900x1400", steps }, null, 2));
+  return file;
+}
+
 let ok = true;
 try {
   ok = (await scenario("fluxo", "ajustes-agente.json", {})) && ok;
@@ -324,6 +369,7 @@ try {
   ok = (await scenario("desfazer", undoFile, {}, { window: "notes", before: undoReady, prefix: "desfazer-" })) && ok;
   ok = (await scenario("atividade", activityFile, {}, { before: activityReady, prefix: "atividade-" })) && ok;
   ok = (await scenario("atividade-vazia", emptyActivityScript(), {}, { prefix: "atividade-" })) && ok;
+  ok = (await scenario("atividade-prazo", expiringScript(), {}, { before: expiringReady, prefix: "atividade-" })) && ok;
 } finally {
   reg.stop();
   rmSync(work, { recursive: true, force: true });

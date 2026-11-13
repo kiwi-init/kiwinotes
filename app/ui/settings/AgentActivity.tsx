@@ -18,7 +18,7 @@ import {
   ACTIVITY_MORE,
   changeLine,
   EMPTY_ACTIVITY,
-  GONE_REQUEST,
+  goneRequest,
   openChanges,
   readsLine,
   requestLine,
@@ -40,21 +40,39 @@ export function AgentActivitySection() {
   const [requests, setRequests] = useState<AgentActivityRequest[] | null>(null);
   const [limit, setLimit] = useState(ACTIVITY_FIRST);
   const [failure, setFailure] = useState<string | null>(null);
+  /** O aviso de um pedido que saiu do registro com a tela aberta: fica fora da lista, e o `load` não o limpa. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [views, setViews] = useState<Record<string, View>>({});
-  const [busy, setBusy] = useState<string | null>(null);
+  /** Os desfazer em curso (o pedido, ou o pedido e a mudança): cada botão espera o seu. */
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
   const limitRef = useRef(limit);
   limitRef.current = limit;
+  const requestsRef = useRef(requests);
+  requestsRef.current = requests;
 
-  const load = useCallback(async () => {
+  /** Lê a lista de novo; devolve a lista lida (null se falhou). */
+  const load = useCallback(async (): Promise<AgentActivityRequest[] | null> => {
     try {
       const { requests } = await api.agent.activity(limitRef.current);
       setRequests(requests);
       setFailure(null);
+      return requests;
     } catch (e) {
       setFailure(e instanceof Error ? e.message : String(e));
+      return null;
     }
   }, []);
+
+  /** Depois de um clique: se o pedido saiu do registro (passou dos 30 dias), a seção diz, e a lista já não o tem. */
+  const afterClick = async (request: string, at: string | undefined, gone: boolean) => {
+    const list = await load();
+    if (gone || (list && !list.some((r) => r.id === request))) {
+      setNotice(goneRequest(at));
+      setOutcomes(({ [request]: _, ...rest }) => rest);
+      setViews((v) => Object.fromEntries(Object.entries(v).filter(([key]) => !key.startsWith(`${request}:`))));
+    }
+  };
 
   useEffect(() => {
     if (!has("agent.activity")) return;
@@ -91,20 +109,25 @@ export function AgentActivitySection() {
       setViews(({ [k]: _, ...rest }) => rest);
       return;
     }
+    const at = requestsRef.current?.find((r) => r.id === request)?.at;
+    setNotice(null);
     setViews((v) => ({ ...v, [k]: { phase: "loading" } }));
     try {
       const view = await api.agent.change(request, change);
       setViews((v) => (v[k] ? { ...v, [k]: { phase: "ready", view } } : v));
     } catch (e) {
       const gone = (e as { code?: string })?.code === "E_NOT_FOUND";
-      setViews((v) => (v[k] ? { ...v, [k]: { phase: "error", message: gone ? GONE_REQUEST : e instanceof Error ? e.message : String(e) } } : v));
-      if (gone) void load();
+      setViews((v) => (v[k] ? { ...v, [k]: { phase: "error", message: e instanceof Error ? e.message : String(e) } } : v));
+      if (gone) await afterClick(request, at, true);
     }
   };
 
   const runUndo = async (request: string, change?: number) => {
     const k = keyOf(request, change);
-    setBusy(k);
+    const at = requestsRef.current?.find((r) => r.id === request)?.at;
+    let gone = false;
+    setNotice(null);
+    setBusy((b) => new Set(b).add(k));
     try {
       const r = await api.agent.undo(request, change);
       const lines = r.notes.map((n: AgentUndoNote) => ({ text: undoLine(n, request), ok: n.result === "restored" || n.result === "trashed" }));
@@ -113,14 +136,15 @@ export function AgentActivitySection() {
       // mudou, e ele fica.
       if (lines.some((l) => l.ok)) setViews((v) => Object.fromEntries(Object.entries(v).filter(([key]) => !key.startsWith(`${request}:`))));
     } catch (e) {
-      const gone = (e as { code?: string })?.code === "E_NOT_FOUND";
-      if (gone) {
-        setRequests((rs) => rs?.filter((r) => r.id !== request) ?? rs);
-        setFailure(GONE_REQUEST);
-      } else setOutcomes((o) => ({ ...o, [request]: { lines: [{ text: e instanceof Error ? e.message : String(e), ok: false }] } }));
+      gone = (e as { code?: string })?.code === "E_NOT_FOUND";
+      if (!gone) setOutcomes((o) => ({ ...o, [request]: { lines: [{ text: e instanceof Error ? e.message : String(e), ok: false }] } }));
     } finally {
-      setBusy(null);
-      void load();
+      setBusy((b) => {
+        const next = new Set(b);
+        next.delete(k);
+        return next;
+      });
+      await afterClick(request, at, gone);
     }
   };
 
@@ -133,8 +157,13 @@ export function AgentActivitySection() {
             {failure}
           </p>
         ) : null}
+        {notice ? (
+          <p className="kn-activity-failure kn-activity-gone" role="status">
+            {notice}
+          </p>
+        ) : null}
         {requests === null ? null : requests.length === 0 ? (
-          <p className="kn-activity-empty">{EMPTY_ACTIVITY}</p>
+          notice ? null : <p className="kn-activity-empty">{EMPTY_ACTIVITY}</p>
         ) : (
           <ul className="kn-activity-list" aria-label="Pedidos ao agente">
             {requests.map((r) => (
@@ -169,14 +198,14 @@ function Request({
   onUndo,
 }: {
   r: AgentActivityRequest;
-  busy: string | null;
+  busy: ReadonlySet<string>;
   views: Record<string, View>;
   outcome?: Outcome;
   onView: (change: number) => void;
   onUndo: (change?: number) => void;
 }) {
   const open = openChanges(r);
-  const running = busy !== null && (busy === r.id || busy.startsWith(`${r.id}:`));
+  const running = [...busy].some((b) => b === r.id || b.startsWith(`${r.id}:`));
   return (
     <li className="kn-activity-req" data-request={r.id}>
       <div className="kn-activity-head">
@@ -188,7 +217,7 @@ function Request({
         </span>
         {r.changes.length > 1 && open > 0 ? (
           <Button onClick={() => onUndo()} disabled={running} aria-label={`Desfazer o pedido de ${whenOf(r.at)}`}>
-            {busy === r.id ? "Desfazendo…" : "Desfazer o pedido"}
+            {busy.has(r.id) ? "Desfazendo…" : "Desfazer o pedido"}
           </Button>
         ) : null}
       </div>
@@ -213,7 +242,7 @@ function Request({
                     </Button>
                     {c.undone ? null : (
                       <Button onClick={() => onUndo(n)} disabled={running} aria-label={`Desfazer: ${changeLine(c)}`}>
-                        {busy === k ? "Desfazendo…" : "Desfazer"}
+                        {busy.has(k) ? "Desfazendo…" : "Desfazer"}
                       </Button>
                     )}
                   </span>

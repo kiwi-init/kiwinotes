@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentChangeView, AgentUndoNote } from "../../src/shared/ui-contract.ts";
-import { changeLine, hourOf, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf } from "./activityText.ts";
+import { changeLine, goneRequest, hourOf, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf } from "./activityText.ts";
 
 /** Uma hora local, em ISO: os testes não dependem do fuso da máquina. */
 const at = (day: number, h: number, m: number) => new Date(2026, 10, day, h, m).toISOString();
@@ -86,6 +86,9 @@ describe("a seção Atividade do agente: os textos", () => {
     expect(lines[6]).toContain("já tinha sido desfeita");
     // Nada de código nem de id na tela.
     for (const l of lines) expect(l).not.toMatch(/E_[A-Z_]+|p2/);
+    // O pedido que passou dos 30 dias com a tela aberta: pela hora dele.
+    expect(goneRequest(at(13, 10, 48), NOW)).toBe("O pedido de hoje, 10:48 passou dos 30 dias: não há mais o que desfazer.");
+    expect(goneRequest(undefined, NOW)).toBe("Esse pedido passou dos 30 dias: não há mais o que desfazer.");
     // A escrita mais nova no mesmo pedido.
     expect(undoLine(n({ reason: "E_LATER_WRITE", later: { request: "p", change: 2, at: at(13, 14, 0) } }), "p", NOW)).toContain("neste mesmo pedido");
   });

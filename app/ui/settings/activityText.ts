@@ -99,7 +99,7 @@ export function undoLine(n: AgentUndoNote, requestId: string, now = Date.now()):
   const name = noteName(n.path);
   if (n.result === "restored") return `${name} voltou ao texto de antes.`;
   if (n.result === "trashed") return `${name} foi para a Lixeira. Nos próximos 10 minutos, dá para trazer de volta pelas Notas.`;
-  if (n.result === "already") return `${name} já tinha sido desfeita, por outro lugar. Nada mudou.`;
+  if (n.result === "already") return `${name} já tinha sido desfeita. Nada mudou.`;
   switch (n.reason) {
     case "E_CHANGED":
       return `${name} mudou depois do agente, então ficou como está. O texto de antes continua guardado.`;
@@ -123,8 +123,9 @@ export function undoLine(n: AgentUndoNote, requestId: string, now = Date.now()):
   }
 }
 
-/** O pedido saiu do registro entre abrir a lista e clicar. */
-export const GONE_REQUEST = "Esse pedido passou dos 30 dias: não há mais o que desfazer.";
+/** O pedido saiu do registro entre abrir a lista e clicar (passou dos 30 dias): o aviso fica na seção, fora da lista. */
+export const goneRequest = (at?: string, now = Date.now()) =>
+  `${at ? `O pedido de ${whenOf(at, now)}` : "Esse pedido"} passou dos 30 dias: não há mais o que desfazer.`;
 
 /** A seção sem pedidos. */
 export const EMPTY_ACTIVITY = "O agente ainda não fez nada.";
