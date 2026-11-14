@@ -136,7 +136,12 @@ try {
   const csv = await ask("/ler-arquivo Dados/contas.csv");
   assert.ok(/\| CI \| ‹segredo [^›]+› \|/.test(csv) && !csv.includes("ghp_"), csv);
   await bubble(q, "Li Dados/contas.csv");
-  await cornerShot(q, ".kn-bubble", "2-segredo.png", "2. O segredo de um csv vira o marcador: o token não vai ao agente");
+  // A resposta inteira, para o marcador aparecer no print.
+  await q.locator(".kn-bubble-more").first().click();
+  await q.waitForSelector(".kn-bubble-big", { timeout: 15000 });
+  await q.waitForFunction(() => document.querySelector(".kn-bubble-big")?.textContent?.includes("‹segredo"), undefined, { timeout: 15000 });
+  await cornerShot(q, ".kn-bubble-big", "2-segredo.png", "2. O segredo de um csv vira o marcador: o token não vai ao agente");
+  await q.keyboard.press("Escape");
   report.checks.push("the guardrail: a token in a csv cell reaches the agent as the marker");
 
   // O docx e o pdf (com o aviso do pdf sem texto) só conferidos, sem print.

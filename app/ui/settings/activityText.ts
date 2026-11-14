@@ -38,8 +38,11 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
   let listedMeetings = false;
   const projects = new Set<string>();
   let listedProjects = false;
+  /** Os arquivos lidos (spec #11549): a mesma planilha lida em várias partes conta uma vez. */
+  const files = new Set<string>();
   for (const r of reads) {
-    if (r.tool === "notes_read" || r.tool === "notes_outline") notes.add(r.target ?? `#${notes.size}`);
+    if (r.tool === "files_read") files.add((r.target ?? `#${files.size}`).split(" › ")[0]!);
+    else if (r.tool === "notes_read" || r.tool === "notes_outline") notes.add(r.target ?? `#${notes.size}`);
     else if (r.tool === "meetings_get") meetings.add(r.target ?? `#${meetings.size}`);
     else if (r.tool === "notes_search") searches++;
     else if (r.tool === "notes_list") listedNotes = true;
@@ -51,6 +54,7 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
   const parts: string[] = [];
   if (notes.size) parts.push(`leu ${plural(notes.size, "nota", "notas")}`);
   if (meetings.size) parts.push(`leu ${plural(meetings.size, "reunião", "reuniões")}`);
+  if (files.size) parts.push(`leu ${plural(files.size, "arquivo", "arquivos")}`);
   if (searches) parts.push(`procurou ${plural(searches, "vez", "vezes")}`);
   if (listedNotes) parts.push("listou as notas");
   if (listedMeetings) parts.push("listou as reuniões");
