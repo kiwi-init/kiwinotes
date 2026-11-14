@@ -62,9 +62,14 @@ for name in ['reference','reference-no-eyes']:
     def smooth(v):
         v=np.clip(v,0,1);return v*v*(3-2*v)
     fade=smooth(x/band)*smooth((2047-x)/band)*smooth((2559-y)/band)
+    # T11565 (spec #9573): the same rounded fall-off as the shader, an ellipse around the cat; never above the band,
+    # and the protected material keeps the band.
+    qx=((x+.5)/2048-.5)*2; qy=((y+.5)/2560-.5)*2
+    rounded=1-smooth((np.sqrt(qx*qx+qy*qy)-.82)/(1-.82))
+    fade=np.maximum(np.minimum(rounded,fade),fade*protected)
     rgb=rgb*np.maximum(coat,fade)[:,:,None]
     alpha=np.maximum(np.maximum(coat,rgb.max(2)),alpha*fade*smooth(y/band))
     straight=np.divide(rgb,alpha[:,:,None],out=np.zeros_like(rgb),where=alpha[:,:,None]>0)
     rgba=np.dstack([np.clip(straight,0,1),alpha])
     Image.fromarray(np.uint8(np.rint(rgba*255))).save(DEST/(name+'-cutout.webp'),lossless=True,method=6)
-(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade; weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback'),indent=2)+'\n')
+(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade under an elliptical fall-off (T11565); weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback'),indent=2)+'\n')

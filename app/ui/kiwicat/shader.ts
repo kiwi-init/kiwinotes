@@ -94,6 +94,8 @@ export function fogMaterial(
   cutout?: Texture,
   backing = 0.5,
   edgeBand = 0.08,
+  /** "band": a faixa reta de antes do spec #9573, só para as provas compararem. */
+  edgeShape: "rounded" | "band" = "rounded",
 ) {
   const arcGain = uniform(1),
     alive = uniform(0),
@@ -192,8 +194,13 @@ export function fogMaterial(
     const lightAlpha = max(max(max(lightRGB.r, lightRGB.g), lightRGB.b), pow(cutoutCoverage.g, backing * 2));
     const alpha = max(cutoutCoverage.r, lightAlpha);
     // Only left/right/bottom carry visible reference light. The top is <=1/255.
-    // This prototype band is reviewed separately; no light is invented outside.
-    const edge = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
+    const band = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
+    // A queda arredondada (spec #9573, a elipse escolhida pelo lead no #11568): perto da borda a luz cai até zero numa
+    // elipse em volta do gato, e não numa faixa reta, para os lados da névoa não ficarem retos. Ela só diminui a luz
+    // (fica sempre abaixo da faixa); o corpo e o aro seguem pela faixa de antes, onde o material os protege.
+    const q = st.sub(0.5).mul(2);
+    const rounded = float(1).sub(smoothstep(0.82, 1, q.x.mul(q.x).add(q.y.mul(q.y)).sqrt()));
+    const edge = edgeShape === "band" ? band : max(min(rounded, band), band.mul(protectedMaterial));
     const coat = cutoutCoverage.r;
     const lightFade = max(coat, edge);
     const finalRGB = lightRGB.mul(lightFade);
