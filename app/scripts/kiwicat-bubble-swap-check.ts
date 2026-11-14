@@ -72,9 +72,20 @@ function webkitCpu(): Map<number, number> {
 /** O que os processos gastaram entre as duas medidas (só os que existem nas duas: um que fechou no meio não conta). */
 const cpuDelta = (a: Map<number, number>, b: Map<number, number>) => [...b].reduce((n, [pid, s]) => n + (a.has(pid) ? s - a.get(pid)! : s), 0);
 
-/** Espera um balão vivo do canto (não o que está saindo), pela classe. */
+/**
+ * Espera um balão vivo do canto, pela classe: não o que está saindo, e já visível. Um balão que só passou por um render
+ * (a proposta que chega com a resposta e sai ainda no atraso da entrada) não conta (#12404).
+ */
 async function live(p: Page, sel: string, timeout = 30000) {
-  await p.waitForFunction((s) => [...document.querySelectorAll(s)].some((e) => !e.closest('[data-phase="exit"]')), sel, { timeout });
+  await p.waitForFunction(
+    (s) =>
+      [...document.querySelectorAll(s)].some((e) => {
+        const slot = e.closest(".kn-bubble-slot");
+        return !!slot && slot.getAttribute("data-phase") !== "exit" && Number(getComputedStyle(slot).opacity) > 0.9;
+      }),
+    sel,
+    { timeout },
+  );
 }
 
 type Slot = { phase: string; op: number; sc: number; kind: string; anim: string; vw: number; lw: number; vh: number; lh: number };
@@ -263,6 +274,9 @@ try {
       const a = analyse(frames);
       report[run] = a;
       if (a.twoFull) problems.push(`${run}: ${a.twoFull} quadro(s) com dois balões cheios`);
+      // As trocas da sequência têm de estar lá (uma espera que passasse por um balão de um render só pularia uma).
+      for (const want of ["resposta → proposta", "proposta → pergunta", "pergunta → resposta"])
+        if (!a.swaps.some((s) => `${s.from} → ${s.to}` === want)) problems.push(`${run}: faltou a troca ${want}`);
       for (const s of a.swaps) if (s.minVisible < 0.3) problems.push(`${run}: a troca ${s.from} → ${s.to} chega a ${s.minVisible} de opacidade`);
       if (run !== "reduced") {
         const g = growth(frames);
