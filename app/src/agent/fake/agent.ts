@@ -225,6 +225,29 @@ async function createFileFake(client: AgentContext, sessionId: string, formato: 
   return `Gerei ${(JSON.parse(r.text) as { caminho: string }).caminho}.`;
 }
 
+/**
+ * A web do agente (spec #11908): "/web <busca>" pede a permissão do `WebSearch`, como o Claude Code. Com o sim, a busca
+ * aparece como uma ferramenta em andamento e termina; com o não, ela não acontece. O falso nunca vai à rede.
+ */
+async function webSearchFake(client: AgentContext, sessionId: string, query: string): Promise<string> {
+  const toolCallId = `w${++rpcId}`;
+  const call = { toolCallId, title: "WebSearch", kind: "fetch", _meta: { claudeCode: { toolName: "WebSearch" } } };
+  const res = (await client.request("session/request_permission", {
+    sessionId,
+    toolCall: call,
+    options: [
+      { optionId: "allow", name: "Permitir", kind: "allow_once" },
+      { optionId: "reject", name: "Recusar", kind: "reject_once" },
+    ],
+  })) as { outcome: { outcome: string; optionId?: string } };
+  if (res.outcome.outcome !== "selected" || res.outcome.optionId !== "allow") return "web negada: a busca não aconteceu.";
+  await client.notify("session/update", { sessionId, update: { sessionUpdate: "tool_call", ...call, status: "in_progress" } });
+  const pause = Number(process.env.KIWI_FAKE_AGENT_TOOL_DELAY_MS ?? 0);
+  if (pause > 0) await Bun.sleep(pause);
+  await client.notify("session/update", { sessionId, update: { sessionUpdate: "tool_call_update", toolCallId, status: "completed" } });
+  return `busquei na web: ${query}`;
+}
+
 /** Responde a uma pergunta pelas notas: procura a pergunta, ou a palavra mais longa dela, lê a 1ª nota e cita o começo. */
 async function answerFromNotes(client: AgentContext, sessionId: string, question: string): Promise<string> {
   const words = [...new Set(question.replace(/[?!.,;:"]/g, " ").split(/\s+/).filter((w) => w.length >= 4))].sort((a, b) => b.length - a.length);
@@ -514,6 +537,12 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
+        // A web (spec #11908): só a permissão e o status; o falso nunca vai à rede.
+        const web = /^\/web\s+(.+)$/.exec(text);
+        if (web) {
+          await say(client, sessionId, await webSearchFake(client, sessionId, web[1]!.trim()));
+          return { stopReason: "end_turn" };
+        }
         // Os arquivos (spec #11549).
         const readCmd = /^\/ler-arquivo\s+(.+)$/.exec(text);
         if (readCmd && kiwiServers.has(sessionId)) {

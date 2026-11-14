@@ -75,7 +75,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     ...(o.reader ? { reader: o.reader } : {}),
     ...(o.writer ? { writer: o.writer } : {}),
     ...(o.doubtTimeoutMs ? { doubtTimeoutMs: o.doubtTimeoutMs } : {}),
-    openHost: async ({ configOptions, kiwiTools, onExit }) =>
+    openHost: async ({ configOptions, kiwiTools, webTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
         name: "Claude Code",
@@ -84,6 +84,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
         configOptions,
         onExit,
         ...(kiwiTools ? { kiwiTools } : {}),
+        ...(webTools ? { webTools } : {}),
         env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}) },
       }),
     registry: reg.url,
@@ -648,6 +649,29 @@ function memoryWriter(notes: Record<string, string>): VaultWriter {
     },
   };
 }
+
+describe("Pesquisar na web (spec #11908)", () => {
+  test("desligado por padrão, o Kiwi nega a busca do agente; ligado, libera já no próximo pedido, e o status diz web", async () => {
+    const m = make();
+    await readyNow(m);
+    expect((await m.svc.status()).webSearch).toBe(false);
+    const off = await askAndWait(m, "/web documentação do DICOMweb");
+    expect(off.at(-1)).toMatchObject({ type: "done", text: "web negada: a busca não aconteceu." });
+    expect(off).toContainEqual(expect.objectContaining({ type: "permission", tool: "WebSearch", decision: "denied" }));
+    expect(off.some((e) => e.type === "status" && (e as { tool?: string }).tool === "web")).toBe(false);
+    // Ligado: sem reabrir o agente, o próximo pedido de permissão já vale.
+    expect((await m.svc.configure({ webSearch: true })).webSearch).toBe(true);
+    const on = await askAndWait(m, "/web documentação do DICOMweb");
+    expect(on.at(-1)).toMatchObject({ type: "done", text: "busquei na web: documentação do DICOMweb" });
+    expect(on).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "web" }));
+    expect(on.some((e) => e.type === "permission")).toBe(false);
+    // O nome cru da ferramenta do agente nunca chega à tela.
+    expect(on.some((e) => e.type === "status" && (e as { tool?: string }).tool === "WebSearch")).toBe(false);
+    // Desligado de novo: negado de novo.
+    await m.svc.configure({ webSearch: false });
+    expect((await askAndWait(m, "/web outra busca")).at(-1)).toMatchObject({ text: "web negada: a busca não aconteceu." });
+  });
+});
 
 describe("os arquivos que o agente gera (spec #11549)", () => {
   test("o pedido gera o arquivo, a Atividade registra a criação, e o [Desfazer] o manda para a Lixeira", async () => {

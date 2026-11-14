@@ -48,7 +48,7 @@ export interface ClaudeAdapterOptions {
   claudePath: string | null;
   /** Para os testes: o ambiente base e outros campos do host. */
   env?: Record<string, string | undefined>;
-  host?: Partial<Pick<AgentHostOptions, "kiwiVersion" | "onUpdate" | "sessionOptions" | "configOptions" | "kiwiTools" | "onExit">>;
+  host?: Partial<Pick<AgentHostOptions, "kiwiVersion" | "onUpdate" | "sessionOptions" | "configOptions" | "kiwiTools" | "webTools" | "onExit">>;
   bun?: string;
 }
 

@@ -115,6 +115,12 @@ export interface AgentHostOptions {
    */
   kiwiTools?: { servers: () => McpServer[]; prefix: string };
   /**
+   * "Pesquisar na web" (spec #11908): consultado a cada pedido de permissão. Ligado, o Kiwi aceita as ferramentas de web
+   * do próprio agente (`WEB_TOOLS`); desligado, ou sem a opção, elas são recusadas como qualquer outra. O Kiwi não faz
+   * nenhuma chamada de rede: quem busca e lê as páginas é o agente, com o login dele.
+   */
+  webTools?: () => boolean;
+  /**
    * O agente fechou sozinho (caiu), e não pelo `stop()`. O serviço fecha junto o servidor de ferramentas daquela
    * abertura (revisão do T8956).
    */
@@ -219,7 +225,7 @@ export class AgentHost {
       .onRequest("session/request_permission", ({ params }) => {
         const tool = toolName(params.toolCall as Record<string, unknown>);
         const kiwi = this.o.kiwiTools;
-        if (kiwi && tool.startsWith(kiwi.prefix)) {
+        if ((kiwi && tool.startsWith(kiwi.prefix)) || (isWebTool(tool) && this.o.webTools?.() === true)) {
           const allow = params.options.find((o) => o.kind === "allow_once");
           if (allow) return { outcome: { outcome: "selected", optionId: allow.optionId } } satisfies RequestPermissionResponse;
         }
@@ -536,6 +542,10 @@ export class AgentHost {
 }
 
 /** O nome da ferramenta de um `tool_call`: o do Claude Code (`_meta.claudeCode.toolName`), o título ou o tipo. */
+/** As ferramentas de web do Claude Code (spec #11908): buscar e ler uma página. */
+export const WEB_TOOLS = ["WebSearch", "WebFetch"] as const;
+export const isWebTool = (tool: string) => (WEB_TOOLS as readonly string[]).includes(tool);
+
 function toolName(call: Record<string, unknown>): string {
   const meta = call._meta as { claudeCode?: { toolName?: unknown } } | undefined;
   const fromMeta = meta?.claudeCode?.toolName;

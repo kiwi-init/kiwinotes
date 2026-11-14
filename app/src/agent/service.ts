@@ -25,7 +25,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { AgentError, type AgentErrorCode } from "./errors.ts";
-import type { AgentHost, AgentHostOptions } from "./host.ts";
+import { isWebTool, type AgentHost, type AgentHostOptions } from "./host.ts";
 import { KIWI_TOOL_PREFIX, KiwiToolServer, type ToolCallEvent } from "./tools/server.ts";
 import { SecretGuard, type DoubtDecider } from "../guardrail/filter.ts";
 import { DoubtAnswers, type DoubtAnswer, type StoredAnswer } from "../guardrail/answers.ts";
@@ -152,6 +152,8 @@ export interface AgentServiceDeps {
   openHost(o: {
     configOptions: () => Record<string, string>;
     kiwiTools?: AgentHostOptions["kiwiTools"];
+    /** "Pesquisar na web" (spec #11908): o host pergunta a cada pedido de permissão do agente. */
+    webTools?: () => boolean;
     /** O programa caiu sozinho: o serviço fecha o servidor de ferramentas daquela abertura. */
     onExit: () => void;
   }): Promise<AgentHost>;
@@ -234,6 +236,8 @@ export class AgentService {
   private readonly usageListeners = new Set<(v: AgentUsageView) => void>();
   /** O modo econômico agora, para as ferramentas lerem a cada chamada (spec #11084). */
   private economyNow = false;
+  /** "Pesquisar na web" (spec #11908) agora: o host consulta a cada pedido de permissão do agente. */
+  private webNow = false;
   /** As propostas das reuniões (spec #8360): guardadas por 30 dias, nada escrito antes do [Aplicar]. */
   private readonly proposals: ProposalStore;
   private readonly proposalListeners = new Set<(list: AgentProposalSummary[]) => void>();
@@ -617,7 +621,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -679,6 +683,7 @@ export class AgentService {
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
       summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
       instructions: s.instructions ?? "",
+      webSearch: s.webSearch === true,
     };
   }
 
@@ -1263,6 +1268,7 @@ export class AgentService {
   private async runTurn(turn: { id: string; cancelled: boolean }, text: string, s: AgentSettings): Promise<void> {
     const wanted = this.wantedConfig(s);
     this.economyNow = s.economy;
+    this.webNow = s.webSearch === true;
     try {
       let host = this.host?.running ? this.host : null;
       if (!host) {
@@ -1320,6 +1326,11 @@ export class AgentService {
         // que foi lido ("Lendo uma nota…"; o gato entra em `agindo` na hora, spec #9510), e de novo pelo próprio
         // servidor, quando ela termina, com o `target` (`onToolCall`). O `thinking` de quando ela acaba vem do host
         // (`tool_call_update`). O nome cru nunca chega à tela.
+        // A web do agente (spec #11908): o status diz "web", e o balão mostra que ele saiu do cofre.
+        if (e.type === "status" && e.status === "running" && isWebTool(e.tool)) {
+          this.emitTurn({ id: turn.id, type: "status", status: "running", tool: "web" });
+          return;
+        }
         if (e.type === "status" && e.status === "running" && e.tool.startsWith(KIWI_TOOL_PREFIX)) {
           this.emitTurn({ id: turn.id, type: "status", status: "running", tool: e.tool.slice(KIWI_TOOL_PREFIX.length) });
           return;
@@ -1392,6 +1403,7 @@ export class AgentService {
       const host = await this.d.openHost({
         configOptions: wanted,
         ...(kiwiTools ? { kiwiTools } : {}),
+        webTools: () => this.webNow,
         onExit: () => {
           this.stopTools(tools);
           this.emitStatus();
@@ -1448,7 +1460,7 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O resumo executivo (spec #11546): os blocos e o período, inteiros e saneados.
     if (o.summary !== undefined) patch.summary = sanitizeSummarySettings(o.summary);
@@ -1457,6 +1469,11 @@ export class AgentService {
     // As instruções da pessoa (spec #11469): valem a partir do pedido seguinte. Elas vão no começo fixo de todo pedido,
     // por fora do filtro do pedido: um trecho com cara de senha ou token é recusado aqui, e nada é gravado (revisão do
     // T11667). Assim o começo continua com os mesmos bytes, sem marcador no meio.
+    // "Pesquisar na web" (spec #11908): vale já no próximo pedido de permissão do agente, sem reabrir a sessão.
+    if (o.webSearch !== undefined) {
+      patch.webSearch = o.webSearch === true;
+      this.webNow = patch.webSearch;
+    }
     if (o.instructions !== undefined) {
       const text = o.instructions.replace(/\r\n?/g, "\n").slice(0, INSTRUCTIONS_MAX);
       if (/‹segredo [^›\n]{0,40}›/.test(text) || this.guard.read("", text).held > 0)
