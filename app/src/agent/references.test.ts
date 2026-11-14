@@ -30,6 +30,41 @@ describe("as referências da nota", () => {
     expect(noteWithReferences("# PACS\n\n## Referências\n", [A]).content).toBe(`# PACS\n\n## Referências\n\n${referenceLine(A)}\n`);
   });
 
+  // Spec #12750: a seção que já existe, em qualquer nível, e um título dentro de código que não conta.
+  const sections = (c: string) => [...c.matchAll(/^#{1,6}[ \t]+referências[ \t]*$/gim)].length;
+
+  test("a seção em H3 (ou em outro nível, com outra caixa): o link novo entra nela, sem criar uma 2ª", () => {
+    const note = "# PACS\n\n### Referências\n\n- velho\n\n### Equipe\n\nAna.\n";
+    const r = noteWithReferences(note, [A]);
+    expect(r.content).toBe(`# PACS\n\n### Referências\n\n- velho\n${referenceLine(A)}\n\n### Equipe\n\nAna.\n`);
+    expect(r.created).toBe(false);
+    // Um H4 depois dela fica dentro da seção; o próximo título do mesmo nível (ou maior) a fecha.
+    const deep = noteWithReferences("# PACS\n\n## referências \n\n#### Livros\n\n- velho\n\n## Equipe\n", [A]).content;
+    expect(deep).toBe(`# PACS\n\n## referências \n\n#### Livros\n\n- velho\n${referenceLine(A)}\n\n## Equipe\n`);
+    // Uma seção vazia em H3 ganha a linha em branco depois do título.
+    expect(noteWithReferences("# PACS\n\n### Referências\n", [A]).content).toBe(`# PACS\n\n### Referências\n\n${referenceLine(A)}\n`);
+    for (const c of [r.content, deep]) expect(sections(c)).toBe(1);
+  });
+
+  test("um ## Referências dentro de um bloco de código não é a seção: ela vai no fim, e o código não muda", () => {
+    for (const fence of ["```", "~~~"]) {
+      const code = `${fence}md\n## Referências\n- [x](https://exemplo.com/x)\n${fence}`;
+      const r = noteWithReferences(`# PACS\n\n${code}\n`, [A]);
+      expect(r.content).toBe(`# PACS\n\n${code}\n\n## Referências\n\n${referenceLine(A)}\n`);
+      expect(r.created).toBe(true);
+      expect(r.content).toContain(code);
+    }
+  });
+
+  test("as duas coisas juntas: o título do código fica, e o link vai para a seção H3 de verdade", () => {
+    const code = "```md\n## Referências\n```";
+    const r = noteWithReferences(`# PACS\n\n${code}\n\n### Referências\n\n- velho\n`, [A]);
+    expect(r.content).toBe(`# PACS\n\n${code}\n\n### Referências\n\n- velho\n${referenceLine(A)}\n`);
+    expect(r.created).toBe(false);
+    // Fora do código, só uma seção.
+    expect(sections(r.content.replace(code, ""))).toBe(1);
+  });
+
   test("um link com parênteses (a Wikipédia) vira um link válido e não se repete (revisão do T11986)", () => {
     const item = { title: "Função (matemática)", url: "https://pt.wikipedia.org/wiki/Fun%C3%A7%C3%A3o_(matem%C3%A1tica)", summary: "" };
     const line = referenceLine(item);

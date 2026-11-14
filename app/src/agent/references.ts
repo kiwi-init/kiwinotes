@@ -80,15 +80,19 @@ export function noteWithReferences(
   }
   if (!added.length) return { content, added, lines: [], created: false };
   const lines = added.map(referenceLine);
+  // Os títulos fora de código (o `markdownStructure` pula as cercas e os comentários): um `## Referências` dentro de um
+  // bloco de código não é a seção (spec #12750).
   const headings = markdownStructure(content).headings;
-  const h = headings.find((x) => x.level === 2 && x.title.trim().toLowerCase() === REFERENCES_TITLE.toLowerCase());
+  // A seção que já existe, em qualquer nível (# a ######), sem diferenciar maiúsculas: o link entra nela, no nível dela.
+  const h = headings.find((x) => x.title.trim().toLowerCase() === REFERENCES_TITLE.toLowerCase());
   if (h) {
-    const next = headings.find((x) => x.from > h.from && x.level <= 2);
+    // Ela vai até o próximo título do mesmo nível ou maior; um subtítulo dela fica dentro.
+    const next = headings.find((x) => x.from > h.from && x.level <= h.level);
     const end = next ? next.from : content.length;
     const body = content.slice(0, end).replace(/\s+$/, "");
     const after = content.slice(end);
-    // A linha em branco depois do título, numa seção vazia; senão, logo abaixo do último item.
-    const sep = body.endsWith(`## ${h.title}`) || /\n##\s[^\n]*$/.test(body) ? "\n\n" : "\n";
+    // A linha em branco depois de um título (a seção vazia, ou um subtítulo dela); senão, logo abaixo do último item.
+    const sep = /(?:^|\n)#{1,6}[ \t][^\n]*$/.test(body) ? "\n\n" : "\n";
     return { content: `${body}${sep}${lines.join("\n")}\n${after ? `\n${after.replace(/^\n+/, "")}` : ""}`, added, lines, created: false };
   }
   const base = content.replace(/\s+$/, "");
