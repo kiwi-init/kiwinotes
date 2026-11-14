@@ -174,6 +174,8 @@ export type { NoteModel };
 //   no `agent.configure`. Só acréscimo.
 // 1.61.0 (T11808, spec #11469): a ação `full` nas `changes` do `AgentMemoryView` (a memória cheia recusou o fato; o
 //   balão avisa, sem [Desfazer]). Só acréscimo.
+// 1.61.0 (T11692, spec #11549): os arquivos que o agente gera. O `files.create` (um arquivo novo do agente: txt, csv,
+//   xlsx, docx ou pdf, em base64) e o `files.delete` (o desfazer dele, para a Lixeira, pela versão). Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.61.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
@@ -331,6 +333,16 @@ export interface UiCapabilities {
    * o de agora. Outro tipo de arquivo, ou um texto que não é UTF-8 (`readOnly` no `files.read`), dá E_BAD_ARGS.
    */
   "files.save": { args: { path: string; content: string; baseVersion: string }; result: FileSaveResult };
+  /**
+   * Um arquivo novo que o agente gerou (1.61.0, spec #11549): txt, csv, xlsx, docx ou pdf, em base64, até 25 MB. Nunca
+   * por cima de outro: com o nome já usado na pasta, ele ganha um número. A versão é a do `files.read`.
+   */
+  "files.create": { args: { folder: string; name: string; base64: string }; result: { path: string; size: number; version: string } };
+  /**
+   * O desfazer de um arquivo que o agente gerou (1.61.0): para a Lixeira (os 10 minutos do Desfazer do app, depois a
+   * do macOS), só se ele ainda está em `baseVersion`; senão E_CONFLICT, e nada sai do lugar.
+   */
+  "files.delete": { args: { path: string; baseVersion: string }; result: true };
   /**
    * O quadro branco (1.37.0, T6600): o texto do `.canvas` e a versão. O save é condicional como o das notas (com
    * `baseVersion` velha não escreve e devolve o de agora) e recusa o que não abre como JSON Canvas. O create aceita o
@@ -919,6 +931,8 @@ export const UI_CAPABILITIES = [
   "files.open",
   "files.read",
   "files.save",
+  "files.create",
+  "files.delete",
   "notes.canvasGet",
   "notes.canvasSave",
   "notes.canvasCreate",

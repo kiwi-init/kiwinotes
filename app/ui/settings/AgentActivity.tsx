@@ -18,6 +18,7 @@ import {
   ACTIVITY_MORE,
   changeLine,
   EMPTY_ACTIVITY,
+  isFile,
   goneRequest,
   heldLines,
   memoryLines,
@@ -288,9 +289,18 @@ function Request({
                   <span className="kn-activity-what">{changeLine(c)}</span>
                   {c.undone ? <span className="kn-activity-undone">{undoneLine(c.undone)}</span> : null}
                   <span className="kn-activity-actions">
-                    <Button onClick={() => onView(n)} aria-expanded={!!view} aria-controls={viewId}>
-                      {view ? "Fechar" : "Ver"}
-                    </Button>
+                    {isFile(c.path) ? (
+                      // Um arquivo gerado (spec #11549) não tem texto para comparar: ele abre no Finder.
+                      c.undone ? null : (
+                        <Button onClick={() => void api.notes.reveal(c.path).catch(() => {})} aria-label={`Abrir no Finder: ${changeLine(c)}`}>
+                          Abrir no Finder
+                        </Button>
+                      )
+                    ) : (
+                      <Button onClick={() => onView(n)} aria-expanded={!!view} aria-controls={viewId}>
+                        {view ? "Fechar" : "Ver"}
+                      </Button>
+                    )}
                     {c.undone ? null : (
                       <Button onClick={() => onUndo(n)} disabled={running} aria-label={`Desfazer: ${changeLine(c)}`}>
                         {busy.has(k) ? "Desfazendo…" : "Desfazer"}

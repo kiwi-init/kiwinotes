@@ -97,6 +97,9 @@ export function doubtLine(d: { path: string; line: number; mask: string }): stri
 export const removedLine = (n: number) =>
   `Esta mudança tirou ${plural(n, "segredo", "segredos")} da nota. O Desfazer ${n === 1 ? "o traz" : "os traz"} de volta, e o texto de antes está nas Versões.`;
 
+/** Um arquivo que não é nota (o que o agente gerou, spec #11549): a Atividade oferece o Finder no lugar do [Ver]. */
+export const isFile = (path: string) => !/\.md$/i.test(path);
+
 /** Uma mudança: "Criou Projetos/Resumo", "Acrescentou em Ideias", "Trocou Kiwi › Prazo". */
 export function changeLine(c: Pick<ActivityChange, "kind" | "path" | "section">): string {
   const where = `${noteName(c.path)}${c.section ? ` › ${c.section}` : ""}`;

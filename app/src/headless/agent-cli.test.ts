@@ -165,7 +165,7 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect(outside.at(-1).text).toMatch(/^erro da ferramenta: E_OUTSIDE_VAULT/);
     // No app, as de escrita (spec #8356) vêm junto.
     expect((await ask("/ferramentas")).at(-1).text).toBe(
-      "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, meeting_propose, project_summary_propose, memory_remember, memory_forget",
+      "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, files_create, meeting_propose, project_summary_propose, memory_remember, memory_forget",
     );
     await invoke("agent.disable");
   }, 60_000);

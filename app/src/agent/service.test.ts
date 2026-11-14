@@ -640,6 +640,12 @@ function memoryWriter(notes: Record<string, string>): VaultWriter {
       return note(p);
     },
     folder: async () => null,
+    // Um arquivo do agente (spec #11549): os bytes guardados como latin1 no mesmo mapa, com a versão dos bytes.
+    createFile: async (folder, name, bytes) => {
+      const p = `${folder ? `${folder}/` : ""}${name}`;
+      notes[p] = Buffer.from(bytes).toString("latin1");
+      return { path: p, size: bytes.length, version: createHash("sha256").update(bytes).digest("hex").slice(0, 16) };
+    },
   };
 }
 
@@ -650,7 +656,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, meeting_propose, project_summary_propose",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, files_create, meeting_propose, project_summary_propose",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
