@@ -58,7 +58,11 @@ export const STALL_MS = 30_000;
 
 /** `p`, ou um erro quando o `signal` aborta antes. */
 function unlessAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason);
+  // Já abortado (o prazo venceu durante o `open` do `.part`): o erro da promessa que veio não fica sem dono (T12910).
+  if (signal.aborted) {
+    p.catch(() => {});
+    return Promise.reject(signal.reason);
+  }
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(signal.reason);
     signal.addEventListener("abort", onAbort, { once: true });

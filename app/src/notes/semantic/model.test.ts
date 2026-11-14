@@ -131,6 +131,22 @@ test("um corpo que anda devagar, mas anda, não desiste; o signal de fora aborta
   expect(readdirSync(modelDir(other, manifest)).filter((n) => n.endsWith(".part"))).toEqual([]);
 });
 
+// T12910: o prazo que vence enquanto o `.part` abre (a máquina lenta do release) não deixa a leitura sem dono. O
+// `unlessAborted` já abortado devolvia o motivo do prazo e largava a promessa da leitura: o "a rede caiu" dela ficava
+// sem dono e o Bun derrubava o teste (o release da rc18), ou o processo, no app.
+test("o prazo que vence antes da primeira leitura não deixa o erro da rede sem dono", async () => {
+  for (let i = 0; i < 20; i++) {
+    const root = tmp();
+    mkdirSync(path.join(modelDir(root, manifest), "onnx"), { recursive: true });
+    writeFileSync(path.join(modelDir(root, manifest), "tokenizer.json"), files["tokenizer.json"]);
+    const fetch = async () => new Response(new ReadableStream({ start: (c) => c.error(new Error("a rede caiu")) }));
+    // Prazo 0: vence durante o `open` do `.part`, antes da primeira leitura.
+    const err = await ensureModel(root, manifest, { fetch, stallMs: 0 }).catch((e) => e);
+    expect(err.code).toBe("E_MODEL_DOWNLOAD");
+  }
+  await Bun.sleep(10);
+});
+
 // T8159: o download que falha só devolve depois de fechar o `.part`. Antes, o stream do `.part` ainda abria ou escrevia
 // depois do `rm` do erro: o `.part` sobrava (~40% das vezes), ou, com a pasta já apagada pelo teste, o `ENOENT` do stream
 // caía sem dono no teste seguinte (o CI da main e o build da rc15).

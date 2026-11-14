@@ -1231,6 +1231,9 @@ describe("a reunião vira nota do projeto (spec #8360)", () => {
     expect(v.notes[NOTE]).toBe(view.noteContent);
     expect(v.notes[MAIN]).toBe(view.main!.lines.map((l) => l.text).join("\n"));
     await expect(m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    // O aviso sai depois do [Aplicar] devolver (o `emitProposals` lê as settings antes): espera por ele, sem contar que
+    // a leitura dele termine antes da do retorno. No runner carregado do #504, a 2ª terminava antes (T12910).
+    await until(() => events.length >= 2);
     expect(events).toEqual([["pending"], ["applied"]]);
     // O [Aplicar] é um pedido do registro, com a cópia de antes: o [Desfazer] volta a nota principal.
     const r = (await m.svc.activityLog()).find((x) => x.id === applied.applyRequest)!;
