@@ -47,7 +47,7 @@ describe("o contador", () => {
     expect(countTokens('{"a": [1, 2]}')).toBe(11); // { " a " : [ 1 , 2 ] }
     expect(countTokens("a b c")).toBeLessThan(countTokens("a b c d"));
     // A mesma palavra, composta ou não (NFC), conta igual.
-    expect(countTokens("ação")).toBe(countTokens("ação"));
+    expect(countTokens("a\u00e7\u00e3o")).toBe(countTokens("ac\u0327a\u0303o")); // NFC contra NFD, escritos com escape
   });
 });
 
