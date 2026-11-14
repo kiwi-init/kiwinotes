@@ -519,9 +519,10 @@ describe("files_read: o agente lê planilhas, documentos e pdfs do cofre (spec #
     const guard = new SecretGuard();
     const r = await runKiwiTool({ reader, guard }, "files_read", { caminho: "Dados/chaves.xlsx" });
     expect(JSON.stringify(r.value)).not.toContain(KEY);
-    expect(r.value.sumario.abas[0].nome).toMatch(/^‹segredo [^›]+›$/);
-    expect(r.value.rotulo).toMatch(/^Aba ‹segredo [^›]+›, linhas 2–2$/);
-    expect(r.value.indice[0].rotulo).toBe(r.value.rotulo);
+    const v = r.value as { sumario: { abas: { nome: string }[] }; rotulo: string; indice: { rotulo: string }[] };
+    expect(v.sumario.abas[0]!.nome).toMatch(/^‹segredo [^›]+›$/);
+    expect(v.rotulo).toMatch(/^Aba ‹segredo [^›]+›, linhas 2–2$/);
+    expect(v.indice[0]!.rotulo).toBe(v.rotulo);
   });
 
   test("o docx vira o texto com os títulos, a lista e a tabela", async () => {
