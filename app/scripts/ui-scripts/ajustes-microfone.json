@@ -4,6 +4,7 @@
     { "invoke": "settings.set", "args": { "microphone": "auto" }, "name": "começa no Automático" },
     { "waitFor": ".kn-tab", "name": "o hub abre" },
     { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "click": ".kn-prefs-item[data-topic=dictation]", "name": "o assunto dictation da barra lateral (#11966)" },
     { "waitFor": ".kn-row:has-text('Microfone') select", "name": "a linha Microfone, em Transcrição" },
     { "expectText": ".kn-row:has-text('Microfone') .kn-row-hint", "text": "Com AirPods Pro na saída, o ditado grava pelo mic do Mac", "name": "o Automático diz o que faz com o AirPods na saída" },
     { "expectCount": ".kn-row:has-text('Microfone') option", "count": 5, "name": "Automático, Mic do Mac, AirPods, Yeti e Padrão do sistema" },

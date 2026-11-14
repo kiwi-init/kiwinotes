@@ -3,6 +3,7 @@
   "steps": [
     { "waitFor": ".kn-tab", "name": "o hub abre" },
     { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "click": ".kn-prefs-item[data-topic=dictation]", "name": "o assunto dictation da barra lateral (#11966)" },
     { "waitFor": ".kn-row:has-text('Modo preciso')", "name": "a linha, em Transcrição" },
     { "expectText": ".kn-row:has-text('Modo preciso') .kn-row-hint", "text": "Ligar baixa o modelo (270 MB)", "name": "desligado, diz o que ganha e o que custa" },
     { "screenshot": "modo-preciso-desligado.png", "selector": ".kn-section:has(.kn-row:has-text('Modo preciso'))" },

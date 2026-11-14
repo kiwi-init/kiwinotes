@@ -44,18 +44,22 @@ try {
   await invoke("agent.enable", { consent: true }); await invoke("agent.download");
   // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
   await invoke("agent.configure", { onboarding: { state: "done" } });
+  // O gato do overlay (spec #9810) entra quando um pedido começa e o hub não está na frente, e o headless nunca está: o
+  // gato do hub ia embora no meio do roteiro. Este roteiro é o do gato do hub; o overlay tem o kiwicat-overlay-check (T12273).
+  await invoke("settings.set", { kiwicat: { overlay: false } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
   const identity = await p.locator(".kn-kiwicat canvas").evaluate(c => { (window as any).__catCanvas = c; return c.getBoundingClientRect().height; });
   assert.equal(identity, 120);
-  for (const section of ["notes", "meetings", "dictation", "settings", "about"]) {
+  // O Sobre virou um assunto de Configurações (spec #11966): ficam as quatro abas (T12273).
+  for (const section of ["notes", "meetings", "dictation", "settings"]) {
     await p.locator(`.kn-tab[data-section=${section}]`).click();
     assert.ok(await p.evaluate(() => (window as any).__catCanvas === document.querySelector(".kn-kiwicat canvas")));
     const hit = await p.locator(".kn-kiwicat").evaluate(c => { const r = c.getBoundingClientRect(); return c.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });
     assert.equal(hit, false);
     await p.screenshot({ path: join(out, `${section}.png`) });
   }
-  report.checks.push("120px, five sections, same canvas, click-through");
+  report.checks.push("120px, four tabs, same canvas, click-through");
   // Os olhos ficam na caixa deles: um <svg> inline descia com a altura de linha do hub e o recorte o escondia (#10039).
   const eyes = await p.evaluate(() => [...document.querySelectorAll(".kn-kiwicat circle")].filter(c => c.getAttribute("r") === "1").map(c => {
     const svg = c.closest("svg")!, disk = svg.parentElement!, a = svg.getBoundingClientRect(), b = disk.getBoundingClientRect();

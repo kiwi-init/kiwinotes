@@ -5,6 +5,7 @@
     { "waitFor": ".kn-tab", "name": "o hub abre" },
     { "waitFor": "html[data-theme='light'][data-theme-id='channels-light'] body", "name": "a janela pinta no Channels Light" },
     { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "click": ".kn-prefs-item[data-topic=appearance]", "name": "o assunto appearance da barra lateral (#11966)" },
     { "expectText": ".kn-themes-sub", "text": "Escuros · 29", "name": "os 29 escuros" },
     { "expectCount": ".kn-theme", "count": 44, "name": "e os 44 temas" },
     { "click": ".kn-segmented button:has-text('Escuro')", "name": "Modo: Escuro" },

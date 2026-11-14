@@ -9,6 +9,10 @@
       "click": ".kn-tab:has-text('Configurações')"
     },
     {
+      "click": ".kn-prefs-item[data-topic=agent]",
+      "name": "o assunto agent da barra lateral (#11966)"
+    },
+    {
       "waitFor": ".kn-section:has(h2:text-is('Agente')) .kn-row-hint:not(:has-text('Conferindo'))"
     },
     {
