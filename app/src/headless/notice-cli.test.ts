@@ -7,6 +7,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { fakeRegistry } from "../agent/fake/registry.ts";
+import { request } from "../../scripts/cli.ts";
 import { tempDir } from "../../test/tmp.ts";
 
 const appDir = path.resolve(import.meta.dirname, "..", "..");
@@ -46,7 +47,12 @@ async function cli(args: string[]): Promise<{ code: number; json: Record<string,
   }
 }
 
-const invoke = (cap: string, args: unknown = {}) => cli(["invoke", cap, JSON.stringify(args)]);
+// Os pedidos vão direto pelo socket de controle, como a CLI manda, sem um processo do Bun para cada um (T12910): o prazo
+// da dúvida é curto (1,5 s), e no runner carregado do release o clique e a resposta, cada um num `bun cli.ts`, chegavam
+// depois dele. O prazo tirava a notificação antes do clique, e a ordem saía "post, remove, show".
+const ctl = async (msg: Record<string, unknown>): Promise<{ json: Record<string, any> | null }> => ({ json: await request(data, msg) });
+const invoke = (cap: string, args: unknown = {}) => ctl({ cmd: "invoke", cap, args });
+const notice = (args: Record<string, unknown>) => ctl({ ...args, cmd: "notice" });
 
 async function until<T>(get: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 15_000): Promise<T> {
   const end = Date.now() + ms;
@@ -101,7 +107,7 @@ describe("a notificação quando o agente espera, pela CLI (spec #9839)", () => 
     await until(() => calls().some((c) => c.op === "post"));
     expect(calls().slice(1)).toEqual([{ op: "post", id, title: "O agente espera uma resposta sua", body: "Dúvida em Servidores. Clique para responder." }]);
     // O clique: a janela principal vem para a frente.
-    expect((await cli(["notice", JSON.stringify({ click: id })])).json!.value).toMatchObject({ view: true, shown: 1 });
+    expect((await notice({ click: id })).json!.value).toMatchObject({ view: true, shown: 1 });
     // A resposta fecha o cartão e retira a notificação.
     await invoke("agent.answer", { card: first.card.id, fingerprint: first.card.items[0]!.fingerprint, answer: "hold" });
     await until(() => calls().some((c) => c.op === "remove"));
@@ -109,7 +115,7 @@ describe("a notificação quando o agente espera, pela CLI (spec #9839)", () => 
 
     // Fora da vista de novo, e sem resposta: o prazo passa e a notificação sai.
     await invoke("agent.forget", { fingerprint: first.card.items[0]!.fingerprint });
-    await cli(["notice", JSON.stringify({ view: false })]);
+    await notice({ view: false });
     await askDoubt("Servidores.md");
     await until(() => calls().length === 6, 10_000);
     expect(calls().slice(4).map((c) => c.op)).toEqual(["post", "remove"]);
