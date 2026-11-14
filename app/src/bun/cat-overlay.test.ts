@@ -7,7 +7,7 @@ import type { Command } from "../shared/ipc.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
 import { readingMs } from "../../ui/hub/bubble-state.ts";
-import { attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_BUBBLE_CHARS, OVERLAY_TIMES, voiceErrorLine } from "./cat-overlay.ts";
+import { attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_BUBBLE_CHARS, OVERLAY_TIMES, plainBubbleText, voiceErrorLine } from "./cat-overlay.ts";
 
 function rig() {
   const sent: CatOverlayCommand[] = [];
@@ -422,6 +422,29 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
       { type: "catOverlay.bubble", text: "Não consegui falar com o agente: o agente está desligado.", error: true },
     ]);
     expect(r.cat.visible).toBe(true);
+  });
+
+  test("o balão mostra o texto sem a marcação: títulos, negrito, código, links e citações", () => {
+    expect(plainBubbleText("# Prazo\n\nO prazo do Kiwi é **abril**.")).toBe("Prazo. O prazo do Kiwi é abril.");
+    expect(plainBubbleText("Veja [a nota](Kiwi/Prazo.md) e `kiwi status`.\n> citado\n- um\n- dois")).toBe("Veja a nota e kiwi status. citado • um • dois");
+    expect(plainBubbleText("Veja a issue #12, ok.")).toBe("Veja a issue #12, ok.");
+    expect(plainBubbleText("```ts\nconst x = 1;\n```")).toBe("const x = 1;");
+    expect(plainBubbleText("## Feito:\n~~velho~~ novo ![img](a.png) <https://kiwi.app>")).toBe("Feito: velho novo img https://kiwi.app");
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Pela nota Kiwi/Prazo.md: # Prazo\n\nO prazo do Kiwi é **abril**."));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Pela nota Kiwi/Prazo.md: Prazo O prazo do Kiwi é abril.", error: false }]);
+  });
+
+  test("uma rotina que começa enquanto a pessoa segura o Control não vira a fala", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.turn(started("rotina"));
+    r.cat.voice({ phase: "idle", cancelled: true });
+    r.cat.turn(text("Resumo do dia pronto.", "rotina"));
+    r.cat.turn(doneWith("Resumo do dia pronto.", "rotina"));
+    expect(bubbles(r.take())).toEqual([]);
   });
 
   test("um pedido que não veio da fala (uma rotina) não mostra texto por cima dos apps", () => {

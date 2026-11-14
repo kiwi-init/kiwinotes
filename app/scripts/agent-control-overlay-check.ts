@@ -84,7 +84,7 @@ try {
   p.on("pageerror", (e) => problems.push(String(e)));
   await p.goto(`http://127.0.0.1:${server.port}/index.html`);
   // Atrás do gato, um "outro app" (só no print): a página do overlay em si é transparente.
-  await p.addStyleTag({ content: "html{background:linear-gradient(135deg,#25324a,#3d2d4f)} body{margin:24px auto 0}" });
+  await p.addStyleTag({ content: "html{background:linear-gradient(135deg,#dfe7f2,#efe4f3) !important} body{margin:24px auto 0} @media (prefers-color-scheme: dark){html{background:linear-gradient(135deg,#25324a,#3d2d4f) !important}}" });
   await p.waitForFunction(() => (window as any).kiwiOverlayStats?.ready === true);
   // O helper de verdade é headless e não mostra nada: a página aplica o que ele recebeu, como o CatOverlay.swift.
   const apply = async (c: Cmd) => {
@@ -128,7 +128,13 @@ try {
     assert.equal(at((c) => c.type === "catOverlay.hide", from), -1, "o overlay não sai antes do balão");
     await p.waitForFunction((t) => (window as any).kiwiOverlayStats.bubble?.text === t, log[b]!.cmd.text);
     await Bun.sleep(400);
-    await p.screenshot({ path: join(out, shot) });
+    // O tema do Mac decide o balão (os tokens do app): um print no claro e outro no escuro.
+    await p.emulateMedia({ colorScheme: "light" });
+    await Bun.sleep(150);
+    await p.screenshot({ path: join(out, shot.replace(".png", "-light.png")) });
+    await p.emulateMedia({ colorScheme: "dark" });
+    await Bun.sleep(150);
+    await p.screenshot({ path: join(out, shot.replace(".png", "-dark.png")) });
     await waitFor(`a saída (${name})`, () => at((c) => c.type === "catOverlay.hide", b) >= 0, 60_000);
     const h = at((c) => c.type === "catOverlay.hide", b);
     const texts = log.slice(from, h).filter((l) => l.cmd.type === "catOverlay.bubble").map((l) => l.cmd.text!);

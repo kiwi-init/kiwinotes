@@ -34,6 +34,33 @@ export const OVERLAY_TIMES = {
 /** Quanto cabe num trecho do balão do overlay: três linhas de uns 36 caracteres (spec #12938). */
 export const OVERLAY_BUBBLE_CHARS = 108;
 
+/**
+ * O texto do agente sem a marcação (spec #12938): o balão do overlay mostra texto corrido, sem `#` de título, `**`,
+ * crases, `[texto](link)` nem `>` de citação. Um título vira uma frase; os itens de lista ficam com "•".
+ */
+export function plainBubbleText(markdown: string): string {
+  const parts: string[] = [];
+  for (const raw of markdown.split("\n")) {
+    if (/^\s*(```|~~~)/.test(raw)) continue;
+    let line = raw.trim().replace(/^>\s?/, "");
+    const heading = /^#{1,6}\s+/.test(line);
+    line = line
+      .replace(/^#{1,6}\s+/, "")
+      // Um título colado no meio da linha ("…: # Prazo"); um "#12" (sem espaço) fica.
+      .replace(/(^|\s)#{1,6}\s+(?=\S)/g, "$1")
+      .replace(/^[-*+]\s+/, "• ")
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/<(https?:\/\/[^>\s]+)>/g, "$1")
+      .replace(/(\*\*|__|~~)(.+?)\1/g, "$2")
+      .replace(/`([^`]+)`/g, "$1")
+      .trim();
+    if (!line) continue;
+    parts.push(heading && !/[.!?:;…]$/.test(line) ? `${line}.` : line);
+  }
+  return parts.join(" ");
+}
+
 /** O balão do erro: o que a pessoa lê quando a fala não virou resposta. */
 export const voiceErrorLine = (message: string) => `Não consegui falar com o agente: ${message.trim() || "erro desconhecido"}`;
 
@@ -87,9 +114,10 @@ export class CatOverlay {
   private overlayShown = false;
   /** O balão está no overlay (spec #12938). */
   private bubbleShown = false;
-  /** A fala pelo Control está em andamento: o próximo pedido que começar é dela. */
-  private voiceWaiting = false;
-  /** Os pedidos que vieram da fala pelo Control. */
+  /**
+   * Os pedidos que vieram da fala pelo Control, pelo id do `asked` (um pedido que começou enquanto a pessoa segurava o
+   * Control, como uma rotina, não entra). Cada um sai no `done` ou no `error` dele.
+   */
   private readonly voiceRequests = new Set<string>();
   /** O pedido em andamento: tudo o que o agente disse, e até onde antes da última ferramenta. */
   private turnId: string | null = null;
@@ -153,6 +181,8 @@ export class CatOverlay {
   /** Um evento do agente (`agent.turn`). */
   turn(e: AgentTurnEvent): void {
     this.track(e);
+    const voice = this.voiceRequests.has(e.id);
+    if (e.type === "done" || e.type === "error") this.voiceRequests.delete(e.id);
     const before = this.activity.state;
     const state = this.activity.event(e);
     if (!this.enabled) {
@@ -183,12 +213,10 @@ export class CatOverlay {
       return;
     }
     this.host.send({ type: "catOverlay.state", estado: state });
-    const voice = this.voiceRequests.has(e.id);
     if (voice && e.type === "done" && state === "pronto") this.speak([this.answerOf(e.text)], false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
     else if (voice && e.type === "error") this.speak([voiceErrorLine(e.message)], true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
     else if (state === "pronto") this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
     else if (state === "erro") this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
-    if (e.type === "done" || e.type === "error") this.voiceRequests.delete(e.id);
   }
 
   /** O que o agente disse no pedido, para o balão da resposta (o `done` traz o texto inteiro). */
@@ -198,10 +226,6 @@ export class CatOverlay {
       this.said = "";
       this.closedLen = 0;
       this.usedTool = false;
-      if (this.voiceWaiting) {
-        this.voiceWaiting = false;
-        this.voiceRequests.add(e.id);
-      }
       return;
     }
     if (e.id !== this.turnId) return;
@@ -215,7 +239,7 @@ export class CatOverlay {
   /** A resposta final: o que veio depois da última ferramenta; sem texto, o que ele fez. */
   private answerOf(full: string): string {
     const said = full && full.startsWith(this.said.slice(0, this.closedLen)) ? full : this.said;
-    const answer = said.slice(this.closedLen).trim() || said.trim();
+    const answer = plainBubbleText(said.slice(this.closedLen)) || plainBubbleText(said);
     return answer || (this.usedTool ? "Feito." : "Pronto.");
   }
 
@@ -251,7 +275,6 @@ export class CatOverlay {
     if (!this.enabled) return;
     const before = this.activity.state;
     if (v.phase === "listening") {
-      this.voiceWaiting = true;
       if (this.activity.attend(true) === before) return;
       this.cancelTimer();
       if (this.hubInView) {
@@ -261,15 +284,13 @@ export class CatOverlay {
       this.show("acordou", OVERLAY_TIMES.enter);
       this.host.send({ type: "catOverlay.state", estado: "ouvindo" });
     } else if (v.phase === "asked") {
-      // O pedido pode ter começado antes de o `ask` devolver: o id dele também marca a fala.
-      this.voiceWaiting = false;
+      // O id do pedido marca a fala: só ele termina com o balão.
       this.voiceRequests.add(v.id);
       // Se o pedido já começou, só sai da atenção: o `sent()` ficaria marcado, e o próximo pedido pularia o `acordou`
       // (e nem apareceria no overlay).
       if (this.turnId === v.id) this.activity.attend(false);
       else this.activity.sent();
     } else if (v.phase === "idle") {
-      this.voiceWaiting = false;
       if (this.activity.attend(false) === before) return;
       if (this.phase === "corner") this.phase = "idle";
       if (this.phase !== "shown") return;

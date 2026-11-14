@@ -7,6 +7,7 @@
 // - `window.kiwiOverlayStats` diz quanto levou do último `show` ao primeiro quadro apresentado (o `requestAnimationFrame`
 //   depois do desenho), e qual caminho o gato usou (WebGPU, WebGL2 ou a imagem parada).
 
+import "../src/styles/tokens.css";
 import { createKiwiCat } from "../kiwicat/cat";
 import type { FogState } from "../kiwicat/state";
 
@@ -27,6 +28,7 @@ interface OverlayStats {
 
 const stats: OverlayStats = { ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null };
 const bubbleEl = document.getElementById("bubble")!;
+const bubbleText = document.getElementById("bubble-text")!;
 
 /** O balão (spec #12938): só texto (`textContent`), nunca HTML. */
 function setBubble(b: { text?: unknown; error?: unknown } | null) {
@@ -37,7 +39,7 @@ function setBubble(b: { text?: unknown; error?: unknown } | null) {
     return;
   }
   stats.bubble = { text, error: b?.error === true };
-  bubbleEl.textContent = text;
+  bubbleText.textContent = text;
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
 }
