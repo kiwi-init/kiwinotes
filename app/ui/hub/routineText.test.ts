@@ -17,3 +17,12 @@ test("o limite: avisa, com a hora de volta quando ela veio; o 'Agora não' não 
   expect(routineLine({ kind: "weekly", phase: "skipped", reason: "limit" })).toBe("Os pendentes da semana não rodaram: o limite do seu plano acabou. Eles rodam de novo no próximo horário.");
   expect(routineLine({ kind: "daily", phase: "skipped", reason: "declined" })).toBeNull();
 });
+
+test("uma rotina nova (spec #12944) diz o nome dela, no feminino", () => {
+  const who = { kind: "custom", id: "r-abcd1234", name: "Resumo das reuniões" } as const;
+  expect(routineLine({ ...who, phase: "done", request: "q", note: "Rotinas/Resumo das reuniões de 16-11-2026.md", change: 1 })).toBe(
+    "A rotina “Resumo das reuniões” está pronta: Resumo das reuniões de 16-11-2026.",
+  );
+  expect(routineLine({ ...who, phase: "skipped", reason: "limit" })).toBe("A rotina “Resumo das reuniões” não rodou: o limite do seu plano acabou. Ela roda de novo no próximo horário.");
+  expect(routineLine({ ...who, phase: "skipped", reason: "declined" })).toBeNull();
+});

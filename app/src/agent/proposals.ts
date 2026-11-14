@@ -21,6 +21,7 @@ export { meetingNoteTitle };
 import { DEFAULT_AGENT_MEETING_SETTINGS, type AgentMeetingSettings } from "../store/settings.ts";
 import type { SummaryFields } from "./summary.ts";
 import type { ReferenceItem } from "./references.ts";
+import type { CustomRoutineInput } from "../shared/agent-routines.ts";
 
 /** Quanto uma proposta fica guardada (spec #8360): 30 dias, como o registro do agente. */
 export const PROPOSAL_KEEP_MS = 30 * 86_400_000;
@@ -82,13 +83,15 @@ export interface MeetingProposal {
    * `summary`: o resumo executivo de um projeto (spec #11546), que só muda a nota principal. Sem ele, a proposta da
    * reunião (#8360).
    */
-  kind?: "summary" | "references";
+  kind?: "summary" | "references" | "routine";
   /** A reunião da proposta; não há num resumo executivo. */
   meeting?: ProposalMeeting;
   /** Os campos do resumo executivo (`kind: "summary"`). */
   summary?: SummaryFields;
   /** As referências de uma nota (`kind: "references"`, spec #11908): a nota e os itens que o agente mandou. */
   references?: { note: string; items: ReferenceItem[] };
+  /** A rotina nova que o agente propõe (`kind: "routine"`, spec #12944); aplicada, a que a pessoa criou (com o [Ajustar]). */
+  routine?: CustomRoutineInput;
   /** O projeto escolhido; null sem projeto (ainda em dúvida, ou "Nenhum: só a nota da reunião"). */
   project: ProposalProject | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe com botões. */
@@ -368,7 +371,9 @@ export class ProposalStore {
         ? x.kind === "summary" && !!p.project && x.project?.folder === p.project.folder
         : p.kind === "references"
           ? x.kind === "references" && x.references?.note === p.references?.note
-          : !!x.meeting && x.meeting.path === p.meeting?.path;
+          : p.kind === "routine"
+            ? x.kind === "routine" && x.routine?.name === p.routine?.name
+            : !!x.meeting && x.meeting.path === p.meeting?.path;
     f.proposals = f.proposals.filter((x) => !((x.status === "pending" || x.status === "offer") && same(x) && !x.notePath));
     f.proposals.push(proposal);
     this.save(f);

@@ -3,6 +3,7 @@
 
 import type { AgentProposalSummary } from "../../src/shared/ui-contract.ts";
 import { collapse, type DiffLine } from "../notes/diff.ts";
+import { customScheduleLine } from "./routinesText.ts";
 
 export const PROPOSAL_VIEW = "Ver a proposta";
 export const PROPOSAL_HIDE = "Fechar a proposta";
@@ -13,6 +14,9 @@ export const PROPOSAL_NOT_NOW = "Agora não";
 export const PROPOSAL_NONE = "Nenhum: só a nota da reunião";
 export const PROPOSAL_UNDO = "Desfazer";
 export const PROPOSAL_LATER = "Depois";
+/** A rotina que o agente propõe (spec #12944): [Criar] (entra desligada) e [Ajustar] (o cartão em Ajustes). */
+export const PROPOSAL_CREATE = "Criar";
+export const PROPOSAL_ADJUST = "Ajustar";
 export const PROPOSALS_TITLE = "Propostas do agente";
 export const PROPOSALS_HINT = "Nada é escrito antes do [Aplicar]. Uma proposta fica aqui até você aplicar ou descartar, por 30 dias.";
 
@@ -62,12 +66,27 @@ export function referencesLine(p: AgentProposalSummary): string {
   }
 }
 
+/** A frase da rotina que o agente propõe (spec #12944), pelo estado. */
+export function routineProposalLine(p: AgentProposalSummary): string {
+  const name = `“${p.routine?.name ?? p.theme}”`;
+  switch (p.status) {
+    case "offer":
+    case "pending":
+      return `O Kiwi Cat propõe a rotina ${name}: ${p.routine ? customScheduleLine(p.routine).replace(/^\w/, (c) => c.toLowerCase()) : ""}. Ela entra desligada.`;
+    case "applied":
+      return `Pronto: a rotina ${name} está em Ajustes › Agente › Rotinas, desligada. Ligue quando quiser.`;
+    case "discarded":
+      return `A rotina ${name} foi descartada.`;
+  }
+}
+
 /** A junção dos nomes da pergunta ("É do A, do B ou do C?"): ", do " entre os do meio e " ou do " antes do último. */
 export const choiceJoin = (i: number, total: number) => (i === 0 ? "" : i === total - 1 ? " ou do " : ", do ");
 
 /** A frase principal da proposta, pelo estado. A pergunta com os projetos, a tela monta com o `choiceJoin`. */
 export function proposalLine(p: AgentProposalSummary): string {
   if (p.kind === "references") return referencesLine(p);
+  if (p.kind === "routine") return routineProposalLine(p);
   if (p.kind === "summary" || !p.meeting || !p.note) return summaryLine(p);
   // As aspas curvas (spec #12626): o texto do agente é uma frase, não código.
   const meeting = `“${p.meeting.title}”`;

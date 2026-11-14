@@ -565,6 +565,18 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
+        // As rotinas novas (spec #12944): "todo dia às 18h, faz um resumo das reuniões" (ou "dias úteis às 9h, …") vira a
+        // proposta pela routine_propose, com o nome tirado do pedido. Nada é ligado: a pessoa cria, ajusta ou descarta.
+        const asked = /^(todo dia|dias úteis) às (\d{1,2})h(\d{2})?,?\s+(.+?)\.?$/i.exec(text);
+        if (asked && kiwiServers.has(sessionId)) {
+          const [, when, h, m, what] = asked as unknown as [string, string, string, string | undefined, string];
+          const pedido = what.charAt(0).toUpperCase() + what.slice(1) + ".";
+          const nome = what.replace(/^(?:faz|faça|fazer|me manda|manda)\s+(?:(?:um|uma)\s+)?/i, "").replace(/^\w/, (c) => c.toUpperCase()).slice(0, 60);
+          const hora = `${h.padStart(2, "0")}:${m ?? "00"}`;
+          const r = await useTool(client, sessionId, "routine_propose", { nome, pedido, hora, dias: when.toLowerCase() });
+          await say(client, sessionId, r.isError ? `Não consegui propor a rotina: ${r.text}` : `Preparei a rotina "${nome}", ${when.toLowerCase()} às ${hora}. Ela entra desligada: crie, ajuste ou descarte.`);
+          return { stopReason: "end_turn" };
+        }
         // As referências (spec #11908): "/referencias <nota>" manda itens fixos, como se tivesse pesquisado.
         const refs = /^\/referencias\s+(.+)$/.exec(text);
         if (refs && kiwiServers.has(sessionId)) {

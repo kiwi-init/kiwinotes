@@ -15,7 +15,9 @@ import {
   choiceJoin,
   mainDiff,
   openProposals,
+  PROPOSAL_ADJUST,
   PROPOSAL_APPLY,
+  PROPOSAL_CREATE,
   PROPOSAL_DISCARD,
   PROPOSAL_HIDE,
   PROPOSAL_NONE,
@@ -25,6 +27,9 @@ import {
   PROPOSAL_VIEW,
   proposalLine,
 } from "./proposalText.ts";
+import { useHubNav } from "../src/hubNav.ts";
+import { requestAdjust } from "./routineAdjust.ts";
+import { ROUTINES_TITLE } from "./routinesText.ts";
 import "./proposal.css";
 
 /** As propostas, lidas de novo a cada `agent.proposalsChanged`. Null antes da primeira leitura. */
@@ -138,6 +143,7 @@ export function ProposalItem({
   const [view, setView] = useState<ViewState | null>(null);
   const [undone, setUndone] = useState(false);
   const open = inline ? view !== null : !!viewOpen;
+  const nav = useHubNav();
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -200,6 +206,24 @@ export function ProposalItem({
                 {PROPOSAL_NONE}
               </Button>
             )}
+            <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
+              {PROPOSAL_DISCARD}
+            </Button>
+          </>
+        ) : p.status === "pending" && p.kind === "routine" && p.routine ? (
+          // A rotina (spec #12944): [Criar] a cria desligada; [Ajustar] abre o cartão em Ajustes › Agente › Rotinas.
+          <>
+            <Button variant="primary" disabled={busy} onClick={() => void run(() => api.agent.proposalApply(p.id))}>
+              {PROPOSAL_CREATE}
+            </Button>
+            <Button
+              onClick={() => {
+                requestAdjust({ proposal: p.id, routine: p.routine! });
+                nav?.openSettings("agent", ROUTINES_TITLE);
+              }}
+            >
+              {PROPOSAL_ADJUST}
+            </Button>
             <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
               {PROPOSAL_DISCARD}
             </Button>

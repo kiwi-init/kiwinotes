@@ -2,7 +2,7 @@
 // `window.engine.invoke(cap, args)`, que o preload da janela põe na página. Fora do app (Vite no navegador) não há
 // `window.engine`: as chamadas falham e as telas mostram o estado vazio.
 
-import type { HistoryEntry, UiCapabilities, UiCapability, UiEvents } from "../../src/shared/ui-contract.ts";
+import type { CustomRoutineInput, HistoryEntry, UiCapabilities, UiCapability, UiEvents } from "../../src/shared/ui-contract.ts";
 
 export type { DictionaryTerm, HistoryEntry, HistoryPage, NoteMeta, SearchHit, Snippet } from "../../src/shared/ui-contract.ts";
 
@@ -172,10 +172,15 @@ export const api = {
     proposals: () => invoke("agent.proposals", {}),
     proposal: (id: string) => invoke("agent.proposal", { id }),
     proposalChoose: (id: string, folder: string | null) => invoke("agent.proposalChoose", { id, folder }),
-    proposalApply: (id: string) => invoke("agent.proposalApply", { id }),
+    /** Numa proposta de rotina (1.68.0), a `routine` é o cartão do [Ajustar]. */
+    proposalApply: (id: string, routine?: CustomRoutineInput) => invoke("agent.proposalApply", routine ? { id, routine } : { id }),
     proposalPrepare: (id: string) => invoke("agent.proposalPrepare", { id }),
     /** "Rodar agora" numa rotina (spec #12150). */
-    routineRun: (kind: "daily" | "weekly") => invoke("agent.routineRun", { kind }),
+    routineRun: (which: { kind: "daily" | "weekly" } | { id: string }) => invoke("agent.routineRun", which),
+    /** As rotinas novas (1.68.0, spec #12944): entram desligadas; editar, ligar e apagar. */
+    routineCreate: (r: CustomRoutineInput) => invoke("agent.routineCreate", r),
+    routineUpdate: (id: string, patch: Partial<CustomRoutineInput & { on: boolean }>) => invoke("agent.routineUpdate", { id, ...patch }),
+    routineDelete: (id: string) => invoke("agent.routineDelete", { id }),
     onRoutine: (fn: (e: UiEvents["agent.routine"]) => void) => on("agent.routine", fn),
     proposalDiscard: (id: string) => invoke("agent.proposalDiscard", { id }),
     onProposals: (fn: (e: UiEvents["agent.proposalsChanged"]) => void) => on("agent.proposalsChanged", fn),

@@ -35,6 +35,7 @@ import {
 import { removedSecrets, type DoubtDecider, type SecretGuard } from "../../guardrail/filter.ts";
 import type { SummaryFields, SummarySignal } from "../summary.ts";
 import { noteWithReferences, REFERENCES_MAX, type ReferenceItem } from "../references.ts";
+import { customRoutineInput, DEFAULT_ROUTINES_FOLDER, ROUTINE_NAME_MAX, ROUTINE_PROMPT_MAX, type CustomRoutineInput, type RoutineDays } from "../../shared/agent-routines.ts";
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
 export const READ_MAX_CHARS = 12_000;
@@ -75,7 +76,7 @@ export const DIARY_STATUS_LINES = 10;
 /** O máximo de notas que um "organizar a pasta" libera de uma vez (spec #11102). */
 export const ORGANIZE_MAX = 200;
 /** A proposta da reunião (spec #8360): não escreve nada, guarda a proposta para a pessoa aprovar. */
-export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose", "project_summary_propose", "notes_add_references"] as const;
+export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose", "project_summary_propose", "notes_add_references", "routine_propose"] as const;
 /** A memória do agente (spec #11469): o que ele sabe sobre a pessoa, em `.kiwi/agente/sobre-mim.md`. */
 export const KIWI_MEMORY_TOOL_NAMES = ["memory_remember", "memory_forget"] as const;
 export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES, ...KIWI_MEMORY_TOOL_NAMES] as const;
@@ -512,6 +513,24 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     proposes: true,
   },
   {
+    name: "routine_propose",
+    title: "Propor uma rotina",
+    description: `Propõe uma rotina quando a pessoa pede algo que se repete ("todo dia às 18h, faz um resumo das reuniões"). Nada liga agora: ela cria, ajusta ou descarta, e a rotina entra desligada. Na hora, o Kiwi manda o pedido a você, e você cria uma nota com o resultado.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        nome: { type: "string", maxLength: ROUTINE_NAME_MAX },
+        pedido: { type: "string", maxLength: ROUTINE_PROMPT_MAX, description: "O que você faz a cada vez." },
+        hora: { type: "string", description: "HH:MM" },
+        dias: { description: '"todo dia", "dias úteis", ou a lista (ex.: ["segunda", "quinta"]).' },
+        pasta: { type: "string", description: `Sem ela, "${DEFAULT_ROUTINES_FOLDER}".` },
+      },
+      required: ["nome", "pedido", "hora", "dias"],
+      additionalProperties: false,
+    },
+    proposes: true,
+  },
+  {
     name: "memory_remember",
     title: "Anotar na memória",
     description: `Anota um fato sobre a pessoa na memória do Kiwi, que vai no começo de todo pedido: quando ela pedir ("lembra que…") ou quando você perceber algo útil e duradouro (o trabalho dela, como ela prefere as respostas). Um fato por chamada, numa linha curta, até ${FACT_MAX_CHARS} caracteres. Nunca senhas, tokens nem dados sensíveis: o Kiwi recusa. A memória tem até ${MEMORY_MAX} fatos; cheia, esqueça um antes. A pessoa vê a anotação no balão e pode desfazer.`,
@@ -639,6 +658,8 @@ export interface ProposalSink {
   summary(d: SummaryDraft): Promise<{ id: string }>;
   /** As referências de uma nota (spec #11908): a nota e os itens já conferidos. */
   references(d: { note: string; items: ReferenceItem[] }): Promise<{ id: string }>;
+  /** Uma rotina nova (spec #12944), com os campos já conferidos: a pessoa cria, ajusta ou descarta. */
+  routine(d: CustomRoutineInput): Promise<{ id: string }>;
   /** Desde quando "o que andou" conta no próximo resumo do projeto (`AAAA-MM-DD`), para o `project_status`. */
   since(p: ProposalProject): Promise<string>;
 }
@@ -794,6 +815,7 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
       if (!ctx.proposals) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       if (name === "project_summary_propose") return await proposeSummary(ctx.reader, ctx.proposals, raw, ctx.guard);
       if (name === "notes_add_references") return await proposeReferences(ctx.reader, ctx.proposals, raw, ctx.guard);
+      if (name === "routine_propose") return await proposeRoutine(ctx.proposals, raw, ctx.guard);
       return await propose(ctx.reader, ctx.proposals, raw, ctx.guard);
     }
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
@@ -1653,6 +1675,48 @@ async function createFile(writer: VaultWriter, raw: unknown, guard: SecretGuard 
  * As referências de uma nota (spec #11908): confere a nota e os links, limpa os textos (um marcador do filtro é
  * recusado: um segredo não vai para a nota pela web) e guarda a proposta. Só os links que a nota ainda não tem contam.
  */
+/** Os dias da `routine_propose`, como a pessoa diz, no formato da rotina. */
+const DAY_NAMES = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+function proposedDays(v: unknown): RoutineDays {
+  if (v === "todo dia") return "every";
+  if (v === "dias úteis") return "weekdays";
+  const days = Array.isArray(v) ? v.map((d) => (typeof d === "string" ? DAY_NAMES.indexOf(d.trim().toLowerCase().replace(/-feira$/, "")) : -1)) : [];
+  if (!days.length || days.some((d) => d < 0)) throw new ToolError("E_BAD_ARGS", 'dias é "todo dia", "dias úteis" ou a lista dos dias (domingo … sábado)');
+  return days;
+}
+
+/** A rotina nova (spec #12944): conferida e guardada como proposta. Nada é ligado: a pessoa cria, ajusta ou descarta. */
+async function proposeRoutine(sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
+  const a = args(raw, ["nome", "pedido", "hora", "dias", "pasta"]);
+  const clean = (v: string | undefined) => restore(guard, "\u0000nova", v ?? "");
+  const input = {
+    name: clean(str(a, "nome", true, ROUTINE_NAME_MAX * 4)),
+    prompt: clean(str(a, "pedido", true, ROUTINE_PROMPT_MAX * 4)),
+    time: str(a, "hora", true, 5)!.trim(),
+    days: proposedDays(a.dias),
+    folder: clean(str(a, "pasta", false, 300)) || DEFAULT_ROUTINES_FOLDER,
+  };
+  const r = customRoutineInput(input);
+  if (!r.ok) {
+    const why: Record<keyof CustomRoutineInput, string> = {
+      name: `nome está vazio ou passa de ${ROUTINE_NAME_MAX} caracteres`,
+      prompt: `pedido está vazio ou passa de ${ROUTINE_PROMPT_MAX} caracteres`,
+      time: "hora é HH:MM, de 00:00 a 23:59",
+      days: "dias não vale",
+      folder: "pasta é uma pasta do cofre, sem .. nem ponto no começo",
+    };
+    throw new ToolError("E_BAD_ARGS", why[r.field]);
+  }
+  const { id } = await sink.routine(r.value);
+  return {
+    value: {
+      proposta: id,
+      rotina: r.value.name,
+      aviso: "Nada foi ligado. A proposta aparece para a pessoa, que cria, ajusta ou descarta; a rotina entra desligada. Diga isso a ela numa frase.",
+    },
+  };
+}
+
 async function proposeReferences(reader: VaultReader, sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
   const a = args(raw, ["nota", "itens"]);
   const notePath = str(a, "nota", true, 1024)!.trim().replace(/^\/+/, "");

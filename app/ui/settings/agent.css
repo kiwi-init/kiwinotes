@@ -398,3 +398,15 @@
 .kn-memory-warning { margin: 0; font-size: var(--text-sm); color: var(--text); }
 .kn-memory-reason { display: block; margin-top: 2px; font-size: var(--text-xs, 12px); color: var(--text-3); }
 .kn-memory-outside { margin: 0; }
+/* As rotinas novas (spec #12944): os dois caminhos, o cartão de criar/editar/ajustar e os dias marcados. */
+.kn-routine-paths { margin: 0 var(--space-4, 16px) var(--space-3, 12px); font-size: var(--t-meta, 12px); color: var(--text-2); }
+.kn-routine-editor { padding: var(--space-3, 12px) 0 0; display: grid; gap: var(--space-2, 8px); }
+.kn-routine-editor-title { margin: 0; padding: 0 var(--space-3, 12px); font-size: var(--t-body, 13px); font-weight: 600; }
+.kn-routine-editor-field { display: grid; gap: 4px; padding: 0 var(--space-3, 12px); font-size: var(--t-meta, 12px); color: var(--text-2); }
+.kn-routine-editor-field .kn-input { width: 100%; box-sizing: border-box; font: inherit; font-size: var(--t-body, 13px); color: var(--text); }
+.kn-routine-prompt { resize: vertical; min-height: 56px; }
+.kn-routine-days { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 var(--space-3, 12px); }
+.kn-routine-day { min-width: 40px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-2); font: inherit; font-size: var(--t-meta, 12px); cursor: pointer; }
+.kn-routine-day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
+.kn-routine-actions { display: inline-flex; align-items: center; gap: var(--space-2, 8px); flex-shrink: 0; }
+.kn-routine-foot > .kn-routine-last { flex: 1; min-width: 0; }

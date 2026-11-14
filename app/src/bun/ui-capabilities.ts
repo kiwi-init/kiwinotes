@@ -16,7 +16,7 @@ import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { NOTE_WIDTH } from "../shared/note-width.ts";
 import { isCatColorChoice } from "../shared/kiwicat-colors.ts";
-import { isRoutineKind, isRoutineTime, ROUTINE_KINDS, routineFolder } from "../shared/agent-routines.ts";
+import { isCustomRoutineId, isRoutineKind, isRoutineTime, ROUTINE_KINDS, routineFolder } from "../shared/agent-routines.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
@@ -1274,9 +1274,12 @@ export function uiCapabilities(deps: CapabilityDeps,
       return agentCall((agent) => agent.proposalChoose(a.id as string, a.folder as string | null));
     },
     "agent.proposalApply": (args) => {
-      const a = fields(args, "agent.proposalApply", ["id"]);
+      const a = fields(args, "agent.proposalApply", ["id", "routine"]);
       if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalApply: id must be the id of a proposal");
-      return agentCall((agent) => agent.proposalApply(a.id as string));
+      // A rotina ajustada no cartão (spec #12944): os campos são conferidos pelo serviço, que diz qual não vale.
+      if (a.routine !== undefined && (!a.routine || typeof a.routine !== "object" || Array.isArray(a.routine)))
+        throw bad("agent.proposalApply: routine must be {name, prompt, time, days, folder}");
+      return agentCall((agent) => agent.proposalApply(a.id as string, a.routine));
     },
     "agent.proposalPrepare": (args) => {
       const a = fields(args, "agent.proposalPrepare", ["id"]);
@@ -1285,9 +1288,31 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     // "Rodar agora" numa rotina (spec #12150).
     "agent.routineRun": (args) => {
-      const a = fields(args, "agent.routineRun", ["kind"]);
-      if (!isRoutineKind(a.kind)) throw bad(`agent.routineRun: kind must be ${ROUTINE_KINDS.join(" or ")}`);
-      return agentCall((agent) => agent.routineRun(a.kind as "daily" | "weekly"));
+      const a = fields(args, "agent.routineRun", ["kind", "id"]);
+      // Uma rotina nova vai pelo id (spec #12944).
+      if (a.id !== undefined) {
+        if (a.kind !== undefined || !isCustomRoutineId(a.id)) throw bad("agent.routineRun: id must be the id of a routine (r-xxxxxxxx), without kind");
+        return agentCall((agent) => agent.routineRun({ kind: "custom", id: a.id as string }));
+      }
+      if (!isRoutineKind(a.kind)) throw bad(`agent.routineRun: kind must be ${ROUTINE_KINDS.join(" or ")}, or id a routine's id`);
+      return agentCall((agent) => agent.routineRun({ kind: a.kind as "daily" | "weekly" }));
+    },
+    // As rotinas novas (spec #12944): aqui só a forma; o serviço confere cada campo e diz qual não vale.
+    "agent.routineCreate": (args) => {
+      const a = fields(args, "agent.routineCreate", ["name", "prompt", "time", "days", "folder"]);
+      return agentCall((agent) => agent.routineCreate(a));
+    },
+    "agent.routineUpdate": (args) => {
+      const a = fields(args, "agent.routineUpdate", ["id", "on", "name", "prompt", "time", "days", "folder"]);
+      if (!isCustomRoutineId(a.id)) throw bad("agent.routineUpdate: id must be the id of a routine (r-xxxxxxxx)");
+      if (a.on !== undefined && typeof a.on !== "boolean") throw bad("agent.routineUpdate: on must be a boolean");
+      const { id, ...patch } = a;
+      return agentCall((agent) => agent.routineUpdate(id as string, patch as Parameters<typeof agent.routineUpdate>[1]));
+    },
+    "agent.routineDelete": (args) => {
+      const a = fields(args, "agent.routineDelete", ["id"]);
+      if (!isCustomRoutineId(a.id)) throw bad("agent.routineDelete: id must be the id of a routine (r-xxxxxxxx)");
+      return agentCall((agent) => agent.routineDelete(a.id as string));
     },
     "agent.proposalDiscard": (args) => {
       const a = fields(args, "agent.proposalDiscard", ["id"]);
