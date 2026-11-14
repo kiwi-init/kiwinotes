@@ -84,7 +84,7 @@ test("o passo 6 (spec #12950): os marcados primeiro, depois o achado, sem repeti
   const rows = projectRows([{ name: "kiwi", folder: "kiwi", outside: "/h/Developer/kiwi" }, { name: "Solto", folder: "Solto" }], found);
   expect(rows.map((r) => [r.name, r.where, r.reason ?? "", r.marked ?? ""])).toEqual([
     ["kiwi", "~/Developer/kiwi", "tem .git", "kiwi"],
-    ["Solto", "Notas/Solto", "", "Solto"],
+    ["Solto", "Notas/Solto", "escolhida por você", "Solto"],
     ["Acme", "Notas/Clientes/Acme", "tem a nota do projeto", ""],
     ["Alfa", "~/Documents/work-projects/Alfa", "dentro de work-projects", ""],
   ]);

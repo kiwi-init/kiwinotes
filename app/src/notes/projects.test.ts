@@ -6,9 +6,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { uiCapabilities } from "../bun/ui-capabilities.ts";
+import { type CapabilityDeps, uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
+import { findProjects } from "./project-finder.ts";
 import { checkMark, followProjects, freeFolderName, mapProjects, openTasks, type ProjectEntry, ProjectError, STATUS_OUTLINE_MAX } from "./projects.ts";
 import { Vault } from "./vault.ts";
 import { tempDir } from "../../test/tmp.ts";
@@ -205,7 +206,7 @@ function newRoot(files: Record<string, string> = {}): string {
 
 function open(
   root: string,
-  extra: { meetingsFolder?: string | null; projectsHome?(): string | null; chooseProjectFolder?(): Promise<string | null>; reveal?(abs: string): void } = {},
+  extra: Partial<Pick<CapabilityDeps, "meetingsFolder" | "projectsHome" | "chooseProjectFolder" | "reveal" | "projectsFinder">> = {},
 ) {
   const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
   vaults.push(v);
@@ -613,6 +614,35 @@ describe("a busca das pastas de projeto e os projetos de fora (spec #12950)", ()
     await new Promise((r) => setTimeout(r, 50));
     expect((await value("projects.find")).state).toBe("stopped");
     expect((await searched(value)).found.length).toBe(400);
+  });
+
+  test("dois cliques seguidos no Procurar não deixam uma busca solta: o Parar para todas (revisão do #520)", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 300; i++) for (let j = 0; j < 10; j++) files[`Developer/p${i}/q${j}/r/x`] = "";
+    const { home, root } = fakeHome(files);
+    let walking = 0;
+    const counted: typeof findProjects = async (roots, o) => {
+      walking++;
+      try {
+        await findProjects(roots, o);
+      } finally {
+        walking--;
+      }
+    };
+    const { value } = open(root, { projectsHome: () => home, projectsFinder: counted });
+    await Promise.all([value("projects.find", { start: true }), value("projects.find", { start: true })]);
+    expect((await value("projects.find", { stop: true })).state).toBe("stopped");
+    // Parada, a busca sai na próxima pasta: em 100 ms nenhuma anda mais (a solta levaria a casa inteira).
+    for (let i = 0; walking > 0 && i < 20; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(walking).toBe(0);
+  });
+
+  test("uma pasta da pasta de notas que começa com '..' é de dentro: vai às regras da pasta de notas, e não vira projeto de fora", async () => {
+    const { root } = fakeHome({ "Documents/Notas/..algo/a.md": "x" });
+    const { value, call } = open(root);
+    await value("notes.list");
+    expect(await call("projects.mark", { outside: path.join(root, "..algo") })).toMatchObject({ ok: false, code: "E_OUTSIDE_VAULT" });
+    expect((await value("projects.list")).projects).toEqual([]);
   });
 
   test("marcar uma pasta de fora cria o projeto na pasta de notas, com o caminho e o link, sem mexer na de fora", async () => {

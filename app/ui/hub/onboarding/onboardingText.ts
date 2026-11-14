@@ -177,7 +177,8 @@ export function projectRows(projects: readonly Pick<ProjectInfo, "name" | "folde
       key: keyOf(p),
       name: c?.name ?? p.name,
       where: c?.where ?? p.outside ?? `Notas/${p.folder}`,
-      ...(c ? { reason: reasonText(c.reason) } : {}),
+      // O que a busca não achou foi a pessoa que marcou: a linha diz isso no lugar do motivo (e não entra na contagem).
+      reason: c ? reasonText(c.reason) : "escolhida por você",
       ...(p.outside ? { outside: p.outside } : { folder: p.folder }),
       marked: p.folder,
     };

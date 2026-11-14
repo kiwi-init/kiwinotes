@@ -152,6 +152,8 @@ export interface CapabilityDeps {
   projectsHome?(): string | null;
   /** O seletor de pasta do macOS para um projeto, só no clique; `KIWI_TEST_PROJECT_FOLDER` no headless e com KIWI_DEBUG. */
   chooseProjectFolder?(): Promise<string | null>;
+  /** Só nos testes: a busca por outra (para contar as que andam). Sem ela, a `findProjects` de verdade. */
+  projectsFinder?: typeof findProjects;
   /** Abre o Lixo do macOS no Finder (T2593). Sem isto (headless, testes, KIWI_DEBUG), o `trash.reveal` não faz nada. */
   revealTrash?(): void;
   /** O texto dos anexos para a busca (T2709). Sem ele, a busca é só nas notas. */
@@ -348,10 +350,11 @@ export function uiCapabilities(deps: CapabilityDeps,
     const abs = real(path.resolve(raw));
     const root = real(path.resolve(deps.notes.root));
     const rel = path.relative(root, abs);
-    if (!rel.startsWith("..") && !path.isAbsolute(rel)) {
+    if (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)) {
       return handlers["projects.mark"]({ folder: rel.split(path.sep).join("/") }) as Promise<{ project: ProjectInfo; created: boolean }>;
     }
-    if (path.relative(abs, root).split(path.sep)[0] !== "..")
+    const up = path.relative(abs, root);
+    if (up !== ".." && !up.startsWith(`..${path.sep}`))
       throw new CapabilityError("E_NESTED", "essa pasta tem a pasta de notas dentro dela; escolha uma pasta de projeto");
     let isDir = false;
     try {
@@ -388,7 +391,11 @@ export function uiCapabilities(deps: CapabilityDeps,
   const SEARCH_MAX = 500;
   const byRecent = (a: ProjectCandidate, b: ProjectCandidate) => b.mtimeMs - a.mtimeMs;
   const startSearch = async () => {
+    // A busca nova entra no lugar da velha antes de qualquer await (revisão do #520): dois cliques seguidos no "Procurar
+    // no Mac" nunca deixam uma solta, sem como parar.
+    const mine = { stop: new AbortController(), view: { state: "searching", found: [], skipped: [] } as ProjectSearchView };
     search?.stop.abort();
+    search = mine;
     await vault();
     const settings = await deps.settings.load();
     const given = deps.projectsHome?.() ?? null;
@@ -398,9 +405,8 @@ export function uiCapabilities(deps: CapabilityDeps,
     // As pastas da pasta de notas que não viram projeto: a das reuniões, a dos modelos, a das diárias e a dos anexos.
     const off = [meetingsFolder, settings.templatesFolder, settings.dailyFolder, settings.attachmentsFolder].filter((f): f is string => !!f);
     const tilde = (abs: string) => (home && (abs === home || abs.startsWith(`${home}/`)) ? `~${abs.slice(home.length)}` : abs);
-    const mine = { stop: new AbortController(), view: { state: "searching", found: [], skipped: [] } as ProjectSearchView };
-    search = mine;
-    void findProjects(roots, {
+    if (mine.stop.signal.aborted) return;
+    void (deps.projectsFinder ?? findProjects)(roots, {
       signal: mine.stop.signal,
       exclude,
       onDenied: (r) => {
