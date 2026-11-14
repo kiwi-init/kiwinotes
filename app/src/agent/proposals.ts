@@ -19,6 +19,7 @@ import { linkSafeName } from "../shared/wikilinks.ts";
 
 export { meetingNoteTitle };
 import { DEFAULT_AGENT_MEETING_SETTINGS, type AgentMeetingSettings } from "../store/settings.ts";
+import type { SummaryFields } from "./summary.ts";
 
 /** Quanto uma proposta fica guardada (spec #8360): 30 dias, como o registro do agente. */
 export const PROPOSAL_KEEP_MS = 30 * 86_400_000;
@@ -76,7 +77,15 @@ export interface MeetingProposal {
   at: number;
   /** O pedido do agente em que a proposta nasceu (o registro). */
   request: string;
-  meeting: ProposalMeeting;
+  /**
+   * `summary`: o resumo executivo de um projeto (spec #11546), que só muda a nota principal. Sem ele, a proposta da
+   * reunião (#8360).
+   */
+  kind?: "summary";
+  /** A reunião da proposta; não há num resumo executivo. */
+  meeting?: ProposalMeeting;
+  /** Os campos do resumo executivo (`kind: "summary"`). */
+  summary?: SummaryFields;
   /** O projeto escolhido; null sem projeto (ainda em dúvida, ou "Nenhum: só a nota da reunião"). */
   project: ProposalProject | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe com botões. */
@@ -339,7 +348,7 @@ export class ProposalStore {
 
   /** Já houve proposta (ou pergunta) para esta reunião, em qualquer estado: uma reunião só gera uma sozinha. */
   hasMeeting(path: string): boolean {
-    return this.load().proposals.some((p) => p.meeting.path === path);
+    return this.load().proposals.some((p) => p.meeting?.path === path);
   }
 
   get(id: string): MeetingProposal | null {
@@ -350,7 +359,10 @@ export class ProposalStore {
   add(p: Omit<MeetingProposal, "id" | "at" | "status">, status: "pending" | "offer" = "pending"): MeetingProposal {
     const f = this.load();
     const proposal: MeetingProposal = { ...p, id: crypto.randomUUID(), at: this.now(), status };
-    f.proposals = f.proposals.filter((x) => !((x.status === "pending" || x.status === "offer") && x.meeting.path === p.meeting.path && !x.notePath));
+    // A mesma reunião (#8360), ou o resumo do mesmo projeto (#11546): vale a mais nova.
+    const same = (x: MeetingProposal) =>
+      p.kind === "summary" ? x.kind === "summary" && !!p.project && x.project?.folder === p.project.folder : !!x.meeting && x.meeting.path === p.meeting?.path;
+    f.proposals = f.proposals.filter((x) => !((x.status === "pending" || x.status === "offer") && same(x) && !x.notePath));
     f.proposals.push(proposal);
     this.save(f);
     return proposal;

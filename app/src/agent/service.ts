@@ -18,6 +18,8 @@
 // - **O desfazer** (spec #9353): com as notas do desfazer (`useUndo`), o `agent.undo` volta o que um pedido mudou, pela
 //   cópia do registro (`undo.ts`). É da pessoa: não precisa do agente ligado e não vira ferramenta dele. Um por vez.
 
+import { lastSummaryDate, mainNoteWithSummary, SUMMARY_TITLE, summarySection } from "./summary.ts";
+import type { SummarySettings } from "../shared/summary-settings.ts";
 import { DEFAULT_SUMMARY_SETTINGS, sanitizeSummarySettings } from "../shared/summary-settings.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -65,6 +67,7 @@ import {
   type MeetingNoteSettings,
   type MeetingProposal,
   type ProposalFields,
+  type ProposalMeeting,
 } from "./proposals.ts";
 import type { ProposalDraft, ProposalSink } from "./tools/tools.ts";
 import { DEFAULT_AGENT_MEETING_SETTINGS, sanitizeAgentMeetingSettings, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
@@ -684,16 +687,18 @@ export class AgentService {
   private proposalSummary(p: MeetingProposal, s: MeetingNoteSettings): AgentProposalSummary {
     const iso = (ms: number) => new Date(ms).toISOString();
     const short = (x: { folder: string; name: string }) => ({ folder: x.folder, name: x.name });
-    const theme = p.fields?.theme ?? "";
+    const theme = p.kind === "summary" ? SUMMARY_TITLE : (p.fields?.theme ?? "");
     return {
       id: p.id,
       at: iso(p.at),
       status: p.status,
-      meeting: p.meeting,
+      kind: p.kind === "summary" ? "summary" : "meeting",
+      meeting: p.meeting ?? null,
+      ...(p.summary ? { summary: { signal: p.summary.signal, since: p.summary.since } } : {}),
       project: p.project ? short(p.project) : null,
       candidates: p.candidates.map(short),
       theme,
-      note: { folder: meetingNoteFolder(p.project, s), title: meetingNoteTitle(p.meeting.date, theme, s.name) },
+      note: p.meeting ? { folder: meetingNoteFolder(p.project, s), title: meetingNoteTitle(p.meeting.date, theme, s.name) } : null,
       ...(p.notePath ? { notePath: p.notePath } : {}),
       ...(p.applyRequest ? { applyRequest: p.applyRequest } : {}),
       ...(p.doneAt !== undefined ? { doneAt: iso(p.doneAt) } : {}),
@@ -731,6 +736,23 @@ export class AgentService {
     return p;
   }
 
+  /** A reunião de uma proposta de reunião (um resumo executivo não tem). */
+  private meetingOf(p: MeetingProposal): ProposalMeeting {
+    if (!p.meeting) throw new AgentServiceError("E_BAD_ARGS", "Essa proposta não é de uma reunião.");
+    return p.meeting;
+  }
+
+  /** O que a pessoa escolheu para o resumo executivo (spec #11546). */
+  private async summarySettings(): Promise<SummarySettings> {
+    return (await this.d.settings.load()).summary ?? DEFAULT_SUMMARY_SETTINGS;
+  }
+
+  /** O dia local de hoje, `AAAA-MM-DD`. */
+  private today(): string {
+    const d = new Date((this.d.now ?? Date.now)());
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   /** Os campos de uma proposta pronta; a pergunta do modo econômico ainda não tem. */
   private fieldsOf(p: MeetingProposal): ProposalFields {
     if (!p.fields) throw new AgentServiceError("E_BAD_ARGS", "Essa proposta ainda não foi preparada: toque em [Preparar].");
@@ -748,15 +770,30 @@ export class AgentService {
    */
   async proposalView(id: string): Promise<AgentProposalView> {
     const p = this.proposalOr404(id);
+    if (p.kind === "summary") {
+      // O resumo executivo (spec #11546): a seção como vai ficar, e a nota principal com ela no topo.
+      const summary = await this.summaryOf(p);
+      const section = summarySection(p.summary!, await this.summarySettings(), this.today());
+      let main: AgentProposalView["main"] = null;
+      let replaces: string | null = null;
+      if (p.project?.main) {
+        const before = (await this.proposalWriter().get(p.project.main)).content;
+        replaces = lastSummaryDate(before);
+        main = { path: p.project.main, lines: addedLines(before, mainNoteWithSummary(before, section)) };
+      }
+      return { ...summary, noteContent: section, main, ...(replaces ? { replaces } : {}) };
+    }
+    const meeting = this.meetingOf(p);
     const fields = this.fieldsOf(p);
     const s = await this.meetingSettings();
     const summary = this.proposalSummary(p, s);
-    const noteContent = meetingNoteContent(p.meeting, fields, s, await this.noteOptions(p));
+    const noteContent = meetingNoteContent(meeting, fields, s, await this.noteOptions(p));
     let main: AgentProposalView["main"] = null;
     if (p.project?.main) {
       const before = (await this.proposalWriter().get(p.project.main)).content;
-      const notePath = p.notePath ?? `${summary.note.folder ? `${summary.note.folder}/` : ""}${summary.note.title}.md`;
-      const after = p.mainDone || mainHasMeeting(before, notePath) ? before : mainNoteWithMeeting(before, notePath, p.meeting, fields);
+      const note = summary.note!;
+      const notePath = p.notePath ?? `${note.folder ? `${note.folder}/` : ""}${note.title}.md`;
+      const after = p.mainDone || mainHasMeeting(before, notePath) ? before : mainNoteWithMeeting(before, notePath, meeting, fields);
       main = { path: p.project.main, lines: addedLines(before, after) };
     }
     return { ...summary, noteContent, main };
@@ -807,13 +844,15 @@ export class AgentService {
     return this.oneProposal(async () => {
       const p = this.proposalOr404(id);
       if (p.status !== "pending") throw new AgentServiceError("E_BAD_ARGS", p.status === "offer" ? "Essa proposta ainda não foi preparada." : "Essa proposta já foi aplicada ou descartada.");
-      if (needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", "Escolha antes o projeto da reunião.");
+      if (needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", p.kind === "summary" ? "Escolha antes o projeto do resumo." : "Escolha antes o projeto da reunião.");
+      if (p.kind === "summary") return this.applySummary(p);
+      const meeting = this.meetingOf(p);
       const fields = this.fieldsOf(p);
       const writer = this.proposalWriter();
       const s = await this.meetingSettings();
       const request = p.applyRequest ?? `proposta-${crypto.randomUUID()}`;
       if (!p.applyRequest) {
-        await this.activity.begin(request, `Aplicar a proposta da reunião "${p.meeting.title}"`);
+        await this.activity.begin(request, `Aplicar a proposta da reunião "${meeting.title}"`);
         this.proposals.update(id, (x) => (x.applyRequest = request));
       }
       const folderId = await writer.folder();
@@ -821,7 +860,7 @@ export class AgentService {
       // A nota da reunião, uma vez só: um [Aplicar] que parou no meio não cria outra.
       let notePath = p.notePath;
       if (!notePath) {
-        const n = await writer.create(meetingNoteFolder(p.project, s), meetingNoteTitle(p.meeting.date, fields.theme, s.name), meetingNoteContent(p.meeting, fields, s, await this.noteOptions(p)));
+        const n = await writer.create(meetingNoteFolder(p.project, s), meetingNoteTitle(meeting.date, fields.theme, s.name), meetingNoteContent(meeting, fields, s, await this.noteOptions(p)));
         notePath = n.path;
         this.proposals.update(id, (x) => (x.notePath = n.path));
         await this.activity.change(request, { kind: "created", path: n.path, before: 0, after: n.content.length, version: n.version, ...where });
@@ -833,7 +872,7 @@ export class AgentService {
           if (n.readOnly) throw new AgentServiceError("E_BAD_ARGS", `${n.path} não é UTF-8: o Kiwi não escreve nela.`);
           // Um [Aplicar] que parou depois de gravar a principal (antes de marcar): ela já tem a reunião.
           if (mainHasMeeting(n.content, notePath)) break;
-          const next = mainNoteWithMeeting(n.content, notePath, p.meeting, fields);
+          const next = mainNoteWithMeeting(n.content, notePath, meeting, fields);
           const copy = await this.activity.keep(request, n.content);
           const r = await writer.save(n.path, next, n.version).catch(async (e) => {
             await this.activity.drop(copy);
@@ -855,6 +894,48 @@ export class AgentService {
       void this.emitProposals();
       return this.summaryOf(done);
     });
+  }
+
+  /**
+   * [Aplicar] num resumo executivo (spec #11546): só a nota principal muda. A seção entra no topo, ou troca a anterior,
+   * que fica nas Versões; a escrita entra no registro, com a cópia de antes e o [Desfazer]. Lida de novo se a nota
+   * mudou no meio.
+   */
+  private async applySummary(p: MeetingProposal): Promise<AgentProposalSummary> {
+    const main = p.project?.main;
+    if (!main) throw new AgentServiceError("E_BAD_ARGS", "Esse projeto não tem nota principal: marque uma em Notas, no projeto.");
+    const writer = this.proposalWriter();
+    const section = summarySection(p.summary!, await this.summarySettings(), this.today());
+    const request = p.applyRequest ?? `resumo-${crypto.randomUUID()}`;
+    if (!p.applyRequest) {
+      await this.activity.begin(request, `Aplicar o resumo executivo de "${p.project!.name}"`);
+      this.proposals.update(p.id, (x) => (x.applyRequest = request));
+    }
+    const folderId = await writer.folder();
+    const where = folderId ? { folder: folderId } : {};
+    for (let tries = 0; ; tries++) {
+      const n = await writer.get(main);
+      if (n.readOnly) throw new AgentServiceError("E_BAD_ARGS", `${n.path} não é UTF-8: o Kiwi não escreve nela.`);
+      const next = mainNoteWithSummary(n.content, section);
+      if (next === n.content) break;
+      const copy = await this.activity.keep(request, n.content);
+      const r = await writer.save(n.path, next, n.version).catch(async (e) => {
+        await this.activity.drop(copy);
+        throw e;
+      });
+      if (r.saved) {
+        await this.activity.change(request, { kind: "replaced", path: r.path, section: SUMMARY_TITLE, before: n.content.length, after: next.length, version: r.version, copy, ...where });
+        break;
+      }
+      await this.activity.drop(copy);
+      if (tries >= 2) throw new AgentServiceError("E_CHANGED", `${n.path} mudou enquanto o Kiwi aplicava. Tente [Aplicar] de novo.`);
+    }
+    const done = this.proposals.update(p.id, (x) => {
+      x.status = "applied";
+      x.doneAt = (this.d.now ?? Date.now)();
+    })!;
+    void this.emitProposals();
+    return this.summaryOf(done);
   }
 
   /**
@@ -890,7 +971,7 @@ export class AgentService {
   async proposalPrepare(id: string): Promise<{ id: string }> {
     const p = this.proposalOr404(id);
     if (p.status !== "offer") throw new AgentServiceError("E_BAD_ARGS", "Essa proposta já foi preparada.");
-    return this.ask(meetingPrompt(p.meeting));
+    return this.ask(meetingPrompt(this.meetingOf(p)));
   }
 
   /** Manda o pedido da próxima reunião da fila, se o agente está livre. */

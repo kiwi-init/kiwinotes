@@ -582,14 +582,19 @@ export interface AgentProposalSummary {
    * "Agora não" o `agent.proposalDiscard`); ainda sem tema. `pending`: pronta, esperando [Aplicar] ou [Descartar].
    */
   status: "offer" | "pending" | "applied" | "discarded";
-  meeting: { path: string; title: string; date: string };
+  /** `summary`: o resumo executivo de um projeto (1.59.0, spec #11546), que só muda a nota principal. */
+  kind: "meeting" | "summary";
+  /** A reunião; null num resumo executivo. */
+  meeting: { path: string; title: string; date: string } | null;
+  /** O resumo executivo: o sinal e desde quando "o que andou" conta. */
+  summary?: { signal: "verde" | "amarelo" | "vermelho"; since: string };
   /** O projeto; null sem projeto (em dúvida, com `candidates`, ou "Nenhum: só a nota da reunião"). */
   project: { folder: string; name: string } | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe. */
   candidates: { folder: string; name: string }[];
   theme: string;
-  /** Onde a nota da reunião vai e com que título (o nome do arquivo). */
-  note: { folder: string; title: string };
+  /** Onde a nota da reunião vai e com que título (o nome do arquivo); null num resumo executivo. */
+  note: { folder: string; title: string } | null;
   /** O caminho da nota criada pelo [Aplicar]. */
   notePath?: string;
   /** O pedido do registro do [Aplicar]: o [Desfazer] é o `agent.undo` dele. */
@@ -602,7 +607,10 @@ export interface AgentProposalSummary {
 
 /** [Ver a proposta] (1.57.0): o texto da nota nova e a nota principal com as linhas que a proposta acrescenta. */
 export interface AgentProposalView extends AgentProposalSummary {
+  /** A nota nova da reunião; num resumo executivo, a seção "Resumo executivo" como vai ficar. */
   noteContent: string;
+  /** O resumo executivo troca o anterior desta data (`AAAA-MM-DD`), que fica nas Versões. */
+  replaces?: string;
   /** Null sem projeto ou num projeto sem nota principal: só a nota da reunião. */
   main: { path: string; lines: { text: string; added: boolean }[] } | null;
 }

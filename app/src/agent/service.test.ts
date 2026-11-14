@@ -1245,7 +1245,7 @@ describe("a reunião vira nota do projeto (spec #8360)", () => {
     await expect(m.svc.proposalView(offer!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
     await m.svc.proposalPrepare(offer!.id);
     const ready = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.status === "pending"));
-    expect(ready.meeting.path).toBe(MEETING_PATH);
+    expect(ready.meeting?.path).toBe(MEETING_PATH);
     expect((await m.svc.proposalsList()).map((x) => x.status)).toEqual(["pending"]);
     await until(() => m.turns.filter((e) => e.type === "done").length === 1);
 
@@ -1254,7 +1254,7 @@ describe("a reunião vira nota do projeto (spec #8360)", () => {
     const slow = await m.svc.ask("/lento");
     await m.svc.meetingReady(MEETING2_PATH);
     expect(started(m)).toBe(2);
-    const next = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.meeting.path === MEETING2_PATH));
+    const next = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.meeting?.path === MEETING2_PATH));
     expect(next.status).toBe("pending");
     await until(() => m.turns.filter((e) => e.type === "done").length === 3);
     const order = m.turns.filter((e) => e.type === "started" || e.type === "done").map((e) => `${e.type}:${e.id === slow.id ? "lento" : "outro"}`);
