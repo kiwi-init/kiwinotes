@@ -164,7 +164,7 @@ try {
     await p.evaluate(() => (window as any).kiwiOverlay.set({ visible: false, bubble: null }));
     await settle(p);
     last = (await posts(p)).at(-1)!;
-    assert.deepEqual(last, { bubble: null, open: false });
+    assert.deepEqual(last, { bubble: null, open: false, close: null });
     // Uma resposta curta: sem Ver mais.
     await p.evaluate((t) => (window as any).kiwiOverlay.set({ visible: true, bubble: { text: t, error: false } }), SHORT);
     await settle(p);
@@ -172,6 +172,55 @@ try {
     assert.equal(s.bubbleMore, false);
     assert.equal(await p.isVisible("#bubble-more"), false);
     report.checks.push("a short answer has no 'Ver mais'; when the bubble goes, the helper gets bubble: null");
+    await ctx.close();
+  }
+
+  // 2. A conversa contínua (spec #13380): a pergunta sem fechar o Ver mais, o toque, os dois × e o VoiceOver.
+  for (const theme of ["light", "dark"] as const) {
+    const tema = theme === "light" ? "claro" : "escuro";
+    const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", theme, 360);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), LONG);
+    await settle(p);
+    // A pergunta com o balão fechado, e o × da cabeça com o mouse sobre o gato.
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ bubble: { text: t, error: false, ask: true }, catHover: true }), LONG);
+    await settle(p);
+    let s = await stats(p);
+    assert.equal(s.bubbleAsk, true);
+    assert.equal(s.catHover, true);
+    assert.equal(await p.isVisible("#bubble-ask"), true);
+    assert.equal(await p.textContent("#bubble-ask"), "Precisa de mais alguma coisa?");
+    assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById("cat-close")!).opacity), "1");
+    let last = (await posts(p)).at(-1)!;
+    assert.ok((last as any).close, `o helper sabe onde está o × da cabeça: ${JSON.stringify(last)}`);
+    const b = await bubbleBox(p);
+    assert.ok(b.y >= 0 && b.bottom <= height, `com a pergunta, o balão fechado fica na janela: ${JSON.stringify(b)}`);
+    await shot(p, `4-pergunta-${theme}.png`, `Sem interação (${tema}): a pergunta e, com o mouse no gato, o ×`, width, height);
+    // O VoiceOver lê a resposta inteira e a pergunta, não o resumo cortado (revisão do #526).
+    const sr = await p.textContent("#bubble-sr");
+    assert.equal(sr, `${LONG} Precisa de mais alguma coisa?`);
+
+    // Aberto e rolado, a pergunta entra e sai sem fechar o balão nem voltar o texto.
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ bubble: { text: t, error: false }, catHover: false }), LONG);
+    await p.click("#bubble-more");
+    await settle(p);
+    const before = (await posts(p)).length;
+    await p.mouse.move((await bubbleBox(p)).x + 100, (await bubbleBox(p)).y + 100);
+    await p.mouse.wheel(0, 40);
+    await settle(p);
+    const scrolled = await p.evaluate(() => document.getElementById("bubble-text")!.scrollTop);
+    assert.ok(scrolled > 0);
+    assert.ok((await posts(p)).slice(before).some((m: any) => m.touch === true), "rolar conta como interação (touch)");
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ bubble: { text: t, error: false, ask: true } }), LONG);
+    await settle(p);
+    s = await stats(p);
+    assert.equal(s.bubbleOpen, true, "a pergunta não fecha o Ver mais");
+    assert.equal(await p.evaluate(() => document.getElementById("bubble-text")!.scrollTop), scrolled, "nem volta o texto");
+    await shot(p, `5-aberto-pergunta-${theme}.png`, `Aberto (${tema}): a pergunta embaixo, e o × do balão`, width, height);
+    // O × do balão: o helper recebe o fechar.
+    await p.click("#bubble-close");
+    last = (await posts(p)).at(-1)!;
+    assert.deepEqual(last, { closed: true });
+    report.checks.push(`(${theme}) the question appears under the answer without closing 'Ver mais' or moving the text; the head × shows on hover and reports its rect; scrolling sends touch; the bubble × sends closed; VoiceOver gets the whole answer and the question`);
     await ctx.close();
   }
 
@@ -210,7 +259,7 @@ try {
   const img = (f: string) => `data:image/png;base64,${readFileSync(join(out, f)).toString("base64")}`;
   await sheet.setContent(
     `<body style="margin:0;padding:24px;background:#eceae4;font:600 18px -apple-system,sans-serif;color:#222">` +
-      `<h1 style="margin:0 0 16px;font-size:26px">O balão do Kiwi Cat: resumo, Ver mais e rolagem (spec #13378)</h1>` +
+      `<h1 style="margin:0 0 16px;font-size:26px">O balão do Kiwi Cat: a conversa contínua (spec #13378, #13380)</h1>` +
       `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start">` +
       shots.map((x) =>
         `<figure style="margin:0"><figcaption style="margin-bottom:8px;min-height:44px">${x.caption}</figcaption>` +

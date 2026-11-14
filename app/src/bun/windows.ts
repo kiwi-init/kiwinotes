@@ -399,6 +399,8 @@ export function startCatOverlay(sidecar: Sidecar): void {
       send: (c) => sidecar.send(c),
       onReady: (fn) => sidecar.on("ready", fn),
       onHold: (fn) => sidecar.on("catOverlay.hold", (e) => fn(e.held === true)),
+      onTouch: (fn) => sidecar.on("catOverlay.touch", () => fn()),
+      onClose: (fn) => sidecar.on("catOverlay.close", () => fn()),
     },
     pageDir: path.join(PATHS.VIEWS_FOLDER, "ui", "catoverlay"),
     where: (overlay) => {

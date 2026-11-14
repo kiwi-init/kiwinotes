@@ -1139,6 +1139,21 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(prompts().at(-1)).toBe(ECONOMY_INSTRUCTIONS + "oi");
   });
 
+  test("dois pedidos seguidos (a conversa pelo Control, spec #13380) vão na mesma sessão do agente, que lembra do anterior", async () => {
+    const m = make();
+    await readyNow(m);
+    await askAndWait(m, "qual o prazo do Kiwi?");
+    await askAndWait(m, "e quem cuida do teste?");
+    const prompts = m.log().filter((l) => l.method === "session/prompt");
+    const opened = m.log().filter((l) => l.method === "session/new" || l.method === "session/resume" || l.method === "session/load");
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    const [a, b] = prompts.slice(-2).map((l) => l.params.sessionId);
+    expect(a).toBeTruthy();
+    expect(b).toBe(a);
+    // Uma abertura só: o segundo pedido continua a conversa, não abre outra.
+    expect(opened).toHaveLength(1);
+  });
+
   test("o começo fixo vai uma vez por abertura (spec #13379): de novo quando muda, a cada 8 pedidos e depois que o programa reabre", async () => {
     const m = make({ idleMs: 2000 });
     await readyNow(m);
