@@ -56,7 +56,7 @@ import type {
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
 import { type NoteModel, noteModelText } from "./note-model.ts";
-import { factKey, forgetFact, MEMORY_MAX, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
+import { factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
 const MEMORY_OPS_KEEP = 50;
@@ -299,6 +299,12 @@ export class AgentService {
     this.vaultRoot = source;
   }
   private vaultRoot: (() => Promise<string>) | null = null;
+
+  /** O glossário do ditado (spec #11469, T11667): os termos do dicionário, que vão no começo fixo do pedido. */
+  useGlossary(source: () => Promise<string[]>): void {
+    this.glossary = source;
+  }
+  private glossary: (() => Promise<string[]>) | null = null;
   /** As últimas mudanças na memória, para o [Desfazer] do balão. Só na memória do app. */
   private memoryOps: MemoryOp[] = [];
   private readonly memoryListeners = new Set<(v: AgentMemoryView) => void>();
@@ -569,7 +575,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -630,6 +636,7 @@ export class AgentService {
       controlShortcut: s.controlShortcut === true,
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
       summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
+      instructions: s.instructions ?? "",
     };
   }
 
@@ -1250,7 +1257,15 @@ export class AgentService {
       const model = this.noteModel ? await this.noteModel().catch(() => null) : null;
       // A memória do agente (spec #11469) vem depois do modelo, com os mesmos bytes para os mesmos fatos.
       const memory = this.vaultRoot ? await this.memoryView().then((v) => memoryText(v.facts), () => "") : "";
-      const fixed = (model ? noteModelText(model) : "") + memory + (s.economy ? ECONOMY_INSTRUCTIONS : "");
+      // As instruções da pessoa e o glossário do ditado (T11667), sempre nesta ordem. No modo econômico, o glossário vai
+      // só com os termos que aparecem no pedido.
+      const terms = this.glossary ? await this.glossary().catch(() => []) : [];
+      const fixed =
+        (model ? noteModelText(model) : "") +
+        memory +
+        instructionsText(s.instructions ?? "") +
+        glossaryText(terms, s.economy ? text : undefined) +
+        (s.economy ? ECONOMY_INSTRUCTIONS : "");
       const answer = await host.ask(fixed + text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
@@ -1390,12 +1405,14 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O resumo executivo (spec #11546): os blocos e o período, inteiros e saneados.
     if (o.summary !== undefined) patch.summary = sanitizeSummarySettings(o.summary);
     // "Suas reuniões" (spec #8360): inteiro, saneado; uma pasta fora do cofre volta para a do projeto.
     if (o.meetings !== undefined) patch.meetings = sanitizeAgentMeetingSettings(o.meetings);
+    // As instruções da pessoa (spec #11469): valem a partir do pedido seguinte.
+    if (o.instructions !== undefined) patch.instructions = o.instructions.replace(/\r\n?/g, "\n").slice(0, INSTRUCTIONS_MAX);
     if (o.model !== undefined) patch.model = o.model;
     if (o.effort !== undefined) patch.effort = o.effort;
     if (o.economy !== undefined) {

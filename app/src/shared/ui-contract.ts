@@ -170,7 +170,8 @@ export type { NoteModel };
 // 1.59.0 (T11559, spec #11546): o resumo executivo. O `summary` no `AgentStatus` e no `agent.configure` (os 6 blocos e o
 //   período do primeiro resumo) e o `kind: "summary"` nas propostas. Só acréscimo.
 // 1.60.0 (T11665, spec #11469): a memória do agente. O `agent.memory` (os fatos e a última mudança), o
-//   `agent.memoryUndo` (o [Desfazer] do balão) e o evento `agent.memoryChanged`. Só acréscimo.
+//   `agent.memoryUndo` (o [Desfazer] do balão) e o evento `agent.memoryChanged`; as `instructions` no `AgentStatus` e
+//   no `agent.configure`. Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.60.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
@@ -480,7 +481,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings }; result: AgentStatus };
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -785,6 +786,8 @@ export interface AgentStatus {
   meetings: AgentMeetingSettings;
   /** O resumo executivo (1.59.0, spec #11546): os 6 blocos e o período do primeiro resumo. */
   summary: SummarySettings;
+  /** As instruções da pessoa para o agente (1.60.0, spec #11469): até 2.000 caracteres, em todo pedido. */
+  instructions: string;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */

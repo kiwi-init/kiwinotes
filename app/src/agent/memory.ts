@@ -116,3 +116,37 @@ export function memoryText(facts: readonly string[]): string {
     "",
   ].join("\n");
 }
+
+/** As instruções da pessoa para o agente (spec #11469, T11667): um texto de Ajustes › Agente, até 2.000 caracteres. */
+export const INSTRUCTIONS_MAX = 2000;
+/** O glossário vai com até tantos termos (o dicionário do ditado pode ser grande). */
+export const GLOSSARY_MAX = 200;
+
+/** As instruções no começo fixo do pedido: o texto da pessoa como está. Sem texto, nada. */
+export function instructionsText(text: string): string {
+  const t = text.replace(/\r\n?/g, "\n").trim().slice(0, INSTRUCTIONS_MAX);
+  if (!t) return "";
+  return `[As instruções da pessoa para você (Ajustes › Agente). Siga sempre:\n${t}\n]\n\n`;
+}
+
+const fold = (t: string) => t.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+
+/**
+ * O glossário do ditado no começo fixo do pedido (T11667): só os termos, na ordem do dicionário, para o agente
+ * escrever certo. `request`: o modo econômico manda só os termos que aparecem no pedido.
+ */
+export function glossaryText(terms: readonly string[], request?: string): string {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  const asked = request === undefined ? null : fold(request);
+  for (const raw of terms) {
+    const term = raw.replace(/[\]\n]/g, " ").replace(/\s+/g, " ").trim();
+    if (!term || seen.has(fold(term))) continue;
+    if (asked !== null && !asked.includes(fold(term))) continue;
+    seen.add(fold(term));
+    list.push(term);
+    if (list.length >= GLOSSARY_MAX) break;
+  }
+  if (!list.length) return "";
+  return `[O glossário da pessoa: escreva estes termos assim. ${list.join("; ")}]\n\n`;
+}

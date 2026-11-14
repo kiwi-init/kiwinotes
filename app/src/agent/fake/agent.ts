@@ -349,6 +349,8 @@ const app = agent({ name: "kiwi-fake-agent" })
       .replace(/^\[Modelo de nota do Kiwi:[^\]]*\]\s*/, "")
       // A memória (spec #11469): o bloco termina numa linha só com "]" (um fato pode ter colchete).
       .replace(/^\[O que você sabe sobre a pessoa[\s\S]*?\n\]\s*/, "")
+      .replace(/^\[As instruções da pessoa para você[\s\S]*?\n\]\s*/, "")
+      .replace(/^\[O glossário da pessoa:[^\]]*\]\s*/, "")
       .replace(/^\[Modo econômico do Kiwi:[^\]]*\]\s*/, "")
       .trim();
 

@@ -246,6 +246,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // O Modelo de nota (spec #11102) do cofre aberto, para o começo fixo do pedido.
   stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
   stores.agent.useVaultRoot(async () => (await stores.folders.current()).notes.root);
+  stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
   stores.agent.useWriter(writerFromCapabilities(capabilities));
   // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
   stores.agent.useUndo(undoNotesFromCapabilities(capabilities));

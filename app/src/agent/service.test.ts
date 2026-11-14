@@ -1466,6 +1466,34 @@ describe("a memória do agente (spec #11469)", () => {
     expect((await m.svc.memoryView()).facts).toEqual(["trabalho com PACS", "uso o Mac"]);
   });
 
+  test("as instruções e o glossário (T11667): no começo fixo, na ordem, os mesmos bytes em dois pedidos seguidos; no modo econômico, só os termos do pedido", async () => {
+    const root = tmp();
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    m.svc.useVaultRoot(async () => root);
+    m.svc.useGlossary(async () => ["DICOM", "kubectl"]);
+    await readyNow(m);
+    await askAndWait(m, "lembra que trabalho com PACS");
+    expect((await m.svc.configure({ instructions: "Sempre em português." })).instructions).toBe("Sempre em português.");
+    await askAndWait(m, "Oi");
+    await askAndWait(m, "Oi de novo");
+    const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    const fixed = (t: string, ask: string) => t.slice(0, t.length - ask.length);
+    const a = fixed(prompts.at(-2)!, "Oi");
+    const b = fixed(prompts.at(-1)!, "Oi de novo");
+    expect(a).toBe(b);
+    expect(a.indexOf("[O que você sabe sobre a pessoa")).toBe(0);
+    expect(a.indexOf("[As instruções da pessoa")).toBeGreaterThan(a.indexOf("- trabalho com PACS"));
+    expect(a.indexOf("[O glossário da pessoa")).toBeGreaterThan(a.indexOf("Sempre em português."));
+    expect(a).toContain("[O glossário da pessoa: escreva estes termos assim. DICOM; kubectl]\n\n");
+    // O modo econômico: o glossário só com os termos que aparecem no pedido.
+    await m.svc.configure({ economy: true });
+    await askAndWait(m, "converta o dicom");
+    const eco = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text).at(-1)!;
+    expect(eco).toContain("[O glossário da pessoa: escreva estes termos assim. DICOM]\n\n");
+    expect(eco).not.toContain("kubectl");
+  });
+
   test("sem a raiz do cofre, as ferramentas da memória não aparecem e o pedido vai sem a memória", async () => {
     const notes: Record<string, string> = { ...NOTES };
     const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });

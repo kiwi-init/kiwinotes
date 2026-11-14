@@ -9,7 +9,7 @@ import { DoubtAnswers } from "../guardrail/answers.ts";
 import { SecretGuard } from "../guardrail/filter.ts";
 import { DoubtQuestions } from "../guardrail/questions.ts";
 import { tempDir } from "../../test/tmp.ts";
-import { forgetFact, formatMemory, MEMORY_FILE, MEMORY_MAX, memoryText, parseMemory, readMemory, rememberFact, writeMemory } from "./memory.ts";
+import { forgetFact, formatMemory, glossaryText, instructionsText, MEMORY_FILE, MEMORY_MAX, memoryText, parseMemory, readMemory, rememberFact, writeMemory } from "./memory.ts";
 import { EMPTY_READER } from "./tools/reader.ts";
 import { kiwiTools, runKiwiTool, type MemorySink } from "./tools/tools.ts";
 
@@ -124,5 +124,25 @@ describe("as ferramentas da memória", () => {
     // "Pode mandar" (a resposta fica guardada): anota.
     answers.set(answers.fingerprint(DOUBT), "send", "m", "random");
     expect((await runKiwiTool(ctx, "memory_remember", { fato: `o código do armário é ${DOUBT}` })).value).toMatchObject({ novo: true });
+  });
+});
+
+describe("as instruções e o glossário (T11667)", () => {
+  test("as instruções da pessoa: o texto como está, até 2.000 caracteres; sem texto, nada", () => {
+    expect(instructionsText("  ")).toBe("");
+    expect(instructionsText("Sempre em português.\r\nNão mexa na pasta Arquivo.")).toBe(
+      "[As instruções da pessoa para você (Ajustes › Agente). Siga sempre:\nSempre em português.\nNão mexa na pasta Arquivo.\n]\n\n",
+    );
+    expect(instructionsText("x".repeat(2500))).toContain("x".repeat(2000) + "\n]");
+    expect(instructionsText("x".repeat(2500))).not.toContain("x".repeat(2001));
+  });
+
+  test("o glossário: só os termos, na ordem, sem repetir; no modo econômico, só os que aparecem no pedido", () => {
+    const terms = ["DICOM", "kubectl", "Healthcare API", "dicom", "a]b"];
+    expect(glossaryText([])).toBe("");
+    expect(glossaryText(terms)).toBe("[O glossário da pessoa: escreva estes termos assim. DICOM; kubectl; Healthcare API; a b]\n\n");
+    expect(glossaryText(terms)).toBe(glossaryText([...terms]));
+    expect(glossaryText(terms, "Migre os estudos dicom pela healthcare api")).toBe("[O glossário da pessoa: escreva estes termos assim. DICOM; Healthcare API]\n\n");
+    expect(glossaryText(terms, "nada a ver")).toBe("");
   });
 });
