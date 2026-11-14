@@ -688,7 +688,8 @@ describe("as referências de uma nota (spec #11908)", () => {
     // O DICOMweb já estava (com a barra do fim): só o outro entra.
     expect(p).toMatchObject({ kind: "references", status: "pending", meeting: null, note: null, references: { note: NOTE, count: 1 } });
     const view = await m.svc.proposalView(p!.id);
-    expect(view.noteContent).toBe("## Referências\n\n- [Cloud Healthcare API: DICOM](https://cloud.google.com/healthcare-api/docs/concepts/dicom): Os dicomStores e o DICOMweb do Google. (14/11/2026)\n");
+    // A nota já tem a seção: só a linha nova.
+    expect(view.noteContent).toBe("- [Cloud Healthcare API: DICOM](https://cloud.google.com/healthcare-api/docs/concepts/dicom): Os dicomStores e o DICOMweb do Google. (14/11/2026)\n");
     expect(view.main!.lines.filter((l) => l.added).map((l) => l.text)).toEqual([expect.stringContaining("cloud.google.com")]);
     const applied = await m.svc.proposalApply(p!.id);
     expect(applied).toMatchObject({ kind: "references", status: "applied" });

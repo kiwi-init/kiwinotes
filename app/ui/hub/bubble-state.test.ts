@@ -214,7 +214,7 @@ test("a web (spec #11908): o balão diz que o agente está pesquisando, e a resp
   const f = new BubbleFeed(fits(60));
   f.event(ev({ type: "started" }), 0);
   f.event(ev({ type: "status", status: "running", tool: "web" }), 10);
-  expect(f.view(10 + WEB_LINE.length * TYPE_MS)).toMatchObject({ text: WEB_LINE });
+  expect(f.view(10 + WEB_LINE.length * TYPE_MS)).toMatchObject({ text: WEB_LINE, more: false });
   // Outra ferramenta não diz isso.
   const g = new BubbleFeed(fits(60));
   g.event(ev({ type: "started" }), 0);

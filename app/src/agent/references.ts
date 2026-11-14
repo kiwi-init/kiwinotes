@@ -55,7 +55,10 @@ export function referenceLine(i: ReferenceItem): string {
  * A nota com as referências novas: as que a nota ainda não tem entram no fim da seção "Referências" (que o Kiwi cria no
  * fim da nota, se ela não existe). `added` são as que entraram; sem nenhuma nova, a nota volta igual.
  */
-export function noteWithReferences(content: string, items: readonly ReferenceItem[]): { content: string; added: ReferenceItem[]; lines: string[] } {
+export function noteWithReferences(
+  content: string,
+  items: readonly ReferenceItem[],
+): { content: string; added: ReferenceItem[]; lines: string[]; /** A seção foi criada agora (a nota não tinha). */ created: boolean } {
   const known = linksIn(content);
   const added: ReferenceItem[] = [];
   for (const i of items) {
@@ -64,7 +67,7 @@ export function noteWithReferences(content: string, items: readonly ReferenceIte
     known.add(k);
     added.push(i);
   }
-  if (!added.length) return { content, added, lines: [] };
+  if (!added.length) return { content, added, lines: [], created: false };
   const lines = added.map(referenceLine);
   const headings = markdownStructure(content).headings;
   const h = headings.find((x) => x.level === 2 && x.title.trim().toLowerCase() === REFERENCES_TITLE.toLowerCase());
@@ -75,8 +78,8 @@ export function noteWithReferences(content: string, items: readonly ReferenceIte
     const after = content.slice(end);
     // A linha em branco depois do título, numa seção vazia; senão, logo abaixo do último item.
     const sep = body.endsWith(`## ${h.title}`) || /\n##\s[^\n]*$/.test(body) ? "\n\n" : "\n";
-    return { content: `${body}${sep}${lines.join("\n")}\n${after ? `\n${after.replace(/^\n+/, "")}` : ""}`, added, lines };
+    return { content: `${body}${sep}${lines.join("\n")}\n${after ? `\n${after.replace(/^\n+/, "")}` : ""}`, added, lines, created: false };
   }
   const base = content.replace(/\s+$/, "");
-  return { content: `${base ? `${base}\n\n` : ""}## ${REFERENCES_TITLE}\n\n${lines.join("\n")}\n`, added, lines };
+  return { content: `${base ? `${base}\n\n` : ""}## ${REFERENCES_TITLE}\n\n${lines.join("\n")}\n`, added, lines, created: true };
 }

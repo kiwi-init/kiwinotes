@@ -16,6 +16,7 @@ describe("as referências da nota", () => {
     const r = noteWithReferences("# PACS\n\nA migração.\n", [A, B]);
     expect(r.content).toBe(`# PACS\n\nA migração.\n\n## Referências\n\n${referenceLine(A)}\n${referenceLine(B)}\n`);
     expect(r.added).toHaveLength(2);
+    expect(r.created).toBe(true);
   });
 
   test("com a seção (mesmo no meio), os novos entram no fim dela, e um link que a nota já tem não se repete", () => {

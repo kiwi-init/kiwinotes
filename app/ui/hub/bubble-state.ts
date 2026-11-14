@@ -241,7 +241,8 @@ export class BubbleFeed {
     const len = [...h.text].length;
     const typed = this.reduced || this.error ? len : Math.min(len, Math.floor((now - h.shownAt) / TYPE_MS));
     const text = cutAtCodePoint(h.text, typed);
-    const more = !this.error && (this.queue.length > 0 || this.said.trim() !== h.text.trim());
+    // A linha da web (spec #11908) não é o que o agente disse: ela sozinha não pede o [Ver mais].
+    const more = !this.error && (this.queue.length > 0 || (h.text !== WEB_LINE && this.said.trim() !== h.text.trim()));
     return { text, full: h.text, error: this.error, more };
   }
 

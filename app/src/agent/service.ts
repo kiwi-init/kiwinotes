@@ -968,7 +968,9 @@ export class AgentService {
       const r = p.references!;
       const before = (await this.proposalWriter().get(r.note)).content;
       const after = noteWithReferences(before, r.items);
-      return { ...summary, noteContent: after.lines.length ? `## ${REFERENCES_TITLE}\n\n${after.lines.join("\n")}\n` : "", main: { path: r.note, lines: addedLines(before, after.content) } };
+      // Com a seção já na nota, só as linhas novas; sem ela, a seção inteira que o Kiwi cria.
+      const noteContent = !after.lines.length ? "" : after.created ? `## ${REFERENCES_TITLE}\n\n${after.lines.join("\n")}\n` : `${after.lines.join("\n")}\n`;
+      return { ...summary, noteContent, main: { path: r.note, lines: addedLines(before, after.content) } };
     }
     if (p.kind === "summary") {
       // O resumo executivo (spec #11546): a seção como vai ficar, e a nota principal com ela no topo.
