@@ -138,6 +138,34 @@ final class OverlayModelTests: XCTestCase {
         XCTAssertEqual(f.minY, -200 + 12 - 14)
     }
 
+    /// Spec #12845: the meeting panel is 480×92 and the recording pill is much smaller; the dictation panel is 360×64.
+    /// Only the pill takes a click: around it (left, right, above, the shadow room below) the click goes to the app behind.
+    func testOnlyThePillTakesClicks() {
+        // The meeting panel above the Dock, and a 220×40 pill centered at its bottom (14 pt of shadow room), top-left based.
+        let panel = CGRect(x: 600, y: 80, width: 480, height: 92)
+        let pill = CGRect(x: 130, y: 38, width: 220, height: 40)
+        let onScreen = OverlayLayout.pillOnScreen(panel: panel, pill: pill)
+        XCTAssertEqual(onScreen, CGRect(x: 730, y: 94, width: 220, height: 40), "y flips: 80 + 92 - 78")
+        // Inside the pill: its center and near its corners.
+        for p in [CGPoint(x: 840, y: 114), CGPoint(x: 731, y: 95), CGPoint(x: 949, y: 133)] {
+            XCTAssertTrue(OverlayLayout.takesClick(panel: panel, pill: pill, mouse: p), "\(p) is on the pill")
+        }
+        // Inside the panel but outside the pill: right, left, above, and the shadow room under it.
+        for p in [CGPoint(x: 1000, y: 114), CGPoint(x: 650, y: 114), CGPoint(x: 840, y: 160), CGPoint(x: 840, y: 85)] {
+            XCTAssertTrue(panel.contains(p), "\(p) is inside the window")
+            XCTAssertFalse(OverlayLayout.takesClick(panel: panel, pill: pill, mouse: p), "\(p) goes to the app behind")
+        }
+        // Outside the window, and before SwiftUI drew the pill: nothing.
+        XCTAssertFalse(OverlayLayout.takesClick(panel: panel, pill: pill, mouse: CGPoint(x: 100, y: 100)))
+        XCTAssertFalse(OverlayLayout.takesClick(panel: panel, pill: nil, mouse: CGPoint(x: 840, y: 114)))
+        XCTAssertFalse(OverlayLayout.takesClick(panel: panel, pill: .zero, mouse: CGPoint(x: 600, y: 172)))
+        // The dictation panel (360×64) with its 40 pt pill: the same rule.
+        let dictation = CGRect(x: 660, y: 70, width: 360, height: 64)
+        let dictationPill = CGRect(x: 120, y: 10, width: 120, height: 40)
+        XCTAssertTrue(OverlayLayout.takesClick(panel: dictation, pill: dictationPill, mouse: CGPoint(x: 840, y: 104)))
+        XCTAssertFalse(OverlayLayout.takesClick(panel: dictation, pill: dictationPill, mouse: CGPoint(x: 700, y: 104)))
+    }
+
     func testErrorTextForKnownCodes() {
         XCTAssertEqual(OverlayText.error("no_input_device"), "Nenhum microfone encontrado")
         XCTAssertEqual(OverlayText.error("microphone_undetermined"), "Permita o microfone e tente de novo")

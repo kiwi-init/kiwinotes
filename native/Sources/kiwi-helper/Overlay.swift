@@ -96,15 +96,9 @@ final class Overlay {
     }
 
     private func updateMouse() {
-        guard let panel, let pill = state.pillFrame else { return }
-        // SwiftUI's frame is top-left based inside the panel; the screen is bottom-left based.
-        let onScreen = CGRect(
-            x: panel.frame.minX + pill.minX,
-            y: panel.frame.maxY - pill.maxY,
-            width: pill.width,
-            height: pill.height
-        )
-        let over = onScreen.contains(NSEvent.mouseLocation)
+        guard let panel, state.pillFrame != nil else { return }
+        // The same rule as the meeting panel (spec #12845): only the pill takes the click.
+        let over = OverlayLayout.takesClick(panel: panel.frame, pill: state.pillFrame, mouse: NSEvent.mouseLocation)
         if panel.ignoresMouseEvents == over { panel.ignoresMouseEvents = !over }
     }
 
