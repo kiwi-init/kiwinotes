@@ -1,6 +1,10 @@
-// T6383: os callouts do Obsidian, sem DOM.
+// T6383: os callouts do Obsidian, sem DOM (o ícone sai em texto, pelo renderToStaticMarkup).
 import { describe, expect, test } from "bun:test";
 
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { CALLOUT_ICONS, CalloutIcon } from "./calloutIcons.tsx";
 import { CALLOUT_KINDS, calloutAt, calloutKind, parseCallout } from "./callouts.ts";
 
 describe("os tipos", () => {
@@ -11,7 +15,12 @@ describe("os tipos", () => {
     expect(CALLOUT_KINDS.map((k) => k.title)).toEqual([
       "Nota", "Resumo", "Info", "A fazer", "Dica", "Sucesso", "Pergunta", "Atenção", "Falha", "Perigo", "Bug", "Exemplo", "Citação",
     ]);
-    expect(new Set(CALLOUT_KINDS.map((k) => k.glyph)).size).toBe(13);
+    // Cada tipo com o seu ícone desenhado (spec #12626): 13 desenhos distintos, nenhum glifo de texto.
+    const drawn = CALLOUT_KINDS.map((k) => renderToStaticMarkup(createElement(CalloutIcon, { kind: k.id })));
+    expect(new Set(drawn).size).toBe(13);
+    for (const svg of drawn) expect(svg).toStartWith("<svg");
+    expect(CALLOUT_KINDS.every((k) => k.id in CALLOUT_ICONS)).toBe(true);
+    expect(CALLOUT_KINDS.some((k) => "glyph" in k)).toBe(false);
   });
 
   test("os outros nomes vão para o tipo deles, sem diferença de maiúscula; o desconhecido desenha como nota", () => {

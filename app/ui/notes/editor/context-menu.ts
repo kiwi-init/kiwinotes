@@ -82,7 +82,8 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
     })) }, { kind: "separator" }] : [];
   const callout = calloutAt(chosenState.doc.toString(), chosenState.selection.main.head);
   const calloutItems: MenuItem[] = callout ? [{ kind: "submenu", label: "Tipo do callout", items: CALLOUT_KINDS.map((kind): MenuItem => ({
-    label: `${kind.glyph}  ${kind.title}`,
+    // Só o título (spec #12626): o menu é de texto, e o glifo saiu.
+    label: kind.title,
     checked: kind.id === callout.kind.id,
     onSelect: perform(() => view.dispatch({ changes: { from: callout.from, to: callout.to, insert: kind.id }, userEvent: "input.type" })),
   })) }, { kind: "separator" }] : [];

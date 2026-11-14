@@ -1,5 +1,5 @@
 // Os callouts do Obsidian (T6383, E8, issue 184): os 13 tipos com os títulos em PT, o `+`/`-` que recolhe e trocar o
-// tipo pelo menu. Sem DOM: o desenho fica em `renderedWidget.tsx`. Referência de comportamento: Obsidian e SilverBullet
+// tipo pelo menu. Sem DOM: o desenho fica em `renderedWidget.tsx`, e o ícone de cada tipo em `calloutIcons.tsx`. Referência de comportamento: Obsidian e SilverBullet
 // `codemirror/syntax/admonition.ts` (MIT), só como ideia.
 
 export type CalloutTone = "accent" | "danger" | "neutral";
@@ -8,24 +8,23 @@ export interface CalloutKind {
   id: string;
   /** O título quando a nota não escreve um. */
   title: string;
-  glyph: string;
   tone: CalloutTone;
 }
 
 export const CALLOUT_KINDS: readonly CalloutKind[] = [
-  { id: "note", title: "Nota", glyph: "✎", tone: "accent" },
-  { id: "abstract", title: "Resumo", glyph: "≡", tone: "accent" },
-  { id: "info", title: "Info", glyph: "i", tone: "accent" },
-  { id: "todo", title: "A fazer", glyph: "☐", tone: "accent" },
-  { id: "tip", title: "Dica", glyph: "✦", tone: "accent" },
-  { id: "success", title: "Sucesso", glyph: "✓", tone: "accent" },
-  { id: "question", title: "Pergunta", glyph: "?", tone: "neutral" },
-  { id: "warning", title: "Atenção", glyph: "!", tone: "danger" },
-  { id: "failure", title: "Falha", glyph: "✕", tone: "danger" },
-  { id: "danger", title: "Perigo", glyph: "⚡\uFE0E", tone: "danger" },
-  { id: "bug", title: "Bug", glyph: "✱", tone: "danger" },
-  { id: "example", title: "Exemplo", glyph: "▤", tone: "neutral" },
-  { id: "quote", title: "Citação", glyph: "❝", tone: "neutral" },
+  { id: "note", title: "Nota", tone: "accent" },
+  { id: "abstract", title: "Resumo", tone: "accent" },
+  { id: "info", title: "Info", tone: "accent" },
+  { id: "todo", title: "A fazer", tone: "accent" },
+  { id: "tip", title: "Dica", tone: "accent" },
+  { id: "success", title: "Sucesso", tone: "accent" },
+  { id: "question", title: "Pergunta", tone: "neutral" },
+  { id: "warning", title: "Atenção", tone: "danger" },
+  { id: "failure", title: "Falha", tone: "danger" },
+  { id: "danger", title: "Perigo", tone: "danger" },
+  { id: "bug", title: "Bug", tone: "danger" },
+  { id: "example", title: "Exemplo", tone: "neutral" },
+  { id: "quote", title: "Citação", tone: "neutral" },
 ];
 
 /** Os outros nomes que o Obsidian aceita, no tipo deles. */

@@ -251,7 +251,9 @@ button.kn-side-head:focus-visible {
   flex-wrap: wrap;
   gap: 6px;
   margin: 0 0 10px;
-  font: var(--t-stamp) / 1.4 var(--mono);
+  /* O polimento do unslop (spec #12626): a fonte da UI, um passo menor que o texto, e os números alinhados. */
+  font: var(--t-meta) / 1.4 var(--ui, var(--font));
+  font-variant-numeric: tabular-nums;
   color: var(--ink-3, var(--text-3));
 }
 
@@ -286,7 +288,9 @@ button.kn-side-head:focus-visible {
   align-items: baseline;
   gap: 4px 12px;
   margin: 0 0 30px;
-  font: var(--t-stamp) / 1.4 var(--mono);
+  /* O polimento do unslop (spec #12626): a fonte da UI, um passo menor que o texto, e os números alinhados. */
+  font: var(--t-meta) / 1.4 var(--ui, var(--font));
+  font-variant-numeric: tabular-nums;
   color: var(--ink-3, var(--text-3));
 }
 
