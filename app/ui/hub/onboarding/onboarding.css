@@ -100,6 +100,7 @@
 .kn-onb-control, .kn-onb-tone, .kn-onb-guard { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
 .kn-onb-row { overflow: hidden; border: 1px solid var(--border); border-radius: var(--r-row, 8px); background: var(--surface); }
 .kn-onb-try { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin: 0; min-height: 32px; font-size: var(--text-md); }
+.kn-onb-try kbd { white-space: nowrap; flex: none; } /* "⌥ direito" numa linha só (T13145) */
 .kn-onb-try[data-phase="answered"] { color: var(--accent-text, var(--accent)); font-weight: 500; }
 /* Passo 3: as duas escolhas lado a lado, a pergunta e a resposta de exemplo como o balão do gato. */
 .kn-onb-tone-pick { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-3); }

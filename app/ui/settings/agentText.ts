@@ -223,17 +223,19 @@ export function webHint(s: Pick<AgentStatus, "webSearch">): string {
   return s.webSearch ? `Ligado. ${what} O balão mostra quando ele está na web.` : `Desligado: o Kiwi recusa a busca e a leitura de páginas do agente. ${what}`;
 }
 
-/** O atalho Control (spec #9876), em Ajustes › Agente. */
-export const CONTROL_LABEL = "Falar com o agente pelo Control";
+/** Falar com o Kiwi Cat (spec #9876; o atalho escolhido, #12946), em Ajustes › Agente. */
+export const CONTROL_LABEL = "Falar com o Kiwi Cat";
 
 /**
- * A dica da linha do Control. `blocked`: o ditado já está num Control, e o do agente fica desligado. Sempre o aviso do
- * Ditado da Apple, que em alguns Macs usa "pressionar Control duas vezes": o Kiwi não mexe nos ajustes do sistema.
+ * A dica da linha. `hold`: como a frase chama o atalho ("o Control", "⌃⌥Espaço"). `blocked`: o ditado está nas mesmas
+ * teclas, e o do Kiwi Cat fica desligado. Com um Control, o aviso do Ditado da Apple, que em alguns Macs usa "pressionar
+ * Control duas vezes": o Kiwi não mexe nos ajustes do sistema.
  */
-export function controlHint(blocked: boolean): string {
-  if (blocked) return "O ditado já usa o Control (Ajustes › Atalhos). Troque a tecla do ditado para ligar este.";
-  return (
-    "Segure o Control para falar com o agente e solte para mandar; dois toques fixam a escuta, e o Esc cancela. " +
-    "O ditado da Apple pode usar \"pressionar Control duas vezes\": troque em Ajustes do Sistema › Teclado › Ditado › Atalho."
-  );
+export function controlHint(blocked: boolean, hold = "o Control", controlAlone = true): string {
+  if (blocked) return `O ditado já usa ${hold} (Ajustes › Atalhos). Escolha outro atalho embaixo, ou troque o do ditado.`;
+  const base = `Segure ${hold} para falar com o Kiwi Cat e solte para mandar. O microfone só abre enquanto você segura; o Esc cancela.`;
+  // O aviso só vale para o Control sozinho: o Ditado da Apple não usa uma combinação.
+  return controlAlone
+    ? `${base} O ditado da Apple pode usar "pressionar Control duas vezes": troque em Ajustes do Sistema › Teclado › Ditado › Atalho.`
+    : base;
 }

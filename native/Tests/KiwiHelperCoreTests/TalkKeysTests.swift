@@ -14,6 +14,38 @@ final class AgentControlKeyTests: XCTestCase {
         return e
     }
 
+    // Spec #12946: the person chooses the Kiwi Cat's shortcut; the helper listens to that one, held to talk.
+    func testAChosenModifierTalksAndTheControlNoLonger() {
+        var e = ShortcutEngine<Int>()
+        e.setBindings([(id: "dictation", shortcut: .key(.fn)), (id: "agent", shortcut: Shortcut("rightOption")!)])
+        let option: Int64 = 61, optionBit: UInt64 = 0x40 | 0x80000
+        XCTAssertEqual(e.handle(.flags(keyCode: option, flags: optionBit), payload: 0, at: 0).outputs, [.press("agent", flags: optionBit)])
+        XCTAssertEqual(e.handle(.flags(keyCode: option, flags: 0), payload: 0, at: 1).outputs, [.release("agent", clean: true)])
+        XCTAssertEqual(e.handle(.flags(keyCode: left, flags: leftBit), payload: 0, at: 2).outputs, [], "the Control is nobody's now")
+        XCTAssertEqual(e.handle(.flags(keyCode: left, flags: 0), payload: 0, at: 3).outputs, [])
+    }
+
+    func testAChosenCombinationIsHeldToTalk() {
+        var e = ShortcutEngine<Int>()
+        e.setBindings([(id: "dictation", shortcut: .key(.fn)), (id: "agent", shortcut: Shortcut("control+option+space")!)])
+        let space: Int64 = 49, held: UInt64 = 0x40000 | 0x80000 | 0x1 | 0x20
+        let down = e.handle(.keyDown(keyCode: space, flags: held, autorepeat: false), payload: 0, at: 0)
+        XCTAssertEqual(down.outputs, [.press("agent", flags: held)])
+        XCTAssertTrue(down.consume, "the app in front never sees ⌃⌥Space")
+        XCTAssertEqual(e.handle(.keyDown(keyCode: space, flags: held, autorepeat: true), payload: 0, at: 0.4).outputs, [], "held, it repeats: still one talk")
+        XCTAssertEqual(e.handle(.keyUp(keyCode: space, flags: held), payload: 0, at: 1).outputs, [.release("agent", clean: true)])
+    }
+
+    func testTheKiwiCatAndTheDictationOnTheSameKeys() {
+        XCTAssertTrue(Shortcut.shareKeys(Shortcut("control"), Shortcut("rightControl")), "both Controls hold the right one")
+        XCTAssertTrue(Shortcut.shareKeys(Shortcut("control"), Shortcut("double:rightControl")))
+        XCTAssertTrue(Shortcut.shareKeys(Shortcut("rightOption"), Shortcut("rightOption")))
+        XCTAssertTrue(Shortcut.shareKeys(Shortcut("control+option+space"), Shortcut("control+option+space")))
+        XCTAssertFalse(Shortcut.shareKeys(Shortcut("control"), Shortcut("fn")))
+        XCTAssertFalse(Shortcut.shareKeys(Shortcut("control"), Shortcut("control+option+v")), "a combination with ⌃ is another shortcut")
+        XCTAssertFalse(Shortcut.shareKeys(Shortcut("rightOption"), nil))
+    }
+
     func testTheTextIsControl() {
         XCTAssertEqual(Shortcut("control"), .key(.control))
         XCTAssertEqual(Shortcut("control")?.spec, "control")

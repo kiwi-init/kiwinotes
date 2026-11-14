@@ -126,3 +126,41 @@ describe("o cancelar do ditado (L5, T5458)", () => {
     expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { cancel: "delete" })).toEqual({ ok: true, patch: { cancel: "delete" } });
   });
 });
+
+describe("o atalho do Kiwi Cat (spec #12946)", () => {
+  test("o padrão é o Control; vale uma tecla sozinha ou uma combinação, segurada", () => {
+    expect(DEFAULT_SHORTCUTS.agent).toBe("control");
+    expect(shortcutLabel("control")).toBe("Control");
+    for (const ok of ["control", "rightControl", "rightOption", "rightCommand", "control+option+space", "f5"]) expect(isShortcutFor("agent", ok)).toBe(true);
+    for (const bad of ["double:rightOption", "control+k r", "escape", "a"]) expect(isShortcutFor("agent", bad)).toBe(false);
+    // O `control` (os dois Controls) só vale para ele: o ditado continua com o ⌃ direito.
+    for (const id of ["dictation", "notes", "meeting"] as const) expect(isShortcutFor(id, "control")).toBe(false);
+    expect(sanitizeShortcuts({}).agent).toBe("control");
+    expect(sanitizeShortcuts({ agent: "double:rightOption" }).agent).toBe("control");
+  });
+
+  test("um atalho que repete outro do Kiwi é recusado, nos dois sentidos", () => {
+    // Os dois Controls ocupam o ⌃ direito do ditado.
+    expect(shortcutsConflict("control", "rightControl")).toBe(true);
+    expect(shortcutsConflict("control", "double:rightControl")).toBe(true);
+    expect(shortcutsConflict("control", "fn")).toBe(false);
+    expect(shortcutsConflict("control", "control+option+v")).toBe(false);
+    expect(conflictOf(DEFAULT_SHORTCUTS, "agent", "control+option+r")).toBe("meeting");
+    expect(conflictOf({ ...DEFAULT_SHORTCUTS, dictation: "rightControl" }, "agent", "control")).toBe("dictation");
+    expect(conflictOf(DEFAULT_SHORTCUTS, "dictation", "rightControl")).toBe("agent");
+    expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { agent: "fn" })).toMatchObject({ ok: false });
+    expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { agent: "rightOption" })).toEqual({ ok: true, patch: { agent: "rightOption" } });
+  });
+
+  test("um arquivo de antes, com o ditado no ⌃ direito: os outros atalhos continuam mudando (revisão do T13145)", () => {
+    // Antes do #12946, o ditado podia ficar no ⌃ direito (o Control do agente só desarmava). O Kiwi Cat entra no Control.
+    const before = sanitizeShortcuts({ dictation: "rightControl" });
+    expect([before.dictation, before.agent]).toEqual(["rightControl", "control"]);
+    expect(checkShortcutsPatch(before, { meeting: "control+option+g" })).toEqual({ ok: true, patch: { meeting: "control+option+g" } });
+    // Escolher outro atalho para o Kiwi Cat resolve; repetir o do ditado, não.
+    expect(checkShortcutsPatch(before, { agent: "rightOption" })).toEqual({ ok: true, patch: { agent: "rightOption" } });
+    expect(checkShortcutsPatch(before, { agent: "control" })).toMatchObject({ ok: false });
+    // Trocar o ditado para o Fn também resolve.
+    expect(checkShortcutsPatch(before, { dictation: "fn" })).toEqual({ ok: true, patch: { dictation: "fn" } });
+  });
+});

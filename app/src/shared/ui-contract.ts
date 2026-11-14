@@ -203,7 +203,9 @@ export type { NoteModel };
 //   `agent.routineDelete`; o `agent.routineRun` aceita `{id}`; o evento `agent.routine` de uma nova leva `kind: "custom"`,
 //   o `id` e o `name`. A proposta `kind: "routine"` (a ferramenta `routine_propose`), com a `routine`, e o
 //   `agent.proposalApply` dela aceita a `routine` ajustada ([Ajustar]). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.69.0";
+// 1.70.0 (T13145, spec #12946): o `shortcuts.agent` nas settings, o atalho de falar com o Kiwi Cat (padrão `control`,
+//   os dois Controls; uma tecla modificadora sozinha ou uma combinação). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.70.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */

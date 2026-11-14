@@ -47,6 +47,23 @@ public enum Shortcut: Hashable, Sendable {
         self = steps.count == 1 ? .combo(steps[0]) : .sequence(steps)
     }
 
+    /// The modifier key this shortcut holds on its own (a key, or the key of a double tap), if any.
+    public var modifierKey: HotkeyKey? {
+        switch self {
+        case .key(let key), .doubleTap(let key): return key
+        case .combo, .sequence: return nil
+        }
+    }
+
+    /// Spec #12946: the Kiwi Cat's shortcut and the dictation's are on the same keys (the same text, or modifier keys
+    /// that share a key code: `.control` is both Controls, so it also holds the ⌃ right). The app refuses to save two
+    /// such shortcuts; this covers a settings file from before.
+    public static func shareKeys(_ a: Shortcut?, _ b: Shortcut?) -> Bool {
+        guard let a, let b else { return false }
+        if let ka = a.modifierKey, let kb = b.modifierKey { return !ka.keyCodes.isDisjoint(with: kb.keyCodes) }
+        return a == b
+    }
+
     /// `fn`, `rightOption`… in any case.
     private static func modifierKey(_ name: String) -> HotkeyKey? {
         HotkeyKey.allCases.first { $0.rawValue.lowercased() == name.lowercased() }

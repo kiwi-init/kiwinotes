@@ -112,7 +112,7 @@ try {
       // Passo 2 (T12002): a linha do Control de Ajustes liga o atalho, e a frase pede para segurar o Control.
       // O hub atrás fica inerte (fora do Tab, do clique e do VoiceOver) enquanto o onboarding está aberto.
       assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll<HTMLElement>(".kn-hub-top, .kn-hub-main")].map((el) => el.inert)), [true, true]);
-      await p.getByRole("dialog").getByRole("switch", { name: "Falar com o agente pelo Control" }).click();
+      await p.getByRole("dialog").getByRole("switch", { name: "Falar com o Kiwi Cat" }).click();
       await p.waitForSelector(".kn-onb-try kbd", { timeout: 15000 });
       assert.equal((await invoke("agent.status")).controlShortcut, true);
       await shot(p, "2-control-light.png");
