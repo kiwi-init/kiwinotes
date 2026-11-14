@@ -60,6 +60,7 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
 
   useEffect(() => onShown?.(changes.length > 0), [changes.length > 0]);
   const showing = changes.length > 0 && !hidden;
+  const warn = changes.some((c) => c.action === "full" || c.action === "over");
   // O tempo conta só com o balão na tela (spec #12749): ele espera o balão da resposta sair, e uma resposta longa não o
   // faz sumir antes de aparecer. Uma mudança nova ou um [Desfazer] recomeça a conta.
   useEffect(() => {
@@ -82,23 +83,34 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
               <li key={c.id} className="kn-memory-item">
                 <span className="kn-memory-line">{memoryBubbleLine(c)}</span>
                 {!c.undone && c.action !== "full" && c.action !== "over" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
-                {(c.action === "full" || c.action === "over") && nav ? (
-                  <Button
-                    onClick={() => {
-                      close();
-                      nav.openSettings("agent", MEMORY_TITLE);
-                    }}
-                  >
-                    Abrir a memória
-                  </Button>
-                ) : null}
               </li>
             ))}
           </ul>
           {failure ? <p className="kn-memory-note">{failure}</p> : null}
-          <div className="kn-memory-actions">
-            <Button onClick={close}>Ok</Button>
-          </div>
+          {/* O aviso (a memória cheia ou acima do limite) tem uma ação principal, numa linha embaixo do texto, como o balão
+              da proposta: [Abrir a memória], e o Ok em texto (revisão do T12771). */}
+          {warn ? (
+            <div className="kn-memory-actions" data-warn="true">
+              {nav ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    close();
+                    nav.openSettings("agent", MEMORY_TITLE);
+                  }}
+                >
+                  Abrir a memória
+                </Button>
+              ) : null}
+              <Button data-role="dismiss" onClick={close}>
+                Ok
+              </Button>
+            </div>
+          ) : (
+            <div className="kn-memory-actions">
+              <Button onClick={close}>Ok</Button>
+            </div>
+          )}
         </div>
       ) : null}
     </BubblePresence>
