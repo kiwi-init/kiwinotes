@@ -40,6 +40,8 @@ export interface SummaryFields {
 }
 
 export const SUMMARY_TITLE = "Resumo executivo";
+/** A marca com o dia do resumo, logo abaixo do título da seção. */
+const SUMMARY_MARK = (day: string) => `<!-- kiwi:resumo ${day} -->`;
 const SIGNAL: Record<SummarySignal, string> = { verde: "🟢 No rumo", amarelo: "🟡 Atenção", vermelho: "🔴 Travado" };
 
 const noMd = (p: string) => p.replace(/\.md$/i, "");
@@ -54,7 +56,8 @@ const link = (path: string) => `[[${noMd(path)}|${linkSafeName(noMd(path).split(
 /** A seção "Resumo executivo", com os blocos ligados na ordem fixa. `today` é o dia local, `AAAA-MM-DD`. */
 export function summarySection(f: SummaryFields, s: SummarySettings, today: string): string {
   const b = s.blocks;
-  const parts: string[] = [`## ${SUMMARY_TITLE}`];
+  // A data do resumo num comentário (não aparece na leitura): o próximo conta "desde" ela, com qualquer bloco ligado.
+  const parts: string[] = [`## ${SUMMARY_TITLE}\n${SUMMARY_MARK(today)}`];
   if (b.situacao) parts.push(`**Situação:** ${SIGNAL[f.signal]} · ${dayOf(today)}${f.status ? ` · ${oneLine(f.status)}` : ""}`);
   const list = (title: string, lines: string[]) => {
     if (lines.length) parts.push(`### ${title}\n\n${lines.join("\n")}`);
@@ -113,12 +116,18 @@ export function mainNoteWithSummary(content: string, section: string): string {
   return `${before}${before && !before.endsWith("\n\n") ? "\n" : ""}${section}${after ? `\n${after}` : ""}`;
 }
 
-/** O dia do último resumo, pela linha "Situação" da seção; null sem resumo. */
+/**
+ * O dia do último resumo: pela marca da seção (`<!-- kiwi:resumo AAAA-MM-DD -->`), que vale com qualquer bloco
+ * desligado; sem ela (uma seção escrita à mão), pela linha "Situação". null sem resumo.
+ */
 export function lastSummaryDate(content: string): string | null {
   const headings = markdownStructure(content).headings;
   const old = existingSection(content, headings);
   if (!old) return null;
-  const m = /\*\*Situação:\*\*[^\n]*?(\d{2})\/(\d{2})\/(\d{4})/.exec(content.slice(old.from, old.to));
+  const section = content.slice(old.from, old.to);
+  const mark = /<!--\s*kiwi:resumo\s+(\d{4}-\d{2}-\d{2})\s*-->/.exec(section);
+  if (mark) return mark[1]!;
+  const m = /\*\*Situação:\*\*[^\n]*?(\d{2})\/(\d{2})\/(\d{4})/.exec(section);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 }
 

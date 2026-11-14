@@ -116,7 +116,7 @@ try {
   await q.locator(".kn-proposal-big button:has-text('Aplicar')").click();
   await q.waitForSelector(".kn-proposal-bubble button:has-text('Desfazer')", { timeout: 15000 });
   const after = await note(MAIN_PATH);
-  assert.ok(after.startsWith("# Migração\n\n## Resumo executivo\n\n**Situação:** 🟡 Atenção"), after);
+  assert.ok(/^# Migração\n\n## Resumo executivo\n<!-- kiwi:resumo \d{4}-\d{2}-\d{2} -->\n\n\*\*Situação:\*\* 🟡 Atenção/.test(after), after);
   assert.ok(after.endsWith("A migração do arquivo antigo para o PACS novo.\n\n## Pendências\n\n- [ ] Pedir o acesso ao bucket\n"), after);
   await cornerShot(q, ".kn-proposal-bubble", "3-aplicado.png", "3. [Aplicar]: a seção no topo da nota principal, com [Desfazer]");
   await Bun.sleep(1200);

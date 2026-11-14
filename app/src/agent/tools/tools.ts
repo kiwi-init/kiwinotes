@@ -1145,6 +1145,10 @@ const SIGNALS: readonly SummarySignal[] = ["verde", "amarelo", "vermelho"];
 async function proposeSummary(reader: VaultReader, sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
   const a = args(raw, ["projeto", "candidatos", "situacao", "linha", "andou", "decisoes", "riscos", "proximosPassos", "reunioes"]);
   const { project, candidates } = await projectChoice(reader, a);
+  // O resumo vai na nota principal de um projeto: sem projeto, ou sem a nota, o agente diz à pessoa, sem balão.
+  if (!project && !candidates.length) throw new ToolError("E_BAD_ARGS", "mande o projeto, ou os candidatos na dúvida; veja os projetos com projects_list");
+  if (project && !project.main)
+    throw new ToolError("E_NO_MAIN_NOTE", `o projeto ${project.name} não tem nota principal: a pessoa marca uma em Notas, no projeto. Diga isso a ela; não há resumo sem a nota.`);
   const signal = str(a, "situacao", true, 20) as SummarySignal;
   if (!SIGNALS.includes(signal)) throw new ToolError("E_BAD_ARGS", "situacao é verde, amarelo ou vermelho");
   const clean = (o: Record<string, unknown>, key: string, required: boolean, max: number, where: string) => {

@@ -1377,7 +1377,7 @@ describe("o resumo executivo de um projeto (spec #11546)", () => {
     expect(v.notes[MAIN]).not.toContain("### Decisões");
   });
 
-  test("com o projeto ambíguo, o resumo pergunta; escolhido, conta o período e aplica; sem projeto não dá", async () => {
+  test("com o projeto ambíguo, o resumo pergunta; escolhido, conta o período e aplica; sem projeto ou sem nota principal não dá", async () => {
     const v = vault(MAIN_TEXT, [project("Projetos/Migração", "Migração", MAIN), project("Projetos/Migração VNA", "Migração VNA", null)]);
     const m = make({ reader: v.reader, writer: v.writer });
     await readyNow(m);
@@ -1386,11 +1386,23 @@ describe("o resumo executivo de um projeto (spec #11546)", () => {
     expect(p).toMatchObject({ kind: "summary", project: null, candidates: [{ folder: "Projetos/Migração" }, { folder: "Projetos/Migração VNA" }], summary: { since: "" } });
     await expect(m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
     await expect(m.svc.proposalChoose(p!.id, null)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    // Um candidato sem nota principal é recusado na escolha, não no [Aplicar]; a pergunta continua aberta.
+    await expect(m.svc.proposalChoose(p!.id, "Projetos/Migração VNA")).rejects.toThrow("não tem nota principal");
+    expect((await m.svc.proposalsList())[0]).toMatchObject({ project: null, candidates: [{}, {}] });
     const chosen = await m.svc.proposalChoose(p!.id, "Projetos/Migração");
     expect(chosen).toMatchObject({ project: { folder: "Projetos/Migração" }, candidates: [] });
     expect(chosen.summary!.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await m.svc.proposalApply(p!.id);
     expect(v.notes[MAIN]).toContain("## Resumo executivo");
+  });
+
+  test("um projeto sem nota principal: a ferramenta recusa, o agente diz, e nenhum balão nasce", async () => {
+    const v = vault(MAIN_TEXT, [project("Projetos/Migração", "Migração", null)]);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    const turn = await askAndWait(m, ASK);
+    expect((turn.at(-1) as { text: string }).text).toContain("não tem nota principal");
+    expect(await m.svc.proposalsList()).toEqual([]);
   });
 
   test("com o modo econômico, pergunta antes de gastar: o não para tudo, o sim segue", async () => {

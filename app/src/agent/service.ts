@@ -833,6 +833,8 @@ export class AgentService {
       const chosen = folder === null ? null : p.candidates.find((c) => c.folder === folder);
       if (chosen === undefined) throw new AgentServiceError("E_BAD_ARGS", "Esse projeto não é um dos candidatos da proposta.");
       if (p.kind === "summary" && !chosen) throw new AgentServiceError("E_BAD_ARGS", "O resumo executivo é de um projeto: escolha um dos candidatos.");
+      if (p.kind === "summary" && chosen && !chosen.main)
+        throw new AgentServiceError("E_BAD_ARGS", `${chosen.name} não tem nota principal: marque uma em Notas, no projeto, e peça o resumo de novo.`);
       const since = p.kind === "summary" && chosen ? await this.summarySinceFor(chosen) : null;
       const next = this.proposals.update(id, (x) => {
         x.project = chosen;

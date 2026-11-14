@@ -332,6 +332,13 @@ describe("a ferramenta project_summary_propose (spec #11546)", () => {
     await expect(call(c, { decisoes: [{ texto: "X", data: "11/11/2026", fonte: MEETING.path }] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
     await expect(call(c, { andou: [{ texto: "  ", fonte: MEETING.path }] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
     await expect(call(c, { extra: 1 })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    // Sem projeto nem candidatos, ou com um projeto sem nota principal: o agente fica sabendo, e nenhum balão nasce.
+    await expect(runKiwiTool(c, "project_summary_propose", { situacao: "verde" })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    const noMain: VaultReader = { ...reader, projects: async () => [{ ...project("Projetos/Solto", "Solto"), main: null }] };
+    await expect(runKiwiTool({ ...c, reader: noMain }, "project_summary_propose", { projeto: "Solto", situacao: "verde" })).rejects.toMatchObject({
+      code: "E_NO_MAIN_NOTE",
+      message: expect.stringContaining("não tem nota principal"),
+    });
     expect(got).toHaveLength(1);
   });
 

@@ -66,6 +66,18 @@ describe("o resumo executivo", () => {
     expect(summarySince(null, DEFAULT_SUMMARY_SETTINGS, new Date(2026, 10, 13, 12))).toBe("2026-10-30");
   });
 
+  test("com a Situação desligada, o próximo resumo ainda conta desde o anterior (pela marca da seção)", () => {
+    const off = { ...DEFAULT_SUMMARY_SETTINGS, blocks: { ...DEFAULT_SUMMARY_SETTINGS.blocks, situacao: false } };
+    const first = mainNoteWithSummary("# Kiwi\n", summarySection(FIELDS, off, "2026-11-06"));
+    expect(first).not.toContain("**Situação:**");
+    expect(first).toContain("## Resumo executivo\n<!-- kiwi:resumo 2026-11-06 -->\n");
+    expect(summarySince(first, off, new Date(2026, 10, 13, 12))).toBe("2026-11-06");
+    // O segundo troca a marca junto com a seção.
+    const second = mainNoteWithSummary(first, summarySection(FIELDS, off, "2026-11-13"));
+    expect(lastSummaryDate(second)).toBe("2026-11-13");
+    expect(second.match(/kiwi:resumo/g)).toHaveLength(1);
+  });
+
   test("os Ajustes saneados: tudo ligado e 14 dias por padrão", () => {
     expect(sanitizeSummarySettings(undefined)).toEqual(DEFAULT_SUMMARY_SETTINGS);
     expect(sanitizeSummarySettings({ blocks: { riscos: false }, firstDays: 30 })).toEqual({ blocks: { ...DEFAULT_SUMMARY_SETTINGS.blocks, riscos: false }, firstDays: 30 });
