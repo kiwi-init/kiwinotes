@@ -19,9 +19,14 @@ export const isTextNote = (path: string) => /\.txt$/i.test(path);
 /** O título de um `.txt`: o nome sem a extensão. */
 export const textNoteTitle = (path: string) => (path.split("/").pop() ?? path).replace(/\.txt$/i, "");
 
-/** Quantos `.txt` a busca abre, no máximo, e o maior que ela lê (os maiores entram só pelo nome). */
+/**
+ * Os limites da busca nos `.txt` (spec #13379): quantos ela olha, o maior que ela lê, e quanto lê no total por busca
+ * (revisão do #524: sem o total, 400 arquivos de 512 KB davam uns 200 MB por busca). Passado um limite, o resto casa
+ * só pelo nome.
+ */
 export const TEXT_SEARCH_FILES = 400;
 export const TEXT_SEARCH_MAX_BYTES = 512 * 1024;
+export const TEXT_SEARCH_TOTAL_BYTES = 4 * 1024 * 1024;
 
 export interface ReaderHit {
   path: string;
@@ -46,8 +51,8 @@ function textSnippet(text: string, words: string[]): string {
 
 /**
  * A busca nos `.txt` (spec #13379): todas as palavras no caminho ou no texto, sem diferenciar maiúscula nem acento. O
- * `path:pasta` da busca vale aqui também. Lê no máximo `TEXT_SEARCH_FILES` arquivos, de até `TEXT_SEARCH_MAX_BYTES`; um
- * maior só casa pelo nome.
+ * `path:pasta` da busca vale aqui também. Olha no máximo `TEXT_SEARCH_FILES` arquivos e lê os de até
+ * `TEXT_SEARCH_MAX_BYTES`, até `TEXT_SEARCH_TOTAL_BYTES` no total; o que passa disso só casa pelo nome.
  */
 export async function searchTextNotes(
   query: string,
@@ -59,12 +64,16 @@ export async function searchTextNotes(
   const inPath = fold(query).match(/(?:^|\s)path:("[^"]+"|\S+)/)?.[1]?.replace(/^"|"$/g, "");
   if (!words.length && !inPath) return [];
   const hits: ReaderHit[] = [];
+  let budget = TEXT_SEARCH_TOTAL_BYTES;
   for (const f of files.filter((x) => isTextNote(x.path)).slice(0, TEXT_SEARCH_FILES)) {
     if (hits.length >= limit) break;
     const where = fold(f.path);
     if (inPath && !where.startsWith(`${inPath.replace(/\/+$/, "")}/`)) continue;
     let text = "";
-    if (words.some((w) => !where.includes(w)) && f.size <= TEXT_SEARCH_MAX_BYTES) text = (await read(f.path)) ?? "";
+    if (words.some((w) => !where.includes(w)) && f.size <= TEXT_SEARCH_MAX_BYTES && f.size <= budget) {
+      budget -= f.size;
+      text = (await read(f.path)) ?? "";
+    }
     const all = `${where}\n${fold(text)}`;
     if (!words.every((w) => all.includes(w))) continue;
     hits.push({ path: f.path, title: textNoteTitle(f.path), snippet: text ? textSnippet(text, words) : "" });

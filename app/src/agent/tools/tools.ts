@@ -269,7 +269,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_write",
     title: "Trocar o texto de uma nota",
-    description: `Troca o texto de uma seção, ou da nota inteira. Mande a versao do notes_read: se a nota mudou depois, nada é escrito e você lê de novo. Com section, troca só o que está abaixo do título. Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para mais, troque por seção. O texto de antes fica nas Versões. Num .txt, o Kiwi pergunta antes à pessoa; com o não, nada muda, e você sugere na resposta um .md organizado ao lado.`,
+    description: `Troca o texto de uma seção, ou da nota inteira. Mande a versao do notes_read: se a nota mudou depois, nada é escrito e você lê de novo. Com section, troca só o que está abaixo do título. Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para mais, troque por seção. O texto de antes fica nas Versões (num .txt, no registro do [Desfazer]). Num .txt, o Kiwi pergunta antes à pessoa; com o não, nada muda, e você sugere na resposta um .md organizado ao lado.`,
     inputSchema: {
       type: "object",
       properties: {

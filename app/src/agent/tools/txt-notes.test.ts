@@ -191,6 +191,18 @@ describe("a pasta pelo nome (spec #13379)", () => {
 });
 
 describe("a busca nos .txt (spec #13379)", () => {
+  test("lê no máximo 4 MB por busca (revisão do #524): passado o total, o resto casa só pelo nome", async () => {
+    const files = Array.from({ length: 20 }, (_, i) => ({ path: `a/nota-${i}.txt`, size: 500 * 1024, mtime: "" }));
+    files.push({ path: "a/legado-no-nome.txt", size: 500 * 1024, mtime: "" });
+    let bytes = 0;
+    const hits = await searchTextNotes("legado", files, async (p) => {
+      bytes += files.find((f) => f.path === p)!.size;
+      return "sem a palavra";
+    }, 10);
+    expect(bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(hits.map((h) => h.path)).toEqual(["a/legado-no-nome.txt"]);
+  });
+
   test("lê no máximo os de até 512 KB; o maior casa só pelo nome", async () => {
     const files = [
       { path: "a/grande-legado.txt", size: 600 * 1024, mtime: "" },
