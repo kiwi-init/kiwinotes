@@ -189,9 +189,12 @@ export function ProposalItem({
                 {c.name}
               </Button>
             ))}
-            <Button disabled={busy} onClick={() => void run(() => api.agent.proposalChoose(p.id, null))}>
-              {PROPOSAL_NONE}
-            </Button>
+            {/* O resumo executivo é sempre de um projeto (spec #11546): sem o "Nenhum". */}
+            {p.kind === "summary" ? null : (
+              <Button disabled={busy} onClick={() => void run(() => api.agent.proposalChoose(p.id, null))}>
+                {PROPOSAL_NONE}
+              </Button>
+            )}
             <Button disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
               {PROPOSAL_DISCARD}
             </Button>
