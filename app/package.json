@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test src scripts ui",
     "test:dictation": "bun scripts/test-dictation.ts",
+    "test:tokens": "KIWI_TOKENS_REPORT=1 bun test test/tokens",
     "ui:build": "bun scripts/ui-build.ts",
     "ui:publish": "bun scripts/ui-publish.ts",
     "ui:serve": "bun scripts/ui-serve.ts",

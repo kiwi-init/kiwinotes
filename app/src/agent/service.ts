@@ -56,9 +56,10 @@ import type {
 } from "../shared/ui-contract.ts";
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
-import { type NoteModel, noteModelText } from "./note-model.ts";
+import { type NoteModel } from "./note-model.ts";
+import { fixedPrefix } from "./fixed-prefix.ts";
 import { sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
-import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, MemoryError, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
+import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, INSTRUCTIONS_MAX, MEMORY_MAX, MemoryError, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
 const MEMORY_OPS_KEEP = 50;
@@ -106,12 +107,8 @@ export const AGENT_IDLE_MS = 10 * 60_000;
 export const AGENT_MAX_TEXT = 20_000;
 /** O comando local do Claude Code que diz o uso da assinatura (spec #11084): só sob demanda. */
 export const USAGE_COMMAND = "/usage";
-/**
- * As instruções do modo econômico (spec #11084), no começo do pedido: sempre os mesmos bytes, na mesma ordem, para o
- * cache do agente reaproveitar. Nada da pessoa vai aqui.
- */
-export const ECONOMY_INSTRUCTIONS =
-  "[Modo econômico do Kiwi: responda curto e direto, em poucas linhas. Leia as notas por seção (notes_outline e section), não inteiras.]\n\n";
+/** As instruções do modo econômico (spec #11084): o texto mora no começo fixo (`fixed-prefix.ts`). */
+export { ECONOMY_INSTRUCTIONS } from "./fixed-prefix.ts";
 
 /** O modelo mais barato que o agente oferece (spec #11084): Haiku, depois Sonnet; null se a lista não tem nenhum. */
 /**
@@ -1374,17 +1371,13 @@ export class AgentService {
       // econômico (spec #11084). Um erro ao ler o modelo não derruba o pedido: ele vai sem o modelo.
       const model = this.noteModel ? await this.noteModel().catch(() => null) : null;
       // A memória do agente (spec #11469) vem depois do modelo, com os mesmos bytes para os mesmos fatos.
-      const memory = this.vaultRoot ? await this.memoryView().then((v) => memoryText(v.facts), () => "") : "";
+      const facts = this.vaultRoot ? await this.memoryView().then((v) => v.facts, () => [] as string[]) : [];
       // As instruções da pessoa e o glossário do ditado (T11667), sempre nesta ordem. No modo econômico, o glossário vai
       // só com os termos que aparecem no pedido.
       const terms = this.glossary ? await this.glossary().catch(() => []) : [];
       // No modo econômico o glossário muda a cada pedido (só os termos dele): ele vai por último, depois das instruções do
       // econômico, para o cache pegar tudo antes dele (revisão do T11667).
-      const fixed =
-        (model ? noteModelText(model) : "") +
-        memory +
-        instructionsText(s.instructions ?? "") +
-        (s.economy ? ECONOMY_INSTRUCTIONS + glossaryText(terms, text) : glossaryText(terms));
+      const fixed = fixedPrefix({ model, facts, instructions: s.instructions ?? "", terms, economy: s.economy === true, request: text });
       const answer = await host.ask(fixed + text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.

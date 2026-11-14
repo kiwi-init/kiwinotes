@@ -1,0 +1,69 @@
+// A bateria de tokens (spec #12137): o que o Kiwi põe em cada pedido ao agente, medido sem chamar agente nenhum. Os
+// casos são fixos (a memória cheia, as instruções no máximo, o glossário grande, o Modelo inteiro), para o número só
+// mudar quando o Kiwi mudar o que manda.
+
+import { fixedPrefix, type FixedPrefixInput } from "../../src/agent/fixed-prefix.ts";
+import { FACT_MAX_CHARS, GLOSSARY_MAX, INSTRUCTIONS_MAX, MEMORY_MAX } from "../../src/agent/memory.ts";
+import { DEFAULT_NOTE_MODEL } from "../../src/agent/note-model.ts";
+import { countTokens } from "../../src/agent/token-count.ts";
+import { EMPTY_READER } from "../../src/agent/tools/reader.ts";
+import { KiwiToolServer } from "../../src/agent/tools/server.ts";
+
+/** Um item medido: o nome (a chave do tetos.json) e os tokens. */
+export interface Measure {
+  item: string;
+  tokens: number;
+}
+
+/** Um fato de memória realista, do tamanho de uma frase longa (o teto é de 300 caracteres). */
+const fact = (i: number) =>
+  `Fato ${i + 1}: a pessoa trabalha com migração de PACS para a nuvem, prefere respostas curtas e revisa os estudos às sextas-feiras.`.slice(0, FACT_MAX_CHARS);
+
+/** As instruções no máximo, com texto de verdade repetido. */
+const INSTRUCTIONS = "Sempre em português do Brasil. Não mexa na pasta Arquivo. Prefiro tópicos curtos a parágrafos longos. "
+  .repeat(40)
+  .slice(0, INSTRUCTIONS_MAX);
+
+/** O glossário grande: tantos termos quanto vão no pedido. */
+const TERMS = Array.from({ length: GLOSSARY_MAX }, (_, i) => `Termo${i + 1} DICOM`);
+
+/** O caso cheio: tudo no máximo. */
+export const FULL: Omit<FixedPrefixInput, "economy" | "request"> = {
+  model: DEFAULT_NOTE_MODEL,
+  facts: Array.from({ length: MEMORY_MAX }, (_, i) => fact(i)),
+  instructions: INSTRUCTIONS,
+  terms: TERMS,
+};
+
+/** Um pedido típico, que cita dois termos do glossário. */
+export const REQUEST = "Resuma a nota do projeto PACS e diga o que mudou com o Termo1 DICOM e o Termo2 DICOM.";
+
+/** O começo fixo, no normal e no econômico. */
+export function prefixMeasures(): Measure[] {
+  return [
+    { item: "começo fixo › normal", tokens: countTokens(fixedPrefix({ ...FULL, economy: false, request: REQUEST })) },
+    { item: "começo fixo › econômico", tokens: countTokens(fixedPrefix({ ...FULL, economy: true, request: REQUEST })) },
+  ];
+}
+
+/** O que o servidor MCP do Kiwi manda ao agente: as instruções do `initialize` e a lista do `tools/list`. */
+export async function toolMeasures(): Promise<Measure[]> {
+  const stub = {} as never;
+  const server = new KiwiToolServer({ reader: EMPTY_READER, writer: stub, journal: stub, proposals: stub, memory: stub });
+  const config = server.start();
+  try {
+    const h = Object.fromEntries(config.headers.map((x) => [x.name, x.value]));
+    const rpc = async (method: string, params?: unknown) => {
+      const r = await fetch(config.url, { method: "POST", headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      return ((await r.json()) as { result: Record<string, unknown> }).result;
+    };
+    const init = await rpc("initialize", { protocolVersion: "2025-06-18" });
+    const list = await rpc("tools/list");
+    return [
+      { item: "ferramentas › instruções do servidor", tokens: countTokens(String(init.instructions)) },
+      { item: "ferramentas › lista", tokens: countTokens(JSON.stringify(list.tools)) },
+    ];
+  } finally {
+    server.stop();
+  }
+}
