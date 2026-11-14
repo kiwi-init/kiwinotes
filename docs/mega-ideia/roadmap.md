@@ -1,6 +1,6 @@
 # Roadmap da mega-ideia: o agente e o Kiwi-cat
 
-Versão 3, de 2026-11-12. É o roadmap do #7561 com as decisões que o harry tomou depois. O harry liberou o início da mega-ideia no #8339. Os números com `#` são mensagens do canal `kiwinotes` no Kiwi Channels.
+Versão 4, de 2026-11-13. É o roadmap do #7561 com as decisões que o harry tomou depois; a versão 4 tira a fase 6 (#11437). O harry liberou o início da mega-ideia no #8339. Os números com `#` são mensagens do canal `kiwinotes` no Kiwi Channels.
 
 ## O que é
 O Kiwi Notes ganha um agente: a pessoa fala (ou digita) um pedido, e o agente de CLI que ela escolheu lê as notas e as reuniões, responde e organiza. O Kiwi-cat é a cara desse agente: o gato do ícone, animado, que mostra o que o agente está fazendo.
@@ -10,7 +10,7 @@ O Kiwi Notes ganha um agente: a pessoa fala (ou digita) um pedido, e o agente de
 ### A ligação com o agente
 - **O app abre o agente,** sem terminal e sem `join` (#4693, #7498).
 - **Pelo ACP, com o adaptador do Claude Code baixado na primeira vez** que a pessoa liga o agente (#8368). O download só acontece com o clique dela, numa versão fixa e conferida. O adaptador usa o Claude Code que já está instalado no Mac, com o login dele.
-- **Na primeira versão, só o Claude Code** (#8364). Codex, Gemini e OpenCode entram num spec seguinte, cada um com a cor dele.
+- **Só o Claude Code** (#8364, #11437). Outros agentes (Codex, Gemini, OpenCode), o agente no Channels e o diagrama no BonsAI saíram do escopo de entrega.
 - **Só o agente que a pessoa escolheu faz o trabalho de IA** (#7496, #7498). Nenhum outro modelo, nem local, lê ou resume no meio.
 - **O Kiwi só dá ferramentas que não interpretam:** o índice, a busca, o sumário, a leitura por seção, a montagem de arquivos e o medidor.
 - **A memória** é escrita pelo próprio agente, e a sessão é retomada (#7497).
@@ -47,12 +47,6 @@ O Kiwi Notes ganha um agente: a pessoa fala (ou digita) um pedido, e o agente de
 - **O design e os estados são do agente Codex** (#7467), com a instrução em `docs/brand/kiwi-cat/estados/INSTRUCAO.md`.
 - **A prancha dos 8 estados está aprovada** (#8276) e fica em `docs/brand/kiwi-cat/estados/`: `repouso`, `dormindo`, `acordou`, `ouvindo`, `thinking`, `agindo`, `pronto` e `erro`, cada um com os olhos e o símbolo de quadrinho dele.
 - **As orelhas largas** (#7718), com alvo de até 25 graus, são critério da entrega do gato em código: nas imagens do ícone elas só giram 5 graus sem defeito.
-
-## Decisões que ainda faltam, com a jow
-| decisão | recomendação do lead |
-|---|---|
-| o diagrama fica no BonsAI ou dentro do Notes | sem recomendação |
-| a personalidade do agente no Channels: só Notes, ou Notes e Architecture | só Notes |
 
 ## As fases
 Cada linha é 1 spec, 1 issue e 1 PR. Andam 1 ou 2 por vez.
@@ -93,11 +87,6 @@ Cada linha é 1 spec, 1 issue e 1 PR. Andam 1 ou 2 por vez.
 ### Fase 5. A primeira impressão
 24. **O onboarding v1** (#7476).
 25. **As rotinas** (v2): o resumo do dia e os pendentes da segunda. Nada roda sem estar ligado.
-
-### Fase 6. Outros agentes e a jow
-26. **Outros agentes:** Codex, Gemini e OpenCode, com a detecção, o login e a cor de cada um.
-27. **O agente no Channels** (#4675, #4680): primeiro sob demanda, depois sempre ligado.
-28. **O diagrama no BonsAI.**
 
 **Fica para depois do v1:** a edição ao vivo, com o texto entrando animado na nota aberta.
 

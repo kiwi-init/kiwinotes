@@ -1,4 +1,4 @@
-import type { NoteModel } from "../agent/note-model.ts";
+import type { NoteModel } from "./note-model.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).

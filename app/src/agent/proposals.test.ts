@@ -8,6 +8,7 @@ import path from "node:path";
 
 import { SecretGuard } from "../guardrail/filter.ts";
 import type { MeetingNote } from "../shared/meetings.ts";
+import type { NoteModel } from "../shared/note-model.ts";
 import {
   addedLines,
   DEFAULT_MEETING_NOTE_SETTINGS,
@@ -47,11 +48,23 @@ describe("a nota da reunião que o Kiwi monta", () => {
     expect(meetingNoteFolder(PROJECT, DEFAULT_MEETING_NOTE_SETTINGS)).toBe("Projetos/Migração");
     expect(meetingNoteFolder(null, DEFAULT_MEETING_NOTE_SETTINGS)).toBe("");
     expect(meetingNoteFolder(PROJECT, { ...DEFAULT_MEETING_NOTE_SETTINGS, folder: { kind: "single", path: "/Atas/" } })).toBe("Atas");
-    expect(meetingNoteContent(MEETING, FIELDS, DEFAULT_MEETING_NOTE_SETTINGS)).toBe(
+    // Sem o arquivo do Modelo de nota, vale o padrão dele: as propriedades, o título, a introdução com o link, o
+    // sumário, o corpo e o fechamento (os próximos passos).
+    expect(meetingNoteContent(MEETING, FIELDS, DEFAULT_MEETING_NOTE_SETTINGS, { project: "Migração" })).toBe(
       [
-        "Reunião de 11/11/2026 · a transcrição: [[Reuniões/2026-11-11 10h00 Zoom|2026-11-11 10h00 Zoom]]",
+        "---",
+        "data: 2026-11-11",
+        'reuniao: "[[Reuniões/2026-11-11 10h00 Zoom|2026-11-11 10h00 Zoom]]"',
+        'projeto: "Migração"',
+        'participantes: ["Ana", "Bruno"]',
+        "tags: [reuniao]",
+        "---",
         "",
-        "**Participantes:** Ana, Bruno",
+        "# Cronograma da migração",
+        "",
+        "Reunião de 11/11/2026, com Ana e Bruno. A transcrição: [[Reuniões/2026-11-11 10h00 Zoom|2026-11-11 10h00 Zoom]].",
+        "",
+        "- [[#Resumo]]\n- [[#Decisões]]\n- [[#Ações]]\n- [[#Próximos passos]]",
         "",
         "## Resumo\n\nRevisamos o cronograma.",
         "",
@@ -68,6 +81,47 @@ describe("a nota da reunião que o Kiwi monta", () => {
     expect(text).not.toMatch(/Resumo|Ações|Participantes|Próximos/);
     // A transcrição bruta nunca entra: só o link para ela.
     expect(text).toContain("[[Reuniões/2026-11-11 10h00 Zoom|");
+  });
+
+  test("o Modelo de nota manda na ordem e na forma; Ajustes, no que entra; o link para a transcrição está sempre lá", () => {
+    const model: NoteModel = {
+      blocks: [
+        { block: "corpo", on: true },
+        { block: "titulo", on: true },
+        { block: "sumario", on: true },
+        { block: "fechamento", on: false },
+        { block: "introducao", on: false },
+        { block: "propriedades", on: false },
+      ],
+      body: "topicos",
+      numbered: true,
+      tocDepth: 2,
+    };
+    const fields = { ...FIELDS, summary: "Revisamos o cronograma. Começamos em dezembro." };
+    const blocks = { ...DEFAULT_MEETING_NOTE_SETTINGS.blocks, actions: false };
+    expect(meetingNoteContent(MEETING, fields, { ...DEFAULT_MEETING_NOTE_SETTINGS, blocks }, { model })).toBe(
+      [
+        "## 1. Resumo\n\n- Revisamos o cronograma.\n- Começamos em dezembro.",
+        "",
+        "## 2. Decisões\n\n- Começar pelo arquivo de 2019",
+        "",
+        // Sem o fechamento no modelo, os próximos passos ficam no fim do corpo.
+        "## 3. Próximos passos\n\n- Rodar a migração de teste",
+        "",
+        "# Cronograma da migração",
+        "",
+        "- [[#1. Resumo]]\n- [[#2. Decisões]]\n- [[#3. Próximos passos]]",
+        "",
+        // Sem a introdução nem as propriedades, quem participou e o link vão no fim.
+        "Com Ana e Bruno. A transcrição: [[Reuniões/2026-11-11 10h00 Zoom|2026-11-11 10h00 Zoom]].\n",
+      ].join("\n"),
+    );
+    // As propriedades vão sempre para o começo (o frontmatter só vale ali), e o sumário até o nível 1 não lista as seções.
+    const props: NoteModel = { ...model, blocks: [...model.blocks.filter((b) => b.block !== "propriedades"), { block: "propriedades", on: true }], tocDepth: 1 };
+    const text = meetingNoteContent(MEETING, fields, DEFAULT_MEETING_NOTE_SETTINGS, { model: props });
+    expect(text).toStartWith("---\ndata: 2026-11-11\n");
+    expect(text).not.toContain("[[#");
+    expect(text).toContain("A transcrição: [[Reuniões/2026-11-11 10h00 Zoom|");
   });
 
   test("a nota principal: só acrescenta, nas seções que já existem ou em seções novas no fim", () => {
