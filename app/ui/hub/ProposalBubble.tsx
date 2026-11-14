@@ -8,8 +8,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { openProposals, PROPOSAL_LATER } from "../settings/proposalText.ts";
 import { ProposalItem, ProposalPanel, useProposals } from "../settings/Proposals.tsx";
+import { BubblePresence } from "./BubblePresence";
 
-export function ProposalBubble({ hidden }: { hidden: boolean }) {
+export function ProposalBubble({ hidden, reduced = false }: { hidden: boolean; reduced?: boolean }) {
   const list = useProposals();
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
   /** A proposta que o balão mostrava: aplicada ali, ela fica com o [Desfazer] até o [Depois]. */
@@ -46,26 +47,32 @@ export function ProposalBubble({ hidden }: { hidden: boolean }) {
     };
   }, [bigOpen]);
 
-  if (!p || hidden) return null;
   const keepFocus = (e: React.MouseEvent) => {
     // Os botões recebem o clique, mas o foco fica onde estava (quem digita numa nota continua digitando).
     if ((e.target as HTMLElement).closest("button")) e.preventDefault();
   };
-  const dismiss = () => setLater((s) => new Set(s).add(p.id));
+  const dismiss = () => p && setLater((s) => new Set(s).add(p.id));
 
-  if (bigOpen)
-    return (
-      <div className="kn-bubble-big kn-proposal-big" ref={big} onMouseDown={keepFocus} role="dialog" aria-label="A proposta da reunião">
-        <ProposalItem p={p} inline={false} viewOpen onView={setBigOpen} />
-        <ProposalPanel id={p.id} />
-      </div>
-    );
+  const small = p && !hidden && !bigOpen ? p : null;
   return (
-    <div className="kn-bubble-shell kn-bubble kn-proposal-bubble" onMouseDown={keepFocus} role="region" aria-label="A proposta da reunião">
-      <ProposalItem p={p} inline={false} viewOpen={false} onView={setBigOpen} />
-      <button type="button" className="kn-proposal-later" onClick={dismiss}>
-        {PROPOSAL_LATER}
-      </button>
-    </div>
+    <>
+      {p && !hidden && bigOpen ? (
+        <div className="kn-bubble-big kn-proposal-big" ref={big} onMouseDown={keepFocus} role="dialog" aria-label="A proposta da reunião">
+          <ProposalItem p={p} inline={false} viewOpen onView={setBigOpen} />
+          <ProposalPanel id={p.id} />
+        </div>
+      ) : null}
+      {/* A troca entre os balões (spec #11652): a proposta entra e sai pela mesma passagem que a resposta. */}
+      <BubblePresence itemKey={small ? `proposta-${small.id}` : null} reduced={reduced}>
+        {small ? (
+          <div className="kn-bubble-shell kn-bubble kn-proposal-bubble" onMouseDown={keepFocus} role="region" aria-label="A proposta da reunião">
+            <ProposalItem p={small} inline={false} viewOpen={false} onView={setBigOpen} />
+            <button type="button" className="kn-proposal-later" onClick={dismiss}>
+              {PROPOSAL_LATER}
+            </button>
+          </div>
+        ) : null}
+      </BubblePresence>
+    </>
   );
 }

@@ -9,9 +9,10 @@ import type { AgentRoutineEvent } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button } from "../src/kit/index.tsx";
 import { type View, ViewPanel } from "../settings/AgentActivity.tsx";
+import { BubblePresence } from "./BubblePresence";
 import { ROUTINE_DISCARDED, routineLine } from "./routineText.ts";
 
-export function RoutineBubble({ hidden, onShown }: { hidden: boolean; onShown?: (shown: boolean) => void }) {
+export function RoutineBubble({ hidden, onShown, reduced = false }: { hidden: boolean; onShown?: (shown: boolean) => void; reduced?: boolean }) {
   const [event, setEvent] = useState<AgentRoutineEvent | null>(null);
   const [view, setView] = useState<View | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -27,12 +28,13 @@ export function RoutineBubble({ hidden, onShown }: { hidden: boolean; onShown?: 
   }, []);
   useEffect(() => onShown?.(event !== null), [event !== null]);
 
-  if (!event || hidden) return null;
+  // A troca com os outros balões (spec #11652): o balão entra e sai pelo `BubblePresence`, que o mantém na saída.
+  const showing = event !== null && !hidden;
   const close = () => setEvent(null);
   const keepFocus = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) e.preventDefault();
   };
-  const done = event.phase === "done" && event.note ? event : null;
+  const done = event?.phase === "done" && event.note ? event : null;
   const see = async () => {
     if (!done) return;
     if (view) return setView(null);
@@ -55,26 +57,30 @@ export function RoutineBubble({ hidden, onShown }: { hidden: boolean; onShown?: 
   };
 
   return (
-    <div className="kn-bubble-shell kn-bubble kn-routine-bubble" onMouseDown={keepFocus} role="status" aria-label="A rotina do agente">
-      <p className="kn-routine-line">{outcome ?? routineLine(event)}</p>
-      {view ? (
-        <div className="kn-routine-view">
-          <ViewPanel view={view} />
+    <BubblePresence itemKey={showing ? "rotina" : null} reduced={reduced}>
+      {showing ? (
+        <div className="kn-bubble-shell kn-bubble kn-routine-bubble" onMouseDown={keepFocus} role="status" aria-label="A rotina do agente">
+          <p className="kn-routine-line">{outcome ?? routineLine(event)}</p>
+          {view ? (
+            <div className="kn-routine-view">
+              <ViewPanel view={view} />
+            </div>
+          ) : null}
+          <div className="kn-routine-actions">
+            {done && !outcome ? (
+              <>
+                <Button onClick={() => void see()}>{view ? "Fechar" : "Ver"}</Button>
+                <Button variant="primary" onClick={close}>
+                  Manter
+                </Button>
+                <Button onClick={() => void discard()}>Descartar</Button>
+              </>
+            ) : (
+              <Button onClick={close}>Ok</Button>
+            )}
+          </div>
         </div>
       ) : null}
-      <div className="kn-routine-actions">
-        {done && !outcome ? (
-          <>
-            <Button onClick={() => void see()}>{view ? "Fechar" : "Ver"}</Button>
-            <Button variant="primary" onClick={close}>
-              Manter
-            </Button>
-            <Button onClick={() => void discard()}>Descartar</Button>
-          </>
-        ) : (
-          <Button onClick={close}>Ok</Button>
-        )}
-      </div>
-    </div>
+    </BubblePresence>
   );
 }

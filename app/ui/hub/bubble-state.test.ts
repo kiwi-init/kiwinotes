@@ -110,7 +110,7 @@ describe("o balão", () => {
     f.event(ev({ type: "started" }), 0);
     f.event(ev({ type: "text", text: "Começando" }), 0);
     f.event(ev({ type: "error", code: "E_AGENT_EXITED", message: "O agente parou.\ndetalhe técnico" }), 100);
-    expect(f.view(100)).toEqual({ text: "O agente parou.", full: "O agente parou.", error: true, more: false });
+    expect(f.view(100)).toMatchObject({ text: "O agente parou.", full: "O agente parou.", error: true, more: false });
     expect(f.view(100 + readingMs("O agente parou."))).toBeNull();
   });
 
@@ -220,4 +220,26 @@ test("a web (spec #11908): o balão diz que o agente está pesquisando, e a resp
   g.event(ev({ type: "started" }), 0);
   g.event(ev({ type: "status", status: "running", tool: "notes_read" }), 10);
   expect(g.view(1000)).toBeNull();
+});
+
+describe("a chave de cada balão (spec #11652)", () => {
+  test("muda a cada trecho novo, e não com o texto que chega no mesmo trecho", () => {
+    const fits = (s: string) => s.length <= 40;
+    const f = new BubbleFeed(fits, true);
+    f.event({ type: "started", id: "r1" } as never, 0);
+    f.event({ type: "text", id: "r1", text: "Olá, " } as never, 0);
+    const first = f.view(10)!.key;
+    f.event({ type: "text", id: "r1", text: "tudo bem?" } as never, 20);
+    expect(f.view(30)!.key).toBe(first);
+    // Um texto longo vira uma fila: cada trecho é um balão novo, com outra chave.
+    f.event({ type: "text", id: "r1", text: " Este pedaço é bem mais longo e não cabe no mesmo balão que o primeiro." } as never, 40);
+    f.event({ type: "done", id: "r1", stopReason: "end_turn", text: "" } as never, 50);
+    const keys = new Set<number>();
+    for (let t = 50; t < 60_000; t += 250) {
+      const v = f.view(t);
+      if (v) keys.add(v.key);
+    }
+    expect(keys.size).toBeGreaterThan(1);
+    expect(keys.has(first)).toBe(true);
+  });
 });

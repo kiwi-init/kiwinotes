@@ -84,9 +84,13 @@ export interface BubbleView {
   error: boolean;
   /** Há mais do que este trecho: o [Ver mais] aparece. */
   more: boolean;
+  /** Muda a cada trecho novo (a troca de um balão para outro, spec #11652); igual enquanto o texto do trecho chega. */
+  key: number;
 }
 
 interface Head {
+  /** Um número por balão (spec #11652): muda a cada trecho novo, e não com o texto que chega no mesmo trecho. */
+  key: number;
   text: string;
   complete: boolean;
   shownAt: number;
@@ -103,6 +107,7 @@ export class BubbleFeed {
   /** O texto do segmento aberto que ainda não virou trecho completo. */
   private open = "";
   private head: Head | null = null;
+  private keys = 0;
   /** Tudo o que o agente disse no pedido (o [Ver mais]). */
   private said = "";
   /** O que foi dito antes do segmento aberto (antes da última ferramenta). */
@@ -206,7 +211,7 @@ export class BubbleFeed {
       this.open = "";
       this.error = true;
       const line = (e.code === "E_AGENT_LIMIT" && this.outLine ? this.outLine : e.message || e.code).split("\n")[0]!.trim();
-      this.head = { text: line, complete: true, shownAt: now, completeAt: now };
+      this.head = { key: ++this.keys, text: line, complete: true, shownAt: now, completeAt: now };
       this.dismissed = false;
     }
   }
@@ -222,7 +227,7 @@ export class BubbleFeed {
       this.reset(id);
     }
     if (this.said || this.dismissed || this.head) return;
-    this.head = { text: `“${text.trim()}”`, complete: true, shownAt: now, completeAt: now, heard: true };
+    this.head = { key: ++this.keys, text: `“${text.trim()}”`, complete: true, shownAt: now, completeAt: now, heard: true };
   }
 
   /** O clique no balão: fecha (o resto deste pedido não aparece mais no balão; o [Ver mais] não abre mais). */
@@ -243,7 +248,7 @@ export class BubbleFeed {
     const text = cutAtCodePoint(h.text, typed);
     // A linha da web (spec #11908) não é o que o agente disse: ela sozinha não pede o [Ver mais].
     const more = !this.error && (this.queue.length > 0 || (h.text !== WEB_LINE && this.said.trim() !== h.text.trim()));
-    return { text, full: h.text, error: this.error, more };
+    return { text, full: h.text, error: this.error, more, key: h.key };
   }
 
   /** Quando o balão muda de novo (a próxima letra ou o fim da leitura); Infinity se nada muda sozinho. */
@@ -313,11 +318,11 @@ export class BubbleFeed {
   private next(at: number): void {
     const t = this.queue.shift();
     if (t !== undefined) {
-      this.head = { text: t, complete: true, shownAt: at, completeAt: at };
+      this.head = { key: ++this.keys, text: t, complete: true, shownAt: at, completeAt: at };
       return;
     }
     const open = this.open.trimStart();
-    this.head = open ? { text: open, complete: false, shownAt: at, completeAt: Infinity } : null;
+    this.head = open ? { key: ++this.keys, text: open, complete: false, shownAt: at, completeAt: Infinity } : null;
   }
 
   private typedAt(h: Head): number {
