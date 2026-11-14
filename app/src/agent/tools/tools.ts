@@ -61,7 +61,13 @@ export const KIWI_READ_TOOL_NAMES = [
   "projects_list",
   "project_status",
 ] as const;
-export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write", "notes_organize_folder"] as const;
+export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write", "notes_organize_folder", "project_diary_add"] as const;
+/** O diário do agente num projeto (spec #11469, T11670): a seção no fim da nota principal, uma linha com data por vez. */
+export const DIARY_SECTION = "Diário do agente";
+/** A maior linha do diário, em caracteres: uma frase, não um relatório. */
+export const DIARY_LINE_MAX = 300;
+/** Quantas linhas do diário o `project_status` devolve (as últimas). */
+export const DIARY_STATUS_LINES = 10;
 /** O máximo de notas que um "organizar a pasta" libera de uma vez (spec #11102). */
 export const ORGANIZE_MAX = 200;
 /** A proposta da reunião (spec #8360): não escreve nada, guarda a proposta para a pessoa aprovar. */
@@ -251,6 +257,21 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
     writes: true,
     replaces: true,
+  },
+  {
+    name: "project_diary_add",
+    title: "Anotar no diário do projeto",
+    description: `Acrescenta uma linha com a data de hoje no "${DIARY_SECTION}", a seção no fim da nota principal de um projeto: o que você fez ou decidiu nele neste pedido, numa frase (até ${DIARY_LINE_MAX} caracteres). Só quando o pedido mexeu no projeto. Sem a seção, o Kiwi cria. O project_status devolve as últimas linhas. O texto de antes fica nas Versões da nota, e a pessoa desfaz pela Atividade.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve." },
+        texto: { type: "string", minLength: 1, maxLength: DIARY_LINE_MAX, description: "A frase, sem a data (o Kiwi põe) e sem marcador de lista." },
+      },
+      required: ["projeto", "texto"],
+      additionalProperties: false,
+    },
+    writes: true,
   },
   {
     name: "notes_organize_folder",
@@ -482,6 +503,8 @@ export interface KiwiToolContext {
   proposals?: ProposalSink;
   /** Quem guarda a memória do agente (spec #11469). Sem ele, as ferramentas da memória não existem. */
   memory?: MemorySink;
+  /** O relógio do diário do projeto (T11670), para os testes. Sem ele, a hora do Mac. */
+  now?: () => Date;
 }
 
 /** A memória do agente: anotar e esquecer, com o total de fatos depois. */
@@ -667,6 +690,7 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     }
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+      if (name === "project_diary_add") return await diaryAdd(ctx.reader, ctx.writer, ctx.journal, raw, ctx.guard, ctx.now?.() ?? new Date());
       return await write(ctx.writer, ctx.journal, name, raw, ctx.guard);
     }
     const r = await run(ctx.reader, name, raw, ctx.guard, ctx.decider, ctx.economy, ctx.proposals);
@@ -893,33 +917,31 @@ async function run(
     }
     case "project_status": {
       const a = args(raw, ["projeto"]);
-      const want = str(a, "projeto", true)!.replace(/^\/+|\/+$/g, "");
-      const all = await reader.projects();
-      const byFolder = all.find((p) => p.folder === want);
-      const byName = all.filter((p) => p.name.toLocaleLowerCase("pt-BR") === want.toLocaleLowerCase("pt-BR"));
-      const p = byFolder ?? (byName.length === 1 ? byName[0] : undefined);
-      if (!p) {
-        if (byName.length > 1) throw new ToolError("E_AMBIGUOUS", `há ${byName.length} projetos chamados ${want}; diga a pasta: ${byName.map((x) => x.folder).join(", ")}`);
-        throw new ToolError("E_NOT_FOUND", `${want} não é um projeto; veja os projetos com projects_list`);
-      }
+      const p = await findProject(reader, str(a, "projeto", true)!);
       const s = await reader.projectStatus(p.folder);
       let unread = false;
-      // O sumário são os títulos de dentro da nota principal, texto da nota: com o filtro do guardrail (spec #9818),
+      let diary: { lines: string[]; total: number } | null = null;
+      // O sumário e o diário (T11670) são texto de dentro da nota principal: com o filtro do guardrail (spec #9818),
       // saem do texto que o agente vê, como no notes_outline (revisão da T10012). Os caminhos, os títulos das notas, as
       // datas e as contagens vão como estão.
-      if (guard && s.project.main !== null) {
+      if (s.project.main !== null) {
         const main = await reader.get(s.project.main).catch(() => null);
-        // Sem conseguir ler de novo (a nota mudou ou sumiu no meio), o sumário não vai: nunca o do texto sem o filtro.
-        const headings = main ? markdownStructure(await seen(main.path, main.content)).headings : [];
-        s.outlineTotal = headings.length;
-        s.outline = headings.slice(0, STATUS_OUTLINE_MAX).map((h) => ({ level: h.level, title: h.title }));
-        if (!main) unread = true;
+        const text = main ? await seen(main.path, main.content) : null;
+        if (guard) {
+          // Sem conseguir ler de novo (a nota mudou ou sumiu no meio), o sumário não vai: nunca o do texto sem o filtro.
+          const headings = text !== null ? markdownStructure(text).headings : [];
+          s.outlineTotal = headings.length;
+          s.outline = headings.slice(0, STATUS_OUTLINE_MAX).map((h) => ({ level: h.level, title: h.title }));
+          if (!main) unread = true;
+        }
+        if (text !== null) diary = diaryOf(text);
       }
       const avisos = [
         ...(unread ? ["Não deu para ler a nota principal agora; o sumário ficou de fora. Tente de novo."] : []),
         ...(s.project.main === null ? ["A nota principal foi apagada; a pessoa ainda não escolheu outra."] : []),
         ...(s.outlineTotal > s.outline.length ? [`A nota principal tem ${s.outlineTotal} títulos; o sumário mostra os ${s.outline.length} primeiros.`] : []),
         ...(s.taskNotes > s.tasks.length ? [`${s.taskNotes} notas têm tarefas abertas; a lista mostra as ${s.tasks.length} com mais.`] : []),
+        ...(diary && diary.total > diary.lines.length ? [`O diário tem ${diary.total} linhas; vão as ${diary.lines.length} últimas.`] : []),
       ];
       return {
         value: {
@@ -931,6 +953,7 @@ async function run(
           sumario: s.outline.map((h) => ({ nivel: h.level, titulo: h.title })),
           recentes: s.recent.map((n) => ({ path: n.path, titulo: n.title, mudou: n.mtime })),
           tarefasAbertas: { total: s.openTasks, notas: s.taskNotes, porNota: s.tasks.map((t) => ({ path: t.path, abertas: t.open })) },
+          ...(diary?.lines.length ? { diario: diary.lines } : {}),
           ...(proposals ? { resumoDesde: await proposals.since({ folder: s.project.folder, name: s.project.name, main: s.project.main }) } : {}),
           ...(avisos.length ? { aviso: avisos.join(" ") } : {}),
         },
@@ -1092,6 +1115,89 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
     }
     default:
       throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+  }
+}
+
+/** O projeto pela pasta ou, sem ambiguidade, pelo nome. */
+async function findProject(reader: VaultReader, raw: string) {
+  const want = raw.replace(/^\/+|\/+$/g, "");
+  const all = await reader.projects();
+  const byFolder = all.find((p) => p.folder === want);
+  const byName = all.filter((p) => p.name.toLocaleLowerCase("pt-BR") === want.toLocaleLowerCase("pt-BR"));
+  const p = byFolder ?? (byName.length === 1 ? byName[0] : undefined);
+  if (p) return p;
+  if (byName.length > 1) throw new ToolError("E_AMBIGUOUS", `há ${byName.length} projetos chamados ${want}; diga a pasta: ${byName.map((x) => x.folder).join(", ")}`);
+  throw new ToolError("E_NOT_FOUND", `${want} não é um projeto; veja os projetos com projects_list`);
+}
+
+/** O dia, no fuso do Mac (AAAA-MM-DD). */
+export const localDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** As linhas do diário de uma nota (as de lista, sem o marcador), as últimas `DIARY_STATUS_LINES`. Sem a seção, nada. */
+export function diaryOf(content: string): { lines: string[]; total: number } | null {
+  const s = sectionSpan(content, DIARY_SECTION);
+  if (!s) return null;
+  const all = content
+    .slice(s.body, s.end)
+    .split(/\r?\n/)
+    .map((l) => /^\s*[-*]\s+(.+)$/.exec(l)?.[1]?.trim())
+    .filter((l): l is string => !!l);
+  return { lines: all.slice(-DIARY_STATUS_LINES), total: all.length };
+}
+
+/**
+ * O diário do projeto (spec #11469, T11670): uma linha `- AAAA-MM-DD: texto` no fim da seção "Diário do agente" da
+ * nota principal, que o Kiwi cria no fim da nota quando ela não existe. É uma escrita como o `notes_append`: a cópia de
+ * antes nas Versões, a Atividade e o [Desfazer].
+ */
+async function diaryAdd(reader: VaultReader, writer: VaultWriter, journal: WriteJournal, raw: unknown, guard: SecretGuard | undefined, now: Date): Promise<ToolResult> {
+  const a = args(raw, ["projeto", "texto"]);
+  const p = await findProject(reader, str(a, "projeto", true)!);
+  if (p.main === null) throw new ToolError("E_NOT_FOUND", `o projeto ${p.name} está sem nota principal: a pessoa ainda não escolheu outra`);
+  const sent = str(a, "texto", true, Number.MAX_SAFE_INTEGER)!
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[-*]\s+/, "");
+  if (!sent) throw new ToolError("E_BAD_ARGS", "texto está vazio");
+  const folder = await writer.folder();
+  for (let tries = 0; ; tries++) {
+    const n = await writer.get(p.main);
+    writable(n);
+    // Os marcadores voltam ao original, só os desta nota (como no notes_append).
+    const text = restore(guard, n.path, sent);
+    if (text.length > DIARY_LINE_MAX) throw new ToolError("E_BAD_ARGS", `a linha do diário passa de ${DIARY_LINE_MAX} caracteres: escreva uma frase curta`);
+    const line = `- ${localDay(now)}: ${text}`;
+    const s = sectionSpan(n.content, DIARY_SECTION);
+    let next: string;
+    if (s) {
+      const body = n.content.slice(s.body, s.end);
+      next = n.content.slice(0, s.body) + appendTo(body, body.trim() ? line : `\n${line}`, s.last) + n.content.slice(s.end);
+    } else {
+      const head = `## ${DIARY_SECTION}\n\n${line}`;
+      next = n.content.trim() ? appendTo(n.content, `\n${head}`, true) : `${head}\n`;
+    }
+    notMeeting(n.path, next);
+    const r = await commit(writer, journal, n, next);
+    if (!r.saved) {
+      if (tries + 1 >= APPEND_TRIES) throw changed(n.path);
+      continue;
+    }
+    return {
+      value: { projeto: p.name, path: r.path, linha: line, versao: r.version },
+      target: `${r.path} › ${DIARY_SECTION}`,
+      change: {
+        kind: "appended",
+        path: r.path,
+        section: DIARY_SECTION,
+        before: n.content.length,
+        after: next.length,
+        version: r.version,
+        copy: r.copy,
+        ...(folder ? { folder } : {}),
+        ...removed(n.content, next),
+      },
+    };
   }
 }
 

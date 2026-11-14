@@ -99,6 +99,8 @@ export function toolStatus(tool: string, target?: string): string {
       return target ? `Acrescentando em ${target}…` : "Acrescentando numa nota…";
     case "notes_write":
       return target ? `Escrevendo em ${target}…` : "Escrevendo numa nota…";
+    case "project_diary_add":
+      return "Anotando no diário do projeto…";
     default:
       return `Usando ${tool}…`;
   }

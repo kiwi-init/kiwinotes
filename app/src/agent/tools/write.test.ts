@@ -14,7 +14,7 @@ import { DEFAULT_SETTINGS } from "../../store/settings.ts";
 import { AgentActivity } from "../activity.ts";
 import { readerFromCapabilities } from "./reader.ts";
 import { KiwiToolServer, MAX_BODY, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
-import { WRITE_MAX_CHARS, type ToolChange, type WriteJournal } from "./tools.ts";
+import { DIARY_LINE_MAX, DIARY_STATUS_LINES, localDay, WRITE_MAX_CHARS, type ToolChange, type WriteJournal } from "./tools.ts";
 import { WRITER_CAPABILITIES, writerFromCapabilities, type VaultWriter } from "./writer.ts";
 import { tempDir } from "../../../test/tmp.ts";
 
@@ -107,7 +107,7 @@ async function tool(config: KiwiMcpServerConfig, name: string, args: unknown = {
 }
 
 describe("o servidor com o escritor (spec #8356)", () => {
-  test("o tools/list traz as doze, e só as quatro de escrita (com o organizar a pasta, spec #11102) dizem que mudam o cofre", async () => {
+  test("o tools/list traz as treze, e só as cinco de escrita (com o organizar a pasta, spec #11102, e o diário do projeto, T11670) dizem que mudam o cofre", async () => {
     const { config } = await setup();
     const init = (await (await rpc(config, "initialize", { protocolVersion: "2025-06-18" })).json()) as any;
     expect(init.result.instructions).toContain("notes_write");
@@ -126,15 +126,18 @@ describe("o servidor com o escritor (spec #8356)", () => {
       "notes_create",
       "notes_append",
       "notes_write",
+      "project_diary_add",
       "notes_organize_folder",
     ]);
-    for (const name of ["notes_create", "notes_append", "notes_write", "notes_organize_folder"]) {
+    for (const name of ["notes_create", "notes_append", "notes_write", "project_diary_add", "notes_organize_folder"]) {
       expect(byName[name].annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false, openWorldHint: false });
       // Os campos internos da definição não vão para o agente.
       expect(byName[name].writes).toBeUndefined();
     }
     expect(byName.notes_write.annotations.destructiveHint).toBe(true);
     expect(byName.notes_append.annotations.destructiveHint).toBe(false);
+    expect(byName.project_diary_add.annotations.destructiveHint).toBe(false);
+    expect(init.result.instructions).toContain("project_diary_add");
     expect(byName.notes_read.annotations.readOnlyHint).toBe(true);
     expect(byName.notes_write.inputSchema.required).toEqual(["path", "text", "version"]);
   });
@@ -423,5 +426,65 @@ describe("a fronteira do cofre", () => {
     await tool(config, "notes_append", { path: "Nova.md", text: "y" });
     await tool(config, "notes_write", { path: "Nova.md", text: "z", version: versionOf("x\ny\n") });
     expect([...called].sort()).toEqual([...WRITER_CAPABILITIES].sort());
+  });
+});
+
+describe("o diário do projeto (spec #11469, T11670)", () => {
+  const mark = (root: string, main: string | null = "Projetos/Kiwi.md") => {
+    mkdirSync(path.join(root, ".kiwi"), { recursive: true });
+    writeFileSync(path.join(root, ".kiwi/projects.json"), JSON.stringify({ version: 1, projects: [{ folder: "Projetos", main }] }));
+  };
+
+  test("a 1ª linha cria a seção no fim da nota principal; as próximas entram no fim dela; o project_status devolve o diário", async () => {
+    const { root, config, read, activity, kept, changes } = await setup();
+    mark(root);
+    const first = await tool(config, "project_diary_add", { projeto: "Projetos", texto: "  Mudei o   prazo para abril.  " });
+    const day = localDay(new Date());
+    expect(read("Projetos/Kiwi.md")).toBe(`${KIWI}\n## Diário do agente\n\n- ${day}: Mudei o prazo para abril.\n`);
+    expect(first.value).toEqual({ projeto: "Projetos", path: "Projetos/Kiwi.md", linha: `- ${day}: Mudei o prazo para abril.`, versao: expect.any(String) });
+    // Uma escrita como as outras: a cópia de antes (o [Desfazer]) e a Atividade, com a seção.
+    expect(await activity.copy(kept[0]!)).toBe(KIWI);
+    expect(changes()[0]).toMatchObject({ kind: "appended", path: "Projetos/Kiwi.md", section: "Diário do agente", before: KIWI.length, copy: kept[0] });
+    // Pelo nome, e com um "- " que o agente pôs na frente: sai um só.
+    await tool(config, "project_diary_add", { projeto: "projetos", texto: "- Pus o gato na equipe." });
+    expect(read("Projetos/Kiwi.md")).toBe(`${KIWI}\n## Diário do agente\n\n- ${day}: Mudei o prazo para abril.\n- ${day}: Pus o gato na equipe.\n`);
+    const s = await tool(config, "project_status", { projeto: "Projetos" });
+    expect(s.value.diario).toEqual([`${day}: Mudei o prazo para abril.`, `${day}: Pus o gato na equipe.`]);
+  });
+
+  test("com a seção no meio da nota, a linha entra no fim dela e o resto não muda; o status leva só as últimas linhas", async () => {
+    const { root, config, read } = await setup();
+    mark(root);
+    const old = Array.from({ length: DIARY_STATUS_LINES + 2 }, (_, i) => `- 2026-01-${String(i + 1).padStart(2, "0")}: passo ${i + 1}`).join("\n");
+    const note = `# Kiwi\n\n## Diário do agente\n\n${old}\n\n## Equipe\n\nharry e jow.\n`;
+    writeFileSync(path.join(root, "Projetos/Kiwi.md"), note);
+    await tool(config, "project_diary_add", { projeto: "Projetos", texto: "Mais um passo." });
+    const day = localDay(new Date());
+    expect(read("Projetos/Kiwi.md")).toBe(`# Kiwi\n\n## Diário do agente\n\n${old}\n- ${day}: Mais um passo.\n\n## Equipe\n\nharry e jow.\n`);
+    const s = await tool(config, "project_status", { projeto: "Projetos" });
+    expect(s.value.diario).toHaveLength(DIARY_STATUS_LINES);
+    expect(s.value.diario.at(-1)).toBe(`${day}: Mais um passo.`);
+    expect(s.value.aviso).toContain(`O diário tem ${DIARY_STATUS_LINES + 3} linhas`);
+    // Uma seção vazia ganha a linha com a linha em branco depois do título.
+    writeFileSync(path.join(root, "Projetos/Kiwi.md"), "# Kiwi\n\n## Diário do agente\n");
+    await tool(config, "project_diary_add", { projeto: "Projetos", texto: "Começo." });
+    expect(read("Projetos/Kiwi.md")).toBe(`# Kiwi\n\n## Diário do agente\n\n- ${day}: Começo.\n`);
+  });
+
+  test("recusa o que não dá: um projeto que não existe, sem nota principal, a frase vazia ou longa, sem o escritor", async () => {
+    const { root, config, read } = await setup();
+    mark(root);
+    expect((await tool(config, "project_diary_add", { projeto: "Solto", texto: "x" })).error).toContain("E_NOT_FOUND");
+    expect((await tool(config, "project_diary_add", { projeto: "Projetos", texto: "   " })).error).toContain("E_BAD_ARGS");
+    expect((await tool(config, "project_diary_add", { projeto: "Projetos", texto: "x".repeat(DIARY_LINE_MAX + 1) })).error).toContain("E_BAD_ARGS");
+    expect(read("Projetos/Kiwi.md")).toBe(KIWI);
+    // A nota principal apagada (os projetos são lidos uma vez por cofre: um cofre novo).
+    const other = await setup();
+    mark(other.root, null);
+    expect((await tool(other.config, "project_diary_add", { projeto: "Projetos", texto: "x" })).error).toMatch(/E_NOT_FOUND.*sem nota principal/);
+    // Só leitura (o agente sem escrever): a ferramenta nem existe.
+    const ro = new KiwiToolServer({ reader: readerFromCapabilities({} as never) });
+    servers.push(ro);
+    expect((await tool(ro.start(), "project_diary_add", { projeto: "Projetos", texto: "x" })).error).toContain("não tem a ferramenta project_diary_add");
   });
 });

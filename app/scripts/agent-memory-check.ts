@@ -139,6 +139,28 @@ try {
   report.checks.push("Ajustes › Agente › Memória: edit a fact, a secret is refused, and the instructions are saved");
   report.problems.push(...s.report.problems);
   await s.close();
+
+  // 6. O diário do projeto (T11670): a linha com a data no fim da nota principal, na Atividade, e o [Desfazer].
+  await invoke("notes.create", { folder: "Kiwi", title: "Kiwi", content: "# Kiwi\n\n## Prazo\n\nMarço.\n" });
+  await invoke("projects.mark", { folder: "Kiwi" });
+  const before = (await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).content;
+  await invoke("agent.ask", { text: 'Mude o prazo do Kiwi\n/tool project_diary_add {"projeto":"Kiwi","texto":"Mudei o prazo para abril, a pedido da pessoa."}' });
+  await idle();
+  const after = (await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).content as string;
+  assert.match(after, /\n## Diário do agente\n\n- \d{4}-\d{2}-\d{2}: Mudei o prazo para abril, a pedido da pessoa\.\n$/);
+  const d = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings" } });
+  const dp = d.page;
+  const diaryReq = dp.locator(".kn-activity-req").filter({ has: dp.locator(".kn-activity-what:has-text('Kiwi › Diário do agente')") }).first();
+  await diaryReq.waitFor({ timeout: 15000 });
+  await diaryReq.locator("button:has-text('Ver')").first().click();
+  await Bun.sleep(400);
+  await diaryReq.scrollIntoViewIfNeeded();
+  await diaryReq.screenshot({ path: join(out, "6-diario.png") });
+  await diaryReq.locator("button[aria-label^='Desfazer: ']").first().click();
+  for (let n = 0; (await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).content !== before; n++) { assert.ok(n < 100, "o [Desfazer] volta a nota"); await Bun.sleep(100); }
+  report.checks.push("project diary: a dated line in \"Diário do agente\" at the end of the main note, in the Atividade, and [Desfazer] restores the note");
+  report.problems.push(...d.report.problems);
+  await d.close();
   assert.deepEqual(report.problems, []);
   console.log(JSON.stringify({ ok: true, ...report }, null, 2));
 } finally {
