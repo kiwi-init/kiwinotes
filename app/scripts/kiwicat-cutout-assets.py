@@ -44,10 +44,17 @@ proximity=np.clip(proximity*3,0,1)
 light=np.maximum(light-32/255,0)/(1-32/255)*proximity
 light=np.asarray(Image.fromarray(light).resize((2048,2560),Image.Resampling.BILINEAR),np.float32)
 # Coverage support is smooth, rather than magnifying byte noise in faint light.
-# T11696: B = how near the coat a pixel is, a wide smooth blur of the coat (no stepped taps). On a light surface the
-# shader keeps the fog opaque in that band, so the light does not fade to white between the glow and the body.
-near=np.asarray(Image.fromarray(np.uint8(np.rint(coat*255))).filter(ImageFilter.GaussianBlur(70)),np.float32)/255
-near=np.clip(near*2.2,0,1)
+# T11696: B packs two fields of the cat's silhouette for a light surface: 0.5 x the sharp silhouette + 0.5 x the same
+# blurred wide. The silhouette is the approved head and body layers (whole, also where the bright arc crosses the head)
+# plus the coat for the ears. In the shader, B around 0.5 is the outline (crisp); below it, 2B is the blurred field
+# outside (the fog starts opaque at the outline and fades by it); above it, 2B - 1 is the blurred field inside (the
+# arc keeps its colours only well inside the head).
+silhouette=coat.copy()
+for name in ['cabeca','corpo']:
+    rgba=np.asarray(Image.open(SRC/(name+'.png')).convert('RGBA'),np.float32)/255
+    silhouette=np.maximum(silhouette,rgba[:,:,3])
+blurred=np.asarray(Image.fromarray(np.uint8(np.rint(silhouette*255))).filter(ImageFilter.GaussianBlur(56)),np.float32)/255
+near=0.5*silhouette+0.5*blurred
 Image.fromarray(np.uint8(np.rint(np.stack([coat,np.sqrt(light),near],2)*255))).save(DEST/'cutout-mask.webp',lossless=True,method=6)
 # Static fallback: output premultiplied reference / coverage as straight RGBA.
 for name in ['reference','reference-no-eyes']:
@@ -76,4 +83,4 @@ for name in ['reference','reference-no-eyes']:
     straight=np.divide(rgb,alpha[:,:,None],out=np.zeros_like(rgb),where=alpha[:,:,None]>0)
     rgba=np.dstack([np.clip(straight,0,1),alpha])
     Image.fromarray(np.uint8(np.rint(rgba*255))).save(DEST/(name+'-cutout.webp'),lossless=True,method=6)
-(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade under an elliptical fall-off (T11565); weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback; B: near-coat field (T11696)'),indent=2)+'\n')
+(DEST/'cutout-source.json').write_text(json.dumps(dict(task='T9708',sources=hashes,method='source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade under an elliptical fall-off (T11565); weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback; B: 0.5 sharp silhouette + 0.5 blurred (T11696)'),indent=2)+'\n')
