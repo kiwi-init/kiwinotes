@@ -933,7 +933,18 @@ async function run(
       const part = doc.parts[parte - 1]!;
       // O texto da parte passa pelo filtro, como uma nota (spec #9818): o segredo vira o marcador, e a dúvida é perguntada.
       const texto = await seen(path, part.text);
-      const indice = doc.parts.slice(0, FILES_INDEX_MAX).map((p, i) => ({ parte: i + 1, rotulo: p.label }));
+      // Os nomes das abas e os rótulos das partes também são texto do arquivo: passam pelo filtro, numa chamada só
+      // (revisão do T11691). Um nome de aba não tem quebra de linha, então as linhas voltam no mesmo lugar.
+      const abas = doc.summary.abas ?? [];
+      const shown = doc.parts.slice(0, FILES_INDEX_MAX);
+      const names = [...abas.map((x) => x.nome), ...shown.map((x) => x.label), part.label];
+      const clean = (await seen(path, names.join("\n"))).split("\n");
+      if (clean.length === names.length) {
+        abas.forEach((x, i) => (x.nome = clean[i]!));
+        shown.forEach((x, i) => (x.label = clean[abas.length + i]!));
+        part.label = clean.at(-1)!;
+      } else throw new ToolError("E_FAILED", `não deu para ler ${path} com o filtro`);
+      const indice = shown.map((p, i) => ({ parte: i + 1, rotulo: p.label }));
       const avisos = [
         ...doc.warnings,
         ...(total > FILES_INDEX_MAX ? [`O índice mostra as ${FILES_INDEX_MAX} primeiras de ${total} partes.`] : []),

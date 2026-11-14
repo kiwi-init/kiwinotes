@@ -513,6 +513,17 @@ describe("files_read: o agente lê planilhas, documentos e pdfs do cofre (spec #
     await expect(runKiwiTool({ reader }, "files_read", { caminho: "Dados/vendas.xlsx", parte: (first.value.partes as number) + 1 })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
   });
 
+  test("o nome de uma aba também passa pelo filtro: no sumário, no índice e no rótulo (revisão do T11691)", async () => {
+    const KEY = "AKIA2E0A8F3B244C9986";
+    const { reader } = await vault({ "Dados/chaves.xlsx": xlsxBytes({ [KEY]: [["a"], ["b"]] }) });
+    const guard = new SecretGuard();
+    const r = await runKiwiTool({ reader, guard }, "files_read", { caminho: "Dados/chaves.xlsx" });
+    expect(JSON.stringify(r.value)).not.toContain(KEY);
+    expect(r.value.sumario.abas[0].nome).toMatch(/^‹segredo [^›]+›$/);
+    expect(r.value.rotulo).toMatch(/^Aba ‹segredo [^›]+›, linhas 2–2$/);
+    expect(r.value.indice[0].rotulo).toBe(r.value.rotulo);
+  });
+
   test("o docx vira o texto com os títulos, a lista e a tabela", async () => {
     const { reader } = await vault({ "Docs/relatorio.docx": await docxBytes() });
     const r = await runKiwiTool({ reader }, "files_read", { caminho: "Docs/relatorio.docx" });
