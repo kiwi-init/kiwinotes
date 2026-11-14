@@ -61,7 +61,7 @@ import { type NoteModel } from "./note-model.ts";
 import { fixedPrefix } from "./fixed-prefix.ts";
 import { sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import { patchRoutines, ROUTINE_KINDS, routineDue, routinesOff, sanitizeAgentRoutines, type RoutineKind } from "../shared/agent-routines.ts";
-import { routineDeclined, routineEconomyQuestion, routinePrompt } from "./routines.ts";
+import { routineDeclined, routineEconomyQuestion, routineNoteChange, routinePrompt } from "./routines.ts";
 import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, INSTRUCTIONS_MAX, MEMORY_MAX, MemoryError, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
@@ -1324,8 +1324,10 @@ export class AgentService {
   }
 
   /**
-   * Marca a vez da rotina (a mesma não dispara de novo no próximo tique, rode ou não) e manda o pedido dela. Com o
-   * limite do plano acabado, não manda nada e avisa (o evento `agent.routine`).
+   * Manda o pedido da rotina e só então marca a vez dela (a mesma não dispara de novo no próximo tique). Se um pedido da
+   * pessoa entrou antes, o `ask` falha com E_AGENT_BUSY e nada é marcado: a próxima conferência tenta de novo, no mesmo
+   * dia (revisão do #479). Com o limite do plano acabado, não manda nada, marca a vez (o dia pula) e avisa (o evento
+   * `agent.routine`).
    */
   private async startRoutine(kind: RoutineKind, manual: boolean): Promise<{ id: string }> {
     const now = this.clock();
@@ -1333,31 +1335,37 @@ export class AgentService {
     const routines = sanitizeAgentRoutines(s.routines);
     const out = this.usageView().out;
     const limited = out !== null && (out.resetsAt ? Date.parse(out.resetsAt) > now : now - Date.parse(out.at) < ROUTINE_OUT_UNKNOWN_MS);
-    if (!limited && this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
-    await this.d.settings.save({ routines: { ...routines, [kind]: { ...routines[kind], lastRun: new Date(now).toISOString() } } });
-    this.emitStatus();
+    const mark = async () => {
+      const current = sanitizeAgentRoutines((await this.d.settings.load()).routines);
+      await this.d.settings.save({ routines: { ...current, [kind]: { ...current[kind], lastRun: new Date(now).toISOString() } } });
+      this.emitStatus();
+    };
     if (limited) {
+      await mark();
       this.emitRoutine({ kind, phase: "skipped", reason: "limit", ...(out.resetsAt ? { resetsAt: out.resetsAt } : {}) });
       throw fromAgentError(new AgentError("E_AGENT_LIMIT", this.name), this.name);
     }
     this.nextRoutine = { kind, manual };
+    let sent: { id: string };
     try {
-      return await this.ask(routinePrompt(kind, routines[kind].folder, new Date(now)));
+      sent = await this.ask(routinePrompt(kind, routines[kind].folder, new Date(now)));
     } finally {
       this.nextRoutine = null;
     }
+    await mark();
+    return sent;
   }
 
   /** O fim de uma rotina: a nota que o pedido criou (pela Atividade), para o balão [Ver] [Manter] [Descartar]. */
   private async finishRoutine(request: string, kind: RoutineKind): Promise<void> {
-    let note: string | null = null;
+    let found: { note: string; change: number } | null = null;
     try {
       const r = (await this.activity.list(ROUTINE_ACTIVITY_LOOKBACK)).find((x) => x.id === request);
-      note = r?.changes.find((c) => c.kind === "created" && c.path.endsWith(".md"))?.path ?? null;
+      found = r ? routineNoteChange(r.changes) : null;
     } catch (e) {
       this.d.log?.(`[agent] routine: ${String((e as Error)?.message ?? e)}`);
     }
-    this.emitRoutine({ kind, phase: "done", request, note });
+    this.emitRoutine({ kind, phase: "done", request, note: found?.note ?? null, change: found?.change ?? null });
   }
 
   /** Liga. Na primeira vez, só com o aceite da tela do ADR 0011. Não baixa nem abre nada. */

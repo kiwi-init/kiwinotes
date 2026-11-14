@@ -1743,7 +1743,7 @@ describe("as rotinas (spec #12150)", () => {
     const id = await r.tick(at(16, 18));
     expect(id).toBeTruthy();
     expect(r.notes["Rotinas/Resumo de 16-11-2026.md"]).toContain("## Próximos passos");
-    expect(r.events).toEqual([{ kind: "daily", phase: "done", request: id!, note: "Rotinas/Resumo de 16-11-2026.md" }]);
+    expect(r.events).toEqual([{ kind: "daily", phase: "done", request: id!, note: "Rotinas/Resumo de 16-11-2026.md", change: 1 }]);
     // A Atividade registra a criação (o [Desfazer] de sempre).
     const log = (await r.m.svc.activityLog())[0]!;
     expect(log.id).toBe(id!);
@@ -1802,7 +1802,7 @@ describe("as rotinas (spec #12150)", () => {
     const { id } = await r.m.svc.routineRun("weekly");
     await until(() => r.events.length > 1);
     expect(r.m.svc.question()).toBeNull();
-    expect(r.events[1]).toEqual({ kind: "weekly", phase: "done", request: id, note: "Rotinas/Pendentes da semana de 16-11-2026.md" });
+    expect(r.events[1]).toEqual({ kind: "weekly", phase: "done", request: id, note: "Rotinas/Pendentes da semana de 16-11-2026.md", change: 1 });
   });
 
   test("com o limite do plano acabado, não roda e avisa", async () => {
@@ -1817,6 +1817,24 @@ describe("as rotinas (spec #12150)", () => {
     expect(r.events).toEqual([{ kind: "daily", phase: "skipped", reason: "limit", resetsAt: expect.any(String) }]);
     expect(r.m.turns.filter((e) => e.type === "started")).toHaveLength(asked);
     await expect(r.m.svc.routineRun("daily")).rejects.toMatchObject({ code: "E_AGENT_LIMIT" });
+  });
+
+  test("a vez só conta depois que o pedido sai; com um pedido da pessoa na frente, nada é marcado (revisão do #479)", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    await r.m.svc.configure({ routines: { daily: { on: true } } });
+    // A ordem: o pedido da rotina começa antes de o status trazer a vez marcada.
+    const order: string[] = [];
+    r.m.svc.onTurn((e) => e.type === "started" && order.push("pedido"));
+    r.m.svc.onStatus((s) => s.routines.daily.lastRun && !order.includes("marcada") && order.push("marcada"));
+    expect(await r.tick(at(16, 18))).toBeTruthy();
+    expect(order).toEqual(["pedido", "marcada"]);
+    // Um pedido da pessoa na frente: o "Rodar agora" falha ocupado, e a vez não é gastada.
+    const { id } = await r.m.svc.ask("/lento");
+    const before = (await r.m.svc.status()).routines.weekly.lastRun;
+    await expect(r.m.svc.routineRun("weekly")).rejects.toMatchObject({ code: "E_AGENT_BUSY" });
+    expect((await r.m.svc.status()).routines.weekly.lastRun).toBe(before);
+    await until(() => r.m.turns.some((e) => e.id === id && e.type === "done"));
   });
 
   test("desligar o agente desliga as rotinas, e o Rodar agora pede o agente ligado", async () => {

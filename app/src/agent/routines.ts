@@ -48,5 +48,15 @@ export function routineDeclined(kind: RoutineKind): string {
   return `Tudo bem, ${ROUTINE_LABELS[kind].toLowerCase()} fica para a próxima: nada foi lido.`;
 }
 
+/**
+ * A nota que a rotina criou, entre as mudanças do pedido: a primeira nota `.md` criada, com a posição dela (1 é a
+ * primeira, como o `agent.change` conta). O [Ver] do balão abre essa mudança, mesmo que o agente tenha escrito outra
+ * coisa antes (revisão do #479).
+ */
+export function routineNoteChange(changes: readonly { kind: string; path: string }[]): { note: string; change: number } | null {
+  const i = changes.findIndex((c) => c.kind === "created" && c.path.endsWith(".md"));
+  return i < 0 ? null : { note: changes[i]!.path, change: i + 1 };
+}
+
 /** O pedido é de uma rotina (o agente falso e a Atividade reconhecem pelo começo). */
 export const isRoutinePrompt = (text: string) => text.startsWith(ROUTINE_MARK);

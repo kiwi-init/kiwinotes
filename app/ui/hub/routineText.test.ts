@@ -5,9 +5,9 @@ import { expect, test } from "bun:test";
 import { noteName, routineLine } from "./routineText.ts";
 
 test("pronto: o nome da rotina e o da nota; sem nota, aponta a Atividade", () => {
-  expect(routineLine({ kind: "daily", phase: "done", request: "r1", note: "Rotinas/Resumo de 16-11-2026.md" })).toBe("O resumo do dia está pronto: Resumo de 16-11-2026.");
-  expect(routineLine({ kind: "weekly", phase: "done", request: "r2", note: null })).toBe("Os pendentes da semana terminaram, mas o agente não criou a nota. A resposta está na Atividade.");
-  expect(routineLine({ kind: "weekly", phase: "done", request: "r3", note: "Rotinas/Pendentes da semana de 23-11-2026.md" })).toBe("Os pendentes da semana estão prontos: Pendentes da semana de 23-11-2026.");
+  expect(routineLine({ kind: "daily", phase: "done", request: "r1", note: "Rotinas/Resumo de 16-11-2026.md", change: 1 })).toBe("O resumo do dia está pronto: Resumo de 16-11-2026.");
+  expect(routineLine({ kind: "weekly", phase: "done", request: "r2", note: null, change: null })).toBe("Os pendentes da semana terminaram, mas o agente não criou a nota. A resposta está na Atividade.");
+  expect(routineLine({ kind: "weekly", phase: "done", request: "r3", note: "Rotinas/Pendentes da semana de 23-11-2026.md", change: 1 })).toBe("Os pendentes da semana estão prontos: Pendentes da semana de 23-11-2026.");
   expect(noteName("A/B/Pendentes da semana de 23-11-2026.md")).toBe("Pendentes da semana de 23-11-2026");
 });
 
