@@ -88,7 +88,7 @@ async function live(p: Page, sel: string, timeout = 30000) {
   );
 }
 
-type Slot = { phase: string; op: number; sc: number; kind: string; anim: string; vw: number; lw: number; vh: number; lh: number };
+type Slot = { phase: string; op: number; sc: number; kind: string; anim: string; vw: number; lw: number; vh: number; lh: number; stale?: boolean };
 type Frame = { t: number; slots: Slot[] };
 async function startSampler(p: Page) {
   await p.evaluate(() => {
@@ -98,6 +98,10 @@ async function startSampler(p: Page) {
     const t0 = performance.now();
     // Lido logo depois da pintura do quadro (uma tarefa depois do rAF): é o que se viu. Dentro do rAF a leitura viria antes
     // do layout e do ResizeObserver do quadro, e veria o tamanho novo antes do FLIP que o quadro pinta.
+    // Mas uma tarefa que muda o texto pode rodar entre a pintura e a leitura: a leitura vê o tamanho novo antes do
+    // ResizeObserver do quadro seguinte, que é quem começa o FLIP, e esse estado nunca é pintado (#12443). Por isso o rAF
+    // guarda o tamanho que o quadro vai pintar, e a leitura que vê outro marca `stale` (a análise do tamanho a ignora).
+    let painted = new WeakMap<Element, string>();
     const read = () => {
       const slots = [...document.querySelectorAll(".kn-bubble-slot")].map((s) => {
         const cs = getComputedStyle(s);
@@ -108,12 +112,16 @@ async function startSampler(p: Page) {
         const shell = s.firstElementChild as HTMLElement | null;
         const r = shell?.getBoundingClientRect();
         const k = m ? m.a : 1;
+        const lw = shell?.offsetWidth ?? 0, lh = shell?.offsetHeight ?? 0;
+        const stale = !!shell && painted.has(shell) && painted.get(shell) !== `${lw}x${lh}`;
         return { phase: (s as HTMLElement).dataset.phase ?? "", op: Number(cs.opacity), sc: k, kind, anim: cs.animationName,
-          vw: r ? r.width / k : 0, lw: shell?.offsetWidth ?? 0, vh: r ? r.height / k : 0, lh: shell?.offsetHeight ?? 0 };
+          vw: r ? r.width / k : 0, lw, vh: r ? r.height / k : 0, lh, stale };
       });
       w.__frames.push({ t: performance.now() - t0, slots });
     };
     const tick = () => {
+      painted = new WeakMap();
+      for (const s of document.querySelectorAll(".kn-bubble-slot > *")) painted.set(s, `${(s as HTMLElement).offsetWidth}x${(s as HTMLElement).offsetHeight}`);
       setTimeout(read, 0);
       if (w.__sampling) requestAnimationFrame(tick);
     };
@@ -182,17 +190,23 @@ async function sequence(p: Page) {
 
 /** A caixa da resposta crescendo: o maior salto de tamanho (largura ou altura) entre dois quadros, no layout e no que se vê. */
 function growth(frames: Frame[]) {
-  let layout = 0, seen = 0, changes = 0;
-  for (let i = 1; i < frames.length; i++) {
-    const a = frames[i - 1]!.slots.find((s) => s.kind === "resposta" && s.phase === "enter" && s.op > 0.9);
-    const b = frames[i]!.slots.find((s) => s.kind === "resposta" && s.phase === "enter" && s.op > 0.9);
+  let layout = 0, seen = 0, changes = 0, stale = 0;
+  const pick = (f: Frame) => f.slots.find((s) => s.kind === "resposta" && s.phase === "enter" && s.op > 0.9);
+  // Só os quadros pintados: o tamanho lido entre a pintura e o ResizeObserver seguinte nunca foi visto (#12443).
+  const painted = frames.filter((f) => {
+    const s = pick(f);
+    if (s?.stale) stale++;
+    return !s?.stale;
+  });
+  for (let i = 1; i < painted.length; i++) {
+    const a = pick(painted[i - 1]!), b = pick(painted[i]!);
     if (!a || !b) continue;
     const dl = Math.max(Math.abs(b.lw - a.lw), Math.abs(b.lh - a.lh)), dv = Math.max(Math.abs(b.vw - a.vw), Math.abs(b.vh - a.vh));
     if (dl >= 4) changes++;
     layout = Math.max(layout, dl);
     seen = Math.max(seen, dv);
   }
-  return { changes, maxLayoutJump: Math.round(layout), maxSeenJump: Math.round(seen) };
+  return { changes, maxLayoutJump: Math.round(layout), maxSeenJump: Math.round(seen), stale };
 }
 
 /** As trocas: quadros com um balão saindo e outro entrando. */
