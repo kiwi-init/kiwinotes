@@ -198,7 +198,7 @@ function Hub() {
         <Onboarding />
         <div className="kn-hub-main">
           {TABS.filter((s) => visited.has(s)).map((s) => (
-            <section key={s} className="kn-hub-pane" hidden={s !== section} aria-label={LABELS[s]}>
+            <section key={s} className="kn-hub-pane" data-section={s} hidden={s !== section} aria-label={LABELS[s]}>
               <HubBarContext.Provider value={{ start, end, active: s === section }}>
                 <Pane section={s} active={s === section} openRequest={openRequest} settingsRequest={settingsRequest} onOpenNote={openNote} />
               </HubBarContext.Provider>

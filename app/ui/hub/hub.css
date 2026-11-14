@@ -138,6 +138,18 @@
   display: none;
 }
 
+/* Com o gato no canto (T12417), a área das seções reserva a coluna dele à direita: nenhum botão, interruptor ou texto
+   fica embaixo do gato, em qualquer rolagem e na janela estreita. A coluna cobre a névoa dele (96 px, a 12 px da borda);
+   o espaço de cada seção já completa a folga. A barra de rolagem fica na borda, fora do clique do gato.
+   As seções centradas (Notas, Reuniões, Ditado) ganham a mesma folga dos dois lados, para continuar no meio; as
+   Configurações têm a barra lateral à esquerda, e só a direita. */
+.kn-hub:has(> .kn-kiwicat) .kn-hub-pane {
+  padding-inline: 96px;
+}
+.kn-hub:has(> .kn-kiwicat) .kn-hub-pane[data-section="settings"] {
+  padding-left: 0;
+}
+
 /* As outras seções (as janelas do kit) ficam numa coluna no meio, como as Configurações do Channels. */
 .kn-hub-pane .kn-content {
   width: 100%;

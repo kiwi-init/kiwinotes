@@ -176,7 +176,14 @@ try {
     await ctx.send({ cmd: "hubView", view: true });
     await invoke("agent.ask", { text: "lembra que tenho um gato chamado Kiwi" });
     await idle();
-    await p.waitForFunction(() => document.querySelector(".kn-memory-bubble")?.textContent?.includes("A memória está cheia"), undefined, { timeout: 30000 });
+    // O aviso volta depois da resposta do agente (o agente falso responde com o erro cru da ferramenta, "Não deu:
+    // E_MEMORY_FULL…"). Com a troca entre os balões (#480), o aviso que sai fica 180 ms na tela: o print espera o aviso
+    // vivo e cheio, sem outro balão (#12536).
+    await p.waitForFunction(() => {
+      const live = [...document.querySelectorAll(".kn-bubble-slot")].filter((s) => s.getAttribute("data-phase") !== "exit");
+      const slot = live.find((s) => s.querySelector(".kn-memory-bubble")?.textContent?.includes("A memória está cheia"));
+      return !!slot && live.length === 1 && Number(getComputedStyle(slot).opacity) > 0.99;
+    }, undefined, { timeout: 30000 });
     await shot(p, "9-link-balao.png", "9. A memória cheia: o balão leva para a Memória");
     await p.locator(".kn-memory-bubble button:has-text('Abrir a memória')").click();
     await shown(p, "agent");
