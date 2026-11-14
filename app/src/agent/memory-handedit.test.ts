@@ -1,12 +1,14 @@
 // Varredura T12585: a memória editada à mão no cofre perde texto em silêncio na próxima mudança do agente.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
+
+import { tempDir } from "../../test/tmp.ts";
 import { forgetFact, formatMemory, inspectMemory, MEMORY_FILE, mergeMemory, parseMemory, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 function vaultWith(text: string) {
-  const root = mkdtempSync(path.join(tmpdir(), "kn-mem-"));
+  // A pasta sai no fim do teste (spec #10077): o CI falha com pasta temporária sobrando.
+  const root = tempDir("kn-mem-");
   mkdirSync(path.dirname(path.join(root, MEMORY_FILE)), { recursive: true });
   writeFileSync(path.join(root, MEMORY_FILE), text);
   return root;
