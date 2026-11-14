@@ -98,7 +98,7 @@ Esta é a peça que mais economiza: a conversa antiga reenviada é 65 % do gasto
 ### 6. O peso fixo menor
 - **Cinco verbos no lugar de 21 ferramentas:** achar, ler, escrever, propor e lembrar. As instruções longas (gerar arquivo, reunião, resumo executivo, rotina) saem da lista fixa e chegam pelo cartão de instrução, só quando o pedido precisa.
 - **A lista nunca muda no meio da sessão.** Mudar uma ferramenta invalida o cache inteiro.
-- **As instruções próprias** (decisão 3): trocar as instruções de programador do Claude Code por instruções curtas de um assistente de notas.
+- **As instruções próprias ficam para depois** (decisão 3): trocar as instruções de programador do Claude Code por instruções curtas de um assistente de notas só volta à mesa com a resposta da Anthropic (#8355).
 
 ### O placar
 Em Ajustes › Agente, por pedido e por dia:
@@ -148,8 +148,8 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
    - **A (escolhida):** a janela curta com a cápsula.
    - B: retomar sempre a sessão inteira, como hoje.
    - C: sessão nova depois de 10 minutos, sem cápsula: o agente esquece a conversa.
-3. **As instruções do agente.**
-   - **A (recomendada agora):** manter as do Claude Code e enxugar só as ferramentas. Peso fixo de uns 5 mil.
+3. **As instruções do agente. Decidido: A (#13628).**
+   - **A (escolhida):** manter as do Claude Code e enxugar só as ferramentas. Peso fixo de uns 5 mil.
    - B: instruções próprias do Kiwi, pela opção oficial `systemPrompt` do adaptador. Peso fixo de uns 3,5 mil. Fica para depois da resposta da Anthropic sobre a assinatura (#8355).
 4. **As trilhas.**
    - **A (recomendada):** ligadas, visíveis e apagáveis em Ajustes › Agente.
