@@ -25,6 +25,14 @@ describe("a seção Atividade do agente: os textos", () => {
     const t = at(13, 10, 0);
     expect(readsLine([])).toBe("Não leu nenhuma nota.");
     expect(readsLine([{ at: t, tool: "notes_read", target: "Kiwi.md" }])).toBe("Leu 1 nota.");
+    // Os arquivos (spec #11549): as partes da mesma planilha contam uma vez.
+    expect(
+      readsLine([
+        { at: t, tool: "files_read", target: "Dados/v.xlsx › Aba A, linhas 2–100" },
+        { at: t, tool: "files_read", target: "Dados/v.xlsx › Aba A, linhas 101–200" },
+        { at: t, tool: "files_read", target: "Docs/laudo.pdf" },
+      ]),
+    ).toBe("Leu 2 arquivos.");
     expect(
       readsLine([
         { at: t, tool: "notes_read", target: "Kiwi.md" },

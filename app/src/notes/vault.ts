@@ -19,7 +19,7 @@ import path from "node:path";
 import { makeFileResolver, makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
-import { isEditableText, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
+import { isEditableText, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, MAX_SEARCH_QUERY, oneSpace, parseQuery, searchTooLong } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -640,6 +640,57 @@ export class Vault {
     if (!(await this.replaceChecked(p, content, baseVersion))) return { saved: false, current: await this.readFile(p, "text") };
     await this.fileWritten(p);
     return { saved: true, path: p, size, version: versionOf(content) };
+  }
+
+  /**
+   * Um arquivo novo que o agente gerou (spec #11549): só txt, csv, xlsx, docx e pdf, nunca por cima de outro (com o nome
+   * já usado na pasta, ele ganha um número, "Vendas 2.xlsx"). A versão é a mesma do `readFile` (o hash dos bytes).
+   */
+  async createFile(folder: unknown, name: unknown, bytes: unknown): Promise<{ path: string; size: number; version: string }> {
+    const dir = folderPath(folder ?? "");
+    if (!(bytes instanceof Uint8Array)) throw new VaultError("E_BAD_ARGS", "bytes must be binary data");
+    if (bytes.length > MAX_VIEW_BYTES) throw new VaultError("E_BAD_ARGS", "the file is larger than 25 MB");
+    if (typeof name !== "string") throw new VaultError("E_BAD_ARGS", "name must be a string");
+    const m = /^(.*?)\.(txt|csv|xlsx|docx|pdf)$/i.exec(name.trim());
+    if (!m) throw new VaultError("E_BAD_ARGS", "name must end in .txt, .csv, .xlsx, .docx or .pdf");
+    const base = fileNameFor(m[1]);
+    const ext = m[2]!.toLowerCase();
+    for (let n = 1; n < 1000; n++) {
+      const p = filePath(`${dir ? `${dir}/` : ""}${n === 1 ? base : `${base} ${n}`}.${ext}`);
+      const abs = inside(this.root, p);
+      if (await exists(abs)) continue;
+      await mkdir(path.dirname(abs), { recursive: true });
+      // `wx`: só se o arquivo ainda não existe (outro pode ter chegado entre a conferência e a escrita).
+      const wrote = await writeFile(abs, bytes, { flag: "wx" }).then(
+        () => true,
+        (e: { code?: string }) => {
+          if (e?.code === "EEXIST") return false;
+          throw e;
+        },
+      );
+      if (!wrote) continue;
+      await this.fileWritten(p);
+      return { path: p, size: bytes.length, version: createHash("sha256").update(bytes).digest("hex").slice(0, 16) };
+    }
+    throw new VaultError("E_EXISTS", `too many files called ${base}.${ext}`);
+  }
+
+  /**
+   * Manda para a Lixeira um arquivo que não é nota, se ele ainda está em `baseVersion` (o desfazer de um arquivo que o
+   * agente gerou, spec #11549): os 10 minutos no Desfazer do app, depois a Lixeira do macOS, como uma nota.
+   */
+  async deleteFile(input: unknown, baseVersion: unknown): Promise<true> {
+    const p = filePath(input);
+    if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
+    const abs = inside(this.root, p);
+    const s = await lstat(abs).catch(() => null);
+    if (!s?.isFile() || this.packageOf(p)) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
+    // O tipo "note" da Lixeira do app é o de um arquivo só: a volta é pelo caminho, como a de uma nota.
+    await this.stage(p, abs, "note", baseVersion);
+    this.files.delete(p);
+    this.touch(p);
+    await this.fileWritten(p);
+    return true;
   }
 
   async get(input: unknown): Promise<Note> {
@@ -1383,7 +1434,8 @@ export class Vault {
   /** O arquivo está naquela versão agora (lido do disco, não do índice). */
   private async atVersion(abs: string, version: string): Promise<boolean> {
     const raw = await readFile(abs).catch(() => null);
-    return raw !== null && versionOf(raw.toString("utf8")) === version;
+    // A versão de uma nota é a do texto; a de um arquivo que não é nota (o `readFile`), a dos bytes.
+    return raw !== null && (versionOf(raw.toString("utf8")) === version || createHash("sha256").update(raw).digest("hex").slice(0, 16) === version);
   }
 
   /** O "Desfazer" acabou: o item vai para a Lixeira do macOS. */

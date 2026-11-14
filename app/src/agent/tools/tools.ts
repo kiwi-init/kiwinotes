@@ -17,6 +17,8 @@ import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import type { VaultReader } from "./reader.ts";
+import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument } from "./files.ts";
+import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
 import { FACT_MAX_CHARS, MEMORY_MAX, MemoryError } from "../memory.ts";
 import {
@@ -60,8 +62,9 @@ export const KIWI_READ_TOOL_NAMES = [
   "meetings_get",
   "projects_list",
   "project_status",
+  "files_read",
 ] as const;
-export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write", "notes_organize_folder", "project_diary_add"] as const;
+export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write", "notes_organize_folder", "project_diary_add", "files_create"] as const;
 /** O diário do agente num projeto (spec #11469, T11670): a seção no fim da nota principal, uma linha com data por vez. */
 export const DIARY_SECTION = "Diário do agente";
 /** A maior linha do diário, em caracteres: uma frase, não um relatório. */
@@ -106,6 +109,13 @@ const SOURCED_PROPS = {
   fonte: { type: "string", description: "O caminho da nota ou da reunião de onde veio, como o notes_list ou o meetings_list devolve." },
 } as const;
 const SOURCED_ITEM = { type: "object", properties: SOURCED_PROPS, required: ["texto", "fonte"], additionalProperties: false } as const;
+/** Os limites do `files_create` (spec #11549): o conteúdo que o agente manda numa chamada. */
+export const CREATE_ROWS_MAX = 20_000;
+export const CREATE_COLUMNS_MAX = 200;
+export const CREATE_SHEETS_MAX = 50;
+export const CREATE_BLOCKS_MAX = 5_000;
+export const CREATE_CELL_CHARS = 5_000;
+export const CREATE_TOTAL_CHARS = 2_000_000;
 /** Quantas reuniões recentes o resumo mostra, no máximo. */
 export const SUMMARY_MEETINGS_MAX = 10;
 
@@ -208,6 +218,20 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
   },
   {
+    name: "files_read",
+    title: "Ler um arquivo do cofre",
+    description: `Lê uma planilha, um documento ou um pdf do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página. Devolve o sumário (as abas, as páginas, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md), use notes_read.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        caminho: { type: "string", description: "O caminho do arquivo no cofre (ex.: Projetos/Kiwi/vendas.xlsx), como o notes_list ou a nota mostram." },
+        parte: { type: "integer", minimum: 1, description: "Qual parte ler, pelo índice; sem ela, a 1ª." },
+      },
+      required: ["caminho"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "notes_create",
     title: "Criar uma nota",
     description: `Cria uma nota nova numa pasta do Kiwi, com o título e o texto em Markdown. Se já existe uma nota com esse título na pasta, a nova ganha um número ("Título 2"): a resposta diz o caminho que ela ganhou. Até ${WRITE_MAX_CHARS} caracteres. Não cria notas de reunião.`,
@@ -281,6 +305,56 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
       type: "object",
       properties: { folder: { type: "string", description: "A pasta (ex.: Projetos). As subpastas entram junto." } },
       required: ["folder"],
+      additionalProperties: false,
+    },
+    writes: true,
+  },
+  {
+    name: "files_create",
+    title: "Gerar um arquivo",
+    description: `Gera um arquivo ${CREATE_FORMATS.join(", ")} numa pasta do cofre com o conteúdo que você manda; o Kiwi monta o arquivo. Mande só a estrutura: para csv, a tabela (a 1ª linha é o cabeçalho); para xlsx, a tabela ou as abas; para txt, docx e pdf, os blocos (títulos, parágrafos, itens e tabelas). O arquivo nunca substitui outro (com o nome já usado, ganha um número). Ele aparece na Atividade com [Desfazer]. Para apontar para ele numa nota, use o link [[caminho]] pela escrita normal.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        formato: { type: "string", enum: [...CREATE_FORMATS] },
+        nome: { type: "string", minLength: 1, maxLength: 120, description: "O nome do arquivo, com ou sem a extensão (ex.: Vendas de novembro)." },
+        pasta: { type: "string", description: "A pasta do cofre (ex.: Projetos/Kiwi); vazia, a raiz." },
+        conteudo: {
+          type: "object",
+          properties: {
+            tabela: { type: "array", maxItems: CREATE_ROWS_MAX, items: { type: "array", items: { type: "string" } }, description: "As linhas; a 1ª é o cabeçalho." },
+            abas: {
+              type: "array",
+              maxItems: CREATE_SHEETS_MAX,
+              items: {
+                type: "object",
+                properties: { nome: { type: "string" }, tabela: { type: "array", items: { type: "array", items: { type: "string" } } } },
+                required: ["nome", "tabela"],
+                additionalProperties: false,
+              },
+              description: "Só no xlsx: uma aba por item.",
+            },
+            blocos: {
+              type: "array",
+              maxItems: CREATE_BLOCKS_MAX,
+              items: {
+                type: "object",
+                properties: {
+                  tipo: { type: "string", enum: ["titulo", "paragrafo", "item", "tabela"] },
+                  texto: { type: "string" },
+                  nivel: { type: "integer", minimum: 1, maximum: 3 },
+                  linhas: { type: "array", items: { type: "array", items: { type: "string" } }, description: "Só na tabela; a 1ª linha é o cabeçalho." },
+                },
+                required: ["tipo"],
+                additionalProperties: false,
+              },
+              description: "Para txt, docx e pdf: os pedaços na ordem.",
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+      required: ["formato", "nome", "conteudo"],
       additionalProperties: false,
     },
     writes: true,
@@ -837,6 +911,62 @@ async function run(
       }
       return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(content, offset, max) }, target: n.path };
     }
+    case "files_read": {
+      const a = args(raw, ["caminho", "parte"]);
+      const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
+      const parte = int(a, "parte", 1, Number.MAX_SAFE_INTEGER) ?? 1;
+      if (/\.md$/i.test(path)) throw new ToolError("E_BAD_ARGS", `${path} é uma nota: leia com notes_read`);
+      if (!fileFormat(path)) throw new ToolError("E_BAD_ARGS", `o files_read lê só ${FILE_FORMATS.join(", ")}`);
+      const f = await reader.file(path);
+      if ("tooLarge" in f || f.size > FILES_READ_MAX_BYTES)
+        throw new ToolError("E_TOO_LARGE", `${path} tem ${Math.round(f.size / 1024 / 1024)} MB, e o agente lê arquivos de até ${FILES_READ_MAX_BYTES / 1024 / 1024} MB`);
+      if (!("base64" in f)) throw new ToolError("E_FAILED", `não deu para ler ${path}`);
+      let doc: Awaited<ReturnType<typeof readDocument>>;
+      try {
+        doc = await readDocument(path, Buffer.from(f.base64, "base64"), economy ? ECONOMY_READ_MAX_CHARS : READ_MAX_CHARS);
+      } catch (e) {
+        if (e instanceof FileReadError) throw new ToolError(e.code, `${path}: ${e.message}`);
+        throw e;
+      }
+      const total = doc.parts.length;
+      if (parte > total) throw new ToolError("E_BAD_ARGS", `${path} tem ${total} parte(s)`);
+      const part = doc.parts[parte - 1]!;
+      // O texto da parte passa pelo filtro, como uma nota (spec #9818): o segredo vira o marcador, e a dúvida é perguntada.
+      const texto = await seen(path, part.text);
+      // Os nomes das abas e os rótulos das partes também são texto do arquivo: passam pelo filtro, numa chamada só
+      // (revisão do T11691). Um nome de aba não tem quebra de linha, então as linhas voltam no mesmo lugar.
+      const abas = doc.summary.abas ?? [];
+      const shown = doc.parts.slice(0, FILES_INDEX_MAX);
+      const names = [...abas.map((x) => x.nome), ...shown.map((x) => x.label), part.label];
+      const clean = (await seen(path, names.join("\n"))).split("\n");
+      if (clean.length === names.length) {
+        abas.forEach((x, i) => (x.nome = clean[i]!));
+        shown.forEach((x, i) => (x.label = clean[abas.length + i]!));
+        part.label = clean.at(-1)!;
+      } else throw new ToolError("E_FAILED", `não deu para ler ${path} com o filtro`);
+      const indice = shown.map((p, i) => ({ parte: i + 1, rotulo: p.label }));
+      const avisos = [
+        ...doc.warnings,
+        ...(total > FILES_INDEX_MAX ? [`O índice mostra as ${FILES_INDEX_MAX} primeiras de ${total} partes.`] : []),
+        ...(parte < total ? [`Há mais: ${total - parte} parte(s) depois desta; peça com parte.`] : []),
+      ];
+      return {
+        value: {
+          caminho: path,
+          formato: doc.format,
+          tamanho: f.size,
+          sumario: doc.summary,
+          partes: total,
+          indice,
+          parte,
+          rotulo: part.label,
+          texto,
+          ...(parte < total ? { proximaParte: parte + 1 } : {}),
+          ...(avisos.length ? { aviso: avisos.join(" ") } : {}),
+        },
+        target: total > 1 ? `${path} › ${part.label}` : path,
+      };
+    }
     case "notes_list": {
       const a = args(raw, ["folder", "offset"]);
       const folder = (str(a, "folder", false) ?? "").replace(/^\/+|\/+$/g, "");
@@ -1002,6 +1132,8 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
   const folder = await writer.folder();
   const where = folder ? { folder } : {};
   switch (name) {
+    case "files_create":
+      return createFile(writer, raw, guard, where);
     case "notes_create": {
       const a = args(raw, ["folder", "title", "text"]);
       const title = str(a, "title", true, 200)!;
@@ -1405,4 +1537,79 @@ async function memoryTool(sink: MemorySink, name: string, raw: unknown, guard: S
     if (e instanceof MemoryError) throw new ToolError(e.code, e.message);
     throw e;
   }
+}
+
+/**
+ * Um arquivo gerado (spec #11549): confere o formato, o nome e o conteúdo, limpa cada texto (um marcador do filtro é
+ * recusado, como numa nota nova: o segredo de outra nota não vai para um arquivo), monta os bytes e cria o arquivo.
+ */
+async function createFile(writer: VaultWriter, raw: unknown, guard: SecretGuard | undefined, where: { folder?: string }): Promise<ToolResult> {
+  const a = args(raw, ["formato", "nome", "pasta", "conteudo"]);
+  const format = str(a, "formato", true, 10) as CreateFormat;
+  if (!(CREATE_FORMATS as readonly string[]).includes(format)) throw new ToolError("E_BAD_ARGS", `formato é ${CREATE_FORMATS.join(", ")}`);
+  const given = str(a, "nome", true, 120)!.trim();
+  const ext = /\.([a-z0-9]{2,5})$/i.exec(given)?.[1]?.toLowerCase();
+  if (ext && (CREATE_FORMATS as readonly string[]).includes(ext) && ext !== format) throw new ToolError("E_BAD_ARGS", `o nome termina em .${ext}, e o formato é ${format}`);
+  const name = `${ext === format ? given.slice(0, -(format.length + 1)) : given}.${format}`;
+  const dir = (str(a, "pasta", false) ?? "").trim().replace(/^\/+|\/+$/g, "");
+  let total = 0;
+  const text = (v: unknown, where: string, max = CREATE_CELL_CHARS) => {
+    if (typeof v !== "string") throw new ToolError("E_BAD_ARGS", `${where} deve ser texto`);
+    if (v.length > max) throw new ToolError("E_BAD_ARGS", `${where} passa de ${max} caracteres`);
+    total += v.length;
+    if (total > CREATE_TOTAL_CHARS) throw new ToolError("E_TOO_LARGE", `o conteúdo passa de ${CREATE_TOTAL_CHARS} caracteres: divida em mais de um arquivo`);
+    return restore(guard, "\u0000nova", v);
+  };
+  const table = (v: unknown, where: string): string[][] => {
+    if (!Array.isArray(v)) throw new ToolError("E_BAD_ARGS", `${where} deve ser uma lista de linhas`);
+    if (v.length > CREATE_ROWS_MAX) throw new ToolError("E_TOO_LARGE", `${where} passa de ${CREATE_ROWS_MAX} linhas`);
+    return v.map((r, i) => {
+      if (!Array.isArray(r)) throw new ToolError("E_BAD_ARGS", `${where}[${i}] deve ser uma lista de células`);
+      if (r.length > CREATE_COLUMNS_MAX) throw new ToolError("E_TOO_LARGE", `${where}[${i}] passa de ${CREATE_COLUMNS_MAX} colunas`);
+      return r.map((c, k) => text(typeof c === "number" ? String(c) : c, `${where}[${i}][${k}]`));
+    });
+  };
+  const c = args(a.conteudo, ["tabela", "abas", "blocos"]);
+  const content: CreateContent = {};
+  if (c.tabela !== undefined) content.tabela = table(c.tabela, "conteudo.tabela");
+  if (c.abas !== undefined) {
+    if (!Array.isArray(c.abas) || !c.abas.length || c.abas.length > CREATE_SHEETS_MAX) throw new ToolError("E_BAD_ARGS", `conteudo.abas é uma lista de 1 a ${CREATE_SHEETS_MAX} abas`);
+    content.abas = c.abas.map((x, i) => {
+      const o = args(x, ["nome", "tabela"]);
+      return { nome: text(o.nome, `conteudo.abas[${i}].nome`, 100), tabela: table(o.tabela, `conteudo.abas[${i}].tabela`) };
+    });
+  }
+  if (c.blocos !== undefined) {
+    if (!Array.isArray(c.blocos) || c.blocos.length > CREATE_BLOCKS_MAX) throw new ToolError("E_BAD_ARGS", `conteudo.blocos é uma lista de até ${CREATE_BLOCKS_MAX} blocos`);
+    content.blocos = c.blocos.map((x, i): DocBlock => {
+      const o = args(x, ["tipo", "texto", "nivel", "linhas"]);
+      const w = `conteudo.blocos[${i}]`;
+      if (o.tipo === "tabela") return { tipo: "tabela", linhas: table(o.linhas, `${w}.linhas`) };
+      if (o.tipo !== "titulo" && o.tipo !== "paragrafo" && o.tipo !== "item") throw new ToolError("E_BAD_ARGS", `${w}.tipo é titulo, paragrafo, item ou tabela`);
+      const t = text(o.texto, `${w}.texto`, 20_000);
+      if (o.tipo === "titulo") {
+        const nivel = o.nivel === undefined ? 1 : o.nivel;
+        if (nivel !== 1 && nivel !== 2 && nivel !== 3) throw new ToolError("E_BAD_ARGS", `${w}.nivel é 1, 2 ou 3`);
+        return { tipo: "titulo", texto: t, nivel };
+      }
+      return { tipo: o.tipo, texto: t };
+    });
+  }
+  // O que cada formato pede.
+  if (format === "csv" && (!content.tabela || content.abas || content.blocos)) throw new ToolError("E_BAD_ARGS", "o csv é uma tabela: mande conteudo.tabela");
+  if (format === "xlsx" && (content.blocos || !!content.tabela === !!content.abas)) throw new ToolError("E_BAD_ARGS", "o xlsx leva conteudo.tabela ou conteudo.abas");
+  if ((format === "txt" || format === "docx" || format === "pdf") && (content.abas || !!content.blocos === !!content.tabela))
+    throw new ToolError("E_BAD_ARGS", `o ${format} leva conteudo.blocos (ou uma conteudo.tabela)`);
+  const bytes = await buildFile(format, content);
+  const f = await writer.createFile(dir, name, bytes);
+  return {
+    value: {
+      caminho: f.path,
+      formato: format,
+      tamanho: f.size,
+      aviso: `O arquivo está criado e aparece na Atividade com [Desfazer]. Para apontar para ele numa nota, use [[${f.path}]].`,
+    },
+    target: f.path,
+    change: { kind: "created", path: f.path, before: 0, after: f.size, version: f.version, ...where },
+  };
 }

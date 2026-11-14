@@ -30,16 +30,20 @@ export interface UndoNotes {
 }
 
 /** As únicas capacidades que o desfazer chama. */
-export const UNDO_CAPABILITIES = ["notes.folder", "notes.get", "notes.save", "notes.delete"] as const;
+export const UNDO_CAPABILITIES = ["notes.folder", "notes.get", "notes.save", "notes.delete", "files.read", "files.delete"] as const;
 type UndoCapability = (typeof UNDO_CAPABILITIES)[number];
 
 const codeOf = (e: unknown) => (e as { code?: string })?.code;
+const isNote = (path: string) => /\.md$/i.test(path);
 const withFolder = (args: Record<string, unknown>, folderId?: string) => (folderId ? { ...args, folderId } : args);
 
 /** A pasta trocou entre a conferência e a chamada: o `folderCapabilities` recusa o id velho. */
 export class OtherFolder extends Error {}
 
-/** O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as quatro acima. */
+/**
+ * O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as seis acima. Um arquivo que não é nota (o que
+ * o agente gerou, spec #11549) é lido pelo `files.read` (só a versão) e vai para a Lixeira pelo `files.delete`.
+ */
 export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: unknown) => unknown>): UndoNotes {
   const call = async <T>(cap: UndoCapability, args: unknown): Promise<T> => {
     try {
@@ -61,6 +65,11 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
     },
     get: async (path, folderId) => {
       try {
+        if (!isNote(path)) {
+          const f = await call<{ version?: string }>("files.read", withFolder({ path, as: "binary" }, folderId));
+          // Um arquivo grande demais para ler volta sem versão: não dá para conferir, então não é o do agente.
+          return { content: "", version: f.version ?? "" };
+        }
         const n = await call<{ content: string; version: string }>("notes.get", withFolder({ path }, folderId));
         return { content: n.content, version: n.version };
       } catch (e) {
@@ -79,7 +88,7 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
     },
     trash: async (path, baseVersion, folderId) => {
       try {
-        await call("notes.delete", withFolder({ path, baseVersion }, folderId));
+        await call(isNote(path) ? "notes.delete" : "files.delete", withFolder({ path, baseVersion }, folderId));
         return "trashed";
       } catch (e) {
         if (codeOf(e) === "E_CONFLICT") return "changed";

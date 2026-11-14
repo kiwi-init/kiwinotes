@@ -465,6 +465,7 @@ function memoryReader(notes: Record<string, string>): VaultReader {
     meetings: async () => [],
     projects: EMPTY_READER.projects,
     projectStatus: EMPTY_READER.projectStatus,
+    file: EMPTY_READER.file,
   };
 }
 
@@ -479,7 +480,7 @@ describe("as ferramentas do Kiwi (spec #7496)", () => {
     const m = make({ reader: memoryReader(NOTES) });
     await readyNow(m);
     const turn = await askAndWait(m, "/ferramentas");
-    expect(turn.at(-1)).toMatchObject({ type: "done", text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status" });
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read" });
     const params = opened(m)[0]!.params as { mcpServers: KiwiServer[]; _meta: { claudeCode: { options: Record<string, unknown> } } };
     expect(params.mcpServers).toHaveLength(1);
     expect(params.mcpServers[0]).toMatchObject({ type: "http", name: "kiwi" });
@@ -639,8 +640,42 @@ function memoryWriter(notes: Record<string, string>): VaultWriter {
       return note(p);
     },
     folder: async () => null,
+    // Um arquivo do agente (spec #11549): os bytes guardados como latin1 no mesmo mapa, com a versão dos bytes.
+    createFile: async (folder, name, bytes) => {
+      const p = `${folder ? `${folder}/` : ""}${name}`;
+      notes[p] = Buffer.from(bytes).toString("latin1");
+      return { path: p, size: bytes.length, version: createHash("sha256").update(bytes).digest("hex").slice(0, 16) };
+    },
   };
 }
+
+describe("os arquivos que o agente gera (spec #11549)", () => {
+  test("o pedido gera o arquivo, a Atividade registra a criação, e o [Desfazer] o manda para a Lixeira", async () => {
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    const turn = await askAndWait(m, "/gerar-arquivo pdf Saída/Relatório");
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: "Gerei Saída/Relatório.pdf." });
+    const bytes = Buffer.from(notes["Saída/Relatório.pdf"]!, "latin1");
+    expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    const r = (await m.svc.activityLog())[0]!;
+    expect(r.changes).toEqual([expect.objectContaining({ kind: "created", path: "Saída/Relatório.pdf", before: 0, after: bytes.length })]);
+    const trashed: string[] = [];
+    m.svc.useUndo({
+      folder: async () => null,
+      get: async (q) => (notes[q] === undefined ? null : { content: "", version: createHash("sha256").update(Buffer.from(notes[q]!, "latin1")).digest("hex").slice(0, 16) }),
+      save: async () => false,
+      trash: async (q) => {
+        trashed.push(q);
+        delete notes[q];
+        return "trashed";
+      },
+    });
+    await m.svc.undo(r.id);
+    expect(trashed).toEqual(["Saída/Relatório.pdf"]);
+    expect(notes["Saída/Relatório.pdf"]).toBeUndefined();
+  });
+});
 
 describe("a escrita e o registro do agente (spec #8356)", () => {
   test("com o escritor, as três de escrita aparecem; cada pedido entra no registro com o que leu e mudou, e a cópia de antes", async () => {
@@ -649,7 +684,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, meeting_propose, project_summary_propose",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, files_create, meeting_propose, project_summary_propose",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
@@ -722,10 +757,10 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await expect(m.svc.undo("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   });
 
-  test("sem o escritor, só as oito de leitura", async () => {
+  test("sem o escritor, só as nove de leitura", async () => {
     const m = make({ reader: memoryReader(NOTES) });
     await readyNow(m);
-    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status" });
+    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read" });
     expect((await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"x"}')).at(-1)).toMatchObject({ text: expect.stringContaining("não tem a ferramenta") });
   });
 

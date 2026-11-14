@@ -14,8 +14,12 @@ import { DEFAULT_SETTINGS } from "../../store/settings.ts";
 import { AgentActivity } from "../activity.ts";
 import { readerFromCapabilities } from "./reader.ts";
 import { KiwiToolServer, MAX_BODY, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
-import { DIARY_LINE_MAX, DIARY_STATUS_LINES, localDay, WRITE_MAX_CHARS, type ToolChange, type WriteJournal } from "./tools.ts";
+import { DIARY_LINE_MAX, DIARY_STATUS_LINES, localDay, runKiwiTool, WRITE_MAX_CHARS, type ToolChange, type WriteJournal } from "./tools.ts";
+import { EMPTY_READER } from "./reader.ts";
+import { SecretGuard } from "../../guardrail/filter.ts";
 import { WRITER_CAPABILITIES, writerFromCapabilities, type VaultWriter } from "./writer.ts";
+import { undoNotesFromCapabilities } from "../undo.ts";
+import { CSV_DELIMITER } from "./files-create.ts";
 import { tempDir } from "../../../test/tmp.ts";
 
 const dirs: string[] = [];
@@ -107,7 +111,7 @@ async function tool(config: KiwiMcpServerConfig, name: string, args: unknown = {
 }
 
 describe("o servidor com o escritor (spec #8356)", () => {
-  test("o tools/list traz as treze, e só as cinco de escrita (com o organizar a pasta, spec #11102, e o diário do projeto, T11670) dizem que mudam o cofre", async () => {
+  test("o tools/list traz as quinze, e só as seis de escrita (com o organizar a pasta, spec #11102, o diário do projeto, T11670, e o files_create, #11549) dizem que mudam o cofre", async () => {
     const { config } = await setup();
     const init = (await (await rpc(config, "initialize", { protocolVersion: "2025-06-18" })).json()) as any;
     expect(init.result.instructions).toContain("notes_write");
@@ -123,13 +127,15 @@ describe("o servidor com o escritor (spec #8356)", () => {
       "meetings_get",
       "projects_list",
       "project_status",
+      "files_read",
       "notes_create",
       "notes_append",
       "notes_write",
       "project_diary_add",
       "notes_organize_folder",
+      "files_create",
     ]);
-    for (const name of ["notes_create", "notes_append", "notes_write", "project_diary_add", "notes_organize_folder"]) {
+    for (const name of ["notes_create", "notes_append", "notes_write", "project_diary_add", "notes_organize_folder", "files_create"]) {
       expect(byName[name].annotations).toMatchObject({ readOnlyHint: false, idempotentHint: false, openWorldHint: false });
       // Os campos internos da definição não vão para o agente.
       expect(byName[name].writes).toBeUndefined();
@@ -420,9 +426,10 @@ describe("a fronteira do cofre", () => {
     expect(readFileSync(path.join(root, "Latin.md"))).toEqual(Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
   });
 
-  test("o escritor só chama as quatro capacidades dele", async () => {
+  test("o escritor só chama as cinco capacidades dele", async () => {
     const { config, called } = await setup();
     await tool(config, "notes_create", { title: "Nova", text: "x" });
+    await tool(config, "files_create", { formato: "txt", nome: "Novo", conteudo: { blocos: [{ tipo: "paragrafo", texto: "x" }] } });
     await tool(config, "notes_append", { path: "Nova.md", text: "y" });
     await tool(config, "notes_write", { path: "Nova.md", text: "z", version: versionOf("x\ny\n") });
     expect([...called].sort()).toEqual([...WRITER_CAPABILITIES].sort());
@@ -487,4 +494,110 @@ describe("o diário do projeto (spec #11469, T11670)", () => {
     servers.push(ro);
     expect((await tool(ro.start(), "project_diary_add", { projeto: "Projetos", texto: "x" })).error).toContain("não tem a ferramenta project_diary_add");
   });
+});
+
+describe("files_create: o Kiwi gera o arquivo com o que o agente manda (spec #11549)", () => {
+  const TABELA = [["Mês", "Exames", "Obs"], ["Outubro", "1200", "ok; revisado"], ["Novembro", "980", "aspas \"assim\""]];
+  const BLOCOS = [
+    { tipo: "titulo", texto: "Relatório da migração", nivel: 1 },
+    { tipo: "paragrafo", texto: "O arquivo de 2019 vai primeiro. Ação: revisar a cotação." },
+    { tipo: "titulo", texto: "Próximos passos", nivel: 2 },
+    { tipo: "item", texto: "Confirmar a janela" },
+    { tipo: "tabela", linhas: [["Ano", "Exames"], ["2019", "1200"]] },
+  ];
+
+  test("gera txt, csv, xlsx, docx e pdf, e cada um abre certo (relido pelo files_read)", async () => {
+    const { config, changes, root } = await setup();
+    const make = async (formato: string, conteudo: unknown, nome = "Relatório") => {
+      const r = await tool(config, "files_create", { formato, nome, pasta: "Saída", conteudo });
+      expect(r.error).toBeUndefined();
+      expect(r.value).toMatchObject({ caminho: `Saída/${nome}.${formato}`, formato });
+      return (await tool(config, "files_read", { caminho: r.value.caminho })).value;
+    };
+    expect((await make("txt", { blocos: BLOCOS })).texto).toBe(
+      "# Relatório da migração\n\nO arquivo de 2019 vai primeiro. Ação: revisar a cotação.\n\n## Próximos passos\n\n- Confirmar a janela\n| Ano | Exames |\n| 2019 | 1200 |",
+    );
+    // O csv com `;` e o BOM (o Excel em português), as aspas e o `;` dentro da célula protegidos.
+    const csv = await make("csv", { tabela: TABELA });
+    expect(csv.texto).toBe("| Mês | Exames | Obs |\n| --- | --- | --- |\n| Outubro | 1200 | ok; revisado |\n| Novembro | 980 | aspas \"assim\" |");
+    const bytes = readFileSync(path.join(root, "Saída/Relatório.csv"));
+    expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(bytes.toString("utf8")).toContain(`Outubro${CSV_DELIMITER}1200${CSV_DELIMITER}"ok; revisado"`);
+    // O xlsx com duas abas; o número vira número (o Excel soma), e volta igual na leitura.
+    const xlsx = await make("xlsx", { abas: [{ nome: "Exames", tabela: TABELA }, { nome: "Resumo", tabela: [["Total"], ["2180"]] }] });
+    expect(xlsx.sumario.abas).toEqual([
+      { nome: "Exames", linhas: 3, colunas: 3 },
+      { nome: "Resumo", linhas: 2, colunas: 1 },
+    ]);
+    expect(xlsx.texto).toContain("| Outubro | 1200 | ok; revisado |");
+    const docx = await make("docx", { blocos: BLOCOS });
+    expect(docx.texto).toBe("# Relatório da migração\nO arquivo de 2019 vai primeiro. Ação: revisar a cotação.\n## Próximos passos\n- Confirmar a janela\n| Ano | Exames |\n| 2019 | 1200 |");
+    const pdf = await make("pdf", { blocos: BLOCOS });
+    expect(pdf.texto).toBe("Relatório da migração\nO arquivo de 2019 vai primeiro. Ação: revisar a cotação.\nPróximos passos\n• Confirmar a janela\nAno | Exames\n2019 | 1200");
+    // Cada arquivo é uma mudança "created" do registro, com o tamanho e a versão dos bytes.
+    expect(changes().map((c) => [c.kind, c.path])).toEqual(["txt", "csv", "xlsx", "docx", "pdf"].map((f) => ["created", `Saída/Relatório.${f}`]));
+    const pdfBytes = readFileSync(path.join(root, "Saída/Relatório.pdf"));
+    expect(changes().at(-1)).toMatchObject({ before: 0, after: pdfBytes.length, version: createHash("sha256").update(pdfBytes).digest("hex").slice(0, 16) });
+  });
+
+  test("nunca por cima de outro arquivo: o nome usado ganha um número", async () => {
+    const { config, root } = await setup();
+    writeFileSync(path.join(root, "Vendas.csv"), "antigo");
+    const r = await tool(config, "files_create", { formato: "csv", nome: "Vendas.csv", conteudo: { tabela: [["a"]] } });
+    expect(r.value.caminho).toBe("Vendas 2.csv");
+    expect(readFileSync(path.join(root, "Vendas.csv"), "utf8")).toBe("antigo");
+  });
+
+  test("o conteúdo errado para o formato, o nome com outra extensão, a pasta fora do cofre e o segredo de outra nota são recusados", async () => {
+    const { config, root } = await setup();
+    const bad = async (args: unknown) => (await tool(config, "files_create", args)).error ?? "";
+    expect(await bad({ formato: "csv", nome: "x", conteudo: { blocos: [{ tipo: "paragrafo", texto: "a" }] } })).toContain("E_BAD_ARGS");
+    expect(await bad({ formato: "xlsx", nome: "x", conteudo: {} })).toContain("E_BAD_ARGS");
+    expect(await bad({ formato: "pdf", nome: "x", conteudo: { blocos: [], tabela: [["a"]] } })).toContain("E_BAD_ARGS");
+    expect(await bad({ formato: "pdf", nome: "x.docx", conteudo: { blocos: [] } })).toContain("E_BAD_ARGS");
+    expect(await bad({ formato: "exe", nome: "x", conteudo: { blocos: [] } })).toContain("E_BAD_ARGS");
+    expect(await bad({ formato: "txt", nome: "x", pasta: "../fora", conteudo: { blocos: [] } })).toMatch(/E_OUTSIDE_VAULT|E_BAD_ARGS/);
+    expect(await bad({ formato: "txt", nome: "x", pasta: "Link", conteudo: { blocos: [] } })).toContain("E_OUTSIDE_VAULT");
+    expect(readdirSync(path.join(root, "..", "fora"))).toEqual([]);
+  });
+
+  test("o [Desfazer] manda o arquivo para a Lixeira, só se ele ainda é o que o agente gerou", async () => {
+    const { config, caps, root, changes } = await setup();
+    const undo = undoNotesFromCapabilities(caps as never);
+    await tool(config, "files_create", { formato: "pdf", nome: "Laudo", conteudo: { blocos: [{ tipo: "paragrafo", texto: "a" }] } });
+    await tool(config, "files_create", { formato: "txt", nome: "Notas", conteudo: { blocos: [{ tipo: "paragrafo", texto: "a" }] } });
+    const [pdf, txt] = changes();
+    expect((await undo.get(pdf!.path))?.version).toBe(pdf!.version);
+    // O txt mudou depois do agente: não sai do lugar.
+    writeFileSync(path.join(root, "Notas.txt"), "a pessoa mudou");
+    expect(await undo.trash(txt!.path, txt!.version)).toBe("changed");
+    expect(existsSync(path.join(root, "Notas.txt"))).toBe(true);
+    expect(await undo.trash(pdf!.path, pdf!.version)).toBe("trashed");
+    expect(existsSync(path.join(root, "Laudo.pdf"))).toBe(false);
+    expect(await undo.trash(pdf!.path, pdf!.version)).toBe("gone");
+    expect(await undo.get(pdf!.path)).toBeNull();
+  });
+});
+
+test("files_create: o segredo de outra nota (o marcador do filtro) não vai para um arquivo", async () => {
+  const guard = new SecretGuard();
+  const marker = /‹segredo [^›]+›/.exec(guard.request("a chave é ghp_0123456789abcdefghijABCDEFGHIJ012345 e pronto").text)?.[0];
+  expect(marker).toBeDefined();
+  const made: string[] = [];
+  const writer: VaultWriter = {
+    get: async () => {
+      throw new Error("não usado");
+    },
+    save: async () => ({ saved: false }),
+    create: async () => {
+      throw new Error("não usado");
+    },
+    folder: async () => null,
+    createFile: async (_f, name, bytes) => (made.push(name), { path: name, size: bytes.length, version: "v" }),
+  };
+  const journal: WriteJournal = { keep: async () => "c", drop: async () => {} };
+  const ctx = { reader: EMPTY_READER, writer, journal, guard };
+  await expect(runKiwiTool(ctx, "files_create", { formato: "txt", nome: "x", conteudo: { blocos: [{ tipo: "paragrafo", texto: `usar ${marker}` }] } })).rejects.toThrow(/marcador/);
+  await expect(runKiwiTool(ctx, "files_create", { formato: "csv", nome: "x", conteudo: { tabela: [["Token"], [marker!]] } })).rejects.toThrow(/marcador/);
+  expect(made).toEqual([]);
 });

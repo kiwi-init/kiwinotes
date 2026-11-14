@@ -124,7 +124,7 @@ export interface CapabilityDeps {
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile" | "embed"
-    | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile"
+    | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile" | "createFile" | "deleteFile"
   > &
     // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu.
     Partial<Pick<Vault, "noteInodes">>;
@@ -822,6 +822,15 @@ export function uiCapabilities(deps: CapabilityDeps,
     "files.save": async (args) => {
       const a = fields(args, "files.save", ["path", "content", "baseVersion"]);
       return (await vault()).saveFile(a.path, a.content, a.baseVersion);
+    },
+    "files.create": async (args) => {
+      const a = fields(args, "files.create", ["folder", "name", "base64"]);
+      if (typeof a.base64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(a.base64)) throw bad("files.create: base64 must be base64 text");
+      return (await vault()).createFile(a.folder, a.name, new Uint8Array(Buffer.from(a.base64, "base64")));
+    },
+    "files.delete": async (args) => {
+      const a = fields(args, "files.delete", ["path", "baseVersion"]);
+      return (await vault()).deleteFile(a.path, a.baseVersion);
     },
     "notes.canvasGet": async (args) => (await vault()).getCanvas(fields(args, "notes.canvasGet", ["path"]).path),
     "notes.canvasSave": async (args) => {
