@@ -1477,6 +1477,26 @@ describe("a memória do agente (spec #11469)", () => {
     expect(r2!.reads.find((x) => x.tool === "memory_remember")?.target).toBeUndefined();
   });
 
+  test("a memória cheia (T11808): o fato não entra, o agente recebe o erro e o balão avisa, sem [Desfazer]", async () => {
+    const root = tmp();
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    m.svc.useVaultRoot(async () => root);
+    const seen: AgentMemoryView[] = [];
+    m.svc.onMemoryChanged((v) => seen.push(v));
+    await readyNow(m);
+    const full = Array.from({ length: 60 }, (_, i) => `fato ${i + 1}`);
+    await m.svc.memorySet(full);
+    const turn = await askAndWait(m, "lembra que tem um gato");
+    expect(JSON.stringify(turn.at(-1))).toContain("E_MEMORY_FULL");
+    expect((await m.svc.memoryView()).facts).toEqual(full);
+    const v = seen.at(-1)!;
+    expect(v.facts).toEqual(full);
+    expect(v.changes).toEqual([expect.objectContaining({ action: "full", fact: "tem um gato" })]);
+    await expect(m.svc.memoryUndo(v.changes[0]!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    expect((await m.svc.memoryView()).facts).toEqual(full);
+  });
+
   test("as instruções e o glossário (T11667): no começo fixo, na ordem, os mesmos bytes em dois pedidos seguidos; no modo econômico, só os termos do pedido", async () => {
     const root = tmp();
     const notes: Record<string, string> = { ...NOTES };

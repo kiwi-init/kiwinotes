@@ -594,7 +594,14 @@ export interface AgentMemoryView {
    * As mudanças que o agente fez no último pedido que mexeu na memória, na ordem (o balão "Anotei: …", cada uma com o
    * seu [Desfazer]); vazio sem nenhuma desde que o app abriu.
    */
-  changes: { id: string; action: "remember" | "forget"; fact: string; at: string; undone?: boolean }[];
+  changes: {
+    id: string;
+    /** `full` (T11808): a memória cheia recusou o fato; o balão avisa, sem [Desfazer]. */
+    action: "remember" | "forget" | "full";
+    fact: string;
+    at: string;
+    undone?: boolean;
+  }[];
 }
 
 /** Uma proposta da reunião (1.57.0, spec #8360). As horas em ISO. */
