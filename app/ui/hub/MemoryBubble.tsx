@@ -51,8 +51,6 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
       open.current = true;
       setFailure(null);
       setChanges(v.changes);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(close, MEMORY_BUBBLE_MS);
     });
     return () => {
       off();
@@ -62,6 +60,14 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
 
   useEffect(() => onShown?.(changes.length > 0), [changes.length > 0]);
   const showing = changes.length > 0 && !hidden;
+  // O tempo conta só com o balão na tela (spec #12749): ele espera o balão da resposta sair, e uma resposta longa não o
+  // faz sumir antes de aparecer. Uma mudança nova ou um [Desfazer] recomeça a conta.
+  useEffect(() => {
+    if (!showing) return;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(close, MEMORY_BUBBLE_MS);
+    return () => clearTimeout(timer.current);
+  }, [showing, changes]);
   const keepFocus = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) e.preventDefault();
   };

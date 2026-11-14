@@ -144,7 +144,7 @@ export function mergeMemory(existing: string | null, facts: readonly string[], k
   const insert = (pos: number, line: string) => {
     out.splice(pos, 0, line);
     for (const [key, p] of at) if (p >= pos) at.set(key, p + 1);
-    for (const [index, p] of slots) if (p > pos) slots.set(index, p + 1);
+    for (const [index, p] of slots) if (p >= pos) slots.set(index, p + 1);
     if (lastFactLine >= pos) lastFactLine++;
   };
   let prev: number | null = null;

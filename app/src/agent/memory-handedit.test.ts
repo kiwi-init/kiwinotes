@@ -71,6 +71,10 @@ describe("a memória escrita à mão: o que vai ao agente e o que fica (T12771)"
     expect(mergeMemory(text, ["mora em BH", "trabalha com PACS", "café sem açúcar", "tem um gato"])).toEndWith("- café sem açúcar\n- tem um gato\n");
     // Editar em Ajustes (o mesmo fato com outra escrita): a linha muda no lugar.
     expect(mergeMemory(text, ["Mora em Belo Horizonte", "trabalha com PACS", "café sem açúcar"])).toContain("Sobre mim:\n- Mora em Belo Horizonte\n- trabalha com PACS\n");
+    // Trocar a lista inteira em Ajustes: os fatos novos ficam na ordem da lista, cada um no lugar do antigo da mesma
+    // posição, e o que sobra vai depois do último.
+    expect(mergeMemory(text, ["um", "dois", "três", "quatro"])).toBe("# Minha memória\n\nSobre mim:\n- um\n- dois\n\n## Gostos\n- três\n- quatro\n");
+    expect(inspectMemory(mergeMemory(formatMemory(["a", "b"]), Array.from({ length: 60 }, (_, i) => `f${i}`))).facts).toEqual(Array.from({ length: 60 }, (_, i) => `f${i}`));
     // Um arquivo sem nenhum fato, só com texto: os fatos vão no fim, depois de uma linha em branco.
     expect(mergeMemory("Só um parágrafo.", ["a"])).toBe("Só um parágrafo.\n\n- a\n");
   });
