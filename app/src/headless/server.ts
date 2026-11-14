@@ -245,6 +245,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   stores.agent.useReader(readerFromCapabilities(capabilities));
   // O Modelo de nota (spec #11102) do cofre aberto, para o começo fixo do pedido.
   stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
+  stores.agent.useVaultRoot(async () => (await stores.folders.current()).notes.root);
   stores.agent.useWriter(writerFromCapabilities(capabilities));
   // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
   stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
@@ -280,6 +281,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.agent.onNoticeChanged((e) => event("agent.noticeChanged", e)),
     stores.agent.onUsageChanged((e) => event("agent.usageChanged", e)),
     stores.agent.onProposalsChanged((proposals) => event("agent.proposalsChanged", { proposals })),
+    stores.agent.onMemoryChanged((v) => event("agent.memoryChanged", v)),
   ];
   // O gato no overlay (spec #9810): no headless não há hub, então os pedidos vão ao helper, que no `--headless` não mostra
   // nada; os comandos aparecem no log, e o `kiwicat.where` sai como evento.

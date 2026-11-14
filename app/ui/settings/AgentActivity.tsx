@@ -20,6 +20,7 @@ import {
   EMPTY_ACTIVITY,
   goneRequest,
   heldLines,
+  memoryLines,
   doubtLine,
   removedLine,
   openChanges,
@@ -243,7 +244,12 @@ function Request({
           </Button>
         ) : null}
       </div>
-      <p className="kn-activity-reads">{readsLine(r.reads)}</p>
+      {readsLine(r.reads) ? <p className="kn-activity-reads">{readsLine(r.reads)}</p> : null}
+      {memoryLines(r.reads).map((l, i) => (
+        <p key={`m${i}`} className="kn-activity-reads kn-activity-memory">
+          {l}
+        </p>
+      ))}
       {heldLines(r).map((l) => (
         <p key={l} className="kn-activity-held">
           {l}
@@ -267,7 +273,8 @@ function Request({
         </ul>
       ) : null}
       {r.changes.length === 0 ? (
-        <p className="kn-activity-none">Não mudou nada.</p>
+        // Só a memória mudou (spec #11469): as linhas dela já dizem; "Não mudou nada" seria falso.
+        memoryLines(r.reads).length ? null : <p className="kn-activity-none">Não mudou nada.</p>
       ) : (
         <ul className="kn-activity-changes">
           {r.changes.map((c, i) => {

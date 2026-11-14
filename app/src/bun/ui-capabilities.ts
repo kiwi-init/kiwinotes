@@ -1232,6 +1232,16 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalDiscard: id must be the id of a proposal");
       return agentCall((agent) => agent.proposalDiscard(a.id as string));
     },
+    // A memória do agente (spec #11469): o que ele sabe sobre a pessoa, no cofre.
+    "agent.memory": (args) => {
+      noArgs(args, "agent.memory");
+      return agentCall((agent) => agent.memoryView());
+    },
+    "agent.memoryUndo": (args) => {
+      const a = fields(args, "agent.memoryUndo", ["id"]);
+      if (typeof a.id !== "string" || !a.id) throw bad("agent.memoryUndo: id must be the id of a memory change");
+      return agentCall((agent) => agent.memoryUndo(a.id as string));
+    },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);
       if (typeof a.request !== "string" || !a.request) throw bad("agent.change: request must be the id of a request");

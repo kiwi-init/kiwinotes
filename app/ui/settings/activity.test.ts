@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentChangeView, AgentUndoNote } from "../../src/shared/ui-contract.ts";
-import { changeLine, doubtLine, goneRequest, heldLines, hourOf, removedLine, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf } from "./activityText.ts";
+import { changeLine, doubtLine, goneRequest, heldLines, hourOf, removedLine, noteName, openChanges, readsLine, requestLine, undoLine, undoneLine, viewNotice, whenOf, memoryLines } from "./activityText.ts";
 
 /** Uma hora local, em ISO: os testes não dependem do fuso da máquina. */
 const at = (day: number, h: number, m: number) => new Date(2026, 10, day, h, m).toISOString();
@@ -124,4 +124,14 @@ describe("a seção Atividade do agente: os textos", () => {
     );
     expect(doubtLine({ path: "", line: 1, mask: "•••• (32 caracteres)" })).toContain("no seu pedido");
   });
+});
+
+test("a memória do agente (spec #11469) na Atividade: uma linha por fato anotado ou tirado, e não é leitura de nota", () => {
+  const reads = [
+    { at: "2026-11-13T23:00:00.000Z", tool: "memory_remember", target: "prefere respostas curtas" },
+    { at: "2026-11-13T23:00:01.000Z", tool: "memory_forget", target: "usa o Windows" },
+  ];
+  expect(memoryLines(reads)).toEqual(["Anotou na memória: “prefere respostas curtas”.", "Tirou da memória: “usa o Windows”."]);
+  expect(readsLine(reads)).toBe("");
+  expect(readsLine([...reads, { at: "2026-11-13T23:00:02.000Z", tool: "notes_read", target: "Ideias.md" }])).toBe("Leu 1 nota.");
 });

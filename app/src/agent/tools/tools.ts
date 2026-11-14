@@ -18,6 +18,7 @@ import { markdownStructure, headingFor, type NoteHeading } from "../../shared/ma
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
+import { FACT_MAX_CHARS, MEMORY_MAX, MemoryError } from "../memory.ts";
 import {
   PROPOSAL_CANDIDATES_MAX,
   PROPOSAL_ITEM_CHARS,
@@ -65,7 +66,9 @@ export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_wri
 export const ORGANIZE_MAX = 200;
 /** A proposta da reunião (spec #8360): não escreve nada, guarda a proposta para a pessoa aprovar. */
 export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose", "project_summary_propose"] as const;
-export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES] as const;
+/** A memória do agente (spec #11469): o que ele sabe sobre a pessoa, em `.kiwi/agente/sobre-mim.md`. */
+export const KIWI_MEMORY_TOOL_NAMES = ["memory_remember", "memory_forget"] as const;
+export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES, ...KIWI_MEMORY_TOOL_NAMES] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
 
 export interface KiwiToolDef {
@@ -79,6 +82,8 @@ export interface KiwiToolDef {
   replaces?: true;
   /** Guarda uma proposta para a pessoa aprovar (spec #8360): só aparece com quem guarda as propostas. */
   proposes?: true;
+  /** Muda a memória do agente (spec #11469): só aparece com quem guarda a memória. */
+  memory?: true;
 }
 
 const offsetProp = {
@@ -380,11 +385,35 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
     proposes: true,
   },
+  {
+    name: "memory_remember",
+    title: "Anotar na memória",
+    description: `Anota um fato sobre a pessoa na memória do Kiwi, que vai no começo de todo pedido: quando ela pedir ("lembra que…") ou quando você perceber algo útil e duradouro (o trabalho dela, como ela prefere as respostas). Um fato por chamada, numa linha curta, até ${FACT_MAX_CHARS} caracteres. Nunca senhas, tokens nem dados sensíveis: o Kiwi recusa. A memória tem até ${MEMORY_MAX} fatos; cheia, esqueça um antes. A pessoa vê a anotação no balão e pode desfazer.`,
+    inputSchema: {
+      type: "object",
+      properties: { fato: { type: "string", minLength: 1, maxLength: FACT_MAX_CHARS, description: "O fato, numa linha (ex.: prefere respostas curtas)." } },
+      required: ["fato"],
+      additionalProperties: false,
+    },
+    memory: true,
+  },
+  {
+    name: "memory_forget",
+    title: "Esquecer da memória",
+    description: "Tira um fato da memória do Kiwi: quando a pessoa pedir (\"esquece que…\"), quando ele mudou, ou para abrir espaço. Mande o fato como está na memória.",
+    inputSchema: {
+      type: "object",
+      properties: { fato: { type: "string", minLength: 1, maxLength: FACT_MAX_CHARS, description: "O fato, como está na memória." } },
+      required: ["fato"],
+      additionalProperties: false,
+    },
+    memory: true,
+  },
 ];
 
 /** As ferramentas que o servidor oferece: as de escrita só com um `writer`, e a proposta só com quem a guarda. */
-export function kiwiTools(writes: boolean, proposes = false): readonly KiwiToolDef[] {
-  return KIWI_TOOLS.filter((t) => (writes || !t.writes) && (proposes || !t.proposes));
+export function kiwiTools(writes: boolean, proposes = false, memory = false): readonly KiwiToolDef[] {
+  return KIWI_TOOLS.filter((t) => (writes || !t.writes) && (proposes || !t.proposes) && (memory || !t.memory));
 }
 
 /** Um erro que o agente lê: o código do Kiwi e o motivo. A ferramenta responde com `isError`. */
@@ -451,6 +480,14 @@ export interface KiwiToolContext {
   economy?: boolean;
   /** Quem guarda as propostas (a da reunião, spec #8360, e o resumo executivo, #11546). Sem ele, elas não existem. */
   proposals?: ProposalSink;
+  /** Quem guarda a memória do agente (spec #11469). Sem ele, as ferramentas da memória não existem. */
+  memory?: MemorySink;
+}
+
+/** A memória do agente: anotar e esquecer, com o total de fatos depois. */
+export interface MemorySink {
+  remember(fact: string): Promise<{ added: boolean; total: number }>;
+  forget(fact: string): Promise<{ removed: string; total: number }>;
 }
 
 /** O que a `meeting_propose` entrega: a reunião e o projeto já conferidos, e os campos limpos. */
@@ -618,6 +655,10 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     if (name === "notes_organize_folder") {
       if (!ctx.writer) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       return await organizeFolder(ctx.reader, raw, ctx.decider);
+    }
+    if ((KIWI_MEMORY_TOOL_NAMES as readonly string[]).includes(name)) {
+      if (!ctx.memory) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+      return await memoryTool(ctx.memory, name, raw, ctx.guard, ctx.decider);
     }
     if ((KIWI_PROPOSE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.proposals) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
@@ -1229,4 +1270,32 @@ async function proposeSummary(reader: VaultReader, sink: ProposalSink, raw: unkn
     },
     target,
   };
+}
+
+/**
+ * A memória do agente (spec #11469). Anotar passa pelo guardrail: um marcador do filtro (um segredo que o agente leu)
+ * ou um segredo no próprio fato é recusado, e um trecho em dúvida vai para a pergunta à pessoa antes de ser guardado
+ * (#9873). Esquecer só tira o que já está lá.
+ */
+async function memoryTool(sink: MemorySink, name: string, raw: unknown, guard: SecretGuard | undefined, decider: DoubtDecider | undefined): Promise<ToolResult> {
+  const a = args(raw, ["fato"]);
+  const fact = str(a, "fato", true, FACT_MAX_CHARS * 2)!.replace(/\s+/g, " ").trim();
+  if (!fact) throw new ToolError("E_BAD_ARGS", "fato está vazio");
+  try {
+    if (name === "memory_forget") {
+      const r = await sink.forget(fact);
+      return { value: { esquecido: r.removed, total: r.total }, target: r.removed };
+    }
+    const secret = () => new ToolError("E_SECRET", "o fato tem um segredo (uma senha, um token ou algo que a pessoa disse que é segredo): nada foi anotado. Anote sem ele.");
+    if (/‹segredo [^›\n]{0,40}›/.test(fact)) throw secret();
+    if (guard && (await guard.decide("", fact, decider)).held > 0) throw secret();
+    const r = await sink.remember(fact);
+    return {
+      value: { anotado: fact, novo: r.added, total: r.total, ...(r.added ? {} : { aviso: "Esse fato já estava na memória." }) },
+      target: fact,
+    };
+  } catch (e) {
+    if (e instanceof MemoryError) throw new ToolError(e.code, e.message);
+    throw e;
+  }
 }

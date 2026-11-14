@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import type { AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
+import type { AgentMemoryView, AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
 import { SettingsStore, type AgentSettings } from "../store/settings.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
@@ -1426,5 +1426,52 @@ describe("o resumo executivo de um projeto (spec #11546)", () => {
     // Outro pedido não pergunta.
     const other = await askAndWait(m, "oi");
     expect(other.at(-1)).toMatchObject({ type: "done" });
+  });
+});
+
+describe("a memória do agente (spec #11469)", () => {
+  test("\"lembra que…\" anota no cofre, avisa o balão com o [Desfazer], entra na Atividade e vai no começo do pedido seguinte", async () => {
+    const root = tmp();
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    m.svc.useVaultRoot(async () => root);
+    const seen: AgentMemoryView[] = [];
+    m.svc.onMemoryChanged((v) => seen.push(v));
+    await readyNow(m);
+    const turn = await askAndWait(m, "lembra que eu prefiro respostas curtas");
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: "Anotei: eu prefiro respostas curtas." });
+    expect(readFileSync(path.join(root, ".kiwi/agente/sobre-mim.md"), "utf8")).toContain("- eu prefiro respostas curtas\n");
+    expect(seen.at(-1)).toMatchObject({ facts: ["eu prefiro respostas curtas"], max: 60, last: { action: "remember", fact: "eu prefiro respostas curtas" } });
+    const [r] = await m.svc.activityLog();
+    expect(r!.reads).toContainEqual(expect.objectContaining({ tool: "memory_remember", target: "eu prefiro respostas curtas" }));
+    // O pedido seguinte leva a memória no começo fixo, e dois pedidos seguidos levam os mesmos bytes.
+    await askAndWait(m, "Oi");
+    await askAndWait(m, "Oi de novo");
+    const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    const head = (t: string) => t.slice(0, t.indexOf("]\n\n") + 3);
+    expect(prompts.at(-2)).toStartWith("[O que você sabe sobre a pessoa (a memória do Kiwi).");
+    expect(head(prompts.at(-1)!)).toBe(head(prompts.at(-2)!));
+    expect(prompts.at(-2)).toContain("- eu prefiro respostas curtas\n]");
+    // O [Desfazer] do balão tira o fato, e o balão sabe que foi desfeito.
+    const undone = await m.svc.memoryUndo(seen.at(-1)!.last!.id);
+    expect(undone).toMatchObject({ facts: [], last: { undone: true } });
+    expect(await m.svc.memoryView()).toMatchObject({ facts: [] });
+    await expect(m.svc.memoryUndo("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    // "esquece que…" com o fato de volta, e o [Desfazer] traz o fato no mesmo lugar.
+    await askAndWait(m, "lembra que trabalho com PACS");
+    await askAndWait(m, "lembra que uso o Mac");
+    await askAndWait(m, "esquece que trabalho com PACS");
+    expect((await m.svc.memoryView()).facts).toEqual(["uso o Mac"]);
+    await m.svc.memoryUndo((await m.svc.memoryView()).last!.id);
+    expect((await m.svc.memoryView()).facts).toEqual(["trabalho com PACS", "uso o Mac"]);
+  });
+
+  test("sem a raiz do cofre, as ferramentas da memória não aparecem e o pedido vai sem a memória", async () => {
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    const listed = (await askAndWait(m, "/ferramentas")).at(-1) as { text: string };
+    expect(listed.text).not.toContain("memory_remember");
+    await expect(m.svc.memoryView()).rejects.toMatchObject({ code: "E_NO_UNDO" });
   });
 });

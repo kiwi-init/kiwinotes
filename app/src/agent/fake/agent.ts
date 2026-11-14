@@ -347,6 +347,8 @@ const app = agent({ name: "kiwi-fake-agent" })
     const modelText = /^\[Modelo de nota do Kiwi:([^\]]*)\]\s*/.exec(raw)?.[1] ?? "";
     const text = raw
       .replace(/^\[Modelo de nota do Kiwi:[^\]]*\]\s*/, "")
+      // A memória (spec #11469): o bloco termina numa linha só com "]" (um fato pode ter colchete).
+      .replace(/^\[O que você sabe sobre a pessoa[\s\S]*?\n\]\s*/, "")
       .replace(/^\[Modo econômico do Kiwi:[^\]]*\]\s*/, "")
       .trim();
 
@@ -484,6 +486,14 @@ const app = agent({ name: "kiwi-fake-agent" })
         const summary = /^\/resumo\s+(.+)$/i.exec(text) ?? /resumo executivo d[oa]s?\s+(?:projeto\s+)?(.+?)[.?!]*$/i.exec(text);
         if (summary && kiwiServers.has(sessionId)) {
           await say(client, sessionId, await proposeSummary(client, sessionId, summary[1]!.trim()));
+          return { stopReason: "end_turn" };
+        }
+        // A memória (spec #11469): "lembra que …" anota, "esquece que …" tira.
+        const memo = /^(lembra|esquece) que (.+?)\.?$/i.exec(text.trim());
+        if (memo && kiwiServers.has(sessionId)) {
+          const tool = memo[1]!.toLowerCase() === "lembra" ? "memory_remember" : "memory_forget";
+          const r = await useTool(client, sessionId, tool, { fato: memo[2]! });
+          await say(client, sessionId, r.isError ? `Não deu: ${r.text}` : tool === "memory_remember" ? `Anotei: ${memo[2]}.` : `Esqueci: ${memo[2]}.`);
           return { stopReason: "end_turn" };
         }
         if (/atualiza o projeto com a reuni/i.test(text) && kiwiServers.has(sessionId)) {

@@ -395,3 +395,9 @@
 .kn-kiwicat[data-away="true"] { visibility: hidden; }
 /* A confirmação no cartão da dúvida (spec #11102): a pergunta em destaque. */
 .kn-confirm-question { margin: 0; font-weight: 600; }
+
+/* "Anotei: …" (spec #11469): o balão da memória, no mesmo canto, com o [Desfazer]. */
+.kn-bubble-shell.kn-memory-bubble { display: grid; gap: 6px; max-width: 300px; user-select: text; }
+.kn-memory-line { margin: 0; }
+.kn-memory-note { margin: 0; font-size: var(--text-xs, 0.85em); color: var(--text-2); }
+.kn-memory-actions { display: flex; gap: 4px; justify-content: flex-end; }

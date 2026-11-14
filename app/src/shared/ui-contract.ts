@@ -169,7 +169,9 @@ export type { NoteModel };
 //   prontas de `kiwicat-colors.ts`; o `settings.set` recusa qualquer outra). Só acréscimo.
 // 1.59.0 (T11559, spec #11546): o resumo executivo. O `summary` no `AgentStatus` e no `agent.configure` (os 6 blocos e o
 //   período do primeiro resumo) e o `kind: "summary"` nas propostas. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.59.0";
+// 1.60.0 (T11665, spec #11469): a memória do agente. O `agent.memory` (os fatos e a última mudança), o
+//   `agent.memoryUndo` (o [Desfazer] do balão) e o evento `agent.memoryChanged`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.60.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -571,6 +573,20 @@ export interface UiCapabilities {
   "agent.proposalPrepare": { args: { id: string }; result: { id: string } };
   /** [Descartar], ou "Agora não" na pergunta do modo econômico (1.57.0): nada muda nas notas. */
   "agent.proposalDiscard": { args: { id: string }; result: AgentProposalSummary };
+  /** A memória do agente (1.60.0, spec #11469): os fatos de `.kiwi/agente/sobre-mim.md` e a última mudança. */
+  "agent.memory": { args: Record<string, never>; result: AgentMemoryView };
+  /** O [Desfazer] de uma mudança na memória (1.60.0): o fato anotado sai, ou o esquecido volta no lugar. */
+  "agent.memoryUndo": { args: { id: string }; result: AgentMemoryView };
+}
+
+/** A memória do agente (1.60.0, spec #11469). */
+export interface AgentMemoryView {
+  /** Os fatos, na ordem do arquivo. */
+  facts: string[];
+  /** O máximo de fatos (60). */
+  max: number;
+  /** A última mudança que o agente fez (o balão "Anotei: …" com o [Desfazer]); null sem nenhuma desde que o app abriu. */
+  last: { id: string; action: "remember" | "forget"; fact: string; at: string; undone?: boolean } | null;
 }
 
 /** Uma proposta da reunião (1.57.0, spec #8360). As horas em ISO. */
@@ -941,6 +957,8 @@ export const UI_CAPABILITIES = [
   "agent.proposalApply",
   "agent.proposalPrepare",
   "agent.proposalDiscard",
+  "agent.memory",
+  "agent.memoryUndo",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -996,6 +1014,8 @@ export interface UiEvents {
   "agent.voice": AgentVoiceUi;
   /** Uma proposta da reunião nasceu, foi escolhida, aplicada ou descartada (1.57.0, spec #8360). */
   "agent.proposalsChanged": { proposals: AgentProposalSummary[] };
+  /** A memória do agente mudou (1.60.0, spec #11469): pelo agente, pela pessoa ou por um [Desfazer]. */
+  "agent.memoryChanged": AgentMemoryView;
 }
 
 /** O que o gato mostra durante a fala ao agente (1.55.0). `voz`: o nível do mic, de 0 a 1. */

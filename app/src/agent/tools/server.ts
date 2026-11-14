@@ -14,7 +14,7 @@
 
 import { timingSafeEqual } from "node:crypto";
 
-import { kiwiTools, runKiwiTool, ToolError, type KiwiToolName, type ProposalSink, type ToolChange, type WriteJournal } from "./tools.ts";
+import { kiwiTools, runKiwiTool, ToolError, type KiwiToolName, type MemorySink, type ProposalSink, type ToolChange, type WriteJournal } from "./tools.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter } from "./writer.ts";
 import type { DoubtDecider, SecretGuard } from "../../guardrail/filter.ts";
@@ -66,6 +66,8 @@ export interface KiwiToolServerOptions {
   economy?: () => boolean;
   /** Quem guarda a proposta da reunião (spec #8360): com ele, a `meeting_propose` aparece. */
   proposals?: ProposalSink;
+  /** Quem guarda a memória do agente (spec #11469): com ele, as ferramentas da memória aparecem. */
+  memory?: MemorySink;
   version?: string;
   onCall?: (e: ToolCallEvent) => void;
   /** Cada método MCP que chegou com a senha certa (a prova do #7496 confere o `tools/list` do Claude Code). */
@@ -178,7 +180,7 @@ export class KiwiToolServer {
         return ok({});
       case "tools/list":
         return ok({
-          tools: kiwiTools(this.writes, !!this.o.proposals).map(({ writes, replaces, proposes: _p, ...t }) => ({
+          tools: kiwiTools(this.writes, !!this.o.proposals, !!this.o.memory).map(({ writes, replaces, proposes: _p, memory: _m, ...t }) => ({
             ...t,
             annotations: {
               title: t.title,
@@ -192,16 +194,17 @@ export class KiwiToolServer {
       case "tools/call": {
         const name = m.params?.name;
         if (typeof name !== "string") return err(-32602, "tools/call: falta o name");
-        if (!kiwiTools(this.writes, !!this.o.proposals).some((t) => t.name === name)) return err(-32602, `o Kiwi não tem a ferramenta ${name}`);
+        if (!kiwiTools(this.writes, !!this.o.proposals, !!this.o.memory).some((t) => t.name === name)) return err(-32602, `o Kiwi não tem a ferramenta ${name}`);
         try {
           // A dúvida espera a pessoa; se o agente desiste da chamada (`signal`), o que falta é segurado.
           const decider = this.o.decider?.();
           const guard = this.o.guard ? { guard: this.o.guard, ...(decider ? { decider: { ...decider, ...(signal ? { signal } : {}) } } : {}) } : {};
           const economy = this.o.economy?.() ? { economy: true } : {};
           const proposals = this.o.proposals ? { proposals: this.o.proposals } : {};
+          const memory = this.o.memory ? { memory: this.o.memory } : {};
           const ctx = this.writes
-            ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard, ...economy, ...proposals }
-            : { reader: this.o.reader, ...guard, ...economy, ...proposals };
+            ? { reader: this.o.reader, writer: this.o.writer, journal: this.o.journal, ...guard, ...economy, ...proposals, ...memory }
+            : { reader: this.o.reader, ...guard, ...economy, ...proposals, ...memory };
           const r = await runKiwiTool(ctx, name, m.params?.arguments);
           this.o.onCall?.({ tool: name, ...(r.target ? { target: r.target } : {}), ok: true, ...(r.change ? { change: r.change } : {}), ...(r.held ? { held: r.held } : {}) });
           return ok({ content: [{ type: "text", text: JSON.stringify(r.value) }] });
