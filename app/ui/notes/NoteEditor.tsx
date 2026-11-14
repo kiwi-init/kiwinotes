@@ -19,6 +19,7 @@ import { lineChanges } from "../../src/shared/merge3.ts";
 import type { AttachmentSource } from "./editor/attachments.ts";
 import type { NoteEmbed } from "../../src/shared/ui-contract.ts";
 import { focusCompartment, focusExtension, typewriterCompartment, typewriterExtension } from "./editor/focus.ts";
+import { titleCompartment, titleHeading } from "./editor/titleHeading.ts";
 import { editorExtensions, type LinkCache, type LinkTarget, stateFor,
 } from "./editor/index.ts";
 
@@ -61,18 +62,21 @@ export interface NoteEditorProps {
   onAddProperty?: () => void;
   /** A nota só é lida (T7575: não é UTF-8). */
   readOnly?: boolean;
+  /** O título da nota (o nome do arquivo): o H1 igual a ele não aparece de novo (spec #12626). */
+  title?: string | null;
 }
 
 export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLink, onOpenTag, onSlashTemplate, linkTargets, headingContent, attachments, embed, onError, createSplit, onSplitDone, onRenameHeading,
-  focus = false, typewriter = false, viewModes, onAddProperty, readOnly = false,
+  focus = false, typewriter = false, viewModes, onAddProperty, readOnly = false, title = null,
 }: NoteEditorProps) {
-  const modes = useRef({ focus, typewriter, readOnly });
-  modes.current = { focus, typewriter, readOnly };
+  const modes = useRef({ focus, typewriter, readOnly, title });
+  modes.current = { focus, typewriter, readOnly, title };
   const withModes = (base: Extension[]): Extension[] => [
     ...base,
     focusCompartment.of(focusExtension(modes.current.focus)),
     typewriterCompartment.of(typewriterExtension(modes.current.typewriter)),
     readOnlyCompartment.of(readOnlyExtension(modes.current.readOnly)),
+    titleCompartment.of(titleHeading(modes.current.title)),
   ];
   const host = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -160,6 +164,11 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
   useEffect(() => {
     view.current?.dispatch({ effects: readOnlyCompartment.reconfigure(readOnlyExtension(readOnly)) });
   }, [readOnly]);
+
+  // A nota renomeada: o H1 deixa de ser igual e reaparece (o arquivo não muda).
+  useEffect(() => {
+    view.current?.dispatch({ effects: titleCompartment.reconfigure(titleHeading(title)) });
+  }, [title]);
 
   useEffect(() => {
     const v = view.current;

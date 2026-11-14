@@ -1701,6 +1701,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
             <NoteEditor
               docKey={docKey}
               readOnly={note.readOnly === true}
+              title={note.title}
               headingJump={headingJump?.path === note.path ? headingJump : null}
               doc={body}
               links={links}

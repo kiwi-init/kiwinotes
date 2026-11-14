@@ -83,7 +83,7 @@
       "press": "Meta+Alt+e"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"
@@ -121,7 +121,7 @@
       "click": "[aria-label='Coluna'] > .kn-menu-item:has-text('Mover à direita')"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"
@@ -155,7 +155,7 @@
       "click": "[aria-label='Ordenar pela coluna'] > .kn-menu-item:has-text('Crescente')"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"
@@ -194,7 +194,7 @@
       "click": "[aria-label='Linha'] > .kn-menu-item:has-text('Apagar linha')"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"
@@ -213,7 +213,7 @@
       "press": "Meta+z"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"
@@ -229,7 +229,7 @@
       "press": "Meta+Shift+Z"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"
@@ -245,7 +245,7 @@
       "press": "Meta+Alt+Backspace"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"
@@ -280,7 +280,7 @@
       "press": "Meta+Alt+s"
     },
     {
-      "click": ".cm-rendered h1"
+      "click": ".cm-rendered p:has-text('Fim.')"
     },
     {
       "waitFor": ".cm-md-table"

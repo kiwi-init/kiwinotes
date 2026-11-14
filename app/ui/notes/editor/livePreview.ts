@@ -295,7 +295,7 @@ export function findComments(text: string): [number, number][] {
 }
 
 /** O editor está com o foco? Sem foco, nada é "linha do cursor": a nota inteira fica em preview. */
-const focusChanged = StateEffect.define<boolean>();
+export const focusChanged = StateEffect.define<boolean>();
 export const editorFocused = StateField.define<boolean>({
   create: () => false,
   update: (v, tr) => tr.effects.reduce((acc, e) => (e.is(focusChanged) ? e.value : acc), v),

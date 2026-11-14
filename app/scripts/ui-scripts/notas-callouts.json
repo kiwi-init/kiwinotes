@@ -34,7 +34,7 @@
     { "screenshot": "03-trocar-tipo.png" },
     { "click": "[role=menuitemradio]:has-text('Perigo')", "name": "troca para Perigo" },
     { "waitFor": ".kn-note-editor .cm-line:has-text('[!danger] Falha no login')", "name": "o tipo trocou no texto; com o cursor dentro, o bloco fica para editar" },
-    { "click": ".kn-note-editor .cm-rendered h1", "name": "o cursor sai do callout" },
+    { "click": ".kn-note-editor .cm-rendered p:has-text('Fim.')", "name": "o cursor sai do callout" },
     { "waitFor": ".kn-callout[data-callout='danger'] .kn-callout-title:has-text('Falha no login')", "name": "desenhado como Perigo, com o título de antes" },
     { "wait": 2000, "name": "o editor salva" },
     { "invoke": "notes.get", "args": { "path": "Callouts.md" }, "name": "o .md tem [!danger] no lugar de [!bug]" }

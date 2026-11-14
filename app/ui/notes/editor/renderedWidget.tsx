@@ -4,6 +4,7 @@
 // O parser (md4c em WASM) vem embutido na lib como base64: nada é baixado.
 
 // Antes da lib: o `__DEV__` que ela lê.
+import { CalloutIcon } from "./calloutIcons.tsx";
 import "./enrichedEnv.ts";
 import katex from "katex";
 import { HIGHLIGHT_BACKGROUND } from "./highlight.ts";
@@ -29,6 +30,7 @@ import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
 import { COPIED_MS } from "./code-copy.ts";
 import { type Callout, parseCallout } from "./callouts.ts";
 import { footnoteJump, footnotesOf, footnoteText } from "./footnotes.ts";
+import { hiddenTitle } from "./titleHeading.ts";
 import {
   FOOTNOTE_DEF_LINK,
   FOOTNOTE_INLINE_LINK,
@@ -324,7 +326,7 @@ function CalloutBox({ callout, markdown, callbacks, attachments, copy, onShown }
   return (
     <div className={`kn-callout kn-callout-${callout.kind.tone}`} data-callout={callout.kind.id} data-open={open ? "true" : "false"}>
       <div className="kn-callout-head">
-        <span className="kn-callout-icon" aria-hidden="true">{callout.kind.glyph}</span>
+        <CalloutIcon kind={callout.kind.id} />
         <span className="kn-callout-title">{callout.title}</span>
         {callout.fold ? (
           <button
@@ -674,7 +676,10 @@ function buildRendered(state: EditorState, resolver: LinkResolver, actions: Rend
   const tree = fullTree(state);
   const out: Range<Decoration>[] = [];
   const notes = footnotesOf(state);
+  const title = hiddenTitle(state);
   for (const b of renderedBlocks(state, focused, tree)) {
+    // O H1 igual ao título está escondido (spec #12626): o bloco dele não se desenha.
+    if (title && b.from >= title.from && b.to <= title.to) continue;
     const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t), notes);
     out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions), block: true }).range(b.from, b.to));
   }
@@ -702,7 +707,8 @@ export function renderedPreview(resolver: LinkResolver, actions: RenderedActions
           tr.selection ||
           tr.effects.some((e) => e.is(linksChanged)) ||
           syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
-          tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false);
+          tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false) ||
+          hiddenTitle(tr.startState) !== hiddenTitle(tr.state);
         return changed ? buildRendered(tr.state, resolver, actions) : value;
       },
       provide: (f) => EditorView.decorations.from(f),
@@ -911,11 +917,12 @@ const renderedTheme = EditorView.theme({
   ".cm-rendered input[type=checkbox]": { cursor: "pointer" },
   ".cm-rendered img": { display: "block", maxWidth: "100%" },
   ".cm-rendered img[style*='inline']": { display: "inline", width: "auto !important", borderRadius: "6px" },
-  // Os callouts (T6383): a borda e o ícone no tom do tipo, o fundo suave, e a seta que gira quando abre.
+  // Os callouts (T6383): o ícone no tom do tipo, o fundo suave, e a seta que gira quando abre. Uma caixa de fio de 1px
+  // no tom do tipo, sem a faixa à esquerda (spec #12626).
   ".kn-callout": {
-    borderLeft: "2px solid var(--kn-callout-ink)",
-    borderRadius: "0 8px 8px 0",
-    background: "var(--surface-2)",
+    border: "1px solid color-mix(in srgb, var(--kn-callout-ink) 28%, transparent)",
+    borderRadius: "8px",
+    background: "color-mix(in srgb, var(--kn-callout-ink) 6%, transparent)",
     padding: "6px 12px",
     margin: "2px 0",
   },
@@ -923,7 +930,7 @@ const renderedTheme = EditorView.theme({
   ".kn-callout-danger": { "--kn-callout-ink": "var(--danger)" },
   ".kn-callout-neutral": { "--kn-callout-ink": "var(--text-3)" },
   ".kn-callout-head": { display: "flex", alignItems: "center", gap: "8px", minHeight: "23px", color: "var(--kn-callout-ink)", fontWeight: "600" },
-  ".kn-callout-icon": { width: "16px", textAlign: "center", fontSize: "13px", lineHeight: "1" },
+  ".kn-callout-icon": { flex: "none", width: "16px", height: "16px" },
   ".kn-callout-title": { flex: "1", minWidth: "0", fontSize: "14px" },
   ".kn-callout-fold": {
     border: "0",
