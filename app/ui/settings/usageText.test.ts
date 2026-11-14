@@ -13,8 +13,8 @@ describe("o medidor", () => {
     expect(tokens(12_340)).toBe("12,3 mil tokens");
     expect(tokens(2_500_000)).toBe("2,5 mi tokens");
     expect(sumLine({ requests: 0, tokens: 0, cacheRead: 0 })).toBe("Nenhum pedido.");
-    expect(sumLine({ requests: 1, tokens: 10_000, cacheRead: 4000 })).toBe("1 pedido · 10 mil tokens · 40% lidos do cache");
-    expect(sumLine({ requests: 3, tokens: 900, cacheRead: 0 })).toBe("3 pedidos · 900 tokens");
+    expect(sumLine({ requests: 1, tokens: 10_000, cacheRead: 4000 })).toBe("1 pedido, 10 mil tokens, 40% lidos do cache.");
+    expect(sumLine({ requests: 3, tokens: 900, cacheRead: 0 })).toBe("3 pedidos, 900 tokens.");
   });
 
   test("a hora: hoje, amanhã e outro dia", () => {
@@ -41,7 +41,7 @@ describe("o medidor", () => {
     expect(subscriptionLine({ at: iso(2026, 10, 13, 13, 0), unavailable: true }, now)).toContain("só o gasto do Kiwi");
     expect(
       subscriptionLine({ at: iso(2026, 10, 13, 13, 0), fiveHour: { percent: 37, resetsAt: iso(2026, 10, 13, 18, 40) }, week: { percent: 12 } }, now),
-    ).toBe("5 horas: 37%, volta às 18h40 · Semana: 12%");
+    ).toBe("5 horas: 37%, volta às 18h40. Semana: 12%.");
   });
 
   test("o balão: o aviso do agente e o limite acabado", () => {

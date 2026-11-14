@@ -12,11 +12,11 @@ export function tokens(n: number): string {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** Uma soma: "3 pedidos · 12 mil tokens · 40% lidos do cache". */
+/** Uma soma: "3 pedidos, 12 mil tokens, 40% lidos do cache." Sem o ponto do meio (spec #12626): é uma frase. */
 export function sumLine(s: AgentUsageSum): string {
   if (!s.requests) return "Nenhum pedido.";
   const cache = s.tokens ? Math.round((s.cacheRead / s.tokens) * 100) : 0;
-  return `${plural(s.requests, "pedido", "pedidos")} · ${tokens(s.tokens)}${cache ? ` · ${cache}% lidos do cache` : ""}`;
+  return `${plural(s.requests, "pedido", "pedidos")}, ${tokens(s.tokens)}${cache ? `, ${cache}% lidos do cache` : ""}.`;
 }
 
 /** A hora, como a pessoa lê: "18h40", ou "amanhã às 9h00" / "seg, 18/11 às 9h00" quando não é hoje. */
@@ -54,7 +54,7 @@ export function limitLine(limit: AgentUsageView["limit"], now: number): string |
   return `O agente informou ${limit.percent}% ${which} usados (às ${clock(limit.at, now)}).`;
 }
 
-/** A assinatura, pelo `/usage`: "5 horas: 37%, volta às 18h40 · Semana: 12%, volta seg, 18/11 às 9h00". */
+/** A assinatura, pelo `/usage`: "5 horas: 37%, volta às 18h40. Semana: 12%, volta seg, 18/11 às 9h00." (spec #12626: frases, sem o ponto do meio). */
 export function subscriptionLine(sub: AgentUsageView["subscription"], now: number): string {
   if (!sub) return "Toque em Atualizar para ver o uso da sua assinatura.";
   if (sub.unavailable || (!sub.fiveHour && !sub.week)) return "O agente não informou o uso da assinatura. O medidor mostra só o gasto do Kiwi.";
@@ -62,7 +62,7 @@ export function subscriptionLine(sub: AgentUsageView["subscription"], now: numbe
     if (!w) return null;
     return w.resetsAt ? `${label}: ${w.percent}%, volta ${at(w.resetsAt, now)}` : `${label}: ${w.percent}%`;
   };
-  return [part("5 horas", sub.fiveHour), part("Semana", sub.week)].filter(Boolean).join(" · ");
+  return [part("5 horas", sub.fiveHour), part("Semana", sub.week)].filter(Boolean).join(". ") + ".";
 }
 
 /** O que o balão diz no aviso do agente e no limite acabado (spec #11084). */

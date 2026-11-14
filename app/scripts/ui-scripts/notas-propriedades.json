@@ -49,7 +49,7 @@
     },
     {
       "expectText": ".kn-props-head",
-      "text": "Propriedades · 7"
+      "text": "Propriedades 7"
     },
     {
       "expectText": ".kn-prop:has(.kn-prop-key:text-is('data'))",

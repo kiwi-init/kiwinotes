@@ -131,7 +131,7 @@ export function AppearanceSection() {
           return (
             <div key={side} className="kn-themes-group">
               <div className="kn-themes-sub">
-                {title} · {list.length}
+                {title} {list.length}
               </div>
               <div className="kn-themes-grid">
                 {list.map((t) => (

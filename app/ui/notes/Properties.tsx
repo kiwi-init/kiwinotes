@@ -283,7 +283,7 @@ export function Properties({ frontmatter, onChange, onAdd, onOpenTag, onOpenLink
     <section className="kn-props" aria-label="Propriedades">
       <button type="button" className="kn-props-head" aria-expanded={open} onClick={toggle}>
         <Twisty open={open} />
-        Propriedades · {props.length}
+        Propriedades {props.length}
       </button>
       {open ? (
         <>
