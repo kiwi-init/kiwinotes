@@ -15,6 +15,7 @@ import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { NOTE_WIDTH } from "../shared/note-width.ts";
+import { isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
@@ -483,10 +484,12 @@ export function uiCapabilities(deps: CapabilityDeps,
           // não vem fica como está.
           const cat = object(value, "kiwicat");
           const keys = Object.keys(cat);
-          if (!keys.length || keys.some(k => k !== "show" && k !== "overlay") || keys.some(k => typeof cat[k] !== "boolean"))
-            throw bad("kiwicat.show and kiwicat.overlay must be true or false");
+          // `cor` (spec #9349): só uma das cores prontas ou a do agente; nada de cor livre.
+          if (!keys.length || keys.some(k => k !== "show" && k !== "overlay" && k !== "cor") ||
+            keys.some(k => (k === "cor" ? !isCatColorChoice(cat[k]) : typeof cat[k] !== "boolean")))
+            throw bad("kiwicat.show and kiwicat.overlay must be true or false; kiwicat.cor one of the ready colours");
           const current = (await deps.settings.load()).kiwicat;
-          patch.kiwicat = { ...current, ...(cat as { show?: boolean; overlay?: boolean }) };
+          patch.kiwicat = { ...current, ...(cat as Partial<AppSettings["kiwicat"]>) };
         } else if (key === "notesShortcut") {
           if (!isNotesShortcut(value)) throw bad("notesShortcut must be a shortcut, or null");
           shortcutPatch.notes = value;

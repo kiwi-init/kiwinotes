@@ -26,6 +26,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     private var gate = CatOverlayGate()
     private var estado = "acordou"
     private var fadeMs: Double = 180
+    /// A cor da névoa (spec #9349), `rrggbb`: vai na URL do próximo `load` e à página aberta.
+    private var cor: String?
     /// A página terminou o carregamento inicial: daí em diante, nenhuma navegação é aceita.
     private var pageLoaded = false
     private var pendingLoad: URL?
@@ -48,7 +50,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         parts.scheme = CatPageScheme.scheme
         parts.host = CatPageScheme.host
         parts.path = "/index.html"
-        parts.query = query
+        parts.query = [query, cor.map { "cor=\($0)" }].compactMap { $0 }.joined(separator: "&").nilIfEmpty
         guard let index = parts.url else { return "not_found" }
         if web != nil { unload() }
         let config = WKWebViewConfiguration()
@@ -100,6 +102,15 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         guard gate.shows else { return }
         let value = level.map { String(format: "%.3f", min(max($0, 0), 1)) } ?? "null"
         script("window.kiwiOverlay?.set({voz: \(value)})")
+    }
+
+    /// A cor da névoa (spec #9349): fica para o próximo `load` e, com a página aberta, troca na hora (a passagem de
+    /// 400 ms do módulo). `false`: não é uma cor `#rrggbb`.
+    func color(_ input: String) -> Bool {
+        guard let hex = CatOverlayColor.normalized(input) else { return false }
+        cor = hex
+        script("window.kiwiOverlay?.set({cor: '#\(hex)'})")
+        return true
     }
 
     func hide(fadeMs: Double) {
@@ -272,6 +283,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             pageLoaded = true
             // Pronta e pausada até o primeiro `show`.
             script("window.kiwiOverlay?.set({visible: false})")
+            // Uma cor que chegou enquanto a página carregava (a URL leva a de antes).
+            if let cor { script("window.kiwiOverlay?.set({cor: '#\(cor)'})") }
             if gate.shows { present() }
             onLoaded?()
         }
@@ -283,4 +296,8 @@ final class CatOverlayPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

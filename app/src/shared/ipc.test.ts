@@ -31,6 +31,7 @@ describe("encode/parseLine", () => {
       { v: 1, id: "c3", type: "catOverlay.state", estado: "thinking" },
       { v: 1, id: "c4", type: "catOverlay.hide", fadeMs: 160 },
       { v: 1, id: "c5", type: "catOverlay.unload" },
+      { v: 1, id: "c6", type: "catOverlay.color", cor: "#6ea8ff" },
     ];
     for (const m of cmds) {
       expect(parseLine(encode(m).slice(0, -1))).toEqual(m);

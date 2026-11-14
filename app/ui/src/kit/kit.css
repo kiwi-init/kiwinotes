@@ -215,6 +215,43 @@
   box-shadow: var(--focus-ring);
 }
 
+/* ---------------------------------------------------------- swatches (spec #9349) */
+
+.kn-swatches {
+  display: inline-grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: var(--space-2);
+}
+
+.kn-swatches button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  /* Um contorno fino, para a amostra se ver no claro e no escuro. */
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--ink), transparent 70%);
+  transition: box-shadow var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+
+.kn-swatches button[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--surface, var(--bg)), 0 0 0 3.5px var(--ink);
+}
+
+.kn-swatches button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.kn-swatches button[aria-checked="true"]:focus-visible {
+  box-shadow: 0 0 0 2px var(--surface, var(--bg)), 0 0 0 3.5px var(--ink), var(--focus-ring);
+}
+
+.kn-swatches button:disabled {
+  opacity: 0.35;
+}
+
 /* ---------------------------------------------------------- switch */
 
 .kn-switch {

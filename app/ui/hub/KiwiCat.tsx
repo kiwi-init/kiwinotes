@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentStatus, AppSettings } from "../../src/shared/ui-contract";
 import type { createKiwiCat } from "../kiwicat/cat";
+import { catColorHex } from "../../src/shared/kiwicat-colors";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
@@ -14,7 +15,7 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
  */
 const symbolBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
 // Com o gato no overlay (spec #9810), o do canto some e pausa o desenho: nunca dois gatos.
-function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; away: boolean }) {
+function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolean; away: boolean; cor: string }) {
   const handle = useRef<Cat | undefined>(undefined);
   const reducedRef = useRef(reduced); reducedRef.current = reduced;
   const awayRef = useRef(away); awayRef.current = away;
@@ -22,6 +23,9 @@ function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; aw
   /** O balão da resposta está na tela: a proposta da reunião espera ele sair (spec #8360). */
   const [talking, setTalking] = useState(false);
   useEffect(() => { handle.current?.update({ parado: reduced }); }, [reduced]);
+  // A cor da névoa (spec #9349): troca na hora, com a passagem de 400 ms do módulo, sem reiniciar o gato.
+  const corRef = useRef(cor); corRef.current = cor;
+  useEffect(() => { if (root.current) root.current.dataset.cor = cor; handle.current?.update({ cor }); }, [cor]);
   useEffect(() => { refresh.current(); }, [away]);
   const root = useRef<HTMLDivElement>(null);
   // O estado do gato vive aqui, e não no efeito: o campo de texto (spec #9878) também o muda.
@@ -54,9 +58,9 @@ function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; aw
         const { createKiwiCat } = await import("../kiwicat/cat");
         if (gone || document.hidden) return;
         const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, background: symbolBackground(),
-          inputs: { estado: activity.state, cor: "claude", voz: null, parado: reducedRef.current } });
+          inputs: { estado: activity.state, cor: corRef.current, voz: null, parado: reducedRef.current } });
         if (gone) { await next.dispose(); return; }
-        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current }); cat.setBackground(symbolBackground()); cat.visibility(hidden()); state(); el.dataset.ready = "true";
+        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current, cor: corRef.current }); cat.setBackground(symbolBackground()); cat.visibility(hidden()); state(); el.dataset.ready = "true";
       } catch { el.replaceChildren(); }
       finally { loading = false; }
     }
@@ -196,5 +200,5 @@ export function KiwiCat() {
     void api.settings.get().then(s => { if (alive && settingsEvents === se) setSettings(s); }, () => {});
     return () => { alive = false; offStatus(); offSettings(); };
   }, []);
-  return status?.enabled && settings?.kiwicat?.show === true ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} away={away} /> : null;
+  return status?.enabled && settings?.kiwicat?.show === true ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} away={away} cor={catColorHex(settings.kiwicat.cor)} /> : null;
 }

@@ -1069,6 +1069,11 @@ final class Helper {
             let cat = catOverlay
             MainActor.assumeIsolated { cat.hide(fadeMs: fade) }
             reply(id, ok: true)
+        case "catOverlay.color":
+            guard let cor = message.string("cor") else { return reply(id, ok: false, error: "invalid_value") }
+            let cat = catOverlay
+            let ok = MainActor.assumeIsolated { cat.color(cor) }
+            reply(id, ok: ok, error: ok ? nil : "invalid_value")
         case "catOverlay.unload":
             catOverlayLoaded = false
             let cat = catOverlay

@@ -357,3 +357,16 @@
 
 /* "Suas reuniões" (spec #8360): a escolha da pasta única fica ao lado de "Numa pasta única". */
 .kn-agent-meetings-folder { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px); align-items: center; justify-content: flex-end; }
+
+/* A cor do Kiwi-cat (spec #9349): o gato parado ao lado das amostras. */
+.kn-cat-color {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.kn-cat-preview {
+  flex: none;
+  width: 48px;
+  height: 60px;
+}
