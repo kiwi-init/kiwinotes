@@ -173,6 +173,8 @@ export const api = {
     /** A memória do agente (1.60.0, spec #11469). */
     memory: () => invoke("agent.memory", {}),
     memoryUndo: (id: string) => invoke("agent.memoryUndo", { id }),
+    memorySet: (facts: string[]) => invoke("agent.memorySet", { facts }),
+    memoryClear: () => invoke("agent.memoryClear", {}),
     onMemory: (fn: (e: UiEvents["agent.memoryChanged"]) => void) => on("agent.memoryChanged", fn),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */

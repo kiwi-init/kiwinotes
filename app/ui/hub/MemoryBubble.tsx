@@ -23,25 +23,29 @@ export function MemoryBubble({ hidden, onShown }: { hidden: boolean; onShown?: (
   const [changes, setChanges] = useState<Change[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** O balão está aberto: um [Desfazer] o atualiza. O [Ok] e o fim do tempo o fecham de vez (revisão do T11665). */
+  const open = useRef(false);
+
+  const close = () => {
+    open.current = false;
+    clearTimeout(timer.current);
+    setChanges([]);
+  };
 
   useEffect(() => {
     if (!has("agent.memory")) return;
     const seen = new Set<string>();
-    let open = false;
     const off = api.agent.onMemory((v) => {
       // Uma mudança nova abre o balão (e o reabre); um [Desfazer] atualiza o que está aberto. A tela de Ajustes mudando
       // a lista, sem mudança do agente, não abre nada.
       const fresh = v.changes.some((c) => !seen.has(c.id));
       for (const c of v.changes) seen.add(c.id);
-      if (!fresh && !open) return;
-      open = true;
+      if (!fresh && !open.current) return;
+      open.current = true;
       setFailure(null);
       setChanges(v.changes);
       clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        open = false;
-        setChanges([]);
-      }, MEMORY_BUBBLE_MS);
+      timer.current = setTimeout(close, MEMORY_BUBBLE_MS);
     });
     return () => {
       off();
@@ -67,7 +71,7 @@ export function MemoryBubble({ hidden, onShown }: { hidden: boolean; onShown?: (
       </ul>
       {failure ? <p className="kn-memory-note">{failure}</p> : null}
       <div className="kn-memory-actions">
-        <Button onClick={() => setChanges([])}>Ok</Button>
+        <Button onClick={close}>Ok</Button>
       </div>
     </div>
   );

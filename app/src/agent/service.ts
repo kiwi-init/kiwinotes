@@ -56,7 +56,7 @@ import type {
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
 import { type NoteModel, noteModelText } from "./note-model.ts";
-import { factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
+import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
 const MEMORY_OPS_KEEP = 50;
@@ -365,6 +365,36 @@ export class AgentService {
   /** A memória do agente agora (`agent.memory`), com a última mudança para o balão. Não precisa do agente ligado. */
   memoryView(): Promise<AgentMemoryView> {
     return this.oneMemory((root) => this.viewOf(readMemory(root)));
+  }
+
+  /**
+   * A pessoa muda a memória em Ajustes › Agente › Memória (`agent.memorySet`, T11668): a lista inteira, na ordem dela.
+   * Cada fato passa pelo filtro do guardrail, como o que o agente anota: a memória vai inteira no começo de todo pedido,
+   * sem o filtro do pedido, então um trecho com cara de senha ou token é recusado.
+   */
+  memorySet(facts: unknown): Promise<AgentMemoryView> {
+    if (!Array.isArray(facts) || facts.some((f) => typeof f !== "string")) return Promise.reject(new AgentServiceError("E_BAD_ARGS", "facts deve ser uma lista de textos"));
+    const list = (facts as string[]).map(cleanFact).filter(Boolean);
+    if (list.length > MEMORY_MAX) return Promise.reject(new AgentServiceError("E_BAD_ARGS", `A memória tem no máximo ${MEMORY_MAX} fatos.`));
+    const long = list.find((f) => f.length > FACT_MAX_CHARS);
+    if (long !== undefined) return Promise.reject(new AgentServiceError("E_BAD_ARGS", `Um fato tem no máximo ${FACT_MAX_CHARS} caracteres.`));
+    const secret = list.find((f) => /‹segredo [^›\n]{0,40}›/.test(f) || this.guard.read("", f).held > 0);
+    if (secret !== undefined)
+      return Promise.reject(new AgentServiceError("E_SECRET", "Um fato parece ter uma senha ou um token. A memória vai ao agente em todo pedido: tire esse trecho."));
+    return this.oneMemory((root) => {
+      const saved = writeMemory(root, list);
+      this.emitMemory(saved);
+      return this.viewOf(saved);
+    });
+  }
+
+  /** "Apagar tudo" (`agent.memoryClear`): a memória fica vazia; o arquivo continua, só com o cabeçalho. */
+  memoryClear(): Promise<AgentMemoryView> {
+    return this.oneMemory((root) => {
+      const saved = writeMemory(root, []);
+      this.emitMemory(saved);
+      return this.viewOf(saved);
+    });
   }
 
   /** A memória mudou (`agent.memoryChanged`): pelo agente, pela pessoa ou por um [Desfazer]. */

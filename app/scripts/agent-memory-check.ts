@@ -105,6 +105,38 @@ try {
   await Bun.sleep(300);
   await req.screenshot({ path: join(out, "3-atividade.png") });
   report.checks.push("Atividade do agente: \"Anotou na memória: …\"");
+
+  // 4. Ajustes › Agente › Memória (T11668): editar um fato, um segredo recusado, as instruções salvas.
+  await invoke("agent.ask", { text: "lembra que eu prefiro respostas curtas" });
+  await idle();
+  const box = ".kn-agent-memory";
+  await p.waitForFunction((sel) => document.querySelectorAll(`${sel} .kn-memory-fact`).length === 2, box, { timeout: 15000 });
+  const first = p.locator(`${box} .kn-memory-fact`).first();
+  await first.locator("button:has-text('Editar')").click();
+  await first.locator("input").fill("trabalho com a migração de PACS no hospital");
+  await first.locator("button:has-text('Salvar')").click();
+  await p.waitForFunction((sel) => document.querySelector(sel)?.textContent?.includes("no hospital"), box, { timeout: 15000 });
+  assert.deepEqual((await invoke("agent.memory")).facts, ["trabalho com a migração de PACS no hospital", "eu prefiro respostas curtas"]);
+  await first.locator("button:has-text('Editar')").click();
+  await first.locator("input").fill("o token do CI é ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8");
+  await first.locator("button:has-text('Salvar')").click();
+  await p.waitForSelector(`${box} .kn-memory-failure`, { timeout: 15000 });
+  assert.ok(((await p.locator(`${box} .kn-memory-failure`).textContent()) ?? "").includes("senha ou um token"));
+  // O print mostra o aviso do segredo, com a edição aberta; depois, [Cancelar].
+  await p.locator(box).scrollIntoViewIfNeeded();
+  await Bun.sleep(300);
+  await p.locator(box).screenshot({ path: join(out, "5-segredo-recusado.png") });
+  await first.locator("button:has-text('Cancelar')").click();
+  assert.equal(await p.locator(`${box} .kn-memory-failure`).count(), 0);
+  assert.deepEqual((await invoke("agent.memory")).facts, ["trabalho com a migração de PACS no hospital", "eu prefiro respostas curtas"]);
+  await p.locator(`${box} textarea`).fill("Sempre em português. Não mexa na pasta Arquivo.");
+  await p.locator(`${box} .kn-memory-clear button:has-text('Salvar')`).click();
+  await p.waitForFunction(async () => true, undefined, { timeout: 1000 });
+  for (let n = 0; (await invoke("agent.status")).instructions !== "Sempre em português. Não mexa na pasta Arquivo."; n++) { assert.ok(n < 100); await Bun.sleep(50); }
+  await p.locator(box).scrollIntoViewIfNeeded();
+  await Bun.sleep(300);
+  await p.locator(box).screenshot({ path: join(out, "4-ajustes-memoria.png") });
+  report.checks.push("Ajustes › Agente › Memória: edit a fact, a secret is refused, and the instructions are saved");
   report.problems.push(...s.report.problems);
   await s.close();
   assert.deepEqual(report.problems, []);

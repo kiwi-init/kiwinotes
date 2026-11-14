@@ -170,7 +170,7 @@ export type { NoteModel };
 // 1.59.0 (T11559, spec #11546): o resumo executivo. O `summary` no `AgentStatus` e no `agent.configure` (os 6 blocos e o
 //   período do primeiro resumo) e o `kind: "summary"` nas propostas. Só acréscimo.
 // 1.60.0 (T11665, spec #11469): a memória do agente. O `agent.memory` (os fatos e a última mudança), o
-//   `agent.memoryUndo` (o [Desfazer] de cada mudança no balão) e o evento `agent.memoryChanged`; as `instructions` no `AgentStatus` e
+//   `agent.memoryUndo` (o [Desfazer] de cada mudança no balão), o `agent.memorySet` e o `agent.memoryClear` (Ajustes) e o evento `agent.memoryChanged`; as `instructions` no `AgentStatus` e
 //   no `agent.configure`. Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.60.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -578,6 +578,10 @@ export interface UiCapabilities {
   "agent.memory": { args: Record<string, never>; result: AgentMemoryView };
   /** O [Desfazer] de uma mudança na memória (1.60.0): o fato anotado sai, ou o esquecido volta no lugar. */
   "agent.memoryUndo": { args: { id: string }; result: AgentMemoryView };
+  /** A pessoa muda a memória em Ajustes (1.60.0): a lista inteira. Um fato com cara de senha ou token é recusado. */
+  "agent.memorySet": { args: { facts: string[] }; result: AgentMemoryView };
+  /** "Apagar tudo" (1.60.0): a memória fica vazia. */
+  "agent.memoryClear": { args: Record<string, never>; result: AgentMemoryView };
 }
 
 /** A memória do agente (1.60.0, spec #11469). */
@@ -965,6 +969,8 @@ export const UI_CAPABILITIES = [
   "agent.proposalDiscard",
   "agent.memory",
   "agent.memoryUndo",
+  "agent.memorySet",
+  "agent.memoryClear",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

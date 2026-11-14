@@ -1245,6 +1245,15 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (typeof a.id !== "string" || !a.id) throw bad("agent.memoryUndo: id must be the id of a memory change");
       return agentCall((agent) => agent.memoryUndo(a.id as string));
     },
+    "agent.memorySet": (args) => {
+      const a = fields(args, "agent.memorySet", ["facts"]);
+      if (!Array.isArray(a.facts) || a.facts.some((f) => typeof f !== "string")) throw bad("agent.memorySet: facts must be a list of texts");
+      return agentCall((agent) => agent.memorySet(a.facts));
+    },
+    "agent.memoryClear": (args) => {
+      noArgs(args, "agent.memoryClear");
+      return agentCall((agent) => agent.memoryClear());
+    },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);
       if (typeof a.request !== "string" || !a.request) throw bad("agent.change: request must be the id of a request");

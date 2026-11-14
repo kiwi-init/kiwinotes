@@ -1510,6 +1510,27 @@ describe("a memória do agente (spec #11469)", () => {
     expect((await m.svc.status()).instructions).toBe("Sempre em português.");
   });
 
+  test("Ajustes › Memória (T11668): a pessoa edita e apaga a lista, um segredo é recusado, e \"Apagar tudo\" esvazia; o balão não abre", async () => {
+    const root = tmp();
+    const m = make();
+    m.svc.useVaultRoot(async () => root);
+    const seen: AgentMemoryView[] = [];
+    m.svc.onMemoryChanged((v) => seen.push(v));
+    expect(await m.svc.memorySet(["prefere respostas curtas", "  trabalha  com PACS ", ""])).toMatchObject({ facts: ["prefere respostas curtas", "trabalha com PACS"], changes: [] });
+    expect(readFileSync(path.join(root, ".kiwi/agente/sobre-mim.md"), "utf8")).toContain("- trabalha com PACS\n");
+    // Editar uma linha e apagar outra é mandar a lista nova.
+    expect((await m.svc.memorySet(["prefere respostas bem curtas"])).facts).toEqual(["prefere respostas bem curtas"]);
+    // Um fato com cara de token é recusado, e a memória não muda.
+    await expect(m.svc.memorySet(["prefere respostas bem curtas", "o token é ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"])).rejects.toMatchObject({ code: "E_SECRET" });
+    await expect(m.svc.memorySet(Array.from({ length: 61 }, (_, i) => `fato ${i}`))).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(m.svc.memorySet("x" as unknown as string[])).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    expect((await m.svc.memoryView()).facts).toEqual(["prefere respostas bem curtas"]);
+    expect((await m.svc.memoryClear()).facts).toEqual([]);
+    // As mudanças da pessoa não são do agente: nenhuma entra nas `changes` do balão.
+    expect(seen.every((v) => v.changes.length === 0)).toBe(true);
+    expect(seen.at(-1)!.facts).toEqual([]);
+  });
+
   test("sem a raiz do cofre, as ferramentas da memória não aparecem e o pedido vai sem a memória", async () => {
     const notes: Record<string, string> = { ...NOTES };
     const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
