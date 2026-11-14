@@ -249,6 +249,8 @@ final class Helper {
         MainActor.assumeIsolated {
             catOverlay.enabled = catOn
             catOverlay.log = { [weak self] line in self?.emit("log", ["level": "info", "message": line]) }
+            // A pessoa lendo o balão (spec #13378): o app segura a saída do gato.
+            catOverlay.onHold = { [weak self] held in self?.emit("catOverlay.hold", ["held": held]) }
         }
         learnPanel.enabled = !headless
         meeting.start()

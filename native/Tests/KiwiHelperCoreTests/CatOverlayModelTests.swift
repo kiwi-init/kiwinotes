@@ -62,6 +62,60 @@ final class CatOverlayModelTests: XCTestCase {
         }
     }
 
+    /// Spec #13378: a janela já tem o espaço do balão aberto. Nas seis posições, nos dois limites de tamanho e nas três
+    /// telas, o gato fica onde estava, e o balão aberto (até 360 pt) fica dentro da área útil, sem cobrir o gato.
+    func testOpenBubbleRoomStaysInsideTheVisibleAreaAndTheCatDoesNotMove() {
+        let screens = [
+            CGRect(x: 0, y: 80, width: 1512, height: 870),
+            CGRect(x: 0, y: 70, width: 1280, height: 650),
+            CGRect(x: -1920, y: 0, width: 1920, height: 1055),
+        ]
+        for visible in screens {
+            for position in CatPosition.allCases {
+                for scale in [0.6, 1.6] {
+                    let p = CatPlacement(position: position, scale: scale)
+                    let closed = p.frame(visible: visible)
+                    let window = p.windowFrame(visible: visible)
+                    let cat = p.catRect(in: window)
+                    let bubble = p.bubbleRect(in: window)
+                    let what = "\(position.rawValue) \(scale) em \(visible)"
+                    XCTAssertEqual(cat, p.catRect(in: closed), "o gato saiu do lugar: \(what)")
+                    XCTAssertTrue(visible.contains(window), "janela fora: \(what)")
+                    XCTAssertTrue(visible.contains(bubble), "balão aberto fora: \(what)")
+                    XCTAssertFalse(cat.intersects(bubble), "balão aberto em cima do gato: \(what)")
+                    XCTAssertGreaterThanOrEqual(bubble.height, CatOverlayLayout.bubbleHeight, what)
+                    XCTAssertLessThanOrEqual(bubble.height, CatPlacement.openBubbleMaxHeight, what)
+                    XCTAssertEqual(bubble.minY < cat.minY, p.bubbleBelow, what)
+                    if visible.height >= 870, scale == 0.6 {
+                        XCTAssertEqual(bubble.height, CatPlacement.openBubbleMaxHeight, "com espaço, o tamanho máximo: \(what)")
+                    }
+                }
+            }
+        }
+        // Sem espaço para o máximo (o centro, 1,6×, na tela pequena): o balão vai até a borda da área útil.
+        let small = CGRect(x: 0, y: 70, width: 1280, height: 650)
+        let big = CatPlacement(position: .center, scale: 1.6)
+        XCTAssertEqual(big.windowFrame(visible: small).maxY, small.maxY, accuracy: 1)
+    }
+
+    /// Spec #13378 e #504: só o balão pega o clique; o gato e o espaço transparente deixam passar.
+    func testOnlyTheBubbleTakesTheClick() {
+        let panel = CGRect(x: 100, y: 100, width: 300, height: 600)
+        // O balão na página: 20 pt da esquerda e 200 pt do topo, 240 × 80 (a origem da página é em cima).
+        let rect = CatOverlayBubble.rect(["x": 20, "y": 200, "w": 240, "h": 80])
+        XCTAssertEqual(rect, CGRect(x: 20, y: 200, width: 240, height: 80))
+        // Na tela (a origem embaixo): x de 120 a 360, y de 700 − 280 = 420 a 500.
+        XCTAssertTrue(CatOverlayBubble.takesClick(panel: panel, rect: rect, mouse: CGPoint(x: 200, y: 460)))
+        XCTAssertFalse(CatOverlayBubble.takesClick(panel: panel, rect: rect, mouse: CGPoint(x: 380, y: 460)), "ao lado do balão")
+        XCTAssertFalse(CatOverlayBubble.takesClick(panel: panel, rect: rect, mouse: CGPoint(x: 200, y: 200)), "o gato")
+        XCTAssertFalse(CatOverlayBubble.takesClick(panel: panel, rect: rect, mouse: CGPoint(x: 200, y: 650)), "o espaço vazio")
+        XCTAssertFalse(CatOverlayBubble.takesClick(panel: panel, rect: nil, mouse: CGPoint(x: 200, y: 460)), "sem balão")
+        XCTAssertNil(CatOverlayBubble.rect(nil))
+        XCTAssertNil(CatOverlayBubble.rect(["x": 0, "y": 0, "w": 0, "h": 10]))
+        XCTAssertNil(CatOverlayBubble.rect(["x": 0, "y": 0, "w": "100", "h": 10]))
+        XCTAssertNil(CatOverlayBubble.rect(["x": Double.nan, "y": 0, "w": 10, "h": 10]))
+    }
+
     func testDefaultIsTodayAndOutOfRangeIsClamped() {
         let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
         XCTAssertEqual(CatPlacement().frame(visible: visible), CatOverlayLayout.frame(visible: visible))

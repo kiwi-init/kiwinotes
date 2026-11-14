@@ -395,7 +395,11 @@ export function startCatOverlay(sidecar: Sidecar): void {
   catOverlay = attachCatOverlay({
     agent: stores.agent,
     settings: stores.settings,
-    helper: { send: (c) => sidecar.send(c), onReady: (fn) => sidecar.on("ready", fn) },
+    helper: {
+      send: (c) => sidecar.send(c),
+      onReady: (fn) => sidecar.on("ready", fn),
+      onHold: (fn) => sidecar.on("catOverlay.hold", (e) => fn(e.held === true)),
+    },
     pageDir: path.join(PATHS.VIEWS_FOLDER, "ui", "catoverlay"),
     where: (overlay) => {
       for (const rpc of rpcs.values()) rpc.send.event({ name: "kiwicat.where", payload: { overlay } });

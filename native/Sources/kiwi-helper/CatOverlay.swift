@@ -20,6 +20,11 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     var log: ((String) -> Void)?
     /** A página terminou o carregamento inicial (para o `--cat-probe`). */
     var onLoaded: (() -> Void)?
+    /**
+     A pessoa está com o balão (spec #13378): aberto no "ver mais" ou com o mouse em cima. O app segura a saída do gato
+     enquanto ela lê.
+     */
+    var onHold: ((Bool) -> Void)?
 
     private var panel: CatOverlayPanel?
     private var web: WKWebView?
@@ -37,6 +42,11 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     /// A página terminou o carregamento inicial: daí em diante, nenhuma navegação é aceita.
     private var pageLoaded = false
     private var pendingLoad: URL?
+    /// O balão na página (spec #13378), como ela o mede (a origem em cima, à esquerda), e se está aberto no "ver mais".
+    private var bubbleRect: CGRect?
+    private var bubbleOpen = false
+    private var held = false
+    private var mouseTimer: Timer?
 
     /// Toda a rede bloqueada, inclusive o WebSocket: a página só usa os arquivos do app. Uma regra por esquema: o
     /// WebKit não aceita `|` no `url-filter` (a lista inteira falha, e a página não carrega).
@@ -64,7 +74,9 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         // Os arquivos do app por um esquema próprio: pelo `file://`, o WebKit recusa os módulos ES (a origem nula).
         config.setURLSchemeHandler(CatPageScheme(root: folder), forURLScheme: CatPageScheme.scheme)
         let size = placement.size
-        let view = WKWebView(frame: CGRect(origin: .zero, size: size), configuration: config)
+        // O balão diz à janela onde está e se abriu (spec #13378): só esses números, nada mais vem da página.
+        config.userContentController.add(CatPageMessages(self), name: CatPageMessages.name)
+        let view = CatWebView(frame: CGRect(origin: .zero, size: size), configuration: config)
         view.navigationDelegate = self
         view.setValue(false, forKey: "drawsBackground")
         web = view
@@ -139,10 +151,12 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     func unload() {
         _ = gate.want(false)
         bubble = "null"
+        resetBubble()
         script("window.kiwiOverlay?.dispose()")
         panel?.orderOut(nil)
         parked = false
         web?.navigationDelegate = nil
+        web?.configuration.userContentController.removeScriptMessageHandler(forName: CatPageMessages.name)
         web?.stopLoading()
         web = nil
         panel = nil
@@ -165,8 +179,11 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             panel.alphaValue = 0
             parked = false
         }
-        panel.setFrame(placement.frame(visible: targetVisibleFrame()), display: false)
-        script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true, bubble: \(bubble)})")
+        // A janela já tem o espaço do balão aberto (spec #13378): o "ver mais" não mexe nela.
+        let frame = placement.windowFrame(visible: targetVisibleFrame())
+        panel.setFrame(frame, display: false)
+        let sala = Int(placement.bubbleRoom(in: frame))
+        script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true, sala: \(sala), bubble: \(bubble)})")
         if !panel.isVisible { panel.orderFrontRegardless() }
         animate(panel, to: 1, ms: fadeMs)
     }
@@ -175,11 +192,61 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         guard let panel, panel.isVisible, !parked else { return }
         // Pausa o desenho antes de a janela sumir; o balão sai com o gato.
         bubble = "null"
+        resetBubble()
         script("window.kiwiOverlay?.set({visible: false, bubble: null})")
         animate(panel, to: 0, ms: fadeMs) { [weak self, weak panel] in
             guard let self, let panel, !self.gate.shows else { return }
             self.park(panel)
         }
+    }
+
+    // MARK: - o balão pega o clique (spec #13378)
+
+    /// A página mediu o balão: `rect` nil é sem balão. Com ele na tela, a janela acompanha o mouse para pegar o clique
+    /// só em cima dele (como o `LearnPanel`, #504).
+    fileprivate func pageBubble(rect: CGRect?, open: Bool) {
+        bubbleRect = rect
+        bubbleOpen = rect != nil && open
+        trackMouse(rect != nil && gate.shows)
+        updateMouse()
+    }
+
+    private func resetBubble() {
+        bubbleRect = nil
+        bubbleOpen = false
+        held = false
+        trackMouse(false)
+    }
+
+    private func trackMouse(_ on: Bool) {
+        guard on else {
+            mouseTimer?.invalidate()
+            mouseTimer = nil
+            panel?.ignoresMouseEvents = true
+            return
+        }
+        guard mouseTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateMouse() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        mouseTimer = timer
+    }
+
+    private func updateMouse() {
+        guard let panel, mouseTimer != nil else {
+            setHeld(false)
+            return
+        }
+        let take = CatOverlayBubble.takesClick(panel: panel.frame, rect: bubbleRect, mouse: NSEvent.mouseLocation)
+        if panel.ignoresMouseEvents == take { panel.ignoresMouseEvents = !take }
+        setHeld(bubbleOpen || take)
+    }
+
+    private func setHeld(_ on: Bool) {
+        guard on != held else { return }
+        held = on
+        onHold?(on)
     }
 
     /// Entre os pedidos: fora de todas as telas e transparente, mas na frente, para a página seguir pronta (pausada).
@@ -308,6 +375,27 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             if gate.shows { present() }
             onLoaded?()
         }
+    }
+}
+
+/// A janela nunca vira a de teclado: o primeiro clique no balão ("ver mais") tem de valer (spec #13378).
+final class CatWebView: WKWebView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// As mensagens da página (spec #13378): só o retângulo do balão e se ele está aberto. Fraco, para a página não segurar
+/// o `CatOverlay` (o `WKUserContentController` segura quem recebe).
+final class CatPageMessages: NSObject, WKScriptMessageHandler {
+    static let name = "kiwiCat"
+    private weak var overlay: CatOverlay?
+
+    init(_ overlay: CatOverlay) { self.overlay = overlay }
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        let body = message.body as? [String: Any]
+        let rect = CatOverlayBubble.rect(body?["bubble"])
+        let open = body?["open"] as? Bool ?? false
+        MainActor.assumeIsolated { overlay?.pageBubble(rect: rect, open: open) }
     }
 }
 

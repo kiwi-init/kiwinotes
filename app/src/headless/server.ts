@@ -301,7 +301,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     // Com o helper headless (que não mostra nada), os comandos também saem como evento: a prova da fala pelo Control
     // (spec #12938) aplica à página o que o helper de verdade recebeu.
     helper: session
-      ? { send: (c) => (event("catOverlay.command", c), session.sidecar.send(c)), onReady: (fn) => session.sidecar.on("ready", fn) }
+      ? {
+          send: (c) => (event("catOverlay.command", c), session.sidecar.send(c)),
+          onReady: (fn) => session.sidecar.on("ready", fn),
+          onHold: (fn) => session.sidecar.on("catOverlay.hold", (e) => fn(e.held === true)),
+        }
       : { send: async (c) => (event("catOverlay.command", c), { ok: true }), onReady: () => () => {} },
     pageDir: path.resolve(import.meta.dirname, "..", "..", "dist", "catoverlay"),
     where: (overlay) => event("kiwicat.where", { overlay }),

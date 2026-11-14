@@ -12,10 +12,13 @@
 // - **Sem pedido, nada na tela:** o `repouso` e o `dormindo` não aparecem no overlay.
 // - **A pílula do ditado tem a vez:** quem sabe se ela está na tela é o helper, que segura o gato até ela sair.
 // - **A fala pelo Control termina com um balão** (spec #12938): a resposta do agente (o que ele disse depois da última
-//   ferramenta), em trechos que cabem no balão, cada um pelo tempo de leitura; ou o erro em palavras. O gato só sai
-//   depois do último trecho. Os outros pedidos (uma rotina, por exemplo) não mostram texto por cima dos apps.
+//   ferramenta), ou o erro em palavras. Os outros pedidos (uma rotina, por exemplo) não mostram texto por cima dos apps.
+// - **O balão não troca frase sozinho** (spec #13378): vai a resposta inteira, de uma vez. A página mostra o começo e o
+//   "ver mais"; aberto, o texto todo rola dentro do balão. O gato fica o tempo de ler o começo e, enquanto a pessoa está
+//   com o balão (aberto, ou com o mouse em cima: o `catOverlay.hold` do helper), não sai; ela solta, e ele sai depois de
+//   `afterHold`.
 
-import { readingMs, splitChunks } from "../../ui/hub/bubble-state.ts";
+import { readingMs } from "../../ui/hub/bubble-state.ts";
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import type { Command } from "../shared/ipc.ts";
 import { catColorHex } from "../shared/kiwicat-colors.ts";
@@ -30,10 +33,9 @@ export const OVERLAY_TIMES = {
   erro: 2200,
   erroExit: 180,
   cancelExit: 120,
+  /** Depois de a pessoa soltar o balão (fechar o "ver mais" ou tirar o mouse), quanto o gato ainda fica (spec #13378). */
+  afterHold: 4000,
 } as const;
-
-/** Quanto cabe num trecho do balão do overlay: três linhas de uns 36 caracteres (spec #12938). */
-export const OVERLAY_BUBBLE_CHARS = 108;
 
 /**
  * O texto do agente sem a marcação (spec #12938): o balão do overlay mostra texto corrido, sem `#` de título, `**`,
@@ -119,8 +121,12 @@ export class CatOverlay {
   private overlayShown = false;
   /** O balão está no overlay (spec #12938). */
   private bubbleShown = false;
-  /** O trecho que está no balão agora: volta a ele depois de uma recarga (revisão do #522). */
+  /** O texto que está no balão agora: volta a ele depois de uma recarga (revisão do #522). */
   private bubbleNow: { text: string; error: boolean } | null = null;
+  /** A pessoa está com o balão (spec #13378): aberto ou com o mouse em cima. */
+  private held = false;
+  /** Quando o gato sai, depois do balão: o tempo de `exit` do roteiro. */
+  private bubbleExit = 0;
   /**
    * Os pedidos que vieram da fala pelo Control, pelo id do `asked` (um pedido que começou enquanto a pessoa segurava o
    * Control, como uma rotina, não entra). Cada um sai no `done` ou no `error` dele.
@@ -220,8 +226,8 @@ export class CatOverlay {
       return;
     }
     this.host.send({ type: "catOverlay.state", estado: state });
-    if (voice && e.type === "done" && state === "pronto") this.speak([this.answerOf(e.text)], false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
-    else if (voice && e.type === "error") this.speak([voiceErrorLine(e.message)], true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+    if (voice && e.type === "done" && state === "pronto") this.speak(this.answerOf(e.text), false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
+    else if (voice && e.type === "error") this.speak(voiceErrorLine(e.message), true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
     else if (state === "pronto") this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
     else if (state === "erro") this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
   }
@@ -251,27 +257,41 @@ export class CatOverlay {
   }
 
   /**
-   * O balão (spec #12938): os trechos, um por vez, cada um pelo tempo de leitura (o primeiro, ao menos `stay`); depois
-   * do último, o gato sai em `exit`. Um pedido novo, o hub à vista ou o overlay desligado cortam a fila.
+   * O balão (spec #12938, #13378): a resposta inteira, de uma vez, sem troca de frase por tempo. O gato fica ao menos
+   * `stay` e o tempo de ler o começo (o `readingMs`, que vai até 8 s) e sai em `exit`; enquanto a pessoa está com o balão
+   * (`hold`), ele espera. Um pedido novo, o hub à vista ou o overlay desligado tiram o balão.
    */
-  private speak(texts: string[], error: boolean, stay: number, exit: number): void {
-    const chunks = texts.flatMap((t) => splitChunks(t, (s) => [...s].length <= OVERLAY_BUBBLE_CHARS).map((c) => c.text));
+  private speak(text: string, error: boolean, stay: number, exit: number): void {
+    if (!text) return this.linger(stay, exit);
     this.phase = "lingering";
     this.cancelTimer();
-    const step = (i: number) => {
-      this.bubbleShown = true;
-      this.bubbleNow = { text: chunks[i]!, error };
-      this.host.send({ type: "catOverlay.bubble", text: chunks[i]!, error });
-      this.timer = this.clock.setTimeout(() => {
-        this.timer = null;
-        if (this.phase !== "lingering") return;
-        if (i + 1 < chunks.length) return step(i + 1);
-        this.phase = "idle";
-        this.hideNow(exit);
-      }, Math.max(i === 0 ? stay : 0, readingMs(chunks[i]!)));
-    };
-    if (chunks.length) step(0);
-    else this.linger(stay, exit);
+    this.bubbleShown = true;
+    this.bubbleNow = { text, error };
+    this.bubbleExit = exit;
+    this.host.send({ type: "catOverlay.bubble", text, error });
+    if (!this.held) this.leaveAfter(Math.max(stay, readingMs(text)));
+  }
+
+  /**
+   * A pessoa pegou o balão ou soltou (spec #13378, o `catOverlay.hold` do helper): aberto no "ver mais" ou com o mouse
+   * em cima, o gato não sai; solto, ele sai depois de `afterHold`.
+   */
+  hold(held: boolean): void {
+    if (held === this.held) return;
+    this.held = held;
+    if (this.phase !== "lingering" || !this.bubbleShown) return;
+    if (held) this.cancelTimer();
+    else this.leaveAfter(OVERLAY_TIMES.afterHold);
+  }
+
+  private leaveAfter(ms: number): void {
+    this.cancelTimer();
+    this.timer = this.clock.setTimeout(() => {
+      this.timer = null;
+      if (this.phase !== "lingering") return;
+      this.phase = "idle";
+      this.hideNow(this.bubbleExit);
+    }, ms);
   }
 
   /**
@@ -305,7 +325,7 @@ export class CatOverlay {
       if (v.error) {
         // O pedido não saiu: o gato diz por quê antes de sair (spec #12938).
         this.host.send({ type: "catOverlay.state", estado: "erro" });
-        this.speak([voiceErrorLine(v.error)], true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+        this.speak(voiceErrorLine(v.error), true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
         return;
       }
       this.phase = "idle";
@@ -368,6 +388,8 @@ export class CatOverlay {
       this.bubbleShown = false;
       this.host.send({ type: "catOverlay.bubble", text: null });
     }
+    // Sem balão, o helper solta o `hold` sem avisar.
+    this.held = false;
     this.phase = "shown";
     this.overlayShown = true;
     this.host.where(true);
@@ -389,8 +411,9 @@ export class CatOverlay {
     this.cancelTimer();
     if (!this.overlayShown) return;
     this.overlayShown = false;
-    // O helper tira o balão junto com o gato.
+    // O helper tira o balão junto com o gato (e solta o `hold` sem avisar).
     this.bubbleShown = false;
+    this.held = false;
     this.host.send({ type: "catOverlay.hide", fadeMs });
     this.host.where(false);
   }
@@ -414,6 +437,8 @@ export interface CatOverlayWiring {
   helper?: {
     send(command: Command): Promise<{ ok: boolean; error?: string }>;
     onReady(fn: () => void): () => void;
+    /** A pessoa pegou o balão ou soltou (spec #13378, o evento `catOverlay.hold`). */
+    onHold?(fn: (held: boolean) => void): () => void;
   };
   /** A pasta da página (`views/ui/catoverlay`). */
   pageDir: string;
@@ -461,6 +486,7 @@ export function attachCatOverlay(w: CatOverlayWiring): AttachedCatOverlay {
     }),
     w.agent.onTurn((e) => overlay.turn(e)),
     w.helper?.onReady(() => overlay.helperReady()) ?? (() => {}),
+    w.helper?.onHold?.((held) => overlay.hold(held)) ?? (() => {}),
   ];
   // A primeira leitura não passa por cima de um evento que chegou antes dela.
   void w.agent.status().then((s) => {
