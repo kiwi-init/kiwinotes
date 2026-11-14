@@ -191,7 +191,11 @@ export type { NoteModel };
 //   evento `agent.routine` (o resultado no balão, ou por que a rotina não rodou). Só acréscimo.
 // 1.66.0 (T12416, revisão do #479): o `agent.routine` de `done` leva o `change`, a posição da nota criada entre as
 //   mudanças do pedido (1 é a primeira, como no `agent.change`), para o [Ver] do balão abrir a certa. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.66.0";
+// 1.67.0 (T12771, spec #12749): a memória escrita à mão não perde texto. O `AgentMemoryView` leva o `skipped` (os fatos
+//   que ficam no arquivo sem ir ao agente: longos ou além dos 60) e o `outside` (as linhas que não são fato); a ação
+//   `over` nas `changes` (o agente não mudou a memória porque ela passou do limite), com o `over`; e o `agent.memorySet`
+//   aceita o `skipped` (os fatos de fora que ficam). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.67.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -613,7 +617,7 @@ export interface UiCapabilities {
   /** O [Desfazer] de uma mudança na memória (1.60.0): o fato anotado sai, ou o esquecido volta no lugar. */
   "agent.memoryUndo": { args: { id: string }; result: AgentMemoryView };
   /** A pessoa muda a memória em Ajustes (1.60.0): a lista inteira. Um fato com cara de senha ou token é recusado. */
-  "agent.memorySet": { args: { facts: string[] }; result: AgentMemoryView };
+  "agent.memorySet": { args: { facts: string[]; skipped?: string[] }; result: AgentMemoryView };
   /** "Apagar tudo" (1.60.0): a memória fica vazia. */
   "agent.memoryClear": { args: Record<string, never>; result: AgentMemoryView };
   /**
@@ -635,12 +639,24 @@ export interface AgentMemoryView {
    */
   changes: {
     id: string;
-    /** `full` (1.61.0, T11808): a memória cheia recusou o fato; o balão avisa, sem [Desfazer]. */
-    action: "remember" | "forget" | "full";
+    /**
+     * `full` (1.61.0, T11808): a memória cheia recusou o fato; o balão avisa, sem [Desfazer]. `over` (1.67.0, spec
+     * #12749): a memória escrita à mão passou do limite, e o agente não a mudou; o balão avisa com [Abrir a memória].
+     */
+    action: "remember" | "forget" | "full" | "over";
     fact: string;
+    /** Na ação `over`: quantos fatos o arquivo tem e quantos passam de 300 caracteres. */
+    over?: { facts: number; long: number };
     at: string;
     undone?: boolean;
   }[];
+  /**
+   * Os fatos escritos à mão que ficam no arquivo sem ir ao agente (1.67.0, spec #12749): `long` passa de 300 caracteres,
+   * `over` vem depois dos 60. Ajustes os mostra com o aviso, para a pessoa encurtar ou apagar.
+   */
+  skipped?: { text: string; reason: "long" | "over" }[];
+  /** Quantas linhas do arquivo não são fato (parágrafos, títulos): ficam lá, sem ir ao agente (1.67.0). */
+  outside?: number;
 }
 
 /** Uma proposta da reunião (1.57.0, spec #8360). As horas em ISO. */

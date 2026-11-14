@@ -393,3 +393,8 @@
 .kn-routine-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3, 12px); padding: var(--space-2, 8px) var(--space-3, 12px); border-top: 0.5px solid var(--border); }
 .kn-routine-last { font-size: var(--t-meta, 12px); color: var(--text-3); }
 .kn-routine-failure { margin: 0; padding: 0 var(--space-3, 12px) var(--space-2, 8px); font-size: var(--t-meta, 12px); color: var(--danger); }
+/* Os fatos escritos à mão que ficam de fora (spec #12749): o aviso, e cada um com o motivo. */
+.kn-memory-skipped { display: grid; gap: var(--space-2, 8px); padding: var(--space-2, 8px) var(--space-3, 12px); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: var(--radius-sm, 6px); background: color-mix(in srgb, var(--danger) 6%, transparent); }
+.kn-memory-warning { margin: 0; font-size: var(--text-sm); color: var(--text); }
+.kn-memory-reason { display: block; margin-top: 2px; font-size: var(--text-xs, 12px); color: var(--text-3); }
+.kn-memory-outside { margin: 0; }

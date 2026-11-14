@@ -1290,9 +1290,11 @@ export function uiCapabilities(deps: CapabilityDeps,
       return agentCall((agent) => agent.memoryUndo(a.id as string));
     },
     "agent.memorySet": (args) => {
-      const a = fields(args, "agent.memorySet", ["facts"]);
+      const a = fields(args, "agent.memorySet", ["facts", "skipped"]);
       if (!Array.isArray(a.facts) || a.facts.some((f) => typeof f !== "string")) throw bad("agent.memorySet: facts must be a list of texts");
-      return agentCall((agent) => agent.memorySet(a.facts));
+      if (a.skipped !== undefined && (!Array.isArray(a.skipped) || a.skipped.some((f) => typeof f !== "string")))
+        throw bad("agent.memorySet: skipped must be a list of texts");
+      return agentCall((agent) => agent.memorySet(a.facts, a.skipped as string[] | undefined));
     },
     "agent.memoryClear": (args) => {
       noArgs(args, "agent.memoryClear");

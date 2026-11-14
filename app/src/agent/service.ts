@@ -62,7 +62,7 @@ import { fixedPrefix } from "./fixed-prefix.ts";
 import { sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import { patchRoutines, ROUTINE_KINDS, routineDue, routinesOff, sanitizeAgentRoutines, type RoutineKind } from "../shared/agent-routines.ts";
 import { routineDeclined, routineEconomyQuestion, routineNoteChange, routinePrompt } from "./routines.ts";
-import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, INSTRUCTIONS_MAX, MEMORY_MAX, MemoryError, readMemory, rememberFact, writeMemory } from "./memory.ts";
+import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, INSTRUCTIONS_MAX, MEMORY_MAX, MemoryError, type MemoryFile, readMemoryFile, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
 const MEMORY_OPS_KEEP = 50;
@@ -70,9 +70,13 @@ interface MemoryOp {
   id: string;
   /** O pedido do agente em que a mudança aconteceu: o balão mostra todas as do mesmo pedido. */
   request: string;
-  /** `full`: a memória cheia recusou o fato (T11808); só o aviso no balão, sem [Desfazer]. */
-  action: "remember" | "forget" | "full";
+  /**
+   * `full`: a memória cheia recusou o fato (T11808); `over`: a memória escrita à mão passou do limite (spec #12749). Só o
+   * aviso no balão, sem [Desfazer].
+   */
+  action: "remember" | "forget" | "full" | "over";
   fact: string;
+  over?: { facts: number; long: number };
   /** Onde o fato estava (para o esquecido voltar no mesmo lugar). */
   index: number;
   at: number;
@@ -345,65 +349,87 @@ export class AgentService {
     return next;
   }
 
-  private memoryOp(action: MemoryOp["action"], fact: string, index: number): MemoryOp {
-    const op: MemoryOp = { id: crypto.randomUUID(), request: this.activityId(), action, fact, index, at: (this.d.now ?? Date.now)() };
+  private memoryOp(action: MemoryOp["action"], fact: string, index: number, over?: MemoryOp["over"]): MemoryOp {
+    const op: MemoryOp = { id: crypto.randomUUID(), request: this.activityId(), action, fact, index, at: (this.d.now ?? Date.now)(), ...(over ? { over } : {}) };
     this.memoryOps = [...this.memoryOps, op].slice(-MEMORY_OPS_KEEP);
     return op;
+  }
+
+  /**
+   * A memória escrita à mão passou do limite (spec #12749): o agente não muda nada, a pessoa vê o aviso no balão com
+   * [Abrir a memória], e o agente recebe o erro. Gravar agora apagaria ou deixaria de fora o que ela escreveu.
+   */
+  private refuseOver(file: MemoryFile, fact: string): void {
+    if (!file.skipped.length) return;
+    const long = file.skipped.filter((x) => x.reason === "long").length;
+    const facts = file.facts.length + file.skipped.length;
+    this.emitMemory(file, this.memoryOp("over", cleanFact(fact), file.facts.length, { facts, long }));
+    throw new MemoryError(
+      "E_MEMORY_OVER",
+      `a memória escrita à mão passou do limite (${facts} fatos${long ? `, ${long} com mais de ${FACT_MAX_CHARS} caracteres` : ""}): nada foi mudado. A pessoa arruma em Ajustes › Agente › Memória; não tente de novo neste pedido`,
+    );
   }
 
   /** A `memory_remember` e a `memory_forget` gravam aqui, e o balão mostra a mudança com o [Desfazer]. */
   private readonly memorySink: MemorySink = {
     remember: (fact) =>
       this.oneMemory((root) => {
-        const before = readMemory(root);
+        const before = readMemoryFile(root);
+        this.refuseOver(before, fact);
         let r: ReturnType<typeof rememberFact>;
         try {
-          r = rememberFact(before, fact);
+          r = rememberFact(before.facts, fact);
         } catch (e) {
           // Cheia (spec #11469, T11808): o agente recebe o erro, e a pessoa vê o aviso no balão, sem [Desfazer].
-          if (e instanceof MemoryError && e.code === "E_MEMORY_FULL") this.emitMemory(before, this.memoryOp("full", cleanFact(fact), before.length));
+          if (e instanceof MemoryError && e.code === "E_MEMORY_FULL") this.emitMemory(before, this.memoryOp("full", cleanFact(fact), before.facts.length));
           throw e;
         }
         if (!r.added) return { added: false, total: r.facts.length };
-        const facts = writeMemory(root, r.facts);
-        this.emitMemory(facts, this.memoryOp("remember", r.facts[r.index]!, r.index));
-        return { added: true, total: facts.length };
+        const file = writeMemory(root, r.facts);
+        this.emitMemory(file, this.memoryOp("remember", r.facts[r.index]!, r.index));
+        return { added: true, total: file.facts.length };
       }),
     forget: (fact) =>
       this.oneMemory((root) => {
-        const r = forgetFact(readMemory(root), fact);
-        const facts = writeMemory(root, r.facts);
-        this.emitMemory(facts, this.memoryOp("forget", r.removed, r.index));
-        return { removed: r.removed, total: facts.length };
+        const before = readMemoryFile(root);
+        this.refuseOver(before, fact);
+        const r = forgetFact(before.facts, fact);
+        const file = writeMemory(root, r.facts);
+        this.emitMemory(file, this.memoryOp("forget", r.removed, r.index));
+        return { removed: r.removed, total: file.facts.length };
       }),
   };
 
-  private viewOf(facts: string[]): AgentMemoryView {
+  private viewOf(file: MemoryFile): AgentMemoryView {
     // As mudanças do último pedido que mexeu na memória, na ordem: cada uma com o seu [Desfazer] no balão.
     const request = this.memoryOps.at(-1)?.request;
     const changes = this.memoryOps
       .filter((o) => o.request === request)
-      .map((o) => ({ id: o.id, action: o.action, fact: o.fact, at: new Date(o.at).toISOString(), ...(o.undone ? { undone: true } : {}) }));
-    return { facts, max: MEMORY_MAX, changes };
+      .map((o) => ({ id: o.id, action: o.action, fact: o.fact, at: new Date(o.at).toISOString(), ...(o.over ? { over: o.over } : {}), ...(o.undone ? { undone: true } : {}) }));
+    return { facts: file.facts, max: MEMORY_MAX, changes, skipped: file.skipped, outside: file.outside };
   }
 
-  private emitMemory(facts: string[], _op?: MemoryOp): void {
-    const v = this.viewOf(facts);
+  private emitMemory(file: MemoryFile, _op?: MemoryOp): void {
+    const v = this.viewOf(file);
     for (const fn of this.memoryListeners) fn(v);
   }
 
   /** A memória do agente agora (`agent.memory`), com a última mudança para o balão. Não precisa do agente ligado. */
   memoryView(): Promise<AgentMemoryView> {
-    return this.oneMemory((root) => this.viewOf(readMemory(root)));
+    return this.oneMemory((root) => this.viewOf(readMemoryFile(root)));
   }
 
   /**
    * A pessoa muda a memória em Ajustes › Agente › Memória (`agent.memorySet`, T11668): a lista inteira, na ordem dela.
    * Cada fato passa pelo filtro do guardrail, como o que o agente anota: a memória vai inteira no começo de todo pedido,
-   * sem o filtro do pedido, então um trecho com cara de senha ou token é recusado.
+   * sem o filtro do pedido, então um trecho com cara de senha ou token é recusado. `skipped` (spec #12749): os fatos
+   * escritos à mão que o agente não lê e que ficam no arquivo; sem a lista, ficam todos. As outras linhas do arquivo
+   * nunca mudam.
    */
-  memorySet(facts: unknown): Promise<AgentMemoryView> {
+  memorySet(facts: unknown, skipped?: unknown): Promise<AgentMemoryView> {
     if (!Array.isArray(facts) || facts.some((f) => typeof f !== "string")) return Promise.reject(new AgentServiceError("E_BAD_ARGS", "facts deve ser uma lista de textos"));
+    if (skipped !== undefined && (!Array.isArray(skipped) || skipped.some((f) => typeof f !== "string")))
+      return Promise.reject(new AgentServiceError("E_BAD_ARGS", "skipped deve ser uma lista de textos"));
     const list = (facts as string[]).map(cleanFact).filter(Boolean);
     if (list.length > MEMORY_MAX) return Promise.reject(new AgentServiceError("E_BAD_ARGS", `A memória tem no máximo ${MEMORY_MAX} fatos.`));
     const long = list.find((f) => f.length > FACT_MAX_CHARS);
@@ -412,13 +438,12 @@ export class AgentService {
     if (secret !== undefined)
       return Promise.reject(new AgentServiceError("E_SECRET", "Um fato parece ter uma senha ou um token. A memória vai ao agente em todo pedido: tire esse trecho."));
     return this.oneMemory((root) => {
-      const saved = writeMemory(root, list);
+      const saved = writeMemory(root, list, (skipped as string[] | undefined) ?? null);
       this.emitMemory(saved);
       return this.viewOf(saved);
     });
   }
 
-  /** "Apagar tudo" (`agent.memoryClear`): a memória fica vazia; o arquivo continua, só com o cabeçalho. */
   /**
    * O guardrail na prática (spec #11955, o passo 4 do onboarding): o texto pelo filtro local, num filtro novo, só para
    * mostrar. Nada vai ao agente, nada fica guardado, e os marcadores do pedido de verdade não mudam.
@@ -427,9 +452,13 @@ export class AgentService {
     return new SecretGuard().request(text.slice(0, 2000));
   }
 
+  /**
+   * "Apagar tudo" (`agent.memoryClear`): todos os fatos saem, também os que o agente não lia. O resto do que a pessoa
+   * escreveu no arquivo (parágrafos, títulos) fica (spec #12749).
+   */
   memoryClear(): Promise<AgentMemoryView> {
     return this.oneMemory((root) => {
-      const saved = writeMemory(root, []);
+      const saved = writeMemory(root, [], []);
       this.emitMemory(saved);
       return this.viewOf(saved);
     });
@@ -449,9 +478,10 @@ export class AgentService {
     return this.oneMemory((root) => {
       const op = this.memoryOps.find((o) => o.id === id);
       if (!op) throw new AgentServiceError("E_NOT_FOUND", "Essa mudança na memória já não pode ser desfeita.");
-      if (op.undone) return this.viewOf(readMemory(root));
-      if (op.action === "full") throw new AgentServiceError("E_BAD_ARGS", "Esse fato não foi anotado: não há o que desfazer.");
-      let facts = readMemory(root);
+      const file = readMemoryFile(root);
+      if (op.undone) return this.viewOf(file);
+      if (op.action === "full" || op.action === "over") throw new AgentServiceError("E_BAD_ARGS", "Esse fato não foi anotado: não há o que desfazer.");
+      let facts = file.facts;
       const at = facts.findIndex((f) => factKey(f) === factKey(op.fact));
       if (op.action === "remember") {
         if (at >= 0) facts = facts.filter((_, i) => i !== at);
@@ -460,9 +490,9 @@ export class AgentService {
         facts = [...facts.slice(0, op.index), op.fact, ...facts.slice(op.index)];
       }
       op.undone = true;
-      facts = writeMemory(root, facts);
-      this.emitMemory(facts);
-      return this.viewOf(facts);
+      const saved = writeMemory(root, facts);
+      this.emitMemory(saved);
+      return this.viewOf(saved);
     });
   }
 

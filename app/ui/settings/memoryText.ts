@@ -40,3 +40,38 @@ export function dropFact(facts: readonly string[], fact: string): string[] | nul
   const at = facts.indexOf(fact);
   return at < 0 ? null : facts.filter((_, i) => i !== at);
 }
+
+/**
+ * O aviso da memória que passou do limite (spec #12749): no balão, quando o agente não a mudou, e em Ajustes. `facts`:
+ * todos os fatos do arquivo; `long`: os que passam de 300 caracteres.
+ */
+export function overLine(o: { facts: number; long: number }): string {
+  const why =
+    o.facts > 60 && o.long
+      ? `tem ${o.facts} fatos, e ${o.long === 1 ? "um passa" : `${o.long} passam`} de 300 caracteres`
+      : o.facts > 60
+        ? `tem ${o.facts} fatos`
+        : o.long === 1
+          ? "um fato passa de 300 caracteres"
+          : `${o.long} fatos passam de 300 caracteres`;
+  return `A memória passou do limite: ${why}. Apague ou encurte um em Ajustes › Agente › Memória.`;
+}
+
+/** Em Ajustes: os fatos escritos à mão que o agente não lê (spec #12749). */
+export function skippedLine(n: number): string {
+  const which = n === 1 ? "Um fato escrito no arquivo fica" : `${n} fatos escritos no arquivo ficam`;
+  return `${which} de fora: o agente não lê, e não muda a memória até você encurtar ou apagar. Nada foi apagado.`;
+}
+
+/** Por que o fato fica de fora. */
+export const skippedReason = (r: "long" | "over") => (r === "long" ? "passa de 300 caracteres" : "depois dos 60 fatos");
+
+/** Em Ajustes: as linhas do arquivo que não são fato (spec #12749). */
+export function outsideLine(n: number): string {
+  return n === 1
+    ? "O arquivo tem uma linha que não é fato (um parágrafo ou um título): ela fica lá, mas não vai ao agente."
+    : `O arquivo tem ${n} linhas que não são fato (parágrafos ou títulos): elas ficam lá, mas não vão ao agente.`;
+}
+
+/** "412 de 300 caracteres": o fato em edição, quando passa do limite. */
+export const factCount = (n: number) => `${n.toLocaleString("pt-BR")} de 300 caracteres`;

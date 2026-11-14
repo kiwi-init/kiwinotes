@@ -30,7 +30,7 @@ describe("o arquivo da memória", () => {
   test("legível, um fato por linha, sem repetição; a pessoa pode editar à mão", () => {
     const root = tmp();
     expect(readMemory(root)).toEqual([]);
-    expect(writeMemory(root, ["Prefere respostas curtas", "  trabalha   com PACS ", "prefere respostas curtas."])).toEqual([
+    expect(writeMemory(root, ["Prefere respostas curtas", "  trabalha   com PACS ", "prefere respostas curtas."]).facts).toEqual([
       "Prefere respostas curtas",
       "trabalha com PACS",
     ]);
