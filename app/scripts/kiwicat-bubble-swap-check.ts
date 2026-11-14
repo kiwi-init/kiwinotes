@@ -116,6 +116,25 @@ async function stopSampler(p: Page): Promise<Frame[]> {
   });
 }
 
+/** O canto parado: nenhum balão saindo, e os que estão lá cheios e iguais por 600 ms. */
+async function settled(p: Page) {
+  const snap = () =>
+    p.evaluate(() =>
+      [...document.querySelectorAll(".kn-bubble-slot")]
+        .map((e) => `${e.getAttribute("data-phase")}:${e.firstElementChild?.className}:${Number(getComputedStyle(e).opacity) > 0.9}`)
+        .join("|"),
+    );
+  const deadline = Date.now() + 15000;
+  let last = await snap();
+  for (;;) {
+    await Bun.sleep(600);
+    const now = await snap();
+    if (now === last && !now.includes("exit") && !now.includes(":false")) return;
+    assert.ok(Date.now() < deadline, `o canto não parou: ${now}`);
+    last = now;
+  }
+}
+
 /** Proposta → pergunta → resposta → aviso. */
 async function sequence(p: Page) {
   await invoke("agent.ask", { text: "faz o resumo executivo do projeto Migração" });
@@ -171,13 +190,22 @@ function analyse(frames: Frame[]) {
   const twoFull = frames.filter((f) => f.slots.filter((s) => s.op > 0.9).length >= 2);
   const swapFrames = frames.filter((f) => f.slots.some((s) => s.phase === "exit") && f.slots.some((s) => s.phase === "enter"));
   // As trocas seguidas viram uma (quadros a menos de 50 ms um do outro).
-  const swaps: { from: string; to: string; start: number; end: number; minVisible: number; frames: number }[] = [];
+  const all: { from: string; to: string; start: number; end: number; minVisible: number; frames: number; seen: number }[] = [];
   for (const f of swapFrames) {
-    const last = swaps.at(-1);
+    const last = all.at(-1);
     const from = f.slots.find((s) => s.phase === "exit")!.kind, to = f.slots.find((s) => s.phase === "enter")!.kind;
-    if (last && f.t - last.end < 50) { last.end = f.t; last.minVisible = Math.min(last.minVisible, vis(f)); last.frames++; }
-    else swaps.push({ from, to, start: f.t, end: f.t, minVisible: vis(f), frames: 1 });
+    const out = Math.max(0, ...f.slots.filter((s) => s.phase === "exit").map((s) => s.op));
+    if (last && f.t - last.end < 50) { last.end = f.t; last.minVisible = Math.min(last.minVisible, vis(f)); last.frames++; last.seen = Math.max(last.seen, out); }
+    else {
+      // O quanto o balão que sai chegou a aparecer: no quadro de antes da troca, e enquanto ele sai.
+      const before = frames[frames.indexOf(f) - 1];
+      all.push({ from, to, start: f.t, end: f.t, minVisible: vis(f), frames: 1, seen: Math.max(out, before ? vis(before) : 0) });
+    }
   }
+  // Uma troca que sai de um balão que nunca apareceu (o pedido traz a resposta e a proposta no mesmo render, e a proposta
+  // sai ainda no atraso da entrada) é, para a pessoa, só a resposta entrando: não conta como troca (#12404).
+  const swaps = all.filter((s) => s.seen >= 0.05);
+  const unseen = all.filter((s) => s.seen < 0.05).map((s) => ({ from: s.from, to: s.to, start: Math.round(s.start) }));
   // Os quadros vazios depois que o primeiro balão apareceu (com o tempo e o que veio antes e depois).
   const first = frames.findIndex((f) => vis(f) > 0.02);
   const empties: { t: number; ms: number; after: string; before: string }[] = [];
@@ -191,8 +219,8 @@ function analyse(frames: Frame[]) {
     i = j;
   }
   const detail = twoFull.slice(0, 6).map((f) => ({ t: Math.round(f.t), slots: f.slots.map((s) => `${s.kind}:${s.phase}:${s.op.toFixed(2)}`) }));
-  const lowSwap = swapFrames.filter((f) => vis(f) < 0.3).slice(0, 6).map((f) => ({ t: Math.round(f.t), slots: f.slots.map((s) => `${s.kind}:${s.phase}:${s.op.toFixed(2)}:${s.anim}`) }));
-  return { frames: frames.length, twoFull: twoFull.length, twoFullDetail: detail, lowSwap, swaps: swaps.map((s) => ({ ...s, start: Math.round(s.start), end: Math.round(s.end), minVisible: +s.minVisible.toFixed(3) })), empties };
+  const lowSwap = swapFrames.filter((f) => vis(f) < 0.3 && swaps.some((s) => f.t >= s.start && f.t <= s.end)).slice(0, 6).map((f) => ({ t: Math.round(f.t), slots: f.slots.map((s) => `${s.kind}:${s.phase}:${s.op.toFixed(2)}:${s.anim}`) }));
+  return { frames: frames.length, twoFull: twoFull.length, twoFullDetail: detail, lowSwap, swaps: swaps.map(({ seen: _, ...s }) => ({ ...s, start: Math.round(s.start), end: Math.round(s.end), minVisible: +s.minVisible.toFixed(3) })), unseen, empties };
 }
 
 const browser = await webkit.launch({ headless: true });
@@ -220,8 +248,10 @@ try {
     const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: dark ? "dark" : "light", width: 900, height: 620, motion: run !== "reduced", browser: "webkit", query: { section: "about" }, ...(cpuOnly || run === "reduced" ? {} : { video: videoDir }) });
     const p = w.page;
     await p.waitForSelector('.kn-kiwicat[data-ready="true"]', { timeout: 15000 });
-    // Uma proposta de antes (a rodada anterior) sai primeiro: começa limpo.
-    await Bun.sleep(500);
+    // Ao abrir, o hub mostra o que ficou da rodada anterior (uma proposta que entra e a resposta que a troca logo em
+    // seguida, ainda no atraso da entrada). Essa troca depende de quando a janela abre e não é a que se mede: a gravação
+    // começa com o canto parado (#12404).
+    await settled(p);
     if (!cpuOnly) await startSampler(p);
     const cpu0 = webkitCpu(), t0 = performance.now();
     await sequence(p);
