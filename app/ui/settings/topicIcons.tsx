@@ -6,11 +6,14 @@ import type { ReactElement } from "react";
 import type { SettingsTopic } from "./topics.ts";
 
 const PATHS: Record<SettingsTopic, ReactElement> = {
-  // Um círculo meio cheio: o claro e o escuro.
+  // A paleta de pintor (pedido do harry, #12472): o contorno com o furo do polegar e quatro pontos de tinta.
   appearance: (
     <>
-      <circle cx="8" cy="8" r="5.5" />
-      <path d="M8 2.5v11a5.5 5.5 0 0 0 0-11z" fill="currentColor" stroke="none" />
+      <path d="M8 2.4c-3.2 0-5.6 2.4-5.6 5.5 0 3.1 2.4 5.7 5.3 5.7.9 0 1.4-.7 1-1.5-.4-.8.1-1.7 1-1.7h1.4c1.6 0 2.5-1.1 2.5-2.6 0-3.1-2.5-5.4-5.6-5.4z" />
+      <circle cx="5.2" cy="8.3" r=".8" fill="currentColor" stroke="none" />
+      <circle cx="5.9" cy="5.5" r=".8" fill="currentColor" stroke="none" />
+      <circle cx="8.6" cy="4.4" r=".8" fill="currentColor" stroke="none" />
+      <circle cx="11" cy="6" r=".8" fill="currentColor" stroke="none" />
     </>
   ),
   // O microfone.
