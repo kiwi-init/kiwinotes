@@ -117,6 +117,8 @@ try {
   await cli(["start", "--no-helper"]);
   await samples();
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito.
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
 
@@ -166,7 +168,7 @@ try {
   await h.close();
 
   // 4. A Atividade: o arquivo criado com [Abrir no Finder] e [Desfazer]; o [Desfazer] manda para a Lixeira.
-  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1600, motion: false, browser: "webkit", query: { section: "settings" } });
+  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1600, motion: false, browser: "webkit", query: { section: "settings", topic: "activity" } });
   const p = s.page;
   const req = (await invoke("agent.activity", {})).requests.find((r: any) => r.changes?.[0]?.path === "Saída/Exames.pdf");
   assert.ok(req, "o pedido que gerou o pdf");

@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from "react";
 
 import type { AgentMemoryView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
+import { useHubNav } from "../src/hubNav.ts";
 import { Button } from "../src/kit/index.tsx";
+import { MEMORY_TITLE } from "../settings/memoryText.ts";
 
 /** Quanto o balão fica na tela depois da última mudança. */
 export const MEMORY_BUBBLE_MS = 12_000;
@@ -26,6 +28,8 @@ export function MemoryBubble({ hidden, onShown }: { hidden: boolean; onShown?: (
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** O balão está aberto: um [Desfazer] o atualiza. O [Ok] e o fim do tempo o fecham de vez (revisão do T11665). */
   const open = useRef(false);
+  /** A memória cheia leva a Ajustes › Agente › Memória (spec #11966): o texto do balão vira um botão. */
+  const nav = useHubNav();
 
   const close = () => {
     open.current = false;
@@ -67,6 +71,16 @@ export function MemoryBubble({ hidden, onShown }: { hidden: boolean; onShown?: (
           <li key={c.id} className="kn-memory-item">
             <span className="kn-memory-line">{memoryBubbleLine(c)}</span>
             {!c.undone && c.action !== "full" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
+            {c.action === "full" && nav ? (
+              <Button
+                onClick={() => {
+                  close();
+                  nav.openSettings("agent", MEMORY_TITLE);
+                }}
+              >
+                Abrir a memória
+              </Button>
+            ) : null}
           </li>
         ))}
       </ul>

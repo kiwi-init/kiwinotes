@@ -5,7 +5,7 @@
 import { useState } from "react";
 
 import {
-  conflictOf, isShortcutFor, SHORTCUTS, shortcutDef, shortcutLabel, type ShortcutId, type Shortcuts,
+  conflictOf, isShortcutFor, SHORTCUTS, shortcutDef, shortcutLabel, type ShortcutDef, type ShortcutId, type Shortcuts,
 } from "../../src/shared/shortcuts.ts";
 import { api, has } from "../src/api.ts";
 import { Button, Row, Section } from "../src/kit/index.tsx";
@@ -112,12 +112,15 @@ export function ShortcutRow({ id, shortcuts }: { id: ShortcutId; shortcuts: Shor
   );
 }
 
-/** Configurações › Atalhos: todos, por grupo. Os das reuniões aparecem também nos ajustes de reunião. */
-export function ShortcutsSection() {
+/**
+ * Configurações › Atalhos, por grupo. Os das reuniões aparecem também nos ajustes de reunião. `group`: só os desse grupo
+ * (cada assunto de Ajustes mostra os dele, spec #11966); sem ele, todos e as teclas da barra lateral.
+ */
+export function ShortcutsSection({ group: only }: { group?: ShortcutDef["group"] } = {}) {
   const shortcuts = useShortcuts();
   // Um engine de antes do T5349: a seção não aparece.
   if (!shortcuts) return null;
-  const groups = [...new Set(SHORTCUTS.map((s) => s.group))];
+  const groups = [...new Set(SHORTCUTS.map((s) => s.group))].filter((g) => !only || g === only);
   return (
     <>
       {groups.map((group) => (
@@ -127,7 +130,7 @@ export function ShortcutsSection() {
           ))}
         </Section>
       ))}
-      <SidebarKeysSection />
+      {only ? null : <SidebarKeysSection />}
     </>
   );
 }

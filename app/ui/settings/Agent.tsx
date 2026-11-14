@@ -27,7 +27,6 @@ import {
 import { NoticeRow } from "./NoticeRow.tsx";
 import { ControlRow } from "./ControlRow.tsx";
 import { NoteModelRow } from "./NoteModel.tsx";
-import { MeetingsRows } from "./MeetingsRows.tsx";
 import { MemoryRows } from "./MemoryRows.tsx";
 import "./agent.css";
 import { CatColorRow, CatRow, OverlayCatRow } from "./CatRow";
@@ -196,8 +195,7 @@ export function AgentSection() {
         </Row>
       ) : null}
 
-      {/* "Suas reuniões" (spec #8360): quando propor, onde salvar, o nome e os blocos. Só com o agente ligado. */}
-      {status.enabled && status.meetings ? <MeetingsRows status={status} run={run} /> : null}
+      {/* "Suas reuniões" (spec #8360) foi para o assunto Reuniões (spec #11966): `AgentMeetingsSection`. */}
 
       {/* A memória do agente e as instruções da pessoa (spec #11469): só com o agente ligado. */}
       {status.enabled ? <MemoryRows status={status} run={run} /> : null}
