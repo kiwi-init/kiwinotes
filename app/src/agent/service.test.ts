@@ -649,6 +649,34 @@ function memoryWriter(notes: Record<string, string>): VaultWriter {
   };
 }
 
+describe("os arquivos que o agente gera (spec #11549)", () => {
+  test("o pedido gera o arquivo, a Atividade registra a criação, e o [Desfazer] o manda para a Lixeira", async () => {
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    const turn = await askAndWait(m, "/gerar-arquivo pdf Saída/Relatório");
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: "Gerei Saída/Relatório.pdf." });
+    const bytes = Buffer.from(notes["Saída/Relatório.pdf"]!, "latin1");
+    expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    const r = (await m.svc.activityLog())[0]!;
+    expect(r.changes).toEqual([expect.objectContaining({ kind: "created", path: "Saída/Relatório.pdf", before: 0, after: bytes.length })]);
+    const trashed: string[] = [];
+    m.svc.useUndo({
+      folder: async () => null,
+      get: async (q) => (notes[q] === undefined ? null : { content: "", version: createHash("sha256").update(Buffer.from(notes[q]!, "latin1")).digest("hex").slice(0, 16) }),
+      save: async () => false,
+      trash: async (q) => {
+        trashed.push(q);
+        delete notes[q];
+        return "trashed";
+      },
+    });
+    await m.svc.undo(r.id);
+    expect(trashed).toEqual(["Saída/Relatório.pdf"]);
+    expect(notes["Saída/Relatório.pdf"]).toBeUndefined();
+  });
+});
+
 describe("a escrita e o registro do agente (spec #8356)", () => {
   test("com o escritor, as três de escrita aparecem; cada pedido entra no registro com o que leu e mudou, e a cópia de antes", async () => {
     const notes: Record<string, string> = { ...NOTES };

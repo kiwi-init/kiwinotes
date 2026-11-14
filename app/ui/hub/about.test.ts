@@ -68,8 +68,13 @@ describe("os créditos (spec #7079)", () => {
     expect(CREDITS.find((c) => c.pkg === "xlsx")?.license).toBe(xlsx.license);
     const acp = JSON.parse(readFileSync(new URL("../../node_modules/@agentclientprotocol/sdk/package.json", import.meta.url), "utf8")) as { license: string; author: string };
     expect(CREDITS.find((c) => c.pkg === "@agentclientprotocol/sdk")).toMatchObject({ license: acp.license, by: acp.author });
+    // As duas do spec #11549 (gerar pdf e docx): a licença que o pacote declara.
+    for (const pkg of ["pdf-lib", "docx"]) {
+      const j = JSON.parse(readFileSync(new URL(`../../node_modules/${pkg}/package.json`, import.meta.url), "utf8")) as { license: string };
+      expect(CREDITS.find((c) => c.pkg === pkg)?.license).toBe(j.license);
+    }
     expect(creditsLine()).toBe(
-      "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); SheetJS Community Edition, de SheetJS LLC (Apache-2.0); three.js, de mrdoob e colaboradores (MIT); draw.io, de JGraph Ltd (Apache-2.0); Agent Client Protocol SDK, de Zed Industries (Apache-2.0).",
+      "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); SheetJS Community Edition, de SheetJS LLC (Apache-2.0); three.js, de mrdoob e colaboradores (MIT); draw.io, de JGraph Ltd (Apache-2.0); pdf-lib, de Andrew Dillon (MIT); docx, de Dolan Miu (MIT); Agent Client Protocol SDK, de Zed Industries (Apache-2.0).",
     );
     expect(creditsLine([])).toBe("");
     expect(creditsLine([CREDITS[0]!, { name: "X", by: "Y", license: "MIT", use: "z", pkg: "x" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, de Y (MIT).");

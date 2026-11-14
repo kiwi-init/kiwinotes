@@ -197,6 +197,34 @@ export function FAKE_SUMMARY(meeting: string | null, main: string | null): Recor
   };
 }
 
+/** Os arquivos (spec #11549): "/ler-arquivo <caminho>" lê a 1ª parte e diz o sumário; "/gerar-arquivo <formato> <pasta/nome>" gera com o conteúdo fixo. */
+export const FAKE_FILE_TABLE = [
+  ["Mês", "Exames", "Obs"],
+  ["Outubro", "1200", "revisado"],
+  ["Novembro", "980", "parcial"],
+];
+export const FAKE_FILE_BLOCKS = [
+  { tipo: "titulo", texto: "Relatório da migração", nivel: 1 },
+  { tipo: "paragrafo", texto: "O arquivo de 2019 vai primeiro, e o teste de carga fica para a semana que vem." },
+  { tipo: "item", texto: "Confirmar a janela de manutenção" },
+  { tipo: "tabela", linhas: FAKE_FILE_TABLE },
+];
+async function readFileFake(client: AgentContext, sessionId: string, caminho: string): Promise<string> {
+  const r = await useTool(client, sessionId, "files_read", { caminho });
+  if (r.isError) return `Não consegui ler ${caminho}: ${r.text}`;
+  const v = JSON.parse(r.text) as { formato: string; partes: number; rotulo: string; texto: string; sumario: { abas?: { nome: string }[]; paginas?: number } };
+  const where = v.sumario.abas ? `${v.sumario.abas.length} aba(s)` : v.sumario.paginas ? `${v.sumario.paginas} página(s)` : `${v.partes} parte(s)`;
+  return `Li ${caminho} (${v.formato}, ${where}). ${v.rotulo}:\n${v.texto.split("\n").slice(0, 4).join("\n")}`;
+}
+async function createFileFake(client: AgentContext, sessionId: string, formato: string, alvo: string): Promise<string> {
+  const cut = alvo.lastIndexOf("/");
+  const [pasta, nome] = cut < 0 ? ["", alvo] : [alvo.slice(0, cut), alvo.slice(cut + 1)];
+  const conteudo = formato === "csv" || formato === "xlsx" ? { tabela: FAKE_FILE_TABLE } : { blocos: FAKE_FILE_BLOCKS };
+  const r = await useTool(client, sessionId, "files_create", { formato, nome, pasta, conteudo });
+  if (r.isError) return `Não consegui gerar o arquivo: ${r.text}`;
+  return `Gerei ${(JSON.parse(r.text) as { caminho: string }).caminho}.`;
+}
+
 /** Responde a uma pergunta pelas notas: procura a pergunta, ou a palavra mais longa dela, lê a 1ª nota e cita o começo. */
 async function answerFromNotes(client: AgentContext, sessionId: string, question: string): Promise<string> {
   const words = [...new Set(question.replace(/[?!.,;:"]/g, " ").split(/\s+/).filter((w) => w.length >= 4))].sort((a, b) => b.length - a.length);
@@ -486,6 +514,17 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
+        // Os arquivos (spec #11549).
+        const readCmd = /^\/ler-arquivo\s+(.+)$/.exec(text);
+        if (readCmd && kiwiServers.has(sessionId)) {
+          await say(client, sessionId, await readFileFake(client, sessionId, readCmd[1]!.trim()));
+          return { stopReason: "end_turn" };
+        }
+        const makeCmd = /^\/gerar-arquivo\s+(\w+)\s+(.+)$/.exec(text);
+        if (makeCmd && kiwiServers.has(sessionId)) {
+          await say(client, sessionId, await createFileFake(client, sessionId, makeCmd[1]!, makeCmd[2]!.trim()));
+          return { stopReason: "end_turn" };
+        }
         // O resumo executivo (spec #11546): "/resumo <projeto>" ou "resumo executivo do <projeto>".
         const summary = /^\/resumo\s+(.+)$/i.exec(text) ?? /resumo executivo d[oa]s?\s+(?:projeto\s+)?(.+?)[.?!]*$/i.exec(text);
         if (summary && kiwiServers.has(sessionId)) {

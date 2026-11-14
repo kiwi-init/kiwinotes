@@ -40,12 +40,15 @@ export function statusLine(v: UpdatesView): string {
  * que usa uma biblioteca entra aqui, com a licença dela.
  */
 export const CREDITS: readonly { name: string; by: string; license: string; use: string; /** O pacote npm, de onde vem o texto da licença (ou o repo, para o que vai copiado no app). */ pkg: string }[] = [
-  { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas", pkg: "pdfjs-dist" },
-  { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "abrir docx nas Notas", pkg: "mammoth" },
-  { name: "SheetJS Community Edition", by: "SheetJS LLC", license: "Apache-2.0", use: "abrir xlsx nas Notas", pkg: "xlsx" },
+  { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas e ler pdf para o agente", pkg: "pdfjs-dist" },
+  { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "abrir docx nas Notas e ler docx para o agente", pkg: "mammoth" },
+  { name: "SheetJS Community Edition", by: "SheetJS LLC", license: "Apache-2.0", use: "abrir xlsx nas Notas, e ler e gerar xlsx com o agente", pkg: "xlsx" },
   { name: "three.js", by: "mrdoob e colaboradores", license: "MIT", use: "névoa do Kiwi-cat", pkg: "three" },
   // Não vem do npm: o viewer oficial vai no repo, com a licença (`scripts/drawio-viewer.ts`, T7112).
   { name: "draw.io", by: "JGraph Ltd", license: "Apache-2.0", use: "abrir diagramas .drawio nas Notas", pkg: "jgraph/drawio" },
+  // Os arquivos que o agente gera (spec #11549): o pdf e o docx são montados no Mac por estas duas.
+  { name: "pdf-lib", by: "Andrew Dillon", license: "MIT", use: "gerar pdf com o agente", pkg: "pdf-lib" },
+  { name: "docx", by: "Dolan Miu", license: "MIT", use: "gerar docx com o agente", pkg: "docx" },
   // O host do agente (spec #4576): a biblioteca oficial do ACP, para o Kiwi conversar com o agente escolhido.
   { name: "Agent Client Protocol SDK", by: "Zed Industries", license: "Apache-2.0", use: "conversar com o agente", pkg: "@agentclientprotocol/sdk" },
 ];
