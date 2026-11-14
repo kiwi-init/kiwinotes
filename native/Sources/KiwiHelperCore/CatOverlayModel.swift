@@ -123,9 +123,29 @@ public struct CatPlacement: Equatable, Sendable {
         return CGRect(x: x, y: y, width: c.width, height: c.height)
     }
 
-    /// Onde o balão fica dentro da janela `frame` (na tela).
+    /// O balão aberto (spec #13378) cresce até esta altura, com o texto todo rolando dentro dele.
+    public static let openBubbleMaxHeight: CGFloat = 360
+
+    /**
+     A janela na tela (spec #13378): a do `frame`, com o espaço do balão aberto já reservado, para o "ver mais" não
+     mexer na janela. O gato fica onde o `frame` o põe; o espaço do balão cresce para o lado dele (para cima, ou para
+     baixo nos cantos de cima) até `openBubbleMaxHeight`, sem passar da área útil, e nunca fica menor que o do balão
+     fechado. A parte transparente deixa o clique passar: só o balão pega o clique (`CatOverlayBubble.takesClick`).
+     */
+    public func windowFrame(visible: CGRect) -> CGRect {
+        let closed = frame(visible: visible)
+        let cat = catRect(in: closed)
+        let room = bubbleBelow ? cat.minY - visible.minY : visible.maxY - cat.maxY
+        let h = max(CatOverlayLayout.bubbleHeight, min(Self.openBubbleMaxHeight, room.rounded(.down)))
+        return CGRect(x: closed.minX, y: bubbleBelow ? cat.minY - h : cat.minY, width: closed.width, height: cat.height + h)
+    }
+
+    /// O espaço do balão numa janela `frame` (a do `frame` ou a do `windowFrame`): a altura que sobra além do gato.
+    public func bubbleRoom(in frame: CGRect) -> CGFloat { frame.height - catSize.height }
+
+    /// Onde o balão fica dentro da janela `frame` (na tela): o espaço todo dele.
     public func bubbleRect(in frame: CGRect) -> CGRect {
-        let w = CatOverlayLayout.bubbleWidth, h = CatOverlayLayout.bubbleHeight
+        let w = CatOverlayLayout.bubbleWidth, h = bubbleRoom(in: frame)
         let x = side == "left" ? frame.minX : side == "right" ? frame.maxX - w : frame.midX - w / 2
         let y = bubbleBelow ? frame.minY : frame.maxY - h
         return CGRect(x: x, y: y, width: w, height: h)
@@ -135,6 +155,23 @@ public struct CatPlacement: Equatable, Sendable {
 /// O balão do gato no overlay (spec #12938): o argumento do `kiwiOverlay.set({bubble: …})`, em JSON. O texto vem do
 /// agente: só como dado de um literal JSON, nunca colado no script.
 public enum CatOverlayBubble {
+    /**
+     Se a janela pega o clique em `mouse` (spec #13378): só em cima do balão, que a página mede (`rect`, na página: a
+     origem em cima, à esquerda). O resto da janela (o gato e o espaço transparente) deixa o clique passar para o app de
+     trás (#504). Sem balão na tela, nada pega.
+     */
+    public static func takesClick(panel: CGRect, rect: CGRect?, mouse: CGPoint) -> Bool {
+        OverlayLayout.takesClick(panel: panel, pill: rect, mouse: mouse)
+    }
+
+    /// O retângulo que a página manda (`{x, y, w, h}`, em pontos); qualquer outra coisa é nenhum balão.
+    public static func rect(_ body: Any?) -> CGRect? {
+        guard let d = body as? [String: Any] else { return nil }
+        let v = ["x", "y", "w", "h"].compactMap { (d[$0] as? NSNumber)?.doubleValue }
+        guard v.count == 4, v.allSatisfy({ $0.isFinite }), v[2] > 0, v[3] > 0, v[2] < 10_000, v[3] < 10_000 else { return nil }
+        return CGRect(x: v[0], y: v[1], width: v[2], height: v[3])
+    }
+
     public static func script(text: String?, error: Bool) -> String {
         guard let text, !text.isEmpty else { return "null" }
         let object: [String: Any] = ["text": text, "error": error]

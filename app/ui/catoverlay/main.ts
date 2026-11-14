@@ -25,24 +25,72 @@ interface OverlayStats {
   cor: string;
   /** O balão na tela agora (spec #12938), ou null. */
   bubble: { text: string; error: boolean } | null;
+  /** O texto não cabe nas três linhas: o "Ver mais" aparece (spec #13378). */
+  bubbleMore: boolean;
+  /** O balão aberto no "Ver mais". */
+  bubbleOpen: boolean;
+  /** O espaço do balão na janela, em pontos (o helper manda: `set({sala})`). */
+  sala: number;
 }
 
-const stats: OverlayStats = { ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null };
+const stats: OverlayStats = {
+  ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null,
+  bubbleMore: false, bubbleOpen: false, sala: 112,
+};
 const bubbleEl = document.getElementById("bubble")!;
 const bubbleText = document.getElementById("bubble-text")!;
+const moreButton = document.getElementById("bubble-more") as HTMLButtonElement;
 
-/** O balão (spec #12938): só texto (`textContent`), nunca HTML. */
+/**
+ * O helper acompanha o balão (spec #13378): onde ele está na página e se está aberto. Com isso, só o balão pega o
+ * clique, e o gato espera enquanto a pessoa lê. Fora do helper (a prova no WebKit headless), não há para quem mandar.
+ */
+function report() {
+  const on = stats.bubble !== null;
+  const r = bubbleEl.getBoundingClientRect();
+  const bubble = on && r.width > 0 && r.height > 0 ? { x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width), h: Math.ceil(r.height) } : null;
+  (window as { webkit?: { messageHandlers?: { kiwiCat?: { postMessage(m: unknown): void } } } }).webkit?.messageHandlers?.kiwiCat?.postMessage({ bubble, open: on && stats.bubbleOpen });
+}
+new ResizeObserver(report).observe(bubbleEl);
+// A entrada desliza 4 px: no fim dela, o lugar de verdade (o clique conta só em cima do balão).
+bubbleEl.addEventListener("transitionend", report);
+
+function setOpen(open: boolean) {
+  stats.bubbleOpen = open;
+  bubbleEl.dataset.open = String(open);
+  moreButton.textContent = open ? "Ver menos" : "Ver mais";
+  moreButton.setAttribute("aria-expanded", String(open));
+  bubbleText.scrollTop = 0;
+  report();
+}
+
+/** O texto passa das três linhas: só aí o "Ver mais" aparece. */
+function measureMore() {
+  stats.bubbleMore = stats.bubble !== null && bubbleText.scrollHeight > bubbleText.clientHeight + 1;
+  bubbleEl.dataset.more = String(stats.bubbleMore);
+}
+
+moreButton.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setOpen(!stats.bubbleOpen);
+});
+
+/** O balão (spec #12938): só texto (`textContent`), nunca HTML. Uma resposta nova chega fechada. */
 function setBubble(b: { text?: unknown; error?: unknown } | null) {
   const text = b && typeof b.text === "string" ? b.text : "";
   if (!text) {
     stats.bubble = null;
     bubbleEl.dataset.on = "false";
+    setOpen(false);
+    measureMore();
     return;
   }
   stats.bubble = { text, error: b?.error === true };
   bubbleText.textContent = text;
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
+  setOpen(false);
+  measureMore();
 }
 const dark = matchMedia("(prefers-color-scheme: dark)");
 const root = document.getElementById("root")!;
@@ -89,7 +137,14 @@ function measureFirstFrame(start: number) {
 }
 
 const api = {
-  set(input: { estado?: string; visible?: boolean; voz?: number | null; cor?: string; bubble?: { text?: unknown; error?: unknown } | null }) {
+  set(input: { estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; bubble?: { text?: unknown; error?: unknown } | null }) {
+    // O espaço do balão na janela (spec #13378), que o helper calcula para a tela de agora: a janela cresce para o lado
+    // do balão, e o gato fica onde estava.
+    if (typeof input.sala === "number" && Number.isFinite(input.sala) && input.sala >= 112 && input.sala <= 2000 && input.sala !== stats.sala) {
+      stats.sala = Math.round(input.sala);
+      css.setProperty("--sala", `${stats.sala}px`);
+      css.setProperty("--win-h", `${place.catH + stats.sala}px`);
+    }
     // O balão da resposta (spec #12938): `null` tira.
     if (input.bubble !== undefined) setBubble(input.bubble);
     // A cor da névoa (spec #9349): troca com a passagem de 400 ms do módulo, sem reiniciar o gato.

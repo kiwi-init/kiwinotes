@@ -19,9 +19,12 @@
       #root { width: var(--cat-w, 192px); height: var(--cat-h, 240px); }
       /* O balão: o mesmo desenho do balão do gato no app (.kn-bubble-shell do hub.css, #12646), com os tokens do app no
          claro e no escuro (o tema do Mac): o contorno grosso na cor do texto, o fundo da superfície, a sombra dura e a
-         ponta virada para o gato, que aqui está embaixo. Três linhas no máximo; o app manda um trecho por vez. */
+         ponta virada para o gato, que aqui está embaixo. O app manda a resposta inteira (spec #13378): fechado, o balão
+         mostra três linhas e o "Ver mais"; aberto, cresce até o espaço da janela (--sala, que o helper manda) e o texto
+         rola dentro dele. Só o balão pega o clique (o helper acompanha o mouse). */
       #bubble {
         position: absolute; left: 50%; bottom: calc(var(--cat-h, 240px) - 10px); transform: translate(var(--bx), 4px); box-sizing: border-box;
+        display: flex; flex-direction: column; max-height: calc(var(--sala, 112px) - 8px);
         min-width: 48px; width: max-content; max-width: 280px; padding: 8px 12px;
         border: 2px solid var(--text); border-radius: 18px; background: var(--surface); color: var(--text);
         box-shadow: 3px 3px 0 var(--text);
@@ -45,7 +48,20 @@
       #bubble::after { bottom: -10px; margin-left: -6px; border-width: 10px 6px 0 6px; border-color: var(--surface) transparent transparent transparent; }
       #bubble[data-error="true"] { border-color: var(--danger); box-shadow: 3px 3px 0 var(--danger); }
       #bubble[data-error="true"]::before { border-top-color: var(--danger); }
-      #bubble-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+      #bubble-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; white-space: pre-line; }
+      #bubble[data-open="true"] { width: 280px; }
+      #bubble[data-open="true"] #bubble-text {
+        display: block; -webkit-line-clamp: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+        margin-right: -8px; padding-right: 8px; scrollbar-width: thin;
+      }
+      /* As ações do balão: o "Ver mais" de hoje; o × e a pergunta da conversa contínua (#13380) entram aqui. */
+      #bubble-actions { display: none; flex: 0 0 auto; justify-content: flex-end; gap: 12px; margin-top: 4px; }
+      #bubble[data-more="true"] #bubble-actions, #bubble[data-open="true"] #bubble-actions { display: flex; }
+      #bubble-more {
+        padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600;
+        text-decoration: underline; cursor: pointer;
+      }
+      #bubble-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
       @media (prefers-reduced-motion: reduce) { #bubble, body[data-balao="abaixo"] #bubble { transition: none; transform: translate(var(--bx), 0); } }
       html, body { background: transparent; }
       /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
@@ -55,7 +71,10 @@
     </style>
   </head>
   <body>
-    <div id="bubble" role="status" aria-live="polite" data-on="false"><div id="bubble-text"></div></div>
+    <div id="bubble" data-on="false" data-open="false" data-more="false">
+      <div id="bubble-text" role="status" aria-live="polite"></div>
+      <div id="bubble-actions"><button id="bubble-more" type="button" aria-expanded="false" aria-controls="bubble-text">Ver mais</button></div>
+    </div>
     <div id="cat"><div id="root"></div></div>
     <script type="module" src="./main.ts"></script>
   </body>

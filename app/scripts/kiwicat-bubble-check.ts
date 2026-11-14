@@ -1,244 +1,230 @@
-// Os balões do gato (spec #9495, T10832): o hub de verdade, o AppEngine headless de verdade e o agente falso, num
-// WebKit headless. Nunca abre janela nativa nem chama o macOS. Prints e vídeo na pasta do argumento.
+// O balão do Kiwi Cat no overlay (T13424, spec #13378): a página do overlay de verdade num WebKit headless, recebendo o
+// que o helper manda (`set({visible, estado, sala, bubble})`), como o CatOverlay.swift. Nada nativo na tela, nenhum
+// agente. A prova:
+//
+// - uma resposta longa chega inteira: fechado, o balão mostra o começo e o "Ver mais"; uma curta não tem o botão;
+// - "Ver mais" abre o balão até o espaço da janela (`sala`), e o texto rola dentro dele com a roda do mouse; "Ver menos"
+//   volta ao resumo;
+// - a página manda ao helper (o `kiwiCat`) o retângulo do balão e se ele está aberto: é com isso que só o balão pega o
+//   clique e o gato espera enquanto a pessoa lê;
+// - nas 6 posições e nos 2 limites de tamanho, o balão aberto fica dentro da janela (o swift test prova que a janela
+//   fica dentro da área útil, `CatOverlayModelTests`).
+//
+// Sai na pasta: `balao.webp` (a folha com os prints: fechado, aberto e rolando).
 //
 //   bun scripts/kiwicat-bubble-check.ts [pasta]
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
-import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
-import { fakeRegistry } from "../src/agent/fake/registry";
+import { BUBBLE_H, overlayPlacement } from "../ui/catoverlay/placement";
 
 const app = resolve(import.meta.dir, "..");
-const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T10832-bubble"));
+const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T13424-balao"));
 mkdirSync(out, { recursive: true });
-const data = mkdtempSync(join(tmpdir(), "kiwi-cat-bubble-"));
-const registry = fakeRegistry([
-  { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
-  { name: "zod", version: "4.6.7", files: { "index.js": "" } },
-]);
-const packages = join(data, "packages.json");
-writeFileSync(packages, JSON.stringify(registry.pinned));
-async function cli(args: string[]) {
-  const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], {
-    cwd: app, stdout: "pipe", stderr: "pipe", env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages },
-  });
-  const text = await new Response(p.stdout).text();
-  const err = await new Response(p.stderr).text();
-  assert.equal(await p.exited, 0, text + err);
-  return text;
-}
-const ctx: UiContext = {
-  data,
-  send: async (msg) => { const r = await request(data, msg); assert.ok(r); return r; },
-  subscribe: async (topics, onMsg) => {
-    const c = await connect(data, (line) => { if (!("id" in line)) onMsg(line); });
-    assert.ok(c);
-    c.write({ id: 0, cmd: "subscribe", topics, follow: true, backlog: false });
-    return () => c.close();
+
+const page = join(app, "dist", "catoverlay");
+const build = spawnSync("bun", ["x", "vite", "build"], { cwd: app, stdio: "ignore", env: { ...process.env, KIWI_UI_WINDOW: "catoverlay" } });
+assert.ok(build.status === 0 && existsSync(join(page, "index.html")), "o build da página catoverlay");
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  async fetch(r) {
+    const file = Bun.file(join(page, new URL(r.url).pathname.replace(/^\/$/, "/index.html")));
+    return (await file.exists()) ? new Response(file) : new Response("", { status: 404 });
   },
-};
-async function invoke(cap: string, args: unknown = {}) {
-  const r = await ctx.send({ cmd: "invoke", cap, args });
-  assert.equal(r.ok, true, JSON.stringify(r));
-  return r.value as any;
-}
-// O balão vivo: na troca (spec #11652), o que sai fica um instante no DOM, num lugar marcado com data-phase="exit".
-const LIVE = '.kn-bubble-slot:not([data-phase="exit"]) > ';
-const bubble = `${LIVE}.kn-bubble`;
-const box = (p: Page, sel: string) => p.locator(sel).evaluate((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; });
-const lineHeight = (p: Page) => p.locator(`${bubble} .kn-bubble-text`).evaluate((e) => parseFloat(getComputedStyle(e).lineHeight));
-/** Espera o balão terminar o pedido (sumir) e devolve os trechos inteiros que passaram por ele. */
-async function chunksUntilGone(p: Page, ms = 90_000): Promise<string[]> {
-  const seen: string[] = [];
-  const end = Date.now() + ms;
-  for (;;) {
-    const s = await p.evaluate(() => {
-      const b = document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) > .kn-bubble');
-      if (!b) return null;
-      return { full: b.querySelector(".kn-bubble-ghost")!.textContent ?? "", typed: b.querySelector(".kn-bubble-typed")!.textContent ?? "" };
-    });
-    if (!s) return seen;
-    if (s.typed === s.full && seen.at(-1) !== s.full) seen.push(s.full);
-    assert.ok(Date.now() < end, `o balão não terminou: ${JSON.stringify(s)} depois de ${JSON.stringify(seen)}`);
-    await Bun.sleep(40);
-  }
-}
+});
+
 const LONG =
-  "Esta é uma resposta longa do agente falso, para mostrar que o balão do gato tem um tamanho máximo. " +
-  "Quando o texto passa de três linhas, ele vira uma sequência de balões, cortada sempre entre palavras, " +
-  "e cada balão fica na tela o tempo de leitura do texto dele antes de dar lugar ao próximo.";
+  "Li as três notas da reunião de ontem. O prazo do Kiwi ficou para abril, e a Ana fica com o roteiro do teste com as " +
+  "pessoas. Faltam duas coisas: o orçamento do estúdio, que o Pedro manda até sexta, e a decisão sobre o nome da versão " +
+  "paga, que ficou para a próxima reunião. Deixei uma lista com as ações em aberto na nota Reuniões/Kiwi.md, com quem " +
+  "cuida de cada uma e a data. Também marquei o lembrete da reunião de quinta às 10h. Se quiser, eu resumo as conversas " +
+  "anteriores sobre o nome, para você chegar na reunião com as opções que já apareceram e o que cada pessoa achou delas. " +
+  "Sobre o teste com as pessoas: a Ana sugeriu cinco sessões de meia hora, duas com quem já usa o app e três com quem " +
+  "nunca viu, e pediu que alguém ficasse com as anotações. Eu posso preparar o roteiro com as tarefas e as perguntas, " +
+  "a partir do que vocês combinaram, e deixar na mesma pasta para ela revisar antes de marcar as sessões.";
+const SHORT = "Pronto: mudei o prazo para abril.";
 
 const browser = await webkit.launch({ headless: true });
-const report: { scope: string; checks: string[]; problems?: string[] } = { scope: "WebKit headless hub with the fake ACP agent; no native app", checks: [] };
-try {
-  await cli(["start", "--no-helper"]);
-  const videos = join(out, "video-tmp");
-  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 620, motion: true, browser: "webkit", query: { section: "about" }, video: videos });
-  const p = w.page;
-  await invoke("agent.enable", { consent: true });
-  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
-  await invoke("agent.configure", { onboarding: { state: "done" } });
-  await invoke("agent.download");
-  // O gato no overlay (spec #9810): no headless não há hub à vista, então a cada pedido o gato iria para o overlay e o do
-  // canto (com o balão) sumiria até o fim. Aqui a prova é o gato do canto.
-  await invoke("settings.set", { kiwicat: { overlay: false } });
-  for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
-  await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
+const report: { scope: string; checks: string[]; problems: string[] } = {
+  scope: "WebKit headless, the real overlay page (dist/catoverlay), commands as the helper sends them; no native window",
+  checks: [],
+  problems: [],
+};
+const shots: { file: string; caption: string; w: number; h: number }[] = [];
 
-  // Quem está digitando continua digitando: um campo com o foco, e o balão não o tira.
-  await p.evaluate(() => {
-    const i = document.createElement("textarea");
-    i.id = "digitando";
-    i.style.cssText = "position:absolute;left:16px;top:120px;width:240px;height:60px;z-index:50";
-    document.body.appendChild(i);
-    i.focus();
+type Posts = { bubble: { x: number; y: number; w: number; h: number } | null; open: boolean }[];
+async function openPage(query: string, theme: "light" | "dark", sala: number) {
+  const q = new URLSearchParams(query);
+  const place = overlayPlacement(q);
+  const width = place.winW;
+  const height = place.catH + sala;
+  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, colorScheme: theme });
+  // O `kiwiCat` do helper: guarda o que a página manda.
+  await ctx.addInitScript(() => {
+    const posts: unknown[] = [];
+    (window as any).__posts = posts;
+    (window as any).webkit = { messageHandlers: { kiwiCat: { postMessage: (m: unknown) => posts.push(JSON.parse(JSON.stringify(m))) } } };
   });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => report.problems.push(`pageerror: ${e.message}`));
+  await p.goto(`http://127.0.0.1:${server.port}/index.html?backend=none&${query}`);
+  await p.waitForFunction(() => (window as any).kiwiCatReady === true, undefined, { timeout: 20_000 });
+  return { ctx, p, width, height, place };
+}
+const stats = (p: Page) => p.evaluate(() => (window as any).kiwiOverlayStats);
+const posts = (p: Page) => p.evaluate(() => (window as any).__posts as Posts);
+const bubbleBox = (p: Page) => p.evaluate(() => {
+  const r = document.getElementById("bubble")!.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height, bottom: r.bottom, right: r.right };
+});
+/** Dois quadros e o fim das transições do balão (140 ms). */
+const settle = async (p: Page) => {
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await Bun.sleep(220);
+};
+async function shot(p: Page, file: string, caption: string, w: number, h: number) {
+  await Bun.sleep(220); // a transição de 140 ms do balão
+  await p.screenshot({ path: join(out, file), omitBackground: true });
+  shots.push({ file, caption, w, h });
+}
 
-  // 1. A resposta digitada num balão ao lado do gato, com a ponta para ele.
-  await invoke("agent.ask", { text: `/conta ${LONG}` });
-  await p.waitForSelector(bubble);
-  const t1 = await p.locator(`${bubble} .kn-bubble-typed`).textContent();
-  await Bun.sleep(250);
-  const t2 = await p.locator(`${bubble} .kn-bubble-typed`).textContent();
-  assert.ok((t2 ?? "").length > (t1 ?? "").length, "o texto aparece sendo digitado");
-  const cat = await box(p, ".kn-kiwicat");
-  const b = await box(p, bubble);
-  assert.ok(b.right <= cat.x, "o balão fica à esquerda do gato");
-  assert.ok(b.bottom > cat.y && b.y < cat.bottom, "na altura do gato, com a ponta virada para ele");
-  assert.ok(b.w <= 280.5, `até 280 px (${b.w})`);
-  await p.screenshot({ path: join(out, "1-digitando.png"), clip: { x: b.x - 16, y: Math.min(b.y, cat.y) - 16, width: cat.right - b.x + 32, height: Math.max(b.bottom, cat.bottom) - Math.min(b.y, cat.y) + 32 } });
-  report.checks.push("typed text in a balloon to the left of the cat, pointing at it, at most 280 px");
+try {
+  // 1. O canto de baixo à direita, 1×, numa tela grande: o espaço do balão é o máximo (360).
+  {
+    const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", "light", 360);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), LONG);
+    await settle(p);
+    let s = await stats(p);
+    assert.equal(s.bubble.text, LONG, "a resposta inteira chega de uma vez");
+    assert.equal(s.bubbleMore, true, "uma resposta longa mostra o Ver mais");
+    assert.equal(s.bubbleOpen, false);
+    const closed = await bubbleBox(p);
+    assert.ok(closed.h < 112, `fechado, o balão é pequeno: ${closed.h}`);
+    await shot(p, "1-fechado.png", "1. Fechado: o começo da resposta e o Ver mais", width, height);
+    let last = (await posts(p)).at(-1)!;
+    assert.ok(last.bubble && !last.open, `o helper sabe onde o balão está: ${JSON.stringify(last)}`);
+    // O helper usa isso para o clique: até 1,5 pt de arredondamento.
+    const near = (a: number, b: number) => Math.abs(a - b) <= 1.5;
+    assert.ok(near(last.bubble.x, closed.x) && near(last.bubble.y, closed.y) && near(last.bubble.w, closed.w) && near(last.bubble.h, closed.h), `o retângulo que o helper recebe: ${JSON.stringify(last.bubble)} × ${JSON.stringify(closed)}`);
+    report.checks.push("a long answer arrives whole, once; closed, the bubble shows its start and 'Ver mais', and tells the helper where it is");
 
-  // 2. O balão é clicável, o resto do canto deixa passar, e o foco fica no campo.
-  const through = await p.locator(".kn-kiwicat").evaluate((c) => { const r = c.getBoundingClientRect(); const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !hit?.closest(".kn-kiwicat, .kn-bubble"); });
-  assert.ok(through, "o clique no gato atravessa");
-  const onBubble = await p.locator(bubble).evaluate((e) => { const r = e.getBoundingClientRect(); return !!document.elementFromPoint(r.x + 10, r.y + 10)?.closest(".kn-bubble"); });
-  assert.ok(onBubble, "o balão recebe o clique");
+    // Nada troca sozinho: um tempo depois, o mesmo texto no balão.
+    await Bun.sleep(1000);
+    s = await stats(p);
+    assert.equal(s.bubble.text, LONG);
 
-  // 3. Até 3 linhas por balão, e o [Ver mais] com tudo, sem fechar o balão.
-  await p.waitForSelector(`${bubble} .kn-bubble-more`, { timeout: 15000 });
-  const lh = await lineHeight(p);
-  const textH = await p.locator(`${bubble} .kn-bubble-text`).evaluate((e) => e.getBoundingClientRect().height);
-  assert.ok(textH <= lh * 3 + 1, `no máximo 3 linhas (${textH} / ${lh})`);
-  await p.locator(`${bubble} .kn-bubble-more`).click();
-  await p.waitForSelector(".kn-bubble-big");
-  assert.equal(await p.evaluate(() => document.activeElement?.id), "digitando", "o [Ver mais] não tira o foco");
-  await p.screenshot({ path: join(out, "2-ver-mais.png") });
-  await p.keyboard.press("Escape");
-  await p.waitForSelector(".kn-bubble-big", { state: "detached" });
-  // O [Ver mais] não fechou o balão: fechado o grande, o pequeno continua.
-  await p.waitForSelector(bubble, { timeout: 2000 });
-  await p.locator(`${bubble} .kn-bubble-more`).click();
-  await p.waitForSelector(".kn-bubble-big");
-  await p.mouse.click(400, 300);
-  await p.waitForSelector(".kn-bubble-big", { state: "detached" });
-  // O clique fora é um clique na página: o foco vai para onde a pessoa clicou, como em qualquer lugar. Volta ao campo.
-  await p.locator("#digitando").focus();
-  report.checks.push("at most 3 lines; [Ver mais] opens the whole answer without closing the balloon; Esc and a click outside close it");
+    await p.click("#bubble-more");
+    await settle(p);
+    s = await stats(p);
+    assert.equal(s.bubbleOpen, true);
+    assert.equal(await p.textContent("#bubble-more"), "Ver menos");
+    const open = await bubbleBox(p);
+    assert.ok(open.h > closed.h * 2, `aberto, o balão cresce: ${closed.h} → ${open.h}`);
+    assert.ok(open.y >= 0 && open.bottom <= height && open.x >= 0 && open.right <= width, `aberto, dentro da janela: ${JSON.stringify(open)}`);
+    const scroll = await p.evaluate(() => { const t = document.getElementById("bubble-text")!; return { sh: t.scrollHeight, ch: t.clientHeight }; });
+    assert.ok(scroll.sh > scroll.ch, `o texto passa do balão aberto e rola: ${JSON.stringify(scroll)}`);
+    last = (await posts(p)).at(-1)!;
+    assert.ok(last.bubble && last.open && last.bubble.h >= Math.floor(open.h) - 1, `o helper sabe que abriu e o novo tamanho: ${JSON.stringify(last)}`);
+    await shot(p, "2-aberto.png", "2. Ver mais: o balão no tamanho máximo, com o texto todo", width, height);
+    report.checks.push("'Ver mais' opens the bubble up to the window's room; the text scrolls inside; the helper gets open: true and the new rect");
 
-  // 4. A sequência: cortada entre palavras, cada trecho na vez dele, e juntos são a resposta.
-  const chunks = await chunksUntilGone(p);
-  const words = new Set(LONG.split(/\s+/));
-  for (const c of chunks) for (const word of c.split(/\s+/).filter(Boolean)) assert.ok(words.has(word), `"${word}" é palavra inteira`);
-  assert.ok(chunks.length >= 3, `vários balões (${chunks.length})`);
-  assert.ok(LONG.endsWith(chunks.at(-1)!.trim()), "o último trecho é o fim da resposta");
-  assert.equal(await p.evaluate(() => document.activeElement?.id), "digitando");
-  // O leitor de tela: a resposta inteira, uma vez, no fim.
-  assert.equal((await p.locator(".kn-visually-hidden[aria-live]").textContent())?.trim(), LONG);
-  report.checks.push(`a long answer became ${chunks.length} balloons, cut between words, then disappeared; announced once, whole`);
+    await p.mouse.move(open.x + open.w / 2, open.y + open.h / 2);
+    await p.mouse.wheel(0, 400);
+    await p.waitForFunction(() => document.getElementById("bubble-text")!.scrollTop > 0, undefined, { timeout: 5000 });
+    const top = await p.evaluate(() => document.getElementById("bubble-text")!.scrollTop);
+    await shot(p, "3-rolando.png", "3. Rolando dentro do balão, com a roda do mouse", width, height);
+    report.checks.push(`the mouse wheel scrolls the text inside the open bubble (scrollTop ${top})`);
 
-  // 5. O clique fecha o balão, e um pedido novo fecha o do anterior.
-  await invoke("agent.ask", { text: `/conta ${LONG}` });
-  await p.waitForSelector(bubble);
-  await p.locator(bubble).click({ position: { x: 12, y: 12 } });
-  await p.waitForSelector(bubble, { state: "detached" });
-  assert.equal(await p.evaluate(() => document.activeElement?.id), "digitando", "o clique no balão não tira o foco");
-  await Bun.sleep(1500);
-  assert.equal(await p.locator(bubble).count(), 0, "fechado, o resto do pedido não volta");
-  for (let n = 0; (await invoke("agent.status")).busy; n++) { assert.ok(n < 200); await Bun.sleep(100); }
-  await invoke("agent.ask", { text: "/conta primeira resposta, que vai ser trocada" });
-  await p.waitForSelector(bubble);
-  for (let n = 0; (await invoke("agent.status")).busy; n++) { assert.ok(n < 200); await Bun.sleep(100); }
-  await invoke("agent.ask", { text: "/conta a segunda" });
-  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent?.startsWith("a segunda"), undefined, { timeout: 10000 });
-  report.checks.push("a click closes the balloon (focus stays); a new request replaces the previous balloon");
-  await chunksUntilGone(p);
+    await p.click("#bubble-more");
+    await settle(p);
+    s = await stats(p);
+    assert.equal(s.bubbleOpen, false);
+    assert.equal(await p.evaluate(() => document.getElementById("bubble-text")!.scrollTop), 0);
+    last = (await posts(p)).at(-1)!;
+    assert.ok(last.bubble && !last.open);
+    report.checks.push("'Ver menos' goes back to the summary, at the top");
 
-  // 6. O texto dito antes de uma ferramenta sai quando ela começa; o [Ver mais] mostra tudo.
-  await invoke("agent.ask", { text: "/antes-da-ferramenta" });
-  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent?.startsWith("Vou ler a nota"), undefined, { timeout: 10000 });
-  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-typed')?.textContent === document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent);
-  await Bun.sleep(400); // a entrada do balão (60 ms de atraso e 250 ms de mola, spec #11652)
-  await p.screenshot({ path: join(out, "3-antes-da-ferramenta.png") });
-  await p.waitForSelector(bubble, { state: "detached", timeout: 5000 });
-  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent?.startsWith("Pronto"), undefined, { timeout: 10000 });
-  await p.locator(`${bubble} .kn-bubble-more`).click();
-  const big = await p.locator(".kn-bubble-big").textContent();
-  assert.ok(big?.includes("Vou ler a nota") && big.includes("o prazo do Kiwi é março"), "o [Ver mais] mostra tudo o que o agente disse");
-  await p.keyboard.press("Escape");
-  report.checks.push("text said before a tool leaves when the tool starts; the final answer comes in a new balloon; [Ver mais] has everything");
-  await chunksUntilGone(p);
-
-  // 7. O erro em uma linha.
-  await invoke("agent.ask", { text: "/limite" });
-  await p.waitForSelector(`${bubble}[data-error]`, { timeout: 10000 });
-  const eh = await p.locator(`${bubble} .kn-bubble-text`).evaluate((e) => e.getBoundingClientRect().height);
-  assert.ok(eh <= (await lineHeight(p)) + 1, `o erro em uma linha (${eh})`);
-  await Bun.sleep(250);
-  await p.screenshot({ path: join(out, "4-erro.png") });
-  report.checks.push("the error in one line");
-  await chunksUntilGone(p);
-
-  // 8. Um texto hostil, um código longo e uma marcação pela metade: texto, legível, sem quebrar o balão.
-  const hostile = '<img src=x onerror="window.__xss=1"> **negrito** e **pela metade `codigo_muito_longo_sem_espaco_nenhum_que_nao_cabe_numa_linha_do_balao`';
-  await invoke("agent.ask", { text: `/conta ${hostile}` });
-  await p.waitForSelector(bubble);
-  await Bun.sleep(400);
-  assert.equal(await p.locator(`${bubble} img, .kn-bubble-big img`).count(), 0, "nada vira HTML");
-  assert.equal(await p.evaluate(() => (window as any).__xss), undefined);
-  const hb = await box(p, bubble);
-  assert.ok(hb.w <= 280.5 && hb.right <= cat.x, "o balão não quebra");
-  await p.locator(`${bubble} .kn-bubble-more`).click({ timeout: 10000 }).catch(() => {});
-  if (await p.locator(".kn-bubble-big").count()) {
-    const bigHtml = await p.locator(".kn-bubble-big").innerHTML();
-    assert.ok(bigHtml.includes("&lt;img"), "o <img> aparece como texto");
-    assert.ok(bigHtml.includes("<strong>negrito</strong>"), "o negrito legível");
-    assert.ok(bigHtml.includes("**pela metade"), "a marcação pela metade fica como texto");
-    await p.screenshot({ path: join(out, "5-texto-hostil.png") });
-    await p.keyboard.press("Escape");
+    // O balão sai com o gato: o helper fica sabendo que não há balão (e para de acompanhar o mouse).
+    await p.evaluate(() => (window as any).kiwiOverlay.set({ visible: false, bubble: null }));
+    await settle(p);
+    last = (await posts(p)).at(-1)!;
+    assert.deepEqual(last, { bubble: null, open: false });
+    // Uma resposta curta: sem Ver mais.
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ visible: true, bubble: { text: t, error: false } }), SHORT);
+    await settle(p);
+    s = await stats(p);
+    assert.equal(s.bubbleMore, false);
+    assert.equal(await p.isVisible("#bubble-more"), false);
+    report.checks.push("a short answer has no 'Ver mais'; when the bubble goes, the helper gets bubble: null");
+    await ctx.close();
   }
-  report.checks.push("hostile text, a long code and half-written markup stay text and legible, without breaking the balloon");
-  await chunksUntilGone(p);
-  report.problems = w.report.problems;
-  await w.close();
-  const v = readdirSync(videos).find((f) => f.endsWith(".webm"));
-  if (v) renameSync(join(videos, v), join(out, "baloes.webm"));
-  rmSync(videos, { recursive: true, force: true });
 
-  // 9. O escuro, e o Reduzir movimento: cada trecho aparece inteiro, sem digitação.
-  await invoke("settings.set", { appearance: { mode: "dark", darkTheme: "channels-oled", lightTheme: "channels-light", textSize: "default", font: "system", motion: "reduced" } });
-  const d = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 900, height: 620, motion: false, browser: "webkit", query: { section: "about" } });
-  await d.page.waitForSelector('.kn-kiwicat[data-ready="true"]');
-  await invoke("agent.ask", { text: `/conta ${LONG}` });
-  await d.page.waitForSelector(bubble);
-  const first = await d.page.evaluate(() => ({ full: document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')!.textContent, typed: document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-typed')!.textContent }));
-  assert.equal(first.typed, first.full, "com o Reduzir movimento, o trecho aparece inteiro");
-  assert.equal(await d.page.locator(bubble).evaluate((e) => getComputedStyle(e).animationName), "none");
-  await d.page.waitForSelector(`${bubble} .kn-bubble-more`, { timeout: 15000 });
-  const db = await box(d.page, bubble);
-  const dc = await box(d.page, ".kn-kiwicat");
-  await d.page.screenshot({ path: join(out, "6-escuro-reduzir.png"), clip: { x: db.x - 16, y: Math.min(db.y, dc.y) - 16, width: dc.right - db.x + 32, height: Math.max(db.bottom, dc.bottom) - Math.min(db.y, dc.y) + 32 } });
-  report.checks.push("dark theme; with Reduce Motion each chunk appears whole, without animation");
-  report.problems = [...(report.problems ?? []), ...d.report.problems];
-  await d.close();
+  // 2. O escuro, aberto, num canto de cima (o balão embaixo do gato).
+  {
+    const { ctx, p, width, height } = await openPage("escala=1.00&lado=left&balao=abaixo", "dark", 360);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), LONG);
+    await settle(p);
+    await p.click("#bubble-more");
+    await settle(p);
+    await shot(p, "4-aberto-escuro.png", "4. No escuro, num canto de cima: o balão abre para baixo", width, height);
+    await ctx.close();
+  }
+
+  // 3. As 6 posições × os 2 limites de tamanho, com o espaço que o helper daria (o máximo e o mínimo): o balão aberto
+  //    fica dentro da janela.
+  const sides = [
+    ["center", "acima"], ["center", "acima"], ["left", "abaixo"], ["right", "abaixo"], ["left", "acima"], ["right", "acima"],
+  ] as const;
+  const names = ["center", "bottom-center", "top-left", "top-right", "bottom-left", "bottom-right"];
+  let checked = 0;
+  for (let i = 0; i < sides.length; i++) {
+    for (const escala of ["0.60", "1.60"]) {
+      for (const sala of [BUBBLE_H, 360]) {
+        const [lado, balao] = sides[i]!;
+        const { ctx, p, width, height } = await openPage(`escala=${escala}&lado=${lado}&balao=${balao}`, "light", sala);
+        await p.evaluate(([t, s]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: s, bubble: { text: t, error: false } }), [LONG, sala] as const);
+        await settle(p);
+        for (const open of [false, true]) {
+          if (open) {
+            await p.click("#bubble-more");
+            await settle(p);
+          }
+          const b = await bubbleBox(p);
+          const what = `${names[i]} ${escala} sala ${sala} ${open ? "aberto" : "fechado"}`;
+          assert.ok(b.x >= 0 && b.y >= 0 && b.right <= width + 0.5 && b.bottom <= height + 0.5, `balão fora da janela: ${what} ${JSON.stringify(b)} em ${width}×${height}`);
+          checked++;
+        }
+        await ctx.close();
+      }
+    }
+  }
+  report.checks.push(`the bubble, closed and open, stays inside the window in the 6 positions × 0.6 and 1.6 × the smallest and largest room (${checked} cases)`);
+
+  // A folha em WebP: cada print sobre um fundo de mesa, como por cima de outro app.
+  const sheet = await browser.newPage({ deviceScaleFactor: 1, viewport: { width: 1480, height: 900 } });
+  const img = (f: string) => `data:image/png;base64,${readFileSync(join(out, f)).toString("base64")}`;
+  await sheet.setContent(
+    `<body style="margin:0;padding:24px;background:#eceae4;font:600 18px -apple-system,sans-serif;color:#222">` +
+      `<h1 style="margin:0 0 16px;font-size:26px">O balão do Kiwi Cat: resumo, Ver mais e rolagem (spec #13378)</h1>` +
+      `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-items:start">` +
+      shots.map((x) =>
+        `<figure style="margin:0"><figcaption style="margin-bottom:8px;min-height:44px">${x.caption}</figcaption>` +
+        `<div style="border-radius:10px;padding:16px;background:linear-gradient(160deg,#9fb4c9,#c9b9a6);box-shadow:0 1px 4px #0003">` +
+        `<img src="${img(x.file)}" style="display:block;width:${x.w}px;height:${x.h}px;margin:0 auto"></div></figure>`).join("") +
+      `</div></body>`,
+  );
+  await sheet.waitForFunction(() => [...document.images].every((i) => i.complete && i.naturalWidth > 0), undefined, { timeout: 30000 });
+  await sheet.screenshot({ path: join(out, "folha.png"), fullPage: true });
+  await sheet.close();
+  const webp = Bun.spawnSync(["cwebp", "-quiet", "-q", "80", join(out, "folha.png"), "-o", join(out, "balao.webp")]);
+  if (webp.exitCode !== 0) report.problems.push(`cwebp: ${webp.stderr.toString()}`);
   assert.deepEqual(report.problems, []);
   console.log(JSON.stringify({ ok: true, ...report }, null, 2));
 } finally {
   await browser.close().catch(() => {});
-  await cli(["stop"]).catch(() => {});
-  registry.stop();
-  rmSync(data, { recursive: true, force: true });
+  server.stop(true);
 }
