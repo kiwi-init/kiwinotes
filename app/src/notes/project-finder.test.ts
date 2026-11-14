@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { tempDir } from "../../test/tmp.ts";
-import { type FoundProject, findProjects, isProjectName } from "./project-finder.ts";
+import { type FoundProject, findProjects, isProjectName, searchPlaces } from "./project-finder.ts";
 
 /** Uma árvore de pastas: as que terminam em `/` são pastas; as outras, arquivos vazios. */
 function tree(root: string, paths: string[]) {
@@ -99,5 +99,41 @@ describe("a busca das pastas de projeto (spec #12950)", () => {
     await find(home);
     clearInterval(timer);
     expect(worst).toBeLessThan(100);
+  });
+
+  test("os lugares: a pasta de notas, os comuns e a casa; nenhuma pasta duas vezes, e o lugar negado fica de fora", async () => {
+    const home = tempDir("kiwi-finder-");
+    tree(home, [
+      "Documents/Notas/Plano/Plano.md", // a pasta de notas, dentro de Documents
+      "Documents/work-projects/Alfa/",
+      "Documents/work-projects/Beta/",
+      "Developer/kiwi/.git/",
+      "outra/meu-projeto/",
+      "Downloads/proj-baixado/",
+      "Library/Mobile Documents/com~apple~CloudDocs/Projeto Nuvem/",
+      "Desktop/proj-mesa/",
+    ]);
+    const notes = path.join(home, "Documents/Notas");
+    const { roots, exclude } = searchPlaces(home, notes);
+    expect(roots.map((r) => r.label)).toEqual(["Notas", "Documents", "Desktop", "Developer", "Projects", "code", "repos", "iCloud Drive", "Pasta pessoal"]);
+    // O Desktop negado (o macOS, ou sem leitura): a busca segue e diz que ele ficou de fora.
+    chmodSync(path.join(home, "Desktop"), 0o000);
+    const found: FoundProject[] = [];
+    const denied: string[] = [];
+    try {
+      await findProjects(roots, { exclude, onFound: (b) => found.push(...b), onDenied: (r) => denied.push(r.label) });
+    } finally {
+      chmodSync(path.join(home, "Desktop"), 0o755);
+    }
+    expect(found.map((f) => `${f.root}:${f.path}`)).toEqual([
+      "Notas:Plano",
+      "Documents:work-projects/Alfa",
+      "Documents:work-projects/Beta",
+      "Developer:kiwi",
+      "iCloud Drive:Projeto Nuvem",
+      "Pasta pessoal:outra/meu-projeto",
+    ]);
+    expect(denied).toEqual(["Desktop"]);
+    expect(searchPlaces(null, notes).roots.map((r) => r.label)).toEqual(["Notas"]);
   });
 });

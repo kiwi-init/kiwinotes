@@ -124,9 +124,13 @@
 
 /* Passo 5: o editor do Modelo de Ajustes, como está. */
 .kn-onb-model { margin-top: var(--space-2); }
-/* Passo 6: as pastas, uma caixa por linha. */
+/* Passo 6: a busca e as pastas, uma por linha, com onde fica e o motivo. */
 .kn-onb-projects { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
-.kn-onb-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.kn-onb-search { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.kn-onb-folders { display: grid; gap: var(--space-2); max-height: 320px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.kn-onb-folder-text { display: grid; min-width: 0; padding: var(--space-1) 0; }
+.kn-onb-folder-name { font-weight: 500; }
+.kn-onb-folder-where { color: var(--text-2); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kn-onb-folder {
   display: flex;
   align-items: center;

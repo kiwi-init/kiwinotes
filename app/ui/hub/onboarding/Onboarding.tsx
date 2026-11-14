@@ -6,7 +6,8 @@ import "./onboarding.css";
 
 import { useEffect, useRef, useState } from "react";
 
-import type { AgentChangeView, AgentStatus, AppSettings } from "../../../src/shared/ui-contract.ts";
+import type { AgentChangeView, AgentStatus, AppSettings, ProjectSearchView } from "../../../src/shared/ui-contract.ts";
+import type { ProjectInfo } from "../../../src/notes/projects.ts";
 import { catColorHex, catColorOptions } from "../../../src/shared/kiwicat-colors.ts";
 import { api, has } from "../../src/api.ts";
 import { Button, Kbd, Segmented, Select } from "../../src/kit/index.tsx";
@@ -29,7 +30,10 @@ import {
   withTone,
   magicCandidates,
   magicRequest,
-  projectCandidates,
+  projectRows,
+  type ProjectRow,
+  searchLine,
+  SEARCH_NOTICE,
   progressLine,
   projectsSummary,
   shortcutSummary,
@@ -293,73 +297,109 @@ function GuardStep() {
 }
 
 /**
- * Passo 6: os projetos. As pastas de primeiro nível do cofre (só os nomes, lidos no Mac, sem mandar nada) e uma caixa
- * para cada; marcar e desmarcar são as mesmas ações da barra lateral das Notas (#9874).
+ * Passo 6: os projetos (spec #12950). Num clique, a busca anda pelo Mac em segundo plano (a pasta de notas, os lugares
+ * comuns e a pasta pessoal) e a lista chega aos poucos, cada pasta com o motivo. A busca só lê nomes; antes dela, uma
+ * linha diz por que o macOS pode pedir permissão. Marcar e desmarcar são as ações da barra lateral das Notas (#9874):
+ * uma pasta de fora vira um projeto dentro da pasta de notas, com o caminho na nota principal.
  */
-function ProjectsStep({ settings }: { settings: AppSettings }) {
-  const [folders, setFolders] = useState<string[] | null>(null);
-  const [marked, setMarked] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState<string | null>(null);
+function ProjectsStep() {
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const [view, setView] = useState<ProjectSearchView>({ state: "idle", found: [], skipped: [] });
+  /** As caixas como a pessoa as deixou, na hora do clique (spec #12918), antes de o Kiwi responder. */
+  const [pending, setPending] = useState<Map<string, boolean>>(new Map());
   const [failure, setFailure] = useState<string | null>(null);
+  const searching = view.state === "searching";
   useEffect(() => {
     let alive = true;
-    // Só os nomes das pastas (spec #12918): o `notes.list` mandava o cofre inteiro para a tela a cada recarga.
-    const folderNames = () => (has("notes.folders") ? api.notes.folders() : api.notes.list());
     const load = () =>
-      Promise.all([folderNames(), api.projects.list()]).then(
-        ([n, p]) => {
-          if (!alive) return;
-          setFolders(projectCandidates(n.folders, [p.meetingsFolder, settings.templatesFolder, settings.dailyFolder, settings.attachmentsFolder]));
-          setMarked(new Set(p.projects.map((x) => x.folder)));
-        },
+      api.projects.list().then(
+        (p) => alive && setProjects(p.projects),
         (e: unknown) => alive && setFailure(e instanceof Error ? e.message : String(e)),
       );
     void load();
+    // Quem voltou ao passo vê a busca de antes, se houve uma.
+    void api.projects.find().then((v) => alive && setView(v), () => {});
     const off = api.projects.onChanged(() => void load());
     return () => {
       alive = false;
       off();
     };
-  }, [settings.templatesFolder, settings.dailyFolder, settings.attachmentsFolder]);
-  const set = (folder: string, on: boolean) =>
-    setMarked((m) => {
-      const next = new Set(m);
-      if (on) next.add(folder);
-      else next.delete(folder);
-      return next;
-    });
-  // A caixa muda no clique (spec #12918), sem esperar o Kiwi criar a nota principal; se ele não conseguir, ela volta.
-  const toggle = async (folder: string, on: boolean) => {
-    set(folder, on);
-    setBusy(folder);
+  }, []);
+  // Enquanto procura, a tela lê de novo a cada pouco; a busca anda no Bun, fora do caminho do clique.
+  useEffect(() => {
+    if (!searching) return;
+    let alive = true;
+    const timer = setInterval(() => void api.projects.find().then((v) => alive && setView(v), () => {}), 300);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [searching]);
+  // Saiu do passo no meio: a busca para.
+  useEffect(() => () => void api.projects.find({ stop: true }).catch(() => {}), []);
+  const start = () => {
+    setFailure(null);
+    void api.projects.find({ start: true }).then(setView, (e: unknown) => setFailure(e instanceof Error ? e.message : String(e)));
+  };
+  const stop = () => void api.projects.find({ stop: true }).then(setView, () => {});
+  const rows = projectRows(projects, view.found);
+  const toggle = async (row: ProjectRow, on: boolean) => {
+    setPending((m) => new Map(m).set(row.key, on));
     setFailure(null);
     try {
-      await (on ? api.projects.mark(folder) : api.projects.unmark(folder));
+      if (!on) await api.projects.unmark(row.marked!);
+      else if (row.outside) await api.projects.markOutside(row.outside);
+      else await api.projects.mark(row.folder!);
+      setProjects((await api.projects.list()).projects);
     } catch (e) {
-      set(folder, !on);
       setFailure(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(null);
+      setPending((m) => {
+        const next = new Map(m);
+        next.delete(row.key);
+        return next;
+      });
     }
   };
-  if (folders === null) return failure ? <p className="kn-onb-failure" role="alert">{failure}</p> : null;
+  const choose = async () => {
+    setFailure(null);
+    try {
+      const { path } = await api.projects.choose();
+      if (!path) return;
+      await api.projects.markOutside(path);
+      setProjects((await api.projects.list()).projects);
+    } catch (e) {
+      setFailure(e instanceof Error ? e.message : String(e));
+    }
+  };
   return (
     <div className="kn-onb-projects">
-      {folders.length ? (
-        <ul className="kn-onb-folders" aria-label="As pastas do cofre">
-          {folders.map((f) => (
-            <li key={f}>
+      {view.state === "idle" ? <p className="kn-onb-status">{SEARCH_NOTICE}</p> : null}
+      <div className="kn-onb-search">
+        {searching ? (
+          <Button data-search="stop" onClick={stop}>Parar</Button>
+        ) : (
+          <Button variant="primary" data-search="start" onClick={start}>{view.state === "idle" ? "Procurar no Mac" : "Procurar de novo"}</Button>
+        )}
+        <Button data-search="choose" onClick={() => void choose()}>Escolher outra pasta…</Button>
+        <span className="kn-onb-status" aria-live="polite">{searchLine(view)}</span>
+      </div>
+      {rows.length ? (
+        <ul className="kn-onb-folders" aria-label="As pastas de projeto">
+          {rows.map((r) => (
+            <li key={r.key} data-key={r.key}>
               <label className="kn-onb-folder">
-                <input type="checkbox" checked={marked.has(f)} disabled={busy === f} onChange={(e) => void toggle(f, e.target.checked)} />
-                <span>{f}</span>
+                <input type="checkbox" checked={pending.get(r.key) ?? !!r.marked} disabled={pending.has(r.key)} onChange={(e) => void toggle(r, e.target.checked)} />
+                <span className="kn-onb-folder-text">
+                  <span className="kn-onb-folder-name">{r.name}</span>
+                  <span className="kn-onb-folder-where">{r.reason ? `${r.where} · ${r.reason}` : r.where}</span>
+                </span>
               </label>
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="kn-onb-status">O cofre ainda não tem pastas. Dá para marcar um projeto depois, na barra lateral das Notas.</p>
-      )}
-      <p className="kn-onb-status">Uma pasta marcada ganha uma nota principal, se ainda não tiver. Nenhuma outra nota muda.</p>
+      ) : null}
+      <p className="kn-onb-status">Uma pasta marcada ganha uma nota principal na pasta de notas. Nada é copiado nem movido de onde ela está.</p>
       {failure ? <p className="kn-onb-failure" role="alert">{failure}</p> : null}
     </div>
   );
@@ -617,7 +657,7 @@ export function Onboarding() {
             <NoteModelEditor />
           </div>
         ) : step === "projects" ? (
-          <ProjectsStep settings={settings} />
+          <ProjectsStep />
         ) : step === "color" ? (
           <div className="kn-onb-row kn-onb-color">
             <CatColorRow agentEnabled={status.enabled} preview={false} />

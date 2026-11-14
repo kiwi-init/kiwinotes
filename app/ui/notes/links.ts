@@ -69,6 +69,22 @@ export function externalUrl(raw: string): string | null {
   return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:" ? url.href : null;
 }
 
+/**
+ * Um link que o editor abre (spec #12950): os de fora (`externalUrl`) e o `file:///…` de uma pasta, o link "Abrir no
+ * Finder" da nota de um projeto de fora. O `file:` não abre direto: vai ao `projects.reveal`, que só mostra a pasta de
+ * um projeto marcado.
+ */
+export function openableUrl(raw: string): string | null {
+  const ext = externalUrl(raw);
+  if (ext) return ext;
+  try {
+    const url = new URL(raw.trim().replace(/^<|>$/g, ""));
+    return url.protocol === "file:" && !url.host ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A linha que cita, sem a marcação: o marcador de lista ou tarefa e os colchetes dos links (fica o apelido ou o nome). */
 export function plainContext(line: string): string {
   return line

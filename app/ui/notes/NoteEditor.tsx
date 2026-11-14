@@ -107,8 +107,12 @@ export function NoteEditor({ docKey, headingJump, doc, links, onChange, onOpenLi
         onOpenLink: (t) => latest.current.onOpenLink(t),
         onOpenTag: (t) => latest.current.onOpenTag?.(t),
         onSlashTemplate: () => latest.current.onSlashTemplate?.(),
-        // Abre fora (no navegador padrão), com a política `newWindow: "external"` da janela; nunca navega a janela.
-        onOpenUrl: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+        // Abre fora (no navegador padrão), com a política `newWindow: "external"` da janela; nunca navega a janela. O
+        // `file:` é a pasta de um projeto de fora (spec #12950): o Finder mostra, se for mesmo de um projeto.
+        onOpenUrl: (url) =>
+          url.startsWith("file:")
+            ? void appApi.projects.reveal(decodeURIComponent(new URL(url).pathname)).catch(() => {})
+            : void window.open(url, "_blank", "noopener,noreferrer"),
         linkTargets: () => latest.current.linkTargets(),
         headingContent: (target) => latest.current.headingContent(target),
         ...(attachments ? { attachments, onError: (t: string) => latest.current.onError?.(t) } : {}),

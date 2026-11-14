@@ -4,6 +4,7 @@ import { NO_SPELLING } from "../shared/spelling.ts";
 // quando chega uma nova e volta atrás se ela falhar. A UI só fala com o main pelo contrato (src/shared/ui-contract.ts).
 
 import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import { BrowserView, BrowserWindow, PATHS, Screen, Updater, Utils } from "electrobun/bun";
@@ -133,6 +134,14 @@ const capabilities = uiCapabilities({
     if (process.env.KIWI_DEBUG === "1") return null;
     const selected = await Utils.openFileDialog({canChooseFiles:false,canChooseDirectory:true,allowsMultipleSelection:false});
     return selected[0] ?? null;
+  },
+  // A busca das pastas de projeto (spec #12950): a pasta pessoal do Mac. Com KIWI_DEBUG=1 (os agentes), só uma casa de
+  // mentira (KIWI_PROJECTS_HOME): nunca a do harry, que abriria o pedido do macOS na tela dele.
+  projectsHome: () => (process.env.KIWI_DEBUG === "1" ? (process.env.KIWI_PROJECTS_HOME ?? null) : homedir()),
+  chooseProjectFolder: async () => {
+    if (process.env.KIWI_DEBUG === "1") return process.env.KIWI_TEST_PROJECT_FOLDER ?? null;
+    const selected = await Utils.openFileDialog({ canChooseFiles: false, canChooseDirectory: true, allowsMultipleSelection: false });
+    return selected.find((p) => p.trim()) ?? null;
   },
   meetingNotes: stores.meetingNotes,
   attachments: stores.attachments,

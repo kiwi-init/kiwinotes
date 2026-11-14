@@ -187,6 +187,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     notes: stores.notes,
     notesFolders: stores.folders,
     chooseNotesFolder: async () => process.env.KIWI_TEST_NOTES_FOLDER ?? null,
+    // O headless nunca anda pela casa de verdade (spec #12950): só a de mentira de KIWI_PROJECTS_HOME.
+    projectsHome: () => process.env.KIWI_PROJECTS_HOME ?? null,
+    chooseProjectFolder: async () => process.env.KIWI_TEST_PROJECT_FOLDER ?? null,
     meetingNotes: stores.meetingNotes,
     attachments: stores.attachments,
     // O headless não sai para a rede: a imagem de fora é sempre esta, depois de conferir o endereço como o app confere.

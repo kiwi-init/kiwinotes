@@ -9,7 +9,7 @@ import path from "node:path";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
-import { checkMark, followProjects, mapProjects, openTasks, type ProjectEntry, ProjectError, STATUS_OUTLINE_MAX } from "./projects.ts";
+import { checkMark, followProjects, freeFolderName, mapProjects, openTasks, type ProjectEntry, ProjectError, STATUS_OUTLINE_MAX } from "./projects.ts";
 import { Vault } from "./vault.ts";
 import { tempDir } from "../../test/tmp.ts";
 
@@ -203,7 +203,10 @@ function newRoot(files: Record<string, string> = {}): string {
   return root;
 }
 
-function open(root: string, extra: { meetingsFolder?: string | null } = {}) {
+function open(
+  root: string,
+  extra: { meetingsFolder?: string | null; projectsHome?(): string | null; chooseProjectFolder?(): Promise<string | null>; reveal?(abs: string): void } = {},
+) {
   const v = new Vault({ root, debounceMs: 20, trash: async () => {} });
   vaults.push(v);
   const caps = uiCapabilities({
@@ -537,5 +540,133 @@ describe("o projeto acompanha o que muda por fora (Finder, Obsidian)", () => {
       expect.objectContaining({ folder: "Kiwi Notes", main: "Kiwi Notes/Kiwi.md" }),
       expect.objectContaining({ folder: "Outro", main: "Outro/Visão.md" }),
     ]);
+  });
+});
+
+// ---------------------------------------------------------------- a busca e os projetos de fora (spec #12950)
+
+/** Uma casa de mentira num tmp, com a pasta de notas dentro de Documents: nunca a casa de verdade. */
+function fakeHome(files: Record<string, string>) {
+  const home = tempDir("kn-home-");
+  writeAll(home, files);
+  const root = path.join(home, "Documents/Notas");
+  mkdirSync(root, { recursive: true });
+  return { home, root };
+}
+
+async function searched(value: (cap: string, args?: unknown) => Promise<any>) {
+  let view = await value("projects.find", { start: true });
+  for (let i = 0; view.state === "searching" && i < 500; i++) {
+    await new Promise((r) => setTimeout(r, 10));
+    view = await value("projects.find");
+  }
+  return view;
+}
+
+/** Os nomes e as datas de tudo debaixo de uma pasta: marcar não pode mudar nada lá. */
+function treeOf(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (d: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const abs = path.join(d, e.name);
+      out.push(`${path.relative(dir, abs)}|${statSync(abs).mtimeMs}`);
+      if (e.isDirectory()) walk(abs);
+    }
+  };
+  walk(dir);
+  return out.sort();
+}
+
+describe("a busca das pastas de projeto e os projetos de fora (spec #12950)", () => {
+  test("a busca acha na pasta de notas e na casa, com o motivo; sem casa, só na pasta de notas", async () => {
+    const { home, root } = fakeHome({
+      "Documents/Notas/Clientes/Acme/Acme.md": "# Acme\n",
+      "Documents/Notas/Reuniões/proj-reunião/a.md": "x",
+      "Developer/kiwi/.git/HEAD": "ref",
+      "Documents/work-projects/Alfa/a.pdf": "",
+      "Documents/work-projects/Beta/b.pdf": "",
+    });
+    const { value } = open(root, { meetingsFolder: "Reuniões", projectsHome: () => home });
+    const view = await searched(value);
+    expect(view.state).toBe("done");
+    const got = Object.fromEntries(view.found.map((c: any) => [c.where, c.folder ?? c.outside]));
+    expect(got).toEqual({
+      "Notas/Clientes/Acme": "Clientes/Acme",
+      "~/Developer/kiwi": path.join(home, "Developer/kiwi"),
+      "~/Documents/work-projects/Alfa": path.join(home, "Documents/work-projects/Alfa"),
+      "~/Documents/work-projects/Beta": path.join(home, "Documents/work-projects/Beta"),
+    });
+    expect(view.found.find((c: any) => c.name === "kiwi").reason).toEqual({ kind: "marker", marker: ".git" });
+
+    const only = open(root, { meetingsFolder: "Reuniões", projectsHome: () => null });
+    expect((await searched(only.value)).found.map((c: any) => c.where)).toEqual(["Notas/Clientes/Acme"]);
+  });
+
+  test("o Parar para a busca, e a de novo recomeça", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 400; i++) files[`Developer/p${i}/q/proj-${i}/x`] = "";
+    const { home, root } = fakeHome(files);
+    const { value } = open(root, { projectsHome: () => home });
+    expect((await value("projects.find", { start: true })).state).toBe("searching");
+    const stopped = await value("projects.find", { stop: true });
+    expect(stopped.state).toBe("stopped");
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await value("projects.find")).state).toBe("stopped");
+    expect((await searched(value)).found.length).toBe(400);
+  });
+
+  test("marcar uma pasta de fora cria o projeto na pasta de notas, com o caminho e o link, sem mexer na de fora", async () => {
+    const { home, root } = fakeHome({ "Developer/kiwi/.git/HEAD": "ref", "Developer/kiwi/src/a.ts": "x", "Documents/Notas/kiwi/Outra.md": "já existe" });
+    const shown: string[] = [];
+    const { value, call } = open(root, { projectsHome: () => home, reveal: (abs) => shown.push(abs) });
+    await value("notes.list");
+    const outside = path.join(home, "Developer/kiwi");
+    const before = treeOf(outside);
+
+    const r = await value("projects.mark", { outside });
+    // A pasta "kiwi" já existia na pasta de notas: o projeto vai para "kiwi 2".
+    expect(r).toMatchObject({ created: true, project: { name: "kiwi 2", folder: "kiwi 2", main: "kiwi 2/kiwi 2.md", outside } });
+    const note = readFileSync(path.join(root, "kiwi 2/kiwi 2.md"), "utf8");
+    expect(note).toContain(`\`${outside}\``);
+    expect(note).toContain(`[Abrir no Finder](file://${outside}/)`);
+    expect(treeOf(outside)).toEqual(before);
+    expect(fileOf(root).projects).toEqual([expect.objectContaining({ folder: "kiwi 2", outside })]);
+
+    // De novo: nada muda. A lista diz o caminho de fora.
+    expect(await value("projects.mark", { outside: `${outside}/` })).toMatchObject({ created: false, project: { folder: "kiwi 2" } });
+    expect((await value("projects.list")).projects).toEqual([expect.objectContaining({ folder: "kiwi 2", outside })]);
+
+    // O link da nota abre a pasta no Finder; outro caminho do Mac, não.
+    expect(await value("projects.reveal", { path: `${outside}/` })).toBe(true);
+    expect(shown).toEqual([outside]);
+    expect(await call("projects.reveal", { path: home })).toMatchObject({ ok: false, code: "E_NOT_FOUND" });
+
+    // Uma pasta de dentro da pasta de notas vira projeto como sempre; a que tem a pasta de notas dentro, não.
+    expect(await value("projects.mark", { outside: path.join(root, "kiwi") })).toMatchObject({ project: { folder: "kiwi", main: "kiwi/kiwi.md" } });
+    expect(await call("projects.mark", { outside: path.join(home, "Documents") })).toMatchObject({ ok: false, code: "E_NESTED" });
+    expect(await call("projects.mark", { outside: path.join(home, "Nada") })).toMatchObject({ ok: false, code: "E_NOT_FOUND" });
+    expect(await call("projects.mark", { outside: "Developer/kiwi" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(await call("projects.mark", { outside, folder: "kiwi" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+
+    // Desmarcar tira o projeto e não apaga nada.
+    await value("projects.unmark", { folder: "kiwi 2" });
+    expect(existsSync(path.join(root, "kiwi 2/kiwi 2.md"))).toBe(true);
+    expect(treeOf(outside)).toEqual(before);
+  });
+
+  test("o nome da pasta nova não repete uma que existe, nem só na maiúscula", () => {
+    expect(freeFolderName("kiwi", ["Notas", "Kiwi", "kiwi 2"])).toBe("kiwi 3");
+    expect(freeFolderName("a/b:c", [])).toBe("a-b-c");
+    expect(freeFolderName("...", [])).toBe("Projeto");
+  });
+
+  test("Escolher outra pasta: o seletor só no clique, e o cancelar devolve null", async () => {
+    const { root } = fakeHome({});
+    let picked: string | null = "/x";
+    const { value } = open(root, { chooseProjectFolder: async () => picked });
+    expect(await value("projects.choose")).toEqual({ path: "/x" });
+    picked = null;
+    expect(await value("projects.choose")).toEqual({ path: null });
+    expect(await open(root).value("projects.choose")).toEqual({ path: null });
   });
 });

@@ -1,5 +1,5 @@
 import { type NoteModel, noteModelSaved, readNoteModel, writeNoteModel } from "../agent/note-model.ts";
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { isSpellingLanguage, isSpellingWord, NO_SPELLING, spellingResult, type SpellingResult } from "../shared/spelling.ts";
@@ -29,7 +29,7 @@ import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
 import type { SemanticIndex } from "../notes/semantic/index.ts";
 import type { SemanticEngine } from "../notes/semantic/engine.ts";
 import { semanticQueryText } from "../shared/query.ts";
-import type { PreciseStatus, SemanticStatus } from "../shared/ui-contract.ts";
+import type { PreciseStatus, ProjectCandidate, ProjectSearchView, SemanticStatus } from "../shared/ui-contract.ts";
 import { modelBytes } from "../notes/semantic/model.ts";
 import { WHISPER_SMALL } from "./precise-dictation.ts";
 import { checkShortcutsPatch, isNotesShortcut } from "../shared/shortcuts.ts";
@@ -40,7 +40,8 @@ import { ExportError, type NoteExporter } from "../notes/export.ts";
 import { checkAppearancePatch } from "../shared/appearance.ts";
 import { MAX_SAVED_SEARCHES, sanitizeSavedSearches } from "../shared/query.ts";
 import type { NotesFolders } from "../notes/folders-workspace.ts";
-import { checkMark, followProjects, layoutProblem, mainNoteFor, mapProjects, projectInfo, ProjectsFile, projectStatus } from "../notes/projects.ts";
+import { findProjects, searchPlaces } from "../notes/project-finder.ts";
+import { type ProjectInfo, checkMark, followProjects, freeFolderName, layoutProblem, mainNoteFor, mapProjects, outsideNote, projectInfo, ProjectsFile, projectStatus } from "../notes/projects.ts";
 import { MEETINGS_FOLDER } from "../notes/meetings.ts";
 import { folderCapabilities } from "./folder-capabilities.ts";
 import type { MeetingNotes } from "../notes/meetings.ts";
@@ -144,6 +145,13 @@ export interface CapabilityDeps {
    * headless e com KIWI_DEBUG. `null`: a pessoa cancelou.
    */
   chooseExportFolder?(): Promise<string | null>;
+  /**
+   * A pasta pessoal onde a busca das pastas de projeto anda (spec #12950). No app, a do Mac; com KIWI_DEBUG e no
+   * headless, só `KIWI_PROJECTS_HOME` (uma casa de mentira num tmp), e sem ela a busca fica na pasta de notas.
+   */
+  projectsHome?(): string | null;
+  /** O seletor de pasta do macOS para um projeto, só no clique; `KIWI_TEST_PROJECT_FOLDER` no headless e com KIWI_DEBUG. */
+  chooseProjectFolder?(): Promise<string | null>;
   /** Abre o Lixo do macOS no Finder (T2593). Sem isto (headless, testes, KIWI_DEBUG), o `trash.reveal` não faz nada. */
   revealTrash?(): void;
   /** O texto dos anexos para a busca (T2709). Sem ele, a busca é só nas notas. */
@@ -328,6 +336,100 @@ export function uiCapabilities(deps: CapabilityDeps,
       return undefined;
     }
   };
+  /**
+   * Marca uma pasta de fora da pasta de notas (spec #12950): o projeto nasce numa pasta nova da pasta de notas, com a
+   * nota principal guardando o caminho de fora e o link para o Finder. Nada de lá é lido, copiado nem movido. Uma pasta
+   * que fica dentro da pasta de notas vira projeto como sempre.
+   */
+  const markOutside = async (raw: unknown) => {
+    if (typeof raw !== "string" || !path.isAbsolute(raw)) throw bad("projects.mark: outside must be an absolute path");
+    const v = await vault();
+    // O caminho de verdade dos dois lados: no Mac, o /var é o /private/var, e um link não engana o "fica dentro".
+    const abs = real(path.resolve(raw));
+    const root = real(path.resolve(deps.notes.root));
+    const rel = path.relative(root, abs);
+    if (!rel.startsWith("..") && !path.isAbsolute(rel)) {
+      return handlers["projects.mark"]({ folder: rel.split(path.sep).join("/") }) as Promise<{ project: ProjectInfo; created: boolean }>;
+    }
+    if (path.relative(abs, root).split(path.sep)[0] !== "..")
+      throw new CapabilityError("E_NESTED", "essa pasta tem a pasta de notas dentro dela; escolha uma pasta de projeto");
+    let isDir = false;
+    try {
+      isDir = statSync(abs).isDirectory();
+    } catch {}
+    if (!isDir) throw new CapabilityError("E_NOT_FOUND", `a pasta ${abs} não existe`);
+    let created = false;
+    const list = await projectsFile().update(async (list) => {
+      if (list.some((e) => e.outside === abs)) return list;
+      const name = path.basename(abs);
+      const folder = freeFolderName(name, v.existing().folders);
+      await v.createFolder(folder);
+      const main = (await v.create(folder, folder, outsideNote(name, abs))).path;
+      created = true;
+      const ino = v.noteInodes?.().get(main);
+      const fino = dirIno(folder);
+      return [...list, { folder, main, ...(ino !== undefined ? { mainIno: ino } : {}), ...(fino !== undefined ? { folderIno: fino } : {}), outside: abs }];
+    });
+    const e = list.find((x) => x.outside === abs)!;
+    return { project: projectInfo(e, (await v.list()).notes), created };
+  };
+
+  /** O caminho sem links (o que não existe fica como veio). */
+  const real = (abs: string) => {
+    try {
+      return realpathSync(abs);
+    } catch {
+      return abs;
+    }
+  };
+
+  /** A busca das pastas de projeto desta pasta de notas (spec #12950): uma por vez, lida aos poucos pela tela. */
+  let search: { stop: AbortController; view: ProjectSearchView } | null = null;
+  const SEARCH_MAX = 500;
+  const byRecent = (a: ProjectCandidate, b: ProjectCandidate) => b.mtimeMs - a.mtimeMs;
+  const startSearch = async () => {
+    search?.stop.abort();
+    await vault();
+    const settings = await deps.settings.load();
+    const given = deps.projectsHome?.() ?? null;
+    const home = given ? real(path.resolve(given)) : null;
+    const root = real(path.resolve(deps.notes.root));
+    const { roots, exclude } = searchPlaces(home, root);
+    // As pastas da pasta de notas que não viram projeto: a das reuniões, a dos modelos, a das diárias e a dos anexos.
+    const off = [meetingsFolder, settings.templatesFolder, settings.dailyFolder, settings.attachmentsFolder].filter((f): f is string => !!f);
+    const tilde = (abs: string) => (home && (abs === home || abs.startsWith(`${home}/`)) ? `~${abs.slice(home.length)}` : abs);
+    const mine = { stop: new AbortController(), view: { state: "searching", found: [], skipped: [] } as ProjectSearchView };
+    search = mine;
+    void findProjects(roots, {
+      signal: mine.stop.signal,
+      exclude,
+      onDenied: (r) => {
+        mine.view = { ...mine.view, skipped: [...mine.view.skipped, r.label] };
+      },
+      onFound: (batch) => {
+        const add: ProjectCandidate[] = [];
+        for (const f of batch) {
+          if (f.root === "Notas") {
+            if (off.some((o) => f.path === o || f.path.startsWith(`${o}/`))) continue;
+            add.push({ name: f.name, where: `Notas/${f.path}`, folder: f.path, reason: f.reason, mtimeMs: f.mtimeMs });
+          } else add.push({ name: f.name, where: tilde(f.abs), outside: f.abs, reason: f.reason, mtimeMs: f.mtimeMs });
+        }
+        // Durante a busca, o lote novo entra no fim (do mais recente ao mais antigo): a linha que a pessoa vai clicar
+        // não sai do lugar. No fim, a lista toda se ordena pelo mais recente.
+        add.sort(byRecent);
+        const found = [...mine.view.found, ...add].slice(0, SEARCH_MAX);
+        mine.view = { ...mine.view, found };
+        if (found.length >= SEARCH_MAX) mine.stop.abort();
+      },
+    })
+      .catch((e) => console.error("[projects] busca:", e))
+      .finally(() => {
+        if (mine.view.state !== "searching") return;
+        const stopped = mine.stop.signal.aborted && mine.view.found.length < SEARCH_MAX;
+        mine.view = stopped ? { ...mine.view, state: "stopped" } : { ...mine.view, state: "done", found: [...mine.view.found].sort(byRecent) };
+      });
+  };
+
   /**
    * Antes de mover uma pasta pelo app (revisão da T10012): um projeto não pode acabar dentro de outro, nem na pasta das
    * reuniões. Recusa antes de mover, com o motivo, em vez de largar um projeto sem a pessoa ver.
@@ -923,7 +1025,11 @@ export function uiCapabilities(deps: CapabilityDeps,
       return { projects: (await projectsFile().load()).map((e) => projectInfo(e, notes)), meetingsFolder };
     },
     "projects.mark": async (args) => {
-      const a = fields(args, "projects.mark", ["folder"]);
+      const a = fields(args, "projects.mark", ["folder", "outside"]);
+      if (a.outside !== undefined) {
+        if (a.folder !== undefined) throw bad("projects.mark: folder or outside, not both");
+        return markOutside(a.outside);
+      }
       if (typeof a.folder !== "string") throw bad("projects.mark: folder must be a string");
       const folder = folderPath(a.folder);
       const v = await vault();
@@ -964,6 +1070,31 @@ export function uiCapabilities(deps: CapabilityDeps,
         list.map((x) => (x.folder !== e.folder ? x : { ...x, main: note, ...(ino !== undefined ? { mainIno: ino } : { mainIno: undefined }) })),
       );
       return { project: projectInfo(list.find((x) => x.folder === e.folder)!, (await v.list()).notes) };
+    },
+    "projects.find": async (args) => {
+      const a = fields(args, "projects.find", ["start", "stop"]);
+      if ((a.start !== undefined && a.start !== true) || (a.stop !== undefined && a.stop !== true)) throw bad("projects.find: start and stop must be true");
+      if (a.stop) {
+        search?.stop.abort();
+        if (search?.view.state === "searching") search.view = { ...search.view, state: "stopped", found: [...search.view.found].sort(byRecent) };
+      }
+      if (a.start) await startSearch();
+      return search?.view ?? { state: "idle", found: [], skipped: [] };
+    },
+    "projects.choose": async (args) => {
+      fields(args, "projects.choose", []);
+      if (!deps.chooseProjectFolder) return { path: null };
+      return { path: (await deps.chooseProjectFolder()) ?? null };
+    },
+    "projects.reveal": async (args) => {
+      const a = fields(args, "projects.reveal", ["path"]);
+      if (typeof a.path !== "string") throw bad("projects.reveal: path must be a string");
+      const want = real(path.resolve(a.path));
+      await vault();
+      // Só a pasta de fora de um projeto marcado: um link numa nota nunca abre outro caminho do Mac.
+      if (!(await projectsFile().load()).some((e) => e.outside === want)) throw new CapabilityError("E_NOT_FOUND", "projects.reveal: essa pasta não é de um projeto");
+      deps.reveal?.(want);
+      return true as const;
     },
     "projects.status": async (args) => {
       const a = fields(args, "projects.status", ["folder"]);

@@ -3,7 +3,7 @@
 import { expect, test } from "bun:test";
 
 import { ONBOARDING_STEPS } from "../../../src/shared/agent-onboarding.ts";
-import { holdName, stepText, canLeaveClaude, magicCandidates, magicRequest, projectCandidates, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, STEP_TEXT, stepAt, toneSummary } from "./onboardingText.ts";
+import { holdName, stepText, canLeaveClaude, magicCandidates, magicRequest, projectRows, reasonText, searchLine, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, STEP_TEXT, stepAt, toneSummary } from "./onboardingText.ts";
 
 test("os 9 passos na ordem do spec, cada um com título e frase (o do Control, sem subtítulo: a frase é a do cartão)", () => {
   expect(STEP_COUNT).toBe(9);
@@ -75,10 +75,29 @@ test("o passo 3: o jeito de falar troca só a linha dele nas instruções, e o e
   expect(toneExample({ length: "curto", register: "informal" }).length).toBeLessThan(toneExample({ length: "detalhado", register: "informal" }).length);
 });
 
-test("o passo 6: só as pastas de primeiro nível, sem as escondidas e sem as do Kiwi, em ordem", () => {
-  const folders = ["Projetos", "Projetos/Kiwi", "Reuniões", ".kiwi", "Modelos", "Diário", "anexos", "Clientes", "Ávila", "Clientes"];
-  expect(projectCandidates(folders, ["Reuniões", "Modelos", "Diário", "anexos", null])).toEqual(["Ávila", "Clientes", "Projetos"]);
-  expect(projectCandidates([], [])).toEqual([]);
+test("o passo 6 (spec #12950): os marcados primeiro, depois o achado, sem repetir, cada um com o motivo", () => {
+  const found = [
+    { name: "kiwi", where: "~/Developer/kiwi", outside: "/h/Developer/kiwi", reason: { kind: "marker", marker: ".git" }, mtimeMs: 3 },
+    { name: "Acme", where: "Notas/Clientes/Acme", folder: "Clientes/Acme", reason: { kind: "note" }, mtimeMs: 2 },
+    { name: "Alfa", where: "~/Documents/work-projects/Alfa", outside: "/h/Documents/work-projects/Alfa", reason: { kind: "inside", group: "work-projects" }, mtimeMs: 1 },
+  ] as const;
+  const rows = projectRows([{ name: "kiwi", folder: "kiwi", outside: "/h/Developer/kiwi" }, { name: "Solto", folder: "Solto" }], found);
+  expect(rows.map((r) => [r.name, r.where, r.reason ?? "", r.marked ?? ""])).toEqual([
+    ["kiwi", "~/Developer/kiwi", "tem .git", "kiwi"],
+    ["Solto", "Notas/Solto", "", "Solto"],
+    ["Acme", "Notas/Clientes/Acme", "tem a nota do projeto", ""],
+    ["Alfa", "~/Documents/work-projects/Alfa", "dentro de work-projects", ""],
+  ]);
+  expect(rows[3]).toMatchObject({ outside: "/h/Documents/work-projects/Alfa" });
+  expect(reasonText({ kind: "name" })).toBe("o nome diz projeto");
+});
+
+test("o passo 6: a linha da busca diz quanto achou e o que ficou de fora", () => {
+  expect(searchLine({ state: "idle", found: [], skipped: [] })).toBe("");
+  expect(searchLine({ state: "searching", found: [{} as never], skipped: [] })).toBe("Procurando… 1 pasta até agora.");
+  expect(searchLine({ state: "done", found: [], skipped: [] })).toBe("Não achei nenhuma pasta de projeto.");
+  expect(searchLine({ state: "stopped", found: [{} as never, {} as never], skipped: [] })).toBe("Parei a busca: 2 pastas.");
+  expect(searchLine({ state: "done", found: [{} as never], skipped: ["Documents", "Desktop"] })).toBe("Achei 1 pasta. Ficaram de fora, sem permissão: Documents, Desktop.");
 });
 
 test("o passo 8: o pedido nomeia a nota, e a lista deixa de fora as reuniões e os modelos", () => {

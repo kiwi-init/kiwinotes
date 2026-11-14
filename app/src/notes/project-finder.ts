@@ -28,6 +28,8 @@ export interface FoundProject {
   root: string;
   /** O caminho da pasta, a partir do lugar (`a/b/c`). */
   path: string;
+  /** O caminho absoluto. */
+  abs: string;
   name: string;
   reason: ProjectReason;
   /** Quando a pasta mudou por último (ms), para a lista ir do mais recente ao mais antigo. */
@@ -50,6 +52,39 @@ export interface FinderOptions {
   yieldEvery?: number;
   /** Ler uma pasta (nos testes, de mentira). */
   readDir?(abs: string): Promise<Dirent[]>;
+  /** As pastas que a busca não abre, em caminho absoluto (os outros lugares, que já têm a vez deles). */
+  exclude?: ReadonlySet<string>;
+  /** Um lugar que existe mas não abriu (o macOS negou, ou sem permissão de leitura): a tela diz que ficou de fora. */
+  onDenied?(root: FinderRoot): void;
+}
+
+/** Os lugares comuns, na ordem em que a busca passa: primeiro onde costuma haver projeto. */
+export const COMMON_PLACES: readonly FinderRoot[] = [
+  { label: "Documents", abs: "Documents" },
+  { label: "Desktop", abs: "Desktop" },
+  { label: "Developer", abs: "Developer" },
+  { label: "Projects", abs: "Projects" },
+  { label: "code", abs: "code" },
+  { label: "repos", abs: "repos" },
+  { label: "iCloud Drive", abs: "Library/Mobile Documents/com~apple~CloudDocs" },
+];
+
+/** O resto da pasta pessoal que a busca não abre: as de mídia e o Downloads (também pedem a permissão do macOS). */
+const HOME_SKIP = ["Downloads", "Movies", "Music", "Pictures", "Public"];
+
+/**
+ * Os lugares da busca (spec #12950): a pasta de notas, os lugares comuns e, por último, a pasta pessoal. Cada lugar
+ * fica de fora dos outros (`exclude`), para nenhuma pasta aparecer duas vezes.
+ */
+export function searchPlaces(home: string | null, notesRoot: string): { roots: FinderRoot[]; exclude: Set<string> } {
+  const roots: FinderRoot[] = [{ label: "Notas", abs: notesRoot }];
+  if (home) {
+    for (const p of COMMON_PLACES) roots.push({ label: p.label, abs: path.join(home, p.abs) });
+    roots.push({ label: "Pasta pessoal", abs: home });
+  }
+  const exclude = new Set(roots.map((r) => r.abs));
+  if (home) for (const n of HOME_SKIP) exclude.add(path.join(home, n));
+  return { roots, exclude };
 }
 
 /** Os nomes que dizem "projeto" (spec #12950). `proj` só como palavra inteira: "projeção" não é. */
@@ -89,12 +124,20 @@ export async function findProjects(roots: readonly FinderRoot[], o: FinderOption
     if (++reads % yieldEvery === 0) await new Promise((r) => setImmediate(r));
   };
   const mtime = async (abs: string) => (await stat(abs).catch(() => null))?.mtimeMs ?? 0;
-  const list = async (abs: string): Promise<Dirent[] | null> => {
-    await pause();
-    return read(abs).catch(() => null);
-  };
+  const exclude = o.exclude ?? new Set<string>();
 
   for (const root of roots) {
+    if (o.signal?.aborted) return;
+    // O lugar que não abriu: o que não existe não conta; o que o macOS ou a permissão negou, a tela mostra.
+    let first: Dirent[];
+    try {
+      await pause();
+      first = await read(root.abs);
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === "EPERM" || code === "EACCES") o.onDenied?.(root);
+      continue;
+    }
     // Em largura: as pastas de cima aparecem primeiro.
     let level: { rel: string; abs: string; group?: string }[] = [{ rel: "", abs: root.abs }];
     for (let depth = 0; depth <= maxDepth && level.length; depth++) {
@@ -102,19 +145,28 @@ export async function findProjects(roots: readonly FinderRoot[], o: FinderOption
       const batch: FoundProject[] = [];
       for (const dir of level) {
         if (o.signal?.aborted) return;
-        const entries = await list(dir.abs);
+        let entries: Dirent[] | null = first;
+        if (dir.rel) {
+          await pause();
+          entries = await read(dir.abs).catch(() => null);
+        }
         if (!entries) continue;
-        const dirs = entries.filter((e) => e.isDirectory() && !skipped(e.name));
+        // Em ordem de nome: o `readdir` não promete ordem, e a lista sai igual a cada busca.
+        const dirs = entries.filter((e) => e.isDirectory() && !skipped(e.name)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
         const name = dir.rel ? path.basename(dir.rel) : "";
         // A raiz não é projeto; o que ela tem dentro, sim.
         const own = dir.rel ? reasonOf(name, entries) : null;
         const reason: ProjectReason | null = dir.group && !own ? { kind: "inside", group: dir.group } : own;
         if (reason && !isGroup(reason, dirs.length)) {
-          batch.push({ root: root.label, path: dir.rel, name, reason, mtimeMs: await mtime(dir.abs) });
+          batch.push({ root: root.label, path: dir.rel, abs: dir.abs, name, reason, mtimeMs: await mtime(dir.abs) });
           continue; // um projeto não fica dentro de outro
         }
         const group = reason ? name : undefined;
-        for (const d of dirs) next.push({ rel: dir.rel ? `${dir.rel}/${d.name}` : d.name, abs: path.join(dir.abs, d.name), ...(group ? { group } : {}) });
+        for (const d of dirs) {
+          const abs = path.join(dir.abs, d.name);
+          if (exclude.has(abs) && abs !== root.abs) continue;
+          next.push({ rel: dir.rel ? `${dir.rel}/${d.name}` : d.name, abs, ...(group ? { group } : {}) });
+        }
       }
       if (batch.length && !o.signal?.aborted) o.onFound(batch);
       level = next;

@@ -23,7 +23,7 @@ import { buildStyles, zeroTrailingMargins } from "react-native-enriched-markdown
 import { indexTaskItems, markInlineImages } from "react-native-enriched-markdown/lib/module/web/utils.js";
 import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/web/types";
 
-import { externalUrl, parseLinks } from "../links.ts";
+import { externalUrl, openableUrl, parseLinks } from "../links.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
 import { editorFocused, focusEditorNow, type LinkResolver, linksChanged } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
@@ -418,7 +418,7 @@ export function EmbeddedMarkdown({ markdown, actions, onShown }: { markdown: str
       else if (act?.kind === "note") actions.onOpenLink(act.target);
       else if (act?.kind === "tag") actions.onOpenTag?.(act.tag);
       else if (act?.kind === "url") {
-        const safe = externalUrl(act.url);
+        const safe = openableUrl(act.url);
         if (safe) actions.onOpenUrl(safe);
       }
     },
@@ -516,8 +516,8 @@ class RenderedWidget extends WidgetType {
         else if (act?.kind === "note") this.actions.onOpenLink(act.target);
         else if (act?.kind === "tag") this.actions.onOpenTag?.(act.tag);
         else if (act?.kind === "url") {
-          // Só o que pode abrir fora (http, https, mailto); o resto não faz nada, como no editor.
-          const safe = externalUrl(act.url);
+          // Só o que pode abrir fora (http, https, mailto, e a pasta de um projeto); o resto não faz nada, como no editor.
+          const safe = openableUrl(act.url);
           if (safe) this.actions.onOpenUrl(safe);
         }
       },

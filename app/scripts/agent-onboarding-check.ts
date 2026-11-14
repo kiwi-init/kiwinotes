@@ -6,7 +6,7 @@
 //
 //   bun scripts/agent-onboarding-check.ts [pasta]
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
@@ -24,9 +24,12 @@ const registry = fakeRegistry([
 ]);
 const packages = join(data, "packages.json");
 writeFileSync(packages, JSON.stringify(registry.pinned));
+// A casa de mentira da busca das pastas de projeto (spec #12950): nunca a de verdade.
+const home = join(data, "home");
+for (const d of ["Developer/kiwi-app/.git", "Documents/work-projects/Alfa", "Documents/work-projects/Beta", "Documents/Fotos/2024"]) mkdirSync(join(home, d), { recursive: true });
 async function cli(args: string[]) {
   const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], {
-    cwd: app, stdout: "pipe", stderr: "pipe", env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages },
+    cwd: app, stdout: "pipe", stderr: "pipe", env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages, KIWI_PROJECTS_HOME: home, KIWI_TEST_PROJECT_FOLDER: join(data, "vault", "Clientes") },
   });
   const text = await new Response(p.stdout).text();
   assert.equal(await p.exited, 0, text + (await new Response(p.stderr).text()));
@@ -149,13 +152,28 @@ try {
       await shot(p, "5-modelo-light.png");
       await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
       await stepIs(p, 6);
-      // Passo 6: as pastas de primeiro nível; a que já é projeto vem marcada, e marcar outra a faz projeto.
+      // Passo 6 (spec #12950): o projeto que já existe vem marcado; o aviso do macOS antes da busca; a busca acha na casa
+      // de mentira, com o motivo; marcar uma de fora cria o projeto na pasta de notas; "Escolher outra pasta…" marca a
+      // escolhida (aqui, a Clientes da pasta de notas).
       await p.waitForSelector(".kn-onb-folder", { timeout: 15000 });
-      const names = await p.locator(".kn-onb-folder span").allTextContents();
-      assert.deepEqual(names, ["Clientes", "Kiwi"]);
+      assert.deepEqual(await p.locator(".kn-onb-folder-name").allTextContents(), ["Kiwi"]);
       assert.equal(await p.locator(".kn-onb-folder:has-text('Kiwi') input").isChecked(), true);
-      await p.locator(".kn-onb-folder:has-text('Clientes') input").click();
+      assert.match((await p.locator(".kn-onb-projects").textContent()) ?? "", /o macOS pode pedir permissão uma vez/);
+      await shot(p, "6-projetos-antes-light.png");
+      await p.locator('[data-search="start"]').click();
+      await p.waitForFunction(() => /Achei/.test(document.querySelector(".kn-onb-search")?.textContent ?? ""), null, { timeout: 15000 });
+      const where = await p.locator(".kn-onb-folder-where").allTextContents();
+      assert.equal(where[0], "Notas/Kiwi · tem a nota do projeto");
+      assert.deepEqual(where.slice(1).sort(), [
+        "~/Developer/kiwi-app · tem .git",
+        "~/Documents/work-projects/Alfa · dentro de work-projects",
+        "~/Documents/work-projects/Beta · dentro de work-projects",
+      ]);
+      await p.locator(".kn-onb-folder:has-text('kiwi-app') input").click();
+      for (let i = 0; !(await invoke("projects.list")).projects.some((x: { outside?: string }) => x.outside === realpathSync(join(home, "Developer/kiwi-app"))); i++) { assert.ok(i < 50, "kiwi-app vira projeto"); await Bun.sleep(100); }
+      await p.locator('[data-search="choose"]').click();
       for (let i = 0; !(await invoke("projects.list")).projects.some((x: { folder: string }) => x.folder === "Clientes"); i++) { assert.ok(i < 50, "Clientes vira projeto"); await Bun.sleep(100); }
+      await p.waitForFunction(() => document.querySelectorAll(".kn-onb-folder input:checked").length === 3, null, { timeout: 15000 });
       await shot(p, "6-projetos-light.png");
       await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
       await stepIs(p, 7);
