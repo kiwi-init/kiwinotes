@@ -19,18 +19,18 @@ const base: AgentProposalSummary = {
 
 describe("a proposta na tela", () => {
   test("a frase de cada estado, e onde a nota vai", () => {
-    expect(proposalLine(base)).toBe('A proposta da reunião "2026-11-11 10h00 Zoom" está pronta: a nota "2026-11-11 · Cronograma" em Migração, e a reunião na nota principal.');
+    expect(proposalLine(base)).toBe('A proposta da reunião “2026-11-11 10h00 Zoom” está pronta: a nota “2026-11-11 · Cronograma” em Migração, e a reunião na nota principal.');
     expect(proposalLine({ ...base, project: null, note: { ...base.note!, folder: "" } })).toBe(
-      'A proposta da reunião "2026-11-11 10h00 Zoom" está pronta: a nota "2026-11-11 · Cronograma" na pasta principal.',
+      'A proposta da reunião “2026-11-11 10h00 Zoom” está pronta: a nota “2026-11-11 · Cronograma” na pasta principal.',
     );
     expect(whereLine({ ...base, note: { ...base.note!, folder: "Atas" } })).toBe("em Atas");
     expect(proposalLine({ ...base, status: "offer", theme: "" })).toBe(
-      'A reunião "2026-11-11 10h00 Zoom" terminou. Quer a proposta da nota do projeto? Ela gasta um pedido do seu plano.',
+      'A reunião “2026-11-11 10h00 Zoom” terminou. Quer a proposta da nota do projeto? Ela gasta um pedido do seu plano.',
     );
-    expect(proposalLine({ ...base, status: "applied" })).toBe('Pronto: a nota "2026-11-11 · Cronograma" está em Migração.');
+    expect(proposalLine({ ...base, status: "applied" })).toBe('Pronto: a nota “2026-11-11 · Cronograma” está em Migração.');
     // Em dúvida: a frase curta, e a pergunta com os nomes vem do choiceJoin.
     expect(proposalLine({ ...base, project: null, candidates: [{ folder: "a", name: "A" }, { folder: "b", name: "B" }] })).toBe(
-      'A proposta da reunião "2026-11-11 10h00 Zoom" está pronta.',
+      'A proposta da reunião “2026-11-11 10h00 Zoom” está pronta.',
     );
     expect(["A", "B", "C"].map((n, i) => `${choiceJoin(i, 3)}${n}`).join("")).toBe("A, do B ou do C");
     expect(["A", "B"].map((n, i) => `${choiceJoin(i, 2)}${n}`).join("")).toBe("A ou do B");

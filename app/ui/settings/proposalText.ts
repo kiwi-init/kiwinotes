@@ -48,7 +48,7 @@ function summaryLine(p: AgentProposalSummary): string {
 
 /** A frase das referências de uma nota (spec #11908), pelo estado. */
 export function referencesLine(p: AgentProposalSummary): string {
-  const note = p.references ? `"${p.references.note.replace(/\.md$/i, "").split("/").at(-1)}"` : "a nota";
+  const note = p.references ? `“${p.references.note.replace(/\.md$/i, "").split("/").at(-1)}”` : "a nota";
   const n = p.references?.count ?? 0;
   const links = n === 1 ? "1 link" : `${n} links`;
   switch (p.status) {
@@ -69,15 +69,16 @@ export const choiceJoin = (i: number, total: number) => (i === 0 ? "" : i === to
 export function proposalLine(p: AgentProposalSummary): string {
   if (p.kind === "references") return referencesLine(p);
   if (p.kind === "summary" || !p.meeting || !p.note) return summaryLine(p);
-  const meeting = `"${p.meeting.title}"`;
+  // As aspas curvas (spec #12626): o texto do agente é uma frase, não código.
+  const meeting = `“${p.meeting.title}”`;
   switch (p.status) {
     case "offer":
       return `A reunião ${meeting} terminou. Quer a proposta da nota do projeto? Ela gasta um pedido do seu plano.`;
     case "pending":
       if (!p.project && p.candidates.length) return `A proposta da reunião ${meeting} está pronta.`;
-      return `A proposta da reunião ${meeting} está pronta: a nota "${p.note.title}" ${whereLine(p)}${p.project ? ", e a reunião na nota principal" : ""}.`;
+      return `A proposta da reunião ${meeting} está pronta: a nota “${p.note.title}” ${whereLine(p)}${p.project ? ", e a reunião na nota principal" : ""}.`;
     case "applied":
-      return `Pronto: a nota "${p.note.title}" está ${whereLine(p)}.`;
+      return `Pronto: a nota “${p.note.title}” está ${whereLine(p)}.`;
     case "discarded":
       return `A proposta da reunião ${meeting} foi descartada.`;
   }
