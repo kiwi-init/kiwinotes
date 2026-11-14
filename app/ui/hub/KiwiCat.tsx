@@ -6,6 +6,7 @@ import { catColorHex } from "../../src/shared/kiwicat-colors";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
+import { BubblePresence } from "./BubblePresence";
 import { CatBubble } from "./CatBubble";
 import { MemoryBubble } from "./MemoryBubble";
 import { RoutineBubble } from "./RoutineBubble";
@@ -39,6 +40,17 @@ function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolea
   const applyRef = useRef<() => void>(() => {});
   const hit = useRef<HTMLButtonElement>(null);
   const [asking, setAsking] = useState(false);
+  /**
+   * O pedido mandado e ainda sem o `busy` do status (que chega depois): a proposta da reunião espera, para não voltar por
+   * um instante entre a pergunta e a resposta (spec #11652).
+   */
+  const [sending, setSending] = useState(false);
+  useEffect(() => {
+    if (!sending) return;
+    if (busy) return void setSending(false);
+    const t = setTimeout(() => setSending(false), 5000);
+    return () => clearTimeout(t);
+  }, [sending, busy]);
   // De onde o foco veio: o campo devolve o foco a quem o tinha (o editor, por exemplo) e, aberto pelo teclado no gato,
   // de volta ao gato. Nunca deixa o anel de foco no gato depois de um clique.
   const returnFocus = useRef<{ el: Element | null; keyboard: boolean }>({ el: null, keyboard: false });
@@ -135,10 +147,11 @@ function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolea
   };
   const send = (text: string) => {
     activity.sent();
+    setSending(true);
     setAsking(false);
     setDraft("");
     giveBackFocus();
-    api.agent.ask(text).catch(() => { activity.attend(false); applyRef.current(); });
+    api.agent.ask(text).catch(() => { setSending(false); activity.attend(false); applyRef.current(); });
   };
   // Clique fora fecha o campo (sem mandar); o clique no próprio gato não conta.
   useEffect(() => {
@@ -172,25 +185,29 @@ function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolea
         // `detail === 0`: o clique veio do teclado (Enter ou Espaço no botão), não do mouse.
         onClick={(e) => (asking ? closeAsk(true) : openAsk(e.detail === 0))}
       />
-      {asking ? (
-        <CatAsk
-          draft={draft}
-          busy={busy || activity.busy}
-          onDraft={setDraft}
-          onSend={send}
-          onClose={() => closeAsk(true)}
-          onCancelRequest={() => void api.agent.cancel().catch(() => {})}
-        />
-      ) : null}
+      {/* O campo de falar por texto também é um balão do canto: entra e sai pela mesma passagem (spec #11652). */}
+      <BubblePresence itemKey={asking ? "pergunta" : null} reduced={reduced}>
+        {asking ? (
+          <CatAsk
+            draft={draft}
+            busy={busy || activity.busy}
+            onDraft={setDraft}
+            onSend={send}
+            onClose={() => closeAsk(true)}
+            onCancelRequest={() => void api.agent.cancel().catch(() => {})}
+          />
+        ) : null}
+      </BubblePresence>
       {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
           o que chega, e aparece depois que o pedido sai (#10868). */}
       <CatBubble reduced={reduced} hidden={asking || away} onShown={setTalking} />
       {/* A proposta da reunião (spec #8360): no mesmo canto, depois que a resposta sai da tela. */}
-      {/* "Anotei: …" (spec #11469): depois da resposta; a proposta da reunião espera ele sair. */}
-      <MemoryBubble hidden={asking || away || talking} onShown={setNoting} />
+      {/* "Anotei: …" (spec #11469): depois da resposta; a proposta da reunião espera ele sair, e também o pedido em
+          andamento (sem isso ela voltava por um instante entre a pergunta e a resposta, spec #11652). */}
+      <MemoryBubble hidden={asking || away || talking} onShown={setNoting} reduced={reduced} />
       {/* As rotinas (spec #12150): o resumo pronto, com [Ver] [Manter] [Descartar], depois da memória. */}
-      <RoutineBubble hidden={asking || away || talking || noting} onShown={setRoutining} />
-      <ProposalBubble hidden={asking || away || talking || noting || routining} />
+      <RoutineBubble hidden={asking || away || talking || noting} onShown={setRoutining} reduced={reduced} />
+      <ProposalBubble hidden={asking || away || talking || noting || routining || busy || sending || activity.busy} reduced={reduced} />
     </>
   );
 }

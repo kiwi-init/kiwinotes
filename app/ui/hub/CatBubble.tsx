@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { api } from "../src/api";
 import { BUBBLE_LINES, BubbleFeed, type BubbleView } from "./bubble-state";
+import { BubblePresence } from "./BubblePresence";
 import { renderLite } from "./bubbleText";
 
 /** Mede no mesmo estilo do balão: o texto cabe em 280 px e 3 linhas? */
@@ -111,39 +112,42 @@ export function CatBubble({ reduced, hidden = false, onShown }: { reduced: boole
   return (
     <>
       {/* Com o balão grande aberto, o pequeno espera embaixo dele (não é fechado) e volta quando o grande fecha. */}
-      {view && !bigOpen && !hidden ? (
-        <div
-          className="kn-bubble-shell kn-bubble"
-          data-error={view.error || undefined}
-          title={view.error ? view.full : undefined}
-          data-reduced={reduced || undefined}
-          onMouseDown={keepFocus}
-          onClick={() => {
-            feed.current?.close();
-            tick.current();
-          }}
-        >
-          {/* O trecho inteiro, invisível, segura o tamanho do balão enquanto a digitação anda. */}
-          <div className="kn-bubble-text" aria-hidden="true">
-            <div className="kn-bubble-ghost">{renderLite(view.full)}</div>
-            <div className="kn-bubble-typed">{renderLite(view.text)}</div>
+      {/* A troca entre os trechos e os balões (spec #11652): cada trecho novo é um balão novo (`view.key`). */}
+      <BubblePresence itemKey={view && !bigOpen && !hidden ? `resposta-${view.key}` : null} reduced={reduced}>
+        {view ? (
+          <div
+            className="kn-bubble-shell kn-bubble"
+            data-error={view.error || undefined}
+            title={view.error ? view.full : undefined}
+            data-reduced={reduced || undefined}
+            onMouseDown={keepFocus}
+            onClick={() => {
+              feed.current?.close();
+              tick.current();
+            }}
+          >
+            {/* O trecho inteiro, invisível, segura o tamanho do balão enquanto a digitação anda. */}
+            <div className="kn-bubble-text" aria-hidden="true">
+              <div className="kn-bubble-ghost">{renderLite(view.full)}</div>
+              <div className="kn-bubble-typed">{renderLite(view.text)}</div>
+            </div>
+            {view.more ? (
+              <button
+                type="button"
+                className="kn-bubble-more"
+                tabIndex={-1}
+                onMouseDown={keepFocus}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBigOpen(true);
+                }}
+              >
+                Ver mais
+              </button>
+            ) : null}
           </div>
-          {view.more ? (
-            <button
-              type="button"
-              className="kn-bubble-more"
-              tabIndex={-1}
-              onMouseDown={keepFocus}
-              onClick={(e) => {
-                e.stopPropagation();
-                setBigOpen(true);
-              }}
-            >
-              Ver mais
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+      </BubblePresence>
       {bigOpen && !hidden ? (
         <div className="kn-bubble-big" ref={big} onMouseDown={keepFocus} aria-label="A resposta do agente">
           <div className="kn-bubble-big-text">{renderLite(said)}</div>

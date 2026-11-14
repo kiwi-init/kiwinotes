@@ -311,11 +311,10 @@
 }
 .kn-cat-ask-send:disabled { opacity: 0.45; cursor: default; }
 
-/* O balão da resposta: a casca, com a entrada animada. */
+/* O balão da resposta: a casca. A entrada e a saída são do lugar dele (`.kn-bubble-slot`, abaixo). */
 .kn-bubble {
   cursor: default;
   user-select: none;
-  animation: kn-bubble-in 160ms ease-out;
 }
 .kn-bubble[data-error] { border-color: var(--danger); box-shadow: 3px 3px 0 var(--danger); }
 .kn-bubble[data-error]::before { border-left-color: var(--danger); }
@@ -323,9 +322,28 @@
 .kn-bubble[data-error] .kn-bubble-ghost,
 .kn-bubble[data-error] .kn-bubble-typed,
 .kn-bubble[data-error] .kn-bubble-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.kn-bubble[data-reduced] { animation: none; }
-@keyframes kn-bubble-in { from { opacity: 0; transform: translateY(4px) scale(0.96); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .kn-bubble { animation: none; } }
+
+/* A troca entre os balões (spec #11652, `BubblePresence.tsx`). O lugar do balão fica no canto, e a casca dentro dele
+   deixa de ser absoluta. O balão que sai encolhe e esmaece na direção da ponta (180 ms); o novo cresce dela, com mola
+   (250 ms, depois de 60 ms). Os tempos ficam em `BubblePresence.tsx`, junto da remoção do que sai. Com o Reduzir
+   movimento, a troca é só um esmaecer de 120 ms. Só `transform` e `opacity`. */
+.kn-bubble-slot {
+  position: absolute;
+  right: 116px;
+  bottom: 56px;
+  z-index: 7;
+  /* A ponta da casca: à direita, embaixo (a casca tem a ponta a 10–26 px do pé). */
+  transform-origin: calc(100% + 12px) calc(100% - 18px);
+  pointer-events: none;
+  animation: kn-slot-in 250ms cubic-bezier(0.34, 1.4, 0.64, 1) 60ms both;
+}
+.kn-bubble-slot > .kn-bubble-shell { position: relative; right: auto; bottom: auto; z-index: auto; }
+/* A saída é da Web Animations, a partir do estado em que o balão está (`BubblePresence.tsx`). */
+.kn-bubble-slot[data-phase="exit"] { z-index: 6; animation: none; }
+.kn-bubble-slot[data-phase="exit"] > * { pointer-events: none; }
+/* Com o Reduzir movimento, a entrada também é da Web Animations (o esmaecer de 120 ms): o `base.css` corta a do CSS. */
+.kn-bubble-slot[data-reduced] { animation: none; }
+@keyframes kn-slot-in { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
 
 /* O trecho inteiro, invisível, dá o tamanho; a parte digitada fica por cima. */
 .kn-bubble-text { display: grid; overflow-wrap: anywhere; white-space: pre-wrap; }

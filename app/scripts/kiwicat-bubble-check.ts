@@ -45,7 +45,9 @@ async function invoke(cap: string, args: unknown = {}) {
   assert.equal(r.ok, true, JSON.stringify(r));
   return r.value as any;
 }
-const bubble = ".kn-bubble";
+// O balão vivo: na troca (spec #11652), o que sai fica um instante no DOM, num lugar marcado com data-phase="exit".
+const LIVE = '.kn-bubble-slot:not([data-phase="exit"]) > ';
+const bubble = `${LIVE}.kn-bubble`;
 const box = (p: Page, sel: string) => p.locator(sel).evaluate((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; });
 const lineHeight = (p: Page) => p.locator(`${bubble} .kn-bubble-text`).evaluate((e) => parseFloat(getComputedStyle(e).lineHeight));
 /** Espera o balão terminar o pedido (sumir) e devolve os trechos inteiros que passaram por ele. */
@@ -54,7 +56,7 @@ async function chunksUntilGone(p: Page, ms = 90_000): Promise<string[]> {
   const end = Date.now() + ms;
   for (;;) {
     const s = await p.evaluate(() => {
-      const b = document.querySelector(".kn-bubble");
+      const b = document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) > .kn-bubble');
       if (!b) return null;
       return { full: b.querySelector(".kn-bubble-ghost")!.textContent ?? "", typed: b.querySelector(".kn-bubble-typed")!.textContent ?? "" };
     });
@@ -80,6 +82,9 @@ try {
   // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
   await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
+  // O gato no overlay (spec #9810): no headless não há hub à vista, então a cada pedido o gato iria para o overlay e o do
+  // canto (com o balão) sumiria até o fim. Aqui a prova é o gato do canto.
+  await invoke("settings.set", { kiwicat: { overlay: false } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
 
@@ -158,18 +163,18 @@ try {
   await p.waitForSelector(bubble);
   for (let n = 0; (await invoke("agent.status")).busy; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   await invoke("agent.ask", { text: "/conta a segunda" });
-  await p.waitForFunction(() => document.querySelector(".kn-bubble-ghost")?.textContent?.startsWith("a segunda"), undefined, { timeout: 10000 });
+  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent?.startsWith("a segunda"), undefined, { timeout: 10000 });
   report.checks.push("a click closes the balloon (focus stays); a new request replaces the previous balloon");
   await chunksUntilGone(p);
 
   // 6. O texto dito antes de uma ferramenta sai quando ela começa; o [Ver mais] mostra tudo.
   await invoke("agent.ask", { text: "/antes-da-ferramenta" });
-  await p.waitForFunction(() => document.querySelector(".kn-bubble-ghost")?.textContent?.startsWith("Vou ler a nota"), undefined, { timeout: 10000 });
-  await p.waitForFunction(() => document.querySelector(".kn-bubble-typed")?.textContent === document.querySelector(".kn-bubble-ghost")?.textContent);
-  await Bun.sleep(250); // a entrada do balão (160 ms)
+  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent?.startsWith("Vou ler a nota"), undefined, { timeout: 10000 });
+  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-typed')?.textContent === document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent);
+  await Bun.sleep(400); // a entrada do balão (60 ms de atraso e 250 ms de mola, spec #11652)
   await p.screenshot({ path: join(out, "3-antes-da-ferramenta.png") });
   await p.waitForSelector(bubble, { state: "detached", timeout: 5000 });
-  await p.waitForFunction(() => document.querySelector(".kn-bubble-ghost")?.textContent?.startsWith("Pronto"), undefined, { timeout: 10000 });
+  await p.waitForFunction(() => document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')?.textContent?.startsWith("Pronto"), undefined, { timeout: 10000 });
   await p.locator(`${bubble} .kn-bubble-more`).click();
   const big = await p.locator(".kn-bubble-big").textContent();
   assert.ok(big?.includes("Vou ler a nota") && big.includes("o prazo do Kiwi é março"), "o [Ver mais] mostra tudo o que o agente disse");
@@ -219,7 +224,7 @@ try {
   await d.page.waitForSelector('.kn-kiwicat[data-ready="true"]');
   await invoke("agent.ask", { text: `/conta ${LONG}` });
   await d.page.waitForSelector(bubble);
-  const first = await d.page.evaluate(() => ({ full: document.querySelector(".kn-bubble-ghost")!.textContent, typed: document.querySelector(".kn-bubble-typed")!.textContent }));
+  const first = await d.page.evaluate(() => ({ full: document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-ghost')!.textContent, typed: document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) .kn-bubble-typed')!.textContent }));
   assert.equal(first.typed, first.full, "com o Reduzir movimento, o trecho aparece inteiro");
   assert.equal(await d.page.locator(bubble).evaluate((e) => getComputedStyle(e).animationName), "none");
   await d.page.waitForSelector(`${bubble} .kn-bubble-more`, { timeout: 15000 });

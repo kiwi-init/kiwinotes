@@ -9,6 +9,7 @@ import { api, has } from "../src/api.ts";
 import { useHubNav } from "../src/hubNav.ts";
 import { Button } from "../src/kit/index.tsx";
 import { MEMORY_TITLE } from "../settings/memoryText.ts";
+import { BubblePresence } from "./BubblePresence";
 
 /** Quanto o balão fica na tela depois da última mudança. */
 export const MEMORY_BUBBLE_MS = 12_000;
@@ -22,7 +23,7 @@ export function memoryBubbleLine(c: Change): string {
   return c.action === "remember" ? `Anotei: ${c.fact}` : `Esqueci: ${c.fact}`;
 }
 
-export function MemoryBubble({ hidden, onShown }: { hidden: boolean; onShown?: (shown: boolean) => void }) {
+export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boolean; onShown?: (shown: boolean) => void; reduced?: boolean }) {
   const [changes, setChanges] = useState<Change[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -59,35 +60,40 @@ export function MemoryBubble({ hidden, onShown }: { hidden: boolean; onShown?: (
   }, []);
 
   useEffect(() => onShown?.(changes.length > 0), [changes.length > 0]);
-  if (!changes.length || hidden) return null;
+  const showing = changes.length > 0 && !hidden;
   const keepFocus = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) e.preventDefault();
   };
   const undo = (id: string) => void api.agent.memoryUndo(id).catch((e: unknown) => setFailure(e instanceof Error ? e.message : String(e)));
+  // A troca entre os balões (spec #11652): o balão da memória é um só enquanto aberto; uma mudança nova muda o tamanho.
   return (
-    <div className="kn-bubble-shell kn-bubble kn-memory-bubble" onMouseDown={keepFocus} role="status" aria-label="A memória do agente">
-      <ul className="kn-memory-list">
-        {changes.map((c) => (
-          <li key={c.id} className="kn-memory-item">
-            <span className="kn-memory-line">{memoryBubbleLine(c)}</span>
-            {!c.undone && c.action !== "full" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
-            {c.action === "full" && nav ? (
-              <Button
-                onClick={() => {
-                  close();
-                  nav.openSettings("agent", MEMORY_TITLE);
-                }}
-              >
-                Abrir a memória
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {failure ? <p className="kn-memory-note">{failure}</p> : null}
-      <div className="kn-memory-actions">
-        <Button onClick={close}>Ok</Button>
-      </div>
-    </div>
+    <BubblePresence itemKey={showing ? "memoria" : null} reduced={reduced}>
+      {showing ? (
+        <div className="kn-bubble-shell kn-bubble kn-memory-bubble" onMouseDown={keepFocus} role="status" aria-label="A memória do agente">
+          <ul className="kn-memory-list">
+            {changes.map((c) => (
+              <li key={c.id} className="kn-memory-item">
+                <span className="kn-memory-line">{memoryBubbleLine(c)}</span>
+                {!c.undone && c.action !== "full" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
+                {c.action === "full" && nav ? (
+                  <Button
+                    onClick={() => {
+                      close();
+                      nav.openSettings("agent", MEMORY_TITLE);
+                    }}
+                  >
+                    Abrir a memória
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {failure ? <p className="kn-memory-note">{failure}</p> : null}
+          <div className="kn-memory-actions">
+            <Button onClick={close}>Ok</Button>
+          </div>
+        </div>
+      ) : null}
+    </BubblePresence>
   );
 }
