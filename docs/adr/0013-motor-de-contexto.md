@@ -1,10 +1,10 @@
 # ADR 0013: a Bússola, o motor de contexto do Kiwi
 
-- Status: **proposto** (T13450, spec #13435). As quatro decisões do harry estão tomadas (#13624, #13626, #13628 e #13631). Falta o sim dele ao ADR inteiro. Nenhum código antes disso.
+- Status: **aceito** (T13450, spec #13435, aprovado pelo harry em #13683). As quatro decisões dele estão em #13624, #13626, #13628 e #13631.
 - O nome é **Bússola** (em inglês, Compass), escolhido pelo harry no #13644.
 - A revisão do #13636 (a autocrítica que o harry pediu) mudou a peça 6, criou a peça 7 e pôs a medição do peso real no PR 1. O que mudou está marcado com "revisão".
 - Segue o [ADR 0011](0011-agente-e-privacidade.md) (nenhum outro modelo de IA, nem local) e o [ADR 0012](0012-host-do-agente.md) (o host e o adaptador ACP). A decisão 1 abaixo muda uma frase do 0011.
-- Código: nenhum ainda. A ordem da construção está no fim.
+- Código: nenhum ainda. A construção é dos builders, na ordem que está no fim.
 
 ## Contexto: para onde foram os 934 mil tokens
 O harry fez 18 pedidos ao agente e gastou 934 mil tokens (#13379). Ele deixou ler o registro desses pedidos. Daqui saem só números e nomes de ferramenta, nada do texto dele.
