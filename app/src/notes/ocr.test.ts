@@ -76,6 +76,25 @@ describe("o OCR dos anexos (T2709)", () => {
     expect(again.stats).toMatchObject({ read: 0, cached: 1 });
   });
 
+  test("a fila anda na ordem de chegada, sem repetir, mesmo com o mesmo anexo chegando de novo no meio", async () => {
+    const { root, runner, ocr } = setup({ "a.png": "a", "b.png": "b", "c.png": "c" });
+    for (const f of ["a", "b", "c"]) writeFileSync(path.join(root, `Anexos/${f}.png`), `png-${f}`);
+    ocr.enqueue(["Anexos/b.png", "Anexos/a.png", "Anexos/b.png"]);
+    ocr.enqueue(["Anexos/c.png", "Anexos/a.png"]);
+    await ocr.idle();
+    expect(runner.calls).toEqual(["b.png", "a.png", "c.png"]);
+  });
+
+  test("60 mil anexos entram na fila de uma vez sem parar o Bun (spec #12918: era N², 4–5 s)", () => {
+    // Sem o helper, a fila não anda: só a entrada é medida.
+    const ocr = new OcrIndex({ root: tmp("big"), cacheDir: tmp("big-cache"), runner: null, enabled: async () => true, battery: async () => AC });
+    const paths = Array.from({ length: 60_000 }, (_, i) => `Docs ${i % 200}/Resources/Images/img-${i}.png`);
+    const t0 = performance.now();
+    ocr.enqueue(paths);
+    ocr.enqueue(paths.slice(0, 30_000));
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+
   test("desligado nas Configurações, ou sem o helper, a fila não anda", async () => {
     const off = setup({ "a.png": "x" }, { enabled: false });
     writeFileSync(path.join(off.root, "Anexos/a.png"), "1");

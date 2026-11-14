@@ -135,7 +135,11 @@ export interface OcrOptions {
 export class OcrIndex {
   /** Anexo (relativo ao vault) → o hash e o texto, quando já lido. */
   private byPath = new Map<string, { hash: string; entry: OcrEntry | null }>();
-  private queue: string[] = [];
+  /**
+   * A fila, na ordem de chegada. Um `Set` (spec #12918): conferir a repetição com `includes` num array era N² na
+   * abertura, e com 60 mil anexos o Bun ficava 4–5 s parado, sem responder à tela.
+   */
+  private queue = new Set<string>();
   private running: Promise<void> | null = null;
   private readonly battery: () => Promise<string>;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -157,11 +161,11 @@ export class OcrIndex {
 
   /** Põe na fila (sem repetir). O que não é anexo fica de fora. */
   enqueue(paths: readonly string[]): void {
-    for (const p of paths) if (isAttachmentName(p) && !this.queue.includes(p)) this.queue.push(p);
+    for (const p of paths) if (isAttachmentName(p)) this.queue.add(p);
     this.running ??= this.drain().finally(() => {
       this.running = null;
       // Algo entrou enquanto a fila terminava.
-      if (this.queue.length) this.enqueue([]);
+      if (this.queue.size) this.enqueue([]);
     });
   }
 
@@ -176,16 +180,17 @@ export class OcrIndex {
   }
 
   private async drain(): Promise<void> {
-    while (this.queue.length) {
+    while (this.queue.size) {
       if (!this.runner || !(await this.o.enabled())) {
-        this.queue = [];
+        this.queue.clear();
         return;
       }
       if (lowBattery(await this.battery())) {
         await this.sleep(BATTERY_RETRY_MS);
         continue;
       }
-      const rel = this.queue.shift()!;
+      const rel = this.queue.values().next().value!;
+      this.queue.delete(rel);
       await this.one(rel).catch((e) => {
         this.stats.failed++;
         console.error(`[ocr] ${rel}:`, e instanceof Error ? e.message : e);
