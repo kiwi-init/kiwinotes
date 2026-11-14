@@ -65,7 +65,7 @@ try {
 
   for (const theme of ["light", "dark"] as const) {
     if (theme === "dark") await invoke("agent.configure", { onboarding: { state: "open", step: 1 } });
-    const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 760, motion: true, browser: "webkit", query: { section: "settings" }, ...(theme === "light" ? { video: out } : {}) });
+    const h = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 760, motion: true, browser: "webkit", query: { section: "settings", topic: "agent" }, ...(theme === "light" ? { video: out } : {}) });
     const p = h.page;
     if (theme === "light") {
       // 1. Ligar o agente pela primeira vez abre o onboarding, por cima do hub, sem o gato do canto.

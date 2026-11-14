@@ -97,11 +97,13 @@ const browser = await webkit.launch({ headless: true });
 try {
   await cli(["start", "--no-helper"]);
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito.
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
 
   for (const theme of ["light", "dark"] as const) {
-    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 900, motion: true, browser: "webkit", query: { section: "settings" } });
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme, width: 900, height: 900, motion: true, browser: "webkit", query: { section: "settings", topic: "agent" } });
     const p = w.page;
     await p.waitForSelector(row);
     await p.locator(row).scrollIntoViewIfNeeded();
@@ -187,7 +189,7 @@ try {
   // 7. Uma página aberta com o gato desligado nem baixa o módulo do gato (o import dinâmico nunca roda).
   await invoke("settings.set", { kiwicat: { show: false } });
   {
-    const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings" } });
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
     await w.page.waitForSelector(`${row} [role=radio][disabled]`);
     await Bun.sleep(500);
     assert.equal(await w.page.locator("canvas").count(), 0, "no cat canvas with the cat off");
@@ -197,7 +199,7 @@ try {
   await invoke("settings.set", { kiwicat: { show: true } });
   await invoke("agent.disable");
   {
-    const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings" } });
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
     await w.page.waitForSelector(`${row} [role=radio][disabled]`);
     assert.equal(await w.page.locator("canvas").count(), 0);
     assert.match((await w.page.locator(row).textContent()) ?? "", /Ligue o agente/);
@@ -209,10 +211,12 @@ try {
   await cli(["stop"]);
   await cli(["start", "--no-helper"]);
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito.
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   assert.equal((await invoke("settings.get")).kiwicat.cor, "ciano");
   {
-    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings" } });
+    const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 900, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
     await w.page.waitForSelector(`${corner}[data-ready="true"]`);
     assert.equal(await w.page.locator(`${row} [role=radio][aria-checked=true]`).getAttribute("aria-label"), "Ciano");
     assert.equal(await w.page.locator(corner).getAttribute("data-cor"), catColorHex("ciano"));

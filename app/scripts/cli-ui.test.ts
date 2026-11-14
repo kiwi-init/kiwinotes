@@ -290,7 +290,7 @@ describe.skipIf(!hasWebkit)("no WebKit headless", () => {
 
   test("ui: um passo que falha para o script, diz qual e deixa o print do momento", async () => {
     const { ctx } = fakeCtx(dir);
-    writeFileSync(join(dir, "falha.json"), JSON.stringify([{ waitFor: ".kn-segmented" }, { click: ".nao-existe", timeout: 300 }, { wait: 1 }]));
+    writeFileSync(join(dir, "falha.json"), JSON.stringify([{ waitFor: ".kn-prefs-item" }, { click: ".nao-existe", timeout: 300 }, { wait: 1 }]));
     capture();
     expect(await runUi(["settings", "--script", join(dir, "falha.json"), "--out", join(dir, "falha")], ctx)).toBe(1);
     const r = lastJson();
@@ -301,7 +301,7 @@ describe.skipIf(!hasWebkit)("no WebKit headless", () => {
 
   test("ui: um passo mais lento que o maxMs falha, com o tempo e o limite (T7390)", async () => {
     const { ctx } = fakeCtx(dir);
-    writeFileSync(join(dir, "lento.json"), JSON.stringify([{ waitFor: ".kn-segmented" }, { wait: 1, maxMs: 2000 }, { wait: 300, maxMs: 50 }]));
+    writeFileSync(join(dir, "lento.json"), JSON.stringify([{ waitFor: ".kn-prefs-item" }, { wait: 1, maxMs: 2000 }, { wait: 300, maxMs: 50 }]));
     capture();
     expect(await runUi(["settings", "--script", join(dir, "lento.json"), "--out", join(dir, "lento")], ctx)).toBe(1);
     const r = lastJson();

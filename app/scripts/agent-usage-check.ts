@@ -73,6 +73,8 @@ const report: { checks: string[]; problems: string[] } = { checks: [], problems:
 try {
   await cli(["start", "--no-helper"]);
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito.
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   // Três pedidos, de tamanhos diferentes: o gasto que o agente falso informa.
@@ -81,7 +83,7 @@ try {
     await idle();
   }
 
-  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings" } });
+  const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
   const p = w.page;
   // 1. O medidor: o gasto do Kiwi e, ao abrir, o uso da assinatura pelo /usage.
   await p.waitForSelector(meter, { timeout: 15000 });

@@ -74,6 +74,8 @@ try {
   await invoke("projects.mark", { folder: "Projetos/Migração" });
   await invoke("notes.create", { folder: "Reuniões", title: "2026-11-11 10h00 Zoom", content: meeting("2026-11-11", "10:00", "Ana", "Vamos começar a migração pelo arquivo de 2019.") });
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito.
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
 
@@ -151,7 +153,7 @@ try {
     status: "offer",
   });
   writeFileSync(file, JSON.stringify(stored), { mode: 0o600 });
-  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings" } });
+  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "activity" } });
   const p = s.page;
   const list = ".kn-activity-proposals";
   await p.waitForSelector(list, { timeout: 15000 });
@@ -162,7 +164,9 @@ try {
   await p.locator(list).screenshot({ path: join(out, "5-atividade.png") });
   report.checks.push("Atividade do agente: the open proposals, the economy question ([Preparar] [Agora não]) and the project choice");
 
-  // 6. "Suas reuniões" em Ajustes › Agente: tema · data, com a prévia, e sem o bloco Ações. A próxima proposta segue.
+  // 6. "Suas reuniões" em Ajustes › Reuniões (spec #11966): tema · data, com a prévia, e sem o bloco Ações. A próxima
+  // proposta segue.
+  await p.locator(".kn-prefs-item[data-topic=meetings]").click();
   const rows = ".kn-agent-meetings";
   await p.waitForSelector(rows, { timeout: 15000 });
   await p.locator(`${rows} [role=radiogroup][aria-label='O nome do arquivo'] button:has-text('tema · data')`).click();
@@ -197,6 +201,8 @@ try {
   });
   const modeled = await invoke("agent.proposal", { id: fresh.id });
   assert.ok(modeled.noteContent.includes("## 1. Resumo\n\n- ") && modeled.noteContent.startsWith("---\n") && !modeled.noteContent.includes("[[#"), modeled.noteContent);
+  // De volta à Atividade (spec #11966), onde ficam as propostas abertas.
+  await p.locator(".kn-prefs-item[data-topic=activity]").click();
   const item = `${list} [data-proposal='${fresh.id}']`;
   await p.waitForSelector(item, { timeout: 15000 });
   await p.locator(`${item} button:has-text('Ver a proposta')`).click();

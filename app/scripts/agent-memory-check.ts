@@ -66,6 +66,8 @@ try {
   await cli(["start", "--no-helper"]);
   await invoke("notes.create", { title: "Ideias", content: "# Ideias\n" });
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito.
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
 
@@ -95,7 +97,7 @@ try {
   // 3. A Atividade do agente registra a anotação.
   await invoke("agent.ask", { text: "lembra que trabalho com migração de PACS" });
   await idle();
-  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings" } });
+  const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "activity" } });
   const p = s.page;
   const line = ".kn-activity-memory";
   await p.waitForSelector(line, { timeout: 15000 });
@@ -109,6 +111,8 @@ try {
   // 4. Ajustes › Agente › Memória (T11668): editar um fato, um segredo recusado, as instruções salvas.
   await invoke("agent.ask", { text: "lembra que eu prefiro respostas curtas" });
   await idle();
+  // Ajustes por assunto (spec #11966): a memória está no assunto Agente.
+  await p.locator(".kn-prefs-item[data-topic=agent]").click();
   const box = ".kn-agent-memory";
   await p.waitForFunction((sel) => document.querySelectorAll(`${sel} .kn-memory-fact`).length === 2, box, { timeout: 15000 });
   const first = p.locator(`${box} .kn-memory-fact`).first();
@@ -148,7 +152,7 @@ try {
   await idle();
   const after = (await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).content as string;
   assert.match(after, /\n## Diário do agente\n\n- \d{4}-\d{2}-\d{2}: Mudei o prazo para abril, a pedido da pessoa\.\n$/);
-  const d = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings" } });
+  const d = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1400, motion: false, browser: "webkit", query: { section: "settings", topic: "activity" } });
   const dp = d.page;
   const diaryReq = dp.locator(".kn-activity-req").filter({ has: dp.locator(".kn-activity-what:has-text('Kiwi › Diário do agente')") }).first();
   await diaryReq.waitFor({ timeout: 15000 });

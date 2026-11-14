@@ -464,7 +464,7 @@ function MagicStep({ status, settings }: { status: AgentStatus; settings: AppSet
           </div>
         </>
       ) : magic.phase === "kept" ? (
-        <p className="kn-onb-try" data-phase="answered">Ficou assim. Dá para desfazer depois, em Ajustes › Agente › Atividade.</p>
+        <p className="kn-onb-try" data-phase="answered">Ficou assim. Dá para desfazer depois, em Ajustes › Atividade do agente.</p>
       ) : magic.phase === "undone" ? (
         <p className="kn-onb-try">Desfeito: a nota voltou como estava.</p>
       ) : (
