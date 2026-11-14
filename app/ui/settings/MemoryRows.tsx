@@ -12,6 +12,10 @@ import {
   countLine,
   dropFact,
   EDIT_GONE,
+  factCount,
+  outsideLine,
+  skippedLine,
+  skippedReason,
   INSTRUCTIONS_HINT,
   INSTRUCTIONS_MAX,
   INSTRUCTIONS_TITLE,
@@ -31,6 +35,8 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
   // O fato em edição pelo texto de origem (`from`), não pela posição: a lista muda ao vivo (revisão do T11668).
   const [editing, setEditing] = useState<{ from: string; text: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  /** O fato de fora em edição (spec #12749), pela posição na lista `skipped`. */
+  const [fixing, setFixing] = useState<{ at: number; text: string } | null>(null);
   const [draft, setDraft] = useState(status.instructions ?? "");
   const saved = status.instructions ?? "";
 
@@ -59,11 +65,13 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
   }, [view, editing]);
 
   if (!view) return failure ? <Row label={MEMORY_TITLE} hint={failure} /> : null;
-  const save = (facts: string[]) =>
-    void api.agent.memorySet(facts).then(
+  const skipped = view.skipped ?? [];
+  const save = (facts: string[], skipped?: string[]) =>
+    void api.agent.memorySet(facts, skipped).then(
       (v) => {
         setView(v);
         setEditing(null);
+        setFixing(null);
         setFailure(null);
       },
       (e) => setFailure(message(e)),
@@ -131,16 +139,63 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
             ))}
           </ul>
         ) : null}
+        {skipped.length ? (
+          <div className="kn-memory-skipped" role="group" aria-label="Os fatos que ficam de fora">
+            <p className="kn-memory-warning">{skippedLine(skipped.length)}</p>
+            <ul className="kn-memory-facts">
+              {skipped.map((x, i) => (
+                <li key={`${i}:${x.text}`} className="kn-memory-fact" data-reason={x.reason}>
+                  {fixing?.at === i ? (
+                    <form
+                      className="kn-memory-edit"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        // Encurtado, ele vira um fato da lista; a linha longa sai do arquivo.
+                        save([...view.facts, fixing.text], skipped.filter((_, j) => j !== i).map((y) => y.text));
+                      }}
+                    >
+                      <input className="kn-input" aria-label="O fato" value={fixing.text} onChange={(e) => setFixing({ at: i, text: e.target.value })} autoFocus />
+                      <Button variant="primary" type="submit" disabled={!fixing.text.trim() || fixing.text.trim().length > 300}>
+                        Salvar
+                      </Button>
+                      <Button onClick={() => setFixing(null)}>Cancelar</Button>
+                    </form>
+                  ) : (
+                    <>
+                      <span className="kn-memory-fact-text">
+                        {x.text}
+                        <span className="kn-memory-reason">{skippedReason(x.reason)}</span>
+                      </span>
+                      <span className="kn-memory-fact-actions">
+                        <Button
+                          onClick={() => {
+                            setFixing({ at: i, text: x.text });
+                            setFailure(null);
+                          }}
+                        >
+                          {x.reason === "long" ? "Encurtar" : "Editar"}
+                        </Button>
+                        <Button onClick={() => save(view.facts, skipped.filter((_, j) => j !== i).map((y) => y.text))}>Apagar</Button>
+                      </span>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {fixing && fixing.text.trim().length > 300 ? <p className="kn-row-hint">{factCount(fixing.text.trim().length)}</p> : null}
+          </div>
+        ) : null}
+        {view.outside ? <p className="kn-row-hint kn-memory-outside">{outsideLine(view.outside)}</p> : null}
         {failure ? (
           <p className="kn-memory-failure" role="alert">
             {failure}
           </p>
         ) : null}
-        {view.facts.length ? (
+        {view.facts.length + skipped.length ? (
           <div className="kn-memory-clear">
             {confirmClear ? (
               <>
-                <span>{clearQuestion(view.facts.length)}</span>
+                <span>{clearQuestion(view.facts.length + skipped.length)}</span>
                 <Button
                   variant="primary"
                   onClick={() =>

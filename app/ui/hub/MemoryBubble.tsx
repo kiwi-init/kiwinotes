@@ -8,7 +8,7 @@ import type { AgentMemoryView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { useHubNav } from "../src/hubNav.ts";
 import { Button } from "../src/kit/index.tsx";
-import { MEMORY_TITLE } from "../settings/memoryText.ts";
+import { MEMORY_TITLE, overLine } from "../settings/memoryText.ts";
 import { BubblePresence } from "./BubblePresence";
 
 /** Quanto o balão fica na tela depois da última mudança. */
@@ -18,6 +18,7 @@ type Change = AgentMemoryView["changes"][number];
 
 /** A frase do balão para uma mudança na memória. */
 export function memoryBubbleLine(c: Change): string {
+  if (c.action === "over") return overLine(c.over ?? { facts: 0, long: 0 });
   if (c.action === "full") return `A memória está cheia: não anotei "${c.fact}". Apague um fato em Ajustes › Agente › Memória.`;
   if (c.undone) return c.action === "remember" ? `Desfeito: não anotei "${c.fact}".` : `Desfeito: "${c.fact}" voltou para a memória.`;
   return c.action === "remember" ? `Anotei: ${c.fact}` : `Esqueci: ${c.fact}`;
@@ -50,8 +51,6 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
       open.current = true;
       setFailure(null);
       setChanges(v.changes);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(close, MEMORY_BUBBLE_MS);
     });
     return () => {
       off();
@@ -61,6 +60,15 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
 
   useEffect(() => onShown?.(changes.length > 0), [changes.length > 0]);
   const showing = changes.length > 0 && !hidden;
+  const warn = changes.some((c) => c.action === "full" || c.action === "over");
+  // O tempo conta só com o balão na tela (spec #12749): ele espera o balão da resposta sair, e uma resposta longa não o
+  // faz sumir antes de aparecer. Uma mudança nova ou um [Desfazer] recomeça a conta.
+  useEffect(() => {
+    if (!showing) return;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(close, MEMORY_BUBBLE_MS);
+    return () => clearTimeout(timer.current);
+  }, [showing, changes]);
   const keepFocus = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) e.preventDefault();
   };
@@ -74,24 +82,35 @@ export function MemoryBubble({ hidden, onShown, reduced = false }: { hidden: boo
             {changes.map((c) => (
               <li key={c.id} className="kn-memory-item">
                 <span className="kn-memory-line">{memoryBubbleLine(c)}</span>
-                {!c.undone && c.action !== "full" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
-                {c.action === "full" && nav ? (
-                  <Button
-                    onClick={() => {
-                      close();
-                      nav.openSettings("agent", MEMORY_TITLE);
-                    }}
-                  >
-                    Abrir a memória
-                  </Button>
-                ) : null}
+                {!c.undone && c.action !== "full" && c.action !== "over" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
               </li>
             ))}
           </ul>
           {failure ? <p className="kn-memory-note">{failure}</p> : null}
-          <div className="kn-memory-actions">
-            <Button onClick={close}>Ok</Button>
-          </div>
+          {/* O aviso (a memória cheia ou acima do limite) tem uma ação principal, numa linha embaixo do texto, como o balão
+              da proposta: [Abrir a memória], e o Ok em texto (revisão do T12771). */}
+          {warn ? (
+            <div className="kn-memory-actions" data-warn="true">
+              {nav ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    close();
+                    nav.openSettings("agent", MEMORY_TITLE);
+                  }}
+                >
+                  Abrir a memória
+                </Button>
+              ) : null}
+              <Button data-role="dismiss" onClick={close}>
+                Ok
+              </Button>
+            </div>
+          ) : (
+            <div className="kn-memory-actions">
+              <Button onClick={close}>Ok</Button>
+            </div>
+          )}
         </div>
       ) : null}
     </BubblePresence>

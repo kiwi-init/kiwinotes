@@ -2,7 +2,7 @@
 // registro do npm falso e local e os ajustes de verdade numa pasta tmp. Nada aqui abre o Claude Code nem vai à internet.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { AgentMemoryView, AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
@@ -1633,6 +1633,47 @@ describe("a memória do agente (spec #11469)", () => {
     expect(v.changes).toEqual([expect.objectContaining({ action: "full", fact: "tem um gato" })]);
     await expect(m.svc.memoryUndo(v.changes[0]!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
     expect((await m.svc.memoryView()).facts).toEqual(full);
+  });
+
+  test("a memória escrita à mão passou do limite (spec #12749): o agente não muda nada, o balão avisa com o motivo, e Ajustes arruma sem apagar o resto", async () => {
+    const root = tmp();
+    const notes: Record<string, string> = { ...NOTES };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    m.svc.useVaultRoot(async () => root);
+    const seen: AgentMemoryView[] = [];
+    m.svc.onMemoryChanged((v) => seen.push(v));
+    await readyNow(m);
+    const file = path.join(root, ".kiwi/agente/sobre-mim.md");
+    mkdirSync(path.dirname(file), { recursive: true });
+    const longo = "x".repeat(400);
+    const text = `- prefiro respostas curtas\n- ${longo}\n\nUma observação minha, fora da lista.\n`;
+    writeFileSync(file, text);
+    // Ajustes vê o fato de fora e a linha que não é fato.
+    expect(await m.svc.memoryView()).toMatchObject({ facts: ["prefiro respostas curtas"], skipped: [{ text: longo, reason: "long" }], outside: 1 });
+    // O agente lê só o fato válido.
+    await askAndWait(m, "Oi");
+    const prompt = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text).at(-1)!;
+    expect(prompt).toContain("- prefiro respostas curtas\n]");
+    expect(prompt).not.toContain(longo);
+    // "lembra que…" e "esquece…": nada muda no arquivo, o agente recebe o erro e o balão avisa, sem [Desfazer].
+    for (const ask of ["lembra que tem um gato", "esquece que prefiro respostas curtas"]) {
+      const turn = await askAndWait(m, ask);
+      expect(JSON.stringify(turn.at(-1))).toContain("E_MEMORY_OVER");
+      expect(readFileSync(file, "utf8")).toBe(text);
+    }
+    const v = seen.at(-1)!;
+    expect(v.changes.at(-1)).toMatchObject({ action: "over", over: { facts: 2, long: 1 } });
+    await expect(m.svc.memoryUndo(v.changes.at(-1)!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    // Editar um fato em Ajustes não mexe no de fora nem no parágrafo.
+    await m.svc.memorySet(["prefiro respostas bem curtas"]);
+    expect(readFileSync(file, "utf8")).toBe(`- prefiro respostas bem curtas\n- ${longo}\n\nUma observação minha, fora da lista.\n`);
+    // Encurtar o longo em Ajustes: ele vira fato, a linha longa sai, e o agente volta a mudar a memória.
+    expect(await m.svc.memorySet(["prefiro respostas bem curtas", "x".repeat(20)], [])).toMatchObject({ skipped: [], outside: 1 });
+    expect((await askAndWait(m, "lembra que tem um gato")).at(-1)).toMatchObject({ type: "done", text: "Anotei: tem um gato." });
+    expect(readFileSync(file, "utf8")).toBe(`- prefiro respostas bem curtas\n- ${"x".repeat(20)}\n- tem um gato\n\nUma observação minha, fora da lista.\n`);
+    // "Apagar tudo": os fatos saem, o parágrafo fica.
+    await m.svc.memoryClear();
+    expect(readFileSync(file, "utf8")).toBe("\nUma observação minha, fora da lista.\n");
   });
 
   test("as instruções e o glossário (T11667): no começo fixo, na ordem, os mesmos bytes em dois pedidos seguidos; no modo econômico, só os termos do pedido", async () => {

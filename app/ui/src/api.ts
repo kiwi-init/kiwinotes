@@ -178,7 +178,7 @@ export const api = {
     /** A memória do agente (1.60.0, spec #11469). */
     memory: () => invoke("agent.memory", {}),
     memoryUndo: (id: string) => invoke("agent.memoryUndo", { id }),
-    memorySet: (facts: string[]) => invoke("agent.memorySet", { facts }),
+    memorySet: (facts: string[], skipped?: string[]) => invoke("agent.memorySet", skipped === undefined ? { facts } : { facts, skipped }),
     memoryClear: () => invoke("agent.memoryClear", {}),
     /** O guardrail na prática (1.64.0, spec #11955): o filtro local, sem ir ao agente. */
     guardPreview: (text: string) => invoke("agent.guardPreview", { text }),

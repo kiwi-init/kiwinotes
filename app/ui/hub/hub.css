@@ -439,3 +439,7 @@
 .kn-routine-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 .kn-memory-note { margin: 0; font-size: var(--text-xs, 0.85em); color: var(--text-2); }
 .kn-memory-actions { display: flex; gap: 4px; justify-content: flex-end; }
+/* O aviso da memória (revisão do T12771): [Abrir a memória] na frente e o Ok em texto, como no balão da proposta. */
+.kn-memory-actions[data-warn="true"] { justify-content: flex-start; align-items: center; }
+.kn-memory-actions[data-warn="true"] .kn-button[data-role="dismiss"] { padding: 0 var(--space-1, 4px); border-color: transparent; background: none; box-shadow: none; color: var(--text-2); }
+.kn-memory-actions[data-warn="true"] .kn-button[data-role="dismiss"]:hover { color: var(--text); background: none; }

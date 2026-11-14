@@ -2,9 +2,11 @@
 // `.kiwi/agente/sobre-mim.md`, uma linha por fato. O agente escreve pelas ferramentas `memory_remember` e
 // `memory_forget`; a pessoa vê e muda tudo em Ajustes › Agente › Memória (T11668).
 //
-// - **Texto legível:** um título, uma frase do que é, e um fato por linha (`- fato`). Uma linha que não começa com
-//   `- ` é ignorada na leitura e some na próxima gravação; a pessoa pode editar o arquivo à mão.
-// - **No máximo 60 fatos** (`MEMORY_MAX`): passando disso, o agente tem de esquecer um antes de anotar outro.
+// - **Texto legível:** um título, uma frase do que é, e um fato por linha (`- fato`). A pessoa pode editar à mão: uma
+//   linha que não é fato (um parágrafo, um título) não vai ao agente, mas fica onde está (spec #12749).
+// - **No máximo 60 fatos** (`MEMORY_MAX`), cada um com até 300 caracteres: passando disso, o agente tem de esquecer um
+//   antes de anotar outro. Um fato escrito à mão além do limite fica no arquivo, sem ir ao agente, e o agente não muda a
+//   memória até a pessoa arrumar (spec #12749).
 // - **Os mesmos bytes para a mesma memória,** no arquivo e no começo fixo do pedido (o cache do agente, #11084).
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -33,19 +35,57 @@ export const factKey = (fact: string) =>
     .toLowerCase()
     .replace(/[.!;,]+$/, "");
 
-/** Os fatos do arquivo, na ordem dele. */
-export function parseMemory(text: string): string[] {
-  const facts: string[] = [];
+/** Um fato escrito à mão que o agente não lê: passa de 300 caracteres, ou vem depois dos 60 (spec #12749). */
+export interface SkippedFact {
+  text: string;
+  reason: "long" | "over";
+}
+
+/** O arquivo da memória lido linha a linha (spec #12749). */
+export interface MemoryFile {
+  /** Os fatos que vão ao agente: até 60, cada um com até 300 caracteres, sem repetir, na ordem do arquivo. */
+  facts: string[];
+  /** Os fatos que ficam no arquivo sem ir ao agente. */
+  skipped: SkippedFact[];
+  /** As linhas escritas que não são fato (parágrafos, títulos), fora o cabeçalho do Kiwi. */
+  outside: number;
+}
+
+const FACT_LINE = /^\s*[-*]\s+(.+)$/;
+const HEADER_LINES = new Set(HEADER.filter(Boolean));
+
+type LineKind = { kind: "fact"; fact: string; key: string } | { kind: "dup"; key: string } | { kind: "skipped"; fact: string; reason: SkippedFact["reason"] } | { kind: "other"; written: boolean };
+
+/** O que cada linha é, na ordem do arquivo: os 60 primeiros fatos válidos são fatos; o resto fica de fora. */
+function classify(lines: readonly string[]): LineKind[] {
   const seen = new Set<string>();
-  for (const line of text.split("\n")) {
-    const m = /^\s*[-*]\s+(.+)$/.exec(line);
-    if (!m) continue;
-    const fact = cleanFact(m[1]!).slice(0, FACT_MAX_CHARS);
-    if (!fact || seen.has(factKey(fact))) continue;
-    seen.add(factKey(fact));
-    facts.push(fact);
+  return lines.map((line): LineKind => {
+    const m = FACT_LINE.exec(line);
+    const fact = m ? cleanFact(m[1]!) : "";
+    if (!m || !fact) return { kind: "other", written: line.trim() !== "" && !HEADER_LINES.has(line.trim()) };
+    if (fact.length > FACT_MAX_CHARS) return { kind: "skipped", fact, reason: "long" };
+    const key = factKey(fact);
+    if (seen.has(key)) return { kind: "dup", key };
+    if (seen.size >= MEMORY_MAX) return { kind: "skipped", fact, reason: "over" };
+    seen.add(key);
+    return { kind: "fact", fact, key };
+  });
+}
+
+/** O arquivo da memória: os fatos que vão ao agente, os que ficam de fora e as outras linhas (spec #12749). */
+export function inspectMemory(text: string): MemoryFile {
+  const out: MemoryFile = { facts: [], skipped: [], outside: 0 };
+  for (const k of classify(text.split("\n"))) {
+    if (k.kind === "fact") out.facts.push(k.fact);
+    else if (k.kind === "skipped") out.skipped.push({ text: k.fact, reason: k.reason });
+    else if (k.kind === "other" && k.written) out.outside++;
   }
-  return facts.slice(0, MEMORY_MAX);
+  return out;
+}
+
+/** Os fatos do arquivo que vão ao agente, na ordem dele. */
+export function parseMemory(text: string): string[] {
+  return inspectMemory(text).facts;
 }
 
 /** O arquivo para estes fatos: sempre os mesmos bytes. */
@@ -53,35 +93,132 @@ export function formatMemory(facts: readonly string[]): string {
   return [...HEADER, ...facts.map((f) => `- ${cleanFact(f)}`), ""].join("\n");
 }
 
+/** Os fatos limpos, sem repetir, sem vazio, até o limite: o que a memória pode guardar. */
+function normalizeFacts(facts: readonly string[]): string[] {
+  return parseMemory(formatMemory(facts.map(cleanFact).filter((f) => f && f.length <= FACT_MAX_CHARS)));
+}
+
 /**
- * Os fatos do cofre. Sem o arquivo, nenhum. **Qualquer outro erro sobe** (`E_MEMORY_UNREADABLE`: sem permissão, uma
- * pasta no lugar, um arquivo do iCloud que não baixou): quem ia gravar não grava por cima de fatos que não leu
- * (revisão do T11665).
+ * O arquivo novo a partir do que está no cofre (spec #12749): só as linhas dos fatos mudam. Um fato que saiu tem a linha
+ * apagada. Um fato novo entra no lugar do fato que saiu na mesma posição da lista (o fato editado em Ajustes fica onde
+ * estava); senão, logo depois do fato que vem antes dele (o esquecido volta no lugar, e o anotado vai para o fim). O resto (o cabeçalho, os parágrafos, os títulos e os fatos que o agente não lê) fica onde está.
+ * `keepSkipped`: os fatos de fora que ficam (Ajustes apaga um deles); sem a lista, ficam todos.
  */
+export function mergeMemory(existing: string | null, facts: readonly string[], keepSkipped: readonly string[] | null = null): string {
+  const wanted = normalizeFacts(facts);
+  if (existing === null) return formatMemory(wanted);
+  const byKey = new Map(wanted.map((f) => [factKey(f), f]));
+  const keep = keepSkipped === null ? null : new Set(keepSkipped.map(cleanFact));
+  const lines = existing.split("\n");
+  const kinds = classify(lines);
+  const out: string[] = [];
+  /** Onde está, em `out`, a linha de cada fato que ficou. */
+  const at = new Map<string, number>();
+  /** Onde estava, em `out`, a linha de cada fato que saiu, pela posição dele na lista antiga. */
+  const slots = new Map<number, number>();
+  let oldIndex = 0;
+  /** A última linha de fato de qualquer tipo, para um fato novo sem vizinho na lista. */
+  let lastFactLine = -1;
+  lines.forEach((line, i) => {
+    const k = kinds[i]!;
+    if (k.kind === "fact") {
+      const next = byKey.get(k.key);
+      const index = oldIndex++;
+      if (next === undefined) {
+        slots.set(index, out.length);
+        return;
+      }
+      at.set(k.key, out.length);
+      lastFactLine = out.length;
+      out.push(next === k.fact ? line : `- ${next}`);
+    } else if (k.kind === "dup") {
+      if (!byKey.has(k.key)) return;
+      lastFactLine = out.length;
+      out.push(line);
+    } else if (k.kind === "skipped") {
+      if (keep && !keep.has(k.fact)) return;
+      lastFactLine = out.length;
+      out.push(line);
+    } else out.push(line);
+  });
+  const insert = (pos: number, line: string) => {
+    out.splice(pos, 0, line);
+    for (const [key, p] of at) if (p >= pos) at.set(key, p + 1);
+    for (const [index, p] of slots) if (p >= pos) slots.set(index, p + 1);
+    if (lastFactLine >= pos) lastFactLine++;
+  };
+  let prev: number | null = null;
+  wanted.forEach((f, index) => {
+    const key = factKey(f);
+    const here = at.get(key);
+    if (here !== undefined) {
+      prev = here;
+      return;
+    }
+    const slot = slots.get(index);
+    slots.delete(index);
+    let pos: number;
+    if (slot !== undefined) pos = slot;
+    else if (prev !== null) pos = prev + 1;
+    else if (at.size) pos = Math.min(...at.values());
+    else if (lastFactLine >= 0) pos = lastFactLine + 1;
+    else {
+      // Nenhuma linha de fato ainda: os fatos vão no fim do texto, depois de uma linha em branco.
+      while (out.length && out.at(-1)!.trim() === "") out.pop();
+      if (out.length) out.push("");
+      pos = out.length;
+      out.push("");
+    }
+    insert(pos, `- ${f}`);
+    at.set(key, pos);
+    prev = pos;
+  });
+  const text = out.join("\n");
+  return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+/**
+ * O arquivo da memória no cofre. Sem o arquivo, vazio. **Qualquer outro erro sobe** (`E_MEMORY_UNREADABLE`: sem
+ * permissão, uma pasta no lugar, um arquivo do iCloud que não baixou): quem ia gravar não grava por cima de fatos que
+ * não leu (revisão do T11665).
+ */
+export function readMemoryFile(vaultRoot: string): MemoryFile {
+  const text = readMemoryText(vaultRoot);
+  return text === null ? { facts: [], skipped: [], outside: 0 } : inspectMemory(text);
+}
+
+/** Os fatos do cofre que vão ao agente. */
 export function readMemory(vaultRoot: string): string[] {
+  return readMemoryFile(vaultRoot).facts;
+}
+
+function readMemoryText(vaultRoot: string): string | null {
   const file = path.join(vaultRoot, MEMORY_FILE);
   try {
-    return parseMemory(readFileSync(file, "utf8"));
+    return readFileSync(file, "utf8");
   } catch (e) {
-    if ((e as { code?: string })?.code === "ENOENT") return [];
+    if ((e as { code?: string })?.code === "ENOENT") return null;
     throw new MemoryError("E_MEMORY_UNREADABLE", `o Kiwi não conseguiu ler a memória (${MEMORY_FILE}): nada foi mudado nela`);
   }
 }
 
-/** Grava a memória inteira (escrita atômica). Sem fatos, o arquivo fica com o cabeçalho só. */
-export function writeMemory(vaultRoot: string, facts: readonly string[]): string[] {
-  const clean = parseMemory(formatMemory(facts));
+/**
+ * Grava a memória (escrita atômica): só as linhas dos fatos mudam, o resto do que a pessoa escreveu fica (spec #12749).
+ * Sem o arquivo, ele nasce com o cabeçalho. `keepSkipped`: veja `mergeMemory`.
+ */
+export function writeMemory(vaultRoot: string, facts: readonly string[], keepSkipped: readonly string[] | null = null): MemoryFile {
+  const text = mergeMemory(readMemoryText(vaultRoot), facts, keepSkipped);
   const file = path.join(vaultRoot, MEMORY_FILE);
   mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
-  writeFileSync(tmp, formatMemory(clean));
+  writeFileSync(tmp, text);
   renameSync(tmp, file);
-  return clean;
+  return inspectMemory(text);
 }
 
 export class MemoryError extends Error {
   constructor(
-    readonly code: "E_MEMORY_FULL" | "E_NOT_FOUND" | "E_BAD_ARGS" | "E_MEMORY_UNREADABLE",
+    readonly code: "E_MEMORY_FULL" | "E_MEMORY_OVER" | "E_NOT_FOUND" | "E_BAD_ARGS" | "E_MEMORY_UNREADABLE",
     message: string,
   ) {
     super(message);
