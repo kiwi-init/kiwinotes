@@ -104,7 +104,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "" });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
@@ -115,10 +115,15 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     controlShortcut: false,
     meetings: DEFAULT_AGENT_MEETING_SETTINGS,
     summary: DEFAULT_SUMMARY_SETTINGS,
+    instructions: "",
   });
   // O modo econômico (spec #11084): desligado de fábrica, e só um true o liga.
   expect(sanitizeSettings({ agent: { economy: true } }).agent.economy).toBe(true);
   expect(sanitizeSettings({ agent: { economy: "sim" } }).agent.economy).toBe(false);
+  // As instruções (spec #11469): texto, até 2.000 caracteres, sem \r.
+  expect(sanitizeSettings({ agent: { instructions: "sempre em português\r\nsem emoji" } }).agent.instructions).toBe("sempre em português\nsem emoji");
+  expect(sanitizeSettings({ agent: { instructions: "x".repeat(2500) } }).agent.instructions).toHaveLength(2000);
+  expect(sanitizeSettings({ agent: { instructions: 3 } }).agent.instructions).toBe("");
   expect(sanitizeSettings({ agent: { enabled: "sim", model: "../x", effort: 3 } }).agent).toEqual(DEFAULT_AGENT_SETTINGS);
 });
 

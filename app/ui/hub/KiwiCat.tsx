@@ -7,6 +7,7 @@ import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
 import { CatBubble } from "./CatBubble";
+import { MemoryBubble } from "./MemoryBubble";
 import { ProposalBubble } from "./ProposalBubble";
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 /**
@@ -22,6 +23,8 @@ function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolea
   const refresh = useRef<() => void>(() => {});
   /** O balão da resposta está na tela: a proposta da reunião espera ele sair (spec #8360). */
   const [talking, setTalking] = useState(false);
+  /** O balão da memória está na tela (spec #11469): a proposta espera ele sair. */
+  const [noting, setNoting] = useState(false);
   useEffect(() => { handle.current?.update({ parado: reduced }); }, [reduced]);
   // A cor da névoa (spec #9349): troca na hora, com a passagem de 400 ms do módulo, sem reiniciar o gato.
   const corRef = useRef(cor); corRef.current = cor;
@@ -181,7 +184,9 @@ function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolea
           o que chega, e aparece depois que o pedido sai (#10868). */}
       <CatBubble reduced={reduced} hidden={asking || away} onShown={setTalking} />
       {/* A proposta da reunião (spec #8360): no mesmo canto, depois que a resposta sai da tela. */}
-      <ProposalBubble hidden={asking || away || talking} />
+      {/* "Anotei: …" (spec #11469): depois da resposta; a proposta da reunião espera ele sair. */}
+      <MemoryBubble hidden={asking || away || talking} onShown={setNoting} />
+      <ProposalBubble hidden={asking || away || talking || noting} />
     </>
   );
 }

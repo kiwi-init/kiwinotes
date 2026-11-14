@@ -45,6 +45,7 @@ import type {
   AgentChangeView,
   AgentClaudeStatus,
   AgentModelChoice,
+  AgentMemoryView,
   AgentProposalSummary,
   AgentProposalView,
   AgentStatus,
@@ -55,6 +56,21 @@ import type {
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
 import { type NoteModel, noteModelText } from "./note-model.ts";
+import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
+
+/** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
+const MEMORY_OPS_KEEP = 50;
+interface MemoryOp {
+  id: string;
+  /** O pedido do agente em que a mudança aconteceu: o balão mostra todas as do mesmo pedido. */
+  request: string;
+  action: "remember" | "forget";
+  fact: string;
+  /** Onde o fato estava (para o esquecido voltar no mesmo lugar). */
+  index: number;
+  at: number;
+  undone?: boolean;
+}
 import {
   addedLines,
   mainHasMeeting,
@@ -70,7 +86,7 @@ import {
   type ProposalMeeting,
   type ProposalProject,
 } from "./proposals.ts";
-import type { ProposalDraft, ProposalSink, SummaryDraft } from "./tools/tools.ts";
+import type { MemorySink, ProposalDraft, ProposalSink, SummaryDraft } from "./tools/tools.ts";
 import { DEFAULT_AGENT_MEETING_SETTINGS, sanitizeAgentMeetingSettings, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
@@ -151,7 +167,7 @@ export interface AgentServiceDeps {
   log?: (msg: string) => void;
 }
 
-type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO" | "E_CHANGED";
+type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO" | "E_CHANGED" | "E_SECRET";
 
 /** Um erro de capacidade do agente, com o código que a tela entende. */
 /** Um pedido de resumo executivo (spec #11546): com o modo econômico, a pessoa confirma antes. */
@@ -276,6 +292,140 @@ export class AgentService {
     this.noteModel = source;
   }
   private noteModel: (() => Promise<NoteModel>) | null = null;
+
+  /**
+   * A raiz do cofre aberto (spec #11469): a memória do agente fica nele, em `.kiwi/agente/sobre-mim.md`. Sem ela (os
+   * testes antigos), as ferramentas da memória não aparecem e o pedido vai sem a memória.
+   */
+  useVaultRoot(source: () => Promise<string>): void {
+    this.vaultRoot = source;
+  }
+  private vaultRoot: (() => Promise<string>) | null = null;
+
+  /** O glossário do ditado (spec #11469, T11667): os termos do dicionário, que vão no começo fixo do pedido. */
+  useGlossary(source: () => Promise<string[]>): void {
+    this.glossary = source;
+  }
+  private glossary: (() => Promise<string[]>) | null = null;
+  /** As últimas mudanças na memória, para o [Desfazer] do balão. Só na memória do app. */
+  private memoryOps: MemoryOp[] = [];
+  private readonly memoryListeners = new Set<(v: AgentMemoryView) => void>();
+  /** Uma mudança na memória por vez: o agente e a pessoa não gravam um por cima do outro. */
+  private memoryQueue: Promise<unknown> = Promise.resolve();
+
+  private oneMemory<T>(run: (root: string) => T | Promise<T>): Promise<T> {
+    const go = async () => {
+      if (!this.vaultRoot) throw new AgentServiceError("E_NO_UNDO", "Este app não guarda a memória do agente.");
+      return run(await this.vaultRoot());
+    };
+    const next = this.memoryQueue.then(go, go);
+    this.memoryQueue = next.catch(() => {});
+    return next;
+  }
+
+  private memoryOp(action: MemoryOp["action"], fact: string, index: number): MemoryOp {
+    const op: MemoryOp = { id: crypto.randomUUID(), request: this.activityId(), action, fact, index, at: (this.d.now ?? Date.now)() };
+    this.memoryOps = [...this.memoryOps, op].slice(-MEMORY_OPS_KEEP);
+    return op;
+  }
+
+  /** A `memory_remember` e a `memory_forget` gravam aqui, e o balão mostra a mudança com o [Desfazer]. */
+  private readonly memorySink: MemorySink = {
+    remember: (fact) =>
+      this.oneMemory((root) => {
+        const r = rememberFact(readMemory(root), fact);
+        if (!r.added) return { added: false, total: r.facts.length };
+        const facts = writeMemory(root, r.facts);
+        this.emitMemory(facts, this.memoryOp("remember", r.facts[r.index]!, r.index));
+        return { added: true, total: facts.length };
+      }),
+    forget: (fact) =>
+      this.oneMemory((root) => {
+        const r = forgetFact(readMemory(root), fact);
+        const facts = writeMemory(root, r.facts);
+        this.emitMemory(facts, this.memoryOp("forget", r.removed, r.index));
+        return { removed: r.removed, total: facts.length };
+      }),
+  };
+
+  private viewOf(facts: string[]): AgentMemoryView {
+    // As mudanças do último pedido que mexeu na memória, na ordem: cada uma com o seu [Desfazer] no balão.
+    const request = this.memoryOps.at(-1)?.request;
+    const changes = this.memoryOps
+      .filter((o) => o.request === request)
+      .map((o) => ({ id: o.id, action: o.action, fact: o.fact, at: new Date(o.at).toISOString(), ...(o.undone ? { undone: true } : {}) }));
+    return { facts, max: MEMORY_MAX, changes };
+  }
+
+  private emitMemory(facts: string[], _op?: MemoryOp): void {
+    const v = this.viewOf(facts);
+    for (const fn of this.memoryListeners) fn(v);
+  }
+
+  /** A memória do agente agora (`agent.memory`), com a última mudança para o balão. Não precisa do agente ligado. */
+  memoryView(): Promise<AgentMemoryView> {
+    return this.oneMemory((root) => this.viewOf(readMemory(root)));
+  }
+
+  /**
+   * A pessoa muda a memória em Ajustes › Agente › Memória (`agent.memorySet`, T11668): a lista inteira, na ordem dela.
+   * Cada fato passa pelo filtro do guardrail, como o que o agente anota: a memória vai inteira no começo de todo pedido,
+   * sem o filtro do pedido, então um trecho com cara de senha ou token é recusado.
+   */
+  memorySet(facts: unknown): Promise<AgentMemoryView> {
+    if (!Array.isArray(facts) || facts.some((f) => typeof f !== "string")) return Promise.reject(new AgentServiceError("E_BAD_ARGS", "facts deve ser uma lista de textos"));
+    const list = (facts as string[]).map(cleanFact).filter(Boolean);
+    if (list.length > MEMORY_MAX) return Promise.reject(new AgentServiceError("E_BAD_ARGS", `A memória tem no máximo ${MEMORY_MAX} fatos.`));
+    const long = list.find((f) => f.length > FACT_MAX_CHARS);
+    if (long !== undefined) return Promise.reject(new AgentServiceError("E_BAD_ARGS", `Um fato tem no máximo ${FACT_MAX_CHARS} caracteres.`));
+    const secret = list.find((f) => /‹segredo [^›\n]{0,40}›/.test(f) || this.guard.read("", f).held > 0);
+    if (secret !== undefined)
+      return Promise.reject(new AgentServiceError("E_SECRET", "Um fato parece ter uma senha ou um token. A memória vai ao agente em todo pedido: tire esse trecho."));
+    return this.oneMemory((root) => {
+      const saved = writeMemory(root, list);
+      this.emitMemory(saved);
+      return this.viewOf(saved);
+    });
+  }
+
+  /** "Apagar tudo" (`agent.memoryClear`): a memória fica vazia; o arquivo continua, só com o cabeçalho. */
+  memoryClear(): Promise<AgentMemoryView> {
+    return this.oneMemory((root) => {
+      const saved = writeMemory(root, []);
+      this.emitMemory(saved);
+      return this.viewOf(saved);
+    });
+  }
+
+  /** A memória mudou (`agent.memoryChanged`): pelo agente, pela pessoa ou por um [Desfazer]. */
+  onMemoryChanged(fn: (v: AgentMemoryView) => void): () => void {
+    this.memoryListeners.add(fn);
+    return () => this.memoryListeners.delete(fn);
+  }
+
+  /**
+   * O [Desfazer] do balão (`agent.memoryUndo`): o fato anotado sai, ou o esquecido volta no lugar dele. Só a mudança
+   * dada, e só se ela ainda vale (a pessoa pode ter mudado a memória depois).
+   */
+  memoryUndo(id: string): Promise<AgentMemoryView> {
+    return this.oneMemory((root) => {
+      const op = this.memoryOps.find((o) => o.id === id);
+      if (!op) throw new AgentServiceError("E_NOT_FOUND", "Essa mudança na memória já não pode ser desfeita.");
+      if (op.undone) return this.viewOf(readMemory(root));
+      let facts = readMemory(root);
+      const at = facts.findIndex((f) => factKey(f) === factKey(op.fact));
+      if (op.action === "remember") {
+        if (at >= 0) facts = facts.filter((_, i) => i !== at);
+      } else if (at < 0) {
+        if (facts.length >= MEMORY_MAX) throw new AgentServiceError("E_BAD_ARGS", `A memória está cheia (${MEMORY_MAX} fatos): apague um antes de trazer este de volta.`);
+        facts = [...facts.slice(0, op.index), op.fact, ...facts.slice(op.index)];
+      }
+      op.undone = true;
+      facts = writeMemory(root, facts);
+      this.emitMemory(facts);
+      return this.viewOf(facts);
+    });
+  }
 
   useReader(reader: VaultReader): void {
     this.reader = reader;
@@ -457,7 +607,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -518,6 +668,7 @@ export class AgentService {
       controlShortcut: s.controlShortcut === true,
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
       summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
+      instructions: s.instructions ?? "",
     };
   }
 
@@ -1136,7 +1287,18 @@ export class AgentService {
       // As instruções fixas vão na frente do pedido, sempre iguais (o cache): o Modelo de nota (spec #11102) e o modo
       // econômico (spec #11084). Um erro ao ler o modelo não derruba o pedido: ele vai sem o modelo.
       const model = this.noteModel ? await this.noteModel().catch(() => null) : null;
-      const fixed = (model ? noteModelText(model) : "") + (s.economy ? ECONOMY_INSTRUCTIONS : "");
+      // A memória do agente (spec #11469) vem depois do modelo, com os mesmos bytes para os mesmos fatos.
+      const memory = this.vaultRoot ? await this.memoryView().then((v) => memoryText(v.facts), () => "") : "";
+      // As instruções da pessoa e o glossário do ditado (T11667), sempre nesta ordem. No modo econômico, o glossário vai
+      // só com os termos que aparecem no pedido.
+      const terms = this.glossary ? await this.glossary().catch(() => []) : [];
+      // No modo econômico o glossário muda a cada pedido (só os termos dele): ele vai por último, depois das instruções do
+      // econômico, para o cache pegar tudo antes dele (revisão do T11667).
+      const fixed =
+        (model ? noteModelText(model) : "") +
+        memory +
+        instructionsText(s.instructions ?? "") +
+        (s.economy ? ECONOMY_INSTRUCTIONS + glossaryText(terms, text) : glossaryText(terms));
       const answer = await host.ask(fixed + text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
@@ -1204,6 +1366,7 @@ export class AgentService {
             decider: () => this.decider(),
             economy: () => this.economyNow,
             ...(writer ? { proposals: this.proposalSink } : {}),
+            ...(this.vaultRoot ? { memory: this.memorySink } : {}),
             version: this.d.version,
             onCall: (e) => this.onToolCall(e),
           })
@@ -1275,12 +1438,21 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O resumo executivo (spec #11546): os blocos e o período, inteiros e saneados.
     if (o.summary !== undefined) patch.summary = sanitizeSummarySettings(o.summary);
     // "Suas reuniões" (spec #8360): inteiro, saneado; uma pasta fora do cofre volta para a do projeto.
     if (o.meetings !== undefined) patch.meetings = sanitizeAgentMeetingSettings(o.meetings);
+    // As instruções da pessoa (spec #11469): valem a partir do pedido seguinte. Elas vão no começo fixo de todo pedido,
+    // por fora do filtro do pedido: um trecho com cara de senha ou token é recusado aqui, e nada é gravado (revisão do
+    // T11667). Assim o começo continua com os mesmos bytes, sem marcador no meio.
+    if (o.instructions !== undefined) {
+      const text = o.instructions.replace(/\r\n?/g, "\n").slice(0, INSTRUCTIONS_MAX);
+      if (/‹segredo [^›\n]{0,40}›/.test(text) || this.guard.read("", text).held > 0)
+        throw new AgentServiceError("E_SECRET", "As instruções têm uma senha ou um token: tire esse trecho antes de salvar. Elas vão ao agente em todo pedido.");
+      patch.instructions = text;
+    }
     if (o.model !== undefined) patch.model = o.model;
     if (o.effort !== undefined) patch.effort = o.effort;
     if (o.economy !== undefined) {

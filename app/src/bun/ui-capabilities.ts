@@ -1109,7 +1109,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
@@ -1118,6 +1118,8 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (a.controlShortcut !== undefined && typeof a.controlShortcut !== "boolean") throw bad("agent.configure: controlShortcut must be a boolean");
       if (a.meetings !== undefined && (!a.meetings || typeof a.meetings !== "object" || Array.isArray(a.meetings))) throw bad("agent.configure: meetings must be an object");
       if (a.summary !== undefined && (!a.summary || typeof a.summary !== "object" || Array.isArray(a.summary))) throw bad("agent.configure: summary must be an object");
+      if (a.instructions !== undefined && (typeof a.instructions !== "string" || a.instructions.length > 2000))
+        throw bad("agent.configure: instructions must be a text up to 2000 characters");
       return agentCall((agent) =>
         agent.configure({
           model: a.model as string | undefined,
@@ -1126,6 +1128,7 @@ export function uiCapabilities(deps: CapabilityDeps,
           ...(a.controlShortcut !== undefined ? { controlShortcut: a.controlShortcut as boolean } : {}),
           ...(a.meetings !== undefined ? { meetings: a.meetings } : {}),
           ...(a.summary !== undefined ? { summary: a.summary } : {}),
+          ...(a.instructions !== undefined ? { instructions: a.instructions as string } : {}),
         }),
       );
     },
@@ -1231,6 +1234,25 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = fields(args, "agent.proposalDiscard", ["id"]);
       if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalDiscard: id must be the id of a proposal");
       return agentCall((agent) => agent.proposalDiscard(a.id as string));
+    },
+    // A memória do agente (spec #11469): o que ele sabe sobre a pessoa, no cofre.
+    "agent.memory": (args) => {
+      noArgs(args, "agent.memory");
+      return agentCall((agent) => agent.memoryView());
+    },
+    "agent.memoryUndo": (args) => {
+      const a = fields(args, "agent.memoryUndo", ["id"]);
+      if (typeof a.id !== "string" || !a.id) throw bad("agent.memoryUndo: id must be the id of a memory change");
+      return agentCall((agent) => agent.memoryUndo(a.id as string));
+    },
+    "agent.memorySet": (args) => {
+      const a = fields(args, "agent.memorySet", ["facts"]);
+      if (!Array.isArray(a.facts) || a.facts.some((f) => typeof f !== "string")) throw bad("agent.memorySet: facts must be a list of texts");
+      return agentCall((agent) => agent.memorySet(a.facts));
+    },
+    "agent.memoryClear": (args) => {
+      noArgs(args, "agent.memoryClear");
+      return agentCall((agent) => agent.memoryClear());
     },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);

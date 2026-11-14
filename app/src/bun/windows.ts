@@ -209,6 +209,9 @@ const capabilities = uiCapabilities({
 stores.agent.useReader(readerFromCapabilities(capabilities));
 // O Modelo de nota (spec #11102) do cofre aberto, para o começo fixo do pedido.
 stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
+// A memória do agente (spec #11469) fica no cofre aberto.
+stores.agent.useVaultRoot(async () => (await stores.folders.current()).notes.root);
+stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
 stores.agent.useWriter(writerFromCapabilities(capabilities));
 // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
 stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
@@ -426,6 +429,10 @@ stores.agent.onTurn((turn) => {
 // A pergunta na dúvida (spec #9873): só os ids; a janela lê o cartão pelo `agent.question`.
 stores.agent.onQuestionChanged((e) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.questionChanged", payload: e });
+});
+// A memória do agente (spec #11469): o balão "Anotei" e a tela de Ajustes.
+stores.agent.onMemoryChanged((view) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.memoryChanged", payload: view });
 });
 // A proposta da reunião (spec #8360): nasceu, foi escolhida, aplicada ou descartada.
 stores.agent.onProposalsChanged((proposals) => {

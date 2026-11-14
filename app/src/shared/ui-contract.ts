@@ -169,7 +169,10 @@ export type { NoteModel };
 //   prontas de `kiwicat-colors.ts`; o `settings.set` recusa qualquer outra). Só acréscimo.
 // 1.59.0 (T11559, spec #11546): o resumo executivo. O `summary` no `AgentStatus` e no `agent.configure` (os 6 blocos e o
 //   período do primeiro resumo) e o `kind: "summary"` nas propostas. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.59.0";
+// 1.60.0 (T11665, spec #11469): a memória do agente. O `agent.memory` (os fatos e a última mudança), o
+//   `agent.memoryUndo` (o [Desfazer] de cada mudança no balão), o `agent.memorySet` e o `agent.memoryClear` (Ajustes) e o evento `agent.memoryChanged`; as `instructions` no `AgentStatus` e
+//   no `agent.configure`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.60.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -478,7 +481,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings }; result: AgentStatus };
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -571,6 +574,27 @@ export interface UiCapabilities {
   "agent.proposalPrepare": { args: { id: string }; result: { id: string } };
   /** [Descartar], ou "Agora não" na pergunta do modo econômico (1.57.0): nada muda nas notas. */
   "agent.proposalDiscard": { args: { id: string }; result: AgentProposalSummary };
+  /** A memória do agente (1.60.0, spec #11469): os fatos de `.kiwi/agente/sobre-mim.md` e a última mudança. */
+  "agent.memory": { args: Record<string, never>; result: AgentMemoryView };
+  /** O [Desfazer] de uma mudança na memória (1.60.0): o fato anotado sai, ou o esquecido volta no lugar. */
+  "agent.memoryUndo": { args: { id: string }; result: AgentMemoryView };
+  /** A pessoa muda a memória em Ajustes (1.60.0): a lista inteira. Um fato com cara de senha ou token é recusado. */
+  "agent.memorySet": { args: { facts: string[] }; result: AgentMemoryView };
+  /** "Apagar tudo" (1.60.0): a memória fica vazia. */
+  "agent.memoryClear": { args: Record<string, never>; result: AgentMemoryView };
+}
+
+/** A memória do agente (1.60.0, spec #11469). */
+export interface AgentMemoryView {
+  /** Os fatos, na ordem do arquivo. */
+  facts: string[];
+  /** O máximo de fatos (60). */
+  max: number;
+  /**
+   * As mudanças que o agente fez no último pedido que mexeu na memória, na ordem (o balão "Anotei: …", cada uma com o
+   * seu [Desfazer]); vazio sem nenhuma desde que o app abriu.
+   */
+  changes: { id: string; action: "remember" | "forget"; fact: string; at: string; undone?: boolean }[];
 }
 
 /** Uma proposta da reunião (1.57.0, spec #8360). As horas em ISO. */
@@ -769,6 +793,8 @@ export interface AgentStatus {
   meetings: AgentMeetingSettings;
   /** O resumo executivo (1.59.0, spec #11546): os 6 blocos e o período do primeiro resumo. */
   summary: SummarySettings;
+  /** As instruções da pessoa para o agente (1.60.0, spec #11469): até 2.000 caracteres, em todo pedido. */
+  instructions: string;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */
@@ -941,6 +967,10 @@ export const UI_CAPABILITIES = [
   "agent.proposalApply",
   "agent.proposalPrepare",
   "agent.proposalDiscard",
+  "agent.memory",
+  "agent.memoryUndo",
+  "agent.memorySet",
+  "agent.memoryClear",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -996,6 +1026,8 @@ export interface UiEvents {
   "agent.voice": AgentVoiceUi;
   /** Uma proposta da reunião nasceu, foi escolhida, aplicada ou descartada (1.57.0, spec #8360). */
   "agent.proposalsChanged": { proposals: AgentProposalSummary[] };
+  /** A memória do agente mudou (1.60.0, spec #11469): pelo agente, pela pessoa ou por um [Desfazer]. */
+  "agent.memoryChanged": AgentMemoryView;
 }
 
 /** O que o gato mostra durante a fala ao agente (1.55.0). `voz`: o nível do mic, de 0 a 1. */

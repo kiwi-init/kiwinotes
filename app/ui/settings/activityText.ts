@@ -46,6 +46,7 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
     else if (r.tool === "meetings_list") listedMeetings = true;
     else if (r.tool === "project_status") projects.add(r.target ?? `#${projects.size}`);
     else if (r.tool === "projects_list") listedProjects = true;
+    // A memória (spec #11469) tem as linhas dela (`memoryLines`): não é uma leitura de nota.
   }
   const parts: string[] = [];
   if (notes.size) parts.push(`leu ${plural(notes.size, "nota", "notas")}`);
@@ -55,9 +56,16 @@ export function readsLine(reads: AgentActivityRequest["reads"]): string {
   if (listedMeetings) parts.push("listou as reuniões");
   if (projects.size) parts.push(`viu ${plural(projects.size, "projeto", "projetos")}`);
   if (listedProjects) parts.push("listou os projetos");
-  if (!parts.length) return "Não leu nenhuma nota.";
+  if (!parts.length) return reads.some((r) => r.tool.startsWith("memory_")) ? "" : "Não leu nenhuma nota.";
   const text = parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} e ${parts.at(-1)}`;
   return text[0]!.toUpperCase() + text.slice(1) + ".";
+}
+
+/** O que o agente mudou na memória (spec #11469), uma linha por fato: "Anotou na memória: “…”." */
+export function memoryLines(reads: AgentActivityRequest["reads"]): string[] {
+  return reads
+    .filter((r) => (r.tool === "memory_remember" || r.tool === "memory_forget") && r.target)
+    .map((r) => `${r.tool === "memory_remember" ? "Anotou na memória" : "Tirou da memória"}: “${r.target}”.`);
 }
 
 /**

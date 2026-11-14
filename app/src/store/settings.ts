@@ -86,6 +86,8 @@ export interface AgentSettings {
   controlShortcut: boolean;
   /** "Suas reuniões" (spec #8360): quando o agente propõe a nota da reunião, onde ela vai, o nome e os blocos. */
   meetings: AgentMeetingSettings;
+  /** As instruções da pessoa para o agente (spec #11469): até 2.000 caracteres, em todo pedido. */
+  instructions: string;
   /** O resumo executivo (spec #11546): os blocos e o período do primeiro. */
   summary: SummarySettings;
 }
@@ -141,6 +143,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   controlShortcut: false,
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   summary: DEFAULT_SUMMARY_SETTINGS,
+  instructions: "",
 };
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
@@ -159,6 +162,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     economy: o.economy === true,
     controlShortcut: o.controlShortcut === true,
     meetings: sanitizeAgentMeetingSettings(o.meetings),
+    instructions: typeof o.instructions === "string" ? o.instructions.replace(/\r\n?/g, "\n").slice(0, 2000) : "",
     summary: sanitizeSummarySettings(o.summary),
   };
 }
