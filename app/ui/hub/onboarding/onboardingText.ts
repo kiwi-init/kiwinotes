@@ -11,7 +11,7 @@ export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> 
   guardrail: { title: "O guardrail na prática", hint: "Escreva uma senha de mentira e veja o Kiwi esconder antes de qualquer coisa sair do Mac." },
   model: { title: "O Modelo de nota", hint: "Como o agente organiza as suas notas." },
   projects: { title: "Os seus projetos", hint: "Marque as pastas que são projetos. O Kiwi só lê os nomes, aqui no Mac." },
-  color: { title: "A cor do gato", hint: "A névoa em volta dele. Dá para trocar depois em Ajustes." },
+  color: { title: "Escolha a cor do Kiwi Cat!", hint: "A névoa em volta dele. Dá para trocar depois em Ajustes." },
   magic: { title: "Um gostinho", hint: "Se quiser, o agente organiza uma nota sua agora, e você vê o antes e o depois." },
   done: { title: "Pronto!", hint: "É só segurar o Control." },
 };

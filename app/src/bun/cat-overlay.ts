@@ -90,7 +90,7 @@ export class CatOverlay {
   }
 
   /**
-   * O agente ligado e o interruptor "Mostrar o Kiwi-cat por cima dos outros apps". Ligado, o helper carrega a página
+   * O agente ligado e o interruptor "Mostrar o Kiwi Cat por cima dos outros apps". Ligado, o helper carrega a página
    * (pronta e pausada, para a entrada ser rápida); desligado, solta a página e o desenho.
    */
   configure(enabled: boolean): void {
