@@ -258,7 +258,11 @@ export function sanitizeShortcuts(input: unknown, legacy: { notes?: unknown; mee
   return out;
 }
 
-/** Confere um `settings.set {shortcuts}`: cada um válido para a sua ação, e nenhum conflito no resultado. */
+/**
+ * Confere um `settings.set {shortcuts}`: cada um válido para a sua ação, e nenhum conflito que o patch cria. Um conflito
+ * que já estava no arquivo não trava os outros atalhos: o ditado no ⌃ direito de antes do spec #12946 e o Kiwi Cat no
+ * Control (o padrão novo) ficam como estão, o do Kiwi Cat desarmado (o agent-voice), até a pessoa escolher outro.
+ */
 export function checkShortcutsPatch(current: Shortcuts, input: unknown): { ok: true; patch: Partial<Shortcuts> } | { ok: false; error: string } {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "shortcuts must be an object" };
   const patch: Partial<Shortcuts> = {};
@@ -270,7 +274,7 @@ export function checkShortcutsPatch(current: Shortcuts, input: unknown): { ok: t
     else return { ok: false, error: `shortcuts.${id} is not a shortcut this action can use` };
   }
   const next = { ...current, ...patch };
-  for (const id of SHORTCUT_IDS) {
+  for (const id of Object.keys(patch) as ShortcutId[]) {
     const text = next[id];
     const other = text === null ? null : conflictOf(next, id, text);
     if (other) return { ok: false, error: `shortcuts.${id} and shortcuts.${other} use the same keys` };

@@ -186,11 +186,11 @@ await step("as Configurações sobem com a CSP das views, com todos os atalhos e
   await shotShortcuts(page, "01-atalhos-claro.png");
 });
 
-await step("gravar o ditado no ⌥ direito: salva, mostra, e aparece o Padrão (o bug do Fn fixo)", async () => {
+await step("gravar o ditado no ⌥ direito: salva, mostra, e aparece o Voltar ao padrão (o bug do Fn fixo)", async () => {
   await record(page, "Ditar", { shortcut: "rightOption" }, "02-gravando.png");
   await expectKey(page, "Ditar", "⌥ direito");
   if ((await calls(page)) !== '[{"shortcuts":{"dictation":"rightOption"}}]') throw new Error(await calls(page));
-  await row(page, "Ditar").getByRole("button", { name: "Padrão" }).waitFor();
+  await row(page, "Ditar").getByRole("button", { name: "Voltar ao padrão" }).waitFor();
 });
 
 await step("um atalho de outra ação: avisa, e Usar aqui troca e desliga o outro", async () => {
@@ -211,9 +211,9 @@ await step("uma sequência e um toque duplo aparecem como se lê", async () => {
   await expectKey(page, "Pausar meu mic", "⌘ direito duas vezes");
 });
 
-await step("Padrão volta ao padrão; Desligar desliga", async () => {
+await step("Voltar ao padrão volta ao padrão; Desligar desliga", async () => {
   await show(page, "Ditar");
-  await row(page, "Ditar").getByRole("button", { name: "Padrão" }).click();
+  await row(page, "Ditar").getByRole("button", { name: "Voltar ao padrão" }).click();
   await expectKey(page, "Ditar", "Fn 🌐");
   await show(page, "Nova nota");
   await row(page, "Nova nota").getByRole("button", { name: "Desligar" }).click();
@@ -259,7 +259,7 @@ await step("L5 (T5458): o cancelar grava uma tecla sozinha (⌫), pedindo bareKe
   const other = await page.evaluate(() => JSON.stringify((window as any).__recordArgs.at(-1)));
   if (other !== "{}") throw new Error(other);
   await show(page, "Cancelar a gravação");
-  await row(page, "Cancelar a gravação").getByRole("button", { name: "Padrão" }).click();
+  await row(page, "Cancelar a gravação").getByRole("button", { name: "Voltar ao padrão" }).click();
   await expectKey(page, "Cancelar a gravação", "Esc");
 });
 

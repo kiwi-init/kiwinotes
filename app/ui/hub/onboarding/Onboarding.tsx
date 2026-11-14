@@ -603,7 +603,7 @@ export function Onboarding() {
       <BigCat cor={catColorHex(settings.kiwicat.cor)} reduced={reduced} />
       <section className="kn-onb-step" key={step} aria-labelledby="kn-onb-title">
         <h1 id="kn-onb-title" className="kn-onb-title" tabIndex={-1}>{text.title}</h1>
-        <p className="kn-onb-hint">{text.hint}</p>
+        {text.hint ? <p className="kn-onb-hint">{text.hint}</p> : null}
         {step === "claude" ? (
           <ClaudeStep status={status} />
         ) : step === "control" ? (

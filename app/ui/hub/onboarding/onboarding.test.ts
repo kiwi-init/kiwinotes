@@ -5,9 +5,10 @@ import { expect, test } from "bun:test";
 import { ONBOARDING_STEPS } from "../../../src/shared/agent-onboarding.ts";
 import { holdName, stepText, canLeaveClaude, magicCandidates, magicRequest, projectCandidates, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, STEP_TEXT, stepAt, toneSummary } from "./onboardingText.ts";
 
-test("os 9 passos na ordem do spec, cada um com título e frase", () => {
+test("os 9 passos na ordem do spec, cada um com título e frase (o do Control, sem subtítulo: a frase é a do cartão)", () => {
   expect(STEP_COUNT).toBe(9);
-  expect(ONBOARDING_STEPS.map((s) => STEP_TEXT[s].title.length > 0 && STEP_TEXT[s].hint.length > 0)).toEqual(Array(9).fill(true));
+  expect(ONBOARDING_STEPS.map((s) => STEP_TEXT[s].title.length > 0 && (s === "control" || STEP_TEXT[s].hint.length > 0))).toEqual(Array(9).fill(true));
+  expect(STEP_TEXT.control.hint).toBe("");
   expect([stepAt(1), stepAt(4), stepAt(9), stepAt(0), stepAt(12)]).toEqual(["claude", "guardrail", "done", "claude", "done"]);
   expect(progressLine(3)).toBe("Passo 3 de 9");
 });
@@ -36,7 +37,7 @@ test("o cartão final: o jeito de falar, os projetos e o atalho", () => {
   expect(shortcutSummary(true, holdName("rightOption"))).toBe("Segure o ⌥ direito para falar");
   expect(stepText("control", "o ⌥ direito").title).toBe("Aperta o ⌥ direito e fala oi");
   expect(stepText("control").title).toBe("Aperta o Control e fala oi");
-  expect(controlLine({ phase: "waiting" }, "⌃⌥ Espaço")).toBe('Segure ⌃⌥ Espaço, diga "oi" e solte.');
+  expect(controlLine({ phase: "waiting" }, "⌃⌥ Espaço")).toBe('Segure ⌃⌥ Espaço, diga "oi" e solte. O microfone só abre enquanto você segura.');
 });
 
 test("o passo 2: a fala pelo Control vai de esperando a ouvindo, pedido e resposta", () => {
@@ -53,7 +54,7 @@ test("o passo 2: a fala pelo Control vai de esperando a ouvindo, pedido e respos
   expect(s).toEqual({ phase: "answered", text: "oi" });
   // Depois de dar certo, segurar de novo não apaga o "deu certo".
   expect(controlStep(s, { voice: { phase: "listening", voz: 0.2 } })).toEqual(s);
-  expect(controlLine({ phase: "waiting" })).toBe('Segure o Control, diga "oi" e solte.');
+  expect(controlLine({ phase: "waiting" })).toBe('Segure o Control, diga "oi" e solte. O microfone só abre enquanto você segura.');
 });
 
 test("o passo 3: o jeito de falar troca só a linha dele nas instruções, e o exemplo muda com a escolha", () => {

@@ -151,4 +151,16 @@ describe("o atalho do Kiwi Cat (spec #12946)", () => {
     expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { agent: "fn" })).toMatchObject({ ok: false });
     expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { agent: "rightOption" })).toEqual({ ok: true, patch: { agent: "rightOption" } });
   });
+
+  test("um arquivo de antes, com o ditado no ⌃ direito: os outros atalhos continuam mudando (revisão do T13145)", () => {
+    // Antes do #12946, o ditado podia ficar no ⌃ direito (o Control do agente só desarmava). O Kiwi Cat entra no Control.
+    const before = sanitizeShortcuts({ dictation: "rightControl" });
+    expect([before.dictation, before.agent]).toEqual(["rightControl", "control"]);
+    expect(checkShortcutsPatch(before, { meeting: "control+option+g" })).toEqual({ ok: true, patch: { meeting: "control+option+g" } });
+    // Escolher outro atalho para o Kiwi Cat resolve; repetir o do ditado, não.
+    expect(checkShortcutsPatch(before, { agent: "rightOption" })).toEqual({ ok: true, patch: { agent: "rightOption" } });
+    expect(checkShortcutsPatch(before, { agent: "control" })).toMatchObject({ ok: false });
+    // Trocar o ditado para o Fn também resolve.
+    expect(checkShortcutsPatch(before, { dictation: "fn" })).toEqual({ ok: true, patch: { dictation: "fn" } });
+  });
 });

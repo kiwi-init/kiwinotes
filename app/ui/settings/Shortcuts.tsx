@@ -79,9 +79,9 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
       ? def.scope === "app"
         ? "Aperte a combinação. Esc cancela."
         : id === "agent"
-          ? "Aperte a tecla (o ⌃, ⌥ ou ⌘ direito) ou a combinação. Esc cancela; para voltar ao Control, use Padrão."
+          ? "Aperte a tecla (o ⌃, ⌥ ou ⌘ direito) ou a combinação. Esc cancela; para voltar ao Control, use Voltar ao padrão."
         : id === "cancel"
-          ? "Aperte a tecla (⌫, ↩…) ou a combinação. Esc cancela; para voltar ao Esc, use Padrão."
+          ? "Aperte a tecla (⌫, ↩…) ou a combinação. Esc cancela; para voltar ao Esc, use Voltar ao padrão."
         : "Aperte o atalho: uma tecla, duas vezes, uma combinação ou uma sequência. Esc cancela."
       : state.kind === "conflict"
         ? `${shortcutLabel(state.text)} já é de “${shortcutDef(state.other).label}”. Usar aqui desliga lá.`
@@ -104,7 +104,7 @@ export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutI
           <>
             {current !== def.default ? (
               <Button className="kn-button kn-shortcut-reset" onClick={() => choose(def.default)} title={`Voltar ao padrão (${shortcutLabel(def.default)})`}>
-                Padrão
+                Voltar ao padrão
               </Button>
             ) : null}
             {/* O Kiwi Cat se desliga pelo interruptor dele (spec #12946), não pelo atalho. */}
