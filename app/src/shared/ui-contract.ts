@@ -210,7 +210,9 @@ export type { NoteModel };
 //   poucos, com o parar); o `projects.mark` aceita `{outside}`, uma pasta de fora da pasta de notas, e o `ProjectInfo`
 //   leva o `outside`; o `projects.choose` (o seletor de pasta, só no clique) e o `projects.reveal` (o link da nota de um
 //   projeto de fora abre a pasta no Finder). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.71.0";
+// 1.72.0 (T13143, spec #12949): o `kiwicat.posicao` (uma das seis posições do gato por cima dos apps; padrão `center`)
+//   e o `kiwicat.tamanho` (de 0,6 a 1,6, em passos de 0,1; padrão 1) nas settings. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.72.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */

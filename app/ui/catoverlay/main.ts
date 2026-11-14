@@ -9,6 +9,7 @@
 
 import "../src/styles/tokens.css";
 import { createKiwiCat } from "../kiwicat/cat";
+import { overlayPlacement } from "./placement";
 import type { FogState } from "../kiwicat/state";
 
 const STATES: readonly string[] = ["repouso", "acordou", "ouvindo", "thinking", "agindo", "pronto", "erro"];
@@ -53,11 +54,20 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const startColour = `#${query.get("cor") ?? ""}`;
 let colour = HEX.test(startColour) ? startColour.toLowerCase() : "claude";
 stats.cor = colour;
+// A posição e o tamanho (spec #12949): a janela do helper já vem no tamanho; a página põe o gato e o balão no lugar.
+const place = overlayPlacement(query);
+const css = document.documentElement.style;
+css.setProperty("--win-w", `${place.winW}px`);
+css.setProperty("--win-h", `${place.winH}px`);
+css.setProperty("--cat-w", `${place.catW}px`);
+css.setProperty("--cat-h", `${place.catH}px`);
+document.body.dataset.lado = place.lado;
+document.body.dataset.balao = place.balao;
 const cat = await createKiwiCat(root, {
   mode: "runtime",
   backend: asked === "webgl2" || asked === "none" ? asked : "auto",
-  width: 192,
-  height: 240,
+  width: place.catW,
+  height: place.catH,
   cutout: true,
   // O overlay fica por cima de tudo enquanto o agente trabalha: metade dos quadros e a névoa em meia resolução
   // (o spec #9810 mede a CPU; o lead aprovou o ritmo e a resolução em #11135). O desenho é o mesmo do hub.

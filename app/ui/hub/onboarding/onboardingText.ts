@@ -16,16 +16,17 @@ export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> 
   model: { title: "O Modelo de nota", hint: "Como o agente organiza as suas notas." },
   projects: { title: "Os seus projetos", hint: "Marque as pastas que são projetos. O Kiwi só lê os nomes, aqui no Mac." },
   color: { title: "Escolha a cor do Kiwi Cat!", hint: "A névoa em volta dele. Dá para trocar depois em Ajustes." },
+  place: { title: "Onde o Kiwi Cat aparece", hint: "Por cima dos outros apps, enquanto o agente trabalha: escolha o canto e o tamanho. Dá para trocar depois em Ajustes." },
   magic: { title: "Um gostinho", hint: "Se quiser, o agente organiza uma nota sua agora, e você vê o antes e o depois." },
   done: { title: "Pronto!", hint: "É só segurar o Control." },
 };
 
 export const STEP_COUNT = ONBOARDING_STEPS.length;
 
-/** O passo de 1 a 9, para o id. */
+/** O passo de 1 a 10, para o id. */
 export const stepAt = (n: number): OnboardingStep => ONBOARDING_STEPS[Math.min(Math.max(n, 1), STEP_COUNT) - 1]!;
 
-/** "Passo 3 de 9". */
+/** "Passo 3 de 10". */
 export const progressLine = (n: number) => `Passo ${n} de ${STEP_COUNT}`;
 
 /**

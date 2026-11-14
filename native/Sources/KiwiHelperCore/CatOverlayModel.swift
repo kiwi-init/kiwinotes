@@ -44,6 +44,94 @@ public enum CatOverlayLayout {
     }
 }
 
+/// Onde o gato fica na tela (spec #12949): as seis posições que a pessoa escolhe. O texto é o das settings.
+public enum CatPosition: String, CaseIterable, Sendable {
+    case center
+    case bottomCenter = "bottom-center"
+    case topLeft = "top-left"
+    case topRight = "top-right"
+    case bottomLeft = "bottom-left"
+    case bottomRight = "bottom-right"
+
+    /// Uma posição que o helper não conhece vira o centro, o padrão de antes.
+    public init(setting: String?) { self = setting.flatMap(CatPosition.init(rawValue:)) ?? .center }
+
+    var isTop: Bool { self == .topLeft || self == .topRight }
+    var isBottom: Bool { self == .bottomCenter || self == .bottomLeft || self == .bottomRight }
+    var isLeft: Bool { self == .topLeft || self == .bottomLeft }
+    var isRight: Bool { self == .topRight || self == .bottomRight }
+}
+
+/**
+ A posição e o tamanho do gato no overlay (spec #12949). A janela tem o gato (192 × 240 vezes a escala) e o balão, que
+ fica sempre com o mesmo tamanho (300 × 112) para o texto ser lido em qualquer escala. Nos cantos de cima o balão vai
+ embaixo do gato, para não sair da tela; nos cantos, o gato encosta no lado da janela que dá para o canto. A janela fica
+ dentro da área útil (sem a barra de menus e o Dock), a `margin` da borda nos cantos e embaixo.
+ */
+public struct CatPlacement: Equatable, Sendable {
+    public static let minScale: CGFloat = 0.6
+    public static let maxScale: CGFloat = 1.6
+    /// A distância da borda da área útil, nos cantos e no centro de baixo.
+    public static let margin: CGFloat = 24
+
+    public let position: CatPosition
+    public let scale: CGFloat
+
+    /// A escala fora dos limites (ou que não é número) fica no limite mais perto, ou em 1.
+    public init(position: CatPosition = .center, scale: Double = 1) {
+        self.position = position
+        self.scale = scale.isFinite ? min(max(CGFloat(scale), Self.minScale), Self.maxScale) : 1
+    }
+
+    public var catSize: CGSize {
+        CGSize(width: (CatOverlayLayout.height * CatOverlayLayout.aspect * scale).rounded(), height: (CatOverlayLayout.height * scale).rounded())
+    }
+
+    /// A janela: a largura do maior (gato ou balão) e a altura dos dois.
+    public var size: CGSize {
+        CGSize(width: max(catSize.width, CatOverlayLayout.bubbleWidth), height: catSize.height + CatOverlayLayout.bubbleHeight)
+    }
+
+    /// O balão embaixo do gato (os cantos de cima); nos outros, em cima.
+    public var bubbleBelow: Bool { position.isTop }
+
+    /// De que lado da janela o gato e o balão encostam: `left`, `right` ou `center`.
+    public var side: String { position.isLeft ? "left" : position.isRight ? "right" : "center" }
+
+    /// O que a página lê da URL: a escala, o lado e onde vai o balão.
+    public var query: String {
+        "escala=\(String(format: "%.2f", Double(scale)))&lado=\(side)&balao=\(bubbleBelow ? "abaixo" : "acima")"
+    }
+
+    /// A janela na área útil `visible` (coordenadas do AppKit: a origem embaixo, à esquerda).
+    public func frame(visible: CGRect) -> CGRect {
+        let s = size
+        let m = Self.margin
+        var x = position.isLeft ? visible.minX + m : position.isRight ? visible.maxX - m - s.width : visible.midX - s.width / 2
+        // No centro, o gato no meio da área útil, como antes (o balão acima dele).
+        var y = position.isTop ? visible.maxY - m - s.height : position.isBottom ? visible.minY + m : visible.midY - catSize.height / 2
+        x = min(max(x, visible.minX), visible.maxX - s.width)
+        y = min(max(y, visible.minY), visible.maxY - s.height)
+        return CGRect(x: x.rounded(), y: y.rounded(), width: s.width, height: s.height)
+    }
+
+    /// Onde o gato fica dentro da janela `frame` (na tela).
+    public func catRect(in frame: CGRect) -> CGRect {
+        let c = catSize
+        let x = side == "left" ? frame.minX : side == "right" ? frame.maxX - c.width : frame.midX - c.width / 2
+        let y = bubbleBelow ? frame.maxY - c.height : frame.minY
+        return CGRect(x: x, y: y, width: c.width, height: c.height)
+    }
+
+    /// Onde o balão fica dentro da janela `frame` (na tela).
+    public func bubbleRect(in frame: CGRect) -> CGRect {
+        let w = CatOverlayLayout.bubbleWidth, h = CatOverlayLayout.bubbleHeight
+        let x = side == "left" ? frame.minX : side == "right" ? frame.maxX - w : frame.midX - w / 2
+        let y = bubbleBelow ? frame.minY : frame.maxY - h
+        return CGRect(x: x, y: y, width: w, height: h)
+    }
+}
+
 /// O balão do gato no overlay (spec #12938): o argumento do `kiwiOverlay.set({bubble: …})`, em JSON. O texto vem do
 /// agente: só como dado de um literal JSON, nunca colado no script.
 public enum CatOverlayBubble {

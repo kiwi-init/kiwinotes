@@ -49,7 +49,7 @@ describe("o gato no overlay", () => {
   test("ligado, o helper carrega a página; desligado, solta", () => {
     const { cat, take } = rig();
     cat.configure(true);
-    expect(take()).toEqual([{ type: "catOverlay.load" }]);
+    expect(take()).toEqual([{ type: "catOverlay.place", posicao: "center", escala: 1 }, { type: "catOverlay.load" }]);
     cat.configure(true);
     expect(take()).toEqual([]);
     cat.configure(false);
@@ -184,7 +184,8 @@ describe("o gato no overlay ligado ao app", () => {
     const turnFns = new Set<(e: AgentTurnEvent) => void>();
     const readyFns = new Set<() => void>();
     const status = (enabled: boolean) => ({ enabled }) as AgentStatus;
-    const settings = (overlay: boolean, cor: AppSettings["kiwicat"]["cor"] = "agente"): AppSettings => ({ ...DEFAULT_SETTINGS, kiwicat: { show: true, overlay, cor } });
+    const settings = (overlay: boolean, cor: AppSettings["kiwicat"]["cor"] = "agente", posicao: AppSettings["kiwicat"]["posicao"] = "center", tamanho = 1): AppSettings =>
+      ({ ...DEFAULT_SETTINGS, kiwicat: { show: true, overlay, cor, posicao, tamanho } });
     const attached = attachCatOverlay({
       agent: {
         status: async () => status(o.enabled ?? true),
@@ -211,7 +212,7 @@ describe("o gato no overlay ligado ao app", () => {
   test("com o agente e o interruptor ligados, carrega a página da pasta do app", async () => {
     const { sent } = wired();
     await tick();
-    expect(sent).toEqual([{ type: "catOverlay.color", cor: "#ff9b5e" }, { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
+    expect(sent).toEqual([{ type: "catOverlay.color", cor: "#ff9b5e" }, { type: "catOverlay.place", posicao: "center", escala: 1 }, { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
   });
 
   test("com o agente desligado ou o interruptor desligado, nada carrega", async () => {
@@ -229,7 +230,7 @@ describe("o gato no overlay ligado ao app", () => {
     sent.splice(0);
     attached.settingsChanged(settings(false));
     attached.settingsChanged(settings(true));
-    expect(sent.map((c) => c.type)).toEqual(["catOverlay.unload", "catOverlay.color", "catOverlay.load"]);
+    expect(sent.map((c) => c.type)).toEqual(["catOverlay.unload", "catOverlay.color", "catOverlay.place", "catOverlay.load"]);
   });
 
   test("o helper reiniciou com o gato na tela: carrega e volta no mesmo estado, sem a entrada", async () => {
@@ -241,6 +242,7 @@ describe("o gato no overlay ligado ao app", () => {
     emit.ready();
     expect(sent).toEqual([
       { type: "catOverlay.color", cor: "#ff9b5e" },
+      { type: "catOverlay.place", posicao: "center", escala: 1 },
       { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" },
       { type: "catOverlay.show", estado: "agindo", fadeMs: 0 },
     ]);
@@ -262,7 +264,23 @@ describe("o gato no overlay ligado ao app", () => {
     attached.settingsChanged(settings(false, "verde"));
     expect(sent).toEqual([]);
     attached.settingsChanged(settings(true, "verde"));
-    expect(sent).toEqual([{ type: "catOverlay.color", cor: "#3cc47c" }, { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
+    expect(sent).toEqual([{ type: "catOverlay.color", cor: "#3cc47c" }, { type: "catOverlay.place", posicao: "center", escala: 1 }, { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" }]);
+  });
+
+  test("a posição e o tamanho vão antes do load; mudar carrega de novo e o gato volta no lugar novo (spec #12949)", async () => {
+    const { attached, sent, emit, settings } = wired();
+    await tick();
+    emit.turn(started());
+    emit.turn(status("running"));
+    sent.splice(0);
+    attached.settingsChanged(settings(true, "agente", "top-right", 1.4));
+    attached.settingsChanged(settings(true, "agente", "top-right", 1.4));
+    expect(sent).toEqual([
+      { type: "catOverlay.color", cor: "#ff9b5e" },
+      { type: "catOverlay.place", posicao: "top-right", escala: 1.4 },
+      { type: "catOverlay.load", dir: "/app/views/ui/catoverlay" },
+      { type: "catOverlay.show", estado: "agindo", fadeMs: 0 },
+    ]);
   });
 
   test("com o hub na vista, o gato é o do canto; o stop solta tudo", async () => {
@@ -355,6 +373,18 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     r.advance(1);
     expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
     expect(r.cat.visible).toBe(false);
+  });
+
+  test("mudar o tamanho com o balão na tela traz o mesmo trecho de volta depois da recarga (revisão do #522)", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(text("Feito."));
+    r.cat.turn(doneWith("Feito."));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false }]);
+    r.cat.setPlace("bottom-right", 0.8);
+    expect(r.take().map((c) => c.type)).toEqual(["catOverlay.place", "catOverlay.load", "catOverlay.show", "catOverlay.bubble"]);
+    r.cat.setPlace("bottom-right", 0.8);
+    expect(r.take()).toEqual([]);
   });
 
   test("um pedido com ação: o balão diz o que ele fez, o texto depois da última ferramenta", () => {

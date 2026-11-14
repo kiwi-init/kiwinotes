@@ -122,6 +122,16 @@ try {
       report.checks.push(`Settings › Agente shows "Cor do Kiwi Cat" with ${catColorOptions().length} ready swatches, the agent's checked, no input of any kind`);
     }
     await p.locator(row).screenshot({ path: join(out, `linha-${theme}.png`) });
+    // A posição e o tamanho do gato (spec #12949), logo abaixo do "por cima dos outros apps": a prévia segue a escolha.
+    const place = ".kn-row:has(.kn-cat-place)";
+    await p.locator(place).scrollIntoViewIfNeeded();
+    if (theme === "light") {
+      await p.locator(`${place} select`).selectOption("bottom-left");
+      for (let i = 0; (await invoke("settings.get")).kiwicat.posicao !== "bottom-left"; i++) { assert.ok(i < 50, "a posição vai para os ajustes"); await Bun.sleep(100); }
+      assert.equal(await p.locator(`${place} .kn-cat-screen-cat`).getAttribute("data-posicao"), "bottom-left");
+      report.checks.push("Settings › Agente: the position (six options) and the size slider under the overlay switch, with the screen preview following the choice");
+    }
+    await p.locator(place).screenshot({ path: join(out, `posicao-${theme}.png`) });
     if (theme === "dark") { await w.close(); break; }
 
     // 2. Um clique: a amostra e o gato do canto trocam na hora, sem reiniciar o gato (o mesmo canvas).

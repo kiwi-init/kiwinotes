@@ -1075,6 +1075,13 @@ final class Helper {
             let cat = catOverlay
             let ok = MainActor.assumeIsolated { cat.color(cor) }
             reply(id, ok: ok, error: ok ? nil : "invalid_value")
+        case "catOverlay.place":
+            // A posição e o tamanho (spec #12949): antes do `load`, como a cor.
+            let position = message.string("posicao")
+            let scale = message.double("escala")
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.place(position: position, scale: scale) }
+            reply(id, ok: true)
         case "catOverlay.bubble":
             let text = message.string("text")
             let error = message.fields["error"] as? Bool ?? false
