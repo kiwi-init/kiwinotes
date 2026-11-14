@@ -61,7 +61,7 @@ interface GridProps {
   header: string[];
   rows: string[][];
   columns: number;
-  /** Um trecho a mais no rodapé, depois de "N linhas · M colunas". */
+  /** Um trecho a mais no rodapé, depois de "N linhas, M colunas". */
   foot?: string | null;
   /** O número da primeira linha (a planilha começa no 1 da linha 1, e o csv conta depois do cabeçalho). */
   firstRow?: number;
@@ -116,8 +116,8 @@ export function TableGrid({ header, rows: all, columns: total, foot, firstRow = 
         ) : null}
       </div>
       <div className="kn-file-table-foot" aria-live="polite">
-        {`${n(all.length)} ${all.length === 1 ? "linha" : "linhas"} · ${n(total)} ${total === 1 ? "coluna" : "colunas"}`}
-        {foot ? ` · ${foot}` : ""}
+        {`${n(all.length)} ${all.length === 1 ? "linha" : "linhas"}, ${n(total)} ${total === 1 ? "coluna" : "colunas"}`}
+        {foot ? `, ${foot}` : ""}
       </div>
     </div>
   );
