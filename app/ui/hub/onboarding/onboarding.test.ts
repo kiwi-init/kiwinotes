@@ -5,12 +5,12 @@ import { expect, test } from "bun:test";
 import { ONBOARDING_STEPS } from "../../../src/shared/agent-onboarding.ts";
 import { holdName, stepText, canLeaveClaude, magicCandidates, magicRequest, projectRows, reasonText, searchLine, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, STEP_TEXT, stepAt, toneSummary } from "./onboardingText.ts";
 
-test("os 9 passos na ordem do spec, cada um com título e frase (o do Control, sem subtítulo: a frase é a do cartão)", () => {
-  expect(STEP_COUNT).toBe(9);
-  expect(ONBOARDING_STEPS.map((s) => STEP_TEXT[s].title.length > 0 && (s === "control" || STEP_TEXT[s].hint.length > 0))).toEqual(Array(9).fill(true));
+test("os 10 passos na ordem do spec, cada um com título e frase (o do Control, sem subtítulo: a frase é a do cartão)", () => {
+  expect(STEP_COUNT).toBe(10);
+  expect(ONBOARDING_STEPS.map((s) => STEP_TEXT[s].title.length > 0 && (s === "control" || STEP_TEXT[s].hint.length > 0))).toEqual(Array(10).fill(true));
   expect(STEP_TEXT.control.hint).toBe("");
-  expect([stepAt(1), stepAt(4), stepAt(9), stepAt(0), stepAt(12)]).toEqual(["claude", "guardrail", "done", "claude", "done"]);
-  expect(progressLine(3)).toBe("Passo 3 de 9");
+  expect([stepAt(1), stepAt(4), stepAt(10), stepAt(0), stepAt(12)]).toEqual(["claude", "guardrail", "done", "claude", "done"]);
+  expect(progressLine(3)).toBe("Passo 3 de 10");
 });
 
 test("o passo 1 só deixa seguir com o Claude Code logado e a ponte baixada", () => {

@@ -28,6 +28,9 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     private var fadeMs: Double = 180
     /// A cor da névoa (spec #9349), `rrggbb`: vai na URL do próximo `load` e à página aberta.
     private var cor: String?
+    /// A posição e o tamanho (spec #12949): o tamanho da janela e a URL valem do próximo `load`; a posição, do próximo
+    /// `present`.
+    private var placement = CatPlacement()
     /// O balão (spec #12938), já como o argumento do script (`CatOverlayBubble`): vai junto quando o gato aparece e sai
     /// com ele.
     private var bubble = "null"
@@ -53,14 +56,14 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         parts.scheme = CatPageScheme.scheme
         parts.host = CatPageScheme.host
         parts.path = "/index.html"
-        parts.query = [query, cor.map { "cor=\($0)" }].compactMap { $0 }.joined(separator: "&").nilIfEmpty
+        parts.query = [query, cor.map { "cor=\($0)" }, placement.query].compactMap { $0 }.joined(separator: "&").nilIfEmpty
         guard let index = parts.url else { return "not_found" }
         if web != nil { unload() }
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         // Os arquivos do app por um esquema próprio: pelo `file://`, o WebKit recusa os módulos ES (a origem nula).
         config.setURLSchemeHandler(CatPageScheme(root: folder), forURLScheme: CatPageScheme.scheme)
-        let size = CatOverlayLayout.size
+        let size = placement.size
         let view = WKWebView(frame: CGRect(origin: .zero, size: size), configuration: config)
         view.navigationDelegate = self
         view.setValue(false, forKey: "drawsBackground")
@@ -105,6 +108,12 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         guard gate.shows else { return }
         let value = level.map { String(format: "%.3f", min(max($0, 0), 1)) } ?? "null"
         script("window.kiwiOverlay?.set({voz: \(value)})")
+    }
+
+    /// A posição e o tamanho do gato (spec #12949). Valem do próximo `load` (o app carrega de novo quando mudam); a
+    /// janela continua sem pegar clique (`ignoresMouseEvents`, #504).
+    func place(position: String?, scale: Double?) {
+        placement = CatPlacement(position: CatPosition(setting: position), scale: scale ?? 1)
     }
 
     /// A cor da névoa (spec #9349): fica para o próximo `load` e, com a página aberta, troca na hora (a passagem de
@@ -156,7 +165,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             panel.alphaValue = 0
             parked = false
         }
-        panel.setFrame(CatOverlayLayout.frame(visible: targetVisibleFrame()), display: false)
+        panel.setFrame(placement.frame(visible: targetVisibleFrame()), display: false)
         script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true, bubble: \(bubble)})")
         if !panel.isVisible { panel.orderFrontRegardless() }
         animate(panel, to: 1, ms: fadeMs)

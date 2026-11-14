@@ -2,13 +2,13 @@
 // O que a pessoa escolhe em cada passo vai direto para o lugar de sempre (as instruções, o Modelo, os projetos, a cor);
 // aqui fica só onde ela está na sequência.
 
-/** Os 9 passos, na ordem do spec. */
-export const ONBOARDING_STEPS = ["claude", "control", "tone", "guardrail", "model", "projects", "color", "magic", "done"] as const;
+/** Os 10 passos, na ordem do spec (o `place`, spec #12949, depois da cor). */
+export const ONBOARDING_STEPS = ["claude", "control", "tone", "guardrail", "model", "projects", "color", "place", "magic", "done"] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 /**
  * - `pending`: o agente ainda não foi ligado com o onboarding (ou foi ligado antes dele existir: só pelo "Refazer").
- * - `open`: o onboarding está na tela, no passo `step` (de 1 a 9). Fechar o app no meio volta ao mesmo passo.
+ * - `open`: o onboarding está na tela, no passo `step` (de 1 a 10; o `place`, spec #12949, entrou depois da cor). Fechar o app no meio volta ao mesmo passo.
  * - `done`: terminou ou foi fechado; só o "Refazer o onboarding" em Ajustes › Agente abre de novo.
  */
 export interface AgentOnboarding {

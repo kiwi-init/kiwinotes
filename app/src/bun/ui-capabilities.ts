@@ -15,7 +15,9 @@ import { aliasWarnings, aliasWarningText } from "../store/aliasCheck.ts";
 import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { NOTE_WIDTH } from "../shared/note-width.ts";
+import { ONBOARDING_STEPS } from "../shared/agent-onboarding.ts";
 import { isCatColorChoice } from "../shared/kiwicat-colors.ts";
+import { catSize, isCatPosition, isCatSize } from "../shared/kiwicat-place.ts";
 import { isCustomRoutineId, isRoutineKind, isRoutineTime, ROUTINE_KINDS, routineFolder } from "../shared/agent-routines.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
@@ -597,9 +599,12 @@ export function uiCapabilities(deps: CapabilityDeps,
           const cat = object(value, "kiwicat");
           const keys = Object.keys(cat);
           // `cor` (spec #9349): só uma das cores prontas ou a do agente; nada de cor livre.
-          if (!keys.length || keys.some(k => k !== "show" && k !== "overlay" && k !== "cor") ||
-            keys.some(k => (k === "cor" ? !isCatColorChoice(cat[k]) : typeof cat[k] !== "boolean")))
-            throw bad("kiwicat.show and kiwicat.overlay must be true or false; kiwicat.cor one of the ready colours");
+          // `posicao` e `tamanho` (spec #12949): uma das seis posições, e de 0,6 a 1,6 (guardado em passos de 0,1).
+          const valid = (k: string) =>
+            k === "cor" ? isCatColorChoice(cat[k]) : k === "posicao" ? isCatPosition(cat[k]) : k === "tamanho" ? isCatSize(cat[k]) : (k === "show" || k === "overlay") && typeof cat[k] === "boolean";
+          if (!keys.length || !keys.every(valid))
+            throw bad("kiwicat.show and kiwicat.overlay must be true or false; kiwicat.cor one of the ready colours; kiwicat.posicao one of the six positions; kiwicat.tamanho from 0.6 to 1.6");
+          if (typeof cat.tamanho === "number") cat.tamanho = catSize(cat.tamanho);
           const current = (await deps.settings.load()).kiwicat;
           patch.kiwicat = { ...current, ...(cat as Partial<AppSettings["kiwicat"]>) };
         } else if (key === "notesShortcut") {
@@ -1288,8 +1293,8 @@ export function uiCapabilities(deps: CapabilityDeps,
         if (!o || typeof o !== "object" || Array.isArray(o) || Object.keys(o).some((k) => k !== "state" && k !== "step"))
           throw bad("agent.configure: onboarding must be {state?, step?}");
         if (o.state !== undefined && o.state !== "open" && o.state !== "done") throw bad('agent.configure: onboarding.state must be "open" or "done"');
-        if (o.step !== undefined && (typeof o.step !== "number" || !Number.isInteger(o.step) || o.step < 1 || o.step > 9))
-          throw bad("agent.configure: onboarding.step must be an integer from 1 to 9");
+        if (o.step !== undefined && (typeof o.step !== "number" || !Number.isInteger(o.step) || o.step < 1 || o.step > ONBOARDING_STEPS.length))
+          throw bad(`agent.configure: onboarding.step must be an integer from 1 to ${ONBOARDING_STEPS.length}`);
       }
       // As rotinas (spec #12150): só o que a pessoa muda (liga/desliga, a hora, o dia e a pasta), rotina por rotina.
       if (a.routines !== undefined) {

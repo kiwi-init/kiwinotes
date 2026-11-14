@@ -30,7 +30,7 @@ import { NoteModelRow } from "./NoteModel.tsx";
 import { MemoryRows } from "./MemoryRows.tsx";
 import { RoutinesRows } from "./RoutinesRows.tsx";
 import "./agent.css";
-import { CatColorRow, CatRow, OverlayCatRow } from "./CatRow";
+import { CatColorRow, CatPlaceRow, CatRow, OverlayCatRow } from "./CatRow";
 
 /** O pedido do "Testar" mais longo que a seção manda. */
 const TEST_MAX = 500;
@@ -155,6 +155,7 @@ export function AgentSection() {
       <CatRow />
       <CatColorRow agentEnabled={status.enabled} />
       <OverlayCatRow />
+      <CatPlaceRow />
 
       {consenting ? <Consent name={name} onYes={() => void turnOn(true)} onNo={() => setConsenting(false)} /> : null}
 

@@ -14,6 +14,67 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertEqual(f.minY + 120, visible.midY, accuracy: 1)
     }
 
+    /// Spec #12949: as seis posições nos dois limites de tamanho, em três telas (a do notebook, uma pequena e uma à
+    /// esquerda da principal): a janela, o gato e o balão dentro da área útil, e o gato encostado no canto pedido.
+    func testSixPositionsAtBothSizeLimitsStayInsideTheVisibleArea() {
+        let screens = [
+            CGRect(x: 0, y: 80, width: 1512, height: 870),
+            CGRect(x: 0, y: 70, width: 1280, height: 650),
+            CGRect(x: -1920, y: 0, width: 1920, height: 1055),
+        ]
+        let m = CatPlacement.margin
+        for visible in screens {
+            for position in CatPosition.allCases {
+                for scale in [0.6, 1.6] {
+                    let p = CatPlacement(position: position, scale: scale)
+                    let f = p.frame(visible: visible)
+                    let cat = p.catRect(in: f)
+                    let bubble = p.bubbleRect(in: f)
+                    let what = "\(position.rawValue) \(scale) em \(visible)"
+                    XCTAssertTrue(visible.contains(f), "janela fora: \(what)")
+                    XCTAssertTrue(visible.contains(cat), "gato fora: \(what)")
+                    XCTAssertTrue(visible.contains(bubble), "balão fora: \(what)")
+                    XCTAssertFalse(cat.intersects(bubble), "balão em cima do gato: \(what)")
+                    XCTAssertEqual(cat.size, CGSize(width: (192 * scale).rounded(), height: (240 * scale).rounded()), what)
+                    switch position {
+                    case .topLeft:
+                        XCTAssertEqual(cat.minX, visible.minX + m, accuracy: 1, what)
+                        XCTAssertEqual(cat.maxY, visible.maxY - m, accuracy: 1, what)
+                    case .topRight:
+                        XCTAssertEqual(cat.maxX, visible.maxX - m, accuracy: 1, what)
+                        XCTAssertEqual(cat.maxY, visible.maxY - m, accuracy: 1, what)
+                    case .bottomLeft:
+                        XCTAssertEqual(cat.minX, visible.minX + m, accuracy: 1, what)
+                        XCTAssertEqual(cat.minY, visible.minY + m, accuracy: 1, what)
+                    case .bottomRight:
+                        XCTAssertEqual(cat.maxX, visible.maxX - m, accuracy: 1, what)
+                        XCTAssertEqual(cat.minY, visible.minY + m, accuracy: 1, what)
+                    case .bottomCenter:
+                        XCTAssertEqual(cat.midX, visible.midX, accuracy: 1, what)
+                        XCTAssertEqual(cat.minY, visible.minY + m, accuracy: 1, what)
+                    case .center:
+                        XCTAssertEqual(cat.midX, visible.midX, accuracy: 1, what)
+                        XCTAssertEqual(cat.midY, visible.midY, accuracy: 1, what)
+                    }
+                    XCTAssertEqual(bubble.minY < cat.minY, position == .topLeft || position == .topRight, "o balão vai embaixo só nos cantos de cima: \(what)")
+                }
+            }
+        }
+    }
+
+    func testDefaultIsTodayAndOutOfRangeIsClamped() {
+        let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
+        XCTAssertEqual(CatPlacement().frame(visible: visible), CatOverlayLayout.frame(visible: visible))
+        XCTAssertEqual(CatPosition(setting: "nada"), .center)
+        XCTAssertEqual(CatPosition(setting: nil), .center)
+        XCTAssertEqual(CatPosition(setting: "top-right"), .topRight)
+        XCTAssertEqual(CatPlacement(scale: 0.1).scale, 0.6)
+        XCTAssertEqual(CatPlacement(scale: 9).scale, 1.6)
+        XCTAssertEqual(CatPlacement(scale: .nan).scale, 1)
+        XCTAssertEqual(CatPlacement(position: .topLeft, scale: 1.25).query, "escala=1.25&lado=left&balao=abaixo")
+        XCTAssertEqual(CatPlacement().query, "escala=1.00&lado=center&balao=acima")
+    }
+
     func testBubbleIsAJSONLiteralNeverScript() throws {
         XCTAssertEqual(CatOverlayBubble.script(text: nil, error: false), "null")
         XCTAssertEqual(CatOverlayBubble.script(text: "", error: false), "null")

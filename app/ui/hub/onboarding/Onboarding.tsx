@@ -14,7 +14,7 @@ import { Button, Kbd, Segmented, Select } from "../../src/kit/index.tsx";
 import { shortcutLabel } from "../../../src/shared/shortcuts.ts";
 import { ViewPanel } from "../../settings/AgentActivity.tsx";
 import { ControlRow } from "../../settings/ControlRow.tsx";
-import { CatColorRow } from "../../settings/CatRow.tsx";
+import { CatColorRow, CatPlaceRow } from "../../settings/CatRow.tsx";
 import { NoteModelEditor } from "../../settings/NoteModel.tsx";
 import { adapterLine, applyTurn, claudeLine, IDLE_TEST, type TestState } from "../../settings/agentText.ts";
 import type { createKiwiCat } from "../../kiwicat/cat.ts";
@@ -523,7 +523,7 @@ function MagicStep({ status, settings }: { status: AgentStatus; settings: AppSet
   );
 }
 
-/** Passo 9: o cartão final, com o que ficou escolhido. */
+/** Passo 10: o cartão final, com o que ficou escolhido. */
 function DoneStep({ status, settings }: { status: AgentStatus; settings: AppSettings }) {
   const [projects, setProjects] = useState<string[] | null>(null);
   useEffect(() => {
@@ -661,6 +661,10 @@ export function Onboarding() {
         ) : step === "color" ? (
           <div className="kn-onb-row kn-onb-color">
             <CatColorRow agentEnabled={status.enabled} preview={false} />
+          </div>
+        ) : step === "place" ? (
+          <div className="kn-onb-row kn-onb-place">
+            <CatPlaceRow />
           </div>
         ) : step === "magic" ? (
           <MagicStep status={status} settings={settings} />

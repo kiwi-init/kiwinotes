@@ -18,14 +18,14 @@ const notesOff = { shortcuts: { ...DEFAULT_SHORTCUTS, notes: null }, notesShortc
 
 test("sem arquivo, o padrão: ⌃⌥N abre a janela Notas (T1499)", async () => {
   fresh();
-  expect(await new SettingsStore(dir).load()).toEqual({ shortcuts: DEFAULT_SHORTCUTS, notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const }, agent: DEFAULT_AGENT_SETTINGS });
+  expect(await new SettingsStore(dir).load()).toEqual({ shortcuts: DEFAULT_SHORTCUTS, notesShortcut: "control+option+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS });
   expect(DEFAULT_SETTINGS.notesShortcut).toBe(DEFAULT_NOTES_SHORTCUT);
 });
 
 test("grava só o que mudou, só para o usuário, e lê de volta; null (desligado) fica", async () => {
   fresh();
   const store = new SettingsStore(dir);
-  const off = { ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const }, agent: DEFAULT_AGENT_SETTINGS };
+  const off = { ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto" as const, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS };
   expect(await store.save({ notesShortcut: null })).toEqual(off);
   expect(await new SettingsStore(dir).load()).toEqual(off);
   expect(JSON.parse(readFileSync(store.file, "utf8"))).toEqual({ version: 1, ...off });
@@ -38,13 +38,13 @@ test("editado à mão com um valor que não existe: volta ao padrão, sem quebra
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: "q" }));
   expect(await new SettingsStore(dir).load()).toEqual(DEFAULT_SETTINGS);
   expect(sanitizeSettings(null)).toEqual(DEFAULT_SETTINGS);
-  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ shortcuts: { ...DEFAULT_SHORTCUTS, notes: "option+command+n" }, notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const }, agent: DEFAULT_AGENT_SETTINGS });
+  expect(sanitizeSettings({ notesShortcut: "option+command+n" })).toEqual({ shortcuts: { ...DEFAULT_SHORTCUTS, notes: "option+command+n" }, notesShortcut: "option+command+n", pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS });
 });
 
 test("a Aparência (T2503): um settings.json de antes dela abre no padrão, e um campo ruim volta sozinho", async () => {
   fresh();
   writeFileSync(path.join(dir, "settings.json"), JSON.stringify({ version: 1, notesShortcut: null }));
-  expect(await new SettingsStore(dir).load()).toEqual({ ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const }, agent: DEFAULT_AGENT_SETTINGS });
+  expect(await new SettingsStore(dir).load()).toEqual({ ...notesOff, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: "Modelos", dailyFolder: "Diário", attachmentsFolder: "Anexos", ocr: true, semanticSearch: true, savedSearches: [], microphone: "auto", showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: 760, kiwicat: { show: true, overlay: true, cor: "agente" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS });
   const mixed = { mode: "light", lightTheme: "glacier-mint", darkTheme: 42, textSize: "huge", font: "lato", motion: "reduced" };
   expect(sanitizeSettings({ appearance: mixed }).appearance).toEqual({
     ...DEFAULT_APPEARANCE,
@@ -100,7 +100,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
     preciseDictation: false,
     meetings: DEFAULT_MEETING_SETTINGS,
     noteWidth: 760,
-    kiwicat: { show: true, overlay: true, cor: "agente" as const }, agent: DEFAULT_AGENT_SETTINGS,
+    kiwicat: { show: true, overlay: true, cor: "agente" as const, posicao: "center" as const, tamanho: 1 }, agent: DEFAULT_AGENT_SETTINGS,
   });
 });
 
@@ -121,8 +121,8 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     onboarding: { state: "pending", step: 1 },
     routines: DEFAULT_AGENT_ROUTINES,
   });
-  // O onboarding (spec #11955): pendente de fábrica; um passo fora de 1 a 9 volta para dentro.
-  expect(sanitizeSettings({ agent: { onboarding: { state: "open", step: 12 } } }).agent.onboarding).toEqual({ state: "open", step: 9 });
+  // O onboarding (spec #11955): pendente de fábrica; um passo fora de 1 a 10 volta para dentro.
+  expect(sanitizeSettings({ agent: { onboarding: { state: "open", step: 12 } } }).agent.onboarding).toEqual({ state: "open", step: 10 });
   expect(sanitizeSettings({ agent: { onboarding: { state: "x", step: "2" } } }).agent.onboarding).toEqual({ state: "pending", step: 1 });
   // O modo econômico (spec #11084): desligado de fábrica, e só um true o liga.
   expect(sanitizeSettings({ agent: { economy: true } }).agent.economy).toBe(true);
@@ -227,12 +227,12 @@ test("settings.json que não é JSON: load devolve o padrão e o arquivo torto f
 
  test("Kiwi-cat defaults on, persists off, and malformed fields fall back without enabling agent", async () => {
   fresh(); const store = new SettingsStore(dir);
-  expect(sanitizeSettings({}).kiwicat).toEqual({ show: true, overlay: true, cor: "agente" });
-  expect(sanitizeSettings({ kiwicat: { show: "false" } }).kiwicat).toEqual({ show: true, overlay: true, cor: "agente" });
+  expect(sanitizeSettings({}).kiwicat).toEqual({ show: true, overlay: true, cor: "agente", posicao: "center", tamanho: 1 });
+  expect(sanitizeSettings({ kiwicat: { show: "false" } }).kiwicat).toEqual({ show: true, overlay: true, cor: "agente", posicao: "center", tamanho: 1 });
   // O overlay (spec #9810) desliga sozinho, separado do gato do canto.
-  expect(sanitizeSettings({ kiwicat: { show: true, overlay: false } }).kiwicat).toEqual({ show: true, overlay: false, cor: "agente" });
-  await store.save({ kiwicat: { show: false, overlay: true, cor: "agente" } });
-  expect((await new SettingsStore(dir).load()).kiwicat).toEqual({ show: false, overlay: true, cor: "agente" });
+  expect(sanitizeSettings({ kiwicat: { show: true, overlay: false } }).kiwicat).toEqual({ show: true, overlay: false, cor: "agente", posicao: "center", tamanho: 1 });
+  await store.save({ kiwicat: { show: false, overlay: true, cor: "agente", posicao: "center", tamanho: 1 } });
+  expect((await new SettingsStore(dir).load()).kiwicat).toEqual({ show: false, overlay: true, cor: "agente", posicao: "center", tamanho: 1 });
   expect((await store.load()).agent.enabled).toBe(false);
  });
 
@@ -257,8 +257,20 @@ test("Suas reuniões (spec #8360): o padrão é propor sozinho, na pasta do proj
   fresh(); const store = new SettingsStore(dir);
   expect(sanitizeSettings({}).kiwicat.cor).toBe("agente");
   for (const cor of ["#ffffff", "branco", "", 3, null, "padrao"]) expect(sanitizeSettings({ kiwicat: { cor } }).kiwicat.cor).toBe("agente");
-  await store.save({ kiwicat: { show: true, overlay: true, cor: "violeta" } });
-  expect((await new SettingsStore(dir).load()).kiwicat).toEqual({ show: true, overlay: true, cor: "violeta" });
+  await store.save({ kiwicat: { show: true, overlay: true, cor: "violeta", posicao: "center", tamanho: 1 } });
+  expect((await new SettingsStore(dir).load()).kiwicat).toEqual({ show: true, overlay: true, cor: "violeta", posicao: "center", tamanho: 1 });
+ });
+
+test("a posição e o tamanho do gato (spec #12949): o centro e 1× por padrão, e o que vier errado volta ao padrão ou ao limite", async () => {
+  fresh(); const store = new SettingsStore(dir);
+  expect(sanitizeSettings({}).kiwicat).toMatchObject({ posicao: "center", tamanho: 1 });
+  for (const posicao of ["meio", "", 3, null, "TOP-LEFT"]) expect(sanitizeSettings({ kiwicat: { posicao } }).kiwicat.posicao).toBe("center");
+  expect(sanitizeSettings({ kiwicat: { tamanho: 0.1 } }).kiwicat.tamanho).toBe(0.6);
+  expect(sanitizeSettings({ kiwicat: { tamanho: 9 } }).kiwicat.tamanho).toBe(1.6);
+  expect(sanitizeSettings({ kiwicat: { tamanho: 1.234 } }).kiwicat.tamanho).toBe(1.2);
+  expect(sanitizeSettings({ kiwicat: { tamanho: "2" } }).kiwicat.tamanho).toBe(1);
+  await store.save({ kiwicat: { show: true, overlay: true, cor: "agente", posicao: "top-right", tamanho: 1.4 } });
+  expect((await new SettingsStore(dir).load()).kiwicat).toMatchObject({ posicao: "top-right", tamanho: 1.4 });
  });
 
 test("Pesquisar na web (spec #11908): desligado por padrão, e só `true` liga", () => {

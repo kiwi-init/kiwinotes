@@ -19,6 +19,7 @@ import { readingMs, splitChunks } from "../../ui/hub/bubble-state.ts";
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import type { Command } from "../shared/ipc.ts";
 import { catColorHex } from "../shared/kiwicat-colors.ts";
+import { CAT_SIZE, type CatPosition, DEFAULT_CAT_POSITION } from "../shared/kiwicat-place.ts";
 import type { AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings } from "../shared/ui-contract.ts";
 
 /** Os tempos do roteiro, em ms. */
@@ -72,6 +73,7 @@ export type CatOverlayCommand =
   | { type: "catOverlay.hide"; fadeMs: number }
   | { type: "catOverlay.unload" }
   | { type: "catOverlay.color"; cor: string }
+  | { type: "catOverlay.place"; posicao: CatPosition; escala: number }
   | { type: "catOverlay.bubble"; text: string | null; error?: boolean };
 
 export interface CatOverlayHost {
@@ -111,6 +113,9 @@ export class CatOverlay {
   private loaded = false;
   /** A cor da névoa (`#rrggbb`), da escolha em Ajustes › Agente. */
   private cor: string | null = null;
+  /** A posição e o tamanho (spec #12949): vão antes do `load`, como a cor. */
+  private posicao: CatPosition = DEFAULT_CAT_POSITION;
+  private escala: number = CAT_SIZE.default;
   private overlayShown = false;
   /** O balão está no overlay (spec #12938). */
   private bubbleShown = false;
@@ -331,10 +336,24 @@ export class CatOverlay {
     if (this.loaded) this.host.send({ type: "catOverlay.color", cor });
   }
 
-  /** A cor vai antes do `load`: o helper a passa à página que ele abre. */
+  /**
+   * A posição e o tamanho do gato (spec #12949). O tamanho muda a janela e a página: com ela carregada, carrega de novo
+   * e, com o gato na tela, ele volta no mesmo estado, já no lugar novo.
+   */
+  setPlace(posicao: CatPosition, escala: number): void {
+    if (posicao === this.posicao && escala === this.escala) return;
+    this.posicao = posicao;
+    this.escala = escala;
+    if (!this.loaded) return;
+    this.load();
+    if (this.overlayShown) this.host.send({ type: "catOverlay.show", estado: this.activity.state, fadeMs: 0 });
+  }
+
+  /** A cor, a posição e o tamanho vão antes do `load`: o helper os passa à página que ele abre. */
   private load(): void {
     this.loaded = true;
     if (this.cor) this.host.send({ type: "catOverlay.color", cor: this.cor });
+    this.host.send({ type: "catOverlay.place", posicao: this.posicao, escala: this.escala });
     this.host.send({ type: "catOverlay.load" });
   }
 
@@ -445,7 +464,10 @@ export function attachCatOverlay(w: CatOverlayWiring): AttachedCatOverlay {
   let colorSet = false;
   void w.settings.load().then((s) => {
     if (overlayOn === undefined) overlayOn = s.kiwicat.overlay;
-    if (!colorSet) overlay.setColor(catColorHex(s.kiwicat.cor));
+    if (!colorSet) {
+      overlay.setColor(catColorHex(s.kiwicat.cor));
+      overlay.setPlace(s.kiwicat.posicao, s.kiwicat.tamanho);
+    }
     apply();
   }, () => {});
   return {
@@ -454,6 +476,7 @@ export function attachCatOverlay(w: CatOverlayWiring): AttachedCatOverlay {
       overlayOn = s.kiwicat.overlay;
       colorSet = true;
       overlay.setColor(catColorHex(s.kiwicat.cor));
+      overlay.setPlace(s.kiwicat.posicao, s.kiwicat.tamanho);
       apply();
     },
     setHubInView: (inView) => overlay.setHubInView(inView),

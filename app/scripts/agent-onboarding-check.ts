@@ -51,7 +51,7 @@ async function invoke(cap: string, args: unknown = {}) {
   return r.value as any;
 }
 const onboarding = async () => (await invoke("agent.status")).onboarding as { state: string; step: number };
-const stepIs = (p: Page, n: number) => p.waitForFunction((n) => document.querySelector(".kn-onb-progress")?.textContent === `Passo ${n} de 9`, n, { timeout: 15000 });
+const stepIs = (p: Page, n: number) => p.waitForFunction((n) => document.querySelector(".kn-onb-progress")?.textContent === `Passo ${n} de 10`, n, { timeout: 15000 });
 const shot = async (p: Page, file: string) => {
   await Bun.sleep(400);
   await p.screenshot({ path: join(out, file) });
@@ -190,7 +190,22 @@ try {
       report.checks.push("steps 5-7 (T11999): the Template editor from Settings; the top-level folders with the marked project checked, and checking another marks it; the colour swatches with the agent's colour selected, and picking one changes the setting; none of them sends a request");
       await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
       await stepIs(p, 8);
-      // Passo 8 (T12001): só com o clique da pessoa, o agente organiza UMA nota no Modelo; o antes e o depois, e o
+      // Passo 8 (spec #12949): onde o gato aparece por cima dos apps e o tamanho, com a prévia da tela. Mudar salva.
+      await p.waitForSelector(".kn-onb-place .kn-cat-screen-cat", { timeout: 15000 });
+      assert.equal(await p.locator(".kn-onb-place select").inputValue(), "center", "o padrão é o centro");
+      await p.locator(".kn-onb-place select").selectOption("top-right");
+      for (let i = 0; (await invoke("settings.get")).kiwicat.posicao !== "top-right"; i++) { assert.ok(i < 50, "a posição vai para os ajustes"); await Bun.sleep(100); }
+      const slider = p.locator(".kn-onb-place input[type=range]");
+      await slider.focus();
+      for (let i = 0; i < 4; i++) await p.keyboard.press("ArrowRight");
+      for (let i = 0; (await invoke("settings.get")).kiwicat.tamanho !== 1.4; i++) { assert.ok(i < 50, "o tamanho vai para os ajustes"); await Bun.sleep(100); }
+      assert.equal(await p.locator(".kn-onb-place .kn-cat-size-value").textContent(), "1,4×");
+      await p.locator("#kn-onb-title").click();
+      await shot(p, "8-posicao-light.png");
+      report.checks.push("step 8 (spec #12949): the six positions (centre by default) and the size slider with the screen preview; changing them saves kiwicat.posicao and kiwicat.tamanho");
+      await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
+      await stepIs(p, 9);
+      // Passo 9 (T12001): só com o clique da pessoa, o agente organiza UMA nota no Modelo; o antes e o depois, e o
       // [Desfazer] volta a nota. É o único pedido do onboarding.
       await invoke("notes.save", { path: "Kiwi/Kiwi.md", content: "# Kiwi\n\nprazo em abril\nfalta o onboarding\n", baseVersion: (await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).version });
       const original = (await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).content;
@@ -199,19 +214,19 @@ try {
       assert.match((await p.locator(".kn-onb-magic .kn-onb-status").first().textContent()) ?? "", /gasta do seu plano/);
       await Bun.sleep(600);
       assert.equal((await invoke("agent.activity")).requests.length, asked, "nada antes do clique");
-      await shot(p, "8-magico-antes-light.png");
+      await shot(p, "9-magico-antes-light.png");
       await p.locator(".kn-onb-magic button:has-text('Organizar esta nota')").click();
       await p.waitForSelector(".kn-onb-diff .kn-diff", { timeout: 30000 });
-      assert.equal((await invoke("agent.activity")).requests.length, asked + 1, "um pedido só, o do passo 8");
+      assert.equal((await invoke("agent.activity")).requests.length, asked + 1, "um pedido só, o do passo 9");
       assert.notEqual((await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).content, original);
-      await shot(p, "8-magico-light.png");
+      await shot(p, "9-magico-light.png");
       await p.locator(".kn-onb-magic button:has-text('Desfazer')").click();
       await p.waitForSelector(".kn-onb-magic:has-text('voltou como estava')", { timeout: 15000 });
       assert.equal((await invoke("notes.get", { path: "Kiwi/Kiwi.md" })).content, original, "o [Desfazer] volta a nota");
-      report.checks.push("step 8 (T12001): only after the person's click, the agent organizes one note (the only request of the onboarding); before and after are shown, and [Desfazer] restores the note");
+      report.checks.push("step 9 (T12001): only after the person's click, the agent organizes one note (the only request of the onboarding); before and after are shown, and [Desfazer] restores the note");
       await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
-      await stepIs(p, 9);
-      report.checks.push("Continuar, Pular and Voltar move through the 9 steps in order; the step is saved in the agent settings");
+      await stepIs(p, 10);
+      report.checks.push("Continuar, Pular and Voltar move through the 10 steps in order; the step is saved in the agent settings");
     } else {
       // O passo da cor no escuro também (spec #12917).
       await invoke("agent.configure", { onboarding: { step: 7 } });
@@ -220,12 +235,17 @@ try {
       // O foco que o passo põe no título (para o leitor de tela) não desenha o anel, nem depois de uma tecla.
       assert.equal(await p.evaluate(() => getComputedStyle(document.activeElement!).boxShadow), "none");
       await shot(p, "7-cor-dark.png");
-      await invoke("agent.configure", { onboarding: { step: 9 } });
-      await stepIs(p, 9);
+      // O passo da posição no escuro (spec #12949).
+      await invoke("agent.configure", { onboarding: { step: 8 } });
+      await stepIs(p, 8);
+      await p.waitForSelector(".kn-onb-place .kn-cat-screen-cat", { timeout: 15000 });
+      await shot(p, "8-posicao-dark.png");
+      await invoke("agent.configure", { onboarding: { step: 10 } });
+      await stepIs(p, 10);
     }
     await p.waitForSelector(theme === "light" ? ".kn-onb-card dd:has-text('Clientes'):has-text('Kiwi')" : ".kn-onb-card dd:has-text('Kiwi')", { timeout: 15000 });
     if (theme === "light") assert.equal(await p.locator(".kn-onb-card dd").first().textContent(), "Verde");
-    await shot(p, `9-pronto-${theme}.png`);
+    await shot(p, `10-pronto-${theme}.png`);
     await p.locator(".kn-onb-actions button:has-text('Pronto')").click();
     await p.waitForSelector(".kn-onb", { state: "detached", timeout: 15000 });
     assert.equal((await onboarding()).state, "done");

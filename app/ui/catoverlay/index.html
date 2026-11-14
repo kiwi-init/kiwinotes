@@ -6,30 +6,47 @@
     <title>Kiwi Cat</title>
     <style>
       html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
-      /* A janela (CatOverlayLayout): 300 × 352, o gato embaixo e o balão da resposta em cima (spec #12938). */
-      body { width: 300px; height: 352px; position: relative; }
-      /* O módulo do gato põe o #root em position: relative: quem o leva para baixo é o #cat. */
-      #cat { position: absolute; left: 54px; bottom: 0; width: 192px; height: 240px; }
-      #root { width: 192px; height: 240px; }
+      /* A janela (CatPlacement, spec #12949): o gato (192 × 240 vezes a escala) e o balão (spec #12938), que vai em
+         cima do gato, ou embaixo nos cantos de cima. Nos cantos, os dois encostam no lado da janela que dá para o canto.
+         O main.ts põe as medidas (--win-*, --cat-*) e o lado e o balão (data-lado, data-balao) a partir da URL. */
+      body { width: var(--win-w, 300px); height: var(--win-h, 352px); position: relative; --bx: -50%; }
+      body[data-lado="left"], body[data-lado="right"] { --bx: 0; }
+      /* O módulo do gato põe o #root em position: relative: quem o leva para o lugar é o #cat. */
+      #cat { position: absolute; left: calc((var(--win-w, 300px) - var(--cat-w, 192px)) / 2); bottom: 0; width: var(--cat-w, 192px); height: var(--cat-h, 240px); }
+      body[data-lado="left"] #cat { left: 0; }
+      body[data-lado="right"] #cat { left: auto; right: 0; }
+      body[data-balao="abaixo"] #cat { bottom: auto; top: 0; }
+      #root { width: var(--cat-w, 192px); height: var(--cat-h, 240px); }
       /* O balão: o mesmo desenho do balão do gato no app (.kn-bubble-shell do hub.css, #12646), com os tokens do app no
          claro e no escuro (o tema do Mac): o contorno grosso na cor do texto, o fundo da superfície, a sombra dura e a
          ponta virada para o gato, que aqui está embaixo. Três linhas no máximo; o app manda um trecho por vez. */
       #bubble {
-        position: absolute; left: 50%; bottom: 230px; transform: translate(-50%, 4px); box-sizing: border-box;
+        position: absolute; left: 50%; bottom: calc(var(--cat-h, 240px) - 10px); transform: translate(var(--bx), 4px); box-sizing: border-box;
         min-width: 48px; width: max-content; max-width: 280px; padding: 8px 12px;
         border: 2px solid var(--text); border-radius: 18px; background: var(--surface); color: var(--text);
         box-shadow: 3px 3px 0 var(--text);
         font: var(--text-sm) / 1.35 var(--ui); text-align: left;
         opacity: 0; transition: opacity var(--fast, 140ms) var(--ease, ease), transform var(--fast, 140ms) var(--ease, ease);
       }
-      #bubble[data-on="true"] { opacity: 1; transform: translate(-50%, 0); }
+      #bubble[data-on="true"] { opacity: 1; transform: translate(var(--bx), 0); }
+      /* Nos cantos, o balão encosta no lado do gato, e a ponta aponta para o meio dele. */
+      body[data-lado="left"] #bubble { left: 0; }
+      body[data-lado="right"] #bubble { left: auto; right: 0; }
+      body[data-lado="left"] #bubble::before, body[data-lado="left"] #bubble::after { left: calc(var(--cat-w, 192px) / 2); }
+      body[data-lado="right"] #bubble::before, body[data-lado="right"] #bubble::after { left: auto; right: calc(var(--cat-w, 192px) / 2 - 8px); }
+      /* Embaixo do gato (os cantos de cima): o balão logo abaixo dele, com a ponta virada para cima. */
+      body[data-balao="abaixo"] #bubble { bottom: auto; top: calc(var(--cat-h, 240px) - 10px); transform: translate(var(--bx), -4px); }
+      body[data-balao="abaixo"] #bubble[data-on="true"] { transform: translate(var(--bx), 0); }
+      body[data-balao="abaixo"] #bubble::before { bottom: auto; top: -14px; border-width: 0 8px 14px 8px; border-color: transparent transparent var(--text) transparent; }
+      body[data-balao="abaixo"] #bubble::after { bottom: auto; top: -10px; border-width: 0 6px 10px 6px; border-color: transparent transparent var(--surface) transparent; }
+      body[data-balao="abaixo"] #bubble[data-error="true"]::before { border-top-color: transparent; border-bottom-color: var(--danger); }
       #bubble::before, #bubble::after { content: ""; position: absolute; width: 0; height: 0; border-style: solid; left: 50%; }
       #bubble::before { bottom: -14px; margin-left: -8px; border-width: 14px 8px 0 8px; border-color: var(--text) transparent transparent transparent; }
       #bubble::after { bottom: -10px; margin-left: -6px; border-width: 10px 6px 0 6px; border-color: var(--surface) transparent transparent transparent; }
       #bubble[data-error="true"] { border-color: var(--danger); box-shadow: 3px 3px 0 var(--danger); }
       #bubble[data-error="true"]::before { border-top-color: var(--danger); }
       #bubble-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
-      @media (prefers-reduced-motion: reduce) { #bubble { transition: none; transform: translate(-50%, 0); } }
+      @media (prefers-reduced-motion: reduce) { #bubble, body[data-balao="abaixo"] #bubble { transition: none; transform: translate(var(--bx), 0); } }
       html, body { background: transparent; }
       /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
          da cor oposta à tinta, para ler sobre fundo claro e escuro (revisão do T10830). O desenho é o mesmo. */

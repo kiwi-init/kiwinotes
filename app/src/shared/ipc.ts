@@ -166,6 +166,8 @@ export type Command =
   | { type: "catOverlay.unload" }
   /** A cor da névoa (spec #9349), `#rrggbb`: o helper a guarda para o próximo `load` e a passa à página aberta. */
   | { type: "catOverlay.color"; cor: string }
+  /** A posição e o tamanho do gato (spec #12949): antes do `load`, como a cor. */
+  | { type: "catOverlay.place"; posicao: string; escala: number }
   /**
    * O balão do gato no overlay (spec #12938): a resposta a uma fala pelo Control, um trecho por vez, ou o erro em
    * palavras (`error`). `text: null` tira o balão. O helper o guarda para quando o gato aparecer e o tira quando ele sai.
@@ -261,6 +263,7 @@ export interface CommandResults {
   "catOverlay.hide": Record<string, never>;
   "catOverlay.unload": Record<string, never>;
   "catOverlay.color": Record<string, never>;
+  "catOverlay.place": Record<string, never>;
   "catOverlay.bubble": Record<string, never>;
   /**
    * `pasted: false`: o texto ficou no clipboard, e o app avisa a pessoa. `reason` diz por quê:
@@ -539,6 +542,7 @@ const COMMAND_TYPES: ReadonlySet<string> = new Set<CommandType>([
   "catOverlay.hide",
   "catOverlay.unload",
   "catOverlay.color",
+  "catOverlay.place",
   "catOverlay.bubble",
   "insert.text",
   "notify",

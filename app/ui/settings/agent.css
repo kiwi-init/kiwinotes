@@ -410,3 +410,15 @@
 .kn-routine-day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
 .kn-routine-actions { display: inline-flex; align-items: center; gap: var(--space-2, 8px); flex-shrink: 0; }
 .kn-routine-foot > .kn-routine-last { flex: 1; min-width: 0; }
+
+/* A posição e o tamanho do gato (spec #12949): a prévia da tela ao lado dos controles. */
+.kn-cat-place { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.kn-cat-place-controls { display: grid; gap: var(--space-2); min-width: 200px; }
+.kn-cat-size { display: flex; align-items: center; gap: var(--space-2); }
+.kn-cat-size input { flex: 1; accent-color: var(--accent); }
+.kn-cat-size-value { min-width: 3ch; font-variant-numeric: tabular-nums; color: var(--text-2); font-size: var(--text-sm); }
+.kn-cat-screen { position: relative; width: 160px; aspect-ratio: 16 / 10; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, var(--surface)); overflow: hidden; flex: none; }
+.kn-cat-screen-menu { position: absolute; left: 0; right: 0; top: 0; background: var(--border); }
+.kn-cat-screen-dock { position: absolute; left: 25%; right: 25%; bottom: 2%; border-radius: 3px; background: var(--border); }
+.kn-cat-screen-cat { position: absolute; border-radius: 40% 40% 30% 30%; background: var(--text); box-shadow: 0 0 0 2px var(--accent-soft, transparent); transition: left var(--fast, 140ms), top var(--fast, 140ms), width var(--fast, 140ms), height var(--fast, 140ms); }
+@media (prefers-reduced-motion: reduce) { .kn-cat-screen-cat { transition: none; } }
