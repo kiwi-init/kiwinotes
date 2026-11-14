@@ -622,7 +622,7 @@ await step("⌘K cria nota nova quando não há título igual", async () => {
 // T7616 (achado da T7437): um [[link]] para um arquivo que está no cofre (pdf, quadro) acha o arquivo. O link não fica
 // de quebrado, e clicar não cria uma nota vazia "relatorio.pdf.md" ao lado do pdf.
 await step("[[relatorio.pdf]] que está no cofre: o link acha o arquivo e o clique não cria nota", async () => {
-  await page.evaluate(() => (window as any).__kiwiNotesMock.otherFiles.push({ path: "Docs/relatorio.pdf", size: 9, mtime: new Date().toISOString() }));
+  await page.evaluate(() => (window as any).__kiwiNotesMock.addOtherFile({ path: "Docs/relatorio.pdf", size: 9, mtime: new Date().toISOString() }));
   await page.click(".cm-content");
   await page.keyboard.press("Meta+ArrowDown");
   await page.keyboard.type("\nver [[relatorio.pdf]] ");

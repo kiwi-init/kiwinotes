@@ -116,6 +116,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const openRequestRef = useRef(openRequest);
   const handledRequest = useRef(openRequest?.n ?? 0);
   const [listing, setListing] = useState<VaultListing | null>(null);
+  const listingRef = useRef(listing);
+  listingRef.current = listing;
   const [failed, setFailed] = useState(false);
   // As pastas abertas e as seções recolhidas da barra ficam guardadas entre aberturas (T7390, spec #7383). As pastas
   // são de cada cofre (este componente remonta a cada troca de pasta das notas).
@@ -287,6 +289,35 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           return null;
         },
       ),
+    [api],
+  );
+
+  /**
+   * Só mudaram notas que já estão na lista (o save da nota aberta, uma edição no Obsidian): troca os dados delas, sem
+   * pedir a lista inteira (spec #13384: com 6 mil pastas, a lista e a árvore refeitas a cada save davam quadros de
+   * 90 ms). `null`: entrou, saiu ou mudou de lugar alguma coisa, e a lista inteira vem.
+   */
+  const patchListing = useCallback(
+    async (paths: string[]): Promise<VaultListing | null> => {
+      const l = listingRef.current;
+      if (!l || !paths.length || paths.length > 20) return null;
+      const at = new Map(l.notes.map((n, i) => [n.path, i]));
+      if (!paths.every((p) => at.has(p))) return null;
+      const got = await Promise.all(paths.map((p) => api.get(p).catch(() => null)));
+      if (got.some((n) => !n) || listingRef.current !== l) return null;
+      const notes = [...l.notes];
+      for (const n of got) {
+        const i = at.get(n!.path)!;
+        const old = notes[i]!;
+        // Os campos da lista, tirados da nota de agora (sem o conteúdo).
+        notes[i] = Object.fromEntries(Object.keys(old).map((k) => [k, (n as unknown as Record<string, unknown>)[k] ?? (old as unknown as Record<string, unknown>)[k]])) as unknown as NoteMeta;
+      }
+      const next = { ...l, notes };
+      listingRef.current = next;
+      setListing(next);
+      api.tags?.().then(setTagList, () => {});
+      return next;
+    },
     [api],
   );
 
@@ -584,7 +615,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
         // O rascunho do que foi digitado antes de olhar o disco (T7876): a nota pode ter sumido fora (T7513).
         settleRef.current();
         setVaultVersion((n) => n + 1);
-        void refresh().then((l) => {
+        void (async () => (await patchListing(paths)) ?? (await refresh()))().then((l) => {
           if (!l) return;
           // Nota que sumiu (apagada ou renomeada fora) leva o rascunho junto (#1525). A aberta com edição pendente fica:
           // o texto ainda está no editor, e o aviso de erro do save deixa a pessoa decidir.
@@ -638,7 +669,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           },
         );
       }),
-    [api, drafts, links, refresh, show],
+    [api, drafts, links, patchListing, refresh, show],
   );
 
   // No hub (T2121) as Notas ficam montadas e escondidas nas outras seções: as teclas só valem com elas na tela (T2200).

@@ -109,6 +109,12 @@ export class MockVault implements NotesApi {
   /** Os arquivos que não são notas (T7616): só na lista, para um `[[relatorio.pdf]]` achar o arquivo. */
   otherFiles: VaultFile[] = [];
 
+  /** Um arquivo que não é nota chega no cofre (os testes): avisa como o watcher do engine avisa a tela. */
+  addOtherFile(file: VaultFile): void {
+    this.otherFiles.push(file);
+    this.emit([file.path]);
+  }
+
   async list(): Promise<VaultListing> {
     return {
       folders: [...this.dirs].sort((a, b) => a.localeCompare(b, "pt-BR")),

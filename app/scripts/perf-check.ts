@@ -2,21 +2,25 @@
 // 6.625 pastas e 150.775 outros arquivos, pelo log), com o AppEngine headless, o agente falso e um WebKit headless:
 // nada na tela de ninguém, sem mic e sem colar de verdade.
 //
-// 1. a CPU do Bun parado, com o hub fechado e com ele aberto nas Notas (meta: perto de 0 %);
-// 2. digitar numa nota no ritmo de uma pessoa: o eco de cada tecla (do envio ao quadro com a letra; meta 16 ms na
-//    mediana) e o quadro mais longo, com os saves de 500 ms e o que cada save refaz na tela;
-// 3. um ditado (`--text`, o caminho do app sem o STT) com as Notas abertas: o tempo do app e o quadro mais longo.
+// 0. o índice do cofre: quanto leva e se o Bun responde nesse meio;
+// 1. a CPU parada: o Bun com o hub fechado, e o Bun e o WebKit com ele aberto nas Notas (meta: perto de 0 %);
+// 2. digitar numa nota no ritmo de uma pessoa: o eco de cada tecla (do envio ao quadro com a letra) e o quadro mais
+//    longo, com os saves de 500 ms e o que cada save refaz na tela;
+// 3. um ditado numa nota: o texto chega de uma vez no editor, como a colagem do helper (o STT e a colagem são do
+//    helper, fora daqui), e o save depois.
+// As metas estão em `GOALS`.
 //
 //   bun scripts/perf-check.ts [--notes N] [--folders N] [--files N] [--keys N] [--idle S] [--no-limits]
 //
-// `--no-limits` só mede (os números de antes). Sai com exit 1 se alguma meta não bateu.
+// `--no-limits` só mede (os números de antes). Sai com exit 1 se alguma meta não bateu. Pesado (escreve 150 mil
+// arquivos num tmp): pegue `kiwi lock bench` antes.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { connect, request } from "./cli";
-import { openWindow, type UiContext } from "./ui-page";
+import { ensureBuild, openWindow, type UiContext } from "./ui-page";
 
 const arg = (name: string, def: number) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -28,8 +32,12 @@ const FILES = arg("files", 150775);
 const KEYS = arg("keys", 120);
 const IDLE_S = arg("idle", 10);
 const LIMITS = !process.argv.includes("--no-limits");
-/** As metas do spec #13384: CPU parado em %, o eco da tecla e o quadro mais longo em ms. */
-export const GOALS = { idleCpu: 2, keyEcho: 16, keyFrame: 50, dictationFrame: 100 } as const;
+/**
+ * As metas do spec #13384. CPU parado em % de um núcleo; o resto em ms: o eco da tecla (a mediana num quadro de 60 Hz,
+ * o p95 em dois), o quadro mais longo digitando (com os saves), o ditado colado aparecendo e o quadro mais longo dele.
+ * Antes (rc19, este cofre): eco p95 4.744 ms, quadro 8.416 ms, ditado 1.351 ms.
+ */
+export const GOALS = { idleCpu: 2, keyEcho: 16, keyEchoP95: 33, keyFrame: 150, dictationEcho: 50, dictationFrame: 100 } as const;
 
 const app = resolve(import.meta.dir, "..");
 const data = mkdtempSync(join(tmpdir(), "kiwi-perf-"));
@@ -143,6 +151,8 @@ function goal(name: string, value: number, limit: number, unit: string) {
   if (!ok) fails.push(name);
 }
 
+// O build do hub antes de medir: com os fontes mudados, o `openWindow` refaz o Vite, e isso não é o app.
+ensureBuild("hub");
 const browser = await webkit.launch({ headless: true });
 try {
   let t0 = performance.now();
@@ -239,7 +249,9 @@ try {
     goal("CPU parado, Notas abertas", idleOpen, GOALS.idleCpu, "%");
     goal("CPU parado do WebKit, Notas abertas", idleWeb, GOALS.idleCpu, "%");
     goal("eco da tecla (mediana)", median(echo), GOALS.keyEcho, "ms");
+    goal("eco da tecla (p95)", pct(echo, 0.95), GOALS.keyEchoP95, "ms");
     goal("quadro mais longo digitando", typing.frame, GOALS.keyFrame, "ms");
+    goal("o ditado colado aparecendo", echoD, GOALS.dictationEcho, "ms");
     goal("quadro mais longo no ditado", dict.frame, GOALS.dictationFrame, "ms");
   }
 } finally {
