@@ -100,7 +100,16 @@ export function CatPlaceRow({ bare = false }: { bare?: boolean }) {
       {bare && failed ? <p className="kn-row-hint" role="alert">{hint}</p> : null}
     </div>
   </div>;
-  return bare ? body : <Row label="Posição e tamanho do Kiwi Cat" hint={hint}>{body}</Row>;
+  if (bare) return body;
+  // O título e a frase em cima, na largura toda, e a prévia e os controles numa linha embaixo (#13334): na coluna
+  // estreita do Row, o texto quebrava em seis linhas.
+  return <div className="kn-row kn-row-stacked">
+    <div className="kn-row-text">
+      <div className="kn-row-label">Posição e tamanho do Kiwi Cat</div>
+      <div className="kn-row-hint">{hint}</div>
+    </div>
+    {body}
+  </div>;
 }
 
 /**

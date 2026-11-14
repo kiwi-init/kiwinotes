@@ -421,7 +421,11 @@
 .kn-cat-size input { flex: 1; accent-color: var(--accent); }
 .kn-cat-size-value { min-width: 3ch; font-variant-numeric: tabular-nums; color: var(--text-2); font-size: var(--text-sm); }
 .kn-cat-screen { position: relative; width: 160px; aspect-ratio: 16 / 10; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, var(--surface)); overflow: hidden; flex: none; }
-.kn-cat-place[data-bare] { justify-content: center; gap: var(--space-4); }
+/* No onboarding, a mesma margem nos quatro lados do cartão (#13334). */
+.kn-cat-place[data-bare] { gap: var(--space-4); padding: var(--space-4); }
+.kn-cat-place[data-bare] .kn-cat-place-controls { flex: 1; }
+/* Em Ajustes, o título e a frase em cima, e a prévia e os controles embaixo. */
+.kn-row.kn-row-stacked { flex-direction: column; align-items: stretch; gap: var(--space-2); padding-block: var(--space-3); }
 .kn-cat-place[data-bare] .kn-cat-screen { width: 288px; border-radius: 10px; }
 .kn-cat-screen-menu { position: absolute; left: 0; right: 0; top: 0; background: var(--border); }
 .kn-cat-screen-dock { position: absolute; left: 25%; right: 25%; bottom: 2%; border-radius: 3px; background: var(--border); }
