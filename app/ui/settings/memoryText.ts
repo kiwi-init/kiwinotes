@@ -22,3 +22,21 @@ export function instructionsCount(n: number): string {
 export function clearQuestion(n: number): string {
   return n === 1 ? "Apagar o fato da memória?" : `Apagar os ${n} fatos da memória?`;
 }
+
+/** O aviso quando o fato em edição sumiu da lista (o agente o esqueceu ou mudou no meio): nada é salvo. */
+export const EDIT_GONE = "Esse fato mudou enquanto você editava: nada foi salvo. Veja a lista e edite de novo.";
+
+/**
+ * A lista com o fato `from` trocado por `to`, achado pelo texto, nunca pela posição: a lista segue o agente ao vivo, e
+ * os fatos andam se ele anota ou esquece um no meio (revisão do T11668). Sem `from` na lista, `null`.
+ */
+export function replaceFact(facts: readonly string[], from: string, to: string): string[] | null {
+  const at = facts.indexOf(from);
+  return at < 0 ? null : facts.map((x, i) => (i === at ? to : x));
+}
+
+/** A lista sem o fato `fact`, achado pelo texto. Sem ele na lista, `null`. */
+export function dropFact(facts: readonly string[], fact: string): string[] | null {
+  const at = facts.indexOf(fact);
+  return at < 0 ? null : facts.filter((_, i) => i !== at);
+}

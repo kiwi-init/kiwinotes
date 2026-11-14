@@ -10,6 +10,8 @@ import { Button, Row } from "../src/kit/index.tsx";
 import {
   clearQuestion,
   countLine,
+  dropFact,
+  EDIT_GONE,
   INSTRUCTIONS_HINT,
   INSTRUCTIONS_MAX,
   INSTRUCTIONS_TITLE,
@@ -17,6 +19,7 @@ import {
   MEMORY_EMPTY,
   MEMORY_HINT,
   MEMORY_TITLE,
+  replaceFact,
 } from "./memoryText.ts";
 
 /** O erro da capacidade, sem o nome dela na frente ("agent.memorySet: …"): a frase é para a pessoa. */
@@ -25,7 +28,8 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e)).rep
 export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: () => Promise<unknown>) => Promise<void> }) {
   const [view, setView] = useState<AgentMemoryView | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ index: number; text: string } | null>(null);
+  // O fato em edição pelo texto de origem (`from`), não pela posição: a lista muda ao vivo (revisão do T11668).
+  const [editing, setEditing] = useState<{ from: string; text: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [draft, setDraft] = useState(status.instructions ?? "");
   const saved = status.instructions ?? "";
@@ -45,6 +49,14 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
   }, []);
   // As instruções que chegam de fora (outra janela) trocam o rascunho só se ele não foi mexido.
   useEffect(() => setDraft((d) => (d === "" || d === saved ? saved : d)), [saved]);
+
+  // O fato em edição sumiu (o agente o esqueceu ou mudou): a edição para, com o aviso, e nada é salvo.
+  useEffect(() => {
+    if (editing && view && !view.facts.includes(editing.from)) {
+      setEditing(null);
+      setFailure(EDIT_GONE);
+    }
+  }, [view, editing]);
 
   if (!view) return failure ? <Row label={MEMORY_TITLE} hint={failure} /> : null;
   const save = (facts: string[]) =>
@@ -66,15 +78,20 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
           <ul className="kn-memory-facts" aria-label="Os fatos da memória">
             {view.facts.map((f, i) => (
               <li key={`${i}:${f}`} className="kn-memory-fact">
-                {editing?.index === i ? (
+                {editing?.from === f ? (
                   <form
                     className="kn-memory-edit"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      save(view.facts.map((x, j) => (j === i ? editing.text : x)));
+                      const next = replaceFact(view.facts, editing.from, editing.text);
+                      if (next) save(next);
+                      else {
+                        setEditing(null);
+                        setFailure(EDIT_GONE);
+                      }
                     }}
                   >
-                    <input className="kn-input" aria-label="O fato" value={editing.text} maxLength={300} onChange={(e) => setEditing({ index: i, text: e.target.value })} autoFocus />
+                    <input className="kn-input" aria-label="O fato" value={editing.text} maxLength={300} onChange={(e) => setEditing({ from: f, text: e.target.value })} autoFocus />
                     <Button variant="primary" type="submit" disabled={!editing.text.trim()}>
                       Salvar
                     </Button>
@@ -91,8 +108,22 @@ export function MemoryRows({ status, run }: { status: AgentStatus; run: (call: (
                   <>
                     <span className="kn-memory-fact-text">{f}</span>
                     <span className="kn-memory-fact-actions">
-                      <Button onClick={() => setEditing({ index: i, text: f })}>Editar</Button>
-                      <Button onClick={() => save(view.facts.filter((_, j) => j !== i))}>Apagar</Button>
+                      <Button
+                        onClick={() => {
+                          setEditing({ from: f, text: f });
+                          setFailure(null);
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          const next = dropFact(view.facts, f);
+                          if (next) save(next);
+                        }}
+                      >
+                        Apagar
+                      </Button>
                     </span>
                   </>
                 )}
