@@ -137,9 +137,8 @@ async function sequence(p: Page) {
   await invoke("agent.ask", { text: "/limite" });
   await live(p, ".kn-bubble[data-error]");
   await Bun.sleep(1500);
-  // O texto chegando aos poucos: a caixa cresce suave (o FLIP). No hub headless o balão do agente falso já aparece com o
-  // trecho inteiro (o aviso KNOWN do kiwicat-bubble-check), então a caixa cresce aqui pelo texto invisível que dá o tamanho
-  // dela (`.kn-bubble-ghost`): uma linha a mais, como um pedaço novo que chega.
+  // O texto chegando aos poucos: a caixa cresce suave (o FLIP). Para um salto certo e repetível, a caixa cresce aqui pelo
+  // texto invisível que dá o tamanho dela (`.kn-bubble-ghost`): uma linha a mais, como um pedaço novo que chega.
   await idle();
   await invoke("agent.ask", { text: "/conta Um pedaço que chegou." });
   await p.waitForFunction(() => [...document.querySelectorAll(".kn-bubble-ghost")].some((g) => !g.closest('[data-phase="exit"]') && g.textContent?.includes("Um pedaço")), undefined, { timeout: 30000 });
@@ -206,6 +205,11 @@ try {
   await invoke("notes.create", { folder: "Projetos/Migração", title: "2026-11-10 · Cronograma", content: "---\ntype: meeting\ndate: 2026-11-10\nstart: 2026-11-10T10:00:00.000Z\nend: 2026-11-10T10:45:00.000Z\nduration: 2700\napp: Zoom\nparticipants:\n  - Ana\n---\n\n## Transcrição\n\n**Ana** (00:00): Começamos pelo arquivo de 2019.\n" });
   await invoke("agent.enable", { consent: true });
   await invoke("agent.download");
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
+  await invoke("agent.configure", { onboarding: { state: "done" } });
+  // O gato no overlay (spec #9810): no headless não há hub à vista, então a cada pedido o gato iria para o overlay e o do
+  // canto (com o balão) sumiria até o fim. Aqui a prova é o gato do canto.
+  await invoke("settings.set", { kiwicat: { overlay: false } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
 
   const runs = cpuOnly ? (["light"] as const) : (["light", "dark", "reduced"] as const);

@@ -82,6 +82,11 @@ try {
   // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
   await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
+  await invoke("agent.configure", { onboarding: { state: "done" } });
+  // O gato no overlay (spec #9810): no headless não há hub à vista, então a cada pedido o gato iria para o overlay e o do
+  // canto (com o balão) sumiria até o fim. Aqui a prova é o gato do canto.
+  await invoke("settings.set", { kiwicat: { overlay: false } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
 
@@ -95,29 +100,12 @@ try {
   });
 
   // 1. A resposta digitada num balão ao lado do gato, com a ponta para ele.
-  // A digitação, quadro a quadro desde o pedido (duas leituras com 250 ms entre elas dependiam de quando o balão aparecia).
-  await p.evaluate(() => {
-    const w = window as any;
-    w.__typed = [];
-    w.__t0 = performance.now();
-    const tick = () => {
-      const b = document.querySelector('.kn-bubble-slot:not([data-phase="exit"]) > .kn-bubble');
-      const typed = b?.querySelector(".kn-bubble-typed")?.textContent?.length, full = b?.querySelector(".kn-bubble-ghost")?.textContent?.length;
-      if (typed !== undefined) w.__typed.push([typed, full, Math.round(performance.now() - w.__t0)]);
-      if (w.__typed.length < 600 && !(typed && typed === full)) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
   await invoke("agent.ask", { text: `/conta ${LONG}` });
   await p.waitForSelector(bubble);
-  await p.waitForFunction(() => { const t = (window as any).__typed as number[][]; return t.length && t.at(-1)![0] === t.at(-1)![1]; }, undefined, { timeout: 15000 });
-  const typing = (await p.evaluate(() => (window as any).__typed)) as number[][];
-  // Conhecido (T11683): no hub headless com o agente falso, o 1º trecho já aparece inteiro, também na main (o balão chega
-  // ~3,5 s depois do pedido, e a digitação, de 18 ms por letra, já passou). Não é da troca entre balões; fica avisado.
-  if (!typing.some(([t, f]) => t! > 0 && t! < f!)) {
-    console.error(`KNOWN: o 1º trecho apareceu inteiro (${JSON.stringify(typing.slice(0, 3))}), como na main`);
-    report.checks.push("KNOWN: the first chunk appeared whole (also on main; not the swap)");
-  }
+  const t1 = await p.locator(`${bubble} .kn-bubble-typed`).textContent();
+  await Bun.sleep(250);
+  const t2 = await p.locator(`${bubble} .kn-bubble-typed`).textContent();
+  assert.ok((t2 ?? "").length > (t1 ?? "").length, "o texto aparece sendo digitado");
   const cat = await box(p, ".kn-kiwicat");
   const b = await box(p, bubble);
   assert.ok(b.right <= cat.x, "o balão fica à esquerda do gato");
