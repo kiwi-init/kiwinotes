@@ -111,6 +111,20 @@ public enum OverlayLayout {
             height: size.height
         )
     }
+
+    /// The pill on screen. `pill` is where SwiftUI drew it inside the panel (origin top-left); the screen's origin is
+    /// bottom-left.
+    public static func pillOnScreen(panel: CGRect, pill: CGRect) -> CGRect {
+        CGRect(x: panel.minX + pill.minX, y: panel.maxY - pill.maxY, width: pill.width, height: pill.height)
+    }
+
+    /// Whether the panel takes a click at `mouse` (screen coordinates, spec #12845). The panel is bigger than the pill
+    /// (room for the shadow, a message or the meeting card), and its transparent part must let the click through to the
+    /// app, the Dock or the desktop behind it: only the pill takes clicks. Without a pill (not drawn yet), nothing does.
+    public static func takesClick(panel: CGRect, pill: CGRect?, mouse: CGPoint) -> Bool {
+        guard let pill, !pill.isEmpty else { return false }
+        return pillOnScreen(panel: panel, pill: pill).contains(mouse)
+    }
 }
 
 /// Short Portuguese text for the `record.error` codes, shown in the pill.

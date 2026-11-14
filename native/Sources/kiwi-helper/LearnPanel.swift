@@ -15,6 +15,7 @@ final class LearnPanel {
     private let state = LearnViewState()
     private var panel: NSPanel?
     private var orderOutWork: DispatchWorkItem?
+    private var mouseTimer: Timer?
 
     init() {
         state.onAnswer = { [weak self] in self?.onAnswer?($0) }
@@ -40,17 +41,39 @@ final class LearnPanel {
             panel.setFrame(frame, display: false)
         }
         state.visible = true
-        panel.ignoresMouseEvents = false
         panel.orderFrontRegardless()
+        trackMouse(true)
     }
 
     private func dismiss() {
         guard state.visible else { return }
         state.visible = false
-        panel?.ignoresMouseEvents = true
+        trackMouse(false)
         let work = DispatchWorkItem { [weak self] in self?.panel?.orderOut(nil) }
         orderOutWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    /// The same cause as the meeting panel (spec #12845): the panel is 480×92 and the card is smaller, so it only takes
+    /// clicks while the mouse is over the card (`OverlayLayout.takesClick`).
+    private func trackMouse(_ on: Bool) {
+        guard on else {
+            mouseTimer?.invalidate()
+            mouseTimer = nil
+            panel?.ignoresMouseEvents = true
+            return
+        }
+        guard mouseTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.updateMouse() }
+        RunLoop.main.add(timer, forMode: .common)
+        mouseTimer = timer
+        updateMouse()
+    }
+
+    private func updateMouse() {
+        guard let panel else { return }
+        let take = OverlayLayout.takesClick(panel: panel.frame, pill: state.cardFrame, mouse: NSEvent.mouseLocation)
+        if panel.ignoresMouseEvents == take { panel.ignoresMouseEvents = !take }
     }
 
     private static func targetScreen() -> NSScreen? {
@@ -68,6 +91,7 @@ final class LearnPanel {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
+        panel.ignoresMouseEvents = true // until the mouse is over the card (trackMouse)
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
@@ -97,6 +121,13 @@ final class LearnViewState: ObservableObject {
     @Published var visible = false
     @Published var offer = LearnOffer(from: "", to: "")
     var onAnswer: (LearnAnswer) -> Void = { _ in }
+    /// Where the card is inside the panel (top-left based), for `LearnPanel.updateMouse`.
+    var cardFrame: CGRect?
+}
+
+private struct LearnCardFrameKey: PreferenceKey {
+    static var defaultValue: CGRect?
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
 }
 
 enum LearnText {
@@ -119,6 +150,9 @@ struct LearnView: View {
         VStack {
             Spacer(minLength: 0)
             card
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: LearnCardFrameKey.self, value: g.frame(in: .named("learn")))
+                })
                 .opacity(state.visible ? 1 : 0)
                 .scaleEffect(state.visible || reduceMotion ? 1 : 0.9, anchor: .bottom)
                 .offset(y: state.visible || reduceMotion ? 0 : 6)
@@ -126,6 +160,8 @@ struct LearnView: View {
                 .padding(.bottom, Self.bottom)
         }
         .frame(width: Self.panelSize.width, height: Self.panelSize.height)
+        .coordinateSpace(name: "learn")
+        .onPreferenceChange(LearnCardFrameKey.self) { state.cardFrame = $0 }
     }
 
     private var card: some View {

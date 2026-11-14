@@ -23,6 +23,7 @@ final class MeetingPanel {
     private var dictating = false
     private var clock: Timer?
     private var orderOutWork: DispatchWorkItem?
+    private var mouseTimer: Timer?
 
     init() {
         state.onAnswer = { [weak self] in self?.onAnswer?($0) }
@@ -82,17 +83,42 @@ final class MeetingPanel {
             panel.setFrame(frame, display: false)
         }
         state.visible = true
-        panel.ignoresMouseEvents = false
         panel.orderFrontRegardless()
+        trackMouse(true)
     }
 
     private func dismiss() {
         guard state.visible else { return }
         state.visible = false
-        panel?.ignoresMouseEvents = true
+        trackMouse(false)
         let work = DispatchWorkItem { [weak self] in self?.panel?.orderOut(nil) }
         orderOutWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    // MARK: Clicks
+
+    /// The panel (480×92) is much bigger than the recording pill: taking clicks on all of it blocked the app, the Dock
+    /// and the desktop around the pill for the whole meeting (spec #12845). Like the dictation pill, it only takes them
+    /// while the mouse is over the card or the pill itself (`OverlayLayout.takesClick`).
+    private func trackMouse(_ on: Bool) {
+        guard on else {
+            mouseTimer?.invalidate()
+            mouseTimer = nil
+            panel?.ignoresMouseEvents = true
+            return
+        }
+        guard mouseTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.updateMouse() }
+        RunLoop.main.add(timer, forMode: .common) // keeps running while a button is being pressed
+        mouseTimer = timer
+        updateMouse()
+    }
+
+    private func updateMouse() {
+        guard let panel else { return }
+        let take = OverlayLayout.takesClick(panel: panel.frame, pill: state.pillFrame, mouse: NSEvent.mouseLocation)
+        if panel.ignoresMouseEvents == take { panel.ignoresMouseEvents = !take }
     }
 
     private static func targetScreen() -> NSScreen? {
@@ -110,6 +136,7 @@ final class MeetingPanel {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
+        panel.ignoresMouseEvents = true // until the mouse is over the card or the pill (trackMouse)
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
@@ -143,6 +170,11 @@ final class MeetingViewState: ObservableObject {
     @Published var elapsed = "0:00"
     /// Snapshots: the dot doesn't breathe, so the PNG shows it at full color.
     var still = false
+    /// Snapshots: tint the part that takes the click and outline the whole panel (spec #12845).
+    var showClicks = false
+    /// Where the card or the pill is inside the panel (top-left based), for `MeetingPanel.updateMouse`. Not published:
+    /// nothing on screen depends on it.
+    var pillFrame: CGRect?
     var onAnswer: (MeetingDetector.Answer) -> Void = { _ in }
     var onStop: () -> Void = {}
     var onTogglePause: () -> Void = {}
@@ -179,6 +211,10 @@ struct MeetingView: View {
         VStack {
             Spacer(minLength: 0)
             content
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: MeetingPillFrameKey.self, value: g.frame(in: .named("meeting")))
+                })
+                .overlay(state.showClicks ? Color.green.opacity(0.45) : Color.clear)
                 .opacity(state.visible ? 1 : 0)
                 .scaleEffect(state.visible || reduceMotion ? 1 : 0.9, anchor: .bottom)
                 .offset(y: state.visible || reduceMotion ? 0 : 6)
@@ -186,6 +222,9 @@ struct MeetingView: View {
                 .padding(.bottom, Self.bottom)
         }
         .frame(width: Self.panelSize.width, height: Self.panelSize.height)
+        .overlay(state.showClicks ? Rectangle().strokeBorder(Color.red, style: StrokeStyle(lineWidth: 2, dash: [6, 4])) : nil)
+        .coordinateSpace(name: "meeting")
+        .onPreferenceChange(MeetingPillFrameKey.self) { state.pillFrame = $0 }
     }
 
     @ViewBuilder
@@ -344,6 +383,11 @@ struct CircleButton: View {
 
 // MARK: - Snapshots (dev)
 
+private struct MeetingPillFrameKey: PreferenceKey {
+    static var defaultValue: CGRect?
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) { value = nextValue() ?? value }
+}
+
 enum MeetingSnapshots {
     /// Part of `kiwi-helper --overlay-snapshot <dir>`: the meeting panel in each state, light and dark, off screen.
     @MainActor
@@ -355,13 +399,15 @@ enum MeetingSnapshots {
             ("recording", .recording(app: teams, since: 0, minePaused: false)),
             ("recording-mine-paused", .recording(app: teams, since: 0, minePaused: true)),
         ]
-        for (name, panel) in samples {
+        let variants = samples.flatMap { s in [(s.0, s.1, false)] + (s.0 == "recording" || s.0 == "suggest" ? [(s.0 + "-clicks", s.1, true)] : []) }
+        for (name, panel, clicks) in variants {
             for scheme in [ColorScheme.light, .dark] {
                 let state = MeetingViewState()
                 state.visible = true
                 state.panel = panel
                 state.elapsed = "12:05"
                 state.still = true
+                state.showClicks = clicks
                 let background = scheme == .dark
                     ? [Color(white: 0.28), Color(white: 0.08)]
                     : [Color(white: 0.96), Color(white: 0.72)]
@@ -373,6 +419,11 @@ enum MeetingSnapshots {
                 guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
                       let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { continue }
                 try png.write(to: dir.appendingPathComponent("meeting-\(name)-\(scheme == .dark ? "dark" : "light").png"))
+                if clicks, scheme == .light {
+                    // The sizes for the PR (spec #12845): the window against the part that takes the click.
+                    let pill = state.pillFrame.map { "\(Int($0.width))×\(Int($0.height)) at (\(Int($0.minX)), \(Int($0.minY)))" } ?? "not measured"
+                    FileHandle.standardError.write(Data("meeting \(name): panel \(Int(MeetingView.panelSize.width))×\(Int(MeetingView.panelSize.height)), clickable \(pill)\n".utf8))
+                }
             }
         }
     }
