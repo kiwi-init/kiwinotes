@@ -208,6 +208,15 @@ export function AgentSection() {
       {/* O atalho Control (spec #9876): só com o agente ligado. */}
       {status.enabled ? <ControlRow status={status} onStatus={setStatus} /> : null}
 
+      {/* O onboarding (spec #11955): abre de novo, do passo 1, por cima do hub. */}
+      {status.enabled ? (
+        <Row label="Onboarding" hint="Os passos com o gato da primeira vez que o agente ligou: o jeito de falar, o Modelo, os projetos e a cor.">
+          <Button onClick={() => void run(() => api.agent.configure({ onboarding: { state: "open", step: 1 } }))} disabled={status.onboarding?.state === "open"}>
+            Refazer o onboarding
+          </Button>
+        </Row>
+      ) : null}
+
       {ready ? (
         <div className="kn-agent-test">
           <div className="kn-row-text">

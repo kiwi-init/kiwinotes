@@ -1,5 +1,7 @@
 import type { NoteModel } from "./note-model.ts";
 import type { SummarySettings } from "./summary-settings.ts";
+import type { AgentOnboarding } from "./agent-onboarding.ts";
+export type { AgentOnboarding } from "./agent-onboarding.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
@@ -179,7 +181,10 @@ export type { NoteModel };
 // 1.63.0 (T11986, spec #11908): "Pesquisar na web". O `webSearch` no `AgentStatus` e no `agent.configure` (desligado por
 //   padrão; ligado, o Kiwi libera as ferramentas de web do próprio agente) e o `kind: "references"` nas propostas (T11987:
 //   as referências de uma nota, com a nota e quantos links). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.63.0";
+// 1.64.0 (T11993, spec #11955): o onboarding do agente. O `onboarding` no `AgentStatus` (pendente, aberto com o passo,
+//   ou feito) e no `agent.configure` (o passo, fechar e o "Refazer"); o `agent.enable` da primeira vez o abre. O
+//   `agent.guardPreview` (o filtro local num texto de exemplo, sem ir ao agente). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.64.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -498,7 +503,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean }; result: AgentStatus };
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean; onboarding?: Partial<AgentOnboarding> }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -599,6 +604,11 @@ export interface UiCapabilities {
   "agent.memorySet": { args: { facts: string[] }; result: AgentMemoryView };
   /** "Apagar tudo" (1.60.0): a memória fica vazia. */
   "agent.memoryClear": { args: Record<string, never>; result: AgentMemoryView };
+  /**
+   * O guardrail na prática (1.64.0, spec #11955, o passo 4 do onboarding): o texto pelo filtro local, com cada segredo
+   * trocado pelo marcador. Nada vai ao agente nem fica guardado; o agente nem precisa estar ligado.
+   */
+  "agent.guardPreview": { args: { text: string }; result: { text: string; held: number } };
 }
 
 /** A memória do agente (1.60.0, spec #11469). */
@@ -824,6 +834,8 @@ export interface AgentStatus {
   instructions: string;
   /** "Pesquisar na web" (1.63.0, spec #11908): desligado por padrão; ligado, o agente pode buscar e ler páginas. */
   webSearch: boolean;
+  /** O onboarding (1.64.0, spec #11955): aberto na primeira vez que o agente liga, e pelo "Refazer". */
+  onboarding: AgentOnboarding;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */
@@ -1002,6 +1014,7 @@ export const UI_CAPABILITIES = [
   "agent.memoryUndo",
   "agent.memorySet",
   "agent.memoryClear",
+  "agent.guardPreview",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */

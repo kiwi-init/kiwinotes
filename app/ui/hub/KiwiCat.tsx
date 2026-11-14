@@ -205,5 +205,6 @@ export function KiwiCat() {
     void api.settings.get().then(s => { if (alive && settingsEvents === se) setSettings(s); }, () => {});
     return () => { alive = false; offStatus(); offSettings(); };
   }, []);
-  return status?.enabled && settings?.kiwicat?.show === true ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} away={away} cor={catColorHex(settings.kiwicat.cor)} /> : null;
+  // No onboarding (spec #11955), o gato grande é o dele: nunca dois gatos.
+  return status?.enabled && settings?.kiwicat?.show === true && status.onboarding?.state !== "open" ? <CatMount busy={status.busy} reduced={settings.appearance.motion === "reduced"} away={away} cor={catColorHex(settings.kiwicat.cor)} /> : null;
 }
