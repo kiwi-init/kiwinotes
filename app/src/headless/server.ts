@@ -250,6 +250,9 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   stores.agent.useWriter(writerFromCapabilities(capabilities));
   // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
   stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
+  // As rotinas (spec #12150): como no app. A conferência pode ser mais curta na prova (`KIWI_ROUTINE_TICK_MS`).
+  const routineTick = Number(process.env.KIWI_ROUTINE_TICK_MS);
+  stores.agent.startRoutines(Number.isFinite(routineTick) && routineTick >= 100 ? routineTick : undefined);
   // A notificação quando o agente espera (spec #9839): na CLI, só o aviso falso (`KIWI_FAKE_NOTICES=<permissão>`), que
   // registra em <dados>/fake-notices.jsonl. A "janela principal" é de mentira: fora da vista até o `notice {"view":true}`.
   const fakeNoticePermission = process.env.KIWI_FAKE_NOTICES;
@@ -283,6 +286,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.agent.onUsageChanged((e) => event("agent.usageChanged", e)),
     stores.agent.onProposalsChanged((proposals) => event("agent.proposalsChanged", { proposals })),
     stores.agent.onMemoryChanged((v) => event("agent.memoryChanged", v)),
+    stores.agent.onRoutine((e) => event("agent.routine", e)),
   ];
   // O gato no overlay (spec #9810): no headless não há hub, então os pedidos vão ao helper, que no `--headless` não mostra
   // nada; os comandos aparecem no log, e o `kiwicat.where` sai como evento.

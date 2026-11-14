@@ -41,6 +41,10 @@ export function appAgentService(o: AppAgentOptions): AgentService {
   const packages =
     headless && env.KIWI_ADAPTER_PACKAGES ? (JSON.parse(readFileSync(env.KIWI_ADAPTER_PACKAGES, "utf8")) as PinnedPackage[]) : undefined;
   const idle = headless && env.KIWI_AGENT_IDLE_MS ? Number(env.KIWI_AGENT_IDLE_MS) : undefined;
+  // O relógio de teste do headless (spec #12150, a prova das rotinas): começa na hora dada e anda junto com o de verdade.
+  const clockStart = headless && env.KIWI_CLOCK_START ? Date.parse(env.KIWI_CLOCK_START) : NaN;
+  const boot = Date.now();
+  const now = Number.isFinite(clockStart) ? () => clockStart + (Date.now() - boot) : undefined;
   return new AgentService({
     data: o.data,
     name: CLAUDE_CODE,
@@ -67,6 +71,7 @@ export function appAgentService(o: AppAgentOptions): AgentService {
     ...(headless && env.KIWI_ADAPTER_REGISTRY ? { registry: env.KIWI_ADAPTER_REGISTRY } : {}),
     ...(packages ? { packages } : {}),
     ...(idle && Number.isFinite(idle) && idle > 0 ? { idleMs: idle } : {}),
+    ...(now ? { now } : {}),
     log: o.log,
   });
 }

@@ -15,6 +15,7 @@ import { DEFAULT_MEETING_SETTINGS, type MeetingSettings, sanitizeMeetingSettings
 import { type CatColorChoice, DEFAULT_CAT_COLOR, isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { folderPath } from "../notes/paths.ts";
 import { type AgentOnboarding, DEFAULT_AGENT_ONBOARDING, sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
+import { type AgentRoutines, DEFAULT_AGENT_ROUTINES, sanitizeAgentRoutines } from "../shared/agent-routines.ts";
 import { readJson, writeJson } from "./files.ts";
 
 export interface AppSettings {
@@ -95,6 +96,8 @@ export interface AgentSettings {
   summary: SummarySettings;
   /** O onboarding (spec #11955): pendente até a primeira vez que o agente liga; aberto (com o passo) ou feito. */
   onboarding: AgentOnboarding;
+  /** As rotinas (spec #12150): o resumo do dia e os pendentes da semana, as duas desligadas de fábrica. */
+  routines: AgentRoutines;
 }
 
 /** "Suas reuniões" em Ajustes › Agente (spec #8360). */
@@ -151,6 +154,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   instructions: "",
   webSearch: false,
   onboarding: DEFAULT_AGENT_ONBOARDING,
+  routines: DEFAULT_AGENT_ROUTINES,
 };
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
@@ -173,6 +177,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     webSearch: o.webSearch === true,
     summary: sanitizeSummarySettings(o.summary),
     onboarding: sanitizeAgentOnboarding(o.onboarding),
+    routines: sanitizeAgentRoutines(o.routines),
   };
 }
 

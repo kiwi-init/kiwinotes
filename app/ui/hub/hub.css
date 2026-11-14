@@ -401,5 +401,11 @@
 .kn-memory-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .kn-memory-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kn-memory-line { min-width: 0; overflow-wrap: anywhere; }
+/* As rotinas (spec #12150): a frase, o [Ver] com o texto da nota (rola por dentro) e os três botões. */
+.kn-bubble-shell.kn-routine-bubble { display: grid; gap: 8px; max-width: 320px; user-select: text; }
+.kn-routine-line { margin: 0; overflow-wrap: anywhere; }
+.kn-routine-view { max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-row, 8px); background: var(--surface); }
+.kn-routine-view .kn-diff { margin: 0; }
+.kn-routine-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 .kn-memory-note { margin: 0; font-size: var(--text-xs, 0.85em); color: var(--text-2); }
 .kn-memory-actions { display: flex; gap: 4px; justify-content: flex-end; }

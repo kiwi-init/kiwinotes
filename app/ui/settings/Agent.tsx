@@ -28,6 +28,7 @@ import { NoticeRow } from "./NoticeRow.tsx";
 import { ControlRow } from "./ControlRow.tsx";
 import { NoteModelRow } from "./NoteModel.tsx";
 import { MemoryRows } from "./MemoryRows.tsx";
+import { RoutinesRows } from "./RoutinesRows.tsx";
 import "./agent.css";
 import { CatColorRow, CatRow, OverlayCatRow } from "./CatRow";
 
@@ -199,6 +200,9 @@ export function AgentSection() {
 
       {/* A memória do agente e as instruções da pessoa (spec #11469): só com o agente ligado. */}
       {status.enabled ? <MemoryRows status={status} run={run} /> : null}
+
+      {/* As rotinas (spec #12150): o resumo do dia e os pendentes da semana. Só com o agente ligado (desligar as desliga). */}
+      {status.enabled && status.routines ? <RoutinesRows status={status} run={run} /> : null}
 
       {/* A notificação quando o agente espera uma resposta (spec #9839): só com o agente ligado. */}
       {status.enabled ? <NoticeRow /> : null}

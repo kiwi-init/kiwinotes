@@ -1,6 +1,7 @@
 // Os textos da seção Agente (spec #8373, T8762), estado por estado. A tela inteira roda no roteiro
 // `scripts/ui-scripts/ajustes-agente.json`, com o agente falso.
 
+import { DEFAULT_AGENT_ROUTINES } from "../../src/shared/agent-routines.ts";
 import { DEFAULT_SUMMARY_SETTINGS } from "../../src/shared/summary-settings.ts";
 import { describe, expect, test } from "bun:test";
 
@@ -28,6 +29,7 @@ const base: AgentStatus = {
   consented: false,
   economy: false,
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
+  routines: DEFAULT_AGENT_ROUTINES,
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
   webSearch: false,

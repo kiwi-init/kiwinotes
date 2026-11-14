@@ -215,6 +215,8 @@ stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) =>
 stores.agent.useWriter(writerFromCapabilities(capabilities));
 // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
 stores.agent.useUndo(undoNotesFromCapabilities(capabilities));
+// As rotinas (spec #12150): o agendador confere a hora com o app aberto, e pega a que passou com o app fechado.
+stores.agent.startRoutines();
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */
 const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();
@@ -433,6 +435,10 @@ stores.agent.onQuestionChanged((e) => {
 // A memória do agente (spec #11469): o balão "Anotei" e a tela de Ajustes.
 stores.agent.onMemoryChanged((view) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.memoryChanged", payload: view });
+});
+// O fim de uma rotina (spec #12150): o balão do gato.
+stores.agent.onRoutine((e) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.routine", payload: e });
 });
 // A proposta da reunião (spec #8360): nasceu, foi escolhida, aplicada ou descartada.
 stores.agent.onProposalsChanged((proposals) => {
