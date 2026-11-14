@@ -1,0 +1,82 @@
+{
+  "task": "T11565",
+  "scope": "scripts/kiwicat-cutout-bench.ts leve --edge band|rounded, standalone WebKit demo 640x800, sum of the test processes, under kiwi lock bench",
+  "runs": [
+    {
+      "run": "1-band",
+      "edgeShape": "band",
+      "backend": "webgpu",
+      "warmupSeconds": 10,
+      "sampleSeconds": 60,
+      "repousoCpuMean": 2.33,
+      "repousoCpuP95": 4.96,
+      "fps": {
+        "repouso": 2,
+        "dormindo": 2,
+        "acordou": 60,
+        "ouvindo": 60,
+        "thinking": 60,
+        "agindo": 60,
+        "pronto": 60,
+        "erro": 60
+      }
+    },
+    {
+      "run": "2-rounded",
+      "edgeShape": "rounded",
+      "backend": "webgpu",
+      "warmupSeconds": 10,
+      "sampleSeconds": 60,
+      "repousoCpuMean": 2.33,
+      "repousoCpuP95": 5.04,
+      "fps": {
+        "repouso": 2,
+        "dormindo": 2,
+        "acordou": 60,
+        "ouvindo": 60,
+        "thinking": 60,
+        "agindo": 60,
+        "pronto": 60,
+        "erro": 60
+      }
+    },
+    {
+      "run": "3-band",
+      "edgeShape": "band",
+      "backend": "webgpu",
+      "warmupSeconds": 10,
+      "sampleSeconds": 60,
+      "repousoCpuMean": 2.23,
+      "repousoCpuP95": 4.91,
+      "fps": {
+        "repouso": 2,
+        "dormindo": 2,
+        "acordou": 60,
+        "ouvindo": 60,
+        "thinking": 60,
+        "agindo": 60,
+        "pronto": 60,
+        "erro": 60
+      }
+    },
+    {
+      "run": "4-rounded",
+      "edgeShape": "rounded",
+      "backend": "webgpu",
+      "warmupSeconds": 10,
+      "sampleSeconds": 60,
+      "repousoCpuMean": 2.3,
+      "repousoCpuP95": 5.11,
+      "fps": {
+        "repouso": 2,
+        "dormindo": 2,
+        "acordou": 60,
+        "ouvindo": 60,
+        "thinking": 60,
+        "agindo": 60,
+        "pronto": 60,
+        "erro": 60
+      }
+    }
+  ]
+}

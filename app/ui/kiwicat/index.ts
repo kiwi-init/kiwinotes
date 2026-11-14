@@ -33,6 +33,8 @@ export interface FogOptions {
   cutout?: boolean;
   backing?: number;
   edgeBand?: number;
+  /** Spec #9573: a queda da luz arredondada (o padrão) ou a faixa reta de antes, só para as provas. */
+  edgeShape?: "rounded" | "band";
   /** The cut-out reference with eyes, for the demos (the app bundles only the eye-free one). */
   cutoutReferenceUrl?: string;
   backend?: "auto" | "webgl2" | "none";
@@ -317,7 +319,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     densityMesh = new Mesh(new PlaneGeometry(2, 2), density.material);
     densityMesh.frustumCulled = false;
     densityScene.add(densityMesh);
-    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08);
+    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08, options.edgeShape ?? "rounded");
     scene = new Scene();
     camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     mesh = new Mesh(new PlaneGeometry(2, 2), material.material);

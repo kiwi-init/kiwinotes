@@ -1,0 +1,93 @@
+{
+  "checks": [
+    "8 states: the light never goes up (≤1/255), nothing changes inside the ellipse (≤1/255), the symbols layer and the opaque mode are identical; the same in WebGL2 for agindo, acordou and erro",
+    "the sheet: agindo, acordou and erro, before and now, on white, black and colour",
+    "the videos: agindo, acordou and erro, 4 s at 30 fps each, on white, black and colour side by side"
+  ],
+  "layers": {
+    "repouso": {
+      "at": 2,
+      "maxUp": 0.41568627450980955,
+      "maxInsideChange": 0,
+      "maxDarker": 89,
+      "channelsChanged": 256591,
+      "opaqueMaxChange": 0
+    },
+    "dormindo": {
+      "at": 2,
+      "maxUp": 0.36862745098039795,
+      "maxInsideChange": 0,
+      "maxDarker": 52,
+      "channelsChanged": 205260,
+      "opaqueMaxChange": 0
+    },
+    "acordou": {
+      "at": 0.53,
+      "maxUp": 0.7019607843137123,
+      "maxInsideChange": 0,
+      "maxDarker": 106,
+      "channelsChanged": 292866,
+      "opaqueMaxChange": 0
+    },
+    "ouvindo": {
+      "at": 1.2,
+      "maxUp": 0.6627450980392098,
+      "maxInsideChange": 0,
+      "maxDarker": 119,
+      "channelsChanged": 295132,
+      "opaqueMaxChange": 0
+    },
+    "thinking": {
+      "at": 1.6,
+      "maxUp": 0.6156862745098124,
+      "maxInsideChange": 0,
+      "maxDarker": 88,
+      "channelsChanged": 254406,
+      "opaqueMaxChange": 0
+    },
+    "agindo": {
+      "at": 1.2,
+      "maxUp": 0.7098039215686356,
+      "maxInsideChange": 0,
+      "maxDarker": 109,
+      "channelsChanged": 283147,
+      "opaqueMaxChange": 0
+    },
+    "pronto": {
+      "at": 0.6,
+      "maxUp": 0.7098039215686356,
+      "maxInsideChange": 0,
+      "maxDarker": 100,
+      "channelsChanged": 277947,
+      "opaqueMaxChange": 0
+    },
+    "erro": {
+      "at": 0.85,
+      "maxUp": 0.22745098039216316,
+      "maxInsideChange": 0,
+      "maxDarker": 57,
+      "channelsChanged": 203535,
+      "opaqueMaxChange": 0
+    },
+    "agindo-webgl2": {
+      "maxUp": 0.7098039215686356,
+      "maxInsideChange": 0,
+      "maxDarker": 109
+    },
+    "acordou-webgl2": {
+      "maxUp": 0.7019607843137123,
+      "maxInsideChange": 0,
+      "maxDarker": 106
+    },
+    "erro-webgl2": {
+      "maxUp": 0.22745098039216316,
+      "maxInsideChange": 0,
+      "maxDarker": 57
+    }
+  },
+  "videos": [
+    "/private/tmp/claude-501/-Users-davivicente-Documents-personal-projects-code-projects-kiwinotes/32c9c771-cdc0-4362-b169-e93784a61b72/scratchpad/round3/agindo.mp4",
+    "/private/tmp/claude-501/-Users-davivicente-Documents-personal-projects-code-projects-kiwinotes/32c9c771-cdc0-4362-b169-e93784a61b72/scratchpad/round3/acordou.mp4",
+    "/private/tmp/claude-501/-Users-davivicente-Documents-personal-projects-code-projects-kiwinotes/32c9c771-cdc0-4362-b169-e93784a61b72/scratchpad/round3/erro.mp4"
+  ]
+}

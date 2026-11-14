@@ -13,6 +13,8 @@ const idleFPS = 2,
   cpuOnly = process.argv.includes("--cpu-only"),
   requestedBackend = process.argv.includes("--webgl2") ? "webgl2" : "auto";
 const variant = selected;
+// T11565 (spec #9573): the rounded fall-off (default) or the straight band before it, measured in pairs.
+const edgeArg = process.argv.indexOf("--edge"), edgeShape = edgeArg > 0 && process.argv[edgeArg + 1] === "band" ? "band" : "rounded";
 const densityScale = Number(process.env.KIWI_FOG_SCALE ?? 1);
 const out = resolve(process.argv[2] ?? "/tmp/kiwi-T8959-bench");
 mkdirSync(out, { recursive: true });
@@ -99,7 +101,7 @@ const report: Record<string, any> = {
     ),
   ),
   requestedBackend,
-  weakCurve: [16,32], edgeBand: .08, backing: selected === "forte" ? .35 : .5,
+  weakCurve: [16,32], edgeBand: .08, edgeShape, backing: selected === "forte" ? .35 : .5,
   noRecorder: true,
   samples: [],
   states: [],
@@ -118,7 +120,7 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(
     server.url +
-      `/?cutout=${selected === "baseline" ? 0 : 1}&outline=1&backing=${selected === "forte" ? .35 : .5}&edgeBand=.08&mode=measure&fogOnly=` + (fogOnly ? "1" : "0") + "&variant=" +
+      `/?cutout=${selected === "baseline" ? 0 : 1}&outline=1&backing=${selected === "forte" ? .35 : .5}&edgeBand=.08&edgeShape=${edgeShape}&mode=measure&fogOnly=` + (fogOnly ? "1" : "0") + "&variant=" +
       variant +
       "&densityScale=" +
       densityScale +
