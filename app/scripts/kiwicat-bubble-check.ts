@@ -82,8 +82,6 @@ try {
   // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
   await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download");
-  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
-  await invoke("agent.configure", { onboarding: { state: "done" } });
   // O gato no overlay (spec #9810): no headless não há hub à vista, então a cada pedido o gato iria para o overlay e o do
   // canto (com o balão) sumiria até o fim. Aqui a prova é o gato do canto.
   await invoke("settings.set", { kiwicat: { overlay: false } });
