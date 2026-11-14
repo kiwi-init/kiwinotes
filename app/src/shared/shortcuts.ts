@@ -42,7 +42,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: "meetingPause", label: "Pausar meu mic", hint: "Só durante a gravação: os outros continuam sendo gravados.", group: "Reuniões", scope: "global", default: "control+option+m" },
   // Spec #12946: falar com o Kiwi Cat segurando um atalho. O padrão é o Control (o da esquerda ou o da direita); vale uma
   // tecla modificadora sozinha ou uma combinação, segurada. Fica em Ajustes › Agente, com o interruptor, e não em Atalhos.
-  { id: "agent", label: "Atalho", hint: "Segure para falar com o Kiwi Cat e solte para mandar.", group: "Kiwi Cat", scope: "global", default: "control" },
+  { id: "agent", label: "Atalho", hint: "Uma tecla sozinha (o Control, o ⌥ ou o ⌘ direito) ou uma combinação.", group: "Kiwi Cat", scope: "global", default: "control" },
 ] as const;
 
 /** O atalho de cada ação; null é desligado. */

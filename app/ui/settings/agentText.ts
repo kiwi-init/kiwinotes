@@ -233,7 +233,7 @@ export const CONTROL_LABEL = "Falar com o Kiwi Cat";
  */
 export function controlHint(blocked: boolean, hold = "o Control", controlAlone = true): string {
   if (blocked) return `O ditado já usa ${hold} (Ajustes › Atalhos). Escolha outro atalho embaixo, ou troque o do ditado.`;
-  const base = `Segure ${hold} para falar com o Kiwi Cat e solte para mandar; o Esc cancela.`;
+  const base = `Segure ${hold} para falar com o Kiwi Cat e solte para mandar. O microfone só abre enquanto você segura; o Esc cancela.`;
   // O aviso só vale para o Control sozinho: o Ditado da Apple não usa uma combinação.
   return controlAlone
     ? `${base} O ditado da Apple pode usar "pressionar Control duas vezes": troque em Ajustes do Sistema › Teclado › Ditado › Atalho.`

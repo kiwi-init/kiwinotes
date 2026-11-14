@@ -7,7 +7,7 @@ import type { AgentTurnEvent, AgentVoiceUi } from "../../../src/shared/ui-contra
 
 export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> = {
   claude: { title: "Oi! Vamos acordar o Claude Code", hint: "O Kiwi confere se ele está instalado e logado, baixa a ponte com ele e manda um oi para testar." },
-  // Sem subtítulo (revisão do T13145): o cartão e a frase embaixo já dizem como; a frase leva o aviso do microfone.
+  // Sem subtítulo (revisão do T13145): o cartão (que leva o aviso do microfone) e a frase embaixo já dizem como.
   control: { title: "Aperta o Control e fala oi", hint: "" },
   tone: { title: "O seu jeito", hint: "Como o agente fala com você: curto ou detalhado, formal ou informal." },
   guardrail: { title: "O guardrail na prática", hint: "Escreva uma senha de mentira e veja o Kiwi esconder antes de qualquer coisa sair do Mac." },
@@ -89,7 +89,7 @@ export function controlStep(s: ControlPhase, e: { voice: AgentVoiceUi } | { turn
 export function controlLine(s: ControlPhase, hold = "o Control"): string {
   switch (s.phase) {
     case "waiting":
-      return `Segure ${hold}, diga "oi" e solte. O microfone só abre enquanto você segura.`;
+      return `Segure ${hold}, diga "oi" e solte.`;
     case "listening":
       return `Ouvindo… solte ${hold} para mandar.`;
     case "processing":

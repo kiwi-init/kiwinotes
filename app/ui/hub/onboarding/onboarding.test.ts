@@ -37,7 +37,7 @@ test("o cartão final: o jeito de falar, os projetos e o atalho", () => {
   expect(shortcutSummary(true, holdName("rightOption"))).toBe("Segure o ⌥ direito para falar");
   expect(stepText("control", "o ⌥ direito").title).toBe("Aperta o ⌥ direito e fala oi");
   expect(stepText("control").title).toBe("Aperta o Control e fala oi");
-  expect(controlLine({ phase: "waiting" }, "⌃⌥ Espaço")).toBe('Segure ⌃⌥ Espaço, diga "oi" e solte. O microfone só abre enquanto você segura.');
+  expect(controlLine({ phase: "waiting" }, "⌃⌥ Espaço")).toBe('Segure ⌃⌥ Espaço, diga "oi" e solte.');
 });
 
 test("o passo 2: a fala pelo Control vai de esperando a ouvindo, pedido e resposta", () => {
@@ -54,7 +54,7 @@ test("o passo 2: a fala pelo Control vai de esperando a ouvindo, pedido e respos
   expect(s).toEqual({ phase: "answered", text: "oi" });
   // Depois de dar certo, segurar de novo não apaga o "deu certo".
   expect(controlStep(s, { voice: { phase: "listening", voz: 0.2 } })).toEqual(s);
-  expect(controlLine({ phase: "waiting" })).toBe('Segure o Control, diga "oi" e solte. O microfone só abre enquanto você segura.');
+  expect(controlLine({ phase: "waiting" })).toBe('Segure o Control, diga "oi" e solte.');
 });
 
 test("o passo 3: o jeito de falar troca só a linha dele nas instruções, e o exemplo muda com a escolha", () => {
