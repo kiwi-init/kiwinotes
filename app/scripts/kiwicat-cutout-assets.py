@@ -49,12 +49,19 @@ Image.fromarray(np.uint8(np.rint(np.stack([coat,np.sqrt(light),np.zeros_like(coa
 # quarter of the size, the head blurred wide in G; the shader takes the arc where this blur is high. The outline itself still comes from the coat.
 def gauss(a,r): return np.asarray(Image.fromarray(np.uint8(np.rint(np.clip(a,0,1)*255))).filter(ImageFilter.GaussianBlur(r)),np.float32)/255
 # The head: the approved head and body layers (whole also where the bright arc crosses the head, where the coat has a
-# hole) plus the coat, rounded and blurred wide.
+# hole) plus the coat, rounded.
 head=coat.copy()
 for name in ['cabeca','corpo']:
     rgba=np.asarray(Image.open(SRC/(name+'.png')).convert('RGBA'),np.float32)/255
     head=np.maximum(head,rgba[:,:,3])
-head=gauss((gauss((head>.5).astype(np.float32),8)>.5).astype(np.float32),56)
+# From the cheek down, shrunk by ~80 px (the cheek, where the reference light eats the coat, is that much inside the layer): its edge lines up
+# with the coat's, so where it fills the arc's hole the outline goes on without a step. Then a short blur (~3 px).
+# Only from the cheek down: above (the top of the head and the V between the ears) the layer's edge is the real one.
+union=Image.fromarray(np.uint8((gauss((head>.5).astype(np.float32),8)>.5)*255)).resize((512,640),Image.Resampling.BOX)
+full=np.asarray(union.filter(ImageFilter.GaussianBlur(2.5)),np.float32)/255
+shrunk=np.asarray(union.point(lambda v:255 if v>127 else 0).filter(ImageFilter.MinFilter(41)).filter(ImageFilter.GaussianBlur(2.5)),np.float32)/255
+top=np.clip((1000/4-np.arange(640,dtype=np.float32)[:,None])/(120/4),0,1); top=top*top*(3-2*top)
+head=np.asarray(Image.fromarray(full*top+shrunk*(1-top)).resize((2048,2560),Image.Resampling.BILINEAR),np.float32)
 # R: the coat blurred short (1 at its edge, fading out over ~20 px of the canvas), so the fog stays opaque right against
 # the dark coat also where the light dips next to it (on black that dip is dark and invisible; on white it was pale).
 hug=np.minimum(2*gauss(coat,60),1)

@@ -216,7 +216,7 @@ export function fogMaterial(
     // junto dele (no preto essa queda é escura e some; no branco virava um clarão). As duas somam como telas; onde o
     // corpo é preenchido (em volta do aro), nenhuma das duas vira tinta.
     // O piso já tira a emissão fraca; o apoio da luz do escuro (a máscara do aro) deixava um anel claro nas bolhas.
-    const head = smoothstep(0.5, 0.85, headField);
+    const head = smoothstep(0.35, 0.65, headField);
     const fill = head.mul(smoothstep(0.05, 0.4, fields.b));
     const fogLight = float(1).sub(exp(max(alphaHigh.sub(0.07), 0).mul(-1.8)));
     const fogHug = fields.r.mul(0.85).mul(float(1).sub(coatA));
@@ -233,7 +233,7 @@ export function fogMaterial(
     const fogShare = min(min(color.r.div(max(tintPeak.x, 0.001)), color.g.div(max(tintPeak.y, 0.001))), color.b.div(max(tintPeak.z, 0.001)));
     const arcOwn = max(color.sub(tintPeak.mul(fogShare)), vec3(0, 0, 0));
     // A luz quase branca (o brilho entre as orelhas) não é cor do aro: no branco ela virava um fio claro.
-    const arcW = smoothstep(0.1, 0.3, max(max(arcOwn.r, arcOwn.g), arcOwn.b)).mul(
+    const arcW = smoothstep(0.03, 0.4, max(max(arcOwn.r, arcOwn.g), arcOwn.b)).mul(
       float(1).sub(smoothstep(0.6, 0.85, min(min(color.r, color.g), color.b))),
     );
     const onLight = surface.mul(float(1).sub(solid));
