@@ -37,6 +37,8 @@ try {
   const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 1000, height: 740, motion: true, browser: "webkit", query: { section: "notes" } });
   const p = w.page;
   await invoke("agent.enable", { consent: true }); await invoke("agent.download");
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
   const box = async (sel: string) => (await p.locator(sel).boundingBox())!;

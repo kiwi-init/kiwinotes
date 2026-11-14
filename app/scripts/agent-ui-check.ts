@@ -113,6 +113,8 @@ async function agentReady(data: string, env: Record<string, string>): Promise<vo
   };
   await invoke("notes.create", { folder: "Projetos", title: "Kiwi", content: KIWI });
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download", {});
   for (const end = Date.now() + 60_000; (await invoke("agent.status", {})).value.adapter.phase !== "ready"; ) {
     if (Date.now() > end) throw new Error("o adaptador não baixou");

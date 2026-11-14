@@ -42,6 +42,8 @@ try {
   await p.waitForTimeout(200);
   assert.equal(await p.locator(".kn-kiwicat").count(), 0); report.checks.push("agent off: no renderer");
   await invoke("agent.enable", { consent: true }); await invoke("agent.download");
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
   const identity = await p.locator(".kn-kiwicat canvas").evaluate(c => { (window as any).__catCanvas = c; return c.getBoundingClientRect().height; });
