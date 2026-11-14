@@ -197,6 +197,12 @@ export const api = {
   projects: {
     list: () => invoke("projects.list", {}),
     mark: (folder: string) => invoke("projects.mark", { folder }),
+    /** Uma pasta de fora da pasta de notas (spec #12950): o projeto nasce dentro dela, com o caminho na nota. */
+    markOutside: (outside: string) => invoke("projects.mark", { outside }),
+    /** A busca das pastas de projeto: `start`, `stop`, ou só ler onde está. */
+    find: (args: { start?: true; stop?: true } = {}) => invoke("projects.find", args),
+    choose: () => invoke("projects.choose", {}),
+    reveal: (path: string) => invoke("projects.reveal", { path }),
     unmark: (folder: string) => invoke("projects.unmark", { folder }),
     onChanged: (fn: () => void) => on("projects.changed", () => fn()),
   },

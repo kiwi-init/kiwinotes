@@ -7,7 +7,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 
-import { externalUrl } from "../links.ts";
+import { externalUrl, openableUrl } from "../links.ts";
 import { headingCompletion, linkCompletion, urlAt, wikiLinkSyntax } from "./index.ts";
 import { DICTATION_CAPTION, findComments, rawCellStart } from "./livePreview.ts";
 
@@ -100,6 +100,12 @@ describe("link externo (#1375, #1379)", () => {
     for (const bad of ["javascript:alert(1)", " JavaScript:alert(1)", "views://internal/index.html", "file:///etc/passwd", "data:text/html,<b>x</b>", "nada"]) {
       expect(externalUrl(bad)).toBeNull();
     }
+  });
+
+  test("o editor deixa passar o file:/// de uma pasta (o Abrir no Finder, spec #12950), que vai ao projects.reveal", () => {
+    expect(openableUrl("file:///Users/h/Developer/kiwi/")).toBe("file:///Users/h/Developer/kiwi/");
+    expect(openableUrl("https://example.com")).toBe("https://example.com/");
+    for (const bad of ["file://servidor/pasta", "javascript:alert(1)", "views://internal/index.html", "nada"]) expect(openableUrl(bad)).toBeNull();
   });
 
   test("⌘-clique acha o endereço do link do Markdown sob o cursor", () => {

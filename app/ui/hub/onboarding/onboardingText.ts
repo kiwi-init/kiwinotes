@@ -3,7 +3,9 @@
 
 import { ONBOARDING_STEPS, type OnboardingStep } from "../../../src/shared/agent-onboarding.ts";
 import { DEFAULT_SHORTCUTS, parseShortcut, shortcutLabel } from "../../../src/shared/shortcuts.ts";
-import type { AgentTurnEvent, AgentVoiceUi } from "../../../src/shared/ui-contract.ts";
+import type { ProjectReason } from "../../../src/notes/project-finder.ts";
+import type { ProjectInfo } from "../../../src/notes/projects.ts";
+import type { AgentTurnEvent, AgentVoiceUi, ProjectCandidate, ProjectSearchView } from "../../../src/shared/ui-contract.ts";
 
 export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> = {
   claude: { title: "Oi! Vamos acordar o Claude Code", hint: "O Kiwi confere se ele está instalado e logado, baixa a ponte com ele e manda um oi para testar." },
@@ -151,16 +153,76 @@ export function toneExample(t: Tone): string {
 
 // ── Passo 6: os projetos (T11999) ────────────────────────────────────────────────────────────────────────────────────
 
-/**
- * As pastas que podem ser projeto: as de primeiro nível do cofre, sem as escondidas e sem as do próprio Kiwi (as
- * reuniões, os modelos, o diário e os anexos), em ordem alfabética. Só os nomes, lidos no Mac.
- */
-export function projectCandidates(folders: readonly string[], skip: readonly (string | null | undefined)[]): string[] {
-  const out = new Set(skip.filter((s): s is string => !!s).map((s) => s.replace(/^\/+|\/+$/g, "")));
-  return [...new Set(folders.map((f) => f.replace(/^\/+|\/+$/g, "")))]
-    .filter((f) => f && !f.includes("/") && !f.startsWith(".") && !out.has(f))
-    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+/** Uma linha do passo 6: uma pasta achada pela busca ou um projeto já marcado. `marked`: a pasta do projeto, se é um. */
+export interface ProjectRow {
+  key: string;
+  name: string;
+  where: string;
+  reason?: string;
+  folder?: string;
+  outside?: string;
+  marked?: string;
 }
+
+/**
+ * As linhas do passo 6 (spec #12950): os projetos já marcados primeiro, e depois o que a busca achou, do mais recente ao
+ * mais antigo, sem repetir uma pasta que já é projeto (pela pasta dentro da pasta de notas, ou pelo caminho de fora).
+ */
+export function projectRows(projects: readonly Pick<ProjectInfo, "name" | "folder" | "outside">[], found: readonly ProjectCandidate[]): ProjectRow[] {
+  const keyOf = (c: { folder?: string; outside?: string }) => (c.outside ? `outside:${c.outside}` : `folder:${c.folder}`);
+  const byKey = new Map(found.map((c) => [keyOf(c), c]));
+  const rows: ProjectRow[] = projects.map((p) => {
+    const c = byKey.get(keyOf(p));
+    return {
+      key: keyOf(p),
+      name: c?.name ?? p.name,
+      where: c?.where ?? p.outside ?? `Notas/${p.folder}`,
+      // O que a busca não achou foi a pessoa que marcou: a linha diz isso no lugar do motivo (e não entra na contagem).
+      reason: c ? reasonText(c.reason) : "escolhida por você",
+      ...(p.outside ? { outside: p.outside } : { folder: p.folder }),
+      marked: p.folder,
+    };
+  });
+  const seen = new Set(rows.map((r) => r.key));
+  for (const c of found) {
+    const key = keyOf(c);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ key, name: c.name, where: c.where, reason: reasonText(c.reason), ...(c.outside ? { outside: c.outside } : { folder: c.folder }) });
+  }
+  return rows;
+}
+
+/** Por que a busca achou a pasta (spec #12950), o texto ao lado dela. */
+export function reasonText(reason: ProjectReason): string {
+  switch (reason.kind) {
+    case "name":
+      return "o nome diz projeto";
+    case "marker":
+      return `tem ${reason.marker}`;
+    case "note":
+      return "tem a nota do projeto";
+    case "inside":
+      return `dentro de ${reason.group}`;
+  }
+}
+
+/** A linha de onde a busca está: procurando, achou, parou; e os lugares que o macOS não deixou ler. */
+export function searchLine(view: Pick<ProjectSearchView, "state" | "found" | "skipped">): string {
+  const n = view.found.length;
+  const count = n === 1 ? "1 pasta" : `${n} pastas`;
+  const head =
+    view.state === "searching" ? `Procurando… ${count} até agora.`
+    : view.state === "stopped" ? `Parei a busca: ${count}.`
+    : view.state === "done" ? (n ? `Achei ${count}.` : "Não achei nenhuma pasta de projeto.")
+    : "";
+  if (!view.skipped.length) return head;
+  return `${head} Ficaram de fora, sem permissão: ${view.skipped.join(", ")}.`.trim();
+}
+
+/** O aviso de uma linha antes da busca (spec #12950): por que o pedido do macOS pode aparecer. */
+export const SEARCH_NOTICE =
+  "Para procurar em Documents, Desktop e no iCloud Drive, o macOS pode pedir permissão uma vez. O Kiwi só lê os nomes das pastas, e nada sai do Mac.";
 
 // ── Passo 8: o momento mágico (T12001) ───────────────────────────────────────────────────────────────────────────────
 

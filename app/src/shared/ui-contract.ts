@@ -24,6 +24,7 @@ import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
 import type { FolderView, OpenFolderResult } from "../notes/folders-workspace.ts";
 import type { MeetingLive, MeetingNote, MeetingSettings } from "./meetings.ts";
+import type { ProjectReason } from "../notes/project-finder.ts";
 import type { ProjectInfo, ProjectStatus } from "../notes/projects.ts";
 
 export type { AppSettings };
@@ -205,7 +206,11 @@ export type { NoteModel };
 //   `agent.proposalApply` dela aceita a `routine` ajustada ([Ajustar]). Só acréscimo.
 // 1.70.0 (T13145, spec #12946): o `shortcuts.agent` nas settings, o atalho de falar com o Kiwi Cat (padrão `control`,
 //   os dois Controls; uma tecla modificadora sozinha ou uma combinação). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.70.0";
+// 1.71.0 (T13200, spec #12950): o `projects.find`, a busca das pastas de projeto no Mac (em segundo plano, lida aos
+//   poucos, com o parar); o `projects.mark` aceita `{outside}`, uma pasta de fora da pasta de notas, e o `ProjectInfo`
+//   leva o `outside`; o `projects.choose` (o seletor de pasta, só no clique) e o `projects.reveal` (o link da nota de um
+//   projeto de fora abre a pasta no Finder). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.71.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -557,7 +562,16 @@ export interface UiCapabilities {
    * Marca a pasta como projeto. Sem a nota com o nome da pasta, cria essa nota, só com o título (`created`); nenhuma
    * outra nota muda. Marcar de novo não muda nada.
    */
-  "projects.mark": { args: { folder: string }; result: { project: ProjectInfo; created: boolean } };
+  "projects.mark": { args: { folder: string } | { outside: string }; result: { project: ProjectInfo; created: boolean } };
+  /**
+   * A busca das pastas de projeto (1.71.0, spec #12950): `start` começa uma nova (e para a de antes), `stop` para, e sem
+   * nada devolve onde ela está. Anda em segundo plano; a tela lê de novo enquanto `state` é `searching`. Só lê nomes.
+   */
+  "projects.find": { args: { start?: true; stop?: true }; result: ProjectSearchView };
+  /** O seletor de pasta do macOS, só no clique (1.71.0): o caminho absoluto, ou null (cancelou). */
+  "projects.choose": { args: Record<string, never>; result: { path: string | null } };
+  /** Abre no Finder a pasta de fora de um projeto (1.71.0): só um caminho que é o `outside` de um projeto marcado. */
+  "projects.reveal": { args: { path: string }; result: true };
   /** Desmarca: o projeto sai, e nenhuma nota muda. */
   "projects.unmark": { args: { folder: string }; result: true };
   /** Troca a nota principal por outra nota de dentro da pasta. */
@@ -1045,6 +1059,9 @@ export const UI_CAPABILITIES = [
   "agent.change",
   "projects.list",
   "projects.mark",
+  "projects.find",
+  "projects.choose",
+  "projects.reveal",
   "projects.unmark",
   "projects.setMain",
   "projects.status",
@@ -1202,3 +1219,21 @@ export interface AppAbout {
 
 /** As notas de uma versão no GitHub Releases (o tag é `v` + a versão). */
 export const releaseNotesUrl = (version: string) => `https://github.com/kiwi-init/kiwinotes/releases/tag/v${encodeURIComponent(version)}`;
+
+/** Uma pasta que a busca achou (1.71.0): `folder` dentro da pasta de notas, ou `outside` (absoluto) fora dela. */
+export interface ProjectCandidate {
+  name: string;
+  /** Onde ela fica, para mostrar: `Notas/Clientes/Acme`, `~/Developer/kiwi`. */
+  where: string;
+  folder?: string;
+  outside?: string;
+  reason: ProjectReason;
+  mtimeMs: number;
+}
+
+/** Onde a busca está (1.71.0). `skipped`: os lugares que não abriram (a permissão negada). */
+export interface ProjectSearchView {
+  state: "idle" | "searching" | "done" | "stopped";
+  found: ProjectCandidate[];
+  skipped: string[];
+}

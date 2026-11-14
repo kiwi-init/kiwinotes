@@ -20,7 +20,7 @@ import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 
 import { markdownStructure } from "../../../src/shared/markdown-structure.ts";
-import { externalUrl, linkAt } from "../links.ts";
+import { linkAt, openableUrl } from "../links.ts";
 import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
 import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { renderedPreview } from "./renderedWidget.tsx";
@@ -55,7 +55,7 @@ export interface EditorOptions {
   onChange(doc: string): void;
   /** Clique num `[[link]]` (⌘-clique com o cursor dentro dele). */
   onOpenLink(target: string): void;
-  /** ⌘-clique num link do Markdown que pode abrir fora (já passou pelo `externalUrl`). */
+  /** ⌘-clique num link do Markdown que pode abrir fora (já passou pelo `openableUrl`). */
   onOpenUrl(url: string): void;
   /** Clique numa `#tag` do texto: a busca por ela (T2619). */
   onOpenTag?(tag: string): void;
@@ -470,13 +470,13 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
   ];
 }
 
-/** O endereço do link do Markdown sob `pos`, se ele pode abrir fora (`externalUrl`). */
+/** O endereço do link do Markdown sob `pos`, se ele pode abrir fora (`openableUrl`). */
 export function urlAt(state: EditorState, pos: number): string | null {
   for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = treeUpTo(state, pos).resolveInner(pos, 1); n; n = n.parent) {
-    if (n.name === "URL") return externalUrl(state.doc.sliceString(n.from, n.to));
+    if (n.name === "URL") return openableUrl(state.doc.sliceString(n.from, n.to));
     if (n.name === "Link" || n.name === "Autolink") {
       const u = n.getChild("URL");
-      return u ? externalUrl(state.doc.sliceString(u.from, u.to)) : null;
+      return u ? openableUrl(state.doc.sliceString(u.from, u.to)) : null;
     }
   }
   return null;

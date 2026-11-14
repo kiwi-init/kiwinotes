@@ -3,14 +3,15 @@
 // nada na tela de ninguém, e nenhum Claude Code de verdade.
 //
 // 1. a troca de Ditado para Configurações (a primeira vez, que monta, e as outras): meta 100 ms;
-// 2. o clique numa pasta no passo "Os projetos" do onboarding, até a caixa aparecer marcada: meta 100 ms;
+// 2. o clique numa pasta no passo "Os projetos" do onboarding, até a caixa aparecer marcada: meta 100 ms. Desde o spec
+//    #12950, durante a busca das pastas de projeto numa casa de mentira (`--home N` pastas, nunca a casa de verdade);
 // 3. o dropdown da pasta das Rotinas, do clique ao quadro seguinte: meta 150 ms.
 // Em todas, nenhum quadro travado acima de 100 ms. O tempo é medido dentro da página (do clique ao primeiro quadro com
 // o resultado), e o quadro mais longo, por um laço de requestAnimationFrame. A meta vale para a mediana das amostras
 // (a do tempo e a do pior quadro de cada uma): a máquina é dividida com outros agentes, e uma amostra solta de um
 // WebKit frio não é o app. O pior de todos sai no relatório.
 //
-//   bun scripts/speed-check.ts [--folders N] [--notes N] [--junk N] [--load N] [--runs N] [--no-limits]
+//   bun scripts/speed-check.ts [--folders N] [--notes N] [--junk N] [--load N] [--home N] [--runs N] [--no-limits]
 //
 // `--no-limits` só mede (os números de antes). Sai com exit 1 se alguma meta não bateu.
 import assert from "node:assert/strict";
@@ -38,6 +39,11 @@ const JUNK = arg("junk", 0);
  */
 const LOAD = arg("load", 0);
 const LIMITS = !process.argv.includes("--no-limits");
+/**
+ * `--home N` (spec #12950): a casa de mentira da busca das pastas de projeto, com N pastas comuns (cada uma com 20 e
+ * cada uma dessas com 10 dentro: a busca anda por todas) e 60 projetos no primeiro nível de Documents.
+ */
+const HOME = arg("home", 200);
 /** As metas do spec #12918, em ms. */
 export const GOALS = { tab: 100, folder: 100, dropdown: 150, frame: 100 } as const;
 
@@ -57,7 +63,8 @@ writeFileSync(packages, JSON.stringify(registry.pinned));
 function bigVault(root: string) {
   const top = Math.max(1, Math.round(FOLDERS / 10));
   const dirs: string[] = [];
-  for (let i = 0; i < top; i++) dirs.push(`Projeto ${String(i).padStart(4, "0")}`);
+  // "Pasta", não "Projeto": as pastas de projeto da busca (spec #12950) vêm da casa de mentira.
+  for (let i = 0; i < top; i++) dirs.push(`Pasta ${String(i).padStart(4, "0")}`);
   for (let i = 0; dirs.length < FOLDERS; i++) dirs.push(`${dirs[i % top]}/Sub ${Math.floor(i / top)}`);
   for (const d of dirs) mkdirSync(join(root, d), { recursive: true });
   for (let i = 0; i < NOTES; i++) {
@@ -72,6 +79,13 @@ function bigVault(root: string) {
     writeFileSync(join(root, rel), "x");
   }
 }
+
+/** A casa de mentira da busca (spec #12950): Documents com os projetos e as pastas comuns, e a pasta de notas fora dela. */
+function fakeHome(home: string) {
+  for (let i = 0; i < 60; i++) mkdirSync(join(home, `Documents/proj-${String(i).padStart(2, "0")}`), { recursive: true });
+  for (let i = 0; i < HOME; i++) for (let j = 0; j < 20; j++) for (let k = 0; k < 10; k++) mkdirSync(join(home, `Documents/arquivo ${i}/s${j}/t${k}`), { recursive: true });
+}
+const home = join(data, "home");
 
 /** O processo que enche o cofre no `--load`: escreve as entradas o mais rápido que dá, fora do processo do app. */
 const WRITER = `
@@ -93,7 +107,7 @@ async function cli(args: string[]) {
     cwd: app,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages },
+    env: { ...process.env, KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages, KIWI_PROJECTS_HOME: home },
   });
   const text = await new Response(p.stdout).text();
   assert.equal(await p.exited, 0, text + (await new Response(p.stderr).text()));
@@ -133,7 +147,7 @@ type Sample = { ms: number; frame: number };
 /** O que a página faz: um clique num elemento, ou abrir um `<select>` (mousedown e foco). */
 type Act = { click: string; index?: number } | { open: string };
 /** Quando o resultado está na tela: um painel do hub visível (e, nas Configurações, com o assunto montado), uma caixa marcada, ou o quadro seguinte. */
-type Done = { pane: string } | { checked: string; index: number } | { settled: string; index: number } | { frame: true };
+type Done = { pane: string } | { checked: string; index: number } | { settled: string; index: number } | { shown: string } | { frame: true };
 /**
  * Uma ação medida na página. O tempo vai do clique ao primeiro quadro com o resultado; `frame` é o maior intervalo
  * entre quadros nesse meio (e mais 300 ms depois, para pegar o que roda logo em seguida). A CSP do hub não deixa
@@ -144,9 +158,13 @@ async function measure(p: Page, act: Act, done: Done): Promise<Sample> {
     async ([act, done]) => {
       const w = window as any;
       const nth = (sel: string, i = 0) => document.querySelectorAll<HTMLElement>(sel)[i];
+      // A caixa clicada, e não a que está no mesmo lugar depois: a lista da busca cresce enquanto a página espera.
+      const clicked = "click" in act ? nth(act.click, act.index) : undefined;
+      const same = "checked" in done && "click" in act && done.checked === act.click && done.index === act.index;
       const ready = (): boolean => {
         if ("frame" in done) return true;
-        if ("checked" in done) return !!(nth(done.checked, done.index) as HTMLInputElement | undefined)?.checked;
+        if ("shown" in done) return !!document.querySelector(done.shown);
+        if ("checked" in done) return !!((same ? clicked : nth(done.checked, done.index)) as HTMLInputElement | undefined)?.checked;
         if ("settled" in done) {
           const box = nth(done.settled, done.index) as HTMLInputElement | undefined;
           return !!box?.checked && !box.disabled;
@@ -157,7 +175,7 @@ async function measure(p: Page, act: Act, done: Done): Promise<Sample> {
       };
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const t0 = performance.now();
-      if ("click" in act) nth(act.click, act.index)!.click();
+      if ("click" in act) clicked!.click();
       else {
         const s = nth(act.open)!;
         s.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -195,6 +213,7 @@ const browser = await webkit.launch({ headless: true });
 let failed = false;
 try {
   bigVault(join(data, "vault"));
+  fakeHome(home);
   const t0 = performance.now();
   await cli(["start", "--no-helper"]);
   for (let n = 0; (await invoke("notes.list")).notes.length < NOTES; n++) { assert.ok(n < 600, "o cofre não indexou"); await Bun.sleep(100); }
@@ -258,23 +277,35 @@ try {
     await w.close();
   }
 
-  // 2. O passo "Os projetos" do onboarding: marcar e desmarcar uma pasta.
+  // 2. O passo "Os projetos" do onboarding (spec #12950): o "Procurar no Mac" e o clique numa pasta durante a busca.
   {
     await invoke("agent.configure", { onboarding: { state: "open", step: 6 } });
     const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 800, motion: true, browser: "webkit", query: { section: "dictation" } }, 30000);
     const p = w.page;
-    await p.waitForSelector(".kn-onb-folders input[type=checkbox]", { timeout: 60000 });
-    console.log(`passo dos projetos: ${await p.locator(".kn-onb-folders input[type=checkbox]").count()} pastas`);
+    await p.waitForSelector('[data-search="start"]', { timeout: 60000 });
     await frameMonitor(p);
+    const t0 = performance.now();
+    record("2a. Procurar no Mac, até o Parar aparecer", 0, [await measure(p, { click: '[data-search="start"]' }, { shown: '[data-search="stop"]' })]);
     const box = ".kn-onb-folders input[type=checkbox]";
+    await p.waitForFunction((n) => document.querySelectorAll(".kn-onb-folders input[type=checkbox]").length >= n, 3 * RUNS, { timeout: 60000 });
     const clicks: Sample[] = [];
+    let during = 0;
     for (let i = 0; i < RUNS; i++) {
+      const searching = (await invoke("projects.find")).state === "searching";
       clicks.push(await measure(p, { click: box, index: i }, { checked: box, index: i }));
-      // Espera o fim (a nota principal nasce e a lista recarrega) antes da próxima.
-      await p.waitForFunction((i) => !(document.querySelectorAll(".kn-onb-folders input[type=checkbox]")[i] as HTMLInputElement).disabled, i, { timeout: 30000 });
-      await Bun.sleep(500);
+      if (searching && (await invoke("projects.find")).state === "searching") during++;
     }
-    record("2. Marcar uma pasta no onboarding", GOALS.folder, clicks);
+    record("2. Marcar uma pasta no onboarding, durante a busca", GOALS.folder, clicks);
+    let view = await invoke("projects.find");
+    while (view.state === "searching") {
+      await Bun.sleep(200);
+      view = await invoke("projects.find");
+    }
+    console.log(`a busca: ${view.found.length} pastas em ${((performance.now() - t0) / 1000).toFixed(1)} s (${HOME * 211 + 60} pastas na casa); ${during} de ${RUNS} cliques com ela rodando`);
+    if (LIMITS && during < RUNS) {
+      console.log("FALHOU: nem todo clique foi durante a busca; aumente o --home");
+      failed = true;
+    }
     failed ||= w.report.problems.length > 0;
     if (w.report.problems.length) console.log("problemas:", w.report.problems);
     await w.close();

@@ -12,6 +12,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { markdownStructure } from "../shared/markdown-structure.ts";
 import type { ExternalMoves, NoteMeta } from "./vault.ts";
@@ -38,6 +39,11 @@ export interface ProjectEntry {
    * pasta mudada por fora. Uma pasta que já existia (as notas arrastadas para outra, e a do projeto apagada) tem outro.
    */
   folderIno?: number;
+  /**
+   * A pasta de fora da pasta de notas (spec #12950), caminho absoluto: o projeto fica numa pasta da pasta de notas, com a
+   * nota principal, e a nota guarda este caminho. O Kiwi não lê, não copia nem move nada de lá.
+   */
+  outside?: string;
 }
 
 /** Um projeto como as capacidades devolvem. */
@@ -50,6 +56,8 @@ export interface ProjectInfo {
   updated: string | null;
   /** Quantas notas há na pasta, contando as subpastas. */
   notes: number;
+  /** A pasta de fora que este projeto acompanha (spec #12950), quando é o caso. */
+  outside?: string;
 }
 
 export interface ProjectStatus {
@@ -85,6 +93,23 @@ export function mainNoteFor(folder: string): string {
   return `${folder}/${baseName(folder)}.md`;
 }
 
+/**
+ * O nome de uma pasta nova na raiz da pasta de notas, sem repetir uma que já existe: `kiwi`, `kiwi 2`, `kiwi 3`… Sem
+ * diferenciar maiúscula, como o disco do Mac: `Kiwi` e `kiwi` são a mesma pasta.
+ */
+export function freeFolderName(name: string, taken: Iterable<string>): string {
+  const used = new Set([...taken].map((t) => t.toLowerCase()));
+  const clean = name.replace(/[/\\:]/g, "-").replace(/^\.+/, "").trim() || "Projeto";
+  if (!used.has(clean.toLowerCase())) return clean;
+  for (let n = 2; ; n++) if (!used.has(`${clean} ${n}`.toLowerCase())) return `${clean} ${n}`;
+}
+
+/** A nota principal de um projeto de fora (spec #12950): o título, o caminho da pasta e o link para o Finder. */
+export function outsideNote(name: string, abs: string): string {
+  const url = pathToFileURL(abs.endsWith("/") ? abs : `${abs}/`).href;
+  return `# ${name}\n\nA pasta deste projeto fica fora da pasta de notas:\n\n\`${abs}\`\n\n[Abrir no Finder](${url})\n`;
+}
+
 /** Quantas caixas de tarefa abertas (`- [ ]`) a nota tem, pela estrutura: uma dentro de código ou comentário não conta. */
 export function openTasks(content: string): number {
   const { tree, prose } = markdownStructure(content);
@@ -107,18 +132,19 @@ export function mapProjects(list: readonly ProjectEntry[], map: (p: string) => s
     let main = e.main === null ? null : map(e.main);
     // A nota principal que saiu da pasta (movida para outra) deixa o projeto sem ela, como a apagada.
     if (main !== null && !under(folder, main)) main = null;
-    out.push(entry(folder, main, main === null ? undefined : e.mainIno, e.folderIno));
+    out.push(entry(folder, main, main === null ? undefined : e.mainIno, e.folderIno, e.outside));
   }
   return out;
 }
 
 /** Uma entrada, sem os campos vazios (o arquivo fica igual quando nada mudou). */
-function entry(folder: string, main: string | null, mainIno: number | undefined, folderIno: number | undefined): ProjectEntry {
+function entry(folder: string, main: string | null, mainIno: number | undefined, folderIno: number | undefined, outside?: string): ProjectEntry {
   return {
     folder,
     main,
     ...(main !== null && mainIno !== undefined ? { mainIno } : {}),
     ...(folderIno !== undefined ? { folderIno } : {}),
+    ...(outside !== undefined ? { outside } : {}),
   };
 }
 
@@ -203,7 +229,7 @@ export function followProjects(
     if (folder === null || out.some((o) => o.folder === folder)) continue;
     if (main !== null) main = movedMain ?? (now.notes.has(main) ? main : null);
     if (main !== null && !under(folder, main)) main = null;
-    const next = entry(folder, main, main === null ? undefined : inodes.get(main), dirIno(folder) ?? e.folderIno);
+    const next = entry(folder, main, main === null ? undefined : inodes.get(main), dirIno(folder) ?? e.folderIno, e.outside);
     // A pasta de destino passa pelas regras: dentro de outro projeto, ou na pasta das reuniões, o projeto sai.
     const others = [...out, ...list.filter((x) => x !== e && x.folder !== e.folder && now.folders.has(x.folder))];
     if (folder !== e.folder && layoutProblem([...others, next], meetingsFolder)) continue;
@@ -221,7 +247,7 @@ export function projectInfo(e: ProjectEntry, notes: readonly NoteMeta[]): Projec
     count++;
     if (updated === null || n.mtime > updated) updated = n.mtime;
   }
-  return { name: baseName(e.folder), folder: e.folder, main: e.main, updated, notes: count };
+  return { name: baseName(e.folder), folder: e.folder, main: e.main, updated, notes: count, ...(e.outside ? { outside: e.outside } : {}) };
 }
 
 /**
@@ -278,14 +304,15 @@ function parse(text: string): ProjectEntry[] {
     const p = raw as Partial<ProjectEntry>;
     if (!p || typeof p.folder !== "string" || !p.folder || out.some((o) => o.folder === p.folder)) continue;
     const main = typeof p.main === "string" && under(p.folder, p.main) ? p.main : null;
-    out.push(entry(p.folder, main, typeof p.mainIno === "number" ? p.mainIno : undefined, typeof p.folderIno === "number" ? p.folderIno : undefined));
+    const outside = typeof p.outside === "string" && path.isAbsolute(p.outside) ? p.outside : undefined;
+    out.push(entry(p.folder, main, typeof p.mainIno === "number" ? p.mainIno : undefined, typeof p.folderIno === "number" ? p.folderIno : undefined, outside));
   }
   return out.slice(0, PROJECTS_MAX);
 }
 
 const same = (a: readonly ProjectEntry[], b: readonly ProjectEntry[]) =>
   a.length === b.length &&
-  a.every((x, i) => x.folder === b[i]!.folder && x.main === b[i]!.main && x.mainIno === b[i]!.mainIno && x.folderIno === b[i]!.folderIno);
+  a.every((x, i) => x.folder === b[i]!.folder && x.main === b[i]!.main && x.mainIno === b[i]!.mainIno && x.folderIno === b[i]!.folderIno && x.outside === b[i]!.outside);
 
 /**
  * O arquivo dos projetos de um cofre. As mudanças passam numa fila: a leitura e a gravação de uma não deixam outra
