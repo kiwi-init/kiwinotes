@@ -252,7 +252,13 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   const current = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Um `[[relatorio.pdf]]` acha o arquivo do vault (T7616): o link não fica de quebrado, e seguir abre o arquivo.
-  const fileOf = useMemo<Resolver>(() => makeFileResolver((listing?.files ?? []).map((f) => f.path)), [listing]);
+  // Pela lista dos arquivos, não pela listagem (spec #13384): um save de nota traz a mesma lista, e o resolvedor fica.
+  const files = listing?.files;
+  // E só quando um link pede (um `[[relatorio.pdf]]`): montar o resolvedor de 150 mil arquivos leva 0,2 s.
+  const fileOf = useMemo<Resolver>(() => {
+    let made: Resolver | null = null;
+    return (target) => (made ??= makeFileResolver((files ?? []).map((f) => f.path)))(target);
+  }, [files]);
   const fileOfRef = useRef(fileOf);
   fileOfRef.current = fileOf;
   const links = useMemo(() => new LinkCache((t) => api.resolve(t).then((p) => p ?? fileOfRef.current(t))), [api]);
@@ -1347,7 +1353,7 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
   );
   const byPath = useMemo(() => new Map((listing?.notes ?? []).map((n) => [n.path, n])), [listing],
   );
-  const fileTimes = useMemo(() => new Map((listing?.files ?? []).map((f) => [f.path, f.mtime])), [listing],
+  const fileTimes = useMemo(() => new Map((files ?? []).map((f) => [f.path, f.mtime])), [files],
   );
   const pinnedNotes = pinned.map((p) => byPath.get(p)).filter((n) => n !== undefined);
   const recent = useMemo(() => recentNotes(listing?.notes ?? [], 5), [listing]);

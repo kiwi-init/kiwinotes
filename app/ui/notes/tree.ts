@@ -3,7 +3,8 @@
 import { subsequence } from "../../src/shared/fuzzy.ts";
 import { folderOf } from "./links.ts";
 import { extOf } from "../../src/shared/attachments.ts";
-import type { NoteMeta, VaultListing } from "./types.ts";
+import type { NoteMeta, VaultFile, VaultListing } from "./types.ts";
+import { filesLineage } from "./files-delta.ts";
 
 export interface FolderNode {
   kind: "folder";
@@ -58,7 +59,12 @@ export function splitExt(base: string): { name: string; ext: string } {
   return dot > 0 ? { name: base.slice(0, dot), ext: base.slice(dot + 1) } : { name: base, ext: "" };
 }
 
-const byName = (a: TreeNode, b: TreeNode) => a.name.localeCompare(b.name, "pt-BR", { numeric: true });
+/**
+ * Um `Intl.Collator` só, feito uma vez (spec #13384): o `localeCompare` com língua e opções monta um a cada comparação,
+ * e ordenar a árvore de um cofre com 150 mil arquivos levava 0,8 s a cada save.
+ */
+const collator = new Intl.Collator("pt-BR", { numeric: true });
+const byName = (a: TreeNode, b: TreeNode) => collator.compare(a.name, b.name);
 
 /**
  * Pastas primeiro (por nome), depois as notas: por nome (números em ordem de número: "2" antes de "10"), ou pela edição
@@ -84,32 +90,130 @@ export function buildTree({ folders, notes, files = [] }: VaultListing, sortBy: 
     folderNode(folderOf(n.path)).children.push({ kind: "note", path: n.path, name: n.title });
     for (let f = folderOf(n.path); f; f = folderOf(f)) index.get(f)!.count++;
   }
-  // Os outros arquivos (T3370) entram junto com as notas, na mesma ordem: um anexo fica perto da nota dele.
-  const fileTimes = new Map(files.map((f) => [f.path, f.mtime]));
-  for (const f of files) {
-    const base = f.path.slice(f.path.lastIndexOf("/") + 1);
-    folderNode(folderOf(f.path)).children.push({ kind: "file", path: f.path, ...splitExt(base), type: fileType(base) });
-    for (let d = folderOf(f.path); d; d = folderOf(d)) index.get(d)!.count++;
-  }
+  // Os outros arquivos (T3370) entram junto com as notas, na mesma ordem: um anexo fica perto da nota dele. Já vêm em
+  // ordem e contados por pasta, de uma vez por lista (spec #13384): um save de nota não reordena 150 mil arquivos.
+  const fi = fileIndex(files, sortBy);
+  for (const d of fi.byFolder.keys()) folderNode(d);
+  for (const [d, n] of fi.counts) index.get(d)!.count += n;
+  const order = nodeOrder(sortBy, mains, meta, fi.times);
+  const sort = (node: FolderNode) => {
+    node.children.sort(order);
+    const own = fi.byFolder.get(node.path);
+    if (own) node.children = mergeSorted(node.children, own, order);
+    for (const c of node.children) if (c.kind === "folder") sort(c);
+  };
+  sort(root);
+  return root.children;
+}
+
+/** A ordem dos filhos de uma pasta (ver `buildTree`). `times`: a data de cada arquivo que não é nota. */
+function nodeOrder(sortBy: SortBy, mains: ReadonlySet<string>, meta: ReadonlyMap<string, NoteMeta>, times: ReadonlyMap<string, string>) {
   const when = (n: TreeNode) => {
-    if (n.kind === "file") return fileTimes.get(n.path) ?? "";
+    if (n.kind === "file") return times.get(n.path) ?? "";
     const m = meta.get(n.path);
     return (sortBy === "created" ? (m?.ctime ?? m?.mtime) : m?.mtime) ?? "";
   };
-  const order = (a: TreeNode, b: TreeNode) => {
+  return (a: TreeNode, b: TreeNode) => {
     const am = a.kind === "note" && mains.has(a.path);
     const bm = b.kind === "note" && mains.has(b.path);
     if (am !== bm) return am ? -1 : 1;
     if ((a.kind === "folder") !== (b.kind === "folder")) return a.kind === "folder" ? -1 : 1;
     if (a.kind === "folder" || sortBy === "name") return byName(a, b);
-    return when(b).localeCompare(when(a)) || byName(a, b);
+    const wa = when(a);
+    const wb = when(b);
+    return (wb < wa ? -1 : wb > wa ? 1 : 0) || byName(a, b);
   };
-  const sort = (node: FolderNode) => {
-    node.children.sort(order);
-    for (const c of node.children) if (c.kind === "folder") sort(c);
+}
+
+/** Junta duas listas já em ordem, numa nova (as do índice dos arquivos não mudam). */
+function mergeSorted(a: TreeNode[], b: readonly TreeNode[], order: (x: TreeNode, y: TreeNode) => number): TreeNode[] {
+  const out: TreeNode[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) out.push(order(a[i]!, b[j]!) <= 0 ? a[i++]! : b[j++]!);
+  while (i < a.length) out.push(a[i++]!);
+  while (j < b.length) out.push(b[j++]!);
+  return out;
+}
+
+interface FileIndex {
+  /** Os arquivos de cada pasta, em ordem. */
+  byFolder: Map<string, FileNode[]>;
+  /** Quantos arquivos há em cada pasta, contando as de dentro (a raiz não conta, como nas notas). */
+  counts: Map<string, number>;
+  times: Map<string, string>;
+}
+/** Por lista de arquivos (a mesma enquanto o `filesVersion` não muda) e por ordem: por nome ou por data. */
+const fileIndexes = new WeakMap<readonly VaultFile[], Map<string, FileIndex>>();
+
+function fileIndex(files: readonly VaultFile[], sortBy: SortBy): FileIndex {
+  const kind = sortBy === "name" ? "name" : "time";
+  let byKind = fileIndexes.get(files);
+  const cached = byKind?.get(kind);
+  if (cached) return cached;
+  // Veio de outra lista pela diferença (files-delta.ts), e a árvore já tinha o índice dela: refaz só as pastas mexidas.
+  const from = filesLineage(files);
+  const base = from && fileIndexes.get(from.from)?.get(kind);
+  const made = base && from ? patchIndex(base, files, from.touched, sortBy) : fullIndex(files, sortBy);
+  if (!byKind) fileIndexes.set(files, (byKind = new Map()));
+  byKind.set(kind, made);
+  return made;
+}
+
+const fileNode = (f: VaultFile): FileNode => {
+  const base = f.path.slice(f.path.lastIndexOf("/") + 1);
+  return { kind: "file", path: f.path, ...splitExt(base), type: fileType(base) };
+};
+
+/** O índice de `base` com os caminhos de `touched` trocados pelo que está em `files` agora. */
+function patchIndex(base: FileIndex, files: readonly VaultFile[], touched: string[], sortBy: SortBy): FileIndex {
+  const set = new Set(touched);
+  const now = new Map<string, VaultFile>();
+  for (let i = files.length - 1; i >= 0 && now.size < set.size; i--) if (set.has(files[i]!.path)) now.set(files[i]!.path, files[i]!);
+  const times = new Map(base.times);
+  const counts = new Map(base.counts);
+  const byFolder = new Map(base.byFolder);
+  const bump = (path: string, by: number) => {
+    for (let x = folderOf(path); x; x = folderOf(x)) {
+      const n = (counts.get(x) ?? 0) + by;
+      if (n > 0) counts.set(x, n);
+      else counts.delete(x);
+    }
   };
-  sort(root);
-  return root.children;
+  for (const p of set) {
+    const had = base.times.has(p);
+    const has = now.get(p);
+    if (had && !has) bump(p, -1);
+    if (!had && has) bump(p, 1);
+    if (has) times.set(p, has.mtime);
+    else times.delete(p);
+  }
+  const order = nodeOrder(sortBy, new Set(), new Map(), times);
+  for (const d of new Set([...set].map(folderOf))) {
+    const list = (byFolder.get(d) ?? []).filter((n) => !set.has(n.path));
+    for (const f of now.values()) if (folderOf(f.path) === d) list.push(fileNode(f));
+    list.sort(order);
+    if (list.length) byFolder.set(d, list);
+    else byFolder.delete(d);
+  }
+  return { byFolder, counts, times };
+}
+
+function fullIndex(files: readonly VaultFile[], sortBy: SortBy): FileIndex {
+  const times = new Map(files.map((f) => [f.path, f.mtime]));
+  const byFolder = new Map<string, FileNode[]>();
+  const counts = new Map<string, number>();
+  for (const f of files) {
+    const d = folderOf(f.path);
+    const node = fileNode(f);
+    const list = byFolder.get(d);
+    if (list) list.push(node);
+    else byFolder.set(d, [node]);
+    for (let x = d; x; x = folderOf(x)) counts.set(x, (counts.get(x) ?? 0) + 1);
+  }
+  const order = nodeOrder(sortBy, new Set(), new Map(), times);
+  for (const list of byFolder.values()) list.sort(order);
+  return { byFolder, counts, times };
 }
 
 /** As pastas que contêm o path, para abrir a árvore até a nota aberta. */

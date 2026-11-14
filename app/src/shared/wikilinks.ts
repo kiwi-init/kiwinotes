@@ -50,6 +50,13 @@ function shortest(paths: string[]): string | null {
 
 export type Resolver = (target: string) => string | null;
 
+/** Junta `p` à lista de `k`, sem copiar a lista (spec #13384: com 150 mil arquivos, a cópia a cada um levava segundos). */
+function push(m: Map<string, string[]>, k: string, p: string) {
+  const list = m.get(k);
+  if (list) list.push(p);
+  else m.set(k, [p]);
+}
+
 /**
  * Prepara a resolução de `[[alvo]]` para um conjunto de notas (`paths`, relativos ao vault, com `.md`). Sem barra,
  * vale o nome do arquivo, em qualquer pasta, sem diferença de maiúscula nem acento; com dois iguais, o caminho mais
@@ -63,12 +70,12 @@ export function makeResolver(paths: readonly string[], aliases?: ReadonlyMap<str
   const byAlias = new Map<string, string[]>();
   for (const p of paths) {
     const n = key(noteName(p));
-    byName.set(n, [...(byName.get(n) ?? []), p]);
+    push(byName, n, p);
     const k = key(p);
-    byPath.set(k, [...(byPath.get(k) ?? []), p]);
+    push(byPath, k, p);
     for (const a of aliases?.get(p) ?? []) {
       const ak = key(a);
-      if (ak) byAlias.set(ak, [...(byAlias.get(ak) ?? []), p]);
+      if (ak) push(byAlias, ak, p);
     }
   }
   const cache = new Map<string, string | null>();
@@ -98,9 +105,9 @@ export function makeFileResolver(files: readonly string[]): Resolver {
   const byPath = new Map<string, string[]>();
   for (const p of files) {
     const n = key(p.slice(p.lastIndexOf("/") + 1));
-    byName.set(n, [...(byName.get(n) ?? []), p]);
+    push(byName, n, p);
     const k = key(p);
-    byPath.set(k, [...(byPath.get(k) ?? []), p]);
+    push(byPath, k, p);
   }
   return (target) => {
     const t = target.trim().replace(/^\/+/, "");

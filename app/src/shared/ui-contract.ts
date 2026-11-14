@@ -212,7 +212,9 @@ export type { NoteModel };
 //   projeto de fora abre a pasta no Finder). Só acréscimo.
 // 1.72.0 (T13143, spec #12949): o `kiwicat.posicao` (uma das seis posições do gato por cima dos apps; padrão `center`)
 //   e o `kiwicat.tamanho` (de 0,6 a 1,6, em passos de 0,1; padrão 1) nas settings. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.72.0";
+// 1.73.0 (T13408, spec #13384): o `filesVersion` no `notes.list` (nos args e no resultado): com a versão de agora, o
+//   resultado vem sem o `files`; com uma pouco atrás, só o `filesDelta`. Só acréscimo: sem o arg, tudo vem como antes.
+export const UI_CONTRACT_VERSION = "1.73.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -303,9 +305,12 @@ export interface UiCapabilities {
   // pasta com ponto) dá E_OUTSIDE_VAULT; nota que não existe, E_NOT_FOUND; destino que já existe, E_EXISTS.
   /**
    * `tree` (1.7.0) é a mesma lista em árvore, com as pastas vazias. `files` (1.19.0) são os arquivos que não são nota
-   * (anexo, PDF, `.canvas`), fora os ocultos.
+   * (anexo, PDF, `.canvas`), fora os ocultos. `filesVersion` (1.73.0, spec #13384) é a versão desses arquivos: com a
+   * mesma versão nos args, o `files` não vem (não mudou), e a tela fica com a lista que já tem; com uma versão pouco
+   * atrás, vem só `filesDelta`, os que entraram ou mudaram (`set`) e os que saíram (`removed`).
    */
-  "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode; files?: VaultFile[];
+  "notes.list": { args: { filesVersion?: string }; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode; files?: VaultFile[];
+      filesDelta?: { set: VaultFile[]; removed: string[] }; filesVersion?: string;
     };
   };
   /** Só os nomes das pastas (1.68.0, spec #12918), em ordem, como o `folders` do `notes.list`, sem as notas e os arquivos. */

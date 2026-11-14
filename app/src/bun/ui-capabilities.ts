@@ -787,8 +787,9 @@ export function uiCapabilities(deps: CapabilityDeps,
     "notes.folder": () => { throw new CapabilityError("E_NO_FOLDERS","Este engine não troca a pasta das notas."); },
     "notes.openFolder": () => { throw new CapabilityError("E_NO_FOLDERS","Este engine não troca a pasta das notas."); },
     "notes.list": async (args) => {
-      noArgs(args, "notes.list");
-      return (await vault()).list();
+      const a = fields(args ?? {}, "notes.list", ["filesVersion"]);
+      if (a.filesVersion !== undefined && typeof a.filesVersion !== "string") throw bad("filesVersion must be a string");
+      return (await vault()).list({ filesVersion: a.filesVersion });
     },
     "meetings.speakers": async (args) => {
       const a = fields(args, "meetings.speakers", ["path"]);

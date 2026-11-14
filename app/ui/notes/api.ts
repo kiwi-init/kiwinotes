@@ -5,9 +5,10 @@
 import "../src/api.ts"; // o tipo do `window.engine`
 
 import { MockVault } from "./mock.ts";
+import { applyFilesDelta, type FilesDelta } from "./files-delta.ts";
 import type { AttachmentFile, AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
-import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat, TreePrefs,
+import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat, TreePrefs, VaultFile, VaultListing,
 } from "./types.ts";
 
 type Invoke = (cap: string, args?: unknown) => Promise<unknown>;
@@ -20,6 +21,8 @@ export function engineNotes(
   folderId?: string,
 ): NotesApi {
   const call = <T>(cap: string, args: object = {}) => invoke(cap, {...args,...(folderId?{folderId}:{})}) as Promise<T>;
+  /** Os arquivos que não são nota da última `notes.list` e a versão deles (spec #13384). */
+  let filesCache: { version: string; files: VaultFile[] } | null = null;
   // As de pastas e as fixadas vêm juntas no contrato 1.7.0 (T2468, #2493). Num engine antigo, a janela esconde o que
   // depende delas; o `pinned` também, porque um campo desconhecido no settings.set dá E_INVALID.
   const withFolders = has("folders.create");
@@ -141,7 +144,24 @@ export function engineNotes(
     ...(has("notes.export") ? { export: (path: string, format: ExportFormat, theme: Record<string, string>,
           ) => call<{ file: string }>("notes.export", { path, format, theme }),
         } : {}),
-    list: () => call("notes.list"),
+    list: async () => {
+      // Os arquivos só quando mudaram (spec #13384, contrato 1.73.0): com a versão que a tela já tem, eles não vêm. Um
+      // engine antigo não manda versão, e então a tela nunca a pede.
+      const l = await call<VaultListing & { filesVersion?: string; filesDelta?: FilesDelta }>("notes.list", filesCache ? { filesVersion: filesCache.version } : undefined);
+      if (!l) return l;
+      if (l.filesVersion && l.files) filesCache = { version: l.filesVersion, files: l.files };
+      else if (filesCache && l.filesVersion && l.filesDelta) {
+        // Só a diferença: a lista nova sai da que a tela tem.
+        filesCache = { version: l.filesVersion, files: applyFilesDelta(filesCache.files, l.filesDelta) };
+        const { filesDelta: _, ...rest } = l;
+        return { ...rest, files: filesCache.files };
+      } else if (filesCache && l.filesVersion === filesCache.version) return { ...l, files: filesCache.files };
+      else if (filesCache) {
+        filesCache = null;
+        return call("notes.list");
+      }
+      return l;
+    },
     get: (path) => call("notes.get", { path }),
     save: (path, content, baseVersion, baseContent) => call("notes.save", { path, content, baseVersion,
         ...(has("meetings.speakers") && baseContent !== undefined
