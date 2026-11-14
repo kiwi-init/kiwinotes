@@ -18,7 +18,7 @@
 // - **O desfazer** (spec #9353): com as notas do desfazer (`useUndo`), o `agent.undo` volta o que um pedido mudou, pela
 //   cópia do registro (`undo.ts`). É da pessoa: não precisa do agente ligado e não vira ferramenta dele. Um por vez.
 
-import { lastSummaryDate, mainNoteWithSummary, SUMMARY_TITLE, summarySection } from "./summary.ts";
+import { lastSummaryDate, mainNoteWithSummary, SUMMARY_TITLE, summarySection, summarySince } from "./summary.ts";
 import type { SummarySettings } from "../shared/summary-settings.ts";
 import { DEFAULT_SUMMARY_SETTINGS, sanitizeSummarySettings } from "../shared/summary-settings.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -68,8 +68,9 @@ import {
   type MeetingProposal,
   type ProposalFields,
   type ProposalMeeting,
+  type ProposalProject,
 } from "./proposals.ts";
-import type { ProposalDraft, ProposalSink } from "./tools/tools.ts";
+import type { ProposalDraft, ProposalSink, SummaryDraft } from "./tools/tools.ts";
 import { DEFAULT_AGENT_MEETING_SETTINGS, sanitizeAgentMeetingSettings, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
@@ -153,6 +154,11 @@ export interface AgentServiceDeps {
 type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO" | "E_CHANGED";
 
 /** Um erro de capacidade do agente, com o código que a tela entende. */
+/** Um pedido de resumo executivo (spec #11546): com o modo econômico, a pessoa confirma antes. */
+const SUMMARY_REQUEST = /resumo\s+executivo/i;
+export const SUMMARY_ECONOMY_QUESTION = "O resumo executivo lê várias notas do projeto e gasta mais do seu limite. Fazer agora?";
+const SUMMARY_ECONOMY_NO = "Tudo bem, não fiz o resumo: nada foi lido.";
+
 export class AgentServiceError extends Error {
   constructor(
     readonly code: AgentCode,
@@ -655,7 +661,20 @@ export class AgentService {
       void this.emitProposals();
       return { id: p.id };
     },
+    summary: async (d: SummaryDraft) => {
+      const since = d.project ? await this.summarySinceFor(d.project) : "";
+      const p = this.proposals.add({ kind: "summary", request: this.activityId(), project: d.project, candidates: d.candidates, fields: null, summary: { ...d.fields, since } });
+      void this.emitProposals();
+      return { id: p.id };
+    },
+    since: (project: ProposalProject) => this.summarySinceFor(project),
   };
+
+  /** Desde quando "o que andou" conta no resumo de um projeto: o último resumo da nota principal, ou o período de Ajustes. */
+  private async summarySinceFor(project: ProposalProject): Promise<string> {
+    const content = project.main ? await this.proposalWriter().get(project.main).then((n) => n.content, () => null) : null;
+    return summarySince(content, await this.summarySettings(), new Date((this.d.now ?? Date.now)()));
+  }
 
   /**
    * O [Desfazer] do pedido de um [Aplicar] (pelo balão ou pela Atividade): com todas as mudanças dele desfeitas, a
@@ -813,9 +832,12 @@ export class AgentService {
       if (!needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", "Essa proposta não espera uma escolha de projeto.");
       const chosen = folder === null ? null : p.candidates.find((c) => c.folder === folder);
       if (chosen === undefined) throw new AgentServiceError("E_BAD_ARGS", "Esse projeto não é um dos candidatos da proposta.");
+      if (p.kind === "summary" && !chosen) throw new AgentServiceError("E_BAD_ARGS", "O resumo executivo é de um projeto: escolha um dos candidatos.");
+      const since = p.kind === "summary" && chosen ? await this.summarySinceFor(chosen) : null;
       const next = this.proposals.update(id, (x) => {
         x.project = chosen;
         x.candidates = [];
+        if (since && x.summary) x.summary.since = since;
       })!;
       void this.emitProposals();
       return this.summaryOf(next);
@@ -1099,6 +1121,15 @@ export class AgentService {
       if (turn.cancelled) {
         this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: "" });
         return;
+      }
+      // O resumo executivo com o modo econômico (spec #11546): ele lê várias notas, então a pessoa diz antes se pode
+      // gastar. Sem resposta no prazo é "não", e nada vai ao agente.
+      if (s.economy && SUMMARY_REQUEST.test(text)) {
+        const go = await this.questions.confirm(turn.id, SUMMARY_ECONOMY_QUESTION);
+        if (!go || turn.cancelled) {
+          this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: go ? "" : SUMMARY_ECONOMY_NO });
+          return;
+        }
       }
       // As instruções fixas vão na frente do pedido, sempre iguais (o cache): o Modelo de nota (spec #11102) e o modo
       // econômico (spec #11084). Um erro ao ler o modelo não derruba o pedido: ele vai sem o modelo.

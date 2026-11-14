@@ -30,6 +30,7 @@ import {
   type ProposalProject,
 } from "../proposals.ts";
 import { removedSecrets, type DoubtDecider, type SecretGuard } from "../../guardrail/filter.ts";
+import type { SummaryFields, SummarySignal } from "../summary.ts";
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
 export const READ_MAX_CHARS = 12_000;
@@ -63,7 +64,7 @@ export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_wri
 /** O máximo de notas que um "organizar a pasta" libera de uma vez (spec #11102). */
 export const ORGANIZE_MAX = 200;
 /** A proposta da reunião (spec #8360): não escreve nada, guarda a proposta para a pessoa aprovar. */
-export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose"] as const;
+export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose", "project_summary_propose"] as const;
 export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
 
@@ -87,6 +88,16 @@ const offsetProp = {
 };
 
 /** O que o `tools/list` do MCP devolve. As anotações dizem que nenhuma escreve nem sai do Mac. */
+
+/** Um item do resumo executivo com a fonte (spec #11546). */
+const SOURCED_PROPS = {
+  texto: { type: "string", minLength: 1, maxLength: PROPOSAL_ITEM_CHARS },
+  fonte: { type: "string", description: "O caminho da nota ou da reunião de onde veio, como o notes_list ou o meetings_list devolve." },
+} as const;
+const SOURCED_ITEM = { type: "object", properties: SOURCED_PROPS, required: ["texto", "fonte"], additionalProperties: false } as const;
+/** Quantas reuniões recentes o resumo mostra, no máximo. */
+export const SUMMARY_MEETINGS_MAX = 10;
+
 export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_search",
@@ -177,7 +188,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "project_status",
     title: "Como está um projeto",
-    description: `O estado de um projeto, só contado, sem resumo: o sumário da nota principal (os títulos, até ${STATUS_OUTLINE_MAX}), as ${STATUS_RECENT} notas da pasta mudadas por último, com a data, e quantas caixas de tarefa abertas (- [ ]) há em cada nota da pasta, com o total. As datas são a hora do arquivo. Para ler uma nota, use notes_read.`,
+    description: `O estado de um projeto, só contado, sem resumo: o sumário da nota principal (os títulos, até ${STATUS_OUTLINE_MAX}), as ${STATUS_RECENT} notas da pasta mudadas por último, com a data, e quantas caixas de tarefa abertas (- [ ]) há em cada nota da pasta, com o total. As datas são a hora do arquivo. Para ler uma nota, use notes_read. Com o resumo executivo disponível, diz também resumoDesde: o dia de onde "o que andou" do próximo resumo conta (AAAA-MM-DD).`,
     inputSchema: {
       type: "object",
       properties: { projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve (ex.: Projetos/Kiwi ou Kiwi)." } },
@@ -296,6 +307,79 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
     proposes: true,
   },
+  {
+    name: "project_summary_propose",
+    title: "Propor o resumo executivo de um projeto",
+    description: `Prepara o resumo executivo de um projeto para a pessoa aprovar: o Kiwi monta a seção "Resumo executivo" no topo da nota principal do projeto, num formato fixo (a situação, o que andou, as decisões, os riscos, os próximos passos e as reuniões recentes), no lugar do resumo anterior. Use quando a pessoa pedir o resumo, o status ou o ponto de um projeto. Leia antes as notas e as reuniões do projeto (project_status, notes_read, meetings_list). Mande só os campos, sem Markdown pronto, e não invente: cada item leva a fonte, o caminho da nota ou da reunião de onde veio, e um item com uma fonte que não existe fica de fora. Nada é escrito agora: a pessoa vê a proposta e aplica ou descarta. Na dúvida entre projetos parecidos, mande os candidatos (de 2 a ${PROPOSAL_CANDIDATES_MAX}).`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve. Só com certeza." },
+        candidatos: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 2,
+          maxItems: PROPOSAL_CANDIDATES_MAX,
+          description: "Na dúvida: as pastas (ou os nomes) dos projetos parecidos, para a pessoa escolher. Sem o projeto.",
+        },
+        situacao: { type: "string", enum: ["verde", "amarelo", "vermelho"], description: "verde: no rumo; amarelo: pede atenção; vermelho: travado." },
+        linha: { type: "string", maxLength: PROPOSAL_ITEM_CHARS, description: "Uma linha sobre a situação (opcional)." },
+        andou: {
+          type: "array",
+          maxItems: PROPOSAL_LIST_MAX,
+          items: SOURCED_ITEM,
+          description: "O que andou no período: um avanço por item, com a fonte.",
+        },
+        decisoes: {
+          type: "array",
+          maxItems: PROPOSAL_LIST_MAX,
+          items: {
+            type: "object",
+            properties: { ...SOURCED_PROPS, data: { type: "string", description: "O dia da decisão, AAAA-MM-DD." } },
+            required: ["texto", "fonte"],
+            additionalProperties: false,
+          },
+          description: "As decisões, com o dia e a fonte.",
+        },
+        riscos: {
+          type: "array",
+          maxItems: PROPOSAL_LIST_MAX,
+          items: {
+            type: "object",
+            properties: { texto: SOURCED_PROPS.texto, fonte: { ...SOURCED_PROPS.fonte, description: "A fonte, se houver." } },
+            required: ["texto"],
+            additionalProperties: false,
+          },
+          description: "Os riscos e bloqueios.",
+        },
+        proximosPassos: {
+          type: "array",
+          maxItems: PROPOSAL_LIST_MAX,
+          items: {
+            type: "object",
+            properties: {
+              oque: SOURCED_PROPS.texto,
+              quem: { type: "string", maxLength: 200 },
+              quando: { type: "string", maxLength: 200 },
+              fonte: SOURCED_PROPS.fonte,
+            },
+            required: ["oque", "fonte"],
+            additionalProperties: false,
+          },
+          description: "Os próximos passos: o quê, quem e quando, com a fonte.",
+        },
+        reunioes: {
+          type: "array",
+          items: { type: "string" },
+          maxItems: SUMMARY_MEETINGS_MAX,
+          description: "Os caminhos das reuniões recentes do projeto, como o meetings_list devolve.",
+        },
+      },
+      required: ["situacao"],
+      additionalProperties: false,
+    },
+    proposes: true,
+  },
 ];
 
 /** As ferramentas que o servidor oferece: as de escrita só com um `writer`, e a proposta só com quem a guarda. */
@@ -365,7 +449,7 @@ export interface KiwiToolContext {
    * pedaços menores, com o "há mais". As descrições das ferramentas não mudam (o começo do pedido fica igual, para o cache).
    */
   economy?: boolean;
-  /** Quem guarda a proposta da reunião (spec #8360). Sem ele, a `meeting_propose` não existe. */
+  /** Quem guarda as propostas (a da reunião, spec #8360, e o resumo executivo, #11546). Sem ele, elas não existem. */
   proposals?: ProposalSink;
 }
 
@@ -377,8 +461,19 @@ export interface ProposalDraft {
   fields: ProposalFields;
 }
 
+/** O que a `project_summary_propose` entrega: o projeto (ou os candidatos) e os campos com as fontes já conferidas. */
+export interface SummaryDraft {
+  project: ProposalProject | null;
+  candidates: ProposalProject[];
+  /** Sem o `since`: quem guarda calcula pela nota principal e pelos Ajustes. */
+  fields: Omit<SummaryFields, "since">;
+}
+
 export interface ProposalSink {
   propose(d: ProposalDraft): Promise<{ id: string }>;
+  summary(d: SummaryDraft): Promise<{ id: string }>;
+  /** Desde quando "o que andou" conta no próximo resumo do projeto (`AAAA-MM-DD`), para o `project_status`. */
+  since(p: ProposalProject): Promise<string>;
 }
 
 function args(raw: unknown, allowed: string[]): Record<string, unknown> {
@@ -526,13 +621,14 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     }
     if ((KIWI_PROPOSE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.proposals) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+      if (name === "project_summary_propose") return await proposeSummary(ctx.reader, ctx.proposals, raw, ctx.guard);
       return await propose(ctx.reader, ctx.proposals, raw, ctx.guard);
     }
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       return await write(ctx.writer, ctx.journal, name, raw, ctx.guard);
     }
-    const r = await run(ctx.reader, name, raw, ctx.guard, ctx.decider, ctx.economy);
+    const r = await run(ctx.reader, name, raw, ctx.guard, ctx.decider, ctx.economy, ctx.proposals);
     if (ctx.guard) r.held = ctx.guard.heldIn(JSON.stringify(r.value));
     return r;
   } catch (e) {
@@ -590,7 +686,15 @@ function snippetOf(text: string, terms: string[]): string {
 }
 
 /** O texto de uma nota como o agente vê: com o filtro, sem os segredos; sem ele, como está. */
-async function run(reader: VaultReader, name: string, raw: unknown, guard?: SecretGuard, decider?: DoubtDecider, economy = false): Promise<ToolResult> {
+async function run(
+  reader: VaultReader,
+  name: string,
+  raw: unknown,
+  guard?: SecretGuard,
+  decider?: DoubtDecider,
+  economy = false,
+  proposals?: ProposalSink,
+): Promise<ToolResult> {
   /** O texto de uma nota como o agente vê: com o filtro, sem os segredos (a dúvida decidida antes); sem ele, como está. */
   const seen = async (path: string, content: string) => (guard ? (await guard.decide(path, content, decider)).text : content);
   switch (name) {
@@ -786,6 +890,7 @@ async function run(reader: VaultReader, name: string, raw: unknown, guard?: Secr
           sumario: s.outline.map((h) => ({ nivel: h.level, titulo: h.title })),
           recentes: s.recent.map((n) => ({ path: n.path, titulo: n.title, mudou: n.mtime })),
           tarefasAbertas: { total: s.openTasks, notas: s.taskNotes, porNota: s.tasks.map((t) => ({ path: t.path, abertas: t.open })) },
+          ...(proposals ? { resumoDesde: await proposals.since({ folder: s.project.folder, name: s.project.name, main: s.project.main }) } : {}),
           ...(avisos.length ? { aviso: avisos.join(" ") } : {}),
         },
         target: s.project.name,
@@ -964,16 +1069,8 @@ function texts(a: Record<string, unknown>, key: string, guard: SecretGuard | und
     .filter(Boolean);
 }
 
-/**
- * A proposta da reunião (spec #8360): confere a reunião e os projetos, limpa os campos e guarda. Um marcador do filtro
- * num campo é recusado, como numa nota nova: um segredo da transcrição não vai para a nota do projeto.
- */
-async function propose(reader: VaultReader, sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
-  const a = args(raw, ["reuniao", "projeto", "candidatos", "tema", "resumo", "decisoes", "acoes", "participantes", "proximosPassos", "pendencias"]);
-  const meetingPath = str(a, "reuniao", true)!;
-  const meeting = (await reader.meetings()).find((m) => m.path === meetingPath);
-  if (!meeting) throw new ToolError("E_NOT_FOUND", `não há reunião gravada em ${meetingPath}; veja as reuniões com meetings_list`);
-  if (meeting.live) throw new ToolError("E_BAD_ARGS", `a reunião ${meetingPath} ainda está gravando`);
+/** O projeto (ou os candidatos, na dúvida) de uma proposta, conferidos com o `projects_list`. */
+async function projectChoice(reader: VaultReader, a: Record<string, unknown>): Promise<{ project: ProposalProject | null; candidates: ProposalProject[] }> {
   const projects = await reader.projects();
   const findProject = (q: string): ProposalProject => {
     const k = fold(q.replace(/^\/+|\/+$/g, ""));
@@ -987,7 +1084,20 @@ async function propose(reader: VaultReader, sink: ProposalSink, raw: unknown, gu
   const candidates = [...new Map(named.map(findProject).map((p) => [p.folder, p])).values()];
   if (named.length && (candidates.length < 2 || candidates.length > PROPOSAL_CANDIDATES_MAX))
     throw new ToolError("E_BAD_ARGS", `os candidatos são de 2 a ${PROPOSAL_CANDIDATES_MAX} projetos diferentes`);
-  const project = projeto ? findProject(projeto) : null;
+  return { project: projeto ? findProject(projeto) : null, candidates };
+}
+
+/**
+ * A proposta da reunião (spec #8360): confere a reunião e os projetos, limpa os campos e guarda. Um marcador do filtro
+ * num campo é recusado, como numa nota nova: um segredo da transcrição não vai para a nota do projeto.
+ */
+async function propose(reader: VaultReader, sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
+  const a = args(raw, ["reuniao", "projeto", "candidatos", "tema", "resumo", "decisoes", "acoes", "participantes", "proximosPassos", "pendencias"]);
+  const meetingPath = str(a, "reuniao", true)!;
+  const meeting = (await reader.meetings()).find((m) => m.path === meetingPath);
+  if (!meeting) throw new ToolError("E_NOT_FOUND", `não há reunião gravada em ${meetingPath}; veja as reuniões com meetings_list`);
+  if (meeting.live) throw new ToolError("E_BAD_ARGS", `a reunião ${meetingPath} ainda está gravando`);
+  const { project, candidates } = await projectChoice(reader, a);
   const theme = restore(guard, "\u0000nova", str(a, "tema", true, PROPOSAL_THEME_CHARS)!).trim();
   if (!theme) throw new ToolError("E_BAD_ARGS", "tema está vazio");
   const summary = restore(guard, "\u0000nova", str(a, "resumo", false, PROPOSAL_TEXT_CHARS) ?? "").trim();
@@ -1021,5 +1131,98 @@ async function propose(reader: VaultReader, sink: ProposalSink, raw: unknown, gu
       aviso: "Nada foi escrito. A proposta aparece para a pessoa, que aplica ou descarta. Não escreva estas notas com outras ferramentas.",
     },
     target: meeting.path,
+  };
+}
+
+
+const SIGNALS: readonly SummarySignal[] = ["verde", "amarelo", "vermelho"];
+
+/**
+ * O resumo executivo de um projeto (spec #11546): confere o projeto e as fontes, limpa os campos e guarda a proposta.
+ * O agente não inventa: um item com uma fonte que não é nota nem reunião do cofre fica de fora (e a resposta conta
+ * quantos). Um marcador do filtro num campo é recusado, como na proposta da reunião.
+ */
+async function proposeSummary(reader: VaultReader, sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
+  const a = args(raw, ["projeto", "candidatos", "situacao", "linha", "andou", "decisoes", "riscos", "proximosPassos", "reunioes"]);
+  const { project, candidates } = await projectChoice(reader, a);
+  const signal = str(a, "situacao", true, 20) as SummarySignal;
+  if (!SIGNALS.includes(signal)) throw new ToolError("E_BAD_ARGS", "situacao é verde, amarelo ou vermelho");
+  const clean = (o: Record<string, unknown>, key: string, required: boolean, max: number, where: string) => {
+    const v = restore(guard, "\u0000nova", str(o, key, required, max) ?? "").trim();
+    if (required && !v) throw new ToolError("E_BAD_ARGS", `${where}.${key} está vazio`);
+    return v;
+  };
+  const status = clean(a, "linha", false, PROPOSAL_ITEM_CHARS, "resumo");
+  const [{ notes }, meetings] = await Promise.all([reader.list(), reader.meetings()]);
+  const known = new Set([...notes.map((n) => n.path), ...meetings.map((m) => m.path)]);
+  let dropped = 0;
+  /** A fonte conferida: um caminho do cofre, ou null (o item sai). */
+  const source = (o: Record<string, unknown>, required: boolean): string | null | undefined => {
+    const f = str(o, "fonte", required, 1024)?.trim().replace(/^\/+/, "");
+    if (!f) return required ? null : undefined;
+    return known.has(f) ? f : known.has(`${f}.md`) ? `${f}.md` : null;
+  };
+  const list = <T,>(key: string, keys: string[], map: (o: Record<string, unknown>, where: string) => T | null): T[] => {
+    const v = a[key] ?? [];
+    if (!Array.isArray(v)) throw new ToolError("E_BAD_ARGS", `${key} deve ser uma lista`);
+    if (v.length > PROPOSAL_LIST_MAX) throw new ToolError("E_BAD_ARGS", `${key} passa de ${PROPOSAL_LIST_MAX} itens`);
+    return v.flatMap((x, i) => {
+      const r = map(args(x, keys), `${key}[${i}]`);
+      if (r === null) dropped++;
+      return r === null ? [] : [r];
+    });
+  };
+  const progress = list("andou", ["texto", "fonte"], (o, w) => {
+    const text = clean(o, "texto", true, PROPOSAL_ITEM_CHARS, w);
+    const src = source(o, true);
+    return src ? { text, source: src } : null;
+  });
+  const decisions = list("decisoes", ["texto", "data", "fonte"], (o, w) => {
+    const text = clean(o, "texto", true, PROPOSAL_ITEM_CHARS, w);
+    const date = str(o, "data", false, 10)?.trim();
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ToolError("E_BAD_ARGS", `${w}.data é AAAA-MM-DD`);
+    const src = source(o, true);
+    return src ? { text, source: src, ...(date ? { date } : {}) } : null;
+  });
+  const risks = list("riscos", ["texto", "fonte"], (o, w) => {
+    const text = clean(o, "texto", true, PROPOSAL_ITEM_CHARS, w);
+    const src = source(o, false);
+    if (src === null) return null;
+    return { text, ...(src ? { source: src } : {}) };
+  });
+  const nextSteps = list("proximosPassos", ["oque", "quem", "quando", "fonte"], (o, w) => {
+    const text = clean(o, "oque", true, PROPOSAL_ITEM_CHARS, w);
+    const who = clean(o, "quem", false, 200, w);
+    const when = clean(o, "quando", false, 200, w);
+    const src = source(o, true);
+    return src ? { text, source: src, ...(who ? { who } : {}), ...(when ? { when } : {}) } : null;
+  });
+  const rawMeetings = a.reunioes ?? [];
+  if (!Array.isArray(rawMeetings)) throw new ToolError("E_BAD_ARGS", "reunioes deve ser uma lista");
+  if (rawMeetings.length > SUMMARY_MEETINGS_MAX) throw new ToolError("E_BAD_ARGS", `reunioes passa de ${SUMMARY_MEETINGS_MAX} itens`);
+  const byPath = new Map(meetings.filter((m) => !m.live).map((m) => [m.path, m]));
+  const recent = [...new Set(rawMeetings.map((x) => (typeof x === "string" ? x.trim() : "")))].flatMap((p) => {
+    const m = byPath.get(p);
+    if (!m) dropped++;
+    return m ? [{ path: m.path, title: m.title, date: m.date }] : [];
+  });
+  recent.sort((x, y) => y.date.localeCompare(x.date));
+  const { id } = await sink.summary({
+    project,
+    candidates,
+    fields: { signal, ...(status ? { status } : {}), progress, decisions, risks, nextSteps, meetings: recent },
+  });
+  const target = project?.main ?? project?.folder ?? candidates[0]?.folder ?? "";
+  return {
+    value: {
+      proposta: id,
+      projeto: project?.folder ?? null,
+      ...(candidates.length ? { candidatos: candidates.map((c) => c.folder) } : {}),
+      ...(dropped ? { foraSemFonte: dropped } : {}),
+      aviso:
+        "Nada foi escrito. A proposta aparece para a pessoa, que aplica ou descarta. Não escreva o resumo com outras ferramentas." +
+        (dropped ? ` ${dropped} item(ns) ficaram de fora porque a fonte não é uma nota nem uma reunião do cofre.` : ""),
+    },
+    target,
   };
 }
