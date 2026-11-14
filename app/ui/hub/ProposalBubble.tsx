@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { openProposals, PROPOSAL_LATER } from "../settings/proposalText.ts";
 import { ProposalItem, ProposalPanel, useProposals } from "../settings/Proposals.tsx";
+import { onAdjust } from "../settings/routineAdjust.ts";
 import { BubblePresence } from "./BubblePresence";
 
 export function ProposalBubble({ hidden, reduced = false }: { hidden: boolean; reduced?: boolean }) {
@@ -17,6 +18,9 @@ export function ProposalBubble({ hidden, reduced = false }: { hidden: boolean; r
   const [shown, setShown] = useState<string | null>(null);
   const [bigOpen, setBigOpen] = useState(false);
   const big = useRef<HTMLDivElement>(null);
+
+  // O [Ajustar] de uma rotina (spec #12944) leva a proposta para o cartão em Ajustes: o balão sai, como no [Depois].
+  useEffect(() => onAdjust((r) => setLater((s) => (s.has(r.proposal) ? s : new Set(s).add(r.proposal)))), []);
 
   const open = openProposals(list ?? []).filter((p) => !later.has(p.id));
   const kept = list?.find((p) => p.id === shown && p.status === "applied" && !later.has(p.id));
