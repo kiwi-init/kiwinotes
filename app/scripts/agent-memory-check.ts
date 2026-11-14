@@ -161,6 +161,21 @@ try {
   report.checks.push("project diary: a dated line in \"Diário do agente\" at the end of the main note, in the Atividade, and [Desfazer] restores the note");
   report.problems.push(...d.report.problems);
   await d.close();
+
+  // 7. A memória cheia (T11808): o fato não entra, e o balão avisa, sem [Desfazer].
+  const full = Array.from({ length: 60 }, (_, i) => `fato ${i + 1}`);
+  await invoke("agent.memorySet", { facts: full });
+  const f = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 980, height: 720, motion: false, browser: "webkit", query: { section: "about" } });
+  await f.page.waitForSelector('.kn-kiwicat[data-ready="true"]', { timeout: 15000 });
+  await invoke("agent.ask", { text: "lembra que tenho um gato chamado Kiwi" });
+  await idle();
+  await f.page.waitForFunction(() => document.querySelector(".kn-memory-bubble")?.textContent?.includes("A memória está cheia"), undefined, { timeout: 30000 });
+  assert.equal(await f.page.locator(".kn-memory-bubble button:has-text('Desfazer')").count(), 0);
+  assert.deepEqual((await invoke("agent.memory")).facts, full);
+  await cornerShot(f.page, ".kn-memory-bubble", "7-cheia.png");
+  report.checks.push("full memory (60): the fact is not saved, and the bubble says so, without [Desfazer]");
+  report.problems.push(...f.report.problems);
+  await f.close();
   assert.deepEqual(report.problems, []);
   console.log(JSON.stringify({ ok: true, ...report }, null, 2));
 } finally {

@@ -172,7 +172,9 @@ export type { NoteModel };
 // 1.60.0 (T11665, spec #11469): a memória do agente. O `agent.memory` (os fatos e a última mudança), o
 //   `agent.memoryUndo` (o [Desfazer] de cada mudança no balão), o `agent.memorySet` e o `agent.memoryClear` (Ajustes) e o evento `agent.memoryChanged`; as `instructions` no `AgentStatus` e
 //   no `agent.configure`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.60.0";
+// 1.61.0 (T11808, spec #11469): a ação `full` nas `changes` do `AgentMemoryView` (a memória cheia recusou o fato; o
+//   balão avisa, sem [Desfazer]). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.61.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -594,7 +596,14 @@ export interface AgentMemoryView {
    * As mudanças que o agente fez no último pedido que mexeu na memória, na ordem (o balão "Anotei: …", cada uma com o
    * seu [Desfazer]); vazio sem nenhuma desde que o app abriu.
    */
-  changes: { id: string; action: "remember" | "forget"; fact: string; at: string; undone?: boolean }[];
+  changes: {
+    id: string;
+    /** `full` (1.61.0, T11808): a memória cheia recusou o fato; o balão avisa, sem [Desfazer]. */
+    action: "remember" | "forget" | "full";
+    fact: string;
+    at: string;
+    undone?: boolean;
+  }[];
 }
 
 /** Uma proposta da reunião (1.57.0, spec #8360). As horas em ISO. */

@@ -56,7 +56,7 @@ import type {
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
 import { type NoteModel, noteModelText } from "./note-model.ts";
-import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
+import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, MemoryError, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
 const MEMORY_OPS_KEEP = 50;
@@ -64,7 +64,8 @@ interface MemoryOp {
   id: string;
   /** O pedido do agente em que a mudança aconteceu: o balão mostra todas as do mesmo pedido. */
   request: string;
-  action: "remember" | "forget";
+  /** `full`: a memória cheia recusou o fato (T11808); só o aviso no balão, sem [Desfazer]. */
+  action: "remember" | "forget" | "full";
   fact: string;
   /** Onde o fato estava (para o esquecido voltar no mesmo lugar). */
   index: number;
@@ -333,7 +334,15 @@ export class AgentService {
   private readonly memorySink: MemorySink = {
     remember: (fact) =>
       this.oneMemory((root) => {
-        const r = rememberFact(readMemory(root), fact);
+        const before = readMemory(root);
+        let r: ReturnType<typeof rememberFact>;
+        try {
+          r = rememberFact(before, fact);
+        } catch (e) {
+          // Cheia (spec #11469, T11808): o agente recebe o erro, e a pessoa vê o aviso no balão, sem [Desfazer].
+          if (e instanceof MemoryError && e.code === "E_MEMORY_FULL") this.emitMemory(before, this.memoryOp("full", cleanFact(fact), before.length));
+          throw e;
+        }
         if (!r.added) return { added: false, total: r.facts.length };
         const facts = writeMemory(root, r.facts);
         this.emitMemory(facts, this.memoryOp("remember", r.facts[r.index]!, r.index));
@@ -412,6 +421,7 @@ export class AgentService {
       const op = this.memoryOps.find((o) => o.id === id);
       if (!op) throw new AgentServiceError("E_NOT_FOUND", "Essa mudança na memória já não pode ser desfeita.");
       if (op.undone) return this.viewOf(readMemory(root));
+      if (op.action === "full") throw new AgentServiceError("E_BAD_ARGS", "Esse fato não foi anotado: não há o que desfazer.");
       let facts = readMemory(root);
       const at = facts.findIndex((f) => factKey(f) === factKey(op.fact));
       if (op.action === "remember") {

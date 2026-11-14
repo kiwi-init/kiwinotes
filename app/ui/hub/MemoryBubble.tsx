@@ -15,6 +15,7 @@ type Change = AgentMemoryView["changes"][number];
 
 /** A frase do balão para uma mudança na memória. */
 export function memoryBubbleLine(c: Change): string {
+  if (c.action === "full") return `A memória está cheia: não anotei "${c.fact}". Apague um fato em Ajustes › Agente › Memória.`;
   if (c.undone) return c.action === "remember" ? `Desfeito: não anotei "${c.fact}".` : `Desfeito: "${c.fact}" voltou para a memória.`;
   return c.action === "remember" ? `Anotei: ${c.fact}` : `Esqueci: ${c.fact}`;
 }
@@ -65,7 +66,7 @@ export function MemoryBubble({ hidden, onShown }: { hidden: boolean; onShown?: (
         {changes.map((c) => (
           <li key={c.id} className="kn-memory-item">
             <span className="kn-memory-line">{memoryBubbleLine(c)}</span>
-            {!c.undone ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
+            {!c.undone && c.action !== "full" ? <Button onClick={() => undo(c.id)}>Desfazer</Button> : null}
           </li>
         ))}
       </ul>
