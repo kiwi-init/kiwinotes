@@ -3,6 +3,7 @@
 
 import { NOTE_WIDTH, sanitizeNoteWidth } from "../shared/note-width.ts";
 import path from "node:path";
+import { DEFAULT_SUMMARY_SETTINGS, sanitizeSummarySettings, type SummarySettings } from "../shared/summary-settings.ts";
 
 import { attachmentsFolder, DEFAULT_ATTACHMENTS_FOLDER } from "../notes/attachments.ts";
 import { type Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from "../shared/appearance.ts";
@@ -85,6 +86,8 @@ export interface AgentSettings {
   controlShortcut: boolean;
   /** "Suas reuniões" (spec #8360): quando o agente propõe a nota da reunião, onde ela vai, o nome e os blocos. */
   meetings: AgentMeetingSettings;
+  /** O resumo executivo (spec #11546): os blocos e o período do primeiro. */
+  summary: SummarySettings;
 }
 
 /** "Suas reuniões" em Ajustes › Agente (spec #8360). */
@@ -137,6 +140,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   economy: false,
   controlShortcut: false,
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
+  summary: DEFAULT_SUMMARY_SETTINGS,
 };
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
@@ -155,6 +159,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     economy: o.economy === true,
     controlShortcut: o.controlShortcut === true,
     meetings: sanitizeAgentMeetingSettings(o.meetings),
+    summary: sanitizeSummarySettings(o.summary),
   };
 }
 

@@ -18,6 +18,7 @@
 // - **O desfazer** (spec #9353): com as notas do desfazer (`useUndo`), o `agent.undo` volta o que um pedido mudou, pela
 //   cópia do registro (`undo.ts`). É da pessoa: não precisa do agente ligado e não vira ferramenta dele. Um por vez.
 
+import { DEFAULT_SUMMARY_SETTINGS, sanitizeSummarySettings } from "../shared/summary-settings.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -447,7 +448,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -507,6 +508,7 @@ export class AgentService {
       economy: s.economy === true,
       controlShortcut: s.controlShortcut === true,
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
+      summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
     };
   }
 
@@ -1159,8 +1161,10 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
+    // O resumo executivo (spec #11546): os blocos e o período, inteiros e saneados.
+    if (o.summary !== undefined) patch.summary = sanitizeSummarySettings(o.summary);
     // "Suas reuniões" (spec #8360): inteiro, saneado; uma pasta fora do cofre volta para a do projeto.
     if (o.meetings !== undefined) patch.meetings = sanitizeAgentMeetingSettings(o.meetings);
     if (o.model !== undefined) patch.model = o.model;

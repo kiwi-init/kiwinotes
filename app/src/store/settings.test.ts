@@ -1,3 +1,4 @@
+import { DEFAULT_SUMMARY_SETTINGS } from "../shared/summary-settings.ts";
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -103,7 +104,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
@@ -113,6 +114,7 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     economy: false,
     controlShortcut: false,
     meetings: DEFAULT_AGENT_MEETING_SETTINGS,
+    summary: DEFAULT_SUMMARY_SETTINGS,
   });
   // O modo econômico (spec #11084): desligado de fábrica, e só um true o liga.
   expect(sanitizeSettings({ agent: { economy: true } }).agent.economy).toBe(true);
