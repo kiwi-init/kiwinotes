@@ -427,6 +427,10 @@ stores.agent.onTurn((turn) => {
 stores.agent.onQuestionChanged((e) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.questionChanged", payload: e });
 });
+// A proposta da reunião (spec #8360): nasceu, foi escolhida, aplicada ou descartada.
+stores.agent.onProposalsChanged((proposals) => {
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.proposalsChanged", payload: { proposals } });
+});
 // O medidor (spec #11084): o gasto que o agente informou mudou.
 stores.agent.onUsageChanged((view) => {
   for (const rpc of rpcs.values()) rpc.send.event({ name: "agent.usageChanged", payload: view });

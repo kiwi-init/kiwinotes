@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { DEFAULT_NOTES_SHORTCUT, DEFAULT_SHORTCUTS, NOTES_SHORTCUTS } from "../shared/shortcuts.ts";
 import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
-import { DEFAULT_AGENT_SETTINGS, DEFAULT_SETTINGS, SettingsStore, sanitizeSettings } from "./settings.ts";
+import { DEFAULT_AGENT_MEETING_SETTINGS, DEFAULT_AGENT_SETTINGS, DEFAULT_SETTINGS, SettingsStore, sanitizeAgentMeetingSettings, sanitizeSettings } from "./settings.ts";
 
 import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
 import { tempDir } from "../../test/tmp.ts";
@@ -103,7 +103,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
@@ -112,6 +112,7 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     notifyWaiting: true,
     economy: false,
     controlShortcut: false,
+    meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   });
   // O modo econômico (spec #11084): desligado de fábrica, e só um true o liga.
   expect(sanitizeSettings({ agent: { economy: true } }).agent.economy).toBe(true);
@@ -220,3 +221,20 @@ test("settings.json que não é JSON: load devolve o padrão e o arquivo torto f
   expect((await new SettingsStore(dir).load()).kiwicat).toEqual({ show: false, overlay: true });
   expect((await store.load()).agent.enabled).toBe(false);
  });
+
+test("Suas reuniões (spec #8360): o padrão é propor sozinho, na pasta do projeto, data · tema e todos os blocos; o resto é saneado", () => {
+  expect(DEFAULT_AGENT_MEETING_SETTINGS).toEqual({
+    propose: "auto",
+    folder: { kind: "project" },
+    name: "date-theme",
+    blocks: { summary: true, decisions: true, actions: true, participants: true, nextSteps: true },
+  });
+  expect(sanitizeAgentMeetingSettings({ propose: "on-request", folder: { kind: "single", path: "/Atas/2026/" }, name: "theme-date", blocks: { actions: false, x: 1 } })).toEqual({
+    propose: "on-request",
+    folder: { kind: "single", path: "Atas/2026" },
+    name: "theme-date",
+    blocks: { summary: true, decisions: true, actions: false, participants: true, nextSteps: true },
+  });
+  for (const path of ["../fora", "a/../b", ".kiwi", "", 3, "a//b"]) expect(sanitizeAgentMeetingSettings({ folder: { kind: "single", path } }).folder).toEqual({ kind: "project" });
+  expect(sanitizeAgentMeetingSettings({ propose: "sempre", name: "x" })).toEqual(DEFAULT_AGENT_MEETING_SETTINGS);
+});

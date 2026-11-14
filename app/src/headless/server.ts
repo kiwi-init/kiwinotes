@@ -279,6 +279,7 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     stores.agent.onQuestionChanged((e) => event("agent.questionChanged", e)),
     stores.agent.onNoticeChanged((e) => event("agent.noticeChanged", e)),
     stores.agent.onUsageChanged((e) => event("agent.usageChanged", e)),
+    stores.agent.onProposalsChanged((proposals) => event("agent.proposalsChanged", { proposals })),
   ];
   // O gato no overlay (spec #9810): no headless não há hub, então os pedidos vão ao helper, que no `--headless` não mostra
   // nada; os comandos aparecem no log, e o `kiwicat.where` sai como evento.

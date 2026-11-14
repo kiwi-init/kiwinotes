@@ -462,6 +462,11 @@ export class MeetingNotes {
       }
     }
   }
+  /** O caminho da nota da reunião desta sessão, ou null (spec #8360: a transcrição pronta vai ao agente por ele). */
+  async pathOf(session: string): Promise<string | null> {
+    validateSession(session);
+    return (await this.find(session))?.path ?? null;
+  }
   async speakers(path: string): Promise<string[]> {
     await this.vault.open();
     const data = dataOf((await this.vault.get(path)).content);

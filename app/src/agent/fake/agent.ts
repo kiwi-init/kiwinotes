@@ -116,6 +116,42 @@ async function useTool(client: AgentContext, sessionId: string, name: string, ar
   return { text: String(r.result?.content?.[0]?.text ?? ""), isError: !!r.result?.isError };
 }
 
+/** A proposta fixa da reunião (spec #8360): os campos que o agente falso manda à `meeting_propose`. */
+export const FAKE_PROPOSAL = {
+  tema: "Cronograma da migração",
+  resumo: "A equipe revisou o cronograma da migração e combinou a ordem das próximas entregas.",
+  decisoes: ["A migração começa pelo arquivo de 2019", "O teste de carga fica para a semana que vem"],
+  acoes: [
+    { oque: "Mandar o plano de testes", quem: "Ana", quando: "sexta" },
+    { oque: "Conferir a cota do bucket", quem: "Bruno" },
+  ],
+  participantes: ["Ana", "Bruno"],
+  proximosPassos: ["Rodar a migração de teste"],
+  pendencias: ["Confirmar a janela de manutenção"],
+};
+
+/**
+ * "Atualiza o projeto com a reunião que eu acabei de ter" (spec #8360): a reunião mais nova, os projetos e a proposta
+ * fixa. Com um projeto, ele; com dois ou mais, os dois primeiros como candidatos; sem nenhum, só a nota da reunião.
+ */
+async function proposeMeeting(client: AgentContext, sessionId: string, path?: string): Promise<string> {
+  const listed = await useTool(client, sessionId, "meetings_list", {});
+  if (listed.isError) return `Não consegui ver as reuniões: ${listed.text}`;
+  const meeting = (JSON.parse(listed.text) as { reunioes: { path: string; titulo: string; gravandoAgora?: boolean }[] }).reunioes.find(
+    (m) => !m.gravandoAgora && (!path || m.path === path),
+  );
+  if (!meeting) return "Não achei nenhuma reunião gravada.";
+  // A transcrição, pela ferramenta: ela passa pelo guardrail (o segredo vira marcador), e o falso não a usa.
+  const read = await useTool(client, sessionId, "meetings_get", { path: meeting.path });
+  if (read.isError) return `Não consegui ler a reunião: ${read.text}`;
+  const projects = await useTool(client, sessionId, "projects_list", {});
+  const folders = projects.isError ? [] : (JSON.parse(projects.text) as { projetos: { pasta: string }[] }).projetos.map((p) => p.pasta);
+  const where = folders.length === 1 ? { projeto: folders[0] } : folders.length > 1 ? { candidatos: folders.slice(0, 2) } : {};
+  const r = await useTool(client, sessionId, "meeting_propose", { reuniao: meeting.path, ...where, ...FAKE_PROPOSAL });
+  if (r.isError) return `Não consegui preparar a proposta: ${r.text}`;
+  return `Preparei a proposta da reunião "${meeting.titulo}". Veja e aplique no Kiwi.`;
+}
+
 /** Responde a uma pergunta pelas notas: procura a pergunta, ou a palavra mais longa dela, lê a 1ª nota e cita o começo. */
 async function answerFromNotes(client: AgentContext, sessionId: string, question: string): Promise<string> {
   const words = [...new Set(question.replace(/[?!.,;:"]/g, " ").split(/\s+/).filter((w) => w.length >= 4))].sort((a, b) => b.length - a.length);
@@ -399,6 +435,16 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
+        if (/atualiza o projeto com a reuni/i.test(text) && kiwiServers.has(sessionId)) {
+          await say(client, sessionId, await proposeMeeting(client, sessionId));
+          return { stopReason: "end_turn" };
+        }
+        // O pedido automático do fim da reunião (spec #8360): a reunião que ele nomeia.
+        const auto = /^\[Pedido automático do Kiwi\] A reunião gravada ".*" \((.+\.md)\) terminou\./.exec(text);
+        if (auto && kiwiServers.has(sessionId)) {
+          await say(client, sessionId, await proposeMeeting(client, sessionId, auto[1]));
+          return { stopReason: "end_turn" };
+        }
         const tools = text.split("\n").filter((l) => l.startsWith("/tool "));
         if (tools.length) {
           const out: string[] = [];

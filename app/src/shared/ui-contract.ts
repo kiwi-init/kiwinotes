@@ -10,7 +10,7 @@ import type { SpellingResult } from "./spelling.ts";
 import type { AliasWarning } from "../store/aliasCheck.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import type { HistoryEntry, HistoryPage } from "../store/history.ts";
-import type { AppSettings } from "../store/settings.ts";
+import type { AgentMeetingSettings, AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
 import type { Backlink, CanvasFile, CanvasSaveResult, FileContent, FileSaveResult, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
@@ -160,7 +160,11 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.56.0 (T11223, spec #11102): o Modelo de nota. O `agent.noteModel` (o modelo do cofre, ou o padrão) e o
 //   `agent.noteModelSet` (grava `.kiwi/modelo-de-nota.md`; não reescreve nenhuma nota). Só acréscimo.
 export type { NoteModel };
-export const UI_CONTRACT_VERSION = "1.56.0";
+// 1.57.0 (T11290, spec #8360): a reunião vira nota do projeto. O `agent.proposals`, o `agent.proposal` (a nota nova e a
+//   diferença na nota principal), o `agent.proposalChoose`, o `agent.proposalApply`, o `agent.proposalPrepare` (a
+//   pergunta do modo econômico), o `agent.proposalDiscard` e o evento `agent.proposalsChanged`. "Suas reuniões": o
+//   `meetings` no `AgentStatus` e no `agent.configure`. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.57.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -467,8 +471,9 @@ export interface UiCapabilities {
   /** Apaga o adaptador baixado (e fecha o programa). O agente continua ligado ou desligado como estava. */
   "agent.remove": { args: Record<string, never>; result: AgentStatus };
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
-  /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean }; result: AgentStatus };
+  /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
+   * reuniões", inteiro; o que não vale volta ao padrão. */
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -546,6 +551,55 @@ export interface UiCapabilities {
   "agent.noteModel": { args: Record<string, never>; result: { model: NoteModel; saved: boolean } };
   /** Grava o Modelo de nota (1.56.0). Só o arquivo do modelo: nenhuma nota é reescrita. */
   "agent.noteModelSet": { args: { model: NoteModel }; result: NoteModel };
+  /** As propostas das reuniões dos últimos 30 dias (1.57.0, spec #8360), da mais nova para a mais velha. */
+  "agent.proposals": { args: Record<string, never>; result: { proposals: AgentProposalSummary[] } };
+  /** [Ver a proposta] (1.57.0): a nota nova e a diferença na nota principal, como ficariam agora. Só lê. */
+  "agent.proposal": { args: { id: string }; result: AgentProposalView };
+  /** A escolha do projeto entre os candidatos, ou `folder: null` para "Nenhum: só a nota da reunião" (1.57.0). */
+  "agent.proposalChoose": { args: { id: string; folder: string | null }; result: AgentProposalSummary };
+  /** [Aplicar] (1.57.0): escreve as duas notas num pedido do registro; o [Desfazer] é o `agent.undo` do `applyRequest`. */
+  "agent.proposalApply": { args: { id: string }; result: AgentProposalSummary };
+  /**
+   * [Preparar] na pergunta do modo econômico (1.57.0): gasta o pedido agora. Volta o id do pedido; a resposta vem pelo
+   * `agent.turn`, e a proposta pronta pelo `agent.proposalsChanged`.
+   */
+  "agent.proposalPrepare": { args: { id: string }; result: { id: string } };
+  /** [Descartar], ou "Agora não" na pergunta do modo econômico (1.57.0): nada muda nas notas. */
+  "agent.proposalDiscard": { args: { id: string }; result: AgentProposalSummary };
+}
+
+/** Uma proposta da reunião (1.57.0, spec #8360). As horas em ISO. */
+export interface AgentProposalSummary {
+  id: string;
+  at: string;
+  /**
+   * `offer`: com o modo econômico, o Kiwi pergunta antes de gastar um pedido ([Preparar] é o `agent.proposalPrepare`,
+   * "Agora não" o `agent.proposalDiscard`); ainda sem tema. `pending`: pronta, esperando [Aplicar] ou [Descartar].
+   */
+  status: "offer" | "pending" | "applied" | "discarded";
+  meeting: { path: string; title: string; date: string };
+  /** O projeto; null sem projeto (em dúvida, com `candidates`, ou "Nenhum: só a nota da reunião"). */
+  project: { folder: string; name: string } | null;
+  /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe. */
+  candidates: { folder: string; name: string }[];
+  theme: string;
+  /** Onde a nota da reunião vai e com que título (o nome do arquivo). */
+  note: { folder: string; title: string };
+  /** O caminho da nota criada pelo [Aplicar]. */
+  notePath?: string;
+  /** O pedido do registro do [Aplicar]: o [Desfazer] é o `agent.undo` dele. */
+  applyRequest?: string;
+  /** Quando foi aplicada ou descartada. */
+  doneAt?: string;
+  /** Quando o [Desfazer] voltou tudo o que o [Aplicar] escreveu (pelo balão ou pela Atividade). */
+  undoneAt?: string;
+}
+
+/** [Ver a proposta] (1.57.0): o texto da nota nova e a nota principal com as linhas que a proposta acrescenta. */
+export interface AgentProposalView extends AgentProposalSummary {
+  noteContent: string;
+  /** Null sem projeto ou num projeto sem nota principal: só a nota da reunião. */
+  main: { path: string; lines: { text: string; added: boolean }[] } | null;
 }
 
 /** Uma soma de gasto do Kiwi (1.54.0). */
@@ -698,6 +752,8 @@ export interface AgentStatus {
   enabled: boolean;
   /** O modo econômico (1.54.0, spec #11084). */
   economy: boolean;
+  /** "Suas reuniões" (1.57.0, spec #8360): quando propor, onde salvar, o nome do arquivo e os blocos do resumo. */
+  meetings: AgentMeetingSettings;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */
@@ -864,6 +920,12 @@ export const UI_CAPABILITIES = [
   "agent.usageClear",
   "agent.noteModel",
   "agent.noteModelSet",
+  "agent.proposals",
+  "agent.proposal",
+  "agent.proposalChoose",
+  "agent.proposalApply",
+  "agent.proposalPrepare",
+  "agent.proposalDiscard",
 ] as const satisfies readonly UiCapability[];
 
 /** Eventos que o engine manda às UIs (`engine.on(nome, fn)`). */
@@ -917,6 +979,8 @@ export interface UiEvents {
    * `idle` (cancelado, ou a fala vazia: o gato volta ao repouso, e no overlay sai pela saída de cancelamento).
    */
   "agent.voice": AgentVoiceUi;
+  /** Uma proposta da reunião nasceu, foi escolhida, aplicada ou descartada (1.57.0, spec #8360). */
+  "agent.proposalsChanged": { proposals: AgentProposalSummary[] };
 }
 
 /** O que o gato mostra durante a fala ao agente (1.55.0). `voz`: o nível do mic, de 0 a 1. */

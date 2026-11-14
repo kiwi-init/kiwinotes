@@ -162,6 +162,14 @@ export const api = {
     noteModel: () => invoke("agent.noteModel", {}),
     noteModelSet: (model: UiCapabilities["agent.noteModelSet"]["args"]["model"]) => invoke("agent.noteModelSet", { model }),
     onUsage: (fn: (e: UiEvents["agent.usageChanged"]) => void) => on("agent.usageChanged", fn),
+    /** A proposta da reunião (1.57.0, spec #8360): nada é escrito antes do `proposalApply`. */
+    proposals: () => invoke("agent.proposals", {}),
+    proposal: (id: string) => invoke("agent.proposal", { id }),
+    proposalChoose: (id: string, folder: string | null) => invoke("agent.proposalChoose", { id, folder }),
+    proposalApply: (id: string) => invoke("agent.proposalApply", { id }),
+    proposalPrepare: (id: string) => invoke("agent.proposalPrepare", { id }),
+    proposalDiscard: (id: string) => invoke("agent.proposalDiscard", { id }),
+    onProposals: (fn: (e: UiEvents["agent.proposalsChanged"]) => void) => on("agent.proposalsChanged", fn),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {

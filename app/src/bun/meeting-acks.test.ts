@@ -57,3 +57,31 @@ test("provisórios, finais sem texto e sem sessão não seguram a marca", () => 
   acks.settled(S, "mine", 5 * 16_000);
   expect(sent).toEqual([{ type: "meeting.ack", session: S, channel: "mine", finalThroughFrame: 80_000 }]);
 });
+
+test("a transcrição pronta (spec #8360): avisa uma vez, só com os dois canais no fim e o VBx gravado", () => {
+  const done: string[] = [];
+  const acks = new MeetingAcks(() => {}, (s) => done.push(s));
+  acks.segment(seg("mine", 0, 1, 2));
+  acks.segment(seg("system", 0, 1, 3));
+  acks.committed(S, [seg("mine", 0, 1, 2), seg("system", 0, 1, 3)]);
+  acks.drained(S, "mine", 90 * 16_000);
+  // O canal "você" acabou, mas o sistema ainda espera o VBx.
+  expect(done).toEqual([]);
+  acks.relabelStarted(S);
+  acks.drained(S, "system", 90 * 16_000);
+  expect(done).toEqual([]);
+  acks.relabelDone(S);
+  expect(done).toEqual([S]);
+  acks.drained(S, "mine", 90 * 16_000);
+  acks.relabelDone(S);
+  expect(done).toEqual([S]);
+});
+
+test("a transcrição pronta numa reunião só com o canal \"você\": o sistema que nunca apareceu não segura", () => {
+  const done: string[] = [];
+  const acks = new MeetingAcks(() => {}, (s) => done.push(s));
+  acks.segment(seg("mine", 0, 1, 2));
+  acks.committed(S, [seg("mine", 0, 1, 2)]);
+  acks.drained(S, "mine", 30 * 16_000);
+  expect(done).toEqual([S]);
+});

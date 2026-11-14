@@ -1106,19 +1106,21 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
       }
       if (a.economy !== undefined && typeof a.economy !== "boolean") throw bad("agent.configure: economy must be true or false");
       if (a.controlShortcut !== undefined && typeof a.controlShortcut !== "boolean") throw bad("agent.configure: controlShortcut must be a boolean");
+      if (a.meetings !== undefined && (!a.meetings || typeof a.meetings !== "object" || Array.isArray(a.meetings))) throw bad("agent.configure: meetings must be an object");
       return agentCall((agent) =>
         agent.configure({
           model: a.model as string | undefined,
           effort: a.effort as string | undefined,
           economy: a.economy as boolean | undefined,
           ...(a.controlShortcut !== undefined ? { controlShortcut: a.controlShortcut as boolean } : {}),
+          ...(a.meetings !== undefined ? { meetings: a.meetings } : {}),
         }),
       );
     },
@@ -1193,6 +1195,37 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = fields(args, "agent.noteModelSet", ["model"]);
       if (!a.model || typeof a.model !== "object") throw bad("agent.noteModelSet: model must be an object");
       return writeNoteModel(deps.notes.root, a.model as NoteModel);
+    },
+    // A reunião vira nota do projeto (spec #8360): a proposta só se escreve no [Aplicar] da pessoa.
+    "agent.proposals": (args) => {
+      noArgs(args, "agent.proposals");
+      return agentCall(async (agent) => ({ proposals: await agent.proposalsList() }));
+    },
+    "agent.proposal": (args) => {
+      const a = fields(args, "agent.proposal", ["id"]);
+      if (typeof a.id !== "string" || !a.id) throw bad("agent.proposal: id must be the id of a proposal");
+      return agentCall((agent) => agent.proposalView(a.id as string));
+    },
+    "agent.proposalChoose": (args) => {
+      const a = fields(args, "agent.proposalChoose", ["id", "folder"]);
+      if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalChoose: id must be the id of a proposal");
+      if (a.folder !== null && (typeof a.folder !== "string" || !a.folder)) throw bad("agent.proposalChoose: folder must be a project folder or null");
+      return agentCall((agent) => agent.proposalChoose(a.id as string, a.folder as string | null));
+    },
+    "agent.proposalApply": (args) => {
+      const a = fields(args, "agent.proposalApply", ["id"]);
+      if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalApply: id must be the id of a proposal");
+      return agentCall((agent) => agent.proposalApply(a.id as string));
+    },
+    "agent.proposalPrepare": (args) => {
+      const a = fields(args, "agent.proposalPrepare", ["id"]);
+      if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalPrepare: id must be the id of a proposal");
+      return agentCall((agent) => agent.proposalPrepare(a.id as string));
+    },
+    "agent.proposalDiscard": (args) => {
+      const a = fields(args, "agent.proposalDiscard", ["id"]);
+      if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalDiscard: id must be the id of a proposal");
+      return agentCall((agent) => agent.proposalDiscard(a.id as string));
     },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);

@@ -81,9 +81,61 @@ export interface AgentSettings {
   economy: boolean;
   /** "Falar com o agente pelo Control" (spec #9876): segurar o Control ouve e soltar manda. Desligado por padrão. */
   controlShortcut: boolean;
+  /** "Suas reuniões" (spec #8360): quando o agente propõe a nota da reunião, onde ela vai, o nome e os blocos. */
+  meetings: AgentMeetingSettings;
 }
 
-export const DEFAULT_AGENT_SETTINGS: AgentSettings = { enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false };
+/** "Suas reuniões" em Ajustes › Agente (spec #8360). */
+export interface AgentMeetingSettings {
+  /** Depois da reunião: propor sozinho (o padrão, #8360) ou só quando a pessoa pedir. */
+  propose: "auto" | "on-request";
+  /** Onde vai a nota: na pasta do projeto (o padrão), ou numa pasta única. */
+  folder: { kind: "project" } | { kind: "single"; path: string };
+  /** O nome do arquivo: `data · tema` (o padrão) ou `tema · data`. */
+  name: "date-theme" | "theme-date";
+  /** Os blocos do resumo, cada um liga e desliga. */
+  blocks: { summary: boolean; decisions: boolean; actions: boolean; participants: boolean; nextSteps: boolean };
+}
+
+export const DEFAULT_AGENT_MEETING_SETTINGS: AgentMeetingSettings = {
+  propose: "auto",
+  folder: { kind: "project" },
+  name: "date-theme",
+  blocks: { summary: true, decisions: true, actions: true, participants: true, nextSteps: true },
+};
+
+/** Uma pasta do cofre que vale: relativa, sem `..`, sem ponto no começo de um nome, até 300 caracteres. */
+function vaultFolder(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const p = v.trim().replace(/^\/+|\/+$/g, "");
+  if (!p || p.length > 300 || p.split("/").some((x) => !x.trim() || x === ".." || x.startsWith("."))) return null;
+  return p;
+}
+
+export function sanitizeAgentMeetingSettings(input: unknown): AgentMeetingSettings {
+  const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const f = (o.folder && typeof o.folder === "object" ? o.folder : {}) as Record<string, unknown>;
+  const single = f.kind === "single" ? vaultFolder(f.path) : null;
+  const b = (o.blocks && typeof o.blocks === "object" ? o.blocks : {}) as Record<string, unknown>;
+  const on = (k: string) => b[k] !== false;
+  return {
+    propose: o.propose === "on-request" ? "on-request" : "auto",
+    folder: single ? { kind: "single", path: single } : { kind: "project" },
+    name: o.name === "theme-date" ? "theme-date" : "date-theme",
+    blocks: { summary: on("summary"), decisions: on("decisions"), actions: on("actions"), participants: on("participants"), nextSteps: on("nextSteps") },
+  };
+}
+
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+  enabled: false,
+  consented: false,
+  model: "default",
+  effort: "default",
+  notifyWaiting: true,
+  economy: false,
+  controlShortcut: false,
+  meetings: DEFAULT_AGENT_MEETING_SETTINGS,
+};
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
 export function isAgentChoice(v: unknown): v is string {
@@ -100,6 +152,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     notifyWaiting: o.notifyWaiting !== false,
     economy: o.economy === true,
     controlShortcut: o.controlShortcut === true,
+    meetings: sanitizeAgentMeetingSettings(o.meetings),
   };
 }
 

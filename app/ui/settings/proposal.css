@@ -1,0 +1,54 @@
+/* A proposta da reunião (spec #8360, T11293): a mesma peça no balão do gato e na Atividade do agente. */
+.kn-proposal { display: grid; gap: var(--space-1, 4px); }
+.kn-proposal-line { margin: 0; font-size: var(--text-sm); line-height: 1.4; }
+.kn-proposal-actions { display: flex; flex-wrap: wrap; gap: var(--space-1, 4px); }
+.kn-proposal-actions:empty { display: none; }
+.kn-proposal-note { margin: 0; font-size: var(--text-sm); color: var(--text-2); }
+.kn-proposal-list { list-style: none; margin: 0 0 var(--space-3, 12px); padding: 0; display: grid; gap: var(--space-2, 8px); }
+.kn-proposal-list > li {
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface);
+}
+.kn-proposal-view {
+  margin-top: var(--space-1, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface-2);
+  display: grid;
+  gap: var(--space-1, 4px);
+  min-width: 0;
+}
+.kn-proposal-h { margin: 0; font-size: var(--text-sm); font-weight: 600; }
+.kn-proposal-path { font-weight: 400; color: var(--text-2); overflow-wrap: anywhere; }
+.kn-proposal-view .kn-diff {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.kn-proposal-view .kn-diff-add { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.kn-proposal-view .kn-diff-same { color: var(--text-2); }
+.kn-proposal-view .kn-diff-gap { color: var(--text-3); font-style: italic; padding: 2px 0; }
+
+/* No balão do gato: a casca do balão de quadrinho, um pouco mais larga, com os botões embaixo. */
+.kn-bubble-shell.kn-proposal-bubble { max-width: 320px; user-select: text; display: grid; gap: 4px; }
+.kn-proposal-bubble .kn-proposal-later {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--text-xs, 0.85em);
+  text-decoration: underline;
+  cursor: pointer;
+  justify-self: end;
+}
+.kn-bubble-big.kn-proposal-big { white-space: normal; width: min(480px, calc(100% - 140px)); max-height: min(70%, 520px); display: grid; gap: 8px; }
+/* No balão grande, quem rola é ele: sem uma rolagem dentro da outra. */
+.kn-proposal-big .kn-proposal-view .kn-diff { max-height: none; overflow: visible; }

@@ -244,7 +244,7 @@ function engineShim(contract: { version: string; capabilities: string[] }) {
 }
 
 /** Os eventos do engine que vão à página (os `UiEvents` do contrato). */
-const PAGE_EVENTS = new Set(["notes.folderChanged", "notes.changed", "files.changed", "history.added", "history.changed", "settings.changed", "meetings.live", "agent.status", "agent.turn", "agent.activityChanged", "projects.changed", "agent.questionChanged", "kiwicat.where", "agent.noticeChanged", "agent.usageChanged", "agent.voice"]);
+const PAGE_EVENTS = new Set(["notes.folderChanged", "notes.changed", "files.changed", "history.added", "history.changed", "settings.changed", "meetings.live", "agent.status", "agent.turn", "agent.activityChanged", "projects.changed", "agent.questionChanged", "kiwicat.where", "agent.noticeChanged", "agent.usageChanged", "agent.voice", "agent.proposalsChanged"]);
 
 /**
  * Abre a janela: build, servidor, contexto (escala, tema, tamanho, movimento), a ponte ao engine e a espera pelo

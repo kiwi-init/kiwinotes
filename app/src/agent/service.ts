@@ -38,11 +38,35 @@ import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/down
 import { ADAPTER_PACKAGES, ADAPTER_VERSION, type PinnedPackage } from "./adapter/pinned.ts";
 import { checkClaudeVersion } from "./adapter/version.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
-import type { AgentChangeView, AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult, AgentUsageView } from "../shared/ui-contract.ts";
+import type {
+  AgentChangeView,
+  AgentClaudeStatus,
+  AgentModelChoice,
+  AgentProposalSummary,
+  AgentProposalView,
+  AgentStatus,
+  AgentTurnEvent,
+  AgentUndoResult,
+  AgentUsageView,
+} from "../shared/ui-contract.ts";
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
 import { type NoteModel, noteModelText } from "./note-model.ts";
-import type { AgentSettings } from "../store/settings.ts";
+import {
+  addedLines,
+  mainHasMeeting,
+  mainNoteWithMeeting,
+  meetingNoteContent,
+  meetingNoteFolder,
+  meetingNoteTitle,
+  needsChoice,
+  ProposalStore,
+  type MeetingNoteSettings,
+  type MeetingProposal,
+  type ProposalFields,
+} from "./proposals.ts";
+import type { ProposalDraft, ProposalSink } from "./tools/tools.ts";
+import { DEFAULT_AGENT_MEETING_SETTINGS, sanitizeAgentMeetingSettings, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
 
@@ -66,6 +90,14 @@ export const ECONOMY_INSTRUCTIONS =
   "[Modo econômico do Kiwi: responda curto e direto, em poucas linhas. Leia as notas por seção (notes_outline e section), não inteiras.]\n\n";
 
 /** O modelo mais barato que o agente oferece (spec #11084): Haiku, depois Sonnet; null se a lista não tem nenhum. */
+/**
+ * O pedido da proposta da reunião (spec #8360): sempre o mesmo texto, com a reunião. O agente lê a transcrição pelo
+ * `meetings_get`, que passa pelo guardrail; o áudio nunca vai.
+ */
+export function meetingPrompt(m: { path: string; title: string }): string {
+  return `[Pedido automático do Kiwi] A reunião gravada "${m.title}" (${m.path}) terminou. Leia a transcrição com meetings_get, compare o assunto, os termos e os nomes com os projetos (projects_list) e prepare a proposta com meeting_propose. Não escreva notas: a pessoa aprova a proposta no Kiwi.`;
+}
+
 export function cheapestModel(models: { value: string; name: string }[]): string | null {
   for (const family of [/haiku/i, /sonnet/i]) {
     const m = models.find((x) => family.test(x.value) || family.test(x.name));
@@ -114,7 +146,7 @@ export interface AgentServiceDeps {
   log?: (msg: string) => void;
 }
 
-type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO";
+type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO" | "E_CHANGED";
 
 /** Um erro de capacidade do agente, com o código que a tela entende. */
 export class AgentServiceError extends Error {
@@ -175,6 +207,13 @@ export class AgentService {
   private readonly usageListeners = new Set<(v: AgentUsageView) => void>();
   /** O modo econômico agora, para as ferramentas lerem a cada chamada (spec #11084). */
   private economyNow = false;
+  /** As propostas das reuniões (spec #8360): guardadas por 30 dias, nada escrito antes do [Aplicar]. */
+  private readonly proposals: ProposalStore;
+  private readonly proposalListeners = new Set<(list: AgentProposalSummary[]) => void>();
+  /** Um [Aplicar], escolher ou [Descartar] por vez: dois cliques rápidos não aplicam a mesma proposta duas vezes. */
+  private proposing: Promise<unknown> = Promise.resolve();
+  /** As reuniões que esperam o agente acabar o pedido de agora para pedir a proposta (spec #8360). */
+  private readonly meetingsQueued: string[] = [];
   private readonly questionListeners = new Set<(e: { card: string; request: string; open: boolean }) => void>();
   /**
    * A notificação quando o agente espera uma resposta (spec #9839): o app liga com o `attachNotice`, que sabe da janela;
@@ -204,6 +243,7 @@ export class AgentService {
     this.activity = new AgentActivity({ dir: path.join(agentDir(d.data), "activity") });
     this.answers = new DoubtAnswers(agentDir(d.data));
     this.usage = new UsageStore(agentDir(d.data), d.now);
+    this.proposals = new ProposalStore(agentDir(d.data), d.now);
     this.questions = new DoubtQuestions({
       answers: this.answers,
       // O prazo menor só nos testes: no app de verdade, sempre os 2 minutos.
@@ -253,7 +293,9 @@ export class AgentService {
     if (!notes) return Promise.reject(new AgentServiceError("E_NO_UNDO", "Este app não desfaz as mudanças do agente."));
     const run = async () => {
       try {
-        return await undo({ activity: this.activity, notes }, request, change);
+        const r = await undo({ activity: this.activity, notes }, request, change);
+        await this.proposalUndone(request);
+        return r;
       } catch (e) {
         if (e instanceof UndoError) throw new AgentServiceError("E_NOT_FOUND", e.message);
         throw e;
@@ -405,7 +447,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -455,7 +497,17 @@ export class AgentService {
   }
 
   private statusFrom(snap: ReturnType<AgentService["snapshot"]>, s: AgentSettings): AgentStatus {
-    return { name: this.name, enabled: s.enabled, consented: s.consented, ...snap, model: s.model, effort: s.effort, economy: s.economy === true, controlShortcut: s.controlShortcut === true };
+    return {
+      name: this.name,
+      enabled: s.enabled,
+      consented: s.consented,
+      ...snap,
+      model: s.model,
+      effort: s.effort,
+      economy: s.economy === true,
+      controlShortcut: s.controlShortcut === true,
+      meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
+    };
   }
 
   /** O modelo e o esforço que o Kiwi pede: no modo econômico, o modelo mais barato que o agente oferece (spec #11084). */
@@ -589,6 +641,260 @@ export class AgentService {
     this.subscription = null;
     this.emitUsage();
     return this.usageView();
+  }
+
+  /** A `meeting_propose` guarda aqui (spec #8360): no pedido em que o agente propôs, e avisa quem escuta. */
+  private readonly proposalSink: ProposalSink = {
+    propose: async (d: ProposalDraft) => {
+      const p = this.proposals.add({ request: this.activityId(), meeting: d.meeting, project: d.project, candidates: d.candidates, fields: d.fields });
+      void this.emitProposals();
+      return { id: p.id };
+    },
+  };
+
+  /**
+   * O [Desfazer] do pedido de um [Aplicar] (pelo balão ou pela Atividade): com todas as mudanças dele desfeitas, a
+   * proposta fica marcada, e as duas telas dizem "Desfeito" sem oferecer o [Desfazer] de novo.
+   */
+  private async proposalUndone(request: string): Promise<void> {
+    const p = this.proposals.list().find((x) => x.applyRequest === request && x.status === "applied" && x.undoneAt === undefined);
+    if (!p) return;
+    const r = await this.activity.get(request);
+    if (!r || !r.changes.length || r.changes.some((c) => !c.undone)) return;
+    this.proposals.update(p.id, (x) => (x.undoneAt = (this.d.now ?? Date.now)()));
+    void this.emitProposals();
+  }
+
+  /** O que a pessoa escolheu em Ajustes › Agente › "Suas reuniões". */
+  private async meetingSettings(): Promise<AgentMeetingSettings> {
+    return (await this.d.settings.load()).meetings ?? DEFAULT_AGENT_MEETING_SETTINGS;
+  }
+
+  private proposalSummary(p: MeetingProposal, s: MeetingNoteSettings): AgentProposalSummary {
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const short = (x: { folder: string; name: string }) => ({ folder: x.folder, name: x.name });
+    const theme = p.fields?.theme ?? "";
+    return {
+      id: p.id,
+      at: iso(p.at),
+      status: p.status,
+      meeting: p.meeting,
+      project: p.project ? short(p.project) : null,
+      candidates: p.candidates.map(short),
+      theme,
+      note: { folder: meetingNoteFolder(p.project, s), title: meetingNoteTitle(p.meeting.date, theme, s.name) },
+      ...(p.notePath ? { notePath: p.notePath } : {}),
+      ...(p.applyRequest ? { applyRequest: p.applyRequest } : {}),
+      ...(p.doneAt !== undefined ? { doneAt: iso(p.doneAt) } : {}),
+      ...(p.undoneAt !== undefined ? { undoneAt: iso(p.undoneAt) } : {}),
+    };
+  }
+
+  private async summaryOf(p: MeetingProposal): Promise<AgentProposalSummary> {
+    return this.proposalSummary(p, await this.meetingSettings());
+  }
+
+  /** As propostas dos últimos 30 dias (`agent.proposals`), da mais nova para a mais velha. */
+  async proposalsList(): Promise<AgentProposalSummary[]> {
+    const s = await this.meetingSettings();
+    return this.proposals.list().map((p) => this.proposalSummary(p, s));
+  }
+
+  /** Avisa a cada proposta nova, escolhida, aplicada ou descartada (`agent.proposalsChanged`). */
+  onProposalsChanged(fn: (list: AgentProposalSummary[]) => void): () => void {
+    this.proposalListeners.add(fn);
+    return () => this.proposalListeners.delete(fn);
+  }
+
+  private async emitProposals(): Promise<void> {
+    if (!this.proposalListeners.size) return;
+    const list = await this.proposalsList().catch(() => null);
+    if (!list) return;
+    for (const fn of this.proposalListeners) fn(list);
+  }
+
+  private proposalOr404(id: unknown): MeetingProposal {
+    if (typeof id !== "string" || !id) throw new AgentServiceError("E_BAD_ARGS", "falta o id da proposta");
+    const p = this.proposals.get(id);
+    if (!p) throw new AgentServiceError("E_NOT_FOUND", "Essa proposta não existe mais (as propostas ficam 30 dias).");
+    return p;
+  }
+
+  /** Os campos de uma proposta pronta; a pergunta do modo econômico ainda não tem. */
+  private fieldsOf(p: MeetingProposal): ProposalFields {
+    if (!p.fields) throw new AgentServiceError("E_BAD_ARGS", "Essa proposta ainda não foi preparada: toque em [Preparar].");
+    return p.fields;
+  }
+
+  private proposalWriter(): VaultWriter {
+    if (!this.writer) throw new AgentServiceError("E_NO_UNDO", "Este app não escreve as propostas do agente.");
+    return this.writer;
+  }
+
+  /**
+   * [Ver a proposta] (`agent.proposal`): a nota nova e a diferença na nota principal do projeto, como ficariam agora.
+   * Só lê; não precisa do agente ligado.
+   */
+  async proposalView(id: string): Promise<AgentProposalView> {
+    const p = this.proposalOr404(id);
+    const fields = this.fieldsOf(p);
+    const s = await this.meetingSettings();
+    const summary = this.proposalSummary(p, s);
+    const noteContent = meetingNoteContent(p.meeting, fields, s);
+    let main: AgentProposalView["main"] = null;
+    if (p.project?.main) {
+      const before = (await this.proposalWriter().get(p.project.main)).content;
+      const notePath = p.notePath ?? `${summary.note.folder ? `${summary.note.folder}/` : ""}${summary.note.title}.md`;
+      const after = p.mainDone || mainHasMeeting(before, notePath) ? before : mainNoteWithMeeting(before, notePath, p.meeting, fields);
+      main = { path: p.project.main, lines: addedLines(before, after) };
+    }
+    return { ...summary, noteContent, main };
+  }
+
+  /** Uma operação de proposta por vez, na ordem dos cliques. */
+  private oneProposal<T>(run: () => Promise<T>): Promise<T> {
+    const next = this.proposing.then(run, run);
+    this.proposing = next.catch(() => {});
+    return next;
+  }
+
+  /** A pessoa escolhe o projeto entre os candidatos, ou "Nenhum: só a nota da reunião" (`folder` null). */
+  proposalChoose(id: string, folder: string | null): Promise<AgentProposalSummary> {
+    return this.oneProposal(async () => {
+      const p = this.proposalOr404(id);
+      if (!needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", "Essa proposta não espera uma escolha de projeto.");
+      const chosen = folder === null ? null : p.candidates.find((c) => c.folder === folder);
+      if (chosen === undefined) throw new AgentServiceError("E_BAD_ARGS", "Esse projeto não é um dos candidatos da proposta.");
+      const next = this.proposals.update(id, (x) => {
+        x.project = chosen;
+        x.candidates = [];
+      })!;
+      void this.emitProposals();
+      return this.summaryOf(next);
+    });
+  }
+
+  /** [Descartar] (`agent.proposalDiscard`), ou "Agora não" na pergunta do modo econômico: nada muda nas notas. */
+  proposalDiscard(id: string): Promise<AgentProposalSummary> {
+    return this.oneProposal(async () => {
+      const p = this.proposalOr404(id);
+      if (p.status !== "pending" && p.status !== "offer") throw new AgentServiceError("E_BAD_ARGS", "Essa proposta já foi aplicada ou descartada.");
+      const next = this.proposals.update(id, (x) => {
+        x.status = "discarded";
+        x.doneAt = (this.d.now ?? Date.now)();
+      })!;
+      void this.emitProposals();
+      return this.summaryOf(next);
+    });
+  }
+
+  /**
+   * [Aplicar] (`agent.proposalApply`): cria a nota da reunião e acrescenta a reunião na nota principal do projeto, num
+   * pedido do registro do agente, com a cópia de antes e o [Desfazer] (spec #9353). Não abre o programa do agente.
+   */
+  proposalApply(id: string): Promise<AgentProposalSummary> {
+    return this.oneProposal(async () => {
+      const p = this.proposalOr404(id);
+      if (p.status !== "pending") throw new AgentServiceError("E_BAD_ARGS", p.status === "offer" ? "Essa proposta ainda não foi preparada." : "Essa proposta já foi aplicada ou descartada.");
+      if (needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", "Escolha antes o projeto da reunião.");
+      const fields = this.fieldsOf(p);
+      const writer = this.proposalWriter();
+      const s = await this.meetingSettings();
+      const request = p.applyRequest ?? `proposta-${crypto.randomUUID()}`;
+      if (!p.applyRequest) {
+        await this.activity.begin(request, `Aplicar a proposta da reunião "${p.meeting.title}"`);
+        this.proposals.update(id, (x) => (x.applyRequest = request));
+      }
+      const folderId = await writer.folder();
+      const where = folderId ? { folder: folderId } : {};
+      // A nota da reunião, uma vez só: um [Aplicar] que parou no meio não cria outra.
+      let notePath = p.notePath;
+      if (!notePath) {
+        const n = await writer.create(meetingNoteFolder(p.project, s), meetingNoteTitle(p.meeting.date, fields.theme, s.name), meetingNoteContent(p.meeting, fields, s));
+        notePath = n.path;
+        this.proposals.update(id, (x) => (x.notePath = n.path));
+        await this.activity.change(request, { kind: "created", path: n.path, before: 0, after: n.content.length, version: n.version, ...where });
+      }
+      if (p.project?.main && !p.mainDone) {
+        // Só acrescenta: lida agora e gravada se ninguém mudou a nota no meio; senão, lida de novo.
+        for (let tries = 0; ; tries++) {
+          const n = await writer.get(p.project.main);
+          if (n.readOnly) throw new AgentServiceError("E_BAD_ARGS", `${n.path} não é UTF-8: o Kiwi não escreve nela.`);
+          // Um [Aplicar] que parou depois de gravar a principal (antes de marcar): ela já tem a reunião.
+          if (mainHasMeeting(n.content, notePath)) break;
+          const next = mainNoteWithMeeting(n.content, notePath, p.meeting, fields);
+          const copy = await this.activity.keep(request, n.content);
+          const r = await writer.save(n.path, next, n.version).catch(async (e) => {
+            await this.activity.drop(copy);
+            throw e;
+          });
+          if (r.saved) {
+            this.proposals.update(id, (x) => (x.mainDone = true));
+            await this.activity.change(request, { kind: "appended", path: r.path, before: n.content.length, after: next.length, version: r.version, copy, ...where });
+            break;
+          }
+          await this.activity.drop(copy);
+          if (tries >= 2) throw new AgentServiceError("E_CHANGED", `${n.path} mudou enquanto o Kiwi aplicava. A nota da reunião já foi criada: tente [Aplicar] de novo.`);
+        }
+      }
+      const done = this.proposals.update(id, (x) => {
+        x.status = "applied";
+        x.doneAt = (this.d.now ?? Date.now)();
+      })!;
+      void this.emitProposals();
+      return this.summaryOf(done);
+    });
+  }
+
+  /**
+   * A transcrição de uma reunião ficou pronta (spec #8360): com o agente ligado e "propor sozinho", o Kiwi pede a
+   * proposta, sem a pessoa pedir. Uma reunião só gera uma. Com o modo econômico, só pergunta antes de gastar (a
+   * `offer`). Com o agente ocupado, espera o pedido de agora acabar. Nunca lança: o fim da reunião não depende disto.
+   */
+  async meetingReady(path: string): Promise<void> {
+    try {
+      const s = await this.d.settings.load();
+      if (!s.enabled || !s.consented || (s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS).propose !== "auto") return;
+      if (!this.reader || !this.writer || !installedAdapter({ root: this.root }, this.packages)) return;
+      if (this.meetingsQueued.includes(path) || this.proposals.hasMeeting(path)) return;
+      const meeting = (await this.reader.meetings()).find((m) => m.path === path && !m.live);
+      if (!meeting) return;
+      const m = { path: meeting.path, title: meeting.title, date: meeting.date };
+      if (s.economy) {
+        this.proposals.add({ request: "", meeting: m, project: null, candidates: [], fields: null }, "offer");
+        void this.emitProposals();
+        return;
+      }
+      this.meetingsQueued.push(path);
+      this.nextMeeting();
+    } catch (e) {
+      this.d.log?.(`[agent] meeting proposal: ${String((e as Error)?.message ?? e)}`);
+    }
+  }
+
+  /**
+   * [Preparar] na pergunta do modo econômico (`agent.proposalPrepare`): gasta o pedido agora. A resposta chega como
+   * um pedido comum (`agent.turn`), e a proposta pronta pelo `agent.proposalsChanged`.
+   */
+  async proposalPrepare(id: string): Promise<{ id: string }> {
+    const p = this.proposalOr404(id);
+    if (p.status !== "offer") throw new AgentServiceError("E_BAD_ARGS", "Essa proposta já foi preparada.");
+    return this.ask(meetingPrompt(p.meeting));
+  }
+
+  /** Manda o pedido da próxima reunião da fila, se o agente está livre. */
+  private nextMeeting(): void {
+    if (this.turn) return;
+    const path = this.meetingsQueued.shift();
+    if (!path) return;
+    void (async () => {
+      const meeting = (await this.reader?.meetings())?.find((m) => m.path === path);
+      if (!meeting || this.proposals.hasMeeting(path)) return this.nextMeeting();
+      await this.ask(meetingPrompt({ path: meeting.path, title: meeting.title }));
+    })().catch((e) => {
+      this.d.log?.(`[agent] meeting proposal: ${String((e as Error)?.message ?? e)}`);
+      this.nextMeeting();
+    });
   }
 
   /** Liga. Na primeira vez, só com o aceite da tela do ADR 0011. Não baixa nem abre nada. */
@@ -749,6 +1055,8 @@ export class AgentService {
       if (this.turn === turn) this.turn = null;
       this.armIdle();
       this.emitStatus();
+      // Uma reunião que terminou com o agente ocupado pede a proposta agora (spec #8360).
+      this.nextMeeting();
     }
   }
 
@@ -770,6 +1078,7 @@ export class AgentService {
             guard: this.guard,
             decider: () => this.decider(),
             economy: () => this.economyNow,
+            ...(writer ? { proposals: this.proposalSink } : {}),
             version: this.d.version,
             onCall: (e) => this.onToolCall(e),
           })
@@ -841,8 +1150,10 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
+    // "Suas reuniões" (spec #8360): inteiro, saneado; uma pasta fora do cofre volta para a do projeto.
+    if (o.meetings !== undefined) patch.meetings = sanitizeAgentMeetingSettings(o.meetings);
     if (o.model !== undefined) patch.model = o.model;
     if (o.effort !== undefined) patch.effort = o.effort;
     if (o.economy !== undefined) {

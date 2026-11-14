@@ -140,12 +140,21 @@ export class Session {
     // O headless não sai para a rede (como a busca pelo sentido): só usa um modelo que já está na pasta.
     this.precise = new PreciseDictation({ modelsDir: stores.modelsDir, send: (c) => this.sidecar.send(c), download: process.env.KIWI_HEADLESS !== "1" });
     // R3: o áudio da reunião só sai do disco do helper depois que o texto dele está salvo na nota (#5061, #5064).
-    this.meetingAcks = new MeetingAcks((ack) => {
-      void this.sidecar.send(ack).then(
-        (r) => r.ok || console.warn(`[meetings] meeting.ack ${ack.channel}: ${r.error}`),
-        () => console.warn("[meetings] meeting.ack: helper gone; the audio stays for the recovery"),
-      );
-    });
+    this.meetingAcks = new MeetingAcks(
+      (ack) => {
+        void this.sidecar.send(ack).then(
+          (r) => r.ok || console.warn(`[meetings] meeting.ack ${ack.channel}: ${r.error}`),
+          () => console.warn("[meetings] meeting.ack: helper gone; the audio stays for the recovery"),
+        );
+      },
+      // A transcrição pronta (spec #8360): com o agente ligado e "propor sozinho", ele prepara a proposta da reunião.
+      // Só o caminho da nota vai; o agente lê a transcrição pelas ferramentas, com o guardrail, e o áudio nunca vai.
+      (session) =>
+        void stores.meetingNotes
+          .pathOf(session)
+          .then((p) => (p ? stores.agent.meetingReady(p) : undefined))
+          .catch(() => console.warn("[meetings] meeting proposal: note not found")),
+    );
   }
 
   /** As acks da reunião (R3): os eventos do helper e as confirmações do R4 entram. */
