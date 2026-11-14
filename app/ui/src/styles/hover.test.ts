@@ -20,6 +20,11 @@ describe("o hover fluido", () => {
     const value = (name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(tokens)?.[1]?.trim();
     expect(value("--hover-dur")).toMatch(/^0?\.\d+s$/);
     expect(value("--hover-ease")).toMatch(/^cubic-bezier\(/);
+    // Sem mola (spec #12626): nenhum y da curva passa de 1, então o movimento não passa do ponto e volta.
+    const ys = /^cubic-bezier\(([^)]+)\)$/.exec(value("--hover-ease")!)![1]!.split(",").map(Number);
+    expect(ys[1]).toBeLessThanOrEqual(1);
+    expect(ys[3]).toBeLessThanOrEqual(1);
+    expect(ys[1]).toBeGreaterThanOrEqual(0);
     expect(value("--hover-in-delay")).toBe("0s");
     expect(value("--hover-out-delay")).toMatch(/^\d+ms$/);
   });

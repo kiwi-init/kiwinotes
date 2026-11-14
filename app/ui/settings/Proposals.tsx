@@ -183,7 +183,7 @@ export function ProposalItem({
             <Button variant="primary" disabled={busy} onClick={() => void run(() => api.agent.proposalPrepare(p.id))}>
               {PROPOSAL_PREPARE}
             </Button>
-            <Button disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
+            <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
               {PROPOSAL_NOT_NOW}
             </Button>
           </>
@@ -200,19 +200,20 @@ export function ProposalItem({
                 {PROPOSAL_NONE}
               </Button>
             )}
-            <Button disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
+            <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
               {PROPOSAL_DISCARD}
             </Button>
           </>
         ) : p.status === "pending" ? (
           <>
-            <Button aria-expanded={open} onClick={toggleView}>
-              {open ? PROPOSAL_HIDE : PROPOSAL_VIEW}
-            </Button>
+            {/* Uma ação principal (spec #12626): o Aplicar na frente, o Ver como secundário, e o Descartar em texto no balão. */}
             <Button variant="primary" disabled={busy} onClick={() => void run(() => api.agent.proposalApply(p.id))}>
               {PROPOSAL_APPLY}
             </Button>
-            <Button disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
+            <Button aria-expanded={open} onClick={toggleView}>
+              {open ? PROPOSAL_HIDE : PROPOSAL_VIEW}
+            </Button>
+            <Button data-role="dismiss" disabled={busy} onClick={() => void run(() => api.agent.proposalDiscard(p.id))}>
               {PROPOSAL_DISCARD}
             </Button>
           </>

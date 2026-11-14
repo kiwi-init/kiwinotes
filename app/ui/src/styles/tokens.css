@@ -110,7 +110,8 @@
    * toda transição (base.css). O foco do teclado (:focus-visible) usa o mesmo visual.
    */
   --hover-dur: 0.22s;
-  --hover-ease: cubic-bezier(0.34, 1.32, 0.64, 1);
+  /* Sem passar do ponto (spec #12626): a curva desacelera e para, sem a mola de antes (o y do 2º ponto era 1.32). */
+  --hover-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --hover-in-delay: 0s;
   --hover-out-delay: 80ms;
   /*

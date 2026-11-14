@@ -38,6 +38,19 @@
 
 /* No balão do gato: a casca do balão de quadrinho, um pouco mais larga, com os botões embaixo. */
 .kn-bubble-shell.kn-proposal-bubble { max-width: 320px; user-select: text; display: grid; gap: 4px; }
+/* As ações de deixar para lá (Descartar, Agora não e Depois) ficam em texto no balão (spec #12626): um botão só chama. */
+.kn-proposal-bubble .kn-proposal-actions,
+.kn-proposal-big .kn-proposal-actions { align-items: center; }
+.kn-proposal-bubble .kn-button[data-role="dismiss"],
+.kn-proposal-big .kn-button[data-role="dismiss"] {
+  padding: 0 var(--space-1, 4px);
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  color: var(--text-2);
+}
+.kn-proposal-bubble .kn-button[data-role="dismiss"]:hover,
+.kn-proposal-big .kn-button[data-role="dismiss"]:hover { color: var(--text); background: none; }
 .kn-proposal-bubble .kn-proposal-later {
   padding: 0;
   border: 0;
