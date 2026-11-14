@@ -269,7 +269,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_write",
     title: "Trocar o texto de uma nota",
-    description: `Troca o texto de uma seção, ou da nota inteira. Mande a versao do notes_read: se a nota mudou depois, nada é escrito e você lê de novo. Com section, troca só o que está abaixo do título. Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para mais, troque por seção. O texto de antes fica nas Versões. Num .txt, o Kiwi pergunta antes à pessoa; com o não, crie um .md organizado ao lado (notes_create) e deixe o .txt.`,
+    description: `Troca o texto de uma seção, ou da nota inteira. Mande a versao do notes_read: se a nota mudou depois, nada é escrito e você lê de novo. Com section, troca só o que está abaixo do título. Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para mais, troque por seção. O texto de antes fica nas Versões. Num .txt, o Kiwi pergunta antes à pessoa; com o não, nada muda, e você sugere na resposta um .md organizado ao lado.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -825,13 +825,13 @@ const textAnswers = new Map<string, boolean>();
 
 /**
  * Reescrever um `.txt` (spec #13379): o Kiwi pergunta à pessoa, no cartão, uma vez por arquivo em cada pedido. Com o
- * não (ou sem quem pergunte), nada é escrito, e o agente cria um `.md` organizado ao lado; o `.txt` fica como está.
+ * não (ou sem resposta no prazo), nada é escrito, e o agente sugere na resposta uma nota `.md` organizada ao lado.
  */
 async function mayRewriteText(path: string, decider?: DoubtDecider): Promise<void> {
   const key = `${decider?.request ?? ""}\u0000${path}`;
   let yes = textAnswers.get(key);
   if (yes === undefined) {
-    const question = `Reescrever ${path} organizado, no próprio .txt? Com o não, o agente cria uma nota .md organizada ao lado, e o .txt fica como está.`;
+    const question = `Reescrever ${path} organizado? O texto de antes fica guardado, e dá para desfazer.`;
     yes = decider ? await decider.questions.confirm(decider.request, question, decider.signal) : false;
     if (textAnswers.size >= 500) textAnswers.clear();
     textAnswers.set(key, yes);
@@ -839,7 +839,7 @@ async function mayRewriteText(path: string, decider?: DoubtDecider): Promise<voi
   if (!yes)
     throw new ToolError(
       "E_DECLINED",
-      `a pessoa preferiu não mudar ${path}: nada foi escrito. Crie uma nota .md organizada ao lado (notes_create, na mesma pasta), com todo o conteúdo, e deixe o .txt como está.`,
+      `a pessoa não quis ${path} reescrito: nada foi escrito. Não mude o .txt; na resposta, ofereça criar uma nota .md organizada ao lado, com todo o conteúdo, e só crie se ela pedir.`,
     );
 }
 

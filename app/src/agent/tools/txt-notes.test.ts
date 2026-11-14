@@ -146,7 +146,7 @@ describe("o agente acha e organiza as notas .txt (spec #13379)", () => {
     expect(t.read("Trabalho/legacy-pr/anotacoes.txt")).toBe(ANOTACOES);
   });
 
-  test("com o não, o .txt fica como está, e o agente sabe que deve criar um .md ao lado", async () => {
+  test("com o não, o .txt fica como está, e o agente sabe que deve oferecer um .md ao lado", async () => {
     const t = setup({ "Trabalho/legacy-pr/outro.txt": "texto solto\n" });
     t.answer(false);
     const r = await t.tool("notes_read", { path: "Trabalho/legacy-pr/outro.txt" });
@@ -157,8 +157,9 @@ describe("o agente acha e organiza as notas .txt (spec #13379)", () => {
       expect((e as ToolError).code).toBe("E_DECLINED");
       message = (e as Error).message;
     }
-    expect(message).toContain("notes_create");
+    expect(message).toContain("ofereça criar uma nota .md organizada ao lado");
     expect(t.read("Trabalho/legacy-pr/outro.txt")).toBe("texto solto\n");
+    // A pessoa pediu o .md: ele nasce ao lado, e o .txt continua igual.
     const md = await t.tool("notes_create", { folder: "Trabalho/legacy-pr", title: "outro", text: "# Outro\n\ntexto solto\n" });
     expect(md.path).toBe("Trabalho/legacy-pr/outro.md");
     expect(t.read("Trabalho/legacy-pr/outro.txt")).toBe("texto solto\n");

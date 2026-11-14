@@ -144,6 +144,19 @@ try {
   await h.page.locator(".kn-confirm-item button:has-text('Organizar')").click();
   await idle();
   report.checks.push("organizing a folder: the card asks how many notes and goes on only with the click; Agora não changes nothing, and the answer is not remembered");
+
+  // 7b. Reescrever um .txt (spec #13379): o cartão pergunta antes; com o "Agora não", o .txt fica como está.
+  const txt = "reunião com o time\n- migrar o legado\n";
+  writeFileSync(join(vault, "Projetos", "anotacoes.txt"), txt);
+  const txtVersion = new Bun.CryptoHasher("sha256").update(txt).digest("hex").slice(0, 16);
+  await invoke("agent.ask", { text: `/tool notes_write ${JSON.stringify({ path: "Projetos/anotacoes.txt", text: "# Anotações\n\n- migrar o legado\n", version: txtVersion })}` });
+  await h.page.waitForSelector(".kn-confirm-item", { timeout: 20000 });
+  assert.ok(((await h.page.locator(".kn-confirm-question").textContent()) ?? "").includes("Reescrever Projetos/anotacoes.txt organizado?"));
+  await h.page.locator(".kn-doubt").screenshot({ path: join(out, "3b-confirmar-txt.png") });
+  await h.page.locator(".kn-confirm-item button:has-text('Agora não')").click();
+  await idle();
+  assert.equal(readFileSync(join(vault, "Projetos", "anotacoes.txt"), "utf8"), txt);
+  report.checks.push("rewriting a .txt: the card asks first; Agora não leaves the .txt as it is");
   report.problems.push(...h.report.problems);
   await h.close();
 
