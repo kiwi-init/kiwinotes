@@ -5,6 +5,7 @@ import type { createKiwiCat } from "../kiwicat/cat";
 import { catColorHex } from "../../src/shared/kiwicat-colors";
 import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
+import { fogSurface } from "../kiwicat/surface";
 import { CatAsk } from "./CatAsk";
 import { CatBubble } from "./CatBubble";
 import { MemoryBubble } from "./MemoryBubble";
@@ -15,6 +16,7 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
  * no `data-theme` do <html> (o `applyAppearance`), e muda sem recarregar quando a pessoa troca a Aparência ou o macOS.
  */
 const symbolBackground = (): "light" | "dark" => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
+const hostSurface = () => fogSurface(getComputedStyle(document.body).backgroundColor);
 // Com o gato no overlay (spec #9810), o do canto some e pausa o desenho: nunca dois gatos.
 function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolean; away: boolean; cor: string }) {
   const handle = useRef<Cat | undefined>(undefined);
@@ -60,10 +62,10 @@ function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolea
       try {
         const { createKiwiCat } = await import("../kiwicat/cat");
         if (gone || document.hidden) return;
-        const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, background: symbolBackground(),
+        const next = await createKiwiCat(el, { mode: "runtime", width: 96, height: 120, cutout: true, background: symbolBackground(), surface: hostSurface(),
           inputs: { estado: activity.state, cor: corRef.current, voz: null, parado: reducedRef.current } });
         if (gone) { await next.dispose(); return; }
-        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current, cor: corRef.current }); cat.setBackground(symbolBackground()); cat.visibility(hidden()); state(); el.dataset.ready = "true";
+        cat = next; handle.current = cat; cat.update({ parado: reducedRef.current, cor: corRef.current }); cat.setBackground(symbolBackground(), hostSurface()); cat.visibility(hidden()); state(); el.dataset.ready = "true";
       } catch { el.replaceChildren(); }
       finally { loading = false; }
     }
@@ -104,8 +106,9 @@ function CatMount({ busy, reduced, away, cor }: { busy: boolean; reduced: boolea
     };
     refresh.current = visibility;
     document.addEventListener("visibilitychange", visibility);
-    const theme = new MutationObserver(() => cat?.setBackground(symbolBackground()));
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    // O tema e a cor de fundo mudam juntos (o `applyAppearance` troca o `data-theme` e as variáveis no <html>).
+    const theme = new MutationObserver(() => cat?.setBackground(symbolBackground(), hostSurface()));
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "style", "class"] });
     void create();
     return () => {
       gone = true; off(); offVoice(); theme.disconnect(); document.removeEventListener("visibilitychange", visibility); refresh.current = () => {};

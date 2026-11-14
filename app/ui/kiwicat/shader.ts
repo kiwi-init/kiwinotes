@@ -199,44 +199,25 @@ export function fogMaterial(
     const alphaSupport = max(smoothstep(16 / 255, 32 / 255, alphaHigh), protectedMaterial);
     const darkRGB = color.mul(alphaSupport);
     const darkAlpha = max(max(max(darkRGB.r, darkRGB.g), darkRGB.b), pow(cutoutCoverage.g, backing * 2));
-    // Numa superfície clara (T11696, o harry no #11858 e o lead no #11896), a luz somada ao branco vira branco: fazia um
-    // fio quase branco entre o corpo e a névoa. Ali o corpo é o mesmo do escuro (o casaco), e só a luz muda:
-    // - **a luz** vira tinta na cor do agente, com a opacidade subindo macia com a intensidade (sem
-    //   teto duro, que fazia uma faixa laranja opaca). Como no preto, onde a luz soma por cima do corpo, a tinta vai por
-    //   cima do casaco: o corpo se desfaz embaixo, e a névoa encosta direto no preto, sem linha clara entre os dois;
-    // - **o aro e as bolhas** mantêm a cor (opacos, como sobre o corpo escuro) só bem dentro da cabeça, pela cabeça
-    //   desfocada de `cutoutFields`; fora dela, viram névoa como o resto. A parte da névoa na cor é o máximo da cor do agente que cabe sob os três canais; só o que
-    //   sobra conta como aro, sem limiares de matiz, que deixavam fios onde o laranja encontra o aro.
-    // Na superfície escura (`surface` 0), nada muda.
+    // Fora do fundo preto (T11696; o harry escolheu, no #12150, o corpo pela silhueta inteira), a luz somada ao fundo
+    // some ou vira branco. Ali o gato é desenhado em camadas:
+    // - **o corpo** é a silhueta inteira das camadas aprovadas (`fields.g`), escura, com a borda macia (~2,5% da largura):
+    //   não se desfaz embaixo;
+    // - **a névoa** é a luz como tinta na cor do agente, por baixo do corpo. A opacidade sobe macia com a intensidade, sem
+    //   teto duro, e um halo medido da silhueta (`fields.r`) a mantém visível em volta do corpo todo, também onde no preto
+    //   o brilho cai sob a silhueta (a bochecha, embaixo do corpo). Ela chega no preto sem linha clara: o corpo a cobre;
+    // - **o aro e as bolhas** mantêm a cor só bem dentro da cabeça. A parte da névoa na cor é o máximo da cor do agente
+    //   que cabe sob os três canais; só o que sobra conta como aro, sem limiares de matiz, que deixavam fios.
+    // No preto (`surface` 0), nada muda.
     const tintPeak = vec3(tint).div(max(max(max(tint.x, tint.y), tint.z), 0.001));
-    const coatA = cutoutCoverage.r;
-    const headField = fields.g;
-    // A opacidade da tinta é a luz acima do escuro do casaco (sem esse piso, o corpo inteiro ficava marrom), subindo
-    // macia e sem teto duro; e, logo fora do casaco (`fields.r`, uns 20 px), a tinta segue opaca também onde a luz cai
-    // junto dele (no preto essa queda é escura e some; no branco virava um clarão). As duas somam como telas; onde o
-    // corpo é preenchido (em volta do aro), nenhuma das duas vira tinta.
-    // O piso já tira a emissão fraca; o apoio da luz do escuro (a máscara do aro) deixava um anel claro nas bolhas.
-    const head = smoothstep(0.35, 0.65, headField);
-    const fill = head.mul(smoothstep(0.05, 0.4, fields.b));
-    const fogLight = float(1).sub(exp(max(alphaHigh.sub(0.07), 0).mul(-1.8)));
-    const fogHug = min(fields.r.mul(2), 1).mul(0.85).mul(float(1).sub(coatA));
-    const fogA = float(1).sub(float(1).sub(fogLight).mul(float(1).sub(fogHug)));
+    const bodyA = smoothstep(0.2, 0.8, fields.g);
+    const inside = smoothstep(0.85, 0.98, fields.g);
+    const fogLight = float(1).sub(exp(max(alphaHigh.sub(0.05), 0).mul(-2.4)));
+    const fogHalo = smoothstep(0.03, 0.5, fields.r).mul(0.7);
+    const fogA = float(1).sub(float(1).sub(fogLight).mul(float(1).sub(fogHalo)));
     const dark = vec3(0.045, 0.045, 0.05);
-    // Bem dentro da cabeça, onde o aro passa, o corpo é inteiro: o casaco tem um buraco ali, e o branco aparecia como
-    // um fio claro em volta do aro. No resto (o corpo de baixo, que no preto se desfaz no brilho) fica o casaco.
-    // Ali, a luz que não é do aro (o brilho laranja de dentro da cabeça) também não vira tinta: no preto ela é um
-    // brilho escuro, e no branco virava um bloco marrom com a borda em escada.
-    // Sob a bolha do lado direito, o casaco tem um lábio fino que no preto o brilho cobre e no branco virava um dente
-    // escuro: ali (só numa caixa em volta dele) o casaco é aparado pelo contorno arredondado do corpo (`fields.r`).
-    const toothBox = smoothstep(0.64, 0.68, st.x)
-      .mul(float(1).sub(smoothstep(0.79, 0.83, st.x)))
-      .mul(smoothstep(0.43, 0.47, st.y))
-      .mul(float(1).sub(smoothstep(0.56, 0.6, st.y)));
-    const coatLight = coatA.mul(float(1).sub(toothBox.mul(float(1).sub(smoothstep(0.42, 0.55, fields.r)))));
-    const bodyA = max(coatLight, fill);
-    const inkA = fogA.mul(float(1).sub(fill));
-    const outsideRGB = tintPeak.mul(inkA).add(dark.mul(bodyA).mul(float(1).sub(inkA)));
-    const outsideA = inkA.add(bodyA.mul(float(1).sub(inkA)));
+    const outsideRGB = dark.mul(bodyA).add(tintPeak.mul(fogA).mul(float(1).sub(bodyA)));
+    const outsideA = bodyA.add(fogA.mul(float(1).sub(bodyA)));
     const fogShare = min(min(color.r.div(max(tintPeak.x, 0.001)), color.g.div(max(tintPeak.y, 0.001))), color.b.div(max(tintPeak.z, 0.001)));
     const arcOwn = max(color.sub(tintPeak.mul(fogShare)), vec3(0, 0, 0));
     // A luz quase branca (o brilho entre as orelhas) não é cor do aro: no branco ela virava um fio claro.
@@ -244,12 +225,12 @@ export function fogMaterial(
       float(1).sub(smoothstep(0.6, 0.85, min(min(color.r, color.g), color.b))),
     );
     const onLight = surface.mul(float(1).sub(solid));
-    const arcInside = arcW.mul(head);
+    const arcInside = arcW.mul(inside);
     // A cor do aro leva só um pouco da névoa que estava misturada nela: inteira, fazia uma franja pêssego na borda.
     const arcRGB = arcOwn.add(color.sub(arcOwn).mul(0.75));
     const lightRGB = mix(darkRGB, mix(outsideRGB, arcRGB, arcInside), onLight);
     const lightAlpha = mix(darkAlpha, mix(outsideA, float(1), arcInside), onLight);
-    const alpha = max(mix(cutoutCoverage.r, coatLight, onLight), lightAlpha);
+    const alpha = max(mix(cutoutCoverage.r, bodyA, onLight), lightAlpha);
     // Only left/right/bottom carry visible reference light. The top is <=1/255.
     const band = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
     // A queda arredondada (spec #9573, a elipse escolhida pelo lead no #11568): perto da borda a luz cai até zero numa
@@ -258,7 +239,7 @@ export function fogMaterial(
     const q = st.sub(0.5).mul(2);
     const rounded = float(1).sub(smoothstep(0.82, 1, q.x.mul(q.x).add(q.y.mul(q.y)).sqrt()));
     const edge = edgeShape === "band" ? band : max(min(rounded, band), band.mul(protectedMaterial));
-    const coat = mix(cutoutCoverage.r, coatLight, onLight);
+    const coat = mix(cutoutCoverage.r, bodyA, onLight);
     const lightFade = max(coat, edge);
     const finalRGB = lightRGB.mul(lightFade);
     const topSupport = smoothstep(0, edgeBand * .8, float(1).sub(st.y));

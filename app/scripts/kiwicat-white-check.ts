@@ -16,16 +16,17 @@ const root = resolve(flag("--root") ?? resolve(import.meta.dir, ".."));
 const backings = (flag("--backing") ?? ".5").split(",").map(Number);
 const W = 640, H = 800, SEED = 17;
 const AT: Record<string, number> = { repouso: 2, acordou: 0.53, agindo: 1.2, erro: 0.85, thinking: 1.6, pronto: 0.6 };
-const BACKS = [["preto", "#000000", "dark"], ["branco", "#ffffff", "light"], ["cor", "#367a8e", "dark"]] as const;
+// O fundo, a tinta dos símbolos e a superfície da névoa (fora do preto, "light": #12150).
+const BACKS = [["preto", "#000000", "dark", "dark"], ["branco", "#ffffff", "light", "light"], ["cor", "#367a8e", "dark", "light"]] as const;
 const { serveFogDemo } = await import(join(root, "scripts/kiwicat-demo.ts"));
 const server = await serveFogDemo("cat-demo.ts");
 const browser = await webkit.launch({ headless: true });
 
-async function cat(state: string, backing: number, ink: string) {
+async function cat(state: string, backing: number, ink: string, surface: string) {
   const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   await context.route("**/*", (r) => (new URL(r.request().url()).origin === server.url ? r.continue() : r.abort()));
   const page = await context.newPage();
-  await page.goto(`${server.url}/?state=repouso&cutout=1&outline=1&backing=${backing}&edgeBand=.08&color=claude&seed=${SEED}&width=${W}&height=${H}&symbolTheme=${ink}`);
+  await page.goto(`${server.url}/?state=repouso&cutout=1&outline=1&backing=${backing}&edgeBand=.08&color=claude&seed=${SEED}&width=${W}&height=${H}&symbolTheme=${ink}&surface=${surface}`);
   await page.waitForFunction(() => (window as any).kiwiCatReady);
   await page.evaluate((state) => {
     document.documentElement.style.background = "transparent"; document.body.style.background = "transparent";
@@ -47,8 +48,8 @@ try {
   const cells: string[] = [];
   for (const state of ["agindo", "acordou", "erro", "repouso"]) {
     for (const backing of backings) {
-      for (const [name, color, ink] of BACKS) {
-        const c = await cat(state, backing, ink);
+      for (const [name, color, ink, surface] of BACKS) {
+        const c = await cat(state, backing, ink, surface);
         const raw = await c.shot(AT[state]!, color);
         await c.close();
         writeFileSync(join(out, `${state}-${name}${backings.length > 1 ? `-${backing}` : ""}.png`), raw);
@@ -70,9 +71,9 @@ try {
     const fps = 30, seconds = 4;
     for (const state of ["agindo", "acordou", "erro"]) {
       const dir = join(out, "frames", state); rmSync(dir, { recursive: true, force: true });
-      for (const [name, color, ink] of BACKS) {
+      for (const [name, color, ink, surface] of BACKS) {
         mkdirSync(join(dir, name), { recursive: true });
-        const c = await cat(state, backings[0]!, ink);
+        const c = await cat(state, backings[0]!, ink, surface);
         for (let i = 0; i < seconds * fps; i++) writeFileSync(join(dir, name, `${String(i).padStart(4, "0")}.png`), await c.shot(i / fps, color));
         await c.close();
       }
