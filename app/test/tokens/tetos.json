@@ -1,0 +1,22 @@
+{
+  "_comoSubir": "Cada valor é o teto de tokens de um item (contador local, src/agent/token-count.ts). Passou, o teste falha com o item e a diferença. Subir um teto é mudar a linha aqui no PR, e quem revisa vê.",
+  "começo fixo › normal": 4370,
+  "começo fixo › econômico": 3400,
+  "ferramentas › instruções do servidor": 190,
+  "ferramentas › lista": 9600,
+  "notes_read › seção": 110,
+  "notes_read › nota inteira": 4420,
+  "notes_outline": 470,
+  "notes_search": 110,
+  "project_status": 590,
+  "meetings_get": 2400,
+  "files_read › planilha grande": 5070,
+  "notes_read › seção › econômico": 110,
+  "notes_read › nota inteira › econômico": 410,
+  "notes_outline › econômico": 470,
+  "notes_search › econômico": 110,
+  "project_status › econômico": 590,
+  "meetings_get › econômico": 2400,
+  "files_read › planilha grande › econômico": 1950,
+  "pedido automático › reunião → projeto": 110
+}
