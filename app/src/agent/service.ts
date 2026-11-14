@@ -1458,10 +1458,10 @@ export class AgentService {
 
   /** Lê, muda e grava as rotinas, uma mudança por vez (duas mudanças rápidas não perdem uma rotina). */
   private routineEdits: Promise<unknown> = Promise.resolve();
-  private saveRoutines(change: (current: AgentRoutines) => Promise<AgentRoutines>): Promise<void> {
+  private saveRoutines(change: (current: AgentRoutines) => Promise<AgentRoutines>, also: Partial<AgentSettings> = {}): Promise<void> {
     const next = this.routineEdits.then(async () => {
       const current = sanitizeAgentRoutines((await this.d.settings.load()).routines);
-      await this.d.settings.save({ routines: await change(current) });
+      await this.d.settings.save({ ...also, routines: await change(current) });
       this.emitStatus();
     });
     this.routineEdits = next.catch(() => {});
@@ -1533,8 +1533,8 @@ export class AgentService {
   /** Desliga: cancela o pedido e o download, e fecha o programa na hora. */
   async disable(): Promise<AgentStatus> {
     // Desligar o agente desliga as rotinas (spec #12150): ligar de novo não as religa sozinho.
-    const s0 = await this.d.settings.load();
-    await this.d.settings.save({ enabled: false, routines: routinesOff(sanitizeAgentRoutines(s0.routines)) });
+    // Pela fila das rotinas: um "Nova rotina" em andamento não grava as rotinas ligadas de novo (revisão do T13010).
+    await this.saveRoutines(async (current) => routinesOff(current), { enabled: false });
     this.download?.abort.abort();
     this.questions.closeAll();
     await this.stopProgram("desligado");
@@ -1824,7 +1824,8 @@ export class AgentService {
     const patch: Partial<AgentSettings> = {};
     // O onboarding (spec #11955): o passo em que a pessoa está, fechar (`done`) e o "Refazer" (`open` no passo 1).
     // As rotinas (spec #12150): ligar ou mudar a hora arma a rotina agora (um horário de antes não dispara).
-    if (o.routines !== undefined) patch.routines = patchRoutines(sanitizeAgentRoutines((await this.d.settings.load()).routines), o.routines, this.clock());
+    // Pela fila das rotinas (revisão do T13010): ligar uma pronta junto com um "Nova rotina" não perde a nova.
+    if (o.routines !== undefined) await this.saveRoutines(async (current) => patchRoutines(current, o.routines, this.clock()));
     if (o.onboarding !== undefined) {
       const now = sanitizeAgentOnboarding((await this.d.settings.load()).onboarding);
       patch.onboarding = sanitizeAgentOnboarding({ ...now, ...(o.onboarding && typeof o.onboarding === "object" ? o.onboarding : {}) });

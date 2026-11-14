@@ -515,21 +515,15 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "routine_propose",
     title: "Propor uma rotina",
-    description: `Propõe uma rotina nova quando a pessoa pede algo que se repete ("todo dia às 18h, faz um resumo das reuniões"): o nome, o que você vai fazer a cada vez, a hora e os dias. Nada é ligado agora: a pessoa vê a proposta e cria, ajusta ou descarta, e a rotina entra desligada até ela ligar em Ajustes › Agente › Rotinas. Na hora marcada, o Kiwi manda o pedido a você, e você cria uma nota com o resultado na pasta.`,
+    description: `Propõe uma rotina quando a pessoa pede algo que se repete ("todo dia às 18h, faz um resumo das reuniões"). Nada liga agora: ela cria, ajusta ou descarta, e a rotina entra desligada. Na hora, o Kiwi manda o pedido a você, e você cria uma nota com o resultado.`,
     inputSchema: {
       type: "object",
       properties: {
-        nome: { type: "string", minLength: 1, maxLength: ROUTINE_NAME_MAX, description: "Um nome curto, como a pessoa vai ver (ex.: Resumo das reuniões)." },
-        pedido: { type: "string", minLength: 1, maxLength: ROUTINE_PROMPT_MAX, description: "O que você faz a cada vez, em uma ou duas frases, como um pedido." },
-        hora: { type: "string", description: "A hora, HH:MM (24 h), no relógio do Mac." },
-        dias: {
-          description: 'Os dias: "todo dia", "dias úteis" (segunda a sexta), ou a lista dos dias (ex.: ["segunda", "quinta"]).',
-          anyOf: [
-            { type: "string", enum: ["todo dia", "dias úteis"] },
-            { type: "array", minItems: 1, maxItems: 7, items: { type: "string", enum: ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"] } },
-          ],
-        },
-        pasta: { type: "string", description: `A pasta do cofre onde a nota vai. Sem ela, "${DEFAULT_ROUTINES_FOLDER}".` },
+        nome: { type: "string", maxLength: ROUTINE_NAME_MAX },
+        pedido: { type: "string", maxLength: ROUTINE_PROMPT_MAX, description: "O que você faz a cada vez." },
+        hora: { type: "string", description: "HH:MM" },
+        dias: { description: '"todo dia", "dias úteis", ou a lista (ex.: ["segunda", "quinta"]).' },
+        pasta: { type: "string", description: `Sem ela, "${DEFAULT_ROUTINES_FOLDER}".` },
       },
       required: ["nome", "pedido", "hora", "dias"],
       additionalProperties: false,

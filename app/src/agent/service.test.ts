@@ -787,7 +787,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, files_create, meeting_propose, project_summary_propose, notes_add_references",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, files_create, meeting_propose, project_summary_propose, notes_add_references, routine_propose",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
@@ -1800,6 +1800,21 @@ describe("as rotinas (spec #12150)", () => {
     await r.m.svc.routineUpdate(again.routines.custom[0]!.id, { on: true });
     await r.m.svc.disable();
     expect((await r.m.svc.status()).routines.custom[0]!.on).toBe(false);
+  });
+
+  test("as gravações das rotinas não se atropelam: criar junto com ligar uma pronta, e criar junto com desligar o agente (revisão do T13010)", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    for (let i = 0; i < 10; i++) {
+      await Promise.all([r.m.svc.routineCreate({ ...NEW, name: `Nova ${i}` }), r.m.svc.configure({ routines: { daily: { on: i % 2 === 0 } } })]);
+      const s = await r.m.svc.status();
+      expect(s.routines.custom.map((x) => x.name)).toContain(`Nova ${i}`);
+      expect(s.routines.daily.on).toBe(i % 2 === 0);
+    }
+    await r.m.svc.configure({ routines: { daily: { on: true } } });
+    await Promise.all([r.m.svc.routineCreate({ ...NEW, name: "Junto do desligar" }), r.m.svc.disable()]);
+    const off = (await r.m.svc.status()).routines;
+    expect([off.daily.on, off.weekly.on, ...off.custom.map((x) => x.on)].every((on) => on === false)).toBe(true);
   });
 
   test("rotina nova, ligada, roda na hora certa com o relógio falso, como as prontas, e só nos dias dela", async () => {
