@@ -398,6 +398,8 @@
 
 /* "Anotei: …" (spec #11469): o balão da memória, no mesmo canto, com o [Desfazer]. */
 .kn-bubble-shell.kn-memory-bubble { display: grid; gap: 6px; max-width: 300px; user-select: text; }
-.kn-memory-line { margin: 0; }
+.kn-memory-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.kn-memory-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kn-memory-line { min-width: 0; overflow-wrap: anywhere; }
 .kn-memory-note { margin: 0; font-size: var(--text-xs, 0.85em); color: var(--text-2); }
 .kn-memory-actions { display: flex; gap: 4px; justify-content: flex-end; }

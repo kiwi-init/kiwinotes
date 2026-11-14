@@ -62,6 +62,8 @@ import { factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, 
 const MEMORY_OPS_KEEP = 50;
 interface MemoryOp {
   id: string;
+  /** O pedido do agente em que a mudança aconteceu: o balão mostra todas as do mesmo pedido. */
+  request: string;
   action: "remember" | "forget";
   fact: string;
   /** Onde o fato estava (para o esquecido voltar no mesmo lugar). */
@@ -322,7 +324,7 @@ export class AgentService {
   }
 
   private memoryOp(action: MemoryOp["action"], fact: string, index: number): MemoryOp {
-    const op: MemoryOp = { id: crypto.randomUUID(), action, fact, index, at: (this.d.now ?? Date.now)() };
+    const op: MemoryOp = { id: crypto.randomUUID(), request: this.activityId(), action, fact, index, at: (this.d.now ?? Date.now)() };
     this.memoryOps = [...this.memoryOps, op].slice(-MEMORY_OPS_KEEP);
     return op;
   }
@@ -347,12 +349,12 @@ export class AgentService {
   };
 
   private viewOf(facts: string[]): AgentMemoryView {
-    const last = this.memoryOps.at(-1);
-    return {
-      facts,
-      max: MEMORY_MAX,
-      last: last ? { id: last.id, action: last.action, fact: last.fact, at: new Date(last.at).toISOString(), ...(last.undone ? { undone: true } : {}) } : null,
-    };
+    // As mudanças do último pedido que mexeu na memória, na ordem: cada uma com o seu [Desfazer] no balão.
+    const request = this.memoryOps.at(-1)?.request;
+    const changes = this.memoryOps
+      .filter((o) => o.request === request)
+      .map((o) => ({ id: o.id, action: o.action, fact: o.fact, at: new Date(o.at).toISOString(), ...(o.undone ? { undone: true } : {}) }));
+    return { facts, max: MEMORY_MAX, changes };
   }
 
   private emitMemory(facts: string[], _op?: MemoryOp): void {

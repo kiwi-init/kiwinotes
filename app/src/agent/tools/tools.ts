@@ -1290,9 +1290,10 @@ async function memoryTool(sink: MemorySink, name: string, raw: unknown, guard: S
     if (/‹segredo [^›\n]{0,40}›/.test(fact)) throw secret();
     if (guard && (await guard.decide("", fact, decider)).held > 0) throw secret();
     const r = await sink.remember(fact);
+    // Sem `target` quando o fato já estava lá: nada mudou, e a Atividade não diz "Anotou" (revisão do T11665).
     return {
       value: { anotado: fact, novo: r.added, total: r.total, ...(r.added ? {} : { aviso: "Esse fato já estava na memória." }) },
-      target: fact,
+      ...(r.added ? { target: fact } : {}),
     };
   } catch (e) {
     if (e instanceof MemoryError) throw new ToolError(e.code, e.message);

@@ -1441,7 +1441,7 @@ describe("a memória do agente (spec #11469)", () => {
     const turn = await askAndWait(m, "lembra que eu prefiro respostas curtas");
     expect(turn.at(-1)).toMatchObject({ type: "done", text: "Anotei: eu prefiro respostas curtas." });
     expect(readFileSync(path.join(root, ".kiwi/agente/sobre-mim.md"), "utf8")).toContain("- eu prefiro respostas curtas\n");
-    expect(seen.at(-1)).toMatchObject({ facts: ["eu prefiro respostas curtas"], max: 60, last: { action: "remember", fact: "eu prefiro respostas curtas" } });
+    expect(seen.at(-1)).toMatchObject({ facts: ["eu prefiro respostas curtas"], max: 60, changes: [{ action: "remember", fact: "eu prefiro respostas curtas" }] });
     const [r] = await m.svc.activityLog();
     expect(r!.reads).toContainEqual(expect.objectContaining({ tool: "memory_remember", target: "eu prefiro respostas curtas" }));
     // O pedido seguinte leva a memória no começo fixo, e dois pedidos seguidos levam os mesmos bytes.
@@ -1453,8 +1453,8 @@ describe("a memória do agente (spec #11469)", () => {
     expect(head(prompts.at(-1)!)).toBe(head(prompts.at(-2)!));
     expect(prompts.at(-2)).toContain("- eu prefiro respostas curtas\n]");
     // O [Desfazer] do balão tira o fato, e o balão sabe que foi desfeito.
-    const undone = await m.svc.memoryUndo(seen.at(-1)!.last!.id);
-    expect(undone).toMatchObject({ facts: [], last: { undone: true } });
+    const undone = await m.svc.memoryUndo(seen.at(-1)!.changes[0]!.id);
+    expect(undone).toMatchObject({ facts: [], changes: [{ undone: true }] });
     expect(await m.svc.memoryView()).toMatchObject({ facts: [] });
     await expect(m.svc.memoryUndo("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
     // "esquece que…" com o fato de volta, e o [Desfazer] traz o fato no mesmo lugar.
@@ -1462,8 +1462,19 @@ describe("a memória do agente (spec #11469)", () => {
     await askAndWait(m, "lembra que uso o Mac");
     await askAndWait(m, "esquece que trabalho com PACS");
     expect((await m.svc.memoryView()).facts).toEqual(["uso o Mac"]);
-    await m.svc.memoryUndo((await m.svc.memoryView()).last!.id);
+    await m.svc.memoryUndo((await m.svc.memoryView()).changes.at(-1)!.id);
     expect((await m.svc.memoryView()).facts).toEqual(["trabalho com PACS", "uso o Mac"]);
+    // Duas anotações no mesmo pedido: as duas vão para o balão, cada uma com o seu [Desfazer] (revisão do T11665).
+    await askAndWait(m, '/tool memory_remember {"fato":"mora em BH"}\n/tool memory_remember {"fato":"tem um gato"}');
+    const both = await m.svc.memoryView();
+    expect(both.changes.map((c) => c.fact)).toEqual(["mora em BH", "tem um gato"]);
+    await m.svc.memoryUndo(both.changes[0]!.id);
+    expect((await m.svc.memoryView()).facts).toEqual(["trabalho com PACS", "uso o Mac", "tem um gato"]);
+    expect((await m.svc.memoryView()).changes).toMatchObject([{ fact: "mora em BH", undone: true }, { fact: "tem um gato" }]);
+    // Um fato que já estava lá não muda nada: a Atividade não diz "Anotou".
+    await askAndWait(m, "lembra que tem um gato");
+    const [r2] = await m.svc.activityLog();
+    expect(r2!.reads.find((x) => x.tool === "memory_remember")?.target).toBeUndefined();
   });
 
   test("as instruções e o glossário (T11667): no começo fixo, na ordem, os mesmos bytes em dois pedidos seguidos; no modo econômico, só os termos do pedido", async () => {

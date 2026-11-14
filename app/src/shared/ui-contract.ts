@@ -170,7 +170,7 @@ export type { NoteModel };
 // 1.59.0 (T11559, spec #11546): o resumo executivo. O `summary` no `AgentStatus` e no `agent.configure` (os 6 blocos e o
 //   período do primeiro resumo) e o `kind: "summary"` nas propostas. Só acréscimo.
 // 1.60.0 (T11665, spec #11469): a memória do agente. O `agent.memory` (os fatos e a última mudança), o
-//   `agent.memoryUndo` (o [Desfazer] do balão) e o evento `agent.memoryChanged`; as `instructions` no `AgentStatus` e
+//   `agent.memoryUndo` (o [Desfazer] de cada mudança no balão) e o evento `agent.memoryChanged`; as `instructions` no `AgentStatus` e
 //   no `agent.configure`. Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.60.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
@@ -586,8 +586,11 @@ export interface AgentMemoryView {
   facts: string[];
   /** O máximo de fatos (60). */
   max: number;
-  /** A última mudança que o agente fez (o balão "Anotei: …" com o [Desfazer]); null sem nenhuma desde que o app abriu. */
-  last: { id: string; action: "remember" | "forget"; fact: string; at: string; undone?: boolean } | null;
+  /**
+   * As mudanças que o agente fez no último pedido que mexeu na memória, na ordem (o balão "Anotei: …", cada uma com o
+   * seu [Desfazer]); vazio sem nenhuma desde que o app abriu.
+   */
+  changes: { id: string; action: "remember" | "forget"; fact: string; at: string; undone?: boolean }[];
 }
 
 /** Uma proposta da reunião (1.57.0, spec #8360). As horas em ISO. */

@@ -7,7 +7,7 @@
 // - **No máximo 60 fatos** (`MEMORY_MAX`): passando disso, o agente tem de esquecer um antes de anotar outro.
 // - **Os mesmos bytes para a mesma memória,** no arquivo e no começo fixo do pedido (o cache do agente, #11084).
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const MEMORY_FILE = path.join(".kiwi", "agente", "sobre-mim.md");
@@ -53,13 +53,18 @@ export function formatMemory(facts: readonly string[]): string {
   return [...HEADER, ...facts.map((f) => `- ${cleanFact(f)}`), ""].join("\n");
 }
 
+/**
+ * Os fatos do cofre. Sem o arquivo, nenhum. **Qualquer outro erro sobe** (`E_MEMORY_UNREADABLE`: sem permissão, uma
+ * pasta no lugar, um arquivo do iCloud que não baixou): quem ia gravar não grava por cima de fatos que não leu
+ * (revisão do T11665).
+ */
 export function readMemory(vaultRoot: string): string[] {
   const file = path.join(vaultRoot, MEMORY_FILE);
-  if (!existsSync(file)) return [];
   try {
     return parseMemory(readFileSync(file, "utf8"));
-  } catch {
-    return [];
+  } catch (e) {
+    if ((e as { code?: string })?.code === "ENOENT") return [];
+    throw new MemoryError("E_MEMORY_UNREADABLE", `o Kiwi não conseguiu ler a memória (${MEMORY_FILE}): nada foi mudado nela`);
   }
 }
 
@@ -76,7 +81,7 @@ export function writeMemory(vaultRoot: string, facts: readonly string[]): string
 
 export class MemoryError extends Error {
   constructor(
-    readonly code: "E_MEMORY_FULL" | "E_NOT_FOUND" | "E_BAD_ARGS",
+    readonly code: "E_MEMORY_FULL" | "E_NOT_FOUND" | "E_BAD_ARGS" | "E_MEMORY_UNREADABLE",
     message: string,
   ) {
     super(message);

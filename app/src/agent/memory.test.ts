@@ -2,7 +2,7 @@
 // ferramentas com o guardrail (o segredo é recusado; a dúvida passa pela pergunta antes de ser guardada).
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { chmodSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { DoubtAnswers } from "../guardrail/answers.ts";
@@ -41,6 +41,25 @@ describe("o arquivo da memória", () => {
     writeFileSync(path.join(root, MEMORY_FILE), `${file}* mora em Belo Horizonte\nlinha solta\n- Trabalha com PACS\n`);
     expect(readMemory(root)).toEqual(["Prefere respostas curtas", "trabalha com PACS", "mora em Belo Horizonte"]);
     expect(parseMemory(formatMemory(readMemory(root)))).toEqual(readMemory(root));
+  });
+
+  test("um arquivo que não dá para ler não vira memória vazia: o erro sobe e nada é gravado por cima (revisão do T11665)", () => {
+    const root = tmp();
+    writeMemory(root, ["fato 1", "fato 2", "fato 3"]);
+    const file = path.join(root, MEMORY_FILE);
+    const before = readFileSync(file, "utf8");
+    chmodSync(file, 0o000);
+    try {
+      expect(() => readMemory(root)).toThrow(/não conseguiu ler a memória/);
+      expect(() => writeMemory(root, rememberFact(readMemory(root), "fato novo").facts)).toThrow();
+    } finally {
+      chmodSync(file, 0o600);
+    }
+    expect(readFileSync(file, "utf8")).toBe(before);
+    // Uma pasta no lugar do arquivo também é erro, não memória vazia.
+    const other = tmp();
+    mkdirSync(path.join(other, MEMORY_FILE), { recursive: true });
+    expect(() => readMemory(other)).toThrow(/não conseguiu ler a memória/);
   });
 
   test("anotar e esquecer: o repetido não entra, o cheio recusa, e esquecer acha sem maiúscula nem acento", () => {
