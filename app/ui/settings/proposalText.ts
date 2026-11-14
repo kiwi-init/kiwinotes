@@ -13,7 +13,7 @@ export const PROPOSAL_NOT_NOW = "Agora não";
 export const PROPOSAL_NONE = "Nenhum: só a nota da reunião";
 export const PROPOSAL_UNDO = "Desfazer";
 export const PROPOSAL_LATER = "Depois";
-export const PROPOSALS_TITLE = "Propostas das reuniões";
+export const PROPOSALS_TITLE = "Propostas do agente";
 export const PROPOSALS_HINT = "Nada é escrito antes do [Aplicar]. Uma proposta fica aqui até você aplicar ou descartar, por 30 dias.";
 
 /** As propostas que esperam a pessoa (a pergunta do modo econômico ou a proposta pronta), da mais nova para a mais velha. */
@@ -23,8 +23,27 @@ export function openProposals(list: readonly AgentProposalSummary[]): AgentPropo
 
 /** Onde a nota vai: "em Migração", "em Atas", ou "na pasta principal". */
 export function whereLine(p: AgentProposalSummary): string {
+  if (!p.note) return p.project ? `em ${p.project.name}` : "na pasta principal";
   if (p.project && p.note.folder === p.project.folder) return `em ${p.project.name}`;
   return p.note.folder ? `em ${p.note.folder}` : "na pasta principal";
+}
+
+/** O sinal do resumo executivo (spec #11546), como a seção mostra. */
+export const SUMMARY_SIGNAL: Record<"verde" | "amarelo" | "vermelho", string> = { verde: "🟢 No rumo", amarelo: "🟡 Atenção", vermelho: "🔴 Travado" };
+
+/** A frase do resumo executivo, pelo estado. */
+function summaryLine(p: AgentProposalSummary): string {
+  const of = p.project ? ` de ${p.project.name}` : "";
+  switch (p.status) {
+    case "offer":
+    case "pending":
+      if (!p.project && p.candidates.length) return "O resumo executivo está pronto.";
+      return `O resumo executivo${of} está pronto${p.summary ? ` (${SUMMARY_SIGNAL[p.summary.signal]})` : ""}: ele entra no topo da nota principal.`;
+    case "applied":
+      return `Pronto: o resumo executivo${of} está no topo da nota principal.`;
+    case "discarded":
+      return `O resumo executivo${of} foi descartado.`;
+  }
 }
 
 /** A junção dos nomes da pergunta ("É do A, do B ou do C?"): ", do " entre os do meio e " ou do " antes do último. */
@@ -32,6 +51,7 @@ export const choiceJoin = (i: number, total: number) => (i === 0 ? "" : i === to
 
 /** A frase principal da proposta, pelo estado. A pergunta com os projetos, a tela monta com o `choiceJoin`. */
 export function proposalLine(p: AgentProposalSummary): string {
+  if (p.kind === "summary" || !p.meeting || !p.note) return summaryLine(p);
   const meeting = `"${p.meeting.title}"`;
   switch (p.status) {
     case "offer":

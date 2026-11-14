@@ -1,4 +1,5 @@
 import type { NoteModel } from "./note-model.ts";
+import type { SummarySettings } from "./summary-settings.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
@@ -166,7 +167,9 @@ export type { NoteModel };
 //   `meetings` no `AgentStatus` e no `agent.configure`. Só acréscimo.
 // 1.58.0 (T11429, spec #9349): a cor da névoa do gato. O `kiwicat.cor` nas settings (a do agente ou uma das cores
 //   prontas de `kiwicat-colors.ts`; o `settings.set` recusa qualquer outra). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.58.0";
+// 1.59.0 (T11559, spec #11546): o resumo executivo. O `summary` no `AgentStatus` e no `agent.configure` (os 6 blocos e o
+//   período do primeiro resumo) e o `kind: "summary"` nas propostas. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.59.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -475,7 +478,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings }; result: AgentStatus };
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -579,14 +582,19 @@ export interface AgentProposalSummary {
    * "Agora não" o `agent.proposalDiscard`); ainda sem tema. `pending`: pronta, esperando [Aplicar] ou [Descartar].
    */
   status: "offer" | "pending" | "applied" | "discarded";
-  meeting: { path: string; title: string; date: string };
+  /** `summary`: o resumo executivo de um projeto (1.59.0, spec #11546), que só muda a nota principal. */
+  kind: "meeting" | "summary";
+  /** A reunião; null num resumo executivo. */
+  meeting: { path: string; title: string; date: string } | null;
+  /** O resumo executivo: o sinal e desde quando "o que andou" conta. */
+  summary?: { signal: "verde" | "amarelo" | "vermelho"; since: string };
   /** O projeto; null sem projeto (em dúvida, com `candidates`, ou "Nenhum: só a nota da reunião"). */
   project: { folder: string; name: string } | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe. */
   candidates: { folder: string; name: string }[];
   theme: string;
-  /** Onde a nota da reunião vai e com que título (o nome do arquivo). */
-  note: { folder: string; title: string };
+  /** Onde a nota da reunião vai e com que título (o nome do arquivo); null num resumo executivo. */
+  note: { folder: string; title: string } | null;
   /** O caminho da nota criada pelo [Aplicar]. */
   notePath?: string;
   /** O pedido do registro do [Aplicar]: o [Desfazer] é o `agent.undo` dele. */
@@ -599,7 +607,10 @@ export interface AgentProposalSummary {
 
 /** [Ver a proposta] (1.57.0): o texto da nota nova e a nota principal com as linhas que a proposta acrescenta. */
 export interface AgentProposalView extends AgentProposalSummary {
+  /** A nota nova da reunião; num resumo executivo, a seção "Resumo executivo" como vai ficar. */
   noteContent: string;
+  /** O resumo executivo troca o anterior desta data (`AAAA-MM-DD`), que fica nas Versões. */
+  replaces?: string;
   /** Null sem projeto ou num projeto sem nota principal: só a nota da reunião. */
   main: { path: string; lines: { text: string; added: boolean }[] } | null;
 }
@@ -756,6 +767,8 @@ export interface AgentStatus {
   economy: boolean;
   /** "Suas reuniões" (1.57.0, spec #8360): quando propor, onde salvar, o nome do arquivo e os blocos do resumo. */
   meetings: AgentMeetingSettings;
+  /** O resumo executivo (1.59.0, spec #11546): os 6 blocos e o período do primeiro resumo. */
+  summary: SummarySettings;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */

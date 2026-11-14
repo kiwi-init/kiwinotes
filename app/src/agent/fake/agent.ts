@@ -152,6 +152,51 @@ async function proposeMeeting(client: AgentContext, sessionId: string, path?: st
   return `Preparei a proposta da reunião "${meeting.titulo}". Veja e aplique no Kiwi.`;
 }
 
+/**
+ * "Resumo executivo do <projeto>" (spec #11546): os projetos com esse nome (um vai como projeto; dois ou mais, como
+ * candidatos), o estado e as reuniões dele, e os campos fixos, com as fontes de verdade (a nota principal e a reunião
+ * mais nova da pasta). Não inventa: sem nota nem reunião, os blocos com fonte vão vazios.
+ */
+async function proposeSummary(client: AgentContext, sessionId: string, name: string): Promise<string> {
+  const listed = await useTool(client, sessionId, "projects_list", {});
+  if (listed.isError) return `Não consegui ver os projetos: ${listed.text}`;
+  const fold = (x: string) => x.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+  const all = (JSON.parse(listed.text) as { projetos: { pasta: string; nome: string }[] }).projetos;
+  const found = all.filter((p) => fold(p.nome).includes(fold(name)) || fold(p.pasta) === fold(name));
+  if (!found.length) return `Não achei o projeto "${name}".`;
+  const first = found[0]!;
+  const status = await useTool(client, sessionId, "project_status", { projeto: first.pasta });
+  if (status.isError) return `Não consegui ver o projeto: ${status.text}`;
+  const main = (JSON.parse(status.text) as { notaPrincipal: string | null }).notaPrincipal;
+  const meetings = await useTool(client, sessionId, "meetings_list", {});
+  const inFolder = meetings.isError
+    ? []
+    : (JSON.parse(meetings.text) as { reunioes: { path: string; gravandoAgora?: boolean }[] }).reunioes.filter((m) => !m.gravandoAgora && m.path.startsWith(`${first.pasta}/`));
+  const meeting = inFolder[0]?.path;
+  const fromMeeting = meeting ?? main;
+  const where = found.length === 1 ? { projeto: first.pasta } : { candidatos: found.slice(0, 2).map((p) => p.pasta) };
+  const r = await useTool(client, sessionId, "project_summary_propose", {
+    ...where,
+    ...FAKE_SUMMARY(fromMeeting, main),
+    reunioes: inFolder.slice(0, 3).map((m) => m.path),
+  });
+  if (r.isError) return `Não consegui preparar o resumo: ${r.text}`;
+  return `Preparei o resumo executivo de "${first.nome}". Veja e aplique no Kiwi.`;
+}
+
+/** Os campos fixos do resumo do agente falso: as fontes são a reunião mais nova e a nota principal (null: o item sai). */
+export function FAKE_SUMMARY(meeting: string | null, main: string | null): Record<string, unknown> {
+  const at = <T,>(src: string | null, item: (s: string) => T) => (src ? [item(src)] : []);
+  return {
+    situacao: "amarelo",
+    linha: "a migração atrasou uma semana",
+    andou: at(meeting, (fonte) => ({ texto: "O cronograma da migração foi revisto", fonte })),
+    decisoes: at(meeting, (fonte) => ({ texto: "A migração começa pelo arquivo de 2019", data: "2026-11-10", fonte })),
+    riscos: [{ texto: "A janela de manutenção ainda não foi confirmada" }],
+    proximosPassos: at(main, (fonte) => ({ oque: "Confirmar a janela de manutenção", quem: "Ana", quando: "sexta", fonte })),
+  };
+}
+
 /** Responde a uma pergunta pelas notas: procura a pergunta, ou a palavra mais longa dela, lê a 1ª nota e cita o começo. */
 async function answerFromNotes(client: AgentContext, sessionId: string, question: string): Promise<string> {
   const words = [...new Set(question.replace(/[?!.,;:"]/g, " ").split(/\s+/).filter((w) => w.length >= 4))].sort((a, b) => b.length - a.length);
@@ -435,6 +480,12 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
+        // O resumo executivo (spec #11546): "/resumo <projeto>" ou "resumo executivo do <projeto>".
+        const summary = /^\/resumo\s+(.+)$/i.exec(text) ?? /resumo executivo d[oa]s?\s+(?:projeto\s+)?(.+?)[.?!]*$/i.exec(text);
+        if (summary && kiwiServers.has(sessionId)) {
+          await say(client, sessionId, await proposeSummary(client, sessionId, summary[1]!.trim()));
+          return { stopReason: "end_turn" };
+        }
         if (/atualiza o projeto com a reuni/i.test(text) && kiwiServers.has(sessionId)) {
           await say(client, sessionId, await proposeMeeting(client, sessionId));
           return { stopReason: "end_turn" };

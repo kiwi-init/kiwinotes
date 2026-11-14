@@ -1109,7 +1109,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
@@ -1117,6 +1117,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (a.economy !== undefined && typeof a.economy !== "boolean") throw bad("agent.configure: economy must be true or false");
       if (a.controlShortcut !== undefined && typeof a.controlShortcut !== "boolean") throw bad("agent.configure: controlShortcut must be a boolean");
       if (a.meetings !== undefined && (!a.meetings || typeof a.meetings !== "object" || Array.isArray(a.meetings))) throw bad("agent.configure: meetings must be an object");
+      if (a.summary !== undefined && (!a.summary || typeof a.summary !== "object" || Array.isArray(a.summary))) throw bad("agent.configure: summary must be an object");
       return agentCall((agent) =>
         agent.configure({
           model: a.model as string | undefined,
@@ -1124,6 +1125,7 @@ export function uiCapabilities(deps: CapabilityDeps,
           economy: a.economy as boolean | undefined,
           ...(a.controlShortcut !== undefined ? { controlShortcut: a.controlShortcut as boolean } : {}),
           ...(a.meetings !== undefined ? { meetings: a.meetings } : {}),
+          ...(a.summary !== undefined ? { summary: a.summary } : {}),
         }),
       );
     },

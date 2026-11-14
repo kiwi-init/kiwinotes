@@ -21,7 +21,7 @@ import {
   type ProposalFields,
 } from "./proposals.ts";
 import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
-import { kiwiTools, runKiwiTool, type ProposalDraft } from "./tools/tools.ts";
+import { kiwiTools, runKiwiTool, type ProposalDraft, type SummaryDraft } from "./tools/tools.ts";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -199,7 +199,7 @@ describe("a ferramenta meeting_propose", () => {
   };
   function ctx(guard?: SecretGuard) {
     const got: ProposalDraft[] = [];
-    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: { propose: async (d: ProposalDraft) => (got.push(d), { id: `p${got.length}` }) } } };
+    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: { propose: async (d: ProposalDraft) => (got.push(d), { id: `p${got.length}` }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01" } } };
   }
   const call = (c: ReturnType<typeof ctx>["ctx"], args: Record<string, unknown>) => runKiwiTool(c, "meeting_propose", { reuniao: MEETING.path, tema: "Tema", ...args });
 
@@ -245,5 +245,128 @@ describe("a ferramenta meeting_propose", () => {
     await expect(call(c, { resumo: `Usar ${marker}` })).rejects.toThrow(/marcador/);
     await expect(call(c, { acoes: [{ oque: `Trocar ${marker}` }] })).rejects.toThrow(/marcador/);
     expect(got).toEqual([]);
+  });
+});
+
+describe("a ferramenta project_summary_propose (spec #11546)", () => {
+  const meetings: MeetingNote[] = [
+    { ...MEETING, start: null, end: null, duration: 1800, app: "Zoom", participants: ["Ana"], live: false, mtime: "2026-11-11T11:00:00.000Z" },
+    { path: "Projetos/Migração/2026-11-12 · Outra.md", title: "Outra", date: "2026-11-12", start: null, end: null, duration: 60, app: null, participants: [], live: false, mtime: "2026-11-12T11:00:00.000Z" },
+    { path: "Reuniões/Agora.md", title: "Agora", date: "2026-11-13", start: null, end: null, duration: null, app: null, participants: [], live: true, mtime: "2026-11-13T12:00:00.000Z" },
+  ];
+  const project = (folder: string, name: string) => ({ folder, name, main: `${folder}/${name}.md`, updated: null, notes: 1 });
+  const note = (p: string) => ({ path: p, title: p.split("/").at(-1)!.replace(/\.md$/, ""), folder: p.split("/").slice(0, -1).join("/"), size: 1, mtime: "2026-11-10T00:00:00.000Z" });
+  const reader: VaultReader = {
+    ...EMPTY_READER,
+    list: async () => ({ folders: ["Projetos/Migração"], notes: [note("Projetos/Migração/Migração.md")] }),
+    meetings: async () => meetings,
+    projects: async () => [project("Projetos/Migração", "Migração"), project("Projetos/VNA", "VNA Fuji"), project("Projetos/Kiwi", "Kiwi")],
+  };
+  function ctx(guard?: SecretGuard) {
+    const got: SummaryDraft[] = [];
+    const sink = { propose: async () => ({ id: "m" }), summary: async (d: SummaryDraft) => (got.push(d), { id: `s${got.length}` }), since: async () => "2026-11-01" };
+    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: sink } };
+  }
+  const call = (c: ReturnType<typeof ctx>["ctx"], args: Record<string, unknown>) => runKiwiTool(c, "project_summary_propose", { projeto: "Migração", situacao: "amarelo", ...args });
+
+  test("só aparece com quem guarda a proposta; os campos vão com as fontes conferidas, e nada é escrito", async () => {
+    expect(kiwiTools(true).map((t) => t.name)).not.toContain("project_summary_propose");
+    expect(kiwiTools(true, true).map((t) => t.name)).toContain("project_summary_propose");
+    const { got, ctx: c } = ctx();
+    const r = await call(c, {
+      linha: "  a migração   atrasou ",
+      andou: [{ texto: "O cronograma foi revisto", fonte: MEETING.path }],
+      decisoes: [{ texto: "Migrar em dezembro", data: "2026-11-11", fonte: MEETING.path.replace(/\.md$/, "") }],
+      riscos: [{ texto: "A janela não foi confirmada" }],
+      proximosPassos: [{ oque: "Confirmar a janela", quem: "Ana", quando: "sexta", fonte: "Projetos/Migração/Migração.md" }],
+      reunioes: [MEETING.path, "Projetos/Migração/2026-11-12 · Outra.md"],
+    });
+    expect(r.value).toMatchObject({ proposta: "s1", projeto: "Projetos/Migração" });
+    expect(r.value.aviso).toContain("Nada foi escrito");
+    expect(r.value.foraSemFonte).toBeUndefined();
+    expect(got).toHaveLength(1);
+    expect(got[0]!.project).toEqual({ folder: "Projetos/Migração", name: "Migração", main: "Projetos/Migração/Migração.md" });
+    expect(got[0]!.fields).toEqual({
+      signal: "amarelo",
+      status: "a migração   atrasou",
+      progress: [{ text: "O cronograma foi revisto", source: MEETING.path }],
+      // Sem o `.md`, a fonte é achada e guardada com ele.
+      decisions: [{ text: "Migrar em dezembro", date: "2026-11-11", source: MEETING.path }],
+      risks: [{ text: "A janela não foi confirmada" }],
+      nextSteps: [{ text: "Confirmar a janela", who: "Ana", when: "sexta", source: "Projetos/Migração/Migração.md" }],
+      // As reuniões, da mais nova para a mais velha.
+      meetings: [
+        { path: "Projetos/Migração/2026-11-12 · Outra.md", title: "Outra", date: "2026-11-12" },
+        { path: MEETING.path, title: MEETING.title, date: MEETING.date },
+      ],
+    });
+  });
+
+  test("o agente não inventa: um item com uma fonte que não existe fica de fora, e a resposta conta", async () => {
+    const { got, ctx: c } = ctx();
+    const r = await call(c, {
+      andou: [{ texto: "Inventado", fonte: "Projetos/Migração/Não existe.md" }],
+      decisoes: [{ texto: "Real", fonte: MEETING.path }, { texto: "Inventada", fonte: "Outra coisa.md" }],
+      riscos: [{ texto: "Com fonte falsa", fonte: "Nada.md" }, { texto: "Sem fonte" }],
+      proximosPassos: [{ oque: "Passo", fonte: "Nada.md" }],
+      // Uma reunião ainda gravando não conta.
+      reunioes: ["Reuniões/Agora.md"],
+    });
+    expect(r.value.foraSemFonte).toBe(5);
+    expect(r.value.aviso).toContain("5 item(ns) ficaram de fora");
+    const f = got[0]!.fields;
+    expect([f.progress, f.decisions.map((d) => d.text), f.risks, f.nextSteps, f.meetings]).toEqual([[], ["Real"], [{ text: "Sem fonte" }], [], []]);
+    // A fonte é obrigatória no que andou, nas decisões e nos próximos passos.
+    await expect(call(c, { decisoes: [{ texto: "Sem fonte" }] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+  });
+
+  test("o projeto ambíguo vai com os candidatos; os campos errados são recusados", async () => {
+    const { got, ctx: c } = ctx();
+    const r = await runKiwiTool(c, "project_summary_propose", { candidatos: ["Kiwi", "VNA Fuji"], situacao: "verde" });
+    expect(r.value).toMatchObject({ projeto: null, candidatos: ["Projetos/Kiwi", "Projetos/VNA"] });
+    expect(got[0]).toMatchObject({ project: null, candidates: [{ folder: "Projetos/Kiwi" }, { folder: "Projetos/VNA" }] });
+    await expect(call(c, { situacao: "azul" })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call(c, { situacao: undefined })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call(c, { projeto: "Outro" })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    await expect(call(c, { candidatos: ["Kiwi", "VNA Fuji"] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call(c, { decisoes: [{ texto: "X", data: "11/11/2026", fonte: MEETING.path }] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call(c, { andou: [{ texto: "  ", fonte: MEETING.path }] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call(c, { extra: 1 })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    // Sem projeto nem candidatos, ou com um projeto sem nota principal: o agente fica sabendo, e nenhum balão nasce.
+    await expect(runKiwiTool(c, "project_summary_propose", { situacao: "verde" })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    const noMain: VaultReader = { ...reader, projects: async () => [{ ...project("Projetos/Solto", "Solto"), main: null }] };
+    await expect(runKiwiTool({ ...c, reader: noMain }, "project_summary_propose", { projeto: "Solto", situacao: "verde" })).rejects.toMatchObject({
+      code: "E_NO_MAIN_NOTE",
+      message: expect.stringContaining("não tem nota principal"),
+    });
+    expect(got).toHaveLength(1);
+  });
+
+  test("um segredo (o marcador do filtro) não vai para a nota do projeto", async () => {
+    const guard = new SecretGuard();
+    const marker = /‹segredo [^›]+›/.exec(guard.request("a chave é ghp_0123456789abcdefghijABCDEFGHIJ012345 e pronto").text)?.[0];
+    expect(marker).toBeDefined();
+    const { got, ctx: c } = ctx(guard);
+    await expect(call(c, { linha: `Usar ${marker}` })).rejects.toThrow(/marcador/);
+    await expect(call(c, { proximosPassos: [{ oque: `Trocar ${marker}`, fonte: MEETING.path }] })).rejects.toThrow(/marcador/);
+    expect(got).toEqual([]);
+  });
+
+  test("o project_status diz desde quando o próximo resumo conta, só com quem guarda a proposta", async () => {
+    const statusReader: VaultReader = {
+      ...reader,
+      projectStatus: async (folder) => ({
+        project: { folder, name: "Migração", main: `${folder}/Migração.md`, updated: null, notes: 1 },
+        outline: [],
+        outlineTotal: 0,
+        recent: [],
+        openTasks: 0,
+        taskNotes: 0,
+        tasks: [],
+      }),
+    };
+    const { ctx: c } = ctx();
+    expect((await runKiwiTool({ ...c, reader: statusReader }, "project_status", { projeto: "Projetos/Migração" })).value.resumoDesde).toBe("2026-11-01");
+    expect((await runKiwiTool({ reader: statusReader }, "project_status", { projeto: "Projetos/Migração" })).value.resumoDesde).toBeUndefined();
   });
 });

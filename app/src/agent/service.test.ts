@@ -12,7 +12,7 @@ import { fakeNotices } from "./fake/notices.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
-import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS } from "./service.ts";
+import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS, SUMMARY_ECONOMY_QUESTION } from "./service.ts";
 import { DEFAULT_NOTE_MODEL, noteModelText, sanitizeNoteModel } from "./note-model.ts";
 import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
@@ -649,7 +649,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write, notes_organize_folder, meeting_propose",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write, notes_organize_folder, meeting_propose, project_summary_propose",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
@@ -1245,7 +1245,7 @@ describe("a reunião vira nota do projeto (spec #8360)", () => {
     await expect(m.svc.proposalView(offer!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
     await m.svc.proposalPrepare(offer!.id);
     const ready = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.status === "pending"));
-    expect(ready.meeting.path).toBe(MEETING_PATH);
+    expect(ready.meeting?.path).toBe(MEETING_PATH);
     expect((await m.svc.proposalsList()).map((x) => x.status)).toEqual(["pending"]);
     await until(() => m.turns.filter((e) => e.type === "done").length === 1);
 
@@ -1254,10 +1254,177 @@ describe("a reunião vira nota do projeto (spec #8360)", () => {
     const slow = await m.svc.ask("/lento");
     await m.svc.meetingReady(MEETING2_PATH);
     expect(started(m)).toBe(2);
-    const next = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.meeting.path === MEETING2_PATH));
+    const next = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.meeting?.path === MEETING2_PATH));
     expect(next.status).toBe("pending");
     await until(() => m.turns.filter((e) => e.type === "done").length === 3);
     const order = m.turns.filter((e) => e.type === "started" || e.type === "done").map((e) => `${e.type}:${e.id === slow.id ? "lento" : "outro"}`);
     expect(order.slice(-4)).toEqual(["started:lento", "done:lento", "started:outro", "done:outro"]);
+  });
+});
+
+describe("o resumo executivo de um projeto (spec #11546)", () => {
+  const MAIN = "Projetos/Migração/Migração.md";
+  const MEETING = "Projetos/Migração/2026-11-10 · Cronograma.md";
+  const MAIN_TEXT = "# Migração\n\nO projeto da migração do PACS.\n\n## Pendências\n\n- [ ] Pedir o acesso\n";
+  const OLD = "# Migração\n\n## Resumo executivo\n\n**Situação:** 🟢 No rumo · 01/11/2026\n\n### Decisões\n\n- Uma decisão velha ([[Projetos/Migração/Migração|Migração]])\n\n## Pendências\n\n- [ ] Pedir o acesso\n";
+  const project = (folder: string, name: string, main: string | null) => ({ folder, name, main, updated: null, notes: 2 });
+  function vault(main: string, projects = [project("Projetos/Migração", "Migração", MAIN)]) {
+    const notes: Record<string, string> = { ...NOTES, [MAIN]: main, [MEETING]: "---\ntype: meeting\ndate: 2026-11-10\n---\n\n## Transcrição\n\n**Ana** (00:00): Começamos por 2019.\n" };
+    const reader: VaultReader = {
+      ...memoryReader(notes),
+      meetings: async () => [
+        { path: MEETING, title: "Cronograma", date: "2026-11-10", start: null, end: null, duration: 1800, app: "Zoom", participants: ["Ana"], live: false, mtime: "2026-11-10T11:00:00.000Z" },
+      ],
+      projects: async () => projects,
+      projectStatus: async (folder) => {
+        const p = projects.find((x) => x.folder === folder)!;
+        return { project: p, outline: [], outlineTotal: 0, recent: [], openTasks: 0, taskNotes: 0, tasks: [] };
+      },
+    };
+    return { notes, reader, writer: memoryWriter(notes) };
+  }
+  const ASK = "faz o resumo executivo do projeto Migração";
+  const day = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const undoer = (notes: Record<string, string>) => ({
+    folder: async () => null,
+    get: async (q: string) => (notes[q] === undefined ? null : { content: notes[q]!, version: versionOf(notes[q]!) }),
+    save: async (q: string, content: string, base: string) => {
+      if (notes[q] === undefined || versionOf(notes[q]!) !== base) return false;
+      notes[q] = content;
+      return true;
+    },
+    trash: async () => "trashed" as const,
+  });
+
+  test("a pedido: os 6 blocos na ordem fixa, com as fontes; nada é escrito antes; [Aplicar] escreve no topo da nota principal, com [Desfazer]", async () => {
+    const v = vault(MAIN_TEXT);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    const before = { ...v.notes };
+    const turn = await askAndWait(m, ASK);
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: 'Preparei o resumo executivo de "Migração". Veja e aplique no Kiwi.' });
+    expect(v.notes).toEqual(before);
+    const [p] = await m.svc.proposalsList();
+    // O primeiro resumo conta os últimos 14 dias (o padrão de Ajustes).
+    const since = new Date(Date.now() - 14 * 86_400_000);
+    const sinceIso = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, "0")}-${String(since.getDate()).padStart(2, "0")}`;
+    expect(p).toMatchObject({ kind: "summary", status: "pending", meeting: null, note: null, project: { folder: "Projetos/Migração" }, summary: { signal: "amarelo", since: sinceIso } });
+    const view = await m.svc.proposalView(p!.id);
+    const s = view.noteContent;
+    const order = [
+      "## Resumo executivo",
+      `**Situação:** 🟡 Atenção · ${day(new Date())} · a migração atrasou uma semana`,
+      `### O que andou desde ${day(since)}`,
+      "### Decisões",
+      "### Riscos e bloqueios",
+      "### Próximos passos",
+      "### Reuniões recentes",
+    ].map((x) => s.indexOf(x));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(s).toContain("- A migração começa pelo arquivo de 2019 (10/11/2026, [[Projetos/Migração/2026-11-10 · Cronograma|2026-11-10 · Cronograma]])");
+    expect(s).toContain("- [ ] Confirmar a janela de manutenção (Ana, sexta) · [[Projetos/Migração/Migração|Migração]]");
+    expect(s).toContain("- 10/11/2026 · [[Projetos/Migração/2026-11-10 · Cronograma|Cronograma]]");
+    expect(view.replaces).toBeUndefined();
+    expect(view.main!.lines.filter((l) => !l.added).map((l) => l.text)).toEqual(MAIN_TEXT.split("\n"));
+    expect(v.notes).toEqual(before);
+
+    const applied = await m.svc.proposalApply(p!.id);
+    expect(applied).toMatchObject({ kind: "summary", status: "applied" });
+    expect(v.notes[MAIN]!.startsWith(`# Migração\n\n${s}\nO projeto da migração do PACS.`)).toBe(true);
+    // Só a nota principal muda: nenhuma nota nova.
+    expect(Object.keys(v.notes).sort()).toEqual(Object.keys(before).sort());
+    const r = (await m.svc.activityLog()).find((x) => x.id === applied.applyRequest)!;
+    expect(r.changes.map((c) => [c.kind, c.path, c.section])).toEqual([["replaced", MAIN, "Resumo executivo"]]);
+    m.svc.useUndo(undoer(v.notes));
+    await m.svc.undo(applied.applyRequest!);
+    expect(v.notes).toEqual(before);
+    expect((await m.svc.proposalsList())[0]).toMatchObject({ status: "applied", undoneAt: expect.any(String) });
+  });
+
+  test("um resumo novo substitui o anterior, que volta com o [Desfazer]; o período conta desde ele", async () => {
+    const v = vault(OLD);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    await askAndWait(m, ASK);
+    const [p] = await m.svc.proposalsList();
+    expect(p!.summary).toMatchObject({ since: "2026-11-01" });
+    const view = await m.svc.proposalView(p!.id);
+    expect(view.replaces).toBe("2026-11-01");
+    expect(view.noteContent).toContain("### O que andou desde 01/11/2026");
+    const applied = await m.svc.proposalApply(p!.id);
+    expect(v.notes[MAIN]!.match(/## Resumo executivo/g)).toHaveLength(1);
+    expect(v.notes[MAIN]).not.toContain("Uma decisão velha");
+    expect(v.notes[MAIN]!.endsWith("## Pendências\n\n- [ ] Pedir o acesso\n")).toBe(true);
+    m.svc.useUndo(undoer(v.notes));
+    await m.svc.undo(applied.applyRequest!);
+    expect(v.notes[MAIN]).toBe(OLD);
+  });
+
+  test("os blocos desligados em Ajustes não entram", async () => {
+    const v = vault(MAIN_TEXT);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    const st = await m.svc.configure({ summary: { blocks: { decisoes: false, reunioes: false }, firstDays: 7 } });
+    expect(st.summary).toEqual({ blocks: { situacao: true, andou: true, decisoes: false, riscos: true, proximos: true, reunioes: false }, firstDays: 7 });
+    await askAndWait(m, ASK);
+    const [p] = await m.svc.proposalsList();
+    const s = (await m.svc.proposalView(p!.id)).noteContent;
+    expect(s).toContain("### Próximos passos");
+    expect(s).not.toContain("### Decisões");
+    expect(s).not.toContain("### Reuniões recentes");
+    await m.svc.proposalApply(p!.id);
+    expect(v.notes[MAIN]).not.toContain("### Decisões");
+  });
+
+  test("com o projeto ambíguo, o resumo pergunta; escolhido, conta o período e aplica; sem projeto ou sem nota principal não dá", async () => {
+    const v = vault(MAIN_TEXT, [project("Projetos/Migração", "Migração", MAIN), project("Projetos/Migração VNA", "Migração VNA", null)]);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    await askAndWait(m, ASK);
+    const [p] = await m.svc.proposalsList();
+    expect(p).toMatchObject({ kind: "summary", project: null, candidates: [{ folder: "Projetos/Migração" }, { folder: "Projetos/Migração VNA" }], summary: { since: "" } });
+    await expect(m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(m.svc.proposalChoose(p!.id, null)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    // Um candidato sem nota principal é recusado na escolha, não no [Aplicar]; a pergunta continua aberta.
+    await expect(m.svc.proposalChoose(p!.id, "Projetos/Migração VNA")).rejects.toThrow("não tem nota principal");
+    expect((await m.svc.proposalsList())[0]).toMatchObject({ project: null, candidates: [{}, {}] });
+    const chosen = await m.svc.proposalChoose(p!.id, "Projetos/Migração");
+    expect(chosen).toMatchObject({ project: { folder: "Projetos/Migração" }, candidates: [] });
+    expect(chosen.summary!.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await m.svc.proposalApply(p!.id);
+    expect(v.notes[MAIN]).toContain("## Resumo executivo");
+  });
+
+  test("um projeto sem nota principal: a ferramenta recusa, o agente diz, e nenhum balão nasce", async () => {
+    const v = vault(MAIN_TEXT, [project("Projetos/Migração", "Migração", null)]);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    const turn = await askAndWait(m, ASK);
+    expect((turn.at(-1) as { text: string }).text).toContain("não tem nota principal");
+    expect(await m.svc.proposalsList()).toEqual([]);
+  });
+
+  test("com o modo econômico, pergunta antes de gastar: o não para tudo, o sim segue", async () => {
+    const v = vault(MAIN_TEXT);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    await m.svc.configure({ economy: true });
+    const ask = async (answer: "send" | "hold") => {
+      const { id } = await m.svc.ask(ASK);
+      await until(() => !!m.svc.question());
+      const card = m.svc.question()!;
+      expect(card.items).toEqual([expect.objectContaining({ kind: "confirm", value: SUMMARY_ECONOMY_QUESTION })]);
+      await m.svc.answerDoubt({ card: card.id, fingerprint: card.items[0]!.fingerprint, answer });
+      await until(() => m.turns.some((e) => e.id === id && e.type === "done"));
+      return m.turns.findLast((e) => e.id === id && e.type === "done") as { text: string; stopReason: string };
+    };
+    expect(await ask("hold")).toMatchObject({ stopReason: "cancelled", text: "Tudo bem, não fiz o resumo: nada foi lido." });
+    expect(await m.svc.proposalsList()).toEqual([]);
+    expect((await ask("send")).text).toContain("Preparei o resumo executivo");
+    expect(await m.svc.proposalsList()).toHaveLength(1);
+    // Outro pedido não pergunta.
+    const other = await askAndWait(m, "oi");
+    expect(other.at(-1)).toMatchObject({ type: "done" });
   });
 });

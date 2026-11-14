@@ -9,6 +9,7 @@ const base: AgentProposalSummary = {
   id: "p1",
   at: "2026-11-11T12:00:00.000Z",
   status: "pending",
+  kind: "meeting",
   meeting: { path: "Reuniões/2026-11-11 10h00 Zoom.md", title: "2026-11-11 10h00 Zoom", date: "2026-11-11" },
   project: { folder: "Projetos/Migração", name: "Migração" },
   candidates: [],
@@ -19,10 +20,10 @@ const base: AgentProposalSummary = {
 describe("a proposta na tela", () => {
   test("a frase de cada estado, e onde a nota vai", () => {
     expect(proposalLine(base)).toBe('A proposta da reunião "2026-11-11 10h00 Zoom" está pronta: a nota "2026-11-11 · Cronograma" em Migração, e a reunião na nota principal.');
-    expect(proposalLine({ ...base, project: null, note: { ...base.note, folder: "" } })).toBe(
+    expect(proposalLine({ ...base, project: null, note: { ...base.note!, folder: "" } })).toBe(
       'A proposta da reunião "2026-11-11 10h00 Zoom" está pronta: a nota "2026-11-11 · Cronograma" na pasta principal.',
     );
-    expect(whereLine({ ...base, note: { ...base.note, folder: "Atas" } })).toBe("em Atas");
+    expect(whereLine({ ...base, note: { ...base.note!, folder: "Atas" } })).toBe("em Atas");
     expect(proposalLine({ ...base, status: "offer", theme: "" })).toBe(
       'A reunião "2026-11-11 10h00 Zoom" terminou. Quer a proposta da nota do projeto? Ela gasta um pedido do seu plano.',
     );

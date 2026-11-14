@@ -1,6 +1,7 @@
 // Os textos da seção Agente (spec #8373, T8762), estado por estado. A tela inteira roda no roteiro
 // `scripts/ui-scripts/ajustes-agente.json`, com o agente falso.
 
+import { DEFAULT_SUMMARY_SETTINGS } from "../../src/shared/summary-settings.ts";
 import { describe, expect, test } from "bun:test";
 
 import type { AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
@@ -27,6 +28,7 @@ const base: AgentStatus = {
   consented: false,
   economy: false,
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
+  summary: DEFAULT_SUMMARY_SETTINGS,
   claude: { installed: true, version: "2.1.322", loggedIn: true, method: "claude.ai", versionOk: true },
   adapter: { version: "0.106.0", phase: "missing" },
   program: "closed",
