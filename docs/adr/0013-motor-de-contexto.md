@@ -1,7 +1,8 @@
-# ADR 0013: o motor de contexto do Kiwi
+# ADR 0013: a Bússola, o motor de contexto do Kiwi
 
 - Status: **proposto** (T13450, spec #13435). As quatro decisões do harry estão tomadas (#13624, #13626, #13628 e #13631). Falta o sim dele ao ADR inteiro. Nenhum código antes disso.
-- O nome do motor ainda não está escolhido (#13613). Até lá, é "o motor de contexto".
+- O nome é **Bússola** (em inglês, Compass), escolhido pelo harry no #13644.
+- A revisão do #13636 (a autocrítica que o harry pediu) mudou a peça 6, criou a peça 7 e pôs a medição do peso real no PR 1. O que mudou está marcado com "revisão".
 - Segue o [ADR 0011](0011-agente-e-privacidade.md) (nenhum outro modelo de IA, nem local) e o [ADR 0012](0012-host-do-agente.md) (o host e o adaptador ACP). A decisão 1 abaixo muda uma frase do 0011.
 - Código: nenhum ainda. A ordem da construção está no fim.
 
@@ -48,16 +49,17 @@ A hipótese do spec era o agente relendo as mesmas notas. Nestes 18 pedidos ela 
 | Cache de leitura do Claude Code | Releitura de um arquivo igual devolve "sem mudança" | Só vale para as ferramentas dele, que o Kiwi desliga. E erra depois de um resumo da conversa: diz "sem mudança" de um texto que o modelo já não tem |
 | Resumo da conversa (`/compact`) e limpeza de resultados antigos | O próprio modelo resume a conversa, ou a API apaga resultados velhos | O resumo custa uma ida inteira e inventa. A limpeza invalida o cache |
 
-O ACP já tem o que o motor precisa: o adaptador aceita contexto embutido no pedido (`embeddedContext`) e o entrega ao modelo como `<context ref="…">`.
+O ACP já tem o que a Bússola precisa: o adaptador aceita contexto embutido no pedido (`embeddedContext`) e o entrega ao modelo como `<context ref="…">`.
 
-## Decisão: o motor de contexto
+## Decisão: a Bússola
 **O Kiwi acha, o agente faz. E o agente não carrega bagagem: quem guarda é o Kiwi.**
 
-O motor é local e não usa modelo nenhum. Ele não usa a busca pelo sentido (e5), mesmo ligada. São seis peças.
+A Bússola é local e não usa modelo nenhum. Ela não usa a busca pelo sentido (e5), mesmo ligada. São sete peças.
 
 ### 1. A busca antecipada: achar antes de perguntar
 Antes de mandar o pedido, o Kiwi resolve no Mac o que a pessoa citou. Custa zero idas e zero tokens.
 - **O índice de nomes.** Todo nome que existe na pasta de notas: pastas, títulos, apelidos (`aliases`), seções, projetos, reuniões, tags e arquivos de qualquer tipo (`.txt`, `.pdf`, `.xlsx`). Cada nome fica em quatro formas: sem acento e sem maiúscula, sem separador (espaço, `-` e `_` valem igual), pelo radical e **pelo som**.
+- **O ditado conhece os nomes das notas (revisão).** Os nomes das pastas, das notas e dos projetos entram na correção do ditado, como o dicionário de hoje. O nome já chega certo no pedido, e casar pelo som fica como rede de segurança.
 - **Pelo som, porque o pedido é falado.** O ditado erra nomes próprios. O Kiwi compara o que ouviu com os nomes que existem, pela pronúncia em português e em inglês. Nenhuma ferramenta de código faz isso: nelas o caminho é digitado.
 - **As citações.** O Kiwi passa pelo pedido em janelas de 1 a 5 palavras e casa cada uma com o índice: igual vale mais que parecido, e um nome longo vale mais que um curto. Palavras como "pasta", "nota", "reunião", "projeto" e "planilha" dizem o tipo.
 - **O que a pessoa aponta sem nomear.** "Essa nota", "aqui" e "esse projeto" viram a nota e a pasta abertas no app. "A última reunião" e "ontem" viram a reunião e as datas.
@@ -89,17 +91,27 @@ Antes de mandar o pedido, o Kiwi resolve no Mac o que a pessoa citou. Custa zero
 Esta é a peça que mais economiza: a conversa antiga reenviada é 65 % do gasto.
 - **A sessão do agente vira descartável.** O Kiwi guarda a conversa no Mac (o pedido, a resposta final e o que foi tocado), por 30 dias, como já guarda a Atividade.
 - **Uma janela é uma sessão nova,** que começa com a **cápsula**: os 3 últimos pedidos com as respostas, cortados, e os cartões das notas tocadas, sem o texto. Até 800 tokens. O Kiwi monta a cápsula sozinho, sem modelo e sem ida.
+- **A cápsula leva o mapa da pasta (revisão):** os projetos e as pastas do primeiro nível, com a contagem, em até 300 tokens. Quando a busca antecipada não acha nada, o agente já sabe onde procurar.
 - **Dentro da janela, a sessão segue como hoje.** A conversa contínua do balão (#13380) acontece aqui, com a memória de verdade do agente.
 - **A janela fecha quando esfriou ou engordou:** mais de 55 minutos sem ida (o cache venceu, e retomar seria reescrever tudo), ou mais de 6 mil tokens de conversa acumulada. Também fecha quando a pessoa pede uma conversa nova.
 - **Nunca no meio de uma conversa.** Com o gato na tela e a conversa andando (#13380), a janela não fecha pelo tamanho: o teto vale só na próxima vez que o gato abrir.
-- **O teto de 6 mil é um ajuste.** Ele depende de quanto a leitura de cache pesa no limite da assinatura, e o placar mede isso.
+- **O teto de 6 mil é um ajuste, e pode ir a zero (revisão).** Com o teto em zero, cada pedido é uma sessão nova com a cápsula, e a bagagem fica em 800 tokens. Isso vale a pena se a leitura de cache pesar como token cheio no limite da assinatura, e não vale se pesar pouco. O PR 1 mede esse peso antes de alguém escolher.
 - **Os 10 minutos não decidem nada.** O programa pode fechar depois de 10 minutos parado, para liberar memória. Reaberto dentro da hora, ele retoma a janela, com o cache quente. Isso responde à pergunta do #13437.
 - **O texto das notas nunca viaja na bagagem.** O Kiwi entrega de novo quando for preciso, pela versão.
 
 ### 6. O peso fixo menor
-- **Cinco verbos no lugar de 21 ferramentas:** achar, ler, escrever, propor e lembrar. As instruções longas (gerar arquivo, reunião, resumo executivo, rotina) saem da lista fixa e chegam pelo cartão de instrução, só quando o pedido precisa.
+- **Uma ferramenta no lugar de 21 (revisão).** Uma só, `kiwi`, com quatro campos: o que fazer (achar, ler, escrever, propor, lembrar), o alvo, o texto e as opções. As 21 de hoje pesam uns 5,3 mil tokens em toda ida; uma pesa uns 400. A primeira versão deste ADR propunha cinco verbos, que ficariam em uns 1,5 mil.
+- **As instruções longas** (gerar arquivo, reunião, resumo executivo, rotina) saem da lista fixa e chegam pelo cartão de instrução, só quando o pedido precisa.
+- **Quem separa leitura de escrita é o Kiwi,** pelo campo "o que fazer", como hoje separa pelo nome da ferramenta. A Atividade continua mostrando cada ação.
 - **A lista nunca muda no meio da sessão.** Mudar uma ferramenta invalida o cache inteiro.
 - **As instruções próprias ficam para depois** (decisão 3): trocar as instruções de programador do Claude Code por instruções curtas de um assistente de notas só volta à mesa com a resposta da Anthropic (#8355).
+
+### 7. Escrever só a diferença (revisão)
+Os 18 pedidos medidos não tiveram nenhuma escrita: o agente não chegou a achar os arquivos. Num uso que dá certo, a saída pesa mais. Hoje, para organizar uma nota, o agente devolve a nota inteira, e a saída custa 5 vezes a entrada.
+- **A versão vem no cartão.** O agente escreve sem ler antes: a ida da leitura some.
+- **Trocar um trecho, não a nota.** A escrita aceita "troque este trecho por este", além da seção e da nota inteira.
+- **Mexer na estrutura sem reescrever.** Mover uma seção, renomear um título e juntar duas seções viram operações curtas, pelos números de seção do cartão.
+- **A resposta da escrita é curta:** a versão nova e o que mudou, sem devolver o texto.
 
 ### O placar
 Em Ajustes › Agente, por pedido e por dia:
@@ -112,11 +124,11 @@ Fica só no Mac. O mockup está em `docs/evidence/T13450/placar.webp`.
 ## Um pedido, antes e depois
 O 15º pedido do registro, só em números.
 
-| | Hoje | Com o motor |
+| | Hoje | Com a Bússola |
 |---|---|---|
 | O que acontece | 4 idas: 5 leituras de arquivo, todas com erro, e 1 busca | 1 ida: o pacote já leva a nota |
-| O que cada ida carrega | 35 a 37 mil tokens | uns 7 mil: o fixo, a cápsula, o pacote e o pedido |
-| Total | 144,6 mil tokens | uns 8 mil (estimativa) |
+| O que cada ida carrega | 35 a 37 mil tokens | uns 6 mil: o fixo, a cápsula, o pacote e o pedido |
+| Total | 144,6 mil tokens | uns 7 mil (estimativa) |
 
 O desenho está em `docs/evidence/T13450/antes-e-depois.webp`.
 
@@ -129,13 +141,14 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
 | Tokens em idas que só servem para achar ou errar | 48,9 % | até 10 % |
 | A busca antecipada acerta o alvo | não existe | o 1º em 85 % dos pedidos, entre os 5 em 97 % |
 | Bagagem no começo de um pedido | até 33,8 mil tokens | até 6 mil (o teto da janela); 800 depois de uma pausa longa |
-| Peso fixo por ida | 8,6 mil tokens | até 5 mil; até 3,5 mil com as instruções próprias |
+| Peso fixo por ida | 8,6 mil tokens | até 4 mil, com a ferramenta única |
+| Saída numa escrita | a nota inteira | só o trecho mudado |
 | Nota sem mudança mandada inteira de novo | sem controle | zero |
-| Os mesmos 18 pedidos, refeitos | 934 mil | até 190 mil (−80 %); até 160 mil com as instruções próprias (estimativa) |
+| Os mesmos 18 pedidos, refeitos | 934 mil | até 160 mil (−83 %); uns 115 mil (−88 %) com o teto da janela em zero (estimativa) |
 
-**Sobre os "90 % a 99 % dos tokens no pedido".** Em tokens brutos, isso não é possível com o Claude Code: as instruções e as ferramentas dele vão em toda ida, e a janela guarda a conversa recente. O que o motor entrega:
+**Sobre os "90 % a 99 % dos tokens no pedido".** Em tokens brutos, isso não é possível com o Claude Code: as instruções e as ferramentas dele vão em toda ida, e a janela guarda a conversa recente. O que a Bússola entrega:
 - achar e errar caem de 49 % para até 10 %;
-- o mesmo uso gasta um quinto dos tokens;
+- o mesmo uso gasta um sexto dos tokens. O piso com o Claude Code intacto é um décimo: 1 ida por pedido, só com as instruções dele, o pedido e a resposta;
 - pelo preço de API, a parte do pedido (o texto novo e a resposta) passa de 14 % para uns 60 % do custo (estimativa). O resto é abrir a frio, que só cai mais com as instruções próprias (decisão 3).
 
 ## As decisões do harry
@@ -150,7 +163,7 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
    - B: retomar sempre a sessão inteira, como hoje.
    - C: sessão nova depois de 10 minutos, sem cápsula: o agente esquece a conversa.
 3. **As instruções do agente. Decidido: A (#13628).**
-   - **A (escolhida):** manter as do Claude Code e enxugar só as ferramentas. Peso fixo de uns 5 mil.
+   - **A (escolhida):** manter as do Claude Code e enxugar só as ferramentas. Peso fixo de uns 5 mil; com a ferramenta única da revisão, uns 4 mil.
    - B: instruções próprias do Kiwi, pela opção oficial `systemPrompt` do adaptador. Peso fixo de uns 3,5 mil. Fica para depois da resposta da Anthropic sobre a assinatura (#8355).
 4. **As trilhas. Decidido: A (#13631).**
    - **A (escolhida):** ligadas, visíveis e apagáveis em Ajustes › Agente.
@@ -158,15 +171,20 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
 
 ## A ordem da construção
 Cada item é um PR dos builders, com o antes e o depois medidos na bateria.
-1. **A bateria e o simulador de idas** (o PR 1 do spec), com o registro do harry reproduzido.
+1. **A bateria e o simulador de idas** (o PR 1 do spec), com o registro do harry reproduzido. E **o peso real de cada tipo de token** (revisão): o Kiwi guarda o `/usage` antes e depois de cada pedido, para a conta do limite sair do uso de verdade.
 2. **A janela curta e a cápsula** (peça 5): o maior ganho, e não depende do índice.
 3. **O erro que ensina e o `find`** (peça 3), por cima do T13427.
 4. **A busca antecipada e o pacote** (peças 1 e 2), com a mudança do ADR 0011 e da tela.
-5. **Os cinco verbos e o cartão de instrução** (peça 6).
+5. **A ferramenta única e o cartão de instrução** (peça 6) e **a escrita pela diferença** (peça 7).
 6. **O placar.**
 7. **O registro de entrega** (peça 4) e **as trilhas.**
 
+## Uma ideia a provar: o fim antecipado
+Depois de uma escrita, o agente faz mais uma ida só para dizer "pronto". O Kiwi poderia mostrar a frase final que veio junto da escrita e encerrar o pedido ali, sem essa ida. Isso depende de como o Claude Code reage a um pedido encerrado no meio, e só o harry testa o agente de verdade. Fica fora das metas até uma prova.
+
 ## Os riscos
+- **A ferramenta única pode gerar mais erro de chamada** que 21 ferramentas com o formato de cada uma. O erro que ensina cobre isso, e a bateria conta as idas por erro. Se passar de 5 % das chamadas, voltam os cinco verbos.
+- **A amostra é pequena e sem escrita:** 18 pedidos de um dia, 7 deles com resposta de menos de 30 tokens (171 mil tokens, 18 % do total). A bateria do PR 1 tem de incluir pedidos que escrevem.
 - **A busca antecipada erra com certeza.** O agente trabalharia na nota errada. O corte do "certo" sai da bateria, o pacote diz qual nota mandou, e a escrita continua com a versão conferida e o Desfazer.
 - **A cápsula perde o detalhe de uma conversa longa.** Dentro da janela nada se perde. Entre janelas ficam os 3 últimos pedidos e as notas tocadas.
 - **Os números de depois são estimativa** até o PR 1. A prova final é o harry usando a rc e vendo o placar.
