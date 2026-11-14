@@ -90,6 +90,7 @@ Esta é a peça que mais economiza: a conversa antiga reenviada é 65 % do gasto
 - **Uma janela é uma sessão nova,** que começa com a **cápsula**: os 3 últimos pedidos com as respostas, cortados, e os cartões das notas tocadas, sem o texto. Até 800 tokens. O Kiwi monta a cápsula sozinho, sem modelo e sem ida.
 - **Dentro da janela, a sessão segue como hoje.** A conversa contínua do balão (#13380) acontece aqui, com a memória de verdade do agente.
 - **A janela fecha quando esfriou ou engordou:** mais de 55 minutos sem ida (o cache venceu, e retomar seria reescrever tudo), ou mais de 6 mil tokens de conversa acumulada. Também fecha quando a pessoa pede uma conversa nova.
+- **Nunca no meio de uma conversa.** Com o gato na tela e a conversa andando (#13380), a janela não fecha pelo tamanho: o teto vale só na próxima vez que o gato abrir.
 - **O teto de 6 mil é um ajuste.** Ele depende de quanto a leitura de cache pesa no limite da assinatura, e o placar mede isso.
 - **Os 10 minutos não decidem nada.** O programa pode fechar depois de 10 minutos parado, para liberar memória. Reaberto dentro da hora, ele retoma a janela, com o cache quente. Isso responde à pergunta do #13437.
 - **O texto das notas nunca viaja na bagagem.** O Kiwi entrega de novo quando for preciso, pela versão.
