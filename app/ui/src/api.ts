@@ -177,7 +177,16 @@ export const api = {
     memoryUndo: (id: string) => invoke("agent.memoryUndo", { id }),
     memorySet: (facts: string[]) => invoke("agent.memorySet", { facts }),
     memoryClear: () => invoke("agent.memoryClear", {}),
+    /** O guardrail na prática (1.64.0, spec #11955): o filtro local, sem ir ao agente. */
+    guardPreview: (text: string) => invoke("agent.guardPreview", { text }),
     onMemory: (fn: (e: UiEvents["agent.memoryChanged"]) => void) => on("agent.memoryChanged", fn),
+  },
+  /** Os projetos (spec #9874), para o onboarding do agente (spec #11955): a lista e marcar ou desmarcar uma pasta. */
+  projects: {
+    list: () => invoke("projects.list", {}),
+    mark: (folder: string) => invoke("projects.mark", { folder }),
+    unmark: (folder: string) => invoke("projects.unmark", { folder }),
+    onChanged: (fn: () => void) => on("projects.changed", () => fn()),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */
   hub: {

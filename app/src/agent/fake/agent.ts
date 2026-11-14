@@ -421,10 +421,12 @@ const app = agent({ name: "kiwi-fake-agent" })
       await say(client, sessionId, r.isError ? `erro da ferramenta: ${r.text}` : `Criei a nota ${title}, no Modelo de nota.`);
       return { stopReason: "end_turn" };
     }
-    // Organizar uma nota que já existe: lê, monta de novo no modelo, mantendo o conteúdo, e grava pelo notes_write.
-    if (text.startsWith("/organiza ")) {
+    // Organizar uma nota que já existe: lê, monta de novo no modelo, mantendo o conteúdo, e grava pelo notes_write. Também
+    // pelo pedido do passo 8 do onboarding (spec #11955): 'Organize a nota "<caminho>" no Modelo de nota: …'.
+    const organize = text.startsWith("/organiza ") ? text.slice("/organiza ".length).trim() : /^Organize a nota "(.+?)" no Modelo de nota:/.exec(text)?.[1];
+    if (organize) {
       await think(client, sessionId);
-      const path = text.slice("/organiza ".length).trim();
+      const path = organize;
       const read = await useTool(client, sessionId, "notes_read", { path });
       if (read.isError) {
         await say(client, sessionId, `erro da ferramenta: ${read.text}`);

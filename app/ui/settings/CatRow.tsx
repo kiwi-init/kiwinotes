@@ -52,7 +52,8 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
  * parada do gato ao lado. Com o agente ou o "Mostrar o Kiwi-cat" desligado, a linha fica desabilitada, sem amostra, e o
  * módulo do gato não é carregado.
  */
-export function CatColorRow({ agentEnabled }: { agentEnabled: boolean }) {
+/** `preview: false`: sem o gatinho da linha (o onboarding já mostra o gato grande na cor, spec #11955). */
+export function CatColorRow({ agentEnabled, preview = true }: { agentEnabled: boolean; preview?: boolean }) {
   const [cat, setCat] = useState<AppSettings["kiwicat"] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -71,7 +72,7 @@ export function CatColorRow({ agentEnabled }: { agentEnabled: boolean }) {
   const options = catColorOptions().map(o => ({ value: o.id, label: o.label, color: o.hex }));
   return <Row label={label} hint={hint}>
     <div className="kn-cat-color">
-      {on ? <CatPreview cor={catColorHex(cat.cor)} /> : null}
+      {on && preview ? <CatPreview cor={catColorHex(cat.cor)} /> : null}
       <Swatches<CatColorChoice> label={label} value={cat.cor} options={options} disabled={!on} onChange={next => {
         if (next === cat.cor) return;
         setFailed(false);

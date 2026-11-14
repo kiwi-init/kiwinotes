@@ -104,7 +104,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: false });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: false, onboarding: { state: "pending", step: 1 } });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
@@ -117,7 +117,11 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     summary: DEFAULT_SUMMARY_SETTINGS,
     instructions: "",
     webSearch: false,
+    onboarding: { state: "pending", step: 1 },
   });
+  // O onboarding (spec #11955): pendente de fábrica; um passo fora de 1 a 9 volta para dentro.
+  expect(sanitizeSettings({ agent: { onboarding: { state: "open", step: 12 } } }).agent.onboarding).toEqual({ state: "open", step: 9 });
+  expect(sanitizeSettings({ agent: { onboarding: { state: "x", step: "2" } } }).agent.onboarding).toEqual({ state: "pending", step: 1 });
   // O modo econômico (spec #11084): desligado de fábrica, e só um true o liga.
   expect(sanitizeSettings({ agent: { economy: true } }).agent.economy).toBe(true);
   expect(sanitizeSettings({ agent: { economy: "sim" } }).agent.economy).toBe(false);

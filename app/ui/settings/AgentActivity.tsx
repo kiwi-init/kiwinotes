@@ -36,7 +36,7 @@ import { ProposalList, useProposals } from "./Proposals.tsx";
 import { openProposals, PROPOSALS_HINT, PROPOSALS_TITLE } from "./proposalText.ts";
 
 /** O [Ver] aberto de uma mudança: carregando, os dois textos, ou o erro. */
-type View = { phase: "loading" } | { phase: "ready"; view: AgentChangeView } | { phase: "error"; message: string };
+export type View = { phase: "loading" } | { phase: "ready"; view: AgentChangeView } | { phase: "error"; message: string };
 
 /** O que o último desfazer de um pedido respondeu, nota por nota (ou o erro). */
 type Outcome = { lines: { text: string; ok: boolean }[] };
@@ -337,7 +337,7 @@ function Request({
 }
 
 /** O [Ver]: o aviso, e o antes contra o depois com as linhas mudadas marcadas (ou só um dos dois). */
-function ViewPanel({ view }: { view: View }) {
+export function ViewPanel({ view }: { view: View }) {
   if (view.phase === "loading") return <p className="kn-activity-notice">Lendo…</p>;
   if (view.phase === "error") return <p className="kn-activity-notice" role="alert">{view.message}</p>;
   const v = view.view;

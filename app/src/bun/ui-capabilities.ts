@@ -1118,7 +1118,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch" && k !== "onboarding");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
@@ -1130,6 +1130,14 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (a.instructions !== undefined && (typeof a.instructions !== "string" || a.instructions.length > 2000))
         throw bad("agent.configure: instructions must be a text up to 2000 characters");
       if (a.webSearch !== undefined && typeof a.webSearch !== "boolean") throw bad("agent.configure: webSearch must be a boolean");
+      if (a.onboarding !== undefined) {
+        const o = a.onboarding as Record<string, unknown>;
+        if (!o || typeof o !== "object" || Array.isArray(o) || Object.keys(o).some((k) => k !== "state" && k !== "step"))
+          throw bad("agent.configure: onboarding must be {state?, step?}");
+        if (o.state !== undefined && o.state !== "open" && o.state !== "done") throw bad('agent.configure: onboarding.state must be "open" or "done"');
+        if (o.step !== undefined && (typeof o.step !== "number" || !Number.isInteger(o.step) || o.step < 1 || o.step > 9))
+          throw bad("agent.configure: onboarding.step must be an integer from 1 to 9");
+      }
       return agentCall((agent) =>
         agent.configure({
           model: a.model as string | undefined,
@@ -1140,6 +1148,7 @@ export function uiCapabilities(deps: CapabilityDeps,
           ...(a.summary !== undefined ? { summary: a.summary } : {}),
           ...(a.instructions !== undefined ? { instructions: a.instructions as string } : {}),
           ...(a.webSearch !== undefined ? { webSearch: a.webSearch as boolean } : {}),
+          ...(a.onboarding !== undefined ? { onboarding: a.onboarding } : {}),
         }),
       );
     },
@@ -1264,6 +1273,11 @@ export function uiCapabilities(deps: CapabilityDeps,
     "agent.memoryClear": (args) => {
       noArgs(args, "agent.memoryClear");
       return agentCall((agent) => agent.memoryClear());
+    },
+    "agent.guardPreview": (args) => {
+      const a = fields(args, "agent.guardPreview", ["text"]);
+      if (typeof a.text !== "string" || a.text.length > 2000) throw bad("agent.guardPreview: text must be a text up to 2000 characters");
+      return agentCall((agent) => agent.guardPreview(a.text as string));
     },
     "agent.change": (args) => {
       const a = fields(args, "agent.change", ["request", "change"]);

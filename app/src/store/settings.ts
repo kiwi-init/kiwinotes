@@ -14,6 +14,7 @@ import { type NotesShortcut, sanitizeShortcuts, type Shortcuts } from "../shared
 import { DEFAULT_MEETING_SETTINGS, type MeetingSettings, sanitizeMeetingSettings } from "../shared/meetings.ts";
 import { type CatColorChoice, DEFAULT_CAT_COLOR, isCatColorChoice } from "../shared/kiwicat-colors.ts";
 import { folderPath } from "../notes/paths.ts";
+import { type AgentOnboarding, DEFAULT_AGENT_ONBOARDING, sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import { readJson, writeJson } from "./files.ts";
 
 export interface AppSettings {
@@ -92,6 +93,8 @@ export interface AgentSettings {
   webSearch: boolean;
   /** O resumo executivo (spec #11546): os blocos e o período do primeiro. */
   summary: SummarySettings;
+  /** O onboarding (spec #11955): pendente até a primeira vez que o agente liga; aberto (com o passo) ou feito. */
+  onboarding: AgentOnboarding;
 }
 
 /** "Suas reuniões" em Ajustes › Agente (spec #8360). */
@@ -147,6 +150,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
   webSearch: false,
+  onboarding: DEFAULT_AGENT_ONBOARDING,
 };
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
@@ -168,6 +172,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     instructions: typeof o.instructions === "string" ? o.instructions.replace(/\r\n?/g, "\n").slice(0, 2000) : "",
     webSearch: o.webSearch === true,
     summary: sanitizeSummarySettings(o.summary),
+    onboarding: sanitizeAgentOnboarding(o.onboarding),
   };
 }
 

@@ -57,6 +57,7 @@ import type {
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
 import { type NoteModel, noteModelText } from "./note-model.ts";
+import { sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, glossaryText, INSTRUCTIONS_MAX, instructionsText, MEMORY_MAX, MemoryError, memoryText, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
@@ -403,6 +404,14 @@ export class AgentService {
   }
 
   /** "Apagar tudo" (`agent.memoryClear`): a memória fica vazia; o arquivo continua, só com o cabeçalho. */
+  /**
+   * O guardrail na prática (spec #11955, o passo 4 do onboarding): o texto pelo filtro local, num filtro novo, só para
+   * mostrar. Nada vai ao agente, nada fica guardado, e os marcadores do pedido de verdade não mudam.
+   */
+  async guardPreview(text: string): Promise<{ text: string; held: number }> {
+    return new SecretGuard().request(text.slice(0, 2000));
+  }
+
   memoryClear(): Promise<AgentMemoryView> {
     return this.oneMemory((root) => {
       const saved = writeMemory(root, []);
@@ -622,7 +631,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -685,6 +694,7 @@ export class AgentService {
       summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
       instructions: s.instructions ?? "",
       webSearch: s.webSearch === true,
+      onboarding: sanitizeAgentOnboarding(s.onboarding),
     };
   }
 
@@ -1240,7 +1250,10 @@ export class AgentService {
   async enable(consent = false): Promise<AgentStatus> {
     const s = await this.d.settings.load();
     if (!s.consented && !consent) throw fail("E_AGENT_CONSENT");
-    await this.d.settings.save({ enabled: true, consented: true });
+    // A primeira vez que o agente liga abre o onboarding (spec #11955). Quem já o tinha ligado antes dele, só pelo
+    // "Refazer o onboarding" em Ajustes.
+    const first = sanitizeAgentOnboarding(s.onboarding).state === "pending";
+    await this.d.settings.save({ enabled: true, consented: true, ...(first ? { onboarding: { state: "open", step: 1 } } : {}) });
     this.emitStatus();
     return this.status();
   }
@@ -1517,8 +1530,13 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
+    // O onboarding (spec #11955): o passo em que a pessoa está, fechar (`done`) e o "Refazer" (`open` no passo 1).
+    if (o.onboarding !== undefined) {
+      const now = sanitizeAgentOnboarding((await this.d.settings.load()).onboarding);
+      patch.onboarding = sanitizeAgentOnboarding({ ...now, ...(o.onboarding && typeof o.onboarding === "object" ? o.onboarding : {}) });
+    }
     // O resumo executivo (spec #11546): os blocos e o período, inteiros e saneados.
     if (o.summary !== undefined) patch.summary = sanitizeSummarySettings(o.summary);
     // "Suas reuniões" (spec #8360): inteiro, saneado; uma pasta fora do cofre volta para a do projeto.

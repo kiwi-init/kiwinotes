@@ -31,6 +31,7 @@ const base: AgentStatus = {
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
   webSearch: false,
+  onboarding: { state: "pending", step: 1 },
   claude: { installed: true, version: "2.1.322", loggedIn: true, method: "claude.ai", versionOk: true },
   adapter: { version: "0.106.0", phase: "missing" },
   program: "closed",

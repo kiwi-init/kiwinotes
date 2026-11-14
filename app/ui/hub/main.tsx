@@ -5,6 +5,7 @@
 import "./hub.css";
 import { DoubtCard } from "./DoubtCard";
 import { KiwiCat } from "./KiwiCat";
+import { Onboarding } from "./onboarding/Onboarding.tsx";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -179,6 +180,8 @@ function Hub() {
       {/* A pergunta na dúvida do guardrail (spec #9873): por cima das seções, em qualquer aba. */}
       <DoubtCard />
       <KiwiCat />
+      {/* O onboarding do agente (spec #11955): por cima de tudo, na primeira vez que o agente liga. */}
+      <Onboarding />
       <div className="kn-hub-main">
         {HUB_SECTIONS.filter((s) => visited.has(s)).map((s) => (
           <section key={s} className="kn-hub-pane" hidden={s !== section} aria-label={LABELS[s]}>

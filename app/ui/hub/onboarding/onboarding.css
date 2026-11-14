@@ -1,0 +1,153 @@
+/* O onboarding do agente (spec #11955): por cima do hub inteiro, o gato grande no topo, um passo por vez no meio e os
+   botões embaixo. Com o Reduzir movimento, sem animação. */
+.kn-onb {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: calc(var(--titlebar, 28px) + var(--space-3)) var(--space-6) var(--space-5);
+  background: var(--bg);
+  color: var(--text);
+  font: var(--t-body, var(--text-md) / 1.45 var(--ui));
+  overflow: auto;
+}
+.kn-onb-top { width: min(560px, 100%); display: flex; align-items: center; gap: var(--space-3); }
+.kn-onb-dots { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.kn-onb-dots li { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); transition: background var(--fast) var(--ease), transform var(--fast) var(--ease); }
+.kn-onb-dots li[data-past="true"] { background: var(--text-3); }
+.kn-onb-dots li[data-on="true"] { background: var(--accent); transform: scale(1.25); }
+.kn-onb-progress { color: var(--text-3); font-size: var(--text-sm); }
+.kn-onb-close {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.kn-onb-close:hover { background: var(--surface-hover); color: var(--text); }
+.kn-onb-close:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.kn-onb-cat { width: 160px; height: 200px; }
+.kn-onb-step { width: min(560px, 100%); display: grid; align-content: start; gap: var(--space-3); animation: kn-onb-in var(--slow, 240ms) var(--ease); }
+.kn-onb-title { margin: 0; font: 600 var(--text-xl) / 1.2 var(--font-display, var(--ui)); letter-spacing: var(--tracking-tight, 0); text-align: center; }
+.kn-onb-title:focus { outline: none; }
+.kn-onb-hint { margin: 0; color: var(--text-2); text-align: center; }
+.kn-onb-soon { margin: var(--space-4) 0 0; color: var(--text-3); text-align: center; font-size: var(--text-sm); }
+.kn-onb-checks { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.kn-onb-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-row, 8px);
+  background: var(--surface);
+}
+.kn-onb-check-text { min-width: 0; }
+.kn-onb-check::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
+.kn-onb-check[data-ok="true"]::before { background: var(--accent); }
+.kn-onb-check-text { flex: 1; }
+.kn-onb-answer {
+  justify-self: center;
+  margin: var(--space-2) 0 0;
+  padding: 8px 12px;
+  border: 2px solid var(--text);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 3px 3px 0 var(--text);
+  max-width: 420px;
+}
+.kn-onb-status { margin: 0; color: var(--text-3); text-align: center; font-size: var(--text-sm); }
+.kn-onb-failure { margin: 0; color: var(--danger); font-size: var(--text-sm); }
+.kn-onb-card {
+  display: grid;
+  gap: 0;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--kn-onb-cor, var(--accent));
+  border-radius: var(--r-card, 12px);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.kn-onb-card-row { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.kn-onb-card-row:last-child { border-bottom: 0; }
+.kn-onb-card dt { color: var(--text-2); }
+.kn-onb-card dd { margin: 0; text-align: right; font-weight: 500; }
+.kn-onb-actions { width: min(560px, 100%); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.kn-onb-actions-end { display: flex; gap: var(--space-2); }
+
+@keyframes kn-onb-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.kn-onb[data-motion="reduced"] .kn-onb-step,
+.kn-onb[data-motion="reduced"] .kn-onb-dots li { animation: none; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .kn-onb-step, .kn-onb-dots li { animation: none; transition: none; }
+}
+
+/* Passo 2: o atalho (a linha de Ajustes) numa caixa, e a frase que segue a fala. */
+.kn-onb-control, .kn-onb-tone, .kn-onb-guard { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
+.kn-onb-row { overflow: hidden; border: 1px solid var(--border); border-radius: var(--r-row, 8px); background: var(--surface); }
+.kn-onb-try { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin: 0; min-height: 32px; font-size: var(--text-md); }
+.kn-onb-try[data-phase="answered"] { color: var(--accent-text, var(--accent)); font-weight: 500; }
+/* Passo 3: as duas escolhas lado a lado, a pergunta e a resposta de exemplo como o balão do gato. */
+.kn-onb-tone-pick { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-3); }
+.kn-onb-ask { justify-self: end; margin: var(--space-2) 0 0; padding: 6px 12px; border-radius: 14px; background: var(--surface-2); color: var(--text-2); font-size: var(--text-sm); }
+.kn-onb-tone .kn-onb-answer { justify-self: start; margin-top: 0; }
+/* Passo 4: o que a pessoa escreve e o que o agente recebe, com o marcador destacado. */
+.kn-onb-label { color: var(--text-2); font-size: var(--text-sm); }
+.kn-onb-guard .kn-input { width: 100%; box-sizing: border-box; }
+.kn-onb-seen {
+  margin: 0;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-row, 8px);
+  background: var(--surface-2);
+  font-family: var(--font-mono, var(--mono));
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.kn-onb-marker { padding: 1px 4px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-text, var(--text)); }
+
+/* Passo 5: o editor do Modelo de Ajustes, como está. */
+.kn-onb-model { margin-top: var(--space-2); }
+/* Passo 6: as pastas, uma caixa por linha. */
+.kn-onb-projects { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
+.kn-onb-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.kn-onb-folder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-row, 8px);
+  background: var(--surface);
+  cursor: pointer;
+}
+.kn-onb-folder:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.kn-onb-folder input { accent-color: var(--accent); }
+.kn-onb-color { margin-top: var(--space-2); }
+
+/* A pergunta na dúvida do guardrail (spec #9873) fica por cima do onboarding: o oi do passo 1 e a fala do passo 2
+   podem precisar dela (revisão do T12002). */
+.kn-hub:has(.kn-onb) .kn-doubt { z-index: 60; }
+
+/* Passo 8: escolher a nota, o aviso do pedido, e o antes e o depois (o [Ver] da Atividade). */
+.kn-onb-magic { display: grid; gap: var(--space-3); margin-top: var(--space-2); }
+.kn-onb-magic-pick { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.kn-onb-magic-pick .kn-select { min-width: 240px; }
+.kn-onb-diff { max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-row, 8px); background: var(--surface); }
+.kn-onb-diff .kn-diff { margin: 0; }

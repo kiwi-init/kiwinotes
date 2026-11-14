@@ -195,6 +195,39 @@ describe("desligado, nada abre nem vai à rede", () => {
   });
 });
 
+describe("o onboarding (spec #11955)", () => {
+  test("ligar pela primeira vez o abre no passo 1; o passo fica guardado; fechar o termina; o Refazer abre de novo", async () => {
+    const data = tmp();
+    const m = make({ data });
+    expect((await m.svc.status()).onboarding).toEqual({ state: "pending", step: 1 });
+    expect((await m.svc.enable(true)).onboarding).toEqual({ state: "open", step: 1 });
+    expect((await m.svc.configure({ onboarding: { step: 4 } })).onboarding).toEqual({ state: "open", step: 4 });
+    // Fechar o app no meio: na volta, o mesmo passo.
+    await m.svc.close();
+    const again = make({ data, reg: m.reg });
+    expect((await again.svc.status()).onboarding).toEqual({ state: "open", step: 4 });
+    expect((await again.svc.configure({ onboarding: { state: "done" } })).onboarding).toEqual({ state: "done", step: 4 });
+    // Desligar e ligar de novo não abre outra vez.
+    await again.svc.disable();
+    expect((await again.svc.enable()).onboarding.state).toBe("done");
+    // O "Refazer o onboarding" em Ajustes: aberto, do passo 1.
+    expect((await again.svc.configure({ onboarding: { state: "open", step: 1 } })).onboarding).toEqual({ state: "open", step: 1 });
+  });
+});
+
+describe("o guardrail na prática (spec #11955, o passo 4)", () => {
+  test("o filtro local troca o segredo pelo marcador, sem o agente ligado, sem abrir nada e sem registro", async () => {
+    const m = make();
+    const r = await m.svc.guardPreview("a senha do servidor é abc123");
+    expect(r.held).toBe(1);
+    expect(r.text).toMatch(/^a senha do servidor é ‹segredo 1 · [a-z0-9]{4}›$/);
+    expect((await m.svc.guardPreview("bom dia")).text).toBe("bom dia");
+    expect(m.pid()).toBeNull();
+    expect(m.reg.requests).toEqual([]);
+    expect(await m.svc.activityLog()).toEqual([]);
+  });
+});
+
 describe("o app lembra entre uma abertura e outra", () => {
   test("ligado, o aceite, o modelo e o esforço ficam nos ajustes; o adaptador baixado é achado no disco", async () => {
     const data = tmp();
