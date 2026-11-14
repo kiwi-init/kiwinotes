@@ -32,10 +32,26 @@ export interface FixedPrefixInput {
  * instruções do econômico, para o cache pegar tudo antes dele (revisão do T11667).
  */
 export function fixedPrefix(o: FixedPrefixInput): string {
-  return (
+  const p = prefixParts(o);
+  return p.stable + p.perRequest;
+}
+
+/**
+ * O começo fixo em duas partes (spec #13379): `stable`, o que é igual entre os pedidos com os mesmos ajustes, e
+ * `perRequest`, o glossário só com os termos do pedido (no modo econômico; fora dele, vazio). A sessão do agente é
+ * retomada entre um pedido e outro, então o `stable` só precisa ir quando muda: cada cópia dele ficava no histórico.
+ */
+export function prefixParts(o: FixedPrefixInput): { stable: string; perRequest: string } {
+  const stable =
     (o.model ? noteModelText(o.model) : "") +
     memoryText(o.facts) +
     instructionsText(o.instructions) +
-    (o.economy ? ECONOMY_INSTRUCTIONS + glossaryText(o.terms, o.request) : glossaryText(o.terms))
-  );
+    (o.economy ? ECONOMY_INSTRUCTIONS : glossaryText(o.terms));
+  return { stable, perRequest: o.economy ? glossaryText(o.terms, o.request) : "" };
 }
+
+/**
+ * De quantos em quantos pedidos na mesma sessão o começo fixo vai de novo, mesmo sem mudar (spec #13379): o agente
+ * resume a conversa quando ela fica longa, e o começo fixo pode sair do resumo.
+ */
+export const PREFIX_RESEND_EVERY = 8;

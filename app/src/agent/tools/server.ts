@@ -84,6 +84,22 @@ export interface KiwiMcpServerConfig {
 
 type JsonRpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
 
+/**
+ * O esquema como vai ao agente (spec #13379): sem o que o código das ferramentas já confere e recusa com a mensagem
+ * certa (`additionalProperties: false`, `minItems`, `maxItems`). Cada esquema vai em toda chamada ao modelo, então cada
+ * palavra conta; os tamanhos dos textos (`maxLength`) ficam, porque guiam o agente antes de errar.
+ */
+export function servedSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(servedSchema);
+  if (!schema || typeof schema !== "object") return schema;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === "minItems" || k === "maxItems" || (k === "additionalProperties" && v === false)) continue;
+    out[k] = k === "properties" && v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([n, x]) => [n, servedSchema(x)])) : servedSchema(v);
+  }
+  return out;
+}
+
 export class KiwiToolServer {
   private server: ReturnType<typeof Bun.serve> | null = null;
   private token = "";
@@ -182,6 +198,7 @@ export class KiwiToolServer {
         return ok({
           tools: kiwiTools(this.writes, !!this.o.proposals, !!this.o.memory).map(({ writes, replaces, proposes: _p, memory: _m, ...t }) => ({
             ...t,
+            inputSchema: servedSchema(t.inputSchema),
             annotations: {
               title: t.title,
               readOnlyHint: !writes,

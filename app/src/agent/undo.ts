@@ -30,19 +30,22 @@ export interface UndoNotes {
 }
 
 /** As únicas capacidades que o desfazer chama. */
-export const UNDO_CAPABILITIES = ["notes.folder", "notes.get", "notes.save", "notes.delete", "files.read", "files.delete"] as const;
+export const UNDO_CAPABILITIES = ["notes.folder", "notes.get", "notes.save", "notes.delete", "files.read", "files.save", "files.delete"] as const;
 type UndoCapability = (typeof UNDO_CAPABILITIES)[number];
 
 const codeOf = (e: unknown) => (e as { code?: string })?.code;
 const isNote = (path: string) => /\.md$/i.test(path);
+/** O `.txt` que o agente mudou (spec #13379): volta como texto, pelo `files.save`. */
+const isText = (path: string) => /\.txt$/i.test(path);
 const withFolder = (args: Record<string, unknown>, folderId?: string) => (folderId ? { ...args, folderId } : args);
 
 /** A pasta trocou entre a conferência e a chamada: o `folderCapabilities` recusa o id velho. */
 export class OtherFolder extends Error {}
 
 /**
- * O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as seis acima. Um arquivo que não é nota (o que
- * o agente gerou, spec #11549) é lido pelo `files.read` (só a versão) e vai para a Lixeira pelo `files.delete`.
+ * O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as sete acima. Um arquivo que não é nota (o que
+ * o agente gerou, spec #11549) é lido pelo `files.read` (só a versão) e vai para a Lixeira pelo `files.delete`. Um `.txt`
+ * que o agente mudou (spec #13379) é lido como texto e volta pelo `files.save`.
  */
 export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: unknown) => unknown>): UndoNotes {
   const call = async <T>(cap: UndoCapability, args: unknown): Promise<T> => {
@@ -65,6 +68,10 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
     },
     get: async (path, folderId) => {
       try {
+        if (isText(path)) {
+          const f = await call<{ version?: string; text?: string }>("files.read", withFolder({ path, as: "text" }, folderId));
+          return { content: f.text ?? "", version: f.version ?? "" };
+        }
         if (!isNote(path)) {
           const f = await call<{ version?: string }>("files.read", withFolder({ path, as: "binary" }, folderId));
           // Um arquivo grande demais para ler volta sem versão: não dá para conferir, então não é o do agente.
@@ -79,6 +86,7 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
     },
     save: async (path, content, baseVersion, folderId) => {
       try {
+        if (isText(path)) return (await call<{ saved: boolean }>("files.save", withFolder({ path, content, baseVersion }, folderId))).saved === true;
         const r = await call<{ saved: boolean }>("notes.save", withFolder({ path, content, baseVersion, snapshot: true }, folderId));
         return r.saved === true;
       } catch (e) {
