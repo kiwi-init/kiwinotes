@@ -10,7 +10,7 @@
 // (a do tempo e a do pior quadro de cada uma): a máquina é dividida com outros agentes, e uma amostra solta de um
 // WebKit frio não é o app. O pior de todos sai no relatório.
 //
-//   bun scripts/speed-check.ts [--folders N] [--notes N] [--runs N] [--no-limits]
+//   bun scripts/speed-check.ts [--folders N] [--notes N] [--junk N] [--load N] [--runs N] [--no-limits]
 //
 // `--no-limits` só mede (os números de antes). Sai com exit 1 se alguma meta não bateu.
 import assert from "node:assert/strict";
@@ -31,6 +31,12 @@ const NOTES = arg("notes", 10000);
 const RUNS = arg("runs", 5);
 /** Arquivos que não são nota dentro do cofre (um `node_modules` e um `.git` de projeto), como uma pasta pessoal de verdade. */
 const JUNK = arg("junk", 0);
+/**
+ * `--load N`: mede de novo o dropdown e a caixa do onboarding enquanto outro processo escreve N entradas no cofre (um
+ * terço num `node_modules`, um terço num `.git`, um terço em `src/`), como um projeto de código clonado ou copiado para
+ * dentro dele: o watcher e o índice do Bun trabalham no mesmo processo que responde à tela.
+ */
+const LOAD = arg("load", 0);
 const LIMITS = !process.argv.includes("--no-limits");
 /** As metas do spec #12918, em ms. */
 export const GOALS = { tab: 100, folder: 100, dropdown: 150, frame: 100 } as const;
@@ -66,6 +72,21 @@ function bigVault(root: string) {
     writeFileSync(join(root, rel), "x");
   }
 }
+
+/** O processo que enche o cofre no `--load`: escreve as entradas o mais rápido que dá, fora do processo do app. */
+const WRITER = `
+const { mkdirSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+const [root, n] = [process.argv[process.argv.length - 2], Number(process.argv[process.argv.length - 1])];
+const made = new Set();
+for (let i = 0; i < n; i++) {
+  const rel = [\`Zona/clone/node_modules/pkg-\${Math.floor(i / 40)}/lib/m\${i}.js\`, \`Zona/clone/.git/objects/\${(i % 256).toString(16).padStart(2, "0")}/o\${i}\`, \`Zona/clone/src/m\${Math.floor(i / 50)}/f\${i}.ts\`][i % 3];
+  const abs = join(root, rel);
+  const dir = join(abs, "..");
+  if (!made.has(dir)) { mkdirSync(dir, { recursive: true }); made.add(dir); }
+  writeFileSync(abs, "x");
+}
+`;
 
 async function cli(args: string[]) {
   const p = Bun.spawn([process.execPath, join(app, "scripts/cli.ts"), ...args, "--data", data], {
@@ -112,7 +133,7 @@ type Sample = { ms: number; frame: number };
 /** O que a página faz: um clique num elemento, ou abrir um `<select>` (mousedown e foco). */
 type Act = { click: string; index?: number } | { open: string };
 /** Quando o resultado está na tela: um painel do hub visível (e, nas Configurações, com o assunto montado), uma caixa marcada, ou o quadro seguinte. */
-type Done = { pane: string } | { checked: string; index: number } | { frame: true };
+type Done = { pane: string } | { checked: string; index: number } | { settled: string; index: number } | { frame: true };
 /**
  * Uma ação medida na página. O tempo vai do clique ao primeiro quadro com o resultado; `frame` é o maior intervalo
  * entre quadros nesse meio (e mais 300 ms depois, para pegar o que roda logo em seguida). A CSP do hub não deixa
@@ -126,6 +147,10 @@ async function measure(p: Page, act: Act, done: Done): Promise<Sample> {
       const ready = (): boolean => {
         if ("frame" in done) return true;
         if ("checked" in done) return !!(nth(done.checked, done.index) as HTMLInputElement | undefined)?.checked;
+        if ("settled" in done) {
+          const box = nth(done.settled, done.index) as HTMLInputElement | undefined;
+          return !!box?.checked && !box.disabled;
+        }
         const el = document.querySelector<HTMLElement>(`.kn-hub-pane[data-section="${done.pane}"]`);
         if (!el || el.hidden || el.getBoundingClientRect().height === 0) return false;
         return done.pane !== "settings" || !!el.querySelector(".kn-prefs-topic:not([hidden]) .kn-section");
@@ -158,11 +183,12 @@ async function measure(p: Page, act: Act, done: Done): Promise<Sample> {
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
 const results: { name: string; goal: number; samples: Sample[] }[] = [];
+/** `goal` 0: só informa (não tem meta no spec), não falha. */
 function record(name: string, goal: number, samples: Sample[]) {
-  results.push({ name, goal, samples });
+  if (goal > 0) results.push({ name, goal, samples });
   const ms = samples.map((s) => s.ms);
   const fr = samples.map((s) => s.frame);
-  console.log(`${name}: mediana ${median(ms).toFixed(0)} ms, pior ${Math.max(...ms).toFixed(0)} ms (meta ${goal}); quadro mais longo: mediana ${median(fr).toFixed(0)} ms, pior ${Math.max(...fr).toFixed(0)} ms`);
+  console.log(`${name}: mediana ${median(ms).toFixed(0)} ms, pior ${Math.max(...ms).toFixed(0)} ms (${goal > 0 ? `meta ${goal}` : "sem meta"}); quadro mais longo: mediana ${median(fr).toFixed(0)} ms, pior ${Math.max(...fr).toFixed(0)} ms`);
 }
 
 const browser = await webkit.launch({ headless: true });
@@ -252,6 +278,69 @@ try {
     failed ||= w.report.problems.length > 0;
     if (w.report.problems.length) console.log("problemas:", w.report.problems);
     await w.close();
+  }
+
+  // 4. Com o cofre enchendo (`--load`): o dropdown, a caixa e o Bun respondendo, enquanto o watcher e o índice trabalham.
+  if (LOAD > 0) {
+    const writer = Bun.spawn([process.execPath, "-e", WRITER, join(data, "vault"), String(LOAD)], { stdout: "ignore", stderr: "inherit" });
+    const pings: number[] = [];
+    let pinging = true;
+    const pinger = (async () => {
+      while (pinging) {
+        const t = performance.now();
+        await invoke("notes.folders");
+        pings.push(performance.now() - t);
+        await Bun.sleep(100);
+      }
+    })();
+    await Bun.sleep(1500);
+    const tag = `com ${LOAD} entradas chegando no cofre`;
+    {
+      await invoke("agent.configure", { onboarding: { state: "done" } });
+      const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 800, motion: true, browser: "webkit", query: { section: "settings", topic: "agent" } }, 60000);
+      const p = w.page;
+      const sel = `.kn-routine-card[data-routine=daily] select[aria-label$="a pasta"]`;
+      await p.waitForSelector(sel, { timeout: 60000 });
+      await frameMonitor(p);
+      const drop: Sample[] = [];
+      for (let i = 0; i < RUNS; i++) {
+        drop.push(await measure(p, { open: sel }, { frame: true }));
+        await p.evaluate((s) => (document.querySelector(s) as HTMLSelectElement).blur(), sel);
+      }
+      record(`3L. O dropdown da pasta das Rotinas, ${tag}`, GOALS.dropdown, drop);
+      await w.close();
+    }
+    {
+      await invoke("agent.configure", { onboarding: { state: "open", step: 6 } });
+      const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme: "light", width: 1100, height: 800, motion: true, browser: "webkit", query: { section: "dictation" } }, 60000);
+      const p = w.page;
+      const box = ".kn-onb-folders input[type=checkbox]";
+      await p.waitForSelector(box, { timeout: 60000 });
+      await frameMonitor(p);
+      const clicks: Sample[] = [];
+      const confirmed: Sample[] = [];
+      // Pastas que a seção 2 não marcou (a "Zona" do clone vai para o fim da lista, que fica na mesma ordem).
+      for (let i = RUNS; i < 2 * RUNS; i++) {
+        clicks.push(await measure(p, { click: box, index: i }, { checked: box, index: i }));
+        confirmed.push(await measure(p, { click: box, index: i + RUNS }, { settled: box, index: i + RUNS }));
+      }
+      record(`2L. Marcar uma pasta no onboarding, ${tag}`, GOALS.folder, clicks);
+      record(`2L'. Marcar e o Kiwi confirmar (a nota principal criada), ${tag}`, 0, confirmed);
+      await w.close();
+    }
+    const during = writer.exitCode === null;
+    // O watcher viu a escrita: os arquivos de `src/` do clone já estão no índice.
+    const seen = ((await invoke("notes.list")).files as { path: string }[] | undefined)?.filter((f) => f.path.startsWith("Zona/")).length ?? 0;
+    pinging = false;
+    await pinger;
+    writer.kill();
+    await writer.exited;
+    const sorted = [...pings].sort((a, b) => a - b);
+    console.log(
+      `o Bun, ${tag}: ${pings.length} chamadas, mediana ${median(pings).toFixed(0)} ms, p95 ${sorted[Math.floor(sorted.length * 0.95)]!.toFixed(0)} ms, pior ${Math.max(...pings).toFixed(0)} ms` +
+        (during ? "; a escrita ainda rodava no fim" : "; a escrita ACABOU antes do fim das medidas") +
+        `; o índice já tinha ${seen} arquivos do clone`,
+    );
   }
 
   for (const r of results) {
