@@ -1,3 +1,4 @@
+import { EarGestures, type EarPose } from "./ears";
 // T8959: elapsed-time gesture machine. No DOM, microphone or host actions.
 import { clamp, smooth, voiceEnvelope, voiceLevel, type FogInputs, type FogState } from "./state";
 export interface EyePose {
@@ -5,7 +6,7 @@ export interface EyePose {
   opening: number; blink: number; happy: number; asleep: number;
 }
 export interface CatFrame {
-  state: FogState; eyes: EyePose; time: number; stateTime: number;
+  state: FogState; eyes: EyePose; ears: EarPose; time: number; stateTime: number;
   symbol: FogState | null; symbolAlpha: number; symbolScale: number;
   symbolY: number; progress: number; jitter: [number, number];
   waves: number[]; dots: number[]; work: number; workOffsets: number[];
@@ -16,6 +17,8 @@ export interface GestureEvent { kind: string; at: number; values: number[] }
 export interface GestureOptions {
   clock: () => number;
   random: () => number;
+  /** Independent stream: adding ears must not consume the approved eye RNG. */
+  earRandom?: () => number;
   /** One value per inactivity episode; defaults to uniform 240..360 seconds. */
   sleepSeconds?: () => number;
   onEvent?: (event: GestureEvent) => void;
@@ -67,11 +70,18 @@ export class GestureMachine {
   private waveTo = waveMask(0);
   private waveAt = 0;
   private jitterPhase: number;
+  private readonly ears: EarGestures;
+  private lastLookEnd = -Infinity;
   constructor(inputs: Partial<FogInputs>, private readonly options: GestureOptions) {
     this.inputs = { estado: "repouso", voz: null, cor: "padrao", parado: false, ...inputs };
     this.visualState = this.requested = this.inputs.estado;
     this.now = this.entered = options.clock();
     this.origin = neutral();
+    this.ears = new EarGestures(this.visualState, this.now, {
+      random: options.earRandom ?? seededRandom(301), onEvent: options.onEvent,
+      blockedUntil: state => Math.max(this.look ? this.lookEnd() : -Infinity, this.lastLookEnd) + (state === "repouso" ? .6 : 0),
+    });
+    this.ears.setReduced(this.inputs.parado, this.now);
     this.jitterPhase = this.range(0, Math.PI * 2);
     this.enter(this.visualState, this.now, true);
     this.setVoice(this.now);
@@ -99,6 +109,8 @@ export class GestureMachine {
     const from = this.visualState;
     this.origin = initial ? neutral() : old.eyes;
     this.previousFrame = initial ? null : old;
+    if (!initial) this.ears.setState(state, at);
+    this.lastLookEnd = -Infinity;
     this.visualState = state; this.entered = at;
     this.transitionAt = at; this.resumed = null; this.doublePending = false;
     this.readyAt = state === "pronto" ? at + 1.1 : Infinity;
@@ -149,7 +161,7 @@ export class GestureMachine {
     if (this.inputs.parado) return Math.min(this.pending?.at ?? Infinity, this.sleepAt, this.readyAt);
     return Math.min(this.pending?.at ?? Infinity, this.sleepAt, this.nextBlink, this.nextLook,
       this.blinkEnd(), this.lookEnd(), this.nextCycle, this.nextDot, this.nextWave(),
-      this.readyAt);
+      this.readyAt, this.ears.nextBoundary);
   }
   nextWake() {
     const phases: number[] = [];
@@ -162,12 +174,12 @@ export class GestureMachine {
       }
       phases.push(l.freezeAt, l.freezeAt + l.freezeFor);
     }
-    return Math.min(this.nextBoundary(), ...phases.filter(at => at > this.now + 1e-8),
+    return Math.min(this.nextBoundary(), this.ears.nextWake(this.now), ...phases.filter(at => at > this.now + 1e-8),
       this.transitionAt + this.transition > this.now ? this.transitionAt + this.transition : Infinity,
       this.resumed && this.resumed.at + .24 > this.now ? this.resumed.at + .24 : Infinity);
   }
   get moving() {
-    return !this.inputs.parado && (this.visualState !== "repouso" || !!this.blink || !!this.look ||
+    return !this.inputs.parado && (this.visualState !== "repouso" || !!this.blink || !!this.look || this.ears.moving(this.now) ||
       this.now < this.transitionAt + this.transition || !!this.resumed && this.now < this.resumed.at + .24);
   }
   private startBlink(t: number, second: boolean) {
@@ -203,10 +215,11 @@ export class GestureMachine {
         } else if (due === this.nextBlink) {
           this.startBlink(due, this.doublePending); this.doublePending = false;
         } else if (due === this.lookEnd()) {
-          this.look = null;
+          this.look = null; this.lastLookEnd = due;
           this.nextLook = due + (this.visualState === "thinking" ? this.range(1.5, 3.5) : this.range(6, 14));
         } else if (due === this.nextLook) {
-          if (this.blink && due < this.blink.at + this.blink.close + this.blink.hold) this.nextLook = this.blinkEnd();
+          if (due < this.ears.blockingUntil() - 1e-8) this.nextLook = this.ears.blockingUntil();
+          else if (this.blink && due < this.blink.at + this.blink.close + this.blink.hold) this.nextLook = this.blinkEnd();
           else {
             const thinking = this.visualState === "thinking";
             this.lookSide = thinking ? -this.lookSide : this.range(0, 1) < .5 ? -1 : 1;
@@ -223,6 +236,8 @@ export class GestureMachine {
           this.event("ciclo_" + this.visualState, due, this.cycleSeconds);
         } else if (due === this.nextDot) {
           this.dotIndex = (this.dotIndex + 1) % 3; this.dotAt = due; this.nextDot = due + this.range(.32, .46);
+        } else if (due === this.ears.nextBoundary) {
+          this.ears.advance(due);
         } else {
           this.waveFrom = this.waveValues(due);
           this.waveBand += this.voiceTarget > this.voice(due - 1e-8) ? 1 : -1;
@@ -233,7 +248,7 @@ export class GestureMachine {
         }
       }
     }
-    this.now = end;
+    this.ears.advance(end); this.now = end;
     return this.project(end);
   }
   private doublePending = false;
@@ -263,6 +278,7 @@ export class GestureMachine {
       if (previousState !== this.visualState || !wasCapture || typeof this.inputs.voz !== "number") this.setVoice(this.now, true);
     }
     if (wasReduced !== this.inputs.parado) {
+      this.ears.setReduced(this.inputs.parado, this.now);
       if (this.inputs.parado && this.pending) {
         this.enter(this.pending.state, this.now); this.setVoice(this.now, true);
       }
@@ -288,6 +304,7 @@ export class GestureMachine {
   }
   /** Visibility resume discards old gestures instead of replaying a backlog. */
   resume(t = this.options.clock()) {
+    this.ears.resume(t); this.lastLookEnd = -Infinity;
     this.now = t; this.blink = this.look = null; this.doublePending = false;
     this.arm(t + .24);
     if (this.visualState === "repouso") this.resetSleep(t);
@@ -367,7 +384,7 @@ export class GestureMachine {
       if (state === "erro") progress = previous.progress;
       for (let i = 0; i < dots.length; i++) dots[i] = mix(previous.dots[i]!, dots[i]!, u);
     }
-    return { state, eyes: pose, time: t, stateTime: age, symbol, symbolAlpha: clamp(alpha), symbolScale: scale,
+    return { state, eyes: pose, ears: this.ears?.project(t) ?? [0, 0], time: t, stateTime: age, symbol, symbolAlpha: clamp(alpha), symbolScale: scale,
       symbolY: y, progress, waves, dots: fading ? [...fading.dots] : dots, work: fading ? fading.work : cycle,
       workOffsets: fixed ? [0, 0, 0] : fading ? [...fading.workOffsets] : this.workOffsets.map(v => v * (this.resumed ? smooth((t - this.resumed.at) / .24) : 1)),
       jitter: fixed ? [0, 0] : fading ? [...fading.jitter] : [2 * Math.sin(t * 19 + this.jitterPhase), 2 * Math.sin(t * 23 + this.jitterPhase + 1.1)].map(v => v * (this.resumed ? smooth((t - this.resumed.at) / .24) : 1)) as [number, number] };

@@ -28,6 +28,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
     reduced: requestedReduced || media.matches, activeIntervals: [] };
   const machine = new GestureMachine({ ...options.inputs, parado: stats.reduced }, {
     clock: () => elapsed, random: options.random ?? seededRandom((options.seed ?? 17) + 101),
+    earRandom: seededRandom((options.seed ?? 17) + 301),
     sleepSeconds: options.sleepSeconds,
   });
   const fogRoot = document.createElement("div"); root.replaceChildren(fogRoot);
