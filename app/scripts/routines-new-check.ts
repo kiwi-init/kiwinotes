@@ -80,9 +80,30 @@ async function shot(p: Page, sel: string, file: string, caption: string) {
   await p.locator(sel).first().screenshot({ path: join(out, file) });
   shots.push({ file, caption });
 }
-/** O recorte do canto do gato: o balão e o gato juntos. */
+/**
+ * O balão parado: nenhum saindo (a troca entre os balões acabou), o de `sel` inteiro na tela, e assim por 600 ms. Sem
+ * isso, o print pega a passagem, com o texto de trás atravessando o balão (revisão do lead, #13102).
+ */
+async function settled(p: Page, sel: string) {
+  const still = () =>
+    p.evaluate((s) => {
+      const el = document.querySelector(s);
+      const slot = el?.closest(".kn-bubble-slot");
+      const exiting = document.querySelector('.kn-bubble-slot[data-phase="exit"]');
+      return !!slot && !exiting && slot.getAttribute("data-phase") !== "exit" && Number(getComputedStyle(slot).opacity) > 0.99;
+    }, sel);
+  for (let n = 0, since = 0; ; n++) {
+    assert.ok(n < 200, `${sel} não parou`);
+    if (await still()) {
+      if (since && Date.now() - since >= 600) return;
+      since ||= Date.now();
+    } else since = 0;
+    await Bun.sleep(50);
+  }
+}
+/** O recorte do canto do gato: o balão e o gato juntos, com o balão parado. */
 async function cornerShot(p: Page, sel: string, file: string, caption: string) {
-  await Bun.sleep(300);
+  await settled(p, sel);
   const b = await p.locator(sel).first().boundingBox();
   const c = await p.locator(".kn-kiwicat").boundingBox();
   assert.ok(b && c, `${sel} e o gato na tela`);
@@ -187,12 +208,12 @@ try {
   const proposal = (await invoke("agent.proposals")).proposals.find((x: any) => x.kind === "routine")!;
   assert.equal(proposal.status, "applied");
   // [Criar] direto no balão.
-  await invoke("agent.ask", { text: "dias úteis às 9h, me manda os e-mails para responder" });
+  await invoke("agent.ask", { text: "dias úteis às 9h, faz a lista das ações em aberto das reuniões" });
   await p.waitForSelector(".kn-proposal-bubble button:has-text('Criar')", { timeout: 60000 });
   await idle();
   await p.locator(".kn-proposal-bubble button:has-text('Criar')").click();
   await p.waitForFunction(() => document.querySelector(".kn-proposal-bubble .kn-proposal-line")?.textContent?.startsWith("Pronto: a rotina"), undefined, { timeout: 10000 });
-  assert.ok((await custom()).some((r) => r.name === "Os e-mails para responder" && r.on === false));
+  assert.ok((await custom()).some((r) => r.name === "A lista das ações em aberto das reuniões" && r.on === false));
   report.checks.push("asking the agent shows the proposal in the cat's bubble with [Criar] [Ajustar] [Descartar]; [Criar] creates it off; [Ajustar] opens the same card in Settings, filled, and creates it with the changes");
   report.problems.push(...h.report.problems);
   await h.close();
