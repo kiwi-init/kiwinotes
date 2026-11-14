@@ -15,6 +15,11 @@ import type { DoubtAnswer, DoubtAnswers } from "./answers.ts";
 
 /** O prazo da pergunta. */
 export const DOUBT_TIMEOUT_MS = 120_000;
+/**
+ * Uma confirmação da pessoa no mesmo cartão (spec #11102: "Organizar 12 notas em Projetos/?"). Ao contrário da dúvida,
+ * a resposta vale só para aquele pedido: nunca é guardada, nunca vira pendência, e sem resposta no prazo é "não".
+ */
+export const CONFIRM_KIND = "confirm";
 
 export interface DoubtItem {
   fingerprint: string;
@@ -117,6 +122,17 @@ export class DoubtQuestions {
     return done;
   }
 
+  /**
+   * Pergunta "sim ou não" à pessoa no cartão do pedido (`kind: "confirm"`, a pergunta em `value`) e espera. Cada
+   * confirmação tem uma impressão própria e nova: nenhuma resposta antiga vale para ela. O prazo, o pedido cancelado ou
+   * o agente que desistiu contam como "não".
+   */
+  async confirm(request: string, question: string, signal?: AbortSignal): Promise<boolean> {
+    const fingerprint = `confirm:${randomUUID()}`;
+    const item: DoubtItem = { fingerprint, value: question, context: "", mask: "", kind: CONFIRM_KIND, path: "", line: 0 };
+    return (await this.ask(request, [item], signal)).has(fingerprint);
+  }
+
   /** O que já pode ir como texto, das impressões `fps`. */
   private sendable(c: Card, fps: string[]): Set<string> {
     return new Set(fps.filter((fp) => c.items.get(fp)?.answer === "send"));
@@ -139,7 +155,8 @@ export class DoubtQuestions {
     clearTimeout(c.timer);
     for (const w of c.waiters) w.resolve(this.sendable(c, w.fingerprints));
     c.waiters.clear();
-    const open = [...c.items.values()].filter((i) => !i.answer);
+    // Uma confirmação sem resposta é só um "não": não vira pendência.
+    const open = [...c.items.values()].filter((i) => !i.answer && i.kind !== CONFIRM_KIND);
     if (pending && open.length) this.o.onPending?.(c.request, open.map(({ value: _v, context: _c, answer: _a, ...rest }) => rest));
     c.items.clear();
     this.o.onChange?.({ card: c.id, request: c.request, open: false });
@@ -156,7 +173,8 @@ export class DoubtQuestions {
     const item = c?.items.get(fingerprint);
     if (!c || !item) return false;
     item.answer = answer;
-    this.o.answers.set(fingerprint, answer, item.mask, item.kind);
+    // A confirmação nunca é lembrada: um "Organizar" não confirma a mesma pasta num próximo pedido.
+    if (item.kind !== CONFIRM_KIND) this.o.answers.set(fingerprint, answer, item.mask, item.kind);
     this.o.onChange?.({ card: c.id, request: c.request, open: true });
     this.settle(c);
     return true;
@@ -169,7 +187,7 @@ export class DoubtQuestions {
     for (const i of c.items.values()) {
       if (i.answer) continue;
       i.answer = "hold";
-      this.o.answers.set(i.fingerprint, "hold", i.mask, i.kind);
+      if (i.kind !== CONFIRM_KIND) this.o.answers.set(i.fingerprint, "hold", i.mask, i.kind);
     }
     this.settle(c);
     return true;

@@ -41,6 +41,7 @@ import { adapterRoot, agentDir } from "./adapter/open.ts";
 import type { AgentChangeView, AgentClaudeStatus, AgentModelChoice, AgentStatus, AgentTurnEvent, AgentUndoResult, AgentUsageView } from "../shared/ui-contract.ts";
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
+import { type NoteModel, noteModelText } from "./note-model.ts";
 import type { AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
@@ -217,6 +218,15 @@ export class AgentService {
    * O leitor do cofre que as ferramentas do Kiwi usam (as capacidades de leitura das janelas). Vale a partir da próxima
    * abertura do programa do agente.
    */
+  /**
+   * O Modelo de nota do cofre aberto (spec #11102): vai no começo fixo de todo pedido, antes das instruções do modo
+   * econômico, com os mesmos bytes para o mesmo modelo (o cache do agente).
+   */
+  useNoteModel(source: () => Promise<NoteModel>): void {
+    this.noteModel = source;
+  }
+  private noteModel: (() => Promise<NoteModel>) | null = null;
+
   useReader(reader: VaultReader): void {
     this.reader = reader;
   }
@@ -692,8 +702,11 @@ export class AgentService {
         this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: "" });
         return;
       }
-      // O modo econômico (spec #11084): as instruções fixas vão na frente do pedido, sempre iguais (o cache).
-      const answer = await host.ask(s.economy ? ECONOMY_INSTRUCTIONS + text : text, (e) => {
+      // As instruções fixas vão na frente do pedido, sempre iguais (o cache): o Modelo de nota (spec #11102) e o modo
+      // econômico (spec #11084). Um erro ao ler o modelo não derruba o pedido: ele vai sem o modelo.
+      const model = this.noteModel ? await this.noteModel().catch(() => null) : null;
+      const fixed = (model ? noteModelText(model) : "") + (s.economy ? ECONOMY_INSTRUCTIONS : "");
+      const answer = await host.ask(fixed + text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
         if (e.type === "limit") {

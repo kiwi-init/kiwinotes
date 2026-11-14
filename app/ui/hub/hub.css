@@ -393,3 +393,5 @@
 }
 /* O gato está no overlay, por cima dos outros apps (spec #9810): o do canto some. */
 .kn-kiwicat[data-away="true"] { visibility: hidden; }
+/* A confirmação no cartão da dúvida (spec #11102): a pergunta em destaque. */
+.kn-confirm-question { margin: 0; font-weight: 600; }

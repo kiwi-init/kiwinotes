@@ -24,6 +24,7 @@ import {
 } from "./agentText.ts";
 import { NoticeRow } from "./NoticeRow.tsx";
 import { ControlRow } from "./ControlRow.tsx";
+import { NoteModelRow } from "./NoteModel.tsx";
 import "./agent.css";
 import { CatRow, OverlayCatRow } from "./CatRow";
 
@@ -234,6 +235,9 @@ export function AgentSection() {
           ) : null}
         </div>
       ) : null}
+
+      {/* O Modelo de nota (spec #11102): depois do teste; na primeira vez, aberto e com "Pular". */}
+      {ready && has("agent.noteModel") ? <NoteModelRow /> : null}
 
       {failure ? <Row label="Não deu certo" hint={failure} /> : null}
     </Section>

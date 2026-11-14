@@ -158,6 +158,9 @@ export const api = {
     usage: () => invoke("agent.usage", {}),
     usageRefresh: () => invoke("agent.usageRefresh", {}),
     usageClear: () => invoke("agent.usageClear", {}),
+    /** O Modelo de nota (1.56.0, spec #11102). */
+    noteModel: () => invoke("agent.noteModel", {}),
+    noteModelSet: (model: UiCapabilities["agent.noteModelSet"]["args"]["model"]) => invoke("agent.noteModelSet", { model }),
     onUsage: (fn: (e: UiEvents["agent.usageChanged"]) => void) => on("agent.usageChanged", fn),
   },
   /** O hub (T2121): a seção pedida antes de ele abrir, e as que chegam com ele aberto. */

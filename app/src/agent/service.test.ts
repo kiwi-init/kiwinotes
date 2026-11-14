@@ -13,6 +13,7 @@ import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS } from "./service.ts";
+import { DEFAULT_NOTE_MODEL, noteModelText, sanitizeNoteModel } from "./note-model.ts";
 import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import { AgentActivity } from "./activity.ts";
@@ -648,7 +649,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write, notes_organize_folder",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
@@ -912,6 +913,87 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(m.turns.length).toBe(before);
     expect(await m.svc.activityLog()).toEqual([]);
     expect(v.week.requests).toBe(0);
+  });
+
+  test("com o agente falso, uma nota criada segue a ordem e os blocos do modelo, e organizar uma nota passa pelo [Desfazer] (spec #11102)", async () => {
+    const notes: Record<string, string> = { "Ideias.md": "# Ideias\n\nGatos dormem muito.\nO Kiwi anota.\n" };
+    // O leitor com a versão, como o de verdade: o notes_write pede a versão que o notes_read devolveu.
+    const base = memoryReader(notes);
+    const reader: VaultReader = { ...base, get: async (p) => ({ ...(await base.get(p)), version: versionOf(notes[p]!) }) };
+    const m = make({ reader, writer: memoryWriter(notes) });
+    await readyNow(m);
+    // O modelo da pessoa: a introdução antes do título, sem o sumário nem as propriedades, e o corpo em tópicos.
+    m.svc.useNoteModel(async () =>
+      sanitizeNoteModel({
+        blocks: [
+          { block: "introducao", on: true },
+          { block: "titulo", on: true },
+          { block: "corpo", on: true },
+          { block: "fechamento", on: true },
+          { block: "sumario", on: false },
+          { block: "propriedades", on: false },
+        ],
+        body: "topicos",
+      }),
+    );
+    await askAndWait(m, "/nota-modelo Viagem");
+    const created = Object.keys(notes).find((p) => p.includes("Viagem"))!;
+    const text = notes[created]!;
+    const at = (s: string) => text.indexOf(s);
+    expect(at("Esta nota resume")).toBeLessThan(at("# Viagem"));
+    expect(at("# Viagem")).toBeLessThan(at("## Assunto"));
+    expect(at("## Assunto")).toBeLessThan(at("## Próximos passos"));
+    expect(text).not.toContain("## Sumário");
+    expect(text).not.toContain("tags:");
+    expect(text).toContain("- Primeira parte do assunto.");
+    // Organizar uma nota que já existe: no modelo, sem perder o conteúdo, e com o [Desfazer] no registro.
+    const org = (await askAndWait(m, "/organiza Ideias.md")).at(-1) as { text: string };
+    expect(org.text).toBe("Organizei Ideias.md no Modelo de nota.");
+    expect(notes["Ideias.md"]).toContain("- Gatos dormem muito.");
+    expect(notes["Ideias.md"]).toContain("- O Kiwi anota.");
+    expect(notes["Ideias.md"]!.indexOf("Esta nota resume")).toBeLessThan(notes["Ideias.md"]!.indexOf("# Ideias"));
+    const [r] = await m.svc.activityLog();
+    expect(r!.changes.map((c) => c.path)).toContain("Ideias.md");
+    const undoNotes: UndoNotes = {
+      folder: async () => null,
+      get: async (p) => (notes[p] === undefined ? null : { content: notes[p]!, version: versionOf(notes[p]!) }),
+      save: async (p, content, base) => {
+        if (notes[p] === undefined || versionOf(notes[p]!) !== base) return false;
+        notes[p] = content;
+        return true;
+      },
+      trash: async () => "gone",
+    };
+    m.svc.useUndo(undoNotes);
+    const back = await m.svc.undo(r!.id);
+    expect(back.notes[0]!.result).toBe("restored");
+    expect(notes["Ideias.md"]).toBe("# Ideias\n\nGatos dormem muito.\nO Kiwi anota.\n");
+  });
+
+  test("o Modelo de nota (spec #11102) vai no começo fixo do pedido, com os mesmos bytes entre dois pedidos com o mesmo modelo", async () => {
+    const m = make();
+    await readyNow(m);
+    let model = sanitizeNoteModel({ ...DEFAULT_NOTE_MODEL, body: "topicos" });
+    m.svc.useNoteModel(async () => model);
+    await askAndWait(m, "oi");
+    await askAndWait(m, "outra coisa");
+    const prompts = () => m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    const [a, b] = prompts().slice(-2);
+    const fixed = noteModelText(model);
+    expect(a!.startsWith(fixed)).toBe(true);
+    expect(b!.startsWith(fixed)).toBe(true);
+    expect(a!.slice(fixed.length)).toBe("oi");
+    // Com o modo econômico, o modelo vem antes, e as instruções econômicas depois: os dois sempre na mesma ordem.
+    await m.svc.configure({ economy: true });
+    await askAndWait(m, "oi");
+    expect(prompts().at(-1)).toBe(fixed + ECONOMY_INSTRUCTIONS + "oi");
+    // Mudar o modelo muda o começo fixo (vale para o que vem depois); um erro ao ler não derruba o pedido.
+    model = sanitizeNoteModel({ ...DEFAULT_NOTE_MODEL, numbered: true });
+    await askAndWait(m, "oi");
+    expect(prompts().at(-1)!.startsWith(noteModelText(model))).toBe(true);
+    m.svc.useNoteModel(async () => { throw new Error("sem cofre"); });
+    await askAndWait(m, "oi");
+    expect(prompts().at(-1)).toBe(ECONOMY_INSTRUCTIONS + "oi");
   });
 
   test("o modo econômico (spec #11084): as instruções e a lista das ferramentas idênticas, byte a byte, entre dois pedidos", async () => {
