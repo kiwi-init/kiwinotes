@@ -144,8 +144,8 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
    - C: nada: só as ferramentas melhores. De 2 a 3 idas.
 
    Com a A, o ADR 0011 e a tela "o que vai para o agente" ganham a frase: "e o que o Kiwi achou nas suas notas sobre o pedido". Essa mudança entra no PR que construir o pacote.
-2. **A memória da conversa.**
-   - **A (recomendada):** a janela curta com a cápsula.
+2. **A memória da conversa. Decidido: A (#13626).**
+   - **A (escolhida):** a janela curta com a cápsula.
    - B: retomar sempre a sessão inteira, como hoje.
    - C: sessão nova depois de 10 minutos, sem cápsula: o agente esquece a conversa.
 3. **As instruções do agente.**
