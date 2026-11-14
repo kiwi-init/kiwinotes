@@ -138,12 +138,12 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
 - pelo preço de API, a parte do pedido (o texto novo e a resposta) passa de 14 % para uns 60 % do custo (estimativa). O resto é abrir a frio, que só cai mais com as instruções próprias (decisão 3).
 
 ## As decisões do harry
-1. **O que o Kiwi pode mandar sem o agente pedir.** Hoje o ADR 0011 diz que vão os trechos que o agente lê. O pacote manda o que o índice achou.
-   - **A (recomendada):** o cartão e, no certo, o texto do alvo. 1 ida.
+1. **O que o Kiwi pode mandar sem o agente pedir. Decidido: A (#13624).** Hoje o ADR 0011 diz que vão os trechos que o agente lê. O pacote manda o que o índice achou.
+   - **A (escolhida):** o cartão e, no certo, o texto do alvo. 1 ida.
    - B: só os cartões (nomes e sumário), nunca o texto. 2 idas.
    - C: nada: só as ferramentas melhores. De 2 a 3 idas.
 
-   Com A ou B, o ADR 0011 e a tela "o que vai para o agente" ganham a frase: "e o que o Kiwi achou nas suas notas sobre o pedido".
+   Com a A, o ADR 0011 e a tela "o que vai para o agente" ganham a frase: "e o que o Kiwi achou nas suas notas sobre o pedido". Essa mudança entra no PR que construir o pacote.
 2. **A memória da conversa.**
    - **A (recomendada):** a janela curta com a cápsula.
    - B: retomar sempre a sessão inteira, como hoje.
