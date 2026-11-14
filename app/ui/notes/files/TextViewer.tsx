@@ -10,7 +10,7 @@
 // "Gravando…/Gravado"), e o texto quebra na largura da nota.
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { Annotation, EditorState } from "@codemirror/state";
+import { Annotation, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -53,11 +53,15 @@ export function TextViewer({ path, file, files, flushRef }: FileViewerProps) {
         version: initial.version,
         save: (content, baseVersion) => files.save!(path, content, baseVersion),
         onState: setState,
-        // O texto de fora entrou: troca no editor, sem contar como digitação.
+        // O texto de fora entrou: troca no editor, sem contar como digitação e fora do desfazer (revisão do #533: um ⌘Z
+        // logo depois desfazia a mudança de fora, e o texto antigo era gravado por cima dela).
         onText: (t) => {
           const v = view.current;
           if (!v || v.state.doc.toString() === t) return;
-          v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: t }, annotations: fromDisk.of(true) });
+          v.dispatch({
+            changes: { from: 0, to: v.state.doc.length, insert: t },
+            annotations: [fromDisk.of(true), Transaction.addToHistory.of(false)],
+          });
         },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
