@@ -185,6 +185,31 @@ try {
   assert.equal(view.note.title, "Cronograma da migração · 2026-11-12");
   assert.ok(view.noteContent.includes("## Decisões") && !view.noteContent.includes("## Ações"), view.noteContent);
   report.checks.push("Suas reuniões: the file name with a live preview and the summary blocks; the next proposal follows them");
+
+  // 7. O Modelo de nota (T11478): com títulos numerados e o corpo em tópicos, o [Ver] da Atividade mostra a nota assim.
+  await invoke("agent.noteModelSet", {
+    model: {
+      blocks: ["titulo", "propriedades", "introducao", "sumario", "corpo", "fechamento"].map((block) => ({ block, on: block !== "sumario" })),
+      body: "topicos",
+      numbered: true,
+      tocDepth: 2,
+    },
+  });
+  const modeled = await invoke("agent.proposal", { id: fresh.id });
+  assert.ok(modeled.noteContent.includes("## 1. Resumo\n\n- ") && modeled.noteContent.startsWith("---\n") && !modeled.noteContent.includes("[[#"), modeled.noteContent);
+  const item = `${list} [data-proposal='${fresh.id}']`;
+  await p.waitForSelector(item, { timeout: 15000 });
+  await p.locator(`${item} button:has-text('Ver a proposta')`).click();
+  await p.waitForSelector(`${item} .kn-proposal-view`, { timeout: 15000 });
+  // A caixa da nota nova rola: o print mostra a parte do corpo, onde estão os títulos numerados e os tópicos.
+  await p.locator(`${item} .kn-proposal-view .kn-diff`).first().evaluate((el: HTMLElement) => {
+    const line = [...el.children].find((c) => c.textContent?.includes("1. Resumo")) as HTMLElement | undefined;
+    if (line) el.scrollTop = line.offsetTop - el.offsetTop - 8;
+  });
+  await p.locator(item).scrollIntoViewIfNeeded();
+  await Bun.sleep(300);
+  await p.locator(item).screenshot({ path: join(out, "7-modelo-de-nota.png") });
+  report.checks.push("the meeting note follows the vault's Note template: properties first, numbered headings, the body in bullets, no table of contents");
   report.problems.push(...s.report.problems);
   await s.close();
   // O vídeo do balão em mp4 (o WebKit grava em webm).

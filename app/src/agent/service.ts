@@ -665,6 +665,15 @@ export class AgentService {
     void this.emitProposals();
   }
 
+  /**
+   * A forma da nota da reunião (T11478): o Modelo de nota do cofre (#11102), ou o padrão sem ele, e o projeto para as
+   * propriedades. O [Ver] e o [Aplicar] leem o modelo de agora: o mesmo texto nos dois.
+   */
+  private async noteOptions(p: MeetingProposal): Promise<{ model?: NoteModel; project: string | null }> {
+    const model = this.noteModel ? await this.noteModel().catch(() => null) : null;
+    return { ...(model ? { model } : {}), project: p.project?.name ?? null };
+  }
+
   /** O que a pessoa escolheu em Ajustes › Agente › "Suas reuniões". */
   private async meetingSettings(): Promise<AgentMeetingSettings> {
     return (await this.d.settings.load()).meetings ?? DEFAULT_AGENT_MEETING_SETTINGS;
@@ -740,7 +749,7 @@ export class AgentService {
     const fields = this.fieldsOf(p);
     const s = await this.meetingSettings();
     const summary = this.proposalSummary(p, s);
-    const noteContent = meetingNoteContent(p.meeting, fields, s);
+    const noteContent = meetingNoteContent(p.meeting, fields, s, await this.noteOptions(p));
     let main: AgentProposalView["main"] = null;
     if (p.project?.main) {
       const before = (await this.proposalWriter().get(p.project.main)).content;
@@ -810,7 +819,7 @@ export class AgentService {
       // A nota da reunião, uma vez só: um [Aplicar] que parou no meio não cria outra.
       let notePath = p.notePath;
       if (!notePath) {
-        const n = await writer.create(meetingNoteFolder(p.project, s), meetingNoteTitle(p.meeting.date, fields.theme, s.name), meetingNoteContent(p.meeting, fields, s));
+        const n = await writer.create(meetingNoteFolder(p.project, s), meetingNoteTitle(p.meeting.date, fields.theme, s.name), meetingNoteContent(p.meeting, fields, s, await this.noteOptions(p)));
         notePath = n.path;
         this.proposals.update(id, (x) => (x.notePath = n.path));
         await this.activity.change(request, { kind: "created", path: n.path, before: 0, after: n.content.length, version: n.version, ...where });

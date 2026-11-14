@@ -14,6 +14,7 @@ import path from "node:path";
 
 import { headingFor, markdownStructure } from "../shared/markdown-structure.ts";
 import { meetingNoteTitle } from "../shared/meeting-note-name.ts";
+import { DEFAULT_NOTE_MODEL, sanitizeNoteModel, type NoteBlock, type NoteModel } from "../shared/note-model.ts";
 import { linkSafeName } from "../shared/wikilinks.ts";
 
 export { meetingNoteTitle };
@@ -125,15 +126,86 @@ function actionLine(a: ProposalAction): string {
   return `- [ ] ${oneLine(a.what)}${extra ? ` (${extra})` : ""}`;
 }
 
-/** O texto da nota da reunião, com os blocos ligados em Ajustes. A transcrição bruta fica em `Reuniões/`: só o link. */
-export function meetingNoteContent(meeting: ProposalMeeting, f: ProposalFields, s: MeetingNoteSettings): string {
-  const parts: string[] = [`Reunião de ${dayOf(meeting.date)} · a transcrição: [[${noMd(meeting.path)}|${linkSafeName(meeting.title) || "Reunião"}]]`];
+/** Uma frase por item, para o corpo "em tópicos". */
+const sentences = (t: string) =>
+  t
+    .split(/(?<=[.!?])\s+(?=\p{Lu})/u)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+/** Um texto para o YAML do frontmatter: entre aspas, como o JSON (que o YAML lê igual). */
+const yaml = (t: string) => JSON.stringify(oneLine(t));
+
+/**
+ * O texto da nota da reunião (spec #8360). **O que entra** é de Ajustes › Agente › "Suas reuniões" (os blocos do
+ * resumo); **a ordem e a forma** são do Modelo de nota (#11102, T11478): o título, as propriedades, a introdução, o
+ * sumário, o corpo (em tópicos, parágrafos ou misto) e o fechamento, na ordem e com a numeração do modelo. A transcrição
+ * bruta fica em `Reuniões/`: a nota leva sempre o link para ela, nunca o texto.
+ */
+export function meetingNoteContent(
+  meeting: ProposalMeeting,
+  f: ProposalFields,
+  s: MeetingNoteSettings,
+  o: { model?: NoteModel; project?: string | null } = {},
+): string {
+  const model = sanitizeNoteModel(o.model ?? DEFAULT_NOTE_MODEL);
   const b = s.blocks;
-  if (b.participants && f.participants.length) parts.push(`**Participantes:** ${f.participants.map(oneLine).join(", ")}`);
-  if (b.summary && f.summary?.trim()) parts.push(`## Resumo\n\n${f.summary.trim()}`);
-  if (b.decisions && f.decisions.length) parts.push(`## Decisões\n\n${bullets(f.decisions)}`);
-  if (b.actions && f.actions.length) parts.push(`## Ações\n\n${f.actions.map(actionLine).join("\n")}`);
-  if (b.nextSteps && f.nextSteps.length) parts.push(`## Próximos passos\n\n${bullets(f.nextSteps)}`);
+  const on = (k: NoteBlock) => model.blocks.some((x) => x.block === k && x.on);
+  const link = `[[${noMd(meeting.path)}|${linkSafeName(meeting.title) || "Reunião"}]]`;
+  const people = b.participants ? f.participants.map(oneLine).filter(Boolean) : [];
+  const peopleText = people.length === 1 ? people[0]! : people.length ? `${people.slice(0, -1).join(", ")} e ${people.at(-1)}` : "";
+
+  // As seções do corpo e o fechamento (os próximos passos), com a numeração do modelo.
+  const summary = b.summary ? f.summary?.trim() : undefined;
+  const body: { title: string; text: string }[] = [];
+  if (summary) body.push({ title: "Resumo", text: model.body === "topicos" ? bullets(sentences(summary)) : summary });
+  if (b.decisions && f.decisions.length) body.push({ title: "Decisões", text: bullets(f.decisions) });
+  if (b.actions && f.actions.length) body.push({ title: "Ações", text: f.actions.map(actionLine).join("\n") });
+  const next = b.nextSteps && f.nextSteps.length ? { title: "Próximos passos", text: bullets(f.nextSteps) } : null;
+  // Sem o bloco de fechamento no modelo, os próximos passos ficam no fim do corpo.
+  if (next && !on("fechamento")) body.push(next);
+  const closing = next && on("fechamento") ? [next] : [];
+  const ordered = model.blocks.filter((x) => x.on).map((x) => x.block);
+  const numberOf = new Map<string, number>();
+  for (const block of ordered) for (const sec of block === "corpo" ? body : block === "fechamento" ? closing : []) numberOf.set(sec.title, numberOf.size + 1);
+  const heading = (title: string) => (model.numbered ? `${numberOf.get(title)}. ${title}` : title);
+  const section = (sec: { title: string; text: string }) => `## ${heading(sec.title)}\n\n${sec.text}`;
+
+  const parts: string[] = [];
+  let linked = false;
+  for (const block of ordered) {
+    switch (block) {
+      case "titulo":
+        parts.push(`# ${oneLine(f.theme) || "Reunião"}`);
+        break;
+      case "propriedades": {
+        const props = [`data: ${meeting.date}`, `reuniao: ${yaml(link)}`];
+        if (o.project) props.push(`projeto: ${yaml(o.project)}`);
+        if (people.length) props.push(`participantes: [${people.map(yaml).join(", ")}]`);
+        props.push("tags: [reuniao]");
+        // O frontmatter só vale no começo da nota: em outro lugar do modelo, ele vai para o começo mesmo.
+        parts.unshift(`---\n${props.join("\n")}\n---`);
+        break;
+      }
+      case "introducao":
+        parts.push(`Reunião de ${dayOf(meeting.date)}${peopleText ? `, com ${peopleText}` : ""}. A transcrição: ${link}.`);
+        linked = true;
+        break;
+      case "sumario": {
+        const all = [...body, ...closing].filter(() => model.tocDepth >= 2);
+        if (all.length) parts.push(all.map((sec) => `- [[#${heading(sec.title)}]]`).join("\n"));
+        break;
+      }
+      case "corpo":
+        parts.push(...body.map(section));
+        break;
+      case "fechamento":
+        parts.push(...closing.map(section));
+        break;
+    }
+  }
+  // Sem a introdução, o link para a transcrição (e quem participou) vai no fim: ele está sempre na nota.
+  if (!linked) parts.push(`${peopleText && !on("propriedades") ? `Com ${peopleText}. ` : ""}A transcrição: ${link}.`);
   return `${parts.join("\n\n")}\n`;
 }
 

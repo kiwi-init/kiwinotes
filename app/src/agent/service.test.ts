@@ -1136,6 +1136,12 @@ describe("a reunião vira nota do projeto (spec #8360)", () => {
     expect(await m.svc.proposalChoose(p!.id, "Projetos/VNA")).toMatchObject({ project: { name: "VNA Fuji" }, candidates: [], note: { folder: "Projetos/VNA" } });
     // Um projeto sem nota principal: a proposta é só a nota da reunião.
     expect((await m.svc.proposalView(p!.id)).main).toBeNull();
+    // A nota segue o Modelo de nota do cofre (T11478): com títulos numerados, o [Ver] já mostra a numeração.
+    expect((await m.svc.proposalView(p!.id)).noteContent).toContain("## Resumo");
+    m.svc.useNoteModel(async () => ({ ...DEFAULT_NOTE_MODEL, numbered: true }));
+    const numbered = (await m.svc.proposalView(p!.id)).noteContent;
+    expect(numbered).toContain("## 1. Resumo");
+    expect(numbered).toContain('projeto: "VNA Fuji"');
     expect(await m.svc.proposalDiscard(p!.id)).toMatchObject({ status: "discarded" });
     expect(v.notes).toEqual(before);
     await expect(m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
