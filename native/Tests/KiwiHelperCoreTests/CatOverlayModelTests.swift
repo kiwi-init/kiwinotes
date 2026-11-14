@@ -116,6 +116,25 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertNil(CatOverlayBubble.rect(["x": Double.nan, "y": 0, "w": 10, "h": 10]))
     }
 
+    /// Spec #13380: o × da cabeça aparece com o mouse sobre o gato e continua enquanto ele vai até o ×.
+    func testTheHeadCloseShowsOverTheCatAndStaysOnTheWayToIt() {
+        let panel = CGRect(x: 100, y: 100, width: 300, height: 600)
+        let cat = CGRect(x: 154, y: 100, width: 192, height: 240)
+        // O × na página: 250 pt da esquerda, 370 do topo, 26 × 26; na tela, x 350–376, y 304–330 (700 − 396).
+        let close = CGRect(x: 250, y: 370, width: 26, height: 26)
+        XCTAssertTrue(CatOverlayBubble.catHover(panel: panel, cat: cat, close: nil, showing: false, mouse: CGPoint(x: 250, y: 200)))
+        XCTAssertFalse(CatOverlayBubble.catHover(panel: panel, cat: cat, close: nil, showing: false, mouse: CGPoint(x: 250, y: 500)), "o espaço do balão")
+        XCTAssertTrue(CatOverlayBubble.catHover(panel: panel, cat: cat, close: close, showing: true, mouse: CGPoint(x: 360, y: 315)), "em cima do ×, fora do gato")
+        XCTAssertFalse(CatOverlayBubble.catHover(panel: panel, cat: cat, close: close, showing: false, mouse: CGPoint(x: 360, y: 315)), "o × escondido não segura")
+    }
+
+    func testTheBubbleCarriesTheQuestion() throws {
+        let js = CatOverlayBubble.script(text: "Pronto.", error: false, ask: true)
+        let back = try JSONSerialization.jsonObject(with: Data(js.utf8)) as? [String: Any]
+        XCTAssertEqual(back?["ask"] as? Bool, true)
+        XCTAssertFalse(CatOverlayBubble.script(text: "Pronto.", error: false).contains("ask"))
+    }
+
     func testDefaultIsTodayAndOutOfRangeIsClamped() {
         let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
         XCTAssertEqual(CatPlacement().frame(visible: visible), CatOverlayLayout.frame(visible: visible))

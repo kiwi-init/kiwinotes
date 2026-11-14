@@ -332,6 +332,9 @@ export type Event =
   | { type: "learn.answered"; from: string; to: string; answer: LearnAnswer }
   /** Spec #13378: a pessoa está com o balão do gato no overlay (aberto no "ver mais", ou com o mouse em cima), ou soltou. */
   | { type: "catOverlay.hold"; held: boolean }
+  /** Spec #13380: clicou ou rolou no balão (a espera recomeça), ou fechou no × do balão ou da cabeça. */
+  | { type: "catOverlay.touch" }
+  | { type: "catOverlay.close" }
   /**
    * R3 (T4943): o texto ao vivo. `id` é o lugar no canal (o provisório leva o id do final que virá). `startFrame` e
    * `endFrame` são o relógio do R1 (16 kHz), para o `meeting.ack`. O helper manda sempre `session` e `channel` (#5064).
@@ -564,6 +567,8 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "meeting.answered",
   "learn.answered",
   "catOverlay.hold",
+  "catOverlay.touch",
+  "catOverlay.close",
   "meeting.minePaused",
   "meeting.segment",
   "meeting.settled",

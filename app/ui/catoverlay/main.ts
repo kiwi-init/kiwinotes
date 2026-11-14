@@ -31,15 +31,28 @@ interface OverlayStats {
   bubbleOpen: boolean;
   /** O espaço do balão na janela, em pontos (o helper manda: `set({sala})`). */
   sala: number;
+  /** A pergunta "Precisa de mais alguma coisa?" no balão (spec #13380). */
+  bubbleAsk: boolean;
+  /** O mouse sobre o gato: o × da cabeça aparece (o helper manda: `set({catHover})`). */
+  catHover: boolean;
 }
 
 const stats: OverlayStats = {
   ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null,
-  bubbleMore: false, bubbleOpen: false, sala: 112,
+  bubbleMore: false, bubbleOpen: false, sala: 112, bubbleAsk: false, catHover: false,
 };
 const bubbleEl = document.getElementById("bubble")!;
 const bubbleText = document.getElementById("bubble-text")!;
 const moreButton = document.getElementById("bubble-more") as HTMLButtonElement;
+const bubbleSr = document.getElementById("bubble-sr")!;
+const catClose = document.getElementById("cat-close") as HTMLButtonElement;
+type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true };
+const post = (m: KiwiCatMessage) =>
+  (window as { webkit?: { messageHandlers?: { kiwiCat?: { postMessage(m: unknown): void } } } }).webkit?.messageHandlers?.kiwiCat?.postMessage(m);
+const rectOf = (el: Element) => {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 ? { x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width), h: Math.ceil(r.height) } : null;
+};
 
 /**
  * O helper acompanha o balão (spec #13378): onde ele está na página e se está aberto. Com isso, só o balão pega o
@@ -47,9 +60,26 @@ const moreButton = document.getElementById("bubble-more") as HTMLButtonElement;
  */
 function report() {
   const on = stats.bubble !== null;
-  const r = bubbleEl.getBoundingClientRect();
-  const bubble = on && r.width > 0 && r.height > 0 ? { x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width), h: Math.ceil(r.height) } : null;
-  (window as { webkit?: { messageHandlers?: { kiwiCat?: { postMessage(m: unknown): void } } } }).webkit?.messageHandlers?.kiwiCat?.postMessage({ bubble, open: on && stats.bubbleOpen });
+  // O × da cabeça (spec #13380) também pega o clique, quando aparece.
+  post({ bubble: on ? rectOf(bubbleEl) : null, open: on && stats.bubbleOpen, close: stats.catHover ? rectOf(catClose) : null });
+}
+
+/** Clicar ou rolar no balão conta como interação (spec #13380): a espera do gato recomeça. No máximo duas por segundo. */
+let lastTouch = 0;
+function touched() {
+  const now = performance.now();
+  if (now - lastTouch < 500) return;
+  lastTouch = now;
+  post({ touch: true });
+}
+bubbleEl.addEventListener("click", touched);
+bubbleText.addEventListener("scroll", touched, { passive: true });
+/** O × do balão e o da cabeça: o gato sai na hora. */
+for (const x of [document.getElementById("bubble-close")!, catClose]) {
+  x.addEventListener("click", (e) => {
+    e.stopPropagation();
+    post({ closed: true });
+  });
 }
 new ResizeObserver(report).observe(bubbleEl);
 // A entrada desliza 4 px: no fim dela, o lugar de verdade (o clique conta só em cima do balão).
@@ -116,17 +146,35 @@ moreButton.addEventListener("click", (e) => {
   setOpen(!stats.bubbleOpen);
 });
 
-/** O balão (spec #12938): só texto (`textContent`), nunca HTML. Uma resposta nova chega fechada. */
-function setBubble(b: { text?: unknown; error?: unknown } | null) {
+/** A pergunta antes de sair (spec #13380): entra e sai sem mexer na resposta, aberta ou não. */
+function setAsk(on: boolean) {
+  stats.bubbleAsk = on;
+  bubbleEl.dataset.ask = String(on);
+  bubbleSr.textContent = stats.bubble ? `${stats.bubble.text}${on ? ` Precisa de mais alguma coisa?` : ""}` : "";
+}
+
+/**
+ * O balão (spec #12938): só texto (`textContent`), nunca HTML. Uma resposta nova chega fechada; a mesma resposta com ou
+ * sem a pergunta (spec #13380) só muda a pergunta, e o balão fica como a pessoa deixou.
+ */
+function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown } | null) {
   const text = b && typeof b.text === "string" ? b.text : "";
+  const ask = b?.ask === true;
   if (!text) {
     stats.bubble = null;
     bubbleEl.dataset.on = "false";
     setOpen(false);
     measureMore();
+    setAsk(false);
+    return;
+  }
+  if (stats.bubble && stats.bubble.text === text && stats.bubble.error === (b?.error === true)) {
+    setAsk(ask);
+    report();
     return;
   }
   stats.bubble = { text, error: b?.error === true };
+  setAsk(ask);
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
   setOpen(false);
@@ -177,7 +225,16 @@ function measureFirstFrame(start: number) {
 }
 
 const api = {
-  set(input: { estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; bubble?: { text?: unknown; error?: unknown } | null }) {
+  set(input: {
+    estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; catHover?: boolean;
+    bubble?: { text?: unknown; error?: unknown; ask?: unknown } | null;
+  }) {
+    // O mouse sobre o gato (spec #13380): o × da cabeça aparece, e o helper passa a deixar o clique nele.
+    if (typeof input.catHover === "boolean" && input.catHover !== stats.catHover) {
+      stats.catHover = input.catHover;
+      document.body.dataset.catHover = String(input.catHover);
+      requestAnimationFrame(report);
+    }
     // O espaço do balão na janela (spec #13378), que o helper calcula para a tela de agora: a janela cresce para o lado
     // do balão, e o gato fica onde estava.
     if (typeof input.sala === "number" && Number.isFinite(input.sala) && input.sala >= 112 && input.sala <= 2000 && input.sala !== stats.sala) {

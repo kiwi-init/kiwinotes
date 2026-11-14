@@ -6,8 +6,7 @@ import type { AgentTurnEvent } from "../shared/ui-contract.ts";
 import type { Command } from "../shared/ipc.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
-import { readingMs } from "../../ui/hub/bubble-state.ts";
-import { attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, plainBubbleText, voiceErrorLine } from "./cat-overlay.ts";
+import { ASK_LINE, attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, plainBubbleText, voiceErrorLine } from "./cat-overlay.ts";
 
 function rig() {
   const sent: CatOverlayCommand[] = [];
@@ -354,7 +353,9 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
   }
   const bubbles = (sent: CatOverlayCommand[]) => sent.filter((c) => c.type === "catOverlay.bubble");
 
-  test("uma pergunta de conversa: a resposta vai ao balão, e o overlay só sai depois do tempo de leitura", () => {
+  // Spec #13380: o gato saía no tempo de ler o balão, às vezes com a pessoa ainda lendo. Agora ele fica, pergunta se
+  // precisa de mais alguma coisa e só então sai.
+  test("uma pergunta de conversa: a resposta vai ao balão, o gato fica, pergunta depois de idleAsk e sai depois de askLeave", () => {
     const r = rig();
     talk(r);
     r.cat.turn(status("thinking"));
@@ -366,9 +367,13 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
       { type: "catOverlay.state", estado: "pronto" },
       { type: "catOverlay.bubble", text: answer, error: false },
     ]);
-    // O `pronto` sozinho sairia em 1100 ms; com o balão, o gato fica o tempo de ler.
-    r.advance(readingMs(answer) - 1);
+    r.advance(OVERLAY_TIMES.idleAsk - 1);
     expect(r.take()).toEqual([]);
+    expect(r.cat.visible).toBe(true);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: answer, error: false, ask: true }]);
+    expect(ASK_LINE).toBe("Precisa de mais alguma coisa?");
+    r.advance(OVERLAY_TIMES.askLeave - 1);
     expect(r.cat.visible).toBe(true);
     r.advance(1);
     expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
@@ -414,36 +419,118 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     const long = Array.from({ length: 80 }, (_, i) => `palavra${i}`).join(" ");
     r.cat.turn(doneWith(long));
     expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: long, error: false }]);
-    // O tempo de ler o começo (o `readingMs` vai até 8 s): nenhum balão novo nesse meio tempo.
-    r.advance(readingMs(long) - 1);
+    // Até a pergunta, nenhum balão novo.
+    r.advance(OVERLAY_TIMES.idleAsk - 1);
     expect(r.take()).toEqual([]);
     expect(r.cat.visible).toBe(true);
-    r.advance(1);
-    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
   });
 
-  test("com a pessoa no balão (aberto ou com o mouse em cima), o gato não sai; solto, sai depois de afterHold", () => {
+  test("com a pessoa no balão (aberto ou com o mouse em cima), o gato espera; solto, a espera recomeça do zero", () => {
     const r = rig();
     talk(r);
-    const long = Array.from({ length: 80 }, (_, i) => `palavra${i}`).join(" ");
-    r.cat.turn(doneWith(long));
+    r.cat.turn(doneWith("Uma resposta."));
     r.take();
-    r.advance(1000);
+    r.advance(OVERLAY_TIMES.idleAsk - 1000);
     r.cat.hold(true);
-    // Lendo com calma, rolando o texto: um minuto e o gato continua, sem nada novo.
-    r.advance(60_000);
+    // Lendo com calma, rolando o texto: cinco minutos e o gato continua, sem pergunta.
+    r.advance(300_000);
     expect(r.take()).toEqual([]);
     expect(r.cat.visible).toBe(true);
     r.cat.hold(false);
-    r.advance(OVERLAY_TIMES.afterHold - 1);
-    expect(r.cat.visible).toBe(true);
+    r.advance(OVERLAY_TIMES.idleAsk - 1);
+    expect(r.take()).toEqual([]);
     r.advance(1);
-    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Uma resposta.", error: false, ask: true }]);
+    // Com a pergunta, a pessoa volta ao balão: a pergunta sai, e a espera para.
+    r.cat.hold(true);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Uma resposta.", error: false }]);
+    r.advance(OVERLAY_TIMES.askLeave * 4);
+    expect(r.cat.visible).toBe(true);
+    r.cat.hold(false);
+    r.advance(OVERLAY_TIMES.idleAsk + OVERLAY_TIMES.askLeave);
+    expect(r.take().at(-1)).toEqual({ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit });
     // Um `hold` atrasado, com o gato fora, não faz nada.
     r.cat.hold(true);
     r.cat.hold(false);
-    r.advance(10_000);
+    r.advance(100_000);
     expect(r.take()).toEqual([]);
+  });
+
+  test("clicar ou rolar no balão (touch) recomeça a espera e tira a pergunta", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Uma resposta."));
+    r.take();
+    r.advance(OVERLAY_TIMES.idleAsk - 1000);
+    r.cat.touch();
+    r.advance(OVERLAY_TIMES.idleAsk - 1);
+    expect(r.take()).toEqual([]);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Uma resposta.", error: false, ask: true }]);
+    r.advance(OVERLAY_TIMES.askLeave - 1000);
+    r.cat.touch();
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Uma resposta.", error: false }]);
+    r.advance(OVERLAY_TIMES.askLeave);
+    expect(r.cat.visible).toBe(true);
+  });
+
+  test("o × do balão ou da cabeça (close) tira o gato na hora", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Uma resposta."));
+    r.take();
+    r.cat.close();
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
+    expect(r.cat.visible).toBe(false);
+    r.advance(OVERLAY_TIMES.idleAsk + OVERLAY_TIMES.askLeave);
+    expect(r.take()).toEqual([]);
+    // Fechado, o próximo Control começa de novo, com a entrada.
+    r.cat.voice({ phase: "listening", voz: 0 });
+    expect(r.take()).toEqual([
+      { type: "catOverlay.show", estado: "acordou", fadeMs: OVERLAY_TIMES.enter },
+      { type: "catOverlay.state", estado: "ouvindo" },
+    ]);
+  });
+
+  test("o Control com o gato na tela continua a conversa: sem a entrada, com o balão onde estava", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Primeira resposta."));
+    r.take();
+    r.advance(OVERLAY_TIMES.idleAsk);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Primeira resposta.", error: false, ask: true }]);
+    // A pessoa aperta o Control com a pergunta na tela: ele volta a ouvir, sem show, e a pergunta sai.
+    r.cat.voice({ phase: "listening", voz: 0 });
+    expect(r.take()).toEqual([
+      { type: "catOverlay.bubble", text: "Primeira resposta.", error: false },
+      { type: "catOverlay.state", estado: "ouvindo" },
+    ]);
+    // Enquanto ouve e pensa, o gato não sai.
+    r.advance(OVERLAY_TIMES.idleAsk + OVERLAY_TIMES.askLeave);
+    expect(r.cat.visible).toBe(true);
+    r.cat.voice({ phase: "processing" });
+    r.cat.turn(started("r2"));
+    r.cat.voice({ phase: "asked", text: "e amanhã?", id: "r2" });
+    r.cat.turn(status("thinking", "r2"));
+    r.cat.turn(doneWith("Segunda resposta.", "r2"));
+    const sent = r.take();
+    expect(sent.some((c) => c.type === "catOverlay.show")).toBe(false);
+    expect(bubbles(sent).at(-1)).toEqual({ type: "catOverlay.bubble", text: "Segunda resposta.", error: false });
+    expect(r.cat.visible).toBe(true);
+  });
+
+  test("a fala cancelada no meio da conversa: o balão de antes fica, e a espera recomeça", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Primeira resposta."));
+    r.take();
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "idle", cancelled: true });
+    const sent = r.take();
+    expect(sent.some((c) => c.type === "catOverlay.hide")).toBe(false);
+    expect(r.cat.visible).toBe(true);
+    r.advance(OVERLAY_TIMES.idleAsk);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Primeira resposta.", error: false, ask: true }]);
   });
 
   test("o hold de um balão que já saiu não segura o balão do próximo pedido", () => {
@@ -452,12 +539,13 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     r.cat.turn(doneWith("Primeira resposta."));
     r.take();
     r.cat.hold(true);
-    // Um pedido novo pela fala: o balão sai, e o helper solta o hold sem avisar.
+    r.cat.close();
+    // Um pedido novo pela fala, com a entrada: o helper soltou o hold sem avisar.
     talk(r, "r2");
     r.cat.turn(doneWith("Segunda resposta.", "r2"));
     expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Segunda resposta.", error: false }]);
-    r.advance(Math.max(OVERLAY_TIMES.pronto, readingMs("Segunda resposta.")));
-    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
+    r.advance(OVERLAY_TIMES.idleAsk);
+    expect(r.take()).toEqual([{ type: "catOverlay.bubble", text: "Segunda resposta.", error: false, ask: true }]);
   });
 
   test("o hold do helper chega ao controlador pelo attach", async () => {
@@ -479,7 +567,7 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(holdFn).toBeNull();
   });
 
-  test("um erro do agente: o balão diz o erro em palavras, e o gato fica o tempo de ler", () => {
+  test("um erro do agente: o balão diz o erro em palavras, e o gato fica como numa resposta", () => {
     const r = rig();
     talk(r);
     r.cat.turn({ type: "error", id: "r1", code: "E_NETWORK", message: "sem internet." } as AgentTurnEvent);
@@ -489,10 +577,10 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
       { type: "catOverlay.state", estado: "erro" },
       { type: "catOverlay.bubble", text: line, error: true },
     ]);
-    r.advance(readingMs(line) - 1);
+    r.advance(OVERLAY_TIMES.idleAsk + OVERLAY_TIMES.askLeave - 1);
     expect(r.cat.visible).toBe(true);
     r.advance(1);
-    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit }]);
+    expect(r.take().at(-1)).toEqual({ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit });
   });
 
   test("o pedido que nem saiu: o balão diz por quê, em vez de sumir calado", () => {

@@ -164,6 +164,14 @@ public enum CatOverlayBubble {
         OverlayLayout.takesClick(panel: panel, pill: rect, mouse: mouse)
     }
 
+    /**
+     O mouse sobre o gato (spec #13380): o × da cabeça aparece. Ele continua enquanto o mouse está no gato ou no próprio
+     × (`close`, que a página mede, com a origem em cima), para dar tempo de chegar nele.
+     */
+    public static func catHover(panel: CGRect, cat: CGRect, close: CGRect?, showing: Bool, mouse: CGPoint) -> Bool {
+        cat.contains(mouse) || (showing && takesClick(panel: panel, rect: close, mouse: mouse))
+    }
+
     /// O retângulo que a página manda (`{x, y, w, h}`, em pontos); qualquer outra coisa é nenhum balão.
     public static func rect(_ body: Any?) -> CGRect? {
         guard let d = body as? [String: Any] else { return nil }
@@ -172,9 +180,11 @@ public enum CatOverlayBubble {
         return CGRect(x: v[0], y: v[1], width: v[2], height: v[3])
     }
 
-    public static func script(text: String?, error: Bool) -> String {
+    /// `ask`: com a pergunta "Precisa de mais alguma coisa?" embaixo da resposta (spec #13380).
+    public static func script(text: String?, error: Bool, ask: Bool = false) -> String {
         guard let text, !text.isEmpty else { return "null" }
-        let object: [String: Any] = ["text": text, "error": error]
+        var object: [String: Any] = ["text": text, "error": error]
+        if ask { object["ask"] = true }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return "null" }
         // U+2028 e U+2029 são fim de linha em JavaScript antigo: escapados, o literal vale em qualquer WebKit.

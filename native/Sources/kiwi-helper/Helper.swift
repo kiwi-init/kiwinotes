@@ -251,6 +251,9 @@ final class Helper {
             catOverlay.log = { [weak self] line in self?.emit("log", ["level": "info", "message": line]) }
             // A pessoa lendo o balão (spec #13378): o app segura a saída do gato.
             catOverlay.onHold = { [weak self] held in self?.emit("catOverlay.hold", ["held": held]) }
+            // A conversa contínua (spec #13380): um toque recomeça a espera; o × tira o gato.
+            catOverlay.onTouch = { [weak self] in self?.emit("catOverlay.touch") }
+            catOverlay.onClose = { [weak self] in self?.emit("catOverlay.close") }
         }
         learnPanel.enabled = !headless
         meeting.start()
@@ -1087,8 +1090,9 @@ final class Helper {
         case "catOverlay.bubble":
             let text = message.string("text")
             let error = message.fields["error"] as? Bool ?? false
+            let ask = message.fields["ask"] as? Bool ?? false
             let cat = catOverlay
-            MainActor.assumeIsolated { cat.bubble(text: text, error: error) }
+            MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask) }
             reply(id, ok: true)
         case "catOverlay.unload":
             catOverlayLoaded = false

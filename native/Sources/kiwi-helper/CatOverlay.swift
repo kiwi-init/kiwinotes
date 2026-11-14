@@ -25,6 +25,10 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
      enquanto ela lê.
      */
     var onHold: ((Bool) -> Void)?
+    /// Clicou ou rolou no balão: a espera do gato recomeça (spec #13380).
+    var onTouch: (() -> Void)?
+    /// O × do balão ou da cabeça (spec #13380): o app tira o gato.
+    var onClose: (() -> Void)?
 
     private var panel: CatOverlayPanel?
     private var web: WKWebView?
@@ -45,6 +49,9 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     /// O balão na página (spec #13378), como ela o mede (a origem em cima, à esquerda), e se está aberto no "ver mais".
     private var bubbleRect: CGRect?
     private var bubbleOpen = false
+    /// O × da cabeça na página (spec #13380), quando aparece, e o mouse sobre o gato.
+    private var closeRect: CGRect?
+    private var catHover = false
     private var held = false
     private var mouseTimer: Timer?
 
@@ -138,8 +145,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     }
 
     /// O balão da resposta (spec #12938): `nil` tira. Com o gato esperando a pílula, ele aparece junto com o gato.
-    func bubble(text: String?, error: Bool) {
-        bubble = CatOverlayBubble.script(text: text, error: error)
+    func bubble(text: String?, error: Bool, ask: Bool = false) {
+        bubble = CatOverlayBubble.script(text: text, error: error, ask: ask)
         if gate.shows { script("window.kiwiOverlay?.set({bubble: \(bubble)})") }
     }
 
@@ -185,6 +192,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         let sala = Int(placement.bubbleRoom(in: frame))
         script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true, sala: \(sala), bubble: \(bubble)})")
         if !panel.isVisible { panel.orderFrontRegardless() }
+        // O mouse sobre o gato mostra o × da cabeça, e só o balão e os × pegam o clique (spec #13378, #13380).
+        trackMouse(true)
         animate(panel, to: 1, ms: fadeMs)
     }
 
@@ -202,19 +211,27 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
 
     // MARK: - o balão pega o clique (spec #13378)
 
-    /// A página mediu o balão: `rect` nil é sem balão. Com ele na tela, a janela acompanha o mouse para pegar o clique
-    /// só em cima dele (como o `LearnPanel`, #504).
-    fileprivate func pageBubble(rect: CGRect?, open: Bool) {
+    /// A página mediu o balão (`rect` nil é sem balão) e o × da cabeça. Com o gato na tela, a janela acompanha o mouse
+    /// para pegar o clique só em cima deles (como o `LearnPanel`, #504).
+    fileprivate func pageBubble(rect: CGRect?, open: Bool, close: CGRect?) {
         bubbleRect = rect
         bubbleOpen = rect != nil && open
-        trackMouse(rect != nil && gate.shows)
+        closeRect = close
         updateMouse()
     }
+
+    fileprivate func pageTouched() { if gate.shows { onTouch?() } }
+    fileprivate func pageClosed() { if gate.shows { onClose?() } }
 
     private func resetBubble() {
         bubbleRect = nil
         bubbleOpen = false
+        closeRect = nil
         held = false
+        if catHover {
+            catHover = false
+            script("window.kiwiOverlay?.set({catHover: false})")
+        }
         trackMouse(false)
     }
 
@@ -238,9 +255,17 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             setHeld(false)
             return
         }
-        let take = CatOverlayBubble.takesClick(panel: panel.frame, rect: bubbleRect, mouse: NSEvent.mouseLocation)
+        let mouse = NSEvent.mouseLocation
+        let hover = CatOverlayBubble.catHover(panel: panel.frame, cat: placement.catRect(in: panel.frame), close: closeRect, showing: catHover, mouse: mouse)
+        if hover != catHover {
+            catHover = hover
+            if !hover { closeRect = nil }
+            script("window.kiwiOverlay?.set({catHover: \(hover)})")
+        }
+        let overBubble = CatOverlayBubble.takesClick(panel: panel.frame, rect: bubbleRect, mouse: mouse)
+        let take = overBubble || (catHover && CatOverlayBubble.takesClick(panel: panel.frame, rect: closeRect, mouse: mouse))
         if panel.ignoresMouseEvents == take { panel.ignoresMouseEvents = !take }
-        setHeld(bubbleOpen || take)
+        setHeld(bubbleOpen || overBubble)
     }
 
     private func setHeld(_ on: Bool) {
@@ -393,9 +418,13 @@ final class CatPageMessages: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let body = message.body as? [String: Any]
+        // Uma mensagem por vez: um toque, o ×, ou as medidas (o balão e o × da cabeça).
+        if body?["touch"] as? Bool == true { return MainActor.assumeIsolated { overlay?.pageTouched() } }
+        if body?["closed"] as? Bool == true { return MainActor.assumeIsolated { overlay?.pageClosed() } }
         let rect = CatOverlayBubble.rect(body?["bubble"])
         let open = body?["open"] as? Bool ?? false
-        MainActor.assumeIsolated { overlay?.pageBubble(rect: rect, open: open) }
+        let close = CatOverlayBubble.rect(body?["close"])
+        MainActor.assumeIsolated { overlay?.pageBubble(rect: rect, open: open, close: close) }
     }
 }
 

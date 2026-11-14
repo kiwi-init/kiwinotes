@@ -305,6 +305,8 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
           send: (c) => (event("catOverlay.command", c), session.sidecar.send(c)),
           onReady: (fn) => session.sidecar.on("ready", fn),
           onHold: (fn) => session.sidecar.on("catOverlay.hold", (e) => fn(e.held === true)),
+          onTouch: (fn) => session.sidecar.on("catOverlay.touch", () => fn()),
+          onClose: (fn) => session.sidecar.on("catOverlay.close", () => fn()),
         }
       : { send: async (c) => (event("catOverlay.command", c), { ok: true }), onReady: () => () => {} },
     pageDir: path.resolve(import.meta.dirname, "..", "..", "dist", "catoverlay"),
