@@ -1516,7 +1516,8 @@ function Notes({ api, drafts, active, openRequest, folderController, folderRef }
           root={rootFolder}
         />
       </TreePopover>
-      <main className="kn-center">
+      {/* A largura da nota vale também para o .txt aberto (spec #13382): o texto quebra na mesma coluna. */}
+      <main className="kn-center" style={{ "--note-width": `${dragWidth ?? prefs.noteWidth ?? NOTE_WIDTH.default}px` } as CSSProperties}>
         {view === "canvas" && board && api.canvas ? (
           <CanvasView
             key={board}
