@@ -1,4 +1,5 @@
-// Dirige os atalhos nas Configurações (T1499, T5349) num navegador headless, sem janela na tela de ninguém. Serve o
+// Dirige os atalhos nas Configurações (T1499, T5349) num navegador headless, sem janela na tela de ninguém. Desde o
+// spec #11966, cada grupo de atalhos fica no assunto dele (Ditado, Notas, Reuniões): o roteiro abre o assunto antes. Serve o
 // build de verdade (dist/settings, de `bun run ui:build`) com a CSP das views (`VIEWS_CSP`) e um `window.engine` de
 // mentira, e confere que nada esbarra na CSP.
 //
@@ -103,19 +104,34 @@ async function open(mode: "ok" | "old" | "failing", colorScheme: "light" | "dark
   await page.addInitScript(() => document.addEventListener("securitypolicyviolation", (e) => console.error(`Refused to load: CSP ${e.violatedDirective} ${e.blockedURI}`)));
   await page.addInitScript(fakeEngine, mode);
   await page.goto(`http://127.0.0.1:${server.port}/index.html`);
-  await page.waitForSelector(".kn-segmented");
+  await page.waitForSelector(".kn-prefs-item");
   return { page, problems };
 }
 
 type Page = import("playwright-core").Page;
-/** Um print só com as três seções de atalhos, da primeira à última (a página inteira, recortada). */
+type Topic = "dictation" | "notes" | "meetings";
+/** O assunto de Ajustes de cada linha que o roteiro usa (spec #11966). */
+const TOPIC: Record<string, Topic> = {
+  Ditar: "dictation", "Cancelar a gravação": "dictation", "Colar o último ditado": "dictation", "Som ao começar e terminar": "dictation",
+  "Abrir as Notas": "notes", "Paleta de comandos": "notes", "Nova nota": "notes", "Nota do dia": "notes",
+  "Gravar e parar a reunião": "meetings", "Pausar meu mic": "meetings",
+};
+/** Abre o assunto da linha (se ainda não está à vista). */
+async function show(page: Page, label: string) {
+  const topic = TOPIC[label];
+  if (!topic) throw new Error(`sem assunto para "${label}"`);
+  if (await page.locator(`.kn-prefs-topic[data-topic=${topic}]:not([hidden])`).count()) return;
+  await page.locator(`.kn-prefs-item[data-topic=${topic}]`).click();
+  await page.locator(`.kn-prefs-topic[data-topic=${topic}]:not([hidden])`).waitFor();
+}
+/** Um print só com as seções de atalhos do assunto à vista (a página inteira, recortada). */
 async function shotShortcuts(page: Page, file: string) {
   if (!shots) return;
-  // A janela rola por dentro: uma tela alta mostra tudo de uma vez, e o recorte pega só os atalhos.
+  // O painel rola por dentro: uma tela alta mostra tudo de uma vez, e o recorte pega só os atalhos.
   const size = page.viewportSize()!;
   await page.setViewportSize({ width: size.width, height: 4000 });
   const box = await page.evaluate(() => {
-    const all = [...document.querySelectorAll(".kn-section")].filter((s) => s.querySelector(".kn-section-title")?.textContent?.startsWith("Atalhos"));
+    const all = [...document.querySelectorAll(".kn-prefs-topic:not([hidden]) .kn-section")].filter((s) => s.querySelector(".kn-section-title")?.textContent?.startsWith("Atalhos"));
     const top = all[0]!.getBoundingClientRect(), bottom = all.at(-1)!.getBoundingClientRect();
     return { x: Math.max(0, top.left - 8), y: Math.max(0, top.top - 8), width: top.width + 16, height: bottom.bottom - top.top + 16 };
   });
@@ -123,12 +139,19 @@ async function shotShortcuts(page: Page, file: string) {
   await page.setViewportSize(size);
 }
 
-/** A linha de um atalho, pelo rótulo. */
-const row = (page: Page, label: string) => page.locator(".kn-row", { has: page.locator(".kn-row-label", { hasText: new RegExp(`^${label}$`) }) });
+/**
+ * A linha pelo rótulo, no assunto à vista. Os atalhos, só na seção "Atalhos": o assunto Reuniões repete os da reunião nos
+ * Ajustes de reunião.
+ */
+const row = (page: Page, label: string) =>
+  page
+    .locator(TOPIC[label] === "dictation" && label === "Som ao começar e terminar" ? ".kn-prefs-topic:not([hidden])" : ".kn-prefs-topic:not([hidden]) .kn-section:has(.kn-section-title:text-matches('^Atalhos'))")
+    .locator(".kn-row", { has: page.locator(".kn-row-label", { hasText: new RegExp(`^${label}$`) }) });
 const key = (page: Page, label: string) => row(page, label).locator(".kn-shortcut-key");
 const calls = (page: Page) => page.evaluate(() => JSON.stringify((window as any).__calls));
 /** Clica na tecla, espera o "Aperte o atalho…" e responde como o helper. */
 async function record(page: Page, label: string, answer: { shortcut: string } | { error: string }, shot?: string) {
+  await show(page, label);
   await key(page, label).click();
   await row(page, label).getByText("Aperte o atalho…").waitFor();
   if (shot && shots) await row(page, label).screenshot({ path: join(shots, shot) });
@@ -136,23 +159,30 @@ async function record(page: Page, label: string, answer: { shortcut: string } | 
   await page.waitForFunction(() => !(window as any).__recording);
 }
 async function expectKey(page: Page, label: string, text: string) {
-  await page.waitForFunction(([l, t]) => [...document.querySelectorAll(".kn-row")].some((r) => r.querySelector(".kn-row-label")?.textContent === l && r.querySelector(".kn-shortcut-key")?.textContent === t), [label, text]);
+  await show(page, label);
+  await page.waitForFunction(([l, t]) => [...document.querySelectorAll(".kn-prefs-topic:not([hidden]) .kn-row")].some((r) => r.querySelector(".kn-row-label")?.textContent === l && r.querySelector(".kn-shortcut-key")?.textContent === t), [label, text]);
 }
 
 const { page, problems } = await open("ok");
 
-await step("as Configurações sobem com a CSP das views, com todos os atalhos e os padrões (T5349)", async () => {
-  await key(page, "Ditar").waitFor();
-  const sections = (await page.locator(".kn-section-title").allTextContents()).filter((t) => t.startsWith("Atalhos"));
-  if (sections.join(",") !== "Atalhos · Ditado,Atalhos · Notas,Atalhos · Reuniões") throw new Error(sections.join(","));
+await step("as Configurações sobem com a CSP das views, com todos os atalhos e os padrões, cada grupo no assunto dele (T5349, #11966)", async () => {
+  const sections: string[] = [];
+  for (const [label, topic] of [["Ditar", "dictation"], ["Abrir as Notas", "notes"], ["Gravar e parar a reunião", "meetings"]] as const) {
+    await show(page, label);
+    await key(page, label).waitFor();
+    sections.push(...(await page.locator(`.kn-prefs-topic[data-topic=${topic}] .kn-section-title`).allTextContents()).filter((t) => t.startsWith("Atalhos")));
+  }
+  if (sections.join(",") !== "Atalhos · Ditado,Atalhos · Notas,Atalhos · Barra lateral das Notas,Atalhos · Reuniões") throw new Error(sections.join(","));
   const shown: Record<string, string> = {};
   for (const label of ["Ditar", "Cancelar a gravação", "Colar o último ditado", "Abrir as Notas", "Paleta de comandos", "Nova nota", "Nota do dia", "Gravar e parar a reunião", "Pausar meu mic"]) {
+    await show(page, label);
     shown[label] = (await key(page, label).textContent()) ?? "";
   }
   const want = { Ditar: "Fn 🌐", "Cancelar a gravação": "Esc", "Colar o último ditado": "⌃⌥V", "Abrir as Notas": "⌃⌥N", "Paleta de comandos": "⌘K", "Nova nota": "⌘N", "Nota do dia": "⇧⌘D", "Gravar e parar a reunião": "⌃⌥R", "Pausar meu mic": "⌃⌥M" };
   if (JSON.stringify(shown) !== JSON.stringify(want)) throw new Error(JSON.stringify(shown));
   // O seletor de mentira de antes (Fn / ⌥ direito, que nunca era salvo) saiu.
   if (await page.getByRole("radiogroup", { name: "Tecla do atalho" }).count()) throw new Error("o seletor antigo ainda está lá");
+  await show(page, "Ditar");
   await shotShortcuts(page, "01-atalhos-claro.png");
 });
 
@@ -182,8 +212,10 @@ await step("uma sequência e um toque duplo aparecem como se lê", async () => {
 });
 
 await step("Padrão volta ao padrão; Desligar desliga", async () => {
+  await show(page, "Ditar");
   await row(page, "Ditar").getByRole("button", { name: "Padrão" }).click();
   await expectKey(page, "Ditar", "Fn 🌐");
+  await show(page, "Nova nota");
   await row(page, "Nova nota").getByRole("button", { name: "Desligar" }).click();
   await expectKey(page, "Nova nota", "Desligado");
 });
@@ -207,6 +239,7 @@ await step("Esc (cancelado) volta sem mudar nada; não é um atalho e sem permis
 });
 
 await step("o botão Cancelar para a gravação", async () => {
+  await show(page, "Ditar");
   await key(page, "Ditar").click();
   await row(page, "Ditar").getByRole("button", { name: "Cancelar" }).click();
   await page.waitForFunction(() => !(window as any).__recording);
@@ -225,11 +258,13 @@ await step("L5 (T5458): o cancelar grava uma tecla sozinha (⌫), pedindo bareKe
   await record(page, "Ditar", { error: "E_CANCELLED" });
   const other = await page.evaluate(() => JSON.stringify((window as any).__recordArgs.at(-1)));
   if (other !== "{}") throw new Error(other);
+  await show(page, "Cancelar a gravação");
   await row(page, "Cancelar a gravação").getByRole("button", { name: "Padrão" }).click();
   await expectKey(page, "Cancelar a gravação", "Esc");
 });
 
 await step("T5833: o som ao começar e terminar vem ligado, e desligar grava cues: false", async () => {
+  await show(page, "Som ao começar e terminar");
   const cuesRow = row(page, "Som ao começar e terminar");
   await cuesRow.waitFor();
   if (shots) await cuesRow.locator("xpath=..").screenshot({ path: join(shots, "07-sons.png") });
@@ -245,6 +280,7 @@ await step("sem erro nem violação de CSP no caminho todo", async () => {
 
 await step("escuro: o mesmo, com os tokens do tema", async () => {
   const dark = await open("ok", "dark");
+  await show(dark.page, "Ditar");
   await key(dark.page, "Ditar").waitFor();
   await dark.page.waitForTimeout(800);
   await shotShortcuts(dark.page, "04-atalhos-escuro.png");
@@ -265,6 +301,7 @@ await step("o engine recusa: o atalho fica como estava e avisa", async () => {
 
 await step("engine sem settings.* (UI nova num app velho): os atalhos não aparecem", async () => {
   const old = await open("old");
+  for (const label of ["Ditar", "Abrir as Notas", "Gravar e parar a reunião"]) await show(old.page, label);
   await old.page.waitForTimeout(300);
   if (await old.page.locator(".kn-shortcut").count()) throw new Error("os atalhos apareceram");
   if (old.problems.length) throw new Error(old.problems.join(" | "));
