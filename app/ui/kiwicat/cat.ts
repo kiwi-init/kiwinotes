@@ -36,7 +36,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   const vectors = createVectorLayer(root, width, height, options.background);
   (root.lastElementChild as HTMLElement).style.zIndex = "2";
   if (vectors.apply(machine.sample())) stats.faceUpdates++;
-  const fog = await createKiwiFog(fogRoot, { ...options, eyes: "hidden",
+  const fog = await createKiwiFog(fogRoot, { ...options, eyes: "hidden", surface: options.background ?? "dark",
     inputs: { ...options.inputs, estado: machine.visualState, parado: stats.reduced } });
   previousStamp = performance.now();
   let fogState = machine.visualState;
@@ -128,7 +128,7 @@ export async function createKiwiCat(root: HTMLElement, options: CatOptions) {
   schedule();
   return {
     stats, fogStats: fog.stats,
-    setBackground(value: SymbolBackground) { if (!disposed) vectors.setBackground(value); },
+    setBackground(value: SymbolBackground) { if (!disposed) { vectors.setBackground(value); fog.setSurface(value); } },
     get visualState() { return machine.visualState; },
     get frame() { return machine.project(elapsed); },
     update(input: Partial<FogInputs>) {

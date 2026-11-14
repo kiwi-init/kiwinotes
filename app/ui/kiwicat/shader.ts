@@ -104,7 +104,9 @@ export function fogMaterial(
     upper = uniform(0),
     volume = uniform(1),
     custom = uniform(0),
-    tint = uniform(new Vector3(1, 1, 1));
+    tint = uniform(new Vector3(1, 1, 1)),
+    /** T11696: 1 sobre uma superfície clara (o tema claro do app), 0 sobre a escura. Só vale no recorte. */
+    surface = uniform(0);
   const material = new MeshBasicNodeMaterial();
   material.depthTest = false;
   material.depthWrite = false;
@@ -190,8 +192,31 @@ export function fogMaterial(
     // when dark; eyes and symbols live on their independent vector layer.
     const protectedMaterial = smoothstep(.05, .2, max(max(coverage.g, coverage.b), cutoutCoverage.r));
     const alphaSupport = max(smoothstep(16 / 255, 32 / 255, alphaHigh), protectedMaterial);
-    const lightRGB = color.mul(alphaSupport);
-    const lightAlpha = max(max(max(lightRGB.r, lightRGB.g), lightRGB.b), pow(cutoutCoverage.g, backing * 2));
+    // Numa superfície clara (T11696, o fundo branco do harry, #11675), luz somada ao branco some: a névoa fica pálida e
+    // a faixa do aro, rala e deformada. Ali a luz vira tinta, com a forma do preto:
+    // - a névoa (neutra ou tingida) na cor do agente, com a opacidade da intensidade dela; as cores do agente têm
+    //   contraste de 2:1 no branco (#9349);
+    // - a faixa do aro na própria cor, opaca onde é forte (igual à do preto) e esmaecendo só na borda macia.
+    // Sem a base escura leve, que tinha a forma da silhueta. Na superfície escura (`surface` 0), nada muda.
+    const peak = max(max(color.r, color.g), color.b);
+    const lightChroma = peak.sub(min(min(color.r, color.g), color.b)).div(max(peak, 0.001));
+    const tintPeak = vec3(tint).div(max(max(max(tint.x, tint.y), tint.z), 0.001));
+    // Só a faixa forte fica opaca; a borda fraca dela segue a névoa, sem virar contorno escuro no branco.
+    const arcInk = coverage.b.mul(smoothstep(0.2, 0.45, lightChroma)).mul(smoothstep(0.25, 0.5, peak));
+    // Junto do corpo: no preto, a luz vai escurecendo até o corpo; no branco, a mesma luz que diminui iria clareando até
+    // o branco e contornaria o gato com uma faixa branca. O campo "perto do casaco" da máscara marca essa faixa, e ali a
+    // névoa fica na cor do agente, opaca até o corpo, que continua escuro.
+    // `cutoutCoverage.b`: quão perto do casaco, um desfoque largo e liso dele (o `kiwicat-cutout-assets.py`).
+    const near = smoothstep(0.02, 0.35, cutoutCoverage.b);
+    // A faixa segue a luz do estado (no `erro`, que perde luz, ela quase some) e não chega a opaca, para não virar um
+    // contorno.
+    const fogInkA = max(min(peak.mul(1.25), 1), near.mul(0.7).mul(smoothstep(0.45, 1, exposure)));
+    const inkA = mix(fogInkA, min(peak.mul(1.8), 1), arcInk);
+    const inkRGB = mix(mix(tintPeak.mul(fogInkA), color, arcInk), color, cutoutCoverage.r);
+    const onLight = surface.mul(float(1).sub(solid));
+    const lightRGB = mix(color, inkRGB, onLight).mul(alphaSupport);
+    const darkAlpha = max(max(max(lightRGB.r, lightRGB.g), lightRGB.b), pow(cutoutCoverage.g, backing * 2));
+    const lightAlpha = mix(darkAlpha, max(inkA.mul(alphaSupport), max(max(lightRGB.r, lightRGB.g), lightRGB.b)), onLight);
     const alpha = max(cutoutCoverage.r, lightAlpha);
     // Only left/right/bottom carry visible reference light. The top is <=1/255.
     const band = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
@@ -210,6 +235,10 @@ export function fogMaterial(
   })();
   return {
     material,
+    /** A superfície atrás do gato recortado (T11696): clara (o tema claro) ou escura. */
+    setSurface(light: boolean) {
+      surface.value = light ? 1 : 0;
+    },
     apply(frame: FogFrame) {
       alive.value = frame.activity;
       arcGain.value = Math.max(

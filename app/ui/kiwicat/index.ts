@@ -33,6 +33,8 @@ export interface FogOptions {
   cutout?: boolean;
   backing?: number;
   edgeBand?: number;
+  /** T11696: a superfície atrás do gato recortado, clara (o tema claro) ou escura (o padrão). */
+  surface?: "light" | "dark";
   /** Spec #9573: a queda da luz arredondada (o padrão) ou a faixa reta de antes, só para as provas. */
   edgeShape?: "rounded" | "band";
   /** The cut-out reference with eyes, for the demos (the app bundles only the eye-free one). */
@@ -320,6 +322,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     densityMesh.frustumCulled = false;
     densityScene.add(densityMesh);
     material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08, options.edgeShape ?? "rounded");
+    material.setSurface(options.surface === "light");
     scene = new Scene();
     camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     mesh = new Mesh(new PlaneGeometry(2, 2), material.material);
@@ -361,6 +364,11 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     /** Test clock only: timestamp the next input without forcing a GPU draw. */
     seek(seconds: number) {
       if (options.mode === "capture" && Number.isFinite(seconds)) elapsed = Math.max(elapsed, seconds);
+    },
+    /** A superfície atrás do gato recortado mudou (o tema do app): desenha de novo, no mesmo instante. */
+    setSurface(value: "light" | "dark") {
+      material.setSurface(value === "light");
+      drawAt(elapsed);
     },
     update(inputs: Partial<FogInputs>) {
       if (options.mode !== "capture") advance();
@@ -430,6 +438,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     return {
       stats,
       canvas: null,
+      setSurface(_value: "light" | "dark") {},
       seek(_seconds: number) {},
       update(_inputs: Partial<FogInputs>) {},
       capture(_seconds: number) {},
