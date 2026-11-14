@@ -189,7 +189,9 @@ export type { NoteModel };
 // 1.65.0 (T12188, spec #12150): as rotinas do agente. O `routines` no `AgentStatus` e no `agent.configure` (o resumo do
 //   dia e os pendentes da semana: liga/desliga, a hora, o dia e a pasta), o `agent.routineRun` ("Rodar agora") e o
 //   evento `agent.routine` (o resultado no balão, ou por que a rotina não rodou). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.65.0";
+// 1.66.0 (T12416, revisão do #479): o `agent.routine` de `done` leva o `change`, a posição da nota criada entre as
+//   mudanças do pedido (1 é a primeira, como no `agent.change`), para o [Ver] do balão abrir a certa. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.66.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -1095,7 +1097,7 @@ export interface UiEvents {
  * econômico, a pessoa disse "Agora não", ou não respondeu).
  */
 export type AgentRoutineEvent =
-  | { kind: RoutineKind; phase: "done"; request: string; note: string | null }
+  | { kind: RoutineKind; phase: "done"; request: string; note: string | null; change: number | null }
   | { kind: RoutineKind; phase: "skipped"; reason: "limit"; resetsAt?: string }
   | { kind: RoutineKind; phase: "skipped"; reason: "declined" };
 

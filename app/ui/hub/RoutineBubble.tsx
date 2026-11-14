@@ -38,7 +38,7 @@ export function RoutineBubble({ hidden, onShown }: { hidden: boolean; onShown?: 
     if (view) return setView(null);
     setView({ phase: "loading" });
     try {
-      setView({ phase: "ready", view: await api.agent.change(done.request, 1) });
+      setView({ phase: "ready", view: await api.agent.change(done.request, done.change ?? 1) });
     } catch (e) {
       setView({ phase: "error", message: e instanceof Error ? e.message : String(e) });
     }
