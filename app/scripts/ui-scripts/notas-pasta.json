@@ -131,6 +131,10 @@
       "click": ".kn-tab:has-text('Configurações')"
     },
     {
+      "click": ".kn-prefs-item[data-topic=notes]",
+      "name": "o assunto notes da barra lateral (#11966)"
+    },
+    {
       "waitFor": ".kn-row:has-text('Pasta das notas')"
     },
     {

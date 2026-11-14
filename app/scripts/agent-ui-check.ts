@@ -113,6 +113,8 @@ async function agentReady(data: string, env: Record<string, string>): Promise<vo
   };
   await invoke("notes.create", { folder: "Projetos", title: "Kiwi", content: KIWI });
   await invoke("agent.enable", { consent: true });
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
+  await invoke("agent.configure", { onboarding: { state: "done" } });
   await invoke("agent.download", {});
   for (const end = Date.now() + 60_000; (await invoke("agent.status", {})).value.adapter.phase !== "ready"; ) {
     if (Date.now() > end) throw new Error("o adaptador não baixou");
@@ -244,6 +246,7 @@ async function activityReady(data: string, env: Record<string, string>): Promise
   const steps = [
     { waitFor: ".kn-tab", name: "o hub abre" },
     { click: ".kn-tab:has-text('Configurações')" },
+    { click: ".kn-prefs-item[data-topic=activity]", name: "o assunto activity da barra lateral (#11966)" },
     { waitFor: section, name: "a seção Atividade do agente" },
     { expectCount: `${section} .kn-activity-req`, count: 5, name: "os cinco pedidos" },
     { expectText: `${section} .kn-activity-req:first-child .kn-activity-text`, text: "Ponha o gato na equipe", name: "do mais novo ao mais velho" },
@@ -310,6 +313,7 @@ function emptyActivityScript(): string {
   const steps = [
     { waitFor: ".kn-tab", name: "o hub abre" },
     { click: ".kn-tab:has-text('Configurações')" },
+    { click: ".kn-prefs-item[data-topic=activity]", name: "o assunto activity da barra lateral (#11966)" },
     { waitFor: section, name: "a seção aparece com o agente desligado" },
     { expectText: section, text: "O agente ainda não fez nada.", name: "e diz que ainda não há nada" },
     { expectCount: `${section} .kn-activity-req`, count: 0 },
@@ -350,6 +354,7 @@ function expiringScript(): string {
   const steps = [
     { waitFor: ".kn-tab", name: "o hub abre" },
     { click: ".kn-tab:has-text('Configurações')" },
+    { click: ".kn-prefs-item[data-topic=activity]", name: "o assunto activity da barra lateral (#11966)" },
     { waitFor: req, name: "o pedido de quase 30 dias está na lista" },
     // O roteiro espera no máximo 10 s por passo: o prazo passa em vários.
     ...Array.from({ length: Math.ceil((EXPIRES_IN_MS + 3000) / 10_000) }, () => ({ wait: 10_000, name: "o prazo passa com a tela aberta" })),
@@ -402,6 +407,7 @@ async function guardrailReady(data: string, env: Record<string, string>): Promis
   const steps = [
     { waitFor: ".kn-tab", name: "o hub abre" },
     { click: ".kn-tab:has-text('Configurações')" },
+    { click: ".kn-prefs-item[data-topic=activity]", name: "o assunto activity da barra lateral (#11966)" },
     { waitFor: section, name: "a seção Atividade do agente" },
     { expectText: section, text: "O Kiwi segurou 2 segredos em Acessos.", name: "a leitura: 2 segredos segurados na nota" },
     { expectText: section, text: "O Kiwi segurou 1 segredo no pedido.", name: "o pedido com um token colado" },
@@ -470,11 +476,13 @@ async function doubtReady(data: string, env: Record<string, string>): Promise<vo
       name: "o claro",
     },
     { click: ".kn-tab:has-text('Configurações')" },
+    { click: ".kn-prefs-item[data-topic=activity]", name: "o assunto activity da barra lateral (#11966)" },
     { waitFor: `${activity} .kn-activity-doubt`, timeout: 10000, name: "a dúvida aparece na Atividade, para responder depois" },
     { expectText: `${activity} .kn-activity-doubt`, text: "em Rascunho, linha 3", name: "com a nota e a máscara, sem o trecho" },
     { screenshot: "3-atividade.png", selector: `${activity} .kn-activity-req:has(.kn-activity-doubt)` },
     { click: `${activity} .kn-activity-doubt button:has-text('É segredo')`, name: "responde depois: é segredo" },
     { expectText: `${activity} .kn-activity-doubt`, text: "Você disse que é segredo.", name: "a resposta fica" },
+    { click: ".kn-prefs-item[data-topic=agent]", name: "as respostas ficam no assunto Agente (#11966)" },
     { expectCount: `${answers} .kn-row`, count: 4, name: "a lista tem as quatro respostas" },
     { screenshot: "4-respostas.png", selector: answers },
     { click: `${answers} .kn-row:first-child button:has-text('Desfazer')`, name: "desfaz uma resposta" },
@@ -490,6 +498,7 @@ function noticeScript(denied: boolean): string {
   const open = [
     { waitFor: ".kn-tab", name: "o hub abre" },
     { click: ".kn-tab:has-text('Configurações')" },
+    { click: ".kn-prefs-item[data-topic=agent]", name: "o assunto agent da barra lateral (#11966)" },
     { waitFor: NOTICE_ROW, timeout: 10000, name: "a linha do aviso, com o agente ligado" },
     // A troca de aba anima: o print espera ela terminar.
     { wait: 1000 },

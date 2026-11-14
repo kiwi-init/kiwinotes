@@ -10,6 +10,10 @@
       "click": ".kn-tab:has-text('Configurações')"
     },
     {
+      "click": ".kn-prefs-item[data-topic=agent]",
+      "name": "o assunto agent da barra lateral (#11966)"
+    },
+    {
       "waitFor": ".kn-section:has(h2:text-is('Agente'))",
       "name": "a seção Agente"
     },
@@ -65,6 +69,18 @@
       "name": "aceita e liga"
     },
     {
+      "waitFor": ".kn-onb",
+      "name": "ligar pela primeira vez abre o onboarding (#11955)"
+    },
+    {
+      "press": "Escape",
+      "name": "o Esc fecha o onboarding"
+    },
+    {
+      "waitFor": ".kn-onb",
+      "state": "detached"
+    },
+    {
       "expectText": ".kn-row:has(.kn-row-label:text-is('Adaptador')) .kn-row-hint",
       "text": "Baixando o adaptador",
       "name": "o download começa só depois do Ligar"
@@ -102,6 +118,11 @@
     {
       "waitFor": ".kn-agent-test",
       "name": "o Testar aparece"
+    },
+    {
+      "waitFor": ".kn-row:has(.kn-row-label:text-is('A sua assinatura')) button:text-is('Atualizar'):enabled",
+      "timeout": 20000,
+      "name": "o medidor já conferiu o uso (o /usage, spec #11084): o agente está livre"
     },
     {
       "click": ".kn-agent-test button:has-text('Testar')",
@@ -248,6 +269,10 @@
     {
       "screenshot": "11-desligado-removido.png",
       "selector": ".kn-section:has(h2:text-is('Agente'))"
+    },
+    {
+      "click": ".kn-prefs-item[data-topic=privacy]",
+      "name": "o assunto privacy da barra lateral (#11966)"
     },
     {
       "screenshot": "12-privacidade.png",

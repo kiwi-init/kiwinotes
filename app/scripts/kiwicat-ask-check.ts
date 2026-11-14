@@ -37,6 +37,12 @@ try {
   const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "dark", width: 1000, height: 740, motion: true, browser: "webkit", query: { section: "notes" } });
   const p = w.page;
   await invoke("agent.enable", { consent: true }); await invoke("agent.download");
+  // O onboarding (spec #11955) abre na primeira vez que o agente liga e cobre o hub: aqui ele já foi feito (T12273).
+  await invoke("agent.configure", { onboarding: { state: "done" } });
+  // O gato do overlay (spec #9810) entra quando um pedido começa e o hub não está na frente, e o headless nunca está: no
+  // pedido lento (passo 6) o gato do canto ia embora. Este roteiro é o do campo no gato do canto; o overlay tem o
+  // kiwicat-overlay-check (T12273).
+  await invoke("settings.set", { kiwicat: { overlay: false } });
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
   await p.waitForSelector('.kn-kiwicat[data-ready="true"]');
   const box = async (sel: string) => (await p.locator(sel).boundingBox())!;

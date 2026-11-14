@@ -6,6 +6,7 @@
     { "wait": 3000 },
     { "waitFor": ".kn-tab", "name": "o hub abre" },
     { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "click": ".kn-prefs-item[data-topic=notes]", "name": "o assunto notes da barra lateral (#11966)" },
     { "waitFor": ".kn-row:has-text('Buscar pelo sentido')", "name": "a linha, em Notas" },
     { "expectText": ".kn-row:has-text('Buscar pelo sentido') .kn-row-hint", "text": "Acha notas pelo assunto", "name": "pronta" },
     { "screenshot": "ajustes-sentido.png", "selector": ".kn-row:has-text('Buscar pelo sentido')" },
