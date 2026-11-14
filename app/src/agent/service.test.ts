@@ -1503,6 +1503,11 @@ describe("a memória do agente (spec #11469)", () => {
     const eco = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text).at(-1)!;
     expect(eco).toContain("[O glossário da pessoa: escreva estes termos assim. DICOM]\n\n");
     expect(eco).not.toContain("kubectl");
+    // No econômico, o glossário (que muda a cada pedido) vai por último, depois das instruções do econômico: o cache.
+    expect(eco.indexOf("[O glossário da pessoa")).toBeGreaterThan(eco.indexOf("[Modo econômico do Kiwi"));
+    // Instruções com um segredo são recusadas, e nada muda (revisão do T11667).
+    await expect(m.svc.configure({ instructions: "use o token ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8 no CI" })).rejects.toMatchObject({ code: "E_SECRET" });
+    expect((await m.svc.status()).instructions).toBe("Sempre em português.");
   });
 
   test("sem a raiz do cofre, as ferramentas da memória não aparecem e o pedido vai sem a memória", async () => {

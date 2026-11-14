@@ -352,6 +352,8 @@ const app = agent({ name: "kiwi-fake-agent" })
       .replace(/^\[As instruções da pessoa para você[\s\S]*?\n\]\s*/, "")
       .replace(/^\[O glossário da pessoa:[^\]]*\]\s*/, "")
       .replace(/^\[Modo econômico do Kiwi:[^\]]*\]\s*/, "")
+      // No modo econômico, o glossário vem depois das instruções do econômico (o cache).
+      .replace(/^\[O glossário da pessoa:[^\]]*\]\s*/, "")
       .trim();
 
     // O Modelo de nota (spec #11102): uma nota nova na ordem e com os blocos do modelo que chegou nas instruções.

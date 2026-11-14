@@ -167,7 +167,7 @@ export interface AgentServiceDeps {
   log?: (msg: string) => void;
 }
 
-type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO" | "E_CHANGED";
+type AgentCode = AgentErrorCode | "E_AGENT_CONSENT" | "E_AGENT_DISABLED" | "E_BAD_ARGS" | "E_NOT_FOUND" | "E_NO_UNDO" | "E_CHANGED" | "E_SECRET";
 
 /** Um erro de capacidade do agente, com o código que a tela entende. */
 /** Um pedido de resumo executivo (spec #11546): com o modo econômico, a pessoa confirma antes. */
@@ -1262,12 +1262,13 @@ export class AgentService {
       // As instruções da pessoa e o glossário do ditado (T11667), sempre nesta ordem. No modo econômico, o glossário vai
       // só com os termos que aparecem no pedido.
       const terms = this.glossary ? await this.glossary().catch(() => []) : [];
+      // No modo econômico o glossário muda a cada pedido (só os termos dele): ele vai por último, depois das instruções do
+      // econômico, para o cache pegar tudo antes dele (revisão do T11667).
       const fixed =
         (model ? noteModelText(model) : "") +
         memory +
         instructionsText(s.instructions ?? "") +
-        glossaryText(terms, s.economy ? text : undefined) +
-        (s.economy ? ECONOMY_INSTRUCTIONS : "");
+        (s.economy ? ECONOMY_INSTRUCTIONS + glossaryText(terms, text) : glossaryText(terms));
       const answer = await host.ask(fixed + text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
@@ -1413,8 +1414,15 @@ export class AgentService {
     if (o.summary !== undefined) patch.summary = sanitizeSummarySettings(o.summary);
     // "Suas reuniões" (spec #8360): inteiro, saneado; uma pasta fora do cofre volta para a do projeto.
     if (o.meetings !== undefined) patch.meetings = sanitizeAgentMeetingSettings(o.meetings);
-    // As instruções da pessoa (spec #11469): valem a partir do pedido seguinte.
-    if (o.instructions !== undefined) patch.instructions = o.instructions.replace(/\r\n?/g, "\n").slice(0, INSTRUCTIONS_MAX);
+    // As instruções da pessoa (spec #11469): valem a partir do pedido seguinte. Elas vão no começo fixo de todo pedido,
+    // por fora do filtro do pedido: um trecho com cara de senha ou token é recusado aqui, e nada é gravado (revisão do
+    // T11667). Assim o começo continua com os mesmos bytes, sem marcador no meio.
+    if (o.instructions !== undefined) {
+      const text = o.instructions.replace(/\r\n?/g, "\n").slice(0, INSTRUCTIONS_MAX);
+      if (/‹segredo [^›\n]{0,40}›/.test(text) || this.guard.read("", text).held > 0)
+        throw new AgentServiceError("E_SECRET", "As instruções têm uma senha ou um token: tire esse trecho antes de salvar. Elas vão ao agente em todo pedido.");
+      patch.instructions = text;
+    }
     if (o.model !== undefined) patch.model = o.model;
     if (o.effort !== undefined) patch.effort = o.effort;
     if (o.economy !== undefined) {
