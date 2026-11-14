@@ -8,6 +8,9 @@ import { DEFAULT_NOTE_MODEL } from "../../src/agent/note-model.ts";
 import { countTokens } from "../../src/agent/token-count.ts";
 import { EMPTY_READER } from "../../src/agent/tools/reader.ts";
 import { KiwiToolServer } from "../../src/agent/tools/server.ts";
+import { runKiwiTool } from "../../src/agent/tools/tools.ts";
+import type { VaultReader } from "../../src/agent/tools/reader.ts";
+import { meetingPrompt } from "../../src/agent/service.ts";
 
 /** Um item medido: o nome (a chave do tetos.json) e os tokens. */
 export interface Measure {
@@ -66,4 +69,33 @@ export async function toolMeasures(): Promise<Measure[]> {
   } finally {
     server.stop();
   }
+}
+
+// ── Os retornos das ferramentas (T12202) ─────────────────────────────────────────────────────────────────────────────
+
+
+/** Os casos fixos: a ferramenta e os argumentos, num cofre de exemplo (`vault.ts`). */
+export const CASES: { item: string; tool: string; args: Record<string, unknown> }[] = [
+  { item: "notes_read › seção", tool: "notes_read", args: { path: "Projetos/PACS/PACS.md", section: "Prazo" } },
+  { item: "notes_read › nota inteira", tool: "notes_read", args: { path: "Projetos/PACS/PACS.md" } },
+  { item: "notes_outline", tool: "notes_outline", args: { path: "Projetos/PACS/PACS.md" } },
+  { item: "notes_search", tool: "notes_search", args: { query: "STOW orçamento" } },
+  { item: "project_status", tool: "project_status", args: { projeto: "PACS" } },
+  { item: "meetings_get", tool: "meetings_get", args: { path: "Reuniões/2026-11-10 · Orçamento.md" } },
+  { item: "files_read › planilha grande", tool: "files_read", args: { caminho: "Projetos/PACS/vendas.xlsx" } },
+];
+
+/** O que cada caso devolve ao agente (o JSON que vai na resposta da ferramenta), no normal ou no econômico. */
+export async function returnMeasures(reader: VaultReader, economy: boolean): Promise<Measure[]> {
+  const out: Measure[] = [];
+  for (const c of CASES) {
+    const r = await runKiwiTool({ reader, economy }, c.tool, c.args);
+    out.push({ item: `${c.item}${economy ? " › econômico" : ""}`, tokens: countTokens(JSON.stringify(r.value)) });
+  }
+  return out;
+}
+
+/** Os pedidos que o próprio Kiwi manda (o fim da reunião → o projeto). */
+export function autoRequestMeasures(): Measure[] {
+  return [{ item: "pedido automático › reunião → projeto", tokens: countTokens(meetingPrompt({ path: "Reuniões/2026-11-10 · Orçamento.md", title: "Orçamento" })) }];
 }

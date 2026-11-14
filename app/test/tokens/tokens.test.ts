@@ -1,13 +1,16 @@
 // A bateria de tokens (spec #12137): o que o Kiwi põe em cada pedido ao agente, contra os tetos de tetos.json. Roda no
 // `bun test` (o CI) e sozinha com `bun run test:tokens`, que imprime o relatório no fim. Nenhum agente é chamado.
 
-import { afterAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { fixedPrefix } from "../../src/agent/fixed-prefix.ts";
 import { countTokens } from "../../src/agent/token-count.ts";
-import { FULL, type Measure, prefixMeasures, REQUEST, toolMeasures } from "./measure.ts";
+import { tempDir } from "../tmp.ts";
+import type { VaultReader } from "../../src/agent/tools/reader.ts";
+import { autoRequestMeasures, CASES, FULL, type Measure, prefixMeasures, REQUEST, returnMeasures, toolMeasures } from "./measure.ts";
+import { sampleVault } from "./vault.ts";
 
 const TETOS = JSON.parse(readFileSync(path.join(import.meta.dir, "tetos.json"), "utf8")) as Record<string, number | string>;
 const measured: Measure[] = [];
@@ -59,6 +62,32 @@ describe("o que o Kiwi manda ao agente fica abaixo do teto", () => {
     const rows = await toolMeasures();
     measured.push(...rows);
     expect(overCeiling(rows, TETOS)).toEqual([]);
+  });
+});
+
+describe("os retornos das ferramentas nos casos fixos (T12202)", () => {
+  let base = "";
+  let reader: VaultReader;
+  let normal: Measure[] = [];
+  let economy: Measure[] = [];
+  beforeAll(async () => {
+    base = tempDir("kiwi-tokens-");
+    reader = (await sampleVault(base)).reader;
+    normal = await returnMeasures(reader, false);
+    economy = await returnMeasures(reader, true);
+  });
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  test("cada retorno, no normal e no econômico, e os pedidos automáticos ficam abaixo do teto", () => {
+    const rows = [...normal, ...economy, ...autoRequestMeasures()];
+    measured.push(...rows);
+    expect(overCeiling(rows, TETOS)).toEqual([]);
+  });
+
+  test("no econômico, nada fica maior; a nota inteira e a planilha grande ficam menores", () => {
+    for (const [i, c] of CASES.entries()) expect({ item: c.item, tokens: economy[i]!.tokens }).toEqual({ item: c.item, tokens: Math.min(economy[i]!.tokens, normal[i]!.tokens) });
+    const at = (item: string) => CASES.findIndex((c) => c.item === item);
+    for (const item of ["notes_read › nota inteira", "files_read › planilha grande"]) expect(economy[at(item)]!.tokens).toBeLessThan(normal[at(item)]!.tokens);
   });
 });
 
