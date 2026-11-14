@@ -15,6 +15,7 @@ import {
 
 import eyeFreeUrl from "./assets/reference-no-eyes.webp";
 import cutoutMaskUrl from "./assets/cutout-mask.webp";
+import cutoutFieldsUrl from "./assets/cutout-fields.webp";
 import cutoutEyeFreeUrl from "./assets/reference-no-eyes-cutout.webp";
 import protectionUrl from "./assets/material-mask.webp";
 import {
@@ -290,12 +291,12 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     ).isWebGPUBackend
       ? "webgpu"
       : "webgl2";
-    const [reference, protection, cutout] = await Promise.all(
-      [selectedReference, protectionUrl, ...(options.cutout ? [cutoutMaskUrl] : [])].map((url) =>
+    const [reference, protection, cutout, cutoutFields] = await Promise.all(
+      [selectedReference, protectionUrl, ...(options.cutout ? [cutoutMaskUrl, cutoutFieldsUrl] : [])].map((url) =>
         new TextureLoader().loadAsync(url),
       ),
     );
-    textures = [reference!, protection!, ...(cutout ? [cutout] : [])];
+    textures = [reference!, protection!, ...(cutout ? [cutout] : []), ...(cutoutFields ? [cutoutFields] : [])];
     for (const tex of textures) {
       tex.colorSpace = NoColorSpace;
       tex.minFilter = LinearFilter;
@@ -321,7 +322,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
     densityMesh = new Mesh(new PlaneGeometry(2, 2), density.material);
     densityMesh.frustumCulled = false;
     densityScene.add(densityMesh);
-    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08, options.edgeShape ?? "rounded");
+    material = fogMaterial(reference!, protection!, densityTarget.texture, options.eyes !== "hidden", cutout, options.backing ?? 0.5, options.edgeBand ?? .08, options.edgeShape ?? "rounded", cutoutFields);
     material.setSurface(options.surface === "light");
     scene = new Scene();
     camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);

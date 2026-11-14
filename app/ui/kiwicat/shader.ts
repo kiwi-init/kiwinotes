@@ -96,6 +96,8 @@ export function fogMaterial(
   edgeBand = 0.08,
   /** "band": a faixa reta de antes do spec #9573, só para as provas compararem. */
   edgeShape: "rounded" | "band" = "rounded",
+  /** T11696: os campos desfocados da silhueta (R o de fora, G o desfoque cru), para a superfície clara. */
+  cutoutFields?: Texture,
 ) {
   const arcGain = uniform(1),
     alive = uniform(0),
@@ -202,23 +204,28 @@ export function fogMaterial(
     // Na borda do casaco as duas se misturam direto, sem o branco no meio. Na superfície escura (`surface` 0), nada muda.
     const peak = max(max(color.r, color.g), color.b);
     const tintPeak = vec3(tint).div(max(max(max(tint.x, tint.y), tint.z), 0.001));
-    // `cutoutCoverage.b`: a silhueta do gato (a cabeça e o corpo aprovados, inteiros também onde a faixa do aro cruza a
-    // cabeça, e o casaco nas orelhas), em dois campos: 0,5 × ela nítida + 0,5 × ela desfocada. Em volta de 0,5 é o
-    // contorno, nítido (2 a 3 px); abaixo, 2B é o desfoque de fora (a névoa começa opaca no contorno e esmaece por ele);
-    // acima, 2B − 1 é o desfoque de dentro (a cor do aro fica só com folga para dentro da cabeça).
-    const packed = cutoutCoverage.b;
-    const silhouette = smoothstep(0.45, 0.55, packed);
-    const near = min(packed.mul(4), 1);
-    const arcInside = smoothstep(0.62, 0.8, packed.mul(2).sub(1)).mul(silhouette);
-    const fogA = max(min(peak.mul(1.25), 1), near);
+    // `cutoutCoverage.b`: a silhueta do gato, nítida e sozinha no canal (a cabeça e o corpo aprovados, inteiros também
+    // onde a faixa do aro cruza a cabeça, e o casaco nas orelhas; arredondada, sem as frestas entre as camadas). Os
+    // campos desfocados dela vêm de `cutoutFields`: R, o de fora (1 no contorno, esmaecendo), e G, o desfoque cru (a cor
+    // do aro fica só com folga para dentro da cabeça).
+    const fields = cutoutFields ? texture(cutoutFields, st) : vec4(0, 0, 0, 0);
+    const silhouette = smoothstep(0.15, 0.85, cutoutCoverage.b);
+    const near = fields.r;
+    const arcInside = smoothstep(0.62, 0.8, fields.g).mul(silhouette);
+    // A opacidade da névoa sobe macia com a luz e com a proximidade do corpo, sem teto duro: um `min(…, 1)` fazia uma
+    // faixa toda opaca junto do contorno, que se lia como um fio laranja (#10383, #11839).
+    const fogLight = float(1).sub(exp(peak.mul(-1.6)));
+    const fogNear = pow(near, 1.5).mul(0.85);
+    const fogA = float(1).sub(float(1).sub(fogLight).mul(float(1).sub(fogNear)));
     const fogRGB = tintPeak.mul(fogA);
     const body = max(silhouette, arcInside);
     // Dentro da cabeça, só a faixa do aro (a luz colorida que não é a da névoa tingida) mantém a cor; o resto é o escuro
     // do corpo, sem a névoa que no preto entra macia pela borda (no branco ela vira uma sombra marrom).
-    const notFog = smoothstep(0.15, 0.35, color.div(max(peak, 0.001)).sub(tintPeak).length());
-    const lightChroma = peak.sub(min(min(color.r, color.g), color.b)).div(max(peak, 0.001));
-    const arcLight = coverage.b.mul(smoothstep(0.15, 0.45, lightChroma)).mul(notFog);
-    const inside = mix(vec3(0.045, 0.045, 0.05), color, arcInside.mul(arcLight));
+    // A parte da névoa é o máximo da cor do agente que cabe sob os três canais; o que sobra é a luz própria do aro.
+    // Tirar a névoa assim (e não por limiares de matiz e de croma) não deixa fio onde o laranja encontra o aro.
+    const fogShare = min(min(color.r.div(max(tintPeak.x, 0.001)), color.g.div(max(tintPeak.y, 0.001))), color.b.div(max(tintPeak.z, 0.001)));
+    const arcOwn = max(color.sub(tintPeak.mul(fogShare)), vec3(0, 0, 0));
+    const inside = vec3(0.045, 0.045, 0.05).add(arcOwn.mul(arcInside.mul(coverage.b)));
     const inkRGB = mix(fogRGB, inside, body);
     const inkA = mix(fogA, float(1), body);
     const onLight = surface.mul(float(1).sub(solid));

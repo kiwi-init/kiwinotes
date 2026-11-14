@@ -49,8 +49,10 @@ try {
     for (const backing of backings) {
       for (const [name, color, ink] of BACKS) {
         const c = await cat(state, backing, ink);
-        const png = (await c.shot(AT[state]!, color)).toString("base64");
+        const raw = await c.shot(AT[state]!, color);
         await c.close();
+        writeFileSync(join(out, `${state}-${name}${backings.length > 1 ? `-${backing}` : ""}.png`), raw);
+        const png = raw.toString("base64");
         cells.push(`<figure><img src="data:image/png;base64,${png}"><figcaption>${state} · ${name}${backings.length > 1 ? ` · base ${backing}` : ""}</figcaption></figure>`);
       }
     }

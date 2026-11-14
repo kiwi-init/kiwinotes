@@ -7,5 +7,5 @@
     "orelha-direita": "6b6624c0c01f5216ec3914d218994ce29736b3694c958f98e74ddd3be74fd719",
     "aro": "5411234791669369e77451cef7d46a85bfe7a1573aa05859abab0131237a1d14"
   },
-  "method": "source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade under an elliptical fall-off (T11565); weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback; B: 0.5 sharp silhouette + 0.5 blurred (T11696)"
+  "method": "source layer coverage gated by smoothed dark observed material; float-smoothed light above32/255 pedestal gated near source coat; sqrt encoded; coat feather10px; 8pct side/bottom fade under an elliptical fall-off (T11565); weak emission16..32/255 curve preserving coat/arc; straight-alpha static fallback; B: rounded sharp silhouette; cutout-fields.webp R outside field, G blur (T11696)"
 }
