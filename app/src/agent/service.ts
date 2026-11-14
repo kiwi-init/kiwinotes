@@ -19,6 +19,7 @@
 //   cópia do registro (`undo.ts`). É da pessoa: não precisa do agente ligado e não vira ferramenta dele. Um por vez.
 
 import { lastSummaryDate, mainNoteWithSummary, SUMMARY_TITLE, summarySection, summarySince } from "./summary.ts";
+import { noteWithReferences, REFERENCES_TITLE } from "./references.ts";
 import type { SummarySettings } from "../shared/summary-settings.ts";
 import { DEFAULT_SUMMARY_SETTINGS, sanitizeSummarySettings } from "../shared/summary-settings.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -834,6 +835,11 @@ export class AgentService {
       return { id: p.id };
     },
     since: (project: ProposalProject) => this.summarySinceFor(project),
+    references: async (d) => {
+      const p = this.proposals.add({ kind: "references", request: this.activityId(), project: null, candidates: [], fields: null, references: d });
+      void this.emitProposals();
+      return { id: p.id };
+    },
   };
 
   /** Desde quando "o que andou" conta no resumo de um projeto: o último resumo da nota principal, ou o período de Ajustes. */
@@ -872,14 +878,15 @@ export class AgentService {
   private proposalSummary(p: MeetingProposal, s: MeetingNoteSettings): AgentProposalSummary {
     const iso = (ms: number) => new Date(ms).toISOString();
     const short = (x: { folder: string; name: string }) => ({ folder: x.folder, name: x.name });
-    const theme = p.kind === "summary" ? SUMMARY_TITLE : (p.fields?.theme ?? "");
+    const theme = p.kind === "summary" ? SUMMARY_TITLE : p.kind === "references" ? REFERENCES_TITLE : (p.fields?.theme ?? "");
     return {
       id: p.id,
       at: iso(p.at),
       status: p.status,
-      kind: p.kind === "summary" ? "summary" : "meeting",
+      kind: p.kind ?? "meeting",
       meeting: p.meeting ?? null,
       ...(p.summary ? { summary: { signal: p.summary.signal, since: p.summary.since } } : {}),
+      ...(p.references ? { references: { note: p.references.note, count: p.references.items.length } } : {}),
       project: p.project ? short(p.project) : null,
       candidates: p.candidates.map(short),
       theme,
@@ -955,6 +962,14 @@ export class AgentService {
    */
   async proposalView(id: string): Promise<AgentProposalView> {
     const p = this.proposalOr404(id);
+    if (p.kind === "references") {
+      // As referências (spec #11908): as linhas que entram e a nota com elas no fim da seção.
+      const summary = await this.summaryOf(p);
+      const r = p.references!;
+      const before = (await this.proposalWriter().get(r.note)).content;
+      const after = noteWithReferences(before, r.items);
+      return { ...summary, noteContent: after.lines.length ? `## ${REFERENCES_TITLE}\n\n${after.lines.join("\n")}\n` : "", main: { path: r.note, lines: addedLines(before, after.content) } };
+    }
     if (p.kind === "summary") {
       // O resumo executivo (spec #11546): a seção como vai ficar, e a nota principal com ela no topo.
       const summary = await this.summaryOf(p);
@@ -1036,6 +1051,7 @@ export class AgentService {
       if (p.status !== "pending") throw new AgentServiceError("E_BAD_ARGS", p.status === "offer" ? "Essa proposta ainda não foi preparada." : "Essa proposta já foi aplicada ou descartada.");
       if (needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", p.kind === "summary" ? "Escolha antes o projeto do resumo." : "Escolha antes o projeto da reunião.");
       if (p.kind === "summary") return this.applySummary(p);
+      if (p.kind === "references") return this.applyReferences(p);
       const meeting = this.meetingOf(p);
       const fields = this.fieldsOf(p);
       const writer = this.proposalWriter();
@@ -1091,6 +1107,45 @@ export class AgentService {
    * que fica nas Versões; a escrita entra no registro, com a cópia de antes e o [Desfazer]. Lida de novo se a nota
    * mudou no meio.
    */
+  /**
+   * O [Aplicar] das referências (spec #11908): só a nota pedida, no fim da seção "Referências", sem repetir um link que
+   * ela já tem. Uma escrita como as outras: a cópia de antes no registro, as Versões e o [Desfazer].
+   */
+  private async applyReferences(p: MeetingProposal): Promise<AgentProposalSummary> {
+    const r = p.references!;
+    const writer = this.proposalWriter();
+    const request = p.applyRequest ?? `referencias-${crypto.randomUUID()}`;
+    if (!p.applyRequest) {
+      await this.activity.begin(request, `Aplicar as referências de "${r.note.replace(/\.md$/i, "")}"`);
+      this.proposals.update(p.id, (x) => (x.applyRequest = request));
+    }
+    const folderId = await writer.folder();
+    const where = folderId ? { folder: folderId } : {};
+    for (let tries = 0; ; tries++) {
+      const n = await writer.get(r.note);
+      if (n.readOnly) throw new AgentServiceError("E_BAD_ARGS", `${n.path} não é UTF-8: o Kiwi não escreve nela.`);
+      const next = noteWithReferences(n.content, r.items).content;
+      if (next === n.content) break;
+      const copy = await this.activity.keep(request, n.content);
+      const w = await writer.save(n.path, next, n.version).catch(async (e) => {
+        await this.activity.drop(copy);
+        throw e;
+      });
+      if (w.saved) {
+        await this.activity.change(request, { kind: "appended", path: w.path, section: REFERENCES_TITLE, before: n.content.length, after: next.length, version: w.version, copy, ...where });
+        break;
+      }
+      await this.activity.drop(copy);
+      if (tries >= 2) throw new AgentServiceError("E_CHANGED", `${n.path} mudou enquanto o Kiwi aplicava. Tente [Aplicar] de novo.`);
+    }
+    const done = this.proposals.update(p.id, (x) => {
+      x.status = "applied";
+      x.doneAt = (this.d.now ?? Date.now)();
+    })!;
+    void this.emitProposals();
+    return this.summaryOf(done);
+  }
+
   private async applySummary(p: MeetingProposal): Promise<AgentProposalSummary> {
     const main = p.project?.main;
     if (!main) throw new AgentServiceError("E_BAD_ARGS", "Esse projeto não tem nota principal: marque uma em Notas, no projeto.");

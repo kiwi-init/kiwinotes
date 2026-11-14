@@ -177,7 +177,8 @@ export type { NoteModel };
 // 1.62.0 (T11691, spec #11549): os arquivos que o agente gera. O `files.create` (um arquivo novo do agente: txt, csv,
 //   xlsx, docx ou pdf, em base64) e o `files.delete` (o desfazer dele, para a Lixeira, pela versão). Só acréscimo.
 // 1.63.0 (T11986, spec #11908): "Pesquisar na web". O `webSearch` no `AgentStatus` e no `agent.configure` (desligado por
-//   padrão; ligado, o Kiwi libera as ferramentas de web do próprio agente). Só acréscimo.
+//   padrão; ligado, o Kiwi libera as ferramentas de web do próprio agente) e o `kind: "references"` nas propostas (T11987:
+//   as referências de uma nota, com a nota e quantos links). Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.63.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
@@ -630,11 +631,14 @@ export interface AgentProposalSummary {
    */
   status: "offer" | "pending" | "applied" | "discarded";
   /** `summary`: o resumo executivo de um projeto (1.59.0, spec #11546), que só muda a nota principal. */
-  kind: "meeting" | "summary";
+  /** `references` (1.63.0, spec #11908): as referências de uma nota, que vão no fim dela. */
+  kind: "meeting" | "summary" | "references";
   /** A reunião; null num resumo executivo. */
   meeting: { path: string; title: string; date: string } | null;
   /** O resumo executivo: o sinal e desde quando "o que andou" conta. */
   summary?: { signal: "verde" | "amarelo" | "vermelho"; since: string };
+  /** As referências: a nota e quantos links o agente mandou. */
+  references?: { note: string; count: number };
   /** O projeto; null sem projeto (em dúvida, com `candidates`, ou "Nenhum: só a nota da reunião"). */
   project: { folder: string; name: string } | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe. */

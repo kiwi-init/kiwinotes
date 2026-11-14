@@ -46,11 +46,28 @@ function summaryLine(p: AgentProposalSummary): string {
   }
 }
 
+/** A frase das referências de uma nota (spec #11908), pelo estado. */
+export function referencesLine(p: AgentProposalSummary): string {
+  const note = p.references ? `"${p.references.note.replace(/\.md$/i, "").split("/").at(-1)}"` : "a nota";
+  const n = p.references?.count ?? 0;
+  const links = n === 1 ? "1 link" : `${n} links`;
+  switch (p.status) {
+    case "offer":
+    case "pending":
+      return `As referências de ${note} estão prontas: ${links} no fim da nota.`;
+    case "applied":
+      return `Pronto: as referências estão no fim de ${note}.`;
+    case "discarded":
+      return `As referências de ${note} foram descartadas.`;
+  }
+}
+
 /** A junção dos nomes da pergunta ("É do A, do B ou do C?"): ", do " entre os do meio e " ou do " antes do último. */
 export const choiceJoin = (i: number, total: number) => (i === 0 ? "" : i === total - 1 ? " ou do " : ", do ");
 
 /** A frase principal da proposta, pelo estado. A pergunta com os projetos, a tela monta com o `choiceJoin`. */
 export function proposalLine(p: AgentProposalSummary): string {
+  if (p.kind === "references") return referencesLine(p);
   if (p.kind === "summary" || !p.meeting || !p.note) return summaryLine(p);
   const meeting = `"${p.meeting.title}"`;
   switch (p.status) {

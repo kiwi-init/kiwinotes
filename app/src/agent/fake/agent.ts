@@ -225,6 +225,12 @@ async function createFileFake(client: AgentContext, sessionId: string, formato: 
   return `Gerei ${(JSON.parse(r.text) as { caminho: string }).caminho}.`;
 }
 
+/** As referências fixas do agente falso (spec #11908): links de documentação pública, nenhum aberto de verdade. */
+export const FAKE_REFERENCES = [
+  { titulo: "DICOMweb", link: "https://www.dicomstandard.org/using/dicomweb", resumo: "O padrão do QIDO-RS, WADO-RS e STOW-RS.", data: "2026-11-14" },
+  { titulo: "Cloud Healthcare API: DICOM", link: "https://cloud.google.com/healthcare-api/docs/concepts/dicom", resumo: "Os dicomStores e o DICOMweb do Google.", data: "2026-11-14" },
+];
+
 /**
  * A web do agente (spec #11908): "/web <busca>" pede a permissão do `WebSearch`, como o Claude Code. Com o sim, a busca
  * aparece como uma ferramenta em andamento e termina; com o não, ela não acontece. O falso nunca vai à rede.
@@ -537,6 +543,13 @@ const app = agent({ name: "kiwi-fake-agent" })
       }
       default:
         await think(client, sessionId);
+        // As referências (spec #11908): "/referencias <nota>" manda itens fixos, como se tivesse pesquisado.
+        const refs = /^\/referencias\s+(.+)$/.exec(text);
+        if (refs && kiwiServers.has(sessionId)) {
+          const r = await useTool(client, sessionId, "notes_add_references", { nota: refs[1]!.trim(), itens: FAKE_REFERENCES });
+          await say(client, sessionId, r.isError ? `Não consegui preparar as referências: ${r.text}` : `Preparei as referências de ${refs[1]!.trim()}. Veja e aplique no Kiwi.`);
+          return { stopReason: "end_turn" };
+        }
         // A web (spec #11908): só a permissão e o status; o falso nunca vai à rede.
         const web = /^\/web\s+(.+)$/.exec(text);
         if (web) {

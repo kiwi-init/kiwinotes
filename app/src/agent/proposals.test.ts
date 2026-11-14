@@ -199,7 +199,7 @@ describe("a ferramenta meeting_propose", () => {
   };
   function ctx(guard?: SecretGuard) {
     const got: ProposalDraft[] = [];
-    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: { propose: async (d: ProposalDraft) => (got.push(d), { id: `p${got.length}` }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01" } } };
+    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: { propose: async (d: ProposalDraft) => (got.push(d), { id: `p${got.length}` }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01", references: async () => ({ id: "r" }) } } };
   }
   const call = (c: ReturnType<typeof ctx>["ctx"], args: Record<string, unknown>) => runKiwiTool(c, "meeting_propose", { reuniao: MEETING.path, tema: "Tema", ...args });
 
@@ -264,7 +264,7 @@ describe("a ferramenta project_summary_propose (spec #11546)", () => {
   };
   function ctx(guard?: SecretGuard) {
     const got: SummaryDraft[] = [];
-    const sink = { propose: async () => ({ id: "m" }), summary: async (d: SummaryDraft) => (got.push(d), { id: `s${got.length}` }), since: async () => "2026-11-01" };
+    const sink = { propose: async () => ({ id: "m" }), summary: async (d: SummaryDraft) => (got.push(d), { id: `s${got.length}` }), since: async () => "2026-11-01", references: async () => ({ id: "r" }) };
     return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: sink } };
   }
   const call = (c: ReturnType<typeof ctx>["ctx"], args: Record<string, unknown>) => runKiwiTool(c, "project_summary_propose", { projeto: "Migração", situacao: "amarelo", ...args });
@@ -368,5 +368,50 @@ describe("a ferramenta project_summary_propose (spec #11546)", () => {
     const { ctx: c } = ctx();
     expect((await runKiwiTool({ ...c, reader: statusReader }, "project_status", { projeto: "Projetos/Migração" })).value.resumoDesde).toBe("2026-11-01");
     expect((await runKiwiTool({ reader: statusReader }, "project_status", { projeto: "Projetos/Migração" })).value.resumoDesde).toBeUndefined();
+  });
+});
+
+describe("a ferramenta notes_add_references (spec #11908)", () => {
+  const NOTE = "Projetos/PACS.md";
+  const reader: VaultReader = {
+    ...EMPTY_READER,
+    get: async (p) => {
+      if (p !== NOTE) throw Object.assign(new Error(`no note ${p}`), { code: "E_NOT_FOUND" });
+      return { path: NOTE, title: "PACS", mtime: "2026-11-14T00:00:00.000Z", content: "# PACS\n\nver https://example.com/ja\n" };
+    },
+  };
+  function ctx(guard?: SecretGuard) {
+    const got: { note: string; items: unknown[] }[] = [];
+    const sink = { propose: async () => ({ id: "m" }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01", references: async (d: { note: string; items: unknown[] }) => (got.push(d), { id: `r${got.length}` }) };
+    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: sink } };
+  }
+  const item = (o: Record<string, unknown> = {}) => ({ titulo: "Doc", link: "https://example.com/doc", resumo: "A doc.", data: "2026-11-14", ...o });
+
+  test("guarda só os links que a nota ainda não tem; com todos já lá, nada é proposto", async () => {
+    const { got, ctx: c } = ctx();
+    const r = await runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item(), item({ titulo: "Já", link: "https://EXAMPLE.com/ja/" })] });
+    expect(r.value).toMatchObject({ proposta: "r1", nota: NOTE, novos: 1, jaNaNota: 1 });
+    expect(got[0]).toEqual({ note: NOTE, items: [{ title: "Doc", url: "https://example.com/doc", summary: "A doc.", date: "2026-11-14" }] });
+    const none = await runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item({ link: "https://example.com/ja" })] });
+    expect(none.value).toMatchObject({ novos: 0 });
+    expect(got).toHaveLength(1);
+  });
+
+  test("um link que não é http(s), com usuário e senha, ou que não é endereço é recusado; a nota tem de existir", async () => {
+    const { got, ctx: c } = ctx();
+    for (const link of ["ftp://example.com/x", "javascript:alert(1)", "file:///etc/hosts", "não é link", "https://ana:segredo@example.com/x"])
+      await expect(runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item({ link })] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(runKiwiTool(c, "notes_add_references", { nota: "Outra.md", itens: [item()] })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    await expect(runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item({ data: "14/11/2026" })] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    expect(got).toEqual([]);
+  });
+
+  test("um segredo (o marcador do filtro) não vai para a nota", async () => {
+    const guard = new SecretGuard();
+    const marker = /‹segredo [^›]+›/.exec(guard.request("a chave é ghp_0123456789abcdefghijABCDEFGHIJ012345 e pronto").text)?.[0];
+    const { got, ctx: c } = ctx(guard);
+    await expect(runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item({ resumo: `usa ${marker}` })] })).rejects.toThrow(/marcador/);
+    expect(got).toEqual([]);
   });
 });

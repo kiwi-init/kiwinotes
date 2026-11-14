@@ -34,6 +34,7 @@ import {
 } from "../proposals.ts";
 import { removedSecrets, type DoubtDecider, type SecretGuard } from "../../guardrail/filter.ts";
 import type { SummaryFields, SummarySignal } from "../summary.ts";
+import { noteWithReferences, REFERENCES_MAX, type ReferenceItem } from "../references.ts";
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
 export const READ_MAX_CHARS = 12_000;
@@ -74,7 +75,7 @@ export const DIARY_STATUS_LINES = 10;
 /** O máximo de notas que um "organizar a pasta" libera de uma vez (spec #11102). */
 export const ORGANIZE_MAX = 200;
 /** A proposta da reunião (spec #8360): não escreve nada, guarda a proposta para a pessoa aprovar. */
-export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose", "project_summary_propose"] as const;
+export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose", "project_summary_propose", "notes_add_references"] as const;
 /** A memória do agente (spec #11469): o que ele sabe sobre a pessoa, em `.kiwi/agente/sobre-mim.md`. */
 export const KIWI_MEMORY_TOOL_NAMES = ["memory_remember", "memory_forget"] as const;
 export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES, ...KIWI_MEMORY_TOOL_NAMES] as const;
@@ -481,6 +482,36 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     proposes: true,
   },
   {
+    name: "notes_add_references",
+    title: "Pôr as referências numa nota",
+    description: `Prepara as referências de uma nota para a pessoa aprovar: os links das páginas que você abriu na web (a documentação, um artigo), cada um com o título, uma linha sobre ele e o dia. O Kiwi monta a seção "Referências" no fim da nota, sem repetir um link que ela já tem. Nada é escrito agora: a pessoa vê e aplica ou descarta. Só links http(s) de páginas que você abriu; até ${REFERENCES_MAX} por vez.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        nota: { type: "string", description: "O caminho da nota (ex.: Projetos/PACS/PACS.md), como o notes_list devolve." },
+        itens: {
+          type: "array",
+          minItems: 1,
+          maxItems: REFERENCES_MAX,
+          items: {
+            type: "object",
+            properties: {
+              titulo: { type: "string", minLength: 1, maxLength: 200 },
+              link: { type: "string", description: "O endereço http(s) da página." },
+              resumo: { type: "string", maxLength: 300, description: "Uma linha sobre o que a página tem." },
+              data: { type: "string", description: "O dia em que você abriu a página, AAAA-MM-DD." },
+            },
+            required: ["titulo", "link"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["nota", "itens"],
+      additionalProperties: false,
+    },
+    proposes: true,
+  },
+  {
     name: "memory_remember",
     title: "Anotar na memória",
     description: `Anota um fato sobre a pessoa na memória do Kiwi, que vai no começo de todo pedido: quando ela pedir ("lembra que…") ou quando você perceber algo útil e duradouro (o trabalho dela, como ela prefere as respostas). Um fato por chamada, numa linha curta, até ${FACT_MAX_CHARS} caracteres. Nunca senhas, tokens nem dados sensíveis: o Kiwi recusa. A memória tem até ${MEMORY_MAX} fatos; cheia, esqueça um antes. A pessoa vê a anotação no balão e pode desfazer.`,
@@ -606,6 +637,8 @@ export interface SummaryDraft {
 export interface ProposalSink {
   propose(d: ProposalDraft): Promise<{ id: string }>;
   summary(d: SummaryDraft): Promise<{ id: string }>;
+  /** As referências de uma nota (spec #11908): a nota e os itens já conferidos. */
+  references(d: { note: string; items: ReferenceItem[] }): Promise<{ id: string }>;
   /** Desde quando "o que andou" conta no próximo resumo do projeto (`AAAA-MM-DD`), para o `project_status`. */
   since(p: ProposalProject): Promise<string>;
 }
@@ -760,6 +793,7 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     if ((KIWI_PROPOSE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.proposals) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       if (name === "project_summary_propose") return await proposeSummary(ctx.reader, ctx.proposals, raw, ctx.guard);
+      if (name === "notes_add_references") return await proposeReferences(ctx.reader, ctx.proposals, raw, ctx.guard);
       return await propose(ctx.reader, ctx.proposals, raw, ctx.guard);
     }
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
@@ -1611,5 +1645,54 @@ async function createFile(writer: VaultWriter, raw: unknown, guard: SecretGuard 
     },
     target: f.path,
     change: { kind: "created", path: f.path, before: 0, after: f.size, version: f.version, ...where },
+  };
+}
+
+
+/**
+ * As referências de uma nota (spec #11908): confere a nota e os links, limpa os textos (um marcador do filtro é
+ * recusado: um segredo não vai para a nota pela web) e guarda a proposta. Só os links que a nota ainda não tem contam.
+ */
+async function proposeReferences(reader: VaultReader, sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
+  const a = args(raw, ["nota", "itens"]);
+  const notePath = str(a, "nota", true, 1024)!.trim().replace(/^\/+/, "");
+  if (!/\.md$/i.test(notePath)) throw new ToolError("E_BAD_ARGS", "nota é o caminho de uma nota .md");
+  const n = await reader.get(notePath);
+  const raws = a.itens;
+  if (!Array.isArray(raws) || !raws.length) throw new ToolError("E_BAD_ARGS", "itens é uma lista com ao menos um item");
+  if (raws.length > REFERENCES_MAX) throw new ToolError("E_BAD_ARGS", `itens passa de ${REFERENCES_MAX}`);
+  const clean = (v: string | undefined) => restore(guard, "\u0000nova", v ?? "").replace(/\s+/g, " ").trim();
+  const items: ReferenceItem[] = raws.map((x, i) => {
+    const o = args(x, ["titulo", "link", "resumo", "data"]);
+    const w = `itens[${i}]`;
+    const title = clean(str(o, "titulo", true, 200));
+    if (!title) throw new ToolError("E_BAD_ARGS", `${w}.titulo está vazio`);
+    const link = str(o, "link", true, 2048)!.trim();
+    let url: URL;
+    try {
+      url = new URL(link);
+    } catch {
+      throw new ToolError("E_BAD_ARGS", `${w}.link não é um endereço: mande o http(s) da página que você abriu`);
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new ToolError("E_BAD_ARGS", `${w}.link não é http(s): só páginas da web que você abriu`);
+    if (url.username || url.password) throw new ToolError("E_BAD_ARGS", `${w}.link leva usuário ou senha: mande o endereço sem eles`);
+    clean(link); // um marcador no link também é recusado
+    const date = str(o, "data", false, 10)?.trim();
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ToolError("E_BAD_ARGS", `${w}.data é AAAA-MM-DD`);
+    return { title, url: url.toString(), summary: clean(str(o, "resumo", false, 300)), ...(date ? { date } : {}) };
+  });
+  const fresh = noteWithReferences(n.content, items).added;
+  if (!fresh.length)
+    return { value: { nota: n.path, novos: 0, aviso: "Todos esses links já estão na nota: nada a propor." }, target: n.path };
+  const { id } = await sink.references({ note: n.path, items: fresh });
+  return {
+    value: {
+      proposta: id,
+      nota: n.path,
+      novos: fresh.length,
+      ...(fresh.length < items.length ? { jaNaNota: items.length - fresh.length } : {}),
+      aviso: "Nada foi escrito. A proposta aparece para a pessoa, que aplica ou descarta. Não escreva as referências com outras ferramentas.",
+    },
+    target: n.path,
   };
 }

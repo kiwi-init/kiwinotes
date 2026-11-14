@@ -20,6 +20,7 @@ import { linkSafeName } from "../shared/wikilinks.ts";
 export { meetingNoteTitle };
 import { DEFAULT_AGENT_MEETING_SETTINGS, type AgentMeetingSettings } from "../store/settings.ts";
 import type { SummaryFields } from "./summary.ts";
+import type { ReferenceItem } from "./references.ts";
 
 /** Quanto uma proposta fica guardada (spec #8360): 30 dias, como o registro do agente. */
 export const PROPOSAL_KEEP_MS = 30 * 86_400_000;
@@ -81,11 +82,13 @@ export interface MeetingProposal {
    * `summary`: o resumo executivo de um projeto (spec #11546), que só muda a nota principal. Sem ele, a proposta da
    * reunião (#8360).
    */
-  kind?: "summary";
+  kind?: "summary" | "references";
   /** A reunião da proposta; não há num resumo executivo. */
   meeting?: ProposalMeeting;
   /** Os campos do resumo executivo (`kind: "summary"`). */
   summary?: SummaryFields;
+  /** As referências de uma nota (`kind: "references"`, spec #11908): a nota e os itens que o agente mandou. */
+  references?: { note: string; items: ReferenceItem[] };
   /** O projeto escolhido; null sem projeto (ainda em dúvida, ou "Nenhum: só a nota da reunião"). */
   project: ProposalProject | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe com botões. */
@@ -361,7 +364,11 @@ export class ProposalStore {
     const proposal: MeetingProposal = { ...p, id: crypto.randomUUID(), at: this.now(), status };
     // A mesma reunião (#8360), ou o resumo do mesmo projeto (#11546): vale a mais nova.
     const same = (x: MeetingProposal) =>
-      p.kind === "summary" ? x.kind === "summary" && !!p.project && x.project?.folder === p.project.folder : !!x.meeting && x.meeting.path === p.meeting?.path;
+      p.kind === "summary"
+        ? x.kind === "summary" && !!p.project && x.project?.folder === p.project.folder
+        : p.kind === "references"
+          ? x.kind === "references" && x.references?.note === p.references?.note
+          : !!x.meeting && x.meeting.path === p.meeting?.path;
     f.proposals = f.proposals.filter((x) => !((x.status === "pending" || x.status === "offer") && same(x) && !x.notePath));
     f.proposals.push(proposal);
     this.save(f);
