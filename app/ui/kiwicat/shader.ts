@@ -219,14 +219,21 @@ export function fogMaterial(
     const head = smoothstep(0.35, 0.65, headField);
     const fill = head.mul(smoothstep(0.05, 0.4, fields.b));
     const fogLight = float(1).sub(exp(max(alphaHigh.sub(0.07), 0).mul(-1.8)));
-    const fogHug = fields.r.mul(0.85).mul(float(1).sub(coatA));
+    const fogHug = min(fields.r.mul(2), 1).mul(0.85).mul(float(1).sub(coatA));
     const fogA = float(1).sub(float(1).sub(fogLight).mul(float(1).sub(fogHug)));
     const dark = vec3(0.045, 0.045, 0.05);
     // Bem dentro da cabeça, onde o aro passa, o corpo é inteiro: o casaco tem um buraco ali, e o branco aparecia como
     // um fio claro em volta do aro. No resto (o corpo de baixo, que no preto se desfaz no brilho) fica o casaco.
     // Ali, a luz que não é do aro (o brilho laranja de dentro da cabeça) também não vira tinta: no preto ela é um
     // brilho escuro, e no branco virava um bloco marrom com a borda em escada.
-    const bodyA = max(coatA, fill);
+    // Sob a bolha do lado direito, o casaco tem um lábio fino que no preto o brilho cobre e no branco virava um dente
+    // escuro: ali (só numa caixa em volta dele) o casaco é aparado pelo contorno arredondado do corpo (`fields.r`).
+    const toothBox = smoothstep(0.64, 0.68, st.x)
+      .mul(float(1).sub(smoothstep(0.79, 0.83, st.x)))
+      .mul(smoothstep(0.43, 0.47, st.y))
+      .mul(float(1).sub(smoothstep(0.56, 0.6, st.y)));
+    const coatLight = coatA.mul(float(1).sub(toothBox.mul(float(1).sub(smoothstep(0.42, 0.55, fields.r)))));
+    const bodyA = max(coatLight, fill);
     const inkA = fogA.mul(float(1).sub(fill));
     const outsideRGB = tintPeak.mul(inkA).add(dark.mul(bodyA).mul(float(1).sub(inkA)));
     const outsideA = inkA.add(bodyA.mul(float(1).sub(inkA)));
@@ -242,7 +249,7 @@ export function fogMaterial(
     const arcRGB = arcOwn.add(color.sub(arcOwn).mul(0.75));
     const lightRGB = mix(darkRGB, mix(outsideRGB, arcRGB, arcInside), onLight);
     const lightAlpha = mix(darkAlpha, mix(outsideA, float(1), arcInside), onLight);
-    const alpha = max(cutoutCoverage.r, lightAlpha);
+    const alpha = max(mix(cutoutCoverage.r, coatLight, onLight), lightAlpha);
     // Only left/right/bottom carry visible reference light. The top is <=1/255.
     const band = smoothstep(0, edgeBand, st.x).mul(smoothstep(0, edgeBand, float(1).sub(st.x))).mul(smoothstep(0, edgeBand * 0.8, st.y));
     // A queda arredondada (spec #9573, a elipse escolhida pelo lead no #11568): perto da borda a luz cai até zero numa
@@ -251,7 +258,7 @@ export function fogMaterial(
     const q = st.sub(0.5).mul(2);
     const rounded = float(1).sub(smoothstep(0.82, 1, q.x.mul(q.x).add(q.y.mul(q.y)).sqrt()));
     const edge = edgeShape === "band" ? band : max(min(rounded, band), band.mul(protectedMaterial));
-    const coat = cutoutCoverage.r;
+    const coat = mix(cutoutCoverage.r, coatLight, onLight);
     const lightFade = max(coat, edge);
     const finalRGB = lightRGB.mul(lightFade);
     const topSupport = smoothstep(0, edgeBand * .8, float(1).sub(st.y));

@@ -45,29 +45,36 @@ light=np.maximum(light-32/255,0)/(1-32/255)*proximity
 light=np.asarray(Image.fromarray(light).resize((2048,2560),Image.Resampling.BILINEAR),np.float32)
 # Coverage support is smooth, rather than magnifying byte noise in faint light.
 Image.fromarray(np.uint8(np.rint(np.stack([coat,np.sqrt(light),np.zeros_like(coat)],2)*255))).save(DEST/'cutout-mask.webp',lossless=True,method=6)
-# T11696: on a light surface the arc keeps its colours only well inside the head. `cutout-fields.webp` holds, at a
-# quarter of the size, the head blurred wide in G; the shader takes the arc where this blur is high. The outline itself still comes from the coat.
+# T11696: the fields for a light surface, in `cutout-fields.webp` at a quarter of the size. The coat has holes where the
+# bright arc crosses the head (and the reference light eats it at the cheek): the shader fills those with the dark body
+# where the arc is (`fill`), and paints the rest of the light as ink.
 def gauss(a,r): return np.asarray(Image.fromarray(np.uint8(np.rint(np.clip(a,0,1)*255))).filter(ImageFilter.GaussianBlur(r)),np.float32)/255
-# The head: the approved head and body layers (whole also where the bright arc crosses the head, where the coat has a
-# hole) plus the coat, rounded.
+def smooth(a,lo,hi): t=np.clip((a-lo)/(hi-lo),0,1); return t*t*(3-2*t)
+# B: the arc coverage of the material mask, blurred: its edge is jagged and striated, and on a light surface it would
+# show as a staircase where the arc leaves the head.
+arc=gauss(np.asarray(Image.open(DEST/'material-mask.webp').convert('RGB'),np.float32)[:,:,2]/255,24)
+# G, the head: the approved head and body layers (whole also where the arc crosses) plus the coat, rounded, with a short
+# edge. From the cheek down it is shrunk by ~80 px (there the reference light eats the coat, that much inside the layer),
+# so the fill's edge lines up with the coat's and the outline goes on without a step; above (the top of the head and
+# the V between the ears) the layer's edge is the real one.
 head=coat.copy()
 for name in ['cabeca','corpo']:
     rgba=np.asarray(Image.open(SRC/(name+'.png')).convert('RGBA'),np.float32)/255
     head=np.maximum(head,rgba[:,:,3])
-# From the cheek down, shrunk by ~80 px (the cheek, where the reference light eats the coat, is that much inside the layer): its edge lines up
-# with the coat's, so where it fills the arc's hole the outline goes on without a step. Then a short blur (~3 px).
-# Only from the cheek down: above (the top of the head and the V between the ears) the layer's edge is the real one.
 union=Image.fromarray(np.uint8((gauss((head>.5).astype(np.float32),8)>.5)*255)).resize((512,640),Image.Resampling.BOX)
 full=np.asarray(union.filter(ImageFilter.GaussianBlur(2.5)),np.float32)/255
 shrunk=np.asarray(union.point(lambda v:255 if v>127 else 0).filter(ImageFilter.MinFilter(41)).filter(ImageFilter.GaussianBlur(2.5)),np.float32)/255
-top=np.clip((1000/4-np.arange(640,dtype=np.float32)[:,None])/(120/4),0,1); top=top*top*(3-2*top)
+top=smooth(1000/4-np.arange(640,dtype=np.float32)[:,None],0,120/4)
 head=np.asarray(Image.fromarray(full*top+shrunk*(1-top)).resize((2048,2560),Image.Resampling.BILINEAR),np.float32)
-# R: the coat blurred short (1 at its edge, fading out over ~20 px of the canvas), so the fog stays opaque right against
-# the dark coat also where the light dips next to it (on black that dip is dark and invisible; on white it was pale).
-hug=np.minimum(2*gauss(coat,60),1)
-# B: the arc coverage of the material mask, blurred: its edge is jagged and striated, and on a light surface it would
-# show as a staircase where the arc leaves the head.
-arc=gauss(np.asarray(Image.open(DEST/'material-mask.webp').convert('RGB'),np.float32)[:,:,2]/255,24)
+# On the right of the head nothing crosses the coat: the fill stays inside the coat's smoothed outline there (past it,
+# under the side bubble, it made a dark tooth pointing out).
+right=smooth(np.arange(2048,dtype=np.float32)[None,:],1150,1300)
+head=head*(1-right*(1-smooth(gauss(coat,24),.45,.6)))
+# R: the body (the coat and the fill) blurred (raw; the shader doubles it): the ink keeps the outside tone right up to
+# the black also where the light dips next to the body (on black that dip is dark and invisible; on white it was a
+# light band). Measured from the body and not only the coat, also at the cheek and at the bottom of the V.
+body=np.maximum(coat,smooth(head,.35,.65)*smooth(arc,.05,.4))
+hug=gauss(body,60)
 Image.fromarray(np.uint8(np.rint(np.stack([hug,head,arc],2)*255))).resize((512,640),Image.Resampling.BOX).save(DEST/'cutout-fields.webp',lossless=True,method=6)
 # Static fallback: output premultiplied reference / coverage as straight RGBA.
 for name in ['reference','reference-no-eyes']:
