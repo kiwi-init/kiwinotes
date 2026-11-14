@@ -81,7 +81,7 @@ export async function createKiwiFog(root: HTMLElement, options: FogOptions) {
   const selectedReference = options.referenceUrl ?? eyeFreeUrl;
   const fallbackReference = options.cutout ? (options.cutoutReferenceUrl ?? cutoutEyeFreeUrl) : selectedReference;
   image.src = fallbackReference;
-  image.alt = "Kiwi-cat";
+  image.alt = "Kiwi Cat";
   image.width = width;
   image.height = height;
   root.replaceChildren(image);

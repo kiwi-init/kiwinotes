@@ -150,7 +150,7 @@ export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, 
 // 1.50.0 (T10122, spec #9873): a pergunta na dúvida. O `agent.question` (o cartão aberto, com os trechos, só para a
 //   tela), o `agent.answer`, o `agent.answers` e o `agent.forget`, o evento `agent.questionChanged` (só os ids), o status
 //   `waiting` no `agent.turn` e as `doubts` de cada pedido no `agent.activity`. Só acréscimo.
-// 1.51.0 (T9567, spec #9510): o gato na janela principal. O `kiwicat.show` nas settings ("Mostrar o Kiwi-cat"). Só
+// 1.51.0 (T9567, spec #9510): o gato na janela principal. O `kiwicat.show` nas settings ("Mostrar o Kiwi Cat"). Só
 //   acréscimo.
 // 1.52.0 (T10525, spec #9839): a notificação quando o agente espera uma resposta. O `agent.notice` (a permissão do macOS
 //   e o liga/desliga), o `agent.noticeAllow` (o único que pede a permissão, no clique da pessoa), o `agent.noticeSet` e o

@@ -14,8 +14,8 @@ export function CatRow() {
     return () => { alive = false; off(); };
   }, []);
   if (show === null) return null;
-  return <Row label="Mostrar o Kiwi-cat" hint={failed ? "Não deu para salvar. Tente de novo." : "O gato mostra o que o agente está fazendo no canto da janela."}>
-    <Switch label="Mostrar o Kiwi-cat" checked={show} onChange={next => {
+  return <Row label="Mostrar o Kiwi Cat" hint={failed ? "Não deu para salvar. Tente de novo." : "O gato mostra o que o agente está fazendo no canto da janela."}>
+    <Switch label="Mostrar o Kiwi Cat" checked={show} onChange={next => {
       setFailed(false);
       void api.settings.set({ kiwicat: { show: next } }).then(s => setShow(s.kiwicat.show), () => setFailed(true));
     }} />
@@ -36,7 +36,7 @@ export function OverlayCatRow() {
     return () => { alive = false; off(); };
   }, []);
   if (on === null) return null;
-  const label = "Mostrar o Kiwi-cat por cima dos outros apps";
+  const label = "Mostrar o Kiwi Cat por cima dos outros apps";
   return <Row label={label} hint={failed ? "Não deu para salvar. Tente de novo." : "Quando o Kiwi não está na frente, o gato aparece no centro da tela enquanto o agente trabalha. Ele não pega o clique nem o foco."}>
     <Switch label={label} checked={on} onChange={next => {
       setFailed(false);
@@ -49,7 +49,7 @@ type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 
 /**
  * A cor da névoa do gato (spec #9349): só amostras prontas, com a do agente marcada por padrão, e uma amostra pequena e
- * parada do gato ao lado. Com o agente ou o "Mostrar o Kiwi-cat" desligado, a linha fica desabilitada, sem amostra, e o
+ * parada do gato ao lado. Com o agente ou o "Mostrar o Kiwi Cat" desligado, a linha fica desabilitada, sem amostra, e o
  * módulo do gato não é carregado.
  */
 /** `preview: false`: sem o gatinho da linha (o onboarding já mostra o gato grande na cor, spec #11955). */
@@ -64,10 +64,10 @@ export function CatColorRow({ agentEnabled, preview = true }: { agentEnabled: bo
   }, []);
   if (!cat) return null;
   const on = agentEnabled && cat.show;
-  const label = "Cor do Kiwi-cat";
+  const label = "Cor do Kiwi Cat";
   const hint = failed ? "Não deu para salvar. Tente de novo."
     : !agentEnabled ? "Ligue o agente para escolher a cor do gato."
-    : !cat.show ? "Mostre o Kiwi-cat para escolher a cor dele."
+    : !cat.show ? "Mostre o Kiwi Cat para escolher a cor dele."
     : "A cor da névoa em volta do gato. O gato continua preto.";
   const options = catColorOptions().map(o => ({ value: o.id, label: o.label, color: o.hex }));
   return <Row label={label} hint={hint}>

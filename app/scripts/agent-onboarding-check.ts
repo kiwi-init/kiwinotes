@@ -159,7 +159,9 @@ try {
       await shot(p, "6-projetos-light.png");
       await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
       await stepIs(p, 7);
-      // Passo 7: as amostras de Ajustes, com a do agente marcada; trocar muda o gato grande na hora.
+      // Passo 7: as amostras de Ajustes, com a do agente marcada; trocar muda o gato grande na hora. O título chama para
+      // escolher (spec #12917).
+      assert.equal(await p.locator("#kn-onb-title").textContent(), "Escolha a cor do Kiwi Cat!");
       const swatch = p.getByRole("dialog").getByRole("radio", { name: "A do agente" });
       assert.equal(await swatch.getAttribute("aria-checked"), "true");
       assert.equal(await p.locator(".kn-onb-color .kn-cat-color canvas, .kn-onb-color .kn-cat-preview").count(), 0, "sem o gatinho da linha: um gato só");
@@ -193,6 +195,13 @@ try {
       await stepIs(p, 9);
       report.checks.push("Continuar, Pular and Voltar move through the 9 steps in order; the step is saved in the agent settings");
     } else {
+      // O passo da cor no escuro também (spec #12917).
+      await invoke("agent.configure", { onboarding: { step: 7 } });
+      await stepIs(p, 7);
+      await p.waitForSelector("#kn-onb-title:text-is('Escolha a cor do Kiwi Cat!')", { timeout: 15000 });
+      // O foco que o passo põe no título (para o leitor de tela) não desenha o anel, nem depois de uma tecla.
+      assert.equal(await p.evaluate(() => getComputedStyle(document.activeElement!).boxShadow), "none");
+      await shot(p, "7-cor-dark.png");
       await invoke("agent.configure", { onboarding: { step: 9 } });
       await stepIs(p, 9);
     }

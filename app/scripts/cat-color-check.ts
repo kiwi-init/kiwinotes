@@ -89,7 +89,7 @@ async function expectHue(p: Page, sel: string, hex: string, what: string, tolera
   return f;
 }
 
-const row = ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi-cat'))";
+const row = ".kn-row:has(.kn-row-label:text-is('Cor do Kiwi Cat'))";
 const corner = ".kn-kiwicat";
 const preview = ".kn-cat-preview";
 const report: { checks: string[]; samples: Record<string, unknown> } = { checks: [], samples: {} };
@@ -119,7 +119,7 @@ try {
       assert.equal(await p.locator(preview).getAttribute("data-cor"), "#ff9b5e");
       await expectHue(p, preview, "#ff9b5e", "preview, agent colour");
       await expectHue(p, corner, "#ff9b5e", "corner cat, agent colour");
-      report.checks.push(`Settings › Agente shows "Cor do Kiwi-cat" with ${catColorOptions().length} ready swatches, the agent's checked, no input of any kind`);
+      report.checks.push(`Settings › Agente shows "Cor do Kiwi Cat" with ${catColorOptions().length} ready swatches, the agent's checked, no input of any kind`);
     }
     await p.locator(row).screenshot({ path: join(out, `linha-${theme}.png`) });
     if (theme === "dark") { await w.close(); break; }

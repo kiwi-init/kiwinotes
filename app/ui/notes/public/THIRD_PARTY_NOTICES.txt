@@ -416,7 +416,7 @@ Apache License
    limitations under the License.
 
 ==============================================================================
-three.js 0.187.0 (three), de mrdoob e colaboradores: névoa do Kiwi-cat
+three.js 0.187.0 (three), de mrdoob e colaboradores: névoa do Kiwi Cat
 Licença: MIT
 
 The MIT License
