@@ -16,6 +16,7 @@ import { Meetings } from "../meetings/Meetings.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { api, has } from "../src/api.ts";
 import { HubNavContext, type SettingsRequest } from "../src/hubNav.ts";
+import { watchSlowFrames } from "../src/slowFrames.ts";
 import type { SettingsTopic } from "../settings/topics.ts";
 import { HubBarContext } from "../src/topbar.tsx";
 import { mount } from "../src/kit/index.tsx";
@@ -162,6 +163,16 @@ function Hub() {
       );
     }
     return api.hub.onNavigate((e) => isHubSection(e.section) && go(e.section));
+  }, []);
+
+  // O quadro travado depois de um clique ou tecla vai para o log local (spec #12918), com a tela: a seção, ou o
+  // onboarding quando ele está por cima.
+  const sectionNow = useRef(section);
+  sectionNow.current = section;
+  useEffect(() => {
+    if (!has("diagnostics.slowFrame")) return;
+    const where = () => (document.querySelector(".kn-onb") ? "onboarding" : sectionNow.current);
+    return watchSlowFrames(where, (w, ms) => void api.diagnostics.slowFrame(w, ms).catch(() => {}));
   }, []);
 
   // O título é o do app, e a entrada ao voltar para a frente é a do hub inteiro (cada seção tem a sua, de janela).

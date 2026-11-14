@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import type { AgentStatus, RoutineKind } from "../../src/shared/ui-contract.ts";
 import { DEFAULT_ROUTINES_FOLDER } from "../../src/shared/agent-routines.ts";
 import { api, has } from "../src/api.ts";
+import { folderChoices } from "../src/folderChoices.ts";
 import { Button, Row, Select, Switch } from "../src/kit/index.tsx";
 import { lastRunLine, ROUTINE_TITLES, routineHint, ROUTINES_HINT, ROUTINES_TITLE, scheduleLine, timeOptions, WEEKDAY_OPTIONS } from "./routinesText.ts";
 
@@ -17,11 +18,13 @@ export function RoutinesRows({ status, run }: { status: AgentStatus; run: (call:
   const [running, setRunning] = useState<RoutineKind | null>(null);
   const [failure, setFailure] = useState<{ kind: RoutineKind; message: string } | null>(null);
 
+  // Só os nomes das pastas (spec #12918): o `notes.list` inteiro mandava o cofre todo para a tela.
   useEffect(() => {
-    if (!has("notes.list")) return;
+    const load = has("notes.folders") ? api.notes.folders : has("notes.list") ? api.notes.list : null;
+    if (!load) return;
     let alive = true;
-    void api.notes.list().then(
-      (r) => alive && setFolders(r.folders.filter((f) => !f.startsWith("."))),
+    void load().then(
+      (r) => alive && setFolders(r.folders),
       () => {},
     );
     return () => {
@@ -49,7 +52,7 @@ export function RoutinesRows({ status, run }: { status: AgentStatus; run: (call:
       {KINDS.map((kind) => {
         const r = status.routines[kind];
         const title = ROUTINE_TITLES[kind];
-        const choices = [...new Set([r.folder, DEFAULT_ROUTINES_FOLDER, ...folders])].map((f) => ({ value: f, label: f }));
+        const choices = folderChoices([r.folder, DEFAULT_ROUTINES_FOLDER], folders).map((f) => ({ value: f, label: f }));
         return (
           <section key={kind} className="kn-routine-card" data-routine={kind} aria-label={title}>
             <Row label={title} hint={routineHint(kind, status.economy === true)}>

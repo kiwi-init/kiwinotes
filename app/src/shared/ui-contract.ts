@@ -195,7 +195,10 @@ export type { NoteModel };
 //   que ficam no arquivo sem ir ao agente: longos ou além dos 60) e o `outside` (as linhas que não são fato); a ação
 //   `over` nas `changes` (o agente não mudou a memória porque ela passou do limite), com o `over`; e o `agent.memorySet`
 //   aceita o `skipped` (os fatos de fora que ficam). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.67.0";
+// 1.68.0 (T12943, spec #12918): o `notes.folders`, só os nomes das pastas do cofre, para os seletores de pasta (as
+//   Rotinas, as reuniões e o passo dos projetos do onboarding) não pedirem o `notes.list` inteiro; e o
+//   `diagnostics.slowFrame`, o quadro travado que a tela conta, para o log local. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.68.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -270,6 +273,8 @@ export interface UiCapabilities {
    * texto nem áudio. No app vai para ~/Downloads e aparece no Finder; no headless, para <dados>/diagnostics.
    */
   "diagnostics.save": { args: Record<string, never>; result: { path: string; bytes: number } };
+  /** Um quadro travado (1.68.0, spec #12918): a tela (`where`, o nome da seção) e os ms. Só vai para o log local. */
+  "diagnostics.slowFrame": { args: { ms: number; where: string }; result: true };
   /**
    * Checa na hora, sem esperar as 6 h (o Updater do ADR 0008, com a conferência da assinatura), e devolve como ficou
    * quando a checagem termina. Com a versão nova baixada e conferida, `state` é `ready`. Desligado (headless, dev,
@@ -289,6 +294,8 @@ export interface UiCapabilities {
   "notes.list": { args: Record<string, never>; result: { folders: string[]; notes: NoteMeta[]; tree?: FolderNode; files?: VaultFile[];
     };
   };
+  /** Só os nomes das pastas (1.68.0, spec #12918), em ordem, como o `folders` do `notes.list`, sem as notas e os arquivos. */
+  "notes.folders": { args: Record<string, never>; result: { folders: string[] } };
   "notes.get": { args: { path: string }; result: Note };
   /**
    * Com `baseVersion` velha (a nota mudou fora, no Obsidian), não escreve e devolve a nota de agora. Com o disco cheio,
@@ -946,9 +953,11 @@ export const UI_CAPABILITIES = [
   "intro.done",
   "app.about",
   "diagnostics.save",
+  "diagnostics.slowFrame",
   "updates.check",
   "updates.apply",
   "notes.list",
+  "notes.folders",
   "notes.get",
   "notes.save",
   "meetings.speakers",

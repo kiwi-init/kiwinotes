@@ -389,10 +389,16 @@ describe("as capacidades notes.* pelo contrato 1.1.0 (T1316)", () => {
     });
     const call = (cap: string, args: unknown) => directInvoke(caps, cap, args);
 
-    expect(UI_CONTRACT_VERSION).toBe("1.67.0");
+    expect(UI_CONTRACT_VERSION).toBe("1.68.0");
     expect(UI_CAPABILITIES).toContain("notes.resolve");
     expect(await call("notes.list", {})).toMatchObject({ ok: true, value: { notes: [{ path: "Ideias.md" }, { path: "Kiwi.md" }] } });
     expect(await call("notes.list", { folder: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    // Só os nomes das pastas (1.68.0, spec #12918), os mesmos do `notes.list`, sem as notas.
+    await call("folders.create", { path: "Projetos/Kiwi" });
+    const listed = (await call("notes.list", {})) as { value: { folders: string[] } };
+    expect(await call("notes.folders", {})).toEqual({ ok: true, value: { folders: listed.value.folders } });
+    expect(listed.value.folders).toContain("Projetos/Kiwi");
+    expect(await call("notes.folders", { all: true })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
     expect(await call("notes.get", { path: "../fora.md" })).toMatchObject({ ok: false, code: "E_OUTSIDE_VAULT" });
     expect(await call("notes.get", { path: "Nada.md" })).toMatchObject({ ok: false, code: "E_NOT_FOUND" });
     expect(await call("notes.get", { path: "Kiwi.md", pth: "x" })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
