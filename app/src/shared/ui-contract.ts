@@ -2,6 +2,8 @@ import type { NoteModel } from "./note-model.ts";
 import type { SummarySettings } from "./summary-settings.ts";
 import type { AgentOnboarding } from "./agent-onboarding.ts";
 export type { AgentOnboarding } from "./agent-onboarding.ts";
+import type { AgentRoutine, AgentRoutines, RoutineKind } from "./agent-routines.ts";
+export type { AgentRoutine, AgentRoutines, RoutineKind } from "./agent-routines.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
@@ -184,7 +186,10 @@ export type { NoteModel };
 // 1.64.0 (T11993, spec #11955): o onboarding do agente. O `onboarding` no `AgentStatus` (pendente, aberto com o passo,
 //   ou feito) e no `agent.configure` (o passo, fechar e o "Refazer"); o `agent.enable` da primeira vez o abre. O
 //   `agent.guardPreview` (o filtro local num texto de exemplo, sem ir ao agente). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.64.0";
+// 1.65.0 (T12188, spec #12150): as rotinas do agente. O `routines` no `AgentStatus` e no `agent.configure` (o resumo do
+//   dia e os pendentes da semana: liga/desliga, a hora, o dia e a pasta), o `agent.routineRun` ("Rodar agora") e o
+//   evento `agent.routine` (o resultado no balão, ou por que a rotina não rodou). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.65.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -503,7 +508,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean; onboarding?: Partial<AgentOnboarding> }; result: AgentStatus };
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean; onboarding?: Partial<AgentOnboarding>; routines?: Partial<Record<RoutineKind, Partial<Pick<AgentRoutine, "on" | "time" | "weekday" | "folder">>>> }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -594,6 +599,11 @@ export interface UiCapabilities {
    * `agent.turn`, e a proposta pronta pelo `agent.proposalsChanged`.
    */
   "agent.proposalPrepare": { args: { id: string }; result: { id: string } };
+  /**
+   * "Rodar agora" numa rotina (1.65.0, spec #12150): manda o pedido dela já, ligada ou não. Volta o id do pedido; o
+   * resultado vem pelo `agent.turn` e pelo evento `agent.routine`.
+   */
+  "agent.routineRun": { args: { kind: RoutineKind }; result: { id: string } };
   /** [Descartar], ou "Agora não" na pergunta do modo econômico (1.57.0): nada muda nas notas. */
   "agent.proposalDiscard": { args: { id: string }; result: AgentProposalSummary };
   /** A memória do agente (1.60.0, spec #11469): os fatos de `.kiwi/agente/sobre-mim.md` e a última mudança. */
@@ -836,6 +846,8 @@ export interface AgentStatus {
   webSearch: boolean;
   /** O onboarding (1.64.0, spec #11955): aberto na primeira vez que o agente liga, e pelo "Refazer". */
   onboarding: AgentOnboarding;
+  /** As rotinas (1.65.0, spec #12150): o resumo do dia e os pendentes da semana. */
+  routines: AgentRoutines;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */
@@ -1010,6 +1022,7 @@ export const UI_CAPABILITIES = [
   "agent.proposalApply",
   "agent.proposalPrepare",
   "agent.proposalDiscard",
+  "agent.routineRun",
   "agent.memory",
   "agent.memoryUndo",
   "agent.memorySet",
@@ -1072,7 +1085,19 @@ export interface UiEvents {
   "agent.proposalsChanged": { proposals: AgentProposalSummary[] };
   /** A memória do agente mudou (1.60.0, spec #11469): pelo agente, pela pessoa ou por um [Desfazer]. */
   "agent.memoryChanged": AgentMemoryView;
+  /** Uma rotina terminou ou não rodou (1.65.0, spec #12150): o balão do gato mostra. */
+  "agent.routine": AgentRoutineEvent;
 }
+
+/**
+ * O fim de uma rotina (1.65.0): `done` com o pedido e a nota que ele criou (null se não criou nenhuma), ou `skipped`,
+ * com o porquê: `limit` (o limite do plano acabou, com a hora de volta quando o agente a disse) ou `declined` (no modo
+ * econômico, a pessoa disse "Agora não", ou não respondeu).
+ */
+export type AgentRoutineEvent =
+  | { kind: RoutineKind; phase: "done"; request: string; note: string | null }
+  | { kind: RoutineKind; phase: "skipped"; reason: "limit"; resetsAt?: string }
+  | { kind: RoutineKind; phase: "skipped"; reason: "declined" };
 
 /** O que o gato mostra durante a fala ao agente (1.55.0). `voz`: o nível do mic, de 0 a 1. */
 export type AgentVoiceUi =

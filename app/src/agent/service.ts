@@ -48,6 +48,7 @@ import type {
   AgentModelChoice,
   AgentMemoryView,
   AgentProposalSummary,
+  AgentRoutineEvent,
   AgentProposalView,
   AgentStatus,
   AgentTurnEvent,
@@ -59,6 +60,8 @@ import { UsageStore } from "./usage-store.ts";
 import { type NoteModel } from "./note-model.ts";
 import { fixedPrefix } from "./fixed-prefix.ts";
 import { sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
+import { patchRoutines, ROUTINE_KINDS, routineDue, routinesOff, sanitizeAgentRoutines, type RoutineKind } from "../shared/agent-routines.ts";
+import { routineDeclined, routineEconomyQuestion, routinePrompt } from "./routines.ts";
 import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, INSTRUCTIONS_MAX, MEMORY_MAX, MemoryError, readMemory, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
@@ -126,6 +129,12 @@ export function cheapestModel(models: { value: string; name: string }[]): string
   }
   return null;
 }
+/** O agendador das rotinas confere a hora a cada 30 s (spec #12150). */
+export const ROUTINE_TICK_MS = 30_000;
+/** Um limite acabado sem a hora de volta segura as rotinas por 5 horas (a janela do plano). */
+const ROUTINE_OUT_UNKNOWN_MS = 5 * 60 * 60_000;
+/** Quantos pedidos do registro o fim da rotina olha para achar o dela. */
+const ROUTINE_ACTIVITY_LOOKBACK = 20;
 /** O progresso do download sai no máximo uma vez a cada tanto, para não inundar as janelas de eventos. */
 const PROGRESS_EVERY_MS = 100;
 
@@ -244,6 +253,15 @@ export class AgentService {
   private proposing: Promise<unknown> = Promise.resolve();
   /** As reuniões que esperam o agente acabar o pedido de agora para pedir a proposta (spec #8360). */
   private readonly meetingsQueued: string[] = [];
+  /** Os pedidos das rotinas (spec #12150): o fim de cada um vira o evento `agent.routine`. */
+  private readonly routineTurns = new Map<string, { kind: RoutineKind; manual: boolean }>();
+  /** A rotina do próximo `ask` (o `startRoutine` marca antes de pedir, e o `ask` a prende ao pedido). */
+  private nextRoutine: { kind: RoutineKind; manual: boolean } | null = null;
+  private readonly routineListeners = new Set<(e: AgentRoutineEvent) => void>();
+  /** O agendador das rotinas: uma conferência a cada tanto, com o app aberto. */
+  private routineTimer: ReturnType<typeof setInterval> | null = null;
+  /** Uma conferência por vez. */
+  private routineChecking = false;
   private readonly questionListeners = new Set<(e: { card: string; request: string; open: boolean }) => void>();
   /**
    * A notificação quando o agente espera uma resposta (spec #9839): o app liga com o `attachNotice`, que sabe da janela;
@@ -628,7 +646,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -692,6 +710,7 @@ export class AgentService {
       instructions: s.instructions ?? "",
       webSearch: s.webSearch === true,
       onboarding: sanitizeAgentOnboarding(s.onboarding),
+      routines: sanitizeAgentRoutines(s.routines),
     };
   }
 
@@ -1243,6 +1262,104 @@ export class AgentService {
     });
   }
 
+  // ── As rotinas (spec #12150) ─────────────────────────────────────────────────────────────────────────────────────
+
+  /** O relógio do serviço (o do medidor e das rotinas): falso nos testes. */
+  private clock(): number {
+    return (this.d.now ?? Date.now)();
+  }
+
+  onRoutine(fn: (e: AgentRoutineEvent) => void): () => void {
+    this.routineListeners.add(fn);
+    return () => this.routineListeners.delete(fn);
+  }
+
+  private emitRoutine(e: AgentRoutineEvent): void {
+    for (const fn of this.routineListeners) fn(e);
+  }
+
+  /**
+   * Liga o agendador (o app e o headless, depois do leitor e do escritor do cofre): uma conferência agora, que pega a
+   * rotina que passou da hora com o app fechado, e outra a cada `everyMs`.
+   */
+  startRoutines(everyMs = ROUTINE_TICK_MS): void {
+    if (this.routineTimer || this.closed) return;
+    this.routineTimer = setInterval(() => void this.routineTick(), everyMs);
+    (this.routineTimer as { unref?: () => void }).unref?.();
+    void this.routineTick();
+  }
+
+  private stopRoutines(): void {
+    if (this.routineTimer) clearInterval(this.routineTimer);
+    this.routineTimer = null;
+  }
+
+  /**
+   * Uma conferência do agendador: a primeira rotina na hora roda. Com o agente desligado, sem o adaptador ou ocupado,
+   * nada roda agora, e a próxima conferência tenta de novo (no mesmo dia). Nunca lança.
+   */
+  async routineTick(): Promise<void> {
+    if (this.routineChecking || this.closed) return;
+    this.routineChecking = true;
+    try {
+      const s = await this.d.settings.load();
+      if (!s.enabled || !s.consented || this.turn) return;
+      if (!this.reader || !this.writer || !installedAdapter({ root: this.root }, this.packages)) return;
+      const routines = sanitizeAgentRoutines(s.routines);
+      const now = new Date(this.clock());
+      const kind = ROUTINE_KINDS.find((k) => routineDue(k, routines[k], now));
+      if (kind) await this.startRoutine(kind, false);
+    } catch (e) {
+      this.d.log?.(`[agent] routine: ${String((e as Error)?.message ?? e)}`);
+    } finally {
+      this.routineChecking = false;
+    }
+  }
+
+  /** "Rodar agora" (`agent.routineRun`): o pedido da rotina já, ligada ou não. */
+  async routineRun(kind: RoutineKind): Promise<{ id: string }> {
+    const s = await this.d.settings.load();
+    if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
+    return this.startRoutine(kind, true);
+  }
+
+  /**
+   * Marca a vez da rotina (a mesma não dispara de novo no próximo tique, rode ou não) e manda o pedido dela. Com o
+   * limite do plano acabado, não manda nada e avisa (o evento `agent.routine`).
+   */
+  private async startRoutine(kind: RoutineKind, manual: boolean): Promise<{ id: string }> {
+    const now = this.clock();
+    const s = await this.d.settings.load();
+    const routines = sanitizeAgentRoutines(s.routines);
+    const out = this.usageView().out;
+    const limited = out !== null && (out.resetsAt ? Date.parse(out.resetsAt) > now : now - Date.parse(out.at) < ROUTINE_OUT_UNKNOWN_MS);
+    if (!limited && this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
+    await this.d.settings.save({ routines: { ...routines, [kind]: { ...routines[kind], lastRun: new Date(now).toISOString() } } });
+    this.emitStatus();
+    if (limited) {
+      this.emitRoutine({ kind, phase: "skipped", reason: "limit", ...(out.resetsAt ? { resetsAt: out.resetsAt } : {}) });
+      throw fromAgentError(new AgentError("E_AGENT_LIMIT", this.name), this.name);
+    }
+    this.nextRoutine = { kind, manual };
+    try {
+      return await this.ask(routinePrompt(kind, routines[kind].folder, new Date(now)));
+    } finally {
+      this.nextRoutine = null;
+    }
+  }
+
+  /** O fim de uma rotina: a nota que o pedido criou (pela Atividade), para o balão [Ver] [Manter] [Descartar]. */
+  private async finishRoutine(request: string, kind: RoutineKind): Promise<void> {
+    let note: string | null = null;
+    try {
+      const r = (await this.activity.list(ROUTINE_ACTIVITY_LOOKBACK)).find((x) => x.id === request);
+      note = r?.changes.find((c) => c.kind === "created" && c.path.endsWith(".md"))?.path ?? null;
+    } catch (e) {
+      this.d.log?.(`[agent] routine: ${String((e as Error)?.message ?? e)}`);
+    }
+    this.emitRoutine({ kind, phase: "done", request, note });
+  }
+
   /** Liga. Na primeira vez, só com o aceite da tela do ADR 0011. Não baixa nem abre nada. */
   async enable(consent = false): Promise<AgentStatus> {
     const s = await this.d.settings.load();
@@ -1257,7 +1374,9 @@ export class AgentService {
 
   /** Desliga: cancela o pedido e o download, e fecha o programa na hora. */
   async disable(): Promise<AgentStatus> {
-    await this.d.settings.save({ enabled: false });
+    // Desligar o agente desliga as rotinas (spec #12150): ligar de novo não as religa sozinho.
+    const s0 = await this.d.settings.load();
+    await this.d.settings.save({ enabled: false, routines: routinesOff(sanitizeAgentRoutines(s0.routines)) });
     this.download?.abort.abort();
     this.questions.closeAll();
     await this.stopProgram("desligado");
@@ -1321,6 +1440,9 @@ export class AgentService {
     const turn = { id: crypto.randomUUID(), cancelled: false };
     this.turn = turn;
     this.lastTurn = turn.id;
+    // O pedido de uma rotina (spec #12150): o fim dele vira o evento `agent.routine`.
+    if (this.nextRoutine) this.routineTurns.set(turn.id, this.nextRoutine);
+    this.nextRoutine = null;
     // O pedido sai pelo filtro (spec #9818): um segredo colado nele não vai ao agente nem ao registro. O registro
     // começa com a dúvida segurada; ela é decidida no `runTurn` (spec #9873), que grava o pedido como foi.
     const filtered = this.guard.request(text);
@@ -1367,6 +1489,17 @@ export class AgentService {
           return;
         }
       }
+      // Uma rotina na hora marcada, com o modo econômico (spec #12150): a pessoa diz antes se pode gastar o pedido. O
+      // "Rodar agora" não pergunta: o clique já foi o sim, e o cartão diz que gasta.
+      const routineNow = this.routineTurns.get(turn.id);
+      if (routineNow && !routineNow.manual && s.economy) {
+        const go = await this.questions.confirm(turn.id, routineEconomyQuestion(routineNow.kind));
+        if (!go || turn.cancelled) {
+          this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: go ? "" : routineDeclined(routineNow.kind) });
+          if (!go) this.emitRoutine({ kind: routineNow.kind, phase: "skipped", reason: "declined" });
+          return;
+        }
+      }
       // As instruções fixas vão na frente do pedido, sempre iguais (o cache): o Modelo de nota (spec #11102) e o modo
       // econômico (spec #11084). Um erro ao ler o modelo não derruba o pedido: ele vai sem o modelo.
       const model = this.noteModel ? await this.noteModel().catch(() => null) : null;
@@ -1406,6 +1539,8 @@ export class AgentService {
         this.emitUsage();
       }
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text });
+      const finished = this.routineTurns.get(turn.id);
+      if (finished) await this.finishRoutine(turn.id, finished.kind);
     } catch (e) {
       if (turn.cancelled) {
         // Desligar ou sair do app no meio fecha o programa: o pedido acaba cancelado, e não "falhou".
@@ -1419,11 +1554,14 @@ export class AgentService {
           const out = this.usageView().out;
           this.emitTurn({ id: turn.id, type: "limit", status: "out", ...(out?.resetsAt ? { resetsAt: out.resetsAt } : {}) });
           this.emitUsage();
+          const routine = this.routineTurns.get(turn.id);
+          if (routine) this.emitRoutine({ kind: routine.kind, phase: "skipped", reason: "limit", ...(out?.resetsAt ? { resetsAt: out.resetsAt } : {}) });
         }
         this.emitTurn({ id: turn.id, type: "error", code: err.code, message: err.message });
       }
     } finally {
       if (this.turn === turn) this.turn = null;
+      this.routineTurns.delete(turn.id);
       this.armIdle();
       this.emitStatus();
       // Uma reunião que terminou com o agente ocupado pede a proposta agora (spec #8360).
@@ -1523,9 +1661,11 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean; onboarding?: unknown; routines?: unknown }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O onboarding (spec #11955): o passo em que a pessoa está, fechar (`done`) e o "Refazer" (`open` no passo 1).
+    // As rotinas (spec #12150): ligar ou mudar a hora arma a rotina agora (um horário de antes não dispara).
+    if (o.routines !== undefined) patch.routines = patchRoutines(sanitizeAgentRoutines((await this.d.settings.load()).routines), o.routines, this.clock());
     if (o.onboarding !== undefined) {
       const now = sanitizeAgentOnboarding((await this.d.settings.load()).onboarding);
       patch.onboarding = sanitizeAgentOnboarding({ ...now, ...(o.onboarding && typeof o.onboarding === "object" ? o.onboarding : {}) });
@@ -1661,6 +1801,7 @@ export class AgentService {
   /** O app vai sair: cancela tudo e fecha o programa do agente, esperando ele sair. */
   async close(): Promise<void> {
     this.notice?.stop();
+    this.stopRoutines();
     this.closed = true;
     this.download?.abort.abort();
     await this.stopProgram("o app saiu");
@@ -1669,6 +1810,7 @@ export class AgentService {
   /** A saída do processo (`process.on("exit")`), sem tempo de esperar: o SIGTERM, que o adaptador trata limpo. */
   killNow(): void {
     this.notice?.stop();
+    this.stopRoutines();
     this.closed = true;
     this.download?.abort.abort();
     this.pending?.killNow();

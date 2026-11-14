@@ -16,6 +16,7 @@ import { MAX_TERMS, sanitizeTerms } from "../store/dictionary.ts";
 import { sanitizeSnippets } from "../store/snippets.ts";
 import { NOTE_WIDTH } from "../shared/note-width.ts";
 import { isCatColorChoice } from "../shared/kiwicat-colors.ts";
+import { isRoutineKind, isRoutineTime, ROUTINE_KINDS, routineFolder } from "../shared/agent-routines.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
 import { folderPath, notePath, VaultError } from "../notes/paths.ts";
@@ -1118,7 +1119,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch" && k !== "onboarding");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch" && k !== "onboarding" && k !== "routines");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
@@ -1138,6 +1139,22 @@ export function uiCapabilities(deps: CapabilityDeps,
         if (o.step !== undefined && (typeof o.step !== "number" || !Number.isInteger(o.step) || o.step < 1 || o.step > 9))
           throw bad("agent.configure: onboarding.step must be an integer from 1 to 9");
       }
+      // As rotinas (spec #12150): só o que a pessoa muda (liga/desliga, a hora, o dia e a pasta), rotina por rotina.
+      if (a.routines !== undefined) {
+        const r = a.routines as Record<string, unknown>;
+        if (!r || typeof r !== "object" || Array.isArray(r) || Object.keys(r).some((k) => !isRoutineKind(k)))
+          throw bad(`agent.configure: routines must be {${ROUTINE_KINDS.join("?, ")}?}`);
+        for (const [kind, v] of Object.entries(r)) {
+          const o = v as Record<string, unknown>;
+          if (!o || typeof o !== "object" || Array.isArray(o) || Object.keys(o).some((k) => k !== "on" && k !== "time" && k !== "weekday" && k !== "folder"))
+            throw bad(`agent.configure: routines.${kind} must be {on?, time?, weekday?, folder?}`);
+          if (o.on !== undefined && typeof o.on !== "boolean") throw bad(`agent.configure: routines.${kind}.on must be a boolean`);
+          if (o.time !== undefined && !isRoutineTime(o.time)) throw bad(`agent.configure: routines.${kind}.time must be HH:MM`);
+          if (o.weekday !== undefined && (kind !== "weekly" || typeof o.weekday !== "number" || !Number.isInteger(o.weekday) || o.weekday < 0 || o.weekday > 6))
+            throw bad(`agent.configure: routines.${kind}.weekday must be an integer from 0 (Sunday) to 6, only for weekly`);
+          if (o.folder !== undefined && routineFolder(o.folder) === null) throw bad(`agent.configure: routines.${kind}.folder must be a folder of the vault`);
+        }
+      }
       return agentCall((agent) =>
         agent.configure({
           model: a.model as string | undefined,
@@ -1149,6 +1166,7 @@ export function uiCapabilities(deps: CapabilityDeps,
           ...(a.instructions !== undefined ? { instructions: a.instructions as string } : {}),
           ...(a.webSearch !== undefined ? { webSearch: a.webSearch as boolean } : {}),
           ...(a.onboarding !== undefined ? { onboarding: a.onboarding } : {}),
+          ...(a.routines !== undefined ? { routines: a.routines } : {}),
         }),
       );
     },
@@ -1249,6 +1267,12 @@ export function uiCapabilities(deps: CapabilityDeps,
       const a = fields(args, "agent.proposalPrepare", ["id"]);
       if (typeof a.id !== "string" || !a.id) throw bad("agent.proposalPrepare: id must be the id of a proposal");
       return agentCall((agent) => agent.proposalPrepare(a.id as string));
+    },
+    // "Rodar agora" numa rotina (spec #12150).
+    "agent.routineRun": (args) => {
+      const a = fields(args, "agent.routineRun", ["kind"]);
+      if (!isRoutineKind(a.kind)) throw bad(`agent.routineRun: kind must be ${ROUTINE_KINDS.join(" or ")}`);
+      return agentCall((agent) => agent.routineRun(a.kind as "daily" | "weekly"));
     },
     "agent.proposalDiscard": (args) => {
       const a = fields(args, "agent.proposalDiscard", ["id"]);

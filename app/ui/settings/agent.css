@@ -383,3 +383,13 @@
 .kn-memory-clear > span:first-child { margin-right: auto; }
 .kn-memory-failure { margin: 0; font-size: var(--text-sm); color: var(--danger); }
 .kn-memory-instructions { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+
+/* As rotinas (spec #12150): um cartão por rotina, com a hora, o dia, a pasta, a última vez e "Rodar agora". */
+.kn-agent-routines { display: grid; }
+.kn-routine-card { margin: 0 var(--space-4, 16px) var(--space-3, 12px); border: 1px solid var(--border); border-radius: var(--r-card, 14px); background: var(--surface); overflow: hidden; }
+.kn-routine-card > .kn-row { padding-left: var(--space-3, 12px); padding-right: var(--space-3, 12px); }
+.kn-routine-fields { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px) var(--space-4, 16px); padding: 0 var(--space-3, 12px) var(--space-2, 8px); }
+.kn-routine-field { display: flex; align-items: center; gap: var(--space-2, 8px); font-size: var(--t-meta, 12px); color: var(--text-2); }
+.kn-routine-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3, 12px); padding: var(--space-2, 8px) var(--space-3, 12px); border-top: 0.5px solid var(--border); }
+.kn-routine-last { font-size: var(--t-meta, 12px); color: var(--text-3); }
+.kn-routine-failure { margin: 0; padding: 0 var(--space-3, 12px) var(--space-2, 8px); font-size: var(--t-meta, 12px); color: var(--danger); }

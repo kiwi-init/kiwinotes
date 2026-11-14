@@ -13,6 +13,9 @@ import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS, SUMMARY_ECONOMY_QUESTION } from "./service.ts";
+import { routineDeclined, routineEconomyQuestion } from "./routines.ts";
+import { DEFAULT_AGENT_ROUTINES } from "../shared/agent-routines.ts";
+import type { AgentRoutineEvent } from "../shared/ui-contract.ts";
 import { DEFAULT_NOTE_MODEL, noteModelText, sanitizeNoteModel } from "./note-model.ts";
 import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
@@ -56,7 +59,7 @@ interface Made {
   pid: () => number | null;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -75,6 +78,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     ...(o.reader ? { reader: o.reader } : {}),
     ...(o.writer ? { writer: o.writer } : {}),
     ...(o.doubtTimeoutMs ? { doubtTimeoutMs: o.doubtTimeoutMs } : {}),
+    ...(o.now ? { now: o.now } : {}),
     openHost: async ({ configOptions, kiwiTools, webTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
@@ -1692,5 +1696,136 @@ describe("a memória do agente (spec #11469)", () => {
     const listed = (await askAndWait(m, "/ferramentas")).at(-1) as { text: string };
     expect(listed.text).not.toContain("memory_remember");
     await expect(m.svc.memoryView()).rejects.toMatchObject({ code: "E_NO_UNDO" });
+  });
+});
+
+describe("as rotinas (spec #12150)", () => {
+  /** 16/11/2026 é uma segunda-feira; o relógio do serviço anda só quando o teste manda. */
+  const at = (day: number, h: number, m = 0) => new Date(2026, 10, day, h, m).getTime();
+  function routines(clockStart: number) {
+    const notes: Record<string, string> = { ...NOTES };
+    const clock = { now: clockStart };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes), now: () => clock.now });
+    const events: AgentRoutineEvent[] = [];
+    m.svc.onRoutine((e) => events.push(e));
+    /** Uma conferência do agendador na hora dada; espera o pedido que ela começar acabar. */
+    const tick = async (when: number) => {
+      clock.now = when;
+      const before = m.turns.filter((e) => e.type === "started").length;
+      await m.svc.routineTick();
+      const started = m.turns.filter((e) => e.type === "started");
+      if (started.length === before) return null;
+      const id = started.at(-1)!.id;
+      await until(() => m.turns.some((e) => e.id === id && (e.type === "done" || e.type === "error")));
+      await until(() => events.length > 0 || m.turns.some((e) => e.id === id && e.type === "error"));
+      return id;
+    };
+    return { m, notes, clock, events, tick };
+  }
+
+  test("nascem desligadas, e ligar ou mudar a hora fica no status", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    expect((await r.m.svc.status()).routines).toEqual(DEFAULT_AGENT_ROUTINES);
+    const s = await r.m.svc.configure({ routines: { daily: { on: true, time: "18:30", folder: "Diário/Resumos" } } });
+    expect(s.routines.daily).toEqual({ on: true, time: "18:30", folder: "Diário/Resumos", lastRun: null, armedAt: new Date(at(16, 10)).toISOString() });
+    expect(s.routines.weekly.on).toBe(false);
+    // Os pendentes, desligados, não rodam nem na hora deles; o resumo, ligado, só às 18h30.
+    expect(await r.tick(at(16, 18, 29))).toBeNull();
+    expect(r.events).toEqual([]);
+  });
+
+  test("ligada, roda na hora, cria a nota pela escrita de sempre, e não roda duas vezes no dia", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    await r.m.svc.configure({ routines: { daily: { on: true } } });
+    expect(await r.tick(at(16, 17, 59))).toBeNull();
+    const id = await r.tick(at(16, 18));
+    expect(id).toBeTruthy();
+    expect(r.notes["Rotinas/Resumo de 16-11-2026.md"]).toContain("## Próximos passos");
+    expect(r.events).toEqual([{ kind: "daily", phase: "done", request: id!, note: "Rotinas/Resumo de 16-11-2026.md" }]);
+    // A Atividade registra a criação (o [Desfazer] de sempre).
+    const log = (await r.m.svc.activityLog())[0]!;
+    expect(log.id).toBe(id!);
+    expect(log.request).toStartWith("[Rotina do Kiwi]");
+    expect(log.changes).toEqual([expect.objectContaining({ kind: "created", path: "Rotinas/Resumo de 16-11-2026.md" })]);
+    expect((await r.m.svc.status()).routines.daily.lastRun).toBe(new Date(at(16, 18)).toISOString());
+    expect(await r.tick(at(16, 18, 30))).toBeNull();
+    // No dia seguinte, de novo.
+    expect(await r.tick(at(17, 18, 1))).toBeTruthy();
+    expect(r.notes["Rotinas/Resumo de 17-11-2026.md"]).toBeDefined();
+  });
+
+  test("com o app fechado na hora: roda uma vez ao abrir no mesmo dia; no dia seguinte, o de ontem pula", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    await r.m.svc.configure({ routines: { daily: { on: true }, weekly: { on: true } } });
+    // Os pendentes da semana (segunda, 9h) ficaram para trás: armados às 10h, só na próxima segunda.
+    expect(await r.tick(at(16, 22, 40))).toBeTruthy();
+    expect(r.events.map((e) => e.kind)).toEqual(["daily"]);
+    expect(await r.tick(at(16, 23))).toBeNull();
+    // Abriu só na quarta de manhã: o resumo de terça não roda mais, e o de quarta ainda não chegou.
+    expect(await r.tick(at(18, 8))).toBeNull();
+    // Na segunda seguinte, os pendentes rodam às 9h, com a nota deles.
+    expect(await r.tick(at(23, 9, 5))).toBeTruthy();
+    expect(r.notes["Rotinas/Pendentes da semana de 23-11-2026.md"]).toContain("- [ ]");
+  });
+
+  test("com o agente ocupado, espera o pedido de agora e roda na conferência seguinte", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    await r.m.svc.configure({ routines: { daily: { on: true } } });
+    r.clock.now = at(16, 18);
+    const { id } = await r.m.svc.ask("/lento");
+    expect(await r.tick(at(16, 18))).toBeNull();
+    await until(() => r.m.turns.some((e) => e.id === id && e.type === "done"));
+    expect(await r.tick(at(16, 18, 1))).toBeTruthy();
+  });
+
+  test("com o modo econômico, pergunta antes: o não para tudo e avisa; o Rodar agora não pergunta", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    await r.m.svc.configure({ economy: true, routines: { daily: { on: true } } });
+    r.clock.now = at(16, 18);
+    void r.m.svc.routineTick();
+    await until(() => !!r.m.svc.question());
+    const card = r.m.svc.question()!;
+    expect(card.items).toEqual([expect.objectContaining({ kind: "confirm", value: routineEconomyQuestion("daily") })]);
+    await r.m.svc.answerDoubt({ card: card.id, fingerprint: card.items[0]!.fingerprint, answer: "hold" });
+    await until(() => r.events.length > 0);
+    expect(r.events).toEqual([{ kind: "daily", phase: "skipped", reason: "declined" }]);
+    expect(r.m.turns.findLast((e) => e.type === "done")).toMatchObject({ stopReason: "cancelled", text: routineDeclined("daily") });
+    expect(Object.keys(r.notes).some((p) => p.startsWith("Rotinas/"))).toBe(false);
+    // Não pergunta de novo no mesmo dia.
+    expect(await r.tick(at(16, 18, 30))).toBeNull();
+    // "Rodar agora": o clique já foi o sim.
+    const { id } = await r.m.svc.routineRun("weekly");
+    await until(() => r.events.length > 1);
+    expect(r.m.svc.question()).toBeNull();
+    expect(r.events[1]).toEqual({ kind: "weekly", phase: "done", request: id, note: "Rotinas/Pendentes da semana de 16-11-2026.md" });
+  });
+
+  test("com o limite do plano acabado, não roda e avisa", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    r.clock.now = at(16, 17);
+    expect((await askAndWait(r.m, "/limite")).at(-1)).toMatchObject({ type: "error", code: "E_AGENT_LIMIT" });
+    await r.m.svc.configure({ routines: { daily: { on: true } } });
+    const asked = r.m.turns.filter((e) => e.type === "started").length;
+    expect(await r.tick(at(16, 18))).toBeNull();
+    // A hora de volta é a da mensagem do limite (o agente falso diz "reset at 5pm": as 17h seguintes).
+    expect(r.events).toEqual([{ kind: "daily", phase: "skipped", reason: "limit", resetsAt: expect.any(String) }]);
+    expect(r.m.turns.filter((e) => e.type === "started")).toHaveLength(asked);
+    await expect(r.m.svc.routineRun("daily")).rejects.toMatchObject({ code: "E_AGENT_LIMIT" });
+  });
+
+  test("desligar o agente desliga as rotinas, e o Rodar agora pede o agente ligado", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    await r.m.svc.configure({ routines: { daily: { on: true }, weekly: { on: true } } });
+    const off = await r.m.svc.disable();
+    expect([off.routines.daily.on, off.routines.weekly.on]).toEqual([false, false]);
+    await expect(r.m.svc.routineRun("daily")).rejects.toMatchObject({ code: "E_AGENT_DISABLED" });
+    expect((await r.m.svc.enable()).routines.daily.on).toBe(false);
   });
 });

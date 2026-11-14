@@ -421,6 +421,26 @@ const app = agent({ name: "kiwi-fake-agent" })
       await say(client, sessionId, r.isError ? `erro da ferramenta: ${r.text}` : `Criei a nota ${title}, no Modelo de nota.`);
       return { stopReason: "end_turn" };
     }
+    // As rotinas (spec #12150): lê pelas ferramentas do Kiwi (as notas e as reuniões) e cria a nota que o pedido diz, na
+    // pasta que ele diz, pelo notes_create. Os itens são fixos: o que importa é o caminho do pedido até a nota.
+    const routine = /^\[Rotina do Kiwi\][\s\S]*?notes_create a nota "(.+?)" na pasta "(.+?)"/.exec(text);
+    if (routine) {
+      await think(client, sessionId);
+      const [, title, folder] = routine as unknown as [string, string, string];
+      const list = await useTool(client, sessionId, "notes_list", {});
+      const meetings = await useTool(client, sessionId, "meetings_list", {});
+      if (list.isError || meetings.isError) {
+        await say(client, sessionId, `erro da ferramenta: ${list.isError ? list.text : meetings.text}`);
+        return { stopReason: "end_turn" };
+      }
+      const daily = title.startsWith("Resumo de ");
+      const body = daily
+        ? `# ${title}\n\n## O que mudou\n\n- As notas do dia, vistas pelo notes_list.\n\n## Decisões\n\n- Nenhuma decisão nova.\n\n## Próximos passos\n\n- [ ] Rever as notas de amanhã.\n`
+        : `# ${title}\n\n## Sem projeto\n\n- [ ] Rever as ações em aberto das notas.\n`;
+      const r = await useTool(client, sessionId, "notes_create", { folder, title, text: body });
+      await say(client, sessionId, r.isError ? `erro da ferramenta: ${r.text}` : `Criei a nota ${title}, em ${folder}.`);
+      return { stopReason: "end_turn" };
+    }
     // Organizar uma nota que já existe: lê, monta de novo no modelo, mantendo o conteúdo, e grava pelo notes_write. Também
     // pelo pedido do passo 8 do onboarding (spec #11955): 'Organize a nota "<caminho>" no Modelo de nota: …'.
     const organize = text.startsWith("/organiza ") ? text.slice("/organiza ".length).trim() : /^Organize a nota "(.+?)" no Modelo de nota:/.exec(text)?.[1];

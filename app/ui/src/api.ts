@@ -170,6 +170,9 @@ export const api = {
     proposalChoose: (id: string, folder: string | null) => invoke("agent.proposalChoose", { id, folder }),
     proposalApply: (id: string) => invoke("agent.proposalApply", { id }),
     proposalPrepare: (id: string) => invoke("agent.proposalPrepare", { id }),
+    /** "Rodar agora" numa rotina (spec #12150). */
+    routineRun: (kind: "daily" | "weekly") => invoke("agent.routineRun", { kind }),
+    onRoutine: (fn: (e: UiEvents["agent.routine"]) => void) => on("agent.routine", fn),
     proposalDiscard: (id: string) => invoke("agent.proposalDiscard", { id }),
     onProposals: (fn: (e: UiEvents["agent.proposalsChanged"]) => void) => on("agent.proposalsChanged", fn),
     /** A memória do agente (1.60.0, spec #11469). */
