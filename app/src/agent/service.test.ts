@@ -75,7 +75,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
     ...(o.reader ? { reader: o.reader } : {}),
     ...(o.writer ? { writer: o.writer } : {}),
     ...(o.doubtTimeoutMs ? { doubtTimeoutMs: o.doubtTimeoutMs } : {}),
-    openHost: async ({ configOptions, kiwiTools, onExit }) =>
+    openHost: async ({ configOptions, kiwiTools, webTools, onExit }) =>
       o.host?.(agentDir(data)) ??
       new AgentHost({
         name: "Claude Code",
@@ -84,6 +84,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
         configOptions,
         onExit,
         ...(kiwiTools ? { kiwiTools } : {}),
+        ...(webTools ? { webTools } : {}),
         env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}) },
       }),
     registry: reg.url,
@@ -649,6 +650,71 @@ function memoryWriter(notes: Record<string, string>): VaultWriter {
   };
 }
 
+describe("Pesquisar na web (spec #11908)", () => {
+  test("desligado por padrão, o Kiwi nega a busca do agente; ligado, libera já no próximo pedido, e o status diz web", async () => {
+    const m = make();
+    await readyNow(m);
+    expect((await m.svc.status()).webSearch).toBe(false);
+    const off = await askAndWait(m, "/web documentação do DICOMweb");
+    expect(off.at(-1)).toMatchObject({ type: "done", text: "web negada: a busca não aconteceu." });
+    expect(off).toContainEqual(expect.objectContaining({ type: "permission", tool: "WebSearch", decision: "denied" }));
+    expect(off.some((e) => e.type === "status" && (e as { tool?: string }).tool === "web")).toBe(false);
+    // Ligado: sem reabrir o agente, o próximo pedido de permissão já vale.
+    expect((await m.svc.configure({ webSearch: true })).webSearch).toBe(true);
+    const on = await askAndWait(m, "/web documentação do DICOMweb");
+    expect(on.at(-1)).toMatchObject({ type: "done", text: "busquei na web: documentação do DICOMweb" });
+    expect(on).toContainEqual(expect.objectContaining({ type: "status", status: "running", tool: "web" }));
+    expect(on.some((e) => e.type === "permission")).toBe(false);
+    // O nome cru da ferramenta do agente nunca chega à tela.
+    expect(on.some((e) => e.type === "status" && (e as { tool?: string }).tool === "WebSearch")).toBe(false);
+    // Desligado de novo: negado de novo.
+    await m.svc.configure({ webSearch: false });
+    expect((await askAndWait(m, "/web outra busca")).at(-1)).toMatchObject({ text: "web negada: a busca não aconteceu." });
+  });
+});
+
+describe("as referências de uma nota (spec #11908)", () => {
+  test("o agente manda os links, nada é escrito antes; [Ver] mostra a seção, [Aplicar] escreve no fim com [Desfazer], e um link repetido não entra", async () => {
+    const NOTE = "Projetos/PACS.md";
+    const TEXT = "# PACS\n\nA migração.\n\n## Referências\n\n- [DICOMweb](https://www.dicomstandard.org/using/dicomweb/): já estava\n";
+    const notes: Record<string, string> = { ...NOTES, [NOTE]: TEXT };
+    const m = make({ reader: memoryReader(notes), writer: memoryWriter(notes) });
+    await readyNow(m);
+    const before = { ...notes };
+    const turn = await askAndWait(m, `/referencias ${NOTE}`);
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: `Preparei as referências de ${NOTE}. Veja e aplique no Kiwi.` });
+    expect(notes).toEqual(before);
+    const [p] = await m.svc.proposalsList();
+    // O DICOMweb já estava (com a barra do fim): só o outro entra.
+    expect(p).toMatchObject({ kind: "references", status: "pending", meeting: null, note: null, references: { note: NOTE, count: 1 } });
+    const view = await m.svc.proposalView(p!.id);
+    // A nota já tem a seção: só a linha nova.
+    expect(view.noteContent).toBe("- [Cloud Healthcare API: DICOM](https://cloud.google.com/healthcare-api/docs/concepts/dicom): Os dicomStores e o DICOMweb do Google. (14/11/2026)\n");
+    expect(view.main!.lines.filter((l) => l.added).map((l) => l.text)).toEqual([expect.stringContaining("cloud.google.com")]);
+    const applied = await m.svc.proposalApply(p!.id);
+    expect(applied).toMatchObject({ kind: "references", status: "applied" });
+    expect(notes[NOTE]).toBe(`${TEXT}- [Cloud Healthcare API: DICOM](https://cloud.google.com/healthcare-api/docs/concepts/dicom): Os dicomStores e o DICOMweb do Google. (14/11/2026)\n`);
+    const r = (await m.svc.activityLog()).find((x) => x.id === applied.applyRequest)!;
+    expect(r.changes.map((c) => [c.kind, c.path, c.section])).toEqual([["appended", NOTE, "Referências"]]);
+    m.svc.useUndo({
+      folder: async () => null,
+      get: async (q) => (notes[q] === undefined ? null : { content: notes[q]!, version: versionOf(notes[q]!) }),
+      save: async (q, content, base) => {
+        if (notes[q] === undefined || versionOf(notes[q]!) !== base) return false;
+        notes[q] = content;
+        return true;
+      },
+      trash: async () => "gone",
+    });
+    await m.svc.undo(applied.applyRequest!);
+    expect(notes[NOTE]).toBe(TEXT);
+    // Todos já na nota: nada a propor.
+    notes[NOTE] = `${TEXT}https://cloud.google.com/healthcare-api/docs/concepts/dicom\n`;
+    expect((await askAndWait(m, `/referencias ${NOTE}`)).at(-1)).toMatchObject({ type: "done" });
+    expect((await m.svc.proposalsList()).filter((x) => x.status === "pending")).toEqual([]);
+  });
+});
+
 describe("os arquivos que o agente gera (spec #11549)", () => {
   test("o pedido gera o arquivo, a Atividade registra a criação, e o [Desfazer] o manda para a Lixeira", async () => {
     const notes: Record<string, string> = { ...NOTES };
@@ -684,7 +750,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, files_create, meeting_propose, project_summary_propose",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, files_create, meeting_propose, project_summary_propose, notes_add_references",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');

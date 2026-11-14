@@ -188,7 +188,7 @@ describe("o servidor MCP do Kiwi", () => {
     // Sem o escritor, só as nove de leitura (com o files_read, #11549); as quatro de escrita (spec #8356 e o organizar a pasta, #11102) e as propostas
     // (a da reunião, spec #8360, e o resumo executivo, #11546) e as duas da memória (#11469) existem, mas não aparecem.
     expect(kiwiTools(false)).toHaveLength(9);
-    expect(KIWI_TOOLS).toHaveLength(19);
+    expect(KIWI_TOOLS).toHaveLength(20);
   });
 
   test("uma ferramenta que não existe é recusada, e um método desconhecido também", async () => {

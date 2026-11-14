@@ -1118,7 +1118,7 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "agent.configure": (args) => {
       const a = object(args, "agent.configure");
-      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions");
+      const extra = Object.keys(a).filter((k) => k !== "model" && k !== "effort" && k !== "economy" && k !== "controlShortcut" && k !== "meetings" && k !== "summary" && k !== "instructions" && k !== "webSearch");
       if (extra.length) throw bad(`agent.configure: unknown arg ${extra[0]}`);
       for (const k of ["model", "effort"] as const) {
         if (a[k] !== undefined && !isAgentChoice(a[k])) throw bad(`agent.configure: ${k} must be an option id (letters, digits, dot, dash)`);
@@ -1129,6 +1129,7 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (a.summary !== undefined && (!a.summary || typeof a.summary !== "object" || Array.isArray(a.summary))) throw bad("agent.configure: summary must be an object");
       if (a.instructions !== undefined && (typeof a.instructions !== "string" || a.instructions.length > 2000))
         throw bad("agent.configure: instructions must be a text up to 2000 characters");
+      if (a.webSearch !== undefined && typeof a.webSearch !== "boolean") throw bad("agent.configure: webSearch must be a boolean");
       return agentCall((agent) =>
         agent.configure({
           model: a.model as string | undefined,
@@ -1138,6 +1139,7 @@ export function uiCapabilities(deps: CapabilityDeps,
           ...(a.meetings !== undefined ? { meetings: a.meetings } : {}),
           ...(a.summary !== undefined ? { summary: a.summary } : {}),
           ...(a.instructions !== undefined ? { instructions: a.instructions as string } : {}),
+          ...(a.webSearch !== undefined ? { webSearch: a.webSearch as boolean } : {}),
         }),
       );
     },

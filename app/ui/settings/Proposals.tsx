@@ -72,13 +72,18 @@ export function ProposalView({ state }: { state: ViewState }) {
         <h3 className="kn-proposal-h">
           A nota nova: <span className="kn-proposal-path">{`${folder}${v.note.title}.md`}</span>
         </h3>
+      ) : v.kind === "references" ? (
+        // As referências (spec #11908): as linhas que entram no fim da nota.
+        <h3 className="kn-proposal-h">
+          As referências, no fim de <span className="kn-proposal-path">{v.references?.note ?? ""}</span>:
+        </h3>
       ) : (
         // O resumo executivo (spec #11546): a seção como vai ficar, no topo da nota principal.
         <h3 className="kn-proposal-h">
           O resumo executivo{v.replaces ? `, no lugar do de ${v.replaces.split("-").reverse().join("/")} (que fica nas Versões)` : ""}:
         </h3>
       )}
-      <pre className="kn-diff" aria-label={v.note ? "O texto da nota nova" : "O resumo executivo"}>
+      <pre className="kn-diff" aria-label={v.note ? "O texto da nota nova" : v.kind === "references" ? "As referências" : "O resumo executivo"}>
         {v.noteContent.replace(/\n$/, "").split("\n").map((l, i) => (
           <div key={i} className="kn-diff-add">
             {"+ "}

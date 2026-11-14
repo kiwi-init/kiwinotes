@@ -13,6 +13,9 @@
 import type { AgentTurnEvent } from "../../src/shared/ui-contract";
 import { limitBubble } from "../settings/usageText";
 
+/** O que o balão diz enquanto o agente está na web (spec #11908). */
+export const WEB_LINE = "Pesquisando na web…";
+
 /** A largura máxima do balão, em pixels, e quantas linhas cabem. */
 export const BUBBLE_WIDTH = 280;
 export const BUBBLE_LINES = 3;
@@ -162,6 +165,11 @@ export class BubbleFeed {
       this.open = "";
       this.head = null;
       this.closedLen = this.said.length;
+      // A web (spec #11908): o balão diz que o agente saiu do cofre, até o próximo texto ou ferramenta.
+      if ("tool" in e && e.tool === "web" && !this.dismissed) {
+        this.queue.push(WEB_LINE);
+        this.next(now);
+      }
     } else if (e.type === "done") {
       this.finish(e.id);
       if (e.stopReason !== "end_turn" || this.dismissed) {
@@ -233,7 +241,8 @@ export class BubbleFeed {
     const len = [...h.text].length;
     const typed = this.reduced || this.error ? len : Math.min(len, Math.floor((now - h.shownAt) / TYPE_MS));
     const text = cutAtCodePoint(h.text, typed);
-    const more = !this.error && (this.queue.length > 0 || this.said.trim() !== h.text.trim());
+    // A linha da web (spec #11908) não é o que o agente disse: ela sozinha não pede o [Ver mais].
+    const more = !this.error && (this.queue.length > 0 || (h.text !== WEB_LINE && this.said.trim() !== h.text.trim()));
     return { text, full: h.text, error: this.error, more };
   }
 

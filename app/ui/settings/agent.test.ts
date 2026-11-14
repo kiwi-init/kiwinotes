@@ -30,6 +30,7 @@ const base: AgentStatus = {
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
+  webSearch: false,
   claude: { installed: true, version: "2.1.322", loggedIn: true, method: "claude.ai", versionOk: true },
   adapter: { version: "0.106.0", phase: "missing" },
   program: "closed",
@@ -239,4 +240,12 @@ test("a linha do aviso (spec #9839): o botão antes de pedir, o liga/desliga com
   expect(noticeHint({ permission: "allowed", enabled: false }, false)).toContain("Desligado");
   expect(noticeHint({ permission: "denied", enabled: true }, false)).toContain("Ajustes do Sistema › Notificações › Kiwi Notes");
   expect(noticeHint({ permission: "unavailable", enabled: true }, false)).toContain("não estão disponíveis");
+});
+
+test("Pesquisar na web (spec #11908): o texto diz o que muda e que o Kiwi não chama serviço", async () => {
+  const { WEB_LABEL, webHint, toolStatus } = await import("./agentText.ts");
+  expect(WEB_LABEL).toBe("Pesquisar na web");
+  expect(webHint({ webSearch: false })).toStartWith("Desligado: o Kiwi recusa a busca");
+  expect(webHint({ webSearch: true })).toContain("O Kiwi não chama nenhum serviço");
+  expect(toolStatus("web")).toBe("Pesquisando na web…");
 });

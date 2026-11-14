@@ -101,6 +101,9 @@ export function toolStatus(tool: string, target?: string): string {
       return target ? `Escrevendo em ${target}…` : "Escrevendo numa nota…";
     case "project_diary_add":
       return "Anotando no diário do projeto…";
+    // A web do agente (spec #11908): ele saiu do cofre para buscar ou ler uma página.
+    case "web":
+      return "Pesquisando na web…";
     default:
       return `Usando ${tool}…`;
   }
@@ -211,6 +214,13 @@ export const ECONOMY_LABEL = "Modo econômico";
 export function economyHint(s: AgentStatus): string {
   const what = "Gasta menos do seu limite: o modelo mais barato que o agente oferece, as notas lidas por seção e respostas curtas.";
   return s.economy ? `Ligado. ${what} Trocar de modelo começa um cache novo, então o primeiro pedido depois gasta um pouco mais.` : `${what} Trocar de modelo começa um cache novo.`;
+}
+
+/** "Pesquisar na web" (spec #11908): o rótulo e o que muda, desligado por padrão. */
+export const WEB_LABEL = "Pesquisar na web";
+export function webHint(s: Pick<AgentStatus, "webSearch">): string {
+  const what = "Com a permissão, o texto do pedido pode virar uma busca na web, feita pelo Claude Code, com o login dele. O Kiwi não chama nenhum serviço.";
+  return s.webSearch ? `Ligado. ${what} O balão mostra quando ele está na web.` : `Desligado: o Kiwi recusa a busca e a leitura de páginas do agente. ${what}`;
 }
 
 /** O atalho Control (spec #9876), em Ajustes › Agente. */

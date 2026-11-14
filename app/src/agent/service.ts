@@ -19,13 +19,14 @@
 //   cópia do registro (`undo.ts`). É da pessoa: não precisa do agente ligado e não vira ferramenta dele. Um por vez.
 
 import { lastSummaryDate, mainNoteWithSummary, SUMMARY_TITLE, summarySection, summarySince } from "./summary.ts";
+import { noteWithReferences, REFERENCES_TITLE } from "./references.ts";
 import type { SummarySettings } from "../shared/summary-settings.ts";
 import { DEFAULT_SUMMARY_SETTINGS, sanitizeSummarySettings } from "../shared/summary-settings.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { AgentError, type AgentErrorCode } from "./errors.ts";
-import type { AgentHost, AgentHostOptions } from "./host.ts";
+import { isWebTool, type AgentHost, type AgentHostOptions } from "./host.ts";
 import { KIWI_TOOL_PREFIX, KiwiToolServer, type ToolCallEvent } from "./tools/server.ts";
 import { SecretGuard, type DoubtDecider } from "../guardrail/filter.ts";
 import { DoubtAnswers, type DoubtAnswer, type StoredAnswer } from "../guardrail/answers.ts";
@@ -152,6 +153,8 @@ export interface AgentServiceDeps {
   openHost(o: {
     configOptions: () => Record<string, string>;
     kiwiTools?: AgentHostOptions["kiwiTools"];
+    /** "Pesquisar na web" (spec #11908): o host pergunta a cada pedido de permissão do agente. */
+    webTools?: () => boolean;
     /** O programa caiu sozinho: o serviço fecha o servidor de ferramentas daquela abertura. */
     onExit: () => void;
   }): Promise<AgentHost>;
@@ -234,6 +237,8 @@ export class AgentService {
   private readonly usageListeners = new Set<(v: AgentUsageView) => void>();
   /** O modo econômico agora, para as ferramentas lerem a cada chamada (spec #11084). */
   private economyNow = false;
+  /** "Pesquisar na web" (spec #11908) agora: o host consulta a cada pedido de permissão do agente. */
+  private webNow = false;
   /** As propostas das reuniões (spec #8360): guardadas por 30 dias, nada escrito antes do [Aplicar]. */
   private readonly proposals: ProposalStore;
   private readonly proposalListeners = new Set<(list: AgentProposalSummary[]) => void>();
@@ -617,7 +622,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -679,6 +684,7 @@ export class AgentService {
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
       summary: s.summary ?? DEFAULT_SUMMARY_SETTINGS,
       instructions: s.instructions ?? "",
+      webSearch: s.webSearch === true,
     };
   }
 
@@ -829,6 +835,11 @@ export class AgentService {
       return { id: p.id };
     },
     since: (project: ProposalProject) => this.summarySinceFor(project),
+    references: async (d) => {
+      const p = this.proposals.add({ kind: "references", request: this.activityId(), project: null, candidates: [], fields: null, references: d });
+      void this.emitProposals();
+      return { id: p.id };
+    },
   };
 
   /** Desde quando "o que andou" conta no resumo de um projeto: o último resumo da nota principal, ou o período de Ajustes. */
@@ -867,14 +878,15 @@ export class AgentService {
   private proposalSummary(p: MeetingProposal, s: MeetingNoteSettings): AgentProposalSummary {
     const iso = (ms: number) => new Date(ms).toISOString();
     const short = (x: { folder: string; name: string }) => ({ folder: x.folder, name: x.name });
-    const theme = p.kind === "summary" ? SUMMARY_TITLE : (p.fields?.theme ?? "");
+    const theme = p.kind === "summary" ? SUMMARY_TITLE : p.kind === "references" ? REFERENCES_TITLE : (p.fields?.theme ?? "");
     return {
       id: p.id,
       at: iso(p.at),
       status: p.status,
-      kind: p.kind === "summary" ? "summary" : "meeting",
+      kind: p.kind ?? "meeting",
       meeting: p.meeting ?? null,
       ...(p.summary ? { summary: { signal: p.summary.signal, since: p.summary.since } } : {}),
+      ...(p.references ? { references: { note: p.references.note, count: p.references.items.length } } : {}),
       project: p.project ? short(p.project) : null,
       candidates: p.candidates.map(short),
       theme,
@@ -950,6 +962,16 @@ export class AgentService {
    */
   async proposalView(id: string): Promise<AgentProposalView> {
     const p = this.proposalOr404(id);
+    if (p.kind === "references") {
+      // As referências (spec #11908): as linhas que entram e a nota com elas no fim da seção.
+      const summary = await this.summaryOf(p);
+      const r = p.references!;
+      const before = (await this.proposalWriter().get(r.note)).content;
+      const after = noteWithReferences(before, r.items);
+      // Com a seção já na nota, só as linhas novas; sem ela, a seção inteira que o Kiwi cria.
+      const noteContent = !after.lines.length ? "" : after.created ? `## ${REFERENCES_TITLE}\n\n${after.lines.join("\n")}\n` : `${after.lines.join("\n")}\n`;
+      return { ...summary, noteContent, main: { path: r.note, lines: addedLines(before, after.content) } };
+    }
     if (p.kind === "summary") {
       // O resumo executivo (spec #11546): a seção como vai ficar, e a nota principal com ela no topo.
       const summary = await this.summaryOf(p);
@@ -1031,6 +1053,7 @@ export class AgentService {
       if (p.status !== "pending") throw new AgentServiceError("E_BAD_ARGS", p.status === "offer" ? "Essa proposta ainda não foi preparada." : "Essa proposta já foi aplicada ou descartada.");
       if (needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", p.kind === "summary" ? "Escolha antes o projeto do resumo." : "Escolha antes o projeto da reunião.");
       if (p.kind === "summary") return this.applySummary(p);
+      if (p.kind === "references") return this.applyReferences(p);
       const meeting = this.meetingOf(p);
       const fields = this.fieldsOf(p);
       const writer = this.proposalWriter();
@@ -1086,6 +1109,45 @@ export class AgentService {
    * que fica nas Versões; a escrita entra no registro, com a cópia de antes e o [Desfazer]. Lida de novo se a nota
    * mudou no meio.
    */
+  /**
+   * O [Aplicar] das referências (spec #11908): só a nota pedida, no fim da seção "Referências", sem repetir um link que
+   * ela já tem. Uma escrita como as outras: a cópia de antes no registro, as Versões e o [Desfazer].
+   */
+  private async applyReferences(p: MeetingProposal): Promise<AgentProposalSummary> {
+    const r = p.references!;
+    const writer = this.proposalWriter();
+    const request = p.applyRequest ?? `referencias-${crypto.randomUUID()}`;
+    if (!p.applyRequest) {
+      await this.activity.begin(request, `Aplicar as referências de "${r.note.replace(/\.md$/i, "")}"`);
+      this.proposals.update(p.id, (x) => (x.applyRequest = request));
+    }
+    const folderId = await writer.folder();
+    const where = folderId ? { folder: folderId } : {};
+    for (let tries = 0; ; tries++) {
+      const n = await writer.get(r.note);
+      if (n.readOnly) throw new AgentServiceError("E_BAD_ARGS", `${n.path} não é UTF-8: o Kiwi não escreve nela.`);
+      const next = noteWithReferences(n.content, r.items).content;
+      if (next === n.content) break;
+      const copy = await this.activity.keep(request, n.content);
+      const w = await writer.save(n.path, next, n.version).catch(async (e) => {
+        await this.activity.drop(copy);
+        throw e;
+      });
+      if (w.saved) {
+        await this.activity.change(request, { kind: "appended", path: w.path, section: REFERENCES_TITLE, before: n.content.length, after: next.length, version: w.version, copy, ...where });
+        break;
+      }
+      await this.activity.drop(copy);
+      if (tries >= 2) throw new AgentServiceError("E_CHANGED", `${n.path} mudou enquanto o Kiwi aplicava. Tente [Aplicar] de novo.`);
+    }
+    const done = this.proposals.update(p.id, (x) => {
+      x.status = "applied";
+      x.doneAt = (this.d.now ?? Date.now)();
+    })!;
+    void this.emitProposals();
+    return this.summaryOf(done);
+  }
+
   private async applySummary(p: MeetingProposal): Promise<AgentProposalSummary> {
     const main = p.project?.main;
     if (!main) throw new AgentServiceError("E_BAD_ARGS", "Esse projeto não tem nota principal: marque uma em Notas, no projeto.");
@@ -1263,6 +1325,7 @@ export class AgentService {
   private async runTurn(turn: { id: string; cancelled: boolean }, text: string, s: AgentSettings): Promise<void> {
     const wanted = this.wantedConfig(s);
     this.economyNow = s.economy;
+    this.webNow = s.webSearch === true;
     try {
       let host = this.host?.running ? this.host : null;
       if (!host) {
@@ -1320,6 +1383,11 @@ export class AgentService {
         // que foi lido ("Lendo uma nota…"; o gato entra em `agindo` na hora, spec #9510), e de novo pelo próprio
         // servidor, quando ela termina, com o `target` (`onToolCall`). O `thinking` de quando ela acaba vem do host
         // (`tool_call_update`). O nome cru nunca chega à tela.
+        // A web do agente (spec #11908): o status diz "web", e o balão mostra que ele saiu do cofre.
+        if (e.type === "status" && e.status === "running" && isWebTool(e.tool)) {
+          this.emitTurn({ id: turn.id, type: "status", status: "running", tool: "web" });
+          return;
+        }
         if (e.type === "status" && e.status === "running" && e.tool.startsWith(KIWI_TOOL_PREFIX)) {
           this.emitTurn({ id: turn.id, type: "status", status: "running", tool: e.tool.slice(KIWI_TOOL_PREFIX.length) });
           return;
@@ -1392,6 +1460,7 @@ export class AgentService {
       const host = await this.d.openHost({
         configOptions: wanted,
         ...(kiwiTools ? { kiwiTools } : {}),
+        webTools: () => this.webNow,
         onExit: () => {
           this.stopTools(tools);
           this.emitStatus();
@@ -1448,7 +1517,7 @@ export class AgentService {
   }
 
   /** O modelo e o esforço do Kiwi. Valem já no próximo pedido. */
-  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string }): Promise<AgentStatus> {
+  async configure(o: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: unknown; summary?: unknown; instructions?: string; webSearch?: boolean }): Promise<AgentStatus> {
     const patch: Partial<AgentSettings> = {};
     // O resumo executivo (spec #11546): os blocos e o período, inteiros e saneados.
     if (o.summary !== undefined) patch.summary = sanitizeSummarySettings(o.summary);
@@ -1457,6 +1526,11 @@ export class AgentService {
     // As instruções da pessoa (spec #11469): valem a partir do pedido seguinte. Elas vão no começo fixo de todo pedido,
     // por fora do filtro do pedido: um trecho com cara de senha ou token é recusado aqui, e nada é gravado (revisão do
     // T11667). Assim o começo continua com os mesmos bytes, sem marcador no meio.
+    // "Pesquisar na web" (spec #11908): vale já no próximo pedido de permissão do agente, sem reabrir a sessão.
+    if (o.webSearch !== undefined) {
+      patch.webSearch = o.webSearch === true;
+      this.webNow = patch.webSearch;
+    }
     if (o.instructions !== undefined) {
       const text = o.instructions.replace(/\r\n?/g, "\n").slice(0, INSTRUCTIONS_MAX);
       if (/‹segredo [^›\n]{0,40}›/.test(text) || this.guard.read("", text).held > 0)

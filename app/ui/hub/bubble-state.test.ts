@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentTurnEvent } from "../../src/shared/ui-contract";
-import { BubbleFeed, readingMs, splitChunks, TYPE_MS } from "./bubble-state";
+import { BubbleFeed, readingMs, splitChunks, TYPE_MS, WEB_LINE } from "./bubble-state";
 
 const fits = (max: number) => (s: string) => [...s].length <= max;
 const ev = (e: Record<string, unknown>) => ({ id: "p1", ...e }) as AgentTurnEvent;
@@ -208,4 +208,16 @@ describe("o balão", () => {
     plain.event(ev({ type: "error", code: "E_AGENT_LIMIT", message: "O Claude Code atingiu o limite de uso da sua conta." }), 0);
     expect(plain.view(0)!.text).toBe("O Claude Code atingiu o limite de uso da sua conta.");
   });
+});
+
+test("a web (spec #11908): o balão diz que o agente está pesquisando, e a resposta vem depois", () => {
+  const f = new BubbleFeed(fits(60));
+  f.event(ev({ type: "started" }), 0);
+  f.event(ev({ type: "status", status: "running", tool: "web" }), 10);
+  expect(f.view(10 + WEB_LINE.length * TYPE_MS)).toMatchObject({ text: WEB_LINE, more: false });
+  // Outra ferramenta não diz isso.
+  const g = new BubbleFeed(fits(60));
+  g.event(ev({ type: "started" }), 0);
+  g.event(ev({ type: "status", status: "running", tool: "notes_read" }), 10);
+  expect(g.view(1000)).toBeNull();
 });

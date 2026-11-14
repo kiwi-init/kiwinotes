@@ -88,6 +88,8 @@ export interface AgentSettings {
   meetings: AgentMeetingSettings;
   /** As instruções da pessoa para o agente (spec #11469): até 2.000 caracteres, em todo pedido. */
   instructions: string;
+  /** "Pesquisar na web" (spec #11908): o Kiwi libera as ferramentas de web do agente. Desligado por padrão. */
+  webSearch: boolean;
   /** O resumo executivo (spec #11546): os blocos e o período do primeiro. */
   summary: SummarySettings;
 }
@@ -144,6 +146,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
+  webSearch: false,
 };
 
 /** Um id de modelo ou de esforço que vale: letras, números, ponto e hífen, até 64. */
@@ -163,6 +166,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     controlShortcut: o.controlShortcut === true,
     meetings: sanitizeAgentMeetingSettings(o.meetings),
     instructions: typeof o.instructions === "string" ? o.instructions.replace(/\r\n?/g, "\n").slice(0, 2000) : "",
+    webSearch: o.webSearch === true,
     summary: sanitizeSummarySettings(o.summary),
   };
 }

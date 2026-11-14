@@ -16,6 +16,8 @@ import {
   IDLE_TEST,
   economyHint,
   ECONOMY_LABEL,
+  WEB_LABEL,
+  webHint,
   modelHint,
   modelOptions,
   switchHint,
@@ -184,6 +186,13 @@ export function AgentSection() {
       {status.enabled && a.phase === "ready" ? (
         <Row label={ECONOMY_LABEL} hint={economyHint(status)}>
           <Switch label={ECONOMY_LABEL} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
+        </Row>
+      ) : null}
+
+      {/* "Pesquisar na web" (spec #11908): desligado por padrão; vale já no próximo pedido. */}
+      {status.enabled && a.phase === "ready" ? (
+        <Row label={WEB_LABEL} hint={webHint(status)}>
+          <Switch label={WEB_LABEL} checked={status.webSearch === true} onChange={(webSearch) => void run(() => api.agent.configure({ webSearch }))} />
         </Row>
       ) : null}
 

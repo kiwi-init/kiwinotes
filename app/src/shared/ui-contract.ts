@@ -176,7 +176,10 @@ export type { NoteModel };
 //   balão avisa, sem [Desfazer]). Só acréscimo.
 // 1.62.0 (T11691, spec #11549): os arquivos que o agente gera. O `files.create` (um arquivo novo do agente: txt, csv,
 //   xlsx, docx ou pdf, em base64) e o `files.delete` (o desfazer dele, para a Lixeira, pela versão). Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.62.0";
+// 1.63.0 (T11986, spec #11908): "Pesquisar na web". O `webSearch` no `AgentStatus` e no `agent.configure` (desligado por
+//   padrão; ligado, o Kiwi libera as ferramentas de web do próprio agente) e o `kind: "references"` nas propostas (T11987:
+//   as referências de uma nota, com a nota e quantos links). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.63.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -495,7 +498,7 @@ export interface UiCapabilities {
   /** O modelo e o esforço que o Kiwi pede ao abrir a sessão (valores das opções do agente, como `default` ou `opus`). */
   /** `controlShortcut` (1.55.0, spec #9876): "Falar com o agente pelo Control". `meetings` (1.57.0, spec #8360): "Suas
    * reuniões", inteiro; o que não vale volta ao padrão. */
-  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string }; result: AgentStatus };
+  "agent.configure": { args: { model?: string; effort?: string; economy?: boolean; controlShortcut?: boolean; meetings?: AgentMeetingSettings; summary?: SummarySettings; instructions?: string; webSearch?: boolean }; result: AgentStatus };
   /**
    * O registro do agente (1.44.0, spec #8356): os pedidos, do mais novo para o mais velho, com o que cada um leu e o que
    * mudou nas notas (a nota, a hora, o tipo, o tamanho antes e depois e a versão que a escrita deixou). Fica 30 dias.
@@ -628,11 +631,14 @@ export interface AgentProposalSummary {
    */
   status: "offer" | "pending" | "applied" | "discarded";
   /** `summary`: o resumo executivo de um projeto (1.59.0, spec #11546), que só muda a nota principal. */
-  kind: "meeting" | "summary";
+  /** `references` (1.63.0, spec #11908): as referências de uma nota, que vão no fim dela. */
+  kind: "meeting" | "summary" | "references";
   /** A reunião; null num resumo executivo. */
   meeting: { path: string; title: string; date: string } | null;
   /** O resumo executivo: o sinal e desde quando "o que andou" conta. */
   summary?: { signal: "verde" | "amarelo" | "vermelho"; since: string };
+  /** As referências: a nota e quantos links o agente mandou. */
+  references?: { note: string; count: number };
   /** O projeto; null sem projeto (em dúvida, com `candidates`, ou "Nenhum: só a nota da reunião"). */
   project: { folder: string; name: string } | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe. */
@@ -816,6 +822,8 @@ export interface AgentStatus {
   summary: SummarySettings;
   /** As instruções da pessoa para o agente (1.60.0, spec #11469): até 2.000 caracteres, em todo pedido. */
   instructions: string;
+  /** "Pesquisar na web" (1.63.0, spec #11908): desligado por padrão; ligado, o agente pode buscar e ler páginas. */
+  webSearch: boolean;
   /** Se a pessoa já aceitou a tela "o que vai para o agente" (ADR 0011). */
   consented: boolean;
   /** null até a primeira conferência (`agent.status {refresh: true}`). */

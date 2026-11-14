@@ -104,7 +104,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "" });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: false });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
@@ -116,6 +116,7 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     meetings: DEFAULT_AGENT_MEETING_SETTINGS,
     summary: DEFAULT_SUMMARY_SETTINGS,
     instructions: "",
+    webSearch: false,
   });
   // O modo econômico (spec #11084): desligado de fábrica, e só um true o liga.
   expect(sanitizeSettings({ agent: { economy: true } }).agent.economy).toBe(true);
@@ -253,3 +254,9 @@ test("Suas reuniões (spec #8360): o padrão é propor sozinho, na pasta do proj
   await store.save({ kiwicat: { show: true, overlay: true, cor: "violeta" } });
   expect((await new SettingsStore(dir).load()).kiwicat).toEqual({ show: true, overlay: true, cor: "violeta" });
  });
+
+test("Pesquisar na web (spec #11908): desligado por padrão, e só `true` liga", () => {
+  expect(DEFAULT_AGENT_SETTINGS.webSearch).toBe(false);
+  expect(sanitizeSettings({ agent: { webSearch: true } }).agent.webSearch).toBe(true);
+  expect(sanitizeSettings({ agent: { webSearch: "sim" } }).agent.webSearch).toBe(false);
+});
