@@ -14,7 +14,7 @@ import {
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
-import { EditorState, type Extension, Prec, StateField, type TransactionSpec } from "@codemirror/state";
+import { EditorSelection, EditorState, type Extension, Prec, StateField, type TransactionSpec } from "@codemirror/state";
 import { EditorView, keymap, placeholder, showTooltip, type Tooltip } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
@@ -38,6 +38,7 @@ import { searchAndFold, searchablePreviews } from "./search-fold.ts";
 import { highlightSyntax, HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 import { spellingAttributes, disableSpellcheck, SPELLING_EXCLUDED } from "./spelling.ts";
 import { clearInline, insertLink, mapLines, setHeading, toggleInline, toggleList, toggleTask } from "./format.ts";
+import { cursorAfterTitle } from "./titleHeading.ts";
 
 export interface LinkTarget {
   /** O título da nota (o que aparece na lista). */
@@ -483,7 +484,11 @@ export function urlAt(state: EditorState, pos: number): string | null {
 
 /** Um estado novo para outra nota: o desfazer não atravessa de uma nota para outra. */
 export function stateFor(doc: string, extensions: Extension[]): EditorState {
-  return EditorState.create({ doc, extensions });
+  const state = EditorState.create({ doc, extensions });
+  // A nota nova que começa pelo H1 igual ao título abre com o cursor na linha vazia depois dele (T12686): o H1 fica
+  // escondido na primeira vista.
+  const at = cursorAfterTitle(state);
+  return at === null ? state : EditorState.create({ doc, extensions, selection: EditorSelection.cursor(at) });
 }
 
 // ---------------------------------------------------------------- o comando "/" (T2660)

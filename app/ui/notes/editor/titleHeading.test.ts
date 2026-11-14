@@ -5,7 +5,8 @@ import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { editorFocused, focusChanged } from "./livePreview.ts";
-import { hiddenTitle, sameTitle, titleCompartment, titleHeading, titleHeadingLines } from "./titleHeading.ts";
+import { cursorAfterTitle, hiddenTitle, sameTitle, titleCompartment, titleHeading, titleHeadingLines } from "./titleHeading.ts";
+import { stateFor } from "./index.ts";
 
 /** As linhas escondidas, de 1 em diante. */
 function hidden(state: EditorState): number[] {
@@ -86,5 +87,34 @@ describe("na vista", () => {
     const s = make(doc, "Plano");
     const changed = s.update({ changes: { from: 2, to: 7, insert: "Outro" }, selection: EditorSelection.cursor(s.doc.length) }).state;
     expect(hidden(changed)).toEqual([]);
+  });
+});
+
+describe("a nota abre com o cursor depois do título escondido (T12686)", () => {
+  const opened = (doc: string, title: string | null) =>
+    stateFor(doc, [editorFocused, titleCompartment.of(titleHeading(title))]).update({ effects: focusChanged.of(true) }).state;
+
+  test("a nota nova do modelo `# {{title}}`: o cursor fica na linha vazia depois do trecho, e o H1 segue escondido com o foco", () => {
+    const s = opened("# Plano\n\n", "Plano");
+    expect(s.selection.main.head).toBe(9);
+    expect(s.doc.lineAt(s.selection.main.head).number).toBe(3);
+    expect(hidden(s)).toEqual([1, 2]);
+  });
+
+  test("subir para a linha 1 mostra o H1 de novo", () => {
+    const s = opened("# Plano\n\n", "Plano");
+    expect(hidden(s.update({ selection: EditorSelection.cursor(0) }).state)).toEqual([]);
+  });
+
+  test("a nota que já tem texto depois do título: o cursor fica no 0, sem abrir o 1º bloco cru (uma tabela, um callout)", () => {
+    expect(opened("# Plano\n\n| a | b |\n| - | - |\n| 1 | 2 |\n", "Plano").selection.main.head).toBe(0);
+    expect(opened("# Plano\n\nA migração.\n", "Plano").selection.main.head).toBe(0);
+  });
+
+  test("sem H1 igual ao título, ou só o H1, o cursor fica no 0", () => {
+    expect(opened("# Outro\n\nTexto.", "Plano").selection.main.head).toBe(0);
+    expect(opened("Texto.", "Plano").selection.main.head).toBe(0);
+    expect(cursorAfterTitle(opened("# Plano", "Plano"))).toBeNull();
+    expect(opened("# Plano", "Plano").selection.main.head).toBe(0);
   });
 });
