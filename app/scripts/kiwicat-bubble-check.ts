@@ -93,9 +93,10 @@ async function shot(p: Page, file: string, caption: string, w: number, h: number
 }
 
 try {
-  // 1. O canto de baixo à direita, 1×, numa tela grande: o espaço do balão é o máximo (360).
-  {
-    const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", "light", 360);
+  // 1. O canto de baixo à direita, 1×, numa tela grande: o espaço do balão é o máximo (360). No claro e no escuro.
+  for (const theme of ["light", "dark"] as const) {
+    const tema = theme === "light" ? "claro" : "escuro";
+    const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", theme, 360);
     await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), LONG);
     await settle(p);
     let s = await stats(p);
@@ -104,7 +105,11 @@ try {
     assert.equal(s.bubbleOpen, false);
     const closed = await bubbleBox(p);
     assert.ok(closed.h < 112, `fechado, o balão é pequeno: ${closed.h}`);
-    await shot(p, "1-fechado.png", "1. Fechado: o começo da resposta e o Ver mais", width, height);
+    // O resumo cortado numa palavra: "…" no fim, menos depois de um ponto (revisão do #526).
+    const summary = (await p.textContent("#bubble-text"))!;
+    assert.ok(LONG.startsWith(summary.replace(/…$/, "")) && summary.length < LONG.length, `o resumo é o começo: ${summary}`);
+    assert.ok(!/[.!?]…$/.test(summary) && /[.!?…]$/.test(summary), `o fim do resumo: ${summary.slice(-20)}`);
+    await shot(p, `1-fechado-${theme}.png`, `Fechado (${tema}): o começo da resposta e o Ver mais`, width, height);
     let last = (await posts(p)).at(-1)!;
     assert.ok(last.bubble && !last.open, `o helper sabe onde o balão está: ${JSON.stringify(last)}`);
     // O helper usa isso para o clique: até 1,5 pt de arredondamento.
@@ -129,14 +134,21 @@ try {
     assert.ok(scroll.sh > scroll.ch, `o texto passa do balão aberto e rola: ${JSON.stringify(scroll)}`);
     last = (await posts(p)).at(-1)!;
     assert.ok(last.bubble && last.open && last.bubble.h >= Math.floor(open.h) - 1, `o helper sabe que abriu e o novo tamanho: ${JSON.stringify(last)}`);
-    await shot(p, "2-aberto.png", "2. Ver mais: o balão no tamanho máximo, com o texto todo", width, height);
+    const fade = () => p.evaluate(() => { const t = document.getElementById("bubble-text")!; return [t.style.getPropertyValue("--fade-top"), t.style.getPropertyValue("--fade-bottom")]; });
+    assert.deepEqual(await fade(), ["0px", "16px"], "no começo, só o degradê de baixo");
+    await shot(p, `2-aberto-${theme}.png`, `Ver mais (${tema}): o balão no tamanho máximo`, width, height);
     report.checks.push("'Ver mais' opens the bubble up to the window's room; the text scrolls inside; the helper gets open: true and the new rect");
 
     await p.mouse.move(open.x + open.w / 2, open.y + open.h / 2);
-    await p.mouse.wheel(0, 400);
+    await p.mouse.wheel(0, 40);
     await p.waitForFunction(() => document.getElementById("bubble-text")!.scrollTop > 0, undefined, { timeout: 5000 });
     const top = await p.evaluate(() => document.getElementById("bubble-text")!.scrollTop);
-    await shot(p, "3-rolando.png", "3. Rolando dentro do balão, com a roda do mouse", width, height);
+    await settle(p); // o evento de rolagem vem no quadro seguinte
+    assert.deepEqual(await fade(), ["16px", "16px"], "no meio, os dois degradês");
+    await shot(p, `3-rolando-${theme}.png`, `Rolando (${tema}): o degradê nas bordas`, width, height);
+    await p.evaluate(() => { const t = document.getElementById("bubble-text")!; t.scrollTop = t.scrollHeight; });
+    await settle(p);
+    assert.deepEqual(await fade(), ["16px", "0px"], "no fim, só o degradê de cima");
     report.checks.push(`the mouse wheel scrolls the text inside the open bubble (scrollTop ${top})`);
 
     await p.click("#bubble-more");
@@ -160,17 +172,6 @@ try {
     assert.equal(s.bubbleMore, false);
     assert.equal(await p.isVisible("#bubble-more"), false);
     report.checks.push("a short answer has no 'Ver mais'; when the bubble goes, the helper gets bubble: null");
-    await ctx.close();
-  }
-
-  // 2. O escuro, aberto, num canto de cima (o balão embaixo do gato).
-  {
-    const { ctx, p, width, height } = await openPage("escala=1.00&lado=left&balao=abaixo", "dark", 360);
-    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), LONG);
-    await settle(p);
-    await p.click("#bubble-more");
-    await settle(p);
-    await shot(p, "4-aberto-escuro.png", "4. No escuro, num canto de cima: o balão abre para baixo", width, height);
     await ctx.close();
   }
 
@@ -210,7 +211,7 @@ try {
   await sheet.setContent(
     `<body style="margin:0;padding:24px;background:#eceae4;font:600 18px -apple-system,sans-serif;color:#222">` +
       `<h1 style="margin:0 0 16px;font-size:26px">O balão do Kiwi Cat: resumo, Ver mais e rolagem (spec #13378)</h1>` +
-      `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-items:start">` +
+      `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start">` +
       shots.map((x) =>
         `<figure style="margin:0"><figcaption style="margin-bottom:8px;min-height:44px">${x.caption}</figcaption>` +
         `<div style="border-radius:10px;padding:16px;background:linear-gradient(160deg,#9fb4c9,#c9b9a6);box-shadow:0 1px 4px #0003">` +

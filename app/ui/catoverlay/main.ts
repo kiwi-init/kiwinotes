@@ -55,19 +55,60 @@ new ResizeObserver(report).observe(bubbleEl);
 // A entrada desliza 4 px: no fim dela, o lugar de verdade (o clique conta só em cima do balão).
 bubbleEl.addEventListener("transitionend", report);
 
+const fits = () => bubbleText.scrollHeight <= bubbleText.clientHeight + 1;
+
+/**
+ * O resumo do balão fechado (revisão do #526): o começo que cabe nas três linhas, cortado numa palavra. Com "…" no fim,
+ * menos quando o corte já termina a frase ("pessoas." fica sem as reticências). Devolve se cortou.
+ */
+function fitSummary(full: string): boolean {
+  bubbleText.textContent = full;
+  if (fits()) return false;
+  const words = full.split(" ");
+  const cut = (n: number) => {
+    const s = words.slice(0, n).join(" ").replace(/[\s,;:\u2013\u2014-]+$/, "");
+    return /[.!?…]$/.test(s) ? s : `${s}…`;
+  };
+  let lo = 1;
+  let hi = words.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    bubbleText.textContent = cut(mid);
+    if (fits()) lo = mid;
+    else hi = mid - 1;
+  }
+  bubbleText.textContent = cut(lo);
+  return true;
+}
+
+/** O degradê das bordas do texto aberto: só onde há mais para rolar. */
+function fades() {
+  const t = bubbleText;
+  const open = stats.bubbleOpen;
+  t.style.setProperty("--fade-top", open && t.scrollTop > 1 ? "16px" : "0px");
+  t.style.setProperty("--fade-bottom", open && t.scrollTop + t.clientHeight < t.scrollHeight - 1 ? "16px" : "0px");
+}
+bubbleText.addEventListener("scroll", fades, { passive: true });
+
 function setOpen(open: boolean) {
   stats.bubbleOpen = open;
   bubbleEl.dataset.open = String(open);
   moreButton.textContent = open ? "Ver menos" : "Ver mais";
   moreButton.setAttribute("aria-expanded", String(open));
+  if (stats.bubble) {
+    if (open) bubbleText.textContent = stats.bubble.text;
+    else fitSummary(stats.bubble.text);
+  }
   bubbleText.scrollTop = 0;
+  fades();
   report();
 }
 
 /** O texto passa das três linhas: só aí o "Ver mais" aparece. */
 function measureMore() {
-  stats.bubbleMore = stats.bubble !== null && bubbleText.scrollHeight > bubbleText.clientHeight + 1;
+  stats.bubbleMore = stats.bubble !== null && fitSummary(stats.bubble.text);
   bubbleEl.dataset.more = String(stats.bubbleMore);
+  if (stats.bubbleOpen && stats.bubble) bubbleText.textContent = stats.bubble.text;
 }
 
 moreButton.addEventListener("click", (e) => {
@@ -86,7 +127,6 @@ function setBubble(b: { text?: unknown; error?: unknown } | null) {
     return;
   }
   stats.bubble = { text, error: b?.error === true };
-  bubbleText.textContent = text;
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
   setOpen(false);
