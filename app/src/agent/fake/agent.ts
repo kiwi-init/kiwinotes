@@ -64,6 +64,8 @@ function note(method: string, params: unknown): void {
 }
 
 const cancelled = new Set<string>();
+/** O último Modelo de nota que chegou em cada sessão (spec #13379): o começo fixo só vem quando muda. */
+const modelBySession = new Map<string, string>();
 
 /** O servidor de ferramentas do Kiwi que cada sessão recebeu (`type: "http"`, o nome `kiwi`). */
 const kiwiServers = new Map<string, { url: string; headers: Record<string, string>; ready?: Promise<void> }>();
@@ -401,7 +403,12 @@ const app = agent({ name: "kiwi-fake-agent" })
     // As instruções fixas vêm na frente do pedido: o Modelo de nota (spec #11102) e o modo econômico (spec #11084). O
     // agente falso as tira para achar o comando, e guarda o modelo para o `/nota-modelo` e o `/organiza`.
     const raw = params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("");
-    const modelText = /^\[Modelo de nota do Kiwi:([^\]]*)\]\s*/.exec(raw)?.[1] ?? "";
+    // O começo fixo só vem quando muda (spec #13379): como o agente de verdade, que o tem no histórico, o falso guarda o
+    // último modelo da sessão. Um começo fixo sem o modelo (o modelo tirado) o esquece.
+    const sentModel = /^\[Modelo de nota do Kiwi:([^\]]*)\]\s*/.exec(raw)?.[1];
+    const sentPrefix = /^\[(Modelo de nota do Kiwi|O que você sabe sobre a pessoa|As instruções da pessoa|O glossário da pessoa|Modo econômico do Kiwi)/.test(raw);
+    if (sentPrefix) modelBySession.set(sessionId, sentModel ?? "");
+    const modelText = modelBySession.get(sessionId) ?? "";
     const text = raw
       .replace(/^\[Modelo de nota do Kiwi:[^\]]*\]\s*/, "")
       // A memória (spec #11469): o bloco termina numa linha só com "]" (um fato pode ter colchete).

@@ -426,11 +426,13 @@ describe("a fronteira do cofre", () => {
     expect(readFileSync(path.join(root, "Latin.md"))).toEqual(Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
   });
 
-  test("o escritor só chama as cinco capacidades dele", async () => {
+  test("o escritor só chama as sete capacidades dele", async () => {
     const { config, called } = await setup();
     await tool(config, "notes_create", { title: "Nova", text: "x" });
     await tool(config, "files_create", { formato: "txt", nome: "Novo", conteudo: { blocos: [{ tipo: "paragrafo", texto: "x" }] } });
     await tool(config, "notes_append", { path: "Nova.md", text: "y" });
+    // O .txt (spec #13379) se lê e grava pelos arquivos do cofre.
+    await tool(config, "notes_append", { path: "Novo.txt", text: "y" });
     await tool(config, "notes_write", { path: "Nova.md", text: "z", version: versionOf("x\ny\n") });
     expect([...called].sort()).toEqual([...WRITER_CAPABILITIES].sort());
   });

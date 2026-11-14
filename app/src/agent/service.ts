@@ -59,7 +59,7 @@ import type {
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { UsageStore } from "./usage-store.ts";
 import { type NoteModel } from "./note-model.ts";
-import { fixedPrefix } from "./fixed-prefix.ts";
+import { PREFIX_RESEND_EVERY, prefixParts } from "./fixed-prefix.ts";
 import { sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
 import {
   createRoutine,
@@ -290,6 +290,8 @@ export class AgentService {
   private readonly usageListeners = new Set<(v: AgentUsageView) => void>();
   /** O modo econômico agora, para as ferramentas lerem a cada chamada (spec #11084). */
   private economyNow = false;
+  /** O começo fixo que foi ao agente (spec #13379): em qual abertura do programa, qual texto e há quantos pedidos. */
+  private prefixSent: { host: AgentHost; stable: string; requests: number } | null = null;
   /** "Pesquisar na web" (spec #11908) agora: o host consulta a cada pedido de permissão do agente. */
   private webNow = false;
   /** As propostas das reuniões (spec #8360): guardadas por 30 dias, nada escrito antes do [Aplicar]. */
@@ -1669,8 +1671,12 @@ export class AgentService {
       const terms = this.glossary ? await this.glossary().catch(() => []) : [];
       // No modo econômico o glossário muda a cada pedido (só os termos dele): ele vai por último, depois das instruções do
       // econômico, para o cache pegar tudo antes dele (revisão do T11667).
-      const fixed = fixedPrefix({ model, facts, instructions: s.instructions ?? "", terms, economy: s.economy === true, request: text });
-      const answer = await host.ask(fixed + text, (e) => {
+      const parts = prefixParts({ model, facts, instructions: s.instructions ?? "", terms, economy: s.economy === true, request: text });
+      // A sessão é retomada entre os pedidos (spec #13379): o começo fixo só vai quando muda, numa abertura nova do
+      // programa, ou a cada `PREFIX_RESEND_EVERY` pedidos. Antes ia sempre, e cada cópia ficava no histórico.
+      const sent = this.prefixSent;
+      const resend = !sent || sent.host !== host || sent.stable !== parts.stable || sent.requests >= PREFIX_RESEND_EVERY;
+      const answer = await host.ask((resend ? parts.stable : "") + parts.perRequest + text, (e) => {
         if (e.type === "done") return; // o `done` sai abaixo, com o texto inteiro
         // O uso da janela (spec #11084) não é um evento do pedido: vai para o medidor, e o aviso, uma vez, para o balão.
         if (e.type === "limit") {
@@ -1692,6 +1698,7 @@ export class AgentService {
         }
         this.emitTurn({ id: turn.id, ...e } as AgentTurnEvent);
       });
+      this.prefixSent = resend || !sent ? { host, stable: parts.stable, requests: 1 } : { ...sent, requests: sent.requests + 1 };
       if (answer.usage) {
         // A pergunta guardada é a que já passou pelo guardrail (sem segredo).
         this.safely(() => this.usage.record(turn.id, decided.text, answer.usage!));

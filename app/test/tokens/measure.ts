@@ -2,7 +2,7 @@
 // casos são fixos (a memória cheia, as instruções no máximo, o glossário grande, o Modelo inteiro), para o número só
 // mudar quando o Kiwi mudar o que manda.
 
-import { fixedPrefix, type FixedPrefixInput } from "../../src/agent/fixed-prefix.ts";
+import { fixedPrefix, type FixedPrefixInput, prefixParts } from "../../src/agent/fixed-prefix.ts";
 import { FACT_MAX_CHARS, GLOSSARY_MAX, INSTRUCTIONS_MAX, MEMORY_MAX } from "../../src/agent/memory.ts";
 import { DEFAULT_NOTE_MODEL } from "../../src/agent/note-model.ts";
 import { countTokens } from "../../src/agent/token-count.ts";
@@ -46,6 +46,10 @@ export function prefixMeasures(): Measure[] {
   return [
     { item: "começo fixo › normal", tokens: countTokens(fixedPrefix({ ...FULL, economy: false, request: REQUEST })) },
     { item: "começo fixo › econômico", tokens: countTokens(fixedPrefix({ ...FULL, economy: true, request: REQUEST })) },
+    // O pedido seguinte, na mesma sessão e com os mesmos ajustes (spec #13379): o começo fixo já está no histórico, e só
+    // vai o que muda a cada pedido (no econômico, o glossário com os termos dele).
+    { item: "começo fixo › pedido seguinte", tokens: countTokens(prefixParts({ ...FULL, economy: false, request: REQUEST }).perRequest) },
+    { item: "começo fixo › pedido seguinte › econômico", tokens: countTokens(prefixParts({ ...FULL, economy: true, request: REQUEST }).perRequest) },
   ];
 }
 

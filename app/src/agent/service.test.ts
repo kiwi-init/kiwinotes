@@ -17,8 +17,13 @@ import { ROUTINE_LABELS, routineDeclined, routineEconomyQuestion } from "./routi
 import { DEFAULT_AGENT_ROUTINES } from "../shared/agent-routines.ts";
 import type { AgentRoutineEvent } from "../shared/ui-contract.ts";
 import { DEFAULT_NOTE_MODEL, noteModelText, sanitizeNoteModel } from "./note-model.ts";
-import { EMPTY_READER, type VaultReader } from "./tools/reader.ts";
-import type { VaultWriter } from "./tools/writer.ts";
+import { PREFIX_RESEND_EVERY } from "./fixed-prefix.ts";
+import { instructionsText } from "./memory.ts";
+import { EMPTY_READER, readerFromCapabilities, type VaultReader } from "./tools/reader.ts";
+import { writerFromCapabilities, type VaultWriter } from "./tools/writer.ts";
+import { uiCapabilities } from "../bun/ui-capabilities.ts";
+import { Vault } from "../notes/vault.ts";
+import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { AgentActivity } from "./activity.ts";
 import type { UndoNotes } from "./undo.ts";
 import { createHash } from "node:crypto";
@@ -1118,20 +1123,45 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     const prompts = () => m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
     const [a, b] = prompts().slice(-2);
     const fixed = noteModelText(model);
-    expect(a!.startsWith(fixed)).toBe(true);
-    expect(b!.startsWith(fixed)).toBe(true);
-    expect(a!.slice(fixed.length)).toBe("oi");
+    expect(a).toBe(fixed + "oi");
+    // A sessão é retomada (spec #13379): o mesmo começo fixo não vai de novo, porque já está no histórico.
+    expect(b).toBe("outra coisa");
     // Com o modo econômico, o modelo vem antes, e as instruções econômicas depois: os dois sempre na mesma ordem.
     await m.svc.configure({ economy: true });
     await askAndWait(m, "oi");
     expect(prompts().at(-1)).toBe(fixed + ECONOMY_INSTRUCTIONS + "oi");
-    // Mudar o modelo muda o começo fixo (vale para o que vem depois); um erro ao ler não derruba o pedido.
+    // Mudar o modelo muda o começo fixo, e ele vai de novo; um erro ao ler não derruba o pedido.
     model = sanitizeNoteModel({ ...DEFAULT_NOTE_MODEL, numbered: true });
     await askAndWait(m, "oi");
     expect(prompts().at(-1)!.startsWith(noteModelText(model))).toBe(true);
     m.svc.useNoteModel(async () => { throw new Error("sem cofre"); });
     await askAndWait(m, "oi");
     expect(prompts().at(-1)).toBe(ECONOMY_INSTRUCTIONS + "oi");
+  });
+
+  test("o começo fixo vai uma vez por abertura (spec #13379): de novo quando muda, a cada 8 pedidos e depois que o programa reabre", async () => {
+    const m = make({ idleMs: 2000 });
+    await readyNow(m);
+    const model = sanitizeNoteModel({ ...DEFAULT_NOTE_MODEL, body: "topicos" });
+    m.svc.useNoteModel(async () => model);
+    const fixed = noteModelText(model);
+    const prompts = () => m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
+    for (let i = 1; i <= PREFIX_RESEND_EVERY + 1; i++) await askAndWait(m, `pedido ${i}`);
+    const sent = prompts().slice(-(PREFIX_RESEND_EVERY + 1));
+    expect(sent[0]).toBe(`${fixed}pedido 1`);
+    for (let i = 1; i < PREFIX_RESEND_EVERY; i++) expect(sent[i]).toBe(`pedido ${i + 1}`);
+    expect(sent[PREFIX_RESEND_EVERY]).toBe(`${fixed}pedido ${PREFIX_RESEND_EVERY + 1}`);
+    // As instruções da pessoa mudaram: o começo fixo muda, e vai.
+    await m.svc.configure({ instructions: "Sempre em tópicos." });
+    await askAndWait(m, "depois das instruções");
+    expect(prompts().at(-1)).toBe(`${fixed}${instructionsText("Sempre em tópicos.")}depois das instruções`);
+    await askAndWait(m, "e mais um");
+    expect(prompts().at(-1)).toBe("e mais um");
+    // O programa fechou (o tempo sem uso) e abriu de novo: vai de novo, uma vez.
+    const pid = m.pid();
+    await until(() => !alive(pid), 8000);
+    await askAndWait(m, "depois de reabrir");
+    expect(prompts().at(-1)).toBe(`${fixed}${instructionsText("Sempre em tópicos.")}depois de reabrir`);
   });
 
   test("o modo econômico (spec #11084): as instruções e a lista das ferramentas idênticas, byte a byte, entre dois pedidos", async () => {
@@ -1145,11 +1175,11 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     // A lista das ferramentas é a mesma nos dois pedidos, e a mesma sem o modo econômico (as descrições não mudam).
     expect(a.text).toBe(b.text);
     expect(a.text).toBe(plain.text);
-    // As instruções vão na frente, com os mesmos bytes, nos dois pedidos.
+    // As instruções vão na frente do pedido em que o modo econômico ligou; no seguinte, a sessão já as tem (spec #13379).
     const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
     const eco = prompts.slice(-2);
-    for (const p of eco) expect(p.startsWith(ECONOMY_INSTRUCTIONS)).toBe(true);
-    expect(eco[0]!.slice(0, ECONOMY_INSTRUCTIONS.length)).toBe(eco[1]!.slice(0, ECONOMY_INSTRUCTIONS.length));
+    expect(eco[0]).toBe(`${ECONOMY_INSTRUCTIONS}/ferramentas-cru`);
+    expect(eco[1]).toBe("/ferramentas-cru");
     expect(prompts[0]!.startsWith("[Modo econômico")).toBe(false);
     // A nota longa, sem seção: o sumário e o "há mais", nunca a nota inteira; com a seção, em pedaços menores.
     const read = (await askAndWait(m, '/tool notes_read {"path":"Longa.md"}')).at(-1) as { text: string };
@@ -1585,13 +1615,12 @@ describe("a memória do agente (spec #11469)", () => {
     expect(seen.at(-1)).toMatchObject({ facts: ["eu prefiro respostas curtas"], max: 60, changes: [{ action: "remember", fact: "eu prefiro respostas curtas" }] });
     const [r] = await m.svc.activityLog();
     expect(r!.reads).toContainEqual(expect.objectContaining({ tool: "memory_remember", target: "eu prefiro respostas curtas" }));
-    // O pedido seguinte leva a memória no começo fixo, e dois pedidos seguidos levam os mesmos bytes.
+    // O pedido seguinte leva a memória no começo fixo; o outro, com a mesma memória, não a leva de novo (spec #13379).
     await askAndWait(m, "Oi");
     await askAndWait(m, "Oi de novo");
     const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
-    const head = (t: string) => t.slice(0, t.indexOf("]\n\n") + 3);
     expect(prompts.at(-2)).toStartWith("[O que você sabe sobre a pessoa (a memória do Kiwi).");
-    expect(head(prompts.at(-1)!)).toBe(head(prompts.at(-2)!));
+    expect(prompts.at(-1)).toBe("Oi de novo");
     expect(prompts.at(-2)).toContain("- eu prefiro respostas curtas\n]");
     // O [Desfazer] do balão tira o fato, e o balão sabe que foi desfeito.
     const undone = await m.svc.memoryUndo(seen.at(-1)!.changes[0]!.id);
@@ -1693,8 +1722,8 @@ describe("a memória do agente (spec #11469)", () => {
     const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => (l.params.prompt as { text: string }[])[0]!.text);
     const fixed = (t: string, ask: string) => t.slice(0, t.length - ask.length);
     const a = fixed(prompts.at(-2)!, "Oi");
-    const b = fixed(prompts.at(-1)!, "Oi de novo");
-    expect(a).toBe(b);
+    // O mesmo começo fixo não vai de novo no pedido seguinte (spec #13379): a sessão já o tem.
+    expect(fixed(prompts.at(-1)!, "Oi de novo")).toBe("");
     expect(a.indexOf("[O que você sabe sobre a pessoa")).toBe(0);
     expect(a.indexOf("[As instruções da pessoa")).toBeGreaterThan(a.indexOf("- trabalho com PACS"));
     expect(a.indexOf("[O glossário da pessoa")).toBeGreaterThan(a.indexOf("Sempre em português."));
@@ -1984,5 +2013,41 @@ describe("as rotinas (spec #12150)", () => {
     expect([off.routines.daily.on, off.routines.weekly.on]).toEqual([false, false]);
     await expect(r.m.svc.routineRun({ kind: "daily" })).rejects.toMatchObject({ code: "E_AGENT_DISABLED" });
     expect((await r.m.svc.enable()).routines.daily.on).toBe(false);
+  });
+});
+
+describe("as notas .txt pelo agente falso (spec #13379)", () => {
+  test('"organize as anotações da pasta Legacy PR": o agente falso acha a pasta pelo nome e lê o .txt, pelas ferramentas do Kiwi', async () => {
+    const root = path.join(tmp(), "KiwiNotes");
+    for (const [rel, content] of Object.entries({ "Trabalho/legacy-pr/anotacoes.txt": "migrar o legado até março\n", "Trabalho/legacy-pr/Plano.md": "# Plano\n" })) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      writeFileSync(path.join(root, rel), content);
+    }
+    const vault = new Vault({ root, debounceMs: 20, trash: async () => {} });
+    try {
+      const caps = uiCapabilities({
+        dictionary: { load: async () => [], save: async (t) => t },
+        snippets: { load: async () => [], save: async (s) => s },
+        history: { search: async () => ({ entries: [] }), delete: async () => true, get: async () => null },
+        dictationNotes: { toNew: async () => { throw new Error("not used"); }, append: async () => { throw new Error("not used"); } },
+        settings: { load: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }), save: async () => ({ ...DEFAULT_SETTINGS, notesShortcut: null }) },
+        clipboardWrite: () => {},
+        notes: vault,
+      });
+      const m = make({ reader: readerFromCapabilities(caps as never), writer: writerFromCapabilities(caps as never) });
+      await readyNow(m);
+      const done = (await askAndWait(
+        m,
+        'organize as anotações da pasta Legacy PR\n/tool notes_list {"folder":"Legacy PR"}\n/tool notes_search {"query":"migrar legado"}\n/tool notes_read {"path":"Trabalho/legacy-pr/anotacoes.txt"}',
+      )).at(-1) as { type: string; text: string };
+      expect(done.type).toBe("done");
+      const [list, search, read] = done.text.split("\n").map((l) => JSON.parse(l) as Record<string, any>);
+      expect(list!.pasta).toBe("Trabalho/legacy-pr");
+      expect(list!.notas.map((n: { path: string }) => n.path)).toContain("Trabalho/legacy-pr/anotacoes.txt");
+      expect(search!.resultados.map((h: { path: string }) => h.path)).toContain("Trabalho/legacy-pr/anotacoes.txt");
+      expect(read!.texto).toBe("migrar o legado até março\n");
+    } finally {
+      vault.close();
+    }
   });
 });

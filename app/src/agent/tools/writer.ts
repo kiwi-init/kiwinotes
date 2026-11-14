@@ -5,8 +5,14 @@
 //   agora, sem escrever. É o mesmo salvar das Notas, então o texto novo entra no histórico de versões.
 // - **A cópia de antes nas Versões:** o `notes.save` vai com `snapshot: true`, e o texto de antes vira uma versão na
 //   hora, sem o intervalo de 2 minutos do histórico.
-// - **Nada apaga, renomeia nem move:** o escritor só conhece cinco capacidades (`notes.get`, `notes.save`,
-//   `notes.create`, `notes.folder` e `files.create`, o arquivo novo do spec #11549), e nenhuma outra passa por ele.
+// - **Nada apaga, renomeia nem move:** o escritor só conhece sete capacidades (`notes.get`, `notes.save`,
+//   `notes.create`, `notes.folder`, `files.create`, o arquivo novo do spec #11549, e `files.read` e `files.save`, o `.txt`
+//   do spec #13379), e nenhuma outra passa por ele.
+// - **O `.txt` (spec #13379):** se lê e grava como texto, com a mesma conferência da versão (`files.save` com
+//   `baseVersion`). Ele não tem as Versões das notas: a cópia de antes fica no registro do agente, e o [Desfazer] volta.
+
+import type { FileContent, FileSaveResult } from "../../notes/vault.ts";
+import { isTextNote, textNote } from "./reader.ts";
 
 /** A nota que o escritor lê antes de mudar. */
 export interface WriterNote {
@@ -31,7 +37,7 @@ export interface VaultWriter {
 }
 
 /** As únicas capacidades que o escritor chama. */
-export const WRITER_CAPABILITIES = ["notes.get", "notes.save", "notes.create", "notes.folder", "files.create"] as const;
+export const WRITER_CAPABILITIES = ["notes.get", "notes.save", "notes.create", "notes.folder", "files.create", "files.read", "files.save"] as const;
 type WriterCapability = (typeof WRITER_CAPABILITIES)[number];
 
 type NoteResult = { path: string; title: string; content: string; version: string; readOnly?: boolean };
@@ -44,12 +50,17 @@ const note = (n: NoteResult): WriterNote => ({
   ...(n.readOnly ? { readOnly: true } : {}),
 });
 
-/** O escritor sobre as capacidades do app (as de `uiCapabilities`): só as cinco acima. */
+/** O escritor sobre as capacidades do app (as de `uiCapabilities`): só as sete acima. */
 export function writerFromCapabilities(caps: Record<WriterCapability, (args: unknown) => unknown>): VaultWriter {
   const call = async <T>(cap: WriterCapability, args: unknown): Promise<T> => (await caps[cap](args)) as T;
   return {
-    get: async (path) => note(await call<NoteResult>("notes.get", { path })),
+    get: async (path) =>
+      isTextNote(path) ? note(textNote(await call<FileContent>("files.read", { path, as: "text" }))) : note(await call<NoteResult>("notes.get", { path })),
     save: async (path, content, baseVersion) => {
+      if (isTextNote(path)) {
+        const r = await call<FileSaveResult>("files.save", { path, content, baseVersion });
+        return r.saved ? { saved: true, path: r.path, version: r.version } : { saved: false };
+      }
       const r = await call<{ saved: true; meta: { path: string; version: string } } | { saved: false }>("notes.save", {
         path,
         content,

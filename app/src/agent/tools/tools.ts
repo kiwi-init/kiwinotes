@@ -16,7 +16,7 @@
 import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared/meeting-note.ts";
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
-import type { VaultReader } from "./reader.ts";
+import { isTextNote, type VaultReader } from "./reader.ts";
 import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument } from "./files.ts";
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
@@ -126,7 +126,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     name: "notes_search",
     title: "Procurar nas notas",
     description:
-      "Procura nas notas do Kiwi pelas palavras e, se a busca pelo sentido estiver ligada, pelo assunto. Devolve o caminho, o título e um trecho de cada nota achada. Use antes de ler, para achar o que precisa sem ler tudo. Aceita \"frases\", tag:x, path:pasta e -palavra.",
+      "Procura nas notas do Kiwi (.md e .txt) pelas palavras e, se a busca pelo sentido estiver ligada, pelo assunto. Devolve o caminho, o título e um trecho de cada nota achada. Use antes de ler, para achar o que precisa sem ler tudo. Aceita \"frases\", tag:x, path:pasta e -palavra.",
     inputSchema: {
       type: "object",
       properties: {
@@ -167,11 +167,11 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_list",
     title: "Listar uma pasta",
-    description: `As pastas e as notas de dentro de uma pasta do Kiwi (só as de primeiro nível), com o tamanho e a última mudança. Até ${LIST_PAGE} notas por vez.`,
+    description: `As pastas e as notas (.md e .txt) de dentro de uma pasta do Kiwi (só as de primeiro nível), com o tamanho e a última mudança. Até ${LIST_PAGE} notas por vez. A pasta se acha pelo nome, sem diferenciar maiúscula, acento, espaço, - e _ ("Legacy PR" acha legacy-pr).`,
     inputSchema: {
       type: "object",
       properties: {
-        folder: { type: "string", description: "A pasta (ex.: Projetos). Vazio ou sem ele: a raiz." },
+        folder: { type: "string", description: "A pasta (ex.: Projetos), ou o nome dela. Vazio ou sem ele: a raiz." },
         offset: { type: "integer", minimum: 0, description: "Onde continuar: o proximoOffset da resposta anterior." },
       },
       additionalProperties: false,
@@ -222,7 +222,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "files_read",
     title: "Ler um arquivo do cofre",
-    description: `Lê uma planilha, um documento ou um pdf do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página. Devolve o sumário (as abas, as páginas, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md), use notes_read.`,
+    description: `Lê uma planilha, um documento ou um pdf do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página. Devolve o sumário (as abas, as páginas, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md ou .txt), use notes_read.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -269,7 +269,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_write",
     title: "Trocar o texto de uma nota",
-    description: `Troca o texto de uma seção, ou da nota inteira. Leia antes com notes_read e mande a versao que ele devolveu: se a nota mudou depois disso, nada é escrito e você precisa ler de novo. Com section, troca só o que está abaixo do título (o título fica). Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para uma nota maior, troque por seção. O texto de antes fica guardado nas Versões da nota.`,
+    description: `Troca o texto de uma seção, ou da nota inteira. Mande a versao do notes_read: se a nota mudou depois, nada é escrito e você lê de novo. Com section, troca só o que está abaixo do título. Sem section, o texto vira a nota inteira, com o frontmatter. Até ${WRITE_MAX_CHARS} caracteres: para mais, troque por seção. O texto de antes fica nas Versões. Num .txt, o Kiwi pergunta antes à pessoa; com o não, nada muda, e você sugere na resposta um .md organizado ao lado.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -305,7 +305,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     description: `Antes de organizar várias notas de uma pasta pelo Modelo de nota: o Kiwi conta as notas e pergunta à pessoa, na tela, se pode. Só use quando a pessoa pedir para organizar a pasta. Com o sim, devolve as notas (até ${ORGANIZE_MAX}); organize cada uma com notes_read e notes_write, mantendo todo o conteúdo. Com o não, não mude nenhuma nota da pasta.`,
     inputSchema: {
       type: "object",
-      properties: { folder: { type: "string", description: "A pasta (ex.: Projetos). As subpastas entram junto." } },
+      properties: { folder: { type: "string", description: "A pasta (ex.: Projetos), ou o nome dela. As subpastas entram junto." } },
       required: ["folder"],
       additionalProperties: false,
     },
@@ -364,18 +364,18 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "meeting_propose",
     title: "Propor a nota de uma reunião",
-    description: `Prepara a proposta de uma reunião gravada para a pessoa aprovar: o Kiwi monta a nota da reunião na pasta do projeto (o resumo, as decisões, as ações e o link para a transcrição) e a mudança na nota principal do projeto (uma linha no histórico de reuniões, as decisões e as pendências novas). Nada é escrito agora: a pessoa vê a proposta e aplica ou descarta. Mande só os campos, sem Markdown pronto. Descubra o projeto pelo assunto, pelos termos e pelos nomes, comparando com o projects_list: na dúvida entre parecidos, mande os candidatos (de 2 a ${PROPOSAL_CANDIDATES_MAX}) e a pessoa escolhe; sem nenhum parecido, não mande projeto nem candidatos.`,
+    description: `Prepara a proposta de uma reunião gravada para a pessoa aprovar: a nota da reunião na pasta do projeto (resumo, decisões, ações e o link para a transcrição) e a mudança na nota principal (o histórico de reuniões, as decisões e as pendências novas). Nada é escrito agora: a pessoa aplica ou descarta. Mande só os campos, sem Markdown. Ache o projeto pelo assunto e pelos nomes no projects_list: na dúvida, mande os candidatos (de 2 a ${PROPOSAL_CANDIDATES_MAX}); sem nenhum parecido, nem projeto nem candidatos.`,
     inputSchema: {
       type: "object",
       properties: {
         reuniao: { type: "string", description: "O caminho da nota da reunião, como o meetings_list devolve." },
-        projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve. Só com certeza." },
+        projeto: { type: "string", description: "A pasta ou o nome do projeto (projects_list). Só com certeza." },
         candidatos: {
           type: "array",
           items: { type: "string" },
           minItems: 2,
           maxItems: PROPOSAL_CANDIDATES_MAX,
-          description: "Na dúvida: as pastas (ou os nomes) dos projetos parecidos, para a pessoa escolher. Sem o projeto.",
+          description: "Na dúvida: os projetos parecidos, para a pessoa escolher.",
         },
         tema: { type: "string", minLength: 1, maxLength: PROPOSAL_THEME_CHARS, description: "O tema da reunião, curto: vira o nome da nota." },
         resumo: { type: "string", maxLength: PROPOSAL_TEXT_CHARS, description: "O resumo da reunião, em poucos parágrafos." },
@@ -412,17 +412,17 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "project_summary_propose",
     title: "Propor o resumo executivo de um projeto",
-    description: `Prepara o resumo executivo de um projeto para a pessoa aprovar: o Kiwi monta a seção "Resumo executivo" no topo da nota principal do projeto, num formato fixo (a situação, o que andou, as decisões, os riscos, os próximos passos e as reuniões recentes), no lugar do resumo anterior. Use quando a pessoa pedir o resumo, o status ou o ponto de um projeto. Leia antes as notas e as reuniões do projeto (project_status, notes_read, meetings_list). Mande só os campos, sem Markdown pronto, e não invente: cada item leva a fonte, o caminho da nota ou da reunião de onde veio, e um item com uma fonte que não existe fica de fora. Nada é escrito agora: a pessoa vê a proposta e aplica ou descarta. Na dúvida entre projetos parecidos, mande os candidatos (de 2 a ${PROPOSAL_CANDIDATES_MAX}).`,
+    description: `Prepara o resumo executivo de um projeto para a pessoa aprovar: a seção "Resumo executivo" no topo da nota principal, num formato fixo (situação, o que andou, decisões, riscos, próximos passos e reuniões recentes), no lugar do anterior. Use quando a pessoa pedir o resumo, o status ou o ponto de um projeto, depois de ler as notas e as reuniões dele. Mande só os campos, sem Markdown, e não invente: cada item leva a fonte (a nota ou a reunião de onde veio), e um item com fonte que não existe fica de fora. Nada é escrito agora: a pessoa aplica ou descarta. Na dúvida entre projetos parecidos, mande os candidatos (de 2 a ${PROPOSAL_CANDIDATES_MAX}).`,
     inputSchema: {
       type: "object",
       properties: {
-        projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve. Só com certeza." },
+        projeto: { type: "string", description: "A pasta ou o nome do projeto (projects_list). Só com certeza." },
         candidatos: {
           type: "array",
           items: { type: "string" },
           minItems: 2,
           maxItems: PROPOSAL_CANDIDATES_MAX,
-          description: "Na dúvida: as pastas (ou os nomes) dos projetos parecidos, para a pessoa escolher. Sem o projeto.",
+          description: "Na dúvida: os projetos parecidos, para a pessoa escolher.",
         },
         situacao: { type: "string", enum: ["verde", "amarelo", "vermelho"], description: "verde: no rumo; amarelo: pede atenção; vermelho: travado." },
         linha: { type: "string", maxLength: PROPOSAL_ITEM_CHARS, description: "Uma linha sobre a situação (opcional)." },
@@ -800,6 +800,49 @@ const APPEND_TRIES = 3;
 /** As marcas internas de cada bloco da transcrição (`%%meeting-segment:…%%`): são do Kiwi, não do que foi dito. */
 const SEGMENT_REF = /[ \t]*%%meeting-segment:[0-9a-f]{24} \{[^\n]*?\}%%/g;
 
+/** Uma pasta pelo nome (spec #13379): minúsculas, sem acento, sem espaço, `-` nem `_`. */
+const folderKey = (t: string) => t.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().replace(/[\s_-]+/g, "");
+
+/**
+ * A pasta que o agente pediu (spec #13379): a exata, ou a única que tem o mesmo nome sem diferenciar maiúscula, acento,
+ * espaço, `-` e `_` ("Legacy PR" acha `legacy-pr` e `Trabalho/Legacy_PR`). Pelo caminho inteiro ou só pelo último
+ * nome. Mais de uma: `E_AMBIGUOUS` com os caminhos. Nenhuma: `E_NOT_FOUND`, com as parecidas, se houver.
+ */
+export function folderNamed(folders: readonly string[], raw: string): string {
+  const want = raw.trim().replace(/^\/+|\/+$/g, "");
+  if (!want || folders.includes(want)) return want;
+  const key = folderKey(want);
+  const whole = folders.filter((f) => folderKey(f) === key);
+  const found = whole.length ? whole : folders.filter((f) => folderKey(f.split("/").pop()!) === key);
+  if (found.length === 1) return found[0]!;
+  if (found.length > 1) throw new ToolError("E_AMBIGUOUS", `há ${found.length} pastas chamadas ${want}; diga qual: ${found.slice(0, 20).join(", ")}`);
+  const near = key ? folders.filter((f) => folderKey(f.split("/").pop()!).includes(key)).slice(0, 10) : [];
+  throw new ToolError("E_NOT_FOUND", `a pasta ${want} não existe${near.length ? `; as parecidas: ${near.join(", ")}` : ""}`);
+}
+
+/** As respostas da pergunta do `.txt` neste pedido: a pessoa responde uma vez por arquivo. */
+const textAnswers = new Map<string, boolean>();
+
+/**
+ * Reescrever um `.txt` (spec #13379): o Kiwi pergunta à pessoa, no cartão, uma vez por arquivo em cada pedido. Com o
+ * não (ou sem resposta no prazo), nada é escrito, e o agente sugere na resposta uma nota `.md` organizada ao lado.
+ */
+async function mayRewriteText(path: string, decider?: DoubtDecider): Promise<void> {
+  const key = `${decider?.request ?? ""}\u0000${path}`;
+  let yes = textAnswers.get(key);
+  if (yes === undefined) {
+    const question = `Reescrever ${path} organizado? O texto de antes fica guardado, e dá para desfazer.`;
+    yes = decider ? await decider.questions.confirm(decider.request, question, decider.signal) : false;
+    if (textAnswers.size >= 500) textAnswers.clear();
+    textAnswers.set(key, yes);
+  }
+  if (!yes)
+    throw new ToolError(
+      "E_DECLINED",
+      `a pessoa não quis ${path} reescrito: nada foi escrito. Não mude o .txt; na resposta, ofereça criar uma nota .md organizada ao lado, com todo o conteúdo, e só crie se ela pedir.`,
+    );
+}
+
 /** Roda uma ferramenta. Um erro do cofre (`E_NOT_FOUND`, `E_OUTSIDE_VAULT`, `E_BAD_ARGS`) vira um `ToolError`. */
 export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unknown): Promise<ToolResult> {
   try {
@@ -821,7 +864,7 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       if (name === "project_diary_add") return await diaryAdd(ctx.reader, ctx.writer, ctx.journal, raw, ctx.guard, ctx.now?.() ?? new Date());
-      return await write(ctx.writer, ctx.journal, name, raw, ctx.guard);
+      return await write(ctx.writer, ctx.journal, name, raw, ctx.guard, ctx.decider);
     }
     const r = await run(ctx.reader, name, raw, ctx.guard, ctx.decider, ctx.economy, ctx.proposals);
     if (ctx.guard) r.held = ctx.guard.heldIn(JSON.stringify(r.value));
@@ -840,9 +883,8 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
  */
 async function organizeFolder(reader: VaultReader, raw: unknown, decider?: DoubtDecider): Promise<ToolResult> {
   const a = args(raw, ["folder"]);
-  const folder = (str(a, "folder", true) ?? "").replace(/^\/+|\/+$/g, "");
   const all = await reader.list();
-  if (folder && !all.folders.includes(folder)) throw new ToolError("E_NOT_FOUND", `a pasta ${folder} não existe`);
+  const folder = folderNamed(all.folders, str(a, "folder", true) ?? "");
   const notes = all.notes.filter((n) => !folder || n.folder === folder || n.folder.startsWith(`${folder}/`));
   if (!notes.length) return { value: { pasta: folder, total: 0, confirmou: false, aviso: "A pasta não tem notas." } };
   const where = folder ? `${folder}/` : "a raiz do cofre";
@@ -1025,10 +1067,10 @@ async function run(
     }
     case "notes_list": {
       const a = args(raw, ["folder", "offset"]);
-      const folder = (str(a, "folder", false) ?? "").replace(/^\/+|\/+$/g, "");
       const offset = int(a, "offset", 0, Number.MAX_SAFE_INTEGER) ?? 0;
       const all = await reader.list();
-      if (folder && !all.folders.includes(folder)) throw new ToolError("E_NOT_FOUND", `a pasta ${folder} não existe`);
+      const asked = (str(a, "folder", false) ?? "").replace(/^\/+|\/+$/g, "");
+      const folder = folderNamed(all.folders, asked);
       const childOf = (p: string) => (folder ? p.startsWith(`${folder}/`) && !p.slice(folder.length + 1).includes("/") : !p.includes("/"));
       const pastas = all.folders.filter(childOf);
       const notes = all.notes.filter((n) => n.folder === folder);
@@ -1038,9 +1080,17 @@ async function run(
         value: {
           pasta: folder,
           pastas,
-          notas: page.map((n) => ({ path: n.path, titulo: n.title, caracteres: n.size, mudou: n.mtime })),
+          notas: page.map((n) => ({ path: n.path, titulo: n.title, caracteres: n.size, mudou: n.mtime, ...(isTextNote(n.path) ? { formato: "txt" } : {}) })),
           total: notes.length,
-          ...(more ? { proximoOffset: offset + LIST_PAGE, aviso: `Há mais ${notes.length - offset - LIST_PAGE} notas nesta pasta.` } : {}),
+          ...(more ? { proximoOffset: offset + LIST_PAGE } : {}),
+          ...(more || folder !== asked
+            ? {
+              aviso: [
+                ...(folder !== asked ? [`Achei a pasta "${folder}" pelo nome "${asked}".`] : []),
+                ...(more ? [`Há mais ${notes.length - offset - LIST_PAGE} notas nesta pasta.`] : []),
+              ].join(" "),
+            }
+            : {}),
         },
         target: folder || "a raiz das notas",
       };
@@ -1184,7 +1234,7 @@ const removed = (before: string, after: string) => {
   return n ? { removedSecrets: n } : {};
 };
 
-async function write(writer: VaultWriter, journal: WriteJournal, name: string, raw: unknown, guard?: SecretGuard): Promise<ToolResult> {
+async function write(writer: VaultWriter, journal: WriteJournal, name: string, raw: unknown, guard?: SecretGuard, decider?: DoubtDecider): Promise<ToolResult> {
   const folder = await writer.folder();
   const where = folder ? { folder } : {};
   switch (name) {
@@ -1263,6 +1313,7 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
       const n = await writer.get(path);
       writable(n);
       if (version !== n.version) throw changed(n.path);
+      if (isTextNote(n.path)) await mayRewriteText(n.path, decider);
       // Os marcadores voltam ao original (no texto e no nome da seção) antes de conferir e gravar.
       const text = restore(guard, n.path, sent);
       capped(text);
