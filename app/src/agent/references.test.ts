@@ -30,6 +30,17 @@ describe("as referências da nota", () => {
     expect(noteWithReferences("# PACS\n\n## Referências\n", [A]).content).toBe(`# PACS\n\n## Referências\n\n${referenceLine(A)}\n`);
   });
 
+  test("um link com parênteses (a Wikipédia) vira um link válido e não se repete (revisão do T11986)", () => {
+    const item = { title: "Função (matemática)", url: "https://pt.wikipedia.org/wiki/Fun%C3%A7%C3%A3o_(matem%C3%A1tica)", summary: "" };
+    const line = referenceLine(item);
+    expect(line).toBe("- [Função (matemática)](https://pt.wikipedia.org/wiki/Fun%C3%A7%C3%A3o_%28matem%C3%A1tica%29)");
+    const once = noteWithReferences("# Nota\n", [item]);
+    expect(noteWithReferences(once.content, [item]).added).toEqual([]);
+    // O link cru, com os parênteses, solto no texto ou num link do Markdown, também conta.
+    expect(noteWithReferences("ver https://pt.wikipedia.org/wiki/Fun%C3%A7%C3%A3o_(matem%C3%A1tica).", [item]).added).toEqual([]);
+    expect(noteWithReferences("[f](https://pt.wikipedia.org/wiki/Fun%C3%A7%C3%A3o_(matem%C3%A1tica))", [item]).added).toEqual([]);
+  });
+
   test("o mesmo link com outra forma (o #, a barra, o host maiúsculo) é o mesmo", () => {
     expect(linkKey("https://Example.com/a/#x")).toBe(linkKey("https://example.com/a"));
     expect(noteWithReferences("ver https://example.com/a.", [{ title: "A", url: "https://EXAMPLE.com/a/", summary: "" }]).added).toEqual([]);

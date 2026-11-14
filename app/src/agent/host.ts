@@ -541,11 +541,11 @@ export class AgentHost {
   }
 }
 
-/** O nome da ferramenta de um `tool_call`: o do Claude Code (`_meta.claudeCode.toolName`), o título ou o tipo. */
 /** As ferramentas de web do Claude Code (spec #11908): buscar e ler uma página. */
 export const WEB_TOOLS = ["WebSearch", "WebFetch"] as const;
 export const isWebTool = (tool: string) => (WEB_TOOLS as readonly string[]).includes(tool);
 
+/** O nome da ferramenta de um `tool_call`: o do Claude Code (`_meta.claudeCode.toolName`), o título ou o tipo. */
 function toolName(call: Record<string, unknown>): string {
   const meta = call._meta as { claudeCode?: { toolName?: unknown } } | undefined;
   const fromMeta = meta?.claudeCode?.toolName;

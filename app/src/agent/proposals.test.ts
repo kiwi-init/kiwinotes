@@ -412,6 +412,10 @@ describe("a ferramenta notes_add_references (spec #11908)", () => {
     const marker = /‹segredo [^›]+›/.exec(guard.request("a chave é ghp_0123456789abcdefghijABCDEFGHIJ012345 e pronto").text)?.[0];
     const { got, ctx: c } = ctx(guard);
     await expect(runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item({ resumo: `usa ${marker}` })] })).rejects.toThrow(/marcador/);
+    // Um segredo no próprio link (a query de uma URL assinada) também é recusado.
+    await expect(
+      runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item({ link: "https://example.com/doc?token=ghp_0123456789abcdefghijABCDEFGHIJ012345" })] }),
+    ).rejects.toMatchObject({ code: "E_SECRET" });
     expect(got).toEqual([]);
   });
 });

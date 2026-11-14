@@ -1677,6 +1677,8 @@ async function proposeReferences(reader: VaultReader, sink: ProposalSink, raw: u
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new ToolError("E_BAD_ARGS", `${w}.link não é http(s): só páginas da web que você abriu`);
     if (url.username || url.password) throw new ToolError("E_BAD_ARGS", `${w}.link leva usuário ou senha: mande o endereço sem eles`);
     clean(link); // um marcador no link também é recusado
+    // Um segredo no próprio link (um `?token=…`, uma URL assinada) também não vai para a nota (revisão do T11986).
+    if (guard && guard.read("", link).held > 0) throw new ToolError("E_SECRET", `${w}.link leva um segredo (um token ou uma assinatura): mande o endereço sem ele`);
     const date = str(o, "data", false, 10)?.trim();
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ToolError("E_BAD_ARGS", `${w}.data é AAAA-MM-DD`);
     return { title, url: url.toString(), summary: clean(str(o, "resumo", false, 300)), ...(date ? { date } : {}) };

@@ -18,21 +18,32 @@ export interface ReferenceItem {
   date?: string;
 }
 
-/** O link, para comparar: sem o `#…`, sem a barra do fim, o host sem maiúsculas. */
+/** Os parênteses de um endereço, codificados: no Markdown, um `(` ou `)` cru no link o quebra (revisão do T11986). */
+const encodeParens = (s: string) => s.replace(/\(/g, "%28").replace(/\)/g, "%29");
+
+/** O link, para comparar: sem o `#…`, sem a barra do fim, o host sem maiúsculas e os parênteses codificados. */
 export function linkKey(url: string): string {
   try {
     const u = new URL(url);
     u.hash = "";
-    return `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+    return encodeParens(`${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}${u.search}`);
   } catch {
-    return url.trim();
+    return encodeParens(url.trim());
   }
+}
+
+/** Um link achado no texto, sem o que é pontuação ou o `)` do Markdown em volta: os parênteses só em par. */
+function trimLink(raw: string): string {
+  let s = raw.replace(/[.,;:!?]+$/, "");
+  const count = (c: string) => s.split(c).length - 1;
+  while (s.endsWith(")") && count(")") > count("(")) s = s.slice(0, -1).replace(/[.,;:!?]+$/, "");
+  return s;
 }
 
 /** Os links http(s) que a nota já tem (em `[texto](link)`, `<link>` ou soltos), pelo `linkKey`. */
 export function linksIn(content: string): Set<string> {
   const out = new Set<string>();
-  for (const m of content.matchAll(/https?:\/\/[^\s<>()\]"']+/gi)) out.add(linkKey(m[0].replace(/[.,;:!?]+$/, "")));
+  for (const m of content.matchAll(/https?:\/\/[^\s<>\]"']+/gi)) out.add(linkKey(trimLink(m[0])));
   return out;
 }
 
@@ -46,7 +57,7 @@ const dayOf = (d: string) => {
 
 /** A linha de um item: `- [Título](link): a linha (dd/mm/aaaa)`. */
 export function referenceLine(i: ReferenceItem): string {
-  const url = i.url.replace(/\)/g, "%29").replace(/ /g, "%20");
+  const url = encodeParens(i.url).replace(/ /g, "%20");
   const summary = oneLine(i.summary);
   return `- [${linkText(i.title)}](${url})${summary ? `: ${summary}` : ""}${i.date ? ` (${dayOf(i.date)})` : ""}`;
 }
