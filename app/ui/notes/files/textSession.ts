@@ -53,6 +53,11 @@ export class TextSession {
   /** O arquivo como está no disco, quando ele mudou fora com algo ainda não gravado aqui. */
   conflict: { text: string; version: string } | null = null;
   private dirty = false;
+  /**
+   * Quem lê o texto da tela na hora de gravar (spec #13382): com ele, a digitação não copia nem compara o arquivo inteiro
+   * a cada tecla, só marca que mudou. Sem ele, vale o `text` do último `edit`.
+   */
+  private read: (() => string) | null = null;
   private saving: Promise<boolean> | null = null;
   private timer: unknown;
   private readonly delay: number;
@@ -80,10 +85,33 @@ export class TextSession {
     this.timer = this.setTimer(() => void this.save(), this.delay);
   }
 
+  /**
+   * A pessoa digitou, num arquivo grande (spec #13382): só marca que mudou e adia a gravação; o texto é lido da tela
+   * (`read`) quando grava. Assim cada tecla custa o mesmo num .txt de 1 KB ou de 1 MB.
+   */
+  touch(read: () => string): void {
+    this.read = read;
+    this.dirty = true;
+    if (this.conflict) return;
+    if (this.state !== "pending") this.set("pending");
+    this.clearTimer(this.timer);
+    this.timer = this.setTimer(() => void this.save(), this.delay);
+  }
+
   /** Grava o que falta. `true` quando nada ficou por gravar. */
   async save(): Promise<boolean> {
     while (this.saving) await this.saving;
     if (!this.dirty || this.conflict) return !this.dirty;
+    if (this.read) {
+      const now = toEditor(this.read());
+      // Digitou e voltou ao que já estava no disco: nada a gravar.
+      if (now === this.text && this.state !== "error") {
+        this.dirty = false;
+        this.set(this.state === "pending" ? "saved" : this.state);
+        return true;
+      }
+      this.text = now;
+    }
     this.dirty = false;
     const sent = toDisk(this.text, this.eol);
     this.set("saving");

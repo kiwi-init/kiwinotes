@@ -80,35 +80,20 @@
   height: 100%;
 }
 
-.kn-file-text-area {
+/* O editor do texto (spec #13382): o CodeMirror, que ocupa o resto da altura e rola sozinho. A coluna e a letra ficam
+   no tema dele, no TextViewer. */
+.kn-file-text-editor {
   flex: 1;
   min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 18px 40px 40px;
-  border: 0;
-  outline: none;
-  resize: none;
-  background: none;
-  color: var(--text);
-  font: 13px/1.6 var(--mono, var(--font-mono, ui-monospace, Menlo, monospace));
-  tab-size: 2;
   -webkit-user-select: text;
   user-select: text;
-  cursor: text;
 }
 
+/* O texto em foco não ganha o anel de foco das outras áreas: é a página inteira de texto, como o editor da nota. */
+.kn-file-text-area:focus,
 .kn-file-text-area:focus-visible {
+  outline: none;
   box-shadow: none;
-}
-
-.kn-file-text-status {
-  position: absolute;
-  right: 40px;
-  bottom: 12px;
-  font: var(--t-meta, 12px) / 1 var(--mono, var(--font-mono, monospace));
-  color: var(--text-3);
-  pointer-events: none;
 }
 
 .kn-file-text-note,

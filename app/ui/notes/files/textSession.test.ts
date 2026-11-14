@@ -203,3 +203,40 @@ test("o de fora entra com o fim de linha dele: de CRLF para LF, e o próximo sav
   expect(r.session.text).toBe("de\nfora\n");
   expect(r.session.eol).toBe("\r\n");
 });
+
+test("num arquivo grande (spec #13382), a tecla só marca: o texto é lido uma vez, na hora de gravar, e o estado não pisca", async () => {
+  const big = `${"linha do arquivo grande\n".repeat(45_000)}`; // ~1 MB
+  const r = rig(big);
+  let screen = big;
+  let reads = 0;
+  const read = () => (reads++, screen);
+  for (const ch of "abc") {
+    screen += ch;
+    r.session.touch(read);
+  }
+  expect(reads).toBe(0); // nenhuma tecla leu o arquivo inteiro
+  expect(r.saves).toEqual([]);
+  // Uma troca só para "pending", e não uma por tecla.
+  expect(r.states).toEqual(["pending"]);
+  await r.tick();
+  expect(reads).toBe(1);
+  expect(r.saves).toEqual([`${big}abc`]);
+  expect(r.states).toEqual(["pending", "saving", "saved"]);
+  // Digitou e apagou de volta ao que está no disco: nada a gravar.
+  screen += "x";
+  r.session.touch(read);
+  screen = screen.slice(0, -1);
+  await r.tick();
+  expect(r.saves).toHaveLength(1);
+  expect(r.session.state).toBe("saved");
+});
+
+test("com o touch, o fim de linha do arquivo volta e sair grava já (spec #13382)", async () => {
+  const r = rig("a\r\nb");
+  let screen = "a\nb";
+  r.session.touch(() => screen);
+  screen = "a\nb\nc";
+  r.session.touch(() => screen);
+  expect(await r.session.flush()).toBe(true);
+  expect(r.disk.text).toBe("a\r\nb\r\nc");
+});
