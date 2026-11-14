@@ -137,11 +137,12 @@ try {
       await settled(p);
       const start = await snapshot(p);
       matchesSelection(start);
-      const rest = await style(p, "about");
-      await p.locator('.kn-tab[data-section=about]').hover();
+      // A última aba é Configurações desde que o Sobre virou um assunto dela (spec #11966).
+      const rest = await style(p, "settings");
+      await p.locator('.kn-tab[data-section=settings]').hover();
       await settled(p);
       const hovered = await snapshot(p);
-      const hoverStyle = await style(p, "about");
+      const hoverStyle = await style(p, "settings");
       metrics.push({ theme, start, hovered, rest, hoverStyle });
       if (!before) {
         matchesSelection(hovered);
@@ -158,7 +159,7 @@ try {
         assert.equal(hoverStyle.timing, "ease");
       }
       // Hover rápido por toda a faixa: nunca muda a seleção nem sua geometria.
-      for (const section of ["settings", "dictation", "meetings", "about"]) {
+      for (const section of ["dictation", "meetings", "settings"]) {
         await p.locator(`.kn-tab[data-section=${section}]`).hover();
         await p.waitForTimeout(90);
         if (!before) matchesSelection(await snapshot(p));
@@ -167,12 +168,12 @@ try {
       await settled(p);
       if (!before) matchesSelection(await snapshot(p));
       // Um clique com animação: o destino e a curva são os tokens do Channels instalado.
-      await p.locator('.kn-tab[data-section=about]').click();
+      await p.locator('.kn-tab[data-section=settings]').click();
       await p.mouse.move(970, 140);
       await settled(p);
       if (!before) {
         const clicked = await snapshot(p);
-        assert.equal(clicked.selected, "about");
+        assert.equal(clicked.selected, "settings");
         matchesSelection(clicked);
         const transition = await p.locator('.kn-tabs-pill').evaluate((el) => {
           const s = getComputedStyle(el);
@@ -188,10 +189,10 @@ try {
       await settled(p);
       if (!before) {
         const keyed = await snapshot(p);
-        assert.equal(keyed.selected, "settings");
+        assert.equal(keyed.selected, "dictation");
         matchesSelection(keyed);
-        assert.equal(await p.locator('.kn-tab[data-section=settings]').evaluate((el) => document.activeElement === el), true);
-        assert.equal(await p.locator('.kn-tab[data-section=settings]').evaluate((el) => el.matches(":focus-visible")), true);
+        assert.equal(await p.locator('.kn-tab[data-section=dictation]').evaluate((el) => document.activeElement === el), true);
+        assert.equal(await p.locator('.kn-tab[data-section=dictation]').evaluate((el) => el.matches(":focus-visible")), true);
       }
       // Preferência do sistema e depois dos Ajustes: ambos desligam a animação.
       for (const mode of ["system", "settings"] as const) {
@@ -201,7 +202,7 @@ try {
           await p.evaluate(() => document.documentElement.dataset.motion = "reduced");
         }
         await p.locator('.kn-tab[data-section=notes]').click();
-        await p.locator('.kn-tab[data-section=about]').click();
+        await p.locator('.kn-tab[data-section=settings]').click();
         if (!before) {
           matchesSelection(await snapshot(p));
           assert.equal(await p.locator('.kn-tabs-pill').evaluate((el) => getComputedStyle(el).transitionDuration), "0s");
