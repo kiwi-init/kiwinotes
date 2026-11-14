@@ -205,6 +205,8 @@ export class NotesFolders {
     notes: 0,
   };
   private lastError?: string;
+  /** A última linha do tamanho do cofre no log: uma reindexação igual não repete. */
+  private sizeLogged = "";
   private pending?: { token: string; path: string; count: number };
   private ocrRunner: OcrRunner | null = null;
   private pdf?: Parameters<NoteExporter["setPdf"]>[0];
@@ -380,6 +382,10 @@ export class NotesFolders {
           !(this.progress.phase === "indexing" && this.progress.path === root)
         )
           return;
+        // O tamanho do cofre no log local (spec #12918), para entender um app lento: só números, sem nomes.
+        const c = p.done ? this.active?.notes.counts?.() : undefined;
+        const line = c && `[notes] cofre indexado: ${c.notes} notas, ${c.folders} pastas, ${c.files} outros arquivos`;
+        if (line && line !== this.sizeLogged) console.log((this.sizeLogged = line));
         this.progress = {
           phase: p.done ? "idle" : "indexing",
           path: root,

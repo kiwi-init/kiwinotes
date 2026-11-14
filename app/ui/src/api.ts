@@ -99,6 +99,8 @@ export const api = {
   },
   notes: {
     list: () => invoke("notes.list", {}),
+    /** Só os nomes das pastas (1.68.0, spec #12918): para um seletor de pasta, sem o cofre inteiro. */
+    folders: () => invoke("notes.folders", {}),
     search: (query: string) => invoke("notes.search", { query, limit: 12 }),
     /** A busca pelo sentido (1.34.0, T6013): o modelo e o índice da pasta aberta. */
     semanticStatus: () => invoke("notes.semanticStatus", {}),
@@ -112,6 +114,8 @@ export const api = {
   /** "Salvar diagnóstico" (T5350): o .txt sem texto nem áudio; no app, em ~/Downloads e no Finder. */
   diagnostics: {
     save: () => invoke("diagnostics.save", {}),
+    /** Um quadro travado (1.68.0, spec #12918), para o log local. */
+    slowFrame: (where: string, ms: number) => invoke("diagnostics.slowFrame", { where, ms }),
   },
   updates: {
     /** Checa na hora; resolve quando a checagem termina (pronta, na última versão ou com erro). */

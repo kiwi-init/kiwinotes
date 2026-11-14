@@ -300,8 +300,10 @@ function ProjectsStep({ settings }: { settings: AppSettings }) {
   const [failure, setFailure] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
+    // Só os nomes das pastas (spec #12918): o `notes.list` mandava o cofre inteiro para a tela a cada recarga.
+    const folderNames = () => (has("notes.folders") ? api.notes.folders() : api.notes.list());
     const load = () =>
-      Promise.all([api.notes.list(), api.projects.list()]).then(
+      Promise.all([folderNames(), api.projects.list()]).then(
         ([n, p]) => {
           if (!alive) return;
           setFolders(projectCandidates(n.folders, [p.meetingsFolder, settings.templatesFolder, settings.dailyFolder, settings.attachmentsFolder]));
@@ -316,18 +318,22 @@ function ProjectsStep({ settings }: { settings: AppSettings }) {
       off();
     };
   }, [settings.templatesFolder, settings.dailyFolder, settings.attachmentsFolder]);
+  const set = (folder: string, on: boolean) =>
+    setMarked((m) => {
+      const next = new Set(m);
+      if (on) next.add(folder);
+      else next.delete(folder);
+      return next;
+    });
+  // A caixa muda no clique (spec #12918), sem esperar o Kiwi criar a nota principal; se ele não conseguir, ela volta.
   const toggle = async (folder: string, on: boolean) => {
+    set(folder, on);
     setBusy(folder);
     setFailure(null);
     try {
       await (on ? api.projects.mark(folder) : api.projects.unmark(folder));
-      setMarked((m) => {
-        const next = new Set(m);
-        if (on) next.add(folder);
-        else next.delete(folder);
-        return next;
-      });
     } catch (e) {
+      set(folder, !on);
       setFailure(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);

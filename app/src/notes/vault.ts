@@ -571,6 +571,19 @@ export class Vault {
 
   // ---------------------------------------------------------------- leitura
 
+  /**
+   * Só os nomes das pastas, em ordem (spec #12918): o que os seletores de pasta precisam, sem montar e mandar à tela as
+   * notas, a árvore e os arquivos do cofre inteiro, como o `list()`.
+   */
+  /** O tamanho do cofre (spec #12918), só números: vai para o log ao indexar, sem nenhum nome. */
+  counts(): { notes: number; folders: number; files: number } {
+    return { notes: this.notes.size, folders: this.folders.size, files: this.files.size };
+  }
+
+  folderList(): string[] {
+    return [...this.folders].sort((a, b) => a.localeCompare(b));
+  }
+
   list(): { folders: string[]; notes: NoteMeta[]; tree: FolderNode; files: VaultFile[] } {
     const folders = [...this.folders].sort((a, b) => a.localeCompare(b));
     const notes = [...this.notes.values()].map((e) => e.meta).sort((a, b) => a.path.localeCompare(b.path));

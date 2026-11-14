@@ -11,6 +11,7 @@ import type { AppEngine } from "electrobun/bun/appengine";
 
 import { type HubSection, UI_CAPABILITIES, UI_CONTRACT_VERSION, type UiEvents, type UiWindow } from "../shared/ui-contract.ts";
 import { saveDiagnostics } from "./diagnostics.ts";
+import { slowLog, timedCapabilities } from "./slow-log.ts";
 import { appLog } from "./file-log.ts";
 import { WINDOW_SPECS as SPECS } from "../shared/window-specs.ts";
 import { type AppEngineRPC, appEnginePageScript } from "./appengine-devkit.ts";
@@ -76,6 +77,8 @@ export function onWindowClosed(fn: (name: WindowName) => void): () => void {
 }
 
 let debugClipboard = "";
+/** O registro do que é lento (spec #12918), no log local: as chamadas das telas, o Bun parado e os quadros travados. */
+export const appSlowLog = slowLog();
 const capabilities = uiCapabilities({
   introDone: () => {
     for (const fn of introDoneListeners) fn();
@@ -177,6 +180,7 @@ const capabilities = uiCapabilities({
   hubSection: () => hubSection(),
   // "Salvar diagnóstico" (T5350): em ~/Downloads, e o Finder mostra o arquivo. Com KIWI_DEBUG=1 (os agentes), vai para
   // <dados>/diagnostics e nada abre na tela.
+  slowFrame: (where, ms) => appSlowLog.line(`quadro de ${ms} ms na tela (${where})`),
   diagnostics: {
     save: () => {
       const debug = process.env.KIWI_DEBUG === "1";
@@ -206,6 +210,8 @@ const capabilities = uiCapabilities({
 });
 // As ferramentas do agente (spec #7496) leem pelas mesmas capacidades das janelas, só as de leitura; e escrevem (spec
 // #8356) pelo mesmo salvar das Notas, com a cópia de antes nas Versões.
+/** O que as telas chamam, com o tempo de cada chamada no log (spec #12918). O agente usa as de sempre, sem o tempo. */
+const timedUi = timedCapabilities(capabilities, appSlowLog);
 stores.agent.useReader(readerFromCapabilities(capabilities));
 // O Modelo de nota (spec #11102) do cofre aberto, para o começo fixo do pedido.
 stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
@@ -267,7 +273,7 @@ async function openWindow(name: WindowName): Promise<void> {
     maxRequestTime: 10_000,
     handlers: {
       requests: {
-        invoke: ({ cap, args }) => (engine ? engine.invoke(cap, args) : directInvoke(capabilities, cap, args)),
+        invoke: ({ cap, args }) => (engine ? engine.invoke(cap, args) : directInvoke(timedUi, cap, args)),
       },
       messages: {
         ready: () => engine?.ready(),
@@ -299,7 +305,7 @@ async function openWindow(name: WindowName): Promise<void> {
       dir,
       builtIn: builtInFrom(path.join(PATHS.VIEWS_FOLDER, "ui", name)),
       trustedKeys: UI_TRUSTED_KEYS,
-      capabilities,
+      capabilities: timedUi,
       manifestUrl: channelUrlOrOff(process.env.KIWI_UI_CHANNEL, name, (m) => log(name, m)),
       show: (ui) => {
         log(name, `showing UI ${ui.uiVersion}${ui.manifest ? "" : " (built-in)"}`);

@@ -112,6 +112,8 @@ export interface CapabilityDeps {
    */
   /** "Salvar diagnóstico" (T5350). Sem isto (testes), o `diagnostics.save` dá E_NO_DIAGNOSTICS. */
   diagnostics?: { save(): Promise<{ path: string; bytes: number }> };
+  /** Um quadro travado que a tela contou (spec #12918): vai para o log local. Sem isto (testes), só responde. */
+  slowFrame?(where: string, ms: number): void;
   about?: {
     info(): Omit<AppAbout, "updates">;
     view(): UpdatesView;
@@ -127,8 +129,9 @@ export interface CapabilityDeps {
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile" | "embed"
     | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile" | "createFile" | "deleteFile"
   > &
-    // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu.
-    Partial<Pick<Vault, "noteInodes">>;
+    // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu. Sem o
+    // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`.
+    Partial<Pick<Vault, "noteInodes" | "folderList">>;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
@@ -623,6 +626,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (!deps.diagnostics) throw new CapabilityError("E_NO_DIAGNOSTICS", "Este engine não salva diagnóstico.");
       return deps.diagnostics.save();
     },
+    "diagnostics.slowFrame": (args) => {
+      const a = fields(args, "diagnostics.slowFrame", ["ms", "where"]);
+      if (typeof a.ms !== "number" || !Number.isFinite(a.ms) || a.ms < 0 || a.ms > 600_000) throw bad("diagnostics.slowFrame: ms must be a number of milliseconds");
+      if (typeof a.where !== "string" || !/^[a-z][a-z0-9-]{0,31}$/.test(a.where)) throw bad("diagnostics.slowFrame: where must be a short screen name");
+      deps.slowFrame?.(a.where, Math.round(a.ms));
+      return true;
+    },
     "updates.check": async (args) => {
       noArgs(args, "updates.check");
       return deps.about ? deps.about.check() : UPDATES_OFF;
@@ -680,6 +690,11 @@ export function uiCapabilities(deps: CapabilityDeps,
       if (typeof a.from !== "string" || typeof a.to !== "string")
         throw bad("from and to must be strings");
       return deps.meetingNotes.renameSpeaker(notePath(a.path), a.from, a.to);
+    },
+    "notes.folders": async (args) => {
+      noArgs(args, "notes.folders");
+      const v = await vault();
+      return { folders: v.folderList?.() ?? v.list().folders };
     },
     "notes.get": async (args) => (await vault()).get(fields(args, "notes.get", ["path"]).path),
     "notes.save": async (args) => {

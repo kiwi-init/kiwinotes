@@ -8,6 +8,7 @@ import type { AgentStatus } from "../../src/shared/ui-contract.ts";
 import type { SummarySettings } from "../../src/shared/summary-settings.ts";
 import type { AgentMeetingSettings } from "../../src/store/settings.ts";
 import { api, has } from "../src/api.ts";
+import { folderChoices } from "../src/folderChoices.ts";
 import { Row, Segmented, Select, Switch } from "../src/kit/index.tsx";
 import {
   BLOCKS,
@@ -31,9 +32,11 @@ export function MeetingsRows({ status, run }: { status: AgentStatus; run: (call:
   const [folders, setFolders] = useState<string[] | null>(null);
 
   useEffect(() => {
-    if (m.folder.kind !== "single" || folders || !has("notes.list")) return;
+    // Só os nomes das pastas (spec #12918), sem o cofre inteiro.
+    const load = has("notes.folders") ? api.notes.folders : has("notes.list") ? api.notes.list : null;
+    if (m.folder.kind !== "single" || folders || !load) return;
     let alive = true;
-    void api.notes.list().then(
+    void load().then(
       (r) => alive && setFolders(r.folders.filter((f) => f !== "Reuniões" && !f.startsWith("Reuniões/"))),
       () => alive && setFolders([]),
     );
@@ -46,7 +49,7 @@ export function MeetingsRows({ status, run }: { status: AgentStatus; run: (call:
   const r = status.summary;
   const saveSummary = (next: SummarySettings) => void run(() => api.agent.configure({ summary: next }));
   const single = m.folder.kind === "single" ? m.folder.path : null;
-  const choices = [...new Set([...(single ? [single] : []), ...(folders ?? [])])];
+  const choices = folderChoices([single], folders ?? []);
 
   return (
     <div className="kn-agent-meetings" role="group" aria-label={MEETINGS_TITLE}>
