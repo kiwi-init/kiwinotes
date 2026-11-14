@@ -168,7 +168,7 @@ try {
   const item = `.kn-activity-req[data-request='${req.id}']`;
   await p.waitForSelector(item, { timeout: 15000 });
   const row = (await p.locator(item).textContent()) ?? "";
-  assert.ok(row.includes("Criou Exames.pdf") && row.includes("Abrir no Finder") && row.includes("Desfazer") && !row.includes("Ver"), row);
+  assert.ok(row.includes("Criou Saída/Exames.pdf") && row.includes("Abrir no Finder") && row.includes("Desfazer") && !row.includes("Ver"), row);
   await p.locator(item).scrollIntoViewIfNeeded();
   await Bun.sleep(300);
   await p.locator(item).screenshot({ path: join(out, "3-atividade.png") });
