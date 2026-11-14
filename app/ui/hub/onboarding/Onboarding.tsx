@@ -10,6 +10,7 @@ import type { AgentChangeView, AgentStatus, AppSettings } from "../../../src/sha
 import { catColorHex, catColorOptions } from "../../../src/shared/kiwicat-colors.ts";
 import { api, has } from "../../src/api.ts";
 import { Button, Kbd, Segmented, Select } from "../../src/kit/index.tsx";
+import { shortcutLabel } from "../../../src/shared/shortcuts.ts";
 import { ViewPanel } from "../../settings/AgentActivity.tsx";
 import { ControlRow } from "../../settings/ControlRow.tsx";
 import { CatColorRow } from "../../settings/CatRow.tsx";
@@ -33,8 +34,9 @@ import {
   projectsSummary,
   shortcutSummary,
   STEP_COUNT,
-  STEP_TEXT,
+  holdName,
   stepAt,
+  stepText,
   toneSummary,
 } from "./onboardingText.ts";
 
@@ -179,7 +181,8 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
  * Passo 2: "aperta o Control e fala oi". A pessoa liga o atalho (a linha de Ajustes, a mesma) e aprende fazendo: a frase
  * segue a fala (`agent.voice`) e a resposta (`agent.turn`). O microfone só abre enquanto ela segura o Control.
  */
-function ControlStep({ status, onStatus }: { status: AgentStatus; onStatus(s: AgentStatus): void }) {
+function ControlStep({ status, onStatus, settings }: { status: AgentStatus; onStatus(s: AgentStatus): void; settings: AppSettings }) {
+  const hold = holdName(settings.shortcuts.agent);
   const [phase, setPhase] = useState<ControlPhase>({ phase: "waiting" });
   useEffect(() => {
     const offVoice = api.agent.onVoice((voice) => setPhase((s) => controlStep(s, { voice })));
@@ -196,8 +199,8 @@ function ControlStep({ status, onStatus }: { status: AgentStatus; onStatus(s: Ag
       </div>
       {status.controlShortcut ? (
         <p className="kn-onb-try" data-phase={phase.phase} aria-live="polite">
-          {phase.phase === "waiting" ? <Kbd>control</Kbd> : null}
-          <span>{controlLine(phase)}</span>
+          {phase.phase === "waiting" ? <Kbd>{shortcutLabel(settings.shortcuts.agent ?? "control")}</Kbd> : null}
+          <span>{controlLine(phase, hold)}</span>
         </p>
       ) : (
         <p className="kn-onb-status">Ligue o atalho para testar. Se preferir digitar, pode pular: o gato também ouve pelo clique.</p>
@@ -499,7 +502,7 @@ function DoneStep({ status, settings }: { status: AgentStatus; settings: AppSett
     ["A cor", color.label],
     ["O jeito de falar", toneSummary(status.instructions)],
     ["Os projetos", projects === null ? "…" : projectsSummary(projects)],
-    ["O atalho", shortcutSummary(status.controlShortcut)],
+    ["O atalho", shortcutSummary(status.controlShortcut, holdName(settings.shortcuts.agent))],
   ];
   return (
     <dl className="kn-onb-card" style={{ "--kn-onb-cor": color.hex } as React.CSSProperties}>
@@ -572,7 +575,9 @@ export function Onboarding() {
   if (!open || !status || !settings) return null;
   const n = status.onboarding.step;
   const step = stepAt(n);
-  const text = STEP_TEXT[step];
+  // O atalho escolhido (spec #12946) nas frases do Control e do fim.
+  const hold = holdName(settings.shortcuts.agent);
+  const text = stepText(step, hold);
   const reduced = settings.appearance.motion === "reduced";
   const set = (o: { state?: "open" | "done"; step?: number }) => {
     setFailure(null);
@@ -602,7 +607,7 @@ export function Onboarding() {
         {step === "claude" ? (
           <ClaudeStep status={status} />
         ) : step === "control" ? (
-          <ControlStep status={status} onStatus={setStatus} />
+          <ControlStep status={status} onStatus={setStatus} settings={settings} />
         ) : step === "tone" ? (
           <ToneStep status={status} onStatus={setStatus} />
         ) : step === "guardrail" ? (

@@ -20,7 +20,13 @@ type State =
   /** O atalho apertado já é de outra ação: usar aqui desliga lá. */
   | { kind: "conflict"; text: string; other: ShortcutId };
 
-export function ShortcutRow({ id, shortcuts }: { id: ShortcutId; shortcuts: Shortcuts }) {
+/**
+ * O atalho do Kiwi Cat (spec #12946) não toma o lugar de outro nem cede o dele: o conflito com ele só avisa e não salva.
+ * `label`: o nome da linha, quando não é o da ação (o "Atalho" embaixo do interruptor do Kiwi Cat).
+ */
+const refuses = (id: ShortcutId, other: ShortcutId) => id === "agent" || other === "agent";
+
+export function ShortcutRow({ id, shortcuts, disabled = false }: { id: ShortcutId; shortcuts: Shortcuts; disabled?: boolean }) {
   const def = shortcutDef(id);
   const [state, setState] = useState<State>({ kind: "idle" });
   const current = shortcuts[id];
@@ -34,11 +40,19 @@ export function ShortcutRow({ id, shortcuts }: { id: ShortcutId; shortcuts: Shor
   /** Salva, ou pergunta antes quando outra ação já usa as mesmas teclas. */
   const choose = (text: string) => {
     if (!isShortcutFor(id, text)) {
-      setState({ kind: "idle", problem: `${shortcutLabel(text)} não serve aqui: com as Notas na frente, só uma combinação, como ⌘K.` });
+      setState({
+        kind: "idle",
+        problem: id === "agent"
+          ? `${shortcutLabel(text)} não serve aqui: segure uma tecla (Control, ⌥ ou ⌘ direito) ou uma combinação, como ⌃⌥Espaço.`
+          : `${shortcutLabel(text)} não serve aqui: com as Notas na frente, só uma combinação, como ⌘K.`,
+      });
       return;
     }
     const other = conflictOf(shortcuts, id, text);
-    if (other) setState({ kind: "conflict", text, other });
+    if (other && refuses(id, other)) {
+      const where = other === "agent" ? "do Kiwi Cat (Ajustes › Agente)" : `de “${shortcutDef(other).label}” (Ajustes › Atalhos)`;
+      setState({ kind: "idle", problem: `${shortcutLabel(text)} já é ${where}. Escolha outro.` });
+    } else if (other) setState({ kind: "conflict", text, other });
     else if (text !== current) save({ [id]: text });
     else setState({ kind: "idle" });
   };
@@ -64,6 +78,8 @@ export function ShortcutRow({ id, shortcuts }: { id: ShortcutId; shortcuts: Shor
     state.kind === "recording"
       ? def.scope === "app"
         ? "Aperte a combinação. Esc cancela."
+        : id === "agent"
+          ? "Aperte a tecla (o ⌃, ⌥ ou ⌘ direito) ou a combinação. Esc cancela; para voltar ao Control, use Padrão."
         : id === "cancel"
           ? "Aperte a tecla (⌫, ↩…) ou a combinação. Esc cancela; para voltar ao Esc, use Padrão."
         : "Aperte o atalho: uma tecla, duas vezes, uma combinação ou uma sequência. Esc cancela."
@@ -91,14 +107,15 @@ export function ShortcutRow({ id, shortcuts }: { id: ShortcutId; shortcuts: Shor
                 Padrão
               </Button>
             ) : null}
-            {current !== null ? (
+            {/* O Kiwi Cat se desliga pelo interruptor dele (spec #12946), não pelo atalho. */}
+            {current !== null && id !== "agent" ? (
               <Button className="kn-button kn-shortcut-off" onClick={() => save({ [id]: null })}>Desligar</Button>
             ) : null}
             <button
               type="button"
               className="kn-kbd kn-shortcut-key"
               data-off={current === null || undefined}
-              disabled={!canRecord}
+              disabled={!canRecord || disabled}
               onClick={record}
               aria-label={`${def.label}: ${shortcutLabel(current)}. Trocar o atalho`}
               title={canRecord ? "Trocar o atalho" : "Trocar o atalho precisa do Kiwi aberto, com o atalho ativo"}
@@ -120,7 +137,8 @@ export function ShortcutsSection({ group: only }: { group?: ShortcutDef["group"]
   const shortcuts = useShortcuts();
   // Um engine de antes do T5349: a seção não aparece.
   if (!shortcuts) return null;
-  const groups = [...new Set(SHORTCUTS.map((s) => s.group))].filter((g) => !only || g === only);
+  // O do Kiwi Cat fica em Ajustes › Agente, com o interruptor dele (spec #12946).
+  const groups = [...new Set(SHORTCUTS.map((s) => s.group))].filter((g) => g !== "Kiwi Cat" && (!only || g === only));
   return (
     <>
       {groups.map((group) => (

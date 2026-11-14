@@ -12,7 +12,7 @@
 // não recebe a tecla (com Acessibilidade). Os do app (a paleta, a nota nova, a nota do dia) só valem com uma janela do
 // Kiwi na frente, e só podem ser uma combinação.
 
-export type ShortcutId = "dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote" | "focusMode" | "typewriter";
+export type ShortcutId = "dictation" | "cancel" | "pasteLast" | "notes" | "meeting" | "meetingPause" | "palette" | "newNote" | "dailyNote" | "focusMode" | "typewriter" | "agent";
 
 export type ShortcutScope = "global" | "app";
 
@@ -20,7 +20,7 @@ export interface ShortcutDef {
   id: ShortcutId;
   label: string;
   hint: string;
-  group: "Ditado" | "Notas" | "Reuniões";
+  group: "Ditado" | "Notas" | "Reuniões" | "Kiwi Cat";
   scope: ShortcutScope;
   default: string;
 }
@@ -40,6 +40,9 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: "typewriter", label: "Máquina de escrever", hint: "Com uma nota aberta: a linha do cursor fica no meio da tela.", group: "Notas", scope: "app", default: "shift+command+t" },
   { id: "meeting", label: "Gravar e parar a reunião", hint: "De qualquer app, com ou sem o pop-up.", group: "Reuniões", scope: "global", default: "control+option+r" },
   { id: "meetingPause", label: "Pausar meu mic", hint: "Só durante a gravação: os outros continuam sendo gravados.", group: "Reuniões", scope: "global", default: "control+option+m" },
+  // Spec #12946: falar com o Kiwi Cat segurando um atalho. O padrão é o Control (o da esquerda ou o da direita); vale uma
+  // tecla modificadora sozinha ou uma combinação, segurada. Fica em Ajustes › Agente, com o interruptor, e não em Atalhos.
+  { id: "agent", label: "Atalho", hint: "Segure para falar com o Kiwi Cat e solte para mandar.", group: "Kiwi Cat", scope: "global", default: "control" },
 ] as const;
 
 /** O atalho de cada ação; null é desligado. */
@@ -56,8 +59,9 @@ export const shortcutDef = (id: ShortcutId): ShortcutDef => SHORTCUTS.find((s) =
 // ---------------------------------------------------------------------------------------------------------------------
 // O texto
 
-export type ModifierKey = "fn" | "rightOption" | "rightCommand" | "rightControl";
-const MODIFIER_KEYS: readonly ModifierKey[] = ["fn", "rightOption", "rightCommand", "rightControl"];
+/** `control`: o Control da esquerda ou o da direita. Só o atalho do Kiwi Cat (spec #12946) o usa sozinho. */
+export type ModifierKey = "fn" | "rightOption" | "rightCommand" | "rightControl" | "control";
+const MODIFIER_KEYS: readonly ModifierKey[] = ["fn", "rightOption", "rightCommand", "rightControl", "control"];
 
 export type Modifier = "control" | "option" | "shift" | "command";
 /** A ordem dos menus do Mac (⌃⌥⇧⌘), que é também a do texto canônico. */
@@ -151,10 +155,16 @@ export function canonicalShortcut(text: unknown, id?: ShortcutId): string | null
   return p ? shortcutText(p) : null;
 }
 
-/** Vale para esta ação: os do app só como uma combinação (quem vê é o WebView, que não vê o Fn nem uma sequência). */
+/**
+ * Vale para esta ação: os do app só como uma combinação (quem vê é o WebView, que não vê o Fn nem uma sequência). O do
+ * Kiwi Cat (spec #12946) é segurado para falar: uma tecla modificadora sozinha ou uma combinação, nunca dois toques nem
+ * uma sequência. O `control` (os dois Controls) só vale para ele.
+ */
 export function isShortcutFor(id: ShortcutId, text: unknown): boolean {
   const p = parseShortcut(text, bareKeyFor(id));
   if (!p) return false;
+  if ((p.kind === "key" || p.kind === "double") && p.key === "control" && id !== "agent") return false;
+  if (id === "agent") return p.kind === "key" || p.kind === "combo";
   return shortcutDef(id).scope === "global" || p.kind === "combo";
 }
 
@@ -162,7 +172,7 @@ export function isShortcutFor(id: ShortcutId, text: unknown): boolean {
 // Como aparece
 
 const MODIFIER_SYMBOLS: Record<Modifier, string> = { control: "⌃", option: "⌥", shift: "⇧", command: "⌘" };
-const MODIFIER_KEY_LABELS: Record<ModifierKey, string> = { fn: "Fn 🌐", rightOption: "⌥ direito", rightCommand: "⌘ direito", rightControl: "⌃ direito" };
+const MODIFIER_KEY_LABELS: Record<ModifierKey, string> = { fn: "Fn 🌐", rightOption: "⌥ direito", rightCommand: "⌘ direito", rightControl: "⌃ direito", control: "Control" };
 const KEY_LABELS: Record<string, string> = {
   space: "Espaço", escape: "Esc", return: "↩", tab: "⇥", delete: "⌫", left: "←", right: "→", down: "↓", up: "↑",
 };
@@ -214,7 +224,9 @@ export function shortcutsConflict(a: string, b: string): boolean {
   const pa = parseShortcut(a, { bareKey: true }), pb = parseShortcut(b, { bareKey: true });
   if (!pa || !pb) return false;
   const ca = claims(pa), cb = claims(pb);
-  if (ca.modifierKey || cb.modifierKey) return ca.modifierKey === cb.modifierKey;
+  // O `control` (os dois Controls) ocupa também o ⌃ direito.
+  const side = (k?: ModifierKey) => (k === "control" ? "rightControl" : k);
+  if (ca.modifierKey || cb.modifierKey) return side(ca.modifierKey) === side(cb.modifierKey);
   const [short, long] = ca.steps!.length <= cb.steps!.length ? [ca.steps!, cb.steps!] : [cb.steps!, ca.steps!];
   return short.every((s, i) => s === long[i]);
 }

@@ -70,6 +70,23 @@ describe("o atalho Control (spec #9876)", () => {
     expect(controlArmed(DEFAULT_SETTINGS, true)).toBe(false); // desligado por padrão
   });
 
+  test("o atalho escolhido (spec #12946): o helper escuta o novo, e o de antes sai", async () => {
+    const r = rig();
+    await flush();
+    expect(r.sent).toContainEqual({ type: "config.set", shortcuts: { agent: "control" } });
+    r.sent.length = 0;
+    r.voice.settingsChanged({ ...r.settings, shortcuts: { ...r.settings.shortcuts, agent: "control+option+space" } });
+    expect(r.sent).toEqual([{ type: "config.set", shortcuts: { agent: "control+option+space" } }]);
+    // O mesmo de novo não manda nada; desligar o interruptor tira o atalho do helper.
+    r.voice.settingsChanged({ ...r.settings, shortcuts: { ...r.settings.shortcuts, agent: "control+option+space" } });
+    expect(r.sent).toHaveLength(1);
+    r.voice.settingsChanged({ ...r.settings, shortcuts: { ...r.settings.shortcuts, agent: "control+option+space" }, agent: { ...r.settings.agent, controlShortcut: false } });
+    expect(r.sent.at(-1)).toEqual({ type: "config.set", shortcuts: { agent: null } });
+    // Um settings de antes com o ditado nas mesmas teclas: o do Kiwi Cat não arma.
+    expect(dictationUsesControl({ shortcuts: { ...DEFAULT_SETTINGS.shortcuts, dictation: "rightOption", agent: "rightOption" } })).toBe(true);
+    expect(dictationUsesControl({ shortcuts: { ...DEFAULT_SETTINGS.shortcuts, dictation: "fn", agent: "rightOption" } })).toBe(false);
+  });
+
   test("com o agente ocupado, o helper sabe e o Control não arma; o ready do helper manda de novo", async () => {
     const r = rig();
     await flush();

@@ -61,8 +61,11 @@ export const TOPIC_BLOCKS: Record<SettingsTopic, readonly SettingsBlock[]> = {
 
 /** O bloco dos atalhos de um grupo. */
 export const shortcutBlock = (group: ShortcutGroup) => `shortcuts:${group}` as SettingsBlock;
-/** Os grupos de atalho que existem (o teste confere que cada um tem o seu bloco). */
-export const shortcutGroups = (): ShortcutGroup[] => [...new Set(SHORTCUTS.map((s) => s.group))];
+/**
+ * Os grupos de atalho que existem (o teste confere que cada um tem o seu bloco). O do Kiwi Cat (spec #12946) fica na
+ * linha "Falar com o Kiwi Cat" de Ajustes › Agente, com o interruptor, e não tem bloco de atalhos.
+ */
+export const shortcutGroups = (): ShortcutGroup[] => [...new Set(SHORTCUTS.map((s) => s.group))].filter((g) => g !== "Kiwi Cat");
 
 /** O assunto de um bloco. */
 export function topicOf(block: SettingsBlock): SettingsTopic {

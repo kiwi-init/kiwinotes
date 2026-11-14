@@ -99,7 +99,8 @@ export interface SessionDiagnostics extends SessionStatus {
  * seletor dos Ajustes só mudava a tela, e o helper ficava sempre no Fn.
  */
 export function shortcutsConfig(settings: Pick<AppSettings, "shortcuts">): Extract<Command, { type: "config.set" }> {
-  return { type: "config.set", shortcuts: Object.fromEntries(GLOBAL_SHORTCUT_IDS.map((id) => [id, settings.shortcuts[id]])) };
+  // O do Kiwi Cat (spec #12946) quem manda é o agent-voice: só armado com o agente e o interruptor ligados.
+  return { type: "config.set", shortcuts: Object.fromEntries(GLOBAL_SHORTCUT_IDS.filter((id) => id !== "agent").map((id) => [id, settings.shortcuts[id]])) };
 }
 
 export class Session {

@@ -14,7 +14,7 @@
 import { cleanupWithRules } from "../cleanup/index.ts";
 import type { DictionaryEntry } from "../cleanup/types.ts";
 import type { Command, Event } from "../shared/ipc.ts";
-import { parseShortcut } from "../shared/shortcuts.ts";
+import { DEFAULT_SHORTCUTS, shortcutsConflict } from "../shared/shortcuts.ts";
 import type { AgentStatus, AgentVoiceUi, AppSettings } from "../shared/ui-contract.ts";
 
 export type { AgentVoiceUi };
@@ -44,15 +44,21 @@ export interface AgentVoiceWiring {
   log?(message: string): void;
 }
 
-/** O ditado já usa um Control: o do agente fica desligado (spec #9876). */
-export function dictationUsesControl(settings: Pick<AppSettings, "shortcuts">): boolean {
-  const text = settings.shortcuts.dictation;
-  if (!text) return false;
-  const s = parseShortcut(text);
-  return (s?.kind === "key" || s?.kind === "double") && s.key === "rightControl";
+/** O atalho do Kiwi Cat (spec #12946): o escolhido em Ajustes › Agente, ou o Control. */
+export function agentShortcut(settings: Pick<AppSettings, "shortcuts">): string {
+  return settings.shortcuts.agent ?? DEFAULT_SHORTCUTS.agent!;
 }
 
-/** O Control armado, ou não: o agente ligado, o interruptor ligado e o ditado fora do Control. */
+/**
+ * O ditado está nas mesmas teclas do atalho do Kiwi Cat (spec #9876; o atalho escolhido, #12946): o do Kiwi Cat fica
+ * desligado. Os Ajustes não deixam salvar dois atalhos iguais; isto cobre um settings.json de antes.
+ */
+export function dictationUsesControl(settings: Pick<AppSettings, "shortcuts">): boolean {
+  const text = settings.shortcuts.dictation;
+  return !!text && shortcutsConflict(text, agentShortcut(settings));
+}
+
+/** O atalho armado, ou não: o agente ligado, o interruptor ligado e o ditado em outras teclas. */
 export function controlArmed(settings: AppSettings, agentEnabled: boolean): boolean {
   return agentEnabled && settings.agent.enabled && settings.agent.controlShortcut && !dictationUsesControl(settings);
 }
@@ -70,7 +76,8 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
   let phase: Phase = "idle";
   /** Quanto durou a gravação que está sendo transcrita (do `agent.record.stopped`). */
   let durationMs = 0;
-  let sentArmed: boolean | undefined;
+  /** O atalho que o helper escuta agora (null: nenhum). */
+  let sentShortcut: string | null | undefined;
   let sentBusy: boolean | undefined;
   const log = (m: string) => w.log?.(`[agent-voice] ${m}`);
 
@@ -82,10 +89,11 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
 
   const sync = (force = false) => {
     if (!settings || !status) return;
-    const armed = controlArmed(settings, status.enabled);
-    if (force || armed !== sentArmed) {
-      sentArmed = armed;
-      void send({ type: "config.set", shortcuts: { agent: armed ? "control" : null } }, "config.set shortcuts.agent");
+    // O atalho escolhido (spec #12946): trocar nos Ajustes troca o que o helper escuta.
+    const want = controlArmed(settings, status.enabled) ? agentShortcut(settings) : null;
+    if (force || want !== sentShortcut) {
+      sentShortcut = want;
+      void send({ type: "config.set", shortcuts: { agent: want } }, "config.set shortcuts.agent");
     }
     if (force || status.busy !== sentBusy) {
       sentBusy = status.busy;
@@ -129,7 +137,7 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
     offs.push(
       h.onReady(() => {
         // O helper reiniciou: ele esqueceu o atalho e o ocupado.
-        sentArmed = undefined;
+        sentShortcut = undefined;
         sentBusy = undefined;
         if (phase !== "idle") idle(true, true);
         sync(true);

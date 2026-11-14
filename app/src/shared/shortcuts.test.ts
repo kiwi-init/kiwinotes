@@ -126,3 +126,29 @@ describe("o cancelar do ditado (L5, T5458)", () => {
     expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { cancel: "delete" })).toEqual({ ok: true, patch: { cancel: "delete" } });
   });
 });
+
+describe("o atalho do Kiwi Cat (spec #12946)", () => {
+  test("o padrão é o Control; vale uma tecla sozinha ou uma combinação, segurada", () => {
+    expect(DEFAULT_SHORTCUTS.agent).toBe("control");
+    expect(shortcutLabel("control")).toBe("Control");
+    for (const ok of ["control", "rightControl", "rightOption", "rightCommand", "control+option+space", "f5"]) expect(isShortcutFor("agent", ok)).toBe(true);
+    for (const bad of ["double:rightOption", "control+k r", "escape", "a"]) expect(isShortcutFor("agent", bad)).toBe(false);
+    // O `control` (os dois Controls) só vale para ele: o ditado continua com o ⌃ direito.
+    for (const id of ["dictation", "notes", "meeting"] as const) expect(isShortcutFor(id, "control")).toBe(false);
+    expect(sanitizeShortcuts({}).agent).toBe("control");
+    expect(sanitizeShortcuts({ agent: "double:rightOption" }).agent).toBe("control");
+  });
+
+  test("um atalho que repete outro do Kiwi é recusado, nos dois sentidos", () => {
+    // Os dois Controls ocupam o ⌃ direito do ditado.
+    expect(shortcutsConflict("control", "rightControl")).toBe(true);
+    expect(shortcutsConflict("control", "double:rightControl")).toBe(true);
+    expect(shortcutsConflict("control", "fn")).toBe(false);
+    expect(shortcutsConflict("control", "control+option+v")).toBe(false);
+    expect(conflictOf(DEFAULT_SHORTCUTS, "agent", "control+option+r")).toBe("meeting");
+    expect(conflictOf({ ...DEFAULT_SHORTCUTS, dictation: "rightControl" }, "agent", "control")).toBe("dictation");
+    expect(conflictOf(DEFAULT_SHORTCUTS, "dictation", "rightControl")).toBe("agent");
+    expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { agent: "fn" })).toMatchObject({ ok: false });
+    expect(checkShortcutsPatch(DEFAULT_SHORTCUTS, { agent: "rightOption" })).toEqual({ ok: true, patch: { agent: "rightOption" } });
+  });
+});

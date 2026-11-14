@@ -439,10 +439,11 @@ final class Helper {
 
     private func applyShortcuts() {
         // A fixed order, so two shortcuts on the same keys always resolve the same way.
-        // Spec #9876: the agent's Control is off while the dictation is on a Control (the app says so in Settings).
-        let dictationOnControl = dictationKey == .rightControl || dictationKey == .control
+        // Spec #9876, #12946: the Kiwi Cat's shortcut is off while the dictation is on the same keys (the app says so in
+        // Settings and refuses to save it).
+        let agentClashes = Shortcut.shareKeys(shortcuts["agent"] ?? nil, shortcuts["dictation"] ?? nil)
         tap.bindings = ["dictation", "agent", "cancel", "pasteLast", "notes", "meeting", "meetingPause"].compactMap { id in
-            guard id != "agent" || !dictationOnControl else { return nil }
+            guard id != "agent" || !agentClashes else { return nil }
             return shortcuts[id].map { (id: id, shortcut: $0) }
         }
         // L6 (T5457): trocar o atalho para outra tecla devolve a ação do 🌐; voltar para o Fn troca de novo.
@@ -1385,8 +1386,10 @@ final class Helper {
         if let value = message.fields["precise"], !(value is NSNull), (value as? String)?.isEmpty != false { return "invalid_value" }
         if !changed.isEmpty {
             let dictationChanged = changed["dictation"].map { $0 != shortcuts["dictation"] } ?? false
-            for (id, shortcut) in changed { shortcuts[id] = shortcut }
+            // Before the assignment (spec #12946): after it, the new one always equals itself, and a change of the Kiwi
+            // Cat's shortcut mid-talk never reset the gesture.
             let agentChanged = changed["agent"].map { $0 != shortcuts["agent"] } ?? false
+            for (id, shortcut) in changed { shortcuts[id] = shortcut }
             if dictationChanged || agentChanged {
                 talk.reset(.dictation); talk.reset(.agent)
                 if audio.isRecording { cancelRecording(reason: "config") }

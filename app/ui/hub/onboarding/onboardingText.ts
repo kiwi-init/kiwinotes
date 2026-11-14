@@ -2,6 +2,7 @@
 // final. TypeScript puro, testado no `bun test`.
 
 import { ONBOARDING_STEPS, type OnboardingStep } from "../../../src/shared/agent-onboarding.ts";
+import { DEFAULT_SHORTCUTS, parseShortcut, shortcutLabel } from "../../../src/shared/shortcuts.ts";
 import type { AgentTurnEvent, AgentVoiceUi } from "../../../src/shared/ui-contract.ts";
 
 export const STEP_TEXT: Record<OnboardingStep, { title: string; hint: string }> = {
@@ -46,9 +47,21 @@ export function projectsSummary(names: readonly string[]): string {
   return names.length > 3 ? `${shown} e mais ${names.length - 3}` : shown;
 }
 
+/** Como as frases chamam o atalho do Kiwi Cat (spec #12946): "o Control", "o ⌥ direito", ou a combinação ("⌃⌥Espaço"). */
+export function holdName(text: string | null | undefined): string {
+  const t = text ?? DEFAULT_SHORTCUTS.agent!;
+  return parseShortcut(t)?.kind === "key" ? `o ${shortcutLabel(t)}` : shortcutLabel(t);
+}
+
+/** O texto do passo, com o atalho escolhido no lugar do Control (spec #12946). */
+export function stepText(step: OnboardingStep, hold = "o Control"): { title: string; hint: string } {
+  const t = STEP_TEXT[step];
+  return { title: t.title.replaceAll("o Control", hold), hint: t.hint.replaceAll("o Control", hold) };
+}
+
 /** O atalho no cartão final. */
-export function shortcutSummary(controlShortcut: boolean): string {
-  return controlShortcut ? "Segure o Control para falar" : "Ligue o Control em Ajustes › Agente";
+export function shortcutSummary(controlShortcut: boolean, hold = "o Control"): string {
+  return controlShortcut ? `Segure ${hold} para falar` : "Ligue o Kiwi Cat em Ajustes › Agente";
 }
 
 // ── Passo 2: o Control (T12002) ──────────────────────────────────────────────────────────────────────────────────────
@@ -72,18 +85,18 @@ export function controlStep(s: ControlPhase, e: { voice: AgentVoiceUi } | { turn
 }
 
 /** A frase do passo 2 para o estado. */
-export function controlLine(s: ControlPhase): string {
+export function controlLine(s: ControlPhase, hold = "o Control"): string {
   switch (s.phase) {
     case "waiting":
-      return "Segure o Control, diga \"oi\" e solte.";
+      return `Segure ${hold}, diga "oi" e solte.`;
     case "listening":
-      return "Ouvindo… solte o Control para mandar.";
+      return `Ouvindo… solte ${hold} para mandar.`;
     case "processing":
       return "Entendendo o que você disse…";
     case "asked":
       return `Você disse: "${s.text}". O gato está pensando…`;
     case "answered":
-      return `Deu certo! Você disse "${s.text}". Agora é só segurar o Control quando quiser.`;
+      return `Deu certo! Você disse "${s.text}". Agora é só segurar ${hold} quando quiser.`;
   }
 }
 

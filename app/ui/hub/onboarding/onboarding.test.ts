@@ -3,7 +3,7 @@
 import { expect, test } from "bun:test";
 
 import { ONBOARDING_STEPS } from "../../../src/shared/agent-onboarding.ts";
-import { canLeaveClaude, magicCandidates, magicRequest, projectCandidates, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, STEP_TEXT, stepAt, toneSummary } from "./onboardingText.ts";
+import { holdName, stepText, canLeaveClaude, magicCandidates, magicRequest, projectCandidates, controlLine, controlStep, type ControlPhase, DEFAULT_TONE, toneExample, toneOf, withTone, progressLine, projectsSummary, shortcutSummary, STEP_COUNT, STEP_TEXT, stepAt, toneSummary } from "./onboardingText.ts";
 
 test("os 9 passos na ordem do spec, cada um com título e frase", () => {
   expect(STEP_COUNT).toBe(9);
@@ -28,7 +28,15 @@ test("o cartão final: o jeito de falar, os projetos e o atalho", () => {
   expect(projectsSummary(["Kiwi", "PACS"])).toBe("Kiwi, PACS");
   expect(projectsSummary(["A", "B", "C", "D", "E"])).toBe("A, B, C e mais 2");
   expect(shortcutSummary(true)).toBe("Segure o Control para falar");
-  expect(shortcutSummary(false)).toBe("Ligue o Control em Ajustes › Agente");
+  expect(shortcutSummary(false)).toBe("Ligue o Kiwi Cat em Ajustes › Agente");
+  // O atalho escolhido (spec #12946) nas frases.
+  expect(holdName("control")).toBe("o Control");
+  expect(holdName("rightOption")).toBe("o ⌥ direito");
+  expect(holdName("control+option+space")).toBe("⌃⌥ Espaço");
+  expect(shortcutSummary(true, holdName("rightOption"))).toBe("Segure o ⌥ direito para falar");
+  expect(stepText("control", "o ⌥ direito").title).toBe("Aperta o ⌥ direito e fala oi");
+  expect(stepText("control").title).toBe("Aperta o Control e fala oi");
+  expect(controlLine({ phase: "waiting" }, "⌃⌥ Espaço")).toBe('Segure ⌃⌥ Espaço, diga "oi" e solte.');
 });
 
 test("o passo 2: a fala pelo Control vai de esperando a ouvindo, pedido e resposta", () => {
