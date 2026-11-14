@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Kiwi: a UI de hoje e as 6 propostas (spec #12550)</title>
+<style>
+@font-face { font-family: "Inter"; src: url("assets/Inter.woff2") format("woff2"); font-weight: 100 900; }
+:root { --bg: #f7f7f5; --card: #fff; --ink: #18181b; --muted: #5f5f66; --rule: #e4e4e0; --good: #2f6b1f; --bad: #a3361f; }
+:root[data-theme="dark"] { --bg: #0d0d0e; --card: #161618; --ink: #ececef; --muted: #a0a0a8; --rule: #2a2a2e; --good: #9fd27a; --bad: #ff8a70; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 "Inter", sans-serif; width: 1800px; padding: 40px; }
+h1 { font-size: 30px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+.lead { color: var(--muted); margin: 0 0 28px; max-width: 1200px; }
+.row { display: grid; grid-template-columns: 300px repeat(3, minmax(0, 1fr)); gap: 16px; padding: 20px 0; border-top: 1px solid var(--rule); }
+.head { display: grid; grid-template-columns: 300px repeat(3, minmax(0, 1fr)); gap: 16px; color: var(--muted); font-size: 13px; padding-bottom: 8px; }
+.name { font-size: 18px; font-weight: 600; margin: 0 0 2px; }
+.repo { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.verdict { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; border: 1px solid currentColor; margin-bottom: 10px; }
+.v-use { color: var(--good); } .v-test { color: #b07a00; } .v-no { color: var(--bad); } .v-base { color: var(--muted); }
+:root[data-theme="dark"] .v-test { color: #f0c060; }
+.txt p { margin: 0 0 8px; } .txt b { font-weight: 600; }
+img { width: 100%; border-radius: 8px; border: 1px solid var(--rule); display: block; }
+</style>
+</head>
+<body>
+<h1>A UI de hoje e uma proposta por skill</h1>
+<p class="lead">As mesmas 3 telas em cada linha: a nota aberta, Configurações › Aparência e o balão do gato com uma proposta. "Hoje" é o app de verdade (headless, agente falso); as outras são protótipos em HTML que seguem as regras de cada repositório, com os textos do app. O gato fica como está em todas.</p>
+<div class="head"><span></span><span>A nota aberta</span><span>Configurações › Aparência</span><span>O balão com uma proposta</span></div>
+<div id="rows"></div>
+<script>
+const theme = new URLSearchParams(location.search).get("theme") || "light";
+document.documentElement.dataset.theme = theme;
+const ROWS = [
+  ["hoje", "Hoje", "o app, main @ 19f1a9f", "v-base", "a base",
+   "<p>Os tokens do Channels, a SF e o azul. O que as skills apontam: o título repetido na nota, metadados e migalha em mono, o callout com faixa lateral e o glifo ✎, o “Escuros · 29”, o balão de contorno grosso com quatro ações e aspas retas.</p>"],
+  ["unslop", "unslop", "heydamir/unslop · CC BY 4.0", "v-use", "usar: polimento",
+   "<p><b>Muda pouco, de propósito:</b> a auditoria dá “pouco slop”, e a regra dela é não trocar uma tela boa só para ficar diferente. Sai o título repetido, o mono dos metadados, o ponto do meio, a faixa do callout e o ✎; o balão fica fino, com uma ação principal.</p><p><b>Melhor:</b> limpa os tiques sem mexer na identidade. <b>Piora:</b> nada; também não dá cara nova. <b>Custo:</b> baixo, CSS e textos.</p>"],
+  ["impeccable", "impeccable", "pbakaus/impeccable · Apache-2.0", "v-test", "testar: a proposta na nota",
+   "<p><b>Muda a cara e o fluxo:</b> casca na cor do kiwi, chão tingido, verde só na ação. A assinatura: a proposta do agente aparece dentro da nota, nas linhas onde vai entrar, com a marca na margem na cor do agente; o balão só confirma.</p><p><b>Melhor:</b> identidade própria, e a proposta se entende sem abrir outra tela. <b>Piora:</b> a barra escura chama mais atenção que o texto, e o verde tem de conviver com os 44 temas. <b>Custo:</b> médio a alto (decorações no editor).</p>"],
+  ["hallmark", "hallmark", "Nutlope/hallmark · MIT · tema Ribbon", "v-test", "testar: a tipografia",
+   "<p><b>Muda o material:</b> papel quente, Instrument Sans leve nos títulos, Figtree no texto, linhas em fio no lugar de caixas, controles com luz de cima; o Tamanho do texto vira um fader. Escuro azul-noite com âmbar.</p><p><b>Melhor:</b> a mais calma e “desenhada”. <b>Piora:</b> o tema foi feito para um app de som e sono; os controles com volume fogem do macOS plano. <b>Custo:</b> médio, duas fontes novas (~50 KB).</p>"],
+  ["huashu", "huashu-design", "alchaincyf/huashu-design · MIT", "v-test", "testar: só a nota",
+   "<p><b>Vira um leitor</b> (direção Editorial Reader): serifa Literata, papel quente, ocre, marca-texto, rótulos pequenos espaçados; o balão vira a barra escura de ação. A skill mostraria 3 direções antes (as outras: Things 3 e Raycast).</p><p><b>Melhor:</b> a nota fica ótima de ler. <b>Piora:</b> menos texto na tela para quem escreve e dita; os rótulos espaçados são o que as outras skills proíbem. <b>Custo:</b> médio, fonte de ~85 KB.</p>"],
+  ["uupm", "ui-ux-pro-max", "nextlevelbuilder/ui-ux-pro-max-skill · MIT", "v-no", "descartar",
+   "<p><b>O que a ferramenta devolveu, aplicado:</b> o vermelho de gravação como cor principal, o azul de botão, Plus Jakarta Sans, estilo suíço com bordas de 2px e cabeçalhos em caixa alta.</p><p><b>Melhor:</b> contraste alto, alvos de 44px. <b>Piora:</b> vermelho em tudo lê como erro; a escolha é por palavra-chave (“voice dictation” → vermelho; outra busca parecida deu cinza e Atkinson). <b>Custo:</b> baixo de fazer, alto de conviver.</p>"],
+  ["designmd", "awesome-design-md", "VoltAgent/awesome-design-md · MIT · notion/DESIGN.md", "v-no", "descartar o arquivo, usar o formato",
+   "<p><b>Os tokens do site do Notion:</b> neutros quentes, roxo no botão, abas em pílula, cartões pastel, tabela em grade.</p><p><b>Melhor:</b> familiar e pronto. <b>Piora:</b> o Kiwi passa a parecer o Notion; o arquivo é do site de marketing, não do app, e não tem escuro (o navy aqui é derivado). <b>O que vale do repo:</b> o formato DESIGN.md, para escrever o do próprio Kiwi.</p>"],
+];
+document.getElementById("rows").innerHTML = ROWS.map(([id, name, repo, cls, verdict, txt]) => `
+  <div class="row">
+    <div class="txt"><p class="name">${name}</p><p class="repo">${repo}</p><span class="verdict ${cls}">${verdict}</span>${txt}</div>
+    ${["nota", "aparencia", "balao"].map((s) => `<img src="../telas/${id}-${s}-${theme}.webp" alt="${name}: ${s}">`).join("")}
+  </div>`).join("");
+</script>
+</body>
+</html>
