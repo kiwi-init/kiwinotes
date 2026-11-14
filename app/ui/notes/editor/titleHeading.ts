@@ -73,6 +73,22 @@ export function hiddenTitle(state: EditorState): { from: number; to: number } | 
   return state.field(titleField, false) ?? null;
 }
 
+/**
+ * Onde o cursor começa na nota nova que abre com o H1 escondido (T12686): a linha vazia depois do trecho, onde a pessoa
+ * começa a escrever, e a primeira vista não mostra o título de novo. Só numa linha vazia: com texto lá (uma nota que já
+ * tem conteúdo), o cursor nele mostraria o bloco cru (uma tabela, um callout), e ele fica no 0, como antes. Null quando
+ * não há o que esconder ou a linha não está vazia.
+ */
+export function cursorAfterTitle(state: EditorState): number | null {
+  const lines = titleHeadingLines(state, state.facet(titleFacet));
+  if (!lines) return null;
+  const last = state.doc.line(lines.last);
+  // A nota que é só o `# Título`: não há linha depois, e o H1 aparece (o cursor fica nele).
+  if (last.number >= state.doc.lines) return null;
+  const next = state.doc.line(last.number + 1);
+  return next.text.trim() ? null : next.from;
+}
+
 /** O compartimento do título: a nota trocada ou renomeada reconfigura só ele. */
 export const titleCompartment = new Compartment();
 export const titleHeading = (title: string | null): Extension => [titleFacet.of(title), titleField];
