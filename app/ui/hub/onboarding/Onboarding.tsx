@@ -664,7 +664,7 @@ export function Onboarding() {
           </div>
         ) : step === "place" ? (
           <div className="kn-onb-row kn-onb-place">
-            <CatPlaceRow />
+            <CatPlaceRow bare />
           </div>
         ) : step === "magic" ? (
           <MagicStep status={status} settings={settings} />

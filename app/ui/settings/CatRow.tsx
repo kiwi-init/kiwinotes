@@ -3,6 +3,7 @@ import type { createKiwiCat } from "../kiwicat/cat";
 import { type CatColorChoice, catColorHex, catColorOptions } from "../../src/shared/kiwicat-colors";
 import type { AppSettings } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
+import previewCatUrl from "../kiwicat/assets/preview-cutout.webp";
 import { CAT_POSITIONS, CAT_SIZE, type CatPosition, catPreviewRect, catSize, catSizeLabel, PREVIEW_BARS } from "../../src/shared/kiwicat-place";
 import { Row, Select, Swatches, Switch } from "../src/kit/index";
 export function CatRow() {
@@ -48,10 +49,11 @@ export function OverlayCatRow() {
 
 /**
  * Onde o gato aparece por cima dos apps, e o tamanho dele (spec #12949): as seis posições, um controle de 0,6× a 1,6× e
- * uma prévia pequena da tela. Salva na hora; o gato do overlay carrega de novo no lugar novo. Com o overlay desligado, a
- * linha continua (a escolha vale quando ele ligar).
+ * uma prévia pequena da tela, com o próprio gato. Salva na hora; o gato do overlay carrega de novo no lugar novo. Com o
+ * overlay desligado, a linha continua (a escolha vale quando ele ligar). `bare` (o onboarding): só a prévia, maior, e
+ * os controles, sem o título e a frase da linha (o passo já diz).
  */
-export function CatPlaceRow() {
+export function CatPlaceRow({ bare = false }: { bare?: boolean }) {
   const [cat, setCat] = useState<AppSettings["kiwicat"] | null>(null);
   const [failed, setFailed] = useState(false);
   const seq = useRef(0);
@@ -75,33 +77,43 @@ export function CatPlaceRow() {
       .finally(() => { pending.current--; });
   };
   const hint = failed ? "Não deu para salvar. Tente de novo."
-    : cat.overlay ? "Onde o gato aparece por cima dos outros apps, e o tamanho dele. Ele fica longe do Dock e da barra de menus."
-    : "Vale quando o Kiwi Cat por cima dos outros apps estiver ligado.";
-  return <Row label="Posição e tamanho do Kiwi Cat" hint={hint}>
-    <div className="kn-cat-place">
-      <CatPlacePreview posicao={cat.posicao} tamanho={cat.tamanho} />
-      <div className="kn-cat-place-controls">
+    : cat.overlay ? "Onde o gato aparece e o tamanho dele."
+    : "Vale quando o gato por cima dos apps estiver ligado.";
+  const body = <div className="kn-cat-place" data-bare={bare || undefined}>
+    <CatPlacePreview posicao={cat.posicao} tamanho={cat.tamanho} cor={catColorHex(cat.cor)} />
+    <div className="kn-cat-place-controls">
+      <div className="kn-cat-place-field">
+        <span className="kn-cat-place-label">Posição</span>
         <Select<CatPosition> label="Posição do Kiwi Cat" value={cat.posicao} options={CAT_POSITIONS.map(p => ({ value: p.id, label: p.label }))}
           onChange={posicao => posicao !== cat.posicao && save({ posicao })} />
-        <label className="kn-cat-size">
+      </div>
+      <label className="kn-cat-place-field">
+        <span className="kn-cat-place-label">Tamanho</span>
+        <span className="kn-cat-size">
           <input type="range" aria-label="Tamanho do Kiwi Cat" min={CAT_SIZE.min} max={CAT_SIZE.max} step={CAT_SIZE.step} value={cat.tamanho}
             onChange={e => setCat({ ...cat, tamanho: catSize(Number(e.target.value)) })}
             onPointerUp={e => save({ tamanho: catSize(Number((e.target as HTMLInputElement).value)) })}
             onKeyUp={e => save({ tamanho: catSize(Number((e.target as HTMLInputElement).value)) })} />
           <span className="kn-cat-size-value">{catSizeLabel(cat.tamanho)}</span>
-        </label>
-      </div>
+        </span>
+      </label>
+      {bare && failed ? <p className="kn-row-hint" role="alert">{hint}</p> : null}
     </div>
-  </Row>;
+  </div>;
+  return bare ? body : <Row label="Posição e tamanho do Kiwi Cat" hint={hint}>{body}</Row>;
 }
 
-/** A prévia pequena da tela: a barra de menus, o Dock e o gato no lugar e no tamanho escolhidos (a conta do helper). */
-export function CatPlacePreview({ posicao, tamanho }: { posicao: CatPosition; tamanho: number }) {
+/**
+ * A prévia pequena da tela: a barra de menus, o Dock e o gato (a mesma arte, sempre preto, com o brilho da cor dele) no
+ * lugar e no tamanho escolhidos, pela conta do helper.
+ */
+export function CatPlacePreview({ posicao, tamanho, cor }: { posicao: CatPosition; tamanho: number; cor: string }) {
   const r = catPreviewRect(posicao, tamanho);
   return <div className="kn-cat-screen" role="img" aria-label={`Prévia: o Kiwi Cat em ${CAT_POSITIONS.find(p => p.id === posicao)?.label.toLowerCase()}, ${catSizeLabel(tamanho)}`}>
     <span className="kn-cat-screen-menu" style={{ height: `${PREVIEW_BARS.menu}%` }} />
     <span className="kn-cat-screen-dock" style={{ height: `${PREVIEW_BARS.dock * 0.6}%` }} />
-    <span className="kn-cat-screen-cat" data-posicao={posicao} style={{ left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%` }} />
+    <img className="kn-cat-screen-cat" src={previewCatUrl} alt="" draggable={false} data-posicao={posicao}
+      style={{ left: `${r.left}%`, top: `${r.top}%`, width: `${r.width}%`, height: `${r.height}%`, ["--glow" as string]: cor }} />
   </div>;
 }
 

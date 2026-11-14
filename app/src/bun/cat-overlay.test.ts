@@ -375,6 +375,18 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(r.cat.visible).toBe(false);
   });
 
+  test("mudar o tamanho com o balão na tela traz o mesmo trecho de volta depois da recarga (revisão do #522)", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(text("Feito."));
+    r.cat.turn(doneWith("Feito."));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false }]);
+    r.cat.setPlace("bottom-right", 0.8);
+    expect(r.take().map((c) => c.type)).toEqual(["catOverlay.place", "catOverlay.load", "catOverlay.show", "catOverlay.bubble"]);
+    r.cat.setPlace("bottom-right", 0.8);
+    expect(r.take()).toEqual([]);
+  });
+
   test("um pedido com ação: o balão diz o que ele fez, o texto depois da última ferramenta", () => {
     const r = rig();
     talk(r);

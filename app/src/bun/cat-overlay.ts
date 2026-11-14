@@ -119,6 +119,8 @@ export class CatOverlay {
   private overlayShown = false;
   /** O balão está no overlay (spec #12938). */
   private bubbleShown = false;
+  /** O trecho que está no balão agora: volta a ele depois de uma recarga (revisão do #522). */
+  private bubbleNow: { text: string; error: boolean } | null = null;
   /**
    * Os pedidos que vieram da fala pelo Control, pelo id do `asked` (um pedido que começou enquanto a pessoa segurava o
    * Control, como uma rotina, não entra). Cada um sai no `done` ou no `error` dele.
@@ -258,6 +260,7 @@ export class CatOverlay {
     this.cancelTimer();
     const step = (i: number) => {
       this.bubbleShown = true;
+      this.bubbleNow = { text: chunks[i]!, error };
       this.host.send({ type: "catOverlay.bubble", text: chunks[i]!, error });
       this.timer = this.clock.setTimeout(() => {
         this.timer = null;
@@ -346,7 +349,10 @@ export class CatOverlay {
     this.escala = escala;
     if (!this.loaded) return;
     this.load();
-    if (this.overlayShown) this.host.send({ type: "catOverlay.show", estado: this.activity.state, fadeMs: 0 });
+    if (!this.overlayShown) return;
+    this.host.send({ type: "catOverlay.show", estado: this.activity.state, fadeMs: 0 });
+    // A recarga zera o balão no helper: o trecho que estava nele volta (revisão do #522).
+    if (this.bubbleShown && this.bubbleNow) this.host.send({ type: "catOverlay.bubble", ...this.bubbleNow });
   }
 
   /** A cor, a posição e o tamanho vão antes do `load`: o helper os passa à página que ele abre. */
