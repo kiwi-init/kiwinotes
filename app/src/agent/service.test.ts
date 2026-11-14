@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
-import { SettingsStore } from "../store/settings.ts";
+import { SettingsStore, type AgentSettings } from "../store/settings.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
@@ -649,7 +649,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write, notes_organize_folder",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write, notes_organize_folder, meeting_propose",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
@@ -1031,5 +1031,227 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(cheapestModel([{ value: "default", name: "Padrão" }, { value: "opus", name: "Opus" }, { value: "haiku", name: "Haiku" }])).toBe("haiku");
     expect(cheapestModel([{ value: "opus", name: "Opus" }, { value: "claude-sonnet-5", name: "Sonnet 5" }])).toBe("claude-sonnet-5");
     expect(cheapestModel([{ value: "default", name: "Padrão" }])).toBeNull();
+  });
+});
+
+describe("a reunião vira nota do projeto (spec #8360)", () => {
+  const MEETING_PATH = "Reuniões/2026-11-11 10h00 Zoom.md";
+  // A transcrição de teste: nunca uma reunião de verdade.
+  const MEETING_NOTE = "---\ntype: meeting\ndate: 2026-11-11\n---\n\n## Transcrição\n\n**Ana** (00:00): Vamos começar pelo arquivo de 2019.\n";
+  // Uma segunda reunião de teste, com um segredo dito na transcrição: o guardrail o segura antes de ir ao agente.
+  const SECRET = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
+  const MEETING2_PATH = "Reuniões/2026-11-11 15h00 Meet.md";
+  const MEETING2_NOTE = `---\ntype: meeting\ndate: 2026-11-11\n---\n\n## Transcrição\n\n**Bruno** (00:00): O token do CI é ${SECRET}.\n`;
+  const MAIN = "Projetos/Migração/Migração.md";
+  const MAIN_TEXT = "# Migração\n\n## Pendências\n\n- [ ] Pedir o acesso\n";
+  const project = (folder: string, name: string, main: string | null) => ({ folder, name, main, updated: null, notes: 1 });
+  function vault(projects: ReturnType<typeof project>[]) {
+    const notes: Record<string, string> = { ...NOTES, [MEETING_PATH]: MEETING_NOTE, [MEETING2_PATH]: MEETING2_NOTE, [MAIN]: MAIN_TEXT };
+    const reader: VaultReader = {
+      ...memoryReader(notes),
+      meetings: async () => [
+        { path: MEETING_PATH, title: "2026-11-11 10h00 Zoom", date: "2026-11-11", start: null, end: null, duration: 1800, app: "Zoom", participants: ["Ana"], live: false, mtime: "2026-11-11T11:00:00.000Z" },
+        { path: MEETING2_PATH, title: "2026-11-11 15h00 Meet", date: "2026-11-11", start: null, end: null, duration: 900, app: "Meet", participants: ["Bruno"], live: false, mtime: "2026-11-11T15:20:00.000Z" },
+      ],
+      projects: async () => projects,
+    };
+    return { notes, reader, writer: memoryWriter(notes) };
+  }
+  const ASK = "atualiza o projeto com a reunião que eu acabei de ter";
+  const NOTE = "Projetos/Migração/2026-11-11 · Cronograma da migração.md";
+
+  test("a pedido: a proposta fica pendente sem escrever nada; [Ver] mostra a nota nova e a diferença; [Aplicar] escreve as duas, com [Desfazer]", async () => {
+    const v = vault([project("Projetos/Migração", "Migração", MAIN)]);
+    const m = make({ reader: v.reader, writer: v.writer });
+    const events: unknown[] = [];
+    m.svc.onProposalsChanged((list) => events.push(list.map((p) => p.status)));
+    await readyNow(m);
+    const before = { ...v.notes };
+    const turn = await askAndWait(m, ASK);
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: 'Preparei a proposta da reunião "2026-11-11 10h00 Zoom". Veja e aplique no Kiwi.' });
+    // Nada foi escrito antes do [Aplicar].
+    expect(v.notes).toEqual(before);
+    const [p] = (await m.svc.proposalsList());
+    expect(p).toMatchObject({
+      status: "pending",
+      meeting: { path: MEETING_PATH },
+      project: { folder: "Projetos/Migração", name: "Migração" },
+      candidates: [],
+      note: { folder: "Projetos/Migração", title: "2026-11-11 · Cronograma da migração" },
+    });
+    const view = await m.svc.proposalView(p!.id);
+    expect(view.noteContent).toContain(`[[Reuniões/2026-11-11 10h00 Zoom|`);
+    expect(view.noteContent).toContain("## Decisões\n\n- A migração começa pelo arquivo de 2019");
+    expect(view.main!.path).toBe(MAIN);
+    expect(view.main!.lines.filter((l) => l.added).map((l) => l.text)).toContain("- [ ] Confirmar a janela de manutenção");
+    expect(view.main!.lines.filter((l) => !l.added).map((l) => l.text)).toEqual(MAIN_TEXT.split("\n"));
+    // [Ver] também não escreve.
+    expect(v.notes).toEqual(before);
+
+    const applied = await m.svc.proposalApply(p!.id);
+    expect(applied).toMatchObject({ status: "applied", notePath: NOTE });
+    expect(v.notes[NOTE]).toBe(view.noteContent);
+    expect(v.notes[MAIN]).toBe(view.main!.lines.map((l) => l.text).join("\n"));
+    await expect(m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    expect(events).toEqual([["pending"], ["applied"]]);
+    // O [Aplicar] é um pedido do registro, com a cópia de antes: o [Desfazer] volta a nota principal.
+    const r = (await m.svc.activityLog()).find((x) => x.id === applied.applyRequest)!;
+    expect(r.changes.map((c) => [c.kind, c.path])).toEqual([
+      ["created", NOTE],
+      ["appended", MAIN],
+    ]);
+    const trashed: string[] = [];
+    m.svc.useUndo({
+      folder: async () => null,
+      get: async (q) => (v.notes[q] === undefined ? null : { content: v.notes[q]!, version: versionOf(v.notes[q]!) }),
+      save: async (q, content, base) => {
+        if (v.notes[q] === undefined || versionOf(v.notes[q]!) !== base) return false;
+        v.notes[q] = content;
+        return true;
+      },
+      trash: async (q) => {
+        trashed.push(q);
+        delete v.notes[q];
+        return "trashed";
+      },
+    });
+    await m.svc.undo(applied.applyRequest!);
+    expect(v.notes).toEqual(before);
+    expect(trashed).toEqual([NOTE]);
+    // A proposta sabe que foi desfeita: as duas telas dizem "Desfeito" e não oferecem o [Desfazer] de novo.
+    expect((await m.svc.proposalsList())[0]).toMatchObject({ status: "applied", undoneAt: expect.any(String) });
+    expect(events.at(-1)).toEqual(["applied"]);
+  });
+
+  test("com dois projetos parecidos, a proposta pergunta; escolhido, aplica; [Descartar] não muda nada; sem projeto, só a nota da reunião", async () => {
+    const v = vault([project("Projetos/Migração", "Migração", MAIN), project("Projetos/VNA", "VNA Fuji", null)]);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    const before = { ...v.notes };
+    await askAndWait(m, ASK);
+    const [p] = (await m.svc.proposalsList());
+    expect(p).toMatchObject({ project: null, candidates: [{ folder: "Projetos/Migração", name: "Migração" }, { folder: "Projetos/VNA", name: "VNA Fuji" }] });
+    await expect(m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(m.svc.proposalChoose(p!.id, "Projetos/Outro")).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    expect(await m.svc.proposalChoose(p!.id, "Projetos/VNA")).toMatchObject({ project: { name: "VNA Fuji" }, candidates: [], note: { folder: "Projetos/VNA" } });
+    // Um projeto sem nota principal: a proposta é só a nota da reunião.
+    expect((await m.svc.proposalView(p!.id)).main).toBeNull();
+    expect(await m.svc.proposalDiscard(p!.id)).toMatchObject({ status: "discarded" });
+    expect(v.notes).toEqual(before);
+    await expect(m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+
+    // De novo, e "Nenhum: só a nota da reunião": a nota vai para a raiz, e a nota principal não muda.
+    await askAndWait(m, ASK);
+    const [q] = (await m.svc.proposalsList()).filter((x) => x.status === "pending");
+    expect(await m.svc.proposalChoose(q!.id, null)).toMatchObject({ project: null, candidates: [], note: { folder: "" } });
+    expect(await m.svc.proposalApply(q!.id)).toMatchObject({ status: "applied", notePath: "2026-11-11 · Cronograma da migração.md" });
+    expect(v.notes[MAIN]).toBe(MAIN_TEXT);
+    await expect(m.svc.proposalView("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+  });
+
+  test("um [Aplicar] que parou depois de gravar a nota principal não repete a reunião nela no [Aplicar] seguinte", async () => {
+    const v = vault([project("Projetos/Migração", "Migração", MAIN)]);
+    // O app "cai" logo depois de gravar a principal: a gravação acontece, e a chamada falha.
+    let crash = true;
+    const writer: VaultWriter = {
+      ...v.writer,
+      save: async (q, content, base) => {
+        const r = await v.writer.save(q, content, base);
+        if (crash && q === MAIN) {
+          crash = false;
+          throw new Error("o app caiu");
+        }
+        return r;
+      },
+    };
+    const m = make({ reader: v.reader, writer });
+    await readyNow(m);
+    await askAndWait(m, ASK);
+    const [p] = (await m.svc.proposalsList());
+    await expect(m.svc.proposalApply(p!.id)).rejects.toThrow("o app caiu");
+    expect((await m.svc.proposalsList())[0]).toMatchObject({ status: "pending", notePath: NOTE });
+    expect(await m.svc.proposalApply(p!.id)).toMatchObject({ status: "applied" });
+    expect(v.notes[MAIN]!.match(/Cronograma da migração\]\]/g)).toHaveLength(1);
+    expect(v.notes[MAIN]!.match(/Confirmar a janela de manutenção/g)).toHaveLength(1);
+    expect(Object.keys(v.notes).filter((k) => k.includes("Cronograma"))).toEqual([NOTE]);
+  });
+
+  /** Muda "Suas reuniões" e o modo econômico direto nos ajustes da pasta do teste. */
+  async function setMeetings(m: Made, meetings: Partial<AgentSettings["meetings"]>, economy = false) {
+    const store = new SettingsStore(m.data);
+    const agent = (await store.load()).agent;
+    await store.save({ agent: { ...agent, economy, meetings: { ...agent.meetings, ...meetings } } });
+  }
+  const started = (m: Made) => m.turns.filter((e) => e.type === "started").length;
+  async function untilAsync<T>(get: () => Promise<T | undefined | null | false>, ms = 10_000): Promise<T> {
+    const end = Date.now() + ms;
+    for (;;) {
+      const v = await get();
+      if (v) return v;
+      if (Date.now() > end) throw new Error("demorou demais");
+      await Bun.sleep(10);
+    }
+  }
+
+  test("a transcrição pronta: a proposta sai sem pedido, nada é escrito, a transcrição passa pelo guardrail, o áudio não vai, e uma reunião só gera uma", async () => {
+    const v = vault([project("Projetos/Migração", "Migração", MAIN)]);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    const before = { ...v.notes };
+    await m.svc.meetingReady(MEETING2_PATH);
+    const p = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.status === "pending"));
+    expect(p).toMatchObject({ meeting: { path: MEETING2_PATH }, project: { name: "Migração" } });
+    await until(() => m.turns.some((e) => e.type === "done"));
+    expect(v.notes).toEqual(before);
+    // O pedido é o automático, e a leitura da transcrição segurou o segredo (o filtro do guardrail).
+    const [r] = await m.svc.activityLog();
+    expect(r!.request).toStartWith("[Pedido automático do Kiwi] A reunião gravada");
+    expect(r!.reads.find((x) => x.tool === "meetings_get")).toMatchObject({ target: MEETING2_PATH, held: 1 });
+    // O que foi ao agente: só texto, sem o segredo e sem áudio.
+    const prompts = m.log().filter((l) => l.method === "session/prompt").map((l) => l.params.prompt as { type: string }[]);
+    expect(prompts.flat().map((b) => b.type)).toEqual(["text"]);
+    expect(JSON.stringify(m.log())).not.toContain(SECRET);
+    // De novo, a mesma reunião: nada novo.
+    const count = started(m);
+    await m.svc.meetingReady(MEETING2_PATH);
+    await Bun.sleep(50);
+    expect(started(m)).toBe(count);
+    expect(await m.svc.proposalsList()).toHaveLength(1);
+  });
+
+  test("só quando eu pedir: nada sozinho. Com o modo econômico, pergunta antes de gastar. Com o agente ocupado, espera", async () => {
+    const v = vault([project("Projetos/Migração", "Migração", MAIN)]);
+    const m = make({ reader: v.reader, writer: v.writer });
+    await readyNow(m);
+    await setMeetings(m, { propose: "on-request" });
+    await m.svc.meetingReady(MEETING_PATH);
+    await Bun.sleep(50);
+    expect(started(m)).toBe(0);
+    expect(await m.svc.proposalsList()).toEqual([]);
+
+    // O modo econômico: a pergunta, sem gastar; "Preparar" gasta o pedido e a proposta toma o lugar dela.
+    await setMeetings(m, { propose: "auto" }, true);
+    await m.svc.meetingReady(MEETING_PATH);
+    const [offer] = await m.svc.proposalsList();
+    expect(offer).toMatchObject({ status: "offer", meeting: { path: MEETING_PATH }, theme: "" });
+    expect(started(m)).toBe(0);
+    await expect(m.svc.proposalApply(offer!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(m.svc.proposalView(offer!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await m.svc.proposalPrepare(offer!.id);
+    const ready = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.status === "pending"));
+    expect(ready.meeting.path).toBe(MEETING_PATH);
+    expect((await m.svc.proposalsList()).map((x) => x.status)).toEqual(["pending"]);
+    await until(() => m.turns.filter((e) => e.type === "done").length === 1);
+
+    // Ocupado: o pedido da reunião espera o de agora acabar.
+    await setMeetings(m, { propose: "auto" }, false);
+    const slow = await m.svc.ask("/lento");
+    await m.svc.meetingReady(MEETING2_PATH);
+    expect(started(m)).toBe(2);
+    const next = await untilAsync(async () => (await m.svc.proposalsList()).find((x) => x.meeting.path === MEETING2_PATH));
+    expect(next.status).toBe("pending");
+    await until(() => m.turns.filter((e) => e.type === "done").length === 3);
+    const order = m.turns.filter((e) => e.type === "started" || e.type === "done").map((e) => `${e.type}:${e.id === slow.id ? "lento" : "outro"}`);
+    expect(order.slice(-4)).toEqual(["started:lento", "done:lento", "started:outro", "done:outro"]);
   });
 });

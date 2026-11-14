@@ -25,6 +25,7 @@ import {
 import { NoticeRow } from "./NoticeRow.tsx";
 import { ControlRow } from "./ControlRow.tsx";
 import { NoteModelRow } from "./NoteModel.tsx";
+import { MeetingsRows } from "./MeetingsRows.tsx";
 import "./agent.css";
 import { CatRow, OverlayCatRow } from "./CatRow";
 
@@ -183,6 +184,9 @@ export function AgentSection() {
           <Switch label={ECONOMY_LABEL} checked={status.economy === true} onChange={(economy) => void run(() => api.agent.configure({ economy }))} />
         </Row>
       ) : null}
+
+      {/* "Suas reuniões" (spec #8360): quando propor, onde salvar, o nome e os blocos. Só com o agente ligado. */}
+      {status.enabled && status.meetings ? <MeetingsRows status={status} run={run} /> : null}
 
       {/* A notificação quando o agente espera uma resposta (spec #9839): só com o agente ligado. */}
       {status.enabled ? <NoticeRow /> : null}

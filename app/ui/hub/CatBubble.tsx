@@ -29,7 +29,7 @@ function measurer(): { fits: (s: string) => boolean; dispose: () => void } {
   };
 }
 
-export function CatBubble({ reduced, hidden = false }: { reduced: boolean; hidden?: boolean }) {
+export function CatBubble({ reduced, hidden = false, onShown }: { reduced: boolean; hidden?: boolean; onShown?: (shown: boolean) => void }) {
   const [view, setView] = useState<BubbleView | null>(null);
   /** O balão grande do [Ver mais], aberto. Ele mostra o texto inteiro do pedido, e acompanha o que ainda chega. */
   const [bigOpen, setBigOpen] = useState(false);
@@ -104,6 +104,9 @@ export function CatBubble({ reduced, hidden = false }: { reduced: boolean; hidde
   }, [bigOpen]);
 
   const keepFocus = (e: React.MouseEvent | React.PointerEvent) => e.preventDefault();
+  // Quem mais usa o canto (a proposta da reunião, spec #8360) espera o balão da resposta sair.
+  const showing = !!view || bigOpen;
+  useEffect(() => onShown?.(showing), [showing]);
 
   return (
     <>

@@ -6,6 +6,7 @@ import { api, has } from "../src/api";
 import { CatActivity } from "./cat-state";
 import { CatAsk } from "./CatAsk";
 import { CatBubble } from "./CatBubble";
+import { ProposalBubble } from "./ProposalBubble";
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 /**
  * A tinta dos símbolos segue o tema da janela (T10737, #428): escura no claro, branca no escuro. O tema resolvido fica
@@ -18,6 +19,8 @@ function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; aw
   const reducedRef = useRef(reduced); reducedRef.current = reduced;
   const awayRef = useRef(away); awayRef.current = away;
   const refresh = useRef<() => void>(() => {});
+  /** O balão da resposta está na tela: a proposta da reunião espera ele sair (spec #8360). */
+  const [talking, setTalking] = useState(false);
   useEffect(() => { handle.current?.update({ parado: reduced }); }, [reduced]);
   useEffect(() => { refresh.current(); }, [away]);
   const root = useRef<HTMLDivElement>(null);
@@ -172,7 +175,9 @@ function CatMount({ busy, reduced, away }: { busy: boolean; reduced: boolean; aw
       ) : null}
       {/* O balão (spec #9495): ao lado do gato, fora da caixa dele. Com o campo aberto ele espera escondido, sem perder
           o que chega, e aparece depois que o pedido sai (#10868). */}
-      <CatBubble reduced={reduced} hidden={asking || away} />
+      <CatBubble reduced={reduced} hidden={asking || away} onShown={setTalking} />
+      {/* A proposta da reunião (spec #8360): no mesmo canto, depois que a resposta sai da tela. */}
+      <ProposalBubble hidden={asking || away || talking} />
     </>
   );
 }

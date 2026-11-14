@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
+import { DEFAULT_AGENT_MEETING_SETTINGS } from "../../src/store/settings.ts";
 import {
   adapterLine,
   applyTurn,
@@ -25,6 +26,7 @@ const base: AgentStatus = {
   enabled: false,
   consented: false,
   economy: false,
+  meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   claude: { installed: true, version: "2.1.322", loggedIn: true, method: "claude.ai", versionOk: true },
   adapter: { version: "0.106.0", phase: "missing" },
   program: "closed",

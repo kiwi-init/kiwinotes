@@ -354,3 +354,6 @@
 @media (prefers-reduced-motion: reduce) { .kn-nm-part { animation: none; } .kn-nm-block { transition: none; } }
 :root[data-motion="reduced"] .kn-nm-part { animation: none; }
 :root[data-motion="reduced"] .kn-nm-block { transition: none; }
+
+/* "Suas reuniões" (spec #8360): a escolha da pasta única fica ao lado de "Numa pasta única". */
+.kn-agent-meetings-folder { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px); align-items: center; justify-content: flex-end; }

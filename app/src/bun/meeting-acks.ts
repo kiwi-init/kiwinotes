@@ -47,8 +47,25 @@ const frameOf = (s: FinalSegment) => s.startFrame ?? Math.floor(s.start * RATE);
 
 export class MeetingAcks {
   private states = new Map<string, ChannelState>();
+  private readonly completed = new Set<string>();
 
-  constructor(private readonly send: (ack: MeetingAck) => void) {}
+  /**
+   * `onComplete` (spec #8360): uma vez por reunião, quando todo canal dela chegou ao fim, com tudo salvo na nota e a
+   * correção do VBx gravada. É quando a transcrição fica pronta para o agente propor a nota do projeto.
+   */
+  constructor(
+    private readonly send: (ack: MeetingAck) => void,
+    private readonly onComplete?: (session: string) => void,
+  ) {}
+
+  /** Todo canal visto desta reunião acabou: avisa uma vez. */
+  private checkComplete(session: string): void {
+    if (!this.onComplete || this.completed.has(session)) return;
+    const channels = [...this.states.entries()].filter(([k]) => k.startsWith(`${session}|`)).map(([, s]) => s);
+    if (!channels.length || !channels.every((s) => s.done)) return;
+    this.completed.add(session);
+    this.onComplete(session);
+  }
 
   private state(session: string, channel: MeetingChannel): ChannelState {
     const key = `${session}|${channel}`;
@@ -71,8 +88,9 @@ export class MeetingAcks {
       const channel = seg.channel ?? "system";
       this.state(session, channel).pending.delete(keyOf(seg));
     }
-    this.evaluate(session, "mine");
-    this.evaluate(session, "system");
+    // Só os canais que esta reunião tem: um canal que nunca apareceu não é criado aqui (o fim da reunião espera os que
+    // existem). Num canal novo, o evaluate não mandaria nada mesmo.
+    for (const channel of ["mine", "system"] as const) if (this.states.has(`${session}|${channel}`)) this.evaluate(session, channel);
   }
 
   settled(session: string, channel: MeetingChannel, frame: number): void {
@@ -103,6 +121,7 @@ export class MeetingAcks {
     if (s.drained !== undefined && s.pending.size === 0 && !s.relabeling) {
       s.done = true;
       this.send({ type: "meeting.ack", session, channel, finalThroughFrame: Math.max(s.drained, s.acked), contextFrames: 0 });
+      this.checkComplete(session);
       return;
     }
     if (channel === "system") return; // opção B: o sistema fica inteiro até o fim

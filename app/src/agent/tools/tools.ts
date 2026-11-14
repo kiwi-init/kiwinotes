@@ -18,6 +18,17 @@ import { markdownStructure, headingFor, type NoteHeading } from "../../shared/ma
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import type { VaultReader } from "./reader.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
+import {
+  PROPOSAL_CANDIDATES_MAX,
+  PROPOSAL_ITEM_CHARS,
+  PROPOSAL_LIST_MAX,
+  PROPOSAL_TEXT_CHARS,
+  PROPOSAL_THEME_CHARS,
+  type ProposalAction,
+  type ProposalFields,
+  type ProposalMeeting,
+  type ProposalProject,
+} from "../proposals.ts";
 import { removedSecrets, type DoubtDecider, type SecretGuard } from "../../guardrail/filter.ts";
 
 /** O maior trecho de texto que `notes_read` e `meetings_get` devolvem de uma vez, em caracteres. */
@@ -51,7 +62,9 @@ export const KIWI_READ_TOOL_NAMES = [
 export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write", "notes_organize_folder"] as const;
 /** O máximo de notas que um "organizar a pasta" libera de uma vez (spec #11102). */
 export const ORGANIZE_MAX = 200;
-export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES] as const;
+/** A proposta da reunião (spec #8360): não escreve nada, guarda a proposta para a pessoa aprovar. */
+export const KIWI_PROPOSE_TOOL_NAMES = ["meeting_propose"] as const;
+export const KIWI_TOOL_NAMES = [...KIWI_READ_TOOL_NAMES, ...KIWI_WRITE_TOOL_NAMES, ...KIWI_PROPOSE_TOOL_NAMES] as const;
 export type KiwiToolName = (typeof KIWI_TOOL_NAMES)[number];
 
 export interface KiwiToolDef {
@@ -63,6 +76,8 @@ export interface KiwiToolDef {
   writes?: true;
   /** Pode trocar um texto que já existia (o `notes_write`). */
   replaces?: true;
+  /** Guarda uma proposta para a pessoa aprovar (spec #8360): só aparece com quem guarda as propostas. */
+  proposes?: true;
 }
 
 const offsetProp = {
@@ -233,11 +248,59 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
     writes: true,
   },
+  {
+    name: "meeting_propose",
+    title: "Propor a nota de uma reunião",
+    description: `Prepara a proposta de uma reunião gravada para a pessoa aprovar: o Kiwi monta a nota da reunião na pasta do projeto (o resumo, as decisões, as ações e o link para a transcrição) e a mudança na nota principal do projeto (uma linha no histórico de reuniões, as decisões e as pendências novas). Nada é escrito agora: a pessoa vê a proposta e aplica ou descarta. Mande só os campos, sem Markdown pronto. Descubra o projeto pelo assunto, pelos termos e pelos nomes, comparando com o projects_list: na dúvida entre parecidos, mande os candidatos (de 2 a ${PROPOSAL_CANDIDATES_MAX}) e a pessoa escolhe; sem nenhum parecido, não mande projeto nem candidatos.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        reuniao: { type: "string", description: "O caminho da nota da reunião, como o meetings_list devolve." },
+        projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve. Só com certeza." },
+        candidatos: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 2,
+          maxItems: PROPOSAL_CANDIDATES_MAX,
+          description: "Na dúvida: as pastas (ou os nomes) dos projetos parecidos, para a pessoa escolher. Sem o projeto.",
+        },
+        tema: { type: "string", minLength: 1, maxLength: PROPOSAL_THEME_CHARS, description: "O tema da reunião, curto: vira o nome da nota." },
+        resumo: { type: "string", maxLength: PROPOSAL_TEXT_CHARS, description: "O resumo da reunião, em poucos parágrafos." },
+        decisoes: { type: "array", items: { type: "string", maxLength: PROPOSAL_ITEM_CHARS }, maxItems: PROPOSAL_LIST_MAX, description: "As decisões tomadas, uma por item." },
+        acoes: {
+          type: "array",
+          maxItems: PROPOSAL_LIST_MAX,
+          items: {
+            type: "object",
+            properties: {
+              oque: { type: "string", minLength: 1, maxLength: PROPOSAL_ITEM_CHARS },
+              quem: { type: "string", maxLength: 200 },
+              quando: { type: "string", maxLength: 200 },
+            },
+            required: ["oque"],
+            additionalProperties: false,
+          },
+          description: "As ações combinadas: o quê, quem e quando.",
+        },
+        participantes: { type: "array", items: { type: "string", maxLength: 200 }, maxItems: PROPOSAL_LIST_MAX, description: "Quem participou." },
+        proximosPassos: { type: "array", items: { type: "string", maxLength: PROPOSAL_ITEM_CHARS }, maxItems: PROPOSAL_LIST_MAX, description: "Os próximos passos." },
+        pendencias: {
+          type: "array",
+          items: { type: "string", maxLength: PROPOSAL_ITEM_CHARS },
+          maxItems: PROPOSAL_LIST_MAX,
+          description: "As pendências novas do projeto, que entram na nota principal como caixas de tarefa.",
+        },
+      },
+      required: ["reuniao", "tema"],
+      additionalProperties: false,
+    },
+    proposes: true,
+  },
 ];
 
-/** As ferramentas que o servidor oferece: as de escrita só com um `writer`. */
-export function kiwiTools(writes: boolean): readonly KiwiToolDef[] {
-  return writes ? KIWI_TOOLS : KIWI_TOOLS.filter((t) => !t.writes);
+/** As ferramentas que o servidor oferece: as de escrita só com um `writer`, e a proposta só com quem a guarda. */
+export function kiwiTools(writes: boolean, proposes = false): readonly KiwiToolDef[] {
+  return KIWI_TOOLS.filter((t) => (writes || !t.writes) && (proposes || !t.proposes));
 }
 
 /** Um erro que o agente lê: o código do Kiwi e o motivo. A ferramenta responde com `isError`. */
@@ -302,6 +365,20 @@ export interface KiwiToolContext {
    * pedaços menores, com o "há mais". As descrições das ferramentas não mudam (o começo do pedido fica igual, para o cache).
    */
   economy?: boolean;
+  /** Quem guarda a proposta da reunião (spec #8360). Sem ele, a `meeting_propose` não existe. */
+  proposals?: ProposalSink;
+}
+
+/** O que a `meeting_propose` entrega: a reunião e o projeto já conferidos, e os campos limpos. */
+export interface ProposalDraft {
+  meeting: ProposalMeeting;
+  project: ProposalProject | null;
+  candidates: ProposalProject[];
+  fields: ProposalFields;
+}
+
+export interface ProposalSink {
+  propose(d: ProposalDraft): Promise<{ id: string }>;
 }
 
 function args(raw: unknown, allowed: string[]): Record<string, unknown> {
@@ -446,6 +523,10 @@ export async function runKiwiTool(ctx: KiwiToolContext, name: string, raw: unkno
     if (name === "notes_organize_folder") {
       if (!ctx.writer) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
       return await organizeFolder(ctx.reader, raw, ctx.decider);
+    }
+    if ((KIWI_PROPOSE_TOOL_NAMES as readonly string[]).includes(name)) {
+      if (!ctx.proposals) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
+      return await propose(ctx.reader, ctx.proposals, raw, ctx.guard);
     }
     if ((KIWI_WRITE_TOOL_NAMES as readonly string[]).includes(name)) {
       if (!ctx.writer || !ctx.journal) throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
@@ -866,4 +947,79 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
     default:
       throw new ToolError("E_UNKNOWN_TOOL", `o Kiwi não tem a ferramenta ${name}`);
   }
+}
+
+/** Uma lista de textos de um campo: cada item limpo de marcadores (nenhum segredo vai para uma nota nova). */
+function texts(a: Record<string, unknown>, key: string, guard: SecretGuard | undefined, max = PROPOSAL_ITEM_CHARS): string[] {
+  const v = a[key];
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new ToolError("E_BAD_ARGS", `${key} deve ser uma lista`);
+  if (v.length > PROPOSAL_LIST_MAX) throw new ToolError("E_BAD_ARGS", `${key} passa de ${PROPOSAL_LIST_MAX} itens`);
+  return v
+    .map((x, i) => {
+      if (typeof x !== "string") throw new ToolError("E_BAD_ARGS", `${key}[${i}] deve ser texto`);
+      if (x.length > max) throw new ToolError("E_BAD_ARGS", `${key}[${i}] passa de ${max} caracteres`);
+      return restore(guard, "\u0000nova", x).trim();
+    })
+    .filter(Boolean);
+}
+
+/**
+ * A proposta da reunião (spec #8360): confere a reunião e os projetos, limpa os campos e guarda. Um marcador do filtro
+ * num campo é recusado, como numa nota nova: um segredo da transcrição não vai para a nota do projeto.
+ */
+async function propose(reader: VaultReader, sink: ProposalSink, raw: unknown, guard: SecretGuard | undefined): Promise<ToolResult> {
+  const a = args(raw, ["reuniao", "projeto", "candidatos", "tema", "resumo", "decisoes", "acoes", "participantes", "proximosPassos", "pendencias"]);
+  const meetingPath = str(a, "reuniao", true)!;
+  const meeting = (await reader.meetings()).find((m) => m.path === meetingPath);
+  if (!meeting) throw new ToolError("E_NOT_FOUND", `não há reunião gravada em ${meetingPath}; veja as reuniões com meetings_list`);
+  if (meeting.live) throw new ToolError("E_BAD_ARGS", `a reunião ${meetingPath} ainda está gravando`);
+  const projects = await reader.projects();
+  const findProject = (q: string): ProposalProject => {
+    const k = fold(q.replace(/^\/+|\/+$/g, ""));
+    const p = projects.find((x) => fold(x.folder) === k) ?? projects.find((x) => fold(x.name) === k);
+    if (!p) throw new ToolError("E_NOT_FOUND", `não há projeto "${q}"; veja os projetos com projects_list`);
+    return { folder: p.folder, name: p.name, main: p.main };
+  };
+  const projeto = str(a, "projeto", false, 500)?.trim();
+  const named = texts(a, "candidatos", undefined, 500);
+  if (projeto && named.length) throw new ToolError("E_BAD_ARGS", "mande o projeto ou os candidatos, não os dois");
+  const candidates = [...new Map(named.map(findProject).map((p) => [p.folder, p])).values()];
+  if (named.length && (candidates.length < 2 || candidates.length > PROPOSAL_CANDIDATES_MAX))
+    throw new ToolError("E_BAD_ARGS", `os candidatos são de 2 a ${PROPOSAL_CANDIDATES_MAX} projetos diferentes`);
+  const project = projeto ? findProject(projeto) : null;
+  const theme = restore(guard, "\u0000nova", str(a, "tema", true, PROPOSAL_THEME_CHARS)!).trim();
+  if (!theme) throw new ToolError("E_BAD_ARGS", "tema está vazio");
+  const summary = restore(guard, "\u0000nova", str(a, "resumo", false, PROPOSAL_TEXT_CHARS) ?? "").trim();
+  const rawActions = a.acoes ?? [];
+  if (!Array.isArray(rawActions)) throw new ToolError("E_BAD_ARGS", "acoes deve ser uma lista");
+  if (rawActions.length > PROPOSAL_LIST_MAX) throw new ToolError("E_BAD_ARGS", `acoes passa de ${PROPOSAL_LIST_MAX} itens`);
+  const actions: ProposalAction[] = rawActions.map((x, i) => {
+    const o = args(x, ["oque", "quem", "quando"]);
+    const what = restore(guard, "\u0000nova", str(o, "oque", true, PROPOSAL_ITEM_CHARS)!).trim();
+    if (!what) throw new ToolError("E_BAD_ARGS", `acoes[${i}].oque está vazio`);
+    const who = restore(guard, "\u0000nova", str(o, "quem", false, 200) ?? "").trim();
+    const when = restore(guard, "\u0000nova", str(o, "quando", false, 200) ?? "").trim();
+    return { what, ...(who ? { who } : {}), ...(when ? { when } : {}) };
+  });
+  const fields: ProposalFields = {
+    theme,
+    ...(summary ? { summary } : {}),
+    decisions: texts(a, "decisoes", guard),
+    actions,
+    participants: texts(a, "participantes", guard, 200),
+    nextSteps: texts(a, "proximosPassos", guard),
+    pending: texts(a, "pendencias", guard),
+  };
+  const { id } = await sink.propose({ meeting: { path: meeting.path, title: meeting.title, date: meeting.date }, project, candidates, fields });
+  return {
+    value: {
+      proposta: id,
+      reuniao: meeting.path,
+      projeto: project?.folder ?? null,
+      ...(candidates.length ? { candidatos: candidates.map((c) => c.folder) } : {}),
+      aviso: "Nada foi escrito. A proposta aparece para a pessoa, que aplica ou descarta. Não escreva estas notas com outras ferramentas.",
+    },
+    target: meeting.path,
+  };
 }

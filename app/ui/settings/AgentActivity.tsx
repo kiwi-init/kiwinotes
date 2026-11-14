@@ -30,6 +30,8 @@ import {
   viewNotice,
   whenOf,
 } from "./activityText.ts";
+import { ProposalList, useProposals } from "./Proposals.tsx";
+import { openProposals, PROPOSALS_HINT, PROPOSALS_TITLE } from "./proposalText.ts";
 
 /** O [Ver] aberto de uma mudança: carregando, os dois textos, ou o erro. */
 type View = { phase: "loading" } | { phase: "ready"; view: AgentChangeView } | { phase: "error"; message: string };
@@ -40,6 +42,7 @@ type Outcome = { lines: { text: string; ok: boolean }[] };
 const keyOf = (request: string, change?: number) => (change ? `${request}:${change}` : request);
 
 export function AgentActivitySection() {
+  const proposals = useProposals();
   const [requests, setRequests] = useState<AgentActivityRequest[] | null>(null);
   const [limit, setLimit] = useState(ACTIVITY_FIRST);
   const [failure, setFailure] = useState<string | null>(null);
@@ -155,6 +158,14 @@ export function AgentActivitySection() {
     <Section title="Atividade do agente">
       <div className="kn-activity">
         <p className="kn-row-hint kn-activity-hint">{ACTIVITY_HINT}</p>
+        {/* As propostas das reuniões (spec #8360): ficam aqui até a pessoa aplicar ou descartar, por 30 dias. */}
+        {openProposals(proposals ?? []).length ? (
+          <div className="kn-activity-proposals">
+            <h3 className="kn-proposal-h">{PROPOSALS_TITLE}</h3>
+            <p className="kn-row-hint">{PROPOSALS_HINT}</p>
+            <ProposalList list={proposals!} />
+          </div>
+        ) : null}
         {failure ? (
           <p className="kn-activity-failure" role="alert">
             {failure}
