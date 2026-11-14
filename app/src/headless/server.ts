@@ -295,8 +295,10 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     settings: stores.settings,
     // Sem o helper (`--no-helper`), um helper falso: os comandos saem como o evento `catOverlay.command`, para a prova
     // no WebKit headless aplicar à página do overlay.
+    // Com o helper headless (que não mostra nada), os comandos também saem como evento: a prova da fala pelo Control
+    // (spec #12938) aplica à página o que o helper de verdade recebeu.
     helper: session
-      ? { send: (c) => session.sidecar.send(c), onReady: (fn) => session.sidecar.on("ready", fn) }
+      ? { send: (c) => (event("catOverlay.command", c), session.sidecar.send(c)), onReady: (fn) => session.sidecar.on("ready", fn) }
       : { send: async (c) => (event("catOverlay.command", c), { ok: true }), onReady: () => () => {} },
     pageDir: path.resolve(import.meta.dirname, "..", "..", "dist", "catoverlay"),
     where: (overlay) => event("kiwicat.where", { overlay }),

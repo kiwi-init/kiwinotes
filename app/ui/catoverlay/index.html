@@ -3,10 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kiwi-cat</title>
+    <title>Kiwi Cat</title>
     <style>
       html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+      /* A janela (CatOverlayLayout): 300 × 352, o gato embaixo e o balão da resposta em cima (spec #12938). */
+      body { width: 300px; height: 352px; position: relative; }
+      /* O módulo do gato põe o #root em position: relative: quem o leva para baixo é o #cat. */
+      #cat { position: absolute; left: 54px; bottom: 0; width: 192px; height: 240px; }
       #root { width: 192px; height: 240px; }
+      /* O balão: o mesmo desenho do balão do gato no app (.kn-bubble-shell do hub.css, #12646), com os tokens do app no
+         claro e no escuro (o tema do Mac): o contorno grosso na cor do texto, o fundo da superfície, a sombra dura e a
+         ponta virada para o gato, que aqui está embaixo. Três linhas no máximo; o app manda um trecho por vez. */
+      #bubble {
+        position: absolute; left: 50%; bottom: 230px; transform: translate(-50%, 4px); box-sizing: border-box;
+        min-width: 48px; width: max-content; max-width: 280px; padding: 8px 12px;
+        border: 2px solid var(--text); border-radius: 18px; background: var(--surface); color: var(--text);
+        box-shadow: 3px 3px 0 var(--text);
+        font: var(--text-sm) / 1.35 var(--ui); text-align: left;
+        opacity: 0; transition: opacity var(--fast, 140ms) var(--ease, ease), transform var(--fast, 140ms) var(--ease, ease);
+      }
+      #bubble[data-on="true"] { opacity: 1; transform: translate(-50%, 0); }
+      #bubble::before, #bubble::after { content: ""; position: absolute; width: 0; height: 0; border-style: solid; left: 50%; }
+      #bubble::before { bottom: -14px; margin-left: -8px; border-width: 14px 8px 0 8px; border-color: var(--text) transparent transparent transparent; }
+      #bubble::after { bottom: -10px; margin-left: -6px; border-width: 10px 6px 0 6px; border-color: var(--surface) transparent transparent transparent; }
+      #bubble[data-error="true"] { border-color: var(--danger); box-shadow: 3px 3px 0 var(--danger); }
+      #bubble[data-error="true"]::before { border-top-color: var(--danger); }
+      #bubble-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+      @media (prefers-reduced-motion: reduce) { #bubble { transition: none; transform: translate(-50%, 0); } }
+      html, body { background: transparent; }
       /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
          da cor oposta à tinta, para ler sobre fundo claro e escuro (revisão do T10830). O desenho é o mesmo. */
       .kn-cat-symbols[data-ink="dark"] svg { filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.85)); }
@@ -14,7 +38,8 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="bubble" role="status" aria-live="polite" data-on="false"><div id="bubble-text"></div></div>
+    <div id="cat"><div id="root"></div></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

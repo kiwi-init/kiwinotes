@@ -1131,7 +1131,8 @@ export type AgentVoiceUi =
   | { phase: "listening"; voz: number }
   | { phase: "processing" }
   | { phase: "asked"; text: string; id: string }
-  | { phase: "idle"; cancelled: boolean };
+  /** `error`: o pedido não saiu (spec #12938); o gato do overlay diz o motivo no balão. */
+  | { phase: "idle"; cancelled: boolean; error?: string };
 
 /** As seções do hub (#2100), na ordem da barra lateral. */
 export const HUB_SECTIONS = ["notes", "meetings", "dictation", "settings", "about",

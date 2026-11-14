@@ -6,7 +6,8 @@ import type { AgentTurnEvent } from "../shared/ui-contract.ts";
 import type { Command } from "../shared/ipc.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
-import { attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES } from "./cat-overlay.ts";
+import { readingMs } from "../../ui/hub/bubble-state.ts";
+import { attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_BUBBLE_CHARS, OVERLAY_TIMES, plainBubbleText, voiceErrorLine } from "./cat-overlay.ts";
 
 function rig() {
   const sent: CatOverlayCommand[] = [];
@@ -316,5 +317,167 @@ describe("o gato no overlay e a fala pelo Control (spec #9876)", () => {
     cat.voice({ phase: "listening", voz: 0 });
     cat.voice({ phase: "idle", cancelled: true });
     expect(take()).toEqual([]);
+  });
+});
+
+// Spec #12938: na rc18, a fala pelo Control fazia o gato ouvir e pensar, e o overlay sumia sem resposta nenhuma. A
+// resposta ia só para o balão do hub, que não estava à vista. Agora toda fala termina com um balão no overlay.
+describe("a fala pelo Control termina com um balão no overlay (spec #12938)", () => {
+  const text = (t: string, id = "r1"): AgentTurnEvent => ({ type: "text", id, text: t }) as AgentTurnEvent;
+  const doneWith = (t: string, id = "r1"): AgentTurnEvent => ({ type: "done", id, stopReason: "end_turn", text: t }) as AgentTurnEvent;
+  /** A fala até o pedido começar, com o `started` antes do `asked` (o `ask` devolve depois de o pedido começar). */
+  function talk(r: ReturnType<typeof rig>, id = "r1") {
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "processing" });
+    r.cat.turn(started(id));
+    r.cat.voice({ phase: "asked", text: "como você está, tudo bem?", id });
+    r.take();
+  }
+  const bubbles = (sent: CatOverlayCommand[]) => sent.filter((c) => c.type === "catOverlay.bubble");
+
+  test("uma pergunta de conversa: a resposta vai ao balão, e o overlay só sai depois do tempo de leitura", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(status("thinking"));
+    r.cat.turn(text("Tudo ótimo por aqui! "));
+    r.cat.turn(text("E você?"));
+    r.cat.turn(doneWith("Tudo ótimo por aqui! E você?"));
+    const answer = "Tudo ótimo por aqui! E você?";
+    expect(r.take()).toEqual([
+      { type: "catOverlay.state", estado: "pronto" },
+      { type: "catOverlay.bubble", text: answer, error: false },
+    ]);
+    // O `pronto` sozinho sairia em 1100 ms; com o balão, o gato fica o tempo de ler.
+    r.advance(readingMs(answer) - 1);
+    expect(r.take()).toEqual([]);
+    expect(r.cat.visible).toBe(true);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.prontoExit }]);
+    expect(r.cat.visible).toBe(false);
+  });
+
+  test("um pedido com ação: o balão diz o que ele fez, o texto depois da última ferramenta", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(text("Vou ler a nota."));
+    r.cat.turn(status("running"));
+    r.cat.turn(text("Mudei o prazo para abril."));
+    r.cat.turn(doneWith("Vou ler a nota.Mudei o prazo para abril."));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Mudei o prazo para abril.", error: false }]);
+    expect(r.cat.visible).toBe(true);
+  });
+
+  test("um pedido com ação e sem texto no fim: o balão diz que fez", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(status("running"));
+    r.cat.turn(doneWith(""));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false }]);
+  });
+
+  test("uma resposta longa vai em trechos, cada um pelo tempo de leitura, e o gato sai depois do último", () => {
+    const r = rig();
+    talk(r);
+    const long = Array.from({ length: 40 }, (_, i) => `palavra${i}`).join(" ");
+    r.cat.turn(doneWith(long));
+    const first = bubbles(r.take());
+    expect(first).toHaveLength(1);
+    const chunks: string[] = [(first[0] as { text: string }).text];
+    for (let i = 0; i < 20 && r.cat.visible; i++) {
+      r.advance(readingMs(chunks.at(-1)!));
+      for (const c of r.take()) if (c.type === "catOverlay.bubble") chunks.push(c.text!);
+    }
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((c) => [...c].length <= OVERLAY_BUBBLE_CHARS)).toBe(true);
+    expect(chunks.join(" ")).toBe(long);
+    expect(r.cat.visible).toBe(false);
+  });
+
+  test("um erro do agente: o balão diz o erro em palavras, e o gato fica o tempo de ler", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn({ type: "error", id: "r1", code: "E_NETWORK", message: "sem internet." } as AgentTurnEvent);
+    const line = voiceErrorLine("sem internet.");
+    expect(line).toBe("Não consegui falar com o agente: sem internet.");
+    expect(r.take()).toEqual([
+      { type: "catOverlay.state", estado: "erro" },
+      { type: "catOverlay.bubble", text: line, error: true },
+    ]);
+    r.advance(readingMs(line) - 1);
+    expect(r.cat.visible).toBe(true);
+    r.advance(1);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: OVERLAY_TIMES.erroExit }]);
+  });
+
+  test("o pedido que nem saiu: o balão diz por quê, em vez de sumir calado", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.voice({ phase: "processing" });
+    r.take();
+    r.cat.voice({ phase: "idle", cancelled: true, error: "o agente está desligado." });
+    expect(r.take()).toEqual([
+      { type: "catOverlay.state", estado: "erro" },
+      { type: "catOverlay.bubble", text: "Não consegui falar com o agente: o agente está desligado.", error: true },
+    ]);
+    expect(r.cat.visible).toBe(true);
+  });
+
+  test("o balão mostra o texto sem a marcação: títulos, negrito, código, links e citações", () => {
+    expect(plainBubbleText("# Prazo\n\nO prazo do Kiwi é **abril**.")).toBe("Prazo. O prazo do Kiwi é abril.");
+    expect(plainBubbleText("Veja [a nota](Kiwi/Prazo.md) e `kiwi status`.\n> citado\n- um\n- dois")).toBe("Veja a nota e kiwi status. citado • um • dois");
+    expect(plainBubbleText("Veja a issue #12, ok.")).toBe("Veja a issue #12, ok.");
+    expect(plainBubbleText("```ts\nconst x = 1;\n```")).toBe("const x = 1;");
+    expect(plainBubbleText("## Feito:\n~~velho~~ novo ![img](a.png) <https://kiwi.app>")).toBe("Feito: velho novo img https://kiwi.app");
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Pela nota Kiwi/Prazo.md: # Prazo\n\nO prazo do Kiwi é **abril**."));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Pela nota Kiwi/Prazo.md: Prazo O prazo do Kiwi é abril.", error: false }]);
+  });
+
+  test("uma rotina que começa enquanto a pessoa segura o Control não vira a fala", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.voice({ phase: "listening", voz: 0 });
+    r.cat.turn(started("rotina"));
+    r.cat.voice({ phase: "idle", cancelled: true });
+    r.cat.turn(text("Resumo do dia pronto.", "rotina"));
+    r.cat.turn(doneWith("Resumo do dia pronto.", "rotina"));
+    expect(bubbles(r.take())).toEqual([]);
+  });
+
+  test("um pedido que não veio da fala (uma rotina) não mostra texto por cima dos apps", () => {
+    const r = rig();
+    r.cat.configure(true);
+    r.cat.turn(started("rotina"));
+    r.cat.turn(text("Resumo do dia pronto.", "rotina"));
+    r.cat.turn(doneWith("Resumo do dia pronto.", "rotina"));
+    expect(bubbles(r.take())).toEqual([]);
+    r.advance(OVERLAY_TIMES.pronto);
+    expect(r.cat.visible).toBe(false);
+  });
+
+  test("um pedido novo durante o balão tira o balão antes de o gato voltar", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Tudo bem."));
+    r.take();
+    r.cat.turn(started("r2"));
+    expect(r.take()).toEqual([
+      { type: "catOverlay.bubble", text: null },
+      { type: "catOverlay.show", estado: "acordou", fadeMs: OVERLAY_TIMES.enter },
+    ]);
+  });
+
+  test("a pessoa volta ao Kiwi durante o balão: o overlay sai, e a resposta fica com o balão do canto", () => {
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith("Tudo bem."));
+    r.take();
+    r.cat.setHubInView(true);
+    expect(r.take()).toEqual([{ type: "catOverlay.hide", fadeMs: 0 }]);
+    r.advance(10_000);
+    expect(r.take()).toEqual([]);
   });
 });

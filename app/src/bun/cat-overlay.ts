@@ -11,7 +11,11 @@
 //   estado em que está, sem fade.
 // - **Sem pedido, nada na tela:** o `repouso` e o `dormindo` não aparecem no overlay.
 // - **A pílula do ditado tem a vez:** quem sabe se ela está na tela é o helper, que segura o gato até ela sair.
+// - **A fala pelo Control termina com um balão** (spec #12938): a resposta do agente (o que ele disse depois da última
+//   ferramenta), em trechos que cabem no balão, cada um pelo tempo de leitura; ou o erro em palavras. O gato só sai
+//   depois do último trecho. Os outros pedidos (uma rotina, por exemplo) não mostram texto por cima dos apps.
 
+import { readingMs, splitChunks } from "../../ui/hub/bubble-state.ts";
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import type { Command } from "../shared/ipc.ts";
 import { catColorHex } from "../shared/kiwicat-colors.ts";
@@ -27,6 +31,39 @@ export const OVERLAY_TIMES = {
   cancelExit: 120,
 } as const;
 
+/** Quanto cabe num trecho do balão do overlay: três linhas de uns 36 caracteres (spec #12938). */
+export const OVERLAY_BUBBLE_CHARS = 108;
+
+/**
+ * O texto do agente sem a marcação (spec #12938): o balão do overlay mostra texto corrido, sem `#` de título, `**`,
+ * crases, `[texto](link)` nem `>` de citação. Um título vira uma frase; os itens de lista ficam com "•".
+ */
+export function plainBubbleText(markdown: string): string {
+  const parts: string[] = [];
+  for (const raw of markdown.split("\n")) {
+    if (/^\s*(```|~~~)/.test(raw)) continue;
+    let line = raw.trim().replace(/^>\s?/, "");
+    const heading = /^#{1,6}\s+/.test(line);
+    line = line
+      .replace(/^#{1,6}\s+/, "")
+      // Um título colado no meio da linha ("…: # Prazo"); um "#12" (sem espaço) fica.
+      .replace(/(^|\s)#{1,6}\s+(?=\S)/g, "$1")
+      .replace(/^[-*+]\s+/, "• ")
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/<(https?:\/\/[^>\s]+)>/g, "$1")
+      .replace(/(\*\*|__|~~)(.+?)\1/g, "$2")
+      .replace(/`([^`]+)`/g, "$1")
+      .trim();
+    if (!line) continue;
+    parts.push(heading && !/[.!?:;…]$/.test(line) ? `${line}.` : line);
+  }
+  return parts.join(" ");
+}
+
+/** O balão do erro: o que a pessoa lê quando a fala não virou resposta. */
+export const voiceErrorLine = (message: string) => `Não consegui falar com o agente: ${message.trim() || "erro desconhecido"}`;
+
 /** O que o app manda ao helper (os comandos `catOverlay.*` do IPC). */
 export type CatOverlayCommand =
   | { type: "catOverlay.load" }
@@ -34,7 +71,8 @@ export type CatOverlayCommand =
   | { type: "catOverlay.state"; estado: CatState }
   | { type: "catOverlay.hide"; fadeMs: number }
   | { type: "catOverlay.unload" }
-  | { type: "catOverlay.color"; cor: string };
+  | { type: "catOverlay.color"; cor: string }
+  | { type: "catOverlay.bubble"; text: string | null; error?: boolean };
 
 export interface CatOverlayHost {
   /** Manda um comando ao helper. */
@@ -74,6 +112,18 @@ export class CatOverlay {
   /** A cor da névoa (`#rrggbb`), da escolha em Ajustes › Agente. */
   private cor: string | null = null;
   private overlayShown = false;
+  /** O balão está no overlay (spec #12938). */
+  private bubbleShown = false;
+  /**
+   * Os pedidos que vieram da fala pelo Control, pelo id do `asked` (um pedido que começou enquanto a pessoa segurava o
+   * Control, como uma rotina, não entra). Cada um sai no `done` ou no `error` dele.
+   */
+  private readonly voiceRequests = new Set<string>();
+  /** O pedido em andamento: tudo o que o agente disse, e até onde antes da última ferramenta. */
+  private turnId: string | null = null;
+  private said = "";
+  private closedLen = 0;
+  private usedTool = false;
 
   constructor(
     private readonly host: CatOverlayHost,
@@ -130,6 +180,9 @@ export class CatOverlay {
 
   /** Um evento do agente (`agent.turn`). */
   turn(e: AgentTurnEvent): void {
+    this.track(e);
+    const voice = this.voiceRequests.has(e.id);
+    if (e.type === "done" || e.type === "error") this.voiceRequests.delete(e.id);
     const before = this.activity.state;
     const state = this.activity.event(e);
     if (!this.enabled) {
@@ -160,8 +213,57 @@ export class CatOverlay {
       return;
     }
     this.host.send({ type: "catOverlay.state", estado: state });
-    if (state === "pronto") this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
+    if (voice && e.type === "done" && state === "pronto") this.speak([this.answerOf(e.text)], false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
+    else if (voice && e.type === "error") this.speak([voiceErrorLine(e.message)], true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+    else if (state === "pronto") this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
     else if (state === "erro") this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+  }
+
+  /** O que o agente disse no pedido, para o balão da resposta (o `done` traz o texto inteiro). */
+  private track(e: AgentTurnEvent): void {
+    if (e.type === "started") {
+      this.turnId = e.id;
+      this.said = "";
+      this.closedLen = 0;
+      this.usedTool = false;
+      return;
+    }
+    if (e.id !== this.turnId) return;
+    if (e.type === "text") this.said += e.text;
+    else if (e.type === "status" && e.status === "running") {
+      this.closedLen = this.said.length;
+      this.usedTool = true;
+    }
+  }
+
+  /** A resposta final: o que veio depois da última ferramenta; sem texto, o que ele fez. */
+  private answerOf(full: string): string {
+    const said = full && full.startsWith(this.said.slice(0, this.closedLen)) ? full : this.said;
+    const answer = plainBubbleText(said.slice(this.closedLen)) || plainBubbleText(said);
+    return answer || (this.usedTool ? "Feito." : "Pronto.");
+  }
+
+  /**
+   * O balão (spec #12938): os trechos, um por vez, cada um pelo tempo de leitura (o primeiro, ao menos `stay`); depois
+   * do último, o gato sai em `exit`. Um pedido novo, o hub à vista ou o overlay desligado cortam a fila.
+   */
+  private speak(texts: string[], error: boolean, stay: number, exit: number): void {
+    const chunks = texts.flatMap((t) => splitChunks(t, (s) => [...s].length <= OVERLAY_BUBBLE_CHARS).map((c) => c.text));
+    this.phase = "lingering";
+    this.cancelTimer();
+    const step = (i: number) => {
+      this.bubbleShown = true;
+      this.host.send({ type: "catOverlay.bubble", text: chunks[i]!, error });
+      this.timer = this.clock.setTimeout(() => {
+        this.timer = null;
+        if (this.phase !== "lingering") return;
+        if (i + 1 < chunks.length) return step(i + 1);
+        this.phase = "idle";
+        this.hideNow(exit);
+      }, Math.max(i === 0 ? stay : 0, readingMs(chunks[i]!)));
+    };
+    if (chunks.length) step(0);
+    else this.linger(stay, exit);
   }
 
   /**
@@ -182,11 +284,22 @@ export class CatOverlay {
       this.show("acordou", OVERLAY_TIMES.enter);
       this.host.send({ type: "catOverlay.state", estado: "ouvindo" });
     } else if (v.phase === "asked") {
-      this.activity.sent();
+      // O id do pedido marca a fala: só ele termina com o balão.
+      this.voiceRequests.add(v.id);
+      // Se o pedido já começou, só sai da atenção: o `sent()` ficaria marcado, e o próximo pedido pularia o `acordou`
+      // (e nem apareceria no overlay).
+      if (this.turnId === v.id) this.activity.attend(false);
+      else this.activity.sent();
     } else if (v.phase === "idle") {
       if (this.activity.attend(false) === before) return;
       if (this.phase === "corner") this.phase = "idle";
       if (this.phase !== "shown") return;
+      if (v.error) {
+        // O pedido não saiu: o gato diz por quê antes de sair (spec #12938).
+        this.host.send({ type: "catOverlay.state", estado: "erro" });
+        this.speak([voiceErrorLine(v.error)], true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
+        return;
+      }
       this.phase = "idle";
       this.hideNow(OVERLAY_TIMES.cancelExit);
     }
@@ -226,6 +339,10 @@ export class CatOverlay {
   }
 
   private show(estado: CatState, fadeMs: number): void {
+    if (this.bubbleShown) {
+      this.bubbleShown = false;
+      this.host.send({ type: "catOverlay.bubble", text: null });
+    }
     this.phase = "shown";
     this.overlayShown = true;
     this.host.where(true);
@@ -247,6 +364,8 @@ export class CatOverlay {
     this.cancelTimer();
     if (!this.overlayShown) return;
     this.overlayShown = false;
+    // O helper tira o balão junto com o gato.
+    this.bubbleShown = false;
     this.host.send({ type: "catOverlay.hide", fadeMs });
     this.host.where(false);
   }

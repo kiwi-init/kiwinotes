@@ -7,6 +7,7 @@
 // - `window.kiwiOverlayStats` diz quanto levou do último `show` ao primeiro quadro apresentado (o `requestAnimationFrame`
 //   depois do desenho), e qual caminho o gato usou (WebGPU, WebGL2 ou a imagem parada).
 
+import "../src/styles/tokens.css";
 import { createKiwiCat } from "../kiwicat/cat";
 import type { FogState } from "../kiwicat/state";
 
@@ -21,9 +22,27 @@ interface OverlayStats {
   visible: boolean;
   estado: string;
   cor: string;
+  /** O balão na tela agora (spec #12938), ou null. */
+  bubble: { text: string; error: boolean } | null;
 }
 
-const stats: OverlayStats = { ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "" };
+const stats: OverlayStats = { ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null };
+const bubbleEl = document.getElementById("bubble")!;
+const bubbleText = document.getElementById("bubble-text")!;
+
+/** O balão (spec #12938): só texto (`textContent`), nunca HTML. */
+function setBubble(b: { text?: unknown; error?: unknown } | null) {
+  const text = b && typeof b.text === "string" ? b.text : "";
+  if (!text) {
+    stats.bubble = null;
+    bubbleEl.dataset.on = "false";
+    return;
+  }
+  stats.bubble = { text, error: b?.error === true };
+  bubbleText.textContent = text;
+  bubbleEl.dataset.error = String(stats.bubble.error);
+  bubbleEl.dataset.on = "true";
+}
 const dark = matchMedia("(prefers-color-scheme: dark)");
 const root = document.getElementById("root")!;
 // Só a prova do helper (`kiwi-helper --cat-probe --backend …`) pede um caminho: o app usa o automático.
@@ -60,7 +79,9 @@ function measureFirstFrame(start: number) {
 }
 
 const api = {
-  set(input: { estado?: string; visible?: boolean; voz?: number | null; cor?: string }) {
+  set(input: { estado?: string; visible?: boolean; voz?: number | null; cor?: string; bubble?: { text?: unknown; error?: unknown } | null }) {
+    // O balão da resposta (spec #12938): `null` tira.
+    if (input.bubble !== undefined) setBubble(input.bubble);
     // A cor da névoa (spec #9349): troca com a passagem de 400 ms do módulo, sem reiniciar o gato.
     if (typeof input.cor === "string" && HEX.test(input.cor) && input.cor.toLowerCase() !== colour) {
       colour = stats.cor = input.cor.toLowerCase();
