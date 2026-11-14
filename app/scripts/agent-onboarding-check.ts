@@ -199,6 +199,8 @@ try {
       await invoke("agent.configure", { onboarding: { step: 7 } });
       await stepIs(p, 7);
       await p.waitForSelector("#kn-onb-title:text-is('Escolha a cor do Kiwi Cat!')", { timeout: 15000 });
+      // O foco que o passo põe no título (para o leitor de tela) não desenha o anel, nem depois de uma tecla.
+      assert.equal(await p.evaluate(() => getComputedStyle(document.activeElement!).boxShadow), "none");
       await shot(p, "7-cor-dark.png");
       await invoke("agent.configure", { onboarding: { step: 9 } });
       await stepIs(p, 9);

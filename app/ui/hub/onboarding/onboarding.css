@@ -37,7 +37,7 @@
 .kn-onb-cat { width: 160px; height: 200px; }
 .kn-onb-step { width: min(560px, 100%); display: grid; align-content: start; gap: var(--space-3); animation: kn-onb-in var(--slow, 240ms) var(--ease); }
 .kn-onb-title { margin: 0; font: 600 var(--text-xl) / 1.2 var(--font-display, var(--ui)); letter-spacing: var(--tracking-tight, 0); text-align: center; }
-.kn-onb-title:focus { outline: none; }
+.kn-onb-title:focus { outline: none; box-shadow: none; } /* o foco que o passo põe no título é para o leitor de tela; o título não está no Tab */
 .kn-onb-hint { margin: 0; color: var(--text-2); text-align: center; }
 .kn-onb-soon { margin: var(--space-4) 0 0; color: var(--text-3); text-align: center; font-size: var(--text-sm); }
 .kn-onb-checks { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
