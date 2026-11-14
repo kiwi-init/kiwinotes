@@ -1074,6 +1074,12 @@ final class Helper {
             let cat = catOverlay
             let ok = MainActor.assumeIsolated { cat.color(cor) }
             reply(id, ok: ok, error: ok ? nil : "invalid_value")
+        case "catOverlay.bubble":
+            let text = message.string("text")
+            let error = message.fields["error"] as? Bool ?? false
+            let cat = catOverlay
+            MainActor.assumeIsolated { cat.bubble(text: text, error: error) }
+            reply(id, ok: true)
         case "catOverlay.unload":
             catOverlayLoaded = false
             let cat = catOverlay

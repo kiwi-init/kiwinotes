@@ -3,10 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kiwi-cat</title>
+    <title>Kiwi Cat</title>
     <style>
       html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+      /* A janela (CatOverlayLayout): 300 × 352, o gato embaixo e o balão da resposta em cima (spec #12938). */
+      body { width: 300px; height: 352px; position: relative; }
+      /* O módulo do gato põe o #root em position: relative: quem o leva para baixo é o #cat. */
+      #cat { position: absolute; left: 54px; bottom: 0; width: 192px; height: 240px; }
       #root { width: 192px; height: 240px; }
+      /* O balão: um cartão sólido, porque o tema do Mac não diz o que está atrás. Três linhas no máximo; o app manda
+         um trecho por vez. */
+      #bubble {
+        --ink: #17171c; --card: #ffffff; --line: rgba(23, 23, 28, 0.12); --err: #c4352b;
+        position: absolute; left: 50%; bottom: 236px; transform: translate(-50%, 4px); box-sizing: border-box;
+        width: max-content; max-width: 284px; padding: 9px 13px; border-radius: 14px;
+        background: var(--card); color: var(--ink); border: 1px solid var(--line);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+        font: 400 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; text-align: center;
+        overflow-wrap: anywhere;
+        display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+        opacity: 0; transition: opacity 160ms ease, transform 160ms ease;
+      }
+      #bubble[data-on="true"] { opacity: 1; transform: translate(-50%, 0); }
+      #bubble[data-error="true"] { border-color: var(--err); }
+      @media (prefers-color-scheme: dark) {
+        #bubble { --ink: #f2f2f5; --card: #1f1f25; --line: rgba(255, 255, 255, 0.14); --err: #ff6b5e; }
+      }
+      @media (prefers-reduced-motion: reduce) { #bubble { transition: none; transform: translate(-50%, 0); } }
       /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
          da cor oposta à tinta, para ler sobre fundo claro e escuro (revisão do T10830). O desenho é o mesmo. */
       .kn-cat-symbols[data-ink="dark"] svg { filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.85)); }
@@ -14,7 +37,8 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="bubble" role="status" aria-live="polite" data-on="false"></div>
+    <div id="cat"><div id="root"></div></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

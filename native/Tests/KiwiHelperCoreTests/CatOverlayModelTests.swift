@@ -7,9 +7,22 @@ final class CatOverlayModelTests: XCTestCase {
     func testCenteredOnTheVisibleArea() {
         let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
         let f = CatOverlayLayout.frame(visible: visible)
-        XCTAssertEqual(f.size, CGSize(width: 192, height: 240))
+        // O gato (192 × 240) embaixo e o balão (spec #12938) em cima: o gato continua no centro.
+        XCTAssertEqual(CatOverlayLayout.catSize, CGSize(width: 192, height: 240))
+        XCTAssertEqual(f.size, CGSize(width: 300, height: 352))
         XCTAssertEqual(f.midX, visible.midX, accuracy: 1)
-        XCTAssertEqual(f.midY, visible.midY, accuracy: 1)
+        XCTAssertEqual(f.minY + 120, visible.midY, accuracy: 1)
+    }
+
+    func testBubbleIsAJSONLiteralNeverScript() throws {
+        XCTAssertEqual(CatOverlayBubble.script(text: nil, error: false), "null")
+        XCTAssertEqual(CatOverlayBubble.script(text: "", error: false), "null")
+        let hostile = "Tudo \"bem\"? '); alert(1); //\n</script>\u{2028}fim"
+        let js = CatOverlayBubble.script(text: hostile, error: true)
+        XCTAssertFalse(js.contains("\u{2028}"))
+        let back = try JSONSerialization.jsonObject(with: Data(js.utf8)) as? [String: Any]
+        XCTAssertEqual(back?["text"] as? String, hostile)
+        XCTAssertEqual(back?["error"] as? Bool, true)
     }
 
     func testScreenOfTheFrontWindowThenMouseThenFirst() {

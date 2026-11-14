@@ -111,8 +111,10 @@ export function attachAgentVoice(w: AgentVoiceWiring): AttachedAgentVoice {
       const { id } = await w.agent.ask(cleaned);
       w.ui({ phase: "asked", text: cleaned, id });
     } catch (err) {
-      log(`agent.ask: ${String((err as Error)?.message ?? err)}`);
-      w.ui({ phase: "idle", cancelled: true });
+      const message = String((err as Error)?.message ?? err);
+      log(`agent.ask: ${message}`);
+      // O motivo vai junto (spec #12938): o gato do overlay o diz no balão, em vez de sumir calado.
+      w.ui({ phase: "idle", cancelled: true, error: message });
     }
   }
 

@@ -9,13 +9,21 @@ public enum CatOverlayLayout {
     /// A proporção da página do gato (a mesma do gato do hub, 96 × 120).
     public static let aspect: CGFloat = 96.0 / 120.0
 
-    public static var size: CGSize { CGSize(width: (height * aspect).rounded(), height: height) }
+    /// O balão da resposta (spec #12938), em cima do gato: o espaço que a página reserva para ele.
+    public static let bubbleWidth: CGFloat = 300
+    public static let bubbleHeight: CGFloat = 112
 
-    /// No centro da área útil da tela (sem a barra de menus e o Dock).
+    /// O gato, na parte de baixo da janela.
+    public static var catSize: CGSize { CGSize(width: (height * aspect).rounded(), height: height) }
+
+    /// A janela: o gato embaixo e o balão em cima.
+    public static var size: CGSize { CGSize(width: max(catSize.width, bubbleWidth), height: height + bubbleHeight) }
+
+    /// O gato no centro da área útil da tela (sem a barra de menus e o Dock), como antes do balão; o balão fica acima.
     public static func frame(visible: CGRect, size: CGSize = CatOverlayLayout.size) -> CGRect {
         CGRect(
             x: (visible.midX - size.width / 2).rounded(),
-            y: (visible.midY - size.height / 2).rounded(),
+            y: (visible.midY - height / 2).rounded(),
             width: size.width,
             height: size.height
         )
@@ -33,6 +41,19 @@ public enum CatOverlayLayout {
         }
         if let m = mouse, let i = screens.firstIndex(where: { $0.contains(m) }) { return i }
         return 0
+    }
+}
+
+/// O balão do gato no overlay (spec #12938): o argumento do `kiwiOverlay.set({bubble: …})`, em JSON. O texto vem do
+/// agente: só como dado de um literal JSON, nunca colado no script.
+public enum CatOverlayBubble {
+    public static func script(text: String?, error: Bool) -> String {
+        guard let text, !text.isEmpty else { return "null" }
+        let object: [String: Any] = ["text": text, "error": error]
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else { return "null" }
+        // U+2028 e U+2029 são fim de linha em JavaScript antigo: escapados, o literal vale em qualquer WebKit.
+        return json.replacingOccurrences(of: "\u{2028}", with: "\\u2028").replacingOccurrences(of: "\u{2029}", with: "\\u2029")
     }
 }
 

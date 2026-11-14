@@ -75,20 +75,21 @@ const at = (pred: (c: Cmd) => boolean, from = 0) => log.findIndex((l, i) => i >=
 try {
   await cli(["start", "--no-helper"]);
   const videos = join(out, "video-tmp");
-  const ctx = await browser.newContext({ viewport: { width: 420, height: 320 }, deviceScaleFactor: 2, recordVideo: { dir: videos, size: { width: 420, height: 320 } } });
+  const ctx = await browser.newContext({ viewport: { width: 420, height: 400 }, deviceScaleFactor: 2, recordVideo: { dir: videos, size: { width: 420, height: 400 } } });
   const p = await ctx.newPage();
   const problems: string[] = [];
   p.on("pageerror", (e) => problems.push(String(e)));
   await p.goto(`http://127.0.0.1:${server.port}/index.html`);
   // Atrás do gato, um "outro app" (só no vídeo): a página do overlay em si é transparente.
-  await p.addStyleTag({ content: "html{background:linear-gradient(135deg,#25324a,#3d2d4f)} #root{margin:40px auto 0}" });
+  await p.addStyleTag({ content: "html{background:linear-gradient(135deg,#25324a,#3d2d4f)} body{margin:24px auto 0}" });
   await p.waitForFunction(() => (window as any).kiwiOverlayStats?.ready === true);
 
   // O helper falso: aplica os comandos do app à página, como o CatOverlay.swift faz.
   const apply = async (c: Cmd) => {
     if (c.type === "catOverlay.show") await p.evaluate((e) => (window as any).kiwiOverlay.set({ estado: e, visible: true }), c.estado);
     else if (c.type === "catOverlay.state") await p.evaluate((e) => (window as any).kiwiOverlay.set({ estado: e, visible: true }), c.estado);
-    else if (c.type === "catOverlay.hide") await p.evaluate(() => (window as any).kiwiOverlay.set({ visible: false }));
+    else if (c.type === "catOverlay.hide") await p.evaluate(() => (window as any).kiwiOverlay.set({ visible: false, bubble: null }));
+    else if (c.type === "catOverlay.bubble") await p.evaluate((b) => (window as any).kiwiOverlay.set({ bubble: b.text ? b : null }), c as any);
   };
   const queue: Cmd[] = [];
   const sub = await connect(data, (line: any) => {

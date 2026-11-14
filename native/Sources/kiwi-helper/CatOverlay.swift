@@ -28,6 +28,9 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     private var fadeMs: Double = 180
     /// A cor da névoa (spec #9349), `rrggbb`: vai na URL do próximo `load` e à página aberta.
     private var cor: String?
+    /// O balão (spec #12938), já como o argumento do script (`CatOverlayBubble`): vai junto quando o gato aparece e sai
+    /// com ele.
+    private var bubble = "null"
     /// A página terminou o carregamento inicial: daí em diante, nenhuma navegação é aceita.
     private var pageLoaded = false
     private var pendingLoad: URL?
@@ -113,6 +116,12 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         return true
     }
 
+    /// O balão da resposta (spec #12938): `nil` tira. Com o gato esperando a pílula, ele aparece junto com o gato.
+    func bubble(text: String?, error: Bool) {
+        bubble = CatOverlayBubble.script(text: text, error: error)
+        if gate.shows { script("window.kiwiOverlay?.set({bubble: \(bubble)})") }
+    }
+
     func hide(fadeMs: Double) {
         self.fadeMs = fadeMs
         if gate.want(false) { dismiss() }
@@ -120,6 +129,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
 
     func unload() {
         _ = gate.want(false)
+        bubble = "null"
         script("window.kiwiOverlay?.dispose()")
         panel?.orderOut(nil)
         parked = false
@@ -147,15 +157,16 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
             parked = false
         }
         panel.setFrame(CatOverlayLayout.frame(visible: targetVisibleFrame()), display: false)
-        script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true})")
+        script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true, bubble: \(bubble)})")
         if !panel.isVisible { panel.orderFrontRegardless() }
         animate(panel, to: 1, ms: fadeMs)
     }
 
     private func dismiss() {
         guard let panel, panel.isVisible, !parked else { return }
-        // Pausa o desenho antes de a janela sumir.
-        script("window.kiwiOverlay?.set({visible: false})")
+        // Pausa o desenho antes de a janela sumir; o balão sai com o gato.
+        bubble = "null"
+        script("window.kiwiOverlay?.set({visible: false, bubble: null})")
         animate(panel, to: 0, ms: fadeMs) { [weak self, weak panel] in
             guard let self, let panel, !self.gate.shows else { return }
             self.park(panel)
