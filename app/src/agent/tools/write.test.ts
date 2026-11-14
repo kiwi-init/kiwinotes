@@ -107,7 +107,7 @@ async function tool(config: KiwiMcpServerConfig, name: string, args: unknown = {
 }
 
 describe("o servidor com o escritor (spec #8356)", () => {
-  test("o tools/list traz as treze, e só as cinco de escrita (com o organizar a pasta, spec #11102, e o diário do projeto, T11670) dizem que mudam o cofre", async () => {
+  test("o tools/list traz as quatorze, e só as cinco de escrita (com o organizar a pasta, spec #11102, e o diário do projeto, T11670) dizem que mudam o cofre", async () => {
     const { config } = await setup();
     const init = (await (await rpc(config, "initialize", { protocolVersion: "2025-06-18" })).json()) as any;
     expect(init.result.instructions).toContain("notes_write");
@@ -123,6 +123,7 @@ describe("o servidor com o escritor (spec #8356)", () => {
       "meetings_get",
       "projects_list",
       "project_status",
+      "files_read",
       "notes_create",
       "notes_append",
       "notes_write",

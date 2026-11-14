@@ -465,6 +465,7 @@ function memoryReader(notes: Record<string, string>): VaultReader {
     meetings: async () => [],
     projects: EMPTY_READER.projects,
     projectStatus: EMPTY_READER.projectStatus,
+    file: EMPTY_READER.file,
   };
 }
 
@@ -479,7 +480,7 @@ describe("as ferramentas do Kiwi (spec #7496)", () => {
     const m = make({ reader: memoryReader(NOTES) });
     await readyNow(m);
     const turn = await askAndWait(m, "/ferramentas");
-    expect(turn.at(-1)).toMatchObject({ type: "done", text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status" });
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read" });
     const params = opened(m)[0]!.params as { mcpServers: KiwiServer[]; _meta: { claudeCode: { options: Record<string, unknown> } } };
     expect(params.mcpServers).toHaveLength(1);
     expect(params.mcpServers[0]).toMatchObject({ type: "http", name: "kiwi" });
@@ -649,7 +650,7 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await readyNow(m);
     expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({
       type: "done",
-      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, meeting_propose, project_summary_propose",
+      text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read, notes_create, notes_append, notes_write, project_diary_add, notes_organize_folder, meeting_propose, project_summary_propose",
     });
     await askAndWait(m, '/tool notes_read {"path":"Ideias.md"}');
     const turn = await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"e cachorros"}');
@@ -722,10 +723,10 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     await expect(m.svc.undo("nao-existe")).rejects.toMatchObject({ code: "E_NOT_FOUND" });
   });
 
-  test("sem o escritor, só as oito de leitura", async () => {
+  test("sem o escritor, só as nove de leitura", async () => {
     const m = make({ reader: memoryReader(NOTES) });
     await readyNow(m);
-    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status" });
+    expect((await askAndWait(m, "/ferramentas")).at(-1)).toMatchObject({ text: "ferramentas: notes_search, notes_outline, notes_read, notes_list, meetings_list, meetings_get, projects_list, project_status, files_read" });
     expect((await askAndWait(m, '/tool notes_append {"path":"Ideias.md","text":"x"}')).at(-1)).toMatchObject({ text: expect.stringContaining("não tem a ferramenta") });
   });
 

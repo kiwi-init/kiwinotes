@@ -17,6 +17,7 @@ import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import type { VaultReader } from "./reader.ts";
+import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument } from "./files.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
 import { FACT_MAX_CHARS, MEMORY_MAX, MemoryError } from "../memory.ts";
 import {
@@ -60,6 +61,7 @@ export const KIWI_READ_TOOL_NAMES = [
   "meetings_get",
   "projects_list",
   "project_status",
+  "files_read",
 ] as const;
 export const KIWI_WRITE_TOOL_NAMES = ["notes_create", "notes_append", "notes_write", "notes_organize_folder", "project_diary_add"] as const;
 /** O diário do agente num projeto (spec #11469, T11670): a seção no fim da nota principal, uma linha com data por vez. */
@@ -204,6 +206,20 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
       type: "object",
       properties: { projeto: { type: "string", description: "A pasta do projeto, ou o nome dele, como o projects_list devolve (ex.: Projetos/Kiwi ou Kiwi)." } },
       required: ["projeto"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "files_read",
+    title: "Ler um arquivo do cofre",
+    description: `Lê uma planilha, um documento ou um pdf do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página. Devolve o sumário (as abas, as páginas, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md), use notes_read.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        caminho: { type: "string", description: "O caminho do arquivo no cofre (ex.: Projetos/Kiwi/vendas.xlsx), como o notes_list ou a nota mostram." },
+        parte: { type: "integer", minimum: 1, description: "Qual parte ler, pelo índice; sem ela, a 1ª." },
+      },
+      required: ["caminho"],
       additionalProperties: false,
     },
   },
@@ -836,6 +852,51 @@ async function run(
         return { value: { path: n.path, titulo: n.title, ...versao, caracteres: content.length, secoes, aviso }, target: n.path };
       }
       return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(content, offset, max) }, target: n.path };
+    }
+    case "files_read": {
+      const a = args(raw, ["caminho", "parte"]);
+      const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
+      const parte = int(a, "parte", 1, Number.MAX_SAFE_INTEGER) ?? 1;
+      if (/\.md$/i.test(path)) throw new ToolError("E_BAD_ARGS", `${path} é uma nota: leia com notes_read`);
+      if (!fileFormat(path)) throw new ToolError("E_BAD_ARGS", `o files_read lê só ${FILE_FORMATS.join(", ")}`);
+      const f = await reader.file(path);
+      if ("tooLarge" in f || f.size > FILES_READ_MAX_BYTES)
+        throw new ToolError("E_TOO_LARGE", `${path} tem ${Math.round(f.size / 1024 / 1024)} MB, e o agente lê arquivos de até ${FILES_READ_MAX_BYTES / 1024 / 1024} MB`);
+      if (!("base64" in f)) throw new ToolError("E_FAILED", `não deu para ler ${path}`);
+      let doc: Awaited<ReturnType<typeof readDocument>>;
+      try {
+        doc = await readDocument(path, Buffer.from(f.base64, "base64"), economy ? ECONOMY_READ_MAX_CHARS : READ_MAX_CHARS);
+      } catch (e) {
+        if (e instanceof FileReadError) throw new ToolError(e.code, `${path}: ${e.message}`);
+        throw e;
+      }
+      const total = doc.parts.length;
+      if (parte > total) throw new ToolError("E_BAD_ARGS", `${path} tem ${total} parte(s)`);
+      const part = doc.parts[parte - 1]!;
+      // O texto da parte passa pelo filtro, como uma nota (spec #9818): o segredo vira o marcador, e a dúvida é perguntada.
+      const texto = await seen(path, part.text);
+      const indice = doc.parts.slice(0, FILES_INDEX_MAX).map((p, i) => ({ parte: i + 1, rotulo: p.label }));
+      const avisos = [
+        ...doc.warnings,
+        ...(total > FILES_INDEX_MAX ? [`O índice mostra as ${FILES_INDEX_MAX} primeiras de ${total} partes.`] : []),
+        ...(parte < total ? [`Há mais: ${total - parte} parte(s) depois desta; peça com parte.`] : []),
+      ];
+      return {
+        value: {
+          caminho: path,
+          formato: doc.format,
+          tamanho: f.size,
+          sumario: doc.summary,
+          partes: total,
+          indice,
+          parte,
+          rotulo: part.label,
+          texto,
+          ...(parte < total ? { proximaParte: parte + 1 } : {}),
+          ...(avisos.length ? { aviso: avisos.join(" ") } : {}),
+        },
+        target: total > 1 ? `${path} › ${part.label}` : path,
+      };
     }
     case "notes_list": {
       const a = args(raw, ["folder", "offset"]);
