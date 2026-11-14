@@ -1,6 +1,7 @@
-# ADR 0013: o Faro, o motor de contexto do Kiwi
+# ADR 0013: o motor de contexto do Kiwi
 
-- Status: **proposto** (T13450, spec #13435). Espera a aprovação do harry. Nenhum código antes dela.
+- Status: **proposto** (T13450, spec #13435). As quatro decisões do harry estão tomadas (#13624, #13626, #13628 e #13631). Falta o sim dele ao ADR inteiro. Nenhum código antes disso.
+- O nome do motor ainda não está escolhido (#13613). Até lá, é "o motor de contexto".
 - Segue o [ADR 0011](0011-agente-e-privacidade.md) (nenhum outro modelo de IA, nem local) e o [ADR 0012](0012-host-do-agente.md) (o host e o adaptador ACP). A decisão 1 abaixo muda uma frase do 0011.
 - Código: nenhum ainda. A ordem da construção está no fim.
 
@@ -47,21 +48,21 @@ A hipótese do spec era o agente relendo as mesmas notas. Nestes 18 pedidos ela 
 | Cache de leitura do Claude Code | Releitura de um arquivo igual devolve "sem mudança" | Só vale para as ferramentas dele, que o Kiwi desliga. E erra depois de um resumo da conversa: diz "sem mudança" de um texto que o modelo já não tem |
 | Resumo da conversa (`/compact`) e limpeza de resultados antigos | O próprio modelo resume a conversa, ou a API apaga resultados velhos | O resumo custa uma ida inteira e inventa. A limpeza invalida o cache |
 
-O ACP já tem o que o Faro precisa: o adaptador aceita contexto embutido no pedido (`embeddedContext`) e o entrega ao modelo como `<context ref="…">`.
+O ACP já tem o que o motor precisa: o adaptador aceita contexto embutido no pedido (`embeddedContext`) e o entrega ao modelo como `<context ref="…">`.
 
-## Decisão: o Faro
+## Decisão: o motor de contexto
 **O Kiwi acha, o agente faz. E o agente não carrega bagagem: quem guarda é o Kiwi.**
 
-O Faro é local e não usa modelo nenhum. Ele não usa a busca pelo sentido (e5), mesmo ligada. São seis peças.
+O motor é local e não usa modelo nenhum. Ele não usa a busca pelo sentido (e5), mesmo ligada. São seis peças.
 
-### 1. O faro: achar antes de perguntar
+### 1. A busca antecipada: achar antes de perguntar
 Antes de mandar o pedido, o Kiwi resolve no Mac o que a pessoa citou. Custa zero idas e zero tokens.
 - **O índice de nomes.** Todo nome que existe na pasta de notas: pastas, títulos, apelidos (`aliases`), seções, projetos, reuniões, tags e arquivos de qualquer tipo (`.txt`, `.pdf`, `.xlsx`). Cada nome fica em quatro formas: sem acento e sem maiúscula, sem separador (espaço, `-` e `_` valem igual), pelo radical e **pelo som**.
 - **Pelo som, porque o pedido é falado.** O ditado erra nomes próprios. O Kiwi compara o que ouviu com os nomes que existem, pela pronúncia em português e em inglês. Nenhuma ferramenta de código faz isso: nelas o caminho é digitado.
-- **As citações.** O Faro passa pelo pedido em janelas de 1 a 5 palavras e casa cada uma com o índice: igual vale mais que parecido, e um nome longo vale mais que um curto. Palavras como "pasta", "nota", "reunião", "projeto" e "planilha" dizem o tipo.
+- **As citações.** O Kiwi passa pelo pedido em janelas de 1 a 5 palavras e casa cada uma com o índice: igual vale mais que parecido, e um nome longo vale mais que um curto. Palavras como "pasta", "nota", "reunião", "projeto" e "planilha" dizem o tipo.
 - **O que a pessoa aponta sem nomear.** "Essa nota", "aqui" e "esse projeto" viram a nota e a pasta abertas no app. "A última reunião" e "ontem" viram a reunião e as datas.
 - **O contexto pesa.** A nota aberta, o projeto dela, o que esta conversa já tocou, o que mudou há pouco e as notas ligadas por `[[link]]` a essas sobem na lista.
-- **As trilhas.** Quando o Faro erra e o agente acaba na nota certa por outro caminho, o Kiwi guarda a ligação entre as palavras do pedido e aquela nota. Da próxima vez ela sobe. É contagem, não modelo. A pessoa vê as trilhas em Ajustes › Agente e apaga a que quiser.
+- **As trilhas.** Quando a busca antecipada erra e o agente acaba na nota certa por outro caminho, o Kiwi guarda a ligação entre as palavras do pedido e aquela nota. Da próxima vez ela sobe. É contagem, não modelo. A pessoa vê as trilhas em Ajustes › Agente e apaga a que quiser.
 - **Três resultados:** *certo* (um alvo, com folga sobre o segundo), *provável* (de 2 a 5 candidatos) ou *nada*. Os cortes saem da bateria do PR 1.
 
 ### 2. O pacote: o alvo vai junto com o pedido
@@ -72,7 +73,7 @@ Antes de mandar o pedido, o Kiwi resolve no Mac o que a pessoa citou. Custa zero
 - **O cartão de instrução.** Quando o pedido pede algo raro (gerar uma planilha, propor uma reunião, criar uma rotina), as instruções daquela ferramenta vão no pacote. Assim a lista fixa de ferramentas pode ser curta (peça 6).
 - **Pelo guardrail e pela Atividade.** O pacote passa pelo mesmo filtro de segredos de uma leitura, e a Atividade mostra "o Kiwi entregou" com o alvo.
 
-### 3. As ferramentas de uma ida, para quando o faro falha
+### 3. As ferramentas de uma ida, para quando a busca antecipada falha
 - **`find`: uma chamada só.** Devolve os alvos de qualquer tipo (nota, pasta, arquivo) já com o cartão e o trecho. Troca a sequência buscar, listar, listar, ver o sumário.
 - **Erro que ensina.** Um caminho ou uma seção que não existe devolve os 3 mais parecidos, com o cartão. A chamada seguinte acerta.
 - **Nome no lugar do caminho.** Toda ferramenta aceita o nome como a pessoa fala, resolvido pelo mesmo índice. O T13427 já faz isso para pastas.
@@ -103,7 +104,7 @@ Esta é a peça que mais economiza: a conversa antiga reenviada é 65 % do gasto
 ### O placar
 Em Ajustes › Agente, por pedido e por dia:
 - as idas, e os tokens em cinco partes: **pedido** (o que a pessoa pediu, o alvo entregue e a resposta), **achar**, **ler**, **bagagem** e **fixo**;
-- quantas vezes o faro acertou de primeira;
+- quantas vezes o Kiwi achou o alvo de primeira;
 - **quanto do limite de 5 horas o dia gastou,** pelo `/usage` do próprio Claude Code, lido antes e depois. Com o tempo, o Kiwi descobre quanto cada tipo de token pesa de verdade no limite.
 
 Fica só no Mac. O mockup está em `docs/evidence/T13450/placar.webp`.
@@ -111,7 +112,7 @@ Fica só no Mac. O mockup está em `docs/evidence/T13450/placar.webp`.
 ## Um pedido, antes e depois
 O 15º pedido do registro, só em números.
 
-| | Hoje | Com o Faro |
+| | Hoje | Com o motor |
 |---|---|---|
 | O que acontece | 4 idas: 5 leituras de arquivo, todas com erro, e 1 busca | 1 ida: o pacote já leva a nota |
 | O que cada ida carrega | 35 a 37 mil tokens | uns 7 mil: o fixo, a cápsula, o pacote e o pedido |
@@ -126,13 +127,13 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
 |---|---|---|
 | Idas por pedido | 1,9 (3,0 nos pedidos que usam notas) | 1 em 90 % dos pedidos de leitura; 2 nos de escrita |
 | Tokens em idas que só servem para achar ou errar | 48,9 % | até 10 % |
-| O faro acerta o alvo | não existe | o 1º em 85 % dos pedidos, entre os 5 em 97 % |
+| A busca antecipada acerta o alvo | não existe | o 1º em 85 % dos pedidos, entre os 5 em 97 % |
 | Bagagem no começo de um pedido | até 33,8 mil tokens | até 6 mil (o teto da janela); 800 depois de uma pausa longa |
 | Peso fixo por ida | 8,6 mil tokens | até 5 mil; até 3,5 mil com as instruções próprias |
 | Nota sem mudança mandada inteira de novo | sem controle | zero |
 | Os mesmos 18 pedidos, refeitos | 934 mil | até 190 mil (−80 %); até 160 mil com as instruções próprias (estimativa) |
 
-**Sobre os "90 % a 99 % dos tokens no pedido".** Em tokens brutos, isso não é possível com o Claude Code: as instruções e as ferramentas dele vão em toda ida, e a janela guarda a conversa recente. O que o Faro entrega:
+**Sobre os "90 % a 99 % dos tokens no pedido".** Em tokens brutos, isso não é possível com o Claude Code: as instruções e as ferramentas dele vão em toda ida, e a janela guarda a conversa recente. O que o motor entrega:
 - achar e errar caem de 49 % para até 10 %;
 - o mesmo uso gasta um quinto dos tokens;
 - pelo preço de API, a parte do pedido (o texto novo e a resposta) passa de 14 % para uns 60 % do custo (estimativa). O resto é abrir a frio, que só cai mais com as instruções próprias (decisão 3).
@@ -151,8 +152,8 @@ O PR 1 monta a bateria: uma pasta falsa de 20 mil notas, 30 pedidos (cada um tam
 3. **As instruções do agente. Decidido: A (#13628).**
    - **A (escolhida):** manter as do Claude Code e enxugar só as ferramentas. Peso fixo de uns 5 mil.
    - B: instruções próprias do Kiwi, pela opção oficial `systemPrompt` do adaptador. Peso fixo de uns 3,5 mil. Fica para depois da resposta da Anthropic sobre a assinatura (#8355).
-4. **As trilhas.**
-   - **A (recomendada):** ligadas, visíveis e apagáveis em Ajustes › Agente.
+4. **As trilhas. Decidido: A (#13631).**
+   - **A (escolhida):** ligadas, visíveis e apagáveis em Ajustes › Agente.
    - B: desligadas.
 
 ## A ordem da construção
@@ -160,13 +161,13 @@ Cada item é um PR dos builders, com o antes e o depois medidos na bateria.
 1. **A bateria e o simulador de idas** (o PR 1 do spec), com o registro do harry reproduzido.
 2. **A janela curta e a cápsula** (peça 5): o maior ganho, e não depende do índice.
 3. **O erro que ensina e o `find`** (peça 3), por cima do T13427.
-4. **O faro e o pacote** (peças 1 e 2), com a mudança do ADR 0011 e da tela.
+4. **A busca antecipada e o pacote** (peças 1 e 2), com a mudança do ADR 0011 e da tela.
 5. **Os cinco verbos e o cartão de instrução** (peça 6).
 6. **O placar.**
 7. **O registro de entrega** (peça 4) e **as trilhas.**
 
 ## Os riscos
-- **O faro erra com certeza.** O agente trabalharia na nota errada. O corte do "certo" sai da bateria, o pacote diz qual nota mandou, e a escrita continua com a versão conferida e o Desfazer.
+- **A busca antecipada erra com certeza.** O agente trabalharia na nota errada. O corte do "certo" sai da bateria, o pacote diz qual nota mandou, e a escrita continua com a versão conferida e o Desfazer.
 - **A cápsula perde o detalhe de uma conversa longa.** Dentro da janela nada se perde. Entre janelas ficam os 3 últimos pedidos e as notas tocadas.
 - **Os números de depois são estimativa** até o PR 1. A prova final é o harry usando a rc e vendo o placar.
 - **O limite da assinatura** pode pesar os tokens de outro jeito. As idas e a bagagem caem em qualquer conta.
