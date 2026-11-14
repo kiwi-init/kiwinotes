@@ -114,6 +114,19 @@ export interface VaultFile {
   mtime: string;
 }
 
+/**
+ * O que o `list` devolve. `filesVersion` (spec #13384): a versão dos arquivos que não são nota; com ela no pedido, vem
+ * nada (`files` e `filesDelta` ausentes: não mudou), só a diferença, ou a lista inteira.
+ */
+export interface VaultList {
+  folders: string[];
+  notes: NoteMeta[];
+  tree: FolderNode;
+  files?: VaultFile[];
+  filesDelta?: { set: VaultFile[]; removed: string[] };
+  filesVersion?: string;
+}
+
 /** Uma pasta do vault com o que tem dentro (T2468): a raiz tem `path` e `name` vazios. */
 export interface FolderNode {
   path: string;
@@ -408,6 +421,21 @@ export class Vault {
   private folders = new Set<string>();
   /** Os arquivos que não são nota (T3370), para a árvore. O conteúdo não é lido. */
   private files = new Map<string, VaultFile>();
+  /**
+   * A versão dos arquivos que não são nota (spec #13384): muda só quando um deles entra, sai ou muda. O `list()` manda
+   * os arquivos só a quem tem outra versão: no cofre do harry eram 150 mil, 15 MB a cada save de uma nota.
+   */
+  private filesRev = 0;
+  private readonly filesId = randomBytes(4).toString("hex");
+  /**
+   * O que mudou em cada versão recente (o caminho e a versão em que mudou), para mandar só a diferença a quem está pouco
+   * atrás. `filesLogFrom`: a versão mais velha que o registro ainda cobre.
+   */
+  private filesLog: { rev: number; path: string }[] = [];
+  private filesLogFrom = 0;
+  /** Os arquivos em ordem e o resolvedor dos `[[arquivo.pdf]]`, feitos uma vez por versão. */
+  private sortedFiles: VaultFile[] | null = null;
+  private fileResolver: Resolver | null = null;
   /** Os documentos-pacote (`.pages`, `.key`… com a marca do formato) que o scan achou (T3371). */
   private packages = new Set<string>();
   /** Fechado (`close`): um `flush` que já estava rodando para no meio e não avisa ninguém (revisão #3499). */
@@ -584,11 +612,67 @@ export class Vault {
     return [...this.folders].sort((a, b) => a.localeCompare(b));
   }
 
-  list(): { folders: string[]; notes: NoteMeta[]; tree: FolderNode; files: VaultFile[] } {
+  /**
+   * As pastas, as notas, a árvore e os arquivos. Com `filesVersion` (spec #13384): igual à de agora, sem os arquivos
+   * (quem pediu já tem a lista); um pouco atrás, só a diferença (`filesDelta`); senão, a lista inteira.
+   */
+  list(): { folders: string[]; notes: NoteMeta[]; tree: FolderNode; files: VaultFile[]; filesVersion?: string };
+  list(opts: { filesVersion?: unknown }): VaultList;
+  list(opts: { filesVersion?: unknown } = {}): VaultList {
     const folders = [...this.folders].sort((a, b) => a.localeCompare(b));
     const notes = [...this.notes.values()].map((e) => e.meta).sort((a, b) => a.path.localeCompare(b.path));
-    const files = [...this.files.values()].sort((a, b) => a.path.localeCompare(b.path));
-    return { folders, notes, tree: buildTree(folders, notes), files };
+    const filesVersion = this.filesVersion();
+    const tree = buildTree(folders, notes);
+    if (opts.filesVersion === filesVersion) return { folders, notes, tree, filesVersion };
+    const filesDelta = this.filesDeltaSince(opts.filesVersion);
+    if (filesDelta) return { folders, notes, tree, filesDelta, filesVersion };
+    this.sortedFiles ??= [...this.files.values()].sort((a, b) => a.path.localeCompare(b.path));
+    return { folders, notes, tree, files: this.sortedFiles, filesVersion };
+  }
+
+  /**
+   * Só o que mudou desde `version` (spec #13384): os arquivos que entraram ou mudaram, e os que saíram. `null` quando a
+   * versão é de outro cofre, mais velha que o registro, ou a diferença é grande (aí vai a lista inteira).
+   */
+  private filesDeltaSince(version: unknown): { set: VaultFile[]; removed: string[] } | null {
+    if (typeof version !== "string") return null;
+    const [id, n] = version.split(".");
+    const rev = Number(n);
+    if (id !== this.filesId || !Number.isInteger(rev) || rev < this.filesLogFrom || rev > this.filesRev) return null;
+    const touched = new Set<string>();
+    for (let i = this.filesLog.length - 1; i >= 0 && this.filesLog[i]!.rev > rev; i--) touched.add(this.filesLog[i]!.path);
+    if (touched.size > FILES_DELTA_MAX) return null;
+    const set: VaultFile[] = [];
+    const removed: string[] = [];
+    for (const p of touched) {
+      const f = this.files.get(p);
+      if (f) set.push(f);
+      else removed.push(p);
+    }
+    return { set, removed };
+  }
+
+  /** A versão de agora dos arquivos que não são nota (ver `filesRev`). */
+  filesVersion(): string {
+    return `${this.filesId}.${this.filesRev}`;
+  }
+
+  /** Um arquivo que não é nota entrou, saiu ou mudou: a lista em ordem e o resolvedor se refazem quando pedidos. */
+  private filesChanged(paths: Iterable<string> | null) {
+    this.filesRev++;
+    this.sortedFiles = null;
+    this.fileResolver = null;
+    // Sem os caminhos (muita coisa de uma vez), o registro recomeça: quem estava atrás recebe a lista inteira.
+    if (paths) for (const path of paths) this.filesLog.push({ rev: this.filesRev, path });
+    if (!paths || this.filesLog.length > FILES_LOG_MAX) {
+      this.filesLog = [];
+      this.filesLogFrom = this.filesRev;
+    }
+  }
+
+  private resolveFile(target: string): string | null {
+    this.fileResolver ??= makeFileResolver([...this.files.keys()]);
+    return this.fileResolver(target);
   }
 
   /**
@@ -700,7 +784,7 @@ export class Vault {
     if (!s?.isFile() || this.packageOf(p)) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     // O tipo "note" da Lixeira do app é o de um arquivo só: a volta é pelo caminho, como a de uma nota.
     await this.stage(p, abs, "note", baseVersion);
-    this.files.delete(p);
+    if (this.files.delete(p)) this.filesChanged([p]);
     this.touch(p);
     await this.fileWritten(p);
     return true;
@@ -987,7 +1071,7 @@ export class Vault {
     await mkdir(path.dirname(absB), { recursive: true });
     await rename(absA, absB);
     await syncDir(path.dirname(absB));
-    this.files.delete(a);
+    if (this.files.delete(a)) this.filesChanged([a]);
     await this.fileWritten(b, [a]);
     return this.getCanvas(b);
   }
@@ -1162,7 +1246,7 @@ export class Vault {
   /** At most 100 source locations. Missing fragments are distinct from missing notes; code is never a link. */
   async linkWarnings(input: unknown): Promise<LinkWarning[]> {
     const p = notePath(input), source = await this.get(p), resolve = makeResolver([...this.notes.keys()], this.aliasMap());
-    const file = makeFileResolver([...this.files.keys()]);
+    const file = (t: string) => this.resolveFile(t);
     const warnings: LinkWarning[] = [];
     for (const ref of noteReferences(source.content)) {
       const target = referenceTarget(ref, p, resolve);
@@ -1315,7 +1399,7 @@ export class Vault {
     const target = link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!.trim().replace(/\.md$/i, "");
     if (!target) throw new VaultError("E_BAD_ARGS", "link is empty");
     // O link acha um arquivo do vault que não é nota (T7616): seguir abre o arquivo, nunca cria "relatorio.pdf.md".
-    const file = makeFileResolver([...this.files.keys()])(link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!);
+    const file = this.resolveFile(link.replace(/^!?\[\[|\]\]$/g, "").split(/[|#]/)[0]!);
     if (file) throw new VaultError("E_EXISTS", `${file} is a file in the vault, not a note`);
     const found = this.resolve_()(target);
     if (found) return this.get(found);
@@ -1735,6 +1819,8 @@ export class Vault {
     this.searchDirty = false;
     this.notes = notes;
     this.folders = folders;
+    const diff = filesDiff(this.files, files);
+    if (diff === null || diff.length) this.filesChanged(diff);
     this.files = files;
     this.packages = packages;
     this.resolver = null;
@@ -1765,7 +1851,7 @@ export class Vault {
         const ps = await lstat(path.join(this.root, pkg)).catch(() => null);
         if (ps?.isDirectory() && !ps.isSymbolicLink()) this.keepFile(pkg, ps);
         else {
-          this.files.delete(pkg);
+          if (this.files.delete(pkg)) this.filesChanged([pkg]);
           this.packages.delete(pkg);
         }
         if (!others.includes(pkg)) others.push(pkg);
@@ -1804,7 +1890,7 @@ export class Vault {
           continue;
         }
         if (s?.isFile()) this.keepFile(rel, s);
-        else this.files.delete(rel);
+        else if (this.files.delete(rel)) this.filesChanged([rel]);
         others.push(rel);
         continue;
       }
@@ -1863,7 +1949,11 @@ export class Vault {
   }
 
   private keepFile(rel: string, s: { size: number; mtimeMs: number }) {
-    this.files.set(rel, fileEntry(rel, s));
+    const entry = fileEntry(rel, s);
+    const was = this.files.get(rel);
+    if (was && was.size === entry.size && was.mtime === entry.mtime) return;
+    this.files.set(rel, entry);
+    this.filesChanged([rel]);
   }
 
   private snapshot(): Snapshot {
@@ -1904,6 +1994,28 @@ async function packageEntries(abs: string): Promise<string[]> {
 const parentOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 
 const fileEntry = (rel: string, s: { size: number; mtimeMs: number }): VaultFile => ({ path: rel, size: s.size, mtime: new Date(s.mtimeMs).toISOString() });
+
+/** Quantas mudanças de arquivo o registro guarda, e a maior diferença que vai no lugar da lista inteira. */
+const FILES_LOG_MAX = 20_000;
+const FILES_DELTA_MAX = 5_000;
+
+/**
+ * Os caminhos que entraram, saíram ou mudaram de tamanho ou de data entre `a` e `b` (o scan de conferência não muda a
+ * versão à toa). `null` quando são mais que o registro guarda.
+ */
+function filesDiff(a: ReadonlyMap<string, VaultFile>, b: ReadonlyMap<string, VaultFile>): string[] | null {
+  const out: string[] = [];
+  for (const [p, f] of b) {
+    const was = a.get(p);
+    if (!was || was.size !== f.size || was.mtime !== f.mtime) out.push(p);
+    if (out.length > FILES_LOG_MAX) return null;
+  }
+  for (const p of a.keys()) {
+    if (!b.has(p)) out.push(p);
+    if (out.length > FILES_LOG_MAX) return null;
+  }
+  return out;
+}
 
 /** A árvore das pastas a partir das listas: pastas vazias entram, e as filhas e as notas vêm em ordem. */
 export function buildTree(folders: readonly string[], notes: readonly { path: string; folder: string }[]): FolderNode {

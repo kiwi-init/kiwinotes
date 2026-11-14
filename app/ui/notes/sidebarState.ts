@@ -61,7 +61,17 @@ export function saveOpenFolders(vault: string, open: ReadonlySet<string>, known?
 
 /** Todas as pastas da árvore, também as de dentro: o que o Expandir tudo abre. */
 export function allFolders(nodes: readonly TreeNode[]): string[] {
-  return nodes.flatMap((n) => (n.kind === "folder" ? [n.path, ...allFolders(n.children)] : []));
+  // Numa lista só (spec #13384): o `flatMap` com cópias em cada nível levava 0,1 s a cada save com 6 mil pastas.
+  const out: string[] = [];
+  const walk = (list: readonly TreeNode[]) => {
+    for (const n of list) {
+      if (n.kind !== "folder") continue;
+      out.push(n.path);
+      walk(n.children);
+    }
+  };
+  walk(nodes);
+  return out;
 }
 
 /** Liga ou desliga um item de um conjunto, sem mexer no de antes. */
