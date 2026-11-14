@@ -13,7 +13,7 @@ import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
 import { AgentHost } from "./host.ts";
 import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS, SUMMARY_ECONOMY_QUESTION } from "./service.ts";
-import { routineDeclined, routineEconomyQuestion } from "./routines.ts";
+import { ROUTINE_LABELS, routineDeclined, routineEconomyQuestion } from "./routines.ts";
 import { DEFAULT_AGENT_ROUTINES } from "../shared/agent-routines.ts";
 import type { AgentRoutineEvent } from "../shared/ui-contract.ts";
 import { DEFAULT_NOTE_MODEL, noteModelText, sanitizeNoteModel } from "./note-model.ts";
@@ -1779,6 +1779,86 @@ describe("as rotinas (spec #12150)", () => {
     expect(r.events).toEqual([]);
   });
 
+  // As rotinas novas (spec #12944): pelo botão "Nova rotina" e pela proposta do agente.
+  const NEW = { name: "Resumo das reuniões", prompt: "Faz um resumo das reuniões do dia.", time: "18:00", days: "every" as const, folder: "Rotinas" };
+
+  test("rotina nova: entra desligada; dá para editar, ligar e apagar; o campo que não vale diz qual; as prontas só desligam", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    const s = await r.m.svc.routineCreate(NEW);
+    expect(s.routines.custom).toEqual([{ id: expect.stringMatching(/^r-[a-z0-9]{8}$/), ...NEW, on: false, lastRun: null, armedAt: null }]);
+    const id = s.routines.custom[0]!.id;
+    const edited = await r.m.svc.routineUpdate(id, { name: "Reuniões do dia", days: [1, 3, 5], on: true });
+    expect(edited.routines.custom[0]).toMatchObject({ name: "Reuniões do dia", days: [1, 3, 5], on: true, armedAt: new Date(at(16, 10)).toISOString() });
+    await expect(r.m.svc.routineUpdate(id, { time: "18h" })).rejects.toMatchObject({ code: "E_BAD_ARGS", message: "Falta ou não vale a hora (HH:MM)." });
+    await expect(r.m.svc.routineCreate({ ...NEW, name: "" })).rejects.toMatchObject({ code: "E_BAD_ARGS", message: "Falta ou não vale o nome (até 60 caracteres)." });
+    expect((await r.m.svc.routineDelete(id)).routines.custom).toEqual([]);
+    await expect(r.m.svc.routineDelete(id)).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    await expect(r.m.svc.routineRun({ kind: "custom", id })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    // Desligar o agente desliga as novas também.
+    const again = await r.m.svc.routineCreate(NEW);
+    await r.m.svc.routineUpdate(again.routines.custom[0]!.id, { on: true });
+    await r.m.svc.disable();
+    expect((await r.m.svc.status()).routines.custom[0]!.on).toBe(false);
+  });
+
+  test("rotina nova, ligada, roda na hora certa com o relógio falso, como as prontas, e só nos dias dela", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    const id = (await r.m.svc.routineCreate({ ...NEW, days: "weekdays" })).routines.custom[0]!.id;
+    // Desligada, não roda (o relógio fica às 17h: ligar depois das 18h já não conta o horário de hoje).
+    expect(await r.tick(at(16, 17))).toBeNull();
+    await r.m.svc.routineUpdate(id, { on: true });
+    expect(await r.tick(at(16, 17, 59))).toBeNull();
+    const req = await r.tick(at(16, 18));
+    expect(req).toBeTruthy();
+    const note = "Rotinas/Resumo das reuniões de 16-11-2026.md";
+    expect(r.notes[note]).toBeDefined();
+    expect(r.events).toEqual([{ kind: "custom", id, name: "Resumo das reuniões", phase: "done", request: req!, note, change: 1 }]);
+    const log = (await r.m.svc.activityLog())[0]!;
+    expect(log.request).toStartWith("[Rotina do Kiwi] Resumo das reuniões, 16/11/2026.");
+    expect(log.request).toContain("Faz um resumo das reuniões do dia.");
+    expect((await r.m.svc.status()).routines.custom[0]!.lastRun).toBe(new Date(at(16, 18)).toISOString());
+    expect(await r.tick(at(16, 19))).toBeNull();
+    // Sábado (21/11) não é dia útil; segunda (23/11) é.
+    expect(await r.tick(at(21, 18, 5))).toBeNull();
+    expect(await r.tick(at(23, 18, 5))).toBeTruthy();
+    // "Rodar agora", pelo id, mesmo desligada.
+    await r.m.svc.routineUpdate(id, { on: false });
+    const manual = await r.m.svc.routineRun({ kind: "custom", id });
+    await until(() => r.events.some((e) => e.phase === "done" && e.request === manual.id));
+  });
+
+  test("pedir ao agente: a proposta da rotina fica pendente; [Criar] a cria desligada; o [Ajustar] cria com o cartão; [Descartar] não cria", async () => {
+    const r = routines(at(16, 10));
+    await readyNow(r.m);
+    const turn = await askAndWait(r.m, "todo dia às 18h, faz um resumo das reuniões");
+    expect(turn.at(-1)).toMatchObject({ type: "done", text: 'Preparei a rotina "Resumo das reuniões", todo dia às 18:00. Ela entra desligada: crie, ajuste ou descarte.' });
+    expect((await r.m.svc.status()).routines.custom).toEqual([]);
+    const [p] = await r.m.svc.proposalsList();
+    expect(p).toMatchObject({ kind: "routine", status: "pending", routine: { name: "Resumo das reuniões", prompt: "Faz um resumo das reuniões.", time: "18:00", days: "every", folder: "Rotinas" } });
+    expect(await r.m.svc.proposalApply(p!.id)).toMatchObject({ kind: "routine", status: "applied" });
+    expect((await r.m.svc.status()).routines.custom).toEqual([expect.objectContaining({ name: "Resumo das reuniões", on: false, time: "18:00" })]);
+    await expect(r.m.svc.proposalApply(p!.id)).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+
+    // [Ajustar]: o cartão manda os campos mudados, e a rotina entra com eles.
+    await askAndWait(r.m, "dias úteis às 9h, me manda os pendentes do dia");
+    const q = (await r.m.svc.proposalsList()).find((x) => x.status === "pending")!;
+    expect(q.routine).toMatchObject({ name: "Os pendentes do dia", time: "09:00", days: "weekdays" });
+    const adjusted = { ...q.routine!, time: "08:30", days: [1, 3] };
+    expect(await r.m.svc.proposalApply(q.id, adjusted)).toMatchObject({ status: "applied", routine: adjusted });
+    expect((await r.m.svc.status()).routines.custom.map((x) => [x.name, x.time, x.days, x.on])).toEqual([
+      ["Resumo das reuniões", "18:00", "every", false],
+      ["Os pendentes do dia", "08:30", [1, 3], false],
+    ]);
+
+    // [Descartar]: nada é criado.
+    await askAndWait(r.m, "todo dia às 7h, faz a lista do dia");
+    const d = (await r.m.svc.proposalsList()).find((x) => x.status === "pending")!;
+    await r.m.svc.proposalDiscard(d.id);
+    expect((await r.m.svc.status()).routines.custom).toHaveLength(2);
+  });
+
   test("ligada, roda na hora, cria a nota pela escrita de sempre, e não roda duas vezes no dia", async () => {
     const r = routines(at(16, 10));
     await readyNow(r.m);
@@ -1834,16 +1914,16 @@ describe("as rotinas (spec #12150)", () => {
     void r.m.svc.routineTick();
     await until(() => !!r.m.svc.question());
     const card = r.m.svc.question()!;
-    expect(card.items).toEqual([expect.objectContaining({ kind: "confirm", value: routineEconomyQuestion("daily") })]);
+    expect(card.items).toEqual([expect.objectContaining({ kind: "confirm", value: routineEconomyQuestion(ROUTINE_LABELS.daily) })]);
     await r.m.svc.answerDoubt({ card: card.id, fingerprint: card.items[0]!.fingerprint, answer: "hold" });
     await until(() => r.events.length > 0);
     expect(r.events).toEqual([{ kind: "daily", phase: "skipped", reason: "declined" }]);
-    expect(r.m.turns.findLast((e) => e.type === "done")).toMatchObject({ stopReason: "cancelled", text: routineDeclined("daily") });
+    expect(r.m.turns.findLast((e) => e.type === "done")).toMatchObject({ stopReason: "cancelled", text: routineDeclined(ROUTINE_LABELS.daily, true) });
     expect(Object.keys(r.notes).some((p) => p.startsWith("Rotinas/"))).toBe(false);
     // Não pergunta de novo no mesmo dia.
     expect(await r.tick(at(16, 18, 30))).toBeNull();
     // "Rodar agora": o clique já foi o sim.
-    const { id } = await r.m.svc.routineRun("weekly");
+    const { id } = await r.m.svc.routineRun({ kind: "weekly" });
     await until(() => r.events.length > 1);
     expect(r.m.svc.question()).toBeNull();
     expect(r.events[1]).toEqual({ kind: "weekly", phase: "done", request: id, note: "Rotinas/Pendentes da semana de 16-11-2026.md", change: 1 });
@@ -1860,7 +1940,7 @@ describe("as rotinas (spec #12150)", () => {
     // A hora de volta é a da mensagem do limite (o agente falso diz "reset at 5pm": as 17h seguintes).
     expect(r.events).toEqual([{ kind: "daily", phase: "skipped", reason: "limit", resetsAt: expect.any(String) }]);
     expect(r.m.turns.filter((e) => e.type === "started")).toHaveLength(asked);
-    await expect(r.m.svc.routineRun("daily")).rejects.toMatchObject({ code: "E_AGENT_LIMIT" });
+    await expect(r.m.svc.routineRun({ kind: "daily" })).rejects.toMatchObject({ code: "E_AGENT_LIMIT" });
   });
 
   test("a vez só conta depois que o pedido sai; com um pedido da pessoa na frente, nada é marcado (revisão do #479)", async () => {
@@ -1876,7 +1956,7 @@ describe("as rotinas (spec #12150)", () => {
     // Um pedido da pessoa na frente: o "Rodar agora" falha ocupado, e a vez não é gastada.
     const { id } = await r.m.svc.ask("/lento");
     const before = (await r.m.svc.status()).routines.weekly.lastRun;
-    await expect(r.m.svc.routineRun("weekly")).rejects.toMatchObject({ code: "E_AGENT_BUSY" });
+    await expect(r.m.svc.routineRun({ kind: "weekly" })).rejects.toMatchObject({ code: "E_AGENT_BUSY" });
     expect((await r.m.svc.status()).routines.weekly.lastRun).toBe(before);
     await until(() => r.m.turns.some((e) => e.id === id && e.type === "done"));
   });
@@ -1887,7 +1967,7 @@ describe("as rotinas (spec #12150)", () => {
     await r.m.svc.configure({ routines: { daily: { on: true }, weekly: { on: true } } });
     const off = await r.m.svc.disable();
     expect([off.routines.daily.on, off.routines.weekly.on]).toEqual([false, false]);
-    await expect(r.m.svc.routineRun("daily")).rejects.toMatchObject({ code: "E_AGENT_DISABLED" });
+    await expect(r.m.svc.routineRun({ kind: "daily" })).rejects.toMatchObject({ code: "E_AGENT_DISABLED" });
     expect((await r.m.svc.enable()).routines.daily.on).toBe(false);
   });
 });

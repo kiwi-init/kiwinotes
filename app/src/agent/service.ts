@@ -49,6 +49,7 @@ import type {
   AgentMemoryView,
   AgentProposalSummary,
   AgentRoutineEvent,
+  RoutineEventWho,
   AgentProposalView,
   AgentStatus,
   AgentTurnEvent,
@@ -60,8 +61,22 @@ import { UsageStore } from "./usage-store.ts";
 import { type NoteModel } from "./note-model.ts";
 import { fixedPrefix } from "./fixed-prefix.ts";
 import { sanitizeAgentOnboarding } from "../shared/agent-onboarding.ts";
-import { patchRoutines, ROUTINE_KINDS, routineDue, routinesOff, sanitizeAgentRoutines, type RoutineKind } from "../shared/agent-routines.ts";
-import { routineDeclined, routineEconomyQuestion, routineNoteChange, routinePrompt } from "./routines.ts";
+import {
+  createRoutine,
+  CUSTOM_ROUTINES_MAX,
+  customRoutineInput,
+  deleteRoutine,
+  dueRoutine,
+  newRoutineId,
+  patchRoutines,
+  routinesOff,
+  sanitizeAgentRoutines,
+  updateRoutine,
+  type AgentRoutines,
+  type CustomRoutineInput,
+  type RoutineRef,
+} from "../shared/agent-routines.ts";
+import { customRoutinePrompt, ROUTINE_LABELS, routineDeclined, routineEconomyQuestion, routineNoteChange, routinePrompt } from "./routines.ts";
 import { cleanFact, FACT_MAX_CHARS, factKey, forgetFact, INSTRUCTIONS_MAX, MEMORY_MAX, MemoryError, type MemoryFile, readMemoryFile, rememberFact, writeMemory } from "./memory.ts";
 
 /** Quantas mudanças na memória o [Desfazer] lembra (só na memória do app). */
@@ -190,6 +205,33 @@ const SUMMARY_REQUEST = /resumo\s+executivo/i;
 export const SUMMARY_ECONOMY_QUESTION = "O resumo executivo lê várias notas do projeto e gasta mais do seu limite. Fazer agora?";
 const SUMMARY_ECONOMY_NO = "Tudo bem, não fiz o resumo: nada foi lido.";
 
+/** O pedido de uma rotina (spec #12150; as novas, #12944): qual, e se foi o "Rodar agora". */
+type RoutineTurn = ({ kind: "daily" | "weekly" } | { kind: "custom"; id: string; name: string }) & { manual: boolean };
+
+/** Qual rotina, como o evento `agent.routine` diz: uma nova leva o id e o nome. */
+const routineOf = (t: RoutineTurn): RoutineEventWho =>
+  t.kind === "custom" ? { kind: "custom", id: t.id, name: t.name } : { kind: t.kind };
+
+/** O nome da rotina, como a pessoa vê. */
+const routineName = (t: RoutineTurn) => (t.kind === "custom" ? t.name : ROUTINE_LABELS[t.kind]);
+
+const ROUTINE_FIELD_NAMES: Record<keyof CustomRoutineInput, string> = {
+  name: "o nome (até 60 caracteres)",
+  prompt: "o que o agente faz (até 1.000 caracteres)",
+  time: "a hora (HH:MM)",
+  days: "os dias",
+  folder: "a pasta",
+};
+
+/** Os campos de uma rotina nova, ou o erro que diz qual não vale. */
+function routineFields(input: unknown): CustomRoutineInput {
+  const r = customRoutineInput(input);
+  if (!r.ok) throw new AgentServiceError("E_BAD_ARGS", `Falta ou não vale ${ROUTINE_FIELD_NAMES[r.field]}.`);
+  return r.value;
+}
+
+const routineGone = () => new AgentServiceError("E_NOT_FOUND", "Essa rotina não existe mais.");
+
 export class AgentServiceError extends Error {
   constructor(
     readonly code: AgentCode,
@@ -258,9 +300,9 @@ export class AgentService {
   /** As reuniões que esperam o agente acabar o pedido de agora para pedir a proposta (spec #8360). */
   private readonly meetingsQueued: string[] = [];
   /** Os pedidos das rotinas (spec #12150): o fim de cada um vira o evento `agent.routine`. */
-  private readonly routineTurns = new Map<string, { kind: RoutineKind; manual: boolean }>();
+  private readonly routineTurns = new Map<string, RoutineTurn>();
   /** A rotina do próximo `ask` (o `startRoutine` marca antes de pedir, e o `ask` a prende ao pedido). */
-  private nextRoutine: { kind: RoutineKind; manual: boolean } | null = null;
+  private nextRoutine: RoutineTurn | null = null;
   private readonly routineListeners = new Set<(e: AgentRoutineEvent) => void>();
   /** O agendador das rotinas: uma conferência a cada tanto, com o app aberto. */
   private routineTimer: ReturnType<typeof setInterval> | null = null;
@@ -896,6 +938,12 @@ export class AgentService {
       void this.emitProposals();
       return { id: p.id };
     },
+    // A rotina nova (spec #12944): a pessoa cria, ajusta ou descarta; nada liga sozinho.
+    routine: async (d) => {
+      const p = this.proposals.add({ kind: "routine", request: this.activityId(), project: null, candidates: [], fields: null, routine: d });
+      void this.emitProposals();
+      return { id: p.id };
+    },
   };
 
   /** Desde quando "o que andou" conta no resumo de um projeto: o último resumo da nota principal, ou o período de Ajustes. */
@@ -934,7 +982,7 @@ export class AgentService {
   private proposalSummary(p: MeetingProposal, s: MeetingNoteSettings): AgentProposalSummary {
     const iso = (ms: number) => new Date(ms).toISOString();
     const short = (x: { folder: string; name: string }) => ({ folder: x.folder, name: x.name });
-    const theme = p.kind === "summary" ? SUMMARY_TITLE : p.kind === "references" ? REFERENCES_TITLE : (p.fields?.theme ?? "");
+    const theme = p.kind === "summary" ? SUMMARY_TITLE : p.kind === "references" ? REFERENCES_TITLE : p.kind === "routine" ? (p.routine?.name ?? "") : (p.fields?.theme ?? "");
     return {
       id: p.id,
       at: iso(p.at),
@@ -943,6 +991,7 @@ export class AgentService {
       meeting: p.meeting ?? null,
       ...(p.summary ? { summary: { signal: p.summary.signal, since: p.summary.since } } : {}),
       ...(p.references ? { references: { note: p.references.note, count: p.references.items.length } } : {}),
+      ...(p.routine ? { routine: p.routine } : {}),
       project: p.project ? short(p.project) : null,
       candidates: p.candidates.map(short),
       theme,
@@ -1018,6 +1067,8 @@ export class AgentService {
    */
   async proposalView(id: string): Promise<AgentProposalView> {
     const p = this.proposalOr404(id);
+    // A rotina (spec #12944) não escreve nota: o [Ajustar] abre o cartão com os campos dela.
+    if (p.kind === "routine") return { ...(await this.summaryOf(p)), noteContent: "", main: null };
     if (p.kind === "references") {
       // As referências (spec #11908): as linhas que entram e a nota com elas no fim da seção.
       const summary = await this.summaryOf(p);
@@ -1103,13 +1154,14 @@ export class AgentService {
    * [Aplicar] (`agent.proposalApply`): cria a nota da reunião e acrescenta a reunião na nota principal do projeto, num
    * pedido do registro do agente, com a cópia de antes e o [Desfazer] (spec #9353). Não abre o programa do agente.
    */
-  proposalApply(id: string): Promise<AgentProposalSummary> {
+  proposalApply(id: string, routine?: unknown): Promise<AgentProposalSummary> {
     return this.oneProposal(async () => {
       const p = this.proposalOr404(id);
       if (p.status !== "pending") throw new AgentServiceError("E_BAD_ARGS", p.status === "offer" ? "Essa proposta ainda não foi preparada." : "Essa proposta já foi aplicada ou descartada.");
       if (needsChoice(p)) throw new AgentServiceError("E_BAD_ARGS", p.kind === "summary" ? "Escolha antes o projeto do resumo." : "Escolha antes o projeto da reunião.");
       if (p.kind === "summary") return this.applySummary(p);
       if (p.kind === "references") return this.applyReferences(p);
+      if (p.kind === "routine") return this.applyRoutine(p, routine);
       const meeting = this.meetingOf(p);
       const fields = this.fieldsOf(p);
       const writer = this.proposalWriter();
@@ -1158,6 +1210,25 @@ export class AgentService {
       void this.emitProposals();
       return this.summaryOf(done);
     });
+  }
+
+  /**
+   * [Criar] numa proposta de rotina (spec #12944): a rotina entra desligada, com os campos do agente ou os do cartão do
+   * [Ajustar]. Não escreve nota, então não há [Desfazer]: a rotina se apaga em Ajustes.
+   */
+  private async applyRoutine(p: MeetingProposal, adjusted: unknown): Promise<AgentProposalSummary> {
+    const fields = routineFields(adjusted ?? p.routine);
+    await this.saveRoutines(async (current) => {
+      if (current.custom.length >= CUSTOM_ROUTINES_MAX) throw new AgentServiceError("E_BAD_ARGS", `Cabem até ${CUSTOM_ROUTINES_MAX} rotinas novas: apague uma antes.`);
+      return createRoutine(current, fields, newRoutineId(current.custom));
+    });
+    const done = this.proposals.update(p.id, (x) => {
+      x.status = "applied";
+      x.routine = fields;
+      x.doneAt = (this.d.now ?? Date.now)();
+    })!;
+    void this.emitProposals();
+    return this.summaryOf(done);
   }
 
   /**
@@ -1337,8 +1408,8 @@ export class AgentService {
       if (!this.reader || !this.writer || !installedAdapter({ root: this.root }, this.packages)) return;
       const routines = sanitizeAgentRoutines(s.routines);
       const now = new Date(this.clock());
-      const kind = ROUTINE_KINDS.find((k) => routineDue(k, routines[k], now));
-      if (kind) await this.startRoutine(kind, false);
+      const due = dueRoutine(routines, now);
+      if (due) await this.startRoutine(due, false);
     } catch (e) {
       this.d.log?.(`[agent] routine: ${String((e as Error)?.message ?? e)}`);
     } finally {
@@ -1346,11 +1417,55 @@ export class AgentService {
     }
   }
 
-  /** "Rodar agora" (`agent.routineRun`): o pedido da rotina já, ligada ou não. */
-  async routineRun(kind: RoutineKind): Promise<{ id: string }> {
+  /** "Rodar agora" (`agent.routineRun`): o pedido da rotina já, ligada ou não. Uma nova, pelo id. */
+  async routineRun(ref: RoutineRef): Promise<{ id: string }> {
     const s = await this.d.settings.load();
     if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
-    return this.startRoutine(kind, true);
+    if (ref.kind === "custom" && !sanitizeAgentRoutines(s.routines).custom.some((x) => x.id === ref.id)) throw routineGone();
+    return this.startRoutine(ref, true);
+  }
+
+  /**
+   * "Nova rotina" (`agent.routineCreate`, spec #12944): entra desligada, como as prontas. Também é o [Criar] da proposta
+   * do agente (o `proposalApply` de uma proposta de rotina).
+   */
+  async routineCreate(input: unknown): Promise<AgentStatus> {
+    const fields = routineFields(input);
+    await this.saveRoutines(async (current) => {
+      if (current.custom.length >= CUSTOM_ROUTINES_MAX) throw new AgentServiceError("E_BAD_ARGS", `Cabem até ${CUSTOM_ROUTINES_MAX} rotinas novas: apague uma antes.`);
+      return createRoutine(current, fields, newRoutineId(current.custom));
+    });
+    return this.status();
+  }
+
+  /** Muda uma rotina nova (`agent.routineUpdate`): o liga/desliga e os campos dados. Ligar ou mudar a hora arma de novo. */
+  async routineUpdate(id: string, patch: { on?: boolean } & Partial<CustomRoutineInput>): Promise<AgentStatus> {
+    await this.saveRoutines(async (current) => {
+      const before = current.custom.find((x) => x.id === id);
+      if (!before) throw routineGone();
+      const { on, ...fields } = patch;
+      const checked = Object.keys(fields).length ? routineFields({ ...before, ...fields }) : {};
+      return updateRoutine(current, id, { ...checked, ...(on !== undefined ? { on } : {}) }, this.clock())!;
+    });
+    return this.status();
+  }
+
+  /** Apaga uma rotina nova (`agent.routineDelete`). As prontas não se apagam: só se desligam. */
+  async routineDelete(id: string): Promise<AgentStatus> {
+    await this.saveRoutines(async (current) => deleteRoutine(current, id) ?? Promise.reject(routineGone()));
+    return this.status();
+  }
+
+  /** Lê, muda e grava as rotinas, uma mudança por vez (duas mudanças rápidas não perdem uma rotina). */
+  private routineEdits: Promise<unknown> = Promise.resolve();
+  private saveRoutines(change: (current: AgentRoutines) => Promise<AgentRoutines>): Promise<void> {
+    const next = this.routineEdits.then(async () => {
+      const current = sanitizeAgentRoutines((await this.d.settings.load()).routines);
+      await this.d.settings.save({ routines: await change(current) });
+      this.emitStatus();
+    });
+    this.routineEdits = next.catch(() => {});
+    return next;
   }
 
   /**
@@ -1359,26 +1474,31 @@ export class AgentService {
    * dia (revisão do #479). Com o limite do plano acabado, não manda nada, marca a vez (o dia pula) e avisa (o evento
    * `agent.routine`).
    */
-  private async startRoutine(kind: RoutineKind, manual: boolean): Promise<{ id: string }> {
+  private async startRoutine(ref: RoutineRef, manual: boolean): Promise<{ id: string }> {
     const now = this.clock();
     const s = await this.d.settings.load();
     const routines = sanitizeAgentRoutines(s.routines);
+    const custom = ref.kind === "custom" ? routines.custom.find((x) => x.id === ref.id) : undefined;
+    if (ref.kind === "custom" && !custom) throw routineGone();
+    const who: RoutineTurn = custom ? { kind: "custom", id: custom.id, name: custom.name, manual } : { kind: ref.kind as "daily" | "weekly", manual };
     const out = this.usageView().out;
     const limited = out !== null && (out.resetsAt ? Date.parse(out.resetsAt) > now : now - Date.parse(out.at) < ROUTINE_OUT_UNKNOWN_MS);
-    const mark = async () => {
-      const current = sanitizeAgentRoutines((await this.d.settings.load()).routines);
-      await this.d.settings.save({ routines: { ...current, [kind]: { ...current[kind], lastRun: new Date(now).toISOString() } } });
-      this.emitStatus();
-    };
+    const mark = () =>
+      this.saveRoutines(async (current) => {
+        const at = new Date(now).toISOString();
+        if (who.kind !== "custom") return { ...current, [who.kind]: { ...current[who.kind], lastRun: at } };
+        // Apagada no meio do pedido: não há o que marcar.
+        return { ...current, custom: current.custom.map((x) => (x.id === who.id ? { ...x, lastRun: at } : x)) };
+      });
     if (limited) {
       await mark();
-      this.emitRoutine({ kind, phase: "skipped", reason: "limit", ...(out.resetsAt ? { resetsAt: out.resetsAt } : {}) });
+      this.emitRoutine({ ...routineOf(who), phase: "skipped", reason: "limit", ...(out.resetsAt ? { resetsAt: out.resetsAt } : {}) });
       throw fromAgentError(new AgentError("E_AGENT_LIMIT", this.name), this.name);
     }
-    this.nextRoutine = { kind, manual };
+    this.nextRoutine = who;
     let sent: { id: string };
     try {
-      sent = await this.ask(routinePrompt(kind, routines[kind].folder, new Date(now)));
+      sent = await this.ask(custom ? customRoutinePrompt(custom, new Date(now)) : routinePrompt(who.kind as "daily" | "weekly", routines[who.kind as "daily" | "weekly"].folder, new Date(now)));
     } finally {
       this.nextRoutine = null;
     }
@@ -1387,7 +1507,7 @@ export class AgentService {
   }
 
   /** O fim de uma rotina: a nota que o pedido criou (pela Atividade), para o balão [Ver] [Manter] [Descartar]. */
-  private async finishRoutine(request: string, kind: RoutineKind): Promise<void> {
+  private async finishRoutine(request: string, who: RoutineTurn): Promise<void> {
     let found: { note: string; change: number } | null = null;
     try {
       const r = (await this.activity.list(ROUTINE_ACTIVITY_LOOKBACK)).find((x) => x.id === request);
@@ -1395,7 +1515,7 @@ export class AgentService {
     } catch (e) {
       this.d.log?.(`[agent] routine: ${String((e as Error)?.message ?? e)}`);
     }
-    this.emitRoutine({ kind, phase: "done", request, note: found?.note ?? null, change: found?.change ?? null });
+    this.emitRoutine({ ...routineOf(who), phase: "done", request, note: found?.note ?? null, change: found?.change ?? null });
   }
 
   /** Liga. Na primeira vez, só com o aceite da tela do ADR 0011. Não baixa nem abre nada. */
@@ -1531,10 +1651,11 @@ export class AgentService {
       // "Rodar agora" não pergunta: o clique já foi o sim, e o cartão diz que gasta.
       const routineNow = this.routineTurns.get(turn.id);
       if (routineNow && !routineNow.manual && s.economy) {
-        const go = await this.questions.confirm(turn.id, routineEconomyQuestion(routineNow.kind));
+        const name = routineName(routineNow);
+        const go = await this.questions.confirm(turn.id, routineEconomyQuestion(name));
         if (!go || turn.cancelled) {
-          this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: go ? "" : routineDeclined(routineNow.kind) });
-          if (!go) this.emitRoutine({ kind: routineNow.kind, phase: "skipped", reason: "declined" });
+          this.emitTurn({ id: turn.id, type: "done", stopReason: "cancelled", text: go ? "" : routineDeclined(name, routineNow.kind !== "custom") });
+          if (!go) this.emitRoutine({ ...routineOf(routineNow), phase: "skipped", reason: "declined" });
           return;
         }
       }
@@ -1578,7 +1699,7 @@ export class AgentService {
       }
       this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text });
       const finished = this.routineTurns.get(turn.id);
-      if (finished) await this.finishRoutine(turn.id, finished.kind);
+      if (finished) await this.finishRoutine(turn.id, finished);
     } catch (e) {
       if (turn.cancelled) {
         // Desligar ou sair do app no meio fecha o programa: o pedido acaba cancelado, e não "falhou".
@@ -1593,7 +1714,7 @@ export class AgentService {
           this.emitTurn({ id: turn.id, type: "limit", status: "out", ...(out?.resetsAt ? { resetsAt: out.resetsAt } : {}) });
           this.emitUsage();
           const routine = this.routineTurns.get(turn.id);
-          if (routine) this.emitRoutine({ kind: routine.kind, phase: "skipped", reason: "limit", ...(out?.resetsAt ? { resetsAt: out.resetsAt } : {}) });
+          if (routine) this.emitRoutine({ ...routineOf(routine), phase: "skipped", reason: "limit", ...(out?.resetsAt ? { resetsAt: out.resetsAt } : {}) } as AgentRoutineEvent);
         }
         this.emitTurn({ id: turn.id, type: "error", code: err.code, message: err.message });
       }

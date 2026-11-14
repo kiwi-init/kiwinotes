@@ -2,7 +2,7 @@
 // ferramentas do Kiwi (as notas, as reuniões e o `project_status`), que passam pelo guardrail como num pedido comum, e
 // escreve uma nota nova pelo `notes_create` (o snapshot, a Atividade e o [Desfazer] de sempre).
 
-import { routineDay, type RoutineKind } from "../shared/agent-routines.ts";
+import { routineDay, type CustomRoutine, type RoutineKind } from "../shared/agent-routines.ts";
 
 /** O nome da rotina, como a pessoa vê. */
 export const ROUTINE_LABELS: Record<RoutineKind, string> = {
@@ -38,14 +38,29 @@ export function routinePrompt(kind: RoutineKind, folder: string, now: Date): str
   );
 }
 
-/** A pergunta do modo econômico (#11084) antes de a rotina gastar o pedido. */
-export function routineEconomyQuestion(kind: RoutineKind): string {
-  return `${ROUTINE_LABELS[kind]} lê as notas e as reuniões e gasta um pedido do seu plano. Fazer agora?`;
+/**
+ * O pedido de uma rotina nova (spec #12944): o que a pessoa escreveu, e a nota com o nome da rotina e o dia, na pasta
+ * dela. O fim é o mesmo das prontas: o agente falso e a Atividade reconhecem pelo começo e pelo "notes_create a nota".
+ */
+export function customRoutinePrompt(r: Pick<CustomRoutine, "name" | "prompt" | "folder">, now: Date): string {
+  const day = routineDay(now);
+  const title = `${r.name} de ${day.replace(/\//g, "-")}`;
+  return (
+    `${ROUTINE_MARK} ${r.name}, ${day}. O que a pessoa pediu para esta rotina:\n\n${r.prompt}\n\n` +
+    `Crie com notes_create a nota "${title}" na pasta "${r.folder}" com o resultado, e o link [[…]] da nota ou da reunião de onde veio cada item. ` +
+    "Leia só pelas ferramentas do Kiwi, não mude nenhuma outra nota e não pergunte nada: a pessoa vê a nota depois."
+  );
+}
+
+/** A pergunta do modo econômico (#11084) antes de a rotina gastar o pedido. `name`: o nome da rotina, como a pessoa vê. */
+export function routineEconomyQuestion(name: string): string {
+  return `${name} lê as notas e as reuniões e gasta um pedido do seu plano. Fazer agora?`;
 }
 
 /** A resposta quando a pessoa disse "Agora não" (ou não respondeu): nada foi lido. */
-export function routineDeclined(kind: RoutineKind): string {
-  return `Tudo bem, ${ROUTINE_LABELS[kind].toLowerCase()} fica para a próxima: nada foi lido.`;
+export function routineDeclined(name: string, builtin: boolean): string {
+  // As prontas começam com artigo ("O resumo do dia"): ele vai em minúscula. O nome de uma nova vai entre aspas, como está.
+  return `Tudo bem, ${builtin ? name.toLowerCase() : `a rotina “${name}”`} fica para a próxima: nada foi lido.`;
 }
 
 /**

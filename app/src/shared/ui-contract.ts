@@ -2,8 +2,8 @@ import type { NoteModel } from "./note-model.ts";
 import type { SummarySettings } from "./summary-settings.ts";
 import type { AgentOnboarding } from "./agent-onboarding.ts";
 export type { AgentOnboarding } from "./agent-onboarding.ts";
-import type { AgentRoutine, AgentRoutines, RoutineKind } from "./agent-routines.ts";
-export type { AgentRoutine, AgentRoutines, RoutineKind } from "./agent-routines.ts";
+import type { AgentRoutine, AgentRoutines, CustomRoutineInput, RoutineKind } from "./agent-routines.ts";
+export type { AgentRoutine, AgentRoutines, CustomRoutine, CustomRoutineInput, RoutineDays, RoutineKind } from "./agent-routines.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
@@ -198,7 +198,12 @@ export type { NoteModel };
 // 1.68.0 (T12943, spec #12918): o `notes.folders`, só os nomes das pastas do cofre, para os seletores de pasta (as
 //   Rotinas, as reuniões e o passo dos projetos do onboarding) não pedirem o `notes.list` inteiro; e o
 //   `diagnostics.slowFrame`, o quadro travado que a tela conta, para o log local. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.68.0";
+// 1.69.0 (T13010, spec #12944): as rotinas novas. O `routines.custom` no `AgentStatus` (o nome, o pedido, a hora, os
+//   dias e a pasta de cada uma), o `agent.routineCreate` (entra desligada), o `agent.routineUpdate` e o
+//   `agent.routineDelete`; o `agent.routineRun` aceita `{id}`; o evento `agent.routine` de uma nova leva `kind: "custom"`,
+//   o `id` e o `name`. A proposta `kind: "routine"` (a ferramenta `routine_propose`), com a `routine`, e o
+//   `agent.proposalApply` dela aceita a `routine` ajustada ([Ajustar]). Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.69.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -606,7 +611,8 @@ export interface UiCapabilities {
   /** A escolha do projeto entre os candidatos, ou `folder: null` para "Nenhum: só a nota da reunião" (1.57.0). */
   "agent.proposalChoose": { args: { id: string; folder: string | null }; result: AgentProposalSummary };
   /** [Aplicar] (1.57.0): escreve as duas notas num pedido do registro; o [Desfazer] é o `agent.undo` do `applyRequest`. */
-  "agent.proposalApply": { args: { id: string }; result: AgentProposalSummary };
+  /** Numa proposta de rotina (1.69.0), a `routine` é o cartão do [Ajustar]: a rotina entra com ela, desligada. */
+  "agent.proposalApply": { args: { id: string; routine?: CustomRoutineInput }; result: AgentProposalSummary };
   /**
    * [Preparar] na pergunta do modo econômico (1.57.0): gasta o pedido agora. Volta o id do pedido; a resposta vem pelo
    * `agent.turn`, e a proposta pronta pelo `agent.proposalsChanged`.
@@ -616,7 +622,13 @@ export interface UiCapabilities {
    * "Rodar agora" numa rotina (1.65.0, spec #12150): manda o pedido dela já, ligada ou não. Volta o id do pedido; o
    * resultado vem pelo `agent.turn` e pelo evento `agent.routine`.
    */
-  "agent.routineRun": { args: { kind: RoutineKind }; result: { id: string } };
+  "agent.routineRun": { args: { kind: RoutineKind } | { id: string }; result: { id: string } };
+  /** "Nova rotina" (1.69.0, spec #12944): entra desligada. Um campo que não vale dá E_BAD_ARGS, que diz qual. */
+  "agent.routineCreate": { args: CustomRoutineInput; result: AgentStatus };
+  /** Muda uma rotina nova: o liga/desliga e os campos dados. Ligar ou mudar a hora ou os dias a arma de novo. */
+  "agent.routineUpdate": { args: { id: string } & Partial<CustomRoutineInput & { on: boolean }>; result: AgentStatus };
+  /** Apaga uma rotina nova. As prontas não se apagam: só se desligam. */
+  "agent.routineDelete": { args: { id: string }; result: AgentStatus };
   /** [Descartar], ou "Agora não" na pergunta do modo econômico (1.57.0): nada muda nas notas. */
   "agent.proposalDiscard": { args: { id: string }; result: AgentProposalSummary };
   /** A memória do agente (1.60.0, spec #11469): os fatos de `.kiwi/agente/sobre-mim.md` e a última mudança. */
@@ -677,13 +689,16 @@ export interface AgentProposalSummary {
   status: "offer" | "pending" | "applied" | "discarded";
   /** `summary`: o resumo executivo de um projeto (1.59.0, spec #11546), que só muda a nota principal. */
   /** `references` (1.63.0, spec #11908): as referências de uma nota, que vão no fim dela. */
-  kind: "meeting" | "summary" | "references";
+  /** `routine` (1.69.0, spec #12944): uma rotina nova que o agente propõe, com a `routine`. */
+  kind: "meeting" | "summary" | "references" | "routine";
   /** A reunião; null num resumo executivo. */
   meeting: { path: string; title: string; date: string } | null;
   /** O resumo executivo: o sinal e desde quando "o que andou" conta. */
   summary?: { signal: "verde" | "amarelo" | "vermelho"; since: string };
   /** As referências: a nota e quantos links o agente mandou. */
   references?: { note: string; count: number };
+  /** A rotina que o agente propõe: o [Criar] a cria desligada; o [Ajustar] abre o cartão com ela. */
+  routine?: CustomRoutineInput;
   /** O projeto; null sem projeto (em dúvida, com `candidates`, ou "Nenhum: só a nota da reunião"). */
   project: { folder: string; name: string } | null;
   /** Os projetos parecidos, quando o agente ficou em dúvida: a pessoa escolhe. */
@@ -1050,6 +1065,9 @@ export const UI_CAPABILITIES = [
   "agent.proposalPrepare",
   "agent.proposalDiscard",
   "agent.routineRun",
+  "agent.routineCreate",
+  "agent.routineUpdate",
+  "agent.routineDelete",
   "agent.memory",
   "agent.memoryUndo",
   "agent.memorySet",
@@ -1121,10 +1139,14 @@ export interface UiEvents {
  * com o porquê: `limit` (o limite do plano acabou, com a hora de volta quando o agente a disse) ou `declined` (no modo
  * econômico, a pessoa disse "Agora não", ou não respondeu).
  */
-export type AgentRoutineEvent =
-  | { kind: RoutineKind; phase: "done"; request: string; note: string | null; change: number | null }
-  | { kind: RoutineKind; phase: "skipped"; reason: "limit"; resetsAt?: string }
-  | { kind: RoutineKind; phase: "skipped"; reason: "declined" };
+export type AgentRoutineEvent = RoutineEventWho &
+  (
+    | { phase: "done"; request: string; note: string | null; change: number | null }
+    | { phase: "skipped"; reason: "limit"; resetsAt?: string }
+    | { phase: "skipped"; reason: "declined" }
+  );
+/** Qual rotina: uma das prontas, ou uma nova (1.69.0), com o id e o nome. */
+export type RoutineEventWho = { kind: RoutineKind; id?: undefined; name?: undefined } | { kind: "custom"; id: string; name: string };
 
 /** O que o gato mostra durante a fala ao agente (1.55.0). `voz`: o nível do mic, de 0 a 1. */
 export type AgentVoiceUi =

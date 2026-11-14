@@ -199,7 +199,7 @@ describe("a ferramenta meeting_propose", () => {
   };
   function ctx(guard?: SecretGuard) {
     const got: ProposalDraft[] = [];
-    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: { propose: async (d: ProposalDraft) => (got.push(d), { id: `p${got.length}` }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01", references: async () => ({ id: "r" }) } } };
+    return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: { propose: async (d: ProposalDraft) => (got.push(d), { id: `p${got.length}` }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01", references: async () => ({ id: "r" }), routine: async () => ({ id: "t" }) } } };
   }
   const call = (c: ReturnType<typeof ctx>["ctx"], args: Record<string, unknown>) => runKiwiTool(c, "meeting_propose", { reuniao: MEETING.path, tema: "Tema", ...args });
 
@@ -264,7 +264,7 @@ describe("a ferramenta project_summary_propose (spec #11546)", () => {
   };
   function ctx(guard?: SecretGuard) {
     const got: SummaryDraft[] = [];
-    const sink = { propose: async () => ({ id: "m" }), summary: async (d: SummaryDraft) => (got.push(d), { id: `s${got.length}` }), since: async () => "2026-11-01", references: async () => ({ id: "r" }) };
+    const sink = { propose: async () => ({ id: "m" }), summary: async (d: SummaryDraft) => (got.push(d), { id: `s${got.length}` }), since: async () => "2026-11-01", references: async () => ({ id: "r" }), routine: async () => ({ id: "t" }) };
     return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: sink } };
   }
   const call = (c: ReturnType<typeof ctx>["ctx"], args: Record<string, unknown>) => runKiwiTool(c, "project_summary_propose", { projeto: "Migração", situacao: "amarelo", ...args });
@@ -382,7 +382,7 @@ describe("a ferramenta notes_add_references (spec #11908)", () => {
   };
   function ctx(guard?: SecretGuard) {
     const got: { note: string; items: unknown[] }[] = [];
-    const sink = { propose: async () => ({ id: "m" }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01", references: async (d: { note: string; items: unknown[] }) => (got.push(d), { id: `r${got.length}` }) };
+    const sink = { propose: async () => ({ id: "m" }), summary: async () => ({ id: "s" }), since: async () => "2026-01-01", references: async (d: { note: string; items: unknown[] }) => (got.push(d), { id: `r${got.length}` }), routine: async () => ({ id: "t" }) };
     return { got, ctx: { reader, ...(guard ? { guard } : {}), proposals: sink } };
   }
   const item = (o: Record<string, unknown> = {}) => ({ titulo: "Doc", link: "https://example.com/doc", resumo: "A doc.", data: "2026-11-14", ...o });
@@ -417,5 +417,40 @@ describe("a ferramenta notes_add_references (spec #11908)", () => {
       runKiwiTool(c, "notes_add_references", { nota: NOTE, itens: [item({ link: "https://example.com/doc?token=ghp_0123456789abcdefghijABCDEFGHIJ012345" })] }),
     ).rejects.toMatchObject({ code: "E_SECRET" });
     expect(got).toEqual([]);
+  });
+});
+
+// A rotina que o agente propõe (spec #12944): os dias como a pessoa diz, e o que não vale volta para o agente.
+describe("a routine_propose", () => {
+  const sink = (got: unknown[]) => ({
+    propose: async () => ({ id: "m" }),
+    summary: async () => ({ id: "s" }),
+    since: async () => "2026-01-01",
+    references: async () => ({ id: "r" }),
+    routine: async (d: unknown) => (got.push(d), { id: `t${got.length}` }),
+  });
+  const base = { nome: "Resumo das reuniões", pedido: "Faz um resumo das reuniões do dia.", hora: "18:00", dias: "todo dia" };
+
+  test("guarda a proposta com os campos no formato da rotina, e a pasta padrão", async () => {
+    const got: unknown[] = [];
+    const r = await runKiwiTool({ reader: EMPTY_READER, proposals: sink(got) }, "routine_propose", base);
+    expect(r.value).toMatchObject({ proposta: "t1", rotina: "Resumo das reuniões" });
+    expect(got).toEqual([{ name: "Resumo das reuniões", prompt: "Faz um resumo das reuniões do dia.", time: "18:00", days: "every", folder: "Rotinas" }]);
+    await runKiwiTool({ reader: EMPTY_READER, proposals: sink(got) }, "routine_propose", { ...base, dias: "dias úteis", pasta: "Diário" });
+    await runKiwiTool({ reader: EMPTY_READER, proposals: sink(got) }, "routine_propose", { ...base, dias: ["quinta-feira", "segunda"] });
+    expect(got.slice(1)).toEqual([expect.objectContaining({ days: "weekdays", folder: "Diário" }), expect.objectContaining({ days: [1, 4] })]);
+  });
+
+  test("o que não vale volta para o agente com o motivo, e nada é guardado", async () => {
+    const got: unknown[] = [];
+    const call = (a: Record<string, unknown>) => runKiwiTool({ reader: EMPTY_READER, proposals: sink(got) }, "routine_propose", { ...base, ...a });
+    await expect(call({ hora: "18h" })).rejects.toMatchObject({ code: "E_BAD_ARGS", message: "hora é HH:MM, de 00:00 a 23:59" });
+    await expect(call({ dias: ["feriado"] })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call({ nome: "x".repeat(61) })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call({ pasta: "../fora" })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(call({ ligar: true })).rejects.toMatchObject({ code: "E_BAD_ARGS", message: "campo desconhecido: ligar" });
+    expect(got).toEqual([]);
+    // Sem quem guarda as propostas, a ferramenta não existe.
+    await expect(runKiwiTool({ reader: EMPTY_READER }, "routine_propose", base)).rejects.toMatchObject({ code: "E_UNKNOWN_TOOL" });
   });
 });

@@ -15,14 +15,16 @@ const hour = (iso: string) => {
 export const noteName = (path: string) => path.replace(/^.*\//, "").replace(/\.md$/i, "");
 
 /** A concordância de cada rotina: o resumo (singular) e os pendentes (plural). */
-const VERBS: Record<RoutineKind, { ready: string; ended: string; notRun: string; again: string }> = {
+const VERBS: Record<RoutineKind | "custom", { ready: string; ended: string; notRun: string; again: string }> = {
   daily: { ready: "está pronto", ended: "terminou", notRun: "não rodou", again: "Ele roda" },
   weekly: { ready: "estão prontos", ended: "terminaram", notRun: "não rodaram", again: "Eles rodam" },
+  // Uma rotina nova (spec #12944): "A rotina “Resumo das reuniões” está pronta".
+  custom: { ready: "está pronta", ended: "terminou", notRun: "não rodou", again: "Ela roda" },
 };
 
 /** A frase do balão, ou null quando não há o que mostrar ("Agora não" foi a própria pessoa que disse). */
 export function routineLine(e: AgentRoutineEvent): string | null {
-  const name = ROUTINE_NAMES[e.kind];
+  const name = e.kind === "custom" ? `A rotina “${e.name}”` : ROUTINE_NAMES[e.kind];
   const v = VERBS[e.kind];
   if (e.phase === "done") return e.note ? `${name} ${v.ready}: ${noteName(e.note)}.` : `${name} ${v.ended}, mas o agente não criou a nota. A resposta está na Atividade.`;
   if (e.reason === "limit") return `${name} ${v.notRun}: o limite do seu plano acabou${e.resetsAt ? ` e volta às ${hour(e.resetsAt)}` : ""}. ${v.again} de novo no próximo horário.`;
