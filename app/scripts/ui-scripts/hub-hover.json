@@ -54,13 +54,13 @@
       "name": "volta para Notas, e o foco fica nela (o teclado precisa disto)"
     },
     {
-      "hover": ".kn-tab:has-text('Sobre')",
-      "name": "mouse parado em Sobre"
+      "hover": ".kn-tab:has-text('Ditado')",
+      "name": "mouse parado em Ditado"
     },
     {
       "expectSame": ".kn-tabs-pill",
       "as": ".kn-tab[aria-selected='true']",
-      "name": "mouse parado em Sobre não seleciona a aba"
+      "name": "mouse parado em Ditado não seleciona a aba"
     },
     {
       "press": "ArrowRight",
@@ -75,11 +75,11 @@
       "name": "o teclado escolhe a aba mesmo com o mouse parado em outra, e a pílula a acompanha"
     },
     {
-      "click": ".kn-tab:has-text('Sobre')",
+      "click": ".kn-tab:has-text('Ditado')",
       "name": "o clique continua trocando de seção"
     },
     {
-      "waitFor": ".kn-tab[aria-selected='true']:has-text('Sobre')"
+      "waitFor": ".kn-tab[aria-selected='true']:has-text('Ditado')"
     },
     {
       "expectSame": ".kn-tabs-pill",
