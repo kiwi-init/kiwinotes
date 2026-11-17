@@ -225,15 +225,21 @@ function growth(frames: Frame[]) {
     if (s?.stale) stale++;
     return !s?.stale;
   });
+  // O salto visto só entre dois quadros seguidos (até 40 ms); o do layout, entre quaisquer dois (ele é do texto, não do
+  // tempo). Com a máquina ocupada, a página fica 100 a 200 ms sem amostra, e o FLIP de 240 ms anda nesse tempo; o par dos
+  // dois lados da trava mostrava o FLIP quase inteiro como um salto de um quadro (T16835: 197 → 323 px em 115 ms). Os
+  // pares mais longe ficam em `gaps`. Nas 54 gravações guardadas, só as duas com trava mudam de resultado.
+  let gaps = 0;
   for (let i = 1; i < painted.length; i++) {
     const a = pick(painted[i - 1]!), b = pick(painted[i]!);
     if (!a || !b) continue;
     const dl = Math.max(Math.abs(b.lw - a.lw), Math.abs(b.lh - a.lh)), dv = Math.max(Math.abs(b.vw - a.vw), Math.abs(b.vh - a.vh));
     if (dl >= 4) changes++;
     layout = Math.max(layout, dl);
+    if (painted[i]!.t - painted[i - 1]!.t > 40) { gaps++; continue; }
     seen = Math.max(seen, dv);
   }
-  return { changes, maxLayoutJump: Math.round(layout), maxSeenJump: Math.round(seen), stale };
+  return { changes, maxLayoutJump: Math.round(layout), maxSeenJump: Math.round(seen), stale, gaps };
 }
 
 /** As trocas: quadros com um balão saindo e outro entrando. */
