@@ -81,6 +81,26 @@ export async function searchTextNotes(
   return hits;
 }
 
+/**
+ * A busca pelo nome nos arquivos que não são nota (spec #17587): um pdf, uma planilha ou um zip cujo caminho tem todas
+ * as palavras do pedido, sem diferenciar maiúscula nem acento. O `path:pasta` vale aqui também. Não lê o arquivo: o
+ * texto dele, o agente pede pelo `files_read`.
+ */
+export function searchFileNames(query: string, files: readonly VaultFile[], limit: number): VaultFile[] {
+  const words = terms(query);
+  const inPath = fold(query).match(/(?:^|\s)path:("[^"]+"|\S+)/)?.[1]?.replace(/^"|"$/g, "");
+  if (!words.length || limit <= 0) return [];
+  const out: VaultFile[] = [];
+  for (const f of files) {
+    if (out.length >= limit) break;
+    if (isTextNote(f.path)) continue;
+    const where = fold(f.path);
+    if (inPath && !where.startsWith(`${inPath.replace(/\/+$/, "")}/`)) continue;
+    if (words.every((w) => where.includes(w))) out.push(f);
+  }
+  return out;
+}
+
 export interface ReaderNoteMeta {
   path: string;
   title: string;
@@ -97,7 +117,8 @@ const textMeta = (f: VaultFile): ReaderNoteMeta => {
 
 export interface VaultReader {
   search(query: string, limit: number): Promise<ReaderHit[]>;
-  list(): Promise<{ folders: string[]; notes: ReaderNoteMeta[] }>;
+  /** `files` (spec #17587): os arquivos que não são nota (o pdf, a planilha, o zip, o que for), para o agente ver tudo. */
+  list(): Promise<{ folders: string[]; notes: ReaderNoteMeta[]; files?: VaultFile[] }>;
   /** `version` (spec #8356): a versão da nota, que o `notes_write` pede para mudar o texto. */
   get(path: string): Promise<{ path: string; title: string; mtime: string; content: string; version?: string }>;
   meetings(): Promise<MeetingNote[]>;
@@ -138,7 +159,8 @@ export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unk
     },
     list: async () => {
       const r = await listed();
-      return { folders: r.folders, notes: [...r.notes, ...(r.files ?? []).filter((f) => isTextNote(f.path)).map(textMeta)] };
+      const files = r.files ?? [];
+      return { folders: r.folders, notes: [...r.notes, ...files.filter((f) => isTextNote(f.path)).map(textMeta)], files: files.filter((f) => !isTextNote(f.path)) };
     },
     get: async (path) => (isTextNote(path) ? textNote(await call<FileContent>("files.read", { path, as: "text" })) : call("notes.get", { path })),
     meetings: async () => (await call<{ meetings: MeetingNote[] }>("meetings.list", undefined)).meetings,
@@ -151,7 +173,7 @@ export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unk
 /** Um cofre vazio: a prova de verdade abre a sessão com as ferramentas, e nenhuma nota da pessoa entra nela. */
 export const EMPTY_READER: VaultReader = {
   search: async () => [],
-  list: async () => ({ folders: [], notes: [] }),
+  list: async () => ({ folders: [], notes: [], files: [] }),
   get: async (path) => {
     throw Object.assign(new Error(`no note ${path}`), { code: "E_NOT_FOUND" });
   },
