@@ -126,12 +126,33 @@ async function startSampler(p: Page) {
       if (w.__sampling) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
+    // As mudanças do canto por tarefa (T16835): cada chamada do MutationObserver junta o que mudou numa mesma tarefa.
+    // Um balão que começa a sair numa tarefa e o seguinte que monta em outra caem em pinturas diferentes, conforme a
+    // máquina estiver. Os quadros acima só pegam isso quando ela está ocupada; aqui pega sempre.
+    const kindOf = (slot: Element) => {
+      const c = (slot.firstElementChild as HTMLElement | null)?.className ?? "";
+      return c.includes("kn-cat-ask") ? "pergunta" : c.includes("kn-proposal") ? "proposta" : c.includes("kn-memory") ? "memoria" : "resposta";
+    };
+    w.__batches = [];
+    w.__observer = new MutationObserver((records) => {
+      const exits: string[] = [], adds: string[] = [];
+      for (const r of records) {
+        if (r.type === "attributes" && (r.target as HTMLElement).dataset.phase === "exit" && r.oldValue !== "exit") exits.push(kindOf(r.target as Element));
+        if (r.type === "childList")
+          for (const n of r.addedNodes) if (n instanceof HTMLElement && n.classList.contains("kn-bubble-slot")) adds.push(kindOf(n));
+      }
+      if (exits.length || adds.length) w.__batches.push({ t: performance.now() - t0, exits, adds });
+    });
+    w.__observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-phase"], attributeOldValue: true });
   });
 }
-async function stopSampler(p: Page): Promise<Frame[]> {
+type Batch = { t: number; exits: string[]; adds: string[] };
+async function stopSampler(p: Page): Promise<{ frames: Frame[]; batches: Batch[] }> {
   return p.evaluate(() => {
-    (window as any).__sampling = false;
-    return (window as any).__frames;
+    const w = window as any;
+    w.__sampling = false;
+    w.__observer.disconnect();
+    return { frames: w.__frames, batches: w.__batches };
   });
 }
 
@@ -216,6 +237,23 @@ function growth(frames: Frame[]) {
 }
 
 /** As trocas: quadros com um balão saindo e outro entrando. */
+/**
+ * As trocas que saem em duas tarefas (T16835): um balão começa a sair sem que outro monte na mesma tarefa, e o seguinte
+ * monta numa tarefa depois (até 400 ms). As duas metades podem cair em pinturas diferentes, e o canto esvazia no meio.
+ * A proposta → resposta fica de fora: a proposta sai sozinha no `started`, e a resposta só vem com o texto (#16046).
+ */
+function splitSwaps(batches: Batch[]): { from: string; to: string; ms: number }[] {
+  const out: { from: string; to: string; ms: number }[] = [];
+  batches.forEach((b, i) => {
+    if (!b.exits.length || b.adds.length) return;
+    const next = batches.slice(i + 1).find((n) => n.adds.length || n.exits.length);
+    if (!next?.adds.length || next.t - b.t > 400) return;
+    for (const from of b.exits)
+      for (const to of next.adds) if (!(from === "proposta" && to === "resposta")) out.push({ from, to, ms: Math.round(next.t - b.t) });
+  });
+  return out;
+}
+
 function analyse(frames: Frame[]) {
   const vis = (f: Frame) => Math.max(0, ...f.slots.map((s) => s.op));
   const twoFull = frames.filter((f) => f.slots.filter((s) => s.op > 0.9).length >= 2);
@@ -305,10 +343,14 @@ try {
     const cpu = cpuDelta(cpu0, webkitCpu()), secs = (performance.now() - t0) / 1000;
     report[`cpu-${run}`] = { seconds: +secs.toFixed(2), cpuSeconds: +cpu.toFixed(2), percentOfCore: +((cpu / secs) * 100).toFixed(1) };
     if (!cpuOnly) {
-      const frames = await stopSampler(p);
+      const { frames, batches } = await stopSampler(p);
       writeFileSync(join(out, `quadros-${run}.json`), JSON.stringify(frames));
+      writeFileSync(join(out, `tarefas-${run}.json`), JSON.stringify(batches));
       const a = analyse(frames);
       report[run] = a;
+      const split = splitSwaps(batches);
+      report[`${run}-split`] = split;
+      for (const s of split) problems.push(`${run}: na troca ${s.from} → ${s.to}, o balão que sai começou a sair ${s.ms} ms antes de o outro montar, em outra tarefa`);
       if (a.twoFull) problems.push(`${run}: ${a.twoFull} quadro(s) com dois balões cheios`);
       // As trocas da sequência têm de estar lá (uma espera que passasse por um balão de um render só pularia uma).
       for (const want of ["resposta → proposta", "proposta → pergunta", "pergunta → resposta"])

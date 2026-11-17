@@ -7,7 +7,7 @@
 //   ouvido enquanto o balão grande está aberto.
 // - Leitor de tela: a resposta é anunciada uma vez, no fim, inteira.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { api } from "../src/api";
 import { BUBBLE_LINES, BubbleFeed, type BubbleView } from "./bubble-state";
@@ -114,7 +114,10 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
   const keepFocus = (e: React.MouseEvent | React.PointerEvent) => e.preventDefault();
   // Quem mais usa o canto (a proposta da reunião, spec #8360) espera o balão da resposta sair.
   const showing = !!view || bigOpen;
-  useEffect(() => onShown?.(showing), [showing]);
+  // No layout effect, e não no `useEffect` (T16835): o `setState` do dono entra antes da pintura, então a proposta monta
+  // na mesma pintura em que a resposta começa a sair. Com o `useEffect`, ela vinha numa tarefa depois, e com a máquina
+  // ocupada a resposta esmaecia sozinha antes (o canto chegava a 0,12 de opacidade).
+  useLayoutEffect(() => onShown?.(showing), [showing]);
 
   return (
     <>
