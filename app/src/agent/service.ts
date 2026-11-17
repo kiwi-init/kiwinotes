@@ -1994,6 +1994,15 @@ export class AgentService {
     };
   }
 
+  /**
+   * As notas mudaram de lugar ou saíram (T16650), pelo app ou por fora: as trilhas vão junto, e a de uma nota que saiu
+   * sai da lista. `map` é o mesmo das fixadas: o caminho novo, ou null.
+   */
+  trailsFollow(map: (p: string) => string | null): void {
+    const n = this.trilhas.seguir(map);
+    if (n) this.d.log?.(`[agent] trilhas: ${n} seguiram a nota`);
+  }
+
   /** Apaga uma trilha. */
   trailDelete(id: string): AgentTrailsView {
     this.trilhas.apagar(id);

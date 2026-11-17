@@ -348,6 +348,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     );
     // Os projetos também (spec #9874); na abertura (sem `moves`), a nota principal acha a pasta pelo inode.
     await projectsFile().update((list) => followProjects(list, r, deps.notes.existing(), deps.notes.noteInodes?.(), dirIno, meetingsFolder));
+    // As trilhas do agente também (T16650): a nota renomeada por fora leva a trilha, e a que sumiu (ou já não existia
+    // na abertura) sai da lista.
+    const existing = deps.notes.existing();
+    followTrails((p) => r.moves.get(p) ?? (existing.notes.has(p) ? p : null));
   };
   /** O arquivo dos projetos deste cofre (`.kiwi/projects.json`). */
   let projects: ProjectsFile | null = null;
@@ -503,6 +507,17 @@ export function uiCapabilities(deps: CapabilityDeps,
     await projectsFile()
       .update((list) => mapProjects(list, map))
       .catch((e) => console.error("[notes] projects:", e));
+    // As trilhas do agente seguem o mesmo mapa (T16650): a nota renomeada ou movida pelo app leva a trilha junto, e a
+    // apagada a tira da lista.
+    followTrails(map);
+  };
+  /** Best effort, como os projetos: um `trilhas.json` que não grava nunca desfaz o que já aconteceu nas notas. */
+  const followTrails = (map: (p: string) => string | null) => {
+    try {
+      deps.agent?.trailsFollow(map);
+    } catch (e) {
+      console.error("[agent] trilhas:", e);
+    }
   };
   /** A nota (ou a pasta) mudou de lugar pelo app: as fixadas e o histórico de versões vão junto. */
   const followMove = async (map: (p: string) => string) => {

@@ -154,6 +154,27 @@ export class TrilhaStore {
     return t;
   }
 
+  /**
+   * A nota mudou de lugar ou saiu (T16650): `map` diz para onde foi cada caminho, ou null quando ela saiu (apagada,
+   * ou sumida por fora sem aparecer em outro lugar). A trilha vai junto com a nota, ou sai da lista: uma trilha morta
+   * não leva a nada. Devolve quantas mudaram.
+   */
+  seguir(map: (p: string) => string | null): number {
+    let mudaram = 0;
+    const next: Trilha[] = [];
+    for (const t of this.list()) {
+      const to = map(t.path);
+      if (to === t.path) {
+        next.push(t);
+        continue;
+      }
+      mudaram++;
+      if (to !== null) next.push({ ...t, path: to });
+    }
+    if (mudaram) this.save(next);
+    return mudaram;
+  }
+
   /** Apaga uma trilha. */
   apagar(id: string): boolean {
     const ts = this.list();
