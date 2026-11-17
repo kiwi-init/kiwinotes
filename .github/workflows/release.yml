@@ -92,6 +92,10 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # O WebKit do Playwright: o teste do OCR da guarda (push-guard.test.ts) desenha a imagem nele, como no ci.yml.
+      - name: Browsers
+        run: bunx playwright-core install webkit
+
       - name: Test
         run: bun test
 
