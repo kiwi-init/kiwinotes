@@ -9,7 +9,7 @@ import type { DecorationSet } from "@codemirror/view";
 
 import { wikiLinkSyntax } from "./index.ts";
 import { editorFocused, focusChanged } from "./livePreview.ts";
-import { buildRendered, renderedPreview } from "./renderedWidget.tsx";
+import { arrowIntoDrawn, buildRendered, renderedPreview } from "./renderedWidget.tsx";
 
 const md = markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] });
 const resolver = { status: () => "exists" as const };
@@ -100,5 +100,40 @@ describe("o cursor que anda remenda só os blocos dele (spec #13385)", () => {
     }
     state = state.update({ selection: EditorSelection.single(doc.indexOf("dois"), doc.indexOf("três")) }).state;
     expect(shape(state.field(field))).toEqual(shape(buildRendered(state, resolver as never, actions)));
+  });
+
+  // A regressão que o T17785 achou: com o cursor no 1º item, a seta para baixo pulava os itens desenhados de baixo.
+  test("a seta anda de item em item, na mesma coluna, e não pula os itens desenhados", () => {
+    const doc = "Antes.\n\n- maçã verde\n- banana da feira\n- cereja\n\nDepois.";
+    const [field] = renderedPreview(resolver as never, actions) as [StateField<DecorationSet>];
+    let state = EditorState.create({ doc, selection: EditorSelection.cursor(doc.indexOf("maçã") + 2), extensions: [md, editorFocused, field] });
+    state = state.update({ effects: focusChanged.of(true) }).state;
+    const go = (dir: 1 | -1) => {
+      const sel = arrowIntoDrawn(state, state.field(field), dir);
+      if (sel) state = state.update({ selection: sel }).state;
+      return sel ? state.selection.main.head : null;
+    };
+    expect(go(1)).toBe(doc.indexOf("banana") + 2);
+    expect(go(1)).toBe(doc.indexOf("cereja") + 2);
+    // Do último item, a linha de baixo está vazia: fica com o editor.
+    expect(go(1)).toBeNull();
+    expect(go(-1)).toBe(doc.indexOf("banana") + 2);
+    expect(go(-1)).toBe(doc.indexOf("maçã") + 2);
+    expect(go(-1)).toBeNull();
+    // A coluna além do fim da linha vizinha cai no fim dela.
+    state = state.update({ selection: EditorSelection.cursor(doc.indexOf("feira") + 5) }).state;
+    expect(go(1)).toBe(doc.indexOf("cereja") + "cereja".length);
+    // Com seleção, a seta é do editor.
+    state = state.update({ selection: EditorSelection.single(doc.indexOf("maçã"), doc.indexOf("verde")) }).state;
+    expect(go(1)).toBeNull();
+  });
+
+  test("a seta que chega a um parágrafo desenhado colado também para na linha vizinha", () => {
+    const doc = "Um\nparágrafo de duas\n- item";
+    const [field] = renderedPreview(resolver as never, actions) as [StateField<DecorationSet>];
+    let state = EditorState.create({ doc, selection: EditorSelection.cursor(doc.indexOf("item")), extensions: [md, editorFocused, field] });
+    state = state.update({ effects: focusChanged.of(true) }).state;
+    const sel = arrowIntoDrawn(state, state.field(field), -1);
+    expect(sel?.main.head).toBe(doc.indexOf("parágrafo") + 2);
   });
 });

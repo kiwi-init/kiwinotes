@@ -10,8 +10,8 @@ import katex from "katex";
 import { HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, type EditorState, type Range, StateField, type Transaction } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
+import { EditorSelection, type EditorState, Prec, type Range, StateField, type Transaction } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, WidgetType } from "@codemirror/view";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { MarkdownStyle } from "react-native-enriched-markdown/lib/module/index.web.js";
@@ -722,26 +722,57 @@ export function patchRendered(value: DecorationSet, tr: Transaction, resolver: L
 }
 
 /**
+ * A seta para cima ou para baixo que entra num bloco desenhado (spec #17690). O editor pula um widget de bloco inteiro:
+ * com o cursor no 1º item de uma lista, a seta para baixo ia para a linha depois da lista, por cima dos itens desenhados.
+ * Aqui ela vai para a linha vizinha, na mesma coluna, e o item dela fica cru. Só com o cursor sem seleção.
+ */
+export function arrowIntoDrawn(state: EditorState, drawn: DecorationSet, dir: 1 | -1): EditorSelection | null {
+  const sel = state.selection.main;
+  if (!sel.empty || state.selection.ranges.length > 1) return null;
+  const line = state.doc.lineAt(sel.head);
+  const n = line.number + dir;
+  if (n < 1 || n > state.doc.lines) return null;
+  const next = state.doc.line(n);
+  let covered = false;
+  drawn.between(next.from, next.to, (from, to, d) => {
+    if ((d.spec as { widget?: unknown }).widget instanceof RenderedWidget && from <= next.from && to >= next.to) covered = true;
+  });
+  if (!covered) return null;
+  return EditorSelection.single(next.from + Math.min(sel.head - line.from, next.length));
+}
+
+/**
  * Os blocos fora do cursor aparecem renderizados pela lib do Channels. Vem de um StateField porque um bloco de várias
  * linhas esconde quebras de linha. Precisa do `commentPreview` (que guarda se o editor está com foco).
  */
 export function renderedPreview(resolver: LinkResolver, actions: RenderedActions) {
+  const field = StateField.define<DecorationSet>({
+    create: (state) => buildRendered(state, resolver, actions),
+    update(value, tr) {
+      const changed =
+        tr.docChanged ||
+        tr.effects.some((e) => e.is(linksChanged)) ||
+        syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
+        tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false) ||
+        hiddenTitle(tr.startState) !== hiddenTitle(tr.state);
+      if (changed) return buildRendered(tr.state, resolver, actions);
+      // Só o cursor: refaz só os blocos onde ele estava e onde está (spec #13385).
+      return tr.selection ? patchRendered(value, tr, resolver, actions) : value;
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
+  const arrow = (dir: 1 | -1) => (view: EditorView) => {
+    const sel = arrowIntoDrawn(view.state, view.state.field(field), dir);
+    if (!sel) return false;
+    view.dispatch({ selection: sel, scrollIntoView: true, userEvent: "select" });
+    return true;
+  };
   return [
-    StateField.define<DecorationSet>({
-      create: (state) => buildRendered(state, resolver, actions),
-      update(value, tr) {
-        const changed =
-          tr.docChanged ||
-          tr.effects.some((e) => e.is(linksChanged)) ||
-          syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
-          tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false) ||
-          hiddenTitle(tr.startState) !== hiddenTitle(tr.state);
-        if (changed) return buildRendered(tr.state, resolver, actions);
-        // Só o cursor: refaz só os blocos onde ele estava e onde está (spec #13385).
-        return tr.selection ? patchRendered(value, tr, resolver, actions) : value;
-      },
-      provide: (f) => EditorView.decorations.from(f),
-    }),
+    field,
+    Prec.high(keymap.of([
+      { key: "ArrowDown", run: arrow(1) },
+      { key: "ArrowUp", run: arrow(-1) },
+    ])),
     footnoteHover(actions),
     renderedTheme,
   ];
