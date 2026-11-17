@@ -98,6 +98,33 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertEqual(big.windowFrame(visible: small).maxY, small.maxY, accuracy: 1)
     }
 
+    /// T16754 (harry #16786): o balão fica do lado do gato, com a ponta do rabo (7,5 pt para dentro da quina) na borda do
+    /// corpo dele, e a janela tem a largura do gato e do que o balão passa dele, a mesma da página (`placement.ts`).
+    func testTheBubbleCornerTouchesTheCatBody() {
+        let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
+        let L = CatOverlayLayout.self
+        for position in CatPosition.allCases {
+            for scale in [0.6, 1, 1.6] {
+                let p = CatPlacement(position: position, scale: scale)
+                let f = p.windowFrame(visible: visible)
+                let cat = p.catRect(in: f)
+                let bubble = p.bubbleRect(in: f)
+                let what = "\(position.rawValue) \(scale)"
+                XCTAssertEqual(p.bubbleLeft, !(position == .topLeft || position == .bottomLeft), what)
+                let tip = p.bubbleLeft ? bubble.maxX - L.tailTipX : bubble.minX + L.tailTipX
+                let edge = cat.minX + cat.width * (p.bubbleLeft ? L.bodyX0 : L.bodyX1)
+                XCTAssertEqual(tip, edge, accuracy: 0.5, "a ponta na borda do corpo: \(what)")
+                XCTAssertGreaterThanOrEqual(bubble.minX, f.minX - 0.5, "o balão dentro da janela: \(what)")
+                XCTAssertLessThanOrEqual(bubble.maxX, f.maxX + 0.5, "o balão dentro da janela: \(what)")
+                XCTAssertEqual(f.width, cat.width + p.overhang, what)
+            }
+        }
+        // As larguras que a página também calcula (placement.test.ts): 1× no centro, 1,6× à esquerda, 0,6× à direita.
+        XCTAssertEqual(CatPlacement(position: .center, scale: 1).size.width, 192 + 239)
+        XCTAssertEqual(CatPlacement(position: .topLeft, scale: 1.6).size.width, 307 + 213)
+        XCTAssertEqual(CatPlacement(position: .bottomRight, scale: 0.6).size.width, 115 + 261)
+    }
+
     /// Spec #13378 e #504: só o balão pega o clique; o gato e o espaço transparente deixam passar.
     func testOnlyTheBubbleTakesTheClick() {
         let panel = CGRect(x: 100, y: 100, width: 300, height: 600)
@@ -137,7 +164,9 @@ final class CatOverlayModelTests: XCTestCase {
 
     func testDefaultIsTodayAndOutOfRangeIsClamped() {
         let visible = CGRect(x: 0, y: 80, width: 1512, height: 870)
-        XCTAssertEqual(CatPlacement().frame(visible: visible), CatOverlayLayout.frame(visible: visible))
+        // O gato no mesmo lugar de antes; a janela agora é mais larga do lado do balão (T16754).
+        let legacy = CatOverlayLayout.frame(visible: visible)
+        XCTAssertEqual(CatPlacement().catRect(in: CatPlacement().frame(visible: visible)), CGRect(x: legacy.midX - 96, y: legacy.minY, width: 192, height: 240))
         XCTAssertEqual(CatPosition(setting: "nada"), .center)
         XCTAssertEqual(CatPosition(setting: nil), .center)
         XCTAssertEqual(CatPosition(setting: "top-right"), .topRight)

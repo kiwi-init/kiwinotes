@@ -74,6 +74,21 @@ describe("o gato segue o pedido atual (spec #9510)", () => {
     expect(b.event(done("antigo"))).toBe("acordou");
   });
 
+  test("o status livre solta a adoção: o pedido que já rodava acabou antes do gato ver (T16754)", () => {
+    const a = new CatActivity(true);
+    expect(a.busy).toBe(true);
+    expect(a.idle()).toBe("repouso");
+    expect(a.busy).toBe(false);
+    // Um pedido de verdade em andamento não é solto pelo idle.
+    a.event(started("novo"));
+    expect(a.idle()).toBe("acordou");
+    expect(a.busy).toBe(true);
+    // Com o campo aberto, volta à atenção.
+    const b = new CatActivity(true);
+    b.attend(true);
+    expect(b.idle()).toBe("ouvindo");
+  });
+
   test("os pedidos terminados ficam guardados até um limite, e o mais velho sai primeiro", () => {
     const a = new CatActivity(false);
     for (let i = 0; i < CAT_FINISHED_MAX + 10; i++) {

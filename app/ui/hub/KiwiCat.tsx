@@ -12,6 +12,7 @@ import { CatBubble } from "./CatBubble";
 import { MemoryBubble } from "./MemoryBubble";
 import { RoutineBubble } from "./RoutineBubble";
 import { ProposalBubble } from "./ProposalBubble";
+import { BubbleCornerContext, useCatCorner } from "./bubbleCorner";
 import { ANSWER_GATE_MS, ASK_HOLD_MS, AnswerGate, proposalHidden } from "./answer-gate";
 type Cat = Awaited<ReturnType<typeof createKiwiCat>>;
 /**
@@ -162,6 +163,9 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     };
   }, []);
   const activity = activityRef.current;
+  // O agente livre no status solta o pedido que o gato ia adotar (`CatActivity.idle`); o desenho segue no efeito.
+  if (!busy) activity.idle();
+  useEffect(() => { if (!busy) applyRef.current(); }, [busy]);
   const openAsk = (keyboard: boolean) => {
     if (asking) return;
     returnFocus.current = { el: keyboard ? hit.current : document.activeElement, keyboard };
@@ -203,8 +207,10 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
     document.addEventListener("mousedown", away, true);
     return () => document.removeEventListener("mousedown", away, true);
   });
+  // A quina do balão (T16754): de que lado do gato os balões abrem, com o rabo encostado nele.
+  const corner = useCatCorner(root);
   return (
-    <>
+    <BubbleCornerContext.Provider value={corner}>
       {/* A barra de rolagem termina antes do gato e da névoa dele (spec #13381). */}
       <div className="kn-kiwicat" aria-hidden="true" data-scrollbar-avoid="" ref={root} />
       {/* Só o corpo do gato recebe o clique (spec #9878); a névoa e o resto do canto deixam passar. */}
@@ -252,7 +258,7 @@ function CatMount({ busy, reduced, away, cor, voiceHint }: { busy: boolean; redu
       {/* As rotinas (spec #12150): o resumo pronto, com [Ver] [Manter] [Descartar], depois da memória. */}
       <RoutineBubble hidden={askShown || away || talking || noting} onShown={setRoutining} reduced={reduced} />
       <ProposalBubble hidden={proposalHidden({ asking: askShown, away, talking, answering, noting, routining, busy: busy || activity.busy, sending })} reduced={reduced} />
-    </>
+    </BubbleCornerContext.Provider>
   );
 }
 /** O estado do agente e os Ajustes, ao vivo: o hub decide daqui se há gato, e onde (a Início, spec #15728). */

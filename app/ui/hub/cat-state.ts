@@ -109,6 +109,17 @@ export class CatActivity {
   }
   private sending = false;
 
+  /**
+   * O status diz que o agente está livre: o pedido que o gato ia adotar já acabou sem ele ver o fim (o `done` chegou
+   * antes do gato nascer). Sem isso, o campo ficava com o "Há um pedido em andamento" para sempre (T16754).
+   */
+  idle(): CatState {
+    if (this.current !== null || !this.adoptable) return this.state;
+    this.adoptable = false;
+    this.state = this.attentive ? "ouvindo" : "repouso";
+    return this.state;
+  }
+
   /** O pedido em andamento, que o campo usa para não mandar outro por cima. */
   get busy(): boolean {
     return this.current !== null || this.adoptable;

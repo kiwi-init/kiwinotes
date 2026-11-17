@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
 import { BUBBLE_H, overlayPlacement } from "../ui/catoverlay/placement";
+import { CAT_BODY } from "../ui/kiwicat-v2/bubbleTail";
 
 const app = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(tmpdir(), "kiwi-T13424-balao"));
@@ -254,9 +255,9 @@ try {
   }
   report.checks.push(`the bubble, closed and open, stays inside the window in the 6 positions × 0.6 and 1.6 × the smallest and largest room (${checked} cases)`);
 
-  // 4. O rabo (T14933, spec #14896): nas 6 posições, a 1×, 0,6× e 1,6×, a ponta do rabo do pacote fica no meio do gato
-  //    e dentro do quadro dele: para baixo com o balão em cima, para cima com o balão embaixo. A ponta do SVG (34 × 24)
-  //    está em (29,5; 20,5); para cima, o SVG é virado (`scaleY(-1)`), e ela fica a 20,5 px do pé dele.
+  // 4. O rabo (T14933, spec #14896; T16754, harry #16786): nas 6 posições, a 1×, 0,6× e 1,6×, o rabo sai da quina do
+  //    balão do lado do gato e a ponta encosta na quina do corpo dele (`CAT_BODY`). A ponta do traço, no SVG de 34 × 24,
+  //    está em (28,5; 19,5); virado, o SVG espelha em volta do meio. O `bubble-tail-check` passa pelo hub também.
   let tails = 0;
   for (let i = 0; i < sides.length; i++) {
     for (const escala of ["1.00", "0.60", "1.60"]) {
@@ -268,24 +269,25 @@ try {
         const svg = document.querySelector("#bubble .kn-bubble-tail")!;
         const t = svg.getBoundingClientRect();
         const c = document.getElementById("cat")!.getBoundingClientRect();
-        return { side: svg.getAttribute("data-side"), t: { x: t.left, y: t.top, w: t.width, h: t.height, bottom: t.bottom }, cat: { x: c.left, y: c.top, w: c.width, bottom: c.bottom } };
+        return { side: svg.getAttribute("data-side"), t: { x: t.left, y: t.top, w: t.width, h: t.height, bottom: t.bottom }, cat: { x: c.left, y: c.top, w: c.width, h: c.height } };
       });
       const what = `${names[i]} ${escala}`;
       const up = balao === "abaixo";
-      assert.equal(m.side, up ? "up" : "down", `o rabo vira para o gato: ${what}`);
+      const right = lado !== "left";
+      assert.equal(m.side, `${up ? "top" : "bottom"}-${right ? "right" : "left"}`, `o rabo na quina do lado do gato: ${what}`);
       assert.ok(Math.abs(m.t.w - 34) < 0.5 && Math.abs(m.t.h - 24) < 0.5, `o rabo do pacote, 34 × 24: ${what} ${JSON.stringify(m.t)}`);
-      const tipX = m.t.x + 29.5;
-      const tipY = up ? m.t.bottom - 20.5 : m.t.y + 20.5;
-      const mid = m.cat.x + m.cat.w / 2;
-      assert.ok(Math.abs(tipX - mid) <= 1, `a ponta no meio do gato: ${what} ponta ${tipX} × meio ${mid}`);
-      assert.ok(tipY >= m.cat.y && tipY <= m.cat.bottom, `a ponta dentro do quadro do gato: ${what} ${tipY} em ${m.cat.y}–${m.cat.bottom}`);
-      assert.ok(m.t.y >= 0 && m.t.bottom <= height, `o rabo dentro da janela: ${what}`);
-      if (escala === "1.00") await shot(p, `6-rabo-${names[i]}.png`, `O rabo: ${names[i]} (${up ? "para cima" : "para baixo"})`, width, height);
+      const tipX = m.t.x + (right ? 28.5 : 34 - 28.5);
+      const tipY = m.t.y + (up ? 24 - 19.5 : 19.5);
+      const bodyX = m.cat.x + m.cat.w * (right ? CAT_BODY.x0 : CAT_BODY.x1);
+      const bodyY = m.cat.y + m.cat.h * (up ? CAT_BODY.y1 : CAT_BODY.y0);
+      assert.ok(Math.hypot(tipX - bodyX, tipY - bodyY) <= 2, `a ponta encosta no corpo do gato: ${what} ponta ${tipX},${tipY} × corpo ${bodyX},${bodyY}`);
+      assert.ok(m.t.x >= 0 && m.t.y >= 0 && m.t.bottom <= height && m.t.x + m.t.w <= width, `o rabo dentro da janela: ${what}`);
+      if (escala === "1.00") await shot(p, `6-rabo-${names[i]}.png`, `O rabo: ${names[i]} (${m.side})`, width, height);
       tails++;
       await ctx.close();
     }
   }
-  report.checks.push(`the package tail points at the middle of the cat and ends inside its box, down above it and up below it, in the 6 positions × 1, 0.6 and 1.6 (${tails} cases)`);
+  report.checks.push(`the tail leaves the bubble corner next to the cat and its tip touches the cat body, in the 6 positions × 1, 0.6 and 1.6 (${tails} cases)`);
 
   // A folha em WebP: cada print sobre um fundo de mesa, como por cima de outro app.
   const sheet = await browser.newPage({ deviceScaleFactor: 1, viewport: { width: 1480, height: 900 } });

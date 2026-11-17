@@ -140,10 +140,14 @@ try {
       // 3. O campo de falar sai do gato, no meio, sem cobrir a busca, com a dica do atalho de voz.
       await p.locator(".kn-kiwicat-hit").click();
       await p.waitForSelector(".kn-cat-ask");
+      // O campo em repouso: um pedido de antes ainda em andamento põe o aviso de "Há um pedido em andamento" (T16754).
+      await p.waitForFunction(() => !document.querySelector('.kn-cat-ask .kn-cat-ask-note[role="status"]'), undefined, { timeout: 10_000 }).catch(async () => {
+        throw new Error(`o campo não ficou em repouso: ${await p.locator(".kn-cat-ask").innerText()} · ${JSON.stringify(await invoke("agent.status"))}`);
+      });
       const ask = await box(p, ".kn-cat-ask");
       const search = await box(p, ".kn-home-search");
       const cat = await box(p, ".kn-kiwicat");
-      assert.ok(!overlaps(ask, search), `o campo cobre a busca: ${JSON.stringify({ ask, search })}`);
+      assert.ok(!overlaps(ask, search), `o campo cobre a busca: ${JSON.stringify({ ask, search, text: await p.locator(".kn-cat-ask").innerText() })}`);
       assert.ok(ask.x + ask.width <= cat.x + cat.width && ask.y + ask.height > cat.y, `o campo não sai do gato: ${JSON.stringify({ ask, cat })}`);
       assert.match(await p.locator(".kn-cat-ask-hint").innerText(), /^Ou segure .+ para falar\.$/);
       // O print depois da entrada do balão (a passagem do BubblePresence), não no meio dela.
