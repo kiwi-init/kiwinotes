@@ -260,7 +260,8 @@ export class AgentHost {
       this.sessionId = sessionId;
       this.fresh = !resumed;
       this.config = Array.isArray(details.configOptions) ? (details.configOptions as SessionConfigOption[]) : [];
-      this.noteStartEffort();
+      // Uma sessão retomada pode trazer o esforço que o Kiwi aplicou antes, não o do agente (revisão #17131).
+      if (!resumed) this.noteStartEffort();
       if (this.o.configOptions) await this.applyConfig(this.o.configOptions());
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId }) + "\n", { mode: 0o600 });
       return { sessionId, resumed, agent: { name: init.agentInfo?.title ?? init.agentInfo?.name, version: init.agentInfo?.version }, details };

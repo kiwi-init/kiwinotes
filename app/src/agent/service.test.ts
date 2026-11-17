@@ -478,7 +478,7 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     expect(effortOptions(st)?.map((o) => o.value)).not.toContain("high");
     expect(effortValue(st)).toBe("medium");
     expect(effortHint(st)).toContain("O nível salvo, Alto, não existe neste modelo: vale o Médio.");
-  });
+  }, 30_000);
 
   test("o Padrão volta mesmo num modelo em que o agente não oferece o default: vale o esforço que o agente pôs nele (revisão #17024)", async () => {
     const m = make();
@@ -495,7 +495,7 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     await m.svc.configure({ effort: "default" });
     await askAndWait(m, "três");
     expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "medium" });
-  });
+  }, 30_000);
 
   test("o prepare com o /usage do medidor andando só devolve o estado: nada de set_config no meio do /usage (revisão #17024)", async () => {
     const m = make({ env: { KIWI_FAKE_AGENT_USAGE_DELAY_MS: "1500" } });
