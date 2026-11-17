@@ -98,8 +98,10 @@ try {
     const w = await openWindow(browser, ctx, { window: "hub", scale: 1, theme, width: 1100, height: 720, motion: false, browser: "webkit", query: { section: "settings", topic: "appearance" }, ...(theme === "light" ? { video: videoDir } : {}) });
     const p = w.page;
     await shown(p, "appearance");
-    // A aba Sobre saiu do topo: quatro abas.
-    assert.deepEqual(await p.locator(".kn-tab").allTextContents(), ["Notas", "Reuniões", "Ditado", "Configurações"]);
+    // A aba Sobre saiu do topo: cinco abas, com a Início na frente (spec #15728). Pela seção, porque o rótulo da Início
+    // muda com a vista dela (o menu da seta).
+    assert.deepEqual(await p.locator(".kn-tab").evaluateAll((els) => els.map((e) => e.getAttribute("data-section"))), ["home", "notes", "meetings", "dictation", "settings"]);
+    assert.deepEqual((await p.locator(".kn-tab").allTextContents()).slice(1), ["Notas", "Reuniões", "Ditado", "Configurações"]);
     assert.deepEqual(await p.locator(".kn-prefs-item").allTextContents(), SETTINGS_TOPICS.map((t) => TOPIC_LABELS[t]));
     const seen = new Map<string, SettingsTopic[]>();
     for (const [i, t] of SETTINGS_TOPICS.entries()) {
@@ -119,7 +121,7 @@ try {
     for (const title of SECTIONS) assert.equal(seen.get(title)?.length, 1, `"${title}" num assunto só: ${JSON.stringify(seen.get(title))}`);
     for (const [title, where] of seen) assert.equal(where.length, 1, `"${title}" repetida em ${where.join(", ")}`);
     if (theme === "light") {
-      report.checks.push(`the sidebar shows the 8 topics and the top bar lost the Sobre tab; each topic shows only its panel; the ${SECTIONS.length} sections are each in exactly one topic`);
+      report.checks.push(`the sidebar shows the 8 topics and the top bar has the 5 tabs (Início first) and no Sobre tab; each topic shows only its panel; the ${SECTIONS.length} sections are each in exactly one topic`);
 
       // 2. O teclado: ↑ e ↓ andam pela lista, Enter abre o assunto, Tab entra no painel.
       await p.locator(".kn-prefs-item[data-topic=appearance]").click();
