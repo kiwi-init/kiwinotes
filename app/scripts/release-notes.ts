@@ -18,9 +18,16 @@ function parse(subject: string): { title: string; pr: number | null } {
  * O corpo das notas. `subjects` vem na ordem da API (do mais velho para o mais novo); sai do mais novo para o mais
  * velho, como no CHANGELOG.
  */
-export function releaseNotes(o: { repo: string; tag: string; previous: string; subjects: readonly string[] }): string {
+export function releaseNotes(o: {
+  repo: string;
+  tag: string;
+  previous: string | null;
+  subjects: readonly string[];
+  /** O primeiro release de um repo (sem anterior): as linhas da seção do CHANGELOG, prontas, no lugar dos commits. */
+  changelog?: readonly string[];
+}): string {
   if (!/^[\w.-]+\/[\w.-]+$/.test(o.repo)) throw new Error(`release-notes: ${o.repo} isn't owner/repo`);
-  const lines = o.subjects
+  const lines = o.changelog ?? o.subjects
     .map((s) => s.trim())
     .filter(Boolean)
     .reverse()
@@ -38,17 +45,42 @@ export function releaseNotes(o: { repo: string; tag: string; previous: string; s
     "",
     `**Para conferir:** o app é assinado com o Developer ID da Kiwi Init e notarizado pela Apple. No Terminal, \`spctl -a -vv "/Applications/Kiwi Notes.app"\` mostra "accepted" e "Notarized Developer ID", e \`codesign --verify --deep --strict "/Applications/Kiwi Notes.app"\` não diz nada.`,
     "",
-    `**Todas as mudanças:** [${o.previous}...${o.tag}](https://github.com/${o.repo}/compare/${o.previous}...${o.tag})`,
-    "",
+    ...(o.previous === null
+      ? []
+      : [`**Todas as mudanças:** [${o.previous}...${o.tag}](https://github.com/${o.repo}/compare/${o.previous}...${o.tag})`, ""]),
   ].join("\n");
+}
+
+/**
+ * A seção da versão no CHANGELOG, sem o título: o primeiro release do repo novo de um commit só (#16505) não tem
+ * anterior para comparar, e os commits não dizem o que entrou.
+ */
+export function changelogSection(changelog: string, version: string): string[] {
+  const all = changelog.split("\n");
+  const start = all.findIndex((l) => l.startsWith(`## [${version}]`));
+  if (start < 0) throw new Error(`release-notes: CHANGELOG.md has no section for ${version}`);
+  const rest = all.slice(start + 1);
+  const end = rest.findIndex((l) => l.startsWith("## "));
+  const body = (end < 0 ? rest : rest.slice(0, end)).join("\n").trim();
+  if (!body) throw new Error(`release-notes: the ${version} section of CHANGELOG.md is empty`);
+  return body.split("\n");
 }
 
 if (import.meta.main) {
   const [repo, tag, previous] = process.argv.slice(2);
   if (!repo || !tag || !previous) {
-    console.error("usage: … | bun scripts/release-notes.ts <owner/repo> <tag> <previous-tag>   (os assuntos dos commits no stdin)");
+    console.error(
+      "usage: … | bun scripts/release-notes.ts <owner/repo> <tag> <previous-tag>   (os assuntos dos commits no stdin)\n" +
+        "       bun scripts/release-notes.ts <owner/repo> <tag> --first   (o primeiro release: a seção do CHANGELOG.md)",
+    );
     process.exit(2);
   }
-  const subjects = (await new Response(Bun.stdin.stream()).text()).split("\n");
-  process.stdout.write(releaseNotes({ repo, tag, previous, subjects }));
+  if (previous === "--first") {
+    const changelog = await Bun.file(new URL("../../CHANGELOG.md", import.meta.url)).text();
+    const lines = changelogSection(changelog, tag.replace(/^v/, ""));
+    process.stdout.write(releaseNotes({ repo, tag, previous: null, subjects: [], changelog: lines }));
+  } else {
+    const subjects = (await new Response(Bun.stdin.stream()).text()).split("\n");
+    process.stdout.write(releaseNotes({ repo, tag, previous, subjects }));
+  }
 }

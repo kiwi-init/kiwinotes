@@ -241,7 +241,12 @@ jobs:
           set -euo pipefail
           prev=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 100 --json tagName,createdAt \
             --jq "[.[] | select(.tagName | startswith(\"v\")) | select(.tagName != \"$GITHUB_REF_NAME\")] | sort_by(.createdAt) | last | .tagName // empty")
-          [[ -n "$prev" ]] || { echo "no previous v* release to compare with"; exit 1; }
+          # O primeiro release do repo (o repo novo de um commit só, #16505): sem anterior, as notas são a seção do CHANGELOG.
+          if [[ -z "$prev" ]]; then
+            bun app/scripts/release-notes.ts "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" --first > out/release-notes.md
+            cat out/release-notes.md
+            exit 0
+          fi
           # O anterior tem de estar no histórico deste tag (revisão do #552): depois de uma reescrita do histórico, um tag
           # velho que não foi reescrito junto daria "diverged", e as notas listariam o histórico inteiro.
           status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$prev...$GITHUB_REF_NAME" --jq .status)
