@@ -1,4 +1,4 @@
-// O Markdown "ao vivo": a marcação (#, **, `, [[ ]]) some fora da linha em que o cursor está, os checkboxes viram
+// O Markdown "ao vivo": a marcação (#, **, `, [[ ]]) some fora do trecho em que o cursor está (spec #17690), os checkboxes viram
 // caixas clicáveis e as tabelas aparecem como tabela até o cursor entrar nelas. Como no Obsidian, a nota continua
 // sendo o .md puro: nada aqui muda o texto, só como ele aparece.
 
@@ -120,13 +120,26 @@ function inCode(node: SyntaxNode | null): boolean {
 }
 
 function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
-  const { state } = view;
-  const active = activeLines(state, view.hasFocus);
+  return inlineDecorations(view.state, view.hasFocus, view.visibleRanges, resolver);
+}
+
+/**
+ * As decorações do preview em linha, sem DOM (testadas): `focused` é o editor com foco, `ranges` os trechos na tela.
+ */
+export function inlineDecorations(state: EditorState, focused: boolean, ranges: readonly { from: number; to: number }[], resolver: LinkResolver): DecorationSet {
+  const active = activeLines(state, focused);
   const isActive = (pos: number) => active.has(state.doc.lineAt(pos).number);
+  // Spec #17690: a marca só aparece no trecho exato onde está o cursor (o `**` do negrito em que ele está, o link em que
+  // ele está), e não na linha inteira. O resto da linha continua desenhado, sem nada pular.
+  const near = (from: number, to: number) => focused && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+  const around = (node: { node: SyntaxNode }) => {
+    const p = node.node.parent;
+    return p ? near(p.from, p.to) : false;
+  };
   const out: Range<Decoration>[] = [];
   const tree = syntaxTree(state);
 
-  for (const { from, to } of view.visibleRanges) {
+  for (const { from, to } of ranges) {
     tree.iterate({
       from,
       to,
@@ -138,14 +151,14 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           return;
         }
         if (name === "HeaderMark") {
-          if (isActive(node.from)) return;
           const after = state.doc.sliceString(node.to, node.to + 1);
+          if (near(node.from, node.to + (after === " " ? 1 : 0))) return;
           // Só o "#" do começo do título ("## Custos"), não o "#" que fecha um título ("## Custos ##").
           if (node.from === state.doc.lineAt(node.from).from) out.push(hide.range(node.from, node.to + (after === " " ? 1 : 0)));
           return;
         }
         if (name === "EmphasisMark" || name === "StrikethroughMark") {
-          if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
+          if (!around(node)) out.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "Highlight") {
@@ -153,7 +166,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           return;
         }
         if (name === "HighlightMark") {
-          if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
+          if (!around(node)) out.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "InlineCode") {
@@ -161,7 +174,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           return;
         }
         if (name === "CodeMark" && node.node.parent?.name === "InlineCode") {
-          if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
+          if (!around(node)) out.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "FencedCode") {
@@ -172,7 +185,8 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
         }
         if (name === "QuoteMark") {
           out.push(Decoration.line({ class: "cm-quote" }).range(state.doc.lineAt(node.from).from));
-          if (!isActive(node.from)) out.push(hide.range(node.from, Math.min(node.to + 1, state.doc.lineAt(node.from).to)));
+          const quoteEnd = Math.min(node.to + 1, state.doc.lineAt(node.from).to);
+          if (!near(node.from, quoteEnd)) out.push(hide.range(node.from, quoteEnd));
           return;
         }
         if (name === "Task") {
@@ -207,7 +221,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
       const missing = m.kind === "ref" && !notes.def(m.label);
       const cls = `cm-footnote${missing ? " cm-footnote-missing" : ""}`;
       const attrs: Record<string, string> = m.kind === "ref" ? { "data-footnote": m.label } : { "data-footnote-n": String(m.n) };
-      if (isActive(m.from)) {
+      if (near(m.from, m.to)) {
         out.push(Decoration.mark({ class: `${cls} cm-footnote-raw`, attributes: attrs }).range(m.from, m.to));
         continue;
       }
@@ -218,7 +232,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
     for (const d of notes.defs) {
       const marker = d.markerTo - `[^${d.label}]:`.length;
       if (d.markerTo < from || marker > to || inCode(tree.resolveInner(marker + 1, 1))) continue;
-      if (isActive(marker)) {
+      if (near(marker, d.markerTo)) {
         out.push(Decoration.mark({ class: "cm-footnote cm-footnote-def cm-footnote-raw" }).range(marker, d.markerTo));
         continue;
       }
@@ -240,7 +254,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
         const cls = `cm-wikilink${status === "missing" ? " cm-wikilink-missing" : ""}`;
         const destination = link.target + (link.heading ? `#${link.heading}` : "");
         const attributes = { "data-target": destination, title: status === "missing" ? `${link.target} (ainda não existe)` : destination };
-        if (isActive(a)) {
+        if (near(a, b)) {
           out.push(Decoration.mark({ class: `${cls} cm-wikilink-raw`, attributes }).range(a, b));
           continue;
         }

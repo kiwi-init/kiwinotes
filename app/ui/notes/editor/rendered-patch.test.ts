@@ -85,4 +85,20 @@ describe("o cursor que anda remenda só os blocos dele (spec #13385)", () => {
     state = state.update({ selection: EditorSelection.cursor(NOTE.length) }).state;
     expect(has()).toBe(true);
   });
+
+  // Spec #17690: numa lista, só o item do cursor fica cru. Andar de um item a outro muda os desenhos de cima e de baixo,
+  // e o remendo refaz a lista inteira.
+  test("andar entre os itens de uma lista: o remendo é igual a refazer tudo", () => {
+    const doc = "Antes.\n\n- um\n- dois\n- três\n- quatro\n  - quatro e meio\n- cinco\n\n1. a\n2. b\n3. c\n\nDepois.";
+    const [field] = renderedPreview(resolver as never, actions) as [StateField<DecorationSet>];
+    let state = EditorState.create({ doc, selection: EditorSelection.cursor(0), extensions: [md, editorFocused, field] });
+    state = state.update({ effects: focusChanged.of(true) }).state;
+    const words = ["um", "três", "dois", "quatro e", "cinco", "um", "Antes", "b", "c", "a", "Depois", "cinco", "dois"];
+    for (const w of words) {
+      state = state.update({ selection: EditorSelection.cursor(doc.indexOf(w)) }).state;
+      expect(shape(state.field(field))).toEqual(shape(buildRendered(state, resolver as never, actions)));
+    }
+    state = state.update({ selection: EditorSelection.single(doc.indexOf("dois"), doc.indexOf("três")) }).state;
+    expect(shape(state.field(field))).toEqual(shape(buildRendered(state, resolver as never, actions)));
+  });
 });

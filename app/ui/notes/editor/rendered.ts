@@ -122,11 +122,78 @@ export function renderedBlocks(state: EditorState, focused: boolean, tree: Tree 
         covered = to;
       }
     }
-    if (focused && touches(state, from, to)) continue;
-    if (to - from > MAX_RENDERED_CHARS || state.doc.lineAt(to).number - state.doc.lineAt(from).number + 1 > MAX_RENDERED_LINES) continue;
-    const source = state.doc.sliceString(from, to);
-    if (!source.trim() || keepsRaw(n, source)) continue;
-    out.push({ from, to, source });
+    // A lista do cursor (spec #17690): só o item do cursor fica cru, e os itens de cima e de baixo continuam desenhados.
+    const spans = focused && touches(state, from, to) ? drawnAround(state, n, from, to) : [[from, to] as const];
+    for (const [a, b] of spans) {
+      if (b - a > MAX_RENDERED_CHARS || state.doc.lineAt(b).number - state.doc.lineAt(a).number + 1 > MAX_RENDERED_LINES) continue;
+      const source = state.doc.sliceString(a, b);
+      if (!source.trim() || keepsRaw(n, source)) continue;
+      out.push({ from: a, to: b, source });
+    }
+  }
+  return out;
+}
+
+const LISTS = new Set(["BulletList", "OrderedList"]);
+
+/** Os itens de cima de uma lista (`ListItem`), cada um das linhas inteiras dele. */
+function listItems(state: EditorState, list: SyntaxNode): [number, number][] {
+  const out: [number, number][] = [];
+  for (let c = list.firstChild; c; c = c.nextSibling) {
+    if (c.name === "ListItem") out.push([state.doc.lineAt(c.from).from, state.doc.lineAt(c.to).to]);
+  }
+  return out;
+}
+
+/**
+ * O que continua desenhado num bloco onde está o cursor. Um parágrafo, um título: nada, ele fica cru inteiro. Uma lista:
+ * os itens sem o cursor, juntos em trechos seguidos (os de cima do item do cursor e os de baixo), para a nota não mudar
+ * de cara a cada clique. Um item com uma lista dentro fica cru com ela.
+ */
+function drawnAround(state: EditorState, node: SyntaxNode, from: number, to: number): (readonly [number, number])[] {
+  if (!LISTS.has(node.name)) return [];
+  const out: [number, number][] = [];
+  let run: [number, number] | null = null;
+  for (const [a, b] of listItems(state, node)) {
+    if (touches(state, a, b)) {
+      if (run) out.push(run);
+      run = null;
+    } else run = run ? [run[0], b] : [a, b];
+  }
+  if (run) out.push(run);
+  return out.filter(([a, b]) => a >= from && b <= to);
+}
+
+/**
+ * Os trechos crus do bloco onde está o cursor: o bloco inteiro, ou só os itens do cursor numa lista (spec #17690). As
+ * imagens e o mermaid embaixo do bloco em edição vão logo depois deles.
+ */
+function rawSpans(state: EditorState, node: SyntaxNode, from: number, to: number): [number, number][] {
+  if (!LISTS.has(node.name)) return [[from, to]];
+  return listItems(state, node).filter(([a, b]) => touches(state, a, b));
+}
+
+/**
+ * O bloco de cima da árvore em que cai cada trecho, das linhas inteiras dele (spec #17690). Andar com o cursor numa lista
+ * muda os trechos desenhados da lista inteira, então o `patchRendered` refaz o bloco todo, e não só as linhas do cursor.
+ */
+export function topBlocksAround(state: EditorState, tree: Tree, ranges: readonly (readonly [number, number])[]): [number, number][] {
+  const out: [number, number][] = [];
+  for (const [a, b] of ranges) {
+    let from = a;
+    let to = b;
+    for (const pos of [a, b]) {
+      const at = Math.min(pos, state.doc.length);
+      for (const side of [-1, 1] as const) {
+        let n: SyntaxNode | null = tree.resolveInner(at, side);
+        while (n?.parent?.parent) n = n.parent;
+        if (n && n.parent && LISTS.has(n.name)) {
+          from = Math.min(from, state.doc.lineAt(n.from).from);
+          to = Math.max(to, state.doc.lineAt(n.to).to);
+        }
+      }
+    }
+    out.push([from, to]);
   }
   return out;
 }
@@ -347,22 +414,25 @@ export function imagesUnderCursor(state: EditorState, focused: boolean, tree: Tr
     const from = state.doc.lineAt(n.from).from;
     const to = state.doc.lineAt(n.to).to;
     if (!touches(state, from, to)) continue;
-    const pics: string[] = [];
-    tree.iterate({
-      from: n.from,
-      to: n.to,
-      enter: (c) => {
-        if (c.name !== "Image") return;
-        const text = state.doc.sliceString(c.from, c.to);
-        if (!text.startsWith("![[")) pics.push(text);
-        else if (!embedLine(state.doc.lineAt(c.from).text)) {
-          const link = parseLinks(text.slice(1))[0];
-          if (link && isAttachmentName(link.target)) pics.push(`![${escapeLabel(link.target.split("/").at(-1)!)}](${ATTACHMENT_LINK}${encodeURIComponent(link.target)})`);
-        }
-        return false;
-      },
-    });
-    if (pics.length) out.push({ to, markdown: pics.join(" ") });
+    // Numa lista, só as imagens do item do cursor: as dos outros itens continuam no desenho deles (spec #17690).
+    for (const [a, b] of rawSpans(state, n, from, to)) {
+      const pics: string[] = [];
+      tree.iterate({
+        from: Math.max(a, n.from),
+        to: Math.min(b, n.to),
+        enter: (c) => {
+          if (c.name !== "Image") return;
+          const text = state.doc.sliceString(c.from, c.to);
+          if (!text.startsWith("![[")) pics.push(text);
+          else if (!embedLine(state.doc.lineAt(c.from).text)) {
+            const link = parseLinks(text.slice(1))[0];
+            if (link && isAttachmentName(link.target)) pics.push(`![${escapeLabel(link.target.split("/").at(-1)!)}](${ATTACHMENT_LINK}${encodeURIComponent(link.target)})`);
+          }
+          return false;
+        },
+      });
+      if (pics.length) out.push({ to: b, markdown: pics.join(" ") });
+    }
   }
   return out;
 }

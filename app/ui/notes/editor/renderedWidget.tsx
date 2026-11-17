@@ -48,6 +48,7 @@ import {
   sourceOffset,
   TAG_LINK,
   taskMarks,
+  topBlocksAround,
   toRenderable,
 } from "./rendered.ts";
 
@@ -710,7 +711,9 @@ const followsCursor = (d: Decoration) => {
  * seleção. Os outros ficam como estavam, e só esses são refeitos. O resultado é o mesmo do `buildRendered` inteiro.
  */
 export function patchRendered(value: DecorationSet, tr: Transaction, resolver: LinkResolver, actions: RenderedActions): DecorationSet {
-  const dirty = [...tr.startState.selection.ranges, ...tr.state.selection.ranges].map((r) => [r.from, r.to] as const);
+  // Numa lista, mudar de item muda os trechos desenhados da lista inteira (spec #17690): ela é refeita toda.
+  const moved = [...tr.startState.selection.ranges, ...tr.state.selection.ranges].map((r) => [r.from, r.to] as const);
+  const dirty = topBlocksAround(tr.state, fullTree(tr.state), moved);
   const hit = (from: number, to: number) => dirty.some(([a, b]) => from <= b && to >= a);
   const fresh = buildRendered(tr.state, resolver, actions, dirty);
   const add: Range<Decoration>[] = [];
