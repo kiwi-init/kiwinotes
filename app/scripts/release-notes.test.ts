@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { releaseNotes } from "./release-notes.ts";
+import { changelogSection, releaseNotes } from "./release-notes.ts";
 
 describe("as notas do release no formato do Channels (spec #13879)", () => {
   const repo = "kiwi-init/kiwinotes";
@@ -51,5 +51,38 @@ describe("as notas do release no formato do Channels (spec #13879)", () => {
     const out = await new Response(p.stdout).text();
     expect(await p.exited).toBe(0);
     expect(out.split("\n")[2]).toBe("- **Segundo** ([#2](https://github.com/kiwi-init/kiwinotes/pull/2))");
+  });
+
+  test("o primeiro release do repo (sem anterior): a seção do CHANGELOG, sem o link de compare", () => {
+    const changelog = [
+      "# Changelog",
+      "",
+      "## [2026.12.1](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.12.1) (2026-12-01)",
+      "",
+      "Uma nota da versão.",
+      "",
+      "- **Exemplo novo** ([#9](https://github.com/kiwi-init/kiwinotes/pull/9))",
+      "",
+      "## [2026.11.2](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.2) (2026-11-17)",
+      "",
+      "- **Outro** ([#8](https://github.com/kiwi-init/kiwinotes/pull/8))",
+    ].join("\n");
+    const lines = changelogSection(changelog, "2026.12.1");
+    expect(lines).toEqual(["Uma nota da versão.", "", "- **Exemplo novo** ([#9](https://github.com/kiwi-init/kiwinotes/pull/9))"]);
+    const body = releaseNotes({ repo, tag: "v2026.12.1", previous: null, subjects: [], changelog: lines });
+    expect(body).toContain("- **Exemplo novo**");
+    expect(body).not.toContain("Outro");
+    expect(body).not.toContain("compare");
+    expect(body).toContain("o Kiwi Notes 2026.12.1 para Mac com Apple Silicon");
+    expect(() => changelogSection(changelog, "2027.1.1")).toThrow();
+  });
+
+  test("a CLI com --first lê a seção da versão no CHANGELOG.md do repo", async () => {
+    const p = Bun.spawn(["bun", new URL("./release-notes.ts", import.meta.url).pathname, repo, "v2026.11.2", "--first"], { stdout: "pipe" });
+    const out = await new Response(p.stdout).text();
+    expect(await p.exited).toBe(0);
+    expect(out).toContain("## O que entrou");
+    expect(out).toContain("Bússola 4");
+    expect(out).not.toContain("compare/");
   });
 });
