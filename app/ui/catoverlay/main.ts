@@ -206,10 +206,12 @@ css.setProperty("--win-w", `${place.winW}px`);
 css.setProperty("--win-h", `${place.winH}px`);
 css.setProperty("--cat-w", `${place.catW}px`);
 css.setProperty("--cat-h", `${place.catH}px`);
+css.setProperty("--cat-x", `${place.catX}px`);
+for (const [k, v] of Object.entries(place.bubble)) css.setProperty(`--bub-${k}`, `${v}px`);
 document.body.dataset.lado = place.lado;
 document.body.dataset.balao = place.balao;
-// O rabo do balão (T14933, spec #14896): o do pacote, para baixo com o balão em cima do gato, para cima com ele embaixo.
-bubbleEl.insertAdjacentHTML("beforeend", tailSvg(place.balao === "abaixo" ? "up" : "down"));
+// O rabo do balão (T14933, spec #14896): o do pacote, na quina do balão mais perto do gato (T16754).
+bubbleEl.insertAdjacentHTML("beforeend", tailSvg(place.tail));
 const cat = await createKiwiCat(root, {
   mode: "runtime",
   backend: asked === "webgl2" || asked === "none" ? asked : "auto",

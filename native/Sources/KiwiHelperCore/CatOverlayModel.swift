@@ -13,6 +13,14 @@ public enum CatOverlayLayout {
     public static let bubbleWidth: CGFloat = 300
     public static let bubbleHeight: CGFloat = 112
 
+    /// O corpo do gato no quadro, em frações (T16754): o `CAT_BODY` de `app/ui/kiwicat-v2/bubbleTail.ts`.
+    public static let bodyX0: CGFloat = 0.28
+    public static let bodyX1: CGFloat = 0.74
+    public static let bodyY0: CGFloat = 0.44
+    public static let bodyY1: CGFloat = 0.77
+    /// A ponta do rabo, 7,5 pt para dentro da quina do balão (o `TAIL_TIP` do mesmo arquivo).
+    public static let tailTipX: CGFloat = 7.5
+
     /// O gato, na parte de baixo da janela.
     public static var catSize: CGSize { CGSize(width: (height * aspect).rounded(), height: height) }
 
@@ -87,9 +95,24 @@ public struct CatPlacement: Equatable, Sendable {
         CGSize(width: (CatOverlayLayout.height * CatOverlayLayout.aspect * scale).rounded(), height: (CatOverlayLayout.height * scale).rounded())
     }
 
-    /// A janela: a largura do maior (gato ou balão) e a altura dos dois.
+    /// O balão à esquerda do gato (o canto da direita e o centro) ou à direita dele (os cantos da esquerda), com o rabo
+    /// na quina do lado do gato e a ponta encostada no corpo (T16754, harry #16786).
+    public var bubbleLeft: Bool { !position.isLeft }
+
+    /// Quanto o balão passa do quadro do gato, para o lado dele: a mesma conta do `overhang` de
+    /// `app/ui/catoverlay/placement.ts`, para a janela e a página terem a mesma largura.
+    public var overhang: CGFloat {
+        let L = CatOverlayLayout.self
+        let inside = catSize.width * (bubbleLeft ? L.bodyX0 : 1 - L.bodyX1) + L.tailTipX
+        return max(0, (L.bubbleWidth - inside).rounded(.up))
+    }
+
+    /// Onde o quadro do gato começa na janela, da esquerda.
+    public var catOffsetX: CGFloat { bubbleLeft ? overhang : 0 }
+
+    /// A janela: o gato e o que o balão passa dele na largura, e os dois na altura.
     public var size: CGSize {
-        CGSize(width: max(catSize.width, CatOverlayLayout.bubbleWidth), height: catSize.height + CatOverlayLayout.bubbleHeight)
+        CGSize(width: catSize.width + overhang, height: catSize.height + CatOverlayLayout.bubbleHeight)
     }
 
     /// O balão embaixo do gato (os cantos de cima); nos outros, em cima.
@@ -107,7 +130,9 @@ public struct CatPlacement: Equatable, Sendable {
     public func frame(visible: CGRect) -> CGRect {
         let s = size
         let m = Self.margin
-        var x = position.isLeft ? visible.minX + m : position.isRight ? visible.maxX - m - s.width : visible.midX - s.width / 2
+        // O gato no lugar pedido; a janela começa `catOffsetX` antes dele.
+        let catX = position.isLeft ? visible.minX + m : position.isRight ? visible.maxX - m - catSize.width : visible.midX - catSize.width / 2
+        var x = catX - catOffsetX
         // No centro, o gato no meio da área útil, como antes (o balão acima dele).
         var y = position.isTop ? visible.maxY - m - s.height : position.isBottom ? visible.minY + m : visible.midY - catSize.height / 2
         x = min(max(x, visible.minX), visible.maxX - s.width)
@@ -118,7 +143,7 @@ public struct CatPlacement: Equatable, Sendable {
     /// Onde o gato fica dentro da janela `frame` (na tela).
     public func catRect(in frame: CGRect) -> CGRect {
         let c = catSize
-        let x = side == "left" ? frame.minX : side == "right" ? frame.maxX - c.width : frame.midX - c.width / 2
+        let x = frame.minX + catOffsetX
         let y = bubbleBelow ? frame.maxY - c.height : frame.minY
         return CGRect(x: x, y: y, width: c.width, height: c.height)
     }
@@ -145,8 +170,11 @@ public struct CatPlacement: Equatable, Sendable {
 
     /// Onde o balão fica dentro da janela `frame` (na tela): o espaço todo dele.
     public func bubbleRect(in frame: CGRect) -> CGRect {
-        let w = CatOverlayLayout.bubbleWidth, h = bubbleRoom(in: frame)
-        let x = side == "left" ? frame.minX : side == "right" ? frame.maxX - w : frame.midX - w / 2
+        let L = CatOverlayLayout.self
+        let w = L.bubbleWidth, h = bubbleRoom(in: frame)
+        let cat = catRect(in: frame)
+        // A ponta do rabo na borda do corpo do lado do balão; a casca 7,5 pt além dela (T16754).
+        let x = bubbleLeft ? cat.minX + cat.width * L.bodyX0 + L.tailTipX - w : cat.minX + cat.width * L.bodyX1 - L.tailTipX
         let y = bubbleBelow ? frame.minY : frame.maxY - h
         return CGRect(x: x, y: y, width: w, height: h)
     }

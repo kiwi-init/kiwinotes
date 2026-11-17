@@ -34,8 +34,9 @@
 /* O erro: o contorno, a sombra e o rabo na cor de perigo. O hub põe `data-error` só no erro; o overlay põe "true" ou "false". */
 .kn-bubble-shell[data-error]:not([data-error="false"]) { --kn-bubble-accent: var(--danger); }
 
-/* O rabo (34 × 24, o SVG do pacote). À direita e à esquerda, embaixo, como no pacote; para baixo e para cima, o mesmo
-   desenho num ponto `--kn-tail-x` (o meio do gato), contado de dentro do contorno de 2 px, e para cima, virado. */
+/* O rabo (34 × 24, o SVG do pacote) sai da quina do balão mais perto do gato (harry #16786, T16754): a de baixo à direita
+   é a do pacote; as outras, o mesmo desenho virado. A ponta fica 7,5 px para dentro da quina e 17,5 px para fora dela
+   (`TAIL_TIP` em bubbleTail.ts), e quem põe o balão no lugar faz essa ponta encostar no gato. */
 .kn-bubble-tail {
   position: absolute;
   width: 34px;
@@ -46,8 +47,7 @@
 .kn-bubble-tail .kn-tail-shadow { fill: var(--kn-bubble-accent); }
 .kn-bubble-tail .kn-tail-fill { fill: var(--kn-bubble-bg); }
 .kn-bubble-tail .kn-tail-line { fill: none; stroke: var(--kn-bubble-accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.kn-bubble-tail[data-side="right"] { bottom: -24px; right: 24px; }
-.kn-bubble-tail[data-side="left"] { bottom: -24px; left: 24px; transform: scaleX(-1); }
-/* A ponta do SVG está em x = 29,5: o rabo começa 29,5 px antes do ponto. */
-.kn-bubble-tail[data-side="down"] { bottom: -24px; left: calc(var(--kn-tail-x, 50%) - 29.5px); }
-.kn-bubble-tail[data-side="up"] { top: -24px; left: calc(var(--kn-tail-x, 50%) - 29.5px); transform: scaleY(-1); }
+.kn-bubble-tail[data-side="bottom-right"] { bottom: -24px; right: 0; }
+.kn-bubble-tail[data-side="bottom-left"] { bottom: -24px; left: 0; transform: scaleX(-1); }
+.kn-bubble-tail[data-side="top-right"] { top: -24px; right: 0; transform: scaleY(-1); }
+.kn-bubble-tail[data-side="top-left"] { top: -24px; left: 0; transform: scale(-1, -1); }
