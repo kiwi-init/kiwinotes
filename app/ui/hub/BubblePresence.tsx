@@ -69,6 +69,8 @@ export function BubblePresence({ itemKey, reduced: appReduced, children }: { ite
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   items.current = nextItems(items.current, itemKey, children);
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  /** O quadro em que a saída de cada balão começa (T16835). */
+  const frames = useRef(new Map<number, number>());
   const slots = useRef(new Map<number, HTMLDivElement>());
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
@@ -128,37 +130,61 @@ export function BubblePresence({ itemKey, reduced: appReduced, children }: { ite
   });
 
   // O balão que sai: a saída parte do estado em que ele está (lido antes de marcar a saída), e ele some no fim dela.
+  // A saída começa no próximo quadro, e não aqui (T16835): o relógio da Web Animations parte agora, e o da entrada do
+  // CSS só na pintura. Com a página travada entre os dois (uma máquina ocupada), a saída chegava ao fim antes de a
+  // entrada começar, e o canto esvaziava. No rAF, as duas partem na mesma pintura. Até lá, o slot fica parado no
+  // estado lido, em inline.
   useLayoutEffect(() => {
     for (const item of items.current) {
       if (!item.leaving || timers.current.has(item.id)) continue;
       const el = slots.current.get(item.id);
-      if (el) {
-        const cs = getComputedStyle(el);
-        const opacity = Number(cs.opacity);
-        const transform = cs.transform === "none" ? "none" : cs.transform;
-        el.dataset.phase = "exit";
-        el.setAttribute("aria-hidden", "true");
-        if (typeof el.animate === "function")
-          el.animate(
-            [
-              { opacity, transform },
-              { opacity: 0, transform: reduced ? transform : `scale(${BUBBLE_FROM_SCALE})` },
-            ],
-            { duration: reduced ? BUBBLE_FADE_MS : BUBBLE_EXIT_MS, easing: reduced ? "ease-in" : BUBBLE_EXIT_EASING, fill: "forwards" },
-          );
-        else el.style.opacity = "0";
+      const exitMs = reduced ? BUBBLE_FADE_MS : BUBBLE_EXIT_MS;
+      const done = () => {
+        timers.current.set(
+          item.id,
+          setTimeout(() => {
+            timers.current.delete(item.id);
+            entered.current.delete(item.id);
+            items.current = items.current.filter((i) => i.id !== item.id);
+            rerender();
+          }, exitMs),
+        );
+      };
+      if (!el || typeof el.animate !== "function" || typeof requestAnimationFrame !== "function") {
+        if (el) {
+          el.dataset.phase = "exit";
+          el.setAttribute("aria-hidden", "true");
+          el.style.opacity = "0";
+        }
+        done();
+        continue;
       }
-      timers.current.set(
-        item.id,
-        setTimeout(() => {
-          timers.current.delete(item.id);
-          entered.current.delete(item.id);
-          items.current = items.current.filter((i) => i.id !== item.id);
-          rerender();
-        }, reduced ? BUBBLE_FADE_MS : BUBBLE_EXIT_MS),
-      );
+      const cs = getComputedStyle(el);
+      const opacity = cs.opacity;
+      const transform = cs.transform === "none" ? "none" : cs.transform;
+      el.dataset.phase = "exit";
+      el.setAttribute("aria-hidden", "true");
+      el.style.opacity = opacity;
+      el.style.transform = transform;
+      // Marcado já, para o próximo render não começar outra saída; o prazo de verdade sai no rAF, junto com a animação.
+      timers.current.set(item.id, undefined as unknown as ReturnType<typeof setTimeout>);
+      const frame = requestAnimationFrame(() => {
+        frames.current.delete(item.id);
+        el.animate(
+          [
+            { opacity: Number(opacity), transform },
+            { opacity: 0, transform: reduced ? transform : `scale(${BUBBLE_FROM_SCALE})` },
+          ],
+          { duration: exitMs, easing: reduced ? "ease-in" : BUBBLE_EXIT_EASING, fill: "forwards" },
+        );
+        el.style.opacity = "";
+        el.style.transform = "";
+        done();
+      });
+      frames.current.set(item.id, frame);
     }
   });
+  useLayoutEffect(() => () => frames.current.forEach(cancelAnimationFrame), []);
   useLayoutEffect(() => () => timers.current.forEach(clearTimeout), []);
 
 
