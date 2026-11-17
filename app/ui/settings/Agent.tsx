@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { AgentStatus } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
-import { Button, Row, Section, Select, Switch } from "../src/kit/index.tsx";
+import { Button, Row, Section, Switch } from "../src/kit/index.tsx";
 import {
   adapterLine,
   applyTurn,
@@ -18,8 +18,6 @@ import {
   ECONOMY_LABEL,
   WEB_LABEL,
   webHint,
-  modelHint,
-  modelOptions,
   switchHint,
   TEST_HINT,
   type TestState,
@@ -28,6 +26,7 @@ import { NoticeRow } from "./NoticeRow.tsx";
 import { ControlRow } from "./ControlRow.tsx";
 import { NoteModelRow } from "./NoteModel.tsx";
 import { MemoryRows } from "./MemoryRows.tsx";
+import { ModelRows } from "./ModelRows.tsx";
 import { RoutinesRows } from "./RoutinesRows.tsx";
 import "./agent.css";
 import { CatColorRow, CatPlaceRow, CatRow, OverlayCatRow } from "./CatRow";
@@ -177,11 +176,8 @@ export function AgentSection() {
         </Row>
       ) : null}
 
-      {status.enabled && a.phase === "ready" ? (
-        <Row label="Modelo" hint={modelHint(status)}>
-          <Select label="Modelo do agente" value={status.model} options={modelOptions(status)} onChange={(model) => void run(() => api.agent.configure({ model }))} />
-        </Row>
-      ) : null}
+      {/* O Modelo e o esforço salvo para ele (spec #16793), as mesmas linhas do passo "claude" do onboarding. */}
+      {status.enabled && a.phase === "ready" ? <ModelRows status={status} run={(fn) => void run(fn)} /> : null}
 
       {/* O modo econômico (spec #11084): só aqui, em Ajustes › Agente. */}
       {status.enabled && a.phase === "ready" ? (

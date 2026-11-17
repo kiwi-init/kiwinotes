@@ -133,7 +133,7 @@ import {
   type ProposalProject,
 } from "./proposals.ts";
 import type { MemorySink, ProposalDraft, ProposalSink, SummaryDraft } from "./tools/tools.ts";
-import { DEFAULT_AGENT_MEETING_SETTINGS, sanitizeAgentMeetingSettings, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
+import { DEFAULT_AGENT_MEETING_SETTINGS, effortOf, isAgentChoice, sanitizeAgentMeetingSettings, sanitizeEffortByModel, type AgentMeetingSettings, type AgentSettings } from "../store/settings.ts";
 import type { Notices } from "../bun/notices.ts";
 import { WaitingNotice, type NoticeState } from "./notice.ts";
 
@@ -310,6 +310,8 @@ export class AgentService {
   private claude: AgentClaudeStatus | null = null;
   /** Os modelos que o agente ofereceu da última vez que abriu (T8762), lidos de `<dados>/agent/models.json` na 1ª vez. */
   private models: AgentModelChoice[] | null = null;
+  /** Os esforços que o agente oferece em cada modelo (spec #16793), como ficaram guardados; `[]` é um modelo sem esforço. */
+  private efforts: Record<string, AgentModelChoice[]> | null = null;
   private applied: Record<string, string> = {};
   private readonly statusListeners = new Set<(s: AgentStatus) => void>();
   private readonly turnListeners = new Set<(e: AgentTurnEvent) => void>();
@@ -803,7 +805,7 @@ export class AgentService {
   }
 
   /** O que muda a todo instante (o download, o programa, o pedido), lido agora, antes de qualquer `await`. */
-  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
+  private snapshot(): Omit<AgentStatus, "name" | "enabled" | "consented" | "model" | "effort" | "effortByModel" | "economy" | "controlShortcut" | "meetings" | "summary" | "instructions" | "webSearch" | "onboarding" | "routines"> {
     const installed = !!installedAdapter({ root: this.root }, this.packages);
     const values = this.host?.running ? this.host.configValues : null;
     return {
@@ -818,6 +820,7 @@ export class AgentService {
       busy: !!this.turn || !!this.usageRun,
       session: values ? { model: values.model, effort: values.effort } : null,
       models: this.knownModels(),
+      efforts: this.knownEfforts(),
     };
   }
 
@@ -839,17 +842,53 @@ export class AgentService {
     return this.models;
   }
 
-  /** Guarda os modelos que o agente acabou de oferecer (ao abrir, e depois de trocar as opções). */
-  private rememberModels(host: AgentHost): void {
-    const models = host.choices("model");
-    if (!models.length || JSON.stringify(models) === JSON.stringify(this.knownModels())) return;
-    this.models = models;
+  private get effortsFile(): string {
+    return path.join(agentDir(this.d.data), "efforts.json");
+  }
+
+  /**
+   * Os esforços guardados, por modelo (spec #16793). O agente só diz os do modelo da sessão (no adaptador, o esforço
+   * depende do modelo, e um modelo sem esforço não tem a opção): o Kiwi junta o que viu de cada um, de uma abertura
+   * para outra, e a seção mostra as escolhas do modelo escolhido mesmo com o programa fechado.
+   */
+  private knownEfforts(): Record<string, AgentModelChoice[]> {
+    if (this.efforts) return this.efforts;
+    const out: Record<string, AgentModelChoice[]> = {};
     try {
-      mkdirSync(agentDir(this.d.data), { recursive: true, mode: 0o700 });
-      writeFileSync(this.modelsFile, JSON.stringify(models) + "\n", { mode: 0o600 });
-    } catch (e) {
-      this.d.log?.(`[agent] models: ${String((e as Error)?.message ?? e)}`);
+      const saved = JSON.parse(readFileSync(this.effortsFile, "utf8")) as unknown;
+      if (saved && typeof saved === "object" && !Array.isArray(saved))
+        for (const [model, list] of Object.entries(saved as Record<string, unknown>))
+          if (isAgentChoice(model) && Array.isArray(list))
+            out[model] = list.filter((m): m is AgentModelChoice => !!m && typeof m.value === "string" && typeof m.name === "string");
+    } catch {
+      // Sem o arquivo (ainda nenhum pedido) ou estragado: começa vazio.
     }
+    return (this.efforts = out);
+  }
+
+  /** Guarda o que o agente acabou de oferecer (ao abrir, e depois de trocar as opções): os modelos e os esforços do atual. */
+  private rememberModels(host: AgentHost): void {
+    const save = (file: string, value: unknown, what: string) => {
+      try {
+        mkdirSync(agentDir(this.d.data), { recursive: true, mode: 0o700 });
+        writeFileSync(file, JSON.stringify(value) + "\n", { mode: 0o600 });
+      } catch (e) {
+        this.d.log?.(`[agent] ${what}: ${String((e as Error)?.message ?? e)}`);
+      }
+    };
+    const models = host.choices("model");
+    if (models.length && JSON.stringify(models) !== JSON.stringify(this.knownModels())) {
+      this.models = models;
+      save(this.modelsFile, models, "models");
+    }
+    // O esforço do modelo da sessão: as escolhas dele, ou `[]` se ele não tem a opção.
+    const model = host.configValues.model;
+    if (!isAgentChoice(model)) return;
+    const efforts = host.choices("effort");
+    const known = this.knownEfforts();
+    if (JSON.stringify(known[model]) === JSON.stringify(efforts)) return;
+    this.efforts = { ...known, [model]: efforts };
+    save(this.effortsFile, this.efforts, "efforts");
   }
 
   private statusFrom(snap: ReturnType<AgentService["snapshot"]>, s: AgentSettings): AgentStatus {
@@ -859,7 +898,8 @@ export class AgentService {
       consented: s.consented,
       ...snap,
       model: s.model,
-      effort: s.effort,
+      effort: effortOf(s, s.model),
+      effortByModel: s.effortByModel ?? {},
       economy: s.economy === true,
       controlShortcut: s.controlShortcut === true,
       meetings: s.meetings ?? DEFAULT_AGENT_MEETING_SETTINGS,
@@ -871,10 +911,14 @@ export class AgentService {
     };
   }
 
-  /** O modelo e o esforço que o Kiwi pede: no modo econômico, o modelo mais barato que o agente oferece (spec #11084). */
+  /**
+   * O modelo e o esforço que o Kiwi pede: no modo econômico, o modelo mais barato que o agente oferece (spec #11084).
+   * O esforço é o salvo para o modelo que vai de fato (spec #16793): no econômico, o do modelo barato.
+   */
   private wantedConfig(s: AgentSettings): { model: string; effort: string } {
     const cheap = s.economy ? cheapestModel(this.knownModels()) : null;
-    return { model: cheap ?? s.model, effort: s.effort };
+    const model = cheap ?? s.model;
+    return { model, effort: effortOf(s, model) };
   }
 
   private async checkClaude(): Promise<void> {
@@ -983,6 +1027,39 @@ export class AgentService {
           }
         : null,
     };
+  }
+
+  /**
+   * O programa aberto sem pedido nenhum (`agent.prepare`, spec #16793): o `session/new` do ACP já traz os modelos e os
+   * esforços, então o onboarding mostra o Modelo e o Esforço logo depois de conectar. Aplica o modelo e o esforço
+   * escolhidos (o esforço de um modelo novo só aparece depois de a sessão estar nele). Nada vai ao agente e não gasta
+   * o plano. Com um pedido rodando, só devolve o estado: o próximo pedido aplica a escolha. O mesmo com um `/usage` andando.
+   */
+  async prepare(): Promise<AgentStatus> {
+    const s = await this.d.settings.load();
+    if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
+    if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
+    // Um pedido, o `/usage` do medidor (T16712) ou o de depois do pedido: o agente está ocupado, e o próximo pedido
+    // aplica a escolha (revisão #17024).
+    const busy = () => !!this.turn || !!this.usageRun || !!this.limitProbe;
+    if (busy()) return this.status();
+    try {
+      if (!this.host?.running) await this.openProgram();
+      else {
+        const wanted = this.wantedConfig(s);
+        if (!busy() && this.host && (wanted.model !== this.applied.model || wanted.effort !== this.applied.effort)) {
+          await this.host.applyConfig(wanted);
+          this.applied = { ...wanted };
+          this.rememberModels(this.host);
+        }
+      }
+    } catch (e) {
+      throw fromAgentError(e, this.name);
+    } finally {
+      if (!busy()) this.armIdle();
+      this.emitStatus();
+    }
+    return this.status();
   }
 
   /**
@@ -2273,7 +2350,13 @@ export class AgentService {
       patch.instructions = text;
     }
     if (o.model !== undefined) patch.model = o.model;
-    if (o.effort !== undefined) patch.effort = o.effort;
+    // O esforço é do modelo (spec #16793): do que veio junto, ou do escolhido agora. Vale a partir do próximo pedido,
+    // pelo `set_config_option`, sem mexer numa resposta em andamento.
+    if (o.effort !== undefined) {
+      const now = await this.d.settings.load();
+      const model = o.model ?? now.model;
+      patch.effortByModel = sanitizeEffortByModel({ ...now.effortByModel, [model]: o.effort });
+    }
     if (o.economy !== undefined) {
       patch.economy = o.economy;
       this.economyNow = o.economy;

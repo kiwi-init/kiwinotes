@@ -1476,6 +1476,10 @@ export function uiCapabilities(deps: CapabilityDeps,
       noArgs(args, "agent.usageRefresh");
       return agentCall((agent) => agent.usageRefresh());
     },
+    "agent.prepare": (args) => {
+      noArgs(args, "agent.prepare");
+      return agentCall((agent) => agent.prepare());
+    },
     "agent.usageClear": (args) => {
       noArgs(args, "agent.usageClear");
       return agentCall(async (agent) => agent.usageClear());

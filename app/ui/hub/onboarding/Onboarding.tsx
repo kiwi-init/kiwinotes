@@ -14,6 +14,7 @@ import { Button, Kbd, Segmented, Select } from "../../src/kit/index.tsx";
 import { shortcutLabel } from "../../../src/shared/shortcuts.ts";
 import { ViewPanel } from "../../settings/AgentActivity.tsx";
 import { ControlRow } from "../../settings/ControlRow.tsx";
+import { ModelRows, type Prepare } from "../../settings/ModelRows.tsx";
 import { CatColorRow, CatPlaceRow } from "../../settings/CatRow.tsx";
 import { NoteModelEditor } from "../../settings/NoteModel.tsx";
 import { adapterLine, applyTurn, claudeLine, IDLE_TEST, type TestState } from "../../settings/agentText.ts";
@@ -153,6 +154,26 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
     }
   };
   const ready = canLeaveClaude(status);
+  // O Modelo e o Esforço logo depois de conectar (spec #16793, harry #16873): a sessão abre sem pedido, e o
+  // `session/new` traz os modelos e os esforços. Trocar o modelo abre de novo nele, para listar os esforços dele.
+  const [prepare, setPrepare] = useState<Prepare>("opening");
+  const open = () => {
+    if (!has("agent.prepare")) return setPrepare("failed");
+    setPrepare("opening");
+    api.agent.prepare().then(
+      () => setPrepare("ready"),
+      () => setPrepare("failed"),
+    );
+  };
+  useEffect(() => {
+    if (ready && status.enabled) open();
+    // Só quando conecta: o resto da sessão segue pelos eventos `agent.status`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, status.enabled]);
+  const choose = (fn: () => Promise<AgentStatus>) => {
+    setFailure(null);
+    fn().then(open, (e: unknown) => setFailure(e instanceof Error ? e.message : String(e)));
+  };
   return (
     <div className="kn-onb-checks">
       <div className="kn-onb-check" data-ok={claude.ok}>
@@ -167,6 +188,11 @@ function ClaudeStep({ status }: { status: AgentStatus }) {
           </Button>
         ) : null}
       </div>
+      {ready && status.enabled ? (
+        <div className="kn-onb-row kn-onb-model">
+          <ModelRows status={status} run={choose} prepare={prepare} />
+        </div>
+      ) : null}
       <div className="kn-onb-check" data-ok={test.phase === "done"}>
         <span className="kn-onb-check-text">{test.phase === "done" ? "O Claude Code respondeu." : "Mande um oi para testar."}</span>
         <Button onClick={() => void hello()} disabled={!ready || test.phase === "running"}>

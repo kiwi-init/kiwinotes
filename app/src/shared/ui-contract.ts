@@ -235,7 +235,10 @@ export type { NoteModel };
 //   `home.changed`. Só acréscimo.
 // 1.81.0 (T16769, spec #16759): o `intro.layout`, onde o hub vai aparecer, para a moldura da intro crescer até ele.
 //   Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.81.0";
+// 1.82.0 (T16801, spec #16793): o esforço por modelo, `effortByModel` e `efforts` no `AgentStatus`. O `effort` passa a
+//   ser o do modelo escolhido, e o `agent.configure({ effort })` grava o do modelo. O `agent.prepare` abre o
+//   programa sem pedido, para o onboarding. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.82.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -665,6 +668,8 @@ export interface UiCapabilities {
   "agent.usage": { args: Record<string, never>; result: AgentUsageView };
   /** "Atualizar" (1.54.0): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica. */
   "agent.usageRefresh": { args: Record<string, never>; result: AgentUsageView };
+  /** Abre o programa do agente sem pedido (1.82.0, spec #16793): lista os modelos e os esforços no onboarding. Não gasta o plano. */
+  "agent.prepare": { args: Record<string, never>; result: AgentStatus };
   /** "Apagar o gasto guardado" (1.54.0): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
   "agent.usageClear": { args: Record<string, never>; result: AgentUsageView };
   /** As trilhas (1.79.0, T14682): as palavras que levaram o agente a uma nota, só no Mac. */
@@ -1034,7 +1039,10 @@ export interface AgentStatus {
   controlShortcut: boolean;
   /** O que o Kiwi pede ao abrir a sessão. */
   model: string;
+  /** O esforço do modelo escolhido (spec #16793): o salvo para ele, ou o de antes, que vale para todos. */
   effort: string;
+  /** O esforço salvo de cada modelo (spec #16793). Um modelo fora daqui usa o `effort` de antes. */
+  effortByModel: Record<string, string>;
   /** O modelo e o esforço da sessão aberta, como o agente diz; null com o programa fechado. */
   session: { model?: string; effort?: string } | null;
   /**
@@ -1042,6 +1050,11 @@ export interface AgentStatus {
    * `description` é o que o agente diz de cada um (no `default`, o modelo que ele usa de fato).
    */
   models: AgentModelChoice[];
+  /**
+   * Os esforços que o agente oferece em cada modelo (spec #16793), por valor do modelo, da última vez que a sessão
+   * esteve nele. `[]` é um modelo sem esforço; um modelo fora daqui ainda não foi usado.
+   */
+  efforts: Record<string, AgentModelChoice[]>;
 }
 
 /** Um modelo que o agente oferece (1.42.0). */
@@ -1189,6 +1202,7 @@ export const UI_CAPABILITIES = [
   "agent.noticeSet",
   "agent.usage",
   "agent.usageRefresh",
+  "agent.prepare",
   "agent.usageClear",
   "agent.trails",
   "agent.trailDelete",

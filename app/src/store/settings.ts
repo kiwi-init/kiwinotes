@@ -87,8 +87,13 @@ export interface AgentSettings {
   consented: boolean;
   /** Um valor da opção `model` do agente; "default" é o padrão do Claude Code, e não o modelo do terminal da pessoa. */
   model: string;
-  /** Um valor da opção `effort` do agente; "default" é o padrão. */
+  /**
+   * Um valor da opção `effort` do agente; "default" é o padrão. Desde o spec #16793 é só o valor inicial: vale para um
+   * modelo que ainda não tem esforço próprio em `effortByModel` (assim o ajuste de antes migra sem perder nada).
+   */
   effort: string;
+  /** O esforço de cada modelo (spec #16793), pelo valor do modelo: `{ "sonnet": "low", "opus": "high" }`. */
+  effortByModel: Record<string, string>;
   /** "Avisar quando o agente esperar uma resposta" (spec #9839): a notificação do macOS; ligado por padrão. */
   notifyWaiting: boolean;
   /** O modo econômico (spec #11084): o modelo mais barato, as ferramentas por seção e respostas curtas; desligado. */
@@ -155,6 +160,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   consented: false,
   model: "default",
   effort: "default",
+  effortByModel: {},
   notifyWaiting: true,
   economy: false,
   controlShortcut: false,
@@ -171,6 +177,25 @@ export function isAgentChoice(v: unknown): v is string {
   return typeof v === "string" && /^[A-Za-z0-9][A-Za-z0-9.\-]{0,63}$/.test(v);
 }
 
+/** Até quantos modelos guardam o esforço: a lista do agente tem uns 10, e um modelo que saiu dela fica guardado. */
+export const MAX_EFFORT_MODELS = 50;
+
+/** O esforço por modelo, saneado: só ids que valem, nos dois lados, até `MAX_EFFORT_MODELS`. */
+export function sanitizeEffortByModel(input: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!input || typeof input !== "object" || Array.isArray(input)) return out;
+  for (const [model, effort] of Object.entries(input as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_EFFORT_MODELS) break;
+    if (isAgentChoice(model) && isAgentChoice(effort)) out[model] = effort;
+  }
+  return out;
+}
+
+/** O esforço de um modelo (spec #16793): o salvo para ele, ou o `effort` de antes, que vale para todos. */
+export function effortOf(s: Pick<AgentSettings, "effort" | "effortByModel">, model: string): string {
+  return s.effortByModel?.[model] ?? s.effort;
+}
+
 export function sanitizeAgentSettings(input: unknown): AgentSettings {
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
@@ -178,6 +203,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     consented: o.consented === true,
     model: isAgentChoice(o.model) ? o.model : DEFAULT_AGENT_SETTINGS.model,
     effort: isAgentChoice(o.effort) ? o.effort : DEFAULT_AGENT_SETTINGS.effort,
+    effortByModel: sanitizeEffortByModel(o.effortByModel),
     notifyWaiting: o.notifyWaiting !== false,
     economy: o.economy === true,
     controlShortcut: o.controlShortcut === true,

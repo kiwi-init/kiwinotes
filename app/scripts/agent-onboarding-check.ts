@@ -89,6 +89,23 @@ try {
       await shot(p, "1-claude-antes-light.png");
       await p.locator(".kn-onb-check button:has-text('Baixar')").click();
       await p.waitForFunction(() => !document.querySelector(".kn-onb-actions button:last-child")?.hasAttribute("disabled"), undefined, { timeout: 30000 });
+      // O Modelo e o Esforço depois de conectar (spec #16793): a sessão abre sem pedido e lista os esforços; a escolha
+      // daqui é a de Ajustes › Agente.
+      const dialog = p.getByRole("dialog");
+      const effort = dialog.getByRole("combobox", { name: "Esforço do modelo" });
+      const efforts = () => effort.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+      await p.waitForFunction(() => (document.querySelector<HTMLSelectElement>("[role=dialog] select[aria-label='Esforço do modelo']")?.options.length ?? 0) > 1, undefined, { timeout: 30000 });
+      await dialog.getByRole("combobox", { name: "Modelo do agente" }).selectOption("sonnet");
+      await p.waitForFunction(() => (document.querySelector<HTMLSelectElement>("[role=dialog] select[aria-label='Esforço do modelo']")?.options.length ?? 0) === 4, undefined, { timeout: 30000 });
+      assert.deepEqual(await efforts(), ["default", "low", "medium", "high"]);
+      await effort.selectOption("low");
+      for (let i = 0; (await invoke("agent.status")).effortByModel?.sonnet !== "low"; i++) { assert.ok(i < 50, "o esforço vai para os ajustes"); await Bun.sleep(100); }
+      const chosen = await invoke("agent.status");
+      assert.equal(chosen.model, "sonnet");
+      assert.equal(chosen.effort, "low");
+      assert.equal((await invoke("agent.activity")).requests.length, 0, "listar os esforços não manda pedido");
+      await shot(p, "1-claude-modelo-light.png");
+      report.checks.push("after connecting, step 1 shows Modelo and Esforço from a session opened without a request; the choice lands in the agent settings (fake agent)");
       await p.locator(".kn-onb-check button:has-text('Mandar um oi')").click();
       await p.waitForSelector(".kn-onb-answer, .kn-onb-failure", { timeout: 30000 }).catch(async (e) => {
         await p.screenshot({ path: join(out, "debug.png") });

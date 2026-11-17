@@ -163,6 +163,11 @@ export class AgentHost {
   private replaying = false;
   /** As opções da sessão aberta, como o agente respondeu por último. */
   private config: SessionConfigOption[] = [];
+  /**
+   * O esforço que o agente pôs ao entrar em cada modelo (spec #16793): é o "Padrão" dele quando ele não oferece o valor
+   * `default`. Guardado na primeira vez que a sessão aparece no modelo, antes de o Kiwi aplicar o esforço salvo.
+   */
+  private startEffort = new Map<string, string>();
 
   constructor(o: AgentHostOptions) {
     this.o = o;
@@ -255,6 +260,8 @@ export class AgentHost {
       this.sessionId = sessionId;
       this.fresh = !resumed;
       this.config = Array.isArray(details.configOptions) ? (details.configOptions as SessionConfigOption[]) : [];
+      // Uma sessão retomada pode trazer o esforço que o Kiwi aplicou antes, não o do agente (revisão #17131).
+      if (!resumed) this.noteStartEffort();
       if (this.o.configOptions) await this.applyConfig(this.o.configOptions());
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId }) + "\n", { mode: 0o600 });
       return { sessionId, resumed, agent: { name: init.agentInfo?.title ?? init.agentInfo?.name, version: init.agentInfo?.version }, details };
@@ -303,6 +310,7 @@ export class AgentHost {
       this.sessionId = created.sessionId;
       this.fresh = true;
       this.config = Array.isArray(created.configOptions) ? (created.configOptions as SessionConfigOption[]) : [];
+      this.noteStartEffort();
       if (this.o.configOptions) await this.applyConfig(this.o.configOptions());
       writeFileSync(this.sessionFile, JSON.stringify({ sessionId: created.sessionId }) + "\n", { mode: 0o600 });
       return created.sessionId;
@@ -402,6 +410,12 @@ export class AgentHost {
     }
   }
 
+  /** Guarda o esforço com que a sessão chegou ao modelo atual, na primeira vez (o "Padrão" do agente nele). */
+  private noteStartEffort(): void {
+    const { model, effort } = this.configValues;
+    if (model && effort && !this.startEffort.has(model)) this.startEffort.set(model, effort);
+  }
+
   /** O valor atual de cada opção da sessão aberta (`model`, `effort`, `mode`…), como o agente diz. */
   get configValues(): Record<string, string> {
     const out: Record<string, string> = {};
@@ -435,13 +449,19 @@ export class AgentHost {
     const applied: string[] = [];
     const refused: string[] = [];
     if (!this.conn || !this.sessionId) return { applied, refused };
-    for (const [configId, value] of Object.entries(wanted)) {
+    for (const [configId, asked] of Object.entries(wanted)) {
       const option = this.config.find((o) => o.id === configId);
       if (!option || !("options" in option)) continue;
-      if (option.currentValue === value) continue;
       const offered = (option.options as unknown as { value?: string; options?: { value: string }[] }[]).flatMap(
         (x): { value?: string }[] => (x.options ? x.options : [x]),
       );
+      // O "Padrão" num modelo em que o agente não oferece `default`: o esforço que ele mesmo pôs ao entrar no modelo.
+      let value = asked;
+      if (configId === "effort" && value === "default" && !offered.some((x) => x.value === value)) {
+        const start = this.startEffort.get(this.configValues.model ?? "");
+        if (start) value = start;
+      }
+      if (option.currentValue === value) continue;
       if (!offered.some((x) => x.value === value)) {
         refused.push(configId);
         continue;
@@ -449,6 +469,7 @@ export class AgentHost {
       try {
         const res = await this.untilExit(this.conn.agent.request("session/set_config_option", { sessionId: this.sessionId, configId, value }));
         if (Array.isArray(res.configOptions)) this.config = res.configOptions;
+        if (configId === "model") this.noteStartEffort();
         applied.push(configId);
       } catch (e) {
         const err = classifyAgentError(e, this.o.name);
