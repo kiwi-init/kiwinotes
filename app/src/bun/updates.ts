@@ -42,6 +42,12 @@ export interface UpdateCheck {
 }
 
 /** O pedaço do `Updater` do Electrobun que o app usa (injetado nos testes). */
+/** O que o Updater do Electrobun manda no `onStatusChange`: o nome do passo e, no `download-progress`, os bytes. */
+export interface UpdaterStatus {
+  status: string;
+  details?: { bytesDownloaded?: number; totalBytes?: number };
+}
+
 export interface UpdaterApi {
   getLocalInfo(): Promise<LocalInfo>;
   checkForUpdate(): Promise<UpdateCheck>;
@@ -53,7 +59,7 @@ export interface UpdaterApi {
    * O status do Updater. Ao abrir, ele reconcilia uma vez o resultado da última troca, feita pelo extractor com o app
    * já fechado: se ela falhou, sai um `error`, e o `updateInfo()` fica com o erro (T2386, #2423).
    */
-  onStatusChange?(callback: ((entry: { status: string }) => void) | null): void;
+  onStatusChange?(callback: ((entry: UpdaterStatus) => void) | null): void;
 }
 
 /**
@@ -173,7 +179,8 @@ export type UpdateState =
   | { kind: "off"; reason: string }
   | { kind: "idle" }
   | { kind: "checking" }
-  | { kind: "downloading"; version: string }
+  /** `done` e `total` em bytes, do `download-progress` do Updater (T17097); sem eles, a faixa do Sobre fica indeterminada. */
+  | { kind: "downloading"; version: string; done?: number; total?: number }
   | { kind: "ready"; version: string; hash: string }
   | { kind: "applying" };
 
@@ -267,6 +274,7 @@ export class AppUpdates {
     // aparece aqui quando o Updater reconcilia o resultado, logo depois de abrir (#2423, o InvalidUpdateIdentity da rc3).
     this.deps.updater.onStatusChange?.((e) => {
       if (e.status === "error") void this.noteFailedSwap();
+      else if (e.status === "download-progress") this.noteProgress(e.details);
     });
     const late = setTimeout(() => void this.noteFailedSwap(), 3000);
     (late as { unref?: () => void }).unref?.();
@@ -277,6 +285,21 @@ export class AppUpdates {
       (this.timer as { unref?: () => void }).unref?.();
     };
     tick(firstMs);
+  }
+
+  /**
+   * O progresso do download (T17097, spec #16837): os bytes que o Updater manda, só enquanto baixa. Um número que não
+   * serve é ignorado; o último aviso pode vir sem o total, e fica o que já se sabia. O total nunca fica menor que o
+   * baixado, para a barra não passar de cheia.
+   */
+  private noteProgress(d: UpdaterStatus["details"]): void {
+    if (this.state.kind !== "downloading") return;
+    const done = d?.bytesDownloaded;
+    if (typeof done !== "number" || !Number.isFinite(done) || done < 0) return;
+    const given = d?.totalBytes;
+    const known = typeof given === "number" && Number.isFinite(given) && given > 0 ? given : this.state.total;
+    const total = known === undefined ? undefined : Math.max(known, done);
+    this.set({ kind: "downloading", version: this.state.version, done, ...(total === undefined ? {} : { total }) });
   }
 
   stop(): void {
@@ -420,7 +443,13 @@ export function updatesView(state: UpdateState, last: LastCheck | null): Updates
     case "off":
       return { ...base, state: "off", reason: offReasonText(state.reason) };
     case "downloading":
-      return { ...base, state: "downloading", version: state.version };
+      return {
+        ...base,
+        state: "downloading",
+        version: state.version,
+        ...(state.done === undefined ? {} : { done: state.done }),
+        ...(state.total === undefined ? {} : { total: state.total }),
+      };
     case "ready":
       return { ...base, state: "ready", version: state.version };
     default:

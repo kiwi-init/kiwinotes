@@ -1343,7 +1343,9 @@ export type UpdatesLastCheck =
 export type UpdatesView = { lastCheck: UpdatesLastCheck | null } & (
   | { state: "off"; reason: string }
   | { state: "idle" | "checking" | "applying" }
-  | { state: "downloading" | "ready"; version: string }
+  /** `done` e `total`: os bytes baixados e o tamanho, quando o Updater diz (T17097); sem eles, a barra é indeterminada. */
+  | { state: "downloading"; version: string; done?: number; total?: number }
+  | { state: "ready"; version: string }
 );
 
 export interface AppAbout {
