@@ -990,10 +990,7 @@ export class AgentService {
    * já tinha, sem erro.
    */
   async usageRefresh(): Promise<AgentUsageView> {
-    await this.limitProbe;
-    const s = await this.d.settings.load();
-    if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
-    if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
+    // Um pedido da pessoa já andando: o /usage não entra no meio dele (o botão do medidor fica desligado com `busy`).
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
     // Um `/usage` já andando (o medidor apareceu e a pessoa clicou em Atualizar): o mesmo serve aos dois.
     if (this.usageRun) {
@@ -1003,9 +1000,16 @@ export class AgentService {
     const run = { done: Promise.resolve(), yielded: false, asking: false };
     let error: unknown;
     let read = false;
+    // A marca entra antes do primeiro `await`: um pedido da pessoa que chegue enquanto os ajustes carregam já a
+    // encontra e passa na frente, em vez de pegar o `turn` e fazer o medidor dar E_AGENT_BUSY (T16712).
     this.usageRun = run;
     run.done = (async () => {
       try {
+        await this.limitProbe;
+        const s = await this.d.settings.load();
+        if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
+        if (!installedAdapter({ root: this.root }, this.packages)) throw new AgentError("E_ADAPTER_MISSING", this.name);
+        if (run.yielded) return;
         const host = this.host?.running ? this.host : await this.openProgram();
         if (run.yielded) return;
         run.asking = true;

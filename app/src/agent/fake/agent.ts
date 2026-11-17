@@ -26,6 +26,7 @@
 //                            que recebeu, com os parâmetros (os testes conferem o isolamento por ele)
 //   KIWI_FAKE_AGENT_RESUME   "resume" (o padrão), "load" ou "none": como ele retoma uma sessão
 //   KIWI_FAKE_AGENT_TOOL_DELAY_MS  uma pausa depois de cada ferramenta do Kiwi, para um print pegar o status no meio
+//   KIWI_FAKE_AGENT_USAGE_DELAY_MS o `/usage` demora isso antes de responder, e respeita o cancelar (T16712)
 //   KIWI_FAKE_AGENT_NO_MCP   "1": não anuncia o HTTP do MCP (`mcpCapabilities`), e o host não manda as ferramentas
 //   KIWI_FAKE_AGENT_MODEL    o modelo com que a sessão abre (o padrão é "fable", como se viesse do terminal da pessoa,
 //                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high"
@@ -417,6 +418,16 @@ const app = agent({ name: "kiwi-fake-agent" })
     // anotados. O Kiwi o manda antes de cada pedido (ADR 0013, T13702), e o registro dele é `session/usage`.
     if (params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("").trim() === "/usage") {
       note("session/usage", params);
+      // Um `/usage` lento (T16712), para um teste pegar o cancelar no meio: a resposta pela metade, e o resto só no fim.
+      const slow = Number(process.env.KIWI_FAKE_AGENT_USAGE_DELAY_MS ?? 0);
+      if (slow > 0) {
+        cancelled.delete(sessionId);
+        await say(client, sessionId, "Plan usage: ");
+        for (const end = Date.now() + slow; Date.now() < end; ) {
+          if (cancelled.has(sessionId)) return { stopReason: "cancelled", noUsage: true };
+          await Bun.sleep(20);
+        }
+      }
       await say(client, sessionId, FAKE_USAGE_MARKDOWN());
       return { stopReason: "end_turn", noUsage: true };
     }
