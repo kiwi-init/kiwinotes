@@ -4,6 +4,20 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.3](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.3) (2026-11-17)
+
+- **Sobre lado a lado: a faixa da atualização com a barra e as Licenças à parte (T17098, T17097, spec #16837)** ([#23](https://github.com/kiwi-init/kiwinotes/pull/23))
+- **balao-igual: o rabo do pacote sai da quina, como o do app desde o T16754 (T17343)** ([#28](https://github.com/kiwi-init/kiwinotes/pull/28))
+- **O esforço de cada modelo, em Ajustes › Agente e no onboarding (T16801, spec #16793)** ([#18](https://github.com/kiwi-init/kiwinotes/pull/18))
+- **A proposta do gato no mesmo quadro da resposta (T16835, spec #15352)** ([#26](https://github.com/kiwi-init/kiwinotes/pull/26))
+- **A busca ⌘K abre por cima da aba atual (T16840, spec #16821)** ([#20](https://github.com/kiwi-init/kiwinotes/pull/20))
+- **O settings-topics-check com a Início, e o link para uma linha de Ajustes sem corrida (T17183)** ([#25](https://github.com/kiwi-init/kiwinotes/pull/25))
+- **A moldura da intro cresce e vira a janela do hub (T16769, spec #16759)** ([#21](https://github.com/kiwi-init/kiwinotes/pull/21))
+- **O balão do KiwiCat aponta para o gato em todas as posições (T16754)** ([#16](https://github.com/kiwi-init/kiwinotes/pull/16))
+- **O /usage do medidor cede a vez ao pedido da pessoa (T16712)** ([#12](https://github.com/kiwi-init/kiwinotes/pull/12))
+- **O hub-hover.json passa o mouse no Ditado, uma aba que existe (T16692, spec #15728)** ([#10](https://github.com/kiwi-init/kiwinotes/pull/10))
+- **A trilha acompanha a nota renomeada ou movida (T16650)** ([#9](https://github.com/kiwi-init/kiwinotes/pull/9))
+
 ## [2026.11.2](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.2) (2026-11-17)
 
 A 2026.11.1 ficou só no tag e não saiu; o que estava nela sai aqui.
