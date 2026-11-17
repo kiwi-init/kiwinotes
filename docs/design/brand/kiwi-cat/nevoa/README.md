@@ -15,13 +15,15 @@ Resolução inteira, 640 × 800 / DPR 1. Relógio, voz e semente controlados;
 simulação a 60 Hz e exportação a 30 fps. Quadros repetidos permanecem
 repetidos, sem interpolação, sem áudio. Não se mede FPS pelo MP4.
 
+Os vídeos estão no commit `2d5493a2` do repo antigo, que não está no GitHub, por isso vão sem link (veja o `docs/arquivo.md`).
+
 | Estado | Kiwi | Claude Code | Codex |
 | --- | --- | --- | --- |
-| Repouso | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/repouso-padrao.mp4) | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/repouso-claude.mp4) | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/repouso-codex.mp4) |
-| Ouvindo, voz sintética | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/ouvindo-padrao.mp4) | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/ouvindo-claude.mp4) | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/ouvindo-codex.mp4) |
-| Thinking | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/thinking-padrao.mp4) | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/thinking-claude.mp4) | [vídeo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/thinking-codex.mp4) |
+| Repouso | `repouso-padrao.mp4` | `repouso-claude.mp4` | `repouso-codex.mp4` |
+| Ouvindo, voz sintética | `ouvindo-padrao.mp4` | `ouvindo-claude.mp4` | `ouvindo-codex.mp4` |
+| Thinking | `thinking-padrao.mp4` | `thinking-claude.mp4` | `thinking-codex.mp4` |
 
-[60 segundos de repouso](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/videos/repouso-60s.mp4) ·
+60 segundos de repouso (`repouso-60s.mp4`) ·
 [relatório da captura](final-b1/videos/report.json).
 
 ## Desempenho da demonstração

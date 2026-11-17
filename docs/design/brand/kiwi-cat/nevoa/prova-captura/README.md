@@ -7,7 +7,7 @@ limpeza do canvas por GPU, não o shader da névoa nem uma medida de desempenho.
 - Backend efetivo: WebGPU; adaptador identificado como Apple;
   `isFallbackAdapter=false`. Não foi usado outro navegador.
 - Dois estados de cor do canvas: [fase A](phase-a.png) e [fase B](phase-b.png).
-- [Vídeo MP4](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/prova-captura/capture.mp4), convertido do [WebM original](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/prova-captura/capture.webm).
+- Vídeo MP4 (`capture.mp4`), convertido do WebM original (`capture.webm`), os dois no commit `2d5493a2` do repo antigo.
   Decodificados em0,5s/1,5s, os valores RGB médios foram101,67/173,00,
   e a diferença absoluta média71,33: há imagem e mudança, não vídeo preto.
 - O gravador produziu25fps. Isso **não prova**60fps de renderização.
