@@ -2,7 +2,8 @@
   "window": "hub",
   "steps": [
     { "waitFor": ".kn-tab", "name": "o hub abre" },
-    { "click": ".kn-tab:has-text('Sobre')", "name": "vai para Sobre" },
+    { "click": ".kn-tab:has-text('Configurações')", "name": "vai para Configurações" },
+    { "click": ".kn-prefs-item[data-topic=about]", "name": "e para o Sobre (um assunto dos Ajustes desde o spec #11966)" },
     { "waitFor": ".kn-about-foot button:has-text('Salvar diagnóstico')", "name": "o botão discreto no rodapé" },
     { "expectCount": ".kn-about-foot button[title*='sem texto nem áudio']", "count": 1, "name": "a explicação vai na dica, não na tela" },
     { "screenshot": "01-sobre-com-diagnostico.png" },
