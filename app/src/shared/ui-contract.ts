@@ -668,7 +668,7 @@ export interface UiCapabilities {
   "agent.usage": { args: Record<string, never>; result: AgentUsageView };
   /** "Atualizar" (1.54.0): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica. */
   "agent.usageRefresh": { args: Record<string, never>; result: AgentUsageView };
-  /** Abre o programa do agente sem pedido (1.81.0, spec #16793): lista os modelos e os esforços no onboarding. Não gasta o plano. */
+  /** Abre o programa do agente sem pedido (1.82.0, spec #16793): lista os modelos e os esforços no onboarding. Não gasta o plano. */
   "agent.prepare": { args: Record<string, never>; result: AgentStatus };
   /** "Apagar o gasto guardado" (1.54.0): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
   "agent.usageClear": { args: Record<string, never>; result: AgentUsageView };

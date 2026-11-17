@@ -130,7 +130,7 @@ export function prepareHint(prepare: Prepare): string {
  * modelo não tem não entra: ele não vale (revisão #17024), e o `effortValue` mostra o que vale.
  */
 export function effortOptions(s: Pick<AgentStatus, "model" | "efforts">): { value: string; label: string }[] | null {
-  // Um engine anterior ao 1.81.0 não manda os esforços (o `requiresContract` da UI é ^1.0.0): sem a lista, sem o seletor.
+  // Um engine anterior ao 1.82.0 não manda os esforços (o `requiresContract` da UI é ^1.0.0): sem a lista, sem o seletor.
   const known = s.efforts?.[s.model];
   if (!known) return null;
   if (!known.length) return [];
