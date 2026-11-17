@@ -7,7 +7,7 @@
 import "./notes.css";
 
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 
 import { api as appApi } from "../src/api.ts";
 import { Button, Empty, HoverLabel } from "../src/kit/index.tsx";
@@ -114,7 +114,7 @@ function useEnterAnimation() {
   return n;
 }
 
-function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderController, folderRef }: { api: NotesApi; drafts: Drafts; active: boolean; openRequest?: { path: string; n: number; internal?: boolean } | null; searchRequest?: number; folderController?:FolderController;folderRef?:FolderRef }) {
+function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen, onShow, folderController, folderRef }: { api: NotesApi; drafts: Drafts; active: boolean; openRequest?: { path: string; n: number; internal?: boolean } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void; folderController?:FolderController;folderRef?:FolderRef }) {
   // A nota que outra seção do hub pediu (T4947): a de antes de montar abre na carga; as seguintes, pelo efeito abaixo.
   const openRequestRef = useRef(openRequest);
   const handledRequest = useRef(openRequest?.n ?? 0);
@@ -550,11 +550,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderCont
   };
 
   const open = useCallback(
-    async (path: string) => {
+    // `keepSearch`: a nota que as Notas abrem sozinhas ao carregar não fecha a busca pedida de outra aba (spec #16821).
+    async (path: string, keepSearch = false) => {
       if (!(await leave())) return;
       const n = await api.get(path).catch(() => null);
       if (n) show(n);
-      setPalette(false);
+      if (!keepSearch) setPalette(false);
       setTreeOpen(false);
       setBackOpen(false);
     },
@@ -563,12 +564,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderCont
 
   /** Abre o quadro branco (T6600) no lugar da nota. */
   const openCanvas = useCallback(
-    async (p: string) => {
+    async (p: string, keepSearch = false) => {
       if (!(await leave())) return;
       setFocusMode(false);
       setBoard(p);
       setView("canvas");
-      setPalette(false);
+      if (!keepSearch) setPalette(false);
       setTreeOpen(false);
       setBackOpen(false);
     },
@@ -577,12 +578,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderCont
 
   /** Abre um arquivo que não é nota no lugar da nota (T7103): o visualizador do tipo, ou o aviso com o app padrão. */
   const openFileView = useCallback(
-    async (p: string) => {
+    async (p: string, keepSearch = false) => {
       if (!(await leave())) return;
       setFocusMode(false);
       setFileOpen(p);
       setView("file");
-      setPalette(false);
+      if (!keepSearch) setPalette(false);
       setTreeOpen(false);
       setBackOpen(false);
     },
@@ -621,19 +622,19 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderCont
         // Com a árvore preguiçosa (spec #13664), a lista não tem todos os arquivos: o pedido vale, e o engine diz se existe.
         const known = (p: string) => !!api.filesIn || !!l.files?.some((f) => f.path === p);
         if (asked && /\.canvas$/i.test(asked) && api.canvas && known(asked)) {
-          void openCanvas(asked);
+          void openCanvas(asked, true);
           return;
         }
         // Um arquivo que não é nota, pedido pelo caminho: abre no view de arquivo (T7103).
         if (asked && api.files?.read && !/\.(md|markdown)$/i.test(asked) && known(asked)) {
-          void openFileView(asked);
+          void openFileView(asked, true);
           return;
         }
         const first =
           l.notes.find((n) => n.path === asked) ??
           l.notes.find((n) => n.path === "Caixa de entrada.md") ??
           [...l.notes].sort((a, b) => b.mtime.localeCompare(a.mtime))[0];
-        if (first) void open(first.path);
+        if (first) void open(first.path, true);
       },
       () => setFailed(true),
     );
@@ -1299,13 +1300,26 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderCont
     setPaletteQuery(q);
     setPalette(true);
   };
-  // A busca da Início (spec #15728): cada pedido novo abre a busca daqui.
-  const handledSearch = useRef(searchRequest);
+  // A busca pedida de outra aba (spec #15728, #16821): cada pedido novo abre a busca daqui. O hub guarda o último que
+  // já abriu (`searchSeen`): as Notas que montam por causa do pedido ainda o atendem.
+  const ownSeen = useRef(searchRequest);
+  const handledSearch = searchSeen ?? ownSeen;
   useEffect(() => {
     if (searchRequest === handledSearch.current) return;
     handledSearch.current = searchRequest;
     openPalette();
   }, [searchRequest]);
+  // Sair das Notas com a busca aberta (o menu da barra troca a aba): ela não fica por cima da outra aba.
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (wasActive.current && !active) setPalette(false);
+    wasActive.current = active;
+  }, [active]);
+  /** Fora das Notas, a escolha na busca leva às Notas antes (spec #16821). */
+  const showNotes = <A extends unknown[]>(f: (...a: A) => void) => (...a: A) => {
+    if (!activeRef.current) onShow?.();
+    f(...a);
+  };
 
   const openTag = (tag: string) => {
     setTreeOpen(false);
@@ -1374,7 +1388,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderCont
     ...(saved ? [{ id: "save-search", title: "Salvar esta busca na árvore", withQuery: true,
           },
         ] : []),
-    ...(note && view === "note" ? [
+    // Os comandos da nota aberta só nas Notas: fora delas, a nota não está na tela (spec #16821).
+    ...(active && note && view === "note" ? [
       { id: "focus", title: focusMode ? "Sair do modo foco" : "Modo foco", words: "foco concentrar distração zen esconder" },
       { id: "typewriter", title: typewriter ? "Desligar a máquina de escrever" : "Máquina de escrever", words: "máquina escrever centralizar linha typewriter" },
       { id: "add-property", title: "Adicionar propriedade", words: "propriedade frontmatter metadado campo yaml" },
@@ -1874,20 +1889,21 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, folderCont
           </>
         )}
       </main>
-      {palette ? (
+      {palette ? withHub(
+        !active,
         <Palette
           api={api}
           notes={listing?.notes ?? []}
           initialQuery={paletteQuery}
           commands={paletteCommands}
-          onCommand={(id, q) =>
+          onCommand={showNotes((id: string, q: string) =>
             id === "template" ? fromTemplate(selectedFolderRef.current) : id === "save-search" ? saveSearch(q) : id === "canvas" ? void newCanvas(selectedFolderRef.current)
               : id === "focus" ? toggleFocus() : id === "typewriter" ? toggleTypewriter() : id === "add-property" ? addNoteProperty() : undefined
-          }
-          onOpen={(p) => void open(p)}
-          onCreate={(t) => void create(t)}
+          )}
+          onOpen={showNotes((p: string) => void open(p))}
+          onCreate={showNotes((t: string) => void create(t))}
           onClose={() => setPalette(false)}
-        />
+        />,
       ) : null}
       {refactor ? <RefactorDialog key={`${refactor.kind}:${refactor.name}`} kind={refactor.kind} name={refactor.name} onRename={performRefactor} onClose={() => setRefactor(null)} /> : null}
       {tagMenu && api.renameTag ? <ContextMenu x={tagMenu.x} y={tagMenu.y} items={[
@@ -2023,7 +2039,13 @@ function Shell({ children }: { children: React.ReactNode }) {
  * Notas estão na tela. No hub, com outra seção à frente, elas ficam montadas e escondidas, e o ⌘N e o ⌘K não podem
  * agir sem ninguém ver (T2200).
  */
-export function NotesApp({ active = true, openRequest = null, searchRequest = 0 }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean } | null; searchRequest?: number } = {}) {
+/** Com as Notas escondidas, a busca vai por cima do hub inteiro (spec #16821); nas Notas, fica onde sempre esteve. */
+function withHub(over: boolean, node: React.ReactNode) {
+  const hub = over ? document.querySelector(".kn-hub") : null;
+  return hub ? createPortal(node, hub) : node;
+}
+
+export function NotesApp({ active = true, openRequest = null, searchRequest = 0, searchSeen, onShow }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void } = {}) {
   const request = openRequest?.n ?? 0;
   const [mode,setMode] = useState({n:request,internal:openRequest?.internal===true});
   const controller = useNotesFolders(()=>setMode({n:request,internal:false}));
@@ -2043,7 +2065,7 @@ export function NotesApp({ active = true, openRequest = null, searchRequest = 0 
     return a && forgetDraftOnDelete(a,drafts);
   }, [drafts,folder?.id,controller.supported]);
   if (!api) return <Shell><Empty title={controller.error|| (controller.supported?"Abrindo a pasta das notas…":"As notas ainda não chegaram a esta versão do app")}/></Shell>;
-  return <>{controller.view&&controller.view.progress.phase!=="idle"?<div className="kn-folder-progress" role="status" aria-live="polite">Lendo {controller.view.progress.path}… {controller.view.progress.seen} arquivos encontrados.</div>:null}<Notes key={folder?.id??"legacy"} api={api} drafts={drafts} active={active} openRequest={openRequest} searchRequest={searchRequest} folderController={controller} folderRef={folder}/><FolderConfirmation controller={controller}/></>;
+  return <>{controller.view&&controller.view.progress.phase!=="idle"?<div className="kn-folder-progress" role="status" aria-live="polite">Lendo {controller.view.progress.path}… {controller.view.progress.seen} arquivos encontrados.</div>:null}<Notes key={folder?.id??"legacy"} api={api} drafts={drafts} active={active} openRequest={openRequest} searchRequest={searchRequest} searchSeen={searchSeen} onShow={onShow} folderController={controller} folderRef={folder}/><FolderConfirmation controller={controller}/></>;
 }
 
 

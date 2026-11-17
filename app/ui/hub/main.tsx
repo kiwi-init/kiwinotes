@@ -37,6 +37,8 @@ const LABELS: Record<HubSection, string> = {
 /** As abas da barra de cima. O `about` do contrato (o menu da barra, `?section=about`) abre Ajustes › Sobre. */
 const TABS = HUB_SECTIONS.filter((s): s is Exclude<HubSection, "about"> => s !== "about");
 type Tab = (typeof TABS)[number];
+/** As abas em que o ⌘K abre a busca por cima, sem trocar de aba (spec #16821). */
+const SEARCH_OVER: ReadonlySet<Tab> = new Set<Tab>(["home", "meetings", "dictation"]);
 
 /** Seção que ainda não existe: aparece na barra, sem abrir nada. Reuniões chegou com o R6 (T4947). */
 const SOON: ReadonlySet<HubSection> = new Set([]);
@@ -59,12 +61,12 @@ interface HomeNav {
 }
 
 /** `active`: a seção está na tela. As outras ficam montadas e escondidas (o estado não se perde ao trocar). */
-function Pane({ section, active, openRequest, searchRequest, settingsRequest, onOpenNote, home }: { section: Tab; active: boolean; openRequest: OpenRequest | null; searchRequest: number; settingsRequest: SettingsRequest | null; onOpenNote(path: string, internal?: boolean): void; home: HomeNav }) {
+function Pane({ section, active, openRequest, searchRequest, searchSeen, onShowNotes, settingsRequest, onOpenNote, home }: { section: Tab; active: boolean; openRequest: OpenRequest | null; searchRequest: number; searchSeen: { current: number }; onShowNotes(): void; settingsRequest: SettingsRequest | null; onOpenNote(path: string, internal?: boolean): void; home: HomeNav }) {
   switch (section) {
     case "home":
       return <Home active={active} onOpenNote={onOpenNote} {...home} />;
     case "notes":
-      return <NotesApp active={active} openRequest={openRequest} searchRequest={searchRequest} />;
+      return <NotesApp active={active} openRequest={openRequest} searchRequest={searchRequest} searchSeen={searchSeen} onShow={onShowNotes} />;
     case "dictation":
       return <History />;
     case "settings":
@@ -195,22 +197,27 @@ function Hub() {
     setOpenRequest((r) => ({ path, internal, n: (r?.n ?? 0) + 1 }));
     go("notes");
   };
-  /** A busca da Início abre a das Notas (o ⌘K): o número muda a cada pedido. */
+  /**
+   * A busca das Notas por cima da aba da frente (spec #16821): o número muda a cada pedido, e o `searchSeen` guarda o
+   * último que as Notas já abriram (as Notas que montam agora, escondidas, ainda atendem o pedido).
+   */
   const [searchRequest, setSearchRequest] = useState(0);
+  const searchSeen = useRef(0);
   const openSearch = () => {
+    setVisited((v) => (v.has("notes") ? v : new Set(v).add("notes")));
     setSearchRequest((n) => n + 1);
-    go("notes");
   };
   const { status: agentStatus, settings } = useAgentCat();
   const catShown = !!agentStatus?.enabled && settings?.kiwicat?.show === true && agentStatus.onboarding?.state !== "open";
   const homeCat: HomeCat = catShown ? "live" : agentStatus && !agentStatus.enabled ? "asleep" : "none";
   const searchShortcut = settings?.shortcuts?.palette ?? DEFAULT_SHORTCUTS.palette!;
-  // O ⌘K com a Início na frente abre a busca das Notas (nas Notas, quem atende é a própria seção).
+  // O ⌘K na Início, nas Reuniões e no Ditado abre a busca das Notas ali mesmo (spec #16821). Nas Notas, quem atende é
+  // a própria seção; nas Configurações, o ⌘K não abre nada.
   const searchKey = useRef({ section, searchShortcut });
   searchKey.current = { section, searchShortcut };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (searchKey.current.section !== "home" || e.defaultPrevented || !matchesKeyEvent(searchKey.current.searchShortcut, e)) return;
+      if (!SEARCH_OVER.has(searchKey.current.section) || e.defaultPrevented || !matchesKeyEvent(searchKey.current.searchShortcut, e)) return;
       e.preventDefault();
       openSearch();
     };
@@ -305,6 +312,8 @@ function Hub() {
                   active={s === section}
                   openRequest={openRequest}
                   searchRequest={searchRequest}
+                  searchSeen={searchSeen}
+                  onShowNotes={() => go("notes")}
                   settingsRequest={settingsRequest}
                   onOpenNote={openNote}
                   home={{ cat: homeCat, view: homeView, searchShortcut, onSearch: openSearch, onDictation: () => go("dictation"), onAgentSettings: () => openSettings("agent") }}

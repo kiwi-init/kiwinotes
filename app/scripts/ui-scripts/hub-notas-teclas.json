@@ -76,7 +76,22 @@
       "name": "⌘K no Ditado"
     },
     {
-      "wait": 400
+      "waitFor": ".kn-palette .kn-palette-q",
+      "name": "a busca abre por cima do Ditado (spec #16821)"
+    },
+    {
+      "expectCount": ".kn-hub-pane[data-section='dictation']:not([hidden])",
+      "count": 1,
+      "name": "e a aba continua o Ditado"
+    },
+    {
+      "press": "Escape",
+      "name": "o Esc fecha a busca"
+    },
+    {
+      "expectCount": ".kn-palette",
+      "count": 0,
+      "name": "a busca fechou no Ditado"
     },
     {
       "click": ".kn-tab:has-text('Notas')",
@@ -98,7 +113,7 @@
     {
       "expectCount": ".kn-palette",
       "count": 0,
-      "name": "o ⌘K no Ditado não abriu a busca"
+      "name": "a busca fechada no Ditado não reabre nas Notas"
     },
     {
       "press": "Meta+k",
