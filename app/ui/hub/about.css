@@ -19,10 +19,12 @@
   gap: 32px;
 }
 
+/* O PNG do ícone traz a margem da grade do macOS (~10 % de cada lado): 156 px com a margem comida dá o desenho em 128. */
 .kn-about-icon {
   flex: none;
-  width: 128px;
-  height: 128px;
+  width: 156px;
+  height: 156px;
+  margin: -14px;
   -webkit-user-select: none;
   user-select: none;
 }

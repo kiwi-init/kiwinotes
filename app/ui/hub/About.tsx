@@ -9,7 +9,7 @@ import "./about.css";
 
 import { useEffect, useState } from "react";
 
-import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
+import { type AppAbout, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button } from "../src/kit/index.tsx";
 import { CHANNEL, CREDITS, DIAG_HINT, updateBand } from "./aboutText.ts";
@@ -65,7 +65,7 @@ export function About() {
   return (
     <div className="kn-about">
       <div className="kn-about-main">
-        <img className="kn-about-icon" src={appIcon} alt="" width={128} height={128} draggable={false} />
+        <img className="kn-about-icon" src={appIcon} alt="" width={156} height={156} draggable={false} />
         <div className="kn-about-body">
           <h1 className="kn-about-name">Kiwi Notes</h1>
           <p className="kn-about-version">
@@ -84,19 +84,7 @@ export function About() {
             <span className="kn-about-dot" aria-hidden="true" />
             <div className="kn-about-band-text">
               <p className="kn-about-line">{band.title}</p>
-              {band.detail || view.state === "ready" ? (
-                <p className="kn-about-detail">
-                  {band.detail}
-                  {view.state === "ready" ? (
-                    <>
-                      {band.detail ? " " : null}
-                      <button type="button" className="kn-about-link" onClick={() => openOutside(releaseNotesUrl(view.version))}>
-                        O que mudou
-                      </button>
-                    </>
-                  ) : null}
-                </p>
-              ) : null}
+              {band.detail ? <p className="kn-about-detail">{band.detail}</p> : null}
               {band.bar ? (
                 <div
                   className="kn-about-bar"
