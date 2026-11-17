@@ -31,6 +31,8 @@ export interface UpdateBand {
   detail: string;
   /** Só no baixando: `pct` null é a barra indeterminada. */
   bar: { pct: number | null } | null;
+  /** No baixando e no pronta, a versão nova cujas notas o "O que muda" abre (spec #16837). */
+  notesOf: string | null;
   /** O botão da direita, ou nenhum. */
   action: { kind: "check" | "apply"; label: string } | null;
 }
@@ -40,29 +42,29 @@ export function updateBand(v: UpdatesView): UpdateBand {
   const check = (label = "Verificar atualizações") => ({ kind: "check" as const, label });
   switch (v.state) {
     case "off":
-      return { tone: "quiet", title: "Atualizações desligadas", detail: `Neste build (${v.reason}).`, bar: null, action: null };
+      return { tone: "quiet", title: "Atualizações desligadas", detail: `Neste build (${v.reason}).`, bar: null, notesOf: null, action: null };
     case "checking":
-      return { tone: "busy", title: "Procurando atualizações…", detail: "Conferindo no GitHub.", bar: null, action: null };
+      return { tone: "busy", title: "Procurando atualizações…", detail: "Conferindo no GitHub.", bar: null, notesOf: null, action: null };
     case "downloading": {
       const p = downloadProgress(v);
       const pct = p ? Math.floor((p.done / p.total) * 100) : null;
       const detail = p ? `${mb(p.done)} de ${mb(p.total)} MB · ${pct}%` : "Baixando…";
-      return { tone: "busy", title: `Baixando a versão ${v.version}`, detail, bar: { pct }, action: null };
+      return { tone: "busy", title: `Baixando a versão ${v.version}`, detail, bar: { pct }, notesOf: v.version, action: null };
     }
     case "ready":
       // Pronta, mas a troca já falhou uma vez (o "Atualizar e reiniciar" voltou): diz o porquê, e o botão segue lá.
       if (v.lastCheck?.result === "error")
-        return { tone: "error", title: v.lastCheck.message, detail: `A versão ${v.version} segue baixada.`, bar: null, action: { kind: "apply", label: "Atualizar e reiniciar" } };
-      return { tone: "ready", title: `A versão ${v.version} está pronta`, detail: "Baixada e conferida. Reinicia em segundos.", bar: null, action: { kind: "apply", label: "Atualizar e reiniciar" } };
+        return { tone: "error", title: v.lastCheck.message, detail: `A versão ${v.version} segue baixada.`, bar: null, notesOf: v.version, action: { kind: "apply", label: "Atualizar e reiniciar" } };
+      return { tone: "ready", title: `A versão ${v.version} está pronta`, detail: "Baixada e conferida. Reinicia em segundos.", bar: null, notesOf: v.version, action: { kind: "apply", label: "Atualizar e reiniciar" } };
     case "applying":
-      return { tone: "busy", title: "Atualizando…", detail: "O Kiwi Notes vai fechar e abrir de novo.", bar: null, action: null };
+      return { tone: "busy", title: "Reiniciando…", detail: "O Kiwi Notes vai fechar e abrir de novo.", bar: null, notesOf: null, action: null };
     case "idle": {
       const last = v.lastCheck;
-      if (!last) return { tone: "quiet", title: "Ainda não verificado", detail: "", bar: null, action: check() };
+      if (!last) return { tone: "quiet", title: "Ainda não verificado", detail: "", bar: null, notesOf: null, action: check() };
       if (last.result === "latest")
-        return { tone: "quiet", title: "Você está na última versão", detail: `Verificado às ${time(last.at)}.`, bar: null, action: check() };
-      if (last.result === "error") return { tone: "error", title: "Não deu para verificar", detail: `${last.message} (às ${time(last.at)})`, bar: null, action: check("Tentar de novo") };
-      return { tone: "quiet", title: `A versão ${last.version} está disponível`, detail: `Verificado às ${time(last.at)}.`, bar: null, action: check() };
+        return { tone: "quiet", title: "Você está na última versão", detail: `Verificado às ${time(last.at)}.`, bar: null, notesOf: null, action: check() };
+      if (last.result === "error") return { tone: "error", title: "Não deu para verificar", detail: `${last.message} (às ${time(last.at)})`, bar: null, notesOf: null, action: check("Tentar de novo") };
+      return { tone: "quiet", title: `A versão ${last.version} está disponível`, detail: `Verificado às ${time(last.at)}.`, bar: null, notesOf: null, action: check() };
     }
   }
 }

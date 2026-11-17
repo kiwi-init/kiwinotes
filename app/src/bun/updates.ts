@@ -41,13 +41,13 @@ export interface UpdateCheck {
   error: string;
 }
 
-/** O pedaço do `Updater` do Electrobun que o app usa (injetado nos testes). */
 /** O que o Updater do Electrobun manda no `onStatusChange`: o nome do passo e, no `download-progress`, os bytes. */
 export interface UpdaterStatus {
   status: string;
   details?: { bytesDownloaded?: number; totalBytes?: number };
 }
 
+/** O pedaço do `Updater` do Electrobun que o app usa (injetado nos testes). */
 export interface UpdaterApi {
   getLocalInfo(): Promise<LocalInfo>;
   checkForUpdate(): Promise<UpdateCheck>;

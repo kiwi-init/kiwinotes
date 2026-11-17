@@ -9,7 +9,7 @@ import "./about.css";
 
 import { useEffect, useState } from "react";
 
-import { type AppAbout, type UpdatesView } from "../../src/shared/ui-contract.ts";
+import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button } from "../src/kit/index.tsx";
 import { CHANNEL, CREDITS, DIAG_HINT, updateBand } from "./aboutText.ts";
@@ -83,7 +83,17 @@ export function About() {
           <div className="kn-about-band" data-state={view.state} data-tone={band.tone} data-result={view.lastCheck?.result ?? ""} aria-live="polite">
             <span className="kn-about-dot" aria-hidden="true" />
             <div className="kn-about-band-text">
-              <p className="kn-about-line">{band.title}</p>
+              <p className="kn-about-line">
+                {band.title}
+                {band.notesOf ? (
+                  <>
+                    {" · "}
+                    <button type="button" className="kn-about-link" onClick={() => openOutside(releaseNotesUrl(band.notesOf!))}>
+                      O que muda
+                    </button>
+                  </>
+                ) : null}
+              </p>
               {band.detail ? <p className="kn-about-detail">{band.detail}</p> : null}
               {band.bar ? (
                 <div

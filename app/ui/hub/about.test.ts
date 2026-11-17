@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { uiCapabilities } from "../../src/bun/ui-capabilities.ts";
 import { directInvoke } from "../../src/bun/ui-engine.ts";
-import type { UpdatesView } from "../../src/shared/ui-contract.ts";
+import { releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { CREDITS, creditsLine, downloadProgress, updateBand } from "./aboutText.ts";
 
 const at = "2026-11-04T12:30:00.000Z";
@@ -22,7 +22,7 @@ describe("a faixa da atualização (spec #16837)", () => {
 
   test("procurando e aplicando: andando, sem botão", () => {
     expect(band({ state: "checking", lastCheck: null })).toMatchObject({ tone: "busy", title: "Procurando atualizações…", action: null, bar: null });
-    expect(band({ state: "applying", lastCheck: null })).toMatchObject({ tone: "busy", detail: "O Kiwi Notes vai fechar e abrir de novo.", action: null });
+    expect(band({ state: "applying", lastCheck: null })).toMatchObject({ tone: "busy", title: "Reiniciando…", detail: "O Kiwi Notes vai fechar e abrir de novo.", action: null });
   });
 
   test("baixando: a barra lê done/total; sem eles, indeterminada e sem número", () => {
@@ -44,6 +44,21 @@ describe("a faixa da atualização (spec #16837)", () => {
     expect(band({ state: "ready", version: "2026.11.3", lastCheck: { at, result: "error", message: "não deu para trocar" } })).toMatchObject({
       tone: "error", title: "não deu para trocar", action: { kind: "apply" },
     });
+  });
+
+  test("\"O que muda\" no baixando e no pronta, com as notas da versão nova; nos outros estados, não", () => {
+    expect(band({ state: "downloading", version: "2026.11.3", lastCheck: null }).notesOf).toBe("2026.11.3");
+    expect(band({ state: "ready", version: "2026.11.3", lastCheck: null }).notesOf).toBe("2026.11.3");
+    expect(band({ state: "ready", version: "2026.11.3", lastCheck: { at, result: "error", message: "não deu para trocar" } }).notesOf).toBe("2026.11.3");
+    expect(releaseNotesUrl("2026.11.3")).toBe("https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.3");
+    const others: UpdatesView[] = [
+      { state: "idle", lastCheck: null },
+      { state: "idle", lastCheck: { at, result: "available", version: "2026.11.3" } },
+      { state: "checking", lastCheck: null },
+      { state: "applying", lastCheck: null },
+      { state: "off", reason: "KIWI_DEBUG=1", lastCheck: null },
+    ];
+    for (const v of others) expect(band(v).notesOf).toBeNull();
   });
 
   test("erro e desligado", () => {
