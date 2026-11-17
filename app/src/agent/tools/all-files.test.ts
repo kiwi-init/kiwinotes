@@ -13,6 +13,9 @@ import { NoteVersions } from "../../notes/versions.ts";
 import { DEFAULT_SETTINGS } from "../../store/settings.ts";
 import { readerFromCapabilities, searchFileNames } from "./reader.ts";
 import { fileCard, LIST_PAGE, runKiwiTool } from "./tools.ts";
+import { runKiwiCall } from "./kiwi-tool.ts";
+import { buildFile } from "./files-create.ts";
+import { pptxBytes, zipBytes } from "../../../test/office-files.ts";
 import { writerFromCapabilities } from "./writer.ts";
 import { tempDir } from "../../../test/tmp.ts";
 
@@ -37,7 +40,7 @@ const PASTA = {
   "Pessoal/proposta-antiga.pdf": "%PDF-1.4 inventado",
 };
 
-function setup(files: Record<string, string> = PASTA) {
+function setup(files: Record<string, string | Uint8Array> = PASTA) {
   const base = tempDir("kiwi-arquivos-");
   const root = path.join(base, "KiwiNotes");
   for (const [rel, content] of Object.entries(files)) {
@@ -60,7 +63,14 @@ function setup(files: Record<string, string> = PASTA) {
   const writer = writerFromCapabilities(caps as never);
   const decider = { request: "p-arquivos", answers: {} as never, questions: { confirm: async () => true } as never };
   const journal = { keep: async () => "", drop: async () => {} };
-  return async (name: string, args: unknown) => (await runKiwiTool({ reader, writer, journal: journal as never, decider }, name, args)).value as Record<string, any>;
+  const ctx = { reader, writer, journal: journal as never, decider };
+  const tool = async (name: string, args: unknown) => (await runKiwiTool(ctx, name, args)).value as Record<string, any>;
+  /** O que o agente falso faz: uma chamada da `kiwi`, como `kiwi ler <alvo>`, só com leitura. */
+  const kiwi = async (call: Record<string, unknown>) => {
+    const r = await runKiwiCall(ctx, call, { writes: false, proposes: false, memory: false });
+    return { tool: r.tool, value: r.value as Record<string, any> };
+  };
+  return Object.assign(tool, { kiwi });
 }
 
 describe("o agente vê todo arquivo da pasta (spec #17587)", () => {
@@ -156,5 +166,66 @@ describe("searchFileNames e fileCard", () => {
     expect(fileCard(files[0]!)).toEqual({ path: "a/Relatório Final.pdf", nome: "Relatório Final.pdf", tipo: "pdf", bytes: 10, mudou: "2026-11-01T00:00:00.000Z", leitura: "files_read" });
     expect(fileCard({ path: "x/.config/arquivo", size: 1, mtime: "" }).tipo).toBe("sem extensão");
     expect(fileCard({ path: "foto.HEIC", size: 1, mtime: "" })).toMatchObject({ tipo: "heic", leitura: "sem leitura" });
+  });
+});
+
+describe("o agente falso acha e lê cada arquivo da pasta pelo `kiwi` (spec #17587)", () => {
+  test("uma nota, um pdf, um docx, um xlsx, um pptx, um csv e um zip: listar mostra os 7, e o `kiwi ler` dá o texto de cada um", async () => {
+    const pasta = {
+      "Projeto X/Resumo.md": "# Resumo\n\nmarca-nota: o projeto X em uma página\n",
+      "Projeto X/Proposta.pdf": await buildFile("pdf", { blocos: [{ tipo: "paragrafo", texto: "marca-pdf proposta para a Ana" }] }),
+      "Projeto X/Contrato.docx": await buildFile("docx", { blocos: [{ tipo: "paragrafo", texto: "marca-docx cláusula primeira" }] }),
+      "Projeto X/Orcamento.xlsx": await buildFile("xlsx", { abas: [{ nome: "Custos", tabela: [["Item", "Valor"], ["marca-xlsx", "10"]] }] }),
+      "Projeto X/Apresentacao.pptx": pptxBytes([[["marca-pptx slide um"]], [["segundo slide"]]]),
+      "Projeto X/clientes.csv": "Nome;Cidade\nmarca-csv;Recife\n",
+      "Projeto X/Anexos.zip": zipBytes({ "planilha.csv": "A;B\nmarca-zip;1\n", "foto.png": "x" }, { deflate: true }),
+    };
+    const tool = setup(pasta);
+
+    // kiwi achar pasta: os 7, cada um com o tipo.
+    const lista = (await tool.kiwi({ fazer: "achar", alvo: "Projeto X", opcoes: { como: "pasta" } })).value;
+    expect(lista.total).toBe(7);
+    expect(lista.notas.map((n: { path: string }) => n.path)).toEqual(["Projeto X/Resumo.md"]);
+    expect(Object.fromEntries(lista.arquivos.map((a: { nome: string; tipo: string; leitura: string }) => [a.nome, `${a.tipo} ${a.leitura}`]))).toEqual({
+      "Anexos.zip": "zip files_read",
+      "Apresentacao.pptx": "pptx files_read",
+      "Contrato.docx": "docx files_read",
+      "Orcamento.xlsx": "xlsx files_read",
+      "Proposta.pdf": "pdf files_read",
+      "clientes.csv": "csv files_read",
+    });
+
+    // kiwi achar pelo nome do pdf: acha o pdf.
+    const achou = (await tool.kiwi({ fazer: "achar", texto: "proposta", opcoes: { como: "texto" } })).value;
+    expect(achou.arquivos.map((a: { path: string }) => a.path)).toEqual(["Projeto X/Proposta.pdf"]);
+
+    // kiwi ler, sem dizer o como: a nota vai ao notes_read, o resto ao files_read, e cada um devolve o texto.
+    const ler = async (alvo: string) => {
+      const r = await tool.kiwi({ fazer: "ler", alvo });
+      return { tool: r.tool, texto: String(r.value.texto ?? r.value.content ?? r.value.conteudo ?? "") };
+    };
+    const nota = await ler("Projeto X/Resumo.md");
+    expect(nota.tool).toBe("notes_read");
+    expect(nota.texto).toContain("marca-nota");
+    for (const [arquivo, marca] of [
+      ["Proposta.pdf", "marca-pdf"],
+      ["Contrato.docx", "marca-docx"],
+      ["Orcamento.xlsx", "marca-xlsx"],
+      ["Apresentacao.pptx", "marca-pptx"],
+      ["clientes.csv", "marca-csv"],
+    ]) {
+      const r = await ler(`Projeto X/${arquivo}`);
+      expect({ arquivo, tool: r.tool }).toEqual({ arquivo, tool: "files_read" });
+      expect(r.texto).toContain(marca!);
+    }
+
+    // O zip devolve a lista do que tem dentro, e lê um arquivo de dentro pelo mesmo caminho.
+    const zip = await ler("Projeto X/Anexos.zip");
+    expect(zip.tool).toBe("files_read");
+    expect(zip.texto).toContain("planilha.csv");
+    expect(zip.texto).toContain("foto.png");
+    const dentro = await ler("Projeto X/Anexos.zip/planilha.csv");
+    expect(dentro.tool).toBe("files_read");
+    expect(dentro.texto).toContain("marca-zip");
   });
 });
