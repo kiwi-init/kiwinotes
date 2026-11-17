@@ -185,7 +185,7 @@
   }
 }
 
-/* O rodapé: uma linha fina, "Tudo fica no seu Mac." e os dois links discretos. */
+/* O rodapé: uma linha fina, a regra de privacidade (ADR 0011) e os dois links discretos. */
 .kn-about-foot {
   display: flex;
   align-items: baseline;
