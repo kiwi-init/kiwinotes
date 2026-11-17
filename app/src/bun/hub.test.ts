@@ -67,6 +67,29 @@ describe("Hub", () => {
     expect(hub.takeSection()).toBe("settings");
   });
 
+  test("o fim da intro que já mostrou o hub: ele não abre de novo, e a seção pedida no meio vai pelo evento (T16769)", async () => {
+    const log: string[] = [];
+    let endIntro = (_shown: boolean) => {};
+    let open = false;
+    const hub = new Hub({
+      show: async () => void log.push("show"),
+      // O hub escondido conta como aberto desde que a intro começa.
+      isOpen: () => open,
+      navigate: (s: HubSection) => log.push(`navigate ${s}`),
+      setDock: (v) => log.push(`dock ${v}`),
+      intro: () => ((open = true), new Promise<boolean>((r) => (endIntro = r))),
+    });
+    const first = hub.open();
+    await Promise.resolve();
+    const second = hub.open("settings");
+    await Promise.resolve();
+    endIntro(true);
+    await Promise.all([first, second]);
+    // Sem o "show": abrir de novo tocaria a entrada do hub (o `__kiwiEnter`) por cima da troca.
+    expect(log).toEqual(["dock true", "navigate settings"]);
+    expect(hub.takeSection()).toBeNull();
+  });
+
   test("a seção pedida com o hub fechado vai pelo hub.section, uma vez", async () => {
     const { hub } = fake();
     await hub.open("settings");

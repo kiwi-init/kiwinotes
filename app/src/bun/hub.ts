@@ -13,8 +13,11 @@ export interface HubDeps {
   /** Manda o hub aberto para uma seção (o evento `hub.navigate`). */
   navigate(section: HubSection): void;
   setDock(visible: boolean): void;
-  /** A intro da abertura do zero (#2078). Sem ela, o hub abre direto. */
-  intro?(): Promise<void>;
+  /**
+   * A intro da abertura do zero (#2078). Sem ela, o hub abre direto. Devolve `true` quando o fim dela já mostrou o hub
+   * (T16769): aí ele não abre de novo, que tocaria a entrada outra vez.
+   */
+  intro?(): Promise<boolean | void>;
 }
 
 export class Hub {
@@ -53,14 +56,19 @@ export class Hub {
     const cold = this.cold;
     this.cold = false;
     this.setDock(true);
+    let revealed = false;
     if (cold && this.deps.intro) {
       try {
-        await this.deps.intro();
+        revealed = (await this.deps.intro()) === true;
       } catch {
         // A intro é enfeite: se falhar, o hub abre igual.
       }
     }
-    await this.deps.show();
+    if (revealed) {
+      // O hub abriu escondido antes de a intro tocar: a seção pedida no meio dela vai agora.
+      const section = this.takeSection();
+      if (section) this.deps.navigate(section);
+    } else await this.deps.show();
     if (!this.deps.isOpen()) this.closed();
   }
 

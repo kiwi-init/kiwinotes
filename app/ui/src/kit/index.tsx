@@ -22,6 +22,10 @@ declare global {
   interface Window {
     /** O processo principal chama ao trazer uma janela já aberta para a frente. */
     __kiwiEnter?: () => void;
+    /** O hub aberto escondido para o fim da intro (T16769): o conteúdo fica transparente até o `__kiwiReveal`. */
+    __kiwiHold?: () => void;
+    /** O hub aparece no fim da intro: o conteúdo entra só com o fade, sem subir nem crescer (T16769). */
+    __kiwiReveal?: () => void;
   }
 }
 

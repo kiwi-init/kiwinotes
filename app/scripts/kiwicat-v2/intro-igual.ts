@@ -1,5 +1,5 @@
 // "Igual ao pacote" (T14851, spec #14766): a intro do app e a do build do pacote, no mesmo WebKit headless, no mesmo
-// `?t=` das 6 fases e do modo reduzido. Mede quantos pixels diferem mais que 8/255 (o limite: 1 % por quadro) e salva
+// `?t=` das 5 fases do gato e do modo reduzido. Mede quantos pixels diferem mais que 8/255 (o limite: 1 % por quadro) e salva
 // os dois lado a lado (o app à esquerda, o pacote à direita).
 //
 // Da raiz do app: `bun scripts/kiwicat-v2/intro-igual.ts [pasta]`. Sai 1 se algum quadro passa de 1 %.
@@ -17,12 +17,12 @@ mkdirSync(out, { recursive: true });
 const LIMIT = 0.01;
 const THRESHOLD = 8;
 
-// O meio de cada fase e o último frame; no reduzido, o gato e a janela.
+// O meio de cada fase até a saída do gato; no reduzido, o gato. O fim (a fase "janela") não é mais o do pacote: a
+// moldura cresce até o hub em vez da janela de mentira (T16769, spec #16759), e quem confere é o
+// `scripts/intro-hub-check.ts`.
 const frames: { name: string; t: number; reduced: boolean; pacoteT?: number }[] = [
-  ...INTRO_PHASES.map((f, i) => ({ name: `${i + 1}-${f.id}`, t: Math.round(((f.start + f.end) / 2) * 100) / 100, reduced: false })),
-  { name: "7-fim", t: 5.3, reduced: false },
+  ...INTRO_PHASES.filter((f) => f.id !== "janela").map((f, i) => ({ name: `${i + 1}-${f.id}`, t: Math.round(((f.start + f.end) / 2) * 100) / 100, reduced: false })),
   { name: "reduzido-gato", t: 0.5, reduced: true },
-  { name: "reduzido-janela", t: 1.45, reduced: true },
 ];
 // O controle: o app em t=2 contra o pacote em t=2,1. Tem que passar de 1 %, senão a medida não vê nada.
 const CONTROLE = { name: "controle", t: 2, reduced: false, pacoteT: 2.1 };

@@ -1,12 +1,17 @@
 // Portado de docs/design/kiwicat-v2/intro/src/exportStandaloneHtml.ts (o script do build, no modo app), T14851,
 // spec #14766. Mudanças: a névoa e o rosto vêm do renderizador comum (../kiwicat-v2/renderer.ts) e a pose da
-// timeline tipada; o fim chama o `intro.done` do AppEngine; o Movimento da Aparência também vem do engine.
+// timeline tipada; o fim chama o `intro.done` do AppEngine; o Movimento da Aparência também vem do engine. Desde o
+// T16769 (spec #16759), o fim é outro: sem a janela de mentira do pacote, a moldura vazia cresce até o lugar do hub.
 //
-// A janela `intro`: o KiwiCat condensa da névoa, ganha orelhas, olhos e aurora, sorri, some, e o quadro vira a
-// janela. No fim (o último frame, o clique para pular ou a versão de 1,5 s do movimento reduzido), o main fecha a
-// janela e abre o hub. `?t=2.4` congela o frame daquele instante (para os prints).
+// A janela `intro`: o KiwiCat condensa da névoa, ganha orelhas, olhos e aurora, sorri e some. Aí a moldura vazia
+// cresce até o retângulo em que o hub vai aparecer (`intro.layout`), com os cantos e a cor de fundo dele, e o hub
+// aparece ali, por cima. No fim (o último frame, o clique para pular ou a versão de 1,5 s do movimento reduzido, que
+// não cresce), o main mostra o hub e fecha esta janela. `?t=2.4` congela o frame daquele instante (para os prints), e
+// `?layout=` (o JSON do `intro.layout`) faz o papel do main nos testes headless.
 
 import type {} from "../src/api.ts";
+import type { IntroLayout } from "../../src/shared/intro-layout.ts";
+import { startAppearance } from "../src/styles/appearance.ts";
 import { drawFace, FogRenderer, INTRO_SHAPE } from "../kiwicat-v2/renderer.ts";
 import { evaluateIntroPose, KIWI_INTRO_CONFIG as CFG, type IntroPose } from "../kiwicat-v2/timeline.ts";
 
@@ -17,8 +22,6 @@ const frozenT = frozenParam !== null && !Number.isNaN(Number(frozenParam)) ? Mat
 const $ = <T extends Element>(id: string) => document.getElementById(id) as T | null;
 const stage = $<HTMLElement>("stage")!;
 const catWrap = $<HTMLElement>("cat-wrap")!;
-const appWin = $<HTMLElement>("app-win");
-const awBody = $<HTMLElement>("aw-body");
 const fogLayer = $<HTMLElement>("fog-layer")!;
 const fogCanvas = $<HTMLCanvasElement>("fog-canvas")!;
 const faceCanvas = $<HTMLCanvasElement>("face-canvas")!;
@@ -33,35 +36,57 @@ try {
   if (JSON.parse(localStorage.getItem("kn-appearance") || "null")?.motion === "reduced") reduced = true;
 } catch {}
 
+/** Onde o hub vai aparecer, nas coordenadas desta janela: do main (`intro.layout`) ou do `?layout=` dos testes. */
+let layout: IntroLayout | null = layoutFrom(params.get("layout"));
+
+function layoutFrom(raw: string | null | unknown): IntroLayout | null {
+  try {
+    const v = (typeof raw === "string" ? JSON.parse(raw) : raw) as IntroLayout | null;
+    const nums = (...n: unknown[]) => n.every((x) => typeof x === "number" && Number.isFinite(x));
+    if (!v || !v.target || !v.center || !v.box) return null;
+    const { target: t, center: c, box: b } = v;
+    return nums(t.x, t.y, t.width, t.height, c.x, c.y, b.width, b.height, v.radius) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 function renderPose(pose: IntroPose): void {
-  const size = Math.max(180, Math.round(Math.min(innerWidth * 0.76, innerHeight * 0.76, 320)));
+  // O gato tem o tamanho que tinha na caixa de 720×480, mesmo com a janela maior (ela agora cobre o hub).
+  const box = layout?.box ?? { width: innerWidth, height: innerHeight };
+  const size = Math.max(180, Math.round(Math.min(box.width * 0.76, box.height * 0.76, 320)));
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const px = Math.round(size * dpr);
 
-  const exp = pose.windowExpand;
-  const targetW = Math.min(innerWidth * 0.92, 640);
-  const targetH = Math.min(innerHeight * 0.8, 370);
-  const w = size + (targetW - size) * exp;
-  const h = size + (targetH - size) * exp;
-  const r = size * 0.24 + (16 - size * 0.24) * exp;
+  // Depois que o gato sai, a moldura vazia cresce do quadrado do meio até o retângulo do hub. No movimento reduzido,
+  // ou sem o retângulo, ela não cresce: esmaece no lugar.
+  const target = reduced ? null : layout?.target ?? null;
+  const exp = target ? pose.windowExpand : 0;
+  const cx0 = layout?.center.x ?? innerWidth / 2;
+  const cy0 = layout?.center.y ?? innerHeight / 2;
+  const w = target ? size + (target.width - size) * exp : size;
+  const h = target ? size + (target.height - size) * exp : size;
+  const cx = target ? cx0 + (target.x + target.width / 2 - cx0) * exp : cx0;
+  const cy = target ? cy0 + (target.y + target.height / 2 - cy0) * exp : cy0;
+  const r0 = size * 0.24;
+  const r = target ? r0 + (layout!.radius - r0) * exp : r0;
+  // A cor: do fundo do gato ao fundo do hub (o --bg do tema), enquanto a moldura vira a janela.
+  const fill = target ? pose.windowChromeOpacity : 0;
+  const fade = target ? 1 : 1 - pose.windowChromeOpacity;
 
+  stage.style.left = (cx - w / 2).toFixed(1) + "px";
+  stage.style.top = (cy - h / 2).toFixed(1) + "px";
   stage.style.width = w.toFixed(1) + "px";
   stage.style.height = h.toFixed(1) + "px";
   stage.style.borderRadius = r.toFixed(1) + "px";
-  stage.style.opacity = pose.stageOpacity.toFixed(3);
+  stage.style.opacity = (pose.stageOpacity * fade).toFixed(3);
   stage.style.transform = "scale(" + pose.stageScale.toFixed(4) + ")";
+  stage.style.background = fill > 0 ? `color-mix(in srgb, var(--bg, #090A0E) ${(fill * 100).toFixed(1)}%, #090A0E)` : "";
+  stage.style.setProperty("--ring", (0.08 * (1 - fill)).toFixed(3));
 
   catWrap.style.width = size + "px";
   catWrap.style.height = size + "px";
   catWrap.style.opacity = pose.mascotOpacity.toFixed(3);
-
-  if (appWin) {
-    appWin.style.opacity = pose.windowChromeOpacity.toFixed(3);
-    if (awBody) {
-      awBody.style.opacity = pose.appContentOpacity.toFixed(3);
-      awBody.style.transform = "translateY(" + ((1 - pose.appContentOpacity) * 10).toFixed(1) + "px)";
-    }
-  }
 
   if (pose.mascotOpacity <= 0.004) return;
 
@@ -116,20 +141,25 @@ stage.addEventListener("click", () => {
 // No app: a UI subiu (o AppEngine conta o boot como bom; sem isso, em 5 s ele volta para a UI anterior).
 const engine = window.engine;
 engine?.ready();
+// O tema do app (o --bg do hub), para a moldura terminar na cor dele.
+void startAppearance();
 
 if (frozenT !== null) {
   renderPose(evaluateIntroPose(frozenT, reduced, null));
 } else {
-  // No app, pergunta antes ao engine pelo Movimento (no máximo 300 ms: a intro nunca espera mais que isso).
-  const prefs = engine?.has("settings.get")
-    ? Promise.race([
-        engine.invoke("settings.get", {}).then(
-          (s) => { if ((s as { appearance?: { motion?: string } } | null)?.appearance?.motion === "reduced") reduced = true; },
-          () => {},
-        ),
-        new Promise((r) => setTimeout(r, 300)),
-      ])
-    : Promise.resolve();
+  // No app, pergunta antes ao engine pelo Movimento e pelo lugar do hub (no máximo 300 ms: a intro nunca espera mais
+  // que isso; sem o lugar, a moldura não cresce).
+  const asks: Promise<unknown>[] = [];
+  if (engine?.has("settings.get")) {
+    asks.push(engine.invoke("settings.get", {}).then(
+      (s) => { if ((s as { appearance?: { motion?: string } } | null)?.appearance?.motion === "reduced") reduced = true; },
+      () => {},
+    ));
+  }
+  if (engine?.has("intro.layout")) {
+    asks.push(engine.invoke("intro.layout", {}).then((l) => { layout = layoutFrom(l) ?? layout; }, () => {}));
+  }
+  const prefs = asks.length ? Promise.race([Promise.all(asks), new Promise((r) => setTimeout(r, 300))]) : Promise.resolve();
   renderPose(evaluateIntroPose(0, reduced, null));
   void prefs.then(() => {
     playing = true;

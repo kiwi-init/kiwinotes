@@ -17,6 +17,16 @@
     fade var(--slow) var(--ease) both;
 }
 
+/* O fim da intro (T16769): escondido e vazio até aparecer; aí só o fade, no lugar exato da moldura dela. O fundo da
+   página é o mesmo --bg, então o que esmaece é o conteúdo. */
+.kn-hub[data-entering="hold"] {
+  opacity: 0;
+}
+
+.kn-hub[data-entering="reveal"] {
+  animation: fade var(--slow) var(--ease) both;
+}
+
 .kn-hub-top {
   position: relative;
   z-index: 5;

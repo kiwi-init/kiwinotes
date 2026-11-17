@@ -20,7 +20,7 @@ import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
 import { watchBusy } from "./slow-log.ts";
-import { appSlowLog, closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, provideAbout, startCatOverlay, startAgentVoice, provideHubSection, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
+import { appSlowLog, closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, prepareHub, provideAbout, revealHub, startCatOverlay, startAgentVoice, provideHubSection, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
 import { loadNotices, NOTIFY_LIBRARY } from "./notices.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
@@ -40,6 +40,9 @@ const hub = new Hub({
     close: () => closeWindow("intro"),
     onDone: onIntroDone,
     onClosed: (fn) => onWindowClosed((name) => name === "intro" && fn()),
+    // O fim vira o hub (T16769): ele abre escondido no lugar dele e aparece por cima da intro.
+    prepare: prepareHub,
+    reveal: revealHub,
   }),
   show: () => showWindow("hub"),
   isOpen: () => openWindows().includes("hub"),
