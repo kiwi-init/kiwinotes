@@ -190,11 +190,12 @@ try {
   report.problems.push(...s.report.problems);
   await s.close();
 
-  // 5. As licenças novas na tela Sobre.
+  // 5. As licenças novas, no Sobre › Licenças (à parte desde o spec #16837).
   const a = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1200, motion: false, browser: "webkit", query: { section: "about" } });
+  await a.page.locator(".kn-about-quiet", { hasText: "Licenças" }).click({ timeout: 15000 });
   await a.page.waitForSelector(".kn-about-credits", { timeout: 15000 });
-  const credits = (await a.page.locator(".kn-about-credits").textContent()) ?? "";
-  assert.ok(credits.includes("pdf-lib, de Andrew Dillon (MIT)") && credits.includes("docx, de Dolan Miu (MIT)"), credits);
+  const credits = (await a.page.locator(".kn-about-credits").innerText()) ?? "";
+  assert.ok(/pdf-lib\s+de Andrew Dillon · MIT/.test(credits) && /docx\s+de Dolan Miu · MIT/.test(credits), credits);
   await a.page.locator(".kn-about-credits").screenshot({ path: join(out, "5-sobre.png") });
   shots.push({ file: "5-sobre.png", caption: "5. As licenças do pdf-lib e do docx na tela Sobre" });
   report.checks.push("the About screen credits pdf-lib and docx with their licenses");

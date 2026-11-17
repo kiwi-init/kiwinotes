@@ -1,7 +1,9 @@
-// A seção Sobre do hub (spec #2370, T2386): o app, a versão e o canal, as notas da versão e o "Verificar atualizações",
-// que checa na hora pelo mesmo Updater do menu (ADR 0008, com a conferência da assinatura). Com a versão nova baixada e
-// conferida, o botão vira "Atualizar e reiniciar": um clique a mais, para não cortar um ditado no meio (#2385).
-// Embaixo, discreto, o "Salvar diagnóstico" (T5350): um .txt para mandar quando algo der errado, sem texto nem áudio.
+// A seção Sobre do hub (spec #2370, T2386; lado a lado desde o spec #16837, o mockup B): o ícone à esquerda; à direita
+// o app, a versão e o canal, e a faixa da atualização, que checa pelo mesmo Updater do menu (ADR 0008, com a
+// conferência da assinatura). A faixa tem um estado de cada vez: parado, procurando, baixando (com a barra), pronta,
+// aplicando, e erro ou desligado. Com a versão nova baixada e conferida, o botão vira "Atualizar e reiniciar": um
+// clique a mais, para não cortar um ditado no meio (#2385).
+// Embaixo, discretos: "Tudo fica no seu Mac.", o "Salvar diagnóstico" (T5350) e as Licenças, numa tela à parte.
 
 import "./about.css";
 
@@ -10,17 +12,20 @@ import { useEffect, useState } from "react";
 import { type AppAbout, releaseNotesUrl, type UpdatesView } from "../../src/shared/ui-contract.ts";
 import { api, has } from "../src/api.ts";
 import { Button } from "../src/kit/index.tsx";
-import { PRIVACY_RULE } from "../settings/agentText.ts";
-import { CHANNEL, creditsLine, statusLine } from "./aboutText.ts";
+import { CHANNEL, CREDITS, DIAG_HINT, updateBand } from "./aboutText.ts";
+import appIcon from "./app-icon.webp";
 
 /** Abre um link do GitHub fora do app (no navegador padrão, pelo `newWindow: "external"` da janela). */
 const openOutside = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
+
+type Diag = { state: "idle" | "saving" } | { state: "saved"; folder: string; name: string } | { state: "failed" };
 
 export function About() {
   const [about, setAbout] = useState<AppAbout | null>(null);
   const [view, setView] = useState<UpdatesView | null>(null);
   const [failed, setFailed] = useState(false);
-  const [diag, setDiag] = useState<{ state: "idle" | "saving" } | { state: "saved"; folder: string; name: string } | { state: "failed" }>({ state: "idle" });
+  const [diag, setDiag] = useState<Diag>({ state: "idle" });
+  const [licenses, setLicenses] = useState(false);
 
   useEffect(() => {
     api.app.about().then(
@@ -54,56 +59,108 @@ export function About() {
 
   if (failed) return <div className="kn-about"><p className="kn-about-line">Não deu para ler a versão do app.</p></div>;
   if (!about || !view) return <div className="kn-about" />;
+  if (licenses) return <Licenses onBack={() => setLicenses(false)} />;
 
-  const busy = view.state === "checking" || view.state === "downloading" || view.state === "applying";
+  const band = updateBand(view);
   return (
     <div className="kn-about">
-      <h1 className="kn-about-name">Kiwi Notes</h1>
-      <p className="kn-about-version">
-        Versão {about.version} · {CHANNEL[about.channel]}
-      </p>
-      {about.releaseUrl ? (
-        <button type="button" className="kn-about-link" onClick={() => openOutside(about.releaseUrl!)}>
-          Notas desta versão
-        </button>
-      ) : null}
+      <div className="kn-about-main">
+        <img className="kn-about-icon" src={appIcon} alt="" width={128} height={128} draggable={false} />
+        <div className="kn-about-body">
+          <h1 className="kn-about-name">Kiwi Notes</h1>
+          <p className="kn-about-version">
+            Versão {about.version} · {CHANNEL[about.channel]}
+            {about.releaseUrl ? (
+              <>
+                {" · "}
+                <button type="button" className="kn-about-link" onClick={() => openOutside(about.releaseUrl!)}>
+                  notas desta versão
+                </button>
+              </>
+            ) : null}
+          </p>
 
-      <div className="kn-about-updates" aria-live="polite">
-        <p className="kn-about-line" data-state={view.state} data-result={view.lastCheck?.result ?? ""}>
-          {statusLine(view)}
-        </p>
-        {view.state === "ready" ? (
-          <>
-            <Button variant="primary" onClick={() => void apply()}>
-              Atualizar e reiniciar
-            </Button>
-            <button type="button" className="kn-about-link" onClick={() => openOutside(releaseNotesUrl(view.version))}>
-              O que mudou na {view.version}
-            </button>
-          </>
-        ) : (
-          <Button variant="primary" disabled={busy || view.state === "off"} onClick={() => void check()}>
-            {view.state === "checking" ? "Verificando…" : view.state === "downloading" ? "Baixando…" : view.state === "applying" ? "Atualizando…" : "Verificar atualizações"}
-          </Button>
-        )}
+          <div className="kn-about-band" data-state={view.state} data-tone={band.tone} data-result={view.lastCheck?.result ?? ""} aria-live="polite">
+            <span className="kn-about-dot" aria-hidden="true" />
+            <div className="kn-about-band-text">
+              <p className="kn-about-line">{band.title}</p>
+              {band.detail || view.state === "ready" ? (
+                <p className="kn-about-detail">
+                  {band.detail}
+                  {view.state === "ready" ? (
+                    <>
+                      {band.detail ? " " : null}
+                      <button type="button" className="kn-about-link" onClick={() => openOutside(releaseNotesUrl(view.version))}>
+                        O que mudou
+                      </button>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {band.bar ? (
+                <div
+                  className="kn-about-bar"
+                  role="progressbar"
+                  aria-label={band.title}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  {...(band.bar.pct === null ? { "data-indeterminate": "" } : { "aria-valuenow": band.bar.pct })}
+                >
+                  <span style={band.bar.pct === null ? undefined : { width: `${band.bar.pct}%` }} />
+                </div>
+              ) : null}
+            </div>
+            {band.action ? (
+              <Button variant="primary" onClick={() => void (band.action!.kind === "apply" ? apply() : check())}>
+                {band.action.label}
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </div>
 
-      {has("diagnostics.save") ? (
-        <div className="kn-about-diag" aria-live="polite">
-          <button type="button" className="kn-about-link" disabled={diag.state === "saving"} onClick={() => void saveDiagnostics()}>
-            {diag.state === "saving" ? "Salvando diagnóstico…" : "Salvar diagnóstico"}
+      <footer className="kn-about-foot">
+        <span className="kn-about-privacy">Tudo fica no seu Mac.</span>
+        <span className="kn-about-actions">
+          {has("diagnostics.save") ? (
+            <button type="button" className="kn-about-quiet" title={DIAG_HINT} disabled={diag.state === "saving"} onClick={() => void saveDiagnostics()}>
+              {diag.state === "saving" ? "Salvando…" : "Salvar diagnóstico"}
+            </button>
+          ) : null}
+          <button type="button" className="kn-about-quiet" onClick={() => setLicenses(true)}>
+            Licenças
           </button>
-          <p className="kn-about-hint">
-            {diag.state === "saved"
-              ? `Salvo em ${diag.folder}: ${diag.name}`
-              : diag.state === "failed"
-                ? "Não deu para salvar o diagnóstico."
-                : "Versões, permissões e o log do app, sem texto nem áudio, para mandar quando algo der errado."}
-          </p>
-        </div>
-      ) : null}
-      <p className="kn-about-hint kn-about-privacy">{PRIVACY_RULE}, e ele vem desligado.</p>
-      <p className="kn-about-hint kn-about-credits">{creditsLine()}</p>
+        </span>
+      </footer>
+      <p className="kn-about-hint kn-about-diag" aria-live="polite">
+        {diag.state === "saved" ? `Salvo em ${diag.folder}: ${diag.name}` : diag.state === "failed" ? "Não deu para salvar o diagnóstico." : ""}
+      </p>
+    </div>
+  );
+}
+
+/** As Licenças (spec #7079, à parte desde o #16837): o software de terceiros que vai dentro do app, um por linha. */
+function Licenses({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="kn-about kn-about-licenses">
+      <div className="kn-about-licenses-head">
+        <button type="button" className="kn-about-quiet kn-about-back" onClick={onBack}>
+          ‹ Sobre
+        </button>
+        <h1 className="kn-about-title">Licenças</h1>
+        <p className="kn-about-hint">O software de terceiros que vai dentro do Kiwi Notes. O texto de cada licença vai junto do app.</p>
+      </div>
+      <ul className="kn-about-credits">
+        {CREDITS.map((c) => (
+          <li key={c.name}>
+            <span className="kn-about-credit-name">{c.name}</span>
+            <span className="kn-about-credit-by">
+              {c.by.startsWith("Mozilla") ? "da" : "de"} {c.by} · {c.license}
+            </span>
+            <span className="kn-about-credit-use">Para {c.use}.</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
