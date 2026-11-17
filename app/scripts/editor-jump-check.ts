@@ -7,7 +7,8 @@
 //   bun scripts/editor-jump-check.ts [pasta]
 //
 // Sai na pasta: `medidas.json` e os prints `0-sem-foco.png`, `1-cursor-fora.png` (no parágrafo de antes da lista),
-// `2-cursor-no-item.png` (no "banana"), `3-cursor-no-negrito.png` (no "maçã"), `4-seta-para-baixo.png`,
+// `2-cursor-no-item.png` (no "banana"), `3-cursor-no-negrito.png` (no "maçã"), `4-seta-para-baixo.png` e
+// `4b-seta-para-cima.png` (as setas andam item a item),
 // `5-cursor-no-titulo.png`, `6-cursor-depois.png` e `7-digitado.png`. A posição de cada palavra vem de um `Range` no
 // texto da página: não importa se a linha está desenhada pela lib ou pelas decorações do editor.
 import assert from "node:assert/strict";
@@ -105,6 +106,20 @@ async function settle(p: Page) {
   await Bun.sleep(200);
 }
 
+/**
+ * O número e o texto da linha do `.md` onde está o cursor, pelo próprio editor: a `EditorView` que o CodeMirror pendura no DOM
+ * (`cmTile.root.view`, o que o `EditorView.findFromDOM` lê; a página não importa módulos).
+ */
+async function lineOfCursor(p: Page): Promise<string> {
+  return p.evaluate(() => {
+    const dom = document.querySelector(".kn-note-editor .cm-content") as unknown as { cmTile?: { root?: { view?: { state: { doc: { lineAt(n: number): { number: number; text: string } }; selection: { main: { head: number } } } } } } };
+    const view = dom.cmTile?.root?.view;
+    if (!view) return "";
+    const line = view.state.doc.lineAt(view.state.selection.main.head);
+    return `${line.number}: ${line.text}`;
+  });
+}
+
 /** Clica no meio da palavra, como a pessoa faz para escrever ali. */
 async function clickWord(p: Page, word: string) {
   const s = (await measure(p, [word]))[word];
@@ -173,18 +188,22 @@ try {
   check("sem foco, a lista está desenhada", ["maçã", "banana", "cereja"].every((x) => !/\*\*|\[\[|^[-*+] /.test(base[x]?.line ?? "")));
 
   // Os estados: onde o cursor vai, como, e a linha do `.md` em que ele fica.
-  const states: { name: string; file: string; go: () => Promise<void>; line: number }[] = [
-    { name: "1-cursor-fora", file: "1-cursor-fora.png", go: () => clickWord(p, "antes"), line: 0 },
-    { name: "2-cursor-no-item", file: "2-cursor-no-item.png", go: () => clickWord(p, "banana"), line: 5 },
-    { name: "3-cursor-no-negrito", file: "3-cursor-no-negrito.png", go: () => clickWord(p, "maçã"), line: 4 },
-    { name: "4-seta-para-baixo", file: "4-seta-para-baixo.png", go: async () => { await p.keyboard.press("ArrowDown"); await settle(p); }, line: 5 },
-    { name: "5-cursor-no-titulo", file: "5-cursor-no-titulo.png", go: () => clickWord(p, "Frutas"), line: 2 },
-    { name: "6-cursor-depois", file: "6-cursor-depois.png", go: () => clickWord(p, "Depois"), line: 8 },
+  const states: { name: string; file: string; go: () => Promise<void>; line: number; at: string }[] = [
+    { name: "1-cursor-fora", file: "1-cursor-fora.png", go: () => clickWord(p, "antes"), line: 0, at: "antes" },
+    { name: "2-cursor-no-item", file: "2-cursor-no-item.png", go: () => clickWord(p, "banana"), line: 5, at: "banana" },
+    { name: "3-cursor-no-negrito", file: "3-cursor-no-negrito.png", go: () => clickWord(p, "maçã"), line: 4, at: "maçã" },
+    { name: "4-seta-para-baixo", file: "4-seta-para-baixo.png", go: async () => { await p.keyboard.press("ArrowDown"); await settle(p); }, line: 5, at: "banana" },
+    { name: "4b-seta-para-cima", file: "4b-seta-para-cima.png", go: async () => { await clickWord(p, "cereja"); await p.keyboard.press("ArrowUp"); await settle(p); }, line: 5, at: "banana" },
+    { name: "5-cursor-no-titulo", file: "5-cursor-no-titulo.png", go: () => clickWord(p, "Frutas"), line: 2, at: "Frutas" },
+    { name: "6-cursor-depois", file: "6-cursor-depois.png", go: () => clickWord(p, "Depois"), line: 8, at: "Depois" },
   ];
   for (const s of states) {
     await s.go();
     const now = await measure(p, words);
     result[s.name] = now;
+    // O cursor foi mesmo para a linha certa: senão, a lista toda desenhada passaria sem provar nada.
+    const cursorLine = await lineOfCursor(p);
+    check(`${s.name}: o cursor está na linha do "${s.at}"`, cursorLine.includes(s.at), { cursorLine });
     await shot(s.file);
     sameSpots(s.name, base, now, s.line);
     othersDrawn(s.name, now, s.line);
