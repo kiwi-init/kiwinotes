@@ -10,7 +10,8 @@ export const WINDOW_SPECS: Record<UiWindow, { title: string; width: number; heig
   notes: { title: "Notas", width: 1180, height: 760 },
   // O hub (T2121): a barra de seções de 200 mais as Notas inteiras.
   hub: { title: "Kiwi Notes", width: 1380, height: 820 },
-  // A intro (T14851): o KiwiCat num quadro de 320 px que vira uma janela de 640×370, sem borda nem fundo, no meio da
-  // tela. 720×480 é o tamanho em que o quadro do pacote chega inteiro (92% e 80% da janela).
+  // A intro (T14851): o KiwiCat num quadro de 320 px no meio da tela, sem borda nem fundo. 720×480 é a caixa em que o
+  // gato tem o tamanho dele; com o hub planejado, a janela cresce para cobrir o hub também, e a moldura vazia cresce até
+  // ele (T16769, `intro-layout.ts`).
   intro: { title: "Kiwi Notes", width: 720, height: 480 },
 };

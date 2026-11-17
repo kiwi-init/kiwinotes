@@ -254,7 +254,21 @@ function Hub() {
   useEffect(() => {
     document.title = "Kiwi Notes";
     window.__kiwiEnter = () => {
+      // Segurado para a intro e aberto por outro caminho: entra igual, sem esperar a página se ver visível.
+      if (ref.current?.dataset.entering === "hold") return window.__kiwiReveal?.();
       if (document.visibilityState === "visible") setEntry((n) => n + 1);
+    };
+    // O fim da intro (T16769): a moldura dela já é esta janela, no mesmo lugar e na mesma cor de fundo. O hub fica
+    // escondido e transparente por dentro até aparecer, e aí só o conteúdo esmaece para dentro, sem o `window-in`.
+    window.__kiwiHold = () => {
+      if (ref.current) ref.current.dataset.entering = "hold";
+    };
+    window.__kiwiReveal = () => {
+      const el = ref.current;
+      if (!el) return;
+      el.dataset.entering = "false";
+      void el.offsetWidth;
+      el.dataset.entering = "reveal";
     };
   }, [section]);
   useLayoutEffect(() => {

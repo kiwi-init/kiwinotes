@@ -56,6 +56,7 @@ import { homeWeek } from "./home-week.ts";
 import { type AgentService, AgentServiceError } from "../agent/service.ts";
 import { ACTIVITY_LIST_MAX } from "../agent/activity.ts";
 import { isAgentChoice } from "../store/settings.ts";
+import type { IntroLayout } from "../shared/intro-layout.ts";
 
 /** O que as capacidades usam do app. Nos testes, tudo de mentira. */
 export interface CapabilityDeps {
@@ -117,6 +118,8 @@ export interface CapabilityDeps {
   hubSection?(): HubSection | null;
   /** A intro avisou que terminou (T2308): o hub segue. */
   introDone?(): void;
+  /** Onde o hub vai aparecer, para a moldura da intro (T16769). */
+  introLayout?(): IntroLayout | null;
   /**
    * A seção Sobre (T2386): a versão do app, o canal e as atualizações. Sem isto (o headless, os testes), o `app.about`
    * diz "dev" e as atualizações respondem `off`, sem ir à rede.
@@ -799,6 +802,10 @@ export function uiCapabilities(deps: CapabilityDeps,
       noArgs(args, "intro.done");
       deps.introDone?.();
       return true as const;
+    },
+    "intro.layout": (args) => {
+      noArgs(args, "intro.layout");
+      return deps.introLayout?.() ?? null;
     },
     "spelling.suggest": async (args) => {
       const o = object(args, "spelling.suggest");

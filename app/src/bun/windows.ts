@@ -3,7 +3,7 @@ import { NO_SPELLING } from "../shared/spelling.ts";
 // janela abre, mostra a UI mais nova que funciona (a de fábrica do .app, ou uma instalada pelo canal local), troca
 // quando chega uma nova e volta atrás se ela falhar. A UI só fala com o main pelo contrato (src/shared/ui-contract.ts).
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -33,6 +33,7 @@ import { readNoteModel } from "../agent/note-model.ts";
 import { writerFromCapabilities } from "../agent/tools/writer.ts";
 import { undoNotesFromCapabilities } from "../agent/undo.ts";
 import { HomeChanges } from "./home.ts";
+import { hubFrame, type IntroLayout, introWindow, parseHubFrame, type Rect } from "../shared/intro-layout.ts";
 
 export type WindowName = UiWindow;
 
@@ -85,6 +86,7 @@ const capabilities = uiCapabilities({
   introDone: () => {
     for (const fn of introDoneListeners) fn();
   },
+  introLayout: () => introPlan?.layout ?? null,
   dictionary: stores.dictionary,
   snippets: stores.snippets,
   history: stores.history,
@@ -276,7 +278,7 @@ export function showWindow(name: WindowName): Promise<void> {
   );
 }
 
-async function openWindow(name: WindowName): Promise<void> {
+async function openWindow(name: WindowName, hidden = false): Promise<void> {
   const existing = open.get(name);
   if (existing) {
     existing.show();
@@ -307,7 +309,14 @@ async function openWindow(name: WindowName): Promise<void> {
     title: spec.title,
     spellCheck: name === "notes" || name === "hub",
     preload,
-    ...(name === "intro" ? introChrome(spec) : { frame: { width: spec.width, height: spec.height }, titleBarStyle: "hiddenInset" as const }),
+    ...(name === "intro"
+      ? introChrome()
+      : {
+          // O hub abre no lugar salvo, ou no meio da área útil (T16769): o mesmo retângulo até onde a intro cresce.
+          frame: name === "hub" ? (introPlan?.hub ?? planHubFrame()) : { width: spec.width, height: spec.height },
+          titleBarStyle: "hiddenInset" as const,
+        }),
+    hidden,
     rpc,
     // Só a UI dentro da janela, link externo no navegador, CSP nas views (T1378).
     ...windowSecurity(dev),
@@ -357,6 +366,7 @@ async function openWindow(name: WindowName): Promise<void> {
   if (name === "hub") {
     win.on("focus", () => setHubFocused(true));
     win.on("blur", () => setHubFocused(false));
+    saveHubFrameOnChange(win);
   }
   win.on("close", () => {
     log(name, "window closed");
@@ -367,6 +377,7 @@ async function openWindow(name: WindowName): Promise<void> {
     open.delete(name);
     for (const fn of closeListeners) fn(name);
   });
+  if (hidden) return;
   win.activate();
   if (name === "hub") setHubFocused(true);
 }
@@ -436,14 +447,97 @@ export function closeWindow(name: WindowName): void {
 
 /**
  * A janela da intro (T2308): sem barra, sem semáforos e sem fundo, só o ícone animado no meio da tela principal. A
- * página tem fundo transparente; o palco é o ícone, de cantos arredondados.
+ * página tem fundo transparente; o palco é o ícone, de cantos arredondados. Desde o T16769 ela cobre também o lugar
+ * do hub, para a moldura crescer até ele (`intro.layout`).
  */
-function introChrome(spec: { width: number; height: number }) {
-  const area = Screen.getPrimaryDisplay().workArea;
-  const x = Math.round(area.x + (area.width - spec.width) / 2);
-  const y = Math.round(area.y + (area.height - spec.height) / 2);
-  return { frame: { x, y, width: spec.width, height: spec.height }, titleBarStyle: "hidden" as const, transparent: true };
+function introChrome() {
+  introPlan ??= planIntro();
+  return { frame: introPlan.frame, titleBarStyle: "hidden" as const, transparent: true };
 }
+
+// ------------------------------------------------------------------ o fim da intro vira o hub (T16769, spec #16759)
+
+/** O plano da abertura do zero: onde o hub abre, a janela da intro e o que a página dela recebe. */
+let introPlan: { hub: Rect; frame: Rect; layout: IntroLayout | null } | null = null;
+
+const hubFrameFile = () => path.join(stores.dir, "hub-frame.json");
+
+/** Onde o hub abre: o lugar salvo (o `hub-frame.json`, posto numa tela que existe) ou o meio da área útil. */
+function planHubFrame(): Rect {
+  let saved: string | null = null;
+  try {
+    saved = readFileSync(hubFrameFile(), "utf8");
+  } catch {}
+  const areas = Screen.getAllDisplays().map((d) => d.workArea).filter((a) => a.width > 0 && a.height > 0);
+  return hubFrame(parseHubFrame(saved), Screen.getPrimaryDisplay().workArea, areas, SPECS.hub);
+}
+
+function planIntro(): { hub: Rect; frame: Rect; layout: IntroLayout | null } {
+  const hub = planHubFrame();
+  return { hub, ...introWindow(Screen.getPrimaryDisplay().workArea, SPECS.intro, hub) };
+}
+
+/** Guarda o lugar do hub quando ele se move ou muda de tamanho (fora de maximizado e de tela cheia). */
+function saveHubFrameOnChange(win: BrowserWindow): void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const save = () => {
+    clearTimeout(timer);
+    timer = undefined;
+    try {
+      if (win.isMaximized() || win.isFullScreen() || win.isMinimized()) return;
+      writeFileSync(hubFrameFile(), JSON.stringify(win.getFrame()));
+    } catch (e) {
+      log("hub", `couldn't save the window frame: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  const later = () => {
+    clearTimeout(timer);
+    timer = setTimeout(save, 400);
+  };
+  win.on("move", later);
+  win.on("resize", later);
+  win.on("close", () => timer && save());
+}
+
+/**
+ * A `IntroDeps.prepare`: planeja a abertura (se a intro ainda não planejou) e abre o hub escondido no lugar dele, com
+ * o conteúdo transparente (`__kiwiHold`) até o `revealHub`. Diz se ele ficou aberto. Nunca rejeita.
+ */
+export async function prepareHub(): Promise<boolean> {
+  introPlan ??= planIntro();
+  if (!introPlan.layout) return false;
+  await oneAtATime(opening, "hub", () => openWindow("hub", true), (e) =>
+    log("hub", `couldn't open the window: ${e instanceof Error ? e.message : String(e)}`),
+  );
+  const hub = open.get("hub");
+  if (!hub || hub.isVisible()) return false;
+  hub.webview.executeJavascript("window.__kiwiHold?.()");
+  return true;
+}
+
+/**
+ * A `IntroDeps.reveal`: mostra o hub escondido, por cima da intro, e o conteúdo dele entra só com o fade (sem o
+ * `window-in`, que sobe e cresce). Diz se mostrou. Nunca rejeita.
+ */
+export async function revealHub(): Promise<boolean> {
+  const hub = open.get("hub");
+  if (!hub) return false;
+  try {
+    hub.show();
+    hub.activate();
+    setHubFocused(true);
+    hub.webview.executeJavascript("window.__kiwiReveal?.()");
+    return true;
+  } catch (e) {
+    log("hub", `couldn't show the window: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+
+/** A intro fechou: o próximo plano (outra abertura do zero não acontece no mesmo processo) é lido de novo. */
+onWindowClosed((name) => {
+  if (name === "intro") introPlan = null;
+});
 
 /** Manda um evento a uma janela aberta. Devolve se ela estava aberta. */
 export function sendToWindow<E extends keyof UiEvents>(name: WindowName, event: E, payload: UiEvents[E]): boolean {

@@ -6,6 +6,7 @@ import type { AgentRoutine, AgentRoutines, CustomRoutineInput, RoutineKind } fro
 export type { AgentRoutine, AgentRoutines, CustomRoutine, CustomRoutineInput, RoutineDays, RoutineKind } from "./agent-routines.ts";
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
+import type { IntroLayout } from "./intro-layout.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
 //
 // Uma UI só chama o main por `engine.invoke(cap, args)` com um destes nomes. Os nomes são estáveis: tirar ou mudar
@@ -232,7 +233,9 @@ export type { NoteModel };
 //   "trilha" no `how` do faro do placar. Só acréscimo.
 // 1.80.0 (T15847, T15875, spec #15728): a tela de Início, `home.today`, `home.pending` e `home.week`, e o evento
 //   `home.changed`. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.80.0";
+// 1.81.0 (T16769, spec #16759): o `intro.layout`, onde o hub vai aparecer, para a moldura da intro crescer até ele.
+//   Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.81.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -300,6 +303,11 @@ export interface UiCapabilities {
    * movimento". O main fecha a janela `intro` e abre o hub. Fora da intro, não faz nada.
    */
   "intro.done": { args: Record<string, never>; result: true };
+  /**
+   * Onde o hub vai aparecer, nas coordenadas da janela da intro (1.81.0, T16769, spec #16759): a moldura cresce até
+   * esse retângulo, e o hub aparece ali. `null` fora da intro, ou quando a moldura não cresce (o hub noutro monitor).
+   */
+  "intro.layout": { args: Record<string, never>; result: IntroLayout | null };
   /** A versão do app, o canal, o link das notas da versão e as atualizações agora (1.6.0, T2386). */
   "app.about": { args: Record<string, never>; result: AppAbout };
   /**
@@ -1083,6 +1091,7 @@ export const UI_CAPABILITIES = [
   "spelling.suggest",
   "hub.section",
   "intro.done",
+  "intro.layout",
   "app.about",
   "diagnostics.save",
   "diagnostics.slowFrame",
