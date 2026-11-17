@@ -1,4 +1,4 @@
-// Os textos da seção Sobre (T2386), fora do componente: assim os testes não carregam o CSS nem o ícone.
+// Os textos da seção Sobre (T2386, spec #16837), fora do componente: assim os testes não carregam o CSS nem o ícone.
 
 import type { AppChannel, UpdatesView } from "../../src/shared/ui-contract.ts";
 
@@ -9,30 +9,68 @@ export const CHANNEL: Record<AppChannel, string> = {
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-/** A linha do estado das atualizações, dita para a pessoa. */
-export function statusLine(v: UpdatesView): string {
+/**
+ * O progresso do download, se o updater mandar os bytes (parte 1 do spec #16837, T17097). Lido sem depender do tipo:
+ * sem `done` e `total` válidos, a barra fica indeterminada, sem número inventado.
+ */
+export function downloadProgress(v: UpdatesView): { done: number; total: number } | null {
+  const p = v as { done?: unknown; total?: unknown };
+  if (typeof p.done !== "number" || typeof p.total !== "number") return null;
+  if (!Number.isFinite(p.done) || !Number.isFinite(p.total) || p.total <= 0 || p.done < 0) return null;
+  return { done: Math.min(p.done, p.total), total: p.total };
+}
+
+const MB = 1024 * 1024;
+const mb = (bytes: number) => Math.round(bytes / MB).toLocaleString("pt-BR");
+
+/** O que a faixa da atualização mostra (spec #16837, mockup B): o tom, as duas linhas, a barra e o botão. */
+export interface UpdateBand {
+  /** A cor da faixa e da bolinha: neutra, andando, pronta (a cor do app) ou com erro. */
+  tone: "quiet" | "busy" | "ready" | "error";
+  title: string;
+  detail: string;
+  /** Só no baixando: `pct` null é a barra indeterminada. */
+  bar: { pct: number | null } | null;
+  /** No baixando e no pronta, a versão nova cujas notas o "O que muda" abre (spec #16837). */
+  notesOf: string | null;
+  /** O botão da direita, ou nenhum. */
+  action: { kind: "check" | "apply"; label: string } | null;
+}
+
+/** A faixa em cada estado das atualizações: parado, procurando, baixando, pronta, aplicando, erro ou desligado. */
+export function updateBand(v: UpdatesView): UpdateBand {
+  const check = (label = "Verificar atualizações") => ({ kind: "check" as const, label });
   switch (v.state) {
     case "off":
-      return `As atualizações estão desligadas neste build (${v.reason}).`;
+      return { tone: "quiet", title: "Atualizações desligadas", detail: `Neste build (${v.reason}).`, bar: null, notesOf: null, action: null };
     case "checking":
-      return "Verificando…";
-    case "downloading":
-      return `Baixando a ${v.version}…`;
+      return { tone: "busy", title: "Procurando atualizações…", detail: "Conferindo no GitHub.", bar: null, notesOf: null, action: null };
+    case "downloading": {
+      const p = downloadProgress(v);
+      const pct = p ? Math.floor((p.done / p.total) * 100) : null;
+      const detail = p ? `${mb(p.done)} de ${mb(p.total)} MB · ${pct}%` : "Baixando…";
+      return { tone: "busy", title: `Baixando a versão ${v.version}`, detail, bar: { pct }, notesOf: v.version, action: null };
+    }
     case "ready":
       // Pronta, mas a troca já falhou uma vez (o "Atualizar e reiniciar" voltou): diz o porquê, e o botão segue lá.
-      return v.lastCheck?.result === "error" ? v.lastCheck.message : `A ${v.version} está pronta.`;
+      if (v.lastCheck?.result === "error")
+        return { tone: "error", title: v.lastCheck.message, detail: `A versão ${v.version} segue baixada.`, bar: null, notesOf: v.version, action: { kind: "apply", label: "Atualizar e reiniciar" } };
+      return { tone: "ready", title: `A versão ${v.version} está pronta`, detail: "Baixada e conferida. Reinicia em segundos.", bar: null, notesOf: v.version, action: { kind: "apply", label: "Atualizar e reiniciar" } };
     case "applying":
-      return "Atualizando: o Kiwi Notes vai fechar e abrir de novo.";
+      return { tone: "busy", title: "Reiniciando…", detail: "O Kiwi Notes vai fechar e abrir de novo.", bar: null, notesOf: null, action: null };
     case "idle": {
       const last = v.lastCheck;
-      if (!last) return "Ainda não verificado.";
-      if (last.result === "latest") return `Você está na última versão. Verificado às ${time(last.at)}.`;
-      if (last.result === "error") return `${last.message} (às ${time(last.at)})`;
-      return `A ${last.version} está disponível.`;
+      if (!last) return { tone: "quiet", title: "Ainda não verificado", detail: "", bar: null, notesOf: null, action: check() };
+      if (last.result === "latest")
+        return { tone: "quiet", title: "Você está na última versão", detail: `Verificado às ${time(last.at)}.`, bar: null, notesOf: null, action: check() };
+      if (last.result === "error") return { tone: "error", title: "Não deu para verificar", detail: `${last.message} (às ${time(last.at)})`, bar: null, notesOf: null, action: check("Tentar de novo") };
+      return { tone: "quiet", title: `A versão ${last.version} está disponível`, detail: `Verificado às ${time(last.at)}.`, bar: null, notesOf: null, action: check() };
     }
   }
 }
 
+/** A dica do "Salvar diagnóstico", no lugar da frase longa de antes. */
+export const DIAG_HINT = "Versões, permissões e o log do app, sem texto nem áudio, para mandar quando algo der errado.";
 
 /**
  * O software de terceiros que vai dentro do app e pede crédito (spec #7079): cada visualizador de arquivo das Notas

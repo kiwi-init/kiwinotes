@@ -175,7 +175,10 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   let fakeClipboard = "";
   let catOverlay: import("../bun/cat-overlay.ts").AttachedCatOverlay | undefined;
   let agentVoice: import("../bun/agent-voice.ts").AttachedAgentVoice | undefined;
+  // O Sobre com um estado de atualização de mentira (T17098): `KIWI_FAKE_UPDATES` é o UpdatesView em JSON.
+  const about = process.env.KIWI_FAKE_UPDATES ? (await import("./fake-updates.ts")).fakeAbout(process.env.KIWI_FAKE_UPDATES) : undefined;
   const capabilities = uiCapabilities({
+    about,
     spelling,
     meetings,
     dictionary: stores.dictionary,

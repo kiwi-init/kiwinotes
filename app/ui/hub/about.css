@@ -1,15 +1,40 @@
-/* A seção Sobre (T2386), no B v4: uma superfície só, sem linha nem borda; cor só no botão e no link. */
+/* A seção Sobre (T2386), lado a lado desde o spec #16837 (o mockup B): o ícone à esquerda, o app e a faixa da
+   atualização à direita, e uma linha fina com o rodapé. Cor só na faixa pronta, no botão e nos links. */
 .kn-about {
   height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 48px 32px;
-  text-align: center;
+  gap: 0;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 40px;
   -webkit-user-select: text;
   user-select: text;
+}
+
+.kn-about-main {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+/* O PNG do ícone traz a margem da grade do macOS (~10 % de cada lado): 156 px com a margem comida dá o desenho em 128. */
+.kn-about-icon {
+  flex: none;
+  width: 156px;
+  height: 156px;
+  margin: -14px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kn-about-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .kn-about-name {
@@ -27,10 +52,10 @@
 }
 
 .kn-about-link {
-  padding: 2px 4px;
+  padding: 0;
   border: 0;
   background: none;
-  font-size: var(--t-ui);
+  font: inherit;
   color: var(--accent-text);
   cursor: default;
 }
@@ -40,35 +65,162 @@
   text-underline-offset: 2px;
 }
 
-.kn-about-updates {
+/* A faixa da atualização: a bolinha, as duas linhas (e a barra, baixando) e o botão à direita. */
+.kn-about-band {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.kn-about-band[data-tone="ready"] {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.kn-about-band[data-tone="error"] {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.kn-about-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.kn-about-band[data-tone="busy"] .kn-about-dot {
+  background: var(--accent);
+  animation: kn-about-pulse 1.2s ease-in-out infinite;
+}
+
+.kn-about-band[data-tone="ready"] .kn-about-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.kn-about-band[data-tone="error"] .kn-about-dot {
+  background: var(--danger);
+}
+
+@keyframes kn-about-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.kn-about-band-text {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  margin-top: 28px;
-  max-width: 420px;
+  gap: 2px;
 }
 
 .kn-about-line {
   margin: 0;
   font-size: var(--t-ui);
-  color: var(--text-2);
+  color: var(--text);
 }
 
-/* Desligado ou ocupado (verificando, baixando): o botão fica claramente parado. */
-.kn-about-updates button:disabled {
-  opacity: 0.4;
+.kn-about-detail {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.kn-about-band .kn-button {
+  flex: none;
+}
+
+/* A barra do download: cheia até a porcentagem, ou um trecho que anda (sem os bytes, nada de número inventado). */
+.kn-about-bar {
+  position: relative;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.kn-about-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.kn-about-bar[data-indeterminate] > span {
+  width: 35%;
+  animation: kn-about-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes kn-about-slide {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kn-about-band .kn-about-dot,
+  .kn-about-bar[data-indeterminate] > span {
+    animation: none;
+  }
+  .kn-about-bar[data-indeterminate] > span {
+    left: 0;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+
+/* O rodapé: uma linha fina, a regra de privacidade (ADR 0011) e os dois links discretos. */
+.kn-about-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.kn-about-privacy {
+  font-size: var(--t-meta);
+  color: var(--text-3);
+}
+
+.kn-about-actions {
+  display: flex;
+  gap: 20px;
+}
+
+.kn-about-quiet {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--t-ui);
+  color: var(--text-2);
   cursor: default;
 }
 
-/* O "Salvar diagnóstico" (T5350): embaixo e discreto, um link e uma linha de ajuda. */
-.kn-about-diag {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  margin-top: 36px;
-  max-width: 420px;
+.kn-about-quiet:hover {
+  color: var(--text);
+}
+
+.kn-about-quiet:disabled {
+  opacity: 0.5;
 }
 
 .kn-about-hint {
@@ -78,11 +230,57 @@
   overflow-wrap: anywhere;
 }
 
-.kn-about-diag button:disabled {
-  opacity: 0.5;
+.kn-about-diag {
+  min-height: 1.4em;
+  margin-top: 8px;
+  text-align: right;
 }
 
-/* os créditos do software de terceiros (spec #7079): no fim, discretos */
+/* As Licenças, à parte: a volta, o título e a lista. */
+.kn-about-licenses {
+  justify-content: flex-start;
+}
+
+.kn-about-licenses-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.kn-about-title {
+  margin: 4px 0 0;
+  font: 650 var(--t-title)/1.25 var(--font-display);
+  color: var(--text);
+}
+
 .kn-about-credits {
-  margin-top: 20px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kn-about-credits li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.kn-about-credit-name {
+  font-size: var(--t-ui);
+  color: var(--text);
+}
+
+.kn-about-credit-by {
+  font-size: var(--t-meta);
+  color: var(--text-2);
+  text-align: right;
+}
+
+.kn-about-credit-use {
+  grid-column: 1 / -1;
+  font-size: var(--t-meta);
+  color: var(--text-3);
 }

@@ -238,7 +238,9 @@ export type { NoteModel };
 // 1.82.0 (T16801, spec #16793): o esforço por modelo, `effortByModel` e `efforts` no `AgentStatus`. O `effort` passa a
 //   ser o do modelo escolhido, e o `agent.configure({ effort })` grava o do modelo. O `agent.prepare` abre o
 //   programa sem pedido, para o onboarding. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.82.0";
+// 1.83.0 (T17097, T17098, spec #16837): `done` e `total`, em bytes, no `downloading` do `UpdatesView`, para a barra do
+//   Sobre. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.83.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -1343,7 +1345,9 @@ export type UpdatesLastCheck =
 export type UpdatesView = { lastCheck: UpdatesLastCheck | null } & (
   | { state: "off"; reason: string }
   | { state: "idle" | "checking" | "applying" }
-  | { state: "downloading" | "ready"; version: string }
+  /** `done` e `total`: os bytes baixados e o tamanho, quando o Updater diz (T17097); sem eles, a barra é indeterminada. */
+  | { state: "downloading"; version: string; done?: number; total?: number }
+  | { state: "ready"; version: string }
 );
 
 export interface AppAbout {

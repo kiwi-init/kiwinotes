@@ -445,3 +445,68 @@ describe("a última checagem, para a seção Sobre (T2386)", () => {
     }));
 });
 
+
+describe("o progresso do download, para a faixa do Sobre (T17097, spec #16837)", () => {
+  type Status = { status: string; details?: { bytesDownloaded?: number; totalBytes?: number } };
+  /** O Updater de mentira com o callback de status do Electrobun, que manda `download-progress` enquanto baixa. */
+  function withProgress(appData: string, during: Status[]) {
+    const { updater } = fakeUpdater({ appData, found: { version: "0.2.0", hash: "bbbb", updateAvailable: true } });
+    let onStatus: ((e: Status) => void) | null = null;
+    updater.onStatusChange = (cb) => void (onStatus = cb);
+    const download = updater.downloadUpdate;
+    const seen: unknown[] = [];
+    updater.downloadUpdate = async () => {
+      for (const e of during) {
+        onStatus!(e);
+        seen.push(updatesView(u.status(), null));
+      }
+      await download();
+    };
+    const u = new AppUpdates({ updater, env: {}, log: () => {}, verify: () => null });
+    return { u, seen, status: (e: Status) => onStatus!(e) };
+  }
+
+  test("o downloading leva done e total em bytes, e a oferta pronta não leva", () =>
+    withDir(async (appData) => {
+      const { u, seen } = withProgress(appData, [
+        { status: "downloading-full-bundle" },
+        { status: "download-progress", details: { bytesDownloaded: 1_048_576, totalBytes: 41_943_040 } },
+        { status: "download-progress", details: { bytesDownloaded: 20_971_520, totalBytes: 41_943_040 } },
+        // O último aviso do Electrobun pode vir sem o total: fica o que já se sabia.
+        { status: "download-progress", details: { bytesDownloaded: 41_943_040 } },
+      ]);
+      await u.start(60_000, 60_000);
+      u.stop();
+      await u.check();
+      expect(seen).toEqual([
+        { lastCheck: null, state: "downloading", version: "0.2.0" },
+        { lastCheck: null, state: "downloading", version: "0.2.0", done: 1_048_576, total: 41_943_040 },
+        { lastCheck: null, state: "downloading", version: "0.2.0", done: 20_971_520, total: 41_943_040 },
+        { lastCheck: null, state: "downloading", version: "0.2.0", done: 41_943_040, total: 41_943_040 },
+      ]);
+      expect(updatesView(u.status(), null)).toEqual({ lastCheck: null, state: "ready", version: "0.2.0" });
+    }));
+
+  test("número inválido, ou progresso fora do download, não mexe no estado", () =>
+    withDir(async (appData) => {
+      const { u, seen, status } = withProgress(appData, [
+        { status: "download-progress", details: { bytesDownloaded: Number.NaN, totalBytes: 100 } },
+        { status: "download-progress", details: { bytesDownloaded: -1, totalBytes: 100 } },
+        { status: "download-progress", details: {} },
+        { status: "download-progress" },
+        // Um total 0 não vale: a barra fica indeterminada.
+        { status: "download-progress", details: { bytesDownloaded: 10, totalBytes: 0 } },
+        // Mais baixado que o total: o total sobe junto, para a barra nunca passar de cheia.
+        { status: "download-progress", details: { bytesDownloaded: 150, totalBytes: 100 } },
+      ]);
+      await u.start(60_000, 60_000);
+      u.stop();
+      status({ status: "download-progress", details: { bytesDownloaded: 5, totalBytes: 10 } }); // antes de baixar
+      expect(u.status()).toEqual({ kind: "idle" });
+      await u.check();
+      const plain = { lastCheck: null, state: "downloading", version: "0.2.0" };
+      expect(seen).toEqual([plain, plain, plain, plain, { ...plain, done: 10 }, { ...plain, done: 150, total: 150 }]);
+      status({ status: "download-progress", details: { bytesDownloaded: 5, totalBytes: 10 } }); // depois de pronta
+      expect(u.status()).toMatchObject({ kind: "ready", version: "0.2.0" });
+    }));
+});
