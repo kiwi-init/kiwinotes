@@ -94,9 +94,9 @@ try {
       const dialog = p.getByRole("dialog");
       const effort = dialog.getByRole("combobox", { name: "Esforço do modelo" });
       const efforts = () => effort.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
-      await p.waitForFunction(() => (document.querySelector<HTMLSelectElement>("select[aria-label='Esforço do modelo']")?.options.length ?? 0) > 1, undefined, { timeout: 30000 });
+      await p.waitForFunction(() => (document.querySelector<HTMLSelectElement>("[role=dialog] select[aria-label='Esforço do modelo']")?.options.length ?? 0) > 1, undefined, { timeout: 30000 });
       await dialog.getByRole("combobox", { name: "Modelo do agente" }).selectOption("sonnet");
-      await p.waitForFunction(() => (document.querySelector<HTMLSelectElement>("select[aria-label='Esforço do modelo']")?.options.length ?? 0) === 4, undefined, { timeout: 30000 });
+      await p.waitForFunction(() => (document.querySelector<HTMLSelectElement>("[role=dialog] select[aria-label='Esforço do modelo']")?.options.length ?? 0) === 4, undefined, { timeout: 30000 });
       assert.deepEqual(await efforts(), ["default", "low", "medium", "high"]);
       await effort.selectOption("low");
       for (let i = 0; (await invoke("agent.status")).effortByModel?.sonnet !== "low"; i++) { assert.ok(i < 50, "o esforço vai para os ajustes"); await Bun.sleep(100); }
