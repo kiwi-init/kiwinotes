@@ -484,9 +484,22 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     expect(settings.session).toEqual({ model: "sonnet", effort: "low" });
   });
 
-  test("o prepare com o agente desligado falha, e com um pedido rodando só devolve o estado", async () => {
+  test("o prepare sem estar ligado, sem o aceite ou sem o adaptador falha sem subir processo; com um pedido rodando, só devolve o estado", async () => {
+    // ADR 0011: sem estar ligado e sem o aceite, ou sem o adaptador, nenhum processo sobe e nada vai ao agente.
     const off = make();
-    await expect(off.svc.prepare()).rejects.toMatchObject({ code: "E_AGENT_DISABLED" });
+    expect((await rejection(off.svc.prepare())).code).toBe("E_AGENT_DISABLED");
+    const data = tmp();
+    await new SettingsStore(data).save({ agent: { ...DEFAULT_AGENT_SETTINGS, enabled: true, consented: false } as never });
+    const noConsent = make({ data });
+    expect((await rejection(noConsent.svc.prepare())).code).toBe("E_AGENT_DISABLED");
+    const noAdapter = make();
+    await noAdapter.svc.enable(true);
+    expect((await rejection(noAdapter.svc.prepare())).code).toBe("E_ADAPTER_MISSING");
+    for (const x of [off, noConsent, noAdapter]) {
+      expect(x.pid()).toBeNull();
+      expect(x.log().filter((l) => l.method === "session/new")).toEqual([]);
+      expect(x.log()).toEqual([]);
+    }
     const m = make();
     await readyNow(m);
     await m.svc.prepare();
