@@ -65,7 +65,7 @@ interface Made {
   pid: () => number | null;
 }
 
-function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number; limitProbe?: { delayMs?: number; retryMs?: number; everyMs?: number }; window?: { maxTokens?: number; idleMs?: number } } = {}): Made {
+function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: string; host?: (dir: string) => AgentHost; reader?: VaultReader; writer?: VaultWriter; doubtTimeoutMs?: number; now?: () => number; limitProbe?: { delayMs?: number; retryMs?: number; everyMs?: number }; window?: { maxTokens?: number; idleMs?: number }; env?: Record<string, string> } = {}): Made {
   const data = o.data ?? tmp();
   const reg = o.reg ?? registry();
   const store = new SettingsStore(data);
@@ -98,7 +98,7 @@ function make(o: { data?: string; reg?: FakeRegistry; idleMs?: number; model?: s
         onExit,
         ...(kiwiTools ? { kiwiTools } : {}),
         ...(webTools ? { webTools } : {}),
-        env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}) },
+        env: { ...process.env, KIWI_FAKE_AGENT_LOG: logFile, ...(o.model ? { KIWI_FAKE_AGENT_MODEL: o.model } : {}), ...o.env },
       }),
     registry: reg.url,
     packages: reg.pinned,
@@ -1238,6 +1238,54 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(await m.svc.activityLog()).toEqual([]);
     expect(v.week.requests).toBe(0);
   });
+
+  test("o /usage do medidor não segura o pedido da pessoa: feito enquanto o programa abre, o pedido espera e sai (T16712)", async () => {
+    const m = make();
+    await readyNow(m);
+    // Abrir Ajustes › Agente pede o /usage, que abre o programa. Um pedido ao gato nesse meio tempo não pode dar
+    // E_AGENT_BUSY: a pessoa não pediu nada antes.
+    const usage = m.svc.usageRefresh();
+    while ((await m.svc.status()).program !== "opening") await Bun.sleep(5);
+    const events = await askAndWait(m, "oi");
+    expect(events.find((e) => e.type === "error")).toBeUndefined();
+    expect(events.some((e) => e.type === "done")).toBe(true);
+    expect(m.log().filter((l) => l.method === "session/prompt")).toHaveLength(1);
+    // O medidor não vê erro: ou leu o /usage, ou cedeu a vez e mostra o número que já tinha.
+    await usage;
+  }, 30_000);
+
+  test("o /usage do medidor pedido logo antes do pedido da pessoa, com o programa aberto, não dá erro a nenhum dos dois (T16712)", async () => {
+    const m = make();
+    await readyNow(m);
+    await askAndWait(m, "oi");
+    // O medidor começa com o agente livre e, antes de ele chegar ao agente, a pessoa pede: com e sem um tique entre os dois.
+    for (const gap of [0, 0, 1, 1, 2]) {
+      const usage = m.svc.usageRefresh();
+      if (gap) await Bun.sleep(0);
+      const events = await askAndWait(m, `pedido ${gap}`);
+      expect(events.find((e) => e.type === "error")).toBeUndefined();
+      expect(await usage).toBeDefined();
+    }
+  }, 30_000);
+
+  test("o /usage do medidor que já foi ao agente é cancelado para o pedido da pessoa: o pedido sai, o número fica o antigo e o próximo pedido responde (T16712)", async () => {
+    const m = make({ env: { KIWI_FAKE_AGENT_USAGE_DELAY_MS: "3000" } });
+    await readyNow(m);
+    const first = await m.svc.usageRefresh();
+    const usages = () => m.log().filter((l) => l.method === "session/usage").length;
+    const usage = m.svc.usageRefresh();
+    await until(() => usages() === 2);
+    const start = Date.now();
+    const events = await askAndWait(m, "oi");
+    // Sem o cancelar, o pedido esperaria os 3 s do /usage.
+    expect(Date.now() - start).toBeLessThan(2_000);
+    expect(events.find((e) => e.type === "error")).toBeUndefined();
+    expect(events.some((e) => e.type === "done")).toBe(true);
+    expect((await usage).subscription).toEqual(first.subscription);
+    const again = await askAndWait(m, "de novo");
+    expect(again.find((e) => e.type === "error")).toBeUndefined();
+    expect(again.some((e) => e.type === "done")).toBe(true);
+  }, 30_000);
 
   test("com o agente falso, uma nota criada segue a ordem e os blocos do modelo, e organizar uma nota passa pelo [Desfazer] (spec #11102)", async () => {
     const notes: Record<string, string> = { "Ideias.md": "# Ideias\n\nGatos dormem muito.\nO Kiwi anota.\n" };
