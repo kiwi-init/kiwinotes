@@ -4,7 +4,7 @@
 // - Agente ligado: um gato só. Na Início ele fica no lugar dele no meio da tela; nas Notas, volta ao canto; de novo na
 //   Início, volta ao meio. Em nenhum quadro há dois gatos.
 // - O campo de falar abre ao lado do gato, no meio, sem cobrir a busca, com a dica do atalho de voz.
-// - A busca da Início abre a busca das Notas (o clique e o ⌘K).
+// - A busca da Início abre a busca das Notas por cima da Início, sem trocar de aba (o clique e o ⌘K; spec #16821).
 // Da raiz do app: `bun scripts/home-hub-check.ts [pasta]` (os prints, claro e escuro).
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -157,17 +157,24 @@ try {
       await p.waitForSelector(".kn-cat-ask", { state: "detached" });
       checks.push(`${theme}: o campo de falar abre ao lado do gato, sem cobrir a busca, com a dica da voz`);
 
-      // 4. A busca: o clique e o ⌘K levam à busca das Notas.
+      // 4. A busca (spec #16821): o clique e o ⌘K abrem a busca das Notas por cima da Início, sem trocar de aba; o Esc
+      // fecha e deixa a pessoa na Início, com o gato no meio.
+      const homeShown = '.kn-hub-pane[data-section="home"]:not([hidden])';
       await p.locator(".kn-home-search").click();
       await p.waitForSelector(".kn-palette .kn-palette-q");
+      await p.waitForSelector(homeShown);
       await p.keyboard.press("Escape");
-      await tab(p, "home").click();
+      await p.waitForSelector(".kn-palette", { state: "detached" });
+      await p.waitForSelector(homeShown);
       await catAtHome(p, `${theme} Início antes do ⌘K`);
       await p.keyboard.press("Meta+k");
       await p.waitForSelector(".kn-palette .kn-palette-q");
-      await catInCorner(p, `${theme} busca`);
+      await p.waitForSelector(homeShown);
+      await catAtHome(p, `${theme} busca`);
       await oneCat(p, `${theme} busca`);
-      checks.push(`${theme}: a busca da Início (clique e ⌘K) abre a das Notas, e o gato volta ao canto`);
+      await p.keyboard.press("Escape");
+      await p.waitForSelector(".kn-palette", { state: "detached" });
+      checks.push(`${theme}: a busca da Início (clique e ⌘K) abre por cima da Início, e o Esc fecha sem trocar de aba`);
       // 5. Os cliques do dia abrem a nota certa nas Notas: o "Continuar" e o "Abrir a ata".
       for (const [sel, title] of [[".kn-home-continue", ["Pessoal", "Uma lista de livros"]], [".kn-home-link", ["Reuniões", "A Carla revisa o texto"]]] as const) {
         await p.keyboard.press("Escape");

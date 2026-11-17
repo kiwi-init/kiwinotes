@@ -1,0 +1,54 @@
+{
+  "window": "hub",
+  "size": "1000x740",
+  "steps": [
+    { "invoke": "notes.create", "args": { "folder": "Projeto X", "title": "Plano do lançamento", "content": "# Plano do lançamento\n\nFechar a lista de tarefas com a Ana.\n" }, "name": "uma nota inventada" },
+    { "invoke": "notes.create", "args": { "folder": "Pessoal", "title": "Ideias", "content": "# Ideias\n\nUma lista de livros para as férias.\n" }, "name": "outra nota inventada" },
+    { "waitFor": ".kn-hub-pane[data-section='home']:not([hidden]) .kn-home-search", "name": "abre na Início" },
+
+    { "press": "Meta+k", "name": "⌘K na Início" },
+    { "waitFor": ".kn-palette .kn-palette-q", "name": "a busca abre" },
+    { "expectCount": ".kn-hub-pane[data-section='home']:not([hidden])", "count": 1, "name": "por cima da Início, sem trocar de aba" },
+    { "wait": 400 },
+    { "screenshot": "busca-inicio.png", "name": "print da Início" },
+    { "press": "Escape", "name": "Esc" },
+    { "expectCount": ".kn-palette", "count": 0, "name": "o Esc fecha" },
+    { "expectCount": ".kn-hub-pane[data-section='home']:not([hidden])", "count": 1, "name": "e fica na Início" },
+
+    { "click": ".kn-home-search", "name": "clique na barra da Início" },
+    { "waitFor": ".kn-palette .kn-palette-q", "name": "a busca abre pelo clique" },
+    { "expectCount": ".kn-hub-pane[data-section='home']:not([hidden])", "count": 1, "name": "o clique também não troca de aba" },
+    { "press": "Escape" },
+    { "expectCount": ".kn-palette", "count": 0 },
+
+    { "click": "[role='tab'][data-section='meetings']", "name": "vai para as Reuniões" },
+    { "press": "Meta+k", "name": "⌘K nas Reuniões" },
+    { "waitFor": ".kn-palette .kn-palette-q", "name": "a busca abre nas Reuniões" },
+    { "expectCount": ".kn-hub-pane[data-section='meetings']:not([hidden])", "count": 1, "name": "por cima das Reuniões" },
+    { "wait": 400 },
+    { "screenshot": "busca-reunioes.png", "name": "print das Reuniões" },
+    { "click": ".kn-palette-scrim", "position": { "x": 20, "y": 700 }, "name": "clique fora" },
+    { "expectCount": ".kn-palette", "count": 0, "name": "o clique fora fecha" },
+    { "expectCount": ".kn-hub-pane[data-section='meetings']:not([hidden])", "count": 1, "name": "e fica nas Reuniões" },
+
+    { "click": "[role='tab'][data-section='dictation']", "name": "vai para o Ditado" },
+    { "press": "Meta+k", "name": "⌘K no Ditado" },
+    { "waitFor": ".kn-palette .kn-palette-q", "name": "a busca abre no Ditado" },
+    { "expectCount": ".kn-hub-pane[data-section='dictation']:not([hidden])", "count": 1, "name": "por cima do Ditado" },
+    { "fill": ".kn-palette-q", "text": "Ideias", "name": "busca uma nota" },
+    { "expectText": ".kn-palette-it[aria-selected='true'] .kn-palette-title", "text": "Ideias", "name": "a nota vem selecionada" },
+    { "press": "Enter", "name": "Enter" },
+    { "waitFor": ".kn-hub-pane[data-section='notes']:not([hidden])", "name": "o Enter leva às Notas" },
+    { "expectCount": ".kn-palette", "count": 0, "name": "e a busca fecha" },
+    { "expectText": ".kn-hub-pane[data-section='notes'] .cm-content", "text": "Uma lista de livros", "name": "com a nota escolhida aberta" },
+
+    { "click": "[role='tab'][data-section='settings']", "name": "vai para as Configurações" },
+    { "press": "Meta+k", "name": "⌘K nas Configurações" },
+    { "wait": 400 },
+    { "expectCount": ".kn-palette", "count": 0, "name": "nas Configurações, o ⌘K não abre a busca" },
+
+    { "click": "[role='tab'][data-section='notes']", "name": "vai para as Notas" },
+    { "press": "Meta+k", "name": "⌘K nas Notas" },
+    { "waitFor": ".kn-hub-pane[data-section='notes'] .kn-palette .kn-palette-q", "name": "nas Notas, a busca abre como sempre" }
+  ]
+}
