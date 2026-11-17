@@ -5,7 +5,9 @@
 // - **A troca:** a `itemKey` mudou. O balão de antes fica na tela pelo tempo da saída (180 ms), e o novo entra com 60 ms
 //   de atraso, numa mola de 250 ms. Os tempos garantem que nunca há um quadro sem balão nem dois balões cheios.
 // - **A saída parte de onde o balão está:** um balão que ainda entrava (no atraso, ou no meio da mola) sai da opacidade e
-//   da escala em que está, pela Web Animations, e não do cheio (o CSS trocaria a animação e o mostraria cheio um quadro).
+//   da escala em que está, e não do cheio.
+// - **Um relógio só:** a entrada e a saída são da Web Animations e nascem no mesmo commit, então partem do mesmo quadro,
+//   mesmo com a página travada (T16835).
 // - **O tamanho:** com a mesma `itemKey`, a caixa que mudou de tamanho parte do tamanho de antes (o FLIP: a casca escala
 //   e o conteúdo dela escala ao contrário, para o texto não deformar).
 // - **Reduzir movimento** (o da Aparência ou o do macOS): a troca é só um esmaecer de 120 ms, sem escala, e o tamanho muda
@@ -116,14 +118,24 @@ export function BubblePresence({ itemKey, reduced: appReduced, children }: { ite
     return ref;
   };
 
-  // O balão que entra, com o Reduzir movimento: o esmaecer de 120 ms (sem ele, a entrada é a mola do CSS).
+  // O balão que entra: a mola (ou, com o Reduzir movimento, o esmaecer de 120 ms), pela Web Animations, e não pelo CSS
+  // (T16835). A saída do balão de antes nasce no mesmo commit, também pela Web Animations, então as duas partem do
+  // mesmo quadro mesmo com a página travada entre o commit e a pintura. Com a entrada no CSS, o relógio de cada uma
+  // partia num momento, e uma trava no meio deixava o canto vazio (a saída já no fim) ou com dois balões cheios.
   useLayoutEffect(() => {
     for (const item of items.current) {
       if (item.leaving || entered.current.has(item.id)) continue;
       entered.current.add(item.id);
       const el = slots.current.get(item.id);
-      if (reduced && el && typeof el.animate === "function")
-        el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: BUBBLE_FADE_MS, easing: "ease-out", fill: "backwards" });
+      if (!el || typeof el.animate !== "function") continue;
+      if (reduced) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: BUBBLE_FADE_MS, easing: "ease-out", fill: "backwards" });
+      else
+        el.animate([{ opacity: 0, transform: `scale(${BUBBLE_FROM_SCALE})` }, { opacity: 1, transform: "none" }], {
+          duration: BUBBLE_ENTER_MS,
+          delay: BUBBLE_ENTER_DELAY_MS,
+          easing: BUBBLE_SPRING,
+          fill: "backwards",
+        });
     }
   });
 
@@ -132,21 +144,24 @@ export function BubblePresence({ itemKey, reduced: appReduced, children }: { ite
     for (const item of items.current) {
       if (!item.leaving || timers.current.has(item.id)) continue;
       const el = slots.current.get(item.id);
+      const exitMs = reduced ? BUBBLE_FADE_MS : BUBBLE_EXIT_MS;
       if (el) {
         const cs = getComputedStyle(el);
         const opacity = Number(cs.opacity);
         const transform = cs.transform === "none" ? "none" : cs.transform;
         el.dataset.phase = "exit";
         el.setAttribute("aria-hidden", "true");
-        if (typeof el.animate === "function")
+        if (typeof el.animate === "function") {
+          // A entrada dele, se ainda andava, sai de cena: a saída parte do ponto em que ela estava.
+          for (const a of el.getAnimations?.() ?? []) a.cancel();
           el.animate(
             [
               { opacity, transform },
               { opacity: 0, transform: reduced ? transform : `scale(${BUBBLE_FROM_SCALE})` },
             ],
-            { duration: reduced ? BUBBLE_FADE_MS : BUBBLE_EXIT_MS, easing: reduced ? "ease-in" : BUBBLE_EXIT_EASING, fill: "forwards" },
+            { duration: exitMs, easing: reduced ? "ease-in" : BUBBLE_EXIT_EASING, fill: "forwards" },
           );
-        else el.style.opacity = "0";
+        } else el.style.opacity = "0";
       }
       timers.current.set(
         item.id,
@@ -155,12 +170,11 @@ export function BubblePresence({ itemKey, reduced: appReduced, children }: { ite
           entered.current.delete(item.id);
           items.current = items.current.filter((i) => i.id !== item.id);
           rerender();
-        }, reduced ? BUBBLE_FADE_MS : BUBBLE_EXIT_MS),
+        }, exitMs),
       );
     }
   });
   useLayoutEffect(() => () => timers.current.forEach(clearTimeout), []);
-
 
   return (
     <>

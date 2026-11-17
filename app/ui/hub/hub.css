@@ -365,17 +365,13 @@
   /* A ponta do rabo, na quina do lado do gato (T16754). */
   transform-origin: var(--kn-bub-ox) var(--kn-bub-oy);
   pointer-events: none;
-  animation: kn-slot-in 250ms cubic-bezier(0.34, 1.4, 0.64, 1) 60ms both;
 }
 /* Dentro do lugar, quem limita ao espaço é o lugar; a casca fica só com o máximo dela, em px (uma % aqui não entra na
    largura que o lugar mede, e a casca ficaria mais estreita que ele, longe do gato). */
 .kn-bubble-slot > .kn-bubble-shell { --kn-bub-room: 9999px; position: relative; left: auto; right: auto; top: auto; bottom: auto; z-index: auto; }
-/* A saída é da Web Animations, a partir do estado em que o balão está (`BubblePresence.tsx`). */
-.kn-bubble-slot[data-phase="exit"] { z-index: 6; animation: none; }
+/* A entrada e a saída são da Web Animations (`BubblePresence.tsx`): as duas partem no mesmo quadro (T16835). */
+.kn-bubble-slot[data-phase="exit"] { z-index: 6; }
 .kn-bubble-slot[data-phase="exit"] > * { pointer-events: none; }
-/* Com o Reduzir movimento, a entrada também é da Web Animations (o esmaecer de 120 ms): o `base.css` corta a do CSS. */
-.kn-bubble-slot[data-reduced] { animation: none; }
-@keyframes kn-slot-in { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
 
 /* O trecho inteiro, invisível, dá o tamanho; a parte digitada fica por cima. */
 .kn-bubble-text { display: grid; overflow-wrap: anywhere; white-space: pre-wrap; }
