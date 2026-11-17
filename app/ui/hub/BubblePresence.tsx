@@ -5,7 +5,9 @@
 // - **A troca:** a `itemKey` mudou. O balão de antes fica na tela pelo tempo da saída (180 ms), e o novo entra com 60 ms
 //   de atraso, numa mola de 250 ms. Os tempos garantem que nunca há um quadro sem balão nem dois balões cheios.
 // - **A saída parte de onde o balão está:** um balão que ainda entrava (no atraso, ou no meio da mola) sai da opacidade e
-//   da escala em que está, pela Web Animations, e não do cheio (o CSS trocaria a animação e o mostraria cheio um quadro).
+//   da escala em que está, e não do cheio.
+// - **Um relógio só:** a entrada e a saída são da Web Animations e nascem no mesmo commit, então partem do mesmo quadro,
+//   mesmo com a página travada (T16835).
 // - **O tamanho:** com a mesma `itemKey`, a caixa que mudou de tamanho parte do tamanho de antes (o FLIP: a casca escala
 //   e o conteúdo dela escala ao contrário, para o texto não deformar).
 // - **Reduzir movimento** (o da Aparência ou o do macOS): a troca é só um esmaecer de 120 ms, sem escala, e o tamanho muda
@@ -69,8 +71,6 @@ export function BubblePresence({ itemKey, reduced: appReduced, children }: { ite
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   items.current = nextItems(items.current, itemKey, children);
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
-  /** O quadro em que a saída de cada balão começa (T16835). */
-  const frames = useRef(new Map<number, number>());
   const slots = useRef(new Map<number, HTMLDivElement>());
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
@@ -118,75 +118,63 @@ export function BubblePresence({ itemKey, reduced: appReduced, children }: { ite
     return ref;
   };
 
-  // O balão que entra, com o Reduzir movimento: o esmaecer de 120 ms (sem ele, a entrada é a mola do CSS).
+  // O balão que entra: a mola (ou, com o Reduzir movimento, o esmaecer de 120 ms), pela Web Animations, e não pelo CSS
+  // (T16835). A saída do balão de antes nasce no mesmo commit, também pela Web Animations, então as duas partem do
+  // mesmo quadro mesmo com a página travada entre o commit e a pintura. Com a entrada no CSS, o relógio de cada uma
+  // partia num momento, e uma trava no meio deixava o canto vazio (a saída já no fim) ou com dois balões cheios.
   useLayoutEffect(() => {
     for (const item of items.current) {
       if (item.leaving || entered.current.has(item.id)) continue;
       entered.current.add(item.id);
       const el = slots.current.get(item.id);
-      if (reduced && el && typeof el.animate === "function")
-        el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: BUBBLE_FADE_MS, easing: "ease-out", fill: "backwards" });
+      if (!el || typeof el.animate !== "function") continue;
+      if (reduced) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: BUBBLE_FADE_MS, easing: "ease-out", fill: "backwards" });
+      else
+        el.animate([{ opacity: 0, transform: `scale(${BUBBLE_FROM_SCALE})` }, { opacity: 1, transform: "none" }], {
+          duration: BUBBLE_ENTER_MS,
+          delay: BUBBLE_ENTER_DELAY_MS,
+          easing: BUBBLE_SPRING,
+          fill: "backwards",
+        });
     }
   });
 
   // O balão que sai: a saída parte do estado em que ele está (lido antes de marcar a saída), e ele some no fim dela.
-  // A saída começa no próximo quadro, e não aqui (T16835): o relógio da Web Animations parte agora, e o da entrada do
-  // CSS só na pintura. Com a página travada entre os dois (uma máquina ocupada), a saída chegava ao fim antes de a
-  // entrada começar, e o canto esvaziava. No rAF, as duas partem na mesma pintura. Até lá, o slot fica parado no
-  // estado lido, em inline.
   useLayoutEffect(() => {
     for (const item of items.current) {
       if (!item.leaving || timers.current.has(item.id)) continue;
       const el = slots.current.get(item.id);
       const exitMs = reduced ? BUBBLE_FADE_MS : BUBBLE_EXIT_MS;
-      const done = () => {
-        timers.current.set(
-          item.id,
-          setTimeout(() => {
-            timers.current.delete(item.id);
-            entered.current.delete(item.id);
-            items.current = items.current.filter((i) => i.id !== item.id);
-            rerender();
-          }, exitMs),
-        );
-      };
-      if (!el || typeof el.animate !== "function" || typeof requestAnimationFrame !== "function") {
-        if (el) {
-          el.dataset.phase = "exit";
-          el.setAttribute("aria-hidden", "true");
-          el.style.opacity = "0";
-        }
-        done();
-        continue;
+      if (el) {
+        const cs = getComputedStyle(el);
+        const opacity = Number(cs.opacity);
+        const transform = cs.transform === "none" ? "none" : cs.transform;
+        el.dataset.phase = "exit";
+        el.setAttribute("aria-hidden", "true");
+        if (typeof el.animate === "function") {
+          // A entrada dele, se ainda andava, sai de cena: a saída parte do ponto em que ela estava.
+          for (const a of el.getAnimations?.() ?? []) a.cancel();
+          el.animate(
+            [
+              { opacity, transform },
+              { opacity: 0, transform: reduced ? transform : `scale(${BUBBLE_FROM_SCALE})` },
+            ],
+            { duration: exitMs, easing: reduced ? "ease-in" : BUBBLE_EXIT_EASING, fill: "forwards" },
+          );
+        } else el.style.opacity = "0";
       }
-      const cs = getComputedStyle(el);
-      const opacity = cs.opacity;
-      const transform = cs.transform === "none" ? "none" : cs.transform;
-      el.dataset.phase = "exit";
-      el.setAttribute("aria-hidden", "true");
-      el.style.opacity = opacity;
-      el.style.transform = transform;
-      // Marcado já, para o próximo render não começar outra saída; o prazo de verdade sai no rAF, junto com a animação.
-      timers.current.set(item.id, undefined as unknown as ReturnType<typeof setTimeout>);
-      const frame = requestAnimationFrame(() => {
-        frames.current.delete(item.id);
-        el.animate(
-          [
-            { opacity: Number(opacity), transform },
-            { opacity: 0, transform: reduced ? transform : `scale(${BUBBLE_FROM_SCALE})` },
-          ],
-          { duration: exitMs, easing: reduced ? "ease-in" : BUBBLE_EXIT_EASING, fill: "forwards" },
-        );
-        el.style.opacity = "";
-        el.style.transform = "";
-        done();
-      });
-      frames.current.set(item.id, frame);
+      timers.current.set(
+        item.id,
+        setTimeout(() => {
+          timers.current.delete(item.id);
+          entered.current.delete(item.id);
+          items.current = items.current.filter((i) => i.id !== item.id);
+          rerender();
+        }, exitMs),
+      );
     }
   });
-  useLayoutEffect(() => () => frames.current.forEach(cancelAnimationFrame), []);
   useLayoutEffect(() => () => timers.current.forEach(clearTimeout), []);
-
 
   return (
     <>
