@@ -22,6 +22,11 @@ export interface Trilha {
   chaves: string[];
   /** A nota a que elas levaram. */
   path: string;
+  /**
+   * A pasta de notas da nota (a chave dela, o `ref.key`, T16650): o caminho só vale nela. Sem ela, um app de uma pasta só, ou uma
+   * trilha de antes do T16650, que nenhuma pasta move nem tira.
+   */
+  pasta?: string;
   /** Quantas vezes elas levaram lá. */
   vezes: number;
   /** A última vez, em ms. */
@@ -85,6 +90,12 @@ export function trilhasDoPedido(pedido: string, trilhas: readonly Trilha[]): Tri
   return out;
 }
 
+/** A trilha é desta pasta de notas (null: o app sem pastas). */
+const daPasta = (t: Trilha, pasta: string | null) => (t.pasta ?? null) === pasta;
+
+/** As trilhas que o faro pode seguir na pasta aberta: as dela, e as de antes do T16650, que não dizem a pasta. */
+export const trilhasDaPasta = (ts: readonly Trilha[], pasta: string | null): Trilha[] => ts.filter((t) => !t.pasta || t.pasta === pasta);
+
 /** O placar de uma trilha casada no faro: abaixo do nome exato, e sobe com as vezes e com as palavras que casaram. */
 export const placarDaTrilha = (c: TrilhaCasada): number => 0.88 + 0.04 * Math.min(c.trilha.vezes, 3) + 0.02 * c.palavras.length;
 
@@ -135,18 +146,18 @@ export class TrilhaStore {
    * maior parte das mesmas palavras conta mais uma vez; senão, entra uma nova. Devolve a trilha, ou null (o pedido não
    * tinha palavra de assunto).
    */
-  aprender(pedido: string, notePath: string): Trilha | null {
+  aprender(pedido: string, notePath: string, pasta: string | null = null): Trilha | null {
     const { palavras, chaves } = palavrasDoPedido(pedido);
     if (!chaves.length) return null;
     const ts = [...this.list()];
     const now = this.now();
-    const mesma = ts.find((t) => t.path === notePath && t.chaves.filter((k) => chaves.includes(k)).length >= Math.min(chaves.length, t.chaves.length) * TRILHA_CASA);
+    const mesma = ts.find((t) => t.path === notePath && daPasta(t, pasta) && t.chaves.filter((k) => chaves.includes(k)).length >= Math.min(chaves.length, t.chaves.length) * TRILHA_CASA);
     let t: Trilha;
     if (mesma) {
       t = { ...mesma, vezes: mesma.vezes + 1, em: now };
       ts.splice(ts.indexOf(mesma), 1, t);
     } else {
-      t = { id: `t${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`, palavras, chaves, path: notePath, vezes: 1, em: now };
+      t = { id: `t${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`, palavras, chaves, path: notePath, vezes: 1, em: now, ...(pasta ? { pasta } : {}) };
       ts.push(t);
     }
     ts.sort((a, b) => b.em - a.em);
@@ -157,13 +168,14 @@ export class TrilhaStore {
   /**
    * A nota mudou de lugar ou saiu (T16650): `map` diz para onde foi cada caminho, ou null quando ela saiu (apagada,
    * ou sumida por fora sem aparecer em outro lugar). A trilha vai junto com a nota, ou sai da lista: uma trilha morta
-   * não leva a nada. Devolve quantas mudaram.
+   * não leva a nada. Só as trilhas de `pasta` (null: o app sem pastas): o mesmo caminho em outra pasta é outra nota.
+   * Devolve quantas mudaram.
    */
-  seguir(map: (p: string) => string | null): number {
+  seguir(pasta: string | null, map: (p: string) => string | null): number {
     let mudaram = 0;
     const next: Trilha[] = [];
     for (const t of this.list()) {
-      const to = map(t.path);
+      const to = daPasta(t, pasta) ? map(t.path) : t.path;
       if (to === t.path) {
         next.push(t);
         continue;

@@ -16,7 +16,8 @@ export function folderCapabilities(
   build: (deps: CapabilityDeps) => Handlers,
 ): Handlers {
   const folders = deps.notesFolders!;
-  const base = build({ ...deps, notesFolders: undefined });
+  // As capacidades fora de pasta usam o cofre fixo (a pasta interna): as trilhas dele são dela (T16650).
+  const base = build({ ...deps, notesFolders: undefined, folderKey: folders.fixed.ref.key });
   const cached = new Map<string, Handlers>();
   const handlers = (b: FolderBundle) => {
     let existing = cached.get(b.ref.id);
@@ -25,6 +26,7 @@ export function folderCapabilities(
       ...deps,
       notesFolders: undefined,
       notes: b.notes,
+      folderKey: b.ref.key,
       settings: b.settings,
       attachments: b.attachments,
       ocr: b.ocr,

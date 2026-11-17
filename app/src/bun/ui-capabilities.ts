@@ -204,6 +204,11 @@ export interface CapabilityDeps {
   meetings?: MeetingHost;
   /** O agente (T8678, spec #8339). Sem ele (testes antigos), as capacidades `agent.*` dão E_NO_AGENT. */
   agent?: AgentService;
+  /**
+   * A pasta de notas destas capacidades (o `ref.key`, T16650, que não muda de uma abertura para outra): as trilhas do
+   * agente só seguem as notas dela.
+   */
+  folderKey?: string;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
@@ -514,7 +519,7 @@ export function uiCapabilities(deps: CapabilityDeps,
   /** Best effort, como os projetos: um `trilhas.json` que não grava nunca desfaz o que já aconteceu nas notas. */
   const followTrails = (map: (p: string) => string | null) => {
     try {
-      deps.agent?.trailsFollow(map);
+      deps.agent?.trailsFollow(deps.folderKey ?? null, map);
     } catch (e) {
       console.error("[agent] trilhas:", e);
     }

@@ -3,14 +3,17 @@
 // Ajustes › Agente. Pasta falsa, nomes inventados, o agente nunca abre.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { tempDir } from "../../test/tmp.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
+import { type CapabilityDeps } from "../bun/ui-capabilities.ts";
+import { folderKey, NotesFolders } from "../notes/folders-workspace.ts";
 import { Vault } from "../notes/vault.ts";
-import { type AppSettings, DEFAULT_SETTINGS } from "../store/settings.ts";
+import { HistoryStore } from "../store/history.ts";
+import { type AppSettings, DEFAULT_SETTINGS, SettingsStore } from "../store/settings.ts";
 import { agentDir } from "./adapter/open.ts";
 import { AgentService } from "./service.ts";
 import { TrilhaStore } from "./trilhas.ts";
@@ -34,14 +37,14 @@ describe("TrilhaStore.seguir", () => {
     s.aprender("receita do bolo de cenoura", "Cozinha/Bolo.md");
     s.aprender("lista de livros para ler", "Leituras.md");
     const map = (p: string) => (p === "Pessoal/Viagem.md" ? "Arquivo/Lisboa 2026.md" : p === "Cozinha/Bolo.md" ? null : p);
-    expect(s.seguir(map)).toBe(2);
+    expect(s.seguir(null, map)).toBe(2);
     const paths = (st: TrilhaStore) => st.list().map((x) => x.path).sort();
     expect(paths(s)).toEqual(["Arquivo/Lisboa 2026.md", "Leituras.md"]);
     // As palavras e as vezes vão junto com a nota.
     expect(s.list().find((x) => x.path === "Arquivo/Lisboa 2026.md")).toMatchObject({ palavras: ["orçamento", "viagem", "Lisboa"], vezes: 1 });
     expect(paths(new TrilhaStore(dir))).toEqual(["Arquivo/Lisboa 2026.md", "Leituras.md"]);
     // Nada mudou: nada a gravar.
-    expect(s.seguir((p) => p)).toBe(0);
+    expect(s.seguir(null, (p) => p)).toBe(0);
   });
 });
 
@@ -142,5 +145,80 @@ describe("as trilhas seguem a nota no app (Ajustes › Agente)", () => {
     await until(async () => (await trails()).length === 1);
     expect(await trails()).toEqual(["Arquivo/Lisboa.md"]);
     v.close();
+  });
+});
+
+describe("as trilhas de uma pasta de notas não mexem nas de outra (revisão do T16650)", () => {
+  const abertas: NotesFolders[] = [];
+  afterEach(async () => {
+    for (const f of abertas.splice(0)) await f.close();
+  });
+
+  /** A pasta interna e uma de fora, com o mesmo `Viagem.md` nas duas, e o agente (que nunca abre) nas capacidades. */
+  async function duasPastas() {
+    const base = realpathSync(tmp("kiwi-trilhas-pastas-"));
+    const data = path.join(base, "data");
+    const interna = path.join(base, "home", "KiwiNotes");
+    const fora = path.join(base, "home", "Outra pasta");
+    mkdirSync(interna, { recursive: true });
+    mkdirSync(fora, { recursive: true });
+    writeFileSync(path.join(interna, "Viagem.md"), "Lisboa");
+    writeFileSync(path.join(interna, "Bolo.md"), "cenoura");
+    writeFileSync(path.join(fora, "Viagem.md"), "Porto");
+    // As trilhas de antes, cada uma da sua pasta: `Bolo.md` só existe na interna.
+    const antes = new TrilhaStore(agentDir(data));
+    antes.aprender("orçamento da viagem para Lisboa", "Viagem.md", folderKey(interna));
+    antes.aprender("receita do bolo de cenoura", "Bolo.md", folderKey(interna));
+    antes.aprender("roteiro da viagem ao Porto", "Viagem.md", folderKey(fora));
+    let agentSettings = { ...DEFAULT_SETTINGS.agent };
+    const agent = new AgentService({
+      data,
+      settings: { load: async () => agentSettings, save: async (patch) => (agentSettings = { ...agentSettings, ...patch }) },
+      claude: () => null,
+      openHost: async () => {
+        throw new Error("o agente não abre neste teste");
+      },
+    });
+    const internalNotes = new Vault({ root: interna, trash: async () => {} });
+    const folders = new NotesFolders({ dir: data, defaultRoot: interna, globalSettings: new SettingsStore(data), internalNotes, home: path.join(base, "home"), watch: false, limit: 20_000 });
+    abertas.push(folders);
+    const caps = uiCapabilities({
+      ...folders.fixed,
+      notesFolders: folders,
+      chooseNotesFolder: async () => fora,
+      history: new HistoryStore(data),
+      dictionary: { load: async () => [], save: async () => [] },
+      snippets: { load: async () => [], save: async () => [] },
+      clipboardWrite: () => {},
+      settingsChanged: () => {},
+      agent,
+    } as CapabilityDeps);
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const r = await directInvoke(caps, name as never, args as never);
+      expect(r).toMatchObject({ ok: true });
+      return (r as { value: unknown }).value;
+    };
+    /** As trilhas como Ajustes › Agente mostra: a 1ª palavra e a nota. */
+    const trails = async () =>
+      ((await call("agent.trails", {})) as { trilhas: { palavras: string[]; path: string }[] }).trilhas.map((t) => `${t.palavras[0]} → ${t.path}`).sort();
+    return { call, trails };
+  }
+
+  test("abrir a 2ª pasta não apaga as trilhas da 1ª", async () => {
+    const { call, trails } = await duasPastas();
+    await call("notes.list", {}); // a interna abre
+    const todas = ["orçamento → Viagem.md", "receita → Bolo.md", "roteiro → Viagem.md"];
+    expect(await trails()).toEqual(todas);
+    expect(await call("notes.openFolder", {})).toMatchObject({ kind: "opened" });
+    await call("notes.list", {}); // a de fora abre: não tem Bolo.md, e a trilha dele é da interna
+    expect(await trails()).toEqual(todas);
+  });
+
+  test("um rename numa pasta não move a trilha do mesmo caminho na outra", async () => {
+    const { call, trails } = await duasPastas();
+    await call("notes.list", {});
+    await call("notes.openFolder", {});
+    await call("notes.rename", { path: "Viagem.md", newPath: "Porto.md" });
+    expect(await trails()).toEqual(["orçamento → Viagem.md", "receita → Bolo.md", "roteiro → Porto.md"]);
   });
 });
