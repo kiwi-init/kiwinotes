@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { DEFAULT_NOTES_SHORTCUT, DEFAULT_SHORTCUTS, NOTES_SHORTCUTS } from "../shared/shortcuts.ts";
 import { DEFAULT_APPEARANCE } from "../shared/appearance.ts";
-import { DEFAULT_AGENT_MEETING_SETTINGS, DEFAULT_AGENT_SETTINGS, DEFAULT_SETTINGS, SettingsStore, sanitizeAgentMeetingSettings, sanitizeSettings } from "./settings.ts";
+import { DEFAULT_AGENT_MEETING_SETTINGS, DEFAULT_AGENT_SETTINGS, DEFAULT_SETTINGS, MAX_EFFORT_MODELS, SettingsStore, effortOf, sanitizeAgentMeetingSettings, sanitizeSettings } from "./settings.ts";
 
 import { DEFAULT_MEETING_SETTINGS } from "../shared/meetings.ts";
 import { tempDir } from "../../test/tmp.ts";
@@ -105,12 +105,13 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", effortByModel: {}, notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
     model: "opus",
     effort: "high",
+    effortByModel: {},
     notifyWaiting: true,
     economy: false,
     controlShortcut: false,
@@ -132,6 +133,24 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
   expect(sanitizeSettings({ agent: { instructions: "x".repeat(2500) } }).agent.instructions).toHaveLength(2000);
   expect(sanitizeSettings({ agent: { instructions: 3 } }).agent.instructions).toBe("");
   expect(sanitizeSettings({ agent: { enabled: "sim", model: "../x", effort: 3 } }).agent).toEqual(DEFAULT_AGENT_SETTINGS);
+});
+
+test("o esforço por modelo (spec #16793): um ajuste antigo, só com o effort, migra sem perder o valor", () => {
+  // O de antes: um esforço para todos. Ele continua lá, e vale para todo modelo sem esforço próprio.
+  const old = sanitizeSettings({ agent: { model: "opus", effort: "high" } }).agent;
+  expect(old.effort).toBe("high");
+  expect(old.effortByModel).toEqual({});
+  expect(effortOf(old, "opus")).toBe("high");
+  expect(effortOf(old, "sonnet")).toBe("high");
+  // Com o esforço de um modelo salvo, ele vale para esse modelo; os outros seguem com o de antes.
+  const now = sanitizeSettings({ agent: { model: "opus", effort: "high", effortByModel: { sonnet: "low" } } }).agent;
+  expect(effortOf(now, "sonnet")).toBe("low");
+  expect(effortOf(now, "opus")).toBe("high");
+  // Um valor ruim, dos dois lados, sai; a lista tem teto.
+  expect(sanitizeSettings({ agent: { effortByModel: { "../x": "low", opus: 3, sonnet: "baixo demais!", haiku: "medium" } } }).agent.effortByModel).toEqual({ haiku: "medium" });
+  expect(sanitizeSettings({ agent: { effortByModel: ["low"] } }).agent.effortByModel).toEqual({});
+  const many = Object.fromEntries(Array.from({ length: MAX_EFFORT_MODELS + 10 }, (_, i) => [`m${i}`, "low"]));
+  expect(Object.keys(sanitizeSettings({ agent: { effortByModel: many } }).agent.effortByModel)).toHaveLength(MAX_EFFORT_MODELS);
 });
 
 test("o aviso quando o agente espera (spec #9839): ligado por padrão, e só um false o desliga", () => {

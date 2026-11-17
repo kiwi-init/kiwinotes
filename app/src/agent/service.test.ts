@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import path from "node:path";
 
 import type { AgentMemoryView, AgentStatus, AgentTurnEvent } from "../shared/ui-contract.ts";
-import { SettingsStore, type AgentSettings } from "../store/settings.ts";
+import { DEFAULT_AGENT_SETTINGS, SettingsStore, type AgentSettings } from "../store/settings.ts";
 import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
@@ -366,6 +366,101 @@ describe("o modelo e o esforço são do app", () => {
   });
 });
 
+describe("o esforço de cada modelo (spec #16793)", () => {
+  const sets = (m: Made) => m.log().filter((l) => l.method === "session/set_config_option").map((l) => [l.params.configId, l.params.value]);
+
+  test("cada modelo guarda o seu: trocar de modelo e voltar traz o esforço dele, e o host aplica o do modelo atual", async () => {
+    const m = make();
+    await readyNow(m);
+    await m.svc.configure({ model: "opus", effort: "high" });
+    await askAndWait(m, "um");
+    expect((await m.svc.status()).session).toEqual({ model: "opus", effort: "high" });
+
+    await m.svc.configure({ model: "sonnet" });
+    // O sonnet ainda não tem esforço próprio: vale o de antes, "default".
+    expect((await m.svc.status()).effort).toBe("default");
+    await m.svc.configure({ effort: "low" });
+    const before = sets(m).length;
+    await askAndWait(m, "dois");
+    expect(sets(m).slice(before)).toEqual([
+      ["model", "sonnet"],
+      ["effort", "low"],
+    ]);
+
+    await m.svc.configure({ model: "opus" });
+    const st = await m.svc.status();
+    expect(st.effort).toBe("high");
+    expect(st.effortByModel).toEqual({ opus: "high", sonnet: "low" });
+    await askAndWait(m, "três");
+    expect((await m.svc.status()).session).toEqual({ model: "opus", effort: "high" });
+  });
+
+  test("as escolhas de esforço de cada modelo, como o agente diz, ficam guardadas; um modelo sem esforço fica com []", async () => {
+    const data = tmp();
+    const m = make({ data });
+    expect((await m.svc.status()).efforts).toEqual({});
+    await readyNow(m);
+    await m.svc.configure({ model: "sonnet" });
+    await askAndWait(m, "um");
+    await m.svc.configure({ model: "opus-legacy", effort: "high" });
+    await askAndWait(m, "dois");
+    const st = await m.svc.status();
+    expect(st.efforts.sonnet?.map((e) => e.value)).toEqual(["default", "low", "medium", "high"]);
+    expect(st.efforts["opus-legacy"]).toEqual([]);
+    // Sem a opção, o esforço salvo não vai ao agente, e a sessão segue.
+    expect(st.session).toEqual({ model: "opus-legacy" });
+    await m.svc.close();
+
+    const again = make({ data, reg: m.reg });
+    const st2 = await again.svc.status();
+    expect(st2.program).toBe("closed");
+    expect(Object.keys(st2.efforts).sort()).toEqual(["opus-legacy", "sonnet"]);
+  });
+
+  test("no modo econômico vale o esforço salvo do modelo barato", async () => {
+    const m = make();
+    await readyNow(m);
+    await askAndWait(m, "um");
+    await m.svc.configure({ model: "haiku", effort: "low" });
+    await m.svc.configure({ model: "opus", effort: "high", economy: true });
+    await askAndWait(m, "dois");
+    expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "low" });
+    await m.svc.configure({ economy: false });
+    await askAndWait(m, "três");
+    expect((await m.svc.status()).session).toEqual({ model: "opus", effort: "high" });
+  });
+
+  test("um ajuste antigo, só com o effort, vale para todos os modelos até cada um ter o seu", async () => {
+    const data = tmp();
+    await new SettingsStore(data).save({ agent: { ...DEFAULT_AGENT_SETTINGS, model: "opus", effort: "medium" } as never });
+    const m = make({ data });
+    expect((await m.svc.status()).effort).toBe("medium");
+    await readyNow(m);
+    await askAndWait(m, "um");
+    expect((await m.svc.status()).session).toEqual({ model: "opus", effort: "medium" });
+    await m.svc.configure({ model: "sonnet", effort: "low" });
+    await m.svc.configure({ model: "fable" });
+    expect((await m.svc.status()).effort).toBe("medium");
+  });
+
+  test("trocar o esforço no meio de uma resposta não a interrompe: vale no pedido seguinte", async () => {
+    const m = make();
+    await readyNow(m);
+    await askAndWait(m, "um");
+    const words = Array.from({ length: 12 }, (_, i) => `p${i}`).join(" ");
+    const { id } = await m.svc.ask(`/conta ${words}`);
+    await until(() => m.turns.some((e) => e.id === id && e.type === "text"));
+    const before = sets(m).length;
+    await m.svc.configure({ effort: "max" });
+    await until(() => m.turns.some((e) => e.id === id && (e.type === "done" || e.type === "error")));
+    const done = m.turns.find((e) => e.id === id && (e.type === "done" || e.type === "error"));
+    expect(done).toMatchObject({ type: "done", stopReason: "end_turn" });
+    expect(sets(m).slice(before)).toEqual([]);
+    await askAndWait(m, "dois");
+    expect(sets(m).slice(before)).toEqual([["effort", "max"]]);
+  });
+});
+
 describe("os modelos que o agente oferece (T8762)", () => {
   test("vazio até o programa abrir; depois, a lista do agente, que fica guardada para a próxima abertura do app", async () => {
     const data = tmp();
@@ -374,15 +469,15 @@ describe("os modelos que o agente oferece (T8762)", () => {
     await readyNow(m);
     await askAndWait(m, "oi");
     const models = (await m.svc.status()).models;
-    expect(models.map((x) => x.value)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
-    expect(models[0]).toEqual({ value: "default", name: "Default (recommended)", description: "Sonnet · o padrão da sua conta" });
+    expect(models.map((x) => x.value)).toEqual(["default", "opus", "fable", "sonnet", "haiku", "opus-legacy"]);
+    expect(models[0]).toEqual({ value: "default", name: "Default (recommended)", description: "Sonnet · Best for everyday, complex tasks" });
     await m.svc.close();
 
     // O app abriu de novo: a lista está lá, sem abrir o programa.
     const again = make({ data, reg: m.reg });
     const st = await again.svc.status();
     expect(st.program).toBe("closed");
-    expect(st.models.map((x) => x.value)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
+    expect(st.models.map((x) => x.value)).toEqual(["default", "opus", "fable", "sonnet", "haiku", "opus-legacy"]);
   });
 });
 

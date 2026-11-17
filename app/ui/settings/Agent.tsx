@@ -18,6 +18,8 @@ import {
   ECONOMY_LABEL,
   WEB_LABEL,
   webHint,
+  effortHint,
+  effortOptions,
   modelHint,
   modelOptions,
   switchHint,
@@ -137,6 +139,7 @@ export function AgentSection() {
 
   const claude = claudeLine(name, status.claude);
   const a = status.adapter;
+  const efforts = effortOptions(status);
   const ready = canTest(status);
   const running = test.phase === "running";
 
@@ -180,6 +183,15 @@ export function AgentSection() {
       {status.enabled && a.phase === "ready" ? (
         <Row label="Modelo" hint={modelHint(status)}>
           <Select label="Modelo do agente" value={status.model} options={modelOptions(status)} onChange={(model) => void run(() => api.agent.configure({ model }))} />
+        </Row>
+      ) : null}
+
+      {/* O esforço do modelo escolhido (spec #16793): as escolhas que o agente oferece nele; sem esforço, só a linha. */}
+      {status.enabled && a.phase === "ready" ? (
+        <Row label="Esforço" hint={effortHint(status)}>
+          {efforts?.length ? (
+            <Select label="Esforço do modelo" value={status.effort} options={efforts} onChange={(effort) => void run(() => api.agent.configure({ effort }))} />
+          ) : null}
         </Row>
       ) : null}
 

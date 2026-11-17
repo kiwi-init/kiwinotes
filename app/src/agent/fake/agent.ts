@@ -32,7 +32,8 @@
 //                            que foi o que a prova de verdade mostrou, #8666); o esforço abre em "high"
 //
 // As opções da sessão (`model` e `effort`) vêm na resposta de `session/new|resume|load`, e o `session/set_config_option`
-// troca o valor e é anotado no log (T8678).
+// troca o valor e é anotado no log (T8678). Como no adaptador de verdade, o esforço depende do modelo (spec #16793): o
+// sonnet tem só até "high", o haiku até "medium", o opus-legacy não tem a opção, e trocar para um modelo sem o esforço atual volta ao "default".
 
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -290,8 +291,11 @@ async function answerFromNotes(client: AgentContext, sessionId: string, question
   return "Não achei nada sobre isso nas suas notas.";
 }
 
-const MODELS = ["default", "opus", "fable", "sonnet", "haiku"];
+const MODELS = ["default", "opus", "fable", "sonnet", "haiku", "opus-legacy"];
 const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
+/** Os esforços de cada modelo (spec #16793); um modelo fora daqui tem todos. */
+const MODEL_EFFORTS: Record<string, string[]> = { sonnet: ["default", "low", "medium", "high"], haiku: ["default", "low", "medium"], "opus-legacy": [] };
+const effortsOf = (model: string) => MODEL_EFFORTS[model] ?? EFFORTS;
 const config = new Map<string, { model: string; effort: string }>();
 function configOf(sessionId: string) {
   let c = config.get(sessionId);
@@ -311,11 +315,12 @@ function configOptions(sessionId: string) {
     // Como o adaptador de verdade: o "default" com o nome de recomendado e o modelo que ele usa na descrição (T8762).
     options: values.map((value) =>
       value === "default"
-        ? { value, name: "Default (recommended)", description: "Sonnet · o padrão da sua conta" }
+        ? { value, name: "Default (recommended)", description: "Sonnet · Best for everyday, complex tasks" }
         : { value, name: value[0]!.toUpperCase() + value.slice(1) },
     ),
   });
-  return [select("model", "Modelo", c.model, MODELS), select("effort", "Esforço", c.effort, EFFORTS)];
+  const efforts = effortsOf(c.model);
+  return [select("model", "Modelo", c.model, MODELS), ...(efforts.length ? [select("effort", "Esforço", c.effort, efforts)] : [])];
 }
 
 /** O `usage_update` com o uso da janela (o `SDKRateLimitInfo` em `_meta["_claude/rateLimit"]`), como o adaptador manda. */
@@ -401,8 +406,10 @@ const app = agent({ name: "kiwi-fake-agent" })
     note("session/set_config_option", params);
     const value = (params as { value?: unknown }).value;
     const c = configOf(params.sessionId);
-    if (params.configId === "model" && typeof value === "string" && MODELS.includes(value)) c.model = value;
-    else if (params.configId === "effort" && typeof value === "string" && EFFORTS.includes(value)) c.effort = value;
+    if (params.configId === "model" && typeof value === "string" && MODELS.includes(value)) {
+      c.model = value;
+      if (!effortsOf(value).includes(c.effort)) c.effort = "default";
+    } else if (params.configId === "effort" && typeof value === "string" && effortsOf(c.model).includes(value)) c.effort = value;
     else throw RequestError.invalidParams(undefined, `não sei ${params.configId}=${String(value)}`);
     return { configOptions: configOptions(params.sessionId) };
   })

@@ -63,12 +63,77 @@ export function modelOptions(s: Pick<AgentStatus, "name" | "model" | "models">):
   return out;
 }
 
+/**
+ * O que o Claude Code diz de cada modelo, em português (spec #16793). Ele manda em inglês ("Opus 5 · Legacy"): cada
+ * pedaço entre "·" vira a tradução daqui, um nome de modelo fica como está, e o resto sai, para a linha não misturar
+ * as duas línguas. As frases são as do Claude Code de hoje; uma nova cai fora até entrar aqui.
+ */
+const MODEL_ABOUT: Record<string, string> = {
+  "most efficient for simpler tasks": "o mais econômico, para tarefas simples",
+  "fastest for quick answers": "o mais rápido, para respostas curtas",
+  "for complex work and everyday tasks": "para trabalho complexo e o dia a dia",
+  "best for everyday, complex tasks": "o melhor para o dia a dia e tarefas complexas",
+  "most capable for complex work": "o mais capaz, para trabalho complexo",
+  "can think for more complex tasks": "pensa mais, para tarefas complexas",
+  "previous opus version": "a versão anterior do Opus",
+  legacy: "versão antiga",
+  recommended: "recomendado",
+  "1m context": "contexto de 1M",
+  "1m context window": "contexto de 1M",
+};
+const MODEL_NAME = /^(claude\s+)?(opus|sonnet|haiku|fable)(\s+[\d.]+)?(\s*\[1m\])?$/i;
+
+export function modelAbout(description: string | undefined): string {
+  if (!description) return "";
+  const parts: string[] = [];
+  for (const piece of description.split(/\s+[·\u00b7]\s+|\s+[-–—]\s+/)) {
+    const t = piece.trim().replace(/\.$/, "");
+    const pt = MODEL_ABOUT[t.toLowerCase()];
+    if (pt) parts.push(parts.length ? pt : pt[0]!.toUpperCase() + pt.slice(1));
+    else if (MODEL_NAME.test(t)) parts.push(t);
+  }
+  return parts.join(" · ");
+}
+
 export function modelHint(s: Pick<AgentStatus, "model" | "models">): string {
   const base = "Um modelo maior gasta mais do seu plano.";
   if (!s.models.length) return `${base} A lista completa aparece depois do primeiro pedido.`;
-  // O que o agente diz do escolhido (no "default", o modelo que ele usa de fato), antes do aviso.
-  const about = s.models.find((m) => m.value === s.model)?.description;
+  // O que o agente diz do escolhido (no "default", o modelo que ele usa de fato), antes do aviso, em português.
+  const about = modelAbout(s.models.find((m) => m.value === s.model)?.description);
   return about ? `${about}. ${base}` : base;
+}
+
+/** Os nomes dos esforços em português (spec #16793); um que o Kiwi não conhece fica com o nome que o agente deu. */
+const EFFORT_NAMES: Record<string, string> = {
+  default: "Padrão",
+  low: "Baixo",
+  medium: "Médio",
+  high: "Alto",
+  xhigh: "Muito alto",
+  max: "Máximo",
+};
+
+/**
+ * As escolhas do Esforço para o modelo escolhido (spec #16793): as que o agente ofereceu nele, em português. `null`
+ * quando o Kiwi ainda não viu esse modelo numa sessão; `[]` quando ele não tem esforço.
+ */
+export function effortOptions(s: Pick<AgentStatus, "model" | "effort" | "efforts">): { value: string; label: string }[] | null {
+  // Um engine anterior ao 1.81.0 não manda os esforços (o `requiresContract` da UI é ^1.0.0): sem a lista, sem o seletor.
+  const known = s.efforts?.[s.model];
+  if (!known) return null;
+  if (!known.length) return [];
+  const label = (m: AgentModelChoice) => EFFORT_NAMES[m.value] ?? m.name;
+  const out = known.map((m) => ({ value: m.value, label: label(m) }));
+  if (!out.some((o) => o.value === s.effort)) out.unshift({ value: s.effort, label: EFFORT_NAMES[s.effort] ?? s.effort });
+  return out;
+}
+
+export function effortHint(s: Pick<AgentStatus, "model" | "effort" | "efforts" | "economy">): string {
+  const options = effortOptions(s);
+  if (options === null) return "As opções de esforço deste modelo aparecem depois do primeiro pedido com ele.";
+  if (!options.length) return "Este modelo não tem nível de esforço: ele responde sempre do mesmo jeito.";
+  const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
+  return s.economy ? `${what} Com o modo econômico ligado, vale o esforço salvo do modelo mais barato.` : what;
 }
 
 /**
@@ -224,7 +289,10 @@ export function noticeHint(s: AgentNoticeState, asking: boolean): string {
 export const ECONOMY_LABEL = "Modo econômico";
 export function economyHint(s: AgentStatus): string {
   const what = "Gasta menos do seu limite: o modelo mais barato que o agente oferece, as notas lidas por seção e respostas curtas.";
-  return s.economy ? `Ligado. ${what} Trocar de modelo começa um cache novo, então o primeiro pedido depois gasta um pouco mais.` : `${what} Trocar de modelo começa um cache novo.`;
+  const effort = "O esforço é o que você salvou para o modelo barato.";
+  return s.economy
+    ? `Ligado. ${what} ${effort} Trocar de modelo começa um cache novo, então o primeiro pedido depois gasta um pouco mais.`
+    : `${what} ${effort} Trocar de modelo começa um cache novo.`;
 }
 
 /** "Pesquisar na web" (spec #11908): o rótulo e o que muda, desligado por padrão. */

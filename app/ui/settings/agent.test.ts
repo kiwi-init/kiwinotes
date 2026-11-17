@@ -14,6 +14,10 @@ import {
   claudeLine,
   consentText,
   IDLE_TEST,
+  effortHint,
+  effortOptions,
+  economyHint,
+  modelAbout,
   modelHint,
   modelOptions,
   noticeHint,
@@ -41,8 +45,10 @@ const base: AgentStatus = {
   controlShortcut: false,
   model: "default",
   effort: "default",
+  effortByModel: {},
   session: null,
   models: [],
+  efforts: {},
 };
 
 describe("o Claude Code instalado", () => {
@@ -111,7 +117,7 @@ describe("o interruptor e o adaptador", () => {
 
 describe("o modelo", () => {
   const models = [
-    { value: "default", name: "Default (recommended)", description: "Sonnet · o padrão da sua conta" },
+    { value: "default", name: "Default (recommended)", description: "Sonnet · Best for everyday, complex tasks" },
     { value: "opus", name: "Opus" },
   ];
 
@@ -125,12 +131,73 @@ describe("o modelo", () => {
       { value: "default", label: "Padrão do Claude Code" },
       { value: "opus", label: "Opus" },
     ]);
-    expect(modelHint({ ...base, models })).toBe("Sonnet · o padrão da sua conta. Um modelo maior gasta mais do seu plano.");
+    expect(modelHint({ ...base, models })).toBe("Sonnet · o melhor para o dia a dia e tarefas complexas. Um modelo maior gasta mais do seu plano.");
     expect(modelHint({ ...base, model: "opus", models })).toBe("Um modelo maior gasta mais do seu plano.");
   });
 
   test("um modelo guardado que o agente não oferece mais continua na lista, para não sumir da tela", () => {
     expect(modelOptions({ ...base, model: "antigo", models }).map((o) => o.value)).toEqual(["antigo", "default", "opus"]);
+  });
+});
+
+describe("o esforço de cada modelo (spec #16793)", () => {
+  const efforts = {
+    sonnet: [
+      { value: "default", name: "Default" },
+      { value: "low", name: "Low" },
+      { value: "medium", name: "Medium" },
+      { value: "high", name: "High" },
+    ],
+    opus: [
+      { value: "default", name: "Default" },
+      { value: "xhigh", name: "Xhigh" },
+      { value: "max", name: "Max" },
+      { value: "ultra-think", name: "Ultra Think" },
+    ],
+    "opus-legacy": [],
+  };
+
+  test("as escolhas do modelo escolhido, em português, e o nome do agente quando o Kiwi não tem a tradução", () => {
+    expect(effortOptions({ ...base, model: "sonnet", effort: "low", efforts })).toEqual([
+      { value: "default", label: "Padrão" },
+      { value: "low", label: "Baixo" },
+      { value: "medium", label: "Médio" },
+      { value: "high", label: "Alto" },
+    ]);
+    expect(effortOptions({ ...base, model: "opus", effort: "max", efforts })?.map((o) => o.label)).toEqual(["Padrão", "Muito alto", "Máximo", "Ultra Think"]);
+  });
+
+  test("um esforço salvo que o modelo não oferece continua na lista, para não sumir da tela", () => {
+    expect(effortOptions({ ...base, model: "sonnet", effort: "max", efforts })?.map((o) => o.value)).toEqual(["max", "default", "low", "medium", "high"]);
+  });
+
+  test("um modelo sem esforço não tem seletor, e a linha diz por quê; um modelo ainda não usado diz quando aparece", () => {
+    expect(effortOptions({ ...base, model: "opus-legacy", efforts })).toEqual([]);
+    expect(effortHint({ ...base, model: "opus-legacy", efforts })).toBe("Este modelo não tem nível de esforço: ele responde sempre do mesmo jeito.");
+    expect(effortOptions({ ...base, model: "haiku", efforts })).toBeNull();
+    expect(effortHint({ ...base, model: "haiku", efforts })).toBe("As opções de esforço deste modelo aparecem depois do primeiro pedido com ele.");
+  });
+
+  test("a linha do Esforço, e a do modo econômico, dizem que no econômico vale o esforço do modelo barato", () => {
+    const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
+    expect(effortHint({ ...base, model: "sonnet", efforts })).toBe(what);
+    expect(effortHint({ ...base, model: "sonnet", efforts, economy: true })).toBe(`${what} Com o modo econômico ligado, vale o esforço salvo do modelo mais barato.`);
+    expect(economyHint(base)).toContain("O esforço é o que você salvou para o modelo barato.");
+    expect(economyHint({ ...base, economy: true })).toContain("O esforço é o que você salvou para o modelo barato.");
+  });
+
+  test("a descrição do modelo fica toda em português: o que o Kiwi traduz entra, um nome de modelo fica, o resto sai", () => {
+    // A linha que o harry viu misturada (#16793): "Most efficient for simpler tasks. Um modelo maior…".
+    expect(modelHint({ ...base, model: "haiku", models: [{ value: "haiku", name: "Haiku", description: "Most efficient for simpler tasks" }] })).toBe(
+      "O mais econômico, para tarefas simples. Um modelo maior gasta mais do seu plano.",
+    );
+    expect(modelAbout("Opus 5 · Legacy")).toBe("Opus 5 · versão antiga");
+    expect(modelAbout("Opus 5.5 · 1M context - best for everyday, complex tasks")).toBe("Opus 5.5 · contexto de 1M · o melhor para o dia a dia e tarefas complexas");
+    expect(modelAbout("Fastest for quick answers.")).toBe("O mais rápido, para respostas curtas");
+    // Uma frase nova, em inglês, sai inteira em vez de misturar as línguas.
+    expect(modelAbout("Sonnet 5.5 · $3/$15 per Mtok")).toBe("Sonnet 5.5");
+    expect(modelAbout("Brand new phrasing")).toBe("");
+    expect(modelAbout(undefined)).toBe("");
   });
 });
 
