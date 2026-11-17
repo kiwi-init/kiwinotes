@@ -3,7 +3,7 @@
 - Status: aceito (T8371, spec #7498, aprovado pelo harry em #8367).
 - Substitui a exceção do Claude Code no AGENTS.md (decisão #34).
 - Decisões do harry que entram aqui: #7496 e #7498 (só o agente escolhido faz o trabalho de IA), #4717 (o que o guardrail segura), #8357 (o guardrail na dúvida), #8360 (a proposta depois da reunião), #8368 (o adaptador ACP) e #8373 (a regra da Anthropic).
-- Código: nenhum ainda. A ligação com o agente e a tela abaixo são do spec de Ajustes › Agente (Fase 1 do [roadmap](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/mega-ideia/roadmap.md)).
+- Código: nenhum ainda. A ligação com o agente e a tela abaixo são do spec de Ajustes › Agente (Fase 1 do roadmap, no commit `2d5493a2` do repo antigo).
 
 ## Contexto
 Até hoje, nada do Kiwi Notes sai do Mac: o ditado, as reuniões e as notas ficam no computador da pessoa. A mega-ideia traz um agente de IA: a pessoa pede algo por voz ou por texto, e o agente lê as notas e as reuniões, responde e organiza. Esse agente roda na nuvem. Para o harry, é o Claude Code com a assinatura dele; outra pessoa pode escolher outro agente.

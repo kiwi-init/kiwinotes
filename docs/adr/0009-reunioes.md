@@ -1,7 +1,7 @@
 # ADR 0009: o ASR e a diarização das reuniões
 
 - Status: **aceito (B, #5131)**. O harry escolheu guardar o canal sistema até o fim e corrigir os falantes com o VBx; o R3 (T4943) implementa. Proposto no T4926 (R0 do spec #4823).
-- Spike: [`spikes/meeting-bench/`](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/spikes/meeting-bench/README.md). Medido em 2026-11-05 num M1 Pro com 16 GB e macOS 27.2, com o FluidAudio 0.18.2 (o mesmo do ditado, ADR 0003), com `kiwi lock bench`.
+- Spike: `spikes/meeting-bench/` (no commit `2d5493a2` do repo antigo). Medido em 2026-11-05 num M1 Pro com 16 GB e macOS 27.2, com o FluidAudio 0.18.2 (o mesmo do ditado, ADR 0003), com `kiwi lock bench`.
 
 ## Contexto
 A reunião é transcrita **ao vivo** e o áudio é **apagado** depois de transcrito (#4840). Separamos os canais: o canal **você** é o mic, e o canal **sistema** é o áudio da reunião, que é o único que passa pela diarização. Antes de construir o R3, precisávamos saber:

@@ -4,7 +4,7 @@ O plano B do lead (#8862/#8893) reduz apenas a cadência quieta, depois de a
 matriz de três repetições por escala reprovar a 3/s. Não muda a função da
 B1, a semente, a voz, as cores ou a cadência dos estados ativos.
 
-[Vídeo lado a lado](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/cadencia/repouso-3-vs-2.mp4): **3/s à esquerda, 2/s à direita**.
+Vídeo lado a lado (`repouso-3-vs-2.mp4`, no commit `2d5493a2` do repo antigo): **3/s à esquerda, 2/s à direita**.
 Relógio/semente controlados,640 × 800 por painel, 8 s, exportação 30 fps e simulação
 60 Hz; sem interpolação. Os relatórios registram24 / 16 quadros distintos,
 respectivamente. Não são medições de desempenho.

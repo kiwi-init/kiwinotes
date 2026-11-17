@@ -12,7 +12,7 @@ explicou a maior parte do custo. A otimização atua no agendamento:
 
 [Verificação](verification.json): 15 PNGs controlados de repouso, ouvindo e
 thinking são idênticos ao `5a78555`, pixel a pixel. O
-[vídeo nativo](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/nevoa/final-b1/agendamento/native-idle.webm), sem screenshots nem chamadas a `capture()`,
+vídeo nativo (`native-idle.webm`, no commit `2d5493a2` do repo antigo), sem screenshots nem chamadas a `capture()`,
 mostra a apresentação real do repouso; a diferença média entre os instantes
 amostrados é maior que 1,7/255. A página escondida para de desenhar. A mudança
 de cor com Reduzir movimento também aparece no vídeo nativo, com dois desenhos.

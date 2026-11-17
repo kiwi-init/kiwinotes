@@ -144,11 +144,13 @@ movimento; continuam sendo documentos, sem código do app.
 
 ## Prévias de movimento — não são a animação final
 
+Os vídeos estão no commit `2d5493a2` do repo antigo, que não está no GitHub, por isso vão sem link (veja o `docs/arquivo.md`).
+
 | Estado | Duração | WebP animado | Cópia para anexar |
 | --- | --- | --- | --- |
-| repouso | 6 s | [WebP](previas/repouso.webp) | [MP4](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/estados/previas/repouso.mp4) |
-| acordou | 2,4 s | [WebP](previas/acordou.webp) | [MP4](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/estados/previas/acordou.mp4) |
-| erro | 3 s | [WebP](previas/erro.webp) | [MP4](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/estados/previas/erro.mp4) |
+| repouso | 6 s | [WebP](previas/repouso.webp) | `repouso.mp4` |
+| acordou | 2,4 s | [WebP](previas/acordou.webp) | `acordou.mp4` |
+| erro | 3 s | [WebP](previas/erro.webp) | `erro.mp4` |
 
 Todas usam **30 fps**, quadro 620 × 856 e altura de referência do gato de
 aproximadamente 481 px. Cada WebP animado tem até 1,5 MB. O rodapé de todos os

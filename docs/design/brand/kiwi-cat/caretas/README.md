@@ -16,16 +16,18 @@ Capturas do WebKit headless, na cor padrão, sem áudio. A voz em `ouvindo` é
 uma sequência de números sintéticos; nenhum microfone é acessado. São provas
 visuais e não servem para medir CPU ou cadência.
 
+Os vídeos estão no commit `2d5493a2` do repo antigo, que não está no GitHub, por isso vão sem link (veja o `docs/arquivo.md`).
+
 | Estado | Vídeo |
 | --- | --- |
-| Repouso | [16 s, piscadas e olhar](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/repouso.mp4) |
-| Dormindo | [zZ em movimento](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/dormindo.mp4) |
-| Acordou | [reação inicial](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/acordou.mp4) |
-| Ouvindo | [nível de voz sintético](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/ouvindo.mp4) |
-| Thinking | [busca e pontos](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/thinking.mp4) |
-| Agindo | [gotas e linhas](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/agindo.mp4) |
-| Pronto | [reação e retorno ao repouso](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/pronto.mp4) |
-| Erro | [traçado do rabisco em loop](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/brand/kiwi-cat/caretas/videos/erro.mp4) |
+| Repouso | 16 s, piscadas e olhar (`repouso.mp4`) |
+| Dormindo | zZ em movimento (`dormindo.mp4`) |
+| Acordou | reação inicial (`acordou.mp4`) |
+| Ouvindo | nível de voz sintético (`ouvindo.mp4`) |
+| Thinking | busca e pontos (`thinking.mp4`) |
+| Agindo | gotas e linhas (`agindo.mp4`) |
+| Pronto | reação e retorno ao repouso (`pronto.mp4`) |
+| Erro | traçado do rabisco em loop (`erro.mp4`) |
 
 O quadro de Reduzir movimento usa os três arcos brancos da referência de
 `ouvindo`. Com `voz=null` ou ausente, as ondas desaparecem no mesmo quadro,
@@ -40,7 +42,7 @@ conferido em #9079) e aprovou a comparação de formas (#9078). O harry aprovou 
 A árvore final contém os materiais de leitura: imagens, vídeos, tabelas por
 série, resumos, auditoria e FPS. Os relatórios por par/processo, as janelas
 individuais, a prova funcional e o manifest completo dos vídeos estão
-preservados no [commit `f35a23d`](https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/design/brand/kiwi-cat/caretas/).
+preservados no commit `f35a23d` do repo antigo, que não está no GitHub.
 Os resumos desta árvore mantêm os valores medidos e apontam para esse arquivo
 histórico; apenas os detalhes repetidos foram retirados.
 
@@ -83,7 +85,7 @@ menos 55 fps. O teto anterior era +0,5 ponto.
 As medidas são da página isolada no Playwright WebKit, não do WKWebView do app.
 
 A primeira sondagem, anterior à otimização de pausas dos gestos, está em
-[histórico `f35a23d`](https://github.com/kiwi-init/kiwinotes/tree/f35a23d/docs/design/brand/kiwi-cat/caretas/diagnostico-inicial/). Ela foi avaliada sob o teto antigo de +0,5 e ficou como diagnóstico histórico. As duas séries concluídas estão abaixo.
+`diagnostico-inicial/`, no commit `f35a23d` do repo antigo. Ela foi avaliada sob o teto antigo de +0,5 e ficou como diagnóstico histórico. As duas séries concluídas estão abaixo.
 
 ## CPU da implementação retida: aceita no teto revisto
 
@@ -152,9 +154,9 @@ ou trajetórias. A rodada não demonstrou ganho de CPU; o caminho adicional
 foi revertido por acrescentar complexidade (decisão delegada no Kiwi #9265).
 A implementação retida usa os olhos individuais de `45a0f21`.
 
-[Imagem do experimento descartado: antes à esquerda, camada compartilhada à direita](https://github.com/kiwi-init/kiwinotes/blob/f35a23d/docs/design/brand/kiwi-cat/caretas/desempenho/otimizacao-piscar/comparacao-olhos.webp)
+Imagem do experimento descartado, antes à esquerda e camada compartilhada à direita: `comparacao-olhos.webp`, no commit `f35a23d` do repo antigo.
 
-[Comparação arquivada](https://github.com/kiwi-init/kiwinotes/blob/f35a23d/docs/design/brand/kiwi-cat/caretas/desempenho/otimizacao-piscar/pixel-diff.json): os sete outros
+Comparação arquivada (`pixel-diff.json`, no commit `f35a23d` do repo antigo): os sete outros
 estados são idênticos pixel a pixel; as diferenças dos olhos em repouso
 ficam nas bordas suavizadas (média ≤0,087/255 por canal nas poses verificadas).
 O comparador nativo confirmou quatro efeitos antes e dois depois.
