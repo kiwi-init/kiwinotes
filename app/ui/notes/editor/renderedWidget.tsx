@@ -25,7 +25,7 @@ import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/
 
 import { externalUrl, openableUrl, parseLinks } from "../links.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
-import { editorFocused, focusEditorNow, type LinkResolver, linksChanged } from "./livePreview.ts";
+import { editorFocused, focusEditorNow, itemHasGap, type LinkResolver, linksChanged, listItemAtLine } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
 import { COPIED_MS } from "./code-copy.ts";
 import { type Callout, parseCallout } from "./callouts.ts";
@@ -466,12 +466,14 @@ class RenderedWidget extends WidgetType {
     readonly markdown: string,
     readonly source: string,
     readonly actions: RenderedActions,
+    /** O bloco começa num item que não abre a lista (o cursor cortou a lista em cima dele): os 2 px entre itens. */
+    readonly listGap = false,
   ) {
     super();
   }
 
   eq(other: RenderedWidget) {
-    return other.markdown === this.markdown && other.source === this.source;
+    return other.markdown === this.markdown && other.source === this.source && other.listGap === this.listGap;
   }
 
   get estimatedHeight() {
@@ -481,6 +483,7 @@ class RenderedWidget extends WidgetType {
   toDOM(view: EditorView) {
     const dom = document.createElement("div");
     dom.className = "cm-rendered";
+    dom.classList.toggle("cm-rendered-gap", this.listGap);
     const root = createRoot(dom);
     roots.set(dom, root);
     widgets.set(dom, this);
@@ -495,6 +498,7 @@ class RenderedWidget extends WidgetType {
     const root = roots.get(dom);
     if (!root) return false;
     widgets.set(dom, this);
+    dom.classList.toggle("cm-rendered-gap", this.listGap);
     this.draw(root, view, dom);
     return true;
   }
@@ -688,7 +692,9 @@ export function buildRendered(state: EditorState, resolver: LinkResolver, action
     // O H1 igual ao título está escondido (spec #12626): o bloco dele não se desenha.
     if (title && b.from >= title.from && b.to <= title.to) continue;
     const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t), notes);
-    out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions), block: true }).range(b.from, b.to));
+    const item = listItemAtLine(state, tree, b.from);
+    const gap = !!item && item.from < b.to && itemHasGap(item);
+    out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions, gap), block: true }).range(b.from, b.to));
   }
   for (const m of imagesUnderCursor(state, focused, tree)) {
     out.push(Decoration.widget({ widget: new ImagesUnderWidget(m.markdown, actions), block: true, side: 1 }).range(m.to));
@@ -944,6 +950,7 @@ function footnoteHover(actions: RenderedActions) {
 const renderedTheme = EditorView.theme({
   // Sem margem (o CodeMirror mede sem ela); `cursor: text` porque o clique edita.
   ".cm-rendered": { cursor: "text", padding: "0", minWidth: "0", overflowWrap: "anywhere" },
+  ".cm-rendered.cm-rendered-gap": { paddingTop: "2px" },
   // T5299 (#212): o bloco de código não quebra; ele rola dentro dele, nunca a nota.
   ".cm-rendered pre": { maxWidth: "100%", overflowX: "auto", overflowWrap: "normal" },
   // O Copiar do bloco de código (T6379): no canto, fora do que rola, e só com o mouse em cima (ou depois de copiar).
