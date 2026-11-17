@@ -20,7 +20,7 @@ import { markdownStructure, headingFor, type NoteHeading } from "../../shared/ma
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
 import { isTextNote, searchFileNames, type VaultReader } from "./reader.ts";
 import type { VaultFile } from "../../notes/vault.ts";
-import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument } from "./files.ts";
+import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument, splitZipPath } from "./files.ts";
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
 import { FACT_MAX_CHARS, MEMORY_MAX, MemoryError } from "../memory.ts";
@@ -268,7 +268,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "files_read",
     title: "Ler um arquivo do cofre",
-    description: `Lê uma planilha, um documento ou um pdf do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página. Devolve o sumário (as abas, as páginas, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md ou .txt), use notes_read.`,
+    description: `Lê um arquivo do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página; o pptx, o texto de cada slide; o html, o texto sem as tags; o json e o xml, o texto. O zip devolve a lista do que há nele; um arquivo de dentro se lê pelo caminho do zip com o de dentro (ex.: Projetos/fotos.zip/dentro/tabela.csv). Devolve o sumário (as abas, as páginas, os slides, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md ou .txt do cofre), use notes_read.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -1275,9 +1275,11 @@ async function run(
       const a = args(raw, ["caminho", "parte"]);
       const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
       const parte = int(a, "parte", 1, Number.MAX_SAFE_INTEGER) ?? 1;
-      if (/\.md$/i.test(path)) throw new ToolError("E_BAD_ARGS", `${path} é uma nota: leia com \`notes_read\``);
+      // Um arquivo de dentro de um zip (T17600): o disco lê o zip, e o readDocument abre o de dentro.
+      const inZip = splitZipPath(path);
+      if (!inZip && /\.md$/i.test(path)) throw new ToolError("E_BAD_ARGS", `${path} é uma nota: leia com \`notes_read\``);
       if (!fileFormat(path)) throw new ToolError("E_BAD_ARGS", `o \`files_read\` lê só ${FILE_FORMATS.join(", ")}`);
-      const f = await reader.file(path);
+      const f = await reader.file(inZip ? inZip.zip : path);
       if ("tooLarge" in f || f.size > FILES_READ_MAX_BYTES)
         throw new ToolError("E_TOO_LARGE", `${path} tem ${Math.round(f.size / 1024 / 1024)} MB, e o agente lê arquivos de até ${FILES_READ_MAX_BYTES / 1024 / 1024} MB`);
       if (!("base64" in f)) throw new ToolError("E_FAILED", `não deu para ler ${path}`);

@@ -14,11 +14,13 @@ import { KIWI_TOOLS, kiwiTools, LIST_PAGE, READ_MAX_CHARS, runKiwiTool, SEARCH_M
 import { readDocument } from "./files.ts";
 import { SecretGuard } from "../../guardrail/filter.ts";
 import * as XLSX from "xlsx";
+import { deflateRawSync } from "node:zlib";
 import { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow } from "docx";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { KiwiToolServer, MCP_VERSIONS, TOKEN_HEADER, type KiwiMcpServerConfig, type ToolCallEvent } from "./server.ts";
 import { tempDir } from "../../../test/tmp.ts";
 import { asKiwi } from "./as-kiwi.ts";
+import { resolveKiwiCall } from "./kiwi-tool.ts";
 
 const dirs: string[] = [];
 const servers: KiwiToolServer[] = [];
@@ -500,6 +502,70 @@ async function docxBytes(): Promise<Uint8Array> {
   });
   return new Uint8Array(await Packer.toBuffer(doc));
 }
+/** Um zip feito à mão (T17600): `deflate` comprime; `declara` mente o tamanho aberto no diretório, como um zip bomba. */
+function zipBytes(files: Record<string, string | Uint8Array>, opts: { deflate?: boolean; declara?: number } = {}): Uint8Array {
+  const enc = new TextEncoder();
+  const locals: Uint8Array[] = [];
+  const centrals: Uint8Array[] = [];
+  let at = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const raw = typeof content === "string" ? enc.encode(content) : content;
+    const data = opts.deflate ? new Uint8Array(deflateRawSync(raw)) : raw;
+    const n = enc.encode(name);
+    const crc = Bun.hash.crc32(raw);
+    const size = opts.declara ?? raw.length;
+    const local = new Uint8Array(30 + n.length + data.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(8, opts.deflate ? 8 : 0, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, n.length, true);
+    local.set(n, 30);
+    local.set(data, 30 + n.length);
+    const central = new Uint8Array(46 + n.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(10, opts.deflate ? 8 : 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, n.length, true);
+    cv.setUint32(42, at, true);
+    central.set(n, 46);
+    locals.push(local);
+    centrals.push(central);
+    at += local.length;
+  }
+  const dirSize = centrals.reduce((t, c) => t + c.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, centrals.length, true);
+  ev.setUint16(10, centrals.length, true);
+  ev.setUint32(12, dirSize, true);
+  ev.setUint32(16, at, true);
+  const out = new Uint8Array(at + dirSize + 22);
+  let o = 0;
+  for (const part of [...locals, ...centrals, end]) {
+    out.set(part, o);
+    o += part.length;
+  }
+  return out;
+}
+/** Um pptx mínimo: um slide por item, cada um com os parágrafos; os pedaços de um parágrafo vêm em `<a:t>` separados. */
+function pptxBytes(slides: string[][][]): Uint8Array {
+  const files: Record<string, string> = { "[Content_Types].xml": "<Types/>", "ppt/presentation.xml": "<p:presentation/>" };
+  slides.forEach((paras, i) => {
+    const body = paras.map((runs) => `<a:p>${runs.map((r) => `<a:r><a:rPr lang="pt-BR"/><a:t>${r}</a:t></a:r>`).join("")}</a:p>`).join("");
+    files[`ppt/slides/slide${i + 1}.xml`] = `<?xml version="1.0"?><p:sld><p:cSld><p:spTree><p:sp><p:txBody>${body}</p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
+  });
+  return zipBytes(files, { deflate: true });
+}
 async function pdfBytes(pages: string[][]): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -609,5 +675,108 @@ describe("files_read: o agente lê planilhas, documentos e pdfs do cofre (spec #
     await expect(runKiwiTool({ reader: s.reader }, "files_read", { caminho: "Projetos/Kiwi.md" })).rejects.toThrow("notes_read");
     await expect(runKiwiTool({ reader: s.reader }, "files_read", { caminho: "Docs/grande.txt" })).rejects.toMatchObject({ code: "E_TOO_LARGE" });
     await expect(runKiwiTool({ reader: s.reader }, "files_read", { caminho: "Docs/nada.csv" })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+  });
+});
+
+describe("files_read: pptx, json, xml, html, zip e o md de dentro do zip (T17600, spec #17587)", () => {
+  async function vault(files: Record<string, Uint8Array | string>) {
+    const s = await setup();
+    for (const [rel, data] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(s.root, rel)), { recursive: true });
+      writeFileSync(path.join(s.root, rel), data);
+    }
+    return s;
+  }
+
+  test("o pptx vira o texto de cada slide, uma parte por slide, na ordem dos números (o 10 depois do 2)", async () => {
+    const slides = Array.from({ length: 10 }, (_, i) => [[`Slide número ${i + 1}`]]);
+    slides[0] = [["Plano da ", "mudança"], ["Ana &amp; Bruno"]];
+    const { reader } = await vault({ "Apresentações/plano.pptx": pptxBytes(slides) });
+    const r = await runKiwiTool({ reader }, "files_read", { caminho: "Apresentações/plano.pptx" });
+    expect(r.value).toMatchObject({ formato: "pptx", sumario: { slides: 10 }, partes: 10, rotulo: "Slide 1", texto: "Plano da mudança\nAna & Bruno" });
+    expect((r.value.indice as { rotulo: string }[]).map((x) => x.rotulo)).toEqual(Array.from({ length: 10 }, (_, i) => `Slide ${i + 1}`));
+    expect((await runKiwiTool({ reader }, "files_read", { caminho: "Apresentações/plano.pptx", parte: 10 })).value.texto).toBe("Slide número 10");
+    await expect(readDocument("x.pptx", new TextEncoder().encode("não sou zip"), 1000)).rejects.toMatchObject({ code: "E_BAD_FILE" });
+  });
+
+  test("o json vem formatado; um json quebrado vem como está, com aviso", async () => {
+    const { reader } = await vault({ "Dados/config.json": '{"nome":"Projeto X","itens":[1,2]}', "Dados/quebrado.json": '{"nome": ' });
+    const r = await runKiwiTool({ reader }, "files_read", { caminho: "Dados/config.json" });
+    expect(r.value).toMatchObject({ formato: "json", texto: '{\n  "nome": "Projeto X",\n  "itens": [\n    1,\n    2\n  ]\n}' });
+    const q = await runKiwiTool({ reader }, "files_read", { caminho: "Dados/quebrado.json" });
+    expect(q.value).toMatchObject({ formato: "json", texto: '{"nome": ' });
+    expect(q.value.aviso).toContain("Não é um JSON válido");
+  });
+
+  test("o xml vem como texto", async () => {
+    const xml = '<?xml version="1.0"?>\n<pedido id="7">\n  <cliente>Ana</cliente>\n</pedido>';
+    const { reader } = await vault({ "Dados/pedido.xml": xml });
+    const r = await runKiwiTool({ reader }, "files_read", { caminho: "Dados/pedido.xml" });
+    expect(r.value).toMatchObject({ formato: "xml", texto: xml, sumario: { linhas: 4 } });
+  });
+
+  test("o html vira o texto sem as tags: sem script nem estilo, os títulos com #, a lista com -, as entidades abertas", async () => {
+    const html = `<!doctype html><html><head><title>Esconder</title><style>p{color:red}</style></head><body>
+<script>alert("não")</script><h1>Relatório</h1><p>Ana &amp; Bruno&nbsp;foram <b>juntos</b>.</p><!-- nota escondida -->
+<ul><li>Primeiro</li><li>Segundo &#8212; fim</li></ul></body></html>`;
+    const { reader } = await vault({ "Web/pagina.html": html, "Web/velha.htm": "<p>Antiga</p>" });
+    const r = await runKiwiTool({ reader }, "files_read", { caminho: "Web/pagina.html" });
+    expect(r.value.formato).toBe("html");
+    expect(r.value.texto).toBe("# Relatório\nAna & Bruno foram juntos.\n- Primeiro\n- Segundo — fim");
+    for (const sujo of ["<", "alert", "color", "escondida", "Esconder"]) expect(r.value.texto as string).not.toContain(sujo);
+    expect((await runKiwiTool({ reader }, "files_read", { caminho: "Web/velha.htm" })).value).toMatchObject({ formato: "html", texto: "Antiga" });
+  });
+
+  test("o zip devolve a lista do que há nele; um arquivo de dentro (csv, md) se lê pelo caminho do zip com o de dentro", async () => {
+    const zip = zipBytes(
+      {
+        "tabela.csv": "Nome;Idade\nAna;30\n",
+        "docs/leia.md": "# Leia\nO texto de dentro.",
+        "docs/": "",
+        "foto.png": "x",
+        "__MACOSX/._tabela.csv": "x",
+        "outro.zip": zipBytes({ "a.txt": "a" }),
+      },
+      { deflate: true },
+    );
+    const { reader } = await vault({ "Pacotes/entrega.zip": zip });
+    const lista = await runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/entrega.zip" });
+    expect(lista.value).toMatchObject({ formato: "zip", sumario: { arquivos: 4 } });
+    const linhas = (lista.value.texto as string).split("\n");
+    expect(linhas).toEqual([
+      "- tabela.csv (18 B) · csv",
+      "- docs/leia.md (25 B) · md",
+      "- foto.png (1 B) · sem leitura",
+      expect.stringMatching(/^- outro\.zip \(\d+ B\) · zip$/),
+    ]);
+    expect(lista.value.aviso).toContain("Pacotes/entrega.zip/<arquivo>");
+
+    const csv = await runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/entrega.zip/tabela.csv" });
+    expect(csv.value).toMatchObject({ caminho: "Pacotes/entrega.zip/tabela.csv", formato: "csv", texto: "| Nome | Idade |\n| --- | --- |\n| Ana | 30 |" });
+    const md = await runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/entrega.zip/docs/leia.md" });
+    expect(md.value).toMatchObject({ formato: "md", texto: "# Leia\nO texto de dentro." });
+    // Pelo kiwi ler, o md de dentro do zip é arquivo; o md do cofre continua nota.
+    expect(resolveKiwiCall({ fazer: "ler", alvo: "Pacotes/entrega.zip/docs/leia.md" }).tool).toBe("files_read");
+    expect(resolveKiwiCall({ fazer: "ler", alvo: "Projetos/Kiwi.md" }).tool).toBe("notes_read");
+    expect(resolveKiwiCall({ fazer: "ler", alvo: "Pacotes/entrega.zip" }).tool).toBe("files_read");
+    expect(resolveKiwiCall({ fazer: "ler", alvo: "Web/pagina.htm" }).tool).toBe("files_read");
+
+    await expect(runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/entrega.zip/nada.csv" })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+    await expect(runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/entrega.zip/foto.png" })).rejects.toMatchObject({ code: "E_BAD_ARGS" });
+    await expect(runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/entrega.zip/outro.zip" })).rejects.toThrow("um zip de cada vez");
+    await expect(runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/entrega.zip/outro.zip/a.txt" })).rejects.toThrow("um zip de cada vez");
+    await expect(runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/sumiu.zip/tabela.csv" })).rejects.toMatchObject({ code: "E_NOT_FOUND" });
+  });
+
+  test("zip bomba: o que sai descompactado para no limite de 20 MB, mesmo com o tamanho declarado pequeno", async () => {
+    const bomba = zipBytes({ "grande.txt": new Uint8Array(21 * 1024 * 1024) }, { deflate: true, declara: 10 });
+    expect(bomba.length).toBeLessThan(200 * 1024);
+    const { reader } = await vault({ "Pacotes/bomba.zip": bomba, "Pacotes/bomba.pptx": zipBytes({ "ppt/slides/slide1.xml": new Uint8Array(21 * 1024 * 1024) }, { deflate: true, declara: 10 }) });
+    const e = await runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/bomba.zip/grande.txt" }).catch((x) => x);
+    expect(e.code).toBe("E_TOO_LARGE");
+    await expect(runKiwiTool({ reader }, "files_read", { caminho: "Pacotes/bomba.pptx" })).rejects.toMatchObject({ code: "E_TOO_LARGE" });
+    // O que cabe abre, guardado (sem compressão) também.
+    const ok = await readDocument("a.zip/b.txt", zipBytes({ "b.txt": "oi" }), 1000);
+    expect(ok.parts[0]!.text).toBe("oi");
   });
 });

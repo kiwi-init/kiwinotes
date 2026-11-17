@@ -16,7 +16,7 @@
 // Nos textos que o Kiwi manda ao agente, uma ação se escreve `kiwi ler/sumario`: fazer "ler", com opcoes.como "sumario".
 
 import { KIWI_TOOLS, runKiwiTool, ToolError, type KiwiToolContext, type KiwiToolName, type ToolResult } from "./tools.ts";
-import { FILE_FORMATS } from "./files.ts";
+import { fileFormat, splitZipPath } from "./files.ts";
 import { servedSchemaOf } from "./served-schema.ts";
 
 /** O nome da ferramenta para o agente: no Claude Code, `mcp__kiwi__kiwi`. */
@@ -182,7 +182,11 @@ export function resolveKiwiCall(raw: unknown): KiwiCall {
   if (!como && !antigo) como = COMO_DO_SINONIMO[fold(a.fazer)];
   // Um escrever com o trecho de antes (opcoes.de) é a troca de um trecho, nunca o acrescentar padrão (T14650).
   if (!como && fazer === "escrever" && (opcoes.de !== undefined || opcoes.old !== undefined)) como = "trecho";
-  if (!como && fazer === "ler" && typeof a.alvo === "string" && FILE_FORMATS.some((f) => a.alvo!.toString().toLowerCase().endsWith(`.${f}`) && f !== "txt")) como = "arquivo";
+  // O txt e o md do cofre são notas; o de dentro de um zip é arquivo (T17600).
+  if (!como && fazer === "ler" && typeof a.alvo === "string") {
+    const f = fileFormat(a.alvo);
+    if (f && (!["txt", "md"].includes(f) || splitZipPath(a.alvo))) como = "arquivo";
+  }
   const acao = como ? ACOES.find((x) => x.fazer === fazer && fold(x.como) === como) : ACOES.find((x) => x.fazer === fazer && x.padrao);
   if (!acao) throw new ToolError("E_BAD_ARGS", `em fazer "${fazer}", opcoes.como é um de: ${listaComos(fazer)}`);
 
