@@ -159,22 +159,29 @@ export function Settings({ request = null }: { request?: SettingsRequest | null 
   }, []);
 
   // Um link de dentro do hub: abre o assunto e rola até a linha.
+  const pendingRow = useRef<{ topic: SettingsTopic; row: string } | null>(null);
+  const stopReveal = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!request) return;
     open(request.topic);
-    if (!request.row) return;
-    let stop: (() => void) | undefined;
-    const frame = requestAnimationFrame(() => {
-      const panel = panels.current[request.topic];
-      if (panel) stop = reveal(panel, request.row!);
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      stop?.();
-    };
+    stopReveal.current?.();
+    stopReveal.current = null;
+    pendingRow.current = request.row ? { topic: request.topic, row: request.row } : null;
     // Só um pedido novo (o `n`) abre de novo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request?.n]);
+  // A rolagem espera o render em que o assunto já está montado e à vista (T17183). Antes ela ia um frame depois do
+  // `open`, e com o React atrasado achava o painel ainda sem montar (sem rolar nem destacar) ou ainda escondido (o
+  // scrollIntoView não faz nada, e a linha destacada ficava fora da vista).
+  useEffect(() => {
+    const want = pendingRow.current;
+    if (!want || want.topic !== topic) return;
+    const panel = panels.current[want.topic];
+    if (!panel || panel.hidden) return;
+    pendingRow.current = null;
+    stopReveal.current = reveal(panel, want.row);
+  });
+  useEffect(() => () => stopReveal.current?.(), []);
 
   // ↑ e ↓ andam pela lista; Enter (o botão) abre; Tab sai da lista para o painel.
   const onListKey = (e: React.KeyboardEvent) => {
