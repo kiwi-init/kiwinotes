@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentStatus, AgentTurnEvent } from "../../src/shared/ui-contract.ts";
 import { DEFAULT_AGENT_MEETING_SETTINGS } from "../../src/store/settings.ts";
 import {
+  prepareHint,
   adapterLine,
   applyTurn,
   canTest,
@@ -320,4 +321,10 @@ test("Pesquisar na web (spec #11908): o texto diz o que muda e que o Kiwi não c
   expect(toolStatus("web")).toBe("Pesquisando na web…");
   expect(toolStatus("notes_edit", "Ideias")).toBe("Trocando um trecho em Ideias…");
   expect(toolStatus("notes_section_merge")).toBe("Arrumando as seções de uma nota…");
+});
+
+test("o Esforço no onboarding antes de o agente dizer as opções: abrindo, ou Padrão com o porquê (spec #16793)", () => {
+  expect(prepareHint("opening")).toContain("Abrindo o Claude Code");
+  expect(prepareHint("failed")).toContain("fica no Padrão");
+  expect(prepareHint("failed")).toContain("Ajustes › Agente");
 });

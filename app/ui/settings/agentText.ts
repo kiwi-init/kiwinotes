@@ -104,7 +104,7 @@ export function modelHint(s: Pick<AgentStatus, "model" | "models">): string {
 }
 
 /** Os nomes dos esforços em português (spec #16793); um que o Kiwi não conhece fica com o nome que o agente deu. */
-const EFFORT_NAMES: Record<string, string> = {
+export const EFFORT_NAMES: Record<string, string> = {
   default: "Padrão",
   low: "Baixo",
   medium: "Médio",
@@ -112,6 +112,16 @@ const EFFORT_NAMES: Record<string, string> = {
   xhigh: "Muito alto",
   max: "Máximo",
 };
+
+/** O que o onboarding sabe da sessão aberta sem pedido: abrindo, aberta ou não deu. */
+export type Prepare = "opening" | "ready" | "failed";
+
+/** A frase do Esforço no onboarding, antes de o agente dizer as opções do modelo. */
+export function prepareHint(prepare: Prepare): string {
+  return prepare === "opening"
+    ? "Abrindo o Claude Code para ver os níveis de esforço deste modelo…"
+    : "Não deu para abrir o Claude Code agora, então fica no Padrão. Dá para trocar em Ajustes › Agente depois do primeiro pedido.";
+}
 
 /**
  * As escolhas do Esforço para o modelo escolhido (spec #16793): as que o agente ofereceu nele, em português. `null`

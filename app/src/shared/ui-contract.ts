@@ -236,7 +236,8 @@ export type { NoteModel };
 // 1.81.0 (T16769, spec #16759): o `intro.layout`, onde o hub vai aparecer, para a moldura da intro crescer até ele.
 //   Só acréscimo.
 // 1.82.0 (T16801, spec #16793): o esforço por modelo, `effortByModel` e `efforts` no `AgentStatus`. O `effort` passa a
-//   ser o do modelo escolhido, e o `agent.configure({ effort })` grava o do modelo. Só acréscimo.
+//   ser o do modelo escolhido, e o `agent.configure({ effort })` grava o do modelo. O `agent.prepare` abre o
+//   programa sem pedido, para o onboarding. Só acréscimo.
 export const UI_CONTRACT_VERSION = "1.82.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
@@ -667,6 +668,8 @@ export interface UiCapabilities {
   "agent.usage": { args: Record<string, never>; result: AgentUsageView };
   /** "Atualizar" (1.54.0): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica. */
   "agent.usageRefresh": { args: Record<string, never>; result: AgentUsageView };
+  /** Abre o programa do agente sem pedido (1.81.0, spec #16793): lista os modelos e os esforços no onboarding. Não gasta o plano. */
+  "agent.prepare": { args: Record<string, never>; result: AgentStatus };
   /** "Apagar o gasto guardado" (1.54.0): só os pedidos guardados; o estado do limite e o registro do agente ficam. */
   "agent.usageClear": { args: Record<string, never>; result: AgentUsageView };
   /** As trilhas (1.79.0, T14682): as palavras que levaram o agente a uma nota, só no Mac. */
@@ -1199,6 +1202,7 @@ export const UI_CAPABILITIES = [
   "agent.noticeSet",
   "agent.usage",
   "agent.usageRefresh",
+  "agent.prepare",
   "agent.usageClear",
   "agent.trails",
   "agent.trailDelete",

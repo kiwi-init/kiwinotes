@@ -164,6 +164,8 @@ export const api = {
     usage: () => invoke("agent.usage", {}),
     usageRefresh: () => invoke("agent.usageRefresh", {}),
     usageClear: () => invoke("agent.usageClear", {}),
+    /** Abre o programa sem pedido (1.81.0, spec #16793): o onboarding lista os modelos e os esforços. */
+    prepare: () => invoke("agent.prepare", {}),
     /** As trilhas (1.79.0, T14682): visíveis e apagáveis, uma a uma. */
     trails: () => invoke("agent.trails", {}),
     trailDelete: (id: string) => invoke("agent.trailDelete", { id }),

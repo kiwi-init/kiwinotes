@@ -314,8 +314,11 @@
       "name": "o opus no esforço máximo"
     },
     {
-      "screenshot": "10b-esforco.png",
-      "selector": ".kn-section:has(h2:text-is('Agente'))"
+      "click": ".kn-row:has(.kn-row-label:text-is('Esforço')) .kn-row-label",
+      "name": "rola até o Modelo e o Esforço, para o print"
+    },
+    {
+      "screenshot": "10b-esforco.png"
     },
     {
       "select": ".kn-row:has(.kn-row-label:text-is('Modelo')) select",
@@ -390,8 +393,11 @@
       "count": 0
     },
     {
-      "screenshot": "10c-sem-esforco.png",
-      "selector": ".kn-section:has(h2:text-is('Agente'))"
+      "click": ".kn-row:has(.kn-row-label:text-is('Esforço')) .kn-row-label",
+      "name": "rola até o Modelo e o Esforço, para o print"
+    },
+    {
+      "screenshot": "10c-sem-esforco.png"
     },
     {
       "click": ".kn-row:has(.kn-row-label:text-is('Ligar o agente')) [role=switch]",

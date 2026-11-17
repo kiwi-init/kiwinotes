@@ -459,6 +459,47 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     await askAndWait(m, "dois");
     expect(sets(m).slice(before)).toEqual([["effort", "max"]]);
   });
+
+  test("o onboarding: o prepare abre a sessão sem pedido, lista os esforços do modelo escolhido, e a escolha fica em Ajustes", async () => {
+    const m = make();
+    await readyNow(m);
+    const prompts = () => m.log().filter((l) => l.method === "session/prompt").length;
+    const st = await m.svc.prepare();
+    expect(st.program).toBe("open");
+    expect(st.efforts.default?.length).toBeGreaterThan(0);
+    // Trocar o modelo e abrir de novo: a sessão vai para ele, e os esforços dele aparecem, sem pedido nenhum.
+    await m.svc.configure({ model: "sonnet" });
+    expect((await m.svc.status()).efforts.sonnet).toBeUndefined();
+    const st2 = await m.svc.prepare();
+    expect(st2.efforts.sonnet?.map((e) => e.value)).toEqual(["default", "low", "medium", "high"]);
+    expect(st2.session).toEqual({ model: "sonnet", effort: "default" });
+    await m.svc.configure({ effort: "low" });
+    await m.svc.prepare();
+    expect(prompts()).toBe(0);
+    // O que Ajustes › Agente lê: o mesmo estado, com o modelo e o esforço escolhidos no onboarding.
+    const settings = await m.svc.status(true);
+    expect(settings.model).toBe("sonnet");
+    expect(settings.effort).toBe("low");
+    expect(settings.effortByModel).toEqual({ sonnet: "low" });
+    expect(settings.session).toEqual({ model: "sonnet", effort: "low" });
+  });
+
+  test("o prepare com o agente desligado falha, e com um pedido rodando só devolve o estado", async () => {
+    const off = make();
+    await expect(off.svc.prepare()).rejects.toMatchObject({ code: "E_AGENT_DISABLED" });
+    const m = make();
+    await readyNow(m);
+    await m.svc.prepare();
+    const words = Array.from({ length: 12 }, (_, i) => `p${i}`).join(" ");
+    const { id } = await m.svc.ask(`/conta ${words}`);
+    await until(() => m.turns.some((e) => e.id === id && e.type === "text"));
+    await m.svc.configure({ model: "haiku" });
+    const before = sets(m).length;
+    expect((await m.svc.prepare()).session?.model).toBe("default");
+    expect(sets(m).slice(before)).toEqual([]);
+    await until(() => m.turns.some((e) => e.id === id && (e.type === "done" || e.type === "error")));
+    expect(m.turns.find((e) => e.id === id && (e.type === "done" || e.type === "error"))).toMatchObject({ type: "done", stopReason: "end_turn" });
+  });
 });
 
 describe("os modelos que o agente oferece (T8762)", () => {

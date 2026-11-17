@@ -1030,6 +1030,36 @@ export class AgentService {
   }
 
   /**
+   * O programa aberto sem pedido nenhum (`agent.prepare`, spec #16793): o `session/new` do ACP já traz os modelos e os
+   * esforços, então o onboarding mostra o Modelo e o Esforço logo depois de conectar. Aplica o modelo e o esforço
+   * escolhidos (o esforço de um modelo novo só aparece depois de a sessão estar nele). Nada vai ao agente e não gasta
+   * o plano. Com um pedido rodando, só devolve o estado: o próximo pedido aplica a escolha.
+   */
+  async prepare(): Promise<AgentStatus> {
+    const s = await this.d.settings.load();
+    if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
+    if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
+    if (this.turn) return this.status();
+    try {
+      if (!this.host?.running) await this.openProgram();
+      else {
+        const wanted = this.wantedConfig(s);
+        if (!this.turn && this.host && (wanted.model !== this.applied.model || wanted.effort !== this.applied.effort)) {
+          await this.host.applyConfig(wanted);
+          this.applied = { ...wanted };
+          this.rememberModels(this.host);
+        }
+      }
+    } catch (e) {
+      throw fromAgentError(e, this.name);
+    } finally {
+      if (!this.turn) this.armIdle();
+      this.emitStatus();
+    }
+    return this.status();
+  }
+
+  /**
    * "Atualizar" (`agent.usageRefresh`): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica.
    * Vai como um pedido interno: fora do registro, sem evento de pedido e sem balão. Nada da pessoa vai junto.
    * Um pedido da pessoa passa na frente (T16712): o `/usage` não vai, ou é cancelado, e o medidor fica com o número que
