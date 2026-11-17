@@ -1033,18 +1033,21 @@ export class AgentService {
    * O programa aberto sem pedido nenhum (`agent.prepare`, spec #16793): o `session/new` do ACP já traz os modelos e os
    * esforços, então o onboarding mostra o Modelo e o Esforço logo depois de conectar. Aplica o modelo e o esforço
    * escolhidos (o esforço de um modelo novo só aparece depois de a sessão estar nele). Nada vai ao agente e não gasta
-   * o plano. Com um pedido rodando, só devolve o estado: o próximo pedido aplica a escolha.
+   * o plano. Com um pedido rodando, só devolve o estado: o próximo pedido aplica a escolha. O mesmo com um `/usage` andando.
    */
   async prepare(): Promise<AgentStatus> {
     const s = await this.d.settings.load();
     if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
     if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
-    if (this.turn) return this.status();
+    // Um pedido, o `/usage` do medidor (T16712) ou o de depois do pedido: o agente está ocupado, e o próximo pedido
+    // aplica a escolha (revisão #17024).
+    const busy = () => !!this.turn || !!this.usageRun || !!this.limitProbe;
+    if (busy()) return this.status();
     try {
       if (!this.host?.running) await this.openProgram();
       else {
         const wanted = this.wantedConfig(s);
-        if (!this.turn && this.host && (wanted.model !== this.applied.model || wanted.effort !== this.applied.effort)) {
+        if (!busy() && this.host && (wanted.model !== this.applied.model || wanted.effort !== this.applied.effort)) {
           await this.host.applyConfig(wanted);
           this.applied = { ...wanted };
           this.rememberModels(this.host);
@@ -1053,7 +1056,7 @@ export class AgentService {
     } catch (e) {
       throw fromAgentError(e, this.name);
     } finally {
-      if (!this.turn) this.armIdle();
+      if (!busy()) this.armIdle();
       this.emitStatus();
     }
     return this.status();

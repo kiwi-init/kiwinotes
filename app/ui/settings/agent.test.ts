@@ -17,6 +17,7 @@ import {
   IDLE_TEST,
   effortHint,
   effortOptions,
+  effortValue,
   economyHint,
   modelAbout,
   modelHint,
@@ -159,17 +160,39 @@ describe("o esforço de cada modelo (spec #16793)", () => {
   };
 
   test("as escolhas do modelo escolhido, em português, e o nome do agente quando o Kiwi não tem a tradução", () => {
-    expect(effortOptions({ ...base, model: "sonnet", effort: "low", efforts })).toEqual([
+    expect(effortOptions({ ...base, model: "sonnet", efforts })).toEqual([
       { value: "default", label: "Padrão" },
       { value: "low", label: "Baixo" },
       { value: "medium", label: "Médio" },
       { value: "high", label: "Alto" },
     ]);
-    expect(effortOptions({ ...base, model: "opus", effort: "max", efforts })?.map((o) => o.label)).toEqual(["Padrão", "Muito alto", "Máximo", "Ultra Think"]);
+    expect(effortOptions({ ...base, model: "opus", efforts })?.map((o) => o.label)).toEqual(["Padrão", "Muito alto", "Máximo", "Ultra Think"]);
   });
 
-  test("um esforço salvo que o modelo não oferece continua na lista, para não sumir da tela", () => {
-    expect(effortOptions({ ...base, model: "sonnet", effort: "max", efforts })?.map((o) => o.value)).toEqual(["max", "default", "low", "medium", "high"]);
+  test("um esforço salvo que o modelo não tem não aparece como se valesse: o seletor mostra o que vale, e a linha diz (revisão #17024)", () => {
+    // A migração: o ajuste antigo com `effort: "high"`, e o haiku, que vai até `medium`.
+    const haiku = { ...efforts, haiku: [{ value: "low", name: "Low" }, { value: "medium", name: "Medium" }] };
+    const s = { ...base, model: "haiku", effort: "high", efforts: haiku };
+    expect(effortOptions(s)?.map((o) => o.value)).not.toContain("high");
+    // Sem a sessão no modelo: o Padrão. Com ela: o esforço que o agente diz.
+    expect(effortValue(s)).toBe("default");
+    expect(effortHint(s)).toContain("O nível salvo, Alto, não existe neste modelo: vale o Padrão.");
+    const live = { ...s, session: { model: "haiku", effort: "medium" } };
+    expect(effortValue(live)).toBe("medium");
+    expect(effortHint(live)).toContain("O nível salvo, Alto, não existe neste modelo: vale o Médio.");
+    // O salvo que o modelo tem é o que aparece, sem a frase.
+    expect(effortValue({ ...s, effort: "low" })).toBe("low");
+    expect(effortHint({ ...s, effort: "low" })).not.toContain("não existe neste modelo");
+  });
+
+  test("o Padrão está sempre na lista, também quando o agente não manda o default (revisão #17024)", () => {
+    const haiku = { haiku: [{ value: "low", name: "Low" }, { value: "medium", name: "Medium" }] };
+    expect(effortOptions({ ...base, model: "haiku", efforts: haiku })).toEqual([
+      { value: "default", label: "Padrão" },
+      { value: "low", label: "Baixo" },
+      { value: "medium", label: "Médio" },
+    ]);
+    expect(effortValue({ ...base, model: "haiku", effort: "default", efforts: haiku })).toBe("default");
   });
 
   test("um modelo sem esforço não tem seletor, e a linha diz por quê; um modelo ainda não usado diz quando aparece", () => {

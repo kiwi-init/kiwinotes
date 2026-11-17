@@ -294,7 +294,9 @@ async function answerFromNotes(client: AgentContext, sessionId: string, question
 const MODELS = ["default", "opus", "fable", "sonnet", "haiku", "opus-legacy"];
 const EFFORTS = ["default", "low", "medium", "high", "xhigh", "max"];
 /** Os esforços de cada modelo (spec #16793); um modelo fora daqui tem todos. */
-const MODEL_EFFORTS: Record<string, string[]> = { sonnet: ["default", "low", "medium", "high"], haiku: ["default", "low", "medium"], "opus-legacy": [] };
+// O haiku não oferece `default` (spec #16793, revisão #17024): ao entrar nele, o esforço do agente é o `medium`.
+const MODEL_EFFORTS: Record<string, string[]> = { sonnet: ["default", "low", "medium", "high"], haiku: ["low", "medium"], "opus-legacy": [] };
+const MODEL_START: Record<string, string> = { haiku: "medium" };
 const effortsOf = (model: string) => MODEL_EFFORTS[model] ?? EFFORTS;
 const config = new Map<string, { model: string; effort: string }>();
 function configOf(sessionId: string) {
@@ -408,7 +410,7 @@ const app = agent({ name: "kiwi-fake-agent" })
     const c = configOf(params.sessionId);
     if (params.configId === "model" && typeof value === "string" && MODELS.includes(value)) {
       c.model = value;
-      if (!effortsOf(value).includes(c.effort)) c.effort = "default";
+      if (!effortsOf(value).includes(c.effort)) c.effort = MODEL_START[value] ?? "default";
     } else if (params.configId === "effort" && typeof value === "string" && effortsOf(c.model).includes(value)) c.effort = value;
     else throw RequestError.invalidParams(undefined, `não sei ${params.configId}=${String(value)}`);
     return { configOptions: configOptions(params.sessionId) };

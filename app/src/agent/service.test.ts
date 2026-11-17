@@ -29,6 +29,7 @@ import type { UndoNotes } from "./undo.ts";
 import { createHash } from "node:crypto";
 import { tempDir } from "../../test/tmp.ts";
 import { CAPSULE_MAX_TOKENS, modelTokens } from "./window.ts";
+import { effortHint, effortOptions, effortValue } from "../../ui/settings/agentText.ts";
 
 const services: AgentService[] = [];
 const registries: FakeRegistry[] = [];
@@ -459,6 +460,63 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     await askAndWait(m, "dois");
     expect(sets(m).slice(before)).toEqual([["effort", "max"]]);
   });
+
+  test("um esforço salvo que o modelo não tem não vale e não aparece como se valesse: a migração com high e o haiku (revisão #17024)", async () => {
+    const data = tmp();
+    await new SettingsStore(data).save({ agent: { ...DEFAULT_AGENT_SETTINGS, model: "opus", effort: "high" } as never });
+    const m = make({ data });
+    await readyNow(m);
+    await askAndWait(m, "um");
+    await m.svc.configure({ model: "haiku" });
+    await askAndWait(m, "dois");
+    const st = await m.svc.status();
+    // O haiku vai até medium: o high salvo não vai ao agente, e a sessão fica no esforço que ele pôs.
+    expect(st.effort).toBe("high");
+    expect(st.session).toEqual({ model: "haiku", effort: "medium" });
+    expect(sets(m)).not.toContainEqual(["effort", "high"]);
+    // O que a tela mostra: o que vale de fato, e a linha que diz que o salvo não existe neste modelo.
+    expect(effortOptions(st)?.map((o) => o.value)).not.toContain("high");
+    expect(effortValue(st)).toBe("medium");
+    expect(effortHint(st)).toContain("O nível salvo, Alto, não existe neste modelo: vale o Médio.");
+  });
+
+  test("o Padrão volta mesmo num modelo em que o agente não oferece o default: vale o esforço que o agente pôs nele (revisão #17024)", async () => {
+    const m = make();
+    await readyNow(m);
+    await m.svc.configure({ model: "haiku" });
+    await askAndWait(m, "um");
+    const st = await m.svc.status();
+    expect(st.efforts.haiku?.map((e) => e.value)).toEqual(["low", "medium"]);
+    expect(effortOptions(st)?.map((o) => o.value)).toEqual(["default", "low", "medium"]);
+    expect(st.session).toEqual({ model: "haiku", effort: "medium" });
+    await m.svc.configure({ effort: "low" });
+    await askAndWait(m, "dois");
+    expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "low" });
+    await m.svc.configure({ effort: "default" });
+    await askAndWait(m, "três");
+    expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "medium" });
+  });
+
+  test("o prepare com o /usage do medidor andando só devolve o estado: nada de set_config no meio do /usage (revisão #17024)", async () => {
+    const m = make({ env: { KIWI_FAKE_AGENT_USAGE_DELAY_MS: "1500" } });
+    await readyNow(m);
+    await m.svc.prepare();
+    const usages = () => m.log().filter((l) => l.method === "session/usage").length;
+    const usage = m.svc.usageRefresh();
+    await until(() => usages() === 1);
+    await m.svc.configure({ model: "sonnet", effort: "low" });
+    const before = sets(m).length;
+    expect((await m.svc.status()).busy).toBe(true);
+    await m.svc.prepare();
+    expect(sets(m).slice(before)).toEqual([]);
+    await usage;
+    // Livre de novo, o prepare aplica a escolha.
+    await m.svc.prepare();
+    expect(sets(m).slice(before)).toEqual([
+      ["model", "sonnet"],
+      ["effort", "low"],
+    ]);
+  }, 30_000);
 
   test("o onboarding: o prepare abre a sessão sem pedido, lista os esforços do modelo escolhido, e a escolha fica em Ajustes", async () => {
     const m = make();

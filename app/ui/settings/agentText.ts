@@ -124,26 +124,44 @@ export function prepareHint(prepare: Prepare): string {
 }
 
 /**
- * As escolhas do Esforço para o modelo escolhido (spec #16793): as que o agente ofereceu nele, em português. `null`
- * quando o Kiwi ainda não viu esse modelo numa sessão; `[]` quando ele não tem esforço.
+ * As escolhas do Esforço para o modelo escolhido (spec #16793): as que o agente ofereceu nele, em português, e sempre o
+ * "Padrão" (o host leva o `default` ao esforço que o próprio agente pôs no modelo, quando ele não oferece o valor).
+ * `null` quando o Kiwi ainda não viu esse modelo numa sessão; `[]` quando ele não tem esforço. Um esforço salvo que o
+ * modelo não tem não entra: ele não vale (revisão #17024), e o `effortValue` mostra o que vale.
  */
-export function effortOptions(s: Pick<AgentStatus, "model" | "effort" | "efforts">): { value: string; label: string }[] | null {
+export function effortOptions(s: Pick<AgentStatus, "model" | "efforts">): { value: string; label: string }[] | null {
   // Um engine anterior ao 1.81.0 não manda os esforços (o `requiresContract` da UI é ^1.0.0): sem a lista, sem o seletor.
   const known = s.efforts?.[s.model];
   if (!known) return null;
   if (!known.length) return [];
-  const label = (m: AgentModelChoice) => EFFORT_NAMES[m.value] ?? m.name;
-  const out = known.map((m) => ({ value: m.value, label: label(m) }));
-  if (!out.some((o) => o.value === s.effort)) out.unshift({ value: s.effort, label: EFFORT_NAMES[s.effort] ?? s.effort });
+  const out = known.map((m) => ({ value: m.value, label: EFFORT_NAMES[m.value] ?? m.name }));
+  if (!out.some((o) => o.value === "default")) out.unshift({ value: "default", label: EFFORT_NAMES.default! });
   return out;
 }
 
-export function effortHint(s: Pick<AgentStatus, "model" | "effort" | "efforts" | "economy">): string {
+/**
+ * O esforço que o seletor mostra: o salvo, se o modelo o tem; senão o que vale de fato, o da sessão aberta nesse modelo
+ * ou o Padrão.
+ */
+export function effortValue(s: Pick<AgentStatus, "model" | "effort" | "efforts" | "session">): string {
+  const options = effortOptions(s) ?? [];
+  const offered = (v: string | undefined): v is string => !!v && options.some((o) => o.value === v);
+  if (offered(s.effort)) return s.effort;
+  const live = s.session?.model === s.model ? s.session.effort : undefined;
+  return offered(live) ? live : "default";
+}
+
+const effortName = (v: string) => EFFORT_NAMES[v] ?? v;
+
+export function effortHint(s: Pick<AgentStatus, "model" | "effort" | "efforts" | "economy" | "session">): string {
   const options = effortOptions(s);
   if (options === null) return "As opções de esforço deste modelo aparecem depois do primeiro pedido com ele.";
   if (!options.length) return "Este modelo não tem nível de esforço: ele responde sempre do mesmo jeito.";
   const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
-  return s.economy ? `${what} Com o modo econômico ligado, vale o esforço salvo do modelo mais barato.` : what;
+  const shown = effortValue(s);
+  const missing = shown !== s.effort ? ` O nível salvo, ${effortName(s.effort)}, não existe neste modelo: vale o ${effortName(shown)}.` : "";
+  const economy = s.economy ? " Com o modo econômico ligado, vale o esforço salvo do modelo mais barato." : "";
+  return `${what}${missing}${economy}`;
 }
 
 /**

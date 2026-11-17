@@ -5,7 +5,7 @@
 import type { AgentStatus } from "../../src/shared/ui-contract.ts";
 import { api } from "../src/api.ts";
 import { Row, Select } from "../src/kit/index.tsx";
-import { EFFORT_NAMES, effortHint, effortOptions, modelHint, modelOptions, type Prepare, prepareHint } from "./agentText.ts";
+import { EFFORT_NAMES, effortHint, effortOptions, effortValue, modelHint, modelOptions, type Prepare, prepareHint } from "./agentText.ts";
 
 export type { Prepare };
 
@@ -29,7 +29,7 @@ export function ModelRows({
       {/* O esforço do modelo escolhido: as escolhas que o agente oferece nele; sem esforço, só a linha. */}
       <Row label="Esforço" hint={unknown ? prepareHint(prepare) : effortHint(status)}>
         {efforts?.length ? (
-          <Select label="Esforço do modelo" value={status.effort} options={efforts} onChange={(effort) => run(() => api.agent.configure({ effort }))} />
+          <Select label="Esforço do modelo" value={effortValue(status)} options={efforts} onChange={(effort) => run(() => api.agent.configure({ effort }))} />
         ) : unknown ? (
           <Select label="Esforço do modelo" value="default" options={[{ value: "default", label: EFFORT_NAMES.default! }]} onChange={() => {}} />
         ) : null}
