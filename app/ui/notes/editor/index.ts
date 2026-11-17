@@ -22,7 +22,7 @@ import type { MarkdownConfig } from "@lezer/markdown";
 import { markdownStructure } from "../../../src/shared/markdown-structure.ts";
 import { linkAt, openableUrl } from "../links.ts";
 import { attachmentInput, attachmentPreview, type AttachmentSource, attachmentTheme } from "./attachments.ts";
-import { commentPreview, inlinePreview, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
+import { commentPreview, inlinePreview, LIST_DEPTH_MAX, LIST_INDENT, type LinkResolver, linksChanged, type LinkStatus, tablePreview, tagPreview } from "./livePreview.ts";
 import { renderedPreview } from "./renderedWidget.tsx";
 import { type EmbedSource, notePreview } from "./embeds.tsx";
 import { fullTree, toRenderable } from "./rendered.ts";
@@ -236,16 +236,38 @@ const theme = EditorView.theme({
   ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "1.5px" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "var(--accent-soft) !important" },
   ".cm-placeholder": { color: "var(--text-3)" },
-  // Títulos: hierarquia por tamanho, peso e espaço (B v4), nunca por linha.
-  ".cm-h": { fontWeight: "600", lineHeight: "1.3" },
-  ".cm-h1": { fontSize: "20px", paddingTop: "22px !important", letterSpacing: "var(--tracking-tight)" },
-  ".cm-h2": { fontSize: "14px", paddingTop: "20px !important", paddingBottom: "2px !important" },
-  ".cm-h3, .cm-h4, .cm-h5, .cm-h6": { fontSize: "14px", color: "var(--text-2)", paddingTop: "14px !important" },
+  // Títulos: o mesmo tamanho e a mesma altura de linha do título desenhado (os `h1`…`h6` de `renderedWidget.tsx`), para o
+  // título não mudar de cara com o cursor nele (T17784, spec #17690).
+  ".cm-h": { fontWeight: "600" },
+  ".cm-h1": { fontSize: "19px", lineHeight: "26px" },
+  ".cm-h2": { fontSize: "17px", lineHeight: "24px" },
+  ".cm-h3, .cm-h4": { fontSize: "15px", lineHeight: "22px" },
+  ".cm-h5, .cm-h6": { fontSize: "14px", lineHeight: "20px", color: "var(--text-2)" },
+  // O "## " da linha do cursor fica na margem: uma caixa sem largura, com o texto saindo para a esquerda.
+  // A caixa termina antes da coluna da dobra (12 px, `search-fold.ts`): a seta fica clicável e não cobre o "#".
+  ".cm-hmark": { display: "inline-flex", width: "0", justifyContent: "flex-end", whiteSpace: "pre", color: "var(--text-3)", fontWeight: "400", position: "relative", left: "-12px" },
   ".cm-highlight": { backgroundColor: HIGHLIGHT_BACKGROUND, borderRadius: "2px" },
   ".cm-inline-code": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)" },
   ".cm-codeblock": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)", paddingLeft: "16px !important" },
   ".cm-quote": { color: "var(--text-2)", paddingLeft: "16px !important" },
-  ".cm-bullet": { color: "var(--text-3)", display: "inline-block", width: "10px" },
+  // Os itens de lista (T17784): o recuo e o espaço entre itens da lista desenhada (o `list` de `renderedWidget.tsx`), e o
+  // marcador no recuo, antes do texto.
+  // Os seletores com três classes passam por cima do recuo pendurado de `lists.ts` (`.cm-line.cm-list-line`): aqui o
+  // marcador já fica no recuo negativo, e a linha que quebra começa no texto do item sem ele.
+  ".cm-li": { lineHeight: "23px" },
+  ".cm-line.cm-li.cm-list-line": { textIndent: "0" },
+  ".cm-li .cm-list-head": { minWidth: "0" },
+  ".cm-line.cm-li.cm-li-gap": { paddingTop: "2px !important" },
+  ...Object.fromEntries(Array.from({ length: LIST_DEPTH_MAX + 1 }, (_, d) => [`.cm-line.cm-li.cm-li-${d}`, { paddingLeft: `${d * LIST_INDENT}px !important` }])),
+  // A caixa da tarefa como a da lista desenhada: a margem de 2 px do checkbox do WebKit, 13 px e 6 px até o texto.
+  ".cm-li .cm-task-box": { marginLeft: "2px", marginRight: "6px" },
+  ".cm-bullet": { color: "var(--text-3)", display: "inline-block", width: `${LIST_INDENT}px`, marginLeft: `-${LIST_INDENT}px`, paddingRight: "11px", boxSizing: "border-box", textAlign: "right" },
+  ".cm-bullet-n": { color: "var(--text)", paddingRight: "4px" },
+  // O disco do WebKit: 5 px na cor do texto, no meio da altura da letra.
+  ".cm-dot": { display: "inline-block", width: "5px", height: "5px", boxSizing: "border-box", verticalAlign: "middle", color: "var(--text)" },
+  ".cm-dot-disc": { borderRadius: "50%", background: "currentColor" },
+  ".cm-dot-circle": { borderRadius: "50%", border: "1px solid currentColor" },
+  ".cm-dot-square": { background: "currentColor" },
   // As notas de rodapé (T6377): o número em sobrescrito no tom do link; a chamada sem texto ainda, apagada.
   ".cm-footnote": { color: "var(--accent-text)", cursor: "pointer", padding: "0 1px", fontWeight: "500" },
   ".cm-footnote-raw": { cursor: "text", padding: "0", fontWeight: "inherit" },
@@ -602,8 +624,11 @@ const FORMAT_BUTTONS: { action: FormatAction; label: string; title: string }[] =
 function formatTooltip(state: EditorState): Tooltip | null {
   const sel = state.selection.main;
   if (sel.empty || state.selection.ranges.length > 1 || searchPanelOpen(state)) return null;
+  // O "## " selecionado fica na margem, fora da caixa do editor, e a barra presa nele sumiria: ela vai para o texto (T17784).
+  const line = state.doc.lineAt(sel.from);
+  const mark = sel.from === line.from ? /^#{1,6}[ \t]+/.exec(line.text) : null;
   return {
-    pos: sel.from,
+    pos: mark ? Math.min(sel.from + mark[0].length, sel.to) : sel.from,
     above: true,
     strictSide: false,
     arrow: false,

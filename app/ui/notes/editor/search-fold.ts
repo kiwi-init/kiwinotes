@@ -45,8 +45,11 @@ export const searchAndFold = [editorPhrases, search({ top: true }), listFolding,
     '.cm-search .cm-textfield': { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '5px', padding: '4px 7px', maxWidth: '100%' },
     '.cm-search .cm-button': { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '5px', padding: '3px 7px' },
     '.cm-gutters': { background: 'transparent', color: 'var(--text-3)', border: 'none', cursor: 'pointer' },
-    // Heading lines have top padding; keep the arrow beside their text baseline.
+    // Some lines have top padding (the 2 px between list items); keep the arrow beside their text baseline.
     '.cm-foldGutter .cm-gutterElement': { display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
+    // A largura fixa (T17784): a seta aparece numa linha crua e some num bloco desenhado; sem isto, a coluna alarga e o
+    // texto da nota inteira anda 2 px a cada clique.
+    '.cm-foldGutter, .cm-foldGutter .cm-gutterElement': { width: '12px', minWidth: '12px', boxSizing: 'border-box', overflow: 'hidden' },
     '.cm-foldPlaceholder': { background: 'var(--surface-2)', color: 'var(--text-2)', borderColor: 'var(--border)', padding: '0 5px', borderRadius: '4px' },
     '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, #f6c945 30%, transparent)' },
     '.cm-searchMatch-selected': { backgroundColor: 'var(--accent-soft)', outline: '1px solid var(--accent)' },
