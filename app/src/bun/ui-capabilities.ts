@@ -204,6 +204,11 @@ export interface CapabilityDeps {
   meetings?: MeetingHost;
   /** O agente (T8678, spec #8339). Sem ele (testes antigos), as capacidades `agent.*` dão E_NO_AGENT. */
   agent?: AgentService;
+  /**
+   * A pasta de notas destas capacidades (o `ref.key`, T16650, que não muda de uma abertura para outra): as trilhas do
+   * agente só seguem as notas dela.
+   */
+  folderKey?: string;
   /** Agora, em ms (para o limite de ritmo do clipboard). */
   now?(): number;
 }
@@ -348,6 +353,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     );
     // Os projetos também (spec #9874); na abertura (sem `moves`), a nota principal acha a pasta pelo inode.
     await projectsFile().update((list) => followProjects(list, r, deps.notes.existing(), deps.notes.noteInodes?.(), dirIno, meetingsFolder));
+    // As trilhas do agente também (T16650): a nota renomeada por fora leva a trilha, e a que sumiu (ou já não existia
+    // na abertura) sai da lista.
+    const existing = deps.notes.existing();
+    followTrails((p) => r.moves.get(p) ?? (existing.notes.has(p) ? p : null));
   };
   /** O arquivo dos projetos deste cofre (`.kiwi/projects.json`). */
   let projects: ProjectsFile | null = null;
@@ -503,6 +512,17 @@ export function uiCapabilities(deps: CapabilityDeps,
     await projectsFile()
       .update((list) => mapProjects(list, map))
       .catch((e) => console.error("[notes] projects:", e));
+    // As trilhas do agente seguem o mesmo mapa (T16650): a nota renomeada ou movida pelo app leva a trilha junto, e a
+    // apagada a tira da lista.
+    followTrails(map);
+  };
+  /** Best effort, como os projetos: um `trilhas.json` que não grava nunca desfaz o que já aconteceu nas notas. */
+  const followTrails = (map: (p: string) => string | null) => {
+    try {
+      deps.agent?.trailsFollow(deps.folderKey ?? null, map);
+    } catch (e) {
+      console.error("[agent] trilhas:", e);
+    }
   };
   /** A nota (ou a pasta) mudou de lugar pelo app: as fixadas e o histórico de versões vão junto. */
   const followMove = async (map: (p: string) => string) => {

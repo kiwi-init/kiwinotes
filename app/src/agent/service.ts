@@ -35,7 +35,7 @@ import type { VaultReader } from "./tools/reader.ts";
 import type { VaultWriter } from "./tools/writer.ts";
 import type { WriteJournal } from "./tools/tools.ts";
 import { AgentActivity, type ActivityRequest } from "./activity.ts";
-import { undo, UndoError, type UndoNotes } from "./undo.ts";
+import { keyOf, undo, UndoError, type UndoNotes } from "./undo.ts";
 import { viewChange } from "./change-view.ts";
 import { claudeStatus, type ProgramArgv } from "./claude.ts";
 import { downloadAdapter, installedAdapter, removeAdapter } from "./adapter/download.ts";
@@ -58,7 +58,7 @@ import type {
   AgentUsageView,
 } from "../shared/ui-contract.ts";
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
-import { TrilhaStore } from "./trilhas.ts";
+import { TrilhaStore, trilhasDaPasta } from "./trilhas.ts";
 import { type LimitSnapshot, UsageStore } from "./usage-store.ts";
 import { faroDoPlacar, PlacarTurno } from "./placar.ts";
 import { RegistroEntrega } from "./entrega.ts";
@@ -384,6 +384,8 @@ export class AgentService {
   private turnFaro: FaroResult | null = null;
   /** A primeira nota que o agente leu no pedido (T14682): se o faro não a deu, as palavras do pedido viram trilha. */
   private turnRead: string | null = null;
+  /** A pasta de notas aberta no pedido de agora (T16650): a trilha aprendida é dela, e o faro só segue as dela. */
+  private turnPasta: string | null = null;
   private readonly trilhas: TrilhaStore;
   /** O servidor de ferramentas do programa aberto (ou abrindo): fecha junto com ele. */
   private tools: KiwiToolServer | null = null;
@@ -1960,7 +1962,9 @@ export class AgentService {
       const [projects, meetings] = await Promise.all([reader.projects().catch(() => []), reader.meetings().catch(() => [])]);
       this.faroIndex = { key, idx: buildIndex({ notes: list.notes, folders: list.folders, projects, meetings }) };
     }
-    const result = sniff(request, this.faroIndex.idx, { openNote: this.openNote, trilhas: this.trilhas.list() });
+    const folderId = (await this.writer?.folder().catch(() => null)) ?? null;
+    this.turnPasta = folderId ? keyOf(folderId) : null;
+    const result = sniff(request, this.faroIndex.idx, { openNote: this.openNote, trilhas: trilhasDaPasta(this.trilhas.list(), this.turnPasta) });
     this.turnFaro = result;
     const decider = this.decider();
     const pkg = await buildPackage({ reader, seen: async (path, content) => (await this.guard.decide(path, content, decider)).text, registro: this.registro }, result, request);
@@ -1983,7 +1987,7 @@ export class AgentService {
       // A trilha que acertou conta mais uma vez; o nome que acertou não precisa de trilha.
       if (f.hit.how === "apontado" || (same && f.hit.how !== "trilha")) return;
     }
-    const learned = this.trilhas.aprender(request, read);
+    const learned = this.trilhas.aprender(request, read, this.turnPasta);
     if (learned) this.d.log?.(`[agent] trilha: ${learned.vezes}× para a nota`);
   }
 
@@ -1992,6 +1996,15 @@ export class AgentService {
     return {
       trilhas: this.trilhas.list().map((t) => ({ id: t.id, palavras: t.palavras, path: t.path, titulo: path.basename(t.path).replace(/\.(md|txt)$/i, ""), vezes: t.vezes, em: t.em })),
     };
+  }
+
+  /**
+   * As notas da pasta `pasta` mudaram de lugar ou saíram (T16650), pelo app ou por fora: as trilhas dela vão junto, e a
+   * de uma nota que saiu sai da lista. `map` é o mesmo das fixadas: o caminho novo, ou null. As de outra pasta ficam.
+   */
+  trailsFollow(pasta: string | null, map: (p: string) => string | null): void {
+    const n = this.trilhas.seguir(pasta, map);
+    if (n) this.d.log?.(`[agent] trilhas: ${n} seguiram a nota`);
   }
 
   /** Apaga uma trilha. */
