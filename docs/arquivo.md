@@ -15,6 +15,7 @@ Na arrumação do repo (spec #13895, T13933), estas coisas saíram da `main`. Na
 | `docs/kiwinote.md`: um arquivo vazio | [no commit 2d5493a2](https://github.com/kiwi-init/kiwinotes/blob/2d5493a2/docs/kiwinote.md) |
 | `docs/design/brand/intro/`: a intro do prisma (o modelo, o `gerar.ts`, o protótipo e a prancha), que a intro do KiwiCat trocou (T14851, spec #14766) | [no commit c30559fa](https://github.com/kiwi-init/kiwinotes/tree/c30559fa/docs/design/brand/intro) |
 | `app/ui/intro/intro.js`, `rive.ts` e `rive.test.ts`: o script da intro do prisma e o gato do Rive (T14851) | [no commit c30559fa](https://github.com/kiwi-init/kiwinotes/tree/c30559fa/app/ui/intro) |
+| `docs/design/brand/kiwi-cat-familia/`: o teste de ícone do T2025, o Kiwi-cat na família do ícone do Channels em 3 variações (aura, vidro e lâmina), sem nenhuma escolhida (T17495, spec #17478) | [no commit 13bfc890](https://github.com/kiwi-init/kiwinotes/tree/13bfc890a0fc41790e962062f32fbf82d5e4e0a3/docs/design/brand/kiwi-cat-familia) |
 
 ## O gato three.js (T14885, spec #14813)
 
