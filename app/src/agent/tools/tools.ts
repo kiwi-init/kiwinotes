@@ -18,7 +18,8 @@ import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared
 import { closest, folderNames, nearSections, noteCard, noteNamed, noteNames } from "./find.ts";
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
-import { isTextNote, type VaultReader } from "./reader.ts";
+import { isTextNote, searchFileNames, type VaultReader } from "./reader.ts";
+import type { VaultFile } from "../../notes/vault.ts";
 import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument } from "./files.ts";
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
@@ -51,6 +52,16 @@ export const WRITE_MAX_CHARS = 40_000;
 /** O máximo de resultados do `notes_search`, e o padrão. */
 export const SEARCH_MAX = 30;
 export const SEARCH_DEFAULT = 10;
+
+/**
+ * Um arquivo que não é nota como o agente vê (spec #17587): o nome, o tipo (a extensão), o tamanho e a data. A `leitura`
+ * diz se o `files_read` dá o texto dele ou se o Kiwi não sabe ler esse tipo ("sem leitura").
+ */
+export function fileCard(f: VaultFile): { path: string; nome: string; tipo: string; bytes: number; mudou: string; leitura: "files_read" | "sem leitura" } {
+  const nome = f.path.split("/").pop() ?? f.path;
+  const tipo = /\.([^./]+)$/.exec(nome)?.[1]?.toLowerCase() ?? "sem extensão";
+  return { path: f.path, nome, tipo, bytes: f.size, mudou: f.mtime, leitura: fileFormat(f.path) ? "files_read" : "sem leitura" };
+}
 /** O `find` (T14133): quantos alvos, no padrão e no máximo, e quantas seções vão no cartão de uma nota. */
 export const FIND_DEFAULT = 5;
 export const FIND_MAX = 10;
@@ -161,7 +172,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     name: "notes_search",
     title: "Procurar nas notas",
     description:
-      "Procura nas notas do Kiwi (.md e .txt) pelas palavras e, se a busca pelo sentido estiver ligada, pelo assunto. Devolve o caminho, o título e um trecho de cada nota achada. Use antes de ler, para achar o que precisa sem ler tudo. Aceita \"frases\", tag:x, path:pasta e -palavra.",
+      "Procura nas notas do Kiwi (.md e .txt) pelas palavras e, se a busca pelo sentido estiver ligada, pelo assunto. Devolve o caminho, o título e um trecho de cada nota achada. Acha também os outros arquivos da pasta (pdf, planilha, docx, zip…) pelo nome, em `arquivos`: o texto deles se lê com files_read. Use antes de ler, para achar o que precisa sem ler tudo. Aceita \"frases\", tag:x, path:pasta e -palavra.",
     inputSchema: {
       type: "object",
       properties: {
@@ -202,7 +213,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "notes_list",
     title: "Listar uma pasta",
-    description: `As pastas e as notas (.md e .txt) de dentro de uma pasta do Kiwi (só as de primeiro nível), com o tamanho e a última mudança. Até ${LIST_PAGE} notas por vez. A pasta se acha pelo nome, sem diferenciar maiúscula, acento, espaço, - e _ ("Legacy PR" acha legacy-pr).`,
+    description: `Tudo o que há numa pasta do Kiwi (só o primeiro nível): as pastas, as notas (.md e .txt) e, em \`arquivos\`, todo outro arquivo (pdf, planilha, docx, pptx, zip…), com o tipo, o tamanho e a última mudança. Um arquivo com leitura "files_read" se lê pelo files_read; "sem leitura" o Kiwi não sabe ler. Até ${LIST_PAGE} entradas por vez. A pasta se acha pelo nome, sem diferenciar maiúscula, acento, espaço, - e _ ("Legacy PR" acha legacy-pr).`,
     inputSchema: {
       type: "object",
       properties: {
@@ -1210,7 +1221,10 @@ async function run(
           ...(h.semantic ? { como: "pelo sentido" } : h.approx ? { como: "aproximado" } : {}),
         });
       }
-      return { value: { query, resultados }, target: `"${query}"` };
+      // Os outros arquivos pelo nome (spec #17587), à parte das notas: o nome não passa pelo filtro, o texto deles só
+      // pelo files_read.
+      const arquivos = searchFileNames(query, (await reader.list()).files ?? [], limit).map(fileCard);
+      return { value: { query, resultados, ...(arquivos.length ? { arquivos } : {}) }, target: `"${query}"` };
     }
     case "notes_outline": {
       const a = args(raw, ["path"]);
@@ -1397,20 +1411,25 @@ async function run(
       const childOf = (p: string) => (folder ? p.startsWith(`${folder}/`) && !p.slice(folder.length + 1).includes("/") : !p.includes("/"));
       const pastas = all.folders.filter(childOf);
       const notes = all.notes.filter((n) => n.folder === folder);
+      // Os outros arquivos da pasta (spec #17587), depois das notas, na mesma paginação.
+      const files = (all.files ?? []).filter((f) => childOf(f.path)).sort((x, y) => x.path.localeCompare(y.path));
+      const total = notes.length + files.length;
       const page = notes.slice(offset, offset + LIST_PAGE);
-      const more = offset + LIST_PAGE < notes.length;
+      const filePage = files.slice(Math.max(0, offset - notes.length), Math.max(0, offset + LIST_PAGE - notes.length));
+      const more = offset + LIST_PAGE < total;
       return {
         value: {
           pasta: folder,
           pastas,
           notas: page.map((n) => ({ path: n.path, titulo: n.title, caracteres: n.size, mudou: n.mtime, ...(isTextNote(n.path) ? { formato: "txt" } : {}) })),
-          total: notes.length,
+          ...(files.length ? { arquivos: filePage.map(fileCard) } : {}),
+          total,
           ...(more ? { proximoOffset: offset + LIST_PAGE } : {}),
           ...(more || folder !== asked
             ? {
               aviso: [
                 ...(folder !== asked ? [`Achei a pasta "${folder}" pelo nome "${asked}".`] : []),
-                ...(more ? [`Há mais ${notes.length - offset - LIST_PAGE} notas nesta pasta.`] : []),
+                ...(more ? [`Há mais ${total - offset - LIST_PAGE} entradas nesta pasta.`] : []),
               ].join(" "),
             }
             : {}),
