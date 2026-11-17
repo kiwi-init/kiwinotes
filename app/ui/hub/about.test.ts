@@ -5,24 +5,52 @@ import { describe, expect, test } from "bun:test";
 import { uiCapabilities } from "../../src/bun/ui-capabilities.ts";
 import { directInvoke } from "../../src/bun/ui-engine.ts";
 import type { UpdatesView } from "../../src/shared/ui-contract.ts";
-import { CREDITS, creditsLine, statusLine } from "./aboutText.ts";
+import { CREDITS, creditsLine, downloadProgress, updateBand } from "./aboutText.ts";
 
 const at = "2026-11-04T12:30:00.000Z";
 const hhmm = new Date(at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-describe("a linha do estado", () => {
-  test("cada estado, dito para a pessoa", () => {
-    const line = (v: UpdatesView) => statusLine(v);
-    expect(line({ state: "idle", lastCheck: null })).toBe("Ainda não verificado.");
-    expect(line({ state: "idle", lastCheck: { at, result: "latest" } })).toBe(`Você está na última versão. Verificado às ${hhmm}.`);
-    expect(line({ state: "idle", lastCheck: { at, result: "error", message: "Sem internet: não deu para falar com o GitHub." } })).toBe(
-      `Sem internet: não deu para falar com o GitHub. (às ${hhmm})`,
-    );
-    expect(line({ state: "checking", lastCheck: null })).toBe("Verificando…");
-    expect(line({ state: "downloading", version: "0.1.0-rc4", lastCheck: null })).toBe("Baixando a 0.1.0-rc4…");
-    expect(line({ state: "ready", version: "0.1.0-rc4", lastCheck: null })).toBe("A 0.1.0-rc4 está pronta.");
-    expect(line({ state: "ready", version: "0.1.0-rc4", lastCheck: { at, result: "error", message: "não deu para trocar" } })).toBe("não deu para trocar");
-    expect(line({ state: "off", reason: "KIWI_DEBUG=1", lastCheck: null })).toBe("As atualizações estão desligadas neste build (KIWI_DEBUG=1).");
+describe("a faixa da atualização (spec #16837)", () => {
+  const band = (v: UpdatesView) => updateBand(v);
+  const MB = 1024 * 1024;
+
+  test("parado: nunca verificou, na última, com uma disponível", () => {
+    expect(band({ state: "idle", lastCheck: null })).toMatchObject({ tone: "quiet", title: "Ainda não verificado", bar: null, action: { kind: "check", label: "Verificar atualizações" } });
+    expect(band({ state: "idle", lastCheck: { at, result: "latest" } })).toMatchObject({ title: "Você está na última versão", detail: `Verificado às ${hhmm}.`, action: { kind: "check" } });
+    expect(band({ state: "idle", lastCheck: { at, result: "available", version: "2026.11.3" } }).title).toBe("A versão 2026.11.3 está disponível");
+  });
+
+  test("procurando e aplicando: andando, sem botão", () => {
+    expect(band({ state: "checking", lastCheck: null })).toMatchObject({ tone: "busy", title: "Procurando atualizações…", action: null, bar: null });
+    expect(band({ state: "applying", lastCheck: null })).toMatchObject({ tone: "busy", detail: "O Kiwi Notes vai fechar e abrir de novo.", action: null });
+  });
+
+  test("baixando: a barra lê done/total; sem eles, indeterminada e sem número", () => {
+    const withBytes = { state: "downloading", version: "2026.11.3", lastCheck: null, done: 38 * MB, total: 61 * MB } as UpdatesView;
+    expect(band(withBytes)).toMatchObject({ tone: "busy", title: "Baixando a versão 2026.11.3", detail: "38 de 61 MB · 62%", bar: { pct: 62 }, action: null });
+    const noBytes = band({ state: "downloading", version: "2026.11.3", lastCheck: null });
+    expect(noBytes).toMatchObject({ detail: "Baixando…", bar: { pct: null } });
+    expect(noBytes.detail).not.toMatch(/\d/);
+    // total zero, negativo ou NaN não vira porcentagem; done além do total para em 100 %
+    for (const bad of [{ done: 1, total: 0 }, { done: -1, total: 10 }, { done: Number.NaN, total: 10 }, { done: "1", total: 10 }])
+      expect(downloadProgress({ state: "downloading", version: "x", lastCheck: null, ...bad } as UpdatesView)).toBeNull();
+    expect(band({ state: "downloading", version: "x", lastCheck: null, done: 70 * MB, total: 61 * MB } as UpdatesView).bar).toEqual({ pct: 100 });
+  });
+
+  test("pronta: Atualizar e reiniciar; se a troca falhou, diz o porquê e o botão fica", () => {
+    expect(band({ state: "ready", version: "2026.11.3", lastCheck: null })).toMatchObject({
+      tone: "ready", title: "A versão 2026.11.3 está pronta", detail: "Baixada e conferida. Reinicia em segundos.", action: { kind: "apply", label: "Atualizar e reiniciar" },
+    });
+    expect(band({ state: "ready", version: "2026.11.3", lastCheck: { at, result: "error", message: "não deu para trocar" } })).toMatchObject({
+      tone: "error", title: "não deu para trocar", action: { kind: "apply" },
+    });
+  });
+
+  test("erro e desligado", () => {
+    expect(band({ state: "idle", lastCheck: { at, result: "error", message: "Sem internet: não deu para falar com o GitHub." } })).toMatchObject({
+      tone: "error", title: "Não deu para verificar", detail: `Sem internet: não deu para falar com o GitHub. (às ${hhmm})`, action: { kind: "check", label: "Tentar de novo" },
+    });
+    expect(band({ state: "off", reason: "KIWI_DEBUG=1", lastCheck: null })).toMatchObject({ tone: "quiet", title: "Atualizações desligadas", detail: "Neste build (KIWI_DEBUG=1).", action: null });
   });
 });
 
@@ -98,5 +126,16 @@ describe("o arquivo de avisos de terceiros (revisão do T7109)", () => {
     expect(file).toContain(`draw.io ${DRAWIO_VERSION} (jgraph/drawio), de JGraph Ltd`);
     // O que é só para Node, opcional, não entra (o canvas do pdf.js).
     expect(file).not.toContain("@napi-rs/canvas");
+  });
+});
+
+describe("o atualizador de mentira do headless (KIWI_FAKE_UPDATES, T17098)", () => {
+  test("mostra o estado do JSON, não vai à rede e o apply só passa a applying", async () => {
+    const { fakeAbout, parseFakeUpdates } = await import("../../src/headless/fake-updates.ts");
+    expect(() => parseFakeUpdates('{"state":"nada"}')).toThrow("estado desconhecido");
+    const about = fakeAbout('{"state":"ready","version":"2026.11.3"}');
+    expect(about.view()).toEqual({ state: "ready", version: "2026.11.3", lastCheck: null });
+    expect(await about.check()).toMatchObject({ state: "ready" });
+    expect(await about.apply()).toEqual({ state: "applying", lastCheck: null });
   });
 });
