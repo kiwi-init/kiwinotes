@@ -1,0 +1,178 @@
+import Foundation
+
+/// The dictation key. Each one is a modifier, so it arrives as a `flagsChanged` event.
+public enum HotkeyKey: String, CaseIterable, Sendable {
+    case fn
+    case rightOption
+    case rightCommand
+    case rightControl
+    /// O atalho do agente (spec #9876): o Control, o da esquerda ou o da direita. Só para o agente: não é uma tecla
+    /// de ditado do Ajustes (o gravador de atalhos não a oferece).
+    case control
+
+    /// Carbon virtual key codes (kVK_Function, kVK_RightOption, kVK_RightCommand, kVK_RightControl).
+    public var keyCode: Int64 {
+        switch self {
+        case .fn: return 63
+        case .rightOption: return 61
+        case .rightCommand: return 54
+        case .rightControl: return 62
+        case .control: return 59
+        }
+    }
+
+    /// Every key code that is this key: the two Controls for `.control`.
+    public var keyCodes: Set<Int64> { self == .control ? [59, 62] : [keyCode] }
+
+    /// The flag bit that says this key is down (kCGEventFlagMaskSecondaryFn and the NX_DEVICER*KEYMASK bits).
+    public var flagMask: UInt64 {
+        switch self {
+        case .fn: return 0x80_0000
+        case .rightOption: return 0x40
+        case .rightCommand: return 0x10
+        case .rightControl: return 0x2000
+        // NX_DEVICELCTLKEYMASK | NX_DEVICERCTLKEYMASK: down while either Control is.
+        case .control: return 0x2001
+        }
+    }
+
+    /// For a `flagsChanged` event: whether this key is now down, or nil when the event is about another key.
+    public func isDown(keyCode: Int64, flags: UInt64) -> Bool? {
+        guard keyCodes.contains(keyCode) else { return nil }
+        return flags & flagMask != 0
+    }
+}
+
+/// The quick note (T1320): ⌥ held when the dictation key goes down turns that dictation into a note instead of
+/// pasting it. Either ⌥ counts, except the one that is the dictation key itself.
+extension HotkeyKey {
+    /// Key codes of the two ⌥ keys (kVK_Option, kVK_RightOption).
+    public static let optionKeyCodes: Set<Int64> = [58, 61]
+    /// NX_DEVICELALTKEYMASK and NX_DEVICERALTKEYMASK: which ⌥ is down, one bit each.
+    static let optionMasks: UInt64 = 0x20 | 0x40
+
+    /// Whether ⌥ (not this key) is held in these flags, when this key goes down.
+    public func noteModifierHeld(flags: UInt64) -> Bool {
+        flags & (Self.optionMasks & ~flagMask) != 0
+    }
+
+    /// A ⌥ key that, while a quick note records, is part of the gesture and not "another key" (letting go of ⌥
+    /// before the dictation key mustn't cancel the note).
+    public func isNoteModifier(keyCode: Int64) -> Bool {
+        keyCode != self.keyCode && Self.optionKeyCodes.contains(keyCode)
+    }
+}
+
+public enum StopMode: String, Sendable {
+    case pushToTalk = "ptt"
+    case toggle
+}
+
+public enum GestureAction: Equatable, Sendable {
+    /// Key went down: start recording now so the first syllable isn't lost.
+    case startRecording
+    /// Second tap of a double tap: keep recording until the next tap.
+    case latch
+    case stopRecording(StopMode)
+    /// A lone short tap or the key used as a modifier (Fn+F5, ⌥+letter): throw the audio away.
+    case cancelRecording
+}
+
+/// Hold = push-to-talk; double tap = toggle (tap again to stop). Pure: times come in, actions go out.
+public struct HotkeyGesture: Sendable {
+    public enum State: Equatable, Sendable {
+        case idle
+        case pressed(since: TimeInterval)
+        case tapped(at: TimeInterval)
+        case latched
+        /// Waiting for the key to come up after a stop or cancel; the release does nothing.
+        case releasing
+    }
+
+    /// A press shorter than this is a tap, not push-to-talk.
+    public var holdThreshold: TimeInterval
+    /// The second tap has to start within this time after the first one ends.
+    public var doubleTapWindow: TimeInterval
+    public private(set) var state: State = .idle
+
+    public init(holdThreshold: TimeInterval = 0.25, doubleTapWindow: TimeInterval = 0.35) {
+        self.holdThreshold = holdThreshold
+        self.doubleTapWindow = doubleTapWindow
+    }
+
+    public var isRecording: Bool {
+        switch state {
+        case .pressed, .tapped, .latched: return true
+        case .idle, .releasing: return false
+        }
+    }
+
+    /// When `tick` has to be called to turn a lone tap into a cancel.
+    public var deadline: TimeInterval? {
+        if case .tapped(let at) = state { return at + doubleTapWindow }
+        return nil
+    }
+
+    public mutating func keyDown(at t: TimeInterval) -> [GestureAction] {
+        switch state {
+        case .idle:
+            state = .pressed(since: t)
+            return [.startRecording]
+        case .tapped(let at):
+            if t - at <= doubleTapWindow {
+                state = .latched
+                return [.latch]
+            }
+            state = .pressed(since: t)
+            return [.cancelRecording, .startRecording]
+        case .latched:
+            state = .releasing
+            return [.stopRecording(.toggle)]
+        case .pressed, .releasing:
+            return []
+        }
+    }
+
+    public mutating func keyUp(at t: TimeInterval) -> [GestureAction] {
+        switch state {
+        case .pressed(let since):
+            if t - since >= holdThreshold {
+                state = .idle
+                return [.stopRecording(.pushToTalk)]
+            }
+            state = .tapped(at: t)
+            return []
+        case .releasing:
+            state = .idle
+            return []
+        case .idle, .tapped, .latched:
+            return []
+        }
+    }
+
+    /// Another key was pressed while ours is held: it's being used as a modifier, not for dictation.
+    public mutating func otherKeyDown() -> [GestureAction] {
+        guard case .pressed = state else { return [] }
+        state = .releasing
+        return [.cancelRecording]
+    }
+
+    public mutating func tick(now: TimeInterval) -> [GestureAction] {
+        guard case .tapped(let at) = state, now - at > doubleTapWindow else { return [] }
+        state = .idle
+        return [.cancelRecording]
+    }
+
+    /// The overlay's ✕ or ✓ ended the recording. Returns how it was recording. A key still held goes to
+    /// `releasing`, so letting it go afterwards does nothing.
+    public mutating func endedFromOverlay() -> StopMode {
+        let mode: StopMode = state == .latched ? .toggle : .pushToTalk
+        if case .pressed = state { state = .releasing } else { state = .idle }
+        return mode
+    }
+
+    /// Recording started or stopped from outside (a `record.start`/`record.stop` command).
+    public mutating func reset(latched: Bool = false) {
+        state = latched ? .latched : .idle
+    }
+}

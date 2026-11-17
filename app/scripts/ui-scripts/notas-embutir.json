@@ -1,0 +1,111 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Mercado",
+        "content": "Leite e café.\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Projeto",
+        "content": "---\ntags: [projeto]\n---\nIntrodução do projeto, com link para [[Mercado]].\n\n# Plano\n\nPrimeiro passo do plano.\n\n## Detalhes\n\nOs detalhes ficam aqui. ^detalhe\n\n- item um\n- item dois ^item2\n- item três\n\n# Fim\n\nAté logo.\n"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Diário",
+        "content": "# Diário\n\nA nota inteira:\n\n![[Projeto]]\n\nSó a seção do plano:\n\n![[Projeto#Plano]]\n\nSó um bloco:\n\n![[Projeto#^item2]]\n\nUm título que não existe:\n\n![[Projeto#Orçamento]]\n\nFim do diário.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Diário"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Diário')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-note-editor .kn-embed .kn-embed-box[data-state='ok']",
+      "name": "os embeds aparecem"
+    },
+    {
+      "expectCount": ".kn-note-editor .kn-embed",
+      "count": 4,
+      "name": "os 4 embeds da nota"
+    },
+    {
+      "expectText": ".kn-embed[data-link='Projeto']",
+      "text": "Introdução do projeto",
+      "name": "a nota inteira, sem o frontmatter"
+    },
+    {
+      "expectCount": ".kn-embed[data-link='Projeto'] :text('tags:')",
+      "count": 0
+    },
+    {
+      "expectText": ".kn-embed[data-link='Projeto#Plano']",
+      "text": "Primeiro passo do plano",
+      "name": "a seção do título"
+    },
+    {
+      "expectCount": ".kn-embed[data-link='Projeto#Plano'] :text('Até logo')",
+      "count": 0,
+      "name": "a seção para no próximo título do mesmo nível"
+    },
+    {
+      "expectText": ".kn-embed[data-link='Projeto#^item2']",
+      "text": "item dois",
+      "name": "o bloco ^id"
+    },
+    {
+      "expectCount": ".kn-embed[data-link='Projeto#^item2'] :text('item três')",
+      "count": 0,
+      "name": "só o item marcado"
+    },
+    {
+      "expectText": ".kn-embed[data-link='Projeto#Orçamento']",
+      "text": "não está nessa nota",
+      "name": "o título que não existe avisa"
+    },
+    {
+      "expectCount": ".kn-note-editor :text('^item2')",
+      "count": 0,
+      "name": "a marca ^id não aparece desenhada"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "screenshot": "01-embutir.png"
+    },
+    {
+      "click": ".kn-embed[data-link='Projeto#Plano'] .kn-embed-title",
+      "name": "o título do embed abre a nota"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered:has-text('Até logo')",
+      "name": "a nota Projeto abriu"
+    },
+    {
+      "expectCount": ".kn-note-editor .kn-embed",
+      "count": 0
+    },
+    {
+      "screenshot": "02-abriu-a-nota.png"
+    }
+  ]
+}

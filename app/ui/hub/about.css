@@ -1,0 +1,88 @@
+/* A seção Sobre (T2386), no B v4: uma superfície só, sem linha nem borda; cor só no botão e no link. */
+.kn-about {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 48px 32px;
+  text-align: center;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.kn-about-name {
+  margin: 0;
+  font: 650 var(--t-display)/1.2 var(--font-display);
+  letter-spacing: var(--tracking-display, 0);
+  color: var(--text);
+}
+
+.kn-about-version {
+  margin: 0;
+  font-size: var(--t-ui);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.kn-about-link {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  font-size: var(--t-ui);
+  color: var(--accent-text);
+  cursor: default;
+}
+
+.kn-about-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kn-about-updates {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+  max-width: 420px;
+}
+
+.kn-about-line {
+  margin: 0;
+  font-size: var(--t-ui);
+  color: var(--text-2);
+}
+
+/* Desligado ou ocupado (verificando, baixando): o botão fica claramente parado. */
+.kn-about-updates button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* O "Salvar diagnóstico" (T5350): embaixo e discreto, um link e uma linha de ajuda. */
+.kn-about-diag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 36px;
+  max-width: 420px;
+}
+
+.kn-about-hint {
+  margin: 0;
+  font-size: var(--t-meta);
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.kn-about-diag button:disabled {
+  opacity: 0.5;
+}
+
+/* os créditos do software de terceiros (spec #7079): no fim, discretos */
+.kn-about-credits {
+  margin-top: 20px;
+}

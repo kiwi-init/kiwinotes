@@ -1,0 +1,24 @@
+{
+  "max_channel_error_outside_eyes": 2,
+  "mean_channel_error_outside_eyes": 0.04339306492127675,
+  "native_size": [
+    2048,
+    2560
+  ],
+  "scope": "pose neutra padrão, antes da redução; exclui discos dos olhos + 5 px",
+  "ear_preparation": {
+    "originals_untouched": true,
+    "ear_angles": [
+      -25,
+      -12.5,
+      0,
+      12.5,
+      25
+    ],
+    "method": "rigid matte masks + difference of silhouette contours; fixed arc/head; neutral difference zero",
+    "changed_base_pixels": 498413,
+    "outside_ear_roi_unchanged": true,
+    "fog_fill": "harmonic 128x160 /3600 iterations;32px smoothing on hidden field only",
+    "root_skinning": "rigid mask rotating at original pivot; fixed head occludes root"
+  }
+}

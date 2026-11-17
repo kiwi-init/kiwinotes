@@ -1,0 +1,286 @@
+/* A tela de Início (spec #15728, T15839). */
+.kn-home {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 40px 40px;
+  font: var(--text-md) / var(--leading) var(--font);
+  color: var(--text);
+}
+
+.kn-home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+/* O lugar do gato: o tamanho do gato do canto, que o hub traz para cá (`data-cat-at="home"`). */
+.kn-home-cat {
+  position: relative;
+  width: 96px;
+  height: 120px;
+  margin-bottom: 4px;
+}
+
+.kn-home-asleep-hit {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.kn-home-asleep-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 40%; }
+/* O quadro é o gato inteiro, com a névoa: no lugar e no tamanho do canvas do gato vivo (96 × 96, embaixo da caixa). */
+.kn-home-asleep-hit img {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 96px;
+  height: 96px;
+  pointer-events: none;
+}
+.kn-home-asleep-dark { display: none; }
+:root[data-theme="dark"] .kn-home-asleep-light { display: none; }
+:root[data-theme="dark"] .kn-home-asleep-dark { display: block; }
+
+.kn-home-menu {
+  position: absolute;
+  z-index: 3;
+  left: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  background: var(--float, var(--surface));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16), 0 0 0 1px var(--border);
+}
+
+.kn-home-menu-item {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.kn-home-menu-item:hover,
+.kn-home-menu-item:focus-visible { background: var(--surface-hover); outline: none; }
+
+.kn-home-date {
+  margin: 0 0 2px;
+  font: 500 var(--text-sm) / 1.2 var(--font);
+  color: var(--text-3);
+}
+
+.kn-home-title {
+  margin: 0;
+  font: 600 var(--text-2xl) / 1.15 var(--font-display);
+  letter-spacing: var(--tracking-display);
+}
+
+.kn-home-phrase {
+  margin: 6px 0 0;
+  font-size: var(--text-lg);
+  color: var(--text-2);
+}
+
+.kn-home-search {
+  width: min(640px, 100%);
+  height: 46px;
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font: inherit;
+  font-size: var(--text-lg);
+  text-align: left;
+  cursor: text;
+}
+.kn-home-search:hover { color: var(--text-2); }
+.kn-home-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kn-home-search kbd {
+  margin-left: auto;
+  font: var(--text-sm) / 1 var(--font-mono);
+  color: var(--text-3);
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.kn-home-empty {
+  margin: 8px 0 0;
+  text-align: center;
+  color: var(--text-3);
+}
+
+.kn-home-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+.kn-home-continue {
+  width: 100%;
+  margin: 0 0 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-color: transparent;
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kn-home-continue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.kn-home-continue-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+}
+
+.kn-home-continue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.kn-home-kicker {
+  font: 600 var(--text-xs) / 1.2 var(--font);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-text, var(--accent));
+}
+
+.kn-home-continue-title { font: 600 var(--text-lg) / 1.3 var(--font); }
+
+.kn-home-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 32px;
+}
+.kn-home-cols[data-single] { grid-template-columns: minmax(0, 1fr); }
+@container kn-window (width < 720px) {
+  .kn-home-cols { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+}
+
+.kn-home-block + .kn-home-block { margin-top: 24px; }
+
+.kn-home-label {
+  margin: 0 0 8px;
+  font: 600 var(--text-xs) / 1 var(--font);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.kn-home-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kn-home-list > li + li { border-top: 1px solid var(--border); }
+.kn-home-list button {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kn-home-list button:hover .kn-home-clip { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
+.kn-home-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-sm); }
+
+.kn-home-ico {
+  flex: none;
+  align-self: center;
+  display: inline-grid;
+  color: var(--text-3);
+}
+
+.kn-home-clip {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kn-home-folder { flex: none; }
+
+.kn-home-muted { color: var(--text-3); }
+
+.kn-home-meta {
+  margin-left: auto;
+  flex: none;
+  font: var(--text-sm) / 1 var(--font);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.kn-home-meeting-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kn-home-meeting-meta {
+  margin: 4px 0 10px;
+  font-size: var(--text-sm);
+}
+
+.kn-home-summary {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.kn-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--accent-text, var(--accent));
+  cursor: pointer;
+}

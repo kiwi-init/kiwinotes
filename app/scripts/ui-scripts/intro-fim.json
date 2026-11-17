@@ -1,0 +1,11 @@
+{
+  "window": "intro",
+  "steps": [
+    { "waitFor": "#stage", "state": "attached", "name": "a intro abre" },
+    { "waitFor": "#fog-canvas", "state": "attached", "name": "o KiwiCat (a névoa e o rosto), sem o prisma" },
+    { "expectCount": "#face-canvas", "count": 1, "name": "o rosto" },
+    { "waitFor": "body.done", "state": "attached", "timeout": 4000, "name": "com movimento reduzido, termina sozinha (a versão de 1,5 s)" },
+    { "expectCount": "#again:visible", "count": 0, "name": "sem o \"De novo\" no app" },
+    { "screenshot": "intro-fim.png" }
+  ]
+}

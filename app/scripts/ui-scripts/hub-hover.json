@@ -1,0 +1,90 @@
+{
+  "window": "hub",
+  "query": { "section": "notes" },
+  "steps": [
+    {
+      "waitFor": ".kn-tab[aria-selected='true']:has-text('Notas')",
+      "name": "o hub abre nas Notas"
+    },
+    {
+      "expectCount": ".kn-float-group .kn-expand",
+      "count": 2,
+      "name": "Nova nota e Buscar viram botões que expandem (T3821)"
+    },
+    {
+      "expectCount": ".kn-float-group .kn-expand .kn-expand-label[aria-hidden='true']",
+      "count": 2,
+      "name": "o nome ao lado do ícone é só visual (o aria-label continua)"
+    },
+    {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "a pílula começa na aba ativa (T4671)"
+    },
+    {
+      "hover": ".kn-tab:has-text('Ditado')",
+      "name": "mouse na aba Ditado"
+    },
+    {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "o hover não move a pílula: ela continua na ativa (T4671)"
+    },
+    {
+      "expectSame": ".kn-tab:has-text('Ditado')",
+      "as": ".kn-tab[aria-selected='true']",
+      "property": "color",
+      "name": "e o texto sob o mouse fica na cor da ativa: o hover só clareia (T4671)"
+    },
+    {
+      "hover": ".kn-float-group .kn-expand[aria-label='Nova nota']",
+      "name": "mouse no Nova nota"
+    },
+    {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "sair das abas não move a pílula"
+    },
+    {
+      "screenshot": "nova-nota.png",
+      "selector": ".kn-hub-top"
+    },
+    {
+      "click": ".kn-tab:has-text('Notas')",
+      "name": "volta para Notas, e o foco fica nela (o teclado precisa disto)"
+    },
+    {
+      "hover": ".kn-tab:has-text('Sobre')",
+      "name": "mouse parado em Sobre"
+    },
+    {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "mouse parado em Sobre não seleciona a aba"
+    },
+    {
+      "press": "ArrowRight",
+      "name": "o teclado anda para Reuniões (revisão #3940)"
+    },
+    {
+      "waitFor": ".kn-tab[aria-selected='true']:has-text('Reuniões')"
+    },
+    {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "o teclado escolhe a aba mesmo com o mouse parado em outra, e a pílula a acompanha"
+    },
+    {
+      "click": ".kn-tab:has-text('Sobre')",
+      "name": "o clique continua trocando de seção"
+    },
+    {
+      "waitFor": ".kn-tab[aria-selected='true']:has-text('Sobre')"
+    },
+    {
+      "expectSame": ".kn-tabs-pill",
+      "as": ".kn-tab[aria-selected='true']",
+      "name": "e a pílula chega na aba clicada"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "window": "notes",
+  "query": { "note": "Anexos/contrato.pdf" },
+  "steps": [
+    { "waitFor": ".kn-file", "name": "o arquivo pedido abre no view de arquivo, no lugar da nota (antes: bun run cli invoke attachments.save '{\"name\":\"contrato.pdf\",\"data\":\"JVBERi0xLjQK\"}')" },
+    { "expectText": ".kn-file-title", "text": "contrato.pdf", "name": "o nome do arquivo no topo" },
+    { "expectCount": ".kn-file-head .kn-file-open", "count": 1, "name": "o botão Abrir no app padrão no topo" },
+    { "expectText": ".kn-file-head .kn-file-open", "text": "Abrir no app padrão" },
+    { "waitFor": ".kn-file[data-state='unsupported'] .kn-file-notice", "name": "sem visualizador para o tipo (a base, T7103), o aviso oferece o app padrão" },
+    { "expectCount": ".kn-note-editor", "count": 0, "name": "o editor da nota não aparece junto" },
+    { "screenshot": "01-arquivo.png" },
+    { "click": ".kn-file-head .kn-file-open", "name": "o botão chama o files.open (no headless, só registra)" },
+    { "expectCount": ".kn-toast", "count": 0, "name": "sem aviso de erro" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Anexos')", "name": "abre a pasta Anexos" },
+    { "waitFor": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('contrato')", "name": "o arquivo está na árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='note']", "name": "clicar numa nota volta para o editor" },
+    { "waitFor": ".kn-note-editor .cm-content", "name": "a nota abre" },
+    { "expectCount": ".kn-file", "count": 0, "name": "e o view de arquivo sai" }
+  ]
+}

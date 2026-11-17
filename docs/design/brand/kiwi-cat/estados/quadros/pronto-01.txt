@@ -1,0 +1,20 @@
+REFERÊNCIA DOCUMENTAL — composição local, não geração por IA.
+Fonte: gerada/manifest.json e as seis camadas originais.
+{
+  "label": "01 · piscada satisfeita",
+  "left": 2,
+  "right": -2,
+  "gaze": 0,
+  "eye": 1,
+  "other": null,
+  "blink": true,
+  "fog": 1.06,
+  "side": 0,
+  "upper": 0,
+  "symbol": "spark",
+  "big": 1,
+  "small": 1,
+  "up": 0,
+  "phase": 0
+}
+Névoa: Densidade 1,06 → 0,96; expansão de luz na piscada, depois assenta.

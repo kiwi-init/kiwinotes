@@ -1,0 +1,77 @@
+{
+  "browser": "27.2",
+  "viewport": [
+    640,
+    800
+  ],
+  "cases": [
+    {
+      "requested": "auto",
+      "first": {
+        "backend": "webgpu",
+        "draws": 1,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      },
+      "errors": [],
+      "hiddenNoDraw": true,
+      "hiddenNoCallbacks": true,
+      "reducedNoDraw": true,
+      "numericVoiceNoDraw": true,
+      "reducedResume": true,
+      "slowNoDraw": true,
+      "final": {
+        "backend": "webgpu",
+        "draws": 7,
+        "hidden": false,
+        "reduced": false,
+        "slow": true,
+        "intervals": []
+      },
+      "disposed": true
+    },
+    {
+      "requested": "webgl2",
+      "first": {
+        "backend": "webgl2",
+        "draws": 1,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      },
+      "errors": [],
+      "disposed": true
+    },
+    {
+      "requested": "none",
+      "first": {
+        "backend": "static",
+        "draws": 0,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": [],
+        "fallbackReason": "GPU disabled by demo test"
+      },
+      "errors": [],
+      "disposed": true
+    },
+    {
+      "requested": "unavailable",
+      "first": {
+        "backend": "static",
+        "draws": 0,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": [],
+        "fallbackReason": "WebGPU and WebGL2 unavailable"
+      },
+      "errors": [],
+      "disposed": true
+    }
+  ]
+}

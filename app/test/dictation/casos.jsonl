@@ -1,0 +1,130 @@
+// Bateria de regressão do ditado (T1908), modo texto: o transcript como o STT entrega → o que o app insere.
+// Roda com `bun run test:dictation` (ou `bun run cli dictate --batch test/dictation/casos.jsonl`, com o
+// dicionário e os snippets de config.json já postos). Inventado, sem transcrição real de ninguém.
+// `known`: um problema de verdade, já anotado. O caso roda e aparece no relatório, mas não falha a bateria; quando
+// passar, a bateria avisa para tirar o `known`.
+// ---------------------------------------------------------------- muletas
+{"name": "muleta: hum e ahn somem", "text": "hum, eu acho que, ahn, dá pra entregar amanhã", "expect": {"text": "Eu acho que dá pra entregar amanhã.", "tone": "default"}}
+{"name": "muleta: tipo no meio", "text": "me manda o relatório amanhã tipo de manhã", "expect": {"text": "Me manda o relatório amanhã de manhã."}}
+{"name": "muleta: tipo substantivo fica", "text": "que tipo de arquivo você precisa", "expect": {"text": "Que tipo de arquivo você precisa?"}}
+{"name": "muleta: né no fim some", "text": "a reunião foi boa né", "expect": {"text": "A reunião foi boa."}}
+{"name": "muleta: né? vira pergunta", "text": "você vem amanhã, né?", "expect": {"text": "Você vem amanhã?"}}
+{"name": "muleta: gagueira", "text": "eu eu acho que que dá", "expect": {"text": "Eu acho que dá."}}
+{"name": "muleta: gagueira no artigo", "text": "o o projeto atrasou", "expect": {"text": "O projeto atrasou."}}
+{"name": "ênfase: logo logo fica", "text": "logo logo a gente resolve", "app": "slack", "expect": {"text": "Logo logo a gente resolve", "tone": "casual"}}
+{"name": "muleta en: uh e you know", "text": "uh I think we should, you know, ship it on friday", "expect": {"text": "I think we should ship it on friday."}}
+{"name": "muleta en: like de muleta some", "text": "it was like really fast", "expect": {"text": "It was really fast."}}
+{"name": "muleta en: like verbo fica", "text": "I like this approach", "expect": {"text": "I like this approach."}}
+{"name": "muleta en: like de comparação fica", "text": "it looks like rain today", "expect": {"text": "It looks like rain today."}}
+// ---------------------------------------------------------------- pontuação e maiúsculas
+{"name": "pontuação: pergunta sem ponto do STT", "text": "quando sai o próximo release", "expect": {"text": "Quando sai o próximo release?"}}
+{"name": "pontuação: maiúscula depois do ponto", "text": "fechou. depois a gente vê", "expect": {"text": "Fechou. Depois a gente vê."}}
+{"name": "pontuação en: i vira I", "text": "yesterday i fixed the build", "expect": {"text": "Yesterday I fixed the build."}}
+{"name": "pontuação: a do STT é respeitada", "text": "Acho que sim. Vamos ver amanhã!", "expect": {"text": "Acho que sim. Vamos ver amanhã!"}}
+// ---------------------------------------------------------------- autocorreção falada
+{"name": "autocorreção: não, quer dizer", "text": "me encontra às três, não, quer dizer, às quatro", "expect": {"text": "Me encontra às 4h."}}
+{"name": "autocorreção: ou melhor", "text": "manda pro João, ou melhor, pra Maria", "expect": {"text": "Manda pra Maria."}}
+{"name": "autocorreção: não espera sem vírgula", "text": "a reunião é na quinta não espera na sexta de manhã", "expect": {"text": "A reunião é na sexta de manhã."}}
+{"name": "autocorreção: negação fica", "text": "isso não quer dizer que o projeto atrasou", "expect": {"text": "Isso não quer dizer que o projeto atrasou."}}
+{"name": "autocorreção en: I mean", "text": "let's meet on monday, I mean, on tuesday", "expect": {"text": "Let's meet on tuesday."}}
+{"name": "autocorreção en: scratch that", "text": "Ship it Friday. Scratch that. Ship it Monday.", "expect": {"text": "Ship it Monday."}}
+// ---------------------------------------------------------------- números e datas (como o STT entrega, em algarismos)
+{"name": "número: versão com ponto", "text": "a versão 2.1 saiu ontem", "expect": {"text": "A versão 2.1 saiu ontem."}}
+{"name": "data: dia e hora", "text": "a reunião é dia 12/11 às 15h", "expect": {"text": "A reunião é dia 12/11 às 15h."}}
+{"name": "número: dinheiro", "text": "custa R$ 1.500,00 por mês", "expect": {"text": "Custa R$ 1.500,00 por mês."}}
+{"name": "data: autocorreção com algarismo", "text": "o prazo é 3 de dezembro, não, quer dizer, 5 de dezembro", "expect": {"text": "O prazo é 5 de dezembro."}}
+{"name": "data: correção só da hora", "text": "a reunião é dia 12 às 15h, não, quer dizer, 16h", "expect": {"text": "A reunião é dia 12 às 16h."}}
+{"name": "data en: hora e dia", "text": "the meeting is at 3pm on November 12", "expect": {"text": "The meeting is at 3pm on November 12."}}
+{"name": "número por extenso vira algarismo (T1974)", "text": "são três arquivos", "expect": {"text": "São 3 arquivos."}}
+// ---------------------------------------------------------------- dicionário (config.json)
+{"name": "dicionário: grafia certa", "text": "o orbit store do silo tá sem acesso", "expect": {"text": "O ORBIT store do SILO tá sem acesso."}}
+{"name": "dicionário: alias", "text": "roda o cube control get pods", "expect": {"text": "Roda o kubectl get pods."}}
+{"name": "dicionário: GitHub", "text": "vou subir no github", "expect": {"text": "Vou subir no GitHub."}}
+{"name": "dicionário: nome com duas palavras", "text": "abri o kiwi notes", "expect": {"text": "Abri o Kiwi Notes."}}
+{"name": "dicionário: argumento no terminal fica", "text": "kubectl -n silo get pods", "app": "terminal", "expect": {"text": "kubectl -n silo get pods", "tone": "literal"}}
+// ---------------------------------------------------------------- snippets (config.json)
+{"name": "snippet: só o gatilho", "text": "meu email", "expect": {"text": "ana@example.com"}}
+{"name": "snippet: no meio da frase", "text": "manda pro meu email", "expect": {"contains": "ana@example.com", "excludes": "meu email"}}
+{"name": "snippet: texto com quebra de linha", "text": "obrigado pelo retorno minha assinatura", "app": "mail", "expect": {"contains": ["Obrigado pelo retorno", "Abraço,\nAna"]}}
+// ---------------------------------------------------------------- tom por app
+{"name": "tom slack: uma frase sem ponto", "text": "ok chego às quatro", "app": "slack", "expect": {"text": "Ok chego às 4h", "tone": "casual"}}
+{"name": "tom slack: duas frases mantêm os pontos", "text": "chego às quatro. me espera", "app": "slack", "expect": {"text": "Chego às 4h. Me espera.", "tone": "casual"}}
+{"name": "tom teams: casual", "text": "beleza, te mando o link já já", "app": "teams", "expect": {"text": "Beleza, te mando o link já já", "tone": "casual"}}
+{"name": "tom mail: pontuação completa", "text": "oi Ana segue o relatório em anexo", "app": "mail", "expect": {"text": "Oi Ana segue o relatório em anexo.", "tone": "formal"}}
+{"name": "tom outlook: pergunta formal", "text": "quando você pode revisar o contrato", "app": "outlook", "expect": {"text": "Quando você pode revisar o contrato?", "tone": "formal"}}
+{"name": "tom ghostty: comando literal, sem espaço automático", "text": "Git status.", "app": "ghostty", "fieldBefore": "$ ", "expect": {"text": "git status", "tone": "literal", "typed": "git status", "spaced": false}}
+{"name": "tom terminal: muleta antes do comando", "text": "hum git checkout main", "app": "terminal", "expect": {"text": "git checkout main", "tone": "literal"}}
+{"name": "tom terminal: prosa para o Claude Code", "text": "corrige o teste que tá quebrando no ci", "app": "terminal", "expect": {"text": "Corrige o teste que tá quebrando no ci.", "tone": "literal"}}
+{"name": "tom vscode: comando literal", "text": "Python3 script.py.", "app": "vscode", "expect": {"text": "python3 script.py", "tone": "literal"}}
+// ---------------------------------------------------------------- espaço automático (--field-before)
+{"name": "espaço: depois de um ponto", "text": "segue o relatório", "app": "mail", "fieldBefore": "Oi Ana.", "expect": {"typed": " Segue o relatório.", "spaced": true, "plan": "paste"}}
+{"name": "espaço: o campo já termina em espaço", "text": "segue o relatório", "app": "mail", "fieldBefore": "Oi Ana. ", "expect": {"typed": "Segue o relatório.", "spaced": false}}
+{"name": "espaço: campo vazio", "text": "segue o relatório", "app": "mail", "fieldBefore": "", "expect": {"typed": "Segue o relatório.", "spaced": false}}
+{"name": "espaço: depois de abrir parêntese, não", "text": "veja o anexo", "fieldBefore": "Detalhes (", "expect": {"spaced": false}}
+{"name": "espaço: slack depois de exclamação", "text": "até amanhã", "app": "slack", "fieldBefore": "valeu!", "expect": {"typed": " Até amanhã", "spaced": true}}
+// ---------------------------------------------------------------- números por extenso (T1974, harry #1968)
+{"name": "número: cardinal composto", "text": "foram duzentos e trinta e quatro volumes", "expect": {"text": "Foram 234 volumes."}}
+{"name": "número: milhar com ponto", "text": "o lote tem vinte mil volumes", "expect": {"text": "O lote tem 20.000 volumes."}}
+{"name": "número: ano sem ponto", "text": "isso foi em dois mil e vinte e seis", "expect": {"text": "Isso foi em 2026."}}
+{"name": "número: data", "text": "a reunião é dia cinco de março", "expect": {"text": "A reunião é dia 5 de março."}}
+{"name": "número: primeiro do mês", "text": "um de março é feriado", "expect": {"text": "1º de março é feriado."}}
+{"name": "número: hora e meia", "text": "te encontro às três e meia na sala", "expect": {"text": "Te encontro às 3h30 na sala."}}
+{"name": "número: hora e minutos", "text": "sexta às oito e quinze", "expect": {"text": "Sexta às 8h15."}}
+{"name": "número: dinheiro em reais (harry #1968)", "text": "paguei cinquenta reais", "expect": {"text": "Paguei 50 reais."}}
+{"name": "número: por cento", "text": "o uso subiu dez por cento", "expect": {"text": "O uso subiu 10%."}}
+{"name": "número: decimal", "text": "a nota foi sete vírgula cinco", "expect": {"text": "A nota foi 7,5."}}
+{"name": "número: versão", "text": "atualiza para a versão dois ponto um", "expect": {"text": "Atualiza para a versão 2.1."}}
+{"name": "número: en, hora", "text": "let's meet at three thirty", "expect": {"text": "Let's meet at 3:30."}}
+{"name": "número: en, dólares", "text": "it costs ten dollars", "expect": {"text": "It costs $10."}}
+{"name": "número: en, data", "text": "the deadline is march fifth", "expect": {"text": "The deadline is March 5."}}
+{"name": "número: fica por extenso, artigo", "text": "manda um arquivo e uma pasta", "expect": {"text": "Manda um arquivo e uma pasta."}}
+{"name": "número: fica por extenso, um dia desses", "text": "um dia desses eu vejo isso", "expect": {"text": "Um dia desses eu vejo isso."}}
+{"name": "número: fica por extenso, uma vez", "text": "foi só uma vez", "expect": {"text": "Foi só uma vez."}}
+{"name": "número: fica por extenso, de um lado", "text": "de um lado tem o SILO", "expect": {"text": "De um lado tem o SILO."}}
+{"name": "número: fica por extenso, os dois", "text": "os dois vão juntos", "expect": {"text": "Os dois vão juntos."}}
+{"name": "número: os dois com substantivo", "text": "os dois arquivos sumiram", "expect": {"text": "Os 2 arquivos sumiram."}}
+{"name": "número: fica por extenso, estimativa", "text": "leva um ou dois minutos", "expect": {"text": "Leva um ou dois minutos."}}
+{"name": "número: fica por extenso, do zero", "text": "começa do zero", "expect": {"text": "Começa do zero."}}
+{"name": "número: fica por extenso, en one of them", "text": "one of them is broken", "expect": {"text": "One of them is broken."}}
+{"name": "número: terminal, prosa vira algarismo", "text": "pede para o claude criar três testes", "app": "terminal", "expect": {"text": "Pede para o claude criar 3 testes."}}
+{"name": "número: terminal, comando fica como foi dito", "text": "git checkout -b dois", "app": "terminal", "expect": {"text": "git checkout -b dois"}}
+{"name": "número: hora contada para trás fica por extenso (#2344)", "text": "me encontra às quinze pra uma", "expect": {"text": "Me encontra às quinze pra uma."}}
+{"name": "número: hora contada para trás, para as", "text": "chego cinco para as oito", "expect": {"text": "Chego cinco para as oito."}}
+{"name": "número: fração fica por extenso", "text": "dois terços dos volumes", "expect": {"text": "Dois terços dos volumes."}}
+// ---------------------------------------------------------------- borda
+{"name": "borda: só muleta não insere nada", "text": "hum", "expect": {"text": ""}}
+
+// ---------------------------------------------------------------- T5300 / issue 158: pontuação falada e horas
+{"name": "L7: PT vírgula e ponto final", "text": "oi vírgula Ana ponto final", "expect": {"text": "Oi, Ana."}}
+{"name": "L7: PT interrogação", "text": "você vem ponto de interrogação", "expect": {"text": "Você vem?"}}
+{"name": "L7: PT exclamação", "text": "conseguimos ponto de exclamação", "expect": {"text": "Conseguimos!"}}
+{"name": "L7: PT dois pontos", "text": "aviso dois pontos atenção", "expect": {"text": "Aviso: atenção."}}
+{"name": "L7: PT ponto e vírgula", "text": "entreguei ponto e vírgula falta revisar", "expect": {"text": "Entreguei; falta revisar."}}
+{"name": "L7: PT aspas", "text": "abre aspas texto citado fecha aspas", "expect": {"text": "“Texto citado”"}}
+{"name": "L7: PT parênteses", "text": "teste abre parênteses opcional fecha parênteses", "expect": {"text": "Teste (opcional)"}}
+{"name": "L7: PT reticências", "text": "talvez reticências amanhã", "expect": {"text": "Talvez… amanhã."}}
+{"name": "L7: EN comma e full stop", "text": "hello comma Ana full stop", "expect": {"text": "Hello, Ana."}}
+{"name": "L7: EN period", "text": "done period next task", "expect": {"text": "Done. Next task."}}
+{"name": "L7: EN question mark", "text": "are you coming question mark", "expect": {"text": "Are you coming?"}}
+{"name": "L7: EN exclamation mark", "text": "we did it exclamation mark", "expect": {"text": "We did it!"}}
+{"name": "L7: EN colon e semicolon", "text": "notice colon ready semicolon ship tomorrow", "expect": {"text": "Notice: ready; ship tomorrow."}}
+{"name": "L7: EN quotes", "text": "open quote quoted text close quote", "expect": {"text": "“Quoted text”"}}
+{"name": "L7: EN parentheses", "text": "test open parentheses optional close parentheses", "expect": {"text": "Test (optional)"}}
+{"name": "L7: EN ellipsis", "text": "maybe ellipsis tomorrow", "expect": {"text": "Maybe… tomorrow."}}
+{"name": "L7: nome ponto final", "text": "o ponto final do projeto", "expect": {"text": "O ponto final do projeto."}}
+{"name": "L7: nome vírgula", "text": "a vírgula separa as orações", "expect": {"text": "A vírgula separa as orações."}}
+{"name": "L7: nome interrogação", "text": "o ponto de interrogação indica dúvida", "expect": {"text": "O ponto de interrogação indica dúvida."}}
+{"name": "L7: nome dois pontos", "text": "temos dois pontos importantes", "expect": {"text": "Temos 2 pontos importantes."}}
+{"name": "L7: nome inglês", "text": "the period of the project", "expect": {"text": "The period of the project."}}
+{"name": "L7: nome colon", "text": "colon cancer is serious", "expect": {"text": "Colon cancer is serious."}}
+{"name": "L7: nome parênteses", "text": "ela abre parênteses no texto", "expect": {"text": "Ela abre parênteses no texto."}}
+{"name": "L7: decimal PT", "text": "o valor é três vírgula cinco", "expect": {"text": "O valor é 3,5."}}
+{"name": "L7: decimal EN", "text": "the value is three point five", "expect": {"text": "The value is 3.5."}}
+{"name": "L7: horas negadas", "text": "às três não às quatro", "expect": {"text": "Às 3h não às 4h."}}
+{"name": "L7: horas na frase", "text": "me encontra às três não às quatro", "expect": {"text": "Me encontra às 3h não às 4h."}}
+{"name": "L7: comando com STT", "text": "oi, vírgula Ana ponto final.", "expect": {"text": "Oi, Ana."}}
+{"name": "L7: ponto explícito no Slack", "text": "oi vírgula Ana ponto final", "app": "slack", "expect": {"text": "Oi, Ana.", "tone": "casual"}}
+{"name": "L7: vírgula sozinha", "text": "vírgula", "expect": {"text": ","}}
+{"name": "L7: colon sozinho", "text": "colon", "expect": {"text": ":"}}
+{"name": "L7: ponto final sozinho", "text": "ponto final", "expect": {"text": "."}}
+{"name": "L7: nome reticências", "text": "adoro reticências no texto", "expect": {"text": "Adoro reticências no texto."}}

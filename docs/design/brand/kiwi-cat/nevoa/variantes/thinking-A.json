@@ -1,0 +1,37 @@
+{
+  "task": "T8487",
+  "scope": "controlled-clock visual capture; not a benchmark",
+  "browser": "27.2",
+  "size": [
+    640,
+    800
+  ],
+  "fps": 30,
+  "simulationHz": 60,
+  "seed": 17,
+  "variant": "A",
+  "densityScale": 1,
+  "scenes": [
+    {
+      "name": "thinking-padrao",
+      "state": "thinking",
+      "colour": "padrao",
+      "seconds": 8,
+      "idleFPS": 3,
+      "file": "thinking-padrao.mp4",
+      "backend": "webgpu",
+      "frames": 240,
+      "uniqueFrameHashes": 240,
+      "firstHash": "51aa77cbb3da2f41dd88ac7d11b4cb53d526693bb948946413fad11a3e5bff77",
+      "lastHash": "7af9f56c85dea130229bae2f1145e46daadb35cfef03e0657a8d2b4cb4c10d71",
+      "stats": {
+        "backend": "webgpu",
+        "draws": 479,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    }
+  ]
+}

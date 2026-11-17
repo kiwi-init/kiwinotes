@@ -1,0 +1,57 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Mudança",
+        "content": "# Mudança de escritório\n\nO que falta:\n\n- Pão para o café da equipe\n- Combinar com a Fio Certo a troca dos cabos de rede do andar novo, de preferência num sábado, para não parar o atendimento\n\n```js\nconst total = itens.reduce((a, b) => a + b, 0);\nconsole.log(total);\n```\n\nFim.\n"
+      }
+    },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre" },
+    { "press": "Meta+k" },
+    { "type": "Mudança" },
+    { "waitFor": ".kn-palette .kn-palette-it:has-text('Mudança')" },
+    { "press": "Enter" },
+    { "waitFor": ".kn-note-editor .kn-code", "name": "o bloco de código aparece desenhado" },
+    { "hover": ".kn-note-editor .kn-code", "name": "o mouse no bloco de código" },
+    { "waitFor": ".kn-note-editor .kn-code-copy:has-text('Copiar')", "name": "o botão Copiar aparece" },
+    { "screenshot": "01-copiar.png" },
+    { "click": ".kn-note-editor .kn-code-copy", "name": "copia (o clipboard do roteiro é de mentira)" },
+    { "waitFor": ".kn-note-editor .kn-code-copy:has-text('Copiado')", "name": "diz Copiado" },
+    { "click": ".kn-note-editor .cm-rendered li:has-text('Combinar com a Fio Certo')", "name": "o cursor vai para a lista" },
+    { "press": "End", "name": "o End vai até a quebra da linha" },
+    { "press": "End", "name": "e o segundo, até o fim do item" },
+    { "wait": 200 },
+    { "screenshot": "02-lista-recuo.png" },
+    { "press": "Enter", "name": "Enter continua a lista" },
+    { "waitFor": ".kn-note-editor .cm-line.cm-list-line >> nth=2", "name": "um item novo, com o recuo pendurado" },
+    { "press": "Enter", "name": "Enter no item vazio sai da lista" },
+    { "type": "Depois da lista." },
+    { "waitFor": ".kn-note-editor .cm-line:not(.cm-list-line):has-text('Depois da lista.')", "name": "a linha nova é parágrafo, fora da lista" },
+    { "click": ".kn-note-editor .cm-rendered p:has-text('Fim.')", "name": "o cursor vai para o fim" },
+    { "press": "End" },
+    { "press": "Enter" },
+    { "press": "Enter" },
+    {
+      "pasteHtml": ".kn-note-editor .cm-content",
+      "html": "<meta charset='utf-8'><h3>Do e-mail da Fio Certo</h3><div>Oi,</div><div><br></div><div>Confirmamos a troca no <b>sábado, dia 14</b>.</div><ul><li>Cabos novos</li><li>Teste da rede</li></ul><table><thead><tr><th>Item</th><th>Valor</th></tr></thead><tbody><tr><td>Rede</td><td>1.800</td></tr></tbody></table><p>Veja o <b>prazo</b> no <a href='https://example.com/plano'>plano</a>.</p>",
+      "text": "Do e-mail da Fio Certo\nOi,\n\nConfirmamos a troca no sábado, dia 14.\nCabos novos\nTeste da rede\nItem\tValor\nRede\t1.800\nVeja o prazo no plano.",
+      "name": "cola um e-mail (HTML)"
+    },
+    { "waitFor": ".kn-note-editor .cm-line:has-text('Veja o **prazo** no [plano](https://example.com/plano).')", "name": "o HTML vira Markdown, com o cursor no fim" },
+    { "type": " " },
+    { "pasteHtml": ".kn-note-editor .cm-content", "html": "<b>sem formatação</b>", "text": "sem formatação", "shift": true, "name": "⇧⌘V: o texto puro" },
+    { "waitFor": ".kn-note-editor .cm-line:has-text('[plano](https://example.com/plano). sem formatação')", "name": "colou o texto, sem os **" },
+    { "click": ".kn-title", "name": "o cursor sai: tudo desenhado" },
+    { "wait": 400 },
+    { "screenshot": "03-colado.png" },
+    { "click": ".kn-note-editor .cm-rendered pre", "name": "o cursor entra no bloco de código" },
+    { "waitFor": ".kn-note-editor .cm-code-copy", "name": "no bloco cru, o Copiar fica na linha do ```" },
+    { "screenshot": "04-copiar-cru.png" },
+    { "click": ".kn-note-editor .cm-code-copy" },
+    { "waitFor": ".kn-note-editor .cm-code-copy:has-text('Copiado')", "name": "copia daqui também" },
+    { "wait": 1500, "name": "o editor salva" },
+    { "invoke": "notes.get", "args": { "path": "Mudança.md" }, "name": "o .md: a lista saiu, o e-mail em Markdown" }
+  ]
+}

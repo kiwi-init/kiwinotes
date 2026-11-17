@@ -1,0 +1,12 @@
+{
+  "window": "history",
+  "steps": [
+    { "waitFor": "button:has-text('Transcrever de novo')" },
+    { "expectText": ".kn-entry", "text": "O ditado não foi concluído" },
+    { "screenshot": "01-ditado-retido.png" },
+    { "click": "button:has-text('Transcrever de novo')" },
+    { "waitFor": ".kn-entry:has-text('Este áudio foi recuperado sem perder o ditado.')", "timeout": 60000 },
+    { "waitFor": ".kn-entry-recovery", "state": "hidden" },
+    { "screenshot": "02-ditado-recuperado.png" }
+  ]
+}

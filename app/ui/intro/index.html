@@ -1,0 +1,177 @@
+<!doctype html>
+<!-- A intro do Kiwi Notes (T14851, spec #14766): o markup e o CSS do build do pacote (docs/design/kiwicat-v2/intro), no modo app. O script é o main.ts. -->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kiwi Notes</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", sans-serif;
+      user-select: none;
+    }
+    #stage {
+      position: relative;
+      width: min(76vmin, 320px);
+      height: min(76vmin, 320px);
+      border-radius: 24%;
+      background: #090A0E;
+      overflow: hidden;
+      box-shadow: 0 28px 80px -20px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+      cursor: pointer;
+      will-change: width, height, border-radius, transform, opacity;
+    }
+    body.done #stage {
+      cursor: default;
+    }
+    #cat-wrap {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #fog-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      -webkit-mask-image: radial-gradient(circle at 50% 53%, rgba(0,0,0,1) var(--fog-core, 43%), rgba(0,0,0,0.84) var(--fog-mid, 67%), rgba(0,0,0,0.28) var(--fog-mist, 85%), transparent var(--fog-edge, 96%));
+      mask-image: radial-gradient(circle at 50% 53%, rgba(0,0,0,1) var(--fog-core, 43%), rgba(0,0,0,0.84) var(--fog-mid, 67%), rgba(0,0,0,0.28) var(--fog-mist, 85%), transparent var(--fog-edge, 96%));
+    }
+    #face-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #sparkle-svg {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: visible;
+    }
+    #app-win {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .aw-bar {
+      height: 40px;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.02);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .aw-dots { display: flex; align-items: center; gap: 7px; }
+    .aw-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .aw-pill { height: 10px; width: 76px; border-radius: 4px; background: rgba(255,255,255,0.12); margin-left: 10px; }
+    .aw-body { flex: 1; display: flex; min-height: 0; }
+    .aw-side {
+      width: 136px;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.015);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .aw-main { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .aw-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .aw-card { border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .aw-box { flex: 1; border-radius: 12px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; }
+    @media (max-width: 520px) { .aw-side { display: none; } }
+    #again { display: none; }
+  </style>
+</head>
+<body>
+  <div id="stage" role="button" tabindex="0" aria-label="Intro Byte Kiwi Cat — clique para pular">
+    <div id="cat-wrap">
+      <div id="fog-layer"><canvas id="fog-canvas"></canvas></div>
+      <div id="face-layer">
+        <canvas id="face-canvas"></canvas>
+        <svg id="sparkle-svg" viewBox="0 0 240 240" aria-hidden="true">
+          <g id="sparkles" fill="#FFFFFF" opacity="0">
+            <path d="M 52 96 L 54.5 103 L 61.5 105.5 L 54.5 108 L 52 115 L 49.5 108 L 42.5 105.5 L 49.5 103 Z" />
+            <path d="M 190 66 L 192.5 73 L 199.5 75.5 L 192.5 78 L 190 85 L 187.5 78 L 180.5 75.5 L 187.5 73 Z" />
+            <path d="M 196 120 L 197.5 124.5 L 202 126 L 197.5 127.5 L 196 132 L 194.5 127.5 L 190 126 L 194.5 124.5 Z" opacity="0.85" />
+          </g>
+        </svg>
+      </div>
+    </div>
+    <div id="app-win" aria-hidden="true">
+      <div class="aw-bar">
+        <div class="aw-dots">
+          <span class="aw-dot" style="background:rgba(255,95,87,0.85)"></span>
+          <span class="aw-dot" style="background:rgba(254,188,46,0.85)"></span>
+          <span class="aw-dot" style="background:rgba(40,200,64,0.85)"></span>
+          <span class="aw-pill"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="height:16px;width:90px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.06)"></span>
+          <span style="height:16px;width:16px;border-radius:6px;background:rgba(255,255,255,0.08)"></span>
+        </div>
+      </div>
+      <div id="aw-body" class="aw-body">
+        <div class="aw-side">
+          <div style="height:24px;border-radius:8px;background:linear-gradient(90deg,rgba(34,211,238,0.2),rgba(99,102,241,0.2));border:1px solid rgba(34,211,238,0.16);display:flex;align-items:center;padding:0 8px;gap:6px">
+            <span style="width:7px;height:7px;border-radius:50%;background:rgba(103,232,249,0.85)"></span>
+            <span style="height:7px;width:54px;border-radius:3px;background:rgba(255,255,255,0.25)"></span>
+          </div>
+          <span style="height:9px;width:88px;border-radius:4px;background:rgba(255,255,255,0.12)"></span>
+          <span style="height:9px;width:72px;border-radius:4px;background:rgba(255,255,255,0.07)"></span>
+          <span style="height:9px;width:98px;border-radius:4px;background:rgba(255,255,255,0.07)"></span>
+          <span style="height:9px;width:64px;border-radius:4px;background:rgba(255,255,255,0.07)"></span>
+        </div>
+        <div class="aw-main">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <span style="height:13px;width:128px;border-radius:4px;background:rgba(255,255,255,0.16)"></span>
+              <span style="height:8px;width:184px;border-radius:4px;background:rgba(255,255,255,0.07)"></span>
+            </div>
+            <span style="height:28px;width:78px;border-radius:8px;background:linear-gradient(90deg,rgba(34,211,238,0.25),rgba(99,102,241,0.25),rgba(236,72,153,0.25));border:1px solid rgba(255,255,255,0.12)"></span>
+          </div>
+          <div class="aw-cards">
+            <div class="aw-card"><span style="width:20px;height:20px;border-radius:6px;background:rgba(34,211,238,0.2)"></span><span style="height:9px;width:56px;border-radius:4px;background:rgba(255,255,255,0.14)"></span><span style="height:7px;width:100%;border-radius:4px;background:rgba(255,255,255,0.06)"></span></div>
+            <div class="aw-card"><span style="width:20px;height:20px;border-radius:6px;background:rgba(99,102,241,0.2)"></span><span style="height:9px;width:62px;border-radius:4px;background:rgba(255,255,255,0.14)"></span><span style="height:7px;width:82%;border-radius:4px;background:rgba(255,255,255,0.06)"></span></div>
+            <div class="aw-card"><span style="width:20px;height:20px;border-radius:6px;background:rgba(236,72,153,0.2)"></span><span style="height:9px;width:48px;border-radius:4px;background:rgba(255,255,255,0.14)"></span><span style="height:7px;width:100%;border-radius:4px;background:rgba(255,255,255,0.06)"></span></div>
+          </div>
+          <div class="aw-box">
+            <span style="height:10px;width:96px;border-radius:4px;background:rgba(255,255,255,0.12)"></span>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="height:9px;width:100%;border-radius:4px;background:rgba(255,255,255,0.07)"></span>
+              <span style="height:9px;width:84%;border-radius:4px;background:rgba(255,255,255,0.06)"></span>
+              <span style="height:9px;width:66%;border-radius:4px;background:rgba(255,255,255,0.05)"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

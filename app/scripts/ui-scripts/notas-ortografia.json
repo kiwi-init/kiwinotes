@@ -1,0 +1,186 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Ortografia E6",
+        "content": "Uma reuniao marcada.\n\n`codigoerrado`\n\nEste errro fica aqui.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Ortografia E6"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Ortografia E6\")"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-content[spellcheck=true][autocorrect=off][writingsuggestions=false]"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+Home"
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "click": ".cm-line:has-text(\"Uma reuniao\")",
+      "button": "right",
+      "position": {
+        "x": 50,
+        "y": 8
+      }
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text(\"reunião\")"
+    },
+    {
+      "screenshot": "01-sugestao.png"
+    },
+    {
+      "click": ".kn-menu-item:has-text(\"reunião\")"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Uma reunião marcada."
+    },
+    {
+      "press": "Meta+z"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Uma reuniao marcada."
+    },
+    {
+      "press": "Meta+Shift+Z"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Uma reunião marcada."
+    },
+    {
+      "press": "Meta+Home"
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "expectCount": ".kn-menu-title:has-text(\"Ortografia\")",
+      "count": 0
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".cm-rendered:has-text(\"codigoerrado\")"
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "waitFor": ".kn-menu"
+    },
+    {
+      "expectCount": ".kn-menu-title:has-text(\"Ortografia\")",
+      "count": 0
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": "[spellcheck=false]:has-text(\"codigoerrado\")"
+    },
+    {
+      "click": ".cm-rendered:has-text(\"Este errro\")"
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "Shift+F10"
+    },
+    {
+      "press": "ArrowLeft"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectCount": ".kn-menu",
+      "count": 0
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "Este errro fica aqui."
+    },
+    {
+      "wait": 1100
+    },
+    {
+      "screenshot": "02-corrigido.png"
+    }
+  ]
+}

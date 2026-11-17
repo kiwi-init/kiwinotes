@@ -1,0 +1,241 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "folder": "Projetos",
+        "title": "Plano",
+        "content": "# Plano\n\nO plano da mudança, em três etapas:\n\n1. Desmontar as mesas\n2. Levar os computadores\n3. Montar tudo no andar novo\n"
+      }
+    },
+    {
+      "invoke": "notes.canvasCreate",
+      "args": {
+        "folder": "Projetos",
+        "title": "Mudança",
+        "content": "{\n\t\"nodes\":[\n\t\t{\"id\":\"g1\",\"type\":\"group\",\"x\":-460,\"y\":-260,\"width\":1200,\"height\":640,\"label\":\"Mudança de escritório\",\"color\":\"5\"},\n\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"## O que falta\\n\\n- [x] Medir as salas\\n- [ ] Pedir o orçamento\\n- [ ] Marcar o sábado\",\"x\":-420,\"y\":-200,\"width\":320,\"height\":200,\"styleAttributes\":{}},\n\t\t{\"id\":\"f1\",\"type\":\"file\",\"file\":\"Projetos/Plano.md\",\"x\":0,\"y\":-200,\"width\":340,\"height\":260},\n\t\t{\"id\":\"t2\",\"type\":\"text\",\"text\":\"Ligar para a **Fio Certo** sobre os cabos de rede\",\"x\":-420,\"y\":80,\"width\":320,\"height\":100,\"color\":\"2\"},\n\t\t{\"id\":\"l1\",\"type\":\"link\",\"url\":\"https://example.com/planta-andar-novo\",\"x\":0,\"y\":120,\"width\":340,\"height\":130},\n\t\t{\"id\":\"t3\",\"type\":\"text\",\"text\":\"Depois da mudança: rever o [[Plano]] na #retrospectiva\",\"x\":820,\"y\":-100,\"width\":300,\"height\":120,\"color\":\"6\"}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e1\",\"fromNode\":\"t1\",\"fromSide\":\"right\",\"toNode\":\"f1\",\"toSide\":\"left\",\"label\":\"detalhe\"},\n\t\t{\"id\":\"e2\",\"fromNode\":\"t2\",\"fromSide\":\"right\",\"toNode\":\"l1\",\"toSide\":\"left\",\"color\":\"1\"},\n\t\t{\"id\":\"e3\",\"fromNode\":\"f1\",\"fromSide\":\"right\",\"toNode\":\"t3\",\"toSide\":\"left\"}\n\t],\n\t\"metadata\":{\"version\":\"1.0-1.0\",\"frontmatter\":{}}\n}"
+      },
+      "name": "um .canvas como o Obsidian grava, com campos que o Kiwi não conhece"
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')",
+      "name": "abre a pasta Projetos"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file'][data-type='canvas']:has-text('Mudança')",
+      "name": "um clique no quadro abre no Kiwi (não no app do Mac)"
+    },
+    {
+      "waitFor": ".kn-canvas-node[data-id='t1'] .kn-canvas-md",
+      "name": "o cartão de texto aparece com o Markdown desenhado"
+    },
+    {
+      "waitFor": ".kn-canvas-node[data-id='f1'] .kn-canvas-file-head:has-text('Plano')",
+      "name": "o nó da nota mostra a nota"
+    },
+    {
+      "waitFor": ".kn-canvas-node[data-id='f1'] .kn-canvas-md:has-text('Desmontar as mesas')"
+    },
+    {
+      "expectText": ".kn-canvas-node[data-id='l1'] .kn-canvas-link-host",
+      "text": "example.com",
+      "name": "o link é um cartão com o endereço, sem baixar nada"
+    },
+    {
+      "expectText": ".kn-canvas-group-label",
+      "text": "Mudança de escritório",
+      "name": "o grupo com o rótulo"
+    },
+    {
+      "expectCount": ".kn-canvas-edge",
+      "count": 3,
+      "name": "as 3 setas"
+    },
+    {
+      "expectText": ".kn-canvas-edge-label",
+      "text": "detalhe",
+      "name": "com o rótulo"
+    },
+    {
+      "waitFor": ".kn-canvas-title",
+      "name": "o nome do quadro no alto"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "01-quadro.png"
+    },
+    {
+      "press": "Meta+k",
+      "name": "a paleta em cima do quadro"
+    },
+    {
+      "waitFor": ".kn-palette"
+    },
+    {
+      "expectCount": ".kn-palette .kn-palette-it:has-text('Adicionar propriedade')",
+      "count": 0,
+      "name": "a paleta em cima do quadro não oferece Adicionar propriedade"
+    },
+    {
+      "press": "Escape",
+      "name": "fecha a paleta"
+    },
+    {
+      "expectCount": ".kn-palette",
+      "count": 0
+    },
+    {
+      "click": ".kn-canvas-node[data-id='t2']",
+      "name": "escolhe o cartão laranja"
+    },
+    {
+      "waitFor": ".kn-canvas-port[data-side='right']",
+      "name": "as bolinhas de ligar e a alça do tamanho aparecem"
+    },
+    {
+      "click": ".kn-canvas-bar .kn-canvas-zoom",
+      "name": "volta a 100% (o arrastar a seguir é em px do quadro)"
+    },
+    {
+      "drag": ".kn-canvas-port[data-side='right']",
+      "x": 200,
+      "y": -230,
+      "name": "arrasta da bolinha até a nota: liga"
+    },
+    {
+      "expectCount": ".kn-canvas-edge",
+      "count": 4,
+      "name": "a seta nova"
+    },
+    {
+      "drag": ".kn-canvas-node[data-id='t2']",
+      "x": 0,
+      "y": 60,
+      "name": "arrasta o cartão para baixo: a seta vai junto"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "screenshot": "02-ligar.png"
+    },
+    {
+      "click": ".kn-canvas-node[data-id='t2']",
+      "button": "right",
+      "name": "o botão direito no cartão"
+    },
+    {
+      "click": ".kn-menu >> text=Cor",
+      "name": "o menu Cor"
+    },
+    {
+      "waitFor": "text=Verde"
+    },
+    {
+      "screenshot": "03-menu-cor.png"
+    },
+    {
+      "click": "text=Verde",
+      "name": "pinta de verde"
+    },
+    {
+      "click": ".kn-canvas-bar >> text=Enquadrar",
+      "name": "enquadra o quadro inteiro"
+    },
+    {
+      "click": ".kn-canvas-edge[data-id='e3'] .kn-canvas-edge-hit",
+      "name": "um clique na seta escolhe a seta"
+    },
+    {
+      "expectCount": ".kn-canvas-edge.is-selected",
+      "count": 1
+    },
+    {
+      "press": "Backspace",
+      "name": "o Backspace apaga a seta"
+    },
+    {
+      "expectCount": ".kn-canvas-edge",
+      "count": 3
+    },
+    {
+      "press": "Meta+z",
+      "name": "o ⌘Z traz de volta"
+    },
+    {
+      "expectCount": ".kn-canvas-edge",
+      "count": 4
+    },
+    {
+      "click": ".kn-canvas-bar >> text=+ Cartão",
+      "name": "um cartão novo que fica vazio"
+    },
+    {
+      "waitFor": ".kn-canvas-textarea"
+    },
+    {
+      "press": "Escape",
+      "name": "o Esc num cartão novo e vazio: ele some"
+    },
+    {
+      "expectCount": ".kn-canvas-textarea",
+      "count": 0
+    },
+    {
+      "expectCount": ".kn-canvas-node",
+      "count": 6,
+      "name": "ficam os 6 do começo"
+    },
+    {
+      "click": ".kn-canvas-bar >> text=+ Cartão",
+      "name": "um cartão novo no meio da tela, já para escrever"
+    },
+    {
+      "waitFor": ".kn-canvas-textarea"
+    },
+    {
+      "type": "Pedir caixas para a **TI**"
+    },
+    {
+      "press": "Escape",
+      "name": "o Esc termina a edição"
+    },
+    {
+      "waitFor": ".kn-canvas-md:has-text('Pedir caixas para a')",
+      "name": "o cartão novo desenhado"
+    },
+    {
+      "fill": ".kn-canvas-title",
+      "text": "Mudança 2026",
+      "name": "troca o nome do quadro"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "wait": 1200,
+      "name": "grava e renomeia"
+    },
+    {
+      "screenshot": "04-final.png"
+    },
+    {
+      "invoke": "notes.canvasGet",
+      "args": {
+        "path": "Projetos/Mudança 2026.canvas"
+      },
+      "name": "o .canvas no disco: o nome novo, o que mudou e o que o Kiwi não conhece"
+    }
+  ]
+}

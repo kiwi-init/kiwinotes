@@ -1,0 +1,240 @@
+/* Kiwi Notes: tokens do design system. As cores são as do Channels (T2503): o tema da Aparência as troca em <html>.
+   Movimento no estilo do Channels: duas velocidades e um ease para fades,
+   duas springs (linear()) para o que se move. */
+
+:root {
+  color-scheme: light dark;
+
+  /* tipografia: SF do sistema */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --leading: 1.45;
+  /* Tracking negativo só em tela densa (o @media no fim): em 1x ele junta as letras, que já saem serrilhadas (T1727). */
+  --tracking-tight: 0;
+  --tracking-display: 0;
+  /* O código e o painel da direita: 12.5px no desenho, mas em 1x um tamanho fracionado cai entre pixels e borra, então
+     em 1x é 13px. Os 12.5px voltam no @media do fim, e o Retina fica igual (T1727, #1988). */
+  --text-code: 13px;
+  --text-aside: 13px;
+
+  /* raios e espaços */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --titlebar: 52px;
+
+  /* cores: os tokens do Kiwi tirados do Channels Light (T2503). O tema escolhido chega por ui/src/styles/appearance.ts,
+     que escreve todas as variáveis em <html>; estes valores só valem na primeira pintura. */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #efeff1;
+  --surface-hover: rgb(0 0 0 / 0.035);
+  --border: rgb(0 0 0 / 0.06);
+  --border-strong: rgb(0 0 0 / 0.13);
+  --text: #18181b;
+  --text-2: #56565e;
+  --text-3: #6c6c74;
+  --accent: #1a56db;
+  --accent-soft: rgb(26 86 219 / 0.08);
+  --accent-text: #1a56db;
+  --on-accent: #ffffff;
+  --danger: #d1342a;
+  --focus-ring: 0 0 0 3px rgb(26 86 219 / 0.3);
+  --text-scale: 1;
+
+  /* sombras */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.07), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.14), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+
+  /* Os tokens fixos do Channels (T2503), com os nomes dele, para a UI nova. Em px: o Tamanho do texto é zoom no body.
+     Os tamanhos de texto são os do Channels no Pequeno, que batem com os de hoje do Kiwi (13px nas linhas). */
+  --ui: var(--font);
+  --sans: var(--font);
+  --mono: "Paper Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --t-stamp: 11px;
+  --t-meta: 12px;
+  --t-ui: 13px;
+  --t-body: 15px;
+  --t-title: 17px;
+  --t-display: 24px;
+  --r-tick: 2px;
+  --r-tag: 6px;
+  --r-row: 8px;
+  --r-ctl: 10px;
+  --r-card: 14px;
+  --r-win: 18px;
+  --ctl: 32px;
+  --ctl-sm: 24px;
+  --gutter: 24px;
+  --card-pad: 16px;
+  --top-h: 46px;
+  --side-w: 248px;
+  --col: 760px;
+  /* Até o tema chegar (appearance.ts escreve estes em <html>). */
+  --ink: var(--text);
+  --float: var(--bg);
+  /* A bolinha do switch: branca nos dois modos, como no macOS e no Channels. */
+  --knob: #ffffff;
+  --float-2: color-mix(in srgb, var(--float) 90%, var(--text));
+  --float-3: color-mix(in srgb, var(--float) 80%, var(--text));
+  --shadow-float: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 0.08), 0 4px 12px rgb(0 0 0 / 0.06);
+
+  /* movimento */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --fast: 0.16s;
+  --slow: 0.28s;
+  /* spring com leve overshoot: painéis, seleções, janelas */
+  --glide-ease: linear(0, 0.07, 0.223, 0.399, 0.565, 0.705, 0.813, 0.893, 0.947, 0.981, 1.001, 1.011, 1.015, 1.015, 1.013, 1.01, 1.008, 1.005, 1.004, 1.002, 1.001, 1.001, 1);
+  --glide: 0.48s var(--glide-ease);
+  /* spring mais viva: toques, marcas, contadores */
+  --pop-ease: linear(0, 0.073, 0.239, 0.436, 0.626, 0.786, 0.907, 0.99, 1.039, 1.063, 1.068, 1.062, 1.05, 1.037, 1.024, 1.013, 1.005, 1, 0.997, 0.996, 0.995, 0.996, 0.997, 0.998, 1);
+  --pop: 0.35s var(--pop-ease);
+  /*
+   * hover que expande (T3821, spec #3816): um movimento só para botões, itens e a barra lateral. Entra quase na
+   * hora e sai com um atraso curto, para não piscar quando o mouse só cruza o elemento. O "Reduzir movimento" já zera
+   * toda transição (base.css). O foco do teclado (:focus-visible) usa o mesmo visual.
+   */
+  --hover-dur: 0.22s;
+  /* Sem passar do ponto (spec #12626): a curva desacelera e para, sem a mola de antes (o y do 2º ponto era 1.32). */
+  --hover-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --hover-in-delay: 0s;
+  --hover-out-delay: 80ms;
+  /*
+   * barra de rolagem (T4505, spec #4497): fina, sem trilho, na cor fraca do tema. Aparece só enquanto rola e some
+   * logo depois (ui/src/scrollbar.ts). Engrossa um pouco com o mouse em cima.
+   */
+  --scrollbar-size: 4px;
+  --scrollbar-size-hover: 6px;
+  --scrollbar-color: color-mix(in srgb, var(--text) 28%, transparent);
+  --scrollbar-color-hover: color-mix(in srgb, var(--text) 45%, transparent);
+  --scrollbar-fade: 0.24s;
+}
+
+/* Escuro antes do JS: o OLED Black do Channels. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --surface: #000000;
+    --surface-2: #18181a;
+    --surface-hover: rgb(255 255 255 / 0.045);
+    --border: rgb(255 255 255 / 0.08);
+    --border-strong: rgb(255 255 255 / 0.15);
+    --text: #ececef;
+    --text-2: #a3a3ab;
+    --text-3: #808089;
+    --accent: #8ab4ff;
+    --accent-soft: rgb(138 180 255 / 0.14);
+    --accent-text: #8ab4ff;
+    --on-accent: #000000;
+    --danger: #ff6259;
+    --focus-ring: 0 0 0 3px rgb(138 180 255 / 0.3);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+    --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+    --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Paper Mono (OFL): a fonte do Channels para as palavras da máquina (horas, contagens, atalhos, ids). */
+@font-face {
+  font-family: "Paper Mono";
+  src: url("../assets/fonts/PaperMono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* A Fonte da Aparência (T2503): as mesmas do Channels, que vêm no app (OFL, licenças em ../assets/fonts). Atrás de
+   cada uma, a do sistema. */
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/Inter.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/Inter-Italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-Bold.woff2") format("woff2");
+  font-weight: 500 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lato";
+  src: url("../assets/fonts/Lato-BoldItalic.woff2") format("woff2");
+  font-weight: 500 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("../assets/fonts/Atkinson.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("../assets/fonts/Atkinson-Italic.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root[data-font="inter"] {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+:root[data-font="lato"] {
+  --font: "Lato", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: "Lato", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+:root[data-font="atkinson"] {
+  --font: "Atkinson Hyperlegible Next", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: "Atkinson Hyperlegible Next", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+
+/* Retina (2x ou mais): o desenho fino e o tracking apertado da SF ficam bonitos aqui, e só aqui (T1727). */
+@media (min-resolution: 2dppx) {
+  :root {
+    --tracking-tight: -0.01em;
+    --tracking-display: -0.02em;
+    --text-code: 12.5px;
+    --text-aside: 12.5px;
+  }
+}

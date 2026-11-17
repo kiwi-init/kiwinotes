@@ -1,0 +1,130 @@
+// O microfone do ditado (spec #3202, T3230): a escolha nas Configurações, o `audio.inputs` e o que vem do helper.
+
+import { describe, expect, test } from "bun:test";
+
+import { type AudioInputs, isMicrophoneChoice, sanitizeAudioInputs, sanitizeMicInUse } from "../shared/microphone.ts";
+import { UI_CAPABILITIES, UI_CONTRACT_VERSION } from "../shared/ui-contract.ts";
+import { DEFAULT_SETTINGS, type SettingsPatch, sanitizeSettings } from "../store/settings.ts";
+import { headlessAudioInputs } from "../headless/server.ts";
+import { listAudioInputs } from "./audio-inputs.ts";
+import { uiCapabilities } from "./ui-capabilities.ts";
+import { directInvoke } from "./ui-engine.ts";
+
+const INPUTS: AudioInputs = {
+  inputs: [
+    { uid: "BuiltInMicrophoneDevice", name: "Microfone (MacBook Pro)", transport: "builtin", isDefault: false },
+    { uid: "AA:input", name: "AirPods Pro", transport: "bluetooth", isDefault: true },
+  ],
+  output: { name: "AirPods Pro", transport: "bluetooth" },
+};
+
+describe("a escolha do microfone", () => {
+  test("só as fixas e um uid: de verdade", () => {
+    for (const ok of ["auto", "builtin", "system", "uid:BuiltInMicrophoneDevice", "uid:AppleUSBAudioEngine:Blue:Yeti:1"]) expect(isMicrophoneChoice(ok)).toBe(true);
+    for (const bad of ["", "mac", "uid:", "AUTO", 42, null, `uid:${"x".repeat(600)}`, "uid:a\nb"]) expect(isMicrophoneChoice(bad)).toBe(false);
+  });
+
+  test("nas Configurações: padrão auto, e um valor ruim editado à mão volta ao auto", () => {
+    expect(DEFAULT_SETTINGS.microphone).toBe("auto");
+    expect(sanitizeSettings({}).microphone).toBe("auto");
+    expect(sanitizeSettings({ microphone: "uid:AA:input" }).microphone).toBe("uid:AA:input");
+    expect(sanitizeSettings({ microphone: "mic do mac" }).microphone).toBe("auto");
+  });
+});
+
+describe("o que o helper manda no audio.inputs", () => {
+  test("fica só o que vale: sem uid, repetido ou com transporte desconhecido", () => {
+    const got = sanitizeAudioInputs({
+      inputs: [
+        { uid: "A", name: "Um", transport: "usb", isDefault: true },
+        { uid: "A", name: "Repetido", transport: "usb" },
+        { name: "Sem uid", transport: "usb" },
+        { uid: "B", transport: "thunderbolt" },
+        "lixo",
+      ],
+      output: { name: "AirPods", transport: "bluetooth", extra: 1 },
+      extra: true,
+    });
+    expect(got).toEqual({
+      inputs: [
+        { uid: "A", name: "Um", transport: "usb", isDefault: true },
+        { uid: "B", name: "B", transport: "other", isDefault: false },
+      ],
+      output: { name: "AirPods", transport: "bluetooth" },
+    });
+    expect(sanitizeAudioInputs({ inputs: "não" })).toBeNull();
+    expect(sanitizeAudioInputs(null)).toBeNull();
+    expect(sanitizeAudioInputs({ inputs: [] })).toEqual({ inputs: [], output: null });
+  });
+
+  test("o using (T3344): por qual mic gravaria, só com o que vale; um helper antigo não manda e não quebra", () => {
+    const using = { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "x", lidClosed: true, choice: "builtin", extra: 1 };
+    expect(sanitizeAudioInputs({ inputs: [], output: null, using })).toEqual({
+      inputs: [],
+      output: null,
+      using: { name: "Yeti", transport: "usb", systemDefault: false, fellBack: true, reason: "x", lidClosed: true, choice: "builtin" },
+    });
+    expect(sanitizeMicInUse({ choice: "mic do mac" })).not.toHaveProperty("choice");
+    expect(sanitizeAudioInputs({ inputs: [], output: null })).not.toHaveProperty("using");
+    expect(sanitizeMicInUse({ transport: "thunderbolt", fellBack: "sim" })).toEqual({
+      name: "", transport: null, systemDefault: false, fellBack: false, reason: "", lidClosed: false,
+    });
+    expect(sanitizeMicInUse("lixo")).toBeNull();
+    expect(sanitizeMicInUse(undefined)).toBeNull();
+  });
+
+  test("o headless calcula o using pela escolha salva (T3344)", () => {
+    expect(headlessAudioInputs("auto").using).toMatchObject({ transport: "builtin", fellBack: false, choice: "auto" });
+    expect(headlessAudioInputs("system").using).toMatchObject({ name: "AirPods Pro", systemDefault: true });
+    expect(headlessAudioInputs("uid:AppleUSBAudioEngine:Blue:Yeti:1").using).toMatchObject({ transport: "usb", fellBack: false });
+    expect(headlessAudioInputs("uid:Sumiu").using).toMatchObject({ transport: "builtin", fellBack: true, choice: "uid:Sumiu" });
+  });
+
+  test("helper de pé responde a lista; antigo (unknown_type) ou fora do ar dá null", async () => {
+    const sent: unknown[] = [];
+    expect(await listAudioInputs(async (c) => (sent.push(c), { ok: true, data: INPUTS }))).toEqual(INPUTS);
+    expect(sent).toEqual([{ type: "audio.inputs" }]);
+    expect(await listAudioInputs(async () => ({ ok: false, error: "unknown_type" }))).toBeNull();
+    expect(await listAudioInputs(() => Promise.reject(new Error("helper not connected")))).toBeNull();
+  });
+});
+
+describe("as capacidades (contrato 1.18.0)", () => {
+  function caps(audioInputs?: () => Promise<AudioInputs | null>) {
+    const saved: SettingsPatch[] = [];
+    const changed: string[] = [];
+    let settings = { ...DEFAULT_SETTINGS };
+    const deps = {
+      settings: {
+        load: async () => settings,
+        save: async (p: SettingsPatch) => (saved.push(p), (settings = { ...settings, ...p } as typeof settings)),
+      },
+      settingsChanged: (s: typeof settings) => void changed.push(s.microphone),
+      audioInputs,
+    } as unknown as Parameters<typeof uiCapabilities>[0];
+    const c = uiCapabilities(deps);
+    return { call: (cap: string, args: unknown) => directInvoke(c, cap, args), saved, changed };
+  }
+
+  test("o contrato tem o audio.inputs (1.18.0) e o using (1.19.0), ou um minor depois", () => {
+    // O minor seguinte (T3370 e os outros) não quebra este teste: o que importa é o audio.inputs ter chegado.
+    expect(UI_CONTRACT_VERSION.startsWith("1.")).toBe(true);
+    expect(Number(UI_CONTRACT_VERSION.split(".")[1])).toBeGreaterThanOrEqual(19);
+    expect(UI_CAPABILITIES).toContain("audio.inputs");
+  });
+
+  test("settings.set microphone: só uma escolha válida, e o helper fica sabendo", async () => {
+    const f = caps();
+    expect(await f.call("settings.set", { microphone: "uid:AA:input" })).toMatchObject({ ok: true, value: { microphone: "uid:AA:input" } });
+    expect(f.changed).toEqual(["uid:AA:input"]);
+    for (const bad of ["mac", "", 1, null, "uid:"]) expect(await f.call("settings.set", { microphone: bad })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+    expect(f.saved).toEqual([{ microphone: "uid:AA:input" }]);
+  });
+
+  test("audio.inputs: a lista do helper; sem helper, E_NO_HELPER; argumento a mais, E_BAD_ARGS", async () => {
+    expect(await caps(async () => INPUTS).call("audio.inputs", {})).toEqual({ ok: true, value: INPUTS });
+    expect(await caps(async () => null).call("audio.inputs", {})).toMatchObject({ ok: false, code: "E_NO_HELPER" });
+    expect(await caps().call("audio.inputs", {})).toMatchObject({ ok: false, code: "E_NO_HELPER" });
+    expect(await caps(async () => INPUTS).call("audio.inputs", { x: 1 })).toMatchObject({ ok: false, code: "E_BAD_ARGS" });
+  });
+});

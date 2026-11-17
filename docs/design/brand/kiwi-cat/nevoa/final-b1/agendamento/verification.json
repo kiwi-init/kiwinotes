@@ -1,0 +1,54 @@
+{
+  "controlled_frames": 15,
+  "max_channel_difference": 0,
+  "native_reduced_colour_means": [
+    [
+      34.585556640625,
+      33.4910390625,
+      40.5669609375
+    ],
+    [
+      42.7076484375,
+      32.167177734375,
+      28.96646484375
+    ]
+  ],
+  "red_minus_blue_change": 19.722587890624997,
+  "native_idle_sample_seconds": [
+    0.8,
+    2.8,
+    5.8
+  ],
+  "native_idle_mean_absolute_change": [
+    1.8304537760416666,
+    1.7171263020833334
+  ],
+  "live_stats": {
+    "backend": "webgpu",
+    "draws": 20,
+    "hidden": false,
+    "reduced": false,
+    "slow": false,
+    "intervals": [
+      0.333,
+      0.33299999999999996,
+      0.3340000000000001,
+      0.3340000000000001,
+      0.3320000000000001,
+      0.3340000000000001,
+      0.33499999999999996,
+      0.33099999999999996,
+      0.33599999999999985,
+      0.33099999999999996,
+      0.3370000000000002,
+      0.33199999999999985,
+      0.33499999999999996,
+      0.3330000000000002,
+      0.3310000000000004,
+      0.33199999999999985,
+      0.3330000000000002
+    ]
+  },
+  "live_hidden_no_draw": true,
+  "scope": "Native video without screenshots/capture calls; controlled frames pixel-identical to5a78555; not a performance run"
+}

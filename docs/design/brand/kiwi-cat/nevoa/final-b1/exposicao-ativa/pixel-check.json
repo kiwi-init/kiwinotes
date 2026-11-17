@@ -1,0 +1,18 @@
+[
+  {
+    "case": "B1-ouvindo",
+    "frames": 91,
+    "minimum_channel_delta": 0,
+    "arc_core_pixels": 11817,
+    "max_channel_surplus_at_unity_emission_cap": 1.7172995780590758,
+    "peak126_max_absolute_error": 1.6695652173913043
+  },
+  {
+    "case": "B1-thinking",
+    "frames": 91,
+    "minimum_channel_delta": 0,
+    "arc_core_pixels": 11817,
+    "max_channel_surplus_at_unity_emission_cap": 1.0000000000000249,
+    "peak126_max_absolute_error": null
+  }
+]

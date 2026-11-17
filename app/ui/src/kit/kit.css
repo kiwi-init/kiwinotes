@@ -1,0 +1,589 @@
+/* Primitivas da UI. Regras de movimento:
+   - movimento responde a uma ação, curto e suave, nunca toca duas vezes;
+   - um controle pressionado afunda para 0.96 e volta na --pop;
+   - a seleção desliza (um só pill se move entre as opções, na --glide);
+   - hover entra na hora e sai devagar. */
+
+/* ---------------------------------------------------------- janela */
+
+.kn-window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transform-origin: 50% 30%;
+}
+
+.kn-window[data-entering="true"] {
+  animation:
+    window-in var(--glide) both,
+    fade var(--slow) var(--ease) both;
+}
+
+.kn-titlebar {
+  position: relative;
+  flex: none;
+  height: var(--titlebar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-4) 0 84px; /* espaço dos semáforos */
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.kn-titlebar h1 {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  font: 600 var(--text-md) / 1 var(--font);
+  color: var(--text);
+  letter-spacing: var(--tracking-tight);
+}
+
+.kn-titlebar .kn-titlebar-end {
+  margin-left: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.kn-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-2) var(--space-5) var(--space-5);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+}
+
+/* filhos diretos sobem em escada: 30ms entre cada, no máximo 120ms */
+.kn-window[data-entering="true"] .kn-stagger > * {
+  animation: rise var(--glide) both;
+}
+.kn-window[data-entering="true"] .kn-stagger > :nth-child(2) { animation-delay: 30ms; }
+.kn-window[data-entering="true"] .kn-stagger > :nth-child(3) { animation-delay: 60ms; }
+.kn-window[data-entering="true"] .kn-stagger > :nth-child(4) { animation-delay: 90ms; }
+.kn-window[data-entering="true"] .kn-stagger > :nth-child(n + 5) { animation-delay: 120ms; }
+
+/* ---------------------------------------------------------- seção e linhas */
+
+.kn-section {
+  margin-bottom: var(--space-5);
+}
+
+.kn-section-title {
+  margin: 0 0 var(--space-2) var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.kn-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.kn-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-4);
+  transition: background var(--slow) var(--ease);
+}
+
+.kn-row + .kn-row {
+  border-top: 0.5px solid var(--border);
+}
+
+.kn-row:hover {
+  background: var(--surface-hover);
+  transition-duration: 0s;
+}
+
+.kn-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.kn-row-label {
+  font-weight: 500;
+}
+
+.kn-row-hint {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------- botão */
+
+.kn-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: calc(var(--ctl) - 4px);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--r-row);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+  font-weight: 500;
+  transition:
+    transform var(--pop),
+    background var(--fast) var(--ease);
+}
+
+.kn-button:hover {
+  background: var(--float-2);
+}
+
+.kn-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-float), var(--focus-ring);
+}
+
+.kn-button:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.kn-button:active {
+  transform: scale(0.96);
+  transition-duration: 0.06s;
+}
+
+.kn-button[data-variant="primary"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+}
+
+.kn-button[data-variant="primary"]:hover {
+  background: color-mix(in srgb, var(--accent), var(--ink) 10%);
+}
+
+/* ---------------------------------------------------------- segmentado */
+
+.kn-segmented {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 2px;
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+}
+
+.kn-segmented-pill {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  border-radius: var(--r-row);
+  background: var(--wash-2, var(--surface-hover));
+  transition:
+    transform var(--glide),
+    width var(--glide);
+}
+
+.kn-segmented button {
+  position: relative;
+  z-index: 1;
+  height: calc(var(--ctl) - 4px);
+  border-radius: var(--r-row);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-2);
+  transition: color var(--fast) var(--ease);
+}
+
+.kn-segmented button[aria-checked="true"],
+.kn-segmented button:hover {
+  color: var(--ink);
+}
+
+.kn-segmented button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---------------------------------------------------------- swatches (spec #9349) */
+
+.kn-swatches {
+  display: inline-grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: var(--space-2);
+}
+
+.kn-swatches button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  /* Um contorno fino, para a amostra se ver no claro e no escuro. */
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--ink), transparent 70%);
+  transition: box-shadow var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+
+.kn-swatches button[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--surface, var(--bg)), 0 0 0 3.5px var(--ink);
+}
+
+.kn-swatches button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.kn-swatches button[aria-checked="true"]:focus-visible {
+  box-shadow: 0 0 0 2px var(--surface, var(--bg)), 0 0 0 3.5px var(--ink), var(--focus-ring);
+}
+
+.kn-swatches button:disabled {
+  opacity: 0.35;
+}
+
+/* ---------------------------------------------------------- switch */
+
+.kn-switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  transition: background var(--slow) var(--ease);
+}
+
+.kn-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--knob);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--pop);
+}
+
+/* a lista que abre (T3230): o select do sistema, flutuando como o segmentado */
+.kn-select {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.kn-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  max-width: 280px;
+  height: var(--ctl);
+  padding: 0 calc(var(--space-3) * 2 + 12px) 0 var(--space-3);
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+
+.kn-select select:hover {
+  background: var(--float-2);
+}
+
+.kn-select select:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-float), var(--focus-ring);
+}
+
+.kn-select-chevron {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.kn-switch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.kn-switch[aria-checked="true"] {
+  background: var(--accent);
+}
+
+.kn-switch[aria-checked="true"]::after {
+  transform: translateX(14px);
+}
+
+.kn-switch:active::after {
+  width: 19px;
+}
+
+.kn-switch[aria-checked="true"]:active::after {
+  transform: translateX(11px);
+}
+
+/* ---------------------------------------------------------- tecla */
+
+.kn-kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  box-shadow: inset 0 -1px 0 var(--border-strong);
+  font: 500 var(--text-sm) / 1 var(--font);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------- vazio */
+
+.kn-empty {
+  display: grid;
+  place-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--text-2);
+}
+
+.kn-empty h2 {
+  margin: 0;
+  font: 600 var(--text-lg) / 1.3 var(--font-display);
+  color: var(--text);
+}
+
+.kn-empty p {
+  margin: 0;
+  max-width: 320px;
+}
+
+.kn-search {
+  width: 220px;
+  height: var(--ctl);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+  outline: none;
+  font-size: var(--text-sm);
+  -webkit-user-select: text;
+  user-select: text;
+  transition:
+    box-shadow var(--fast) var(--ease),
+    width var(--glide);
+}
+
+.kn-search:focus {
+  width: 260px;
+  box-shadow: var(--shadow-float), var(--focus-ring);
+}
+
+.kn-search::placeholder {
+  color: var(--ink-3, var(--text-3));
+}
+
+/* ---------------------------------------------------------- a barra de cima e os botões que flutuam (T2502)
+   Como no Channels: controles soltos na barra, num fundo que flutua com sombra. No hub, a barra é dele (hub.css); numa
+   janela avulsa (as Notas), a seção desenha a própria `kn-bar`. */
+
+.kn-bar {
+  position: absolute;
+  z-index: 5;
+  inset: 0 0 auto 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px 0 84px; /* os semáforos */
+  pointer-events: none;
+}
+
+.kn-bar > * {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kn-float {
+  height: var(--ctl);
+  min-width: var(--ctl);
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  font: 500 var(--t-ui) / 1 var(--ui);
+  white-space: nowrap;
+  cursor: default;
+  transition: background var(--fast) var(--ease);
+}
+
+.kn-float:hover,
+.kn-float[aria-expanded="true"] {
+  background: var(--float-2);
+}
+
+.kn-float:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-float), var(--focus-ring);
+}
+
+.kn-float svg {
+  flex: none;
+  color: var(--ink-2, var(--text-2));
+}
+
+/* um grupo de botões só de ícone, juntos num flutuante */
+.kn-float-group {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+}
+
+.kn-float-group > button {
+  width: calc(var(--ctl) - 4px);
+  height: calc(var(--ctl) - 4px);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-row);
+  background: none;
+  color: var(--ink-2, var(--text-2));
+  cursor: default;
+}
+
+.kn-float-group > button:hover {
+  background: var(--wash-2, var(--surface-hover));
+  color: var(--ink);
+}
+
+.kn-float-group > button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+
+/* ---------------------------------------------------------- o botão que expande (T3821, spec #3816) */
+
+/*
+ * Em repouso, só o ícone; no hover (e no foco do teclado), o botão alarga e mostra o nome ao lado. A largura vem do
+ * grid: a coluna do nome vai de 0fr a 1fr, que o WebKit anima sem medir em JS. Os vizinhos deslizam junto.
+ * Uso: <button className="… kn-expand" aria-label="Nova nota"><Icone /><HoverLabel>Nova nota</HoverLabel></button>.
+ */
+.kn-expand {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 0fr);
+  place-items: center start;
+  justify-content: start;
+  transition: grid-template-columns var(--hover-dur) var(--hover-ease) var(--hover-out-delay);
+}
+
+.kn-expand:hover,
+.kn-expand:focus-visible {
+  grid-template-columns: auto minmax(0, 1fr);
+  transition-delay: var(--hover-in-delay);
+}
+
+.kn-expand > svg,
+.kn-expand > .kn-side-icon {
+  justify-self: center;
+}
+
+/* Os botões só de ícone que viram kn-expand: a largura sai do grid (o ícone fica no quadrado de antes). */
+.kn-float-group > button.kn-expand {
+  width: auto;
+  min-width: calc(var(--ctl) - 4px);
+  padding: 0 calc((var(--ctl) - 4px - 15px) / 2);
+  display: inline-grid;
+  place-items: center start;
+}
+
+.kn-float-group > button.kn-expand > .kn-expand-label > span {
+  padding-right: 2px;
+}
+
+.kn-expand-label {
+  /* Do tamanho da coluna, e não do texto: é o que faz o overflow cortar o nome enquanto a coluna encolhe. Com o
+     place-items do botão (start), o nome ficava do tamanho dele e vazava por cima do botão vizinho. */
+  justify-self: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.kn-expand-label > span {
+  display: block;
+  padding-left: 6px;
+  white-space: nowrap;
+  font: 500 var(--t-ui) / 1 var(--ui);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity var(--hover-dur) var(--ease) var(--hover-out-delay),
+    transform var(--hover-dur) var(--hover-ease) var(--hover-out-delay);
+}
+
+.kn-expand:hover .kn-expand-label > span,
+.kn-expand:focus-visible .kn-expand-label > span {
+  opacity: 1;
+  transform: none;
+  transition-delay: var(--hover-in-delay);
+}
+
+/* O × de remover das listas dos Ajustes (Dicionário, Snippets): o "Remover" aparece ao lado, no hover e no foco. */
+.kn-icon-button.kn-expand {
+  width: auto;
+  min-width: 26px;
+  padding: 0 6px;
+  display: inline-grid;
+}
+
+.kn-icon-button.kn-expand:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.kn-icon-button.kn-expand[data-tone="danger"]:focus-visible {
+  color: var(--danger);
+}
+
+/* Um interruptor que não pode mudar agora (o atalho Control com o ditado no Control, spec #9876). */
+.kn-switch:disabled { opacity: 0.45; cursor: default; }

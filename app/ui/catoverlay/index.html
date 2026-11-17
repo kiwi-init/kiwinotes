@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kiwi Cat</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+      /* A janela (CatPlacement, spec #12949): o gato (192 × 240 vezes a escala) e o balão (spec #12938), que vai em
+         cima do gato, ou embaixo nos cantos de cima. Nos cantos, os dois encostam no lado da janela que dá para o canto.
+         O main.ts põe as medidas (--win-*, --cat-*) e o lado e o balão (data-lado, data-balao) a partir da URL. */
+      body { width: var(--win-w, 300px); height: var(--win-h, 352px); position: relative; --bx: -50%; }
+      body[data-lado="left"], body[data-lado="right"] { --bx: 0; }
+      /* O módulo do gato põe o #root em position: relative: quem o leva para o lugar é o #cat. */
+      #cat { position: absolute; left: calc((var(--win-w, 300px) - var(--cat-w, 192px)) / 2); bottom: 0; width: var(--cat-w, 192px); height: var(--cat-h, 240px); }
+      body[data-lado="left"] #cat { left: 0; }
+      body[data-lado="right"] #cat { left: auto; right: 0; }
+      body[data-balao="abaixo"] #cat { bottom: auto; top: 0; }
+      #root { width: var(--cat-w, 192px); height: var(--cat-h, 240px); }
+      /* O balão: a casca do pacote do KiwiCat (`.kn-bubble-shell`, ui/kiwicat-v2/bubble.css, T14933), a mesma do hub:
+         sempre escura, com o contorno e a sombra no destaque, e o rabo em SVG virado para o gato (para baixo com o
+         balão em cima, para cima com o balão embaixo). Aqui fica só o lugar. A largura é 280 e não os 320 do pacote: a
+         janela tem 300 (`BUBBLE_W` em placement.ts). O app manda a resposta inteira (spec #13378): fechado, o balão
+         mostra três linhas e o "Ver mais"; aberto, cresce até o espaço da janela (--sala, que o helper manda) e o texto
+         rola dentro dele. Só o balão pega o clique (o helper acompanha o mouse).
+         A ponta do rabo fica 20 px depois da borda do balão: o balão encosta 4 px no quadro do gato, e a ponta chega
+         onde chegava a de antes (24 px dentro do quadro). */
+      #bubble {
+        position: absolute; left: 50%; bottom: calc(var(--cat-h, 240px) - 4px); transform: translate(var(--bx), 4px);
+        display: flex; flex-direction: column; max-height: var(--sala, 112px);
+        width: max-content; max-width: 280px; text-align: left;
+        --kn-tail-x: 50%;
+        opacity: 0; transition: opacity var(--fast, 140ms) var(--ease, ease), transform var(--fast, 140ms) var(--ease, ease);
+      }
+      #bubble[data-on="true"] { opacity: 1; transform: translate(var(--bx), 0); }
+      /* Nos cantos, o balão encosta no lado do gato, e a ponta do rabo fica no meio dele (o --kn-tail-x conta de dentro do
+         contorno de 2 px, como todo `position: absolute`). */
+      body[data-lado="left"] #bubble { left: 0; --kn-tail-x: calc(var(--cat-w, 192px) / 2 - 2px); }
+      body[data-lado="right"] #bubble { left: auto; right: 0; --kn-tail-x: calc(100% - var(--cat-w, 192px) / 2 + 2px); }
+      /* Embaixo do gato (os cantos de cima): o balão logo abaixo dele, com o rabo para cima. */
+      body[data-balao="abaixo"] #bubble { bottom: auto; top: calc(var(--cat-h, 240px) - 4px); transform: translate(var(--bx), -4px); max-height: calc(var(--sala, 112px) - 4px); }
+      body[data-balao="abaixo"] #bubble[data-on="true"] { transform: translate(var(--bx), 0); }
+      /* Fechado: até três linhas; o main.ts corta o resumo numa palavra (sem "…" depois de um ponto). */
+      #bubble-text { max-height: calc(3 * 1.35em); overflow: hidden; overflow-wrap: anywhere; white-space: pre-line; }
+      #bubble[data-open="true"] { width: 280px; }
+      /* Aberto: o texto rola; um degradê curto em cima e embaixo, que some no começo e no fim (--fade-top, --fade-bottom). */
+      #bubble[data-open="true"] #bubble-text {
+        max-height: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+        margin-right: -8px; padding-right: 8px; scrollbar-width: thin;
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top, 0px), #000 calc(100% - var(--fade-bottom, 0px)), transparent 100%);
+        mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top, 0px), #000 calc(100% - var(--fade-bottom, 0px)), transparent 100%);
+      }
+      /* As ações do balão: o "Ver mais" de hoje; o × e a pergunta da conversa contínua (#13380) entram aqui. */
+      /* As ações: o × à esquerda (spec #13380) e o Ver mais à direita, quando o texto não cabe. */
+      #bubble-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+      #bubble-more { display: none; }
+      #bubble[data-more="true"] #bubble-more, #bubble[data-open="true"] #bubble-more { display: inline; }
+      /* A pergunta antes de sair (spec #13380): uma linha embaixo da resposta, que fica onde estava. */
+      #bubble-ask { display: none; flex: 0 0 auto; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); font-weight: 600; }
+      #bubble[data-ask="true"] #bubble-ask { display: block; }
+      .kn-x {
+        display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
+        background: none; color: var(--text); font: 600 16px / 1 var(--ui); cursor: pointer;
+      }
+      .kn-x:hover { background: var(--accent-soft); }
+      .kn-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+      /* O × em cima da cabeça do gato, à direita: só com o mouse sobre ele (o helper diz, `set({catHover})`). */
+      #cat-close {
+        position: absolute; top: 15%; right: 10%; z-index: 2; width: 26px; height: 26px; border: 2px solid var(--text);
+        background: var(--surface); box-shadow: 2px 2px 0 var(--text); opacity: 0; pointer-events: none;
+        transition: opacity var(--fast, 140ms) var(--ease, ease);
+      }
+      body[data-cat-hover="true"] #cat-close { opacity: 1; pointer-events: auto; }
+      .kn-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      #bubble-more {
+        padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; line-height: 1.2; font-weight: 600;
+        text-decoration: underline; cursor: pointer;
+      }
+      #bubble-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+      @media (prefers-reduced-motion: reduce) { #bubble, body[data-balao="abaixo"] #bubble { transition: none; transform: translate(var(--bx), 0); } }
+      html, body { background: transparent; }
+      /* O overlay fica por cima de qualquer app, e o tema do Mac não diz o que está atrás: os símbolos levam um contorno
+         da cor oposta à tinta, para ler sobre fundo claro e escuro (revisão do T10830). O desenho é o mesmo. */
+      .kn-cat-symbols[data-ink="dark"] svg { filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.85)); }
+      .kn-cat-symbols[data-ink="light"] svg { filter: drop-shadow(0 0 1px #17171c) drop-shadow(0 0 1.5px rgba(23, 23, 28, 0.85)); }
+    </style>
+  </head>
+  <body>
+    <div id="bubble" class="kn-bubble-shell" data-on="false" data-open="false" data-more="false">
+      <div id="bubble-text" aria-hidden="true"></div>
+      <div id="bubble-ask" aria-hidden="true">Precisa de mais alguma coisa?</div>
+      <div id="bubble-actions">
+        <button id="bubble-close" class="kn-x" type="button" aria-label="Fechar">×</button>
+        <button id="bubble-more" type="button" aria-expanded="false" aria-controls="bubble-text">Ver mais</button>
+      </div>
+      <!-- O que o VoiceOver lê: a resposta inteira e a pergunta, não o resumo cortado (revisão do #526). -->
+      <div id="bubble-sr" class="kn-sr" role="status" aria-live="polite"></div>
+    </div>
+    <div id="cat"><button id="cat-close" class="kn-x" type="button" aria-label="Fechar o Kiwi Cat">×</button><div id="root"></div></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

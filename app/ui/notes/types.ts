@@ -1,0 +1,214 @@
+// As capacidades `notes.*` do contrato (A1, T1316, src/shared/ui-contract.ts), do lado da janela Notas (T1317), mais as
+// de pastas do contrato 1.7.0 (T2468): `folders.*`, `notes.move|duplicate|restore|reveal`, o `ctime` e o `pinned`.
+
+import type { UiCapabilities } from "../../src/shared/ui-contract.ts";
+
+/** Um projeto, como o `projects.list` devolve. */
+export type ProjectView = UiCapabilities["projects.list"]["result"]["projects"][number];
+export interface ProjectsApi {
+  list(): Promise<UiCapabilities["projects.list"]["result"]>;
+  mark(folder: string): Promise<unknown>;
+  unmark(folder: string): Promise<unknown>;
+  setMain(folder: string, note: string): Promise<unknown>;
+  /** Os projetos mudaram por outro lugar (a CLI, outra janela, a pasta seguida). */
+  onChanged(fn: () => void): () => void;
+}
+import type { AttachmentSource } from "./editor/attachments.ts";
+
+export type { Backlink, Note, NoteMeta, SaveResult, SearchHit, TagNode,
+} from "../../src/shared/ui-contract.ts";
+import type { TagNode } from "../../src/shared/ui-contract.ts";
+import type { SavedSearch } from "../../src/shared/query.ts";
+import type { Note, NoteMeta } from "../../src/shared/ui-contract.ts";
+
+/**
+ * As pastas e as notas do vault (`notes.list`). A UI pode rodar num engine mais velho (o `requiresContract` é ^1.0.0):
+ * aí o `ctime` não vem, e a ordem por criação cai na edição (tree.ts).
+ */
+export interface VaultListing {
+  folders: string[];
+  notes: NoteMeta[];
+  /**
+   * Os arquivos que não são nota (T3370, contrato 1.19.0). Com a árvore preguiçosa (spec #13664), só os das pastas que
+   * já abriram; os outros vêm pelo `filesIn` quando a pasta abre. Num engine antigo, não vem.
+   */
+  files?: VaultFile[];
+  /** Quantos arquivos que não são nota há direto em cada pasta (spec #13664): os contadores da árvore, sem a lista. */
+  fileCounts?: Record<string, number>;
+}
+
+export type VaultFile = NonNullable<UiCapabilities["notes.list"]["result"]["files"]>[number];
+
+/** O conteúdo de um arquivo que não é nota (T7103, contrato 1.39.0): o texto, os bytes em base64, ou "grande demais". */
+export type FileContent = UiCapabilities["files.read"]["result"];
+
+export type FileSaveResult = UiCapabilities["files.save"]["result"];
+
+export type CanvasFile = UiCapabilities["notes.canvasGet"]["result"];
+export type CanvasSaveResult = UiCapabilities["notes.canvasSave"]["result"];
+
+/** O quadro branco (T6600, contrato 1.37.0): o `.canvas` do Obsidian, aberto no Kiwi. */
+export interface CanvasApi {
+  get(path: string): Promise<CanvasFile>;
+  save(path: string, content: string, baseVersion: string): Promise<CanvasSaveResult>;
+  create(folder: string, title: string, content?: string): Promise<CanvasFile>;
+  rename(from: string, to: string): Promise<CanvasFile>;
+}
+
+/** O que a árvore lê das settings (T3370): a extensão nos nomes e a pasta da nota do dia (o ícone dela). */
+export interface TreePrefs {
+  showExtensions: boolean;
+  dailyFolder: string;
+  /** A largura da coluna da nota (T5299); `null` num engine de antes do 1.24.0, que não a guarda. */
+  noteWidth: number | null;
+}
+
+type Result<C extends keyof UiCapabilities> = Promise<UiCapabilities[C]["result"]>;
+
+/** As capacidades `notes.*` do contrato, como a janela chama. */
+export interface NotesApi {
+  /** A nota aberta, para o agente (T14359): "essa nota" no pedido é ela. Sem o agente, não faz nada. */
+  agentOpenNote?(path: string | null): void;
+  meetings?: {
+    speakers(path: string): Promise<string[]>;
+    renameSpeaker(path: string, from: string, to: string): Promise<NoteMeta>;
+  };
+  list(): Promise<VaultListing>;
+  /**
+   * A árvore preguiçosa (spec #13664): carrega os arquivos de uma pasta (o próximo `list` os traz), e devolve se mudou
+   * alguma coisa. Sem ela (engine antigo), o `list` já traz todos.
+   */
+  filesIn?(folder: string, more?: (files: VaultFile[]) => void): Promise<VaultFile[] | null>;
+  /** Os arquivos cujo caminho tem as palavras da busca (spec #13664), até 500, de qualquer pasta. */
+  findFiles?(query: string): Promise<VaultFile[]>;
+  /** Os links `[[arquivo]]` em lote (spec #13664): o caminho achado de cada alvo, ou null. */
+  resolveFiles?(targets: string[]): Promise<Record<string, string | null>>;
+  /** Um tempo lento da tela no log local do app (spec #13664: a abertura das Notas no app de verdade, pelo `[slow]`). */
+  slow?(where: string, ms: number): void;
+  get(path: string): Promise<Note>;
+  /** Se a nota mudou fora (no Obsidian, por exemplo), não grava e devolve a versão do disco. */
+  save(path: string, content: string, baseVersion: string,
+    baseContent?: string,
+  ): Result<"notes.save">;
+  /** Título repetido vira "Título 2". */
+  create(title: string, folder?: string, content?: string, template?: string,
+  ): Promise<Note>;
+  /** As tags em árvore (T2619). Num engine antes do 1.9.0, não existe. */
+  tags?(): Promise<TagNode[]>;
+  /** A pasta de modelos e as notas dela (T2619). Num engine antes do 1.9.0, não existe. */
+  templates?(): Promise<{ folder: string; templates: NoteMeta[] }>;
+  rename(path: string, newPath: string): Result<"notes.rename">;
+  renameHeading?(path: string, offset: number, title: string, baseVersion: string): Result<"notes.renameHeading">;
+  renameTag?(from: string, to: string): Result<"notes.renameTag">;
+  linkWarnings?(path: string): Result<"notes.linkWarnings">;
+  /** Com o T2468, vai antes para `<vault>/.kiwi-trash/` por 10 min (o "Desfazer", `restore`), e depois para a Lixeira. */
+  delete(path: string): Result<"notes.delete">;
+  search(query: string, limit?: number): Result<"notes.search">;
+  backlinks(path: string): Result<"notes.backlinks">;
+  /** `[[alvo]]` → o path da nota, ou `null` se ela não existe. A regra fica só no engine (#1335). */
+  resolve(link: string): Result<"notes.resolve">;
+  /** O pedaço de nota de um `![[nota]]` (T6594, 1.36.0). Num engine sem ele, o embed de nota fica como texto. */
+  embed?(link: string): Result<"notes.embed">;
+  /** Uma nota foi criada, mudada, apagada ou renomeada, inclusive fora do app. Devolve a função que desliga. */
+  onChanged(fn: (paths: string[]) => void): () => void;
+  /** As de pastas (T2468). Num engine sem elas, a janela esconde o que depende delas (`has`). */
+  folders?: FoldersApi;
+  /**
+   * As notas fixadas (T2469): ficam nas `AppSettings` (`pinned`, #2475), fora do frontmatter, para não mexer no arquivo
+   * da pessoa por uma preferência da janela. O engine corrige os paths quando a nota muda de nome, de pasta ou some.
+   */
+  pins?: { list(): Promise<string[]>; set(paths: string[]): Promise<string[]> };
+  /**
+   * Os projetos (spec #9847, contrato 1.49.0): uma pasta marcada, com a nota principal. As regras (um dentro do outro, a
+   * pasta das reuniões) são do engine; a janela só não oferece o que ele recusaria.
+   */
+  projects?: ProjectsApi;
+  /** A nota do dia, o link que cria a nota, "Mencionada sem link" e a Lixeira (T2593, contrato 1.8.0). */
+  extras?: ExtrasApi;
+  /** O histórico de versões (T2680). Num engine sem ele, o "Versões…" não aparece. */
+  versions?: VersionsApi;
+  /**
+   * Exportar (T2684): o engine abre o seletor de pasta e grava `<Título>.md|.html|.pdf`. `theme` são as variáveis CSS da
+   * janela, para o HTML e o PDF saírem com o tema de agora. Cancelar dá E_CANCELED.
+   */
+  export?(path: string, format: ExportFormat, theme: Record<string, string>,
+  ): Promise<{ file: string }>;
+  /** Os anexos (T2594, contrato 1.11.0). Num engine sem eles, colar e arrastar arquivo não faz nada de especial. */
+  attachments?: AttachmentSource;
+  /**
+   * As buscas salvas (T2660, `savedSearches` nas settings). `list()` dá `null` num engine que ainda não as tem: a janela
+   * esconde o "Salvar esta busca".
+   */
+  savedSearches?: { list(): Promise<SavedSearch[] | null>; set(list: SavedSearch[]): Promise<SavedSearch[]>;
+  };
+  /**
+   * Os arquivos que não são nota (T3370, contrato 1.19.0): abrir no app padrão do Mac, só pelo clique, e o aviso de que
+   * mudaram. Num engine antigo, a árvore só tem pastas e notas.
+   */
+  files?: { open(path: string): Promise<true>; onChanged(fn: (paths: string[]) => void): () => void;
+    /** O conteúdo, para as Notas mostrarem na própria janela (T7103, contrato 1.39.0). Num engine antigo, não existe. */
+    read?(path: string, as: "text" | "binary"): Promise<FileContent>;
+    /** Grava um texto aberto nas Notas (T7105, contrato 1.40.0), se ninguém o mudou desde `baseVersion`. */
+    save?(path: string, content: string, baseVersion: string): Promise<FileSaveResult>;
+  };
+  /** O quadro branco (T6600). Num engine antigo, o `.canvas` abre no app padrão do Mac, como os outros arquivos. */
+  canvas?: CanvasApi;
+  /** As preferências da árvore, e o aviso quando as settings mudam (de outra janela, os Ajustes). */
+  prefs?: { get(): Promise<TreePrefs>; onChanged(fn: (p: TreePrefs) => void): () => void;
+    /** Guarda a largura da coluna da nota (T5299). */
+    setNoteWidth(px: number): Promise<void>;
+  };
+}
+
+export type TrashItem = UiCapabilities["trash.list"]["result"]["items"][number];
+export type Mention = UiCapabilities["notes.unlinkedMentions"]["result"][number];
+
+export type VersionInfo = UiCapabilities["notes.versions"]["result"]["versions"][number];
+
+export interface VersionsApi {
+  /** A mais nova primeiro. */
+  list(path: string): Promise<VersionInfo[]>;
+  get(path: string, id: string): Promise<{ content: string; at: string }>;
+  /** Volta a nota para a versão (o texto de agora vira uma versão antes). */
+  restore(path: string, id: string): Result<"notes.restoreVersion">;
+}
+
+export interface ExtrasApi {
+  /** `<dailyFolder>/AAAA-MM-DD.md`, criada se não existe. */
+  daily(date?: string): Promise<Note>;
+  /** A nota de um `[[link]]`: a que ele acha, ou uma nova (`[[Pasta/Nota]]` em Pasta; senão na pasta de `from`). */
+  createFromLink(link: string, from?: string): Promise<Note>;
+  unlinkedMentions(path: string): Promise<Mention[]>;
+  /** Na nota `path`, as menções de `target` viram `[[link]]`. */
+  linkMentions(path: string, target: string,
+  ): Promise<{ meta: NoteMeta; count: number }>;
+  trashList(): Promise<TrashItem[]>;
+  /** O que espera o Desfazer vai já para o Lixo do macOS. */
+  trashEmpty(): Promise<number>;
+  /** Abre o Lixo do macOS no Finder. */
+  trashReveal(): Promise<true>;
+}
+
+/** `moved`: quantas notas mudaram de path. */
+export type FolderMoved = UiCapabilities["folders.rename"]["result"];
+
+export type ExportFormat = "md" | "html" | "pdf";
+
+export interface FoldersApi {
+  /** Cria a pasta (e os pais que faltarem). */
+  create(path: string): Promise<{ path: string }>;
+  /** As notas de dentro mudam de path, e os `[[Pasta/Nota]]` que apontavam para elas também. */
+  rename(path: string, newPath: string): Promise<FolderMoved>;
+  /** `parent` "" é a raiz. */
+  move(path: string, parent: string): Promise<FolderMoved>;
+  /** Com o que tiver dentro, como o `delete` da nota: dá para desfazer por 10 min. */
+  delete(path: string): Promise<true>;
+  moveNote(path: string, folder: string,
+  ): Promise<{ meta: NoteMeta; updatedLinks: number }>;
+  /** "Título 2", na mesma pasta. */
+  duplicateNote(path: string): Promise<Note>;
+  /** O "Desfazer" do apagar (nota ou pasta, nos últimos 10 min), pelo caminho original. `E_EXISTS` se o lugar foi ocupado. */
+  restore(path: string): Promise<{ path: string }>;
+  /** "Mostrar no Finder". */
+  reveal(path: string): Promise<true>;
+}

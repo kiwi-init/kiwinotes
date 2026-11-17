@@ -1,0 +1,30 @@
+{
+  "window": "hub",
+  "size": "900x1400",
+  "steps": [
+    {
+      "waitFor": ".kn-tab"
+    },
+    {
+      "click": ".kn-tab:has-text('Configurações')"
+    },
+    {
+      "click": ".kn-prefs-item[data-topic=agent]",
+      "name": "o assunto agent da barra lateral (#11966)"
+    },
+    {
+      "waitFor": ".kn-section:has(h2:text-is('Agente')) .kn-row-hint:not(:has-text('Conferindo'))"
+    },
+    {
+      "expectText": ".kn-section:has(h2:text-is('Agente')) .kn-row-label",
+      "text": "Claude Code"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "estado.png",
+      "selector": ".kn-section:has(h2:text-is('Agente'))"
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+/* Configurações por assunto (spec #11966): a lista à esquerda, parada, e o painel do assunto, que rola sozinho. Como os
+   Ajustes do Channels: ícone e nome, a seleção num fundo arredondado e o título do assunto no alto do painel. */
+
+/* A janela do kit não rola mais por inteiro: quem rola é o painel. */
+.kn-content:has(> .kn-prefs) {
+  display: flex;
+  overflow: hidden;
+  padding: 0;
+  mask-image: none;
+}
+.kn-hub-pane .kn-content:has(> .kn-prefs) {
+  max-width: none;
+}
+
+.kn-prefs {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+}
+
+.kn-prefs-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3) var(--space-4);
+  border-right: 0.5px solid var(--border);
+}
+
+.kn-prefs-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--t-ui);
+  text-align: left;
+  cursor: default;
+  transition:
+    background var(--slow) var(--ease),
+    color var(--slow) var(--ease);
+}
+.kn-prefs-item > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kn-prefs-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transition-duration: var(--fast);
+}
+.kn-prefs-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.kn-prefs-item[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-text, var(--text));
+  font-weight: 600;
+}
+.kn-prefs-icon {
+  flex: none;
+  color: var(--text-3);
+}
+.kn-prefs-item:hover .kn-prefs-icon {
+  color: var(--text-2);
+}
+.kn-prefs-item[aria-current="page"] .kn-prefs-icon {
+  color: currentColor;
+}
+.kn-prefs-chevron {
+  color: var(--text-3);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.kn-prefs-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-5) var(--space-5);
+}
+.kn-prefs-topic {
+  max-width: var(--col, 760px);
+  margin: 0 auto;
+}
+.kn-prefs-topic[hidden] {
+  display: none;
+}
+.kn-prefs-title {
+  margin: var(--space-2) 0 var(--space-4) var(--space-1);
+  font: 650 var(--t-title, 17px) / 1.25 var(--font-display);
+  letter-spacing: var(--tracking-display, 0);
+  color: var(--text);
+}
+/* Um assunto de uma seção só: o título dela repetiria o do assunto. */
+.kn-prefs-topic[data-single] .kn-section-title {
+  display: none;
+}
+
+/* O Sobre era uma aba inteira, centrado na altura: no painel, ele fica no alto, como os outros assuntos. */
+.kn-prefs-topic .kn-about {
+  height: auto;
+  padding: var(--space-5) var(--space-4);
+}
+
+/* A linha que um link de dentro do app abriu: um destaque curto, que some sozinho. */
+.kn-prefs-topic [data-flash="true"] {
+  background: var(--accent-soft);
+  border-radius: var(--radius-md);
+  transition: background var(--slow) var(--ease);
+}
+
+.kn-prefs-back {
+  display: inline-flex;
+  align-items: center;
+  margin: var(--space-1) 0 0;
+  padding: 4px var(--space-2);
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: none;
+  color: var(--accent-text, var(--accent));
+  font: inherit;
+  font-size: var(--t-ui);
+  cursor: default;
+}
+.kn-prefs-back:hover {
+  background: var(--surface-hover);
+}
+.kn-prefs-back:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* A janela estreita: a lista e o assunto se revezam, cada um na largura toda. */
+.kn-prefs[data-narrow] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.kn-prefs[data-narrow] .kn-prefs-side {
+  border-right: 0;
+  padding: var(--space-3) var(--space-4);
+}
+.kn-prefs[data-narrow] .kn-prefs-item {
+  min-height: 40px;
+}

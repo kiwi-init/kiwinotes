@@ -1,0 +1,10 @@
+{
+  "window": "intro",
+  "steps": [
+    { "waitFor": "#stage", "state": "attached", "name": "a intro abre" },
+    { "wait": 600, "name": "a intro tocando (o KiwiCat)" },
+    { "screenshot": "intro-gato.png" },
+    { "click": "#stage", "name": "um clique pula" },
+    { "waitFor": "body.done", "state": "attached", "timeout": 1000, "name": "fecha em menos de 1 s (o esmaecer de 0,26 s)" }
+  ]
+}

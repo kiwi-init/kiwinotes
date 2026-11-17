@@ -1,0 +1,124 @@
+{
+  "max_channel_error_outside_eyes": 2,
+  "mean_channel_error_outside_eyes": 0.04351374643010531,
+  "native_size": [
+    2048,
+    2560
+  ],
+  "scope": "pose neutra padrão, antes da redução; exclui discos dos olhos + 5 px",
+  "ear_preparation": {
+    "originals_untouched": true,
+    "ear_angles": [
+      -5,
+      -2.5,
+      0,
+      2.5,
+      5
+    ],
+    "method": "fixed harmonic light plate; dark surface and narrow antialias support; smooth ear ownership; opaque fixed junction",
+    "changed_base_pixels": 472249,
+    "outside_ear_roi_unchanged": true,
+    "fog_fill": "harmonic 128x160 / 3600 iterations; 48px hidden-field smoothing; hidden root alpha 900 iterations float32, matte RGB",
+    "root_skinning": "tip control angles; near-rigid triangle, flex only py-80..py+60 source pixels, 32px mesh, 7 inverse iterations"
+  },
+  "real_size": {
+    "cat_source_y": [
+      650,
+      2240
+    ],
+    "cat_heights": [
+      120,
+      240
+    ],
+    "selected_pose": {
+      "repouso": 0,
+      "dormindo": 0,
+      "acordou": 1,
+      "ouvindo": 1,
+      "thinking": 0,
+      "agindo": 0,
+      "pronto": 0,
+      "erro": 2
+    }
+  },
+  "task": "T7606",
+  "review": "#7630",
+  "frames": 31,
+  "frame_size": [
+    1536,
+    2052
+  ],
+  "sources_sha256": {
+    "luz.png": "4a2161ebd3347663ced59040e46e13e16ab29ddaea7e5ff7537e2b3685982b90",
+    "corpo.png": "e2ce949258fc0eedb512d3552f8ec406f284656b0f2bcc0ef31ab2999bf4dacb",
+    "cabeca.png": "3e746771ebc5a4641e8176f4d433ebeb9de34672a16f7c87a28010b658970012",
+    "orelha-esquerda.png": "ff77bc41d4aab1cb7143b17098cbb1b9edccae408efa0c88f0fcd29b557149f9",
+    "orelha-direita.png": "6b6624c0c01f5216ec3914d218994ce29736b3694c958f98e74ddd3be74fd719",
+    "aro.png": "5411234791669369e77451cef7d46a85bfe7a1573aa05859abab0131237a1d14"
+  },
+  "body_transform": "nenhuma; escala global de apresentação 0.75",
+  "fog": "exposição mínima .50; aro acompanha a menor exposição local sem mudar matiz; cor livre com piso .28; sem blur",
+  "states": [
+    "repouso",
+    "dormindo",
+    "acordou",
+    "ouvindo",
+    "thinking",
+    "agindo",
+    "pronto",
+    "erro"
+  ],
+  "fog_floor": 0.5,
+  "color_linear_luminance_floor": 0.28,
+  "arc_rule": "gain <= min(local fog gains, 1), hue unchanged",
+  "previews": [
+    {
+      "state": "repouso",
+      "fps": 30,
+      "frames": 180,
+      "seconds": 6.0,
+      "size": [
+        620,
+        856
+      ],
+      "cat_reference_height": 481.34765625,
+      "webp_bytes": 320556,
+      "webp_quality": 82,
+      "mp4_bytes": 93004,
+      "mist": "static",
+      "annotation": "prévia de movimento, não é a animação final"
+    },
+    {
+      "state": "acordou",
+      "fps": 30,
+      "frames": 72,
+      "seconds": 2.4,
+      "size": [
+        620,
+        856
+      ],
+      "cat_reference_height": 481.34765625,
+      "webp_bytes": 193742,
+      "webp_quality": 82,
+      "mp4_bytes": 74470,
+      "mist": "static",
+      "annotation": "prévia de movimento, não é a animação final"
+    },
+    {
+      "state": "erro",
+      "fps": 30,
+      "frames": 90,
+      "seconds": 3.0,
+      "size": [
+        620,
+        856
+      ],
+      "cat_reference_height": 481.34765625,
+      "webp_bytes": 364634,
+      "webp_quality": 82,
+      "mp4_bytes": 108904,
+      "mist": "static",
+      "annotation": "prévia de movimento, não é a animação final"
+    }
+  ]
+}

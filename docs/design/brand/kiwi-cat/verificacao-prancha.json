@@ -1,0 +1,13 @@
+{
+  "last_frame_max_channel_error_outside_eyes": 5,
+  "last_frame_mean_channel_error_outside_eyes": 0.1262194971411337,
+  "last_frame_p99_channel_error_outside_eyes": 1.0,
+  "frames": 10,
+  "source_asset_commit": "f06e567",
+  "chin_stage_y": [
+    458.4000000000001,
+    554.4000000000001
+  ],
+  "body_frames_checked": 481,
+  "body_transform": "identity; only monotonic alpha reveal in original pixel positions"
+}

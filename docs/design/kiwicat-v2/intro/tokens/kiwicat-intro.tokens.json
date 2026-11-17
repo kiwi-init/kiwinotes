@@ -1,0 +1,239 @@
+{
+  "appName": "Kiwi Notes",
+  "mascotName": "KiwiCat",
+  "presetName": "KiwiCat Ver Final Perfect",
+  "version": "1.0.0",
+  "durations": {
+    "fullWithAppTransitionSec": 5.35,
+    "catOnlyFramelessSec": 4.4,
+    "reducedMotionSec": 1.5,
+    "skipFadeSec": 0.26
+  },
+  "storyboardTimestamps": {
+    "withFrame": [
+      0.45,
+      1.55,
+      2.2,
+      3.55,
+      4.55,
+      5.2
+    ],
+    "frameless": [
+      0.4,
+      1.05,
+      1.55,
+      2.15,
+      2.85,
+      3.55
+    ]
+  },
+  "architectureSeparation": {
+    "mascotLayer": {
+      "id": "KiwiCat",
+      "selectors": [
+        ".cat-wrap",
+        ".fog-layer (z-index: 1)",
+        ".face-layer (z-index: 10)"
+      ],
+      "fixedSizeBoxPx": 320,
+      "opacityUniformDriver": "pose.mascotOpacity",
+      "fadesOutWindowSec": [
+        3.96,
+        4.3
+      ],
+      "notes": "Permanece sempre centralizado em proporcao 1:1 fixa (size x size) para nunca achatar o shader WebGL2 ou os olhos/orelhas 3D enquanto a moldura externa estica."
+    },
+    "appShellLayer": {
+      "id": "Kiwi Notes App Shell (Moldura)",
+      "selectors": [
+        "#stage",
+        "#app-win"
+      ],
+      "surfaceBg": "#090A0E",
+      "initialShape": {
+        "widthPx": 320,
+        "heightPx": 320,
+        "borderRadiusPct": 24,
+        "borderRadiusPxAt320": 76.8
+      },
+      "expandedShape": {
+        "widthPx": 640,
+        "heightPx": 370,
+        "borderRadiusPx": 16
+      },
+      "expandWindowSec": [
+        4.28,
+        4.92
+      ],
+      "windowChromeFadeSec": [
+        4.62,
+        4.94
+      ],
+      "appContentFadeSec": [
+        4.8,
+        5.26
+      ],
+      "notes": "Moldura squircle independente do mascote. Apos o KiwiCat desaparecer em 4.30s, apenas a moldura permanece e se estica para virar a janela do Kiwi Notes."
+    }
+  },
+  "config": {
+    "earStyle": "compactas",
+    "earScale": 0.75,
+    "eyeStyle": "circulares",
+    "eyeScale": 1.05,
+    "eyeSpacing": 1,
+    "bodyWidth": 1.06,
+    "bodyColor": "#050507",
+    "accentColor": "#F472B6",
+    "surfaceBg": "#090A0E",
+    "eyeColor": "#FFFFFF",
+    "prismStops": [
+      "#22D3EE",
+      "#6366F1",
+      "#EC4899"
+    ],
+    "mistBaseColor": "#D4D8E4",
+    "prismSpread": 78,
+    "auraStyle": "borda-suave",
+    "showAmbientMist": false,
+    "showMascotDetails": true
+  },
+  "camera3D": {
+    "camZ": 3.1,
+    "focalLen": 2.45,
+    "raymarchMaxSteps": 30,
+    "boundingSphereRadius": 1.62
+  },
+  "phases": [
+    {
+      "id": "condense",
+      "label": "Névoa & Condensação",
+      "start": 0,
+      "end": 1.4,
+      "durationSec": 1.4
+    },
+    {
+      "id": "waking",
+      "label": "Despertar & Orelhas",
+      "start": 1.4,
+      "end": 2.6,
+      "durationSec": 1.2
+    },
+    {
+      "id": "aurora",
+      "label": "Foco & Aurora",
+      "start": 2.6,
+      "end": 3.18,
+      "durationSec": 0.58
+    },
+    {
+      "id": "happy",
+      "label": "Reação Feliz",
+      "start": 3.18,
+      "end": 3.92,
+      "durationSec": 0.74
+    },
+    {
+      "id": "exit",
+      "label": "Pouso do Kiwi Cat",
+      "start": 3.92,
+      "end": 4.34,
+      "durationSec": 0.42
+    },
+    {
+      "id": "expand",
+      "label": "Janela & App",
+      "start": 4.34,
+      "end": 5.35,
+      "durationSec": 1.01
+    }
+  ],
+  "staggeredFeatureRevealSec": {
+    "bodyUniformSphereGrow": [
+      0,
+      1.34
+    ],
+    "bodyMorphSphereToCatScaleRange": [
+      0.32,
+      0.85
+    ],
+    "earsAppear": [
+      1.24,
+      1.54
+    ],
+    "earsUnfoldFromSleep": [
+      1.38,
+      2.38
+    ],
+    "earTwitchRight": [
+      1.44,
+      1.72
+    ],
+    "earTwitchLeft": [
+      1.66,
+      1.96
+    ],
+    "eyesAppear": [
+      1.7,
+      1.94
+    ],
+    "sleepyBlink1": [
+      1.88,
+      2.04
+    ],
+    "sleepyBlink2": [
+      2.12,
+      2.28
+    ],
+    "headWobbleWake": [
+      1.82,
+      2.36
+    ],
+    "mouthAppear": [
+      2.08,
+      2.34
+    ],
+    "auroraOrbitBoost": [
+      2.4,
+      3.38
+    ],
+    "happyReaction": [
+      3.16,
+      4.12
+    ],
+    "sparkles": [
+      3.18,
+      4
+    ],
+    "mascotLandingFade": [
+      3.96,
+      4.3
+    ],
+    "shellExpandToAppWindow": [
+      4.28,
+      4.92
+    ],
+    "appChromeAppear": [
+      4.62,
+      4.94
+    ],
+    "appContentAppear": [
+      4.8,
+      5.26
+    ]
+  },
+  "runtimeContracts": {
+    "queryParamFreeze": "?t=<seconds>",
+    "reducedMotionSources": [
+      "window.matchMedia(\"(prefers-reduced-motion: reduce)\")",
+      "localStorage[\"kn-appearance\"] -> { \"motion\": \"reduced\" }"
+    ],
+    "nativeBridge": {
+      "ready": "window.engine?.ready?.()",
+      "done": [
+        "window.engine?.intro?.done?.()",
+        "window.engine?.send?.(\"intro.done\")"
+      ]
+    }
+  }
+}

@@ -1,0 +1,73 @@
+import { describe, expect, test } from "bun:test";
+
+import { buildIndex, joinSpelledLetters, sniff, soundKey } from "./faro.ts";
+
+const note = (path: string) => ({ path, title: path.split("/").pop()!.replace(/\.(md|txt)$/, ""), folder: path.split("/").slice(0, -1).join("/"), size: 100, mtime: "2026-11-10T00:00:00.000Z" });
+
+describe("o som (ADR 0013 peça 1, T14359)", () => {
+  test("o nome do ditado e o nome certo dão a mesma chave", () => {
+    for (const [said, real] of [
+      ["legasi pê erre", "Legacy PR"],
+      ["rêde nórti", "Rede Norte"],
+      ["portau clientis", "Portal Clientes"],
+      ["mudansa bêta", "Mudança Beta"],
+      ["relatório quê um", "Relatório Q1"],
+      ["fotô grafia", "Fotografia"],
+      ["lista de compra", "Lista de compras"],
+    ])
+      expect(soundKey(said)).toBe(soundKey(real));
+    expect(soundKey("ideias de viagem")).not.toBe(soundKey("Relatório Q1"));
+  });
+
+  test("as siglas faladas viram letras; 'a', 'e' e 'o' soltos não", () => {
+    expect(joinSpelledLetters("legasi pê erre")).toBe("legasi pr");
+    expect(joinSpelledLetters("relatório quê um e me diz")).toBe("relatório q1 e me diz");
+    expect(joinSpelledLetters("o que tem")).toBe("o que tem");
+  });
+});
+
+describe("as citações", () => {
+  const idx = buildIndex({
+    notes: [
+      note("Projetos/Legacy PR/Plano de Mudança.md"),
+      note("Projetos/Legacy PR/Legacy PR.md"),
+      note("Projetos/Portal Clientes/Relatório Q1.md"),
+      note("Projetos/Portal Clientes/Relatório Q1 rascunho.txt"),
+      note("Áreas/x/relatório pendência 88.md"),
+      note("Pessoal/Lista de compras.md"),
+      note("A/prazo/um.md"),
+      note("Reuniões/2026-11-12 · Status.md"),
+      note("Reuniões/2026-11-13 · Alinhamento.md"),
+    ],
+    folders: ["Projetos", "Projetos/Legacy PR", "Projetos/Portal Clientes", "Pessoal", "A", "A/prazo", "B/prazo", "C/prazo", "D/prazo", "Áreas", "Áreas/x", "Reuniões"],
+    projects: [{ name: "Legacy PR", folder: "Projetos/Legacy PR", main: "Projetos/Legacy PR/Legacy PR.md" }],
+    meetings: [
+      { path: "Reuniões/2026-11-12 · Status.md", title: "Status", date: "2026-11-12" },
+      { path: "Reuniões/2026-11-13 · Alinhamento.md", title: "Alinhamento", date: "2026-11-13" },
+    ],
+  });
+  const certo = (r: ReturnType<typeof sniff>) => (r.kind === "certo" ? r.hit.target.path : r.kind);
+
+  test("o nome inteiro ganha das palavras soltas; digitado e falado", () => {
+    expect(certo(sniff("Qual é o prazo no Plano de Mudança do Legacy PR?", idx))).toBe("Projetos/Legacy PR/Plano de Mudança.md");
+    expect(certo(sniff("Qual é o prazo no plano de mudança do legasi pê erre?", idx))).toBe("Projetos/Legacy PR/Plano de Mudança.md");
+  });
+
+  test("as palavras em outra ordem, e o número do nome é obrigatório", () => {
+    expect(certo(sniff("Abre o rascunho do Relatório Q1", idx))).toBe("Projetos/Portal Clientes/Relatório Q1 rascunho.txt");
+    expect(certo(sniff("as pendências do relatório quê um", idx))).toBe("Projetos/Portal Clientes/Relatório Q1.md");
+  });
+
+  test("o projeto e a nota principal dele são um alvo só; a palavra do tipo puxa a pasta", () => {
+    const r = sniff("Como está o projeto Legacy PR?", idx);
+    expect(r).toMatchObject({ kind: "certo", hit: { target: { kind: "projeto", path: "Projetos/Legacy PR" } } });
+    expect(certo(sniff("O que tem na pasta Pessoal?", idx))).toBe("Pessoal");
+  });
+
+  test('um nome de muitos alvos ("prazo") não é citação; "essa nota" e "a última reunião" são apontados', () => {
+    expect(sniff("qual o prazo?", idx).kind).toBe("nada");
+    expect(certo(sniff("resume essa nota", idx, { openNote: "Pessoal/Lista de compras.md" }))).toBe("Pessoal/Lista de compras.md");
+    expect(sniff("resume essa nota", idx).kind).toBe("nada");
+    expect(certo(sniff("o que foi decidido na última reunião?", idx))).toBe("Reuniões/2026-11-13 · Alinhamento.md");
+  });
+});

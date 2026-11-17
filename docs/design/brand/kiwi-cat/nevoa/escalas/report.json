@@ -1,0 +1,38 @@
+[
+  {
+    "scale": 1,
+    "errors": [],
+    "stats": {
+      "backend": "webgpu",
+      "draws": 381,
+      "hidden": false,
+      "reduced": false,
+      "slow": false,
+      "intervals": []
+    }
+  },
+  {
+    "scale": 0.5,
+    "errors": [],
+    "stats": {
+      "backend": "webgpu",
+      "draws": 381,
+      "hidden": false,
+      "reduced": false,
+      "slow": false,
+      "intervals": []
+    }
+  },
+  {
+    "scale": 0.25,
+    "errors": [],
+    "stats": {
+      "backend": "webgpu",
+      "draws": 381,
+      "hidden": false,
+      "reduced": false,
+      "slow": false,
+      "intervals": []
+    }
+  }
+]

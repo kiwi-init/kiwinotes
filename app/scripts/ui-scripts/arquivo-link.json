@@ -1,0 +1,21 @@
+{
+  "window": "notes",
+  "steps": [
+    { "waitFor": ".kn-title", "name": "a janela Notas abre (antes, no cofre: Docs/relatorio.pdf, a cópia de test/fixtures/files/relatorio.pdf, um Mapa.canvas vazio e a nota F.md com \"Ver o [[relatorio.pdf]] e o [[Mapa.canvas]] antes da reunião.\")" },
+    { "click": ".kn-title", "name": "tira o foco do editor: os links viram links" },
+    { "waitFor": ".cm-rendered a[href^='kiwi-note:']:has-text('relatorio.pdf')", "name": "T7616: o [[relatorio.pdf]] acha o arquivo e não fica de link quebrado" },
+    { "expectCount": ".cm-rendered a[href^='kiwi-note-missing:']", "count": 0, "name": "nenhum link quebrado na nota" },
+    { "screenshot": "nota-com-links.png" },
+    { "click": ".cm-rendered a:has-text('relatorio.pdf')", "name": "clica no link do pdf" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-pdf-sheet[data-rendered='true']", "timeout": 20000, "name": "o pdf abre no visualizador das Notas, não uma nota nova" },
+    { "expectText": ".kn-file-title", "text": "relatorio.pdf" },
+    { "screenshot": "pdf-pelo-link.png" },
+    { "press": "Meta+k" },
+    { "type": "F" },
+    { "wait": 300 },
+    { "press": "Enter", "name": "volta para a nota F" },
+    { "waitFor": ".cm-rendered a:has-text('Mapa.canvas')" },
+    { "click": ".cm-rendered a:has-text('Mapa.canvas')", "name": "clica no link do quadro" },
+    { "waitFor": ".kn-canvas", "name": "o quadro abre no Kiwi (T6600)" }
+  ]
+}

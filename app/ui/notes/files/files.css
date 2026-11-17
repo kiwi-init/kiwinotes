@@ -1,0 +1,485 @@
+/* O arquivo aberto dentro das Notas (spec #7079, T7103): o topo com o nome e o botão, e o corpo do visualizador. */
+
+.kn-file {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
+
+.kn-file-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 40px 14px;
+  border-bottom: 1px solid var(--border, var(--surface-2));
+}
+
+.kn-file-icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-3);
+}
+
+.kn-file-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 650 18px/1.3 var(--font-display, var(--font));
+  letter-spacing: var(--tracking-display, normal);
+  color: var(--text);
+}
+
+.kn-file-meta {
+  flex: none;
+  font: var(--t-meta, 12px) / 1 var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+}
+
+.kn-file-actions {
+  flex: none;
+  margin-left: auto;
+}
+
+.kn-file-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.kn-file-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 520px;
+  margin: 64px auto 0;
+  padding: 16px 20px;
+  border-radius: var(--r-card, 14px);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.kn-file-notice p {
+  margin: 0;
+}
+
+.kn-file-notice .kn-bt {
+  background: var(--surface-hover);
+}
+
+/* ---------------------------------------------------------- o texto (T7105) */
+
+.kn-file-text {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* O corpo do texto: o editor e, por cima, a moldura das alças da largura (spec #13383). */
+.kn-file-text-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* O editor do texto (spec #13382): o CodeMirror, que ocupa o resto da altura e rola sozinho. A coluna e a letra ficam
+   no tema dele, no TextViewer. */
+.kn-file-text-editor {
+  flex: 1;
+  min-height: 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* O texto em foco não ganha o anel de foco das outras áreas: é a página inteira de texto, como o editor da nota. */
+.kn-file-text-area:focus,
+.kn-file-text-area:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.kn-file-text-note,
+.kn-file-text-alert {
+  flex: none;
+  margin: 12px 40px 0;
+  padding: 10px 14px;
+  border-radius: var(--r-row, 8px);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--t-ui);
+}
+
+/* ---------------------------------------------------------- a tabela do csv e do tsv (T7107) */
+
+.kn-file-table-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 40px 24px;
+}
+
+.kn-file-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--t-ui, 13px);
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.kn-file-table th,
+.kn-file-table td {
+  padding: 6px 12px;
+  max-width: 420px;
+  border-bottom: 1px solid var(--border, var(--surface-2));
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* o cabeçalho fica no alto enquanto as linhas rolam */
+.kn-file-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg, var(--surface, Canvas));
+  font-weight: 600;
+  white-space: nowrap;
+  /* a linha de baixo é sombra, não borda: a borda de uma célula fixa some com `border-collapse: separate` ao rolar */
+  border-bottom: 0;
+  box-shadow: 0 1px 0 var(--border, var(--surface-2));
+}
+
+.kn-file-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+.kn-file-table .kn-file-table-n {
+  padding-left: 0;
+  color: var(--text-3);
+  font: var(--t-meta, 12px) / 1.7 var(--mono, var(--font-mono, monospace));
+  text-align: right;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kn-file-table-more {
+  margin-top: 14px;
+}
+
+.kn-file-table-foot {
+  flex: none;
+  padding: 8px 40px 10px;
+  border-top: 1px solid var(--border, var(--surface-2));
+  font: var(--t-meta, 12px) / 1 var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+}
+
+.kn-file-table-note {
+  margin-bottom: 8px;
+}
+
+/* ---------------------------------------------------------- o pdf (T7109) */
+
+.kn-file-pdf {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-pdf-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 40px;
+  border-bottom: 1px solid var(--border, var(--surface-2));
+  font-size: var(--t-meta, 12px);
+  color: var(--text-2);
+}
+
+.kn-file-pdf-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kn-file-pdf-bar .kn-bt:disabled {
+  opacity: 0.45;
+}
+
+.kn-file-pdf-zoom {
+  min-width: 44px;
+  text-align: center;
+  font-family: var(--mono, var(--font-mono, monospace));
+}
+
+.kn-file-pdf-page {
+  font-family: var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+}
+
+.kn-file-pdf-find {
+  margin-left: auto;
+}
+
+.kn-file-pdf-query {
+  width: 200px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.kn-file-pdf-count {
+  min-width: 64px;
+  font-family: var(--mono, var(--font-mono, monospace));
+  color: var(--text-3);
+}
+
+.kn-file-pdf-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  background: var(--surface-2);
+}
+
+/* a folha é sempre branca, como o papel, nos dois temas */
+.kn-file-pdf-sheet {
+  position: relative;
+  margin: 0 auto 24px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.kn-file-pdf-sheet:last-child {
+  margin-bottom: 0;
+}
+
+.kn-file-pdf-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kn-file-pdf-mark {
+  position: absolute;
+  border-radius: 2px;
+  background: rgba(255, 213, 0, 0.4);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.kn-file-pdf-mark[data-current] {
+  background: rgba(255, 138, 0, 0.55);
+}
+
+/* ---------------------------------------------------------- o docx (T7110) */
+
+.kn-file-docx {
+  height: 100%;
+  overflow: auto;
+}
+
+.kn-file-docx-note {
+  margin-bottom: 0;
+}
+
+/* a coluna do texto, na fonte e na largura das notas */
+.kn-file-docx-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 40px 64px;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-user-select: text;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.kn-file-docx-page h1,
+.kn-file-docx-page h2,
+.kn-file-docx-page h3,
+.kn-file-docx-page h4 {
+  margin: 1.4em 0 0.5em;
+  font-family: var(--font-display, var(--font));
+  letter-spacing: var(--tracking-display, normal);
+  line-height: 1.25;
+}
+
+.kn-file-docx-page h1 { font-size: 26px; }
+.kn-file-docx-page h2 { font-size: 20px; }
+.kn-file-docx-page h3 { font-size: 17px; }
+.kn-file-docx-page > :first-child { margin-top: 0; }
+
+.kn-file-docx-page p { margin: 0 0 0.8em; }
+.kn-file-docx-page ul,
+.kn-file-docx-page ol { margin: 0 0 0.8em; padding-left: 1.5em; }
+
+/* só o link que passou pela lista; um `<a>` sem `href` (um `javascript:` que saiu) é texto comum */
+.kn-file-docx-page a[href] {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: default;
+}
+
+.kn-file-docx-page img {
+  max-width: 100%;
+  height: auto;
+}
+
+.kn-file-docx-page table {
+  border-collapse: collapse;
+  margin: 0 0 1em;
+  font-size: 14px;
+}
+
+.kn-file-docx-page td,
+.kn-file-docx-page th {
+  padding: 6px 10px;
+  border: 1px solid var(--border, var(--surface-2));
+  vertical-align: top;
+}
+
+.kn-file-docx-page td > p:last-child,
+.kn-file-docx-page th > p:last-child { margin-bottom: 0; }
+
+.kn-file-docx-page blockquote {
+  margin: 0 0 0.8em;
+  padding-left: 14px;
+  border-left: 3px solid var(--surface-2);
+  color: var(--text-2);
+}
+
+/* ---------------------------------------------------------- a planilha (T7111) */
+
+.kn-file-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-sheet > .kn-file-table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.kn-file-sheet-note {
+  margin-bottom: 0;
+}
+
+.kn-file-sheet-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 10px 40px 8px;
+  overflow-x: auto;
+}
+
+.kn-file-sheet-tab {
+  flex: none;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--t-ui, 13px);
+  cursor: default;
+}
+
+.kn-file-sheet-tab:hover {
+  background: var(--surface-hover);
+}
+
+.kn-file-sheet-tab[aria-selected="true"] {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------- a imagem (T7113) */
+
+.kn-file-image {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* a imagem no meio; maior que a área, ela rola para os dois lados a partir do canto */
+.kn-file-image-area {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--surface-2);
+}
+
+.kn-file-image-area[data-zoomed] {
+  place-items: start;
+}
+
+.kn-file-image-img {
+  display: block;
+  max-width: none;
+  height: auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  /* o fundo xadrez mostra a transparência do png e do svg */
+  background:
+    conic-gradient(#e6e6e6 25%, #fff 0 50%, #e6e6e6 0 75%, #fff 0) 0 0 / 16px 16px;
+}
+
+/* ---------------------------------------------------------- o draw.io (T7112) */
+
+.kn-file-drawio {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.kn-file-drawio-area {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px 24px;
+  background: var(--surface-2);
+  /* O HTML dos rótulos fica preso aqui (revisão do T7112): com `contain: paint`, um `position: fixed` ou `absolute`
+     num rótulo se posiciona dentro desta área e é cortado por ela, sem cobrir a barra, a árvore ou a nota. */
+  contain: paint;
+}
+
+/* o diagrama no papel branco, como no draw.io, nos dois temas */
+.kn-file-drawio-graph {
+  margin: 0 auto;
+  background: #fff;
+  border-radius: var(--r-card, 14px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  color: #000;
+}
+
+.kn-file-drawio-area[hidden] {
+  display: none;
+}

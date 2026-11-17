@@ -1,0 +1,35 @@
+// Bateria do ditado (T1908), modo wav: de ponta a ponta, do áudio ao texto inserido. Cada caso diz o que o `say`
+// fala (`say`, com a voz de `voice`: Luciana em pt-BR, Samantha em en-US). O `scripts/dictation-fixtures.ts` gera os
+// WAV numa pasta temporária: áudio nunca entra no repo. O STT pontua do jeito dele, então o `expect` confere o que
+// importa (`contains`/`excludes`, tom, espaço) e não a vírgula. `known`: como em casos.jsonl.
+// `soltouAntesMs` (T5456): o atalho foi solto esse tanto antes de a fala acabar; o WAV é cortado onde a gravação
+// pararia, com o rabo de 250 ms do helper (`KIWI_RELEASE_TAIL_MS=0` mostra como era antes).
+{"name": "falado: hum some", "say": "hum, eu acho que dá pra entregar amanhã", "voice": "Luciana", "expect": {"contains": ["acho que dá", "entregar amanhã"], "excludes": ["hum", "Hum"]}}
+{"name": "falado: tipo some", "say": "me manda o relatório amanhã, tipo, de manhã", "voice": "Luciana", "expect": {"contains": "relatório amanhã", "excludes": ["tipo", "Tipo"]}}
+{"name": "falado: autocorreção", "say": "me encontra às três, não, quer dizer, às quatro", "voice": "Luciana", "expect": {"contains": "4", "excludes": ["3", "três", "quer dizer"]}}
+{"name": "falado: pergunta", "say": "quando sai o próximo release", "voice": "Luciana", "expect": {"contains": "?"}}
+{"name": "falado en: uh some", "say": "uh, I think we should ship it on Friday", "voice": "Samantha", "expect": {"contains": "ship it on Friday", "excludes": ["uh", "Uh"]}}
+{"name": "falado en: scratch that", "say": "Ship it Friday. Scratch that. Ship it Monday.", "voice": "Samantha", "expect": {"contains": "Monday", "excludes": ["Friday", "Scratch"]}}
+{"name": "falado: dicionário ORBIT SILO", "say": "o orbit do silo caiu de novo", "voice": "Luciana", "expect": {"contains": ["ORBIT", "SILO"]}}
+{"name": "falado: dicionário GitHub", "say": "abre um pull request no github", "voice": "Luciana", "expect": {"contains": "GitHub"}}
+{"name": "falado: dicionário Kiwi Notes", "say": "anota isso no kiwi notes", "voice": "Luciana", "expect": {"contains": "Kiwi Notes"}}
+{"name": "falado en: dicionário kubectl", "say": "run kube control get pods", "voice": "Samantha", "expect": {"contains": "kubectl get pods"}}
+{"name": "falado: snippet", "say": "manda pro meu email", "voice": "Luciana", "expect": {"contains": "ana@example.com"}}
+{"name": "falado: slack casual", "say": "ok, chego às quatro", "voice": "Luciana", "app": "slack", "expect": {"tone": "casual", "excludes": "."}}
+{"name": "falado: mail formal com espaço", "say": "segue o relatório em anexo", "voice": "Luciana", "app": "mail", "fieldBefore": "Oi Ana.", "expect": {"tone": "formal", "spaced": true, "contains": ["Segue o relatório", "."]}}
+{"name": "falado: ghostty literal", "say": "git status", "voice": "Samantha", "app": "ghostty", "fieldBefore": "$ ", "expect": {"text": "git status", "tone": "literal", "spaced": false}}
+{"name": "falado: teams depois de um Oi.", "say": "tudo certo por aqui", "voice": "Luciana", "app": "teams", "fieldBefore": "Oi.", "expect": {"tone": "casual", "spaced": true}}
+// Trava de falso positivo do boosting e da correção fonética (T1973, #2097): frases sem termo nenhum, com sons parecidos.
+{"name": "sem termo: eu dei com ele no corredor", "say": "eu dei com ele no corredor", "voice": "Luciana", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: a paz voltou", "say": "a paz voltou", "voice": "Luciana", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: o pacote chegou", "say": "o pacote chegou", "voice": "Luciana", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: comprei um quiuí", "say": "comprei um quiuí", "voice": "Luciana", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: o sistema caiu de novo", "say": "o sistema caiu de novo", "voice": "Luciana", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: I get a hub of ideas", "say": "I get a hub of ideas", "voice": "Samantha", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: put the ice cube in the cup", "say": "put the ice cube in the cup", "voice": "Samantha", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: she packs her bags", "say": "she packs her bags", "voice": "Samantha", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: bring the comb", "say": "bring the comb", "voice": "Samantha", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "sem termo: a reunião de amanhã", "say": "a reunião de amanhã", "voice": "Luciana", "expect": {"excludes": ["ORBIT", "SILO", "GitHub", "Kiwi Notes", "kubectl"]}}
+{"name": "falado: data por extenso vira algarismo (T1974)", "say": "a entrega é dia cinco de março", "voice": "Luciana", "expect": {"contains": "5 de março", "excludes": ["cinco"]}}
+{"name": "falado: última palavra ao soltar (L4, +250 ms)", "say": "me lembra de ligar para o fornecedor amanhã", "voice": "Luciana", "soltouAntesMs": 450, "expect": {"contains": "amanhã"}}
+{"name": "falado: ditado longo de 70 s, sem perder palavra nas emendas de 15 s (L13, T6580)", "say": "Hoje de manhã eu revisei a lista de tarefas do projeto e percebi que ainda faltam três entregas importantes para esta semana. A primeira é terminar o relatório de vendas do trimestre, com os números de cada região e uma comparação com o ano passado. A segunda é preparar a apresentação para a reunião de sexta-feira, que precisa mostrar o andamento do aplicativo e os próximos passos. A terceira é responder os e-mails dos clientes que pediram uma demonstração da nova versão. Além disso, preciso marcar uma conversa com o time de design para decidir as cores da tela inicial, porque a última proposta ficou escura demais no modo claro. Também quero aproveitar a tarde para testar o ditado com frases longas, já que algumas pessoas reclamaram que palavras somem no meio do texto quando falam por mais de um minuto sem parar. Se isso for verdade, vamos precisar cortar o áudio nas pausas em vez de cortar em janelas fixas. Por fim, não posso esquecer de comprar café e frutas para a reunião da equipe amanhã cedo.", "voice": "Luciana", "expect": {"contains": ["entregas importantes", "apresentação", "demonstração", "modo claro", "mais de um minuto", "janelas fixas", "café e frutas"]}}

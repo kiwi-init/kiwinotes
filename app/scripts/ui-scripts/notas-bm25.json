@@ -1,0 +1,214 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Organização",
+        "content": "Notas para organizar as tarefas. #projeto"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Síntese",
+        "content": "Organização organização organização das reuniões e dos projetos. #projeto"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Ideias",
+        "content": "Planejando ações para organizar projetos e reuniões. #projeto"
+      }
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Contexto",
+        "content": "Organização das reuniões. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. Detalhes da pauta e do planejamento. "
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "fill": ".kn-palette-q",
+      "text": "organizar"
+    },
+    {
+      "waitFor": ".kn-palette-snippet"
+    },
+    {
+      "wait": 250
+    },
+    {
+      "expectText": ".kn-palette-it:nth-child(1)",
+      "text": "Organização"
+    },
+    {
+      "expectText": ".kn-palette-it:nth-child(2)",
+      "text": "Ideias"
+    },
+    {
+      "expectText": ".kn-palette-it:nth-child(3)",
+      "text": "Síntese"
+    },
+    {
+      "expectText": ".kn-palette-it:nth-child(4)",
+      "text": "Contexto"
+    },
+    {
+      "invoke": "notes.search",
+      "args": {
+        "query": "organizar"
+      }
+    },
+    {
+      "screenshot": "01-bm25.png"
+    },
+    {
+      "fill": ".kn-palette-q",
+      "text": "reuniao"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Síntese\")"
+    },
+    {
+      "wait": 250
+    },
+    {
+      "expectCount": ".kn-palette-snippet mark:has-text(\"reuniões\")",
+      "count": 3
+    },
+    {
+      "invoke": "notes.search",
+      "args": {
+        "query": "reuniao"
+      }
+    },
+    {
+      "screenshot": "02-portugues.png"
+    },
+    {
+      "fill": ".kn-palette-q",
+      "text": "organizar tag:projeto -path:contexto"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Síntese\")"
+    },
+    {
+      "wait": 250
+    },
+    {
+      "expectCount": ".kn-palette-it:has-text(\"Contexto\")",
+      "count": 0
+    },
+    {
+      "invoke": "notes.search",
+      "args": {
+        "query": "organizar tag:projeto -path:contexto"
+      }
+    },
+    {
+      "screenshot": "03-filtros.png"
+    },
+    {
+      "fill": ".kn-palette-q",
+      "text": "orgnaizar"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Ideias\")"
+    },
+    {
+      "wait": 250
+    },
+    {
+      "invoke": "notes.search",
+      "args": {
+        "query": "orgnaizar"
+      }
+    },
+    {
+      "screenshot": "04-fuzzy.png"
+    },
+    {
+      "fill": ".kn-palette-q",
+      "text": "\"organizar\""
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Ideias\")"
+    },
+    {
+      "wait": 250
+    },
+    {
+      "expectCount": ".kn-palette-it:has-text(\"Síntese\")",
+      "count": 0
+    },
+    {
+      "invoke": "notes.search",
+      "args": {
+        "query": "\"organizar\""
+      }
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-side-search"
+    },
+    {
+      "fill": ".kn-side-search",
+      "text": "reuniao"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item:has-text(\"Síntese\")"
+    },
+    {
+      "screenshot": "05-arvore.png"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "fill": ".kn-palette-q",
+      "text": "organizar"
+    },
+    {
+      "waitFor": ".kn-palette-it:nth-child(4):has-text(\"Contexto\")"
+    },
+    {
+      "invoke": "notes.save",
+      "args": {
+        "path": "Contexto.md",
+        "content": "organizar",
+        "baseVersion": "current"
+      }
+    },
+    {
+      "waitFor": ".kn-palette-it:nth-child(2):has-text(\"Contexto\")"
+    },
+    {
+      "invoke": "notes.search",
+      "args": {
+        "query": "organizar"
+      }
+    },
+    {
+      "screenshot": "06-ranking-atualizado.png"
+    }
+  ]
+}

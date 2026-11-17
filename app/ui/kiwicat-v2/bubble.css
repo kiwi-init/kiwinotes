@@ -1,0 +1,53 @@
+/* A casca do balão do KiwiCat (T14933, spec #14896): a do `KiwiSpeechBubble` do pacote
+   (docs/design/kiwicat-v2/agente/ByteKiwiCat.tsx). Só o desenho: o lugar, a largura e a lógica são de quem usa.
+   O fundo quase preto, o texto branco, o contorno de 2 px e a sombra dura de 4 px para baixo na cor de destaque, e o
+   rabo em SVG (`.kn-bubble-tail`, de `bubbleTail.ts`). O balão é sempre escuro, também no tema claro (harry, #14908):
+   dentro dele, os tokens do app são os do escuro, para os botões e as notas seguirem o fundo. */
+.kn-bubble-shell,
+.kn-bubble-big {
+  /* A cor de destaque: o `accentColor` da paleta escolhida (spec #14963), que o hub e o overlay põem em `--kn-cat-accent`
+     na raiz; sem ela (os Ajustes), o da paleta padrão (`prisma-original`). */
+  --kn-bubble-accent: var(--kn-cat-accent, #f472b6);
+  --kn-bubble-bg: #07080b;
+  --kn-bubble-ink: #ffffff;
+  --bg: var(--kn-bubble-bg);
+  --surface: var(--kn-bubble-bg);
+  --surface-2: #18181a;
+  --border: rgb(255 255 255 / 0.08);
+  --text: var(--kn-bubble-ink);
+  --text-2: #a3a3ab;
+  --text-3: #808089;
+  --accent: #8ab4ff;
+  --accent-text: #8ab4ff;
+  --danger: #ff6259;
+  color-scheme: dark;
+  box-sizing: border-box;
+  min-width: 96px;
+  padding: 8px 16px;
+  border: 2px solid var(--kn-bubble-accent);
+  border-radius: 22px;
+  background: var(--kn-bubble-bg);
+  color: var(--kn-bubble-ink);
+  box-shadow: 0 4px 0 var(--kn-bubble-accent);
+  font: 500 14px / 1.35 system-ui, -apple-system, sans-serif;
+}
+/* O erro: o contorno, a sombra e o rabo na cor de perigo. O hub põe `data-error` só no erro; o overlay põe "true" ou "false". */
+.kn-bubble-shell[data-error]:not([data-error="false"]) { --kn-bubble-accent: var(--danger); }
+
+/* O rabo (34 × 24, o SVG do pacote). À direita e à esquerda, embaixo, como no pacote; para baixo e para cima, o mesmo
+   desenho num ponto `--kn-tail-x` (o meio do gato), contado de dentro do contorno de 2 px, e para cima, virado. */
+.kn-bubble-tail {
+  position: absolute;
+  width: 34px;
+  height: 24px;
+  overflow: visible;
+  pointer-events: none;
+}
+.kn-bubble-tail .kn-tail-shadow { fill: var(--kn-bubble-accent); }
+.kn-bubble-tail .kn-tail-fill { fill: var(--kn-bubble-bg); }
+.kn-bubble-tail .kn-tail-line { fill: none; stroke: var(--kn-bubble-accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.kn-bubble-tail[data-side="right"] { bottom: -24px; right: 24px; }
+.kn-bubble-tail[data-side="left"] { bottom: -24px; left: 24px; transform: scaleX(-1); }
+/* A ponta do SVG está em x = 29,5: o rabo começa 29,5 px antes do ponto. */
+.kn-bubble-tail[data-side="down"] { bottom: -24px; left: calc(var(--kn-tail-x, 50%) - 29.5px); }
+.kn-bubble-tail[data-side="up"] { top: -24px; left: calc(var(--kn-tail-x, 50%) - 29.5px); transform: scaleY(-1); }

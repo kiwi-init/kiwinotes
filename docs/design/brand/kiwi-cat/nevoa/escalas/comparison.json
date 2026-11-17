@@ -1,0 +1,74 @@
+{
+  "order": [
+    1,
+    0.5,
+    0.25
+  ],
+  "variant": "B",
+  "comparison": [
+    {
+      "state": "repouso",
+      "scale": 1.0,
+      "max_channel_error": 0,
+      "mean_channel_error": 0.0,
+      "p99_channel_error": 0.0
+    },
+    {
+      "state": "repouso",
+      "scale": 0.5,
+      "max_channel_error": 1,
+      "mean_channel_error": 0.00378125,
+      "p99_channel_error": 0.0
+    },
+    {
+      "state": "repouso",
+      "scale": 0.25,
+      "max_channel_error": 1,
+      "mean_channel_error": 0.010180338541666667,
+      "p99_channel_error": 1.0
+    },
+    {
+      "state": "ouvindo",
+      "scale": 1.0,
+      "max_channel_error": 0,
+      "mean_channel_error": 0.0,
+      "p99_channel_error": 0.0
+    },
+    {
+      "state": "ouvindo",
+      "scale": 0.5,
+      "max_channel_error": 11,
+      "mean_channel_error": 0.011495442708333333,
+      "p99_channel_error": 1.0
+    },
+    {
+      "state": "ouvindo",
+      "scale": 0.25,
+      "max_channel_error": 12,
+      "mean_channel_error": 0.03817252604166667,
+      "p99_channel_error": 1.0
+    },
+    {
+      "state": "thinking",
+      "scale": 1.0,
+      "max_channel_error": 0,
+      "mean_channel_error": 0.0,
+      "p99_channel_error": 0.0
+    },
+    {
+      "state": "thinking",
+      "scale": 0.5,
+      "max_channel_error": 1,
+      "mean_channel_error": 0.010210286458333334,
+      "p99_channel_error": 1.0
+    },
+    {
+      "state": "thinking",
+      "scale": 0.25,
+      "max_channel_error": 2,
+      "mean_channel_error": 0.035860026041666666,
+      "p99_channel_error": 1.0
+    }
+  ],
+  "scope": "fixed seed/time; screenshots, not CPU benchmark"
+}

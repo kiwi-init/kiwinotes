@@ -1,0 +1,90 @@
+{
+  "task": "T10437",
+  "protocol": "3 alternating pairs/candidate, 10s+60s, 640x800 DPR1, five owned WebKit processes, no capture",
+  "summary": [
+    {
+      "variant": "symbols",
+      "pairs": 3,
+      "meanDelta": 0.0945241492566667,
+      "medianDelta": 0.28407550088927613,
+      "maxDelta": 0.30048735065425003,
+      "baselineMean": 1.9924572158970173,
+      "candidateMean": 2.086981365153684,
+      "p95s": [
+        4.578809788634138,
+        4.945070225865395,
+        5.026866505267295
+      ]
+    }
+  ],
+  "baseline": "afda4c9",
+  "pairs": [
+    {
+      "pair": 1,
+      "variant": "symbols",
+      "order": [
+        "baseline",
+        "symbols"
+      ],
+      "baseline": {
+        "variant": "baseline",
+        "mean": 2.2486172799249364,
+        "p95": 4.996413614278969,
+        "dir": "/tmp/kiwi-T10437-cpu/pair-1-1-baseline"
+      },
+      "candidate": {
+        "variant": "symbols",
+        "mean": 1.9476268761514104,
+        "p95": 4.578809788634138,
+        "dir": "/tmp/kiwi-T10437-cpu/pair-1-2-symbols"
+      },
+      "delta": -0.30099040377352604
+    },
+    {
+      "pair": 2,
+      "variant": "symbols",
+      "order": [
+        "symbols",
+        "baseline"
+      ],
+      "baseline": {
+        "variant": "baseline",
+        "mean": 1.7315321599023028,
+        "p95": 3.6400116461080665,
+        "dir": "/tmp/kiwi-T10437-cpu/pair-2-2-baseline"
+      },
+      "candidate": {
+        "variant": "symbols",
+        "mean": 2.015607660791579,
+        "p95": 4.945070225865395,
+        "dir": "/tmp/kiwi-T10437-cpu/pair-2-1-symbols"
+      },
+      "delta": 0.28407550088927613
+    },
+    {
+      "pair": 3,
+      "variant": "symbols",
+      "order": [
+        "baseline",
+        "symbols"
+      ],
+      "baseline": {
+        "variant": "baseline",
+        "mean": 1.9972222078638122,
+        "p95": 4.019111881775826,
+        "dir": "/tmp/kiwi-T10437-cpu/pair-3-1-baseline"
+      },
+      "candidate": {
+        "variant": "symbols",
+        "mean": 2.2977095585180622,
+        "p95": 5.026866505267295,
+        "dir": "/tmp/kiwi-T10437-cpu/pair-3-2-symbols"
+      },
+      "delta": 0.30048735065425003
+    }
+  ],
+  "baselineP95": 4.151322486223255,
+  "symbolsP95": 4.983697905520419,
+  "runtimeHashesMatch": true,
+  "reviewerInterpretation": "Lead #10595 accepts +0.095 point as measurement noise; bound +0.5 point, no claim of CPU decrease"
+}

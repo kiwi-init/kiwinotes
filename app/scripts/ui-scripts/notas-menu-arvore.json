@@ -1,0 +1,38 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Origem",
+        "content": "Uma nota de teste.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item:has-text('Origem')"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item:has-text('Origem')",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu-item:has-text('Duplicar')"
+    },
+    {
+      "screenshot": "menu-arvore.png"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Duplicar')"
+    },
+    {
+      "expectText": ".kn-title",
+      "text": "Origem 2"
+    }
+  ]
+}

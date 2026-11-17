@@ -1,0 +1,82 @@
+{
+  "scope": "functional controlled pixels + native video, not performance",
+  "cases": [
+    {
+      "state": "repouso",
+      "errors": [],
+      "stats": {
+        "backend": "webgpu",
+        "draws": 25,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "state": "ouvindo",
+      "errors": [],
+      "stats": {
+        "backend": "webgpu",
+        "draws": 481,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    },
+    {
+      "state": "thinking",
+      "errors": [],
+      "stats": {
+        "backend": "webgpu",
+        "draws": 481,
+        "hidden": false,
+        "reduced": false,
+        "slow": false,
+        "intervals": []
+      }
+    }
+  ],
+  "fixed": {
+    "ready": 0.21113579200000004,
+    "changed": 1.7144255419999999,
+    "sampleBefore": 0.911135792,
+    "sampleAfter": 2.414425542,
+    "stats": {
+      "backend": "webgpu",
+      "draws": 2,
+      "hidden": false,
+      "reduced": true,
+      "slow": false,
+      "intervals": []
+    }
+  },
+  "live": {
+    "backend": "webgpu",
+    "draws": 20,
+    "hidden": false,
+    "reduced": false,
+    "slow": false,
+    "intervals": [
+      0.333,
+      0.33299999999999996,
+      0.3340000000000001,
+      0.3340000000000001,
+      0.3320000000000001,
+      0.3340000000000001,
+      0.33499999999999996,
+      0.33099999999999996,
+      0.33599999999999985,
+      0.33099999999999996,
+      0.3370000000000002,
+      0.33199999999999985,
+      0.33499999999999996,
+      0.3330000000000002,
+      0.3310000000000004,
+      0.33199999999999985,
+      0.3330000000000002
+    ]
+  },
+  "liveHiddenNoDraw": true
+}

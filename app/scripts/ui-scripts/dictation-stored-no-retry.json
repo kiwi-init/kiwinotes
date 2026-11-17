@@ -1,0 +1,12 @@
+{
+  "window": "history",
+  "steps": [
+    { "waitFor": ".kn-entry:has-text('Este texto já está seguro no Histórico.')" },
+    { "expectCount": ".kn-entry", "count": 1 },
+    { "expectCount": "button:has-text('Transcrever de novo')", "count": 0 },
+    { "expectCount": ".kn-entry-recovery", "count": 0 },
+    { "waitFor": "button[aria-label='Copiar o texto']" },
+    { "screenshot": "01-texto-guardado-sem-audio.png" },
+    { "invoke": "history.search", "args": { "limit": 10 } }
+  ]
+}

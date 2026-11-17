@@ -1,0 +1,531 @@
+{
+ "de": "registro do agente do Kiwi, 18 pedidos (spec #13435). Só números e nomes de ferramenta.",
+ "modelo": "claude-sonnet-5-5",
+ "cache": "1h",
+ "pedidos": [
+  {
+   "pedidoChars": 661,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 0,
+     "cacheEscrito": 8838,
+     "saida": 270
+    }
+   ]
+  },
+  {
+   "pedidoChars": 731,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "projects_list",
+       "argumentosChars": 2,
+       "resultadoChars": 25,
+       "erro": false
+      },
+      {
+       "nome": "notes_search",
+       "argumentosChars": 34,
+       "resultadoChars": 3716,
+       "erro": false
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 8838,
+     "cacheEscrito": 597,
+     "saida": 98
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_search",
+       "argumentosChars": 79,
+       "resultadoChars": 3590,
+       "erro": false
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 9435,
+     "cacheEscrito": 2127,
+     "saida": 126
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_read",
+       "argumentosChars": 93,
+       "resultadoChars": 317,
+       "erro": false
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 11562,
+     "cacheEscrito": 1992,
+     "saida": 91
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_search",
+       "argumentosChars": 54,
+       "resultadoChars": 3765,
+       "erro": false
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 13554,
+     "cacheEscrito": 273,
+     "saida": 133
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 13827,
+     "cacheEscrito": 2115,
+     "saida": 411
+    }
+   ]
+  },
+  {
+   "pedidoChars": 696,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 4,
+     "cacheLido": 15942,
+     "cacheEscrito": 725,
+     "saida": 365
+    }
+   ]
+  },
+  {
+   "pedidoChars": 652,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 0,
+     "cacheEscrito": 17667,
+     "saida": 24
+    }
+   ]
+  },
+  {
+   "pedidoChars": 668,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 4,
+     "cacheLido": 17667,
+     "cacheEscrito": 331,
+     "saida": 25
+    }
+   ]
+  },
+  {
+   "pedidoChars": 663,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 4,
+     "cacheLido": 18025,
+     "cacheEscrito": 304,
+     "saida": 28
+    }
+   ]
+  },
+  {
+   "pedidoChars": 743,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 0,
+     "cacheEscrito": 23872,
+     "saida": 16
+    }
+   ]
+  },
+  {
+   "pedidoChars": 740,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 4,
+     "cacheLido": 23872,
+     "cacheEscrito": 360,
+     "saida": 18
+    }
+   ]
+  },
+  {
+   "pedidoChars": 883,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 4,
+     "cacheLido": 24252,
+     "cacheEscrito": 406,
+     "saida": 89
+    }
+   ]
+  },
+  {
+   "pedidoChars": 889,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 0,
+     "cacheEscrito": 26479,
+     "saida": 19
+    }
+   ]
+  },
+  {
+   "pedidoChars": 935,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_list",
+       "argumentosChars": 27,
+       "resultadoChars": 1606,
+       "erro": false
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 26479,
+     "cacheEscrito": 445,
+     "saida": 111
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 26924,
+     "cacheEscrito": 987,
+     "saida": 311
+    }
+   ]
+  },
+  {
+   "pedidoChars": 981,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_list",
+       "argumentosChars": 44,
+       "resultadoChars": 968,
+       "erro": false
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 28222,
+     "cacheEscrito": 446,
+     "saida": 77
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_organize_folder",
+       "argumentosChars": 54,
+       "resultadoChars": 113,
+       "erro": false
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 28668,
+     "cacheEscrito": 677,
+     "saida": 138
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 29345,
+     "cacheEscrito": 207,
+     "saida": 86
+    }
+   ]
+  },
+  {
+   "pedidoChars": 900,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_list",
+       "argumentosChars": 54,
+       "resultadoChars": 258,
+       "erro": false
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 29638,
+     "cacheEscrito": 411,
+     "saida": 84
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 30049,
+     "cacheEscrito": 256,
+     "saida": 150
+    }
+   ]
+  },
+  {
+   "pedidoChars": 963,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_search",
+       "argumentosChars": 82,
+       "resultadoChars": 87,
+       "erro": false
+      },
+      {
+       "nome": "notes_list",
+       "argumentosChars": 81,
+       "resultadoChars": 292,
+       "erro": false
+      },
+      {
+       "nome": "notes_list",
+       "argumentosChars": 68,
+       "resultadoChars": 99,
+       "erro": false
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 30455,
+     "cacheEscrito": 438,
+     "saida": 277
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_list",
+       "argumentosChars": 58,
+       "resultadoChars": 89,
+       "erro": false
+      },
+      {
+       "nome": "notes_list",
+       "argumentosChars": 98,
+       "resultadoChars": 129,
+       "erro": false
+      },
+      {
+       "nome": "notes_list",
+       "argumentosChars": 105,
+       "resultadoChars": 565,
+       "erro": false
+      },
+      {
+       "nome": "notes_search",
+       "argumentosChars": 42,
+       "resultadoChars": 3425,
+       "erro": false
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 30893,
+     "cacheEscrito": 681,
+     "saida": 421
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 31574,
+     "cacheEscrito": 2898,
+     "saida": 421
+    }
+   ]
+  },
+  {
+   "pedidoChars": 928,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "files_read",
+       "argumentosChars": 74,
+       "resultadoChars": 80,
+       "erro": true
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 34893,
+     "cacheEscrito": 428,
+     "saida": 146
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_search",
+       "argumentosChars": 27,
+       "resultadoChars": 364,
+       "erro": false
+      },
+      {
+       "nome": "files_read",
+       "argumentosChars": 101,
+       "resultadoChars": 107,
+       "erro": true
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 35321,
+     "cacheEscrito": 209,
+     "saida": 170
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "files_read",
+       "argumentosChars": 88,
+       "resultadoChars": 94,
+       "erro": true
+      },
+      {
+       "nome": "files_read",
+       "argumentosChars": 78,
+       "resultadoChars": 84,
+       "erro": true
+      },
+      {
+       "nome": "files_read",
+       "argumentosChars": 64,
+       "resultadoChars": 70,
+       "erro": true
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 35530,
+     "cacheEscrito": 511,
+     "saida": 358
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 36041,
+     "cacheEscrito": 621,
+     "saida": 401
+    }
+   ]
+  },
+  {
+   "pedidoChars": 941,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "files_read",
+       "argumentosChars": 75,
+       "resultadoChars": 81,
+       "erro": true
+      },
+      {
+       "nome": "files_read",
+       "argumentosChars": 73,
+       "resultadoChars": 79,
+       "erro": true
+      },
+      {
+       "nome": "files_read",
+       "argumentosChars": 73,
+       "resultadoChars": 79,
+       "erro": true
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 37063,
+     "cacheEscrito": 431,
+     "saida": 277
+    },
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_search",
+       "argumentosChars": 31,
+       "resultadoChars": 4094,
+       "erro": false
+      },
+      {
+       "nome": "files_read",
+       "argumentosChars": 73,
+       "resultadoChars": 79,
+       "erro": true
+      },
+      {
+       "nome": "files_read",
+       "argumentosChars": 64,
+       "resultadoChars": 70,
+       "erro": true
+      }
+     ],
+     "entrada": 2,
+     "cacheLido": 37494,
+     "cacheEscrito": 538,
+     "saida": 256
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 38032,
+     "cacheEscrito": 2531,
+     "saida": 254
+    }
+   ]
+  },
+  {
+   "pedidoChars": 911,
+   "idas": [
+    {
+     "ferramentas": [
+      {
+       "nome": "notes_search",
+       "argumentosChars": 79,
+       "resultadoChars": 81,
+       "erro": false
+      },
+      {
+       "nome": "notes_search",
+       "argumentosChars": 68,
+       "resultadoChars": 70,
+       "erro": false
+      }
+     ],
+     "entrada": 4,
+     "cacheLido": 40817,
+     "cacheEscrito": 419,
+     "saida": 321
+    },
+    {
+     "ferramentas": [],
+     "entrada": 2,
+     "cacheLido": 41236,
+     "cacheEscrito": 489,
+     "saida": 293
+    }
+   ]
+  },
+  {
+   "pedidoChars": 890,
+   "idas": [
+    {
+     "ferramentas": [],
+     "entrada": 4,
+     "cacheLido": 42018,
+     "cacheEscrito": 408,
+     "saida": 14
+    }
+   ]
+  }
+ ]
+}

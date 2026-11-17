@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Kiwi-cat na família do Channels (T2025)</title>
+<!-- As três variações com a animação de abertura original (o tempo, a sequência e o movimento são os do demo do zip;
+     só a aparência muda, #2029). Abra no navegador; "De novo" recarrega as animações. -->
+<style>
+  body { margin: 0; padding: 24px; background: #1c1c1e; color: #f2f2f4; font: 600 15px -apple-system, system-ui, sans-serif; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; }
+  figure { margin: 0; }
+  figcaption { margin-top: 8px; opacity: .7; font-weight: 500; }
+  img { display: block; width: 360px; height: 360px; }
+  button { margin-bottom: 16px; font: inherit; padding: 6px 14px; border-radius: 8px; border: 0; }
+</style>
+<button onclick="for (const i of document.images) { const s = i.src; i.src = ''; i.src = s; }">De novo</button>
+<div class="row">
+  <figure><img src="kiwi-cat-1-aura-intro.svg" alt=""><figcaption>1 · Aura</figcaption></figure>
+  <figure><img src="kiwi-cat-2-vidro-intro.svg" alt=""><figcaption>2 · Vidro</figcaption></figure>
+  <figure><img src="kiwi-cat-3-lamina-intro.svg" alt=""><figcaption>3 · Lâmina</figcaption></figure>
+</div>

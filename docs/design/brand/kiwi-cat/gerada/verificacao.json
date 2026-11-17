@@ -1,0 +1,9 @@
+{
+  "max_channel_error_outside_eyes": 2,
+  "mean_channel_error_outside_eyes": 0.04339306492127675,
+  "mean_channel_error_all": 0.08333034515380859,
+  "p99_channel_error_outside_eyes": 1.0,
+  "max_channel_error_three_layers_outside_eyes": 2,
+  "mean_channel_error_three_layers_outside_eyes": 0.041628209833789696,
+  "eye_excluded_pixels": 33576
+}

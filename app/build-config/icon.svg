@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<!-- Gerado por app/scripts/app-icon.ts (T4411, T15551) da kiwi-cat-marca.png. Não edite à mão. -->
+<defs><clipPath id="base"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath></defs>
+<g clip-path="url(#base)">
+<rect x="100" y="100" width="824" height="824" fill="#000"/>
+<image id="kiwi-cat" x="100" y="100" width="824" height="824" preserveAspectRatio="xMidYMid slice" href="../../docs/design/kiwicat-v2/icone/kiwi-cat-marca.png"/>
+</g></svg>

@@ -1,0 +1,280 @@
+{
+ "window": "notes",
+ "steps": [
+  {
+   "invoke": "notes.create",
+   "args": {
+    "title": "Estresse",
+    "content": "# Teste do menu\n\nUm parágrafo qualquer[^1].\n\nOutro parágrafo.\n\n[^1]: A primeira.\n"
+   }
+  },
+  {
+   "waitFor": ".kn-crumb-bt"
+  },
+  {
+   "press": "Meta+k"
+  },
+  {
+   "type": "Estresse"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('Estresse')"
+  },
+  {
+   "press": "Enter"
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-rendered a[href^='kiwi-footnote-def:']"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "2: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 2."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^2]: Menu 2.')",
+   "timeout": 2500,
+   "name": "2: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "3: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 3."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^3]: Menu 3.')",
+   "timeout": 2500,
+   "name": "3: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "4: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 4."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^4]: Menu 4.')",
+   "timeout": 2500,
+   "name": "4: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "5: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 5."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^5]: Menu 5.')",
+   "timeout": 2500,
+   "name": "5: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "6: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 6."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^6]: Menu 6.')",
+   "timeout": 2500,
+   "name": "6: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "7: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 7."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^7]: Menu 7.')",
+   "timeout": 2500,
+   "name": "7: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "8: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 8."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^8]: Menu 8.')",
+   "timeout": 2500,
+   "name": "8: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "9: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 9."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^9]: Menu 9.')",
+   "timeout": 2500,
+   "name": "9: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "10: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 10."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^10]: Menu 10.')",
+   "timeout": 2500,
+   "name": "10: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "click": ".kn-note-editor .cm-rendered p:has-text('Outro parágrafo')",
+   "name": "11: o cursor no parágrafo"
+  },
+  {
+   "click": ".kn-note-editor .cm-line:has-text('Outro parágrafo')",
+   "button": "right"
+  },
+  {
+   "hover": "[role=menuitem]:has-text('Inserir')"
+  },
+  {
+   "click": "[role=menuitem]:has-text('Nota de rodapé')"
+  },
+  {
+   "type": "Menu 11."
+  },
+  {
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^11]: Menu 11.')",
+   "timeout": 2500,
+   "name": "11: o texto entra na definição nova"
+  },
+  {
+   "press": "Escape"
+  }
+ ]
+}

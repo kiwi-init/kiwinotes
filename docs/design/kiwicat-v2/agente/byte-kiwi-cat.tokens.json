@@ -1,0 +1,479 @@
+{
+  "name": "Byte Kiwi Cat Tokens & Catalogs",
+  "model": "byte-kiwi-cat",
+  "technique": "Separação Estrita em Camadas: .fog-layer (z-index: 1, WebGL2 Névoa Difusa + Arco Orbital Aquarelado + Máscara Radial Dinâmica por Voz) abaixo de .face-layer (z-index: 10, Coroa Flat-3D + Olhos 3D + Vetores)",
+  "selectedPreset": {
+    "id": "custom-1794801995497",
+    "name": "KiwiCat Ver Final Perfect",
+    "subtitle": "Byte Kiwi Cat · respondendo",
+    "isBuiltIn": false,
+    "activeState": "respondendo"
+  },
+  "selectedChoices": {
+    "state": "respondendo",
+    "paletteId": "prisma-original",
+    "paletteName": "Prisma Original",
+    "mistDistribution": "borda-suave",
+    "mistDistributionLabel": "Arco Orbital (MP4)",
+    "overlayTransition": "materializacao-nevoa",
+    "overlayTransitionLabel": "Materialização Névoa",
+    "overlayPosition": "bottom-right",
+    "overlayPositionLabel": "Canto Inferior Direito",
+    "showChinEqualizer": false
+  },
+  "activeConfiguration": {
+    "previewState": "respondendo",
+    "shape": {
+      "earStyle": "compactas",
+      "earScale": 0.75,
+      "eyeStyle": "circulares",
+      "eyeScale": 1.05,
+      "eyeSpacing": 1,
+      "silhouetteSoftness": 18,
+      "bodyWidth": 1.06
+    },
+    "color": {
+      "paletteId": "prisma-original",
+      "bodyColor": "#050507",
+      "accentColor": "#F472B6",
+      "surfaceBg": "#090A0E",
+      "eyeColor": "#FFFFFF",
+      "auraGradient": [
+        "#22D3EE",
+        "#6366F1",
+        "#EC4899"
+      ],
+      "auraIntensity": 95,
+      "mistDiffusion": 78,
+      "auraStyle": "borda-suave"
+    },
+    "motion": {
+      "fluidity": 100,
+      "speedMultiplier": 1.2,
+      "voiceReactivity": 85,
+      "eyeExpressiveness": 88
+    },
+    "ui": {
+      "frame": "livre",
+      "ambientMist": false,
+      "acousticRings": false,
+      "stateCaption": false,
+      "mascotDetails": true,
+      "chinEqualizer": false,
+      "comicEmotes": true,
+      "comicEmote": "auto",
+      "speechBubble": {
+        "enabled": true,
+        "text": "Pronto para criar. Pode falar!",
+        "color": "#F472B6",
+        "offsetX": -56,
+        "offsetY": -48
+      }
+    },
+    "overlay": {
+      "position": "bottom-right",
+      "transition": "materializacao-nevoa",
+      "entryDurationMs": 420,
+      "exitDurationMs": 280,
+      "springBounce": 68
+    }
+  },
+  "availableCatalogs": {
+    "palettes": [
+      {
+        "id": "prisma-original",
+        "name": "Prisma Original",
+        "description": "Ciano, índigo e magenta suaves na névoa atrás da silhueta escura",
+        "prismStops": [
+          "#22D3EE",
+          "#6366F1",
+          "#EC4899"
+        ],
+        "surfaceBg": "#090A0E",
+        "silhouetteColor": "#050507",
+        "accentColor": "#F472B6",
+        "mistColor": "#D4D8E4",
+        "eyeColor": "#FFFFFF",
+        "isSelected": true
+      },
+      {
+        "id": "kiwi-neon",
+        "name": "Kiwi Elétrico",
+        "description": "Chassi obsidiana com destaque verde-lima e aura ciano-esmeralda",
+        "prismStops": [
+          "#A3E635",
+          "#22D3EE",
+          "#10B981"
+        ],
+        "surfaceBg": "#080B09",
+        "silhouetteColor": "#050705",
+        "accentColor": "#A3E635",
+        "mistColor": "#D9F99D",
+        "eyeColor": "#FFFFFF",
+        "isSelected": false
+      },
+      {
+        "id": "ambar-solar",
+        "name": "Âmbar Noturno",
+        "description": "Calor coral e dourado para alertas de limite e foco calmo",
+        "prismStops": [
+          "#FBBF24",
+          "#F97316",
+          "#FB7185"
+        ],
+        "surfaceBg": "#0C0908",
+        "silhouetteColor": "#070505",
+        "accentColor": "#FB7185",
+        "mistColor": "#FED7AA",
+        "eyeColor": "#FFFFFF",
+        "isSelected": false
+      },
+      {
+        "id": "soul-claro",
+        "name": "Soul Mist · Claro (Ref.)",
+        "description": "Fundo branco fiel ao vídeo MP4 com tinta escura e fita ciano-azul-magenta",
+        "prismStops": [
+          "#22D3EE",
+          "#3B82F6",
+          "#EC4899"
+        ],
+        "surfaceBg": "#FFFFFF",
+        "silhouetteColor": "#050507",
+        "accentColor": "#EC4899",
+        "mistColor": "#050507",
+        "eyeColor": "#FFFFFF",
+        "isSelected": false
+      },
+      {
+        "id": "nevoa-violeta",
+        "name": "Névoa Violeta",
+        "description": "Atmosfera noturna roxo-azulada com contorno luminescente",
+        "prismStops": [
+          "#38BDF8",
+          "#A855F7",
+          "#F472B6"
+        ],
+        "surfaceBg": "#090810",
+        "silhouetteColor": "#06050A",
+        "accentColor": "#C084FC",
+        "mistColor": "#DDD6FE",
+        "eyeColor": "#FFFFFF",
+        "isSelected": false
+      }
+    ],
+    "mistDistributions": [
+      {
+        "id": "borda-suave",
+        "label": "Arco Orbital (MP4)",
+        "desc": "Fita prismática que abraça o contorno e desliza continuamente em volta do mascote.",
+        "isSelected": true
+      },
+      {
+        "id": "contorno-sutil",
+        "label": "Crescente Diagonal (JPEG)",
+        "desc": "Fixa o arco ciano-índigo-rosa na curva inferior direita e pulsa com a voz.",
+        "isSelected": false
+      },
+      {
+        "id": "halo-difuso",
+        "label": "Aurora Dupla",
+        "desc": "Duas fitas iridescentes em lados opostos envolvendo toda a silhueta orgânica.",
+        "isSelected": false
+      },
+      {
+        "id": "nuvem-base",
+        "label": "Véu na Cauda",
+        "desc": "Concentra o brilho colorido abaixo do queixo e ao longo da cauda de fumaça.",
+        "isSelected": false
+      }
+    ],
+    "overlayTransitions": [
+      {
+        "id": "auto-direcional",
+        "label": "Auto Direcional",
+        "desc": "Sai da borda/canto escolhido e materializa no centro com névoa",
+        "isSelected": false
+      },
+      {
+        "id": "materializacao-nevoa",
+        "label": "Materialização Névoa",
+        "desc": "Surge condensando da névoa com desfoque suave em qualquer ponto",
+        "isSelected": true
+      },
+      {
+        "id": "salto-elastico",
+        "label": "Salto Elástico HQ",
+        "desc": "Pop expressivo estilo mangá com overshoot de escala ao pousar",
+        "isSelected": false
+      },
+      {
+        "id": "espreitar-borda",
+        "label": "Espreitar Rápido",
+        "desc": "Deslize ágil com inclinação de cabeça e saída imediata",
+        "isSelected": false
+      }
+    ],
+    "overlayPositions": [
+      {
+        "id": "top-left",
+        "label": "Canto Superior Esquerdo",
+        "motionCue": "Entra na diagonal para baixo e para a direita com leve inclinação de orelha",
+        "isSelected": false
+      },
+      {
+        "id": "top-center",
+        "label": "Centro Superior",
+        "motionCue": "Desce da barra superior como um HUD elástico com pouso suave",
+        "isSelected": false
+      },
+      {
+        "id": "top-right",
+        "label": "Canto Superior Direito",
+        "motionCue": "Entra na diagonal para baixo e para a esquerda saindo do canto direito",
+        "isSelected": false
+      },
+      {
+        "id": "center-left",
+        "label": "Borda Esquerda",
+        "motionCue": "Espreita da borda esquerda para o palco com rotação suave",
+        "isSelected": false
+      },
+      {
+        "id": "center",
+        "label": "Centro da Tela",
+        "motionCue": "Materializa no centro com expansão da névoa prismática e pouso elástico",
+        "isSelected": false
+      },
+      {
+        "id": "center-right",
+        "label": "Borda Direita",
+        "motionCue": "Espreita da borda direita para dentro com balão voltado à esquerda",
+        "isSelected": false
+      },
+      {
+        "id": "bottom-left",
+        "label": "Canto Inferior Esquerdo",
+        "motionCue": "Sobe na diagonal a partir do canto inferior esquerdo",
+        "isSelected": false
+      },
+      {
+        "id": "bottom-center",
+        "label": "Centro Inferior",
+        "motionCue": "Emerge acima do Dock do Mac com impulso vertical e amortecimento",
+        "isSelected": false
+      },
+      {
+        "id": "bottom-right",
+        "label": "Canto Inferior Direito",
+        "motionCue": "Sobe na diagonal a partir do canto inferior direito com balão acima à esquerda",
+        "isSelected": true
+      }
+    ],
+    "savedPresets": [
+      {
+        "id": "custom-1794801995497",
+        "name": "KiwiCat Ver Final Perfect",
+        "subtitle": "Byte Kiwi Cat · respondendo",
+        "isBuiltIn": false,
+        "isSelected": true,
+        "createdAt": "2026-11-16T04:06:35.497Z",
+        "state": "respondendo",
+        "parameters": {
+          "earStyle": "compactas",
+          "earScale": 0.75,
+          "eyeStyle": "circulares",
+          "eyeScale": 1.05,
+          "eyeSpacing": 1,
+          "silhouetteSoftness": 18,
+          "bodyWidth": 1.06,
+          "paletteId": "prisma-original",
+          "customBodyColor": "#050507",
+          "customAccentColor": "#F472B6",
+          "customPrismStart": "#22D3EE",
+          "customPrismMid": "#6366F1",
+          "customPrismEnd": "#EC4899",
+          "customEyeColor": "#FFFFFF",
+          "customSurfaceBg": "#090A0E",
+          "auraIntensity": 95,
+          "prismSpread": 78,
+          "auraStyle": "borda-suave",
+          "motionFluidity": 100,
+          "speedMultiplier": 1.2,
+          "voiceReactivity": 85,
+          "eyeExpressiveness": 88,
+          "uiFrame": "livre",
+          "showAmbientMist": false,
+          "showAcousticRings": false,
+          "showStateCaption": false,
+          "showMascotDetails": true,
+          "showChinEqualizer": false,
+          "showComicEmotes": true,
+          "comicEmote": "auto",
+          "showSpeechBubble": true,
+          "speechBubbleText": "Pronto para criar. Pode falar!",
+          "speechBubbleColor": "#F472B6",
+          "speechBubbleOffsetX": -56,
+          "speechBubbleOffsetY": -48,
+          "overlayPosition": "bottom-right",
+          "overlayTransition": "materializacao-nevoa",
+          "overlayEntryMs": 420,
+          "overlayExitMs": 280,
+          "overlaySpringBounce": 68
+        }
+      },
+      {
+        "id": "custom-1794801023987",
+        "name": "KiwiCat Quase final",
+        "subtitle": "Byte Kiwi Cat · repouso",
+        "isBuiltIn": false,
+        "isSelected": false,
+        "createdAt": "2026-11-16T03:50:23.987Z",
+        "state": "repouso",
+        "parameters": {
+          "earStyle": "compactas",
+          "earScale": 0.85,
+          "eyeStyle": "circulares",
+          "eyeScale": 1.05,
+          "eyeSpacing": 1,
+          "silhouetteSoftness": 21,
+          "bodyWidth": 0.98,
+          "paletteId": "prisma-original",
+          "customBodyColor": "#050507",
+          "customAccentColor": "#F472B6",
+          "customPrismStart": "#22D3EE",
+          "customPrismMid": "#6366F1",
+          "customPrismEnd": "#EC4899",
+          "customEyeColor": "#FFFFFF",
+          "customSurfaceBg": "#090A0E",
+          "auraIntensity": 95,
+          "prismSpread": 78,
+          "auraStyle": "borda-suave",
+          "motionFluidity": 100,
+          "speedMultiplier": 1.2,
+          "voiceReactivity": 85,
+          "eyeExpressiveness": 88,
+          "uiFrame": "livre",
+          "showAmbientMist": true,
+          "showAcousticRings": false,
+          "showStateCaption": false,
+          "showMascotDetails": true,
+          "showChinEqualizer": false,
+          "showComicEmotes": true,
+          "comicEmote": "auto",
+          "showSpeechBubble": false,
+          "speechBubbleText": "Analisando seu pedido...",
+          "speechBubbleColor": "#F472B6",
+          "speechBubbleOffsetX": -56,
+          "speechBubbleOffsetY": -48,
+          "overlayPosition": "bottom-right",
+          "overlayTransition": "materializacao-nevoa",
+          "overlayEntryMs": 420,
+          "overlayExitMs": 280,
+          "overlaySpringBounce": 68
+        }
+      },
+      {
+        "id": "preset-byte-kiwi-cat",
+        "name": "Byte Kiwi Cat · Soul Mist (Escuro)",
+        "subtitle": "Tinta orgânica + fita prismática orbital pronta para overlay no Mac",
+        "isBuiltIn": true,
+        "isSelected": false,
+        "createdAt": "2026-11-15T18:45:00Z",
+        "state": "ouvindo",
+        "parameters": {
+          "earStyle": "pontiagudas",
+          "earScale": 1,
+          "eyeStyle": "circulares",
+          "eyeScale": 1.05,
+          "eyeSpacing": 1,
+          "silhouetteSoftness": 46,
+          "bodyWidth": 1,
+          "paletteId": "prisma-original",
+          "customBodyColor": "#050507",
+          "customAccentColor": "#F472B6",
+          "customPrismStart": "#22D3EE",
+          "customPrismMid": "#3B82F6",
+          "customPrismEnd": "#EC4899",
+          "customEyeColor": "#FFFFFF",
+          "customSurfaceBg": "#090A0E",
+          "auraIntensity": 95,
+          "prismSpread": 78,
+          "auraStyle": "borda-suave",
+          "motionFluidity": 80,
+          "speedMultiplier": 1,
+          "voiceReactivity": 85,
+          "eyeExpressiveness": 88,
+          "uiFrame": "livre",
+          "showAmbientMist": true,
+          "showAcousticRings": false,
+          "showStateCaption": false,
+          "showMascotDetails": false,
+          "showChinEqualizer": false,
+          "showComicEmotes": true,
+          "comicEmote": "alerta",
+          "showSpeechBubble": true,
+          "speechBubbleText": "Pronto para criar. Pode falar!",
+          "speechBubbleColor": "#F472B6",
+          "speechBubbleOffsetX": -56,
+          "speechBubbleOffsetY": -48,
+          "overlayPosition": "bottom-right",
+          "overlayTransition": "materializacao-nevoa",
+          "overlayEntryMs": 420,
+          "overlayExitMs": 280,
+          "overlaySpringBounce": 68
+        }
+      },
+      {
+        "id": "preset-soul-reference-mp4",
+        "name": "Soul Mist · Referência MP4 (Claro)",
+        "subtitle": "Visual puro da referência em fundo branco sem balão nem emotes",
+        "isBuiltIn": true,
+        "isSelected": false,
+        "createdAt": "2026-11-15T18:45:00Z",
+        "state": "ouvindo",
+        "parameters": {
+          "earStyle": "pontiagudas",
+          "earScale": 1,
+          "eyeStyle": "circulares",
+          "eyeScale": 1.05,
+          "eyeSpacing": 1,
+          "silhouetteSoftness": 52,
+          "bodyWidth": 1,
+          "paletteId": "soul-claro",
+          "customBodyColor": "#050507",
+          "customAccentColor": "#F472B6",
+          "customPrismStart": "#22D3EE",
+          "customPrismMid": "#3B82F6",
+          "customPrismEnd": "#EC4899",
+          "customEyeColor": "#FFFFFF",
+          "customSurfaceBg": "#FFFFFF",
+          "auraIntensity": 95,
+          "prismSpread": 78,
+          "auraStyle": "borda-suave",
+          "motionFluidity": 80,
+          "speedMultiplier": 1,
+          "voiceReactivity": 85,
+          "eyeExpressiveness": 88,
+          "uiFrame": "livre",
+          "showAmbientMist": true,
+          "showAcousticRings": false,
+          "showStateCaption": false,
+          "showMascotDetails": false,
+          "showChinEqualizer": false,
+          "showComicEmotes": false,
+          "comicEmote": "alerta",
+          "showSpeechBubble": false,
+          "speechBubbleText": "Pronto para criar. Pode falar!",
+          "speechBubbleColor": "#F472B6",
+          "speechBubbleOffsetX": -56,
+          "speechBubbleOffsetY": -48,
+          "overlayPosition": "bottom-right",
+          "overlayTransition": "materializacao-nevoa",
+          "overlayEntryMs": 420,
+          "overlayExitMs": 280,
+          "overlaySpringBounce": 68
+        }
+      }
+    ]
+  }
+}

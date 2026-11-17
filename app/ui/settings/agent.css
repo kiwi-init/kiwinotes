@@ -1,0 +1,468 @@
+/* A seção Agente dos Ajustes (spec #8373, T8762): a tela de aviso do ADR 0011 e o "Testar". Os cartões e as linhas
+   são os do kit; aqui só o que é da seção. */
+
+.kn-agent-consent {
+  border-top: 0.5px solid var(--border);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--accent-soft);
+}
+
+.kn-agent-consent h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.kn-agent-consent h4 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.kn-agent-consent ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.kn-agent-consent li,
+.kn-agent-consent p {
+  margin: 2px 0;
+  font-size: var(--text-md);
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.kn-agent-consent-buttons {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.kn-agent-test {
+  border-top: 0.5px solid var(--border);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.kn-agent-test-form {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.kn-agent-test-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.kn-agent-test-out {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--text-md);
+  line-height: 1.45;
+}
+
+.kn-agent-test-out p {
+  margin: 0;
+}
+
+.kn-agent-test-status {
+  color: var(--text-2);
+}
+
+.kn-agent-test-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.kn-agent-test-status + .kn-agent-test-text {
+  margin-top: var(--space-1);
+}
+
+.kn-agent-test-error {
+  color: var(--danger);
+}
+
+.kn-agent-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* A seção "Atividade do agente" (spec #9480): a lista dos pedidos, o [Ver] e o [Desfazer]. O comparador é o das
+   Versões (`ui/notes/diff.ts`); as cores dele vêm de `notes.css`, repetidas aqui porque os Ajustes não carregam as
+   Notas. */
+
+.kn-activity {
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.kn-activity p {
+  margin: 0;
+}
+
+.kn-activity-hint {
+  margin-bottom: var(--space-2) !important;
+}
+
+.kn-activity-empty,
+.kn-activity-failure {
+  font-size: var(--text-md);
+  color: var(--text-2);
+}
+
+.kn-activity-failure {
+  margin-bottom: var(--space-2) !important;
+}
+
+.kn-activity-list,
+.kn-activity-changes,
+.kn-activity-outcome {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kn-activity-req {
+  padding: var(--space-2) 0;
+  border-top: 0.5px solid var(--border);
+}
+
+.kn-activity-req:first-child {
+  border-top: 0;
+}
+
+.kn-activity-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.kn-activity-when {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.kn-activity-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+  font-weight: 500;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.kn-activity-head .kn-button {
+  flex: none;
+  align-self: center;
+}
+
+.kn-activity-reads,
+.kn-activity-none {
+  margin-top: 2px !important;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.kn-activity-changes {
+  margin-top: var(--space-1);
+}
+
+.kn-activity-change {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  font-size: var(--text-md);
+}
+
+.kn-activity-what {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kn-activity-change[data-undone] .kn-activity-what {
+  color: var(--text-2);
+}
+
+.kn-activity-undone {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.kn-activity-actions {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.kn-activity-view {
+  margin: var(--space-1) 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.kn-activity-notice {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  margin-bottom: var(--space-1) !important;
+}
+
+.kn-activity-view .kn-diff {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--mono, var(--font-mono));
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kn-activity-view .kn-diff-add {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.kn-activity-view .kn-diff-del {
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, #e5484d 50%, transparent);
+}
+
+.kn-activity-view .kn-diff-same {
+  color: var(--text-2);
+}
+
+.kn-activity-view .kn-diff-gap {
+  color: var(--text-3);
+  font-style: italic;
+  padding: 2px 0;
+}
+
+.kn-activity-outcome {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.kn-activity-outcome li {
+  padding: 2px 0;
+}
+
+.kn-activity-outcome li[data-ok="false"] {
+  color: var(--text-2);
+}
+
+.kn-activity-more {
+  margin-top: var(--space-2);
+}
+
+/* O filtro do guardrail (spec #9818): quantos segredos o Kiwi segurou, e a mudança que tirou um segredo da nota. */
+.kn-activity-held {
+  margin-top: 2px !important;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.kn-activity-removed {
+  margin: 0 0 var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #e5a50a 14%, transparent);
+  font-size: var(--text-sm);
+}
+
+/* As dúvidas sem resposta de um pedido (spec #9873), com os botões para responder depois. */
+.kn-activity-doubts {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+}
+.kn-activity-doubt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  font-size: var(--text-sm);
+}
+
+/* O medidor (spec #11084): os pedidos mais caros, a pergunta e, embaixo, a hora e o gasto. */
+.kn-usage-top { padding: var(--space-2) var(--space-4); }
+.kn-usage-top ol { margin: var(--space-1) 0 0; padding-left: 1.2em; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.kn-usage-top li { min-width: 0; font-size: var(--text-sm); }
+.kn-usage-q { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kn-usage-meta { display: block; color: var(--text-2); font-size: var(--text-xs, 0.85em); }
+
+/* O Modelo de nota (spec #11102): a lista dos blocos ao lado do desenho grande, que é só forma. */
+.kn-nm { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-top: 0.5px solid var(--border); }
+.kn-nm-head { display: flex; flex-direction: column; gap: 2px; }
+.kn-nm-grid { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1.1fr); gap: var(--space-4); align-items: start; }
+.kn-nm-blocks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.kn-nm-block { display: flex; align-items: center; gap: var(--space-2); padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: grab; transition: border-color var(--fast) var(--ease), opacity var(--fast) var(--ease); }
+.kn-nm-block[data-off] { opacity: 0.55; }
+.kn-nm-block[data-over] { border-color: var(--accent); }
+.kn-nm-grip { width: 10px; height: 14px; background: radial-gradient(circle, var(--text-2) 1.2px, transparent 1.4px) 0 0 / 5px 5px; opacity: 0.6; flex: none; }
+.kn-nm-block-name { flex: 1; font-size: var(--text-sm); }
+.kn-nm-move { display: flex; gap: 2px; }
+.kn-nm-arrow { width: 22px; height: 22px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font: inherit; font-size: 12px; line-height: 1; cursor: pointer; }
+.kn-nm-arrow:disabled { opacity: 0.35; cursor: default; }
+.kn-nm-arrow:focus-visible, .kn-nm-body-choice:focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: 1px; }
+
+/* O desenho: uma página de mentira. As formas usam a cor do texto bem esmaecida. */
+.kn-nm-page { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 18px 20px; min-height: 280px; display: flex; flex-direction: column; gap: 14px; --nm-ink: color-mix(in srgb, var(--text-2) 32%, transparent); --nm-ink-strong: color-mix(in srgb, var(--text-2) 55%, transparent); }
+.kn-nm-part { animation: kn-nm-in 160ms var(--ease, ease-out); }
+@keyframes kn-nm-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.kn-nm-title { height: 14px; width: 58%; border-radius: 4px; background: var(--nm-ink-strong); }
+.kn-nm-heading { display: block; height: 9px; width: 34%; border-radius: 3px; background: var(--nm-ink-strong); margin-bottom: 6px; }
+.kn-nm-heading-small { width: 24%; }
+.kn-nm-lines, .kn-nm-props, .kn-nm-toc, .kn-nm-body, .kn-nm-close { display: flex; flex-direction: column; gap: 5px; }
+.kn-nm-props { padding: 6px 8px; border-radius: 4px; background: color-mix(in srgb, var(--text-2) 7%, transparent); }
+.kn-nm-line-row { display: flex; align-items: center; gap: 6px; }
+.kn-nm-line { display: block; height: 6px; border-radius: 3px; background: var(--nm-ink); }
+.kn-nm-link { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.kn-nm-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--nm-ink-strong); flex: none; }
+.kn-nm-key { width: 14%; height: 6px; border-radius: 3px; background: var(--nm-ink-strong); flex: none; }
+.kn-nm-num { width: 10px; height: 6px; border-radius: 2px; background: var(--nm-ink-strong); flex: none; }
+.kn-nm-check { width: 7px; height: 7px; border-radius: 2px; border: 1.5px solid var(--nm-ink-strong); flex: none; }
+.kn-nm-gap { height: 4px; }
+
+/* Os estilos do corpo, cada um com a sua miniatura. */
+.kn-nm-bodies { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.kn-nm-body-choice { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: inherit; font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.kn-nm-body-choice[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.kn-nm-thumb { width: 100%; padding: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text-2) 5%, transparent); --nm-ink: color-mix(in srgb, var(--text-2) 32%, transparent); --nm-ink-strong: color-mix(in srgb, var(--text-2) 55%, transparent); }
+.kn-nm-thumb .kn-nm-lines { gap: 4px; }
+.kn-nm-thumb .kn-nm-line { height: 4px; }
+.kn-nm-options { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.kn-nm-option { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.kn-nm-first { display: flex; justify-content: flex-end; gap: var(--space-2); }
+@media (max-width: 640px) { .kn-nm-grid { grid-template-columns: 1fr; } .kn-nm-bodies { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Reduzir movimento: sem animação ao arrastar e ao trocar o estilo. */
+@media (prefers-reduced-motion: reduce) { .kn-nm-part { animation: none; } .kn-nm-block { transition: none; } }
+:root[data-motion="reduced"] .kn-nm-part { animation: none; }
+:root[data-motion="reduced"] .kn-nm-block { transition: none; }
+
+/* "Suas reuniões" (spec #8360): a escolha da pasta única fica ao lado de "Numa pasta única". */
+.kn-agent-meetings-folder { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px); align-items: center; justify-content: flex-end; }
+
+/* A paleta do Kiwi Cat (spec #14963): o gato parado ao lado das 5 amostras, numa fileira. */
+.kn-cat-color {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.kn-cat-color .kn-swatches { grid-template-columns: repeat(5, 22px); }
+
+/* O gato novo parado na linha do Kiwi Cat (spec #14813). */
+.kn-cat-preview {
+  flex: none;
+  width: 56px;
+  height: 56px;
+}
+
+/* A memória do agente (spec #11469): os fatos, a edição e as instruções. */
+.kn-memory-box { display: grid; gap: var(--space-2, 8px); padding: 0 var(--space-4, 16px) var(--space-3, 12px); }
+.kn-memory-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.kn-memory-fact { display: flex; align-items: center; gap: var(--space-2, 8px); padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); background: var(--surface); min-width: 0; }
+.kn-memory-fact-text { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
+.kn-memory-fact-actions { display: flex; gap: 4px; flex: none; }
+.kn-memory-edit { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.kn-memory-edit .kn-input { flex: 1; min-width: 0; }
+.kn-memory-clear { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2, 8px); flex-wrap: wrap; }
+.kn-memory-clear > span:first-child { margin-right: auto; }
+.kn-memory-failure { margin: 0; font-size: var(--text-sm); color: var(--danger); }
+.kn-memory-instructions { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+
+/* As rotinas (spec #12150): um cartão por rotina, com a hora, o dia, a pasta, a última vez e "Rodar agora". */
+.kn-agent-routines { display: grid; }
+.kn-routine-card { margin: 0 var(--space-4, 16px) var(--space-3, 12px); border: 1px solid var(--border); border-radius: var(--r-card, 14px); background: var(--surface); overflow: hidden; }
+.kn-routine-card > .kn-row { padding-left: var(--space-3, 12px); padding-right: var(--space-3, 12px); }
+.kn-routine-fields { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px) var(--space-4, 16px); padding: 0 var(--space-3, 12px) var(--space-2, 8px); }
+.kn-routine-field { display: flex; align-items: center; gap: var(--space-2, 8px); font-size: var(--t-meta, 12px); color: var(--text-2); }
+.kn-routine-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3, 12px); padding: var(--space-2, 8px) var(--space-3, 12px); border-top: 0.5px solid var(--border); }
+.kn-routine-last { font-size: var(--t-meta, 12px); color: var(--text-3); }
+.kn-routine-failure { margin: 0; padding: 0 var(--space-3, 12px) var(--space-2, 8px); font-size: var(--t-meta, 12px); color: var(--danger); }
+/* Os fatos escritos à mão que ficam de fora (spec #12749): o aviso, e cada um com o motivo. */
+.kn-memory-skipped { display: grid; gap: var(--space-2, 8px); padding: var(--space-2, 8px) var(--space-3, 12px); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: var(--radius-sm, 6px); background: color-mix(in srgb, var(--danger) 6%, transparent); }
+.kn-memory-warning { margin: 0; font-size: var(--text-sm); color: var(--text); }
+.kn-memory-reason { display: block; margin-top: 2px; font-size: var(--text-xs, 12px); color: var(--text-3); }
+.kn-memory-outside { margin: 0; }
+/* As rotinas novas (spec #12944): os dois caminhos, o cartão de criar/editar/ajustar e os dias marcados. */
+.kn-routine-paths { margin: 0 var(--space-4, 16px) var(--space-3, 12px); font-size: var(--t-meta, 12px); color: var(--text-2); }
+.kn-routine-editor { padding: var(--space-3, 12px) 0 0; display: grid; gap: var(--space-2, 8px); }
+.kn-routine-editor-title { margin: 0; padding: 0 var(--space-3, 12px); font-size: var(--t-body, 13px); font-weight: 600; }
+.kn-routine-editor-field { display: grid; gap: 4px; padding: 0 var(--space-3, 12px); font-size: var(--t-meta, 12px); color: var(--text-2); }
+.kn-routine-editor-field .kn-input { width: 100%; box-sizing: border-box; font: inherit; font-size: var(--t-body, 13px); color: var(--text); }
+.kn-routine-prompt { resize: vertical; min-height: 56px; }
+.kn-routine-days { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 var(--space-3, 12px); }
+.kn-routine-day { min-width: 40px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-2); font: inherit; font-size: var(--t-meta, 12px); cursor: pointer; }
+.kn-routine-day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
+.kn-routine-actions { display: inline-flex; align-items: center; gap: var(--space-2, 8px); flex-shrink: 0; }
+.kn-routine-foot > .kn-routine-last { flex: 1; min-width: 0; }
+
+/* A posição e o tamanho do gato (spec #12949): a prévia da tela, com o próprio gato, ao lado dos controles. */
+.kn-cat-place { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.kn-cat-place-controls { display: grid; gap: var(--space-2); min-width: 220px; }
+.kn-cat-place-field { display: grid; gap: var(--space-1); }
+.kn-cat-place-field > .kn-select { justify-self: start; }
+.kn-cat-place-label { font-size: var(--text-sm); color: var(--text-2); }
+.kn-cat-size { display: flex; align-items: center; gap: var(--space-2); }
+.kn-cat-size input { flex: 1; accent-color: var(--accent); }
+.kn-cat-size-value { min-width: 3ch; font-variant-numeric: tabular-nums; color: var(--text-2); font-size: var(--text-sm); }
+.kn-cat-screen { position: relative; width: 160px; aspect-ratio: 16 / 10; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, var(--surface)); overflow: hidden; flex: none; }
+/* No onboarding, a mesma margem nos quatro lados do cartão (#13334). */
+.kn-cat-place[data-bare] { gap: var(--space-4); padding: var(--space-4); }
+.kn-cat-place[data-bare] .kn-cat-place-controls { flex: 1; }
+/* Em Ajustes, o título e a frase em cima, e a prévia e os controles embaixo. */
+.kn-row.kn-row-stacked { flex-direction: column; align-items: stretch; gap: var(--space-2); padding-block: var(--space-3); }
+.kn-cat-place[data-bare] .kn-cat-screen { width: 288px; border-radius: 10px; }
+.kn-cat-screen-menu { position: absolute; left: 0; right: 0; top: 0; background: var(--border); }
+.kn-cat-screen-dock { position: absolute; left: 25%; right: 25%; bottom: 2%; border-radius: 3px; background: var(--border); }
+/* O gato de verdade é sempre preto: a mesma arte, com o brilho da cor dele em volta. */
+.kn-cat-screen-cat { position: absolute; object-fit: contain; filter: drop-shadow(0 0 3px var(--glow, transparent)); user-select: none; pointer-events: none; transition: left var(--fast, 140ms), top var(--fast, 140ms), width var(--fast, 140ms), height var(--fast, 140ms); }
+@media (prefers-reduced-motion: reduce) { .kn-cat-screen-cat { transition: none; } }
+
+/* O placar de hoje (ADR 0013, T14671): os cartões, a barra das cinco partes, a legenda e os últimos pedidos. Cores
+   calmas, tiradas da cor do app; nada de neon. */
+.kn-placar { --parte-pedido: var(--accent); --parte-achar: color-mix(in srgb, #c98a3a 85%, var(--surface)); --parte-ler: color-mix(in srgb, #5b8fb9 85%, var(--surface)); --parte-bagagem: color-mix(in srgb, #8a7bb0 80%, var(--surface)); --parte-fixo: color-mix(in srgb, var(--text-3) 55%, var(--surface)); display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.kn-placar [data-parte="pedido"] { background: var(--parte-pedido); }
+.kn-placar [data-parte="achar"] { background: var(--parte-achar); }
+.kn-placar [data-parte="ler"] { background: var(--parte-ler); }
+.kn-placar [data-parte="bagagem"] { background: var(--parte-bagagem); }
+.kn-placar [data-parte="fixo"] { background: var(--parte-fixo); }
+.kn-placar-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.kn-placar-card { padding: var(--space-2) var(--space-3); border: 0.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); min-width: 0; }
+.kn-placar-valor { font-size: 1.35em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kn-placar-label { font-size: var(--text-sm); }
+.kn-placar-sub { font-size: var(--text-xs, 0.85em); color: var(--text-2); }
+.kn-placar-barra, .kn-placar-mini { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; }
+.kn-placar-mini { height: 8px; width: 100%; border-radius: 4px; }
+.kn-placar-barra > span, .kn-placar-mini > span { flex-basis: 0; min-width: 3px; }
+.kn-placar-legenda { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px var(--space-3); font-size: var(--text-sm); }
+.kn-placar-legenda i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.kn-placar-legenda span { display: block; padding-left: 15px; color: var(--text-2); font-size: var(--text-xs, 0.85em); }
+.kn-placar-nota { margin: 0; font-size: var(--text-sm); color: var(--text-2); }
+.kn-placar-tabela { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--text-sm); }
+.kn-placar-tabela th { text-align: left; font-weight: 500; color: var(--text-2); font-size: var(--text-xs, 0.85em); padding: 4px 6px; border-bottom: 0.5px solid var(--border); }
+.kn-placar-tabela th:nth-child(1) { width: 34%; }
+.kn-placar-tabela th:nth-child(2) { width: 26%; }
+.kn-placar-tabela th:nth-child(3) { width: 8%; }
+.kn-placar-tabela th:nth-child(4) { width: 12%; }
+.kn-placar-tabela td { padding: 6px; vertical-align: middle; border-bottom: 0.5px solid var(--border); min-width: 0; overflow: hidden; }
+.kn-placar-num { font-variant-numeric: tabular-nums; }
+.kn-placar-selo { display: inline-block; padding: 2px 8px; border-radius: 9px; font-size: var(--text-xs, 0.85em); line-height: 1.35; background: var(--surface-2); color: var(--text-2); }
+.kn-placar-selo[data-tom="achou"] { background: var(--accent-soft); color: var(--accent-text); }
+.kn-placar-selo[data-tom="quase"] { background: color-mix(in srgb, #c98a3a 18%, transparent); }

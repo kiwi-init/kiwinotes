@@ -1,0 +1,13 @@
+{
+  "electrobun": "2026.10.2",
+  "releasesBaseUrl": "https://github.com/kiwi-init/electrobun-livewire/releases/download",
+  "hutch": {
+    "version": "0.28.2-canary.8",
+    "platforms": {
+      "macos-arm64": {
+        "url": "https://hutch.blackboard.sh/hutch/builds/c2ede316742ecc6734e8f86c92d87abcae609b69/macos-arm64/hutch.tar.gz",
+        "sha256": "4b3b99c30155ebfd263791931573763cf5353514cddbac35c960c3bfa1642118"
+      }
+    }
+  }
+}

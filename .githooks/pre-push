@@ -1,0 +1,10 @@
+#!/bin/sh
+# A guarda de privacidade antes do GitHub (spec #14415, T14423): os commits que vão subir passam pela lista em hash,
+# pelos padrões (IDs de nuvem, segredos pelo formato e nomes de máquina .local) e pelo OCR dos prints novos. Se algo
+# barra, o push não sai. Veja o AGENTS.md, Privacidade.
+root=$(git rev-parse --show-toplevel) || exit 1
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-push: sem o bun, a guarda de privacidade não roda; instale o bun (veja o AGENTS.md)" >&2
+  exit 1
+fi
+exec bun "$root/app/scripts/push-guard.ts" --push "$1"

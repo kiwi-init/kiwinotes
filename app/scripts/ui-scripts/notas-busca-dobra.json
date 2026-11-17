@@ -1,0 +1,237 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Busca e dobra E5",
+        "content": "# Primeiro\n\nAlvo um, alvo dois.\n\n| Coluna | Valor |\n| --- | --- |\n| alvo | 2 |\n\n```txt\nalvo código\n```\n\n## Filho\n\nMais conteúdo.\n\n# Segundo\n\n- Pai\n  - Filho lista\n- Outro\n\nFim.\n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Busca e dobra E5"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text(\"Busca e dobra E5\")"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-content"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+Home"
+    },
+    {
+      "press": "Meta+f"
+    },
+    {
+      "waitFor": ".cm-search input[name=search]:focus"
+    },
+    {
+      "fill": ".cm-search input[name=search]",
+      "text": "alvo"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "waitFor": ".cm-searchMatch"
+    },
+    {
+      "expectCount": ".cm-rendered",
+      "count": 0
+    },
+    {
+      "expectCount": ".cm-searchMatch",
+      "count": 4
+    },
+    {
+      "click": ".cm-search input[name=case]"
+    },
+    {
+      "expectCount": ".cm-searchMatch",
+      "count": 3
+    },
+    {
+      "click": ".cm-search input[name=case]"
+    },
+    {
+      "expectCount": ".cm-searchMatch",
+      "count": 4
+    },
+    {
+      "click": ".cm-search input[name=search]"
+    },
+    {
+      "screenshot": "01-busca.png"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "press": "Meta+g"
+    },
+    {
+      "press": "Meta+Alt+f"
+    },
+    {
+      "waitFor": ".cm-search input[name=replace]:focus"
+    },
+    {
+      "fill": ".cm-search input[name=replace]",
+      "text": "ACHADO"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "click": ".cm-search button[name=replace]"
+    },
+    {
+      "expectCount": ".cm-searchMatch",
+      "count": 3
+    },
+    {
+      "click": ".cm-search button[name=replaceAll]"
+    },
+    {
+      "expectText": ".cm-content",
+      "text": "ACHADO"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+z"
+    },
+    {
+      "waitFor": ".cm-searchMatch"
+    },
+    {
+      "press": "Meta+Shift+Z"
+    },
+    {
+      "expectCount": ".cm-searchMatch",
+      "count": 0
+    },
+    {
+      "screenshot": "02-substituir.png"
+    },
+    {
+      "click": ".cm-search button[name=close]"
+    },
+    {
+      "waitFor": ".cm-search",
+      "state": "hidden"
+    },
+    {
+      "waitFor": ".cm-rendered"
+    },
+    {
+      "click": ".cm-content"
+    },
+    {
+      "press": "Meta+Home"
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "Meta+Alt+["
+    },
+    {
+      "waitFor": ".cm-foldPlaceholder"
+    },
+    {
+      "screenshot": "03-titulo-recolhido.png"
+    },
+    {
+      "press": "Meta+Alt+]"
+    },
+    {
+      "waitFor": ".cm-foldPlaceholder",
+      "state": "hidden"
+    },
+    {
+      "waitFor": ".cm-rendered:has-text(\"Mais conteúdo\")"
+    },
+    {
+      "click": ":nth-match(.cm-foldGutter [title=\"Recolher linha\"], 1)"
+    },
+    {
+      "waitFor": ".cm-foldPlaceholder"
+    },
+    {
+      "press": "Meta+f"
+    },
+    {
+      "waitFor": ".cm-search input[name=search]:focus"
+    },
+    {
+      "fill": ".cm-search input[name=search]",
+      "text": "ACHADO código"
+    },
+    {
+      "press": "ArrowRight"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-foldPlaceholder",
+      "state": "hidden"
+    },
+    {
+      "click": ".cm-search button[name=close]"
+    },
+    {
+      "waitFor": ".cm-rendered:has-text(\"Mais conteúdo\")"
+    },
+    {
+      "click": ".cm-rendered:has-text(\"Pai\")",
+      "position": {
+        "x": 32,
+        "y": 8
+      }
+    },
+    {
+      "press": "Home"
+    },
+    {
+      "press": "Meta+Alt+["
+    },
+    {
+      "waitFor": ".cm-foldPlaceholder"
+    },
+    {
+      "screenshot": "04-lista-recolhida.png"
+    },
+    {
+      "click": ".cm-foldPlaceholder"
+    },
+    {
+      "waitFor": ".cm-foldPlaceholder",
+      "state": "hidden"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "invoke": "notes.get",
+      "args": {
+        "path": "Busca e dobra E5.md"
+      }
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "task": "T10437",
+  "variant": "baseline",
+  "baseline": true,
+  "failures": [],
+  "scope": "state-local Playwright WebKit FPS, not CPU",
+  "measuredCommit": "71b282bb3d997daebacb31bb3b6d1a0fe67224c6",
+  "source_sha256": {
+    "index.ts": "2bf16db1d81a9b61db7fef4a195a4b08f10403ea1937256f4584fa415d28b5cd",
+    "shader.ts": "4577f9ea600657482c086290ddf48fae3ee4b507ec1d8694ec854db0252bdc18",
+    "state.ts": "6b0c72e06e875f442b24a7a7d29966b2feb290774aad7193bb3a33c5bf9fb099",
+    "cat-demo.ts": "b01f1bf2c66432e961c85b67b2b1605a11fecadfd7f6a10eeb755a0b54fc5f11",
+    "cat.ts": "337c5f4b5c53416bfab545cc8b899ad38457c63548fe68e91aa9099341570e2a",
+    "gestures.ts": "faa4200a721eb770f2c49617f0230074dc204555381ef76e169e19b78a6ea542",
+    "vectors.ts": "743c8991a1e14db9276929b0f553b53621452e358757ad6f7b8d20c50b04ad16",
+    "assets/reference-no-eyes.webp": "01a6e6743be6489acd5887f0d5102982279552793549e2e762670c196f490e74",
+    "assets/source.json": "2c80a303609b966e237ccd3114793109909febb25ab1c90bd8fc2b4a3a8bbc00"
+  },
+  "browser": "27.2",
+  "noRecorder": true,
+  "size": [
+    640,
+    800
+  ],
+  "states": [
+    {
+      "state": "acordou",
+      "stateAtStart": "acordou",
+      "stateAtEnd": "acordou",
+      "startAfterEntryMs": 1001,
+      "endAfterEntryMs": 4002,
+      "windowMs": 3001,
+      "fogFrames": 178,
+      "fogFPS": 59.35311770590177,
+      "vectorFrames": 178,
+      "vectorFPS": 59.35311770590175,
+      "vectorStates": [
+        "acordou"
+      ],
+      "slow": false
+    },
+    {
+      "state": "ouvindo",
+      "stateAtStart": "ouvindo",
+      "stateAtEnd": "ouvindo",
+      "startAfterEntryMs": 1000,
+      "endAfterEntryMs": 4001,
+      "windowMs": 3001,
+      "fogFrames": 178,
+      "fogFPS": 59.33333333333367,
+      "vectorFrames": 178,
+      "vectorFPS": 59.33333333333367,
+      "vectorStates": [
+        "ouvindo"
+      ],
+      "slow": false
+    },
+    {
+      "state": "thinking",
+      "stateAtStart": "thinking",
+      "stateAtEnd": "thinking",
+      "startAfterEntryMs": 1002,
+      "endAfterEntryMs": 4002,
+      "windowMs": 3000,
+      "fogFrames": 179,
+      "fogFPS": 59.68656218739618,
+      "vectorFrames": 179,
+      "vectorFPS": 59.68656218739618,
+      "vectorStates": [
+        "thinking"
+      ],
+      "slow": false
+    },
+    {
+      "state": "agindo",
+      "stateAtStart": "agindo",
+      "stateAtEnd": "agindo",
+      "startAfterEntryMs": 1001,
+      "endAfterEntryMs": 4001,
+      "windowMs": 3000,
+      "fogFrames": 180,
+      "fogFPS": 60.020006668892144,
+      "vectorFrames": 180,
+      "vectorFPS": 60.020006668892144,
+      "vectorStates": [
+        "agindo"
+      ],
+      "slow": false
+    },
+    {
+      "state": "pronto",
+      "stateAtStart": "pronto",
+      "stateAtEnd": "pronto",
+      "startAfterEntryMs": 101,
+      "endAfterEntryMs": 802,
+      "windowMs": 701,
+      "fogFrames": 42,
+      "fogFPS": 60.000000000003105,
+      "vectorFrames": 42,
+      "vectorFPS": 60.000000000003105,
+      "vectorStates": [
+        "pronto"
+      ],
+      "slow": false
+    },
+    {
+      "state": "erro",
+      "stateAtStart": "erro",
+      "stateAtEnd": "erro",
+      "startAfterEntryMs": 1001,
+      "endAfterEntryMs": 4002,
+      "windowMs": 3001,
+      "fogFrames": 180,
+      "fogFPS": 60.0000000000032,
+      "vectorFrames": 180,
+      "vectorFPS": 60.0000000000032,
+      "vectorStates": [
+        "erro"
+      ],
+      "slow": false
+    }
+  ],
+  "errors": []
+}

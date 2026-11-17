@@ -1,0 +1,127 @@
+{
+  "task": "T10437",
+  "baseline": "afda4c9",
+  "scope": "real body/fog/arc/eyes, symbols hidden by CSS before first draw",
+  "rows": [
+    {
+      "backend": "auto",
+      "state": "repouso",
+      "max": 0
+    },
+    {
+      "backend": "auto",
+      "state": "dormindo",
+      "max": 0
+    },
+    {
+      "backend": "auto",
+      "state": "acordou",
+      "max": 0
+    },
+    {
+      "backend": "auto",
+      "state": "ouvindo",
+      "max": 0
+    },
+    {
+      "backend": "auto",
+      "state": "thinking",
+      "max": 0
+    },
+    {
+      "backend": "auto",
+      "state": "agindo",
+      "max": 0
+    },
+    {
+      "backend": "auto",
+      "state": "pronto",
+      "max": 0
+    },
+    {
+      "backend": "auto",
+      "state": "erro",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "repouso",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "dormindo",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "acordou",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "ouvindo",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "thinking",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "agindo",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "pronto",
+      "max": 0
+    },
+    {
+      "backend": "webgl2",
+      "state": "erro",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "repouso",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "dormindo",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "acordou",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "ouvindo",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "thinking",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "agindo",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "pronto",
+      "max": 0
+    },
+    {
+      "backend": "none",
+      "state": "erro",
+      "max": 0
+    }
+  ]
+}

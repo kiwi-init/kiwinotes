@@ -1,0 +1,81 @@
+/* impeccable (pbakaus/impeccable), modo Operate: "uma tela cinza com um acento é o padrão da categoria sem o polimento
+   dela, não contenção". O mundo empresta quatro coisas e só elas: tipo, paleta, densidade e um gesto de assinatura.
+   Mundo: o kiwi (a polpa verde, as sementes pretas, a casca). Paleta comprometida: a barra de cima na cor da casca/folha,
+   o chão levemente tingido, o verde só na ação, na seleção e no estado. Tipo: uma família (Inter), escala fixa 1.2.
+   Assinatura: a proposta do agente aparece dentro da nota, nas linhas onde vai entrar, com a marca na margem na cor do
+   agente; o balão só confirma (o modal é a última resposta). Sem faixa lateral, sem glifo como ícone, superfícies do
+   navegador (seleção, cursor) na paleta. */
+:root {
+  --ground: #f4f3ec; --paper: #fffffd; --shell: #26301b; --shell-2: #33402a; --shell-ink: #eef0e4; --shell-muted: #b7bea5;
+  --ink: #1c1f17; --ink-2: #4a5040; --ink-3: #6b715f; --rule: #e2e1d6; --rule-2: #cfcfc1;
+  --accent: #4a7418; --accent-hover: #3d6213; --accent-soft: #e6eed7; --on-accent: #fbfdf5;
+  --agent: #c9682a; --agent-soft: #fbeee3;
+  --font: "Inter", -apple-system, sans-serif;
+}
+:root[data-theme="dark"] {
+  --ground: #11130e; --paper: #171a13; --shell: #1d2615; --shell-2: #28331e; --shell-ink: #e9ecdf; --shell-muted: #a4ad92;
+  --ink: #e9ebe1; --ink-2: #b9bdaa; --ink-3: #8f9582; --rule: #2a2f23; --rule-2: #3a4131;
+  --accent: #a6d15e; --accent-hover: #b8dd78; --accent-soft: #26331a; --on-accent: #10140a;
+  --agent: #f0a46b; --agent-soft: #33241a;
+}
+::selection { background: var(--accent-soft); color: var(--ink); }
+body { background: var(--ground); color: var(--ink); font: 15px/1.6 var(--font); font-feature-settings: "cv11", "ss01"; caret-color: var(--accent); }
+button { font: inherit; color: inherit; cursor: pointer; transition: background-color .18s cubic-bezier(.2,.8,.2,1), color .18s; }
+.top { height: 52px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; background: var(--shell); color: var(--shell-ink); }
+.folder { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--shell-2); color: var(--shell-ink); font-size: 13px; font-weight: 500; margin-left: 84px; }
+.folder-gap { width: 1px; }
+.tabs { display: flex; gap: 2px; }
+.tab { height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: none; font-size: 13px; font-weight: 500; color: var(--shell-muted); }
+.tab[aria-selected="true"] { background: var(--shell-2); color: var(--shell-ink); }
+.tools { display: flex; gap: 2px; } .tools button { width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--shell-muted); display: grid; place-items: center; }
+.note { position: relative; width: 760px; margin: 20px auto 0; padding: 28px 40px 24px 56px; background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; height: 760px; }
+.crumb { font-size: 13px; color: var(--ink-3); } .crumb .sep { margin: 0 4px; }
+.title { font-size: 27px; line-height: 1.2; font-weight: 600; margin: 6px 0 4px; letter-spacing: -0.02em; }
+.meta { display: flex; gap: 12px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.backlinks { color: var(--ink-3); }
+.toc { margin: 16px 0 0; font-size: 13px; color: var(--ink-2); }
+.body h2 { font-size: 18.7px; font-weight: 600; margin: 22px 0 6px; letter-spacing: -0.01em; }
+.body p { margin: 0 0 10px; }
+.tasks { list-style: none; padding: 0; margin: 0; }
+.tasks li { position: relative; display: flex; gap: 10px; align-items: center; height: 30px; }
+.box { width: 16px; height: 16px; border: 1.5px solid var(--rule-2); border-radius: 4px; background: var(--paper); }
+.done { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--rule-2); } .done .box { background: var(--accent); border-color: var(--accent); }
+/* A assinatura: o que o agente propõe já está no lugar, tingido, com a marca na margem. */
+.proposed { position: relative; background: var(--agent-soft); border-radius: 6px; margin-left: -8px !important; padding-left: 8px; padding-right: 8px; }
+.proposed::before { content: "+"; position: absolute; left: -28px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; border-radius: 50%; background: var(--agent); color: var(--paper); font: 600 13px/18px var(--font); text-align: center; }
+p.proposed { padding-top: 4px; padding-bottom: 4px; } p.proposed a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.why { margin-left: auto; font-size: 12px; color: var(--agent); } p.proposed .why { margin-left: 8px; }
+table { border-collapse: collapse; margin: 12px 0 14px; font-size: 14px; font-variant-numeric: tabular-nums; }
+th { font-weight: 500; font-size: 13px; color: var(--ink-3); text-align: left; padding: 0 28px 6px 0; border-bottom: 1px solid var(--rule-2); }
+td { padding: 6px 28px 6px 0; border-bottom: 1px solid var(--rule); } .n { text-align: right; }
+.callout { display: flex; gap: 10px; padding: 12px 14px; border-radius: 8px; background: var(--accent-soft); }
+.callout-ic { color: var(--accent); padding-top: 3px; } .callout strong { font-weight: 600; } .callout p { margin: 2px 0 0; color: var(--ink-2); }
+.bubble { position: absolute; right: 128px; bottom: 44px; width: 340px; padding: 14px; border-radius: 12px; background: var(--paper); border: 1px solid var(--rule-2); box-shadow: 0 2px 6px rgb(0 0 0 / .06), 0 16px 36px -12px rgb(0 0 0 / .22); z-index: 6; }
+.bubble p { margin: 0 0 12px; font-size: 14px; line-height: 1.5; }
+.actions { display: flex; gap: 8px; }
+.actions button { height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--rule-2); background: var(--paper); font-size: 13px; font-weight: 500; }
+.actions .primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+/* Ajustes: a mesma casca; a barra lateral é a segunda neutra. */
+.prefs { display: flex; height: calc(820px - 52px); }
+.side { width: 220px; padding: 12px 10px; background: var(--paper); border-right: 1px solid var(--rule); }
+.item { display: flex; gap: 10px; align-items: center; height: 32px; padding: 0 10px; margin-bottom: 2px; border-radius: 8px; font-size: 13px; color: var(--ink-2); }
+.item[aria-current] { background: var(--accent-soft); color: var(--ink); font-weight: 600; } .item[aria-current] svg { color: var(--accent); }
+.pane { flex: 1; overflow: hidden; padding: 20px 32px 0; }
+.pane h2 { max-width: 760px; margin: 0 auto 12px; font-size: 22.5px; font-weight: 600; letter-spacing: -0.015em; }
+.group { max-width: 760px; margin: 0 auto; background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; padding: 0 16px; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 54px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.label { font-size: 13px; font-weight: 500; } .hint { font-size: 12px; color: var(--ink-3); }
+.seg { display: flex; border: 1px solid var(--rule-2); border-radius: 8px; overflow: hidden; }
+.seg button { height: 30px; padding: 0 12px; border: 0; border-right: 1px solid var(--rule-2); background: var(--paper); font-size: 12.5px; color: var(--ink-2); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.search { width: 220px; height: 32px; border-radius: 8px; border: 1px solid var(--rule-2); background: var(--paper); color: var(--ink); padding: 0 12px; font: inherit; font-size: 13px; }
+.themes-head { border-bottom: 0; } .sub { font-size: 12.5px; color: var(--ink-3); margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+.grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding-bottom: 16px; }
+.theme { border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); padding: 6px; text-align: left; }
+.theme[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.swatch { display: block; position: relative; height: 48px; border-radius: 6px; background: var(--sw); padding: 9px; }
+.swatch i { display: block; height: 3px; border-radius: 2px; background: rgb(255 255 255 / .5); margin-bottom: 5px; width: 60%; }
+.swatch i:nth-child(2) { width: 80%; opacity: .6; } .swatch i:nth-child(3) { width: 45%; opacity: .5; }
+.swatch b { position: absolute; right: 9px; bottom: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--ac); }
+.name { display: block; margin: 6px 2px 0; font-size: 12px; color: var(--ink-2); } .theme[aria-pressed="true"] .name { color: var(--ink); font-weight: 600; }

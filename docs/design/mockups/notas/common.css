@@ -1,0 +1,53 @@
+/* Mockup da janela Notas, B v4 (#1133, #1235). Só a moldura da página: o fundo, o cabeçalho e a janela do macOS.
+   O resto do mockup está no próprio index.html. Os tokens são os do app (tokens.css); o escuro vem por classe. */
+@import url("tokens.css");
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+html { background: #e9e7e2; }
+html.dark { background: #121214; }
+body {
+  font: var(--text-md) / var(--leading) var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  /* um fundo atrás da janela, só para a página não ficar chapada */
+  background:
+    radial-gradient(1200px 700px at 12% 0%, #c9dcc0 0%, transparent 60%),
+    radial-gradient(900px 700px at 100% 100%, #d9d3e8 0%, transparent 55%),
+    #e9e7e2;
+  padding: 40px 44px 48px;
+  width: 1680px;
+}
+html.dark body {
+  background:
+    radial-gradient(1200px 700px at 12% 0%, #24331d 0%, transparent 60%),
+    radial-gradient(900px 700px at 100% 100%, #2a2538 0%, transparent 55%),
+    #121214;
+}
+
+/* cabeçalho da página (fora da janela) */
+.board-head { display: flex; gap: 36px; align-items: flex-start; margin-bottom: 26px; }
+.board-head .tag {
+  display: inline-block; font: 600 11px/1 var(--font); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent-text); background: var(--accent-soft); padding: 5px 8px; border-radius: var(--radius-pill);
+}
+.board-head h1 { font: 700 30px/1.1 var(--font-display); letter-spacing: -0.02em; margin: 10px 0 6px; }
+.board-head .idea { font-size: 15px; color: var(--text-2); max-width: 640px; margin: 0; }
+.proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; margin-top: 4px; }
+.proscons div { background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: var(--radius-md); padding: 12px 14px; }
+.proscons h3 { font: 600 12px/1 var(--font); margin: 0 0 8px; color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; }
+.proscons ul { margin: 0; padding-left: 16px; font-size: 13px; }
+.proscons li { margin: 2px 0; }
+
+/* a janela do macOS: só sombra, sem contorno */
+.win { position: relative; border-radius: 12px; overflow: hidden; background: var(--bg); }
+.lights { position: absolute; top: 18px; left: 18px; display: flex; gap: 8px; z-index: 5; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.lights i:nth-child(2) { background: #febc2e; }
+.lights i:nth-child(3) { background: #28c840; }
+.frame-label { font: 600 12px/1 var(--font); color: var(--text-2); margin: 0 0 10px 4px; letter-spacing: .02em; }
+.row { display: grid; gap: 28px; margin-top: 30px; }
+
+.muted { color: var(--text-2); }
+.faint { color: var(--text-3); }
+.mono { font-family: var(--font-mono); font-size: 12px; }

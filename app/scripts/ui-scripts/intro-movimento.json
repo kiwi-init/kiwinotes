@@ -1,0 +1,14 @@
+{
+  "window": "intro",
+  "steps": [
+    { "waitFor": "#stage", "state": "attached", "name": "a intro abre" },
+    { "wait": 1200, "name": "com movimento: a névoa condensa no KiwiCat" },
+    { "screenshot": "intro-movimento-condensa.png" },
+    { "wait": 2200, "name": "~3,5 s: o gato feliz, com a aurora" },
+    { "screenshot": "intro-movimento-feliz.png" },
+    { "expectCount": "body.done", "count": 0, "name": "ainda não acabou (a intro inteira leva 5,35 s)" },
+    { "waitFor": "body.done", "state": "attached", "timeout": 4000, "name": "termina sozinha, com o quadro virando a janela" },
+    { "expectCount": "#again:visible", "count": 0, "name": "sem o \"De novo\" no app" },
+    { "screenshot": "intro-movimento-fim.png" }
+  ]
+}

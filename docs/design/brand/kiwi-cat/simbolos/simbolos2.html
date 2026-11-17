@@ -1,0 +1,139 @@
+<!doctype html><meta charset="utf-8">
+<style>body{margin:0;background:#fff;font:14px -apple-system,sans-serif}canvas{display:block}</style>
+<canvas id="c" width="2240" height="1330"></canvas>
+<script>
+const load = src => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+const W = 640, H = 800;
+function pixels(img) { const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d"); x.drawImage(img, 0, 0, W, H); return x.getImageData(0, 0, W, H); }
+const sm = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+function hex(h) { return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); }
+// Compose one panel. mode: "now" (frame as is) | "ink" (proposed light treatment)
+function compose(F, M, bg, mode, tintHex, deepHex) {
+  const out = new ImageData(W, H), B = hex(bg), T = hex(tintHex || "#000000"), D = hex(deepHex || "#000000");
+  for (let i = 0; i < W * H; i++) {
+    const k = i * 4, a = F.data[k + 3] / 255;
+    const r = F.data[k], g = F.data[k + 1], b = F.data[k + 2];
+    let o;
+    if (mode === "now") o = [r * a + B[0] * (1 - a), g * a + B[1] * (1 - a), b * a + B[2] * (1 - a)];
+    else {
+      const pr = r * a, pg = g * a, pb = b * a, mx = Math.max(pr, pg, pb), mn = Math.min(pr, pg, pb);
+      const L = mx / 255, sat = mx > 8 ? (mx - mn) / mx : 0;
+      const coat = sm(.42, .58, M.data[k] / 255);            // crisp silhouette
+      const arc = sm(.28, .55, sat) * sm(.10, .30, L);        // the rainbow rim keeps its own colour
+      const px = i % W, py = (i / W) | 0;
+      const round = 1 - sm(.74, 1, Math.hypot((px - 320) / 318, (py - 430) / 392)); // rounded falloff, no straight sides
+      const fog = Math.pow(Math.min(1, L * 1.25), .85) * (1 - arc) * round;
+      // 1) mist: colour, not light. Deeper tint where the fog is denser.
+      const am = Math.min(.78, fog * .95);
+      const mist = [0, 1, 2].map(j => T[j] + (D[j] - T[j]) * sm(.25, .9, fog));
+      o = [0, 1, 2].map(j => B[j] * (1 - am) + mist[j] * am);
+      // 2) rim glow outside the body: its own hue, as colour over paper
+      if (arc > 0 && mx > 0) { const aa = arc * Math.min(1, L * 1.1) * .9; const n = [pr, pg, pb].map(v => v / mx * 235); o = o.map((v, j) => v * (1 - aa) + n[j] * aa); }
+      // 3) body: opaque coat with the approved pixels
+      o = o.map((v, j) => v * (1 - coat) + [r, g, b][j] * coat);
+    }
+    out.data[k] = o[0]; out.data[k + 1] = o[1]; out.data[k + 2] = o[2]; out.data[k + 3] = 255;
+  }
+  return out;
+}
+function eyes(x, ox, oy, s) { x.fillStyle = "#fff"; for (const cx of [802.823, 1243.342]) { x.beginPath(); x.arc(ox + cx / 2048 * W * s, oy + 1279.3 / 2560 * H * s, 68.1 / 2048 * W * s, 0, 7); x.fill(); } }
+function panel(x, img, ox, oy, label, dark, s = 1) {
+  const c = document.createElement("canvas"); c.width = W; c.height = H; c.getContext("2d").putImageData(img, 0, 0);
+  x.imageSmoothingQuality = "high"; x.drawImage(c, ox, oy, W * s, H * s); eyes(x, ox, oy, s);
+  if (label) { x.fillStyle = dark ? "#ddd" : "#333"; x.font = "600 20px -apple-system,sans-serif"; x.fillText(label, ox + 16, oy + 30); }
+}
+
+// ---- symbol set, drawn on a 100x100 box. ink = fill/stroke colour, hole = colour showing through.
+function sym(x, name, ox, oy, s, ink, hole) {
+  x.save(); x.translate(ox, oy); x.scale(s / 100, s / 100); x.fillStyle = ink; x.strokeStyle = ink; x.lineCap = "round"; x.lineJoin = "round";
+  const P = d => new Path2D(d);
+  if (name === "acordou") {
+    x.translate(50, 50); x.rotate(.2); x.translate(-50, -50);
+    x.fill(P("M38 12 C38 5 62 5 62 12 L56 60 C55 67 45 67 44 60 Z")); x.beginPath(); x.arc(50, 84, 9, 0, 7); x.fill();
+    x.lineWidth = 7; x.stroke(P("M74 30 L90 20 M77 48 L95 48"));
+  } else if (name === "dormindo") {
+    x.translate(50, 50); x.rotate(-.14); x.translate(-50, -50);
+    x.lineWidth = 8; x.stroke(P("M14 60 H36 L14 86 H36")); x.lineWidth = 11; x.stroke(P("M46 14 H86 L46 60 H86"));
+  } else if (name === "ouvindo") {
+    x.lineWidth = 9; for (const r of [20, 40, 60]) { x.beginPath(); x.arc(8, 50, r, -.72, .72); x.stroke(); }
+  } else if (name === "thinking") {
+    for (const [cx, cy, r] of [[30, 44, 20], [52, 34, 26], [76, 46, 19], [52, 54, 22]]) { x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); }
+    x.fillRect(30, 44, 46, 20);
+    x.beginPath(); x.arc(24, 80, 7, 0, 7); x.fill(); x.beginPath(); x.arc(11, 93, 4, 0, 7); x.fill();
+    x.fillStyle = hole; for (const cx of [34, 53, 72]) { x.beginPath(); x.arc(cx, 46, 5.5, 0, 7); x.fill(); }
+  } else if (name === "agindo") {
+    const drop = (cx, cy, k) => { x.save(); x.translate(cx, cy); x.scale(k, k); x.fill(P("M0 -18 C8 -6 12 1 12 7 A12 12 0 1 1 -12 7 C-12 1 -8 -6 0 -18 Z")); x.restore(); };
+    drop(38, 34, 1.25); drop(72, 66, 1.0);
+  } else if (name === "linhas") {
+    x.lineWidth = 8; x.stroke(P("M30 22 H92 M10 50 H92 M40 78 H92"));
+  } else if (name === "pronto") {
+    const star = (cx, cy, k) => { x.save(); x.translate(cx, cy); x.scale(k, k); x.fill(P("M0 -22 Q3 -3 22 0 Q3 3 0 22 Q-3 3 -22 0 Q-3 -3 0 -22 Z")); x.restore(); };
+    star(40, 44, 1.5); star(80, 20, .75); star(78, 78, .6);
+  } else if (name === "erro") {
+    x.lineWidth = 8; x.stroke(P("M10 54 C16 14 44 10 46 40 S18 82 40 80 S76 16 62 20 S50 74 76 70 S96 36 84 30"));
+  }
+  x.restore();
+}
+
+function blur(src, r) { // separable box blur, two passes, on a Float32Array W*H
+  let a = src, b = new Float32Array(W * H);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < H; y++) { let s = 0; for (let x = -r; x <= r; x++) s += a[y * W + Math.min(W - 1, Math.max(0, x))];
+      for (let x = 0; x < W; x++) { b[y * W + x] = s / (2 * r + 1); s += a[y * W + Math.min(W - 1, x + r + 1)] - a[y * W + Math.max(0, x - r)]; } }
+    for (let x = 0; x < W; x++) { let s = 0; for (let y = -r; y <= r; y++) s += b[Math.min(H - 1, Math.max(0, y)) * W + x];
+      for (let y = 0; y < H; y++) { a[y * W + x] = s / (2 * r + 1); s += b[Math.min(H - 1, y + r + 1) * W + x] - b[Math.max(0, y - r) * W + x]; } }
+  }
+  return a;
+}
+// Quiet light treatment: a soft neutral mist hugging the silhouette. No rim, no band, no neon.
+function mist(F, M, bg, o) {
+  const out = new ImageData(W, H), B = hex(bg), T = hex(o.tint), D = hex(o.deep);
+  const fog0 = new Float32Array(W * H), coatF = new Float32Array(W * H), arcF = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) { const k = i * 4, a = F.data[k + 3] / 255, pr = F.data[k] * a, pg = F.data[k + 1] * a, pb = F.data[k + 2] * a;
+    const mx = Math.max(pr, pg, pb), mn = Math.min(pr, pg, pb), L = mx / 255, sat = mx > 8 ? (mx - mn) / mx : 0;
+    arcF[i] = sm(.28, .55, sat) * sm(.10, .30, L); fog0[i] = L * (1 - arcF[i]); coatF[i] = M.data[k] / 255; }
+  const fogB = blur(Float32Array.from(fog0), 12), halo = blur(Float32Array.from(coatF), 30);
+  for (let i = 0; i < W * H; i++) { const k = i * 4, a = F.data[k + 3] / 255, r = F.data[k], g = F.data[k + 1], b = F.data[k + 2];
+    const px = i % W, py = (i / W) | 0, round = 1 - sm(.70, 1, Math.hypot((px - 320) / 318, (py - 430) / 392));
+    const coat = sm(.42, .58, coatF[i]);
+    const dens = Math.min(1, (.55 * sm(.04, .62, halo[i]) + .70 * fogB[i]) * round);
+    const am = o.max * (1 - Math.exp(-2.4 * dens));
+    const col = [0, 1, 2].map(j => T[j] + (D[j] - T[j]) * dens);
+    let v = [0, 1, 2].map(j => B[j] * (1 - am) + col[j] * am);
+    const mx = Math.max(r * a, g * a, b * a), L = mx / 255;
+    if (arcF[i] > 0 && mx > 0) { const aa = arcF[i] * Math.min(1, L * 1.1) * .85, n = [r * a, g * a, b * a].map(c => c / mx * 232); v = v.map((c, j) => c * (1 - aa) + n[j] * aa); }
+    v = v.map((c, j) => c * (1 - coat) + [r, g, b][j] * coat);
+    out.data[k] = v[0]; out.data[k + 1] = v[1]; out.data[k + 2] = v[2]; out.data[k + 3] = 255; }
+  return out;
+}
+const QUIET = { A: { tint: "#dedbe8", deep: "#b3aec6", max: .30 }, B: { tint: "#d3cfe0", deep: "#9d98b5", max: .44 }, C: { tint: "#eadfd6", deep: "#c8ad9b", max: .36 } };
+
+(async () => {
+  const [f, m, h] = await Promise.all([load("frame.png"), load("mask.webp"), load("hoje.webp")]);
+  const F = pixels(f), M = pixels(m), x = document.getElementById("c").getContext("2d");
+  const dark = compose(F, M, "#111113", "now"), light = mist(F, M, "#ffffff", QUIET.B);
+  const states = ["dormindo", "acordou", "ouvindo", "thinking", "agindo", "pronto", "erro"];
+  const CW = 320, RH = 400, top = 70;
+  x.fillStyle = "#111113"; x.fillRect(0, 0, 2240, top + RH * 2 + 30); x.fillStyle = "#ffffff"; x.fillRect(0, top + RH * 2 + 30, 2240, 460);
+  x.font = "600 22px -apple-system,sans-serif"; x.fillStyle = "#ddd";
+  x.fillText("HOJE (os símbolos de agora, no escuro)", 20, 40); x.fillText("PROPOSTA (o mesmo conjunto, redesenhado; no escuro)", 20, top + RH + 20);
+  x.fillStyle = "#333"; x.fillText("PROPOSTA (no claro: os mesmos símbolos, em tinta escura)", 20, top + RH * 2 + 66);
+  states.forEach((st, i) => {
+    const ox = i * CW;
+    // row 1: today's sheet, column "leve / preto"
+    const row = ["repouso", "dormindo", "acordou", "ouvindo", "thinking", "agindo", "pronto", "erro"].indexOf(st);
+    x.imageSmoothingQuality = "high"; x.drawImage(h, 320, 55 + 384 * row, 320, 384, ox + 20, top - 10, 280, 336);
+    x.fillStyle = "#aaa"; x.font = "16px -apple-system,sans-serif"; x.fillText(st, ox + 24, top + 350);
+    for (const [img, oy, ink, hole] of [[dark, top + RH + 30, "#ffffff", "#111113"], [light, top + RH * 2 + 80, "#17171c", "#ffffff"]]) {
+      const c = document.createElement("canvas"); c.width = W; c.height = H; c.getContext("2d").putImageData(img, 0, 0);
+      x.drawImage(c, ox + 20, oy, 280, 350); eyes(x, ox + 20, oy, 280 / W);
+      if (st === "agindo") { sym(x, "linhas", ox + 4, oy + 96, 58, ink, hole); sym(x, "agindo", ox + 228, oy + 70, 70, ink, hole); }
+      else if (st === "pronto") sym(x, st, ox + 214, oy + 56, 84, ink, hole);
+      else if (st === "ouvindo") sym(x, st, ox + 246, oy + 120, 62, ink, hole);
+      else if (st === "thinking") sym(x, st, ox + 208, oy + 22, 96, ink, hole);
+      else sym(x, st, ox + 222, oy + 30, 78, ink, hole);
+    }
+  });
+  window.done = true;
+})();
+</script>

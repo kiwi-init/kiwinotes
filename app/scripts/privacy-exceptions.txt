@@ -1,0 +1,34 @@
+# As exceções da guarda de privacidade (spec #14415, app/scripts/push-guard.ts): uma linha por falso positivo,
+# `arquivo<TAB>sha256 do texto da linha<TAB>motivo`, revisada no PR. A chave é a linha exata daquele arquivo: ela não
+# vale para outro arquivo nem para outra linha, e nunca libera um termo. Para gerar: bun scripts/push-guard.ts --line <arquivo> <n>
+# O repo novo num commit só (opção B do harry, #16505): todas as linhas são novas para a guarda. Estas são as fixtures falsas dos testes do detector e do agente, e comentários que descrevem o formato.
+app/scripts/agent-memory-check.ts	f562303d3cf4536f1b289ff5611a25a7186bd80fba658dfd217a4c1b7569422f	valor falso de teste ou comentário de formato, não é segredo
+app/scripts/agent-onboarding-check.ts	3af5e9607ebe6d618c37a850f1f439517bf455802fa61099b600a77dfa5c8912	valor falso de teste ou comentário de formato, não é segredo
+app/scripts/files-check.ts	30ad92ac845817e980e877d09d976c9ac0bb6fcd48c8382724c372cc7417e787	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/proposals.test.ts	c1cacb8e0a9c5e598875c0a5a20a7b8e023359d1032bb2efd18385c725b1ca80	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/proposals.test.ts	edd3b11a93c6d9bd3a061147840e1dd785a6c5f34d1db572224c7bf4c85ccdf5	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/proposals.test.ts	76f6e1a16eb27f0c0fabdd7251971763984a7f3f2209bdc89f2df7a485c8e4f8	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/proposals.test.ts	edd3b11a93c6d9bd3a061147840e1dd785a6c5f34d1db572224c7bf4c85ccdf5	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/proposals.test.ts	137428327226be936eaf7bf58df715a87871709f7285de7b72bc20868af9b988	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/service.test.ts	e6a2f150c825a83c2b7c4d82533813167ec6fc8015f1f5eec71a9d807eef648e	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/service.test.ts	4b9702f600ce5adf1895c28fbac74d6f475c649c6f328dcee885b3cd9aed8742	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/service.test.ts	bb04be7dae5abc780fbf2f56b73fd33018819b6b3cbe1ef2cfea54a0dadf5972	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/tools/tools.test.ts	4216beacba7661bdee0abdc6312573589defcf35f6666394a7a9ac6373e6197f	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/tools/tools.test.ts	c091d7a78c1a2ed720a063a04ec8ab3f5db7a127472e09a87c582df8aa21e006	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/tools/tools.ts	2aa5557bba288b4e068ce6a852f76c44164a730f1d350ad4eb7fbd4dd1e5cc7f	valor falso de teste ou comentário de formato, não é segredo
+app/src/agent/tools/write.test.ts	edd3b11a93c6d9bd3a061147840e1dd785a6c5f34d1db572224c7bf4c85ccdf5	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	d7a8cac1b3319f411ecfa1d3bbbd75023c8168c82f021d5b30cee704f40d4c0b	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	789e499810e0d5c780352bd41420a5817d749229fa359cf61b89ae0fe2caa1b0	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	feb2b0e6fa9a5e555fc7dd9873876103449907e716d286fd667f0f35e070bef2	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	c451c5f0183ac3baa88cd49df2321f68f23144683e6322253db13dce6349bb5f	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	f609c6ba84996428c03721eaac7fb37a2a96a6dedd0d7be7aed7f4674510c3b0	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	509533f540ac27df26a9cc09a0e64697c12f55dc539704302dcc4173f695634c	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	222e56c8d8caeaaa0b24e2c2f7635cccfc074618e04a41197c895966655dc35a	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	d175f9ebaa9dc1c3464c73eaa5f54c6fb6e887a940468a571d48918c08150707	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	8a13d59e8b0d48fb7a6c911139b404eafd9bbbba30e22298a01b58ede36e0217	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	0b4a10a6ef767f686f08bc26779e56de9544898b9f553a7118a3a33dca61165d	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	3e3e1b6138b113c392c6b32dffb1ad4ec63f03413d8badc08912efb204aec73c	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.test.ts	fed14bbfb8753679884953aa1514bd114154fe6868a6638f28a7115a44211d66	valor falso de teste ou comentário de formato, não é segredo
+app/src/guardrail/detector.ts	8fe80ab393fd1420017675f48f12d8b02790535704bc99159d78fd9826fb3feb	valor falso de teste ou comentário de formato, não é segredo
+app/src/notes/remote-image.test.ts	560a3643d928d308983860e53a41967d0e45a145a57a16eeaa5f1d0010813bac	valor falso de teste ou comentário de formato, não é segredo
+app/src/notes/remote-image.test.ts	42f1ecbbf199adb86d6ed754862dce265ab30c99dbddd533594fcabc034bf113	valor falso de teste ou comentário de formato, não é segredo

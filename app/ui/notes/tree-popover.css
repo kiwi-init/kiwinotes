@@ -1,0 +1,22 @@
+/* T4363, spec #4357: a árvore sai de baixo do botão do caminho, com o movimento dos tokens de hover (T3821). */
+.kn-tree-hover {
+  transform: translateY(-4px) scale(0.985);
+  transform-origin: top left;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  animation: none;
+  /* O atraso de saída já é cancelável no componente; não aplicar duas vezes. */
+  transition:
+    transform var(--hover-dur, 200ms) var(--hover-ease, var(--ease)),
+    opacity var(--hover-dur, 200ms) var(--ease),
+    visibility 0s var(--hover-dur, 200ms);
+}
+.kn-tree-hover[data-open] {
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: var(--hover-in-delay, 0ms);
+}
+.kn-tree-hover .kn-side { flex: 1; }

@@ -1,0 +1,415 @@
+{
+  "task": "T8377",
+  "spec": "#7718",
+  "referenceOnly": true,
+  "note": "Static approved images illustrate poses; labels specify future motion. No wide-ear rendering claim.",
+  "size": [
+    2048,
+    900
+  ],
+  "frames": [
+    {
+      "state": "repouso",
+      "time_seconds": 0,
+      "label": "neutro",
+      "source": "quadros/repouso-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "repouso",
+      "time_seconds": 7.35,
+      "label": "arcos na piscada",
+      "source": "previas/repouso.webp",
+      "source_frame": 45,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "repouso",
+      "time_seconds": 12.34,
+      "label": "tique só à direita",
+      "source": "previas/repouso.webp",
+      "source_frame": 80,
+      "target_ear_degrees": [
+        0,
+        -18
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "repouso",
+      "time_seconds": 14.0,
+      "label": "olhar lateral",
+      "source": "previas/repouso.webp",
+      "source_frame": 124,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "dormindo",
+      "time_seconds": 0,
+      "label": "antes do sono",
+      "source": "quadros/repouso-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "dormindo",
+      "time_seconds": 0.8,
+      "label": "arcos / relaxou",
+      "source": "quadros/dormindo-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        12,
+        -12
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "dormindo",
+      "time_seconds": 1.8,
+      "label": "zZ sobe",
+      "source": "quadros/dormindo-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        12,
+        -12
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "dormindo",
+      "time_seconds": 2.7,
+      "label": "próximo zZ",
+      "source": "quadros/dormindo-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        12,
+        -12
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "acordou",
+      "time_seconds": 0,
+      "label": "antes do opa",
+      "source": "quadros/acordou-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "acordou",
+      "time_seconds": 0.53,
+      "label": "pico / ! salta",
+      "source": "quadros/acordou-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        -25,
+        25
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "acordou",
+      "time_seconds": 0.97,
+      "label": "! começa a sair",
+      "source": "quadros/acordou-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        -17.3,
+        17.3
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "acordou",
+      "time_seconds": 1.4,
+      "label": "assentou",
+      "source": "quadros/repouso-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "ouvindo",
+      "time_seconds": 0,
+      "label": "silêncio / uma onda",
+      "source": "quadros/ouvindo-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "ouvindo",
+      "time_seconds": 0.18,
+      "label": "voz cresce",
+      "source": "quadros/ouvindo-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "ouvindo",
+      "time_seconds": 3.2,
+      "label": "atenção unilateral",
+      "source": "quadros/ouvindo-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        -25,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "ouvindo",
+      "time_seconds": 3.8,
+      "label": "voz cai",
+      "source": "quadros/ouvindo-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "thinking",
+      "time_seconds": 0.26,
+      "label": "busca à esquerda",
+      "source": "quadros/thinking-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "thinking",
+      "time_seconds": 0.95,
+      "label": "pontos acendem",
+      "source": "quadros/thinking-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "thinking",
+      "time_seconds": 2.8,
+      "label": "busca à direita",
+      "source": "quadros/thinking-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "thinking",
+      "time_seconds": 3.5,
+      "label": "mantém a busca",
+      "source": "quadros/thinking-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "agindo",
+      "time_seconds": 0.24,
+      "label": "foco",
+      "source": "quadros/agindo-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        -10,
+        10
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "agindo",
+      "time_seconds": 0.7,
+      "label": "gotas e linhas",
+      "source": "quadros/agindo-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        -10,
+        10
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "agindo",
+      "time_seconds": 1.4,
+      "label": "símbolo avança",
+      "source": "quadros/agindo-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        -10,
+        10
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "agindo",
+      "time_seconds": 2.4,
+      "label": "execução continua",
+      "source": "quadros/agindo-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        -10,
+        10
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "pronto",
+      "time_seconds": 0.16,
+      "label": "arcos felizes",
+      "source": "quadros/pronto-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        5,
+        -5
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "pronto",
+      "time_seconds": 0.3,
+      "label": "brilhos / satisfação",
+      "source": "quadros/pronto-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        8,
+        -8
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "pronto",
+      "time_seconds": 0.7,
+      "label": "brilhos saindo",
+      "source": "quadros/pronto-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        3,
+        -3
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "pronto",
+      "time_seconds": 1.1,
+      "label": "volta ao repouso",
+      "source": "quadros/repouso-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "erro",
+      "time_seconds": 0,
+      "label": "rabisco começa",
+      "source": "quadros/erro-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        0,
+        0
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "erro",
+      "time_seconds": 0.45,
+      "label": "embolando",
+      "source": "quadros/erro-02.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        9,
+        -9
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "erro",
+      "time_seconds": 0.9,
+      "label": "embolado / avião",
+      "source": "quadros/erro-03.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        20,
+        -20
+      ],
+      "rendered_ear_limit_degrees": 5
+    },
+    {
+      "state": "erro",
+      "time_seconds": 1.0,
+      "label": "recomeça o traço",
+      "source": "quadros/erro-01.webp",
+      "source_frame": null,
+      "target_ear_degrees": [
+        20,
+        -20
+      ],
+      "rendered_ear_limit_degrees": 5
+    }
+  ],
+  "source_sha256": {
+    "previas/repouso.webp": "723b338e5bdc68ebcbb803782086597293d030b44b351a90e0980251bf93334a",
+    "quadros/acordou-01.webp": "cf0f530da69835deb5babae45f230c8931aaea8a07561688b5ec5e12379048a4",
+    "quadros/acordou-02.webp": "8f5bfd608772ea550955f1581ad3d53b61f7f6e44f666952c5ff94ab0d44d3e2",
+    "quadros/agindo-01.webp": "02feaada8d642e78d3b3ad2f25ee8270f16b197f6cb985a5920b6efd0a734d80",
+    "quadros/agindo-02.webp": "123e5d21aa8bbfb4252c1056514dd073f8d30661d97cf9ef25e9bb4b3dba12b8",
+    "quadros/dormindo-01.webp": "1ea296bdaa37e0b519f906a7f142e2ae205d946f7c507ce19212120b134316ec",
+    "quadros/dormindo-02.webp": "875546f56c8cf9d0dac619434ee674f4db3b79b75d1384d67f1aa689c3ccd8d2",
+    "quadros/erro-01.webp": "552ab449a125d1ee5c474392e8164d1b8f3006c8b6c3a14e670e3775d839c2f4",
+    "quadros/erro-02.webp": "6c895034bb981b30ab30f80117eb99820a6843ba60d2c62eacd81c4aafeb0719",
+    "quadros/erro-03.webp": "5343a62cc2427a2bfdd5f0dab7eca4f33192bb4fe928dc06cc1dbdeb1bfee50c",
+    "quadros/ouvindo-01.webp": "6033e605967b6572d089d504407c30ba60916f7631daca6d0de36480d7408938",
+    "quadros/ouvindo-02.webp": "8ebcd69b7abb247c91c8060f48529d5ed8ca7660ca556dc01bb861bfd1ddbf7f",
+    "quadros/pronto-01.webp": "9046973219ffd96408c8fbdbc446a17cdcf6b8649b52ccdd08371109b0dfc858",
+    "quadros/pronto-02.webp": "27a58a8dc76bdb3e93ddaedd5a21dcede7e217ff4f308e7410abdcde3eafb5de",
+    "quadros/repouso-01.webp": "63f3f7b1fedc7612479881b083cff40b42f63ad813f7492e509d46f21decd28d",
+    "quadros/thinking-01.webp": "53e2ec32523344f4e0a61c733ff6f4d64e2454f64c2f7af5b0b149f4e3d793dc",
+    "quadros/thinking-02.webp": "b5908c79c9c3d672fcae92ff1455638a442ab1c17a7a69c1c7d8624d9b269653"
+  }
+}

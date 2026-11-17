@@ -1,0 +1,66 @@
+{
+  "measuredCommit": "78fbb512129ab2e27547abde51dc976b914befdb",
+  "sampleElapsedRangeSeconds": [
+    60.037109958,
+    60.08861875000001
+  ],
+  "all24RuntimeHashesMatch": true,
+  "groupingBasis": "Observed gaps between pair start timestamps, interpreted as likely sleep by reviewer Kiwi #9243; pair5 kept as transition.",
+  "groups": [
+    {
+      "group": "Antes das pausas",
+      "pairs": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "medianAll": 0.7491768197052966,
+      "stableCount": 0,
+      "medianStable": null
+    },
+    {
+      "group": "Transição entre pausas",
+      "pairs": [
+        5
+      ],
+      "medianAll": 0.9315813151859316,
+      "stableCount": 0,
+      "medianStable": null
+    },
+    {
+      "group": "Após a última pausa",
+      "pairs": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "medianAll": 1.0318384355304033,
+      "stableCount": 5,
+      "medianStable": 1.0320958932963875
+    }
+  ],
+  "lease": {
+    "expiredDuringSeries": true,
+    "observedReacquiredByUTC": "2026-11-13T06:26:00Z",
+    "noCompetingHolderVerifiedBy": "lead, Kiwi #9241",
+    "potentiallyAffectedPairs": [
+      5,
+      6,
+      7
+    ]
+  },
+  "idleSleepInhibition": {
+    "command": "caffeinate -i -w 77771",
+    "ownPID": 79726,
+    "startedUTC": "2026-11-13T06:28:42Z",
+    "observedNotRunningAtUTC": "2026-11-13T07:55:01.286172+00:00",
+    "otherCaffeinateProcessesNotModified": true
+  },
+  "stoppedAfter12": true,
+  "noFurtherOptimizationRound": true
+}

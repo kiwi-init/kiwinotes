@@ -1,0 +1,138 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Foco",
+        "content": "# Foco\n\nParágrafo 1: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 2: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 3: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 4: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 5: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 6: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 7: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 8: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 9: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 10: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 11: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n\nParágrafo 12: um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. um texto para encher a página e mostrar o foco. \n"
+      }
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Foco"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Foco')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-rendered:has-text('Parágrafo 3:')"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered:has-text('Parágrafo 3:')",
+      "name": "o cursor vai para o parágrafo 3"
+    },
+    {
+      "press": "Shift+Meta+f",
+      "name": "⇧⌘F liga o modo foco"
+    },
+    {
+      "waitFor": ".kn-notes[data-focus='true']"
+    },
+    {
+      "waitFor": ".kn-note-editor .cm-editor.cm-focus-on"
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-focus-here",
+      "count": 1,
+      "name": "só o parágrafo do cursor fica em destaque"
+    },
+    {
+      "expectText": ".kn-note-editor .cm-focus-here",
+      "text": "Parágrafo 3:"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "screenshot": "01-modo-foco.png"
+    },
+    {
+      "press": "Shift+Meta+t",
+      "name": "⇧⌘T liga a máquina de escrever"
+    },
+    {
+      "click": ".kn-note-editor .cm-rendered:has-text('Parágrafo 12:')",
+      "name": "o cursor vai para o último parágrafo"
+    },
+    {
+      "expectText": ".kn-note-editor .cm-focus-here",
+      "text": "Parágrafo 12:"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "screenshot": "02-maquina-de-escrever.png"
+    },
+    {
+      "click": ".kn-note-editor .cm-content",
+      "button": "right",
+      "name": "botão direito no texto"
+    },
+    {
+      "waitFor": "[role=menuitemradio][aria-checked=true]:has-text('Modo foco')",
+      "name": "o menu mostra o modo foco ligado"
+    },
+    {
+      "waitFor": "[role=menuitemradio][aria-checked=true]:has-text('Máquina de escrever')"
+    },
+    {
+      "screenshot": "03-menu.png"
+    },
+    {
+      "click": "[role=menuitemradio]:has-text('Modo foco')",
+      "name": "desliga pelo menu"
+    },
+    {
+      "expectCount": ".kn-notes[data-focus]",
+      "count": 0
+    },
+    {
+      "expectCount": ".kn-note-editor .cm-editor.cm-focus-on",
+      "count": 0
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "modo foco"
+    },
+    {
+      "waitFor": ".kn-palette .kn-palette-it:has-text('Modo foco')",
+      "name": "a paleta oferece o modo foco"
+    },
+    {
+      "click": ".kn-palette .kn-palette-it:has-text('Modo foco')",
+      "name": "escolhe o comando"
+    },
+    {
+      "waitFor": ".kn-notes[data-focus='true']",
+      "name": "liga pela paleta"
+    },
+    {
+      "press": "Shift+Meta+f"
+    },
+    {
+      "expectCount": ".kn-notes[data-focus]",
+      "count": 0,
+      "name": "o mesmo atalho desliga"
+    },
+    {
+      "invoke": "notes.get",
+      "args": {
+        "path": "Foco.md"
+      },
+      "name": "o .md não mudou"
+    }
+  ]
+}

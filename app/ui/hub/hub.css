@@ -1,0 +1,427 @@
+/* O hub (T2121, #2100) com as abas em cima (T2502, #2457 ponto 2, versão C · Foco): a barra de cima tem os semáforos,
+   o que a seção na tela pede à esquerda e à direita, e as abas no meio, num grupo que flutua com a seleção deslizando,
+   como no Channels. Os tokens têm os nomes do Channels (T2503); até eles chegarem, cada um tem o de hoje como reserva. */
+
+.kn-hub {
+  --kn-bar: 52px;
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: var(--kn-bar) minmax(0, 1fr);
+  background: var(--bg);
+}
+
+.kn-hub[data-entering="true"] {
+  animation:
+    window-in var(--glide) both,
+    fade var(--slow) var(--ease) both;
+}
+
+.kn-hub-top {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  /* os semáforos ficam à esquerda */
+  padding: 0 14px 0 84px;
+}
+
+.kn-hub-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kn-hub-end {
+  justify-content: flex-end;
+}
+
+/* Só o que a seção pôs ali deixa de arrastar a janela. */
+.kn-hub-slot > * {
+  -webkit-app-region: no-drag;
+}
+
+/* ---------------------------------------------------------- as abas */
+
+.kn-tabs {
+  position: relative;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-ctl);
+  background: var(--float);
+  box-shadow: var(--shadow-float);
+}
+
+.kn-tabs-pill {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: calc(var(--ctl) - 4px);
+  border-radius: var(--r-row);
+  background: var(--wash-2, var(--surface-hover));
+  transform: translateX(0);
+  pointer-events: none;
+}
+
+.kn-tabs-pill[data-moving="true"] {
+  transition: transform var(--glide), width var(--glide);
+}
+
+.kn-tab {
+  position: relative;
+  height: calc(var(--ctl) - 4px);
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: none;
+  color: var(--ink-2, var(--text-2));
+  font: 500 var(--t-ui) / 1 var(--ui);
+  white-space: nowrap;
+  cursor: default;
+  /* Channels instalado: o hover só muda ink-2 → ink, em --fast (160 ms, ease padrão). */
+  transition: color var(--fast);
+}
+
+.kn-tab:hover,
+.kn-tab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.kn-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.kn-tab-soon {
+  font: var(--t-stamp) / 1 var(--mono);
+  color: var(--ink-3, var(--text-3));
+}
+
+/* "Reduzir movimento" zera a pílula por conta própria (T4671, #150): com `[data-moving="true"]` no seletor, estas
+   regras vencem a da animação por especificidade, em qualquer ordem de arquivo, sem depender do `!important` da
+   base.css. A pílula sem `data-moving` continua coberta pelo primeiro seletor de cada lista. */
+@media (prefers-reduced-motion: reduce) {
+  :root .kn-tabs-pill,
+  :root .kn-tabs-pill[data-moving="true"] {
+    transition: none;
+  }
+}
+
+:root[data-motion="reduced"] .kn-tabs-pill,
+:root[data-motion="reduced"] .kn-tabs-pill[data-moving="true"] {
+  transition: none;
+}
+
+/* ---------------------------------------------------------- as seções */
+
+.kn-hub-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.kn-hub-pane {
+  height: 100%;
+  overflow: auto;
+  container: kn-window / inline-size;
+}
+
+.kn-hub-pane[hidden] {
+  display: none;
+}
+
+/* Com o gato no canto (T12417), a área das seções reserva a coluna dele à direita: nenhum botão, interruptor ou texto
+   fica embaixo do gato, em qualquer rolagem e na janela estreita. A coluna cobre a névoa dele (96 px, a 12 px da borda);
+   o espaço de cada seção já completa a folga. A barra de rolagem fica na borda, fora do clique do gato.
+   As seções centradas (Notas, Reuniões, Ditado) ganham a mesma folga dos dois lados, para continuar no meio; as
+   Configurações têm a barra lateral à esquerda, e só a direita. */
+.kn-hub:has(> .kn-kiwicat) .kn-hub-pane {
+  padding-inline: 96px;
+}
+.kn-hub:has(> .kn-kiwicat) .kn-hub-pane[data-section="settings"] {
+  padding-left: 0;
+}
+
+/* As outras seções (as janelas do kit) ficam numa coluna no meio, como as Configurações do Channels. */
+.kn-hub-pane .kn-content {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* A entrada é a do hub: a seção não anima de novo por cima. */
+.kn-hub-main .kn-window[data-entering="true"],
+.kn-hub-main .kn-notes {
+  animation: none;
+}
+
+/* O vazio de Reuniões fica onde ficam os outros vazios (o do Ditado, o das Notas): no alto da coluna (T2778). */
+.kn-hub-soon {
+  display: grid;
+  justify-items: center;
+  padding-top: var(--space-2);
+}
+
+/* A pergunta na dúvida do guardrail (spec #9873): um cartão por cima das seções, no alto e à direita. */
+.kn-doubt {
+  position: absolute;
+  top: 56px;
+  right: 16px;
+  z-index: 20;
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100% - 80px);
+  overflow: auto;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+.kn-doubt-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.kn-doubt-hint {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.kn-doubt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.kn-doubt-item {
+  padding: var(--space-2) 0;
+  border-top: 0.5px solid var(--border);
+}
+.kn-doubt-where {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+.kn-doubt-context {
+  display: block;
+  margin: 2px 0 var(--space-2);
+  font-family: var(--mono, var(--font-mono));
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.kn-doubt-value {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: color-mix(in srgb, #e5a50a 30%, transparent);
+  color: inherit;
+}
+.kn-doubt-buttons,
+.kn-doubt-all {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+.kn-doubt-answered {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+/* Persistent across panes; all pixels pass clicks to the content below. */
+.kn-kiwicat { position: absolute !important; right: 12px; bottom: 12px; width: 96px; height: 120px; z-index: 6; pointer-events: none;
+  /* Os olhos e os símbolos são <svg> inline: com a altura de linha do hub, eles desciam 8 px da caixa deles, e o recorte
+     do olho os escondia (o gato sem olhos, #10039). */
+  line-height: 0; }
+.kn-kiwicat * { pointer-events: none !important; }
+
+/* O balão do gato (spec #9495, T10832). A casca (`.kn-bubble-shell`) é a do balão do pacote do KiwiCat
+   (`../kiwicat-v2/bubble.css`, T14933): aqui fica só o lugar dela, à esquerda do gato, com o rabo à direita, embaixo,
+   curvado para ele. Ela é dividida com o campo de "falar por texto" (#9878): os dois aparecem no mesmo lugar e com o
+   mesmo traço. A altura vem do conteúdo. Só o balão recebe clique; o resto do canto deixa passar. */
+.kn-bubble-shell {
+  position: absolute;
+  right: 116px;
+  bottom: 56px;
+  z-index: 7;
+  max-width: 320px;
+  pointer-events: auto;
+}
+
+/* Falar por texto (spec #9878, T10872): só o corpo do gato recebe o clique. O botão é invisível, cobre a silhueta (não a
+   névoa) e mostra o anel do foco para quem chega pelo teclado. */
+.kn-kiwicat-hit {
+  position: absolute;
+  right: 30px;
+  bottom: 22px;
+  z-index: 7;
+  width: 60px;
+  height: 86px;
+  padding: 0;
+  border: 0;
+  border-radius: 46% 46% 42% 42%;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.kn-kiwicat-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* O campo: o pedido em até 5 linhas, depois rola; sem animação (abre na hora, também com o Reduzir movimento). */
+.kn-cat-ask { width: 260px; max-width: 260px; display: grid; gap: 6px; }
+.kn-cat-ask-field {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: calc(5 * 1.35em + 4px);
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+/* O balão já mostra onde a pessoa escreve: o anel de foco global (base.css) ficaria um campo dentro do campo. */
+.kn-cat-ask-field:focus-visible { outline: none; box-shadow: none; }
+.kn-cat-ask-note { margin: 0; font-size: var(--text-xs, 0.85em); color: var(--text-2); }
+.kn-cat-ask-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; text-decoration: underline; cursor: pointer; }
+.kn-cat-ask-actions { display: flex; justify-content: flex-end; }
+.kn-cat-ask-send {
+  padding: 2px 10px;
+  border: 1.5px solid var(--kn-bubble-accent, var(--text));
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kn-cat-ask-send:disabled { opacity: 0.45; cursor: default; }
+
+/* O balão da resposta: a casca. A entrada e a saída são do lugar dele (`.kn-bubble-slot`, abaixo). */
+.kn-bubble {
+  cursor: default;
+  user-select: none;
+}
+.kn-bubble[data-error] .kn-bubble-text { white-space: nowrap; }
+.kn-bubble[data-error] .kn-bubble-ghost,
+.kn-bubble[data-error] .kn-bubble-typed,
+.kn-bubble[data-error] .kn-bubble-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* A troca entre os balões (spec #11652, `BubblePresence.tsx`). O lugar do balão fica no canto, e a casca dentro dele
+   deixa de ser absoluta. O balão que sai encolhe e esmaece na direção da ponta (180 ms); o novo cresce dela, com mola
+   (250 ms, depois de 60 ms). Os tempos ficam em `BubblePresence.tsx`, junto da remoção do que sai. Com o Reduzir
+   movimento, a troca é só um esmaecer de 120 ms. Só `transform` e `opacity`. */
+.kn-bubble-slot {
+  position: absolute;
+  right: 116px;
+  bottom: 56px;
+  z-index: 7;
+  /* A ponta do rabo: 28,5 px da direita e 20 px abaixo do pé da casca (o rabo do pacote, em `right: 24`). */
+  transform-origin: calc(100% - 28.5px) calc(100% + 20px);
+  pointer-events: none;
+  animation: kn-slot-in 250ms cubic-bezier(0.34, 1.4, 0.64, 1) 60ms both;
+}
+.kn-bubble-slot > .kn-bubble-shell { position: relative; right: auto; bottom: auto; z-index: auto; }
+/* A saída é da Web Animations, a partir do estado em que o balão está (`BubblePresence.tsx`). */
+.kn-bubble-slot[data-phase="exit"] { z-index: 6; animation: none; }
+.kn-bubble-slot[data-phase="exit"] > * { pointer-events: none; }
+/* Com o Reduzir movimento, a entrada também é da Web Animations (o esmaecer de 120 ms): o `base.css` corta a do CSS. */
+.kn-bubble-slot[data-reduced] { animation: none; }
+@keyframes kn-slot-in { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
+
+/* O trecho inteiro, invisível, dá o tamanho; a parte digitada fica por cima. */
+.kn-bubble-text { display: grid; overflow-wrap: anywhere; white-space: pre-wrap; }
+.kn-bubble-ghost, .kn-bubble-typed { grid-area: 1 / 1; }
+.kn-bubble-ghost { visibility: hidden; }
+.kn-bubble-line, .kn-bubble-li { display: block; }
+.kn-bubble-mark { font-weight: 600; }
+.kn-bubble code, .kn-bubble-big code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+.kn-bubble-pre { margin: 2px 0; font: 0.92em / 1.35 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.kn-bubble-more {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* O balão grande do [Ver mais]: a resposta inteira, com rolagem, ancorado no mesmo canto. */
+.kn-bubble-big {
+  position: absolute;
+  right: 116px;
+  bottom: 56px;
+  z-index: 8;
+  box-sizing: border-box;
+  width: min(420px, calc(100% - 140px));
+  max-height: min(60%, 420px);
+  overflow: auto;
+  /* A casca é a do pacote (bubble.css); o grande lê com mais folga, sem o rabo. */
+  padding: 12px 16px;
+  line-height: 1.45;
+  pointer-events: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A régua do balão: o mesmo texto, fora da tela, para medir se um trecho cabe. */
+.kn-bubble-measure {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  box-sizing: content-box;
+  width: 284px; /* 320 menos o padding (16 + 16) e o contorno (2 + 2) */
+  font: 500 14px / 1.35 system-ui, -apple-system, sans-serif;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  visibility: hidden;
+}
+
+.kn-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* O gato está no overlay, por cima dos outros apps (spec #9810): o do canto some. */
+.kn-kiwicat[data-away="true"] { visibility: hidden; }
+/* A confirmação no cartão da dúvida (spec #11102): a pergunta em destaque. */
+.kn-confirm-question { margin: 0; font-weight: 600; }
+
+/* "Anotei: …" (spec #11469): o balão da memória, no mesmo canto, com o [Desfazer]. */
+.kn-bubble-shell.kn-memory-bubble { display: grid; gap: 6px; max-width: 300px; user-select: text; }
+.kn-memory-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.kn-memory-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kn-memory-line { min-width: 0; overflow-wrap: anywhere; }
+/* As rotinas (spec #12150): a frase, o [Ver] com o texto da nota (rola por dentro) e os três botões. */
+.kn-bubble-shell.kn-routine-bubble { display: grid; gap: 8px; max-width: 320px; user-select: text; }
+.kn-routine-line { margin: 0; overflow-wrap: anywhere; }
+.kn-routine-view { max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-row, 8px); background: var(--surface); }
+.kn-routine-view .kn-diff { margin: 0; }
+.kn-routine-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.kn-memory-note { margin: 0; font-size: var(--text-xs, 0.85em); color: var(--text-2); }
+.kn-memory-actions { display: flex; gap: 4px; justify-content: flex-end; }
+/* O aviso da memória (revisão do T12771): [Abrir a memória] na frente e o Ok em texto, como no balão da proposta. */
+.kn-memory-actions[data-warn="true"] { justify-content: flex-start; align-items: center; }
+.kn-memory-actions[data-warn="true"] .kn-button[data-role="dismiss"] { padding: 0 var(--space-1, 4px); border-color: transparent; background: none; box-shadow: none; color: var(--text-2); }
+.kn-memory-actions[data-warn="true"] .kn-button[data-role="dismiss"]:hover { color: var(--text); background: none; }
+
+/* Na Início (spec #15728, lead #15867), o gato do canto vai para o meio da tela: um gato só. A tela mede o lugar dele
+   (`.kn-home-cat`) e põe no hub o deslocamento a partir do canto; o gato, o clique e os balões andam juntos. A casca
+   dentro do lugar do balão (`.kn-bubble-slot > .kn-bubble-shell`) já anda com ele. Com a página rolada, a tela tira o
+   `data-cat-at`, e ele volta ao canto. */
+.kn-hub[data-cat-at="home"] > :is(.kn-kiwicat, .kn-kiwicat-hit, .kn-bubble-slot, .kn-bubble-shell, .kn-bubble-big) {
+  translate: var(--kn-cat-dx, 0px) var(--kn-cat-dy, 0px);
+}

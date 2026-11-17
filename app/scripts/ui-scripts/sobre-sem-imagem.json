@@ -1,0 +1,1 @@
+{"window":"hub","steps":[{"waitFor":".kn-tab[data-section=about]"},{"click":".kn-tab[data-section=about]"},{"waitFor":".kn-about-name"},{"expectText":".kn-about-name","text":"Kiwi Notes"},{"expectCount":".kn-about img","count":0},{"expectCount":".kn-about button:has-text('Verificar atualizações')","count":1},{"screenshot":"sobre.png"}]}
