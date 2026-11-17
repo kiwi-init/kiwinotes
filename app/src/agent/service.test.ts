@@ -1239,6 +1239,21 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
     expect(v.week.requests).toBe(0);
   });
 
+  test("o /usage do medidor não segura o pedido da pessoa: feito enquanto o programa abre, o pedido espera e sai (T16712)", async () => {
+    const m = make();
+    await readyNow(m);
+    // Abrir Ajustes › Agente pede o /usage, que abre o programa. Um pedido ao gato nesse meio tempo não pode dar
+    // E_AGENT_BUSY: a pessoa não pediu nada antes.
+    const usage = m.svc.usageRefresh();
+    while ((await m.svc.status()).program !== "opening") await Bun.sleep(5);
+    const events = await askAndWait(m, "oi");
+    expect(events.find((e) => e.type === "error")).toBeUndefined();
+    expect(events.some((e) => e.type === "done")).toBe(true);
+    expect(m.log().filter((l) => l.method === "session/prompt")).toHaveLength(1);
+    // O medidor não vê erro: ou leu o /usage, ou cedeu a vez e mostra o número que já tinha.
+    await usage;
+  });
+
   test("com o agente falso, uma nota criada segue a ordem e os blocos do modelo, e organizar uma nota passa pelo [Desfazer] (spec #11102)", async () => {
     const notes: Record<string, string> = { "Ideias.md": "# Ideias\n\nGatos dormem muito.\nO Kiwi anota.\n" };
     // O leitor com a versão, como o de verdade: o notes_write pede a versão que o notes_read devolveu.

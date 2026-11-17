@@ -361,6 +361,11 @@ export class AgentService {
   /** O `/usage` em segundo plano depois de um pedido (ADR 0013), e quando foi o último. */
   private limitProbe: Promise<void> | null = null;
   private limitProbedAt = -Infinity;
+  /**
+   * O `/usage` do medidor andando (T16712). Não é um pedido: não ocupa o `turn`, e cede a vez a um pedido da pessoa.
+   * `asking` diz que o `/usage` já foi ao agente (aí ele é cancelado); antes disso, ainda abrindo o programa, só não vai.
+   */
+  private usageRun: { done: Promise<void>; yielded: boolean; asking: boolean } | null = null;
   private limitProbeTimer: ReturnType<typeof setTimeout> | null = null;
   /** A conversa com o gato está na tela (#13380): o `/usage` espera ela acabar. Quem liga é o app (`useConversationCheck`). */
   private conversationOpen: () => boolean = () => false;
@@ -808,7 +813,7 @@ export class AgentService {
         ...(this.downloadError && !this.download ? { error: this.downloadError } : {}),
       },
       program: this.host?.running ? "open" : this.opening ? "opening" : "closed",
-      busy: !!this.turn,
+      busy: !!this.turn || !!this.usageRun,
       session: values ? { model: values.model, effort: values.effort } : null,
       models: this.knownModels(),
     };
@@ -981,6 +986,8 @@ export class AgentService {
   /**
    * "Atualizar" (`agent.usageRefresh`): o `/usage` do próprio Claude Code, só quando a pessoa abre o medidor ou clica.
    * Vai como um pedido interno: fora do registro, sem evento de pedido e sem balão. Nada da pessoa vai junto.
+   * Um pedido da pessoa passa na frente (T16712): o `/usage` não vai, ou é cancelado, e o medidor fica com o número que
+   * já tinha, sem erro.
    */
   async usageRefresh(): Promise<AgentUsageView> {
     await this.limitProbe;
@@ -988,23 +995,52 @@ export class AgentService {
     if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
     if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
-    const marker = { id: `usage-${crypto.randomUUID()}`, cancelled: false };
-    this.turn = marker;
+    // Um `/usage` já andando (o medidor apareceu e a pessoa clicou em Atualizar): o mesmo serve aos dois.
+    if (this.usageRun) {
+      await this.usageRun.done;
+      return this.usageView();
+    }
+    const run = { done: Promise.resolve(), yielded: false, asking: false };
+    let error: unknown;
+    let read = false;
+    this.usageRun = run;
+    run.done = (async () => {
+      try {
+        const host = this.host?.running ? this.host : await this.openProgram();
+        if (run.yielded) return;
+        run.asking = true;
+        const answer = await host.ask(USAGE_COMMAND);
+        this.windowGrow(host, modelTokens(USAGE_COMMAND) + modelTokens(answer.text));
+        // Cancelado no meio para o pedido da pessoa: a resposta veio pela metade e não vale como número.
+        if (run.yielded) return;
+        const now = (this.d.now ?? Date.now)();
+        this.subscription = { at: now, usage: parseUsageMarkdown(answer.text, now) };
+        read = true;
+      } catch (e) {
+        if (!run.yielded) error = e;
+      } finally {
+        if (this.usageRun === run) this.usageRun = null;
+      }
+    })();
+    this.emitStatus();
     try {
-      const host = this.host?.running ? this.host : await this.openProgram();
-      const answer = await host.ask(USAGE_COMMAND);
-      this.windowGrow(host, modelTokens(USAGE_COMMAND) + modelTokens(answer.text));
-      const now = (this.d.now ?? Date.now)();
-      this.subscription = { at: now, usage: parseUsageMarkdown(answer.text, now) };
-    } catch (e) {
-      throw fromAgentError(e, this.name);
+      await run.done;
     } finally {
-      if (this.turn === marker) this.turn = null;
       this.armIdle();
       this.emitStatus();
     }
-    this.emitUsage();
+    if (error !== undefined) throw fromAgentError(error, this.name);
+    if (read) this.emitUsage();
     return this.usageView();
+  }
+
+  /** Um pedido da pessoa vai na frente do `/usage` do medidor (T16712): o `/usage` cede a vez, e o pedido espera ele sair. */
+  private async yieldUsage(): Promise<void> {
+    for (let run = this.usageRun; run; run = this.usageRun) {
+      run.yielded = true;
+      if (run.asking) void this.host?.cancel().catch(() => {});
+      await run.done;
+    }
   }
 
   /**
@@ -1019,7 +1055,7 @@ export class AgentService {
     const check = () => {
       this.limitProbeTimer = null;
       // Outro pedido já começou (ou já acabou): o /usage deste é pulado.
-      if (this.lastTurn !== after || this.turn || this.limitProbe) return;
+      if (this.lastTurn !== after || this.turn || this.limitProbe || this.usageRun) return;
       const now = (this.d.now ?? Date.now)();
       if (now - this.limitProbedAt < (o.everyMs ?? LIMIT_PROBE_EVERY_MS)) return;
       const host = this.host;
@@ -1743,6 +1779,8 @@ export class AgentService {
     const s = await this.d.settings.load();
     if (!s.enabled || !s.consented) throw fail("E_AGENT_DISABLED");
     if (!installedAdapter({ root: this.root }, this.packages)) throw fromAgentError(new AgentError("E_ADAPTER_MISSING", this.name), this.name);
+    // Sem `await` daqui até o `this.turn = turn`: um /usage do medidor que comece agora já encontra o pedido.
+    await this.yieldUsage();
     if (this.turn) throw fromAgentError(new AgentError("E_AGENT_BUSY", this.name), this.name);
     const turn = { id: crypto.randomUUID(), cancelled: false };
     this.turn = turn;
@@ -2240,7 +2278,7 @@ export class AgentService {
     if (!this.host?.running || this.closed) return;
     this.idle = setTimeout(() => {
       this.idle = null;
-      if (!this.turn) void this.stopProgram("10 minutos sem uso").then(() => this.emitStatus());
+      if (!this.turn && !this.usageRun) void this.stopProgram("10 minutos sem uso").then(() => this.emitStatus());
     }, this.d.idleMs ?? AGENT_IDLE_MS);
     (this.idle as { unref?: () => void }).unref?.();
   }
