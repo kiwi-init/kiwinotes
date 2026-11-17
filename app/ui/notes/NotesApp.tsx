@@ -2034,16 +2034,17 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * A janela Notas inteira: o vault, a nota e o "Citada em". A janela Notas e o hub (T2121) montam esta. `active`: as
- * Notas estão na tela. No hub, com outra seção à frente, elas ficam montadas e escondidas, e o ⌘N e o ⌘K não podem
- * agir sem ninguém ver (T2200).
- */
 /** Com as Notas escondidas, a busca vai por cima do hub inteiro (spec #16821); nas Notas, fica onde sempre esteve. */
 function withHub(over: boolean, node: React.ReactNode) {
   const hub = over ? document.querySelector(".kn-hub") : null;
   return hub ? createPortal(node, hub) : node;
 }
+
+/**
+ * A janela Notas inteira: o vault, a nota e o "Citada em". A janela Notas e o hub (T2121) montam esta. `active`: as
+ * Notas estão na tela. No hub, com outra seção à frente, elas ficam montadas e escondidas, e o ⌘N e o ⌘K delas não
+ * agem sem ninguém ver (T2200); a busca que o hub pede (`searchRequest`) abre por cima da outra aba (spec #16821).
+ */
 
 export function NotesApp({ active = true, openRequest = null, searchRequest = 0, searchSeen, onShow }: { active?: boolean; openRequest?: { path: string; n: number; internal?:boolean } | null; searchRequest?: number; searchSeen?: { current: number }; onShow?: () => void } = {}) {
   const request = openRequest?.n ?? 0;
