@@ -86,6 +86,8 @@ try {
       // O Pular vale sempre, também no passo 1 (revisão do T11993); o foco está no título do passo.
       assert.equal(await p.locator(".kn-onb-actions button:has-text('Pular')").isDisabled(), false);
       assert.equal(await p.evaluate(() => document.activeElement?.id), "kn-onb-title");
+      // Spec #17709: o título é o do gato; o Claude Code fica na frase de baixo.
+      assert.equal(await p.locator("#kn-onb-title").textContent(), "Oi! Vamos acordar o Kiwi Cat");
       await shot(p, "1-claude-antes-light.png");
       await p.locator(".kn-onb-check button:has-text('Baixar')").click();
       await p.waitForFunction(() => !document.querySelector(".kn-onb-actions button:last-child")?.hasAttribute("disabled"), undefined, { timeout: 30000 });
@@ -200,14 +202,26 @@ try {
       const swatch = p.getByRole("dialog").getByRole("radio", { name: "Prisma Original" });
       assert.equal(await swatch.getAttribute("aria-checked"), "true");
       const swatches = p.getByRole("dialog").getByRole("radiogroup", { name: "Cor do Kiwi Cat" }).getByRole("radio");
-      assert.deepEqual(await swatches.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label"))), ["Prisma Original", "Kiwi Elétrico", "Âmbar Noturno", "Soul Mist · Claro (Ref.)", "Névoa Violeta"]);
+      assert.deepEqual(await swatches.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label"))), ["Prisma Original", "Kiwi Elétrico", "Âmbar Noturno", "Soul Mist", "Névoa Violeta"]);
       assert.match(await swatch.evaluate((e) => getComputedStyle(e).backgroundImage), /linear-gradient/, "a amostra é o gradiente da paleta");
       assert.equal(await p.locator(".kn-onb-color .kn-cat-color canvas, .kn-onb-color .kn-cat-preview").count(), 0, "sem o gatinho da linha: um gato só");
-      await p.getByRole("dialog").getByRole("radio", { name: "Kiwi Elétrico" }).click();
-      for (let i = 0; (await invoke("settings.get")).kiwicat.cor !== "kiwi-neon"; i++) { assert.ok(i < 50, "a cor vai para os ajustes"); await Bun.sleep(100); }
+      // Spec #17709: a caixa da cor tem a mesma altura com qualquer uma das 5, e a frase cabe numa linha.
+      const box = p.locator(".kn-onb-color .kn-row").first();
+      const heights: Record<string, number> = {};
+      for (const [id, name] of [["kiwi-neon", "Kiwi Elétrico"], ["ambar-solar", "Âmbar Noturno"], ["soul-claro", "Soul Mist"], ["nevoa-violeta", "Névoa Violeta"], ["prisma-original", "Prisma Original"], ["kiwi-neon", "Kiwi Elétrico"]] as const) {
+        await p.getByRole("dialog").getByRole("radio", { name }).click();
+        for (let i = 0; (await invoke("settings.get")).kiwicat.cor !== id; i++) { assert.ok(i < 50, `${name} vai para os ajustes`); await Bun.sleep(100); }
+        await p.waitForFunction((n) => document.querySelector(".kn-onb-color .kn-row-hint")?.textContent?.startsWith(n) === true, name);
+        heights[name] = Math.round((await box.boundingBox())!.height);
+        const hint = p.locator(".kn-onb-color .kn-row-hint");
+        const lines = await hint.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+        assert.equal(lines, 1, `a frase de ${name} numa linha`);
+        await box.screenshot({ path: join(out, `7-cor-${id}-light.png`) });
+      }
+      assert.equal(new Set(Object.values(heights)).size, 1, `a caixa da cor com a mesma altura: ${JSON.stringify(heights)}`);
       await shot(p, "7-cor-light.png");
       assert.equal((await invoke("agent.activity")).requests.length, asked, "os passos 2 a 7 não mandam pedido");
-      report.checks.push("steps 5-7 (T11999): the Template editor from Settings; the top-level folders with the marked project checked, and checking another marks it; the 5 palette swatches (spec #14963) with prisma-original selected, each a gradient of its prismStops, and picking one changes the setting; none of them sends a request");
+      report.checks.push("steps 5-7 (T11999): the Template editor from Settings; the top-level folders with the marked project checked, and checking another marks it; the 5 palette swatches (spec #14963) with prisma-original selected, each a gradient of its prismStops, and picking one changes the setting; the colour box keeps one height and a one-line sentence with each of the 5 (spec #17709); none of them sends a request");
       await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
       await stepIs(p, 8);
       // Passo 8 (spec #12949): onde o gato aparece por cima dos apps e o tamanho, com a prévia da tela. Mudar salva.
@@ -265,12 +279,35 @@ try {
     }
     await p.waitForSelector(theme === "light" ? ".kn-onb-card dd:has-text('Clientes'):has-text('Kiwi')" : ".kn-onb-card dd:has-text('Kiwi')", { timeout: 15000 });
     if (theme === "light") assert.equal(await p.locator(".kn-onb-card dd").first().textContent(), "Kiwi Elétrico");
+    // Spec #17709 (T18615): o cartão do "Pronto!" sem a faixa de cor em cima: a borda de cima é a fina dos outros lados.
+    const borders = await p.locator(".kn-onb-card").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { top: cs.borderTopWidth, side: cs.borderLeftWidth, topColor: cs.borderTopColor, sideColor: cs.borderLeftColor };
+    });
+    assert.equal(borders.top, borders.side, `a borda de cima do cartão (${borders.top}) tem que ser a dos lados (${borders.side})`);
+    assert.equal(borders.topColor, borders.sideColor, "a borda de cima do cartão tem a cor dos lados, sem a cor do gato");
     await shot(p, `10-pronto-${theme}.png`);
     await p.locator(".kn-onb-actions button:has-text('Pronto')").click();
     await p.waitForSelector(".kn-onb", { state: "detached", timeout: 15000 });
     assert.equal((await onboarding()).state, "done");
     if (theme === "light") {
-      report.checks.push("the final card shows the colour, the tone, the projects and the shortcut; Pronto ends it");
+      report.checks.push("the final card shows the colour, the tone, the projects and the shortcut, with no colour stripe on top (spec #17709); Pronto ends it");
+      // Spec #17709 (T18615): em Ajustes, a mesma linha da cor tem a mesma altura com as 5, e a frase numa linha.
+      const row = p.locator(".kn-row", { has: p.getByRole("radiogroup", { name: "Cor do Kiwi Cat" }) }).first();
+      await row.scrollIntoViewIfNeeded();
+      const settingsHeights: Record<string, number> = {};
+      for (const [id, name] of [["prisma-original", "Prisma Original"], ["kiwi-neon", "Kiwi Elétrico"], ["ambar-solar", "Âmbar Noturno"], ["soul-claro", "Soul Mist"], ["nevoa-violeta", "Névoa Violeta"]] as const) {
+        await row.getByRole("radio", { name }).click();
+        await p.waitForFunction(([sel, n]) => [...document.querySelectorAll(sel)].some((e) => e.textContent?.startsWith(n)), [".kn-row-hint", name] as const);
+        const hint = row.locator(".kn-row-hint");
+        const lines = await hint.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+        assert.equal(lines, 1, `em Ajustes, a frase de ${name} numa linha`);
+        settingsHeights[name] = Math.round((await row.boundingBox())!.height);
+        await Bun.sleep(300);
+        await row.screenshot({ path: join(out, `ajustes-cor-${id}-light.png`) });
+      }
+      assert.equal(new Set(Object.values(settingsHeights)).size, 1, `em Ajustes, a linha da cor com a mesma altura: ${JSON.stringify(settingsHeights)}`);
+      report.checks.push("in Settings, the colour row keeps one height and a one-line sentence with each of the 5 (spec #17709)");
       // 2. "Refazer o onboarding" em Ajustes abre de novo, do passo 1; fechar no meio termina com o que foi escolhido.
       await p.locator("button:has-text('Refazer o onboarding')").click();
       await p.waitForSelector(".kn-onb", { timeout: 15000 });

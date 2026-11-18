@@ -153,7 +153,7 @@ export function CatColorRow({ agentEnabled, preview = true }: { agentEnabled: bo
     : !cat.show ? "Mostre o Kiwi Cat para escolher a cor dele."
     : `${current.name}: a névoa em volta do gato e os detalhes dele.`;
   const options = catColorOptions().map(o => ({ value: o.id, label: o.label, color: catSwatchCss(o.prismStops) }));
-  return <Row label={label} hint={hint}>
+  return <Row label={label} hint={hint} oneLine>
     <div className="kn-cat-color">
       {on && preview ? <CatPreview cor={cat.cor} /> : null}
       <Swatches<CatColorChoice> label={label} value={current.id} options={options} disabled={!on} onChange={next => {
