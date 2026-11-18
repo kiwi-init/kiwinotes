@@ -391,7 +391,6 @@ export function Sidebar(p: SidebarProps) {
           // ⌃-clique é o menu, como nas notas (T2693).
           onClick={(e) => !e.ctrlKey && p.onOpenFile?.(f.path)}
           onContextMenu={(e) => menu(e, target)}
-          {...drag(target)}
         >
           <Twisty />
           <TreeIcon name={f.type} />
