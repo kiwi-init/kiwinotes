@@ -286,7 +286,10 @@ export function plainMarkdown(text: string): string {
     }
     if (n.tag === "tr") {
       flush();
-      n.children.forEach((cell, i) => {
+      // As células vazias do fim da linha (uma linha mais curta que o cabeçalho) não deixam um " · " sobrando.
+      let last = n.children.length;
+      while (last > 0 && typeof n.children[last - 1] !== "string" && (n.children[last - 1] as MdNode).children.length === 0) last--;
+      n.children.slice(0, last).forEach((cell, i) => {
         if (i > 0) line += " · ";
         if (typeof cell !== "string") cell.children.forEach((c) => walk(c));
       });

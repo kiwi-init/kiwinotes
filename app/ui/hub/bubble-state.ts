@@ -79,25 +79,100 @@ export function splitChunks(text: string, fits: (s: string) => boolean): Chunk[]
   return out;
 }
 
+/** O texto corrido, como o balão pequeno mostra: sem `**`, `#`, `|` nem a crase (o que sobra de um negrito aberto também). */
+function plainOf(raw: string): string {
+  return plainMarkdown(raw).replace(/\*\*|__|~~|`+/g, "");
+}
+
+const words = (s: string) => s.split(/\s+/).filter(Boolean);
+
 /**
- * O texto corrido do segmento, como o balão pequeno mostra. Chegando (`done` falso), as linhas de tabela do fim, sem a
- * linha dos `---` ainda, ficam de fora até ela chegar (antes dela, são um parágrafo com os `|`), e a última linha de uma
- * tabela fica de fora até terminar. Os símbolos que sobram de um negrito ou de um código ainda aberto saem: o texto que
- * já apareceu não muda quando o fechamento chega.
+ * O que ainda pode chegar e mudar o texto corrido do que já chegou: o fim de um link, de um negrito ou de um código, a
+ * linha dos `---` de uma tabela, o fim de um bloco de código.
+ */
+const PROBES = ["", ")", "]", "](x)", "*", "**", "_", "__", "`", "~~", ">", "\n", "\n\n", "\n```\n"];
+
+/** Os testes para `raw`: os fixos, e a linha dos `---` com o número de colunas da última linha com `|`. */
+function probes(raw: string): string[] {
+  const line = raw.split("\n").reverse().find((l) => l.includes("|"));
+  if (!line) return PROBES;
+  const cols = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").length;
+  return [...PROBES, `\n${"|---".repeat(cols)}|\n`, `${"|---".repeat(cols)}|\n`];
+}
+
+/** As palavras do corrido de `raw.slice(0, at)` ficam as mesmas, venha o que vier depois de `raw`? */
+function stableAt(raw: string, at: number): boolean {
+  const mine = words(plainOf(raw.slice(0, at)));
+  return probes(raw).every((x) => {
+    const all = words(plainOf(raw + x));
+    return mine.every((w, i) => all[i] === w);
+  });
+}
+
+/**
+ * O começo das linhas de tabela do fim que ainda não têm a linha dos `---`: antes dela, elas são um parágrafo com os `|`,
+ * e depois uma tabela. Nada delas é estável até a linha chegar. Sem isso, o fim do texto.
+ */
+function tableHeadStart(raw: string): number {
+  const m = /(?:^|\n)((?:[ \t]*\|[^\n]*(?:\n|$))+)$/.exec(raw);
+  if (!m) return raw.length;
+  // Só uma linha dos `---` inteira (com a quebra depois): um `|-` pela metade ainda não decide.
+  const lines = m[1]!.split("\n").slice(0, -1);
+  const delimiter = lines.some((l) => /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/.test(l));
+  return delimiter ? raw.length : raw.length - m[1]!.length;
+}
+
+/**
+ * Até onde o texto cru que está chegando já tem o corrido certo (T17984, revisão 2): o fim de uma palavra que nada que
+ * chegue depois muda. O balão só corta até ali; o resto espera. `from` é um ponto já conferido antes (o resultado
+ * nunca volta para trás dele).
+ */
+export function stableEnd(raw: string, from = 0): number {
+  // Os blocos antes da última linha vazia (fora de um bloco de código) não mudam com o que vem depois: a conferência
+  // lê só dali para a frente, e não o segmento inteiro a cada pedaço que chega.
+  const base = blockStart(raw, from);
+  const tail = raw.slice(base);
+  let tried = 0;
+  for (let at = Math.min(raw.length - 1, tableHeadStart(raw)); at > from && tried < 64; at--) {
+    if (!/\s/.test(raw[at]!) || /\s/.test(raw[at - 1]!)) continue;
+    // Numa linha de tabela, só no fim dela: as colunas que faltam mudam o que a linha é.
+    if (raw[at] !== "\n" && /^[ \t]*\|/.test(raw.slice(raw.lastIndexOf("\n", at - 1) + 1, at))) continue;
+    tried++;
+    if (stableAt(tail, at - base)) return at;
+  }
+  return from;
+}
+
+/** A última linha vazia até `upTo` que não está dentro de um bloco de código: dali começa um bloco novo. 0 se não há. */
+function blockStart(raw: string, upTo: number): number {
+  for (let at = raw.lastIndexOf("\n\n", upTo); at > 0; at = raw.lastIndexOf("\n\n", at - 1)) {
+    const fences = raw.slice(0, at).match(/^[ \t]*(```|~~~)/gm)?.length ?? 0;
+    if (fences % 2 === 0) return at + 2;
+  }
+  return 0;
+}
+
+/**
+ * O texto corrido do segmento (spec #17679): o que o balão pequeno mostra. Com `done`, o texto inteiro; chegando, só até
+ * o `stableEnd`, o pedaço que não muda mais.
  */
 export function bubblePlain(raw: string, done: boolean): string {
-  let text = raw;
-  if (!done) {
-    const m = /(?:^|\n)((?:[ \t]*\|[^\n]*(?:\n|$))+)$/.exec(text);
-    if (m) {
-      const start = text.length - m[1]!.length;
-      const delimiter = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-*:?[ \t]*)*\|?[ \t]*$/m.test(m[1]!);
-      text = !delimiter ? text.slice(0, start) : text.endsWith("\n") ? text : text.slice(0, text.lastIndexOf("\n") + 1);
-    }
+  return plainOf(done ? raw : raw.slice(0, stableEnd(raw)));
+}
+
+/**
+ * Onde, em `plain`, termina o texto `cut` já cortado em trechos: as mesmas letras na mesma ordem, sem contar os espaços
+ * e as quebras (o corrido de um pedaço maior pode juntar as linhas de outro jeito). -1 se não bate.
+ */
+export function afterCut(plain: string, cut: string): number {
+  let i = 0;
+  for (const ch of cut) {
+    if (/\s/.test(ch)) continue;
+    while (i < plain.length && /\s/.test(plain[i]!)) i++;
+    if (plain[i] !== ch) return -1;
+    i++;
   }
-  const plain = plainMarkdown(text).replace(/\*\*|__|~~|`+/g, "");
-  // O espaço do fim do que está chegando fica, como no texto cru: ele é o que separa da próxima palavra.
-  return done ? plain : plain + (/\s+$/.exec(text)?.[0] ?? "");
+  return i;
 }
 
 export interface BubbleView {
@@ -136,8 +211,10 @@ export class BubbleFeed {
   private queue: string[] = [];
   /** O segmento aberto, cru (desde a última ferramenta). */
   private open = "";
-  /** Quanto do texto corrido do segmento aberto (`bubblePlain`) já virou trecho completo. */
-  private consumed = 0;
+  /** O texto corrido do segmento aberto que já virou trecho completo (o texto, e não a posição: revisão 2 do T17984). */
+  private cut = "";
+  /** Até onde o segmento aberto, cru, já tem o corrido que não muda (`stableEnd`). */
+  private stable = 0;
   private head: Head | null = null;
   private keys = 0;
   /** Tudo o que o agente disse no pedido (o [Ver mais]). */
@@ -210,7 +287,8 @@ export class BubbleFeed {
       // A ferramenta começou: o que foi dito antes sai do balão.
       this.queue = [];
       this.open = "";
-      this.consumed = 0;
+      this.cut = "";
+      this.stable = 0;
       this.head = null;
       this.closedLen = this.said.length;
       // A web (spec #11908): o balão diz que o agente saiu do cofre, até o próximo texto ou ferramenta.
@@ -252,7 +330,8 @@ export class BubbleFeed {
       this.finish(e.id);
       this.queue = [];
       this.open = "";
-      this.consumed = 0;
+      this.cut = "";
+      this.stable = 0;
       this.error = true;
       const line = (e.code === "E_AGENT_LIMIT" && this.outLine ? this.outLine : e.message || e.code).split("\n")[0]!.trim();
       this.head = { key: ++this.keys, text: line, complete: true, shownAt: now, completeAt: now };
@@ -280,7 +359,8 @@ export class BubbleFeed {
     this.dismissed = true;
     this.queue = [];
     this.open = "";
-    this.consumed = 0;
+    this.cut = "";
+    this.stable = 0;
     this.head = null;
   }
 
@@ -316,7 +396,8 @@ export class BubbleFeed {
     this.request = id;
     this.queue = [];
     this.open = "";
-    this.consumed = 0;
+    this.cut = "";
+    this.stable = 0;
     this.head = null;
     this.said = "";
     this.closedLen = 0;
@@ -330,7 +411,8 @@ export class BubbleFeed {
   private clear(): void {
     this.queue = [];
     this.open = "";
-    this.consumed = 0;
+    this.cut = "";
+    this.stable = 0;
     this.head = null;
   }
 
@@ -345,20 +427,41 @@ export class BubbleFeed {
     return this.said.length - this.closedLen - this.open.length;
   }
 
-  /** O texto corrido do segmento aberto que ainda não virou trecho completo. */
+  /** O texto corrido do segmento aberto que ainda não virou trecho completo: chegando, só o pedaço que não muda mais. */
   private openShown(all = false): string {
-    return bubblePlain(this.open, all).slice(this.consumed);
+    if (!all) this.stable = stableEnd(this.open, this.stable);
+    return this.afterCut(plainOf(all ? this.open : this.open.slice(0, this.stable)));
+  }
+
+  /**
+   * O que o balão mostra do trecho que ainda está chegando: tudo o que chegou, se nada que venha depois muda o que já
+   * aparece (a palavra do fim só cresce); senão, só o pedaço que não muda mais. O espaço do fim fica, como no cru.
+   */
+  private openTyping(): string {
+    const shown = this.openShown();
+    const tail = this.open.slice(this.stable);
+    // O resto, depois do pedaço que não muda mais: só palavras, sem nada que o markdown leia (`[`, `*`, `|`, `#`, um
+    // `-` ou `>` no começo da linha…). Com um desses, ele espera, como o resto do trecho.
+    if (/[[\]*_`~|#<>\\&!]/.test(tail) || /\n[ \t]*([-+=]|\d+[.)])/.test(tail)) return shown;
+    return shown ? shown + tail : tail.trimStart();
+  }
+
+  private afterCut(plain: string): string {
+    const at = afterCut(plain, this.cut);
+    return plain.slice(at < 0 ? Math.min(this.cut.length, plain.length) : at);
   }
 
   /** Corta o segmento aberto, no texto corrido: os trechos completos vão para a fila; com `all`, o resto também. */
   private chunkOpen(now: number, all: boolean): void {
-    const chunks = splitChunks(this.openShown(all), this.fits);
+    const rest = this.openShown(all);
+    const chunks = splitChunks(rest, this.fits);
     const complete = all ? chunks : chunks.slice(0, -1);
     for (const c of complete) this.queue.push(c.text);
     if (all) {
       this.open = "";
-      this.consumed = 0;
-    } else if (complete.length) this.consumed += complete.at(-1)!.end;
+      this.cut = "";
+      this.stable = 0;
+    } else if (complete.length) this.cut += rest.slice(0, complete.at(-1)!.end);
     // O trecho na tela que ainda estava chegando: se ele virou o primeiro completo da fila, fica completo.
     // O trecho na tela que ainda estava chegando é sempre o começo do segmento aberto: se um trecho completo saiu dele,
     // é esse, e o balão fica com ele (sem o espaço do fim, que é o que separa do próximo).
@@ -369,7 +472,7 @@ export class BubbleFeed {
         h.text = first;
         h.complete = true;
         h.completeAt = now;
-      } else h.text = this.openShown().trimStart();
+      } else h.text = this.openTyping().trimStart();
     }
     if (!this.head) this.next(now);
   }
@@ -381,7 +484,7 @@ export class BubbleFeed {
       this.head = { key: ++this.keys, text: t, complete: true, shownAt: at, completeAt: at };
       return;
     }
-    const open = this.openShown().trimStart();
+    const open = this.openTyping().trimStart();
     this.head = open ? { key: ++this.keys, text: open, complete: false, shownAt: at, completeAt: Infinity } : null;
   }
 
