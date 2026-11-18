@@ -224,6 +224,9 @@ button.kn-side-head:focus-visible {
   touch-action: none;
 }
 .kn-width-handle[data-side="left"] { left: 12px; }
+/* Na nota .md, a alça fica por baixo do editor (T19388): a seta da dobra, na mesma faixa, ganha o clique; o editor deixa
+   o mouse passar no resto (`search-fold.ts`). */
+.kn-page > .kn-width-handle { z-index: 0; }
 .kn-width-handle[data-side="right"] { right: 12px; }
 .kn-width-handle::after {
   content: "";

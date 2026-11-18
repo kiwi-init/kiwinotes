@@ -52,7 +52,18 @@ export const searchOnly: Extension = [editorPhrases, search({ top: true }), keym
 export const searchAndFold = [editorPhrases, search({ top: true }), listFolding, foldGutter({ domEventHandlers: { mousedown(view, _line, event) { event.preventDefault(); view.focus(); return false; } } }), keymap.of([...SEARCH_KEYS, ...foldKeymap]),
   searchTheme,
   EditorView.theme({
-    '.cm-gutters': { background: 'transparent', color: 'var(--text-3)', border: 'none', cursor: 'pointer' },
+    // A coluna da dobra fica no recuo da página, fora da coluna do texto (T19388): o editor começa 12 px antes, e o texto
+    // fica no meio, alinhado com o título e com a pasta, e na borda da alça esquerda da largura. Sem isto, o texto ia de
+    // 52 a 720 px numa coluna de 760, e a alça (de 12 a 42) não chegava nele.
+    // A coluna da dobra e a alça dividem a faixa logo fora do texto. A ordem: a seta, a alça, o texto. A alça fica por
+    // baixo do editor (`.kn-page > .kn-width-handle`, em notes.css), e a moldura do editor deixa o mouse passar: só o
+    // texto, as setas e o que sai dele (a busca, as dicas) pegam o mouse. Numa linha sem seta, a alça responde.
+    '&': { marginLeft: '-12px', pointerEvents: 'none' },
+    '& > *': { pointerEvents: 'auto' },
+    '.cm-scroller, .cm-gutters': { pointerEvents: 'none' },
+    '.cm-content': { pointerEvents: 'auto' },
+    '.cm-gutters': { background: 'transparent', color: 'var(--text-3)', border: 'none' },
+    '.cm-foldGutter .cm-gutterElement > *': { pointerEvents: 'auto', cursor: 'pointer' },
     // Some lines have top padding (the 2 px between list items); keep the arrow beside their text baseline.
     '.cm-foldGutter .cm-gutterElement': { display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
     // A largura fixa (T17784): a seta aparece numa linha crua e some num bloco desenhado; sem isto, a coluna alarga e o
