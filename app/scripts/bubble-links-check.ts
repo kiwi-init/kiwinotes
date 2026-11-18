@@ -39,6 +39,26 @@ const LONGA = [
   "A previsão do tempo de cada dia está no fim da nota.",
 ].join("\n");
 
+/** Um pdf de verdade, de uma página, para o visualizador abrir: "Bilhete de exemplo". */
+function tinyPdf(): string {
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 420 200] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    "",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  const stream = "BT /F1 28 Tf 40 100 Td (Bilhete de exemplo) Tj ET";
+  objs[3] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  let pdf = "%PDF-1.4\n";
+  const at: number[] = [];
+  objs.forEach((o, i) => { at.push(pdf.length); pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${at.map((n) => `${String(n).padStart(10, "0")} 00000 n \n`).join("")}`;
+  pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1").toString("base64");
+}
+
 const data = mkdtempSync(join(tmpdir(), "kiwi-links-"));
 const registry = fakeRegistry([
   { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
@@ -93,7 +113,7 @@ let server: ReturnType<typeof Bun.serve> | undefined;
 try {
   await cli(["start", "--no-helper"]);
   await invoke("notes.create", { folder: "Viagem", title: "Plano", content: "# Plano\n\nO roteiro dos três dias.\n" });
-  await invoke("attachments.save", { name: "bilhete.pdf", data: "JVBERi0xLjQK" });
+  await invoke("attachments.save", { name: "bilhete.pdf", data: tinyPdf() });
   await invoke("agent.enable", { consent: true });
   await invoke("agent.download");
   await invoke("agent.configure", { onboarding: { state: "done" } });
@@ -111,6 +131,8 @@ try {
     await p.locator(`${BUBBLE} .kn-md-file[data-path="Anexos/bilhete.pdf"]`).click();
     await p.waitForSelector(".kn-file");
     assert.equal((await p.locator(".kn-file-title").innerText()).trim(), "bilhete.pdf");
+    await p.waitForSelector(".kn-file-pdf-canvas");
+    await Bun.sleep(300); // a página termina de desenhar
     await p.screenshot({ path: join(out, "02-pdf-no-visualizador.png") });
     checks.push("balão pequeno: a nota e o pdf viram link (data-path, sem href); o clique no pdf abre o visualizador nas Notas");
 
