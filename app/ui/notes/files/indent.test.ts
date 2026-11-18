@@ -30,6 +30,9 @@ test("sem nada recuado: 4 no .py e 2 no resto", () => {
 test("o comentário de bloco ( * …) não conta como recuo de 1, e o CRLF não atrapalha", () => {
   const doc = "/**\n * Soma.\n * @param a\n */\nfunction f(a) {\n    return a;\n}\n";
   expect(detectIndent(doc, "a.js").unit).toBe("    ");
+  // Num arquivo recuado com tab, as linhas ` * ` do JSDoc de fora começam com espaço: se contassem, venceriam o tab.
+  const tabbed = "/**\n * Soma dois números.\n * @param a o primeiro\n * @param b o segundo\n */\nfunction soma(a, b) {\n\treturn a + b;\n}\n";
+  expect(detectIndent(tabbed, "soma.js").unit).toBe("\t");
   expect(detectIndent(py4.replaceAll("\n", "\r\n"), "a.py").unit).toBe("    ");
 });
 
