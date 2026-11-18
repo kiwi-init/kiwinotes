@@ -2,11 +2,11 @@
 // roteiro. Um relógio falso e um helper falso que grava os comandos; nada abre na tela.
 import { describe, expect, test } from "bun:test";
 
-import type { AgentTurnEvent } from "../shared/ui-contract.ts";
+import type { AgentTurnEvent, BubbleLink } from "../shared/ui-contract.ts";
 import type { Command } from "../shared/ipc.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import type { AgentStatus, AppSettings } from "../shared/ui-contract.ts";
-import { ASK_LINE, attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, plainBubbleText, voiceErrorLine } from "./cat-overlay.ts";
+import { ASK_LINE, attachCatOverlay, CatOverlay, type CatOverlayCommand, OVERLAY_TIMES, plainBubbleText, shiftLinks, voiceErrorLine } from "./cat-overlay.ts";
 
 function rig() {
   const sent: CatOverlayCommand[] = [];
@@ -567,6 +567,49 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(holdFn).toBeNull();
   });
 
+  test("o clique num caminho só abre o que o balão de agora mostra (spec #17683)", () => {
+    const r = rig();
+    talk(r);
+    expect(r.cat.shownPath("Plano.md")).toBe(false);
+    r.cat.turn({ ...doneWith("Veja Plano.md."), links: [{ text: "Plano.md", from: 5, to: 13, path: "Plano.md", kind: "note" }] } as AgentTurnEvent);
+    expect(r.cat.shownPath("Plano.md")).toBe(true);
+    expect(r.cat.shownPath("Outra.md")).toBe(false);
+    r.cat.close();
+    expect(r.cat.shownPath("Plano.md")).toBe(false);
+  });
+
+  test("o openPath do helper chega ao notes.openPath pelo attach, só para o caminho do balão", async () => {
+    let openFn: ((path: string) => void) | null = null;
+    const opened: string[] = [];
+    const logs: string[] = [];
+    const a = attachCatOverlay({
+      agent: { status: async () => ({ enabled: false }) as AgentStatus, onStatus: () => () => {}, onTurn: () => () => {} },
+      settings: { load: () => new Promise(() => {}) },
+      helper: { send: async () => ({ ok: true }), onReady: () => () => {}, onOpenPath: (fn) => ((openFn = fn), () => (openFn = null)) },
+      openPath: async (p) => {
+        opened.push(p);
+        if (p === "Sumiu.md") throw Object.assign(new Error("no note"), { code: "E_NOT_FOUND" });
+      },
+      pageDir: "/x",
+      where: () => {},
+      log: (m) => logs.push(m),
+    });
+    const shown = new Set(["Plano.md", "Sumiu.md"]);
+    a.overlay.shownPath = (p: string) => shown.has(p);
+    let touched = 0;
+    a.overlay.touch = () => void touched++;
+    openFn!("Plano.md");
+    openFn!("../fora.md");
+    openFn!(42 as unknown as string);
+    openFn!("Sumiu.md");
+    await Bun.sleep(0);
+    expect(opened).toEqual(["Plano.md", "Sumiu.md"]);
+    expect(touched).toBe(2);
+    expect(logs).toEqual(["[cat-overlay] openPath: fora do balão", "[cat-overlay] openPath: fora do balão", "[cat-overlay] openPath: E_NOT_FOUND"]);
+    a.stop();
+    expect(openFn).toBeNull();
+  });
+
   test("um erro do agente: o balão diz o erro em palavras, e o gato fica como numa resposta", () => {
     const r = rig();
     talk(r);
@@ -627,6 +670,40 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     e.cat.turn(status("running"));
     e.cat.turn(doneWith("```\n```"));
     expect(bubbles(e.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false }]);
+  });
+
+  test("os links do done vão no balão, nas posições do trecho mostrado (spec #17683)", () => {
+    const full = "Vou ler a nota.\n\nVeja [[Plano]] e Anexos/capa.png.";
+    const at = (t: string) => full.indexOf(t);
+    const links: BubbleLink[] = [
+      { text: "Vou", from: 0, to: 3, path: "Vou.md", kind: "note" }, // antes da ferramenta: fica de fora
+      { text: "[[Plano]]", from: at("[[Plano]]"), to: at("[[Plano]]") + 9, path: "Plano.md", kind: "note" },
+      { text: "Anexos/capa.png", from: at("Anexos"), to: at("Anexos") + 15, path: "Anexos/capa.png", kind: "file" },
+    ];
+    const r = rig();
+    talk(r);
+    r.cat.turn(text("Vou ler a nota."));
+    r.cat.turn(status("running"));
+    r.cat.turn(text("\n\nVeja [[Plano]] e Anexos/capa.png."));
+    r.cat.turn({ ...doneWith(full), links } as AgentTurnEvent);
+    const shown = "Veja [[Plano]] e Anexos/capa.png.";
+    expect(bubbles(r.take())).toEqual([
+      {
+        type: "catOverlay.bubble",
+        text: shown,
+        error: false,
+        links: [
+          { text: "[[Plano]]", from: 5, to: 14, path: "Plano.md", kind: "note" },
+          { text: "Anexos/capa.png", from: 17, to: 32, path: "Anexos/capa.png", kind: "file" },
+        ],
+      },
+    ]);
+    // Sem links no done, o balão vai sem o campo.
+    const p = rig();
+    talk(p);
+    p.cat.turn(doneWith("Veja [[Plano]]."));
+    expect(bubbles(p.take())).toEqual([{ type: "catOverlay.bubble", text: "Veja [[Plano]].", error: false }]);
+    expect(shiftLinks([{ text: "x", from: 0, to: 1, path: "x.md", kind: "note" }], 0, "y")).toEqual([]);
   });
 
   test("uma rotina que começa enquanto a pessoa segura o Control não vira a fala", () => {

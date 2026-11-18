@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { EDITABLE_TEXT } from "../../../src/shared/file-view.ts";
+import { EDITABLE_TEXT, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
 import type { FileContent } from "../types.ts";
 import { type FileViewer, loadFile, viewerFor, VIEWERS } from "./viewers.ts";
 
@@ -68,4 +68,16 @@ test("ler para o visualizador: pronto, grande demais, sem visualizador, sumiu e 
   expect(await loadFile(read(Object.assign(new Error("no file"), { code: "E_NOT_FOUND" })), "a.txt", text)).toEqual({ kind: "missing" });
   expect(await loadFile(read(new Error("E_NOT_FOUND: no file a.txt")), "a.txt", text)).toEqual({ kind: "missing" });
   expect(await loadFile(read(new Error("boom")), "a.txt", text)).toEqual({ kind: "error" });
+});
+
+test("a lista de tipos do engine (spec #17683) é a mesma do VIEWERS, e o `.txt` conta como nota", () => {
+  expect([...VIEWER_TYPES].sort()).toEqual(Object.keys(VIEWERS).sort());
+  expect(openTarget("Projeto X/Lista.TXT")).toBe("note");
+  expect(openTarget("Feira.md")).toBe("note");
+  expect(openTarget("plano.pdf")).toBe("viewer");
+  expect(openTarget("fluxo.drawio.svg")).toBe("viewer");
+  expect(openTarget("quadro.canvas")).toBe("viewer");
+  expect(openTarget("contas.numbers")).toBe("app");
+  expect(openTarget("sem-extensao")).toBe("app");
+  expect(openTarget("Pasta.pdf/arquivo")).toBe("app");
 });

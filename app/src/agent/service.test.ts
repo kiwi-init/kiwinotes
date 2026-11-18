@@ -306,6 +306,23 @@ describe("o pedido, ao vivo", () => {
     expect(events.at(-1)).toMatchObject({ type: "done", stopReason: "end_turn", text: 'Você disse: "oi". Este é o turno 1 desta sessão.' });
   });
 
+  test("o done leva os links do que existe na pasta (spec #17683); sem o índice, vai sem links", async () => {
+    const m = make();
+    m.svc.useLinkResolver(async () => ({ note: (t) => (t === "Plano" || t === "Plano.md" ? "Plano.md" : null), file: () => null }));
+    await readyNow(m);
+    const done = (await askAndWait(m, "Plano.md e Outra.md")).at(-1)!;
+    expect(done).toMatchObject({ type: "done", links: [{ text: "Plano.md", path: "Plano.md", kind: "note" }] });
+    if (done.type !== "done") throw new Error("sem done");
+    const l = done.links![0]!;
+    expect(done.text.slice(l.from, l.to)).toBe("Plano.md");
+    // O índice falhou: o pedido termina igual, sem links.
+    m.svc.useLinkResolver(async () => { throw new Error("sem pasta"); });
+    expect((await askAndWait(m, "Plano.md")).at(-1)).not.toHaveProperty("links");
+    const plain = make();
+    await readyNow(plain);
+    expect((await askAndWait(plain, "Plano.md")).at(-1)).not.toHaveProperty("links");
+  });
+
   test("o programa abre no primeiro pedido e fica aberto: o segundo não abre de novo", async () => {
     const m = make();
     await readyNow(m);

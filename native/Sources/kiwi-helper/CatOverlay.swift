@@ -29,6 +29,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     var onTouch: (() -> Void)?
     /// O × do balão ou da cabeça (spec #13380): o app tira o gato.
     var onClose: (() -> Void)?
+    /// Clicou num caminho do balão (spec #17683): o app abre, depois de conferir na pasta.
+    var onOpenPath: ((String) -> Void)?
 
     private var panel: CatOverlayPanel?
     private var web: WKWebView?
@@ -43,6 +45,8 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     /// O balão (spec #12938), já como o argumento do script (`CatOverlayBubble`): vai junto quando o gato aparece e sai
     /// com ele.
     private var bubble = "null"
+    /// Os caminhos dos links do balão de agora (spec #17683): só eles abrem.
+    private var bubblePaths: [String] = []
     /// A página terminou o carregamento inicial: daí em diante, nenhuma navegação é aceita.
     private var pageLoaded = false
     private var pendingLoad: URL?
@@ -145,8 +149,10 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     }
 
     /// O balão da resposta (spec #12938): `nil` tira. Com o gato esperando a pílula, ele aparece junto com o gato.
-    func bubble(text: String?, error: Bool, ask: Bool = false) {
-        bubble = CatOverlayBubble.script(text: text, error: error, ask: ask)
+    func bubble(text: String?, error: Bool, ask: Bool = false, links: Any? = nil) {
+        let shown = CatOverlayBubble.links(links, textLength: text?.utf16.count ?? 0)
+        bubblePaths = text == nil ? [] : shown.compactMap { $0["path"] as? String }
+        bubble = CatOverlayBubble.script(text: text, error: error, ask: ask, links: shown)
         if gate.shows { script("window.kiwiOverlay?.set({bubble: \(bubble)})") }
     }
 
@@ -158,6 +164,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     func unload() {
         _ = gate.want(false)
         bubble = "null"
+        bubblePaths = []
         resetBubble()
         script("window.kiwiOverlay?.dispose()")
         panel?.orderOut(nil)
@@ -201,6 +208,7 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         guard let panel, panel.isVisible, !parked else { return }
         // Pausa o desenho antes de a janela sumir; o balão sai com o gato.
         bubble = "null"
+        bubblePaths = []
         resetBubble()
         script("window.kiwiOverlay?.set({visible: false, bubble: null})")
         animate(panel, to: 0, ms: fadeMs) { [weak self, weak panel] in
@@ -225,6 +233,12 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
     fileprivate func pageLink(_ body: Any) {
         guard gate.shows, let url = CatOverlayBubble.link(body) else { return }
         NSWorkspace.shared.open(url)
+        onTouch?()
+    }
+
+    fileprivate func pageOpenPath(_ body: Any) {
+        guard gate.shows, let path = CatOverlayBubble.openPath(body, shown: bubblePaths) else { return }
+        onOpenPath?(path)
         onTouch?()
     }
 
@@ -428,6 +442,8 @@ final class CatPageMessages: NSObject, WKScriptMessageHandler {
         if body?["closed"] as? Bool == true { return MainActor.assumeIsolated { overlay?.pageClosed() } }
         // Um link do balão que a pessoa clicou (spec #17679): abre no app padrão, só http(s) e mailto.
         if let link = body?["link"] { return MainActor.assumeIsolated { overlay?.pageLink(link) } }
+        // Um caminho da pasta (spec #17683): o `kiwi-file:` do balão, só se veio nos links dele; quem abre é o app.
+        if let path = body?["openPath"] { return MainActor.assumeIsolated { overlay?.pageOpenPath(path) } }
         let rect = CatOverlayBubble.rect(body?["bubble"])
         let open = body?["open"] as? Bool ?? false
         let close = CatOverlayBubble.rect(body?["close"])

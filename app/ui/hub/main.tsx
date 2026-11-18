@@ -237,15 +237,20 @@ function Hub() {
     go("settings");
   };
 
-  // O que o menu da barra pediu: antes de abrir (`hub.section`) e com o hub aberto (`hub.navigate`).
+  // O que o menu da barra pediu: antes de abrir (`hub.section`) e com o hub aberto (`hub.navigate`). Com `path` (o
+  // clique num arquivo do balão do gato, spec #17683), as Notas abrem nele, na pasta aberta.
   useEffect(() => {
+    const follow = (section: unknown, path?: string) => {
+      if (section === "notes" && typeof path === "string" && path) openNote(path, false);
+      else if (isHubSection(section)) go(section);
+    };
     if (has("hub.section")) {
       api.hub.section().then(
-        (r) => r.section && go(r.section),
+        (r) => r.section && follow(r.section, r.path),
         () => {},
       );
     }
-    return api.hub.onNavigate((e) => isHubSection(e.section) && go(e.section));
+    return api.hub.onNavigate((e) => follow(e.section, e.path));
   }, []);
 
   // O quadro travado depois de um clique ou tecla vai para o log local (spec #12918), com a tela: a seção, ou o

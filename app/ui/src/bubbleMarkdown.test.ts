@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
+import type { BubbleLink } from "../../src/shared/ui-contract.ts";
 import { type MdChild, type MdDocument, type MdNode, mountMarkdown, parseMarkdown, plainMarkdown, renderMarkdown } from "./bubbleMarkdown.ts";
 
 /** Uma resposta inventada do agente: título, lista com caixas, tabela de 3 colunas, código e link. */
@@ -154,7 +155,79 @@ describe("o texto corrido do balão fechado", () => {
     expect(plainMarkdown("> uma ideia\n> em duas linhas\n\n3. três\n4. quatro")).toBe("uma ideia\nem duas linhas\n3. três\n4. quatro");
   });
 
+  test("colchete dentro do texto do link (CommonMark): o link fica, com o colchete no texto", () => {
+    const link = (t: string) => find(parseMarkdown(t), "a").map((a) => [text(a), a.attrs?.href]);
+    expect(link("[link [aninhado]](https://example.com/a)")).toEqual([["link [aninhado]", "https://example.com/a"]]);
+    expect(link("Veja [a [b [c]] d](https://example.com/a) e [outro](https://example.com/b).")).toEqual([
+      ["a [b [c]] d", "https://example.com/a"],
+      ["outro", "https://example.com/b"],
+    ]);
+    expect(plainMarkdown("[link [aninhado]](https://example.com/a)")).toBe("link [aninhado]");
+    // Um link de dentro ganha, como no CommonMark (e o endereço de fora fica um endereço solto, que o GFM linka);
+    // o código e as caixas não mudam.
+    expect(link("[a [b](https://example.com/b)](https://example.com/a)")).toEqual([
+      ["b", "https://example.com/b"],
+      ["https://example.com/a", "https://example.com/a"],
+    ]);
+    expect(plainMarkdown("`[a [b]](x)` e\n\n- [ ] [c]")).toBe("[a [b]](x) e\n• ☐ [c]");
+  });
+
   test("texto sem markdown passa igual", () => {
     expect(plainMarkdown("Pronto, salvei a nota.")).toBe("Pronto, salvei a nota.");
+  });
+});
+
+describe("as notas e os arquivos da pasta como link (spec #17683)", () => {
+  const RESP = "Criei [[Plano|o plano]] e salvei `Projeto X/relatorio.pdf`. Veja também [isto](kiwi-file:segredo.md).";
+  const at = (text: string, path: string, kind: BubbleLink["kind"]): BubbleLink => {
+    const from = RESP.indexOf(text);
+    return { text, from, to: from + text.length, path, kind };
+  };
+  const LINKS = [at("[[Plano|o plano]]", "Plano.md", "note"), at("`Projeto X/relatorio.pdf`", "Projeto X/relatorio.pdf", "file")];
+  const out = html(renderMarkdown(RESP, fakeDoc(), LINKS) as unknown as Fake);
+
+  test("cada menção achada pelo main vira link com o caminho, sem href", () => {
+    expect(out).toContain('<a class="kn-md-link kn-md-file" data-path="Plano.md" title="Plano.md" role="link" tabindex="0">o plano</a>');
+    expect(out).toContain('<a class="kn-md-link kn-md-file" data-path="Projeto X/relatorio.pdf" title="Projeto X/relatorio.pdf" role="link" tabindex="0"><code>Projeto X/relatorio.pdf</code></a>');
+    expect(out).not.toMatch(/ href=/);
+  });
+
+  test("um kiwi-file: que a resposta escreveu sozinha fica texto", () => {
+    expect(out).toContain("Veja também isto.");
+    expect(out).not.toContain("segredo.md");
+    expect(html(renderMarkdown("[x](kiwi-file:Plano.md)", fakeDoc()) as unknown as Fake)).toBe("<p>x</p>");
+  });
+
+  test("mesmo com um caminho que o main achou, o link que a resposta escreveu fica texto", () => {
+    const text = `${RESP} E [outro](kiwi-file:Plano.md).`;
+    const got = html(renderMarkdown(text, fakeDoc(), LINKS) as unknown as Fake);
+    expect(got.match(/data-path="Plano.md"/g)).toHaveLength(1);
+    expect(got).toContain("E outro.");
+  });
+
+  test("o [[…]] mostra só o nome, sem os colchetes, com ou sem link (#18271); no código fica como está", () => {
+    expect(plainMarkdown("Criei [[Plano]] e [[Viagem/Roteiro#Dia 1|o roteiro]].")).toBe("Criei Plano e o roteiro.");
+    expect(["[[Plano]]", "[[Plano|o plano]]", "[[Plano#Seção]]", "![[img.png]]"].map((t) => plainMarkdown(t))).toEqual(["Plano", "o plano", "Plano", "img.png"]);
+    expect(plainMarkdown("Veja ![[foto.png]], [[a*b*]] e `[[Plano]]`.")).toBe("Veja foto.png, a*b* e [[Plano]].");
+    expect(plainMarkdown("```\n[[Plano]]\n```")).toBe("[[Plano]]");
+    expect(plainMarkdown(RESP)).toBe("Criei o plano e salvei Projeto X/relatorio.pdf. Veja também isto.");
+  });
+
+  test("só o esquema desta montagem e um caminho da lista viram link", () => {
+    const files = { scheme: "kn0123456789abcdef:", paths: new Set(["Outro.md"]) };
+    expect(find(parseMarkdown("[x](kn0123456789abcdef:Plano.md)", files), "a")).toEqual([]);
+    expect(find(parseMarkdown("[x](kn0123456789abcdef:Outro.md)", files), "a")).toEqual([{ tag: "a", attrs: { path: "Outro.md" }, children: ["x"] }]);
+    expect(find(parseMarkdown("[x](kn00000000000000ff:Outro.md)", files), "a")).toEqual([]);
+  });
+
+  test("muito colchete sem par não fica lento (#18278)", () => {
+    const t0 = performance.now();
+    plainMarkdown(`${"[a ".repeat(20_000)}[b](https://example.com/b)`);
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+
+  test("a posição que não bate com o texto não vira link", () => {
+    const wrong = { ...LINKS[0]!, from: 0, to: LINKS[0]!.text.length };
+    expect(html(renderMarkdown(RESP, fakeDoc(), [wrong]) as unknown as Fake)).not.toContain("data-path");
   });
 });

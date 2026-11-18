@@ -56,7 +56,9 @@ import type {
   AgentUndoResult,
   AgentTrailsView,
   AgentUsageView,
+  BubbleLink,
 } from "../shared/ui-contract.ts";
+import { type BubbleLinkResolver, findBubbleLinks } from "./bubble-links.ts";
 import { type AgentLimit, parseResetFromError, parseUsageMarkdown, type SubscriptionUsage, type UsageWindow } from "./usage.ts";
 import { TrilhaStore, trilhasDaPasta } from "./trilhas.ts";
 import { type LimitSnapshot, UsageStore } from "./usage-store.ts";
@@ -452,6 +454,27 @@ export class AgentService {
     this.vaultRoot = source;
   }
   private vaultRoot: (() => Promise<string>) | null = null;
+
+  /**
+   * O índice da pasta para os links do balão (spec #17683): o `done` leva as notas e os arquivos que a resposta cita e
+   * que existem nela. Sem ele (os testes antigos), o `done` vai sem `links`.
+   */
+  useLinkResolver(source: () => Promise<BubbleLinkResolver>): void {
+    this.linkResolver = source;
+  }
+  private linkResolver: (() => Promise<BubbleLinkResolver>) | null = null;
+
+  /** Os links da resposta; um erro no índice não derruba o pedido, só tira os links. */
+  private async bubbleLinks(text: string): Promise<BubbleLink[] | undefined> {
+    if (!this.linkResolver || !text) return undefined;
+    try {
+      const links = findBubbleLinks(text, await this.linkResolver());
+      return links.length ? links : undefined;
+    } catch (err) {
+      this.d.log?.(`[agent] links: ${String((err as Error)?.message ?? err)}`);
+      return undefined;
+    }
+  }
 
   /** O glossário do ditado (spec #11469, T11667): os termos do dicionário, que vão no começo fixo do pedido. */
   useGlossary(source: () => Promise<string[]>): void {
@@ -2020,7 +2043,8 @@ export class AgentService {
         this.emitUsage();
       }
       if (answer.stopReason !== "cancelled" && !turn.cancelled && !isRoutinePrompt(text)) this.safely(() => this.learnTrail(decided.text));
-      this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text });
+      const links = answer.stopReason === "cancelled" ? undefined : await this.bubbleLinks(answer.text);
+      this.emitTurn({ id: turn.id, type: "done", stopReason: answer.stopReason, text: answer.text, ...(links ? { links } : {}) });
       succeeded = answer.stopReason !== "cancelled" && !turn.cancelled;
       const finished = this.routineTurns.get(turn.id);
       if (finished) await this.finishRoutine(turn.id, finished);

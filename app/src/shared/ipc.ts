@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import type { AudioInputs, MicrophoneChoice } from "./microphone.ts";
+import type { BubbleLink } from "./ui-contract.ts";
 
 export const IPC_VERSION = 1 as const;
 export const MAX_LINE_BYTES = 1024 * 1024;
@@ -172,7 +173,7 @@ export type Command =
    * O balão do gato no overlay (spec #12938): a resposta a uma fala pelo Control, um trecho por vez, ou o erro em
    * palavras (`error`). `text: null` tira o balão. O helper o guarda para quando o gato aparecer e o tira quando ele sai.
    */
-  | { type: "catOverlay.bubble"; text: string | null; error?: boolean }
+  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[] }
   /**
    * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
    * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.
@@ -335,6 +336,8 @@ export type Event =
   /** Spec #13380: clicou ou rolou no balão (a espera recomeça), ou fechou no × do balão ou da cabeça. */
   | { type: "catOverlay.touch" }
   | { type: "catOverlay.close" }
+  /** Spec #17683: clicou num link `kiwi-file:` do balão; `path` é relativo à pasta, e o main confere de novo. */
+  | { type: "catOverlay.openPath"; path: string }
   /**
    * R3 (T4943): o texto ao vivo. `id` é o lugar no canal (o provisório leva o id do final que virá). `startFrame` e
    * `endFrame` são o relógio do R1 (16 kHz), para o `meeting.ack`. O helper manda sempre `session` e `channel` (#5064).
@@ -569,6 +572,7 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<EventType>([
   "catOverlay.hold",
   "catOverlay.touch",
   "catOverlay.close",
+  "catOverlay.openPath",
   "meeting.minePaused",
   "meeting.segment",
   "meeting.settled",

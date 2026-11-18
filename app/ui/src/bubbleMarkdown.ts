@@ -9,6 +9,9 @@
 import type { SyntaxNode } from "@lezer/common";
 import { GFM, parser as baseParser } from "@lezer/markdown";
 
+import { kiwiFilePath, linkify, linkLabel } from "../../src/shared/bubble-links.ts";
+import type { BubbleLink } from "../../src/shared/ui-contract.ts";
+
 const parser = baseParser.configure(GFM);
 
 /** As tags que o balão monta. `task` é a caixa de um item `- [ ]`. */
@@ -21,6 +24,8 @@ export type MdTag =
 export type MdAttrs = {
   /** O endereço do link (só `http`, `https` e `mailto`). */
   href?: string;
+  /** O caminho de uma nota ou arquivo da pasta (spec #17683), relativo a ela: um link `kiwi-file:` que o main achou. */
+  path?: string;
   /** O número do primeiro item de uma lista numerada, quando não é 1. */
   start?: number;
   /** A caixa marcada. */
@@ -77,7 +82,11 @@ function gap(text: string): MdChild[] {
 }
 
 class Builder {
-  constructor(readonly src: string) {}
+  /**
+   * `files`: os caminhos que o main conferiu na pasta, e `scheme`, o esquema só desta montagem que o `linkify` usou.
+   * Só um link com esse esquema e um desses caminhos vira link de arquivo; o resto fica texto.
+   */
+  constructor(readonly src: string, readonly files: FileLinks = NO_FILES) {}
 
   text(n: { from: number; to: number }): string {
     return this.src.slice(n.from, n.to);
@@ -115,8 +124,16 @@ class Builder {
         const url = c.getChild("URL");
         const marks = c.getChildren("LinkMark");
         const label = marks.length >= 2 ? this.inline(c, marks[0]!.to, marks[1]!.from) : [this.text(c)];
+        // `[c]` ou `[a][b]`, sem `(…)`: uma referência, e o balão não tem nenhuma definida. No CommonMark isso é
+        // texto, com os colchetes.
+        if (marks.length >= 2 && this.src[marks[1]!.to] !== "(") return ["[", ...label, this.src.slice(marks[1]!.from, c.to)];
+        // Uma nota ou um arquivo da pasta (spec #17683): só o link que o `withFileLinks` pôs, com o esquema desta
+        // montagem e um caminho que o main achou nesta resposta. Um `[x](kiwi-file:…)` que a resposta escreveu
+        // sozinha fica texto, mesmo com um caminho da lista.
+        const path = url && this.files.scheme ? kiwiFilePath(this.text(url), this.files.scheme) : null;
+        if (path !== null) return this.files.paths.has(path) ? [node("a", tidy(label), { path })] : label;
         const href = url ? safeHref(this.text(url)) : null;
-        // Sem endereço que preste (um `javascript:`, uma referência): só o texto do link.
+        // Sem endereço que preste (um `javascript:`): só o texto do link.
         return href ? [node("a", tidy(label), { href })] : label;
       }
       case "Autolink": {
@@ -252,9 +269,99 @@ class Builder {
 }
 
 /** A resposta em árvore de elementos (só as tags de `MdTag`; o texto, sempre string). */
-export function parseMarkdown(text: string): MdNode[] {
-  const tree = parser.parse(text);
-  return new Builder(text).blocks(tree.topNode);
+export function parseMarkdown(text: string, files?: FileLinks): MdNode[] {
+  let tree = parser.parse(text);
+  const wiki = wikiLabels(text, tree.topNode);
+  if (wiki !== text) {
+    text = wiki;
+    tree = parser.parse(text);
+  }
+  const nested = escapeNestedBrackets(text, tree.topNode);
+  if (nested !== text) {
+    text = nested;
+    tree = parser.parse(text);
+  }
+  return new Builder(text, files).blocks(tree.topNode);
+}
+
+/**
+ * A resposta com as notas e os arquivos que o main achou (spec #17683) como links: o texto com cada menção trocada
+ * por `[rótulo](kiwi-file:…)` e os caminhos que podem virar link. Sem `links`, o texto como veio.
+ */
+export function withFileLinks(text: string, links?: readonly BubbleLink[]): { text: string; files: FileLinks } {
+  if (!links?.length) return { text, files: NO_FILES };
+  const scheme = fileScheme();
+  return { text: linkify(text, links, scheme), files: { scheme, paths: new Set(links.map((l) => l.path)) } };
+}
+
+/** Os links de arquivo de uma montagem: o esquema que só ela conhece e os caminhos conferidos. */
+export type FileLinks = { readonly scheme: string; readonly paths: ReadonlySet<string> };
+const NO_FILES: FileLinks = { scheme: "", paths: new Set() };
+
+/** Um esquema novo a cada montagem (`kn` + 16 hex): a resposta não tem como escrever um igual. */
+function fileScheme(): string {
+  const b = crypto.getRandomValues(new Uint8Array(8));
+  return `kn${[...b].map((x) => x.toString(16).padStart(2, "0")).join("")}:`;
+}
+
+/** Onde o `[` não é marca: código, endereço, tag HTML, escape. */
+const LITERAL = new Set(["InlineCode", "FencedCode", "CodeBlock", "Autolink", "URL", "HTMLTag", "HTMLBlock", "Escape"]);
+
+/** 1 onde o texto é literal (código, endereço, tag HTML, escape): ali nenhum colchete é marca. */
+function literalMask(text: string, top: SyntaxNode): Uint8Array {
+  const literal = new Uint8Array(text.length);
+  const cursor = top.cursor();
+  do {
+    if (LITERAL.has(cursor.name)) literal.fill(1, cursor.from, cursor.to);
+  } while (cursor.next());
+  return literal;
+}
+
+/**
+ * O `[[alvo]]` e o `[[alvo|apelido]]` das notas (spec #17683, #18271): o balão mostra só o nome, sem os colchetes,
+ * como no balão aberto. Fora do código; o nome vai escapado, para não virar outra marca.
+ */
+function wikiLabels(text: string, top: SyntaxNode): string {
+  if (!text.includes("[[")) return text;
+  const literal = literalMask(text, top);
+  return text.replace(/!?\[\[[^\[\]\n]+\]\]/g, (m, at: number) =>
+    literal[at] || literal[at + m.length - 1] ? m : linkLabel(m.replace(/^!/, "")).replace(/[\\`*_[\]<>|~!]/g, "\\$&"),
+  );
+}
+
+/**
+ * `[link [aninhado]](url)` é um link com o texto "link [aninhado]" no CommonMark: o `[aninhado]` só seria link se
+ * houvesse a referência, e o balão não tem referências. O lezer o lê como link e o de fora fica cru. Aqui os
+ * colchetes de dentro do texto de um link viram `\[` `\]`, fora do código; um `[x](y)` de dentro continua link.
+ */
+function escapeNestedBrackets(text: string, top: SyntaxNode): string {
+  if (!text.includes("](")) return text;
+  const literal = literalMask(text, top);
+  // Uma passada, com uma pilha (o #18278: procurar o par de cada `[` era quadrático). Cada `[` aberto guarda os pares de
+  // dentro que não são link; ao fechar um link com algum, eles viram escape; senão, sobem para o de fora.
+  const escape: number[] = [];
+  let stack: { at: number; inner: number[] }[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (literal[i]) continue;
+    const ch = text[i];
+    // O texto do link fica no parágrafo: uma linha vazia fecha tudo.
+    if (ch === "\n" && text[i + 1] === "\n") stack = [];
+    else if (ch === "[") stack.push({ at: i, inner: [] });
+    else if (ch === "]" && stack.length) {
+      const open = stack.pop()!;
+      const parent = stack.at(-1);
+      if (text[i + 1] === "(") {
+        if (open.inner.length) escape.push(...open.inner);
+      } else if (parent) {
+        parent.inner.push(...open.inner, open.at, i);
+      }
+    }
+  }
+  if (escape.length === 0) return text;
+  const marks = new Set(escape);
+  let out = "";
+  for (let i = 0; i < text.length; i++) out += marks.has(i) ? `\\${text[i]}` : text[i];
+  return out;
 }
 
 /** Os blocos que levam quebra de linha no texto corrido. */
@@ -333,6 +440,14 @@ function mountNode(doc: MdDocument, n: MdChild): unknown {
   if (typeof n === "string") return doc.createTextNode(n);
   const el = doc.createElement(DOM_TAG[n.tag]);
   const a = n.attrs;
+  if (n.tag === "a" && a?.path) {
+    // A nota ou o arquivo (spec #17683): também sem `href`. O clique manda o caminho para o app abrir.
+    el.setAttribute("class", "kn-md-link kn-md-file");
+    el.setAttribute("data-path", a.path);
+    el.setAttribute("title", a.path);
+    el.setAttribute("role", "link");
+    el.setAttribute("tabindex", "0");
+  }
   if (n.tag === "a" && a?.href) {
     // Sem `href`: o clique não navega sozinho. O balão lê o `data-href` e abre, no clique da pessoa.
     el.setAttribute("class", "kn-md-link");
@@ -372,8 +487,10 @@ export function mountMarkdown(nodes: MdNode[], doc: MdDocument = document as unk
 }
 
 /** O atalho: o texto do agente já montado (`mountMarkdown(parseMarkdown(text))`). */
-export function renderMarkdown(text: string): DocumentFragment;
-export function renderMarkdown(text: string, doc: MdDocument): MdElement;
-export function renderMarkdown(text: string, doc?: MdDocument): MdElement | DocumentFragment {
-  return doc ? mountMarkdown(parseMarkdown(text), doc) : mountMarkdown(parseMarkdown(text));
+export function renderMarkdown(text: string, doc?: undefined, links?: readonly BubbleLink[]): DocumentFragment;
+export function renderMarkdown(text: string, doc: MdDocument, links?: readonly BubbleLink[]): MdElement;
+export function renderMarkdown(text: string, doc?: MdDocument, links?: readonly BubbleLink[]): MdElement | DocumentFragment {
+  const md = withFileLinks(text, links);
+  const nodes = parseMarkdown(md.text, md.files);
+  return doc ? mountMarkdown(nodes, doc) : mountMarkdown(nodes);
 }

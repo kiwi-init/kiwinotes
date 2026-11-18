@@ -20,7 +20,7 @@ import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
 import { watchBusy } from "./slow-log.ts";
-import { appSlowLog, closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, prepareHub, provideAbout, revealHub, startCatOverlay, startAgentVoice, provideHubSection, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
+import { appSlowLog, closeWindow, hubInView, openNotesFolderFromMenu, onIntroDone, onWindowClosed, openWindows, prepareHub, provideAbout, revealHub, startCatOverlay, startAgentVoice, provideHubSection, provideOpenInHub, sendToWindow, homeChanged, showWindow, type WindowName } from "./windows.ts";
 import { loadNotices, NOTIFY_LIBRARY } from "./notices.ts";
 
 // Um Kiwi Notes por vez (T992): antes do ícone da barra e do helper. Com o mesmo .app já de pé, este sai; um build
@@ -46,10 +46,11 @@ const hub = new Hub({
   }),
   show: () => showWindow("hub"),
   isOpen: () => openWindows().includes("hub"),
-  navigate: (section) => void sendToWindow("hub", "hub.navigate", { section }),
+  navigate: (section, path) => void sendToWindow("hub", "hub.navigate", path ? { section, path } : { section }),
   setDock: (visible) => Utils.setDockIconVisible(visible),
 });
-provideHubSection(() => hub.takeSection());
+provideHubSection(() => hub.takeRequest());
+provideOpenInHub((path) => void hub.open("notes", path));
 onWindowClosed((name) => name === "hub" && hub.closed());
 const openHub = (section?: HubSection) => void hub.open(section);
 

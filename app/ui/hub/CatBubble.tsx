@@ -12,11 +12,42 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import type { BubbleLink } from "../../src/shared/ui-contract";
 import { api } from "../src/api";
-import { BUBBLE_LINES, BubbleFeed, type BubbleView } from "./bubble-state";
+import { BUBBLE_LINES, BubbleFeed, type BubbleView, type ChunkLink } from "./bubble-state";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
 import { MdView, openMdLink } from "./bubbleMd";
+
+/**
+ * O texto do trecho com as notas e os arquivos (spec #17683) clicáveis. Enquanto o trecho se digita, só o pedaço do
+ * link que já apareceu. O clique abre no app e não fecha o balão.
+ */
+function withLinks(text: string, links: readonly ChunkLink[] | undefined): React.ReactNode {
+  if (!links?.length) return text;
+  const out: React.ReactNode[] = [];
+  let at = 0;
+  for (const l of links) {
+    if (l.from >= text.length) break;
+    const to = Math.min(l.to, text.length);
+    out.push(text.slice(at, l.from));
+    out.push(
+      <span key={l.from} className="kn-md-link kn-md-file" data-path={l.path} title={l.path}
+        onClick={(e) => {
+          e.stopPropagation();
+          void api.notes.openPath(l.path).catch(() => {});
+        }}
+      >
+        {text.slice(l.from, to)}
+      </span>,
+    );
+    at = to;
+  }
+  out.push(text.slice(at));
+  return out;
+}
+
+const sameLinks = (a: readonly BubbleLink[], b: readonly BubbleLink[]) => a === b || JSON.stringify(a) === JSON.stringify(b);
 
 /** Mede no mesmo estilo do balão: o texto cabe em 320 px (a casca do pacote) e 3 linhas? */
 function measurer(): { fits: (s: string) => boolean; dispose: () => void } {
@@ -43,6 +74,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
   /** O balão grande do [Ver mais], aberto. Ele mostra o texto inteiro do pedido, e acompanha o que ainda chega. */
   const [bigOpen, setBigOpen] = useState(false);
   const [said, setSaid] = useState("");
+  const [saidLinks, setSaidLinks] = useState<readonly BubbleLink[]>([]);
   const [announce, setAnnounce] = useState("");
   const feed = useRef<BubbleFeed | null>(null);
   const tick = useRef<() => void>(() => {});
@@ -58,6 +90,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
       const now = performance.now();
       setView(f.view(now));
       setSaid(f.all());
+      setSaidLinks((old) => (sameLinks(old, f.links()) ? old : f.links()));
       const a = f.takeAnnouncement();
       if (a) setAnnounce(a);
       const next = f.nextWake(now);
@@ -142,7 +175,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
             {/* O trecho inteiro, invisível, segura o tamanho do balão enquanto a digitação anda. */}
             <div className="kn-bubble-text" aria-hidden="true">
               <div className="kn-bubble-ghost">{view.full}</div>
-              <div className="kn-bubble-typed">{view.text}</div>
+              <div className="kn-bubble-typed">{withLinks(view.text, view.links)}</div>
             </div>
             {view.more ? (
               <button
@@ -169,7 +202,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
           }}
           aria-label="A resposta do agente"
         >
-          <MdView className="kn-bubble-big-text" text={said} />
+          <MdView className="kn-bubble-big-text" text={said} links={saidLinks} />
         </div>
       ) : null}
       <div className="kn-visually-hidden" aria-live="polite">

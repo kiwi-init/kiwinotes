@@ -10,8 +10,8 @@ export interface HubDeps {
   /** Abre a janela do hub, ou traz para a frente a que já existe. Nunca rejeita (o `showWindow`). */
   show(): Promise<void>;
   isOpen(): boolean;
-  /** Manda o hub aberto para uma seção (o evento `hub.navigate`). */
-  navigate(section: HubSection): void;
+  /** Manda o hub aberto para uma seção (o evento `hub.navigate`); `path`, o arquivo que as Notas abrem (spec #17683). */
+  navigate(section: HubSection, path?: string): void;
   setDock(visible: boolean): void;
   /**
    * A intro da abertura do zero (#2078). Sem ela, o hub abre direto. Devolve `true` quando o fim dela já mostrou o hub
@@ -23,6 +23,8 @@ export interface HubDeps {
 export class Hub {
   private cold = true;
   private pending: HubSection | null = null;
+  /** O arquivo pedido junto da seção (o clique no balão do gato, spec #17683), para as Notas abrirem. */
+  private pendingPath: string | null = null;
   private dock = false;
   /** A abertura em andamento (a intro e o show). Uma 2ª abertura nesse meio espera esta, em vez de mostrar o hub antes
    * do fim da intro (round 1 do T2121, T2308). */
@@ -35,13 +37,18 @@ export class Hub {
    * abertura em andamento (a intro tocando), uma 2ª espera a mesma: o hub só aparece no fim da intro, na seção pedida
    * por último.
    */
-  async open(section?: HubSection): Promise<void> {
-    if (section) this.pending = section;
+  async open(section?: HubSection, path?: string): Promise<void> {
+    if (section) {
+      this.pending = section;
+      this.pendingPath = path ?? null;
+    }
     if (this.opening) return this.opening;
     if (this.deps.isOpen()) {
       if (section) {
         this.pending = null;
-        this.deps.navigate(section);
+        this.pendingPath = null;
+        if (path) this.deps.navigate(section, path);
+        else this.deps.navigate(section);
       }
       this.setDock(true);
       return this.deps.show();
@@ -66,8 +73,10 @@ export class Hub {
     }
     if (revealed) {
       // O hub abriu escondido antes de a intro tocar: a seção pedida no meio dela vai agora.
+      const path = this.pendingPath;
       const section = this.takeSection();
-      if (section) this.deps.navigate(section);
+      if (section && path) this.deps.navigate(section, path);
+      else if (section) this.deps.navigate(section);
     } else await this.deps.show();
     if (!this.deps.isOpen()) this.closed();
   }
@@ -76,12 +85,22 @@ export class Hub {
   takeSection(): HubSection | null {
     const s = this.pending;
     this.pending = null;
+    this.pendingPath = null;
     return s;
+  }
+
+  /** A seção pedida e o arquivo junto dela (`hub.section`), uma vez só. */
+  takeRequest(): { section: HubSection; path?: string } | null {
+    const path = this.pendingPath;
+    const section = this.takeSection();
+    if (!section) return null;
+    return path ? { section, path } : { section };
   }
 
   /** A janela do hub fechou (o botão vermelho ou ⌘W): sai do Dock, e o app continua na barra. */
   closed(): void {
     this.pending = null;
+    this.pendingPath = null;
     this.setDock(false);
   }
 

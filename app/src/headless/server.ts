@@ -229,6 +229,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     // O "Mostrar no Finder" nunca abre o Finder no headless: só o log (T2468).
     reveal: (abs) => console.log(`[headless] notes.reveal (not opened): ${abs}`),
     openFile: (abs, mode) => console.log(`[headless] files.open (not opened, ${mode}): ${abs}`),
+    // O hub que estiver ligado (o `cli ui hub`) vai para as Notas no arquivo, pelo mesmo evento do app (spec #17683).
+    openInNotes: (rel) => {
+      console.log(`[headless] notes.openPath (Notas): ${rel}`);
+      event("hub.navigate", { section: "notes", path: rel });
+    },
     revealTrash: () => console.log("[headless] trash.reveal (not opened)"),
     // O diagnóstico vai para <data>/diagnostics e nada abre; os crashes do macOS só de KIWI_CRASH_DIR (nunca os reais).
     diagnostics: {
@@ -253,6 +258,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   // O Modelo de nota (spec #11102) do cofre aberto, para o começo fixo do pedido.
   stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
   stores.agent.useVaultRoot(async () => (await stores.folders.current()).notes.root);
+  // Os links do balão (spec #17683): só o que está no índice da pasta aberta.
+  stores.agent.useLinkResolver(async () => {
+    const v = (await stores.folders.current()).notes;
+    return { note: (t) => v.resolve(t), file: (t) => v.resolveFiles([t])[t] ?? null };
+  });
   stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
   stores.agent.useWriter(writerFromCapabilities(capabilities));
   // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
@@ -319,8 +329,10 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
           onHold: (fn) => session.sidecar.on("catOverlay.hold", (e) => fn(e.held === true)),
           onTouch: (fn) => session.sidecar.on("catOverlay.touch", () => fn()),
           onClose: (fn) => session.sidecar.on("catOverlay.close", () => fn()),
+          onOpenPath: (fn) => session.sidecar.on("catOverlay.openPath", (e) => fn(e.path)),
         }
       : { send: async (c) => (event("catOverlay.command", c), { ok: true }), onReady: () => () => {} },
+    openPath: async (p) => capabilities["notes.openPath"]({ path: p }),
     pageDir: path.resolve(import.meta.dirname, "..", "..", "dist", "catoverlay"),
     where: (overlay) => event("kiwicat.where", { overlay }),
     log: (m) => console.log(m),

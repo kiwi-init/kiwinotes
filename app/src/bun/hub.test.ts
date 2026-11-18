@@ -12,7 +12,7 @@ function fake(o: { intro?: boolean; failShow?: boolean } = {}) {
       if (!o.failShow) open = true;
     },
     isOpen: () => open,
-    navigate: (s: HubSection) => log.push(`navigate ${s}`),
+    navigate: (s: HubSection, p?: string) => log.push(p ? `navigate ${s} ${p}` : `navigate ${s}`),
     setDock: (v) => log.push(`dock ${v}`),
     intro: o.intro ? async () => void log.push("intro") : undefined,
   });
@@ -104,6 +104,25 @@ describe("Hub", () => {
     await hub.open("dictation");
     expect(log).toEqual(["navigate dictation", "show"]);
     expect(hub.takeSection()).toBeNull();
+  });
+
+  test("o arquivo do balão do gato (spec #17683): com o hub aberto vai pelo evento, junto da seção", async () => {
+    const { hub, log } = fake();
+    await hub.open();
+    log.length = 0;
+    await hub.open("notes", "Projeto X/plano.pdf");
+    expect(log).toEqual(["navigate notes Projeto X/plano.pdf", "show"]);
+    expect(hub.takeRequest()).toBeNull();
+  });
+
+  test("o arquivo pedido com o hub fechado vai pelo hub.section, uma vez, e um pedido sem arquivo não herda o anterior", async () => {
+    const { hub, close } = fake();
+    await hub.open("notes", "Feira.md");
+    expect(hub.takeRequest()).toEqual({ section: "notes", path: "Feira.md" });
+    expect(hub.takeRequest()).toBeNull();
+    close();
+    await hub.open("notes");
+    expect(hub.takeRequest()).toEqual({ section: "notes" });
   });
 
   test("o hub que não abriu não deixa o app no Dock", async () => {
