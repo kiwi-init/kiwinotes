@@ -597,7 +597,7 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(r.cat.visible).toBe(true);
   });
 
-  test("o balão mostra o texto sem a marcação: títulos, negrito, código, links e citações", () => {
+  test("o texto sem a marcação: títulos, negrito, código, links e citações", () => {
     expect(plainBubbleText("# Prazo\n\nO prazo do Kiwi é **abril**.")).toBe("Prazo. O prazo do Kiwi é abril.");
     expect(plainBubbleText("Veja [a nota](Kiwi/Prazo.md) e `kiwi status`.\n> citado\n- um\n- dois")).toBe("Veja a nota e kiwi status. citado • um • dois");
     expect(plainBubbleText("Veja a issue #12, ok.")).toBe("Veja a issue #12, ok.");
@@ -605,8 +605,28 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(plainBubbleText("## Feito:\n~~velho~~ novo ![img](a.png) <https://kiwi.app>")).toBe("Feito: velho novo img https://kiwi.app");
     const r = rig();
     talk(r);
-    r.cat.turn(doneWith("Pela nota Kiwi/Prazo.md: # Prazo\n\nO prazo do Kiwi é **abril**."));
-    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: "Pela nota Kiwi/Prazo.md: Prazo O prazo do Kiwi é abril.", error: false }]);
+  });
+
+  test("o balão recebe o markdown, com a tabela e as quebras de linha (spec #17679): a página monta e limpa", () => {
+    const md = "## Plano\n\n| Tarefa | Quem |\n| --- | --- |\n| Roteiro | Ana |\n\nO prazo é **abril**.";
+    const r = rig();
+    talk(r);
+    r.cat.turn(doneWith(`\n${md}\n\n`));
+    expect(bubbles(r.take())).toEqual([{ type: "catOverlay.bubble", text: md, error: false }]);
+    // Depois de uma ferramenta, só o markdown que veio depois dela.
+    const t = rig();
+    talk(t);
+    t.cat.turn(text("Vou ler a nota."));
+    t.cat.turn(status("running"));
+    t.cat.turn(text(md));
+    t.cat.turn(doneWith(`Vou ler a nota.${md}`));
+    expect(bubbles(t.take())).toEqual([{ type: "catOverlay.bubble", text: md, error: false }]);
+    // Só um bloco de código vazio depois da ferramenta: o que ele fez.
+    const e = rig();
+    talk(e);
+    e.cat.turn(status("running"));
+    e.cat.turn(doneWith("```\n```"));
+    expect(bubbles(e.take())).toEqual([{ type: "catOverlay.bubble", text: "Feito.", error: false }]);
   });
 
   test("uma rotina que começa enquanto a pessoa segura o Control não vira a fala", () => {
