@@ -1,11 +1,11 @@
-// O Markdown "ao vivo": a marcação (#, **, `, [[ ]]) some fora da linha em que o cursor está, os checkboxes viram
+// O Markdown "ao vivo": a marcação (#, **, `, [[ ]]) some fora do trecho em que o cursor está (spec #17690), os checkboxes viram
 // caixas clicáveis e as tabelas aparecem como tabela até o cursor entrar nelas. Como no Obsidian, a nota continua
 // sendo o .md puro: nada aqui muda o texto, só como ele aparece.
 
 import { syntaxTree } from "@codemirror/language";
 import { type EditorState, type Range, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
-import type { SyntaxNode } from "@lezer/common";
+import type { SyntaxNode, Tree } from "@lezer/common";
 
 import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
@@ -64,16 +64,86 @@ class CheckboxWidget extends WidgetType {
   }
 }
 
-class BulletWidget extends WidgetType {
-  eq() {
-    return true;
+/** O "## " do título com o cursor nele (T17784): na margem, à esquerda, para o título não sair do lugar. */
+class HeadMarkWidget extends WidgetType {
+  constructor(readonly text: string) {
+    super();
+  }
+  eq(other: HeadMarkWidget) {
+    return other.text === this.text;
   }
   toDOM() {
-    const dot = document.createElement("span");
-    dot.className = "cm-bullet";
-    dot.textContent = "•";
-    return dot;
+    const mark = document.createElement("span");
+    mark.className = "cm-hmark";
+    mark.textContent = this.text;
+    return mark;
   }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+/**
+ * O marcador do item (T17784, spec #17690), sempre desenhado e no recuo, onde a lista desenhada põe o dela; o texto do
+ * item começa no mesmo lugar nas duas caras: o número como está, e no lugar do "-" o mesmo marcador da
+ * lista desenhada do WebKit, que muda com o nível (o disco, o círculo e, do 3º nível em diante, o quadrado).
+ */
+class ListMarkWidget extends WidgetType {
+  constructor(
+    readonly text: string,
+    readonly level: number,
+  ) {
+    super();
+  }
+  eq(other: ListMarkWidget) {
+    return other.text === this.text && other.level === this.level;
+  }
+  toDOM() {
+    const mark = document.createElement("span");
+    mark.setAttribute("aria-hidden", "true");
+    if (/^[-*+]$/.test(this.text)) {
+      mark.className = "cm-bullet";
+      const dot = document.createElement("span");
+      dot.className = `cm-dot cm-dot-${this.level <= 1 ? "disc" : this.level === 2 ? "circle" : "square"}`;
+      mark.append(dot);
+    } else {
+      mark.className = "cm-bullet cm-bullet-n";
+      mark.textContent = this.text;
+    }
+    return mark;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+export const LIST_INDENT = 22;
+/** Os níveis com classe de recuo; mais fundo que isto fica no último. */
+export const LIST_DEPTH_MAX = 6;
+
+/**
+ * O item que não abre a lista (T17784): o 2º em diante, ou o primeiro de uma lista recuada. Na lista desenhada ele tem
+ * 2 px em cima (o `itemSpacing`); o item cru e o bloco desenhado que começa nele guardam esse espaço.
+ */
+export function itemHasGap(item: SyntaxNode): boolean {
+  return !!item.prevSibling || listDepth(item) > 1;
+}
+
+/** O item de lista que começa na linha de `lineFrom`, se houver. */
+export function listItemAtLine(state: EditorState, tree: Tree, lineFrom: number): SyntaxNode | null {
+  const line = state.doc.lineAt(lineFrom);
+  const start = line.from + (/^\s*/.exec(line.text)?.[0].length ?? 0);
+  for (let n: SyntaxNode | null = tree.resolveInner(start, 1); n; n = n.parent) {
+    if (n.name === "ListItem") return n.from >= line.from ? n : null;
+  }
+  return null;
+}
+
+/** Quantas listas há em volta do nó: 1 numa lista de fora, 2 numa lista dentro de um item, e assim por diante. */
+function listDepth(node: SyntaxNode): number {
+  let depth = 0;
+  for (let n: SyntaxNode | null = node; n; n = n.parent) if (n.name === "BulletList" || n.name === "OrderedList") depth++;
+  return depth;
 }
 
 /**
@@ -112,7 +182,6 @@ class FootnoteWidget extends WidgetType {
 }
 
 const hide = Decoration.replace({});
-const bullet = Decoration.replace({ widget: new BulletWidget() });
 
 function inCode(node: SyntaxNode | null): boolean {
   for (let n = node; n; n = n.parent) if (n.name === "InlineCode" || n.name === "FencedCode" || n.name === "CodeBlock") return true;
@@ -120,13 +189,24 @@ function inCode(node: SyntaxNode | null): boolean {
 }
 
 function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
-  const { state } = view;
-  const active = activeLines(state, view.hasFocus);
-  const isActive = (pos: number) => active.has(state.doc.lineAt(pos).number);
-  const out: Range<Decoration>[] = [];
-  const tree = syntaxTree(state);
+  return inlineDecorations(view.state, view.hasFocus, view.visibleRanges, resolver);
+}
 
-  for (const { from, to } of view.visibleRanges) {
+/**
+ * As decorações do preview em linha, sem DOM (testadas): `focused` é o editor com foco, `ranges` os trechos na tela.
+ * `tree`: no editor, a que o parser já fez; nos testes, a inteira (`fullTree`), que não depende do orçamento de tempo.
+ */
+export function inlineDecorations(state: EditorState, focused: boolean, ranges: readonly { from: number; to: number }[], resolver: LinkResolver, tree: Tree = syntaxTree(state)): DecorationSet {
+  // Spec #17690: a marca só aparece no trecho exato onde está o cursor (o `**` do negrito em que ele está, o link em que
+  // ele está), e não na linha inteira. O resto da linha continua desenhado, sem nada pular.
+  const near = (from: number, to: number) => focused && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+  const around = (node: { node: SyntaxNode }) => {
+    const p = node.node.parent;
+    return p ? near(p.from, p.to) : false;
+  };
+  const out: Range<Decoration>[] = [];
+
+  for (const { from, to } of ranges) {
     tree.iterate({
       from,
       to,
@@ -138,14 +218,17 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           return;
         }
         if (name === "HeaderMark") {
-          if (isActive(node.from)) return;
           const after = state.doc.sliceString(node.to, node.to + 1);
           // Só o "#" do começo do título ("## Custos"), não o "#" que fecha um título ("## Custos ##").
-          if (node.from === state.doc.lineAt(node.from).from) out.push(hide.range(node.from, node.to + (after === " " ? 1 : 0)));
+          if (node.from !== state.doc.lineAt(node.from).from) return;
+          const end = node.to + (after === " " ? 1 : 0);
+          // Com o cursor nele, o "## " aparece na margem, à esquerda, e o título não sai do lugar (T17784).
+          // Um widget, não uma marca: o texto dentro da caixa da margem não é editado (o WebKit perdia o espaço do "## ").
+          out.push(near(node.from, end) ? Decoration.replace({ widget: new HeadMarkWidget(state.doc.sliceString(node.from, end)) }).range(node.from, end) : hide.range(node.from, end));
           return;
         }
         if (name === "EmphasisMark" || name === "StrikethroughMark") {
-          if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
+          if (!around(node)) out.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "Highlight") {
@@ -153,7 +236,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           return;
         }
         if (name === "HighlightMark") {
-          if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
+          if (!around(node)) out.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "InlineCode") {
@@ -161,7 +244,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           return;
         }
         if (name === "CodeMark" && node.node.parent?.name === "InlineCode") {
-          if (!isActive(node.from)) out.push(hide.range(node.from, node.to));
+          if (!around(node)) out.push(hide.range(node.from, node.to));
           return;
         }
         if (name === "FencedCode") {
@@ -172,7 +255,8 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
         }
         if (name === "QuoteMark") {
           out.push(Decoration.line({ class: "cm-quote" }).range(state.doc.lineAt(node.from).from));
-          if (!isActive(node.from)) out.push(hide.range(node.from, Math.min(node.to + 1, state.doc.lineAt(node.from).to)));
+          const quoteEnd = Math.min(node.to + 1, state.doc.lineAt(node.from).to);
+          if (!near(node.from, quoteEnd)) out.push(hide.range(node.from, quoteEnd));
           return;
         }
         if (name === "Task") {
@@ -181,18 +265,34 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
           const checked = /x/i.test(state.doc.sliceString(marker.from, marker.to));
           const line = state.doc.lineAt(node.from);
           if (checked) out.push(Decoration.line({ class: "cm-task-done" }).range(line.from));
-          // O "- " antes da caixa some, e a caixa fica mesmo na linha do cursor (menos com o cursor dentro do "[ ]").
+          // O "- " antes da caixa some sempre, como na lista desenhada (T17784); a caixa fica, menos com o cursor no "[ ]".
           const listMark = node.node.parent?.getChild("ListMark");
+          if (listMark && state.doc.lineAt(listMark.from).number === line.number) out.push(hide.range(listMark.from, marker.from));
           const cursorIn = state.selection.ranges.some((r) => r.from <= marker.to && r.to >= marker.from);
           if (cursorIn) return;
-          if (listMark && !isActive(node.from)) out.push(hide.range(listMark.from, marker.from));
-          out.push(Decoration.replace({ widget: new CheckboxWidget(checked, marker.from) }).range(marker.from, marker.to));
+          // O espaço depois do "]" vai junto: a margem da caixa já é o espaço até o texto.
+          const gap = /[ \t]/.test(state.doc.sliceString(marker.to, marker.to + 1)) ? 1 : 0;
+          out.push(Decoration.replace({ widget: new CheckboxWidget(checked, marker.from) }).range(marker.from, marker.to + gap));
           return;
         }
         if (name === "ListMark") {
+          // A linha do item com o recuo e o espaço da lista desenhada, com o cursor nela ou fora (T17784, spec #17690):
+          // o marcador fica desenhado no recuo, os espaços do começo somem, e o texto começa onde começa no desenho.
+          const line = state.doc.lineAt(node.from);
+          const item = node.node.parent;
+          const list = item?.parent;
+          if (!item || !list || !/^\s*$/.test(state.doc.sliceString(line.from, node.from))) return;
           const text = state.doc.sliceString(node.from, node.to);
-          const isTask = node.node.parent?.getChild("Task");
-          if (!isTask && /^[-*+]$/.test(text) && !isActive(node.from)) out.push(bullet.range(node.from, node.to));
+          const isTask = !!item.getChild("Task");
+          const depth = Math.min(listDepth(item), LIST_DEPTH_MAX);
+          // A lista de tarefas desenhada não tem recuo próprio (o `listStyle` da lib): a caixa fica na margem do nível.
+          const level = isTask ? depth - 1 : depth;
+          out.push(Decoration.line({ class: `cm-li cm-li-${level}${itemHasGap(item) ? " cm-li-gap" : ""}` }).range(line.from));
+          if (node.from > line.from) out.push(hide.range(line.from, node.from));
+          if (isTask) return;
+          const after = state.doc.sliceString(node.to, node.to + 1);
+          const end = after === " " || after === "\t" ? node.to + 1 : node.to;
+          out.push(Decoration.replace({ widget: new ListMarkWidget(text, depth) }).range(node.from, end));
           return;
         }
       },
@@ -207,7 +307,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
       const missing = m.kind === "ref" && !notes.def(m.label);
       const cls = `cm-footnote${missing ? " cm-footnote-missing" : ""}`;
       const attrs: Record<string, string> = m.kind === "ref" ? { "data-footnote": m.label } : { "data-footnote-n": String(m.n) };
-      if (isActive(m.from)) {
+      if (near(m.from, m.to)) {
         out.push(Decoration.mark({ class: `${cls} cm-footnote-raw`, attributes: attrs }).range(m.from, m.to));
         continue;
       }
@@ -218,7 +318,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
     for (const d of notes.defs) {
       const marker = d.markerTo - `[^${d.label}]:`.length;
       if (d.markerTo < from || marker > to || inCode(tree.resolveInner(marker + 1, 1))) continue;
-      if (isActive(marker)) {
+      if (near(marker, d.markerTo)) {
         out.push(Decoration.mark({ class: "cm-footnote cm-footnote-def cm-footnote-raw" }).range(marker, d.markerTo));
         continue;
       }
@@ -240,7 +340,7 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
         const cls = `cm-wikilink${status === "missing" ? " cm-wikilink-missing" : ""}`;
         const destination = link.target + (link.heading ? `#${link.heading}` : "");
         const attributes = { "data-target": destination, title: status === "missing" ? `${link.target} (ainda não existe)` : destination };
-        if (isActive(a)) {
+        if (near(a, b)) {
           out.push(Decoration.mark({ class: `${cls} cm-wikilink-raw`, attributes }).range(a, b));
           continue;
         }

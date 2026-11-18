@@ -10,8 +10,8 @@ import katex from "katex";
 import { HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, type EditorState, type Range, StateField, type Transaction } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
+import { EditorSelection, type EditorState, Prec, type Range, StateField, type Transaction, type TransactionSpec } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, WidgetType } from "@codemirror/view";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { MarkdownStyle } from "react-native-enriched-markdown/lib/module/index.web.js";
@@ -25,7 +25,7 @@ import type { ASTNode } from "react-native-enriched-markdown/lib/typescript/src/
 
 import { externalUrl, openableUrl, parseLinks } from "../links.ts";
 import type { AttachmentFile, AttachmentSource } from "./attachments.ts";
-import { editorFocused, focusEditorNow, type LinkResolver, linksChanged } from "./livePreview.ts";
+import { editorFocused, focusEditorNow, itemHasGap, type LinkResolver, linksChanged, listItemAtLine } from "./livePreview.ts";
 import { MermaidBlock, mermaidCode } from "./mermaid.tsx";
 import { COPIED_MS } from "./code-copy.ts";
 import { type Callout, parseCallout } from "./callouts.ts";
@@ -48,6 +48,7 @@ import {
   sourceOffset,
   TAG_LINK,
   taskMarks,
+  topBlocksAround,
   toRenderable,
 } from "./rendered.ts";
 
@@ -465,12 +466,14 @@ class RenderedWidget extends WidgetType {
     readonly markdown: string,
     readonly source: string,
     readonly actions: RenderedActions,
+    /** O bloco começa num item que não abre a lista (o cursor cortou a lista em cima dele): os 2 px entre itens. */
+    readonly listGap = false,
   ) {
     super();
   }
 
   eq(other: RenderedWidget) {
-    return other.markdown === this.markdown && other.source === this.source;
+    return other.markdown === this.markdown && other.source === this.source && other.listGap === this.listGap;
   }
 
   get estimatedHeight() {
@@ -480,6 +483,7 @@ class RenderedWidget extends WidgetType {
   toDOM(view: EditorView) {
     const dom = document.createElement("div");
     dom.className = "cm-rendered";
+    dom.classList.toggle("cm-rendered-gap", this.listGap);
     const root = createRoot(dom);
     roots.set(dom, root);
     widgets.set(dom, this);
@@ -494,6 +498,7 @@ class RenderedWidget extends WidgetType {
     const root = roots.get(dom);
     if (!root) return false;
     widgets.set(dom, this);
+    dom.classList.toggle("cm-rendered-gap", this.listGap);
     this.draw(root, view, dom);
     return true;
   }
@@ -576,7 +581,10 @@ class RenderedWidget extends WidgetType {
       before.setStart(dom, 0);
       before.setEnd(caret.startContainer, caret.startOffset);
       const shown = before.toString();
-      return sourceOffset(this.source, shown, shown.length);
+      // O texto inteiro do bloco, não só o de antes: o `**` logo antes da letra clicada se acha pela letra seguinte.
+      const all = document.createRange();
+      all.selectNodeContents(dom);
+      return sourceOffset(this.source, all.toString(), shown.length);
     } catch {
       // Um ponto que não dá para medir (dentro de um desenho): o começo do bloco.
       return 0;
@@ -687,7 +695,9 @@ export function buildRendered(state: EditorState, resolver: LinkResolver, action
     // O H1 igual ao título está escondido (spec #12626): o bloco dele não se desenha.
     if (title && b.from >= title.from && b.to <= title.to) continue;
     const markdown = toRenderable(b.source, b.from, tree, (t) => resolver.status(t), notes);
-    out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions), block: true }).range(b.from, b.to));
+    const item = listItemAtLine(state, tree, b.from);
+    const gap = !!item && item.from < b.to && itemHasGap(item);
+    out.push(Decoration.replace({ widget: new RenderedWidget(markdown, b.source, actions, gap), block: true }).range(b.from, b.to));
   }
   for (const m of imagesUnderCursor(state, focused, tree)) {
     out.push(Decoration.widget({ widget: new ImagesUnderWidget(m.markdown, actions), block: true, side: 1 }).range(m.to));
@@ -710,7 +720,9 @@ const followsCursor = (d: Decoration) => {
  * seleção. Os outros ficam como estavam, e só esses são refeitos. O resultado é o mesmo do `buildRendered` inteiro.
  */
 export function patchRendered(value: DecorationSet, tr: Transaction, resolver: LinkResolver, actions: RenderedActions): DecorationSet {
-  const dirty = [...tr.startState.selection.ranges, ...tr.state.selection.ranges].map((r) => [r.from, r.to] as const);
+  // Numa lista, mudar de item muda os trechos desenhados da lista inteira (spec #17690): ela é refeita toda.
+  const moved = [...tr.startState.selection.ranges, ...tr.state.selection.ranges].map((r) => [r.from, r.to] as const);
+  const dirty = topBlocksAround(tr.state, fullTree(tr.state), moved);
   const hit = (from: number, to: number) => dirty.some(([a, b]) => from <= b && to >= a);
   const fresh = buildRendered(tr.state, resolver, actions, dirty);
   const add: Range<Decoration>[] = [];
@@ -719,26 +731,80 @@ export function patchRendered(value: DecorationSet, tr: Transaction, resolver: L
 }
 
 /**
+ * A seta para cima ou para baixo que entra num bloco desenhado (spec #17690). O editor pula um widget de bloco inteiro:
+ * com o cursor no 1º item de uma lista, a seta para baixo ia para a linha depois da lista, por cima dos itens desenhados.
+ * Aqui ela vai para a linha vizinha, na mesma coluna, e o item dela fica cru. Só com o cursor sem seleção.
+ */
+export function arrowIntoDrawn(state: EditorState, drawn: DecorationSet, dir: 1 | -1): EditorSelection | null {
+  const sel = state.selection.main;
+  if (!sel.empty || state.selection.ranges.length > 1) return null;
+  const line = state.doc.lineAt(sel.head);
+  const n = line.number + dir;
+  if (n < 1 || n > state.doc.lines) return null;
+  const next = state.doc.line(n);
+  let covered = false;
+  drawn.between(next.from, next.to, (from, to, d) => {
+    if ((d.spec as { widget?: unknown }).widget instanceof RenderedWidget && from <= next.from && to >= next.to) covered = true;
+  });
+  if (!covered) return null;
+  return EditorSelection.single(next.from + Math.min(sel.head - line.from, next.length));
+}
+
+/**
+ * O Backspace no começo do texto de um título (#17924): o `## ` fica na margem, e apagar só o espaço deixava `##Título`
+ * cru no lugar do título. Ali o Backspace tira o `## ` inteiro: o título vira parágrafo, com o mesmo texto.
+ */
+export function headingBackspace(state: EditorState): TransactionSpec | null {
+  const sel = state.selection.main;
+  if (!sel.empty || state.selection.ranges.length > 1) return null;
+  const line = state.doc.lineAt(sel.head);
+  const mark = /^#{1,6}[ \t]+/.exec(line.text);
+  if (!mark || sel.head !== line.from + mark[0].length) return null;
+  // Só num título de verdade: o `## ` de um bloco de código fica como está.
+  if (!/^ATXHeading\d$/.test(fullTree(state).resolveInner(line.from, 1).parent?.name ?? "")) return null;
+  return { changes: { from: line.from, to: sel.head }, selection: { anchor: line.from }, userEvent: "delete.backward" };
+}
+
+/**
  * Os blocos fora do cursor aparecem renderizados pela lib do Channels. Vem de um StateField porque um bloco de várias
  * linhas esconde quebras de linha. Precisa do `commentPreview` (que guarda se o editor está com foco).
  */
 export function renderedPreview(resolver: LinkResolver, actions: RenderedActions) {
+  const field = StateField.define<DecorationSet>({
+    create: (state) => buildRendered(state, resolver, actions),
+    update(value, tr) {
+      const changed =
+        tr.docChanged ||
+        tr.effects.some((e) => e.is(linksChanged)) ||
+        syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
+        tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false) ||
+        hiddenTitle(tr.startState) !== hiddenTitle(tr.state);
+      if (changed) return buildRendered(tr.state, resolver, actions);
+      // Só o cursor: refaz só os blocos onde ele estava e onde está (spec #13385).
+      return tr.selection ? patchRendered(value, tr, resolver, actions) : value;
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
+  const arrow = (dir: 1 | -1) => (view: EditorView) => {
+    const sel = arrowIntoDrawn(view.state, view.state.field(field), dir);
+    if (!sel) return false;
+    view.dispatch({ selection: sel, scrollIntoView: true, userEvent: "select" });
+    return true;
+  };
   return [
-    StateField.define<DecorationSet>({
-      create: (state) => buildRendered(state, resolver, actions),
-      update(value, tr) {
-        const changed =
-          tr.docChanged ||
-          tr.effects.some((e) => e.is(linksChanged)) ||
-          syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
-          tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false) ||
-          hiddenTitle(tr.startState) !== hiddenTitle(tr.state);
-        if (changed) return buildRendered(tr.state, resolver, actions);
-        // Só o cursor: refaz só os blocos onde ele estava e onde está (spec #13385).
-        return tr.selection ? patchRendered(value, tr, resolver, actions) : value;
+    field,
+    Prec.high(keymap.of([
+      { key: "ArrowDown", run: arrow(1) },
+      { key: "ArrowUp", run: arrow(-1) },
+      {
+        key: "Backspace",
+        run: (view) => {
+          const spec = headingBackspace(view.state);
+          if (spec) view.dispatch(spec);
+          return !!spec;
+        },
       },
-      provide: (f) => EditorView.decorations.from(f),
-    }),
+    ])),
     footnoteHover(actions),
     renderedTheme,
   ];
@@ -910,6 +976,7 @@ function footnoteHover(actions: RenderedActions) {
 const renderedTheme = EditorView.theme({
   // Sem margem (o CodeMirror mede sem ela); `cursor: text` porque o clique edita.
   ".cm-rendered": { cursor: "text", padding: "0", minWidth: "0", overflowWrap: "anywhere" },
+  ".cm-rendered.cm-rendered-gap": { paddingTop: "2px" },
   // T5299 (#212): o bloco de código não quebra; ele rola dentro dele, nunca a nota.
   ".cm-rendered pre": { maxWidth: "100%", overflowX: "auto", overflowWrap: "normal" },
   // O Copiar do bloco de código (T6379): no canto, fora do que rola, e só com o mouse em cima (ou depois de copiar).

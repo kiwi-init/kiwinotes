@@ -33,7 +33,7 @@
     { "wait": 200, "name": "o autocomplete só aceita o Enter 75 ms depois de mudar (interactionDelay)" },
     { "press": "Enter" },
     { "type": "Pedir mais dois orçamentos." },
-    { "waitFor": ".kn-note-editor .cm-line:has-text('[^3]: Pedir mais dois orçamentos.')", "name": "a chamada [^3] entra e o cursor vai para a definição no fim" },
+    { "waitFor": ".kn-note-editor .cm-line:has-text('Pedir mais dois orçamentos.') .cm-footnote-def", "name": "a chamada [^3] entra e o cursor vai para a definição no fim; o [^3]: vira o número, porque o cursor não está nele (spec #17690)" },
     { "screenshot": "02-inserir-pelo-slash.png" },
     { "click": ".kn-note-editor .cm-rendered h1", "name": "o cursor sai, para o título" },
     { "press": "End" },
@@ -44,11 +44,11 @@
     { "screenshot": "03-menu-inserir.png" },
     { "click": "[role=menuitem]:has-text('Nota de rodapé')" },
     { "type": "Pelo menu." },
-    { "waitFor": ".kn-note-editor .cm-line:has-text('[^4]: Pelo menu.')", "name": "a [^4] entra junto das outras" },
+    { "waitFor": ".kn-note-editor .cm-line:has-text('[^4]: Pelo menu.'), .kn-note-editor .cm-line:has-text('Pelo menu.') .cm-footnote-def", "name": "a [^4] entra junto das outras" },
     { "waitFor": ".kn-note-editor .cm-rendered h1 a[href='kiwi-footnote:4']", "name": "a chamada no fim do título" },
     { "click": ".kn-note-editor .cm-rendered h1", "name": "o cursor sai de novo" },
     { "click": ".kn-note-editor .cm-rendered a[href='kiwi-footnote:1']", "name": "o clique no ¹ vai para a definição" },
-    { "waitFor": ".kn-note-editor .cm-line:has-text('[^1]: Combinado na reunião')", "name": "a definição fica para editar" },
+    { "waitFor": ".kn-note-editor .cm-line:has-text('[^1]: Combinado na reunião'), .kn-note-editor .cm-line:has-text('Combinado na reunião') .cm-footnote-def", "name": "a definição fica para editar" },
     { "wait": 1500, "name": "o editor salva" },
     { "invoke": "notes.get", "args": { "path": "Rodapé.md" }, "name": "o .md tem as chamadas e as definições no fim" }
   ]
