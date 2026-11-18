@@ -34,6 +34,12 @@ const PAGE = `<!doctype html>
 <script>document.body.append("SCRIPT RODOU"); try { parent.document.title = "VAZOU" } catch {} parent.postMessage("script", "*")</script>
 </body></html>`;
 
+/**
+ * O WebKit headless no runner do CI leva perto dos 5 s padrão do bun para abrir e desenhar a prévia (4982 ms passou,
+ * 5001 ms caiu, T19998): o lançamento, o teste e o fechamento ganham um tempo que cabe com folga.
+ */
+const WEBKIT_TIMEOUT = 30_000;
+
 describe.skipIf(!hasWebkit)("a prévia do .html, isolada (T19314)", () => {
   let browser: Browser;
   let server: ReturnType<typeof Bun.serve>;
@@ -61,12 +67,12 @@ addEventListener("message", (e) => { document.title = "MSG:" + e.data; });`;
       },
     });
     browser = await webkit.launch({ headless: true });
-  });
+  }, WEBKIT_TIMEOUT);
 
   afterAll(async () => {
     await browser?.close();
     server?.stop(true);
-  });
+  }, WEBKIT_TIMEOUT);
 
   test("desenha o de dentro, e nada sai: nem script, nem pedido, nem link, nem form", async () => {
     const page = await browser.newPage();
@@ -93,5 +99,5 @@ addEventListener("message", (e) => { document.title = "MSG:" + e.data; });`;
     // Os únicos pedidos são os da página de mentira: nem a rede, nem o `foto.png` relativo (a CSP da prévia barra).
     expect(requests).toEqual([`${host()}/`, `${host()}/mount.js`]);
     await page.close();
-  });
+  }, WEBKIT_TIMEOUT);
 });
