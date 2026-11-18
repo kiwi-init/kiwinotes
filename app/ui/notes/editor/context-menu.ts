@@ -127,8 +127,9 @@ export const PARAGRAPH_LOOK: Record<string, { icon?: MenuIconName; labelClass?: 
 /**
  * O menu do botão direito do editor. `plain` (spec #13385): o de um texto puro (.txt), o mesmo menu sem o que só existe
  * numa nota (o link para outra nota e dividir a nota). A formatação entra como Markdown simples (`# `, `- `, `**`).
+ * `code` (T19312): o de um arquivo de código, sem Formatar, Parágrafo e Inserir, que são Markdown.
  */
-export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void, onRenameHeading?: (offset: number, title: string, source: string) => void, opts: { plain?: boolean } = {}): MenuItem[] {
+export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void, onRenameHeading?: (offset: number, title: string, source: string) => void, opts: { plain?: boolean; code?: boolean } = {}): MenuItem[] {
   const chosenState = view.state;
   const safe = () => unchanged(view, chosenState);
   // O foco antes da ação (T6377): despachada com o editor ainda sem foco, o texto digitado logo depois caía fora dela.
@@ -173,7 +174,8 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
     ...calloutItems,
     ...(heading ? [{ label: "Renomear título e seus links…", onSelect: perform(() => onRenameHeading?.(heading.from, heading.title, chosenState.doc.toString())) }, { kind: "separator" as const }] : []),
     ...tableItems,
-    { kind: "submenu", label: "Formatar", items: [
+    // O código (T19312): sem o Markdown, que num .py ou num .css viraria lixo.
+    ...(opts.code ? [] : [{ kind: "submenu" as const, label: "Formatar", items: [
       ...["Mod-b", "Mod-i", "Shift-Mod-x", "Shift-Mod-h", "Mod-e", "Mod-/"].map(command),
       { kind: "separator" }, command("Mod-\\"),
     ] },
@@ -190,7 +192,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
       { label: "Separador", icon: "divider", onSelect: insertBlock("divider") },
       { label: "Callout", icon: "callout", onSelect: insertBlock("callout") },
       { label: "Nota de rodapé", icon: "footnote", onSelect: perform(() => view.dispatch(insertFootnote(view.state))) },
-    ] },
+    ] }] satisfies MenuItem[]),
     { kind: "submenu", label: "Ferramentas de texto", items: TEXT_TOOLS.map(item => ({ label: item.label,
       disabled: !textTool(chosenState, item.id), onSelect: perform(() => { const tr = textTool(view.state, item.id); if (tr) view.dispatch(tr); }),
     })) },

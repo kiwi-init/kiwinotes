@@ -794,13 +794,14 @@ export class Vault {
   }
 
   /**
-   * Grava um texto do cofre que as Notas abrem editável (T7105): só `.txt`, `.log`, `.json`, `.yaml` e `.yml`, só num
+   * Grava um texto do cofre que as Notas abrem editável (T7105): `.txt`, `.log`, `.json`, `.yaml`, `.yml` e o código
+   * (`CODE_TYPES`, T19312), só num
    * arquivo que já existe, e só se ninguém o mudou desde `baseVersion` (senão devolve o de agora, sem escrever). A
    * escrita é a troca atômica das notas. Um arquivo que não é UTF-8 nunca casa com a versão: não é gravado por cima.
    */
   async saveFile(input: unknown, content: unknown, baseVersion: unknown): Promise<FileSaveResult> {
     const p = filePath(input);
-    if (!isEditableText(p)) throw new VaultError("E_BAD_ARGS", "only txt, log, json, yaml and yml files are saved");
+    if (!isEditableText(p)) throw new VaultError("E_BAD_ARGS", "only text and code files (txt, log, json, yaml, py, ts…) are saved");
     if (typeof content !== "string") throw new VaultError("E_BAD_ARGS", "content must be a string");
     const size = Buffer.byteLength(content, "utf8");
     if (size > MAX_VIEW_TEXT_BYTES) throw new VaultError("E_BAD_ARGS", "content is larger than 5 MB");

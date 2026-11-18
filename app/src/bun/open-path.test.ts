@@ -31,6 +31,8 @@ const FILES: Record<string, string> = {
   "Projeto X/quadro.canvas": "{}",
   "Projeto X/apresentacao.key": "k",
   "Projeto X/rodar.sh": "#!/bin/sh\n",
+  "Projeto X/pacote.zip": "PK",
+  "Projeto X/instalar.command": "#!/bin/sh\n",
 };
 
 async function setup() {
@@ -39,7 +41,7 @@ async function setup() {
   const root = path.join(dir, "KiwiNotes");
   for (const [rel, content] of Object.entries(FILES)) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
-    writeFileSync(path.join(root, rel), content, rel.endsWith(".sh") ? { mode: 0o755 } : undefined);
+    writeFileSync(path.join(root, rel), content, /\.(sh|command)$/.test(rel) ? { mode: 0o755 } : undefined);
   }
   // Fora da pasta: um arquivo ao lado dela, e um link simbólico de dentro para ele.
   writeFileSync(path.join(dir, "fora.pdf"), "%PDF-1.4");
@@ -67,7 +69,7 @@ async function setup() {
   return { openPath, inNotes, inApp };
 }
 
-test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem e quadro no visualizador; o resto no app do Mac", async () => {
+test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem, quadro e código no visualizador; o resto no app do Mac", async () => {
   const { openPath, inNotes, inApp } = await setup();
   const opened: Record<string, unknown> = {};
   for (const p of Object.keys(FILES)) {
@@ -84,7 +86,10 @@ test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem e quadro no visu
     "Projeto X/foto.png": "viewer",
     "Projeto X/quadro.canvas": "viewer",
     "Projeto X/apresentacao.key": "app",
-    "Projeto X/rodar.sh": "app",
+    // O código abre como texto nas Notas (T19312), mesmo com o bit de execução: ali ele só é lido, nunca roda.
+    "Projeto X/rodar.sh": "viewer",
+    "Projeto X/pacote.zip": "app",
+    "Projeto X/instalar.command": "app",
   });
   expect(inNotes).toEqual([
     "Feira.md",
@@ -95,9 +100,14 @@ test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem e quadro no visu
     "Projeto X/tabela.xlsx",
     "Projeto X/foto.png",
     "Projeto X/quadro.canvas",
+    "Projeto X/rodar.sh",
   ]);
   // O que rodaria algo (o bit de execução) só aparece no Finder, como no `files.open`.
-  expect(inApp).toEqual([["Projeto X/apresentacao.key", "app"], ["Projeto X/rodar.sh", "finder"]]);
+  expect(inApp).toEqual([
+    ["Projeto X/apresentacao.key", "app"],
+    ["Projeto X/pacote.zip", "finder"], // fora da OPENS_IN_APP: só no Finder
+    ["Projeto X/instalar.command", "finder"],
+  ]);
 });
 
 test("fora da pasta, por link simbólico, uma pasta ou o que não existe: erro, e nada abre", async () => {
