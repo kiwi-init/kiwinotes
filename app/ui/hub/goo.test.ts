@@ -61,6 +61,8 @@ describe("o CSS", () => {
   test("a gota tem a cor da barra, nunca uma cor fixa", () => {
     const body = css.match(/\.kn-goo-base,\s*\.kn-goo-drop \{([^}]*)\}/)?.[1] ?? "";
     expect(body).toContain("background: var(--float)");
+    // A borda: a mesma da pílula, que no escuro soma o anel dela ao do filtro (#18827).
+    expect(css).toMatch(/\.kn-goo-edge \{\s*flood-color: var\(--border-strong\);/);
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i);
   });
 

@@ -33,8 +33,11 @@
   height: 0;
 }
 
+/* A borda da gota tem de bater com a da pílula e a dos botões. Nelas, o anel do `--shadow-float` (`--border`) fica por
+   cima do anel deste filtro, e os dois somados dão o tom do `--border-strong`; só com o `--border`, a gota no escuro
+   parecia uma mancha sem borda (#18827). */
 .kn-goo-edge {
-  flood-color: var(--border);
+  flood-color: var(--border-strong);
 }
 
 .kn-goo-shapes {
