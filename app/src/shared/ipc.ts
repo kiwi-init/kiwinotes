@@ -219,7 +219,9 @@ export type Command =
   /** `target: "agent"` (spec #9876): o arquivo vira uma fala ao agente pelo Control, com os eventos `agent.*`. */
   | { type: "debug.transcribe"; path: string; app?: AppRef; target?: "note" | "agent" }
   /** KIWI_DEBUG=1: processos inventados usando o mic, para testar o perceber a reunião sem olhar o áudio de verdade (R2). */
-  | { type: "debug.meetingMicUsers"; users: { pid: number; bundleId: string }[] };
+  | { type: "debug.meetingMicUsers"; users: { pid: number; bundleId: string }[] }
+  /** Headless e KIWI_DEBUG=1 (T18410): a fala com o Kiwi-cat com o mic silencioso; `drop` é o mic que cai. */
+  | { type: "debug.agentRecording"; action: "start" | "stop" | "cancel" | "drop" };
 
 /**
  * O campo descrito em vez de lido (T1740): com `insert.text {dryRun, simulate}`, o helper responde o plano e o espaço
@@ -296,6 +298,7 @@ export interface CommandResults {
   "audio.inputs": AudioInputs;
   "debug.transcribe": Record<string, never>;
   "debug.meetingMicUsers": Record<string, never>;
+  "debug.agentRecording": Record<string, never>;
 }
 
 // ---------------------------------------------------------- sidecar → Bun
