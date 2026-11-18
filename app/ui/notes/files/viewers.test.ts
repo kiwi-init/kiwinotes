@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { CODE_TYPES, EDITABLE_TEXT, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
+import { CODE_TYPES, EDITABLE_TEXT, looksLikeText, mayBeText, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
 import type { FileContent } from "../types.ts";
 import { type FileViewer, loadFile, viewerFor, VIEWERS } from "./viewers.ts";
 
@@ -62,7 +62,7 @@ test("ler para o visualizador: pronto, grande demais, sem visualizador, sumiu e 
   expect(asked).toEqual([["a.txt", "text"]]);
   expect(await loadFile(read({ path: "a.pdf", size: 30, tooLarge: true, limit: 25 }), "a.pdf", binary)).toEqual({ kind: "tooLarge", size: 30, limit: 25 });
   expect(asked.at(-1)).toEqual(["a.pdf", "binary"]);
-  // Sem visualizador, nada é lido.
+  // Sem visualizador e de um tipo que nunca é texto (o .zip, T19313), nada é lido.
   const before = asked.length;
   expect(await loadFile(read(file), "a.zip", undefined)).toEqual({ kind: "unsupported" });
   expect(asked.length).toBe(before);
@@ -94,4 +94,34 @@ test("o código (T19312): py, ts, css, html, sh… abrem no editor dos textos, e
   for (const ext of CODE_TYPES) expect(VIEWER_TYPES).toContain(ext);
   // Sem repetir o que já tinha visualizador próprio.
   for (const ext of ["txt", "csv", "pdf", "svg", "drawio", "md"]) expect(CODE_TYPES).not.toContain(ext);
+});
+
+test("sem visualizador (T19313): o que é texto no disco abre no editor dos textos; o binário e o tipo conhecido, não", async () => {
+  const asked: string[] = [];
+  const read = (answer: FileContent) => async (path: string, as: "text" | "binary") => {
+    asked.push(`${path}:${as}`);
+    return answer;
+  };
+  const docker: FileContent = { path: "Dockerfile", size: 14, version: "v1", text: "FROM exemplo\n" };
+  expect(await loadFile(read(docker), "Dockerfile", viewerFor("Dockerfile"))).toEqual({ kind: "ready", file: docker, viewer: viewerFor("a.txt")! });
+  expect(asked).toEqual(["Dockerfile:text"]);
+  const vue: FileContent = { path: "site/pagina.vue", size: 22, version: "v1", text: "<template></template>\n" };
+  expect(await loadFile(read(vue), "site/pagina.vue", undefined)).toMatchObject({ kind: "ready" });
+  // O byte zero, o que não é UTF-8 e o grande demais para conferir: o view oferece o app padrão.
+  for (const answer of [
+    { path: "x", size: 4, version: "v1", text: "\x7fELF\0" },
+    { path: "x", size: 2, version: "v1", text: "a\ufffd", readOnly: true as const },
+    { path: "x", size: 9e6, tooLarge: true as const, limit: 5e6 },
+  ]) expect(await loadFile(read(answer), "dados.bin2", undefined)).toEqual({ kind: "unsupported" });
+  // Um tipo que nunca é texto nem é lido.
+  const before = asked.length;
+  for (const name of ["pacote.zip", "musica.mp3", "fonte.woff2", "Slides.KEY"]) expect(await loadFile(read(docker), name, undefined)).toEqual({ kind: "unsupported" });
+  expect(asked.length).toBe(before);
+});
+
+test("pode ser texto (T19313): sem visualizador, sem ser nota e fora da lista do que nunca é texto", () => {
+  for (const name of ["Dockerfile", "Projeto X/LEIAME", "site/pagina.vue", "dados.novo", "Dockerfile.dev"]) expect(mayBeText(name)).toBe(true);
+  for (const name of ["nota.md", "nota.markdown", "quadro.canvas", "a.txt", "a.py", "a.pdf", "fluxo.drawio.svg", "pacote.zip", "Slides.KEY", ""]) expect(mayBeText(name)).toBe(false);
+  expect(looksLikeText("FROM exemplo\n")).toBe(true);
+  expect(looksLikeText("PK\u0003\u0004\0\0")).toBe(false);
 });

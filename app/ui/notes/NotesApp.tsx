@@ -17,6 +17,7 @@ import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/sha
 import { Popover } from "./Popover.tsx";
 import { TreePopover } from "./TreePopover.tsx";
 import { NoteWidthHandles } from "./NoteWidth.tsx";
+import { mayBeText } from "../../src/shared/file-view.ts";
 import { NOTE_WIDTH } from "../../src/shared/note-width.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { FolderConfirmation, useNotesFolders, type FolderController } from "./NotesFolder.tsx";
@@ -834,8 +835,9 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const openVaultFile = (p: string) => {
     // O quadro branco abre no Kiwi (T6600); o resto, no app padrão do Mac.
     if (api.canvas && /\.canvas$/i.test(p)) return void openCanvas(p);
-    // O tipo que tem visualizador abre nas Notas (T7103, spec #7079).
-    if (api.files?.read && viewerFor(p)) return void openFileView(p);
+    // O tipo que tem visualizador abre nas Notas (T7103, spec #7079), e um sem visualizador que pode ser texto também
+    // (T19313): o view lê e confere; um binário mostra o "Abrir no app padrão".
+    if (api.files?.read && (viewerFor(p) || mayBeText(p))) return void openFileView(p);
     setTreeOpen(false);
     api.files?.open(p).catch(failed_("abrir o arquivo"));
   };

@@ -19,7 +19,7 @@ import path from "node:path";
 import { makeFileResolver, makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
-import { isEditableText, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
+import { isEditableText, looksLikeText, MAX_VIEW_BYTES, mayBeText, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, MAX_SEARCH_QUERY, oneSpace, parseQuery, searchTooLong } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -795,19 +795,22 @@ export class Vault {
 
   /**
    * Grava um texto do cofre que as Notas abrem editável (T7105): `.txt`, `.log`, `.json`, `.yaml`, `.yml` e o código
-   * (`CODE_TYPES`, T19312), só num
+   * (`CODE_TYPES`, T19312), e qualquer arquivo sem visualizador que já é texto no disco (`mayBeText`, T19313), só num
    * arquivo que já existe, e só se ninguém o mudou desde `baseVersion` (senão devolve o de agora, sem escrever). A
    * escrita é a troca atômica das notas. Um arquivo que não é UTF-8 nunca casa com a versão: não é gravado por cima.
    */
   async saveFile(input: unknown, content: unknown, baseVersion: unknown): Promise<FileSaveResult> {
     const p = filePath(input);
-    if (!isEditableText(p)) throw new VaultError("E_BAD_ARGS", "only text and code files (txt, log, json, yaml, py, ts…) are saved");
+    const known = isEditableText(p);
+    if (!known && !mayBeText(p)) throw new VaultError("E_BAD_ARGS", "only text and code files (txt, log, json, yaml, py, ts…) are saved");
     if (typeof content !== "string") throw new VaultError("E_BAD_ARGS", "content must be a string");
     const size = Buffer.byteLength(content, "utf8");
     if (size > MAX_VIEW_TEXT_BYTES) throw new VaultError("E_BAD_ARGS", "content is larger than 5 MB");
     if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
     const current = await this.readFile(p, "text");
     if ("tooLarge" in current || !("text" in current) || current.readOnly) throw new VaultError("E_BAD_ARGS", `${p} can't be saved as text`);
+    // T19313: um tipo sem visualizador só grava se o que está no disco é texto (o mesmo que a UI conferiu para abrir).
+    if (!known && !looksLikeText(current.text)) throw new VaultError("E_BAD_ARGS", `${p} can't be saved as text`);
     if (current.version !== baseVersion) return { saved: false, current };
     if (!(await this.replaceChecked(p, content, baseVersion))) return { saved: false, current: await this.readFile(p, "text") };
     await this.fileWritten(p);

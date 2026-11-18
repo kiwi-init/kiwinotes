@@ -59,3 +59,18 @@ test("é código (números de linha, menu sem Markdown): o que tem cor e o .php;
   for (const name of ["a.py", "b.TS", "c.css", "d.json", "e.yaml", "f.php", "g.tex", ".env"]) expect(isCodeFile(name)).toBe(true);
   for (const name of ["lista.txt", "saida.log", "nota.md", "sem-extensao"]) expect(isCodeFile(name)).toBe(false);
 });
+
+test("pelo nome (T19313): o Dockerfile com o modo dele, e o Makefile com o do shell (o legacy-modes não tem o do make)", async () => {
+  for (const name of ["Dockerfile", "Projeto X/dockerfile", "Containerfile", "Dockerfile.dev", "app.dockerfile"]) expect(codeLanguageFor(name)).toBe(CODE_LANGUAGES.dockerfile!);
+  for (const name of ["Makefile", "site/GNUmakefile", "regras.mk"]) expect(codeLanguageFor(name)).toBe(CODE_LANGUAGES.sh!);
+  // Uma extensão conhecida ganha do nome, e um nome parecido não conta.
+  expect(codeLanguageFor("dockerfile.json")).toBe(CODE_LANGUAGES.json!);
+  for (const name of ["Makefile.md", "meu-dockerfile", "LEIAME"]) expect(codeLanguageFor(name)).toBeUndefined();
+  for (const name of ["Dockerfile", "Makefile"]) expect(isCodeFile(name)).toBe(true);
+  const docker = await colors("dockerfile", "# a imagem (exemplo)\nFROM exemplo:1\nRUN echo \"oi\"\n");
+  expect(docker.find((x) => x.text === "FROM")?.color).toContain("--c-violet");
+  expect(docker.find((x) => x.text.startsWith("# a imagem"))?.color).toContain("--ink-3");
+  const make = await colors("mk", "# o build (exemplo)\nCC = cc\ntudo:\n\techo \"pronto\"\n");
+  expect(make.find((x) => x.text.startsWith("# o build"))?.color).toContain("--ink-3");
+  expect(make.find((x) => x.text === '"pronto"')?.color).toContain("--c-green");
+});

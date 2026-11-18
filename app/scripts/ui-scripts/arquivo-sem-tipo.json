@@ -1,0 +1,153 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre (antes, no cofre: Projeto X/Dockerfile, Makefile, LEIAME, dados.bin2 e uma nota)"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projeto X')",
+      "name": "abre a pasta Projeto X"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('Dockerfile')",
+      "name": "clica no Dockerfile, que não tem extensão"
+    },
+    {
+      "waitFor": ".kn-file[data-state='ready'] .kn-file-text-area",
+      "name": "abre nas Notas, no editor dos textos (T19313)"
+    },
+    {
+      "expectText": ".kn-file-title",
+      "text": "Dockerfile",
+      "name": "com o nome no topo"
+    },
+    {
+      "waitFor": ".kn-file-text[data-code='colored']",
+      "name": "com a cor do Dockerfile, pelo nome"
+    },
+    {
+      "expectCount": ".kn-file-text-note",
+      "count": 0,
+      "name": "editável, sem aviso de só leitura"
+    },
+    {
+      "click": ".kn-file-text-area",
+      "name": "o cursor vai para o arquivo"
+    },
+    {
+      "press": "Meta+ArrowDown",
+      "name": "fim do arquivo"
+    },
+    {
+      "type": "EXPOSE 8080",
+      "name": "digita uma linha"
+    },
+    {
+      "waitFor": ".kn-file-text[data-save='saved']",
+      "name": "grava sozinho"
+    },
+    {
+      "invoke": "files.read",
+      "args": {
+        "path": "Projeto X/Dockerfile",
+        "as": "text"
+      },
+      "name": "o Dockerfile no disco tem a linha nova"
+    },
+    {
+      "screenshot": "01-dockerfile.png"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('Makefile')",
+      "name": "clica no Makefile"
+    },
+    {
+      "waitFor": ".kn-file[data-state='ready'] .kn-file-text[data-code='colored']",
+      "name": "o Makefile abre com cor (a do shell)"
+    },
+    {
+      "click": ".kn-file-text-area",
+      "name": "o cursor vai para o arquivo"
+    },
+    {
+      "press": "Meta+ArrowDown",
+      "name": "fim do arquivo"
+    },
+    {
+      "press": "Enter",
+      "name": "linha nova"
+    },
+    {
+      "press": "Tab",
+      "name": "o Tab recua"
+    },
+    {
+      "type": "echo pronto",
+      "name": "digita a receita"
+    },
+    {
+      "waitFor": ".kn-file-text[data-save='saved']",
+      "name": "grava"
+    },
+    {
+      "invoke": "files.read",
+      "args": {
+        "path": "Projeto X/Makefile",
+        "as": "text"
+      },
+      "name": "no disco, a receita nova começa com tab (o make só roda assim)"
+    },
+    {
+      "screenshot": "02-makefile.png"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('LEIAME')",
+      "name": "clica no LEIAME"
+    },
+    {
+      "waitFor": ".kn-file[data-state='ready'] .kn-file-text-area",
+      "name": "um texto sem extensão abre no editor"
+    },
+    {
+      "expectCount": ".kn-file-text[data-code='colored']",
+      "count": 0,
+      "name": "sem cor: não é código"
+    },
+    {
+      "screenshot": "03-leiame.png"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('dados')",
+      "name": "clica no dados.bin2 (a árvore mostra só \"dados\")"
+    },
+    {
+      "waitFor": ".kn-file[data-state='unsupported']",
+      "name": "um binário de extensão desconhecida não abre como texto"
+    },
+    {
+      "expectCount": ".kn-file-notice .kn-file-open",
+      "count": 1,
+      "name": "e oferece o app padrão, como antes"
+    },
+    {
+      "screenshot": "04-binario.png"
+    }
+  ]
+}

@@ -1,11 +1,12 @@
 // Os visualizadores das Notas (spec #7079): que tipo de arquivo abre dentro da janela, e como o conteúdo é lido.
-// Cada formato entra aqui no seu PR (txt, csv, pdf, docx, xlsx, draw.io, imagens). Um tipo sem visualizador segue
-// como sempre: o clique na árvore abre no app padrão do Mac.
+// Cada formato entra aqui no seu PR (txt, csv, pdf, docx, xlsx, draw.io, imagens). Um tipo sem visualizador que é
+// texto no disco (o `Dockerfile`, um `LEIAME`, uma extensão nova) abre no editor dos textos (T19313); o resto segue
+// como sempre: o app padrão do Mac.
 
 import { type ComponentType, lazy, type MutableRefObject, type ReactNode } from "react";
 
 import { extOf } from "../../../src/shared/attachments.ts";
-import { CODE_TYPES, type FileReadAs } from "../../../src/shared/file-view.ts";
+import { CODE_TYPES, type FileReadAs, looksLikeText, mayBeText } from "../../../src/shared/file-view.ts";
 import type { FileContent, NotesApi } from "../types.ts";
 import { ImageViewer } from "./ImageViewer.tsx";
 import { TableViewer } from "./TableViewer.tsx";
@@ -107,11 +108,25 @@ export async function loadFile(
   path: string,
   viewer: FileViewer | undefined,
 ): Promise<FileState> {
-  if (!viewer) return { kind: "unsupported" };
+  if (!viewer) return mayBeText(path) ? loadAsText(read, path) : { kind: "unsupported" };
   try {
     const file = await read(path, viewer.as);
     if ("tooLarge" in file) return { kind: "tooLarge", size: file.size, limit: file.limit };
     return { kind: "ready", file, viewer };
+  } catch (e) {
+    return { kind: /E_NOT_FOUND/.test(String((e as { code?: string })?.code ?? e)) ? "missing" : "error" };
+  }
+}
+
+/**
+ * Um arquivo sem visualizador próprio (T19313): lido como texto, abre no editor dos textos se é UTF-8 e não tem o byte
+ * zero. Senão (um binário, ou grande demais para conferir), o view oferece o app padrão, como antes.
+ */
+async function loadAsText(read: (path: string, as: FileReadAs) => Promise<FileContent>, path: string): Promise<FileState> {
+  try {
+    const file = await read(path, "text");
+    if ("tooLarge" in file || !("text" in file) || file.readOnly || !looksLikeText(file.text)) return { kind: "unsupported" };
+    return { kind: "ready", file, viewer: text };
   } catch (e) {
     return { kind: /E_NOT_FOUND/.test(String((e as { code?: string })?.code ?? e)) ? "missing" : "error" };
   }

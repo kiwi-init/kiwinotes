@@ -217,6 +217,31 @@ describe("gravar um texto do cofre (T7105)", () => {
     expect(read(root, "a.txt")).toBe("novo");
   });
 
+  test("sem visualizador (T19313): grava o que já é texto no disco, e nunca um binário, uma nota ou um tipo conhecido", async () => {
+    const { v, root } = await vault({
+      Dockerfile: "FROM exemplo\n",
+      "Projeto X/LEIAME": "Leia antes.\n",
+      "Projeto X/.gitignore": "build/\n",
+      "site/pagina.vue": "<template></template>\n",
+      "dados.bin2": new Uint8Array([0x7f, 0x45, 0x00, 0x01]),
+      "pacote.zip": "PK texto",
+      "quadro.canvas": "{}",
+    });
+    const save = (p: string, before: string, after: string) => v.saveFile(p, after, versionOf(before)).then((r) => r.saved, (e) => (e as { code?: string }).code);
+    expect(await save("Dockerfile", "FROM exemplo\n", "FROM exemplo:2\n")).toBe(true);
+    expect(read(root, "Dockerfile")).toBe("FROM exemplo:2\n");
+    expect(await save("Projeto X/LEIAME", "Leia antes.\n", "Leia antes, Ana.\n")).toBe(true);
+    // O arquivo oculto segue fora do cofre, como na árvore.
+    expect(await save("Projeto X/.gitignore", "build/\n", "tmp/\n")).toBe("E_OUTSIDE_VAULT");
+    expect(await save("site/pagina.vue", "<template></template>\n", "<template><p>oi</p></template>\n")).toBe(true);
+    // O byte zero diz que é binário, mesmo com a versão certa.
+    expect(await v.saveFile("dados.bin2", "x", (await v.readFile("dados.bin2", "binary") as { version: string }).version).catch((e) => e.code)).toBe("E_BAD_ARGS");
+    expect(readFileSync(path.join(root, "dados.bin2")).equals(Buffer.from([0x7f, 0x45, 0x00, 0x01]))).toBe(true);
+    // Um tipo que nunca é texto, e o quadro branco (que tem a própria tela), seguem fora.
+    expect(await save("pacote.zip", "PK texto", "x")).toBe("E_BAD_ARGS");
+    expect(await save("quadro.canvas", "{}", "[]")).toBe("E_BAD_ARGS");
+  });
+
   test("pela capacidade `files.save` do contrato", async () => {
     const { v, root } = await vault({ "a.yaml": "a: 1\n" });
     const caps = uiCapabilities({

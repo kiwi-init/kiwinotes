@@ -4,12 +4,17 @@
 // A regra: conta as linhas que começam com tab e as que começam com espaço. Ganha o tab se for a maioria. Senão, o passo
 // é o aumento de recuo mais comum entre uma linha e a seguinte (de 2 a 8). Sem nada recuado, 4 no .py e 2 no resto.
 // As linhas de comentário de bloco (` * …`) ficam de fora: o espaço antes do `*` não é recuo.
+// Um Makefile é sempre tab (T19313): o make só roda a receita recuada com tab.
 
 export type Indent = { unit: string; tabSize: number };
+
+/** É um Makefile (`Makefile`, `GNUmakefile`, `regras.mk`): as receitas só rodam recuadas com tab. */
+export const isMakefile = (name: string): boolean => /^(gnu)?makefile$|\.mk$/.test((name.split("/").at(-1) ?? "").toLowerCase());
 
 const MAX_LINES = 2000;
 
 export function detectIndent(text: string, name = ""): Indent {
+  if (isMakefile(name)) return { unit: "\t", tabSize: 4 };
   const ext = /\.([a-z0-9]+)$/i.exec(name.split("/").at(-1) ?? "")?.[1]?.toLowerCase();
   const fallback = ext === "py" ? 4 : 2;
   let tabs = 0;
