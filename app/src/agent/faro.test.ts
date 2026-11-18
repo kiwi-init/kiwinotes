@@ -108,6 +108,30 @@ describe("as citações", () => {
       expect(aberto(sniff("escreve aqui na Lista de compras", idx, { openNote: csv }))).toBe("nota:Pessoal/Lista de compras.md");
     });
 
+    test("uma palavra solta que é o nome de uma nota não tira o aberto da frente (revisão do T19969)", () => {
+      const comuns = buildIndex({
+        notes: ["Pessoal/Total.md", "Pessoal/Resumo.md", "Pessoal/Tabela.md", "Pessoal/Coluna.md", "Projeto X/Linhas.md", "Pessoal/Lista de compras.md"].map(note),
+        folders: ["Pessoal", "Projeto X"],
+        projects: [],
+        meetings: [],
+      });
+      for (const pedido of [
+        "nesse csv, quantas linhas?",
+        "soma a coluna B dessa planilha",
+        "resume esse documento",
+        "nesse arquivo, faz um resumo",
+        "soma o total dessa planilha",
+        "nesse arquivo, monta uma tabela com nome e total",
+        "nessa planilha, qual o maior valor na coluna B?",
+        "nesse arquivo, quanto dá no total?",
+      ])
+        expect([pedido, aberto(sniff(pedido, comuns, { openNote: csv }))]).toEqual([pedido, `arquivo:${csv}`]);
+      // A citação forte vale: o nome inteiro, ou a palavra depois de "nota" ou "para o".
+      expect(aberto(sniff("copia esse arquivo para a Lista de compras", comuns, { openNote: csv }))).toBe("nota:Pessoal/Lista de compras.md");
+      expect(aberto(sniff("põe os totais desse arquivo na nota Resumo", comuns, { openNote: csv }))).toBe("nota:Pessoal/Resumo.md");
+      expect(aberto(sniff("copia esse arquivo para o Total", comuns, { openNote: csv }))).toBe("nota:Pessoal/Total.md");
+    });
+
     test("sem nada aberto, a frase pede a pergunta; o \"aqui\" sozinho não", () => {
       expect(sniff("nesse arquivo, monta uma tabela", idx)).toEqual({ kind: "nada", semAberto: true });
       expect(sniff("o que tá aberto?", idx)).toEqual({ kind: "nada", semAberto: true });

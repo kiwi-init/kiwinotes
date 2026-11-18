@@ -222,6 +222,23 @@ const POINT_MEETING = /\b(ultima|recente) reuniao\b|\breuniao (de ontem|de hoje|
 /** O `said` do alvo que veio do aberto nas Notas. */
 export const OPEN_SAID = "o aberto nas Notas";
 
+/**
+ * O que vem antes de uma palavra solta para ela ser o nome de um destino: "na nota Resumo", "para o Resumo". Um "na" ou
+ * "no" sozinho não basta: "o maior valor na coluna B" e "quanto dá no total" falam do aberto.
+ */
+const CITE_BEFORE = "(?:nota|pasta|projeto|pra|pro|para(?: a| o)?)";
+
+/**
+ * Uma citação forte o bastante para passar na frente do aberto (T19969): um nome de duas palavras ou mais, ou uma
+ * palavra logo depois de "nota", "pasta", "projeto", "para a" ou "pra". `text` é o pedido já no `plain`.
+ */
+function strongCitation(text: string, said: string): boolean {
+  const s = plain(said).trim();
+  if (s.split(/\s+/).length >= 2) return true;
+  const esc = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${CITE_BEFORE} ${esc}\\b`).test(text);
+}
+
 /** O alvo do aberto nas Notas: o do índice (nota, reunião), ou um arquivo pelo caminho. `.md` e `.txt` são notas. */
 function openTarget(idx: FaroIndex, path: string): FaroTarget {
   const known = idx.targets.find((x) => x.path === path && x.kind !== "pasta" && x.kind !== "projeto");
@@ -303,10 +320,11 @@ export function sniff(request: string, idx: FaroIndex, ctx: { openNote?: string 
   const hits = all
     .filter((h) => h.how === "apontado" || h.how === "trilha" || !all.some((o) => o !== h && o.score > h.score && plain(o.said).includes(plain(h.said)) && plain(o.said) !== plain(h.said)))
     .sort((a, b) => b.score - a.score);
-  // O aberto vale, a não ser que a pessoa cite outro alvo pelo nome ("aqui na nota Compras"): aí vale o citado, e o
-  // aberto fica abaixo dele.
+  // O aberto vale, a não ser que a pessoa cite outro alvo pelo nome com força ("aqui na Lista de compras"): aí vale o
+  // citado, e o aberto fica abaixo dele. Uma palavra solta que também é o nome de uma nota ("resumo", "total",
+  // "linhas") não tira o aberto da frente: ele fica com o placar 2, acima dela (revisão do T19969).
   if (open && !byTarget.has(open)) {
-    const cited = hits.some((h) => (h.how === "nome" || h.how === "som") && h.target.path !== open.path);
+    const cited = hits.some((h) => (h.how === "nome" || h.how === "som") && h.target.path !== open.path && strongCitation(text, h.said));
     hits.push({ target: open, said: OPEN_SAID, score: cited ? 0 : 2, how: "apontado" });
     hits.sort((a, b) => b.score - a.score);
   }
