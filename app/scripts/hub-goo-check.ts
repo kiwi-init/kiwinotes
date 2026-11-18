@@ -11,8 +11,18 @@
 // E "reduzir movimento", o do Mac (`prefers-reduced-motion`) e o do Kiwi (`data-motion="reduced"`): sem gota, os
 // botões só fazem o fade (OUT/reduzir-mac, OUT/reduzir-kiwi).
 //
-// Confere: as fases (entering → shown, leaving → hidden), a duração (350–500 ms), a gota longe da pílula no meio da
-// ida e no lugar dos botões no fim, e o texto e os ícones fora de filtro e por cima da gota em todos os quadros.
+// Confere: as fases (entering → shown, leaving → hidden), a duração (350–500 ms), a gota no lugar dos botões no fim da
+// ida, e o texto e os ícones fora da camada e por cima da gota em todos os quadros.
+//
+// A forma e o rastro, nos pixels (T18950, harry #18945), sem depender de como a gota é desenhada: em cada quadro sai
+// também um print só da camada `.kn-goo`, preta no branco, e um laboratório (uma página em branco) conta os pixels.
+// - Forma: coluna a coluna, na faixa entre a pílula e a borda da janela de cada lado, a altura da gota
+//   (`goo-profile.ts`). A ida tem que passar por um quadro com pescoço (ligação < 30% da altura da gota) e por um com a
+//   gota solta; no fim da volta, nada fora da pílula. Um deslizar de pílula não passa.
+// - Rastro: fora da gota (com folga para a borda e a sombra) e dos botões, a faixa tem que ser igual à barra parada
+//   em Ajustes, em cada quadro e depois de cada volta em tempo real.
+// - A tira (OUT/<tema>/<ida|volta>/lado-*/): o recorte de cada lado por quadro, que o `goo-strip.ts` junta para
+//   comparar com a referência.
 // Sem um headless de pé, sobe o seu (`cli start --no-helper`) e o derruba no fim, passe ou falhe. Sem OUT, os prints
 // vão para uma pasta nova do tmp, que fica (a saída diz onde).
 import assert from "node:assert/strict";
@@ -20,10 +30,11 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { webkit, type Page } from "playwright-core";
+import { webkit, type Browser, type Page } from "playwright-core";
 
 import { SLOW_FRAME_MS, WATCH_MS } from "../ui/src/slowFrames.ts";
 import { request } from "./cli.ts";
+import { dripProblem, dropShape, type DropShape } from "./goo-profile.ts";
 import { openWindow, settle, type UiContext } from "./ui-page.ts";
 
 const [outArg] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -31,9 +42,22 @@ const out = resolve(outArg ?? mkdtempSync(join(tmpdir(), "kn-hub-goo-out-")));
 const data = mkdtempSync(join(tmpdir(), "kn-hub-goo-"));
 mkdirSync(out, { recursive: true });
 
-/** Os tempos de cada quadro, em fração da animação: os do goo-shape.ts (barriga até 20%, pescoço até 46%, a beira volta
- *  reta até 68%, a gota corre até o fim) e os do meio deles. */
-const FRAMES = [0, 0.07, 0.14, 0.2, 0.28, 0.36, 0.43, 0.5, 0.58, 0.68, 0.8, 0.9, 1];
+/** Os tempos de cada quadro, em fração da animação: 12, como os quadros da referência do harry. */
+const FRAMES = Array.from({ length: 12 }, (_, i) => i / 11);
+/** Um pixel do rastro: um canal com mais que isto de diferença da barra parada. */
+const TRAIL_DIFF = 32;
+/**
+ * O piso da borda (#19034), com a medida do `analyze`; os botões das Notas não servem de régua no escuro (~4).
+ * - A pílula parada na main antes da Gota 2 (b3f76782), com a janela já de pé: 57 e 27,8, igual em duas rodadas
+ *   (T19175). A pílula não fica abaixo de 90% disto.
+ * - A gota, em cada quadro, não fica abaixo de `DROP_RING` (o mesmo número da rodada 1: 80% da pílula medida então,
+ *   39 e 21). Na main, a gota do claro dava 33 e a do escuro ~14: a mancha sem borda do #18974, que não passa.
+ */
+const PILL_RING = { light: 57, dark: 27.8 };
+const PILL_MIN = 0.9;
+const DROP_RING = { light: 31.2, dark: 16.8 };
+/** No 1º quadro depois do clique da volta (9%), os botões ainda com esta fração do conteúdo de antes (#18974). */
+const BUTTONS_EARLY = 0.3;
 const MIN_MS = 350;
 const MAX_MS = 500;
 /** Idas e voltas em tempo real, por tema. */
@@ -50,7 +74,12 @@ const ctx: UiContext = {
 };
 
 type Box = { x: number; y: number; w: number; h: number };
-type Frame = { t: number; start: Box; end: Box; tabs: Box };
+type Side = "start" | "end";
+type Frame = {
+  t: number; start: Box | null; end: Box | null; shape: Record<Side, DropShape>; cols: Record<Side, number[]>;
+  trail: { count: number; at: number[][] }; ring: { start: number | null; end: number | null; pill: number | null; buttons: number | null };
+};
+const SIDES: Side[] = ["start", "end"];
 
 /** As fases dos dois lados e dos slots. */
 const phases = (p: Page) => p.evaluate(() => {
@@ -94,7 +123,8 @@ const crisp = (p: Page) => p.evaluate(() => {
     if (hit && !el.contains(hit) && !hit.contains(el)) problems.push(`${name}: coberto por ${hit.className}`);
   }
   see.remove();
-  // A gota é desenhada (T18948): caminhos SVG, sem filtro e sem texto dentro.
+  // A gota é desenhada (T18948): caminhos SVG, sem filtro e sem texto dentro. A cópia dos botões na volta (T18949)
+  // mora na camada de propósito, nítida, fora do desenho.
   const draw = document.querySelector<SVGElement>(".kn-goo-draw");
   if (!draw) problems.push("sem .kn-goo-draw");
   else {
@@ -114,23 +144,32 @@ const clickAndPause = (p: Page, section: string) => p.evaluate(async (s) => {
     (ms ?? 0) >= 900 ? orig(() => {}, 0) : orig(fn, ms, ...a)) as typeof setTimeout;
   document.querySelector<HTMLElement>(`.kn-tab[data-section="${s}"]`)!.click();
   const bar = document.querySelector(".kn-hub-top")!;
+  // A gota anda por um relógio WAAPI (`.kn-goo-clock[data-side]`, T18948) ou por @keyframes `kn-goo-in|out-*`; os
+  // botões, pelo `kn-goo-buttons-in`. Tudo o que for da gota na barra para junto.
+  const target = (a: Animation) => (a.effect as KeyframeEffect | null)?.target;
+  const name = (a: Animation) => (a as CSSAnimation).animationName ?? "";
+  const side = (a: Animation) => {
+    const t = target(a) as HTMLElement;
+    if (t.matches(".kn-goo-clock")) return t.dataset.side ?? "?";
+    return /^kn-goo-(in|out)-(start|end)$/.exec(name(a))?.[2] ?? null;
+  };
   const mine = () => document.getAnimations().filter((a) => {
-    const t = (a.effect as KeyframeEffect | null)?.target;
-    return t instanceof Element && bar.contains(t) && (a as CSSAnimation).animationName?.startsWith("kn-goo");
+    const t = target(a);
+    return t instanceof Element && bar.contains(t) && (t.matches(".kn-goo-clock") || name(a).startsWith("kn-goo"));
   });
   const deadline = performance.now() + 2000;
   let list = mine();
-  while (list.filter((a) => (a as CSSAnimation).animationName.includes("-in-") || (a as CSSAnimation).animationName.includes("-out-")).length < 2) {
-    if (performance.now() > deadline) throw new Error(`as gotas não começaram: ${list.map((a) => (a as CSSAnimation).animationName)}`);
+  while (list.filter(side).length < 2) {
+    if (performance.now() > deadline) throw new Error(`as gotas não começaram: ${list.map(name)}`);
     await new Promise((r) => requestAnimationFrame(r));
     list = mine();
   }
   for (const a of list) a.pause();
   (window as unknown as { __goo: Animation[] }).__goo = list;
-  return list.map((a) => ({ name: (a as CSSAnimation).animationName, ms: Number(a.effect!.getComputedTiming().duration) }));
+  return list.map((a) => ({ name: name(a) || "relógio", side: side(a), ms: Number(a.effect!.getComputedTiming().duration) }));
 }, section);
 
-/** Põe as animações paradas na fração `f` e mede a gota (a parte que vira os botões) e a pílula. */
+/** Põe as animações paradas na fração `f`. */
 const seek = (p: Page, f: number) => p.evaluate(async (frac) => {
   for (const a of (window as unknown as { __goo: Animation[] }).__goo) {
     const ms = Number(a.effect!.getComputedTiming().duration);
@@ -138,16 +177,27 @@ const seek = (p: Page, f: number) => p.evaluate(async (frac) => {
     // movimento", o base.css corta as animações para 0,01 ms: o "um pouco" é proporcional.
     a.currentTime = Math.min(frac * ms, ms * 0.999);
   }
-  // A gota se desenha no próximo quadro.
-  for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(r));
-  const bar = document.querySelector(".kn-hub-top")!.getBoundingClientRect();
-  const box = (el: Element): { x: number; y: number; w: number; h: number } => {
-    const r = el.getBoundingClientRect();
-    return { x: r.x - bar.x, y: r.y - bar.y, w: r.width, h: r.height };
-  };
-  const head = (s: string) => document.querySelector(`.kn-goo-path[data-side="${s}"][data-part="head"]`)!;
-  return { t: frac, start: box(head("start")), end: box(head("end")), tabs: box(document.querySelector(".kn-tabs")!) };
+  // Dois quadros: o caminho da gota é reescrito num rAF a partir do relógio (T18948).
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 }, f);
+
+/** O retângulo da gota de cada lado (a soma das partes `.kn-goo-path` desenhadas, ou a `.kn-goo-drop`), na barra. */
+const dropBoxes = (p: Page) => p.evaluate(() => {
+  const bar = document.querySelector(".kn-hub-top")!.getBoundingClientRect();
+  const box = (s: string) => {
+    const parts = Array.from(document.querySelectorAll(`.kn-goo-path[data-side="${s}"]`))
+      .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    if (parts.length === 0) {
+      const drop = document.querySelector(`.kn-goo-drop[data-side="${s}"]`);
+      if (drop) parts.push(drop.getBoundingClientRect());
+    }
+    if (parts.length === 0) return null;
+    const x = Math.min(...parts.map((r) => r.left)), y = Math.min(...parts.map((r) => r.top));
+    const w = Math.max(...parts.map((r) => r.right)) - x, h = Math.max(...parts.map((r) => r.bottom)) - y;
+    return { x: x - bar.x, y: y - bar.y, w, h };
+  };
+  return { start: box("start"), end: box("end") };
+});
 
 /** Solta as animações e a reserva de 900 ms. */
 const release = (p: Page) => p.evaluate(() => {
@@ -165,39 +215,247 @@ const slotBox = (p: Page, side: "start" | "end") => p.evaluate((s) => {
   return { x: l - bar.x, y: t - bar.y, w: r - l, h: b - t };
 }, side);
 
+/**
+ * O `settle` e mais a entrada da janela: o `window-in` do Hub (480 ms de escala e o fade) ainda corre quando ele volta,
+ * e um print no meio dela pega a pílula um pouco menor e mais clara, num ponto diferente a cada rodada (T19175: a
+ * borda clara dava 55 numa e 37 noutra). Espera todas as animações finitas acabarem.
+ */
+const ready = async (p: Page) => {
+  await settle(p);
+  await p.evaluate(() => Promise.all(document.getAnimations()
+    .filter((a) => Number.isFinite(Number(a.effect?.getComputedTiming().endTime)))
+    .map((a) => a.finished)));
+};
+
+/** Os pixels de tela por px CSS da página (a escala dos prints). */
+const dpr = async (p: Page) => (await p.evaluate(() => devicePixelRatio)) || 1;
+
 const near = (a: Box, b: Box, tol = 1.5) =>
   Math.abs(a.x - b.x) <= tol && Math.abs(a.y - b.y) <= tol && Math.abs(a.w - b.w) <= tol && Math.abs(a.h - b.h) <= tol;
 
-const shot = async (p: Page, file: string) => {
+/** O print da barra (com 8 px abaixo, para a sombra); com `file`, também salvo. */
+const shot = async (p: Page, file?: string) => {
   const bar = await p.locator(".kn-hub-top").boundingBox();
   assert.ok(bar, "a barra do Hub não está na tela");
-  await p.screenshot({ path: file, clip: { x: 0, y: bar.y, width: p.viewportSize()!.width, height: bar.height + 8 } });
+  return p.screenshot({ path: file, clip: { x: 0, y: bar.y, width: p.viewportSize()!.width, height: bar.height + 8 } });
 };
 
-/** Uma ida ou uma volta, quadro a quadro. */
-async function frames(p: Page, dir: string, section: string, kind: "in" | "out") {
-  mkdirSync(dir, { recursive: true });
+/** O mesmo recorte, só com a camada da gota: tudo o mais escondido, e a gota preta (com a borda e a sombra) no branco. */
+const maskShot = async (p: Page) => {
+  await p.evaluate(() => {
+    const st = document.createElement("style");
+    st.id = "kn-goo-mask";
+    // Só o que está fora da camada some: dentro dela, o que a gota esconde (o relógio, uma parte fora de uso) fica escondido.
+    st.textContent = `body *:not(.kn-goo):not(.kn-goo *) { visibility: hidden !important; }
+      .kn-goo { visibility: visible !important; }
+      .kn-goo { filter: brightness(0) !important; }
+      html, body { background: #fff !important; }`;
+    document.head.append(st);
+  });
+  try {
+    return await shot(p);
+  } finally {
+    await p.evaluate(() => document.getElementById("kn-goo-mask")?.remove());
+  }
+};
+
+/** Onde olhar, no recorte (px CSS): as faixas dos dois lados da pílula e os botões, que não são rastro. */
+const geometry = (p: Page) => p.evaluate(() => {
+  const bar = document.querySelector(".kn-hub-top")!.getBoundingClientRect();
+  const rel = (r: DOMRect) => ({ x: r.x, y: r.y - bar.y, w: r.width, h: r.height });
+  const tabs = rel(document.querySelector(".kn-tabs")!.getBoundingClientRect());
+  const buttons = Array.from(document.querySelectorAll(".kn-hub-slot > *")).map((c) => rel(c.getBoundingClientRect()));
+  return { tabs, buttons, width: innerWidth };
+});
+type Geometry = Awaited<ReturnType<typeof geometry>>;
+
+/**
+ * O laboratório: numa página em branco (sem a CSP do app), lê os prints num canvas e devolve, por lado, a altura da gota
+ * em cada coluna (a partir da pílula), os pixels de rastro e o recorte do lado para a tira.
+ */
+async function analyze(lab: Page, scale: number, geo: Geometry, rest: Buffer, cur: Buffer, mask: Buffer | null, content: Box[] = []) {
+  return lab.evaluate(async ({ scale, geo, rest, cur, mask, diff, content }) => {
+    const load = async (b64: string) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext("2d", { willReadFrequently: true })!;
+      g.drawImage(img, 0, 0);
+      return { w: img.width, h: img.height, d: g.getImageData(0, 0, img.width, img.height).data, c };
+    };
+    const R = await load(rest);
+    const C = await load(cur);
+    const M = mask ? await load(mask) : null;
+    const W = C.w, H = C.h;
+    const lum = (d: Uint8ClampedArray, i: number) => d[i]! * 0.3 + d[i + 1]! * 0.59 + d[i + 2]! * 0.11;
+    const px = (v: number) => Math.round(v * scale);
+    const left = px(geo.tabs.x), right = Math.min(W, px(geo.tabs.x + geo.tabs.w));
+
+    // A forma: pixels da camada com mais da metade de tinta.
+    const profile = (x0: number, x1: number) => {
+      const cols: number[] = [];
+      for (let x = x0; x < x1; x++) {
+        let n = 0;
+        if (M) for (let y = 0; y < H; y++) if (lum(M.d, (y * W + x) * 4) < 128) n++;
+        cols.push(n);
+      }
+      return cols;
+    };
+    // A borda da própria pílula (a base da gota) passa 1 px do `.kn-tabs`: as faixas começam 2 px depois dela.
+    const edge = px(2);
+    const start = profile(0, Math.max(0, left - edge)).reverse();
+    const end = profile(Math.min(W, right + edge), W);
+
+    // O rastro: a faixa difere da barra parada fora da gota (com 3 px de folga) e dos botões (com 12 px, a sombra).
+    const covered = new Uint8Array(W * H);
+    if (M) {
+      const r = px(3);
+      const ink = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++) ink[i] = lum(M.d, i * 4) < 250 ? 1 : 0;
+      const tmp = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        let on = 0;
+        for (let k = Math.max(0, x - r); k <= Math.min(W - 1, x + r) && !on; k++) on = ink[y * W + k]!;
+        tmp[y * W + x] = on;
+      }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        let on = 0;
+        for (let k = Math.max(0, y - r); k <= Math.min(H - 1, y + r) && !on; k++) on = tmp[k * W + x]!;
+        covered[y * W + x] = on;
+      }
+    }
+    const pad = 12;
+    const inButton = (x: number, y: number) => geo.buttons.some((b) =>
+      x >= px(b.x - pad) && x < px(b.x + b.w + pad) && y >= px(b.y - pad) && y < px(b.y + b.h + pad));
+    let count = 0;
+    const at: number[][] = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (x >= left - edge && x < right + edge) continue;
+      const i = y * W + x;
+      if (covered[i] || inButton(x, y)) continue;
+      const o = i * 4;
+      const d = Math.max(Math.abs(C.d[o]! - R.d[o]!), Math.abs(C.d[o + 1]! - R.d[o + 1]!), Math.abs(C.d[o + 2]! - R.d[o + 2]!));
+      if (d > diff) {
+        count++;
+        if (at.length < 5) at.push([Math.round(x / scale), Math.round(y / scale)]);
+      }
+    }
+
+    // A tira: cada lado, com 60 px da pílula.
+    const crop = (x0: number, x1: number) => {
+      const c = document.createElement("canvas");
+      c.width = x1 - x0;
+      c.height = H;
+      c.getContext("2d")!.drawImage(C.c, x0, 0, x1 - x0, H, 0, 0, x1 - x0, H);
+      return c.toDataURL("image/png").split(",")[1]!;
+    };
+    // A borda (T18950, #18974, #19034): a mesma medida na gota, na pílula e nos botões. Linha a linha no meio da forma,
+    // o maior contraste contra o fundo numa janela de 2 px para cada lado da beira de fora, menos o contraste do recheio
+    // (5 px para dentro): o quanto a borda se destaca do fundo além do próprio recheio. Sem borda dá ~0, mesmo no OLED
+    // Black, onde o `--float` já difere do `#000`. Fica a mediana das linhas.
+    const median = (v: number[]) => (v.length ? v.sort((a, b) => a - b)[Math.floor(v.length / 2)]! : null);
+    const band = px(2);
+    const L = (img: typeof C, x: number, y: number) => lum(img.d, (y * W + Math.max(0, Math.min(W - 1, x))) * 4);
+    const contrast = (img: typeof C, bg: (x: number, y: number) => number, x0: number, y: number, inward: number) => {
+      let best = 0;
+      for (let x = Math.max(0, x0 - band); x <= Math.min(W - 1, x0 + band); x++) best = Math.max(best, Math.abs(L(img, x, y) - bg(x, y)));
+      const xf = x0 + inward * px(5);
+      return best - Math.abs(L(img, xf, y) - bg(xf, y));
+    };
+    /** A borda da esquerda de uma caixa (px CSS na barra) em `img`, contra o fundo 6 px fora dela. */
+    const boxRing = (img: typeof C, b: { x: number; y: number; w: number; h: number }) => {
+      const x0 = px(b.x), y0 = px(b.y), y1 = px(b.y + b.h);
+      const rows: number[] = [];
+      for (let y = y0 + Math.floor((y1 - y0) / 4); y < y1 - Math.floor((y1 - y0) / 4); y++) {
+        if (y < 0 || y >= H) continue;
+        const bg = L(img, x0 - px(6), y);
+        rows.push(contrast(img, () => bg, x0, y, 1));
+      }
+      return median(rows);
+    };
+    const ring = (side: "start" | "end") => {
+      if (!M) return null;
+      const outer: [number, number][] = [];
+      for (let y = 0; y < H; y++) {
+        let x0 = -1;
+        if (side === "end") { for (let x = W - 1; x >= right + edge; x--) if (lum(M.d, (y * W + x) * 4) < 128) { x0 = x; break; } }
+        else for (let x = 0; x < left - edge; x++) if (lum(M.d, (y * W + x) * 4) < 128) { x0 = x; break; }
+        // Debaixo de um botão a beira não aparece (ele cobre a gota): a linha não conta.
+        const under = geo.buttons.some((b) => x0 >= px(b.x - 2) && x0 < px(b.x + b.w + 2) && y >= px(b.y - 2) && y < px(b.y + b.h + 2));
+        if (x0 >= 0 && !under) outer.push([y, x0]);
+      }
+      if (outer.length < px(6)) return null;
+      const mid = outer.slice(Math.floor(outer.length / 4), Math.ceil(outer.length * 3 / 4));
+      return median(mid.map(([y, x0]) => contrast(C, (x, yy) => L(R, x, yy), x0, y, side === "end" ? -1 : 1)));
+    };
+    const buttonRings = geo.buttons.map((b) => boxRing(C, b)).filter((v): v is number => v !== null);
+    // O conteúdo dos botões: pixels bem diferentes da barra parada, dentro das caixas (6 px para dentro, sem a borda).
+    let ink = 0;
+    for (const b of content) {
+      for (let y = px(b.y + 6); y < px(b.y + b.h - 6); y++) for (let x = px(b.x + 6); x < px(b.x + b.w - 6); x++) {
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        const d = Math.abs(lum(C.d, (y * W + x) * 4) - lum(R.d, (y * W + x) * 4));
+        if (d > 40) ink += d;
+      }
+    }
+    return {
+      start, end, trail: { count, at }, ring: { start: ring("start"), end: ring("end"), pill: boxRing(R, geo.tabs), buttons: median(buttonRings) }, ink,
+      crops: { start: crop(0, Math.min(W, left + px(60))), end: crop(Math.max(0, right - px(60)), W) },
+    };
+  }, {
+    scale, geo, diff: TRAIL_DIFF, content,
+    rest: rest.toString("base64"), cur: cur.toString("base64"), mask: mask ? mask.toString("base64") : null,
+  });
+}
+
+/** Uma ida ou uma volta, quadro a quadro; `rest` é o print da barra parada em Ajustes, na mesma escala. */
+async function frames(p: Page, lab: Page, rest: Buffer, dir: string, section: string, kind: "in" | "out") {
+  for (const sub of ["lado-inicio", "lado-fim", "mascara"]) mkdirSync(join(dir, sub), { recursive: true });
+  const scale = await dpr(p);
+  // Na volta, o conteúdo dos botões antes do clique, para ver se eles somem de cara.
+  const before = kind === "out" ? await geometry(p) : null;
+  const shownInk = before ? (await analyze(lab, scale, before, rest, await shot(p), null, before.buttons)).ink : 0;
   const anims = await clickAndPause(p, section);
-  const drops = anims.filter((a) => a.name.startsWith(`kn-goo-${kind}-`));
-  assert.deepEqual(drops.map((a) => a.name).sort(), [`kn-goo-${kind}-end`, `kn-goo-${kind}-start`], JSON.stringify(anims));
-  for (const a of drops) assert.ok(a.ms >= MIN_MS && a.ms <= MAX_MS, `${a.name} tem ${a.ms} ms, fora de ${MIN_MS}–${MAX_MS}`);
+  const drops = anims.filter((a) => a.side);
+  assert.deepEqual(drops.map((a) => a.side).sort(), ["end", "start"], JSON.stringify(anims));
+  for (const a of drops) assert.ok(a.ms >= MIN_MS && a.ms <= MAX_MS, `${a.name} (${a.side}) tem ${a.ms} ms, fora de ${MIN_MS}–${MAX_MS}`);
   const want = kind === "in" ? "entering" : "leaving";
   const ph = await phases(p);
   assert.equal(ph.start, want, JSON.stringify(ph));
   assert.equal(ph.end, want, JSON.stringify(ph));
   const list: Frame[] = [];
   const problems: string[] = [];
+  const trail: string[] = [];
+  const inks: { t: number; ink: number }[] = [];
   for (const [i, f] of FRAMES.entries()) {
-    const fr = await seek(p, f);
-    list.push(fr);
+    const label = `${String(i).padStart(2, "0")}-${String(Math.round(f * 100)).padStart(3, "0")}`;
+    await seek(p, f);
     const c = await crisp(p);
     problems.push(...c.problems.map((m) => `${Math.round(f * 100)}%: ${m}`));
-    await shot(p, join(dir, `${String(i).padStart(2, "0")}-${String(Math.round(f * 100)).padStart(3, "0")}.png`));
+    const cur = await shot(p, join(dir, `${label}.png`));
+    const mask = await maskShot(p);
+    writeFileSync(join(dir, "mascara", `${label}.png`), mask);
+    const a = await analyze(lab, scale, await geometry(p), rest, cur, mask, before?.buttons);
+    if (before) inks.push({ t: f, ink: a.ink });
+    writeFileSync(join(dir, "lado-inicio", `${label}.png`), Buffer.from(a.crops.start, "base64"));
+    writeFileSync(join(dir, "lado-fim", `${label}.png`), Buffer.from(a.crops.end, "base64"));
+    if (a.trail.count > 0) trail.push(`${Math.round(f * 100)}%: ${a.trail.count} px fora da gota, em ${JSON.stringify(a.trail.at)}`);
+    const boxes = await dropBoxes(p);
+    list.push({ t: f, ...boxes, shape: { start: dropShape(a.start), end: dropShape(a.end) }, cols: { start: a.start, end: a.end }, trail: a.trail, ring: a.ring });
   }
   assert.deepEqual(problems, [], `texto ou ícone fora do lugar durante a ${kind === "in" ? "ida" : "volta"}`);
+  if (before) {
+    const early = inks.find((i) => i.t > 0 && i.t < 0.25)!;
+    assert.ok(early.ink >= BUTTONS_EARLY * shownInk,
+      `os botões somem de cara na volta: em ${Math.round(early.t * 100)}% sobra ${(early.ink / Math.max(1, shownInk) * 100).toFixed(0)}% do conteúdo (mínimo ${BUTTONS_EARLY * 100}%): ${JSON.stringify({ shownInk, inks })}`);
+  }
+  assert.deepEqual(trail, [], `rastro durante a ${kind === "in" ? "ida" : "volta"} (a faixa diferente da barra parada, fora da gota)`);
   await release(p);
   await waitPhase(p, kind === "in" ? "shown" : "hidden");
-  return { anims, frames: list };
+  return { anims, frames: list, shownInk, inks };
 }
 
 /** O maior intervalo entre quadros do clique até WATCH_MS depois, com o clique de verdade do Playwright. */
@@ -280,7 +538,8 @@ if (up.status !== 0) {
   cleanup();
   throw new Error(`o headless não subiu em ${data}:\n${up.stdout}${up.stderr}`);
 }
-const browser = await webkit.launch();
+const browser: Browser = await webkit.launch();
+const lab = await browser.newPage();
 const metrics: Record<string, unknown> = {};
 try {
   const base = { window: "hub" as const, width: 1000, height: 640, browser: "webkit" as const, query: { section: "settings" } };
@@ -288,26 +547,42 @@ try {
     // 1. Quadro a quadro.
     const w = await openWindow(browser, ctx, { ...base, scale: 2, theme, motion: true });
     try {
-      await settle(w.page);
+      await ready(w.page);
       const first = await phases(w.page);
       assert.deepEqual([first.start, first.end], ["hidden", "hidden"], `Ajustes abriu com botões na barra: ${JSON.stringify(first)}`);
-      const ida = await frames(w.page, join(out, theme, "ida"), "notes", "in");
-      const mid = ida.frames.find((f) => f.t === 0.5)!;
-      // No meio da ida, a gota já se soltou da pílula (goo-shape.ts: o pescoço parte em 46%).
-      assert.ok(mid.start.w > 0 && mid.start.x + mid.start.w < mid.tabs.x - 4, `no meio da ida a gota da esquerda ainda está presa à pílula: ${JSON.stringify(mid)}`);
-      assert.ok(mid.end.w > 0 && mid.end.x > mid.tabs.x + mid.tabs.w + 4, `no meio da ida a gota da direita ainda está presa à pílula: ${JSON.stringify(mid)}`);
+      const rest = await shot(w.page, join(out, theme, "parada.png"));
+      const ida = await frames(w.page, lab, rest, join(out, theme, "ida"), "notes", "in");
+      for (const side of SIDES) {
+        const why = dripProblem(ida.frames.map((f) => f.shape[side]));
+        assert.equal(why, null, `a ida do lado ${side} não pinga como gota: ${why} (${JSON.stringify(ida.frames.map((f) => f.shape[side]))})`);
+      }
       const shown = await phases(w.page);
       assert.deepEqual([shown.slotStart, shown.slotEnd], ["shown", "shown"], JSON.stringify(shown));
       assert.ok(shown.buttons.start > 0 && shown.buttons.end > 0, `as Notas não puseram botões dos dois lados: ${JSON.stringify(shown)}`);
+      const shownGeo = await geometry(w.page);
+      const buttonsRing = (await analyze(lab, await dpr(w.page), shownGeo, rest, await shot(w.page, join(out, theme, "notas.png")), null)).ring.buttons;
       const last = ida.frames.at(-1)!;
-      for (const side of ["start", "end"] as const) {
+      for (const side of SIDES) {
         const b = await slotBox(w.page, side);
-        assert.ok(near(last[side], b), `a gota da ${side} não assenta nos botões: gota ${JSON.stringify(last[side])}, botões ${JSON.stringify(b)}`);
+        const d = last[side];
+        assert.ok(d && near(d, b, 2), `a gota da ${side} não assenta nos botões: gota ${JSON.stringify(d)}, botões ${JSON.stringify(b)}`);
       }
-      const volta = await frames(w.page, join(out, theme, "volta"), "settings", "out");
+      const volta = await frames(w.page, lab, rest, join(out, theme, "volta"), "settings", "out");
       const back = volta.frames.at(-1)!;
-      assert.ok(back.start.x >= back.tabs.x - 1 && back.end.x + back.end.w <= back.tabs.x + back.tabs.w + 1,
-        `no fim da volta a gota não está dentro da pílula: ${JSON.stringify(back)}`);
+      const pillRing = ida.frames[0]!.ring.pill;
+      const weak = [...ida.frames.map((f) => ["ida", f] as const), ...volta.frames.map((f) => ["volta", f] as const)].flatMap(([dir, f]) =>
+        SIDES.flatMap((side) => {
+          const r = f.ring[side];
+          return r !== null && r < DROP_RING[theme] ? [`${dir} ${Math.round(f.t * 100)}% ${side}: ${r.toFixed(0)}`] : [];
+        }));
+      metrics[`${theme}.borda`] = { buttons: buttonsRing, pill: pillRing, drop: weak };
+      console.log(`borda ${theme}: botões ${buttonsRing}, pílula ${pillRing}, gota ${JSON.stringify(ida.frames.concat(volta.frames).map((f) => [f.ring.start, f.ring.end]))}`);
+      assert.ok(pillRing !== null && pillRing >= PILL_MIN * PILL_RING[theme],
+        `a borda da pílula parada (${theme}) ficou em ${pillRing?.toFixed(0)}, abaixo da main (${PILL_RING[theme]}, mínimo ${PILL_MIN * 100}%)`);
+      assert.deepEqual(weak, [], `a borda da gota some no fundo (${theme}: mínimo ${DROP_RING[theme]})`);
+      for (const side of SIDES) {
+        assert.equal(back.shape[side].kind, "none", `no fim da volta sobra gota fora da pílula do lado ${side}: ${JSON.stringify(back.shape[side])}, colunas ${back.cols[side].slice(0, 40)}`);
+      }
       assert.deepEqual(w.report.problems, [], "erros na página");
       metrics[`${theme}.quadros`] = { ida, volta };
     } finally {
@@ -317,7 +592,10 @@ try {
     // 2. Tempo real, com vídeo.
     const v = await openWindow(browser, ctx, { ...base, scale: 1, theme, motion: true, video: join(out, theme, "video") });
     try {
-      await settle(v.page);
+      await ready(v.page);
+      const restV = await shot(v.page);
+      const trails: string[] = [];
+      let rounds = 0;
       // A máquina é dividida: com outro agente rodando, um quadro passou de 100 ms uma vez em três rodadas (load 24).
       // Uma rodada lenta é repetida uma vez; a gota só reprova se a repetição também for lenta.
       const reports = () => v.report.invokes["diagnostics.slowFrame"] ?? 0;
@@ -327,6 +605,10 @@ try {
         await waitPhase(v.page, "shown");
         const volta = await realtime(v.page, "settings");
         await waitPhase(v.page, "hidden");
+        // Depois da volta em tempo real, a barra é a de antes: nenhum resto de pintura do caminho da gota.
+        const after = await shot(v.page, join(out, theme, `depois-da-volta-${++rounds}.png`));
+        const a = await analyze(lab, await dpr(v.page), await geometry(v.page), restV, after, null);
+        if (a.trail.count > 0) trails.push(`${a.trail.count} px em ${JSON.stringify(a.trail.at)}`);
         return { ida, volta, slowFrameReports: reports() - before };
       };
       const slow = (r: Awaited<ReturnType<typeof round>>) => r.ida >= SLOW_FRAME_MS || r.volta >= SLOW_FRAME_MS || r.slowFrameReports > 0;
@@ -348,6 +630,7 @@ try {
       // No CI, a VM do GitHub não dá um relógio de quadros confiável: o tempo sai no log, e quem barra é a máquina local.
       if (why && process.env.CI) console.log(`aviso (CI, não barra): ${why}`);
       else assert.equal(why, null, why ?? "");
+      assert.deepEqual(trails, [], "rastro na barra depois da volta em tempo real");
       assert.deepEqual(v.report.problems, [], "erros na página");
     } finally {
       await v.close();
@@ -357,14 +640,14 @@ try {
   // 3. Reduzir movimento: o do Mac e o do Kiwi.
   const mac = await openWindow(browser, ctx, { ...base, scale: 2, theme: "light", motion: false });
   try {
-    await settle(mac.page);
+    await ready(mac.page);
     metrics["reduzir-mac"] = await reduced(mac.page, join(out, "reduzir-mac"));
   } finally {
     await mac.close();
   }
   const kiwi = await openWindow(browser, ctx, { ...base, scale: 2, theme: "light", motion: true });
   try {
-    await settle(kiwi.page);
+    await ready(kiwi.page);
     await kiwi.page.evaluate(() => {
       document.documentElement.dataset.motion = "reduced";
     });
@@ -375,7 +658,7 @@ try {
   writeFileSync(join(out, "metrics.json"), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const theme of ["light", "dark"]) {
     const t = metrics[`${theme}.tempoReal`] as { worst: number };
-    console.log(`ok ${theme}: ida e volta quadro a quadro; pior quadro em tempo real ${t.worst.toFixed(1)} ms (meta ${SLOW_FRAME_MS})`);
+    console.log(`ok ${theme}: ida e volta quadro a quadro, com pescoço, gota solta e sem rastro; pior quadro em tempo real ${t.worst.toFixed(1)} ms (meta ${SLOW_FRAME_MS})`);
   }
   console.log("ok reduzir movimento (Mac e Kiwi): sem gota; os botões entram com o fade, que o base.css corta para 0,01 ms");
   console.log(`quadros, vídeos e metrics.json em ${out}`);
