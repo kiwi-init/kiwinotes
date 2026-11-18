@@ -10,6 +10,14 @@
       }
     },
     {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Outra nota",
+        "content": "# Outra nota\n\nTexto da outra.\n"
+      },
+      "name": "uma segunda nota, para a paleta abrir no fim"
+    },
+    {
       "waitFor": ".kn-crumb-bt"
     },
     {
@@ -370,6 +378,63 @@
     {
       "waitFor": ".cm-md-table",
       "name": "o cursor sai e a tabela volta"
+    },
+    {
+      "click": ".cm-md-table td:has-text('Ana')",
+      "name": "abre a célula Ana"
+    },
+    {
+      "waitFor": ".cm-md-table-input:focus"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "type": " Souza"
+    },
+    {
+      "press": "Meta+k",
+      "name": "a paleta tira o foco da célula (revisão #19948)"
+    },
+    {
+      "type": "Outra nota",
+      "name": "o texto vai para a busca da paleta, não para a nota"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text('Outra nota')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-content:has-text('Texto da outra')",
+      "name": "a outra nota abriu"
+    },
+    {
+      "press": "Meta+k"
+    },
+    {
+      "type": "Operações de tabela"
+    },
+    {
+      "waitFor": ".kn-palette-it:has-text('Operações de tabela')"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".cm-md-table td:has-text('Ana Souza')",
+      "name": "a célula ficou gravada"
+    },
+    {
+      "expectCount": ".cm-line:has-text('Outra nota')",
+      "count": 0,
+      "name": "e nada do que foi digitado na paleta entrou na nota"
+    },
+    {
+      "expectCount": ".cm-md-table tbody tr",
+      "count": 6,
+      "name": "nem linhas novas na tabela"
     }
   ]
 }

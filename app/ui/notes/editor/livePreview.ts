@@ -615,10 +615,11 @@ class TableWidget extends WidgetType {
         input.addEventListener("input", fit);
         const state = { input, row, col, done: false };
         open = state;
-        const finish = (move: CellMove | null, action?: TableAction) => {
+        /** `refocus`: as saídas por teclado devolvem o foco ao editor; o blur não, o foco já foi para onde a pessoa quis. */
+        const finish = (move: CellMove | null, action?: TableAction, refocus = true) => {
           if (state.done) return;
           state.done = true;
-          if (!this.commit(view, row, col, input.value, move, action) || (!move && !action)) view.focus();
+          if (!this.commit(view, row, col, input.value, move, action) || (!move && !action)) { if (refocus) view.focus(); }
           // Uma ação que não vale ali (apagar o cabeçalho) deixa a mesma célula: o widget é igual, o campo fica, e segue vivo.
           else if (input.isConnected) state.done = false;
         };
@@ -643,7 +644,8 @@ class TableWidget extends WidgetType {
           }
         });
         // Um campo que sai do DOM (a tabela redesenhada) não grava: o blur ali viria no meio de outra mudança.
-        input.addEventListener("blur", () => { if (input.isConnected) finish(null); });
+        // Sair do campo por fora (a paleta, a busca, o título) grava a célula e deixa o foco onde ele foi.
+        input.addEventListener("blur", () => { if (input.isConnected) finish(null, undefined, false); });
         el.append(input);
         // O `openCell` já pôs o foco; este é para quando a célula volta aberta por outro caminho (o desfazer).
         requestAnimationFrame(() => {
