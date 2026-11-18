@@ -17,7 +17,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-async function vault(files: Record<string, string>) {
+async function vault(files: Record<string, string | Buffer>) {
   const dir = tempDir("kiwinotes-files-rename-");
   dirs.push(dir);
   const root = path.join(dir, "Cofre");
@@ -125,6 +125,16 @@ describe("apagar e mostrar um arquivo", () => {
     expect(await v.restore("docs/exemplo.pdf")).toEqual({ path: "docs/exemplo.pdf" });
     expect(readFileSync(path.join(root, "docs/exemplo.pdf"), "utf8")).toBe("%PDF");
     expect(v.list().files?.map((f) => f.path)).toEqual(["docs/exemplo.pdf"]);
+  });
+
+  test("um PDF de vários MB volta com os mesmos bytes", async () => {
+    const big = Buffer.alloc(6 * 1024 * 1024);
+    for (let i = 0; i < big.length; i++) big[i] = (i * 31 + (i >> 11)) & 0xff;
+    const { v, root } = await vault({ "docs/grande.pdf": big });
+    expect(await v.deleteFile("docs/grande.pdf")).toBe(true);
+    expect(existsSync(path.join(root, "docs/grande.pdf"))).toBe(false);
+    await v.restore("docs/grande.pdf");
+    expect(readFileSync(path.join(root, "docs/grande.pdf")).equals(big)).toBe(true);
   });
 
   test("o Mostrar no Finder acha o arquivo", async () => {

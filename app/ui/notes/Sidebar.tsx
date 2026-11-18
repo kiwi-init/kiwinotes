@@ -172,6 +172,16 @@ export function visibleRange(count: number, rowHeight: number, listTop: number, 
   return [Math.min(first, last), last];
 }
 
+/**
+ * O nome novo de um arquivo que não é nota (T19878): o campo mostra o nome sem a extensão, e ela volta no fim. Quem
+ * digita o nome com a extensão (`relatorio.pdf`) não fica com `relatorio.pdf.pdf`, e o tipo nunca se perde.
+ */
+export function withExt(name: string | null, ext: string): string | null {
+  if (name === null || !ext) return name;
+  const tail = `.${ext}`;
+  return name.toLowerCase().endsWith(tail.toLowerCase()) ? name.slice(0, -tail.length) + tail : `${name}${tail}`;
+}
+
 /** O campo de renomear: Enter grava, Esc desiste, sair do campo grava. */
 function RenameInput({ initial, depth, fresh, onDone }: { initial: string; depth: number; fresh?: boolean; onDone(name: string | null): void }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -365,7 +375,7 @@ export function Sidebar(p: SidebarProps) {
     const target = { kind: "file" as const, path: f.path };
     const full = f.ext ? `${f.name}.${f.ext}` : f.name;
     return p.renaming === sideKey(target) ? (
-      <RenameInput key={`a:${f.path}`} initial={f.name} depth={depth} onDone={(name) => p.onRename(target, name === null ? null : f.ext ? `${name}.${f.ext}` : name)} />
+      <RenameInput key={`a:${f.path}`} initial={f.name} depth={depth} onDone={(name) => p.onRename(target, withExt(name, f.ext))} />
     ) : (
       <div key={`a:${f.path}`} className="kn-side-row" data-menu={p.menuOn === sideKey(target) || undefined} style={{ "--row-tools": `${28 + (p.fileTimes?.has(f.path) ? 44 : 0)}px` } as CSSProperties}>
         <button
