@@ -28,7 +28,8 @@ test("cada opção do Formatar vem no próprio estilo, e o estilo existe no note
   expect(items.map((it) => it.label)).toEqual(["Negrito", "Itálico", "Tachado", "Realce", "Código", "Comentário", "Limpar formatação"]);
   for (const it of items) {
     expect(it.labelClass, it.label).toBeString();
-    expect(ruleOf(it.labelClass!), `${it.label}: .${it.labelClass}`).not.toBe("");
+    const rule = ruleOf(it.labelClass!) || ruleOf(`${it.labelClass}::before`);
+    expect(rule, `${it.label}: .${it.labelClass}`).not.toBe("");
   }
   // Cada uma no seu: nenhuma repete o estilo de outra.
   expect(new Set(items.map((it) => it.labelClass)).size).toBe(items.length);
@@ -41,7 +42,15 @@ test("o estilo do rótulo é o que a opção faz no texto", () => {
   expect(ruleOf("kn-menu-strike")).toContain("line-through");
   expect(ruleOf("kn-menu-highlight")).toContain("#f6c945"); // o HIGHLIGHT_BACKGROUND do editor
   expect(ruleOf("kn-menu-code")).toContain("var(--font-mono)");
-  expect(ruleOf("kn-menu-comment")).toContain("var(--text-3)"); // o .cm-comment do editor
+  // O comentário: o `%%` do editor em volta, apagado; o rótulo não fica na cor de um item desligado (revisão do T18383).
+  expect(ruleOf("kn-menu-comment::before")).toContain('content: "%% "');
+  expect(ruleOf("kn-menu-comment::after")).toContain('content: " %%"');
+  expect(ruleOf("kn-menu-comment")).toBe("");
+  const disabled = css.match(/\.kn-menu-item\[aria-disabled\]\s*\{([^}]*)\}/)![1];
+  for (const it of submenu(menu(), "Formatar")) {
+    const color = ruleOf(it.labelClass!).match(/(?:^|;)\s*color:\s*([^;]+)/)?.[1]?.trim();
+    if (color) expect(disabled, `${it.label} na cor do item desligado`).not.toContain(color);
+  }
 });
 
 test("o rótulo leva a classe; sem ela, fica como antes", () => {
