@@ -37,6 +37,8 @@
       body[data-balao="abaixo"] #bubble[data-on="true"] { transform: none; }
       /* Fechado: até três linhas; o main.ts corta o resumo numa palavra (sem "…" depois de um ponto). */
       #bubble-text { max-height: calc(3 * 1.35em); overflow: hidden; overflow-wrap: anywhere; white-space: pre-line; }
+      /* Aberto, o markdown montado (spec #17679): blocos de verdade, sem as quebras do texto cru. */
+      #bubble-text[data-md="true"] { white-space: normal; }
       #bubble[data-open="true"] { width: 280px; }
       /* Aberto: o texto rola; um degradê curto em cima e embaixo, que some no começo e no fim (--fade-top, --fade-bottom). */
       #bubble[data-open="true"] #bubble-text {

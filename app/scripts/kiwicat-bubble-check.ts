@@ -289,6 +289,67 @@ try {
   }
   report.checks.push(`the tail leaves the bubble corner next to the cat and its tip touches the cat body, in the 6 positions × 1, 0.6 and 1.6 (${tails} cases)`);
 
+  // 5. O markdown (spec #17679, T17985): fechado, o resumo sai sem os símbolos; aberto, os elementos montados (título,
+  //    lista, tabela, código e link), e um <script> ou <img onerror> do texto fica texto. O link não tem href e só manda
+  //    o endereço ao helper com o clique. Texto inventado.
+  {
+    const MD = [
+      "## Plano da semana",
+      "",
+      "Resumo das **três** tarefas do *Projeto X*:",
+      "",
+      "- [x] revisar o roteiro",
+      "- [ ] marcar a reunião",
+      "",
+      "| Tarefa | Quem | Prazo |",
+      "| --- | --- | --- |",
+      "| Roteiro | Ana | sexta |",
+      "| Orçamento | Pedro | segunda |",
+      "",
+      "Rode `bun test` antes. Mais em [exemplo](https://exemplo.com/plano).",
+      "",
+      "<script>window.__xss = 1</script> <img src=x onerror=\"window.__xss = 2\">",
+    ].join("\n");
+    const { ctx, p, width, height } = await openPage("escala=1.00&lado=right&balao=acima", "light", 360);
+    await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), MD);
+    await settle(p);
+    const closed = (await p.textContent("#bubble-text"))!;
+    for (const sym of ["**", "##", "|", "`", "[x]"]) assert.ok(!closed.includes(sym), `o resumo fechado sem "${sym}": ${closed}`);
+    assert.ok(closed.startsWith("Plano da semana"), `o resumo começa pelo título: ${closed}`);
+    assert.equal(await p.locator("#bubble-text *").count(), 0, "fechado, só texto");
+    await shot(p, "7-markdown-fechado.png", "Markdown, fechado: sem os símbolos", width, height);
+    await p.click("#bubble-more");
+    await settle(p);
+    const open = await p.evaluate(() => {
+      const t = document.getElementById("bubble-text")!;
+      const q = (s: string) => t.querySelectorAll(s).length;
+      return {
+        h2: t.querySelector("h2")?.textContent, strong: q("strong"), em: q("em"), tasks: q(".kn-md-task"), table: q(".kn-md-scroll > table.kn-md-table"),
+        th: [...t.querySelectorAll("th")].map((e) => e.textContent), rows: q("tbody tr"), code: t.querySelector("code")?.textContent,
+        link: (() => { const a = t.querySelector("a.kn-md-link") as HTMLAnchorElement | null; return a && { text: a.textContent, href: a.getAttribute("href"), data: a.dataset.href }; })(),
+        script: q("script"), img: q("img"), text: t.textContent, xss: (window as any).__xss ?? null, pipes: t.textContent!.includes("|"),
+      };
+    });
+    assert.equal(open.h2, "Plano da semana");
+    assert.ok(open.strong === 1 && open.em === 1 && open.tasks === 2, `negrito, itálico e as caixas: ${JSON.stringify(open)}`);
+    assert.equal(open.table, 1, "a tabela, dentro do .kn-md-scroll");
+    assert.deepEqual(open.th, ["Tarefa", "Quem", "Prazo"]);
+    assert.equal(open.rows, 2);
+    assert.equal(open.pipes, false, "aberto, a tabela sem pipes");
+    assert.equal(open.code, "bun test");
+    assert.deepEqual(open.link, { text: "exemplo", href: null, data: "https://exemplo.com/plano" });
+    assert.ok(open.script === 0 && open.img === 0 && open.xss === null && open.text!.includes("<script>"), `o HTML do texto fica texto: ${JSON.stringify(open)}`);
+    await shot(p, "7-markdown-aberto.png", "Markdown, aberto: título, caixas, tabela, código e link", width, height);
+    await p.evaluate(() => ((window as any).__posts.length = 0));
+    await p.click("#bubble-text a.kn-md-link");
+    const sent = (await p.evaluate(() => (window as any).__posts)) as { link?: string }[];
+    assert.deepEqual(sent.filter((m) => m.link), [{ link: "https://exemplo.com/plano" }], `o clique no link manda o endereço ao helper: ${JSON.stringify(sent)}`);
+    assert.equal(p.url().startsWith(`http://127.0.0.1:${server.port}/`), true, "a página não navegou");
+    assert.equal(await p.textContent("#bubble-more"), "Ver menos", "o clique no link não fecha o balão");
+    await ctx.close();
+  }
+  report.checks.push("markdown: closed, the summary has no **, #, |, ` or [x]; open, the heading, bold, italics, tasks, the table (no pipes), code and link are elements; <script> and <img onerror> stay text; the link has no href and only a click sends it to the helper");
+
   // A folha em WebP: cada print sobre um fundo de mesa, como por cima de outro app.
   const sheet = await browser.newPage({ deviceScaleFactor: 1, viewport: { width: 1480, height: 900 } });
   const img = (f: string) => `data:image/png;base64,${readFileSync(join(out, f)).toString("base64")}`;
