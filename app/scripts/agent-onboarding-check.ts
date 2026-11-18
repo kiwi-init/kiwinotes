@@ -86,6 +86,8 @@ try {
       // O Pular vale sempre, também no passo 1 (revisão do T11993); o foco está no título do passo.
       assert.equal(await p.locator(".kn-onb-actions button:has-text('Pular')").isDisabled(), false);
       assert.equal(await p.evaluate(() => document.activeElement?.id), "kn-onb-title");
+      // Spec #17709: o título é o do gato; o Claude Code fica na frase de baixo.
+      assert.equal(await p.locator("#kn-onb-title").textContent(), "Oi! Vamos acordar o Kiwi Cat");
       await shot(p, "1-claude-antes-light.png");
       await p.locator(".kn-onb-check button:has-text('Baixar')").click();
       await p.waitForFunction(() => !document.querySelector(".kn-onb-actions button:last-child")?.hasAttribute("disabled"), undefined, { timeout: 30000 });
