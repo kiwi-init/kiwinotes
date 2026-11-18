@@ -23,6 +23,10 @@
 //                                                     SEL, fora os que casam com `allow` (o bloco de código, a tabela
 //                                                     larga). Na falha, diz quem passa da borda (T5299, issue #212)
 //   { "drag": "SEL", "x": 200, "y"?: 0 }              aperta no meio do elemento, arrasta x/y px e solta (T5299)
+//   { "dragTo": "SEL", "from"?: "SEL", "at"?: 0.5, "hold"?: true }  o arrastar do HTML (dragstart, dragover, drop,
+//                                                     dragend) de `from` até SEL, na altura `at` da linha (0 é o topo,
+//                                                     1 a base). Com `hold`, para no dragover (para o print do destino
+//                                                     destacado), e o próximo `dragTo` sem `from` continua dali (T19937)
 //   { "expectWidth": "SEL", "min"?: 400, "max"?: 900 } a largura do elemento na tela fica entre min e max (T5299)
 //   { "drop": "SEL", "file": "caminho" }           arrasta um arquivo (imagem, PDF) e solta no meio do elemento (T2594)
 //   { "pasteFile": "SEL", "file": "caminho" }      cola um arquivo no elemento, como um ⌘V com uma imagem (T2594).
@@ -73,6 +77,8 @@ export type Step =
   | { expectNoHScroll: string; allow?: string }
   /** Aperta no meio do elemento, arrasta `x`/`y` px em passos, como o mouse de verdade, e solta (T5299). */
   | { drag: string; x: number; y?: number }
+  /** O arrastar do HTML de `from` até o elemento, na altura `at` (0 a 1); `hold` para antes de soltar (T19937). */
+  | { dragTo: string; from?: string; at?: number; hold?: boolean }
   /** A largura do elemento na tela (px) fica entre `min` e `max`, esperando até o timeout (T5299). */
   | { expectWidth: string; min?: number; max?: number }
   | { invoke: string; args?: Record<string, unknown>; expect?: Record<string, unknown> }
@@ -93,7 +99,7 @@ export interface ScriptFile {
   steps: StepWithMeta[];
 }
 
-const ACTIONS = ["click", "clickText", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "expectNoHScroll", "drag", "expectWidth", "screenshot", "invoke", "drop", "pasteFile", "pasteHtml"] as const;
+const ACTIONS = ["click", "clickText", "fill", "select", "type", "press", "hover", "scroll", "expectScroll", "waitFor", "wait", "expectText", "expectCount", "expectSame", "expectNoHScroll", "drag", "dragTo", "expectWidth", "screenshot", "invoke", "drop", "pasteFile", "pasteHtml"] as const;
 
 /** O tipo do arquivo de um `drop`/`pasteFile`, pela extensão. */
 const FILE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", txt: "text/plain" };
@@ -196,6 +202,12 @@ export function parseScript(json: unknown): ScriptFile {
           }
         }
         if (s.x === undefined) throw new Error(`${at}: drag precisa de x (px)`);
+        break;
+      case "dragTo":
+        str(s.dragTo, `${at}.dragTo`);
+        if (s.from !== undefined) str(s.from, `${at}.from`);
+        if (s.at !== undefined && !(typeof s.at === "number" && s.at >= 0 && s.at <= 1)) throw new Error(`${at}: dragTo.at de 0 a 1`);
+        if (s.hold !== undefined && typeof s.hold !== "boolean") throw new Error(`${at}: dragTo.hold é true ou false`);
         break;
       case "expectWidth":
         str(s.expectWidth, `${at}.expectWidth`);
@@ -398,6 +410,38 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
     await page.mouse.down();
     await page.mouse.move(x + s.x, y + (s.y ?? 0), { steps: 12 });
     await page.mouse.up();
+  } else if ("dragTo" in s) {
+    // Os eventos do arrastar do HTML, com um DataTransfer de verdade: o mouse do Playwright não arrasta no WebKit
+    // headless. O arrasto em curso fica na página (`__kiwiDrag`), para o `hold` (T19937).
+    // Os elementos pelo locator do Playwright (aceita `:has-text`), e as mãos deles vão para a página.
+    const target = await page.locator(s.dragTo).first().elementHandle({ timeout });
+    const src = s.from ? await page.locator(s.from).first().elementHandle({ timeout }) : null;
+    const err = await page.evaluate(({ target, src, at, hold }) => {
+      const w = window as unknown as { __kiwiDrag?: { dt: DataTransfer; src: Element } | null };
+      const fire = (el: Element, type: string, dt: DataTransfer, x: number, y: number) =>
+        el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true, dataTransfer: dt, clientX: x, clientY: y }));
+      if (src) {
+        const r = src.getBoundingClientRect();
+        const dt = new DataTransfer();
+        fire(src, "dragstart", dt, r.left + r.width / 2, r.top + r.height / 2);
+        w.__kiwiDrag = { dt, src };
+      }
+      const drag = w.__kiwiDrag;
+      if (!drag) return "dragTo sem from e sem um arrasto em curso";
+      const r = target.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height * at;
+      fire(target, "dragenter", drag.dt, x, y);
+      const accepted = !fire(target, "dragover", drag.dt, x, y);
+      if (hold) return null;
+      if (accepted) fire(target, "drop", drag.dt, x, y);
+      fire(drag.src, "dragend", drag.dt, x, y);
+      w.__kiwiDrag = null;
+      return null;
+    }, { target, src, at: s.at ?? 0.5, hold: s.hold ?? false });
+    if (err) throw new Error(err);
+    // Um quadro para o React pintar o destino (e a faixa "Raiz", que entra num requestAnimationFrame).
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   } else if ("expectWidth" in s) {
     const min = s.min ?? -Infinity;
     const max = s.max ?? Infinity;
