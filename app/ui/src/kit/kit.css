@@ -118,6 +118,12 @@
   color: var(--text-2);
 }
 
+.kn-row-hint-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---------------------------------------------------------- botão */
 
 .kn-button {
