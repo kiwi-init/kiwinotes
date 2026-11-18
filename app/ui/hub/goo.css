@@ -112,14 +112,14 @@
   }
 }
 
-/* Na volta, a cópia dos botões que saíram (`Goo.tsx`) fica no lugar deles, por cima da gota, e some nos primeiros 25%:
-   a gota assume sem o salto do quadro 0. Só desenho: `inert` e sem clique. */
+/* Na volta, a cópia dos botões que saíram (`Goo.tsx`) anda com a cabeça da gota, por cima dela: o `Goo.tsx` escreve o
+   transform e a opacidade a cada quadro. Só desenho: `inert` e sem clique. */
 .kn-goo-ghost {
   position: absolute;
   display: flex;
   align-items: center;
   pointer-events: none;
-  animation: kn-goo-ghost-out var(--goo-ms-out, 400ms) linear both;
+  transform-origin: center;
 }
 .kn-goo-ghost[data-side="end"] {
   justify-content: flex-end;
@@ -132,18 +132,6 @@
 .kn-goo .kn-goo-ghost * {
   text-overflow: clip;
   overflow: visible;
-}
-
-@keyframes kn-goo-ghost-out {
-  0% {
-    opacity: 1;
-    transform: none;
-  }
-  25%,
-  100% {
-    opacity: 0;
-    transform: scale(0.96);
-  }
 }
 
 /* "Reduzir movimento": sem gota; os botões só aparecem com um fade curto. */
