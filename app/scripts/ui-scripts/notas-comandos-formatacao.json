@@ -227,7 +227,7 @@
       "press": "Meta+Shift+8"
     },
     {
-      "waitFor": ".cm-line:has-text(\"- Item de lista\")"
+      "waitFor": ".cm-line.cm-list-line:has-text(\"Item de lista\")"
     },
     {
       "press": "End"
@@ -252,7 +252,7 @@
       "press": "Meta+Shift+7"
     },
     {
-      "waitFor": ".cm-line:has-text(\"1. Item numerado\")"
+      "waitFor": ".cm-line.cm-list-line:has-text(\"Item numerado\")"
     },
     {
       "press": "End"
@@ -277,13 +277,13 @@
       "press": "Meta+Shift+9"
     },
     {
-      "waitFor": ".cm-line:has-text(\"- [ ] Revisão concluída\")"
+      "waitFor": ".cm-line:has-text(\"[ ] Revisão concluída\"), .cm-line:has-text(\"Revisão concluída\") .cm-task-box[data-checked=false]"
     },
     {
       "press": "Meta+l"
     },
     {
-      "waitFor": ".cm-line:has-text(\"- [x] Revisão concluída\")"
+      "waitFor": ".cm-line:has-text(\"[x] Revisão concluída\"), .cm-line:has-text(\"Revisão concluída\") .cm-task-box[data-checked=true]"
     },
     {
       "press": "End"

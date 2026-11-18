@@ -44,7 +44,7 @@
    "type": "Menu 2."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^2]: Menu 2.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('Menu 2.') .cm-footnote-def",
    "timeout": 2500,
    "name": "2: o texto entra na definição nova"
   },
@@ -69,7 +69,7 @@
    "type": "Menu 3."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^3]: Menu 3.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^3]: Menu 3.'), .kn-note-editor .cm-line:has-text('Menu 3.') .cm-footnote-def",
    "timeout": 2500,
    "name": "3: o texto entra na definição nova"
   },
@@ -94,7 +94,7 @@
    "type": "Menu 4."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^4]: Menu 4.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^4]: Menu 4.'), .kn-note-editor .cm-line:has-text('Menu 4.') .cm-footnote-def",
    "timeout": 2500,
    "name": "4: o texto entra na definição nova"
   },
@@ -119,7 +119,7 @@
    "type": "Menu 5."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^5]: Menu 5.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^5]: Menu 5.'), .kn-note-editor .cm-line:has-text('Menu 5.') .cm-footnote-def",
    "timeout": 2500,
    "name": "5: o texto entra na definição nova"
   },
@@ -144,7 +144,7 @@
    "type": "Menu 6."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^6]: Menu 6.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^6]: Menu 6.'), .kn-note-editor .cm-line:has-text('Menu 6.') .cm-footnote-def",
    "timeout": 2500,
    "name": "6: o texto entra na definição nova"
   },
@@ -169,7 +169,7 @@
    "type": "Menu 7."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^7]: Menu 7.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^7]: Menu 7.'), .kn-note-editor .cm-line:has-text('Menu 7.') .cm-footnote-def",
    "timeout": 2500,
    "name": "7: o texto entra na definição nova"
   },
@@ -194,7 +194,7 @@
    "type": "Menu 8."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^8]: Menu 8.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^8]: Menu 8.'), .kn-note-editor .cm-line:has-text('Menu 8.') .cm-footnote-def",
    "timeout": 2500,
    "name": "8: o texto entra na definição nova"
   },
@@ -219,7 +219,7 @@
    "type": "Menu 9."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^9]: Menu 9.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^9]: Menu 9.'), .kn-note-editor .cm-line:has-text('Menu 9.') .cm-footnote-def",
    "timeout": 2500,
    "name": "9: o texto entra na definição nova"
   },
@@ -244,7 +244,7 @@
    "type": "Menu 10."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^10]: Menu 10.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^10]: Menu 10.'), .kn-note-editor .cm-line:has-text('Menu 10.') .cm-footnote-def",
    "timeout": 2500,
    "name": "10: o texto entra na definição nova"
   },
@@ -269,7 +269,7 @@
    "type": "Menu 11."
   },
   {
-   "waitFor": ".kn-note-editor .cm-line:has-text('[^11]: Menu 11.')",
+   "waitFor": ".kn-note-editor .cm-line:has-text('[^11]: Menu 11.'), .kn-note-editor .cm-line:has-text('Menu 11.') .cm-footnote-def",
    "timeout": 2500,
    "name": "11: o texto entra na definição nova"
   },
