@@ -73,7 +73,9 @@ async function hoverAt(p: Page, x: number, y: number) {
     const el = document.elementFromPoint(x!, y!) as HTMLElement | null;
     // A barrinha à mostra: o `::after` com opacidade, pelo `:hover` (no mesmo quadro do mouse, sem esperar o React).
     const bar = el ? Number(getComputedStyle(el, "::after").opacity) : 0;
-    return { handle: el?.classList.contains("kn-width-handle") ? el.dataset.side : null, cursor: el ? getComputedStyle(el).cursor : "", shown: bar > 0 };
+    // O que ficou por cima (a classe), para saber o que tapa a alça quando ela não está ali.
+    const over = document.elementsFromPoint(x!, y!).slice(0, 8).map((e) => `${e.tagName.toLowerCase()}.${[...e.classList].join(".")} z=${getComputedStyle(e).zIndex} pos=${getComputedStyle(e).position}`).join(" > ");
+    return { handle: el?.classList.contains("kn-width-handle") ? el.dataset.side : null, cursor: el ? getComputedStyle(el).cursor : "", shown: bar > 0, over };
   }, [x, y]);
 }
 
@@ -136,6 +138,11 @@ try {
     const atRight = await hoverAt(p, e0.right + 8, e0.y);
     const onRight = await hoverAt(p, e0.right, e0.y);
     result[`${c.name}.bordas`] = { atLeft, atRight, onRight };
+    result[`${c.name}.geo`] = await p.evaluate(([column]) => {
+      const col = document.querySelector(column!)!.getBoundingClientRect();
+      const r = (s: string) => { const b = document.querySelector(s)?.getBoundingClientRect(); return b ? [Math.round(b.left - col.left), Math.round(b.right - col.left)] : null; };
+      return { colW: Math.round(col.width), handleL: r(`${column} .kn-width-handle[data-side="left"]`), handleR: r(`${column} .kn-width-handle[data-side="right"]`), gutters: r(".cm-gutters"), content: r(".cm-content"), line: r(".cm-line") };
+    }, [c.column]);
     check(`${c.name}: a alça esquerda na borda do texto, com o cursor na hora`, atLeft.handle === "left" && atLeft.cursor === "col-resize" && atLeft.shown);
     check(`${c.name}: a alça direita na borda do texto, com o cursor na hora`, atRight.handle === "right" && atRight.cursor === "col-resize" && atRight.shown && onRight.handle === "right");
     // A barrinha a mesma folga dos dois lados, de 20 a 28 px fora do texto (lead, #13915). O texto é o recuo da coluna:

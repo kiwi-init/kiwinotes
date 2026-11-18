@@ -1,0 +1,19 @@
+{
+  "window": "notes",
+  "steps": [
+    { "invoke": "notes.create", "args": { "title": "Curta", "content": "Uma linha só.\n" }, "name": "uma nota curta (inventada)" },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre" },
+    { "press": "Meta+k" },
+    { "type": "Curta" },
+    { "waitFor": ".kn-palette .kn-palette-it:has-text('Curta')" },
+    { "press": "Enter", "name": "abre a nota" },
+    { "waitFor": ".kn-note-editor .cm-content" },
+    { "press": "Escape", "name": "o cursor sai do editor" },
+    { "wait": 300 },
+    { "click": ".kn-page", "position": { "x": 300, "y": 420 }, "name": "clica no vazio da página, bem abaixo da última linha (T19388: a moldura do editor deixa o mouse passar)" },
+    { "type": "Z", "name": "digita" },
+    { "expectText": ".kn-note-editor .cm-line:last-child", "text": "Z", "name": "o Z entra no fim da nota: o clique abaixo pôs o cursor no fim" },
+    { "expectText": ".kn-note-editor .cm-line:first-child", "text": "Uma linha só.", "name": "e a primeira linha ficou como estava" },
+    { "screenshot": "clique-abaixo.png" }
+  ]
+}
