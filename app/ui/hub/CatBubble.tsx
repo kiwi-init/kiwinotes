@@ -6,7 +6,8 @@
 // - [Ver mais] abre o balão grande, com a resposta inteira e rolagem; fecha com um clique fora ou com Esc. O Esc só é
 //   ouvido enquanto o balão grande está aberto.
 // - Leitor de tela: a resposta é anunciada uma vez, no fim, inteira.
-// - O markdown (spec #17679, T17986): o pequeno mostra o texto corrido, sem símbolos (`plainMarkdown`); o grande, formatado
+// - O markdown (spec #17679, T17986): o pequeno mostra o texto corrido, sem símbolos, que o `BubbleFeed` já corta
+//   limpo (`bubblePlain`, T17984); o grande, formatado
 //   (títulos, listas, código, tabela que rola de lado), pelo mesmo montador do overlay. Um link só abre no clique.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -15,7 +16,6 @@ import { api } from "../src/api";
 import { BUBBLE_LINES, BubbleFeed, type BubbleView } from "./bubble-state";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
-import { plainMarkdown } from "../src/bubbleMarkdown";
 import { MdView, openMdLink } from "./bubbleMd";
 
 /** Mede no mesmo estilo do balão: o texto cabe em 320 px (a casca do pacote) e 3 linhas? */
@@ -141,8 +141,8 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
           >
             {/* O trecho inteiro, invisível, segura o tamanho do balão enquanto a digitação anda. */}
             <div className="kn-bubble-text" aria-hidden="true">
-              <div className="kn-bubble-ghost">{plainMarkdown(view.full)}</div>
-              <div className="kn-bubble-typed">{plainMarkdown(view.text)}</div>
+              <div className="kn-bubble-ghost">{view.full}</div>
+              <div className="kn-bubble-typed">{view.text}</div>
             </div>
             {view.more ? (
               <button

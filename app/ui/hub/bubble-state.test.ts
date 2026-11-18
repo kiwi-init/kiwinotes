@@ -325,3 +325,44 @@ describe("a resposta de antes espera a nova entrar (T15377)", () => {
     expect(f.view(200)!.full).toBe("“abre a nota”");
   });
 });
+
+describe("o markdown no balão pequeno (spec #17679)", () => {
+  const RESPOSTA = [
+    "Resumo: o **prazo final do Projeto X fica para sexta-feira** e a Ana confirma.",
+    "",
+    "## Quem faz o quê",
+    "",
+    "| Nome | Prazo | Status |",
+    "|---|---|---|",
+    "| Ana | sexta | ok |",
+    "| Bruno | segunda | `revisar` |",
+  ].join("\n");
+  const SIMBOLOS = /[|*#`]/;
+
+  test("pelo done: nenhum trecho com |, **, # ou `", () => {
+    const f = new BubbleFeed(fits(40));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "done", stopReason: "end_turn", text: RESPOSTA }), 0);
+    const { chunks } = play(f, 0);
+    expect(chunks.length).toBeGreaterThan(2);
+    for (const c of chunks) expect(c).not.toMatch(SIMBOLOS);
+    expect(chunks.join(" ")).toContain("Ana · sexta · ok");
+  });
+
+  test("chegando aos pedaços: nenhum trecho, nem o que ainda está chegando, com os símbolos", () => {
+    const f = new BubbleFeed(fits(40));
+    f.event(ev({ type: "started" }), 0);
+    const seen: string[] = [];
+    let now = 0;
+    for (let i = 0; i < RESPOSTA.length; i += 7) {
+      f.event(ev({ type: "text", text: RESPOSTA.slice(i, i + 7) }), now);
+      const v = f.view(now);
+      if (v) seen.push(v.full);
+      now += 50;
+    }
+    f.event(ev({ type: "done", stopReason: "end_turn", text: RESPOSTA }), now);
+    const { chunks } = play(f, now);
+    for (const c of [...seen, ...chunks]) expect(c).not.toMatch(SIMBOLOS);
+    expect(chunks.join(" ")).toContain("Bruno · segunda · revisar");
+  });
+});

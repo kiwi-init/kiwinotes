@@ -8,7 +8,7 @@
 // - `<script>` e `<img>` aparecem como texto, e não há nenhum elemento `script`, `img` ou `iframe` no balão;
 // - o link não tem `href` (nada abre sozinho); um clique nele abre o endereço uma vez, e só ele.
 //
-// Sai na pasta: `fechado.png`, `aberto.png`, `rolado.png` e `medidas.json`. Exit 1 se uma prova falha.
+// Sai na pasta: `fechado.png`, `fechado-tabela.png`, `aberto.png`, `rolado.png` e `medidas.json`. Exit 1 se uma prova falha.
 //
 //   bun scripts/kiwicat-v2/balao-markdown.ts [pasta]
 import { webkit } from "playwright-core";
@@ -83,6 +83,29 @@ try {
     check(small.length > 0, "fechado: o balão pequeno aparece");
     check(!/\*\*|\||^#|`/m.test(small), `fechado: sem **, |, # nem crase (${JSON.stringify(small.slice(0, 60))}…)`);
     await page.screenshot({ path: join(out, "fechado.png"), clip: { x: 0, y: 0, width: 400, height: 200 } });
+
+    // Todos os trechos, até o balão sumir (revisão do T17984): o corte é no texto corrido, e um trecho com a metade
+    // da tabela ou de um negrito não sai com os símbolos. O print de um trecho da tabela fica em `fechado-tabela.png`.
+    const trechos: string[] = [];
+    let tabela = false;
+    for (let t = 0; t < 180_000; t += 250) {
+      const ghost = await page.evaluate(() => document.querySelector(".kn-bubble-ghost")?.textContent ?? null);
+      if (ghost === null) break;
+      if (trechos.at(-1) !== ghost) {
+        trechos.push(ghost);
+        if (!tabela && /Pera madura/.test(ghost)) {
+          tabela = true;
+          await page.clock.runFor(TYPE_MS * [...ghost].length + 100);
+          await page.screenshot({ path: join(out, "fechado-tabela.png"), clip: { x: 0, y: 0, width: 400, height: 200 } });
+        }
+      }
+      await page.clock.runFor(250);
+    }
+    measures.trechos = trechos;
+    const sujos = trechos.filter((c) => /\*\*|\||^#|`/m.test(c));
+    check(trechos.length > 2, `fechado: a resposta passa em ${trechos.length} trechos`);
+    check(sujos.length === 0, `fechado: nenhum trecho com **, |, # nem crase (${JSON.stringify(sujos[0] ?? "")})`);
+    check(tabela && trechos.some((c) => c.includes("Pera madura · 1 kg")), "fechado: a tabela aparece como texto corrido (Pera madura · 1 kg)");
     check(problems.length === 0, `fechado: sem erro na página ${problems.join("; ")}`);
     await context.close();
   }

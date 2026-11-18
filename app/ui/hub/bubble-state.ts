@@ -9,8 +9,11 @@
 // - O `done` traz o texto inteiro do pedido: o trecho final é o que vem depois do que já foi dito antes da última
 //   ferramenta. No erro, o balão mostra a mensagem. Um pedido novo fecha o balão do anterior.
 // - O texto nunca é reescrito: só cortado. Nada aqui interpreta HTML (a tela mostra como texto).
+// - O markdown (spec #17679): o balão pequeno mostra o texto corrido, sem `**`, `#`, `|` nem a crase. O corte é feito
+//   nesse texto, e não no cru: um trecho com a metade de uma tabela ou de um negrito não sai com os símbolos.
 
 import type { AgentTurnEvent } from "../../src/shared/ui-contract";
+import { plainMarkdown } from "../src/bubbleMarkdown";
 import { limitBubble } from "../settings/usageText";
 
 /** O que o balão diz enquanto o agente está na web (spec #11908). */
@@ -76,6 +79,27 @@ export function splitChunks(text: string, fits: (s: string) => boolean): Chunk[]
   return out;
 }
 
+/**
+ * O texto corrido do segmento, como o balão pequeno mostra. Chegando (`done` falso), as linhas de tabela do fim, sem a
+ * linha dos `---` ainda, ficam de fora até ela chegar (antes dela, são um parágrafo com os `|`), e a última linha de uma
+ * tabela fica de fora até terminar. Os símbolos que sobram de um negrito ou de um código ainda aberto saem: o texto que
+ * já apareceu não muda quando o fechamento chega.
+ */
+export function bubblePlain(raw: string, done: boolean): string {
+  let text = raw;
+  if (!done) {
+    const m = /(?:^|\n)((?:[ \t]*\|[^\n]*(?:\n|$))+)$/.exec(text);
+    if (m) {
+      const start = text.length - m[1]!.length;
+      const delimiter = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-*:?[ \t]*)*\|?[ \t]*$/m.test(m[1]!);
+      text = !delimiter ? text.slice(0, start) : text.endsWith("\n") ? text : text.slice(0, text.lastIndexOf("\n") + 1);
+    }
+  }
+  const plain = plainMarkdown(text).replace(/\*\*|__|~~|`+/g, "");
+  // O espaço do fim do que está chegando fica, como no texto cru: ele é o que separa da próxima palavra.
+  return done ? plain : plain + (/\s+$/.exec(text)?.[0] ?? "");
+}
+
 export interface BubbleView {
   /** O que aparece agora no balão (a parte já digitada). */
   text: string;
@@ -110,8 +134,10 @@ export class BubbleFeed {
   private readonly finished = new Set<string>();
   /** Os trechos completos que esperam a vez. */
   private queue: string[] = [];
-  /** O texto do segmento aberto que ainda não virou trecho completo. */
+  /** O segmento aberto, cru (desde a última ferramenta). */
   private open = "";
+  /** Quanto do texto corrido do segmento aberto (`bubblePlain`) já virou trecho completo. */
+  private consumed = 0;
   private head: Head | null = null;
   private keys = 0;
   /** Tudo o que o agente disse no pedido (o [Ver mais]). */
@@ -184,6 +210,7 @@ export class BubbleFeed {
       // A ferramenta começou: o que foi dito antes sai do balão.
       this.queue = [];
       this.open = "";
+      this.consumed = 0;
       this.head = null;
       this.closedLen = this.said.length;
       // A web (spec #11908): o balão diz que o agente saiu do cofre, até o próximo texto ou ferramenta.
@@ -225,6 +252,7 @@ export class BubbleFeed {
       this.finish(e.id);
       this.queue = [];
       this.open = "";
+      this.consumed = 0;
       this.error = true;
       const line = (e.code === "E_AGENT_LIMIT" && this.outLine ? this.outLine : e.message || e.code).split("\n")[0]!.trim();
       this.head = { key: ++this.keys, text: line, complete: true, shownAt: now, completeAt: now };
@@ -252,6 +280,7 @@ export class BubbleFeed {
     this.dismissed = true;
     this.queue = [];
     this.open = "";
+    this.consumed = 0;
     this.head = null;
   }
 
@@ -268,7 +297,7 @@ export class BubbleFeed {
     const typed = this.reduced || this.error ? len : Math.min(len, Math.floor((now - h.shownAt) / TYPE_MS));
     const text = cutAtCodePoint(h.text, typed);
     // A linha da web (spec #11908) não é o que o agente disse: ela sozinha não pede o [Ver mais].
-    const more = !this.error && (this.queue.length > 0 || (h.text !== WEB_LINE && this.said.trim() !== h.text.trim()));
+    const more = !this.error && (this.queue.length > 0 || (h.text !== WEB_LINE && bubblePlain(this.said, true).trim() !== h.text.trim()));
     return { text, full: h.text, error: this.error, more, key: h.key };
   }
 
@@ -287,6 +316,7 @@ export class BubbleFeed {
     this.request = id;
     this.queue = [];
     this.open = "";
+    this.consumed = 0;
     this.head = null;
     this.said = "";
     this.closedLen = 0;
@@ -300,6 +330,7 @@ export class BubbleFeed {
   private clear(): void {
     this.queue = [];
     this.open = "";
+    this.consumed = 0;
     this.head = null;
   }
 
@@ -309,18 +340,25 @@ export class BubbleFeed {
     if (this.finished.size > 64) this.finished.delete(this.finished.values().next().value!);
   }
 
-  /** Quanto do segmento aberto já virou balão (o trecho na tela e os da fila). */
+  /** Quanto do segmento cru ficou para trás do segmento aberto (o `open` guarda o segmento inteiro desde o T17984). */
   private segmentShown(): number {
     return this.said.length - this.closedLen - this.open.length;
   }
 
-  /** Corta o segmento aberto: os trechos completos vão para a fila; com `all`, o resto também. */
+  /** O texto corrido do segmento aberto que ainda não virou trecho completo. */
+  private openShown(all = false): string {
+    return bubblePlain(this.open, all).slice(this.consumed);
+  }
+
+  /** Corta o segmento aberto, no texto corrido: os trechos completos vão para a fila; com `all`, o resto também. */
   private chunkOpen(now: number, all: boolean): void {
-    const chunks = splitChunks(this.open, this.fits);
+    const chunks = splitChunks(this.openShown(all), this.fits);
     const complete = all ? chunks : chunks.slice(0, -1);
     for (const c of complete) this.queue.push(c.text);
-    if (all) this.open = "";
-    else if (complete.length) this.open = this.open.slice(complete.at(-1)!.end);
+    if (all) {
+      this.open = "";
+      this.consumed = 0;
+    } else if (complete.length) this.consumed += complete.at(-1)!.end;
     // O trecho na tela que ainda estava chegando: se ele virou o primeiro completo da fila, fica completo.
     // O trecho na tela que ainda estava chegando é sempre o começo do segmento aberto: se um trecho completo saiu dele,
     // é esse, e o balão fica com ele (sem o espaço do fim, que é o que separa do próximo).
@@ -331,7 +369,7 @@ export class BubbleFeed {
         h.text = first;
         h.complete = true;
         h.completeAt = now;
-      } else h.text = this.open.trimStart();
+      } else h.text = this.openShown().trimStart();
     }
     if (!this.head) this.next(now);
   }
@@ -343,7 +381,7 @@ export class BubbleFeed {
       this.head = { key: ++this.keys, text: t, complete: true, shownAt: at, completeAt: at };
       return;
     }
-    const open = this.open.trimStart();
+    const open = this.openShown().trimStart();
     this.head = open ? { key: ++this.keys, text: open, complete: false, shownAt: at, completeAt: Infinity } : null;
   }
 
