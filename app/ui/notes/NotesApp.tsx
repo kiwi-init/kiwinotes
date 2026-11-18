@@ -710,8 +710,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   useEffect(() => {
     if (!openRequest || openRequest.n === handledRequest.current) return;
     handledRequest.current = openRequest.n;
-    void open(openRequest.path);
-  }, [openRequest, open]);
+    // Um arquivo que não é nota (o clique no balão do gato, spec #17683): o quadro branco ou o visualizador do tipo.
+    const p = openRequest.path;
+    if (api.canvas && /\.canvas$/i.test(p)) void openCanvas(p);
+    else if (!/\.md$/i.test(p) && api.files?.read) void openFileView(p);
+    else void open(p);
+  }, [openRequest, open, openCanvas, openFileView, api]);
 
   const activeRef = useRef(active);
   activeRef.current = active;

@@ -56,7 +56,9 @@ function devServerUrl(): Promise<string | null> {
 }
 
 /** Quem sabe a seção pedida para o hub (src/bun/hub.ts), e quem quer saber que uma janela fechou. */
-let hubSection: () => HubSection | null = () => null;
+let hubSection: () => { section: HubSection; path?: string } | null = () => null;
+/** Quem abre o hub nas Notas num arquivo (o clique no balão do gato, spec #17683): o index.ts liga ao `Hub`. */
+let openInHub: (path: string) => void = () => {};
 const closeListeners = new Set<(name: WindowName) => void>();
 let about: CapabilityDeps["about"];
 /** A seção Sobre: a versão e as atualizações, que o index.ts liga ao `AppUpdates` (T2386). */
@@ -64,8 +66,12 @@ export function provideAbout(a: NonNullable<CapabilityDeps["about"]>): void {
   about = a;
 }
 
-export function provideHubSection(fn: () => HubSection | null): void {
+export function provideHubSection(fn: () => { section: HubSection; path?: string } | null): void {
   hubSection = fn;
+}
+
+export function provideOpenInHub(fn: (path: string) => void): void {
+  openInHub = fn;
 }
 const introDoneListeners = new Set<() => void>();
 /** A página da intro avisou que terminou (`intro.done`, T2308). */
@@ -190,6 +196,7 @@ const capabilities = uiCapabilities({
   versions: stores.versions,
   dictationNotes: stores.dictationNotes,
   hubSection: () => hubSection(),
+  openInNotes: (path) => openInHub(path),
   // "Salvar diagnóstico" (T5350): em ~/Downloads, e o Finder mostra o arquivo. Com KIWI_DEBUG=1 (os agentes), vai para
   // <dados>/diagnostics e nada abre na tela.
   // A abertura das Notas (spec #13664) chega como `notes-open`: é um tempo de abrir, não um quadro.

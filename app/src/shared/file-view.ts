@@ -28,3 +28,26 @@ export function fileSize(bytes: number): string {
   }
   return `${value >= 100 ? Math.round(value) : value.toFixed(1).replace(".", ",").replace(/,0$/, "")} ${units[unit]}`;
 }
+
+/**
+ * Os tipos que as Notas mostram na própria janela, num visualizador (spec #7079): a UI tem o componente de cada um em
+ * `ui/notes/files/viewers.ts` (`VIEWERS`), e o teste de lá confere que as duas listas batem. O `.txt` também abre nas
+ * Notas, mas conta como nota (spec #17683). `.drawio.svg` vem antes de `.svg`.
+ */
+export const VIEWER_TYPES: readonly string[] = [
+  "txt", "log", "json", "yaml", "yml", "csv", "tsv", "pdf", "docx", "xlsx",
+  "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "svg", "drawio", "drawio.svg",
+];
+
+/** Onde um arquivo do cofre abre pelo clique no balão do gato (spec #17683): nas Notas, num visualizador, ou no app do Mac. */
+export type OpenTarget = "note" | "viewer" | "app";
+
+/** `.md` e `.txt` são nota; um tipo com visualizador (ou o quadro branco) abre nas Notas; o resto, no app padrão do Mac. */
+export function openTarget(name: string): OpenTarget {
+  const base = (name.split("/").at(-1) ?? "").toLowerCase();
+  if (/\.(md|txt)$/.test(base)) return "note";
+  if (/\.canvas$/.test(base)) return "viewer";
+  const double = /\.([a-z0-9]+\.[a-z0-9]+)$/.exec(base)?.[1];
+  const single = /\.([a-z0-9]+)$/.exec(base)?.[1];
+  return (double && VIEWER_TYPES.includes(double)) || (single && VIEWER_TYPES.includes(single)) ? "viewer" : "app";
+}

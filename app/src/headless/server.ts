@@ -229,6 +229,11 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
     // O "Mostrar no Finder" nunca abre o Finder no headless: só o log (T2468).
     reveal: (abs) => console.log(`[headless] notes.reveal (not opened): ${abs}`),
     openFile: (abs, mode) => console.log(`[headless] files.open (not opened, ${mode}): ${abs}`),
+    // O hub que estiver ligado (o `cli ui hub`) vai para as Notas no arquivo, pelo mesmo evento do app (spec #17683).
+    openInNotes: (rel) => {
+      console.log(`[headless] notes.openPath (Notas): ${rel}`);
+      event("hub.navigate", { section: "notes", path: rel });
+    },
     revealTrash: () => console.log("[headless] trash.reveal (not opened)"),
     // O diagnóstico vai para <data>/diagnostics e nada abre; os crashes do macOS só de KIWI_CRASH_DIR (nunca os reais).
     diagnostics: {

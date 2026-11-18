@@ -1,0 +1,16 @@
+{
+  "window": "hub",
+  "steps": [
+    { "invoke": "notes.create", "args": { "title": "Feira", "content": "maçã e pera" }, "name": "uma nota inventada (a Feira)" },
+    { "invoke": "attachments.save", "args": { "name": "plano.pdf", "data": "JVBERi0xLjQK" }, "name": "um pdf inventado (Anexos/plano.pdf)" },
+    { "waitFor": ".kn-hub", "name": "o hub abre na seção de sempre" },
+    { "invoke": "notes.openPath", "args": { "path": "Anexos/plano.pdf" }, "name": "o clique num pdf do balão (spec #17683): o engine manda o hub às Notas, no arquivo" },
+    { "waitFor": ".kn-file", "name": "as Notas abrem o pdf no view de arquivo" },
+    { "expectText": ".kn-file-title", "text": "plano.pdf", "name": "o nome do arquivo no topo" },
+    { "screenshot": "01-pdf.png" },
+    { "invoke": "notes.openPath", "args": { "path": "Feira.md" }, "name": "o clique numa nota do balão" },
+    { "waitFor": ".kn-note-editor", "name": "a nota abre no editor" },
+    { "expectCount": ".kn-file", "count": 0, "name": "o view de arquivo sai" },
+    { "screenshot": "02-nota.png" }
+  ]
+}
