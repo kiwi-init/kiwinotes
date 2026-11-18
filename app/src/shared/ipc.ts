@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import type { AudioInputs, MicrophoneChoice } from "./microphone.ts";
+import type { BubbleLink } from "./ui-contract.ts";
 
 export const IPC_VERSION = 1 as const;
 export const MAX_LINE_BYTES = 1024 * 1024;
@@ -172,7 +173,7 @@ export type Command =
    * O balão do gato no overlay (spec #12938): a resposta a uma fala pelo Control, um trecho por vez, ou o erro em
    * palavras (`error`). `text: null` tira o balão. O helper o guarda para quando o gato aparecer e o tira quando ele sai.
    */
-  | { type: "catOverlay.bubble"; text: string | null; error?: boolean }
+  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[] }
   /**
    * `dryRun: true` (os testes de agente, #490): o sidecar não toca no clipboard nem no teclado e responde
    * `{pasted: false, restored: false, dryRun: true, app?}`. O app conta isso como colado.

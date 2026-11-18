@@ -24,7 +24,7 @@
 import { CatActivity, type CatState } from "../../ui/hub/cat-state.ts";
 import type { Command } from "../shared/ipc.ts";
 import { CAT_SIZE, type CatPosition, DEFAULT_CAT_POSITION } from "../shared/kiwicat-place.ts";
-import type { AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings } from "../shared/ui-contract.ts";
+import type { AgentStatus, AgentTurnEvent, AgentVoiceUi, AppSettings, BubbleLink } from "../shared/ui-contract.ts";
 
 /** Os tempos do roteiro, em ms. */
 export const OVERLAY_TIMES = {
@@ -68,6 +68,14 @@ export function plainBubbleText(markdown: string): string {
   return parts.join(" ");
 }
 
+/** Os links que caem inteiros no trecho `text`, que começa em `start` da resposta, com as posições do trecho. */
+export function shiftLinks(links: readonly BubbleLink[] | undefined, start: number, text: string): BubbleLink[] {
+  if (!links?.length || start < 0) return [];
+  return links
+    .map((l) => ({ ...l, from: l.from - start, to: l.to - start }))
+    .filter((l) => l.from >= 0 && l.to <= text.length && text.slice(l.from, l.to) === l.text);
+}
+
 /** A pergunta antes de sair (spec #13380). */
 export const ASK_LINE = "Precisa de mais alguma coisa?";
 
@@ -83,7 +91,8 @@ export type CatOverlayCommand =
   | { type: "catOverlay.unload" }
   | { type: "catOverlay.color"; cor: string }
   | { type: "catOverlay.place"; posicao: CatPosition; escala: number }
-  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean };
+  /** `links` (spec #17683): as notas e os arquivos citados, nas posições de `text` (não da resposta inteira). */
+  | { type: "catOverlay.bubble"; text: string | null; error?: boolean; ask?: boolean; links?: BubbleLink[] };
 
 export interface CatOverlayHost {
   /** Manda um comando ao helper. */
@@ -129,7 +138,7 @@ export class CatOverlay {
   /** O balão está no overlay (spec #12938). */
   private bubbleShown = false;
   /** O texto que está no balão agora: volta a ele depois de uma recarga (revisão do #522). */
-  private bubbleNow: { text: string; error: boolean } | null = null;
+  private bubbleNow: { text: string; error: boolean; links?: BubbleLink[] } | null = null;
   /** A pessoa está com o balão (spec #13378): aberto ou com o mouse em cima. */
   private held = false;
   /** Quando o gato sai, depois do balão: o tempo de `exit` do roteiro. */
@@ -235,7 +244,10 @@ export class CatOverlay {
       return;
     }
     this.host.send({ type: "catOverlay.state", estado: state });
-    if (voice && e.type === "done" && state === "pronto") this.speak(this.answerOf(e.text), false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
+    if (voice && e.type === "done" && state === "pronto") {
+      const a = this.answerOf(e.text, e.links);
+      this.speak(a.text, false, OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit, a.links);
+    }
     else if (voice && e.type === "error") this.speak(voiceErrorLine(e.message), true, OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
     else if (state === "pronto") this.linger(OVERLAY_TIMES.pronto, OVERLAY_TIMES.prontoExit);
     else if (state === "erro") this.linger(OVERLAY_TIMES.erro, OVERLAY_TIMES.erroExit);
@@ -262,11 +274,19 @@ export class CatOverlay {
    * A resposta final: o que veio depois da última ferramenta; sem texto, o que ele fez. Vai o markdown (spec #17679): a
    * página do overlay monta a tabela, os títulos e as listas no aberto, e o fechado sai sem os símbolos.
    */
-  private answerOf(full: string): string {
-    const said = full && full.startsWith(this.said.slice(0, this.closedLen)) ? full : this.said;
-    const tail = said.slice(this.closedLen).trim();
-    const answer = plainBubbleText(tail) ? tail : plainBubbleText(said) ? said.trim() : "";
-    return answer || (this.usedTool ? "Feito." : "Pronto.");
+  private answerOf(full: string, links?: readonly BubbleLink[]): { text: string; links?: BubbleLink[] } {
+    const fromFull = !!full && full.startsWith(this.said.slice(0, this.closedLen));
+    const said = fromFull ? full : this.said;
+    const tail = said.slice(this.closedLen);
+    // Onde o trecho mostrado começa na resposta: os links (spec #17683) vêm nas posições dela.
+    let start = -1;
+    let text = "";
+    if (plainBubbleText(tail.trim())) [start, text] = [this.closedLen + (tail.length - tail.trimStart().length), tail.trim()];
+    else if (plainBubbleText(said)) [start, text] = [said.length - said.trimStart().length, said.trim()];
+    if (!text) return { text: this.usedTool ? "Feito." : "Pronto." };
+    // Sem a resposta inteira (o `done` veio diferente do que foi falado), as posições não valem: vai sem links.
+    const shown = fromFull ? shiftLinks(links, start, text) : [];
+    return shown.length ? { text, links: shown } : { text };
   }
 
   /**
@@ -274,15 +294,15 @@ export class CatOverlay {
    * espera (`idleAsk`, a pergunta e `askLeave`) começa agora, e a pessoa com o balão (`hold`) a segura. Um pedido novo, o
    * hub à vista, o × ou o overlay desligado tiram o balão.
    */
-  private speak(text: string, error: boolean, stay: number, exit: number): void {
+  private speak(text: string, error: boolean, stay: number, exit: number, links?: BubbleLink[]): void {
     if (!text) return this.linger(stay, exit);
     this.phase = "lingering";
     this.cancelTimer();
     this.bubbleShown = true;
     this.asking = false;
-    this.bubbleNow = { text, error };
+    this.bubbleNow = links?.length ? { text, error, links } : { text, error };
     this.bubbleExit = exit;
-    this.host.send({ type: "catOverlay.bubble", text, error });
+    this.host.send({ type: "catOverlay.bubble", ...this.bubbleNow });
     this.waitIdle();
   }
 
