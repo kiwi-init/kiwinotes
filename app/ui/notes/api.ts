@@ -68,6 +68,13 @@ export function engineNotes(
           ),
         set: (pinned: string[]) => call<{ pinned?: string[] }>("settings.set", { pinned }).then((s) => s.pinned ?? [],
           ),
+        // O engine corrige as fixadas sozinho (renomear, mover, apagar, pela janela, pelo agente ou por fora) e manda as
+        // configurações novas no `settings.changed` (T20167): a janela relê dali, não depois de cada operação.
+        onChanged: (fn: (pinned: string[]) => void) =>
+          on("settings.changed", (s) => {
+            const pinned = (s as { pinned?: unknown } | undefined)?.pinned;
+            if (Array.isArray(pinned)) fn(pinned.filter((p): p is string => typeof p === "string"));
+          }),
       }
     : undefined;
   // Os projetos (1.49.0, spec #9847): o evento só vale para a pasta de notas desta janela.
