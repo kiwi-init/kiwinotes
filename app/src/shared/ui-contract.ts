@@ -241,7 +241,10 @@ export type { NoteModel };
 //   programa sem pedido, para o onboarding. Só acréscimo.
 // 1.83.0 (T17097, T17098, spec #16837): `done` e `total`, em bytes, no `downloading` do `UpdatesView`, para a barra do
 //   Sobre. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.83.0";
+// 1.84.0 (T19878, spec #19256): o `files.rename`, renomear ou mover um arquivo que não é nota pelo menu da árvore, com os
+//   links das notas reescritos. O `baseVersion` do `files.delete` fica opcional (o "Apagar" do menu), e o
+//   `notes.reveal` e o `notes.restore` valem também para esses arquivos. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.84.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -433,7 +436,13 @@ export interface UiCapabilities {
    * O desfazer de um arquivo que o agente gerou (1.62.0): para a Lixeira (os 10 minutos do Desfazer do app, depois a
    * do macOS), só se ele ainda está em `baseVersion`; senão E_CONFLICT, e nada sai do lugar.
    */
-  "files.delete": { args: { path: string; baseVersion: string }; result: true };
+  "files.delete": { args: { path: string; baseVersion?: string }; result: true };
+  /**
+   * Renomeia ou move um arquivo que não é nota (1.84.0, T19878): `newPath` é o caminho novo, com a mesma extensão, e
+   * nunca por cima de outro (E_EXISTS). Os `[[…]]`, `![[…]]` e `[texto](…)` das notas que apontavam para ele seguem;
+   * `skippedPaths` são as notas que não deu para reescrever (mudaram no meio, ou não são UTF-8).
+   */
+  "files.rename": { args: { path: string; newPath: string }; result: { path: string; updatedLinks: number; skippedPaths: string[] } };
   /**
    * O quadro branco (1.37.0, T6600): o texto do `.canvas` e a versão. O save é condicional como o das notas (com
    * `baseVersion` velha não escreve e devolve o de agora) e recusa o que não abre como JSON Canvas. O create aceita o
@@ -1168,6 +1177,7 @@ export const UI_CAPABILITIES = [
   "files.save",
   "files.create",
   "files.delete",
+  "files.rename",
   "notes.canvasGet",
   "notes.canvasSave",
   "notes.canvasCreate",

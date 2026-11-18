@@ -18,7 +18,10 @@ import type { SectionId } from "./sidebarState.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
 
 /** Em que o botão direito (ou o arrastar) caiu. */
-export type SideTarget = { kind: "note"; path: string } | { kind: "folder"; path: string } | { kind: "empty" };
+export type SideTarget = { kind: "note"; path: string } | { kind: "folder"; path: string } | { kind: "file"; path: string } | { kind: "empty" };
+
+/** A chave de um item no `menuOn` e no `renaming`: `n:` nota, `f:` pasta, `a:` arquivo que não é nota (T19878). */
+export const sideKey = (target: Exclude<SideTarget, { kind: "empty" }>) => `${target.kind === "note" ? "n" : target.kind === "folder" ? "f" : "a"}:${target.path}`;
 
 export interface SidebarProps {
   /** Hover não deve mover o cursor de quem está escrevendo. */
@@ -43,9 +46,9 @@ export interface SidebarProps {
   onQuery(q: string): void;
   pinned: NoteMeta[];
   recent: NoteMeta[];
-  /** O item com o menu de botão direito aberto (`n:path` ou `f:path`), ou null. */
+  /** O item com o menu de botão direito aberto (`n:path`, `f:path` ou `a:path`, veja `sideKey`), ou null. */
   menuOn?: string | null;
-  /** O item sendo renomeado ali mesmo (`n:path` ou `f:path`), ou null. */
+  /** O item sendo renomeado ali mesmo (`n:path`, `f:path` ou `a:path`), ou null. */
   renaming: string | null;
   onRename(target: SideTarget, name: string | null): void;
   onToggle(folder: string): void;
@@ -313,7 +316,7 @@ export function Sidebar(p: SidebarProps) {
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true"><path d="M5 2h6l-1 5 2 3H4l2-3-1-5ZM8 10v4" /></svg>
         </button>
       ) : null}
-      <button type="button" className="kn-side-action" aria-label={`Mais ações para “${name}”`} aria-haspopup="menu" aria-expanded={p.menuOn === `${target.kind === "note" ? "n" : "f"}:${target.path}`} onClick={(event) => {
+      <button type="button" className="kn-side-action" aria-label={`Mais ações para “${name}”`} aria-haspopup="menu" aria-expanded={p.menuOn === sideKey(target)} onClick={(event) => {
         if (event.ctrlKey) return;
         const rect = event.currentTarget.getBoundingClientRect();
         p.onMenu({ x: rect.left, y: rect.bottom }, target);
@@ -356,33 +359,39 @@ export function Sidebar(p: SidebarProps) {
       </div>
     );
 
-  // Um arquivo que não é nota (T3370): o clique abre no app padrão do Mac. Sem menu nem arrastar: renomear e mover
-  // um anexo é pelo Finder (os links das notas a ele não seriam reescritos aqui).
-  const fileItem = (f: FileNode, depth: number) => (
-    <div key={`a:${f.path}`} className="kn-side-row" style={{ "--row-tools": p.fileTimes?.has(f.path) ? "44px" : "0px" } as CSSProperties} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>
-      <button
-        type="button"
-        className="kn-side-item"
-        data-kind="file"
-        data-type={f.type}
-        style={{ paddingLeft: depth * 14 }}
-        title={`${f.path} · abre no app padrão do Mac`}
-        onClick={(e) => !e.ctrlKey && p.onOpenFile?.(f.path)}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-      >
-        <Twisty />
-        <TreeIcon name={f.type} />
-        <span className="kn-side-name">{searching ? <Highlight text={f.name} ranges={titleRanges(f.name, p.query)} /> : f.name}</span>
-        {p.showExtensions ? <Ext ext={f.ext} /> : null}
-      </button>
-      <span className="kn-side-tools">
-        <ModifiedAt value={p.fileTimes?.get(f.path)} />
-      </span>
-    </div>
-  );
+  // Um arquivo que não é nota (T3370): o clique abre (no app padrão do Mac, ou no Kiwi, se ele mostra). O botão direito
+  // abre o menu dele (T19878, spec #19256): renomear e mover reescrevem os links das notas, pelo `files.rename`.
+  const fileItem = (f: FileNode, depth: number) => {
+    const target = { kind: "file" as const, path: f.path };
+    const full = f.ext ? `${f.name}.${f.ext}` : f.name;
+    return p.renaming === sideKey(target) ? (
+      <RenameInput key={`a:${f.path}`} initial={f.name} depth={depth} onDone={(name) => p.onRename(target, name === null ? null : f.ext ? `${name}.${f.ext}` : name)} />
+    ) : (
+      <div key={`a:${f.path}`} className="kn-side-row" data-menu={p.menuOn === sideKey(target) || undefined} style={{ "--row-tools": `${28 + (p.fileTimes?.has(f.path) ? 44 : 0)}px` } as CSSProperties}>
+        <button
+          type="button"
+          className="kn-side-item"
+          data-kind="file"
+          data-type={f.type}
+          data-path={f.path}
+          aria-keyshortcuts="Shift+F10"
+          data-menu={p.menuOn === sideKey(target) || undefined}
+          style={{ paddingLeft: depth * 14 }}
+          title={f.path}
+          // ⌃-clique é o menu, como nas notas (T2693).
+          onClick={(e) => !e.ctrlKey && p.onOpenFile?.(f.path)}
+          onContextMenu={(e) => menu(e, target)}
+          {...drag(target)}
+        >
+          <Twisty />
+          <TreeIcon name={f.type} />
+          <span className="kn-side-name">{searching ? <Highlight text={f.name} ranges={titleRanges(f.name, p.query)} /> : f.name}</span>
+          {p.showExtensions ? <Ext ext={f.ext} /> : null}
+        </button>
+        {tools(target, full, p.fileTimes?.get(f.path))}
+      </div>
+    );
+  };
 
   const row = ({ node: n, depth }: TreeRow): ReactElement => {
       if (n.kind === "note") return noteItem(n, depth, `n:${n.path}`);
@@ -452,7 +461,7 @@ export function Sidebar(p: SidebarProps) {
   useEffect(() => {
     const nav = navRef.current;
     if (!virtual || !p.renaming || !nav) return;
-    const index = rows.findIndex((r) => `${r.node.kind === "folder" ? "f" : "n"}:${r.node.path}` === p.renaming);
+    const index = rows.findIndex((r) => sideKey({ kind: r.node.kind, path: r.node.path }) === p.renaming);
     if (index < 0) return;
     const top = (listRef.current?.offsetTop ?? 0) + index * rowHeight;
     if (top < nav.scrollTop || top + rowHeight > nav.scrollTop + nav.clientHeight) nav.scrollTop = top - nav.clientHeight / 2;
@@ -564,7 +573,7 @@ export function Sidebar(p: SidebarProps) {
         if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
           const kind = el.dataset.kind;
           const path = el.dataset.path;
-          if ((kind !== "note" && kind !== "folder") || path === undefined) return;
+          if ((kind !== "note" && kind !== "folder" && kind !== "file") || path === undefined) return;
           e.preventDefault();
           const rect = el.getBoundingClientRect();
           p.onMenu({ x: rect.left + 24, y: rect.bottom }, { kind, path });

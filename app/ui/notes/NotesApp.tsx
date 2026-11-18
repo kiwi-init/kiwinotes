@@ -43,7 +43,7 @@ import { focusEditor, insertIntoEditor,
 } from "./NoteEditor.tsx";
 import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
-import { type SideRoot, type SideTarget, Sidebar, whereLabel } from "./Sidebar.tsx";
+import { type SideRoot, type SideTarget, Sidebar, sideKey, whereLabel } from "./Sidebar.tsx";
 import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy,
 } from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
@@ -1079,11 +1079,39 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       const r = await api.rename(target.path, `${join(folderOf(target.path), safe)}.md`).catch(failed_("renomear a nota"));
       if (r) await after({ from: target.path, to: r.meta.path });
       if (r && safe !== clean) say(`Nota renomeada para “${noteName(r.meta.path)}”${LINK_SAFE_NOTE}.`);
+    } else if (target.kind === "file") {
+      if (clean === target.path.slice(target.path.lastIndexOf("/") + 1)) return;
+      await renameFile(target.path, join(folderOf(target.path), clean), "renomear o arquivo");
     } else if (folders) {
       if (current.current?.startsWith(`${target.path}/`) && !(await leave())) return;
       const r = await folders.rename(target.path, join(folderOf(target.path), clean)).catch(failed_("renomear a pasta"));
       if (r) await after({ from: target.path, to: r.path });
     }
+  };
+
+  /**
+   * Renomear e mover um arquivo que não é nota (T19878, spec #19256): o engine reescreve os links das notas. O arquivo
+   * aberto na janela grava antes e segue para o caminho novo.
+   */
+  const renameFile = async (from: string, to: string, what: string) => {
+    const rename = api.files?.rename;
+    if (!rename) return;
+    const isOpen = view === "file" && fileOpen === from;
+    if (isOpen && !(await leave())) return;
+    const r = await rename(from, to).catch(failed_(what));
+    if (!r) return;
+    if (isOpen) setFileOpen(r.path);
+    await after({ from, to: r.path });
+    if (r.skippedPaths.length) say(`${r.skippedPaths.length === 1 ? "Uma nota mudou" : `${r.skippedPaths.length} notas mudaram`} no meio e ficou com o link antigo.`);
+    else if (r.updatedLinks) say(`${r.updatedLinks === 1 ? "1 link atualizado" : `${r.updatedLinks} links atualizados`}.`);
+  };
+
+  /** "Copiar caminho" (T19878): o caminho inteiro no disco, quando se sabe a pasta; senão, o de dentro da pasta. */
+  const copyPath = (p: string) => {
+    void appApi.copy(shownFolder?.path ? `${shownFolder.path.replace(/\/$/, "")}/${p}` : p).then(
+      () => say("Caminho copiado."),
+      () => say("Não deu para copiar o caminho."),
+    );
   };
 
   const moveItem = async (target: SideTarget, folder: string) => {
@@ -1094,6 +1122,9 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       if (current.current === target.path && !(await leave())) return;
       const r = await folders.moveNote(target.path, folder).catch(failed_("mover a nota"));
       if (r) await after({ from: target.path, to: r.meta.path });
+    } else if (target.kind === "file") {
+      if (folderOf(target.path) === folder) return;
+      await renameFile(target.path, join(folder, target.path.slice(target.path.lastIndexOf("/") + 1)), "mover o arquivo");
     } else {
       if (folder === target.path || folder.startsWith(`${target.path}/`) || folderOf(target.path) === folder) return;
       if (current.current?.startsWith(`${target.path}/`) && !(await leave())) return;
@@ -1144,20 +1175,30 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const remove = async (target: SideTarget) => {
     if (target.kind === "empty") return;
     const isOpen = current.current === target.path || (target.kind === "folder" && !!current.current?.startsWith(`${target.path}/`));
+    // O arquivo aberto na janela (T19878) grava o que tiver e fecha.
+    const fileShown = target.kind === "file" && view === "file" && fileOpen === target.path;
+    if (fileShown) {
+      if (!(await leave())) return;
+      setFileOpen(null);
+      setView("note");
+    }
     if (isOpen) {
       // O que estava sendo editado grava antes; se não der, não apaga.
       if (!(await leave())) return;
       current.current = null;
       setNote(null);
     }
-    const name = target.path.slice(target.path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    const base = target.path.slice(target.path.lastIndexOf("/") + 1);
+    const name = target.kind === "file" ? base : base.replace(/\.md$/, ""); // o arquivo fica com a extensão (T19878)
     // O engine tira das fixadas o que foi apagado; o Desfazer põe de volta.
     const wasPinned = pinned.filter((p) => p === target.path || (target.kind === "folder" && p.startsWith(`${target.path}/`)),
     );
     const r =
       target.kind === "note"
         ? await api.delete(target.path).catch(failed_("apagar a nota"))
-        : await folders?.delete(target.path).catch(failed_("apagar a pasta"));
+        : target.kind === "file"
+          ? await api.files?.delete?.(target.path).catch(failed_("apagar o arquivo"))
+          : await folders?.delete(target.path).catch(failed_("apagar a pasta"));
     if (!r) return;
     await after();
     // O engine guarda o apagado por 10 min antes da Lixeira (#2493); o aviso dura 8 s, então o Desfazer sempre chega a tempo.
@@ -1263,6 +1304,22 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         { kind: "separator" },
         { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !folders,
         },
+      ];
+    }
+    if (t.kind === "file") {
+      // Um arquivo que não é nota (T19878, spec #19256): só o que vale para ele. O "Abrir" é o mesmo do clique.
+      const shownHere = Boolean(api.canvas && /\.canvas$/i.test(t.path)) || Boolean(api.files?.read && (viewerFor(t.path) || mayBeText(t.path)));
+      const canMove = Boolean(api.files?.rename);
+      return [
+        { label: "Abrir", onSelect: () => openVaultFile(t.path) },
+        ...(shownHere ? [{ label: "Abrir no app padrão", onSelect: () => void api.files?.open(t.path).catch(failed_("abrir o arquivo")) }] : []),
+        { label: "Mostrar no Finder", onSelect: () => void folders?.reveal(t.path).catch(failed_("mostrar no Finder")), disabled: !folders },
+        { label: "Copiar caminho", onSelect: () => copyPath(t.path) },
+        { kind: "separator" },
+        { label: "Renomear", onSelect: () => setRenaming(sideKey(t)), disabled: !canMove },
+        { label: "Mover para…", onSelect: () => setMoving(t), disabled: !canMove || !folders },
+        { kind: "separator" },
+        { label: "Apagar", danger: true, onSelect: () => void remove(t), disabled: !api.files?.delete || !folders },
       ];
     }
     const isPinned = pinned.includes(t.path);
@@ -1612,7 +1669,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           pinned={pinnedNotes}
           recent={recent}
           renaming={renaming}
-          menuOn={menu && menu.target.kind !== "empty" ? `${menu.target.kind === "note" ? "n" : "f"}:${menu.target.path}` : null}
+          menuOn={menu && menu.target.kind !== "empty" ? sideKey(menu.target) : null}
           onRename={(t, name) => void renameItem(t, name)}
           onSelectFolder={setSelectedFolder}
           onMenu={(at, target) => {
@@ -1993,7 +2050,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         <FolderPicker
           title={`Mover “${moving.path.slice(moving.path.lastIndexOf("/") + 1).replace(/\.md$/, "")}” para…`}
           folders={["", ...(listing?.folders ?? [])].filter(
-            (f) => f !== folderOf(moving.path) && (moving.kind === "note" || (f !== moving.path && !f.startsWith(`${moving.path}/`))),
+            (f) => f !== folderOf(moving.path) && (moving.kind !== "folder" || (f !== moving.path && !f.startsWith(`${moving.path}/`))),
           )}
           onPick={(f) => void moveItem(moving, f)}
           onClose={() => setMoving(null)}

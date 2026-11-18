@@ -63,6 +63,7 @@ const notesStub = {
   saveFile: async (p: unknown) => ({ saved: true as const, path: String(p), size: 2, version: "v2" }),
   createFile: async (folder: unknown, name: unknown) => ({ path: `${String(folder)}/${String(name)}`, size: 2, version: "v1" }),
   deleteFile: async () => true as const,
+  renameFile: async () => ({ path: "", updatedLinks: 0, skippedPaths: [] }),
   getCanvas: async (p: unknown) => ({ path: String(p), content: "{}", version: "v1" }),
   saveCanvas: async (p: unknown) => ({ saved: true as const, path: String(p), version: "v2" }),
   createCanvas: async () => ({ path: "Quadro.canvas", content: "{}", version: "v1" }),
