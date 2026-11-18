@@ -75,7 +75,7 @@ jobs:
         run: bun test
 
       # Os roteiros de UI que o `bun test` não roda (issue 224): ficaram quebrando na `main` sem ninguém ver.
-      # A janela Notas no Vite de dev com o vault de mentira, e as abas do hub no build real com um headless --no-helper.
+      # A janela Notas no Vite de dev com o vault de mentira, e as abas e a gota do hub no build real com um headless --no-helper.
       # Rodam mesmo com o `bun test` vermelho (um defeito não esconde o outro), mas só com os navegadores instalados.
       - name: notes-ui-check
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
@@ -86,6 +86,11 @@ jobs:
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 10
         run: bun scripts/hub-tabs-ui-check.ts
+
+      - name: hub-goo-check
+        if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
+        timeout-minutes: 10
+        run: bun scripts/hub-goo-check.ts
 
   typecheck:
     name: typecheck
