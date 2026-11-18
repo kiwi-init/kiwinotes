@@ -1,4 +1,4 @@
-// As referências (spec #11908, T11986–T11988): a permissão "Pesquisar na web" em Ajustes › Agente (desligada nega a busca
+// As referências (spec #11908, T11986–T11988): a permissão "Pesquisar na web" em Ajustes › Agente (ligada de fábrica desde o spec #19273; desligada nega a busca
 // do agente; ligada libera, e o balão diz "Pesquisando na web…"), e a seção "Referências" que o Kiwi monta com os links
 // que o agente manda, com [Ver] [Aplicar] [Descartar] e [Desfazer]. No hub de verdade, com o AppEngine headless e o
 // agente falso, num WebKit headless. A nota é de teste, num tmp; o agente falso nunca vai à rede; nada na tela de ninguém.
@@ -92,21 +92,38 @@ try {
   await invoke("agent.download");
   for (let n = 0; (await invoke("agent.status")).adapter.phase !== "ready"; n++) { assert.ok(n < 200); await Bun.sleep(100); }
 
-  // 1. Ajustes › Agente: "Pesquisar na web" nasce desligado, e a busca do agente é negada.
+  // 1. Ajustes › Agente: "Pesquisar na web" nasce ligado (spec #19273); desligado pela tela, a busca do agente é negada.
   const s = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", width: 900, height: 1800, motion: false, browser: "webkit", query: { section: "settings", topic: "agent" } });
   const sw = "[role=switch][aria-label='Pesquisar na web']";
   await s.page.waitForSelector(sw, { timeout: 15000 });
-  assert.equal(await s.page.locator(sw).getAttribute("aria-checked"), "false");
+  assert.equal(await s.page.locator(sw).getAttribute("aria-checked"), "true");
+  assert.equal((await invoke("agent.status")).webSearch, true);
+  report.checks.push("Pesquisar na web is on by default (spec #19273)");
+  const row = s.page.locator(`.kn-row:has(${sw})`).first();
+  await row.scrollIntoViewIfNeeded();
+  await Bun.sleep(300);
+  await row.screenshot({ path: join(out, "0-de-fabrica.png") });
+  shots.push({ file: "0-de-fabrica.png", caption: "0. De fábrica, \"Pesquisar na web\" vem ligado (spec #19273)" });
+  await s.page.locator(sw).click();
+  await s.page.waitForSelector(`${sw}[aria-checked=false]`, { timeout: 15000 });
   assert.equal((await invoke("agent.status")).webSearch, false);
   const off = await answerOf((await invoke("agent.ask", { text: "/web documentação do ORBITweb" })).id);
   assert.equal(off, "web negada: a busca não aconteceu.");
   await idle();
-  const row = s.page.locator(`.kn-row:has(${sw})`).first();
+  // O Esforço no Padrão, depois do primeiro pedido (o modelo já disse os níveis): a linha diz que vale o mais baixo.
+  const effort = s.page.locator(".kn-row:has([aria-label='Esforço do modelo'])").first();
+  await s.page.waitForFunction(() => document.body.textContent?.includes("No Padrão, vale o nível mais baixo do modelo"), undefined, { timeout: 15000 });
+  await effort.scrollIntoViewIfNeeded();
+  await Bun.sleep(300);
+  await effort.screenshot({ path: join(out, "0-esforco.png") });
+  shots.push({ file: "0-esforco.png", caption: "0. O Esforço no Padrão: vale o nível mais baixo do modelo (spec #19273)" });
+  assert.equal((await invoke("agent.status")).session?.effort, "low");
+  report.checks.push("with no choice, the effort row says the lowest level applies, and the session runs on low");
   await row.scrollIntoViewIfNeeded();
   await Bun.sleep(300);
   await row.screenshot({ path: join(out, "1-desligado.png") });
-  shots.push({ file: "1-desligado.png", caption: "1. \"Pesquisar na web\" nasce desligado: o Kiwi nega a busca do agente" });
-  report.checks.push("Pesquisar na web is off by default, and the agent's web search is denied");
+  shots.push({ file: "1-desligado.png", caption: "1. \"Pesquisar na web\" desligado: o Kiwi nega a busca do agente" });
+  report.checks.push("Pesquisar na web turned off, and the agent's web search is denied");
   // Ligado pela tela.
   await s.page.locator(sw).click();
   await s.page.waitForSelector(`${sw}[aria-checked=true]`, { timeout: 15000 });

@@ -362,16 +362,18 @@ describe("o pedido, ao vivo", () => {
 });
 
 describe("o modelo e o esforço são do app", () => {
-  test("o agente abre com os do terminal (fable, high), e o app troca pelos dele antes do primeiro pedido", async () => {
+  test("o agente abre com os do terminal (fable, high), e o app troca pelos dele antes do primeiro pedido; sem escolha, o esforço vai no mais baixo (spec #19273)", async () => {
     const m = make({ model: "fable" });
     await readyNow(m);
     await askAndWait(m, "oi");
     const sets = m.log().filter((l) => l.method === "session/set_config_option").map((l) => [l.params.configId, l.params.value]);
     expect(sets).toEqual([
       ["model", "default"],
-      ["effort", "default"],
+      ["effort", "low"],
     ]);
-    expect((await m.svc.status()).session).toEqual({ model: "default", effort: "default" });
+    expect((await m.svc.status()).session).toEqual({ model: "default", effort: "low" });
+    // Nos Ajustes, a escolha continua "Padrão": o low é o que o Padrão pede.
+    expect((await m.svc.status()).effort).toBe("default");
   });
 
   test("trocar o modelo vale no próximo pedido, com o programa já aberto", async () => {
@@ -380,7 +382,7 @@ describe("o modelo e o esforço são do app", () => {
     await askAndWait(m, "um");
     await m.svc.configure({ model: "opus" });
     await askAndWait(m, "dois");
-    expect((await m.svc.status()).session).toEqual({ model: "opus", effort: "default" });
+    expect((await m.svc.status()).session).toEqual({ model: "opus", effort: "low" });
   });
 });
 
@@ -497,7 +499,7 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     expect(effortHint(st)).toContain("O nível salvo, Alto, não existe neste modelo: vale o Médio.");
   }, 30_000);
 
-  test("o Padrão volta mesmo num modelo em que o agente não oferece o default: vale o esforço que o agente pôs nele (revisão #17024)", async () => {
+  test("o Padrão volta mesmo num modelo em que o agente não oferece o default: vale o mais baixo dele (revisão #17024, spec #19273)", async () => {
     const m = make();
     await readyNow(m);
     await m.svc.configure({ model: "haiku" });
@@ -505,13 +507,13 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     const st = await m.svc.status();
     expect(st.efforts.haiku?.map((e) => e.value)).toEqual(["low", "medium"]);
     expect(effortOptions(st)?.map((o) => o.value)).toEqual(["default", "low", "medium"]);
-    expect(st.session).toEqual({ model: "haiku", effort: "medium" });
-    await m.svc.configure({ effort: "low" });
+    expect(st.session).toEqual({ model: "haiku", effort: "low" });
+    await m.svc.configure({ effort: "medium" });
     await askAndWait(m, "dois");
-    expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "low" });
+    expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "medium" });
     await m.svc.configure({ effort: "default" });
     await askAndWait(m, "três");
-    expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "medium" });
+    expect((await m.svc.status()).session).toEqual({ model: "haiku", effort: "low" });
   }, 30_000);
 
   test("o prepare com o /usage do medidor andando só devolve o estado: nada de set_config no meio do /usage (revisão #17024)", async () => {
@@ -521,7 +523,7 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     const usages = () => m.log().filter((l) => l.method === "session/usage").length;
     const usage = m.svc.usageRefresh();
     await until(() => usages() === 1);
-    await m.svc.configure({ model: "sonnet", effort: "low" });
+    await m.svc.configure({ model: "sonnet", effort: "medium" });
     const before = sets(m).length;
     expect((await m.svc.status()).busy).toBe(true);
     await m.svc.prepare();
@@ -531,7 +533,7 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     await m.svc.prepare();
     expect(sets(m).slice(before)).toEqual([
       ["model", "sonnet"],
-      ["effort", "low"],
+      ["effort", "medium"],
     ]);
   }, 30_000);
 
@@ -547,16 +549,16 @@ describe("o esforço de cada modelo (spec #16793)", () => {
     expect((await m.svc.status()).efforts.sonnet).toBeUndefined();
     const st2 = await m.svc.prepare();
     expect(st2.efforts.sonnet?.map((e) => e.value)).toEqual(["default", "low", "medium", "high"]);
-    expect(st2.session).toEqual({ model: "sonnet", effort: "default" });
-    await m.svc.configure({ effort: "low" });
+    expect(st2.session).toEqual({ model: "sonnet", effort: "low" });
+    await m.svc.configure({ effort: "medium" });
     await m.svc.prepare();
     expect(prompts()).toBe(0);
     // O que Ajustes › Agente lê: o mesmo estado, com o modelo e o esforço escolhidos no onboarding.
     const settings = await m.svc.status(true);
     expect(settings.model).toBe("sonnet");
-    expect(settings.effort).toBe("low");
-    expect(settings.effortByModel).toEqual({ sonnet: "low" });
-    expect(settings.session).toEqual({ model: "sonnet", effort: "low" });
+    expect(settings.effort).toBe("medium");
+    expect(settings.effortByModel).toEqual({ sonnet: "medium" });
+    expect(settings.session).toEqual({ model: "sonnet", effort: "medium" });
   });
 
   test("o prepare sem estar ligado, sem o aceite ou sem o adaptador falha sem subir processo; com um pedido rodando, só devolve o estado", async () => {
@@ -768,8 +770,9 @@ describe("as ferramentas do Kiwi (spec #7496)", () => {
     expect(params.mcpServers[0]!.headers[0]!.name).toBe("X-Kiwi-Token");
     const options = params._meta.claudeCode.options;
     expect(options.allowedTools).toEqual(["mcp__kiwi__*"]);
-    // O isolamento continua: nenhuma ferramenta embutida, nenhuma configuração pessoal, só os servidores do Kiwi.
-    expect(options).toMatchObject({ tools: [], settingSources: [], strictMcpConfig: true, allowDangerouslySkipPermissions: false });
+    // O isolamento continua: das embutidas só a busca e a leitura de página (spec #19273), nenhuma configuração pessoal,
+    // e só o servidor do Kiwi: nenhum MCP de fora, nem o context7 (harry #19281).
+    expect(options).toMatchObject({ tools: ["WebSearch", "WebFetch"], settingSources: [], strictMcpConfig: true, allowDangerouslySkipPermissions: false });
   });
 
   test("sem o leitor do cofre, nenhum servidor vai e nada é liberado", async () => {
@@ -930,9 +933,12 @@ function memoryWriter(notes: Record<string, string>): VaultWriter {
 }
 
 describe("Pesquisar na web (spec #11908)", () => {
-  test("desligado por padrão, o Kiwi nega a busca do agente; ligado, libera já no próximo pedido, e o status diz web", async () => {
+  test("ligado por padrão (spec #19273); desligado, o Kiwi nega a busca do agente; ligado de novo, libera já no próximo pedido, e o status diz web", async () => {
     const m = make();
     await readyNow(m);
+    expect((await m.svc.status()).webSearch).toBe(true);
+    // A escolha fica gravada com a marca: desligar continua desligado depois de reler as configurações.
+    expect((await m.svc.configure({ webSearch: false })).webSearch).toBe(false);
     expect((await m.svc.status()).webSearch).toBe(false);
     const off = await askAndWait(m, "/web documentação do ORBITweb");
     expect(off.at(-1)).toMatchObject({ type: "done", text: "web negada: a busca não aconteceu." });

@@ -104,8 +104,16 @@ export interface AgentSettings {
   meetings: AgentMeetingSettings;
   /** As instruções da pessoa para o agente (spec #11469): até 2.000 caracteres, em todo pedido. */
   instructions: string;
-  /** "Pesquisar na web" (spec #11908): o Kiwi libera as ferramentas de web do agente. Desligado por padrão. */
+  /**
+   * "Pesquisar na web" (spec #11908): o Kiwi libera as ferramentas de web do agente. Ligado por padrão desde o spec
+   * #19273 (harry #19290): buscar e ler uma página gasta menos que trazer a página inteira.
+   */
   webSearch: boolean;
+  /**
+   * A pessoa já mexeu no "Pesquisar na web" (spec #19273). As configurações são gravadas inteiras, então todo arquivo de
+   * antes tem o `webSearch: false` do padrão velho: sem esta marca, vale o padrão novo (ligado); com ela, a escolha.
+   */
+  webSearchChosen: boolean;
   /** O resumo executivo (spec #11546): os blocos e o período do primeiro. */
   summary: SummarySettings;
   /** O onboarding (spec #11955): pendente até a primeira vez que o agente liga; aberto (com o passo) ou feito. */
@@ -167,7 +175,8 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   meetings: DEFAULT_AGENT_MEETING_SETTINGS,
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
-  webSearch: false,
+  webSearch: true,
+  webSearchChosen: false,
   onboarding: DEFAULT_AGENT_ONBOARDING,
   routines: DEFAULT_AGENT_ROUTINES,
 };
@@ -209,7 +218,8 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
     controlShortcut: o.controlShortcut === true,
     meetings: sanitizeAgentMeetingSettings(o.meetings),
     instructions: typeof o.instructions === "string" ? o.instructions.replace(/\r\n?/g, "\n").slice(0, 2000) : "",
-    webSearch: o.webSearch === true,
+    webSearch: o.webSearchChosen === true ? o.webSearch === true : DEFAULT_AGENT_SETTINGS.webSearch,
+    webSearchChosen: o.webSearchChosen === true,
     summary: sanitizeSummarySettings(o.summary),
     onboarding: sanitizeAgentOnboarding(o.onboarding),
     routines: sanitizeAgentRoutines(o.routines),

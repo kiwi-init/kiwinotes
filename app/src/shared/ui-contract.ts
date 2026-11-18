@@ -1022,7 +1022,7 @@ export interface AgentStatus {
   summary: SummarySettings;
   /** As instruções da pessoa para o agente (1.60.0, spec #11469): até 2.000 caracteres, em todo pedido. */
   instructions: string;
-  /** "Pesquisar na web" (1.63.0, spec #11908): desligado por padrão; ligado, o agente pode buscar e ler páginas. */
+  /** "Pesquisar na web" (1.63.0, spec #11908): ligado por padrão (spec #19273); ligado, o agente pode buscar e ler páginas. */
   webSearch: boolean;
   /** O onboarding (1.64.0, spec #11955): aberto na primeira vez que o agente liga, e pelo "Refazer". */
   onboarding: AgentOnboarding;

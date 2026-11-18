@@ -37,8 +37,10 @@ import { AgentError, classifyAgentError } from "./errors.ts";
  * - `settingSources: []` não carrega as configurações da pessoa (`~/.claude`, as do projeto e as locais), com os
  *   hooks, as regras e os servidores MCP do terminal;
  * - `strictMcpConfig` usa só os servidores MCP que o Kiwi mandar (o das ferramentas do Kiwi, spec #7496, ou nenhum);
- * - `tools: []` desliga as ferramentas embutidas (o shell, a edição de arquivos e a web). As ferramentas MCP não são
- *   embutidas: as do Kiwi continuam visíveis ("`tools: []`: Claude can only use your MCP tools", doc do Agent SDK);
+ * - `tools` só com a busca e a leitura de página (`WEB_TOOLS`, spec #19273): desliga as outras embutidas (o shell e a
+ *   edição de arquivos). As ferramentas MCP não são embutidas: as do Kiwi continuam visíveis (doc do Agent SDK). As da
+ *   web existem na sessão, mas só passam com "Pesquisar na web" ligado (`webTools`, no pedido de permissão): sem elas na
+ *   lista, o interruptor ligado não tinha o que liberar. Trocar o interruptor vale no pedido seguinte, sem reabrir;
  * - `allowDangerouslySkipPermissions: false` desliga o modo que pula as permissões (spec #8368). Sem ele, um
  *   `"defaultMode": "bypassPermissions"` no `~/.claude/settings.json` da pessoa vira `--permission-mode=bypassPermissions`
  *   no Claude Code: foi o que a prova do builder viu, com o adaptador de verdade e um `claude` falso. Com ele, a sessão
@@ -54,11 +56,23 @@ export const ISOLATION_META = {
     options: {
       settingSources: [] as string[],
       strictMcpConfig: true,
-      tools: [] as string[],
+      tools: ["WebSearch", "WebFetch"] as string[],
       allowDangerouslySkipPermissions: false,
     },
   },
 } as const;
+
+/**
+ * O enxuto (spec #19273): o que a sessão do gato leva para gastar menos, sem tirar função. A conversa compacta ao chegar
+ * em 200 mil tokens (`autoCompactWindow`, nas `settings` da sessão; o SDK aceita de 100 mil a 1 milhão), em vez de
+ * carregar a janela inteira do modelo a cada turno. Vai por baixo do isolamento, como o `sessionOptions`.
+ */
+export const LEAN_SESSION_OPTIONS = {
+  settings: { autoCompactWindow: 200_000 },
+} as const;
+
+/** Os esforços do Claude Code, do mais baixo ao mais alto: sem escolha da pessoa, vai o mais baixo oferecido (#19294). */
+export const EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max"] as const;
 
 export type AgentEvent =
   | { type: "status"; status: "thinking" }
@@ -325,6 +339,7 @@ export class AgentHost {
     // O servidor do Kiwi vai pelo HTTP do MCP: só para um agente que diz saber (`mcpCapabilities.http`).
     const mcpServers = kiwi && init.agentCapabilities?.mcpCapabilities?.http ? kiwi.servers() : [];
     const options = {
+      ...structuredClone(LEAN_SESSION_OPTIONS),
       ...structuredClone(this.o.sessionOptions ?? {}),
       ...structuredClone(ISOLATION_META.claudeCode.options),
       ...(mcpServers.length && kiwi ? { allowedTools: [`${kiwi.prefix}*`] } : {}),
@@ -455,11 +470,16 @@ export class AgentHost {
       const offered = (option.options as unknown as { value?: string; options?: { value: string }[] }[]).flatMap(
         (x): { value?: string }[] => (x.options ? x.options : [x]),
       );
-      // O "Padrão" num modelo em que o agente não oferece `default`: o esforço que ele mesmo pôs ao entrar no modelo.
+      // O "Padrão" (a pessoa não escolheu): o esforço mais baixo que o modelo oferece (spec #19273, harry #19294). Um
+      // modelo sem nenhum dos níveis conhecidos fica com o `default` dele, ou com o que ele mesmo pôs ao entrar.
       let value = asked;
-      if (configId === "effort" && value === "default" && !offered.some((x) => x.value === value)) {
-        const start = this.startEffort.get(this.configValues.model ?? "");
-        if (start) value = start;
+      if (configId === "effort" && value === "default") {
+        const lowest = EFFORT_ORDER.find((e) => offered.some((x) => x.value === e));
+        if (lowest) value = lowest;
+        else if (!offered.some((x) => x.value === value)) {
+          const start = this.startEffort.get(this.configValues.model ?? "");
+          if (start) value = start;
+        }
       }
       if (option.currentValue === value) continue;
       if (!offered.some((x) => x.value === value)) {

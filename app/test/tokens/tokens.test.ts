@@ -9,7 +9,7 @@ import { fixedPrefix } from "../../src/agent/fixed-prefix.ts";
 import { countTokens } from "../../src/agent/token-count.ts";
 import { tempDir } from "../tmp.ts";
 import type { VaultReader } from "../../src/agent/tools/reader.ts";
-import { autoRequestMeasures, cardMeasures, CASES, listaAntes, FULL, type Measure, prefixMeasures, REQUEST, returnMeasures, toolMeasures } from "./measure.ts";
+import { autoRequestMeasures, cardMeasures, CASES, listaAntes, FULL, type Measure, prefixMeasures, REQUEST, returnMeasures, sessionMeasures, toolMeasures } from "./measure.ts";
 import { sampleVault } from "./vault.ts";
 
 const TETOS = JSON.parse(readFileSync(path.join(import.meta.dir, "tetos.json"), "utf8")) as Record<string, number | string>;
@@ -52,6 +52,12 @@ describe("o contador", () => {
 });
 
 describe("o que o Kiwi manda ao agente fica abaixo do teto", () => {
+  test("a sessão do gato, do lado do Kiwi: uma nova e o pedido seguinte (spec #19273)", async () => {
+    const rows = await sessionMeasures();
+    measured.push(...rows);
+    expect(overCeiling(rows, TETOS)).toEqual([]);
+  });
+
   test("o começo fixo, no normal e no econômico", () => {
     const rows = prefixMeasures();
     measured.push(...rows);

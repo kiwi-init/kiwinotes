@@ -1,5 +1,7 @@
 {
   "_comoSubir": "Cada valor é o teto de tokens de um item (contador local, src/agent/token-count.ts). Passou, o teste falha com o item e a diferença. Subir um teto é mudar a linha aqui no PR, e quem revisa vê.",
+  "sessão › nova": 5210,
+  "sessão › pedido típico": 40,
   "começo fixo › normal": 4370,
   "começo fixo › econômico": 3400,
   "começo fixo › pedido seguinte": 0,

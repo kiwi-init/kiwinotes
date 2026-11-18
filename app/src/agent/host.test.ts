@@ -5,7 +5,10 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { FAKE_AGENT_COMMAND } from "./fake/index.ts";
-import { AgentHost, ISOLATION_META, type AgentEvent } from "./host.ts";
+import { AgentHost, ISOLATION_META, LEAN_SESSION_OPTIONS, WEB_TOOLS, type AgentEvent } from "./host.ts";
+
+/** O `_meta` que toda sessão leva: o enxuto por baixo, o isolamento por cima. */
+const SESSION_META = { claudeCode: { options: { ...LEAN_SESSION_OPTIONS, ...ISOLATION_META.claudeCode.options } } };
 import type { AgentError } from "./errors.ts";
 import { tempDir } from "../../test/tmp.ts";
 
@@ -248,8 +251,18 @@ describe("o isolamento", () => {
     const [created] = opened();
     expect(created!.params.cwd).toBe(path.join(dir, "agent", "work"));
     expect(created!.params.mcpServers).toEqual([]);
-    expect(created!.params._meta).toEqual(ISOLATION_META);
-    expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: [], allowDangerouslySkipPermissions: false });
+    expect(created!.params._meta).toEqual(SESSION_META);
+    expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: ["WebSearch", "WebFetch"], allowDangerouslySkipPermissions: false });
+  });
+
+  test("o enxuto (spec #19273): só a busca e a leitura de página entre as embutidas, e compacta em 200 mil", async () => {
+    const dir = tmp();
+    const { h, opened } = fakeHost(dir);
+    await h.start();
+    const options = (opened()[0]!.params._meta as { claudeCode: { options: Record<string, unknown> } }).claudeCode.options;
+    expect(options.tools).toEqual([...WEB_TOOLS]);
+    expect(options.tools).not.toContain("Bash");
+    expect(options.settings).toEqual({ autoCompactWindow: 200_000 });
   });
 
   test("opções a mais vão junto, mas nunca trocam o isolamento (T8540)", async () => {
@@ -257,7 +270,7 @@ describe("o isolamento", () => {
     const { h, opened } = fakeHost(dir, { sessionOptions: { persistSession: false, tools: ["Bash"], settingSources: ["user"] } });
     await h.start();
     const [created] = opened();
-    expect(created!.params._meta).toEqual({ claudeCode: { options: { persistSession: false, ...ISOLATION_META.claudeCode.options } } });
+    expect(created!.params._meta).toEqual({ claudeCode: { options: { ...LEAN_SESSION_OPTIONS, persistSession: false, ...ISOLATION_META.claudeCode.options } } });
   });
 
   test("retomar a sessão manda o mesmo isolamento", async () => {
@@ -268,7 +281,7 @@ describe("o isolamento", () => {
     const { h: again, opened } = fakeHost(dir);
     await again.start();
     const resumed = opened().find((o) => o.method === "session/resume");
-    expect(resumed!.params._meta).toEqual(ISOLATION_META);
+    expect(resumed!.params._meta).toEqual(SESSION_META);
     expect(resumed!.params.mcpServers).toEqual([]);
   });
 
@@ -335,6 +348,41 @@ describe("os erros", () => {
 });
 
 describe("as opções da sessão: o modelo e o esforço (T8678)", () => {
+  test("sem escolha da pessoa, o esforço vai no mais baixo que o modelo oferece (spec #19273, harry #19294)", async () => {
+    const open = async (model: string) => {
+      const dir = tmp();
+      const h = new AgentHost({
+        name: "Agente falso",
+        command: FAKE_AGENT_COMMAND,
+        dir: path.join(dir, "agent"),
+        env: { ...process.env, KIWI_FAKE_AGENT_MODEL: model },
+        configOptions: () => ({ model, effort: "default" }),
+      });
+      hosts.push(h);
+      await h.start();
+      return h.configValues.effort;
+    };
+    // O falso abre em "high"; o "Padrão" vira o "low", no modelo que tem o low.
+    expect(await open("fable")).toBe("low");
+    expect(await open("haiku")).toBe("low");
+    // Um modelo sem nível de esforço continua sem.
+    expect(await open("opus-legacy")).toBeUndefined();
+  });
+
+  test("a escolha da pessoa continua valendo", async () => {
+    const dir = tmp();
+    const h = new AgentHost({
+      name: "Agente falso",
+      command: FAKE_AGENT_COMMAND,
+      dir: path.join(dir, "agent"),
+      env: { ...process.env, KIWI_FAKE_AGENT_MODEL: "fable" },
+      configOptions: () => ({ model: "fable", effort: "medium" }),
+    });
+    hosts.push(h);
+    await h.start();
+    expect(h.configValues.effort).toBe("medium");
+  });
+
   test("o host aplica os valores do Kiwi ao abrir, só onde o atual é outro", async () => {
     const dir = tmp();
     const log = path.join(dir, "log.jsonl");
@@ -431,7 +479,7 @@ describe("as ferramentas do Kiwi no host (spec #7496)", () => {
     const p = opened().find((l) => l.method === "session/new")!.params;
     expect(p.mcpServers).toEqual([server]);
     expect(p._meta.claudeCode.options.allowedTools).toEqual(["mcp__kiwi__*"]);
-    expect(p._meta.claudeCode.options.tools).toEqual([]);
+    expect(p._meta.claudeCode.options.tools).toEqual([...WEB_TOOLS]);
   });
 
   test("um agente que não diz saber o HTTP do MCP não recebe o servidor", async () => {
@@ -440,7 +488,7 @@ describe("as ferramentas do Kiwi no host (spec #7496)", () => {
     const p = opened().find((l) => l.method === "session/new")!.params;
     expect(p.mcpServers).toEqual([]);
     expect(p._meta.claudeCode.options.allowedTools).not.toContain("mcp__kiwi__*");
-    expect(p._meta.claudeCode.options.tools).toEqual([]);
+    expect(p._meta.claudeCode.options.tools).toEqual([...WEB_TOOLS]);
   });
 
   test("a permissão: aceita a ferramenta do Kiwi, recusa o Bash", async () => {

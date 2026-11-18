@@ -2365,6 +2365,7 @@ export class AgentService {
     // "Pesquisar na web" (spec #11908): vale já no próximo pedido de permissão do agente, sem reabrir a sessão.
     if (o.webSearch !== undefined) {
       patch.webSearch = o.webSearch === true;
+      patch.webSearchChosen = true;
       this.webNow = patch.webSearch;
     }
     if (o.instructions !== undefined) {
