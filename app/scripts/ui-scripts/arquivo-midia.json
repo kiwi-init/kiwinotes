@@ -23,9 +23,10 @@
     { "screenshot": "03-quebrado.png" },
     { "click": ".kn-crumb-bt", "name": "abre a árvore outra vez" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('enorme')", "name": "clica num .mov de 4 GB (esparso)" },
-    { "waitFor": ".kn-file[data-state='tooLarge'] .kn-file-notice", "name": "o engine nem lê: o aviso do tamanho (#19727)" },
+    { "waitFor": ".kn-file[data-state='tooLarge'] .kn-file-card", "name": "o engine nem lê: o cartão do arquivo, com o tamanho (#19727, T19316)" },
     { "expectText": ".kn-file-notice", "text": "Este arquivo tem 4 GB, e o Kiwi Notes mostra aqui até 25 MB.", "name": "o tamanho e o limite" },
-    { "expectCount": ".kn-file-actions button:has-text('Abrir no app padrão')", "count": 1, "name": "e o app padrão" },
+    { "expectCount": ".kn-file-open", "count": 1, "name": "um só Abrir no app padrão, no cartão (T19316, #19747)" },
+    { "expectCount": ".kn-file-reveal", "count": 1, "name": "e o Mostrar no Finder" },
     { "expectCount": "video, audio", "count": 0, "name": "nenhum player" },
     { "screenshot": "04-enorme.png" }
   ]
