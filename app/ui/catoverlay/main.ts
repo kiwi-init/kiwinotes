@@ -11,6 +11,7 @@
 
 import "../src/styles/tokens.css";
 import "../kiwicat-v2/bubble.css";
+import "../kiwicat-v2/bubble-md.css";
 import { DEFAULT_CAT_COLOR, catPalette, isCatColorChoice } from "../../src/shared/kiwicat-colors";
 import { createKiwiCat } from "../kiwicat/cat";
 import { overlayPlacement } from "./placement";
@@ -103,9 +104,8 @@ const fits = () => bubbleText.scrollHeight <= bubbleText.clientHeight + 1;
 
 /** O balão aberto (spec #17679): o markdown montado em elementos, nunca HTML. */
 function showFull(text: string) {
-  // Com o `document` de verdade (o padrão), o montador devolve um `DocumentFragment`.
-  bubbleText.replaceChildren(renderMarkdown(text) as unknown as DocumentFragment);
-  bubbleText.dataset.md = "true";
+  bubbleText.replaceChildren(renderMarkdown(text));
+  bubbleText.classList.add("kn-md");
 }
 
 /**
@@ -114,7 +114,7 @@ function showFull(text: string) {
  * símbolos do markdown (`plainMarkdown`, spec #17679).
  */
 function fitSummary(full: string): boolean {
-  bubbleText.dataset.md = "false";
+  bubbleText.classList.remove("kn-md");
   bubbleText.textContent = full;
   if (fits()) return false;
   const words = full.split(" ");
