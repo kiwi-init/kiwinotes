@@ -64,3 +64,12 @@ export function gooRect(el: GooBox, bar: Element): GooRect | null {
 export function gooVars(name: "tabs" | GooSide, r: GooRect): Record<string, string> {
   return { [`--goo-${name}-x`]: `${r.x}px`, [`--goo-${name}-y`]: `${r.y}px`, [`--goo-${name}-w`]: `${r.w}px`, [`--goo-${name}-h`]: `${r.h}px` };
 }
+
+/**
+ * Os botões que o `ResizeObserver` passa a olhar (`add`) e os que saíram da barra e ele larga (`drop`). Sem o `drop`,
+ * cada troca de seção deixava os botões antigos observados até a barra sumir (revisão do T18646, T18917).
+ */
+export function gooWatchDiff<T>(watched: ReadonlySet<T>, now: Iterable<T>): { add: T[]; drop: T[] } {
+  const current = new Set(now);
+  return { add: [...current].filter((c) => !watched.has(c)), drop: [...watched].filter((c) => !current.has(c)) };
+}

@@ -10,7 +10,7 @@ import "./goo.css";
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 
-import { GOO_FALLBACK_MS, type GooPhase, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars } from "./goo.ts";
+import { GOO_FALLBACK_MS, type GooPhase, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
 
 const SIDES: GooSide[] = ["start", "end"];
 /** O fade dos botões com "reduzir movimento" (o `--fast`, com folga). */
@@ -86,7 +86,9 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
     ro.observe(tabs);
     const watched = new Set<Element>();
     const watchChildren = () => {
-      for (const slot of [start, end]) for (const c of Array.from(slot?.children ?? [])) if (!watched.has(c)) (watched.add(c), ro.observe(c));
+      const { add, drop } = gooWatchDiff(watched, [start, end].flatMap((slot) => Array.from(slot?.children ?? [])));
+      for (const c of drop) (watched.delete(c), ro.unobserve(c));
+      for (const c of add) (watched.add(c), ro.observe(c));
     };
     watchChildren();
     const mos = SIDES.map((side) => {
