@@ -160,8 +160,10 @@ export function effortHint(s: Pick<AgentStatus, "model" | "effort" | "efforts" |
   const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
   const shown = effortValue(s);
   const missing = shown !== s.effort ? ` O nível salvo, ${effortName(s.effort)}, não existe neste modelo: vale o ${effortName(shown)}.` : "";
+  // O Padrão pede o nível mais baixo do modelo (spec #19273, harry #19294).
+  const lowest = shown === "default" ? " No Padrão, vale o nível mais baixo do modelo, o que gasta menos." : "";
   const economy = s.economy ? " Com o modo econômico ligado, vale o esforço salvo do modelo mais barato." : "";
-  return `${what}${missing}${economy}`;
+  return `${what}${lowest}${missing}${economy}`;
 }
 
 /**
@@ -323,7 +325,7 @@ export function economyHint(s: AgentStatus): string {
     : `${what} ${effort} Trocar de modelo começa um cache novo.`;
 }
 
-/** "Pesquisar na web" (spec #11908): o rótulo e o que muda, desligado por padrão. */
+/** "Pesquisar na web" (spec #11908): o rótulo e o que muda, ligado por padrão (spec #19273). */
 export const WEB_LABEL = "Pesquisar na web";
 export function webHint(s: Pick<AgentStatus, "webSearch">): string {
   const what = "Com a permissão, o texto do pedido pode virar uma busca na web, feita pelo Claude Code, com o login dele. O Kiwi não chama nenhum serviço.";

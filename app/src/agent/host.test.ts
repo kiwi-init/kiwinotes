@@ -5,7 +5,10 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { FAKE_AGENT_COMMAND } from "./fake/index.ts";
-import { AgentHost, ISOLATION_META, type AgentEvent } from "./host.ts";
+import { AgentHost, ISOLATION_META, LEAN_SESSION_OPTIONS, WEB_TOOLS, type AgentEvent } from "./host.ts";
+
+/** O `_meta` que toda sessão leva: o enxuto por baixo, o isolamento por cima. */
+const SESSION_META = { claudeCode: { options: { ...LEAN_SESSION_OPTIONS, ...ISOLATION_META.claudeCode.options } } };
 import type { AgentError } from "./errors.ts";
 import { tempDir } from "../../test/tmp.ts";
 
@@ -26,7 +29,7 @@ function tmp(): string {
 /** Um host com o agente falso. `log` recebe cada abertura de sessão que o falso viu; `resume` muda como ele retoma. */
 function fakeHost(
   dir: string,
-  extra: { resume?: "resume" | "load" | "none"; command?: readonly string[]; sessionOptions?: Record<string, unknown> } = {},
+  extra: { resume?: "resume" | "load" | "none"; command?: readonly string[]; sessionOptions?: Record<string, unknown>; webTools?: () => boolean } = {},
 ) {
   const log = path.join(dir, "fake-log.jsonl");
   const h = new AgentHost({
@@ -35,6 +38,7 @@ function fakeHost(
     dir: path.join(dir, "agent"),
     env: { ...process.env, KIWI_FAKE_AGENT_LOG: log, KIWI_FAKE_AGENT_RESUME: extra.resume ?? "resume" },
     sessionOptions: extra.sessionOptions,
+    ...(extra.webTools ? { webTools: extra.webTools } : {}),
   });
   hosts.push(h);
   // Como as sessões abriram: o agente falso também anota cada `session/prompt` (spec #11084), que fica de fora aqui.
@@ -248,8 +252,37 @@ describe("o isolamento", () => {
     const [created] = opened();
     expect(created!.params.cwd).toBe(path.join(dir, "agent", "work"));
     expect(created!.params.mcpServers).toEqual([]);
-    expect(created!.params._meta).toEqual(ISOLATION_META);
+    expect(created!.params._meta).toEqual(SESSION_META);
     expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: [], allowDangerouslySkipPermissions: false });
+  });
+
+  test("o enxuto (spec #19273): só a busca e a leitura de página entre as embutidas, e compacta em 200 mil", async () => {
+    const dir = tmp();
+    const { h, opened } = fakeHost(dir, { webTools: () => true });
+    await h.start();
+    const options = (opened()[0]!.params._meta as { claudeCode: { options: Record<string, unknown> } }).claudeCode.options;
+    expect(options.tools).toEqual([...WEB_TOOLS]);
+    expect(options.tools).not.toContain("Bash");
+    expect(options.settings).toEqual({ autoCompactWindow: 200_000 });
+    expect(h.sessionWeb).toBe(true);
+  });
+
+  test("web desligada: as ferramentas de web nem existem na sessão, e a sessão nova segue o interruptor (revisão do T19300)", async () => {
+    const dir = tmp();
+    let web = false;
+    const { h, opened } = fakeHost(dir, { webTools: () => web });
+    await h.start();
+    const tools = (n: number) => (opened()[n]!.params._meta as { claudeCode: { options: { tools: string[] } } }).claudeCode.options.tools;
+    expect(tools(0)).toEqual([]);
+    expect(h.sessionWeb).toBe(false);
+    web = true;
+    await h.newSession();
+    expect(tools(1)).toEqual([...WEB_TOOLS]);
+    expect(h.sessionWeb).toBe(true);
+    web = false;
+    await h.newSession();
+    expect(tools(2)).toEqual([]);
+    expect(h.sessionWeb).toBe(false);
   });
 
   test("opções a mais vão junto, mas nunca trocam o isolamento (T8540)", async () => {
@@ -257,7 +290,7 @@ describe("o isolamento", () => {
     const { h, opened } = fakeHost(dir, { sessionOptions: { persistSession: false, tools: ["Bash"], settingSources: ["user"] } });
     await h.start();
     const [created] = opened();
-    expect(created!.params._meta).toEqual({ claudeCode: { options: { persistSession: false, ...ISOLATION_META.claudeCode.options } } });
+    expect(created!.params._meta).toEqual({ claudeCode: { options: { ...LEAN_SESSION_OPTIONS, persistSession: false, ...ISOLATION_META.claudeCode.options } } });
   });
 
   test("retomar a sessão manda o mesmo isolamento", async () => {
@@ -268,7 +301,7 @@ describe("o isolamento", () => {
     const { h: again, opened } = fakeHost(dir);
     await again.start();
     const resumed = opened().find((o) => o.method === "session/resume");
-    expect(resumed!.params._meta).toEqual(ISOLATION_META);
+    expect(resumed!.params._meta).toEqual(SESSION_META);
     expect(resumed!.params.mcpServers).toEqual([]);
   });
 
@@ -335,6 +368,41 @@ describe("os erros", () => {
 });
 
 describe("as opções da sessão: o modelo e o esforço (T8678)", () => {
+  test("sem escolha da pessoa, o esforço vai no mais baixo que o modelo oferece (spec #19273, harry #19294)", async () => {
+    const open = async (model: string) => {
+      const dir = tmp();
+      const h = new AgentHost({
+        name: "Agente falso",
+        command: FAKE_AGENT_COMMAND,
+        dir: path.join(dir, "agent"),
+        env: { ...process.env, KIWI_FAKE_AGENT_MODEL: model },
+        configOptions: () => ({ model, effort: "default" }),
+      });
+      hosts.push(h);
+      await h.start();
+      return h.configValues.effort;
+    };
+    // O falso abre em "high"; o "Padrão" vira o "low", no modelo que tem o low.
+    expect(await open("fable")).toBe("low");
+    expect(await open("haiku")).toBe("low");
+    // Um modelo sem nível de esforço continua sem.
+    expect(await open("opus-legacy")).toBeUndefined();
+  });
+
+  test("a escolha da pessoa continua valendo", async () => {
+    const dir = tmp();
+    const h = new AgentHost({
+      name: "Agente falso",
+      command: FAKE_AGENT_COMMAND,
+      dir: path.join(dir, "agent"),
+      env: { ...process.env, KIWI_FAKE_AGENT_MODEL: "fable" },
+      configOptions: () => ({ model: "fable", effort: "medium" }),
+    });
+    hosts.push(h);
+    await h.start();
+    expect(h.configValues.effort).toBe("medium");
+  });
+
   test("o host aplica os valores do Kiwi ao abrir, só onde o atual é outro", async () => {
     const dir = tmp();
     const log = path.join(dir, "log.jsonl");

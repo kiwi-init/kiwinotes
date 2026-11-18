@@ -105,7 +105,7 @@ test("gravações ao mesmo tempo (T2503, revisão #2582): uma por vez, sem perde
 });
 
 test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no padrão; um valor ruim volta ao padrão", () => {
-  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", effortByModel: {}, notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
+  expect(DEFAULT_AGENT_SETTINGS).toEqual({ enabled: false, consented: false, model: "default", effort: "default", effortByModel: {}, notifyWaiting: true, economy: false, controlShortcut: false, meetings: DEFAULT_AGENT_MEETING_SETTINGS, summary: DEFAULT_SUMMARY_SETTINGS, instructions: "", webSearch: true, webSearchChosen: false, onboarding: { state: "pending", step: 1 }, routines: DEFAULT_AGENT_ROUTINES });
   expect(sanitizeSettings({ agent: { enabled: true, consented: true, model: "opus", effort: "high" } }).agent).toEqual({
     enabled: true,
     consented: true,
@@ -118,7 +118,8 @@ test("o agente (T8678): desligado e sem aceite de fábrica, modelo e esforço no
     meetings: DEFAULT_AGENT_MEETING_SETTINGS,
     summary: DEFAULT_SUMMARY_SETTINGS,
     instructions: "",
-    webSearch: false,
+    webSearch: true,
+    webSearchChosen: false,
     onboarding: { state: "pending", step: 1 },
     routines: DEFAULT_AGENT_ROUTINES,
   });
@@ -300,8 +301,12 @@ test("a posição e o tamanho do gato (spec #12949): o centro e 1× por padrão,
   expect((await new SettingsStore(dir).load()).kiwicat).toMatchObject({ posicao: "top-right", tamanho: 1.4 });
  });
 
-test("Pesquisar na web (spec #11908): desligado por padrão, e só `true` liga", () => {
-  expect(DEFAULT_AGENT_SETTINGS.webSearch).toBe(false);
-  expect(sanitizeSettings({ agent: { webSearch: true } }).agent.webSearch).toBe(true);
-  expect(sanitizeSettings({ agent: { webSearch: "sim" } }).agent.webSearch).toBe(false);
+test("Pesquisar na web (spec #11908, #19273): ligado por padrão; quem escolheu fica com a escolha, e só `true` liga", () => {
+  expect(DEFAULT_AGENT_SETTINGS.webSearch).toBe(true);
+  // Um arquivo de antes: o `false` era só o padrão velho, gravado junto com o resto. Vale o padrão novo.
+  expect(sanitizeSettings({ agent: { webSearch: false } }).agent.webSearch).toBe(true);
+  // Quem desligou no interruptor continua desligado.
+  expect(sanitizeSettings({ agent: { webSearch: false, webSearchChosen: true } }).agent.webSearch).toBe(false);
+  expect(sanitizeSettings({ agent: { webSearch: true, webSearchChosen: true } }).agent.webSearch).toBe(true);
+  expect(sanitizeSettings({ agent: { webSearch: "sim", webSearchChosen: true } }).agent.webSearch).toBe(false);
 });

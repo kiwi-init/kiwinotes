@@ -53,7 +53,8 @@ export interface WindowState {
   tokens: number;
 }
 
-export type WindowCloseReason = "start" | "idle" | "size" | "asked";
+/** `web`: o "Pesquisar na web" mudou desde que a sessão abriu, e as ferramentas dela são outras (revisão do T19300). */
+export type WindowCloseReason = "start" | "idle" | "size" | "asked" | "web";
 
 /**
  * Se a janela fecha antes deste pedido, e por quê. Sem janela (`start`: a 1ª vez, um estado perdido, ou a sessão do

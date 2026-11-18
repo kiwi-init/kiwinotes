@@ -13,6 +13,7 @@ import { servedSchemaOf } from "../../src/agent/tools/served-schema.ts";
 import { acaoLabel, CARD_ACOES, cardsBlock } from "../../src/agent/tools/kiwi-tool.ts";
 import type { VaultReader } from "../../src/agent/tools/reader.ts";
 import { meetingPrompt } from "../../src/agent/service.ts";
+import { ISOLATION_META, LEAN_SESSION_OPTIONS } from "../../src/agent/host.ts";
 
 /** Um item medido: o nome (a chave do tetos.json) e os tokens. */
 export interface Measure {
@@ -75,6 +76,23 @@ export async function toolMeasures(): Promise<Measure[]> {
   } finally {
     server.stop();
   }
+}
+
+/**
+ * A sessão do gato inteira, do lado do Kiwi (spec #19273): uma sessão nova leva as opções da sessão (o isolamento e o
+ * enxuto), as instruções do servidor, a lista de ferramentas e o começo fixo com o pedido; o pedido seguinte, na mesma
+ * sessão, só o que muda e o próprio pedido. O prompt do sistema e os esquemas das ferramentas do Claude Code não entram:
+ * são do agente, e o contador local não os vê.
+ */
+export async function sessionMeasures(): Promise<Measure[]> {
+  const tools = await toolMeasures();
+  const sum = (rows: Measure[]) => rows.reduce((n, r) => n + r.tokens, 0);
+  const options = { ...LEAN_SESSION_OPTIONS, ...ISOLATION_META.claudeCode.options, allowedTools: ["mcp__kiwi__*"] };
+  const meta = countTokens(JSON.stringify({ _meta: { claudeCode: { options } } }));
+  return [
+    { item: "sessão › nova", tokens: meta + sum(tools) + countTokens(fixedPrefix({ ...FULL, economy: false, request: REQUEST })) },
+    { item: "sessão › pedido típico", tokens: countTokens(prefixParts({ ...FULL, economy: false, request: REQUEST }).perRequest) + countTokens(REQUEST) },
+  ];
 }
 
 /**

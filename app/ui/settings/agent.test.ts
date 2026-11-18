@@ -38,7 +38,7 @@ const base: AgentStatus = {
   routines: DEFAULT_AGENT_ROUTINES,
   summary: DEFAULT_SUMMARY_SETTINGS,
   instructions: "",
-  webSearch: false,
+  webSearch: true,
   onboarding: { state: "pending", step: 1 },
   claude: { installed: true, version: "2.1.322", loggedIn: true, method: "claude.ai", versionOk: true },
   adapter: { version: "0.106.0", phase: "missing" },
@@ -204,8 +204,11 @@ describe("o esforço de cada modelo (spec #16793)", () => {
 
   test("a linha do Esforço, e a do modo econômico, dizem que no econômico vale o esforço do modelo barato", () => {
     const what = "Mais esforço pensa mais antes de responder e gasta mais do seu plano. Fica salvo para este modelo e vale a partir do próximo pedido.";
-    expect(effortHint({ ...base, model: "sonnet", efforts })).toBe(what);
-    expect(effortHint({ ...base, model: "sonnet", efforts, economy: true })).toBe(`${what} Com o modo econômico ligado, vale o esforço salvo do modelo mais barato.`);
+    // No Padrão (spec #19273), a linha diz que vale o mais baixo; com um nível escolhido, não.
+    const lowest = " No Padrão, vale o nível mais baixo do modelo, o que gasta menos.";
+    expect(effortHint({ ...base, model: "sonnet", efforts })).toBe(`${what}${lowest}`);
+    expect(effortHint({ ...base, model: "sonnet", efforts, effort: "high" })).toBe(what);
+    expect(effortHint({ ...base, model: "sonnet", efforts, economy: true })).toBe(`${what}${lowest} Com o modo econômico ligado, vale o esforço salvo do modelo mais barato.`);
     expect(economyHint(base)).toContain("O esforço é o que você salvou para o modelo barato.");
     expect(economyHint({ ...base, economy: true })).toContain("O esforço é o que você salvou para o modelo barato.");
   });

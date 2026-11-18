@@ -186,7 +186,7 @@ export function AgentSection() {
         </Row>
       ) : null}
 
-      {/* "Pesquisar na web" (spec #11908): desligado por padrão; vale já no próximo pedido. */}
+      {/* "Pesquisar na web" (spec #11908): ligado por padrão (spec #19273); vale já no próximo pedido. */}
       {status.enabled && a.phase === "ready" ? (
         <Row label={WEB_LABEL} hint={webHint(status)}>
           <Switch label={WEB_LABEL} checked={status.webSearch === true} onChange={(webSearch) => void run(() => api.agent.configure({ webSearch }))} />
