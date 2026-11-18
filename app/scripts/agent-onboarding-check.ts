@@ -216,6 +216,7 @@ try {
         const hint = p.locator(".kn-onb-color .kn-row-hint");
         const lines = await hint.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
         assert.equal(lines, 1, `a frase de ${name} numa linha`);
+        await box.screenshot({ path: join(out, `7-cor-${id}-light.png`) });
       }
       assert.equal(new Set(Object.values(heights)).size, 1, `a caixa da cor com a mesma altura: ${JSON.stringify(heights)}`);
       await shot(p, "7-cor-light.png");
@@ -291,6 +292,22 @@ try {
     assert.equal((await onboarding()).state, "done");
     if (theme === "light") {
       report.checks.push("the final card shows the colour, the tone, the projects and the shortcut, with no colour stripe on top (spec #17709); Pronto ends it");
+      // Spec #17709 (T18615): em Ajustes, a mesma linha da cor tem a mesma altura com as 5, e a frase numa linha.
+      const row = p.locator(".kn-row", { has: p.getByRole("radiogroup", { name: "Cor do Kiwi Cat" }) }).first();
+      await row.scrollIntoViewIfNeeded();
+      const settingsHeights: Record<string, number> = {};
+      for (const [id, name] of [["prisma-original", "Prisma Original"], ["kiwi-neon", "Kiwi Elétrico"], ["ambar-solar", "Âmbar Noturno"], ["soul-claro", "Soul Mist"], ["nevoa-violeta", "Névoa Violeta"]] as const) {
+        await row.getByRole("radio", { name }).click();
+        await p.waitForFunction(([sel, n]) => [...document.querySelectorAll(sel)].some((e) => e.textContent?.startsWith(n)), [".kn-row-hint", name] as const);
+        const hint = row.locator(".kn-row-hint");
+        const lines = await hint.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+        assert.equal(lines, 1, `em Ajustes, a frase de ${name} numa linha`);
+        settingsHeights[name] = Math.round((await row.boundingBox())!.height);
+        await Bun.sleep(300);
+        await row.screenshot({ path: join(out, `ajustes-cor-${id}-light.png`) });
+      }
+      assert.equal(new Set(Object.values(settingsHeights)).size, 1, `em Ajustes, a linha da cor com a mesma altura: ${JSON.stringify(settingsHeights)}`);
+      report.checks.push("in Settings, the colour row keeps one height and a one-line sentence with each of the 5 (spec #17709)");
       // 2. "Refazer o onboarding" em Ajustes abre de novo, do passo 1; fechar no meio termina com o que foi escolhido.
       await p.locator("button:has-text('Refazer o onboarding')").click();
       await p.waitForSelector(".kn-onb", { timeout: 15000 });
