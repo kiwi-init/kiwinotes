@@ -244,7 +244,8 @@ const theme = EditorView.theme({
   ".cm-h3, .cm-h4": { fontSize: "15px", lineHeight: "22px" },
   ".cm-h5, .cm-h6": { fontSize: "14px", lineHeight: "20px", color: "var(--text-2)" },
   // O "## " da linha do cursor fica na margem: uma caixa sem largura, com o texto saindo para a esquerda.
-  ".cm-hmark": { display: "inline-flex", width: "0", justifyContent: "flex-end", whiteSpace: "pre", color: "var(--text-3)", fontWeight: "400" },
+  // A caixa termina antes da coluna da dobra (12 px, `search-fold.ts`): a seta fica clicável e não cobre o "#".
+  ".cm-hmark": { display: "inline-flex", width: "0", justifyContent: "flex-end", whiteSpace: "pre", color: "var(--text-3)", fontWeight: "400", position: "relative", left: "-12px" },
   ".cm-highlight": { backgroundColor: HIGHLIGHT_BACKGROUND, borderRadius: "2px" },
   ".cm-inline-code": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)" },
   ".cm-codeblock": { fontFamily: "var(--font-mono)", fontSize: "var(--text-code)", color: "var(--text-2)", paddingLeft: "16px !important" },
@@ -623,8 +624,11 @@ const FORMAT_BUTTONS: { action: FormatAction; label: string; title: string }[] =
 function formatTooltip(state: EditorState): Tooltip | null {
   const sel = state.selection.main;
   if (sel.empty || state.selection.ranges.length > 1 || searchPanelOpen(state)) return null;
+  // O "## " selecionado fica na margem, fora da caixa do editor, e a barra presa nele sumiria: ela vai para o texto (T17784).
+  const line = state.doc.lineAt(sel.from);
+  const mark = sel.from === line.from ? /^#{1,6}[ \t]+/.exec(line.text) : null;
   return {
-    pos: sel.from,
+    pos: mark ? Math.min(sel.from + mark[0].length, sel.to) : sel.from,
     above: true,
     strictSide: false,
     arrow: false,

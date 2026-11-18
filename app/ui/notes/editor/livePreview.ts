@@ -64,10 +64,6 @@ class CheckboxWidget extends WidgetType {
   }
 }
 
-/**
- * O marcador de um item de lista (T17784, spec #17690): o "•" ou o "1." no recuo da linha, onde a lista desenhada põe o
- * dela, com o cursor na linha ou fora. O texto do item começa no mesmo lugar nas duas caras.
- */
 /** O "## " do título com o cursor nele (T17784): na margem, à esquerda, para o título não sair do lugar. */
 class HeadMarkWidget extends WidgetType {
   constructor(readonly text: string) {
@@ -88,7 +84,8 @@ class HeadMarkWidget extends WidgetType {
 }
 
 /**
- * O marcador do item (T17784), sempre desenhado e no recuo: o número como está, e no lugar do "-" o mesmo marcador da
+ * O marcador do item (T17784, spec #17690), sempre desenhado e no recuo, onde a lista desenhada põe o dela; o texto do
+ * item começa no mesmo lugar nas duas caras: o número como está, e no lugar do "-" o mesmo marcador da
  * lista desenhada do WebKit, que muda com o nível (o disco, o círculo e, do 3º nível em diante, o quadrado).
  */
 class ListMarkWidget extends WidgetType {
@@ -124,7 +121,6 @@ export const LIST_INDENT = 22;
 /** Os níveis com classe de recuo; mais fundo que isto fica no último. */
 export const LIST_DEPTH_MAX = 6;
 
-/** Quantas listas há em volta do nó: 1 numa lista de fora, 2 numa lista dentro de um item, e assim por diante. */
 /**
  * O item que não abre a lista (T17784): o 2º em diante, ou o primeiro de uma lista recuada. Na lista desenhada ele tem
  * 2 px em cima (o `itemSpacing`); o item cru e o bloco desenhado que começa nele guardam esse espaço.
@@ -143,6 +139,7 @@ export function listItemAtLine(state: EditorState, tree: Tree, lineFrom: number)
   return null;
 }
 
+/** Quantas listas há em volta do nó: 1 numa lista de fora, 2 numa lista dentro de um item, e assim por diante. */
 function listDepth(node: SyntaxNode): number {
   let depth = 0;
   for (let n: SyntaxNode | null = node; n; n = n.parent) if (n.name === "BulletList" || n.name === "OrderedList") depth++;
