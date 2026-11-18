@@ -9,6 +9,8 @@ import { extOf } from "../../../src/shared/attachments.ts";
 import { CODE_TYPES, type FileReadAs, looksLikeText, mayBeText } from "../../../src/shared/file-view.ts";
 import type { FileContent, NotesApi } from "../types.ts";
 import { ImageViewer } from "./ImageViewer.tsx";
+import { MEDIA_MIME } from "./media.ts";
+import { MediaViewer } from "./MediaViewer.tsx";
 import { TableViewer } from "./TableViewer.tsx";
 import { TextViewer } from "./TextViewer.tsx";
 
@@ -51,6 +53,7 @@ const DrawioViewer = lazy(() => import("./DrawioViewer.tsx").then((m) => ({ defa
 const text: FileViewer = { as: "text", View: TextViewer };
 const table: FileViewer = { as: "text", View: TableViewer };
 const image: FileViewer = { as: "binary", View: ImageViewer };
+const media: FileViewer = { as: "binary", View: MediaViewer };
 
 export const VIEWERS: Record<string, FileViewer> = {
   // T7105: os textos, editáveis (os mesmos tipos que o `files.save` aceita).
@@ -83,6 +86,8 @@ export const VIEWERS: Record<string, FileViewer> = {
   "drawio.svg": image,
   // T19312: o código, editável e com cor, no mesmo editor dos textos.
   ...Object.fromEntries(CODE_TYPES.map((ext) => [ext, text])),
+  // T19315: o áudio e o vídeo, no player do WebKit, a partir de um `blob:`.
+  ...Object.fromEntries(Object.keys(MEDIA_MIME).map((ext) => [ext, media])),
 };
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */

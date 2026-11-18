@@ -276,7 +276,8 @@ export async function openWindow(browser: Browser, ctx: UiContext, opts: PageOpt
     // Nada de rede: só o build. (O WebSocket da ponte do app não existe aqui; a ponte é o binding.)
     await context.route("**/*", (route) => {
       const url = route.request().url();
-      if (url.startsWith(`${origin}/`)) return route.continue();
+      // Um `blob:` da própria página é memória dela, não rede: o áudio e o vídeo das Notas tocam dele (T19315).
+      if (url.startsWith(`${origin}/`) || url.startsWith(`blob:${origin}/`)) return route.continue();
       report.blocked.push(url);
       return route.abort("blockedbyclient");
     });

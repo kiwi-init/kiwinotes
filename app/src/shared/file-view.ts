@@ -43,6 +43,9 @@ export function fileSize(bytes: number): string {
   return `${value >= 100 ? Math.round(value) : value.toFixed(1).replace(".", ",").replace(/,0$/, "")} ${units[unit]}`;
 }
 
+/** O áudio e o vídeo que tocam nas Notas (T19315): o tipo MIME de cada um fica em `ui/notes/files/media.ts`. */
+export const MEDIA_TYPES: readonly string[] = ["mp3", "m4a", "aac", "wav", "aiff", "aif", "caf", "mp4", "m4v", "mov"];
+
 /**
  * Os tipos que as Notas mostram na própria janela, num visualizador (spec #7079): a UI tem o componente de cada um em
  * `ui/notes/files/viewers.ts` (`VIEWERS`), e o teste de lá confere que as duas listas batem. O `.txt` também abre nas
@@ -51,6 +54,7 @@ export function fileSize(bytes: number): string {
 export const VIEWER_TYPES: readonly string[] = [
   "txt", "log", "json", "yaml", "yml", "csv", "tsv", "pdf", "docx", "xlsx",
   "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "svg", "drawio", "drawio.svg", ...CODE_TYPES,
+  ...MEDIA_TYPES,
 ];
 
 /**

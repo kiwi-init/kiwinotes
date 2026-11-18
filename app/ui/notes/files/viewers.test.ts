@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { PACKAGE_MARKS } from "../../../src/shared/attachments.ts";
-import { CODE_TYPES, EDITABLE_TEXT, looksLikeText, mayBeText, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
+import { CODE_TYPES, EDITABLE_TEXT, looksLikeText, mayBeText, MEDIA_TYPES, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
 import type { FileContent } from "../types.ts";
 import { type FileViewer, loadFile, viewerFor, VIEWERS } from "./viewers.ts";
 
@@ -23,8 +23,8 @@ test("o visualizador vem da extensão, sem ligar para maiúsculas nem para a pas
 });
 
 test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7109), o docx (T7110), o xlsx (T7111), as imagens (T7113) e o draw.io (T7112); o resto segue abrindo no app padrão", () => {
-  // O código (T19312) entra pelo `CODE_TYPES`, no editor dos textos.
-  expect(Object.keys(VIEWERS).sort()).toEqual([...["bmp", "csv", "docx", "drawio", "drawio.svg", "gif", "heic", "heif", "jpeg", "jpg", "json", "log", "pdf", "png", "svg", "tsv", "txt", "webp", "xlsx", "yaml", "yml"], ...CODE_TYPES].sort());
+  // O código (T19312) entra pelo `CODE_TYPES`, no editor dos textos; o áudio e o vídeo (T19315), pelo `MEDIA_TYPES`.
+  expect(Object.keys(VIEWERS).sort()).toEqual([...["bmp", "csv", "docx", "drawio", "drawio.svg", "gif", "heic", "heif", "jpeg", "jpg", "json", "log", "pdf", "png", "svg", "tsv", "txt", "webp", "xlsx", "yaml", "yml"], ...CODE_TYPES, ...MEDIA_TYPES].sort());
   // O pdf é lido em binário (T7109).
   expect(viewerFor("Docs/Contrato.PDF")?.as).toBe("binary");
   // O docx também (T7110), e o .doc antigo segue no app padrão.
