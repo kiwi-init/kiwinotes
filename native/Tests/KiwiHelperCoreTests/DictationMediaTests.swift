@@ -84,6 +84,36 @@ final class DictationMediaTests: XCTestCase {
         media.end() // the agent's recording then ends: nothing more to give back
         XCTAssertEqual(fake.writes.count, 2)
     }
+    // Spec #17697, parte C: a reunião começa no meio da fala com o gato. O `meeting.start` (do app e do detector)
+    // devolve o volume; o fim da gravação do agente não mexe de novo; durante a reunião nada baixa; depois dela, baixa.
+    func testMeetingMidAgentRecordingTheWholeWay() {
+        let fake = FakeVolume(), journal = FakeMediaJournal()
+        let media = DictationMedia(volume: fake, journal: journal)
+        media.startCapture(meetingActive: false) {} // startAgentRecording
+        XCTAssertEqual(fake.values[fake.a]!, 0.2, accuracy: 0.0001)
+        XCTAssertNotNil(journal.changes, "a baixa fica no diário até voltar")
+        media.end() // meeting.start, antes de handleMeeting
+        XCTAssertEqual(fake.values[fake.a], 0.8)
+        XCTAssertNil(journal.changes, "o diário limpa: um crash na reunião não \"devolve\" um volume velho")
+        media.end() // finishAgentRecording, depois
+        media.startCapture(meetingActive: true) {} // outra fala com o gato, ou um ditado, com a reunião gravando
+        media.end()
+        XCTAssertEqual(fake.writes.count, 2, "durante a reunião o volume não se mexe")
+        XCTAssertEqual(fake.values[fake.a], 0.8)
+        media.startCapture(meetingActive: false) {} // a reunião acabou: o gato volta a baixar
+        XCTAssertEqual(fake.values[fake.a]!, 0.2, accuracy: 0.0001)
+        media.end()
+        XCTAssertEqual(fake.values[fake.a], 0.8)
+    }
+    // Se a pessoa mexeu no volume durante a reunião, o fim da gravação do agente não o sobrescreve.
+    func testAgentEndingAfterMeetingKeepsTheVolumeThePersonSet() {
+        let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
+        media.startCapture(meetingActive: false) {}
+        media.end() // meeting.start
+        fake.values[fake.a] = 0.5 // a pessoa ajusta na reunião
+        media.end() // finishAgentRecording
+        XCTAssertEqual(fake.values[fake.a], 0.5)
+    }
     func testLowersBeforeCaptureAndRestoresWhenCaptureEnds() throws {
         let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
         media.startCapture { XCTAssertEqual(fake.values[fake.a]!, 0.2, accuracy: 0.0001) }
