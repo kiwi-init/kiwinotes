@@ -86,6 +86,24 @@ describe("sem o scan inteiro (T20166)", () => {
     expect(v.resolve("Lista")).toBe("Arquivo/Lista.md");
   });
 
+  test("o que entrou e saiu por fora da pasta, antes do watcher, vai junto no mover (rodada 2)", async () => {
+    const { v, root, scans } = await setup();
+    // Dentro do debounce do watcher: o índice ainda não viu nada disso.
+    writeFileSync(path.join(root, "Projetos/Velhos/novo.csv"), "x,y\n");
+    rmSync(path.join(root, "Projetos/Velhos/dados.csv"));
+    mkdirSync(path.join(root, "Projetos/Nova/Funda"), { recursive: true });
+    writeFileSync(path.join(root, "Projetos/Nova/Funda/Rascunho.md"), "# Rascunho\n");
+    writeFileSync(path.join(root, "Projetos/Nova/tabela.csv"), "1\n");
+    await v.moveFolder("Projetos", "B/A");
+    expect(scans()).toBe(0);
+    const now = view(v);
+    expect(now.files).toContain("B/A/Velhos/novo.csv|4");
+    expect(now.files).toContain("B/A/Nova/tabela.csv|2");
+    expect(now.files.some((f) => f.startsWith("B/A/Velhos/dados.csv"))).toBe(false);
+    expect(now.folders).toContain("B/A/Nova/Funda");
+    expect(now).toEqual(await fresh(root));
+  });
+
   test("apagar pasta e nota, e o desfazer da nota: zero scans", async () => {
     const { v, root, scans } = await setup();
     await v.deleteFolder("Diário");
