@@ -85,6 +85,15 @@
       "name": "nada aninhado dentro de Ideias"
     },
     {
+      "wait": 400,
+      "name": "passa a conferência de vista (250 ms)"
+    },
+    {
+      "expectCount": ".kn-toast",
+      "count": 0,
+      "name": "sem o aviso Pasta criada: a pasta ficou à vista e só mudou de nome"
+    },
+    {
       "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')",
       "name": "escolhe Projetos"
     },
@@ -111,6 +120,50 @@
       "expectCount": ".kn-tree-pop[data-open]",
       "count": 1,
       "name": "e a árvore segue aberta (com a raiz já escolhida, o Esc fecha, como antes)"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')",
+      "name": "escolhe Projetos"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-new[data-new='folder'][title='Nova pasta em Projetos']"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-root-bt",
+      "name": "clica na linha da raiz, no topo"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-new[data-new='folder'][title='Nova pasta na raiz']",
+      "name": "spec #19265: o clique na raiz a escolhe"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-root-bt[data-selected]",
+      "count": 1,
+      "name": "e ela fica destacada como destino"
+    },
+    {
+      "expectCount": ".kn-tree-pop [data-root='open']",
+      "count": 0,
+      "name": "sem abrir o menu Abrir pasta… (rodada 2)"
+    },
+    {
+      "screenshot": "raiz-escolhida.png"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-root-toggle",
+      "name": "a seta da raiz"
+    },
+    {
+      "waitFor": ".kn-tree-pop [data-root='open']",
+      "name": "abre o Abrir pasta… e as recentes"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-root-toggle",
+      "name": "e fecha de novo"
+    },
+    {
+      "expectCount": ".kn-tree-pop [data-root='open']",
+      "count": 0
     },
     {
       "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')",

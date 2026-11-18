@@ -898,6 +898,28 @@ button.kn-side-head:focus-visible {
 .kn-side-root {
   margin-bottom: 8px;
 }
+.kn-side-root-row {
+  display: flex;
+  align-items: center;
+}
+.kn-side-root-toggle {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: default;
+}
+.kn-side-root-toggle:hover {
+  color: var(--text);
+}
+.kn-side-root-bt {
+  min-width: 0;
+}
 .kn-side-root-bt .kn-side-name {
   color: var(--text);
   font-weight: 600;

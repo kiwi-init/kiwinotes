@@ -178,5 +178,9 @@ describe("a barra", () => {
     expect(atRoot).toMatch(/kn-side-root-bt" data-selected="true"/);
     expect(atRoot).toContain('title="Nova pasta na raiz"');
     expect(html({ root, selectedFolder: "Projetos" })).not.toMatch(/kn-side-root-bt" data-selected/);
+    // Rodada 2: a linha só escolhe; o "Abrir pasta…" é da seta, fechado no começo.
+    expect(atRoot).toMatch(/class="kn-side-root-toggle" aria-expanded="false" aria-label="Outras pastas de notas"/);
+    expect(atRoot).not.toMatch(/kn-side-root-bt"[^>]*aria-expanded/);
+    expect(atRoot).not.toContain('data-root="open"');
   });
 });

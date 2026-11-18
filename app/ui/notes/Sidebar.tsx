@@ -476,6 +476,8 @@ export function Sidebar(p: SidebarProps) {
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
   }, []);
+  const freshRenaming = useRef(p.renaming);
+  freshRenaming.current = p.renaming;
   // A pasta nova fora da vista mesmo depois de rolar (spec #19265): o aviso diz onde ela nasceu.
   useEffect(() => {
     const nav = navRef.current;
@@ -484,6 +486,9 @@ export function Sidebar(p: SidebarProps) {
     // Depois da rolagem: na lista virtual, a linha só existe quando a janela dela é desenhada.
     const id = setTimeout(() => {
       const el = nav.querySelector<HTMLElement>("[data-fresh]");
+      // Sem a linha: só conta como fora da vista se ela ainda está no renomear (a lista virtual não a desenhou). Se a
+      // pessoa já deu outro nome, a linha velha sumiu porque mudou de path, não porque está fora da vista.
+      if (!el && freshRenaming.current !== `f:${path}`) return;
       const box = el?.getBoundingClientRect();
       const view = nav.getBoundingClientRect();
       if (!box || box.bottom <= view.top || box.top >= view.bottom || !box.height) p.onFreshHidden?.(path);
@@ -726,28 +731,39 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, 
   ]);
 }
 
-/** A pasta raiz no topo da árvore: um clique mostra, logo abaixo e dentro da árvore, o "Abrir pasta…" e as recentes. */
+/**
+ * A pasta raiz no topo da árvore: o clique na linha a escolhe (spec #19265); a seta mostra, logo abaixo e dentro da
+ * árvore, o "Abrir pasta…" e as recentes.
+ */
 function RootFolder({ root, selected, onSelect }: { root: SideRoot; selected: boolean; onSelect(): void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="kn-side-root" data-open={open || undefined}>
-      <button
-        type="button"
-        className="kn-side-item kn-side-root-bt"
-        data-selected={selected || undefined}
-        aria-expanded={open}
-        aria-label={`Pasta das notas: ${root.name}`}
-        title={`${root.path} · o + Nota e o + Pasta criam aqui`}
-        // O clique na raiz também a escolhe (spec #19265): o jeito óbvio de voltar a criar ao lado das outras pastas.
-        onClick={() => {
-          onSelect();
-          setOpen(!open);
-        }}
-      >
-        <Twisty open={open} />
-        <TreeIcon name={open ? "folder-open" : "folder"} />
-        <span className="kn-side-name">{root.name}</span>
-      </button>
+      {/* Spec #19265: o clique na linha só escolhe a raiz (onde o + Nota e o + Pasta criam); o "Abrir pasta…" e as
+          recentes abrem só pela seta, para não abrir um menu a cada volta à raiz. */}
+      <div className="kn-side-root-row">
+        <button
+          type="button"
+          className="kn-side-root-toggle"
+          aria-expanded={open}
+          aria-label="Outras pastas de notas"
+          title="Abrir outra pasta de notas"
+          onClick={() => setOpen(!open)}
+        >
+          <Twisty open={open} />
+        </button>
+        <button
+          type="button"
+          className="kn-side-item kn-side-root-bt"
+          data-selected={selected || undefined}
+          aria-label={`Pasta das notas: ${root.name}`}
+          title={`${root.path} · o + Nota e o + Pasta criam aqui`}
+          onClick={(e) => !e.ctrlKey && onSelect()}
+        >
+          <TreeIcon name={open ? "folder-open" : "folder"} />
+          <span className="kn-side-name">{root.name}</span>
+        </button>
+      </div>
       {open ? (
         <div className="kn-side-root-list" role="group" aria-label="Pastas de notas">
           <button type="button" className="kn-side-item" data-root="open" onClick={() => root.onOpen()}>

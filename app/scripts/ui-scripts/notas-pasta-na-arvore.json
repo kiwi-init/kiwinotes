@@ -26,7 +26,7 @@
       "screenshot": "02-arvore-com-a-pasta.png"
     },
     {
-      "click": ".kn-side-root-bt"
+      "click": ".kn-side-root-toggle"
     },
     {
       "waitFor": "[data-root='open']"
@@ -48,7 +48,7 @@
       "waitFor": ".kn-side-item:has-text('Projeto Atlas')"
     },
     {
-      "click": ".kn-side-root-bt"
+      "click": ".kn-side-root-toggle"
     },
     {
       "waitFor": "[data-root='recent']:has-text('vault')"
