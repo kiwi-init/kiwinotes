@@ -1,9 +1,9 @@
 // O que as Notas abrem dentro da própria janela (spec #7079, T7103), para o engine e para a UI: os limites de tamanho
 // do `files.read`. Acima deles, o Kiwi avisa e oferece o app padrão do Mac, em vez de carregar o arquivo na memória.
 
-/** O maior arquivo lido em binário (pdf, docx, xlsx, imagem): 25 MB, como o maior anexo. */
 import { PACKAGE_MARKS } from "./attachments.ts";
 
+/** O maior arquivo lido em binário (pdf, docx, xlsx, imagem): 25 MB, como o maior anexo. */
 export const MAX_VIEW_BYTES = 25 * 1024 * 1024;
 
 /** O maior arquivo lido como texto (txt, csv, json…): 5 MB, como o quadro branco. */
@@ -82,7 +82,7 @@ export function mayBeText(name: string): boolean {
   const single = /\.([a-z0-9]+)$/.exec(base)?.[1];
   if ((double && VIEWER_TYPES.includes(double)) || (single && VIEWER_TYPES.includes(single))) return false;
   // Um documento-pacote (`.rtfd`, `.pages`…) é uma pasta no disco: ler como texto daria "não está mais na pasta".
-  return !single || !(NEVER_TEXT.has(single) || single in PACKAGE_MARKS);
+  return !single || !(NEVER_TEXT.has(single) || Object.hasOwn(PACKAGE_MARKS, single));
 }
 
 /** É texto: lido em UTF-8 sem perda (sem `readOnly`) e sem o byte zero, que nenhum texto tem e todo binário tem. */

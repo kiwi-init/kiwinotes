@@ -125,6 +125,8 @@ test("pode ser texto (T19313): sem visualizador, sem ser nota e fora da lista do
   for (const name of ["nota.md", "nota.markdown", "quadro.canvas", "a.txt", "a.py", "a.pdf", "fluxo.drawio.svg", "pacote.zip", "Slides.KEY", ""]) expect(mayBeText(name)).toBe(false);
   // Documento-pacote é pasta no disco: sempre o app padrão, nunca a leitura como texto (revisão #19650).
   for (const ext of Object.keys(PACKAGE_MARKS)) expect(mayBeText(`Projeto X/Carta.${ext}`)).toBe(false);
+  // Só as chaves da lista, não as do Object.prototype (revisão #19657).
+  expect(mayBeText("exemplo.constructor")).toBe(true);
   expect(looksLikeText("FROM exemplo\n")).toBe(true);
   expect(looksLikeText("PK\u0003\u0004\0\0")).toBe(false);
 });
