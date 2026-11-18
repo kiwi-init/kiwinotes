@@ -49,3 +49,11 @@ test("o Tab do editor recua com o passo do arquivo (o indentMore com o indentUni
     expect(state.doc.toString()).toBe(want);
   }
 });
+
+test("o Makefile recua sempre com tab (T19313): a receita só roda assim, mesmo num arquivo vazio ou com espaços", () => {
+  for (const name of ["Makefile", "Projeto X/GNUmakefile", "regras.mk"]) {
+    expect(detectIndent("", name)).toEqual({ unit: "\t", tabSize: 4 });
+    expect(detectIndent("tudo:\n  echo errado\n  echo de novo\n", name).unit).toBe("\t");
+  }
+  expect(detectIndent("", "Dockerfile").unit).toBe("  ");
+});

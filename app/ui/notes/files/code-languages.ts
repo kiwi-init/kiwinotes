@@ -27,6 +27,7 @@ const clike = (name: "c" | "cpp" | "java" | "kotlin" | "csharp" | "scala" | "dar
   legacy(async () => (await import("@codemirror/legacy-modes/mode/clike"))[name]);
 const properties = legacy(async () => (await import("@codemirror/legacy-modes/mode/properties")).properties);
 const diff = legacy(async () => (await import("@codemirror/legacy-modes/mode/diff")).diff);
+const dockerfile = legacy(async () => (await import("@codemirror/legacy-modes/mode/dockerfile")).dockerFile);
 
 /** Por extensão, em minúsculas e sem o ponto: as mesmas de `CODE_TYPES`, e o json e o yaml, que já abriam sem cor. */
 export const CODE_LANGUAGES: Record<string, LanguageLoader> = {
@@ -78,6 +79,9 @@ export const CODE_LANGUAGES: Record<string, LanguageLoader> = {
   proto: legacy(async () => (await import("@codemirror/legacy-modes/mode/protobuf")).protobuf),
   diff,
   patch: diff,
+  dockerfile,
+  // O legacy-modes não tem modo de Make (o `cmake` é do CMake): o do shell pinta o comentário, o `$(VAR)` e as receitas.
+  mk: shell,
   json: legacy(async () => (await import("@codemirror/legacy-modes/mode/javascript")).json),
   yaml: legacy(async () => (await import("@codemirror/legacy-modes/mode/yaml")).yaml),
   yml: legacy(async () => (await import("@codemirror/legacy-modes/mode/yaml")).yaml),
@@ -86,12 +90,17 @@ export const CODE_LANGUAGES: Record<string, LanguageLoader> = {
 /** O código que abre editável sem cor: o legacy-modes não tem modo de PHP. */
 export const CODE_WITHOUT_COLOR: ReadonlySet<string> = new Set(["php"]);
 
+/** Pelo nome inteiro, os arquivos que não têm extensão (T19313). O `Dockerfile.dev` conta como `Dockerfile`. */
+const NAME_LANGUAGES: Record<string, LanguageLoader> = { dockerfile, containerfile: dockerfile, makefile: shell, gnumakefile: shell };
+
 const extOf = (name: string) => /\.([a-z0-9]+)$/i.exec(name.split("/").at(-1) ?? "")?.[1]?.toLowerCase();
 
 /** A linguagem de um arquivo pelo nome, ou `undefined` (o .txt e o .log seguem sem cor, e o .php também). */
 export function codeLanguageFor(name: string): LanguageLoader | undefined {
+  const base = (name.split("/").at(-1) ?? "").toLowerCase();
   const ext = extOf(name);
-  return ext ? CODE_LANGUAGES[ext] : undefined;
+  const byExt = ext ? CODE_LANGUAGES[ext] : undefined;
+  return NAME_LANGUAGES[base] ?? byExt ?? (base.startsWith("dockerfile.") ? dockerfile : undefined);
 }
 
 /** É código (os números de linha e o menu sem Markdown): tem cor, ou é de `CODE_TYPES` mesmo sem ela (o .php). */

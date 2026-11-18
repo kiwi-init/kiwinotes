@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
-import { fileSize, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
+import { fileSize, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES, mayBeText } from "../shared/file-view.ts";
 import { UI_CAPABILITIES } from "../shared/ui-contract.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Vault, versionOf } from "./vault.ts";
@@ -215,6 +215,44 @@ describe("gravar um texto do cofre (T7105)", () => {
     expect(read(root, "a.txt")).toBe("a");
     expect(await code("a.txt")).toBe("saved");
     expect(read(root, "a.txt")).toBe("novo");
+  });
+
+  test("sem visualizador (T19313): grava o que já é texto no disco, e nunca um binário, uma nota ou um tipo conhecido", async () => {
+    const { v, root } = await vault({
+      Dockerfile: "FROM exemplo\n",
+      "Projeto X/LEIAME": "Leia antes.\n",
+      "Projeto X/.gitignore": "build/\n",
+      "site/pagina.vue": "<template></template>\n",
+      "dados.bin2": new Uint8Array([0x7f, 0x45, 0x00, 0x01]),
+      "pacote.zip": "PK texto",
+      "quadro.canvas": "{}",
+    });
+    const save = (p: string, before: string, after: string) => v.saveFile(p, after, versionOf(before)).then((r) => r.saved, (e) => (e as { code?: string }).code);
+    expect(await save("Dockerfile", "FROM exemplo\n", "FROM exemplo:2\n")).toBe(true);
+    expect(read(root, "Dockerfile")).toBe("FROM exemplo:2\n");
+    expect(await save("Projeto X/LEIAME", "Leia antes.\n", "Leia antes, Ana.\n")).toBe(true);
+    // O arquivo oculto segue fora do cofre, como na árvore.
+    expect(await save("Projeto X/.gitignore", "build/\n", "tmp/\n")).toBe("E_OUTSIDE_VAULT");
+    expect(await save("site/pagina.vue", "<template></template>\n", "<template><p>oi</p></template>\n")).toBe(true);
+    // O byte zero diz que é binário, mesmo com a versão certa.
+    expect(await v.saveFile("dados.bin2", "x", (await v.readFile("dados.bin2", "binary") as { version: string }).version).catch((e) => e.code)).toBe("E_BAD_ARGS");
+    expect(readFileSync(path.join(root, "dados.bin2")).equals(Buffer.from([0x7f, 0x45, 0x00, 0x01]))).toBe(true);
+    // Um tipo que nunca é texto, e o quadro branco (que tem a própria tela), seguem fora.
+    expect(await save("pacote.zip", "PK texto", "x")).toBe("E_BAD_ARGS");
+    expect(await save("quadro.canvas", "{}", "[]")).toBe("E_BAD_ARGS");
+  });
+
+  test("documento-pacote listado como arquivo não abre como texto (revisão #19650)", async () => {
+    const { v } = await vault({
+      "Projeto X/Carta.rtfd/TXT.rtf": "{\\rtf1 exemplo}",
+      "Projeto X/Resumo.pages/Index.zip": "PK",
+      "Ana.md": "# Ana\n",
+    });
+    const packages = v.list().files.map((f) => f.path).filter((p) => !p.endsWith(".md"));
+    expect(packages).toEqual(["Projeto X/Carta.rtfd", "Projeto X/Resumo.pages"]);
+    // A árvore manda ao app padrão, sem a tela de texto, que daria "não está mais na pasta".
+    for (const p of packages) expect(mayBeText(p)).toBe(false);
+    expect(await v.saveFile("Projeto X/Carta.rtfd", "x", versionOf("")).catch((e) => e.code)).toBe("E_BAD_ARGS");
   });
 
   test("pela capacidade `files.save` do contrato", async () => {
