@@ -9,7 +9,7 @@ import type { DecorationSet } from "@codemirror/view";
 
 import { wikiLinkSyntax } from "./index.ts";
 import { editorFocused, focusChanged } from "./livePreview.ts";
-import { arrowIntoDrawn, buildRendered, renderedPreview } from "./renderedWidget.tsx";
+import { arrowIntoDrawn, buildRendered, headingBackspace, renderedPreview } from "./renderedWidget.tsx";
 
 const md = markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] });
 const resolver = { status: () => "exists" as const };
@@ -135,5 +135,25 @@ describe("o cursor que anda remenda só os blocos dele (spec #13385)", () => {
     state = state.update({ effects: focusChanged.of(true) }).state;
     const sel = arrowIntoDrawn(state, state.field(field), -1);
     expect(sel?.main.head).toBe(doc.indexOf("parágrafo") + 2);
+  });
+});
+
+describe("o Backspace no começo do título (#17924)", () => {
+  const press = (doc: string, at: number) => {
+    const state = EditorState.create({ doc, selection: { anchor: at }, extensions: [md] });
+    const spec = headingBackspace(state);
+    return spec ? state.update(spec).state : null;
+  };
+
+  test("no começo do texto, tira o `## ` inteiro: vira parágrafo, sem `##Título` cru", () => {
+    const after = press("Antes\n\n## Plano da semana\n\nDepois", "Antes\n\n## ".length);
+    expect(after?.doc.toString()).toBe("Antes\n\nPlano da semana\n\nDepois");
+    expect(after?.selection.main.head).toBe("Antes\n\n".length);
+  });
+
+  test("no meio do texto, num parágrafo ou num bloco de código, fica com o Backspace de sempre", () => {
+    expect(press("## Plano da semana", 5)).toBeNull();
+    expect(press("Plano da semana", 0)).toBeNull();
+    expect(press("```\n## não é título\n```", "```\n## ".length)).toBeNull();
   });
 });

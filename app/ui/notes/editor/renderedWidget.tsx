@@ -10,7 +10,7 @@ import katex from "katex";
 import { HIGHLIGHT_BACKGROUND } from "./highlight.ts";
 
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, type EditorState, Prec, type Range, StateField, type Transaction } from "@codemirror/state";
+import { EditorSelection, type EditorState, Prec, type Range, StateField, type Transaction, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, WidgetType } from "@codemirror/view";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -751,6 +751,21 @@ export function arrowIntoDrawn(state: EditorState, drawn: DecorationSet, dir: 1 
 }
 
 /**
+ * O Backspace no começo do texto de um título (#17924): o `## ` fica na margem, e apagar só o espaço deixava `##Título`
+ * cru no lugar do título. Ali o Backspace tira o `## ` inteiro: o título vira parágrafo, com o mesmo texto.
+ */
+export function headingBackspace(state: EditorState): TransactionSpec | null {
+  const sel = state.selection.main;
+  if (!sel.empty || state.selection.ranges.length > 1) return null;
+  const line = state.doc.lineAt(sel.head);
+  const mark = /^#{1,6}[ \t]+/.exec(line.text);
+  if (!mark || sel.head !== line.from + mark[0].length) return null;
+  // Só num título de verdade: o `## ` de um bloco de código fica como está.
+  if (!/^ATXHeading\d$/.test(fullTree(state).resolveInner(line.from, 1).parent?.name ?? "")) return null;
+  return { changes: { from: line.from, to: sel.head }, selection: { anchor: line.from }, userEvent: "delete.backward" };
+}
+
+/**
  * Os blocos fora do cursor aparecem renderizados pela lib do Channels. Vem de um StateField porque um bloco de várias
  * linhas esconde quebras de linha. Precisa do `commentPreview` (que guarda se o editor está com foco).
  */
@@ -781,6 +796,14 @@ export function renderedPreview(resolver: LinkResolver, actions: RenderedActions
     Prec.high(keymap.of([
       { key: "ArrowDown", run: arrow(1) },
       { key: "ArrowUp", run: arrow(-1) },
+      {
+        key: "Backspace",
+        run: (view) => {
+          const spec = headingBackspace(view.state);
+          if (spec) view.dispatch(spec);
+          return !!spec;
+        },
+      },
     ])),
     footnoteHover(actions),
     renderedTheme,

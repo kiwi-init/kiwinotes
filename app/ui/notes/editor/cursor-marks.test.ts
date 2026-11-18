@@ -121,6 +121,8 @@ describe("só a marca do cursor aparece (spec #17690)", () => {
   test("o # do título só aparece com o cursor nele; no meio do título, ele continua escondido", () => {
     expect(hiddenIn("# Plano da semana", at("semana"))).toEqual(["# "]);
     expect(hiddenIn("# Plano da semana", 0)).toEqual([]);
+    // No começo do texto, o Backspace apagaria o espaço do "# ": a pessoa vê o que apaga (#17924).
+    expect(hiddenIn("# Plano da semana", at("Plano"))).toEqual([]);
   });
 
   test("a ênfase de outra linha, e a da mesma linha longe do cursor, continuam escondidas", () => {

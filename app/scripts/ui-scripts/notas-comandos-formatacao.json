@@ -227,7 +227,7 @@
       "press": "Meta+Shift+8"
     },
     {
-      "waitFor": ".cm-line.cm-list-line:has-text(\"Item de lista\")"
+      "waitFor": ".cm-line.cm-list-line:has-text(\"Item de lista\") .cm-bullet:not(.cm-bullet-n) .cm-dot"
     },
     {
       "press": "End"
@@ -252,7 +252,7 @@
       "press": "Meta+Shift+7"
     },
     {
-      "waitFor": ".cm-line.cm-list-line:has-text(\"Item numerado\")"
+      "waitFor": ".cm-line.cm-list-line:has-text(\"Item numerado\") .cm-bullet-n:text-is(\"1.\")"
     },
     {
       "press": "End"
