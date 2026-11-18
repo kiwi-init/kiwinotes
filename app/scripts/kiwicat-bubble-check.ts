@@ -261,8 +261,9 @@ try {
           assert.ok(!covers, `o balão cobre o gato: ${what} ${JSON.stringify(b)} × corpo ${JSON.stringify(body)}`);
           if (!open) closedW = b.w;
           else {
-            assert.ok(b.w <= largura + 0.5, `o aberto passa da largura: ${what} ${b.w}`);
-            // O texto longo pede mais que 280: com espaço, o aberto alarga (ver mais: para o lado primeiro).
+            // O texto longo pede mais que 480, e a janela tem o espaço que o helper reserva (`openPlacement`): o aberto
+            // chega à largura toda, nem 1 px a menos (um teto escondido de 380 passaria por um "alargou" frouxo).
+            assert.ok(Math.abs(b.w - largura) <= 1, `o aberto não tem a largura do helper: ${what} ${b.w} ≠ ${largura}`);
             if (largura > SHELL_W) assert.ok(b.w > closedW + 50, `o aberto não alargou: ${what} ${closedW} → ${b.w}`);
           }
           checked++;
@@ -271,7 +272,7 @@ try {
       }
     }
   }
-  report.checks.push(`the bubble, closed and open, stays inside the window and off the cat body in the 6 positions × 0.6 and 1.6 × the smallest and largest room × open width 280, 380 and 480, and the open one widens when there is room (${checked} cases)`);
+  report.checks.push(`the bubble, closed and open, stays inside the window and off the cat body in the 6 positions × 0.6 and 1.6 × the smallest and largest room × open width 280, 380 and 480, and the open one is exactly the width the helper gives (±1 px) (${checked} cases)`);
 
   // 4. O rabo (T14933, spec #14896; T16754, harry #16786): nas 6 posições, a 1×, 0,6× e 1,6×, o rabo sai da quina do
   //    balão do lado do gato e a ponta encosta na quina do corpo dele (`CAT_BODY`). A ponta do traço, no SVG de 34 × 24,
@@ -289,6 +290,9 @@ try {
       if (aberto) {
         await p.click("#bubble-more");
         await settle(p);
+        // "Aberto a 480" é a 480 mesmo, antes de olhar o rabo.
+        const w = (await bubbleBox(p)).w;
+        assert.ok(w >= OPEN_SHELL_W - 1, `o aberto não chegou a 480: ${names[i]} ${escala} ${w}`);
       }
       const m = await p.evaluate(() => {
         const svg = document.querySelector("#bubble .kn-bubble-tail")!;
