@@ -110,6 +110,13 @@
     },
     {
       "wait": 500
+    },
+    {
+      "invoke": "settings.get",
+      "expect": {
+        "noteWidth": 940
+      },
+      "name": "e o soltar guardou 940 nas configurações (o notas-largura-salva confere a volta)"
     }
   ]
 }

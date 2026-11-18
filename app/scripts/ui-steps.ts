@@ -32,6 +32,9 @@
 //   { "invoke": "notes.save", "args": {…} }          uma capacidade direto no engine, "de fora" da janela (como uma
 //                                                     edição no Obsidian): a janela vê pelos eventos. Nunca clipboard.
 //                                                     No notes.save, `"baseVersion": "current"` usa a versão de agora.
+//                                                     `"expect": {…}`: cada chave tem que vir igual na resposta, as
+//                                                     outras chaves ficam livres (T19426: o settings.get confere o
+//                                                     noteWidth que o arraste guardou).
 //
 // Todo passo aceita `timeout` (ms, padrão 5000), `name` (o rótulo no relatório) e `maxMs` (o passo falha se levar mais
 // que isso, para medir uma trava; T7390). O arquivo é
@@ -72,7 +75,7 @@ export type Step =
   | { drag: string; x: number; y?: number }
   /** A largura do elemento na tela (px) fica entre `min` e `max`, esperando até o timeout (T5299). */
   | { expectWidth: string; min?: number; max?: number }
-  | { invoke: string; args?: Record<string, unknown> }
+  | { invoke: string; args?: Record<string, unknown>; expect?: Record<string, unknown> }
   | { drop: string; file: string }
   | { pasteFile: string; file: string }
   | { pasteHtml: string; html: string; text?: string; shift?: boolean };
@@ -220,6 +223,7 @@ export function parseScript(json: unknown): ScriptFile {
         str(s.invoke, `${at}.invoke`);
         if (s.invoke === "clipboard.write") throw new Error(`${at}: clipboard.write não (AGENTS.md: agente não escreve no clipboard)`);
         if (s.args !== undefined && (!s.args || typeof s.args !== "object" || Array.isArray(s.args))) throw new Error(`${at}: args é um objeto`);
+        if (s.expect !== undefined && (!s.expect || typeof s.expect !== "object" || Array.isArray(s.expect))) throw new Error(`${at}: expect é um objeto`);
         break;
       case "type":
         if (typeof s.type !== "string") throw new Error(`${at}: type precisa de um texto`);
@@ -275,6 +279,12 @@ export async function runStep(page: Page, s: StepWithMeta, out: string, send: (m
     // Com a versão velha, o save não escreve e responde ok: no roteiro, isso é falha, não sucesso calado.
     if (s.invoke === "notes.save" && (r.value as { saved?: boolean } | null)?.saved === false) {
       throw new Error(`notes.save ${String(args.path)}: não gravou, o baseVersion está velho (use "current")`);
+    }
+    if (s.expect) {
+      const got = (r.value ?? {}) as Record<string, unknown>;
+      for (const [key, want] of Object.entries(s.expect)) {
+        if (JSON.stringify(got[key]) !== JSON.stringify(want)) throw new Error(`${s.invoke}: esperava ${key} = ${JSON.stringify(want)}, veio ${JSON.stringify(got[key])}`);
+      }
     }
     return { value: r.value };
   }
