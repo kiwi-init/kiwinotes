@@ -8,8 +8,9 @@
 // quadro. Com "reduzir movimento", não há gota: os botões só aparecem e somem com um fade.
 //
 // Os botões na volta (T18949): a seção tira os botões da barra de uma vez (o React desmonta), e a gota que voltava sem
-// eles era o "rastro preto" no escuro. Uma cópia dos últimos botões (`.kn-goo-ghost`) fica na camada, no lugar deles, e
-// some nos primeiros ~25% da volta enquanto a gota assume. É só desenho: `inert`, sem clique, fora do leitor de tela.
+// eles era o "rastro preto" no escuro. Uma cópia dos últimos botões (`.kn-goo-ghost`) fica na camada e anda com a
+// cabeça da gota (o mesmo centro e a mesma escala, quadro a quadro), esmaecendo conforme a cabeça encolhe: um objeto
+// só, o botão que vira gota. É só desenho: `inert`, sem clique, fora do leitor de tela.
 
 import "./goo.css";
 
@@ -22,6 +23,8 @@ const SIDES: GooSide[] = ["start", "end"];
 const PARTS: (keyof GooParts)[] = ["edge", "speck", "head"];
 /** O fade dos botões com "reduzir movimento" (o `--fast`, com folga). */
 const REDUCED_MS = 220;
+/** A escala da cabeça (sobre os botões) em que a cópia dos botões já sumiu. */
+const GHOST_GONE = 0.55;
 
 const reducedMotion = () =>
   document.documentElement.dataset.motion === "reduced" ||
@@ -75,6 +78,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
         whole: Array.from(el.querySelectorAll<SVGPathElement>(`.kn-goo-whole[data-side="${side}"]`)),
       }]),
     ) as Record<GooSide, { parts: Record<keyof GooParts, SVGPathElement | null>; whole: SVGPathElement[] }>;
+    const ghosts: Partial<Record<GooSide, HTMLElement>> = {};
     const radius = () => parseFloat(getComputedStyle(el).getPropertyValue("--r-ctl")) || 10;
     const draw = (side: GooSide) => {
       const ph = phases.current[side];
@@ -89,6 +93,20 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       for (const k of PARTS) paths[side].parts[k]?.setAttribute("d", parts[k]);
       const all = parts.edge + parts.speck + parts.head;
       for (const w of paths[side].whole) w.setAttribute("d", all);
+      const g = ghosts[side];
+      if (g && target) followHead(g, parts.head ? paths[side].parts.head : null, target);
+    };
+    // A cópia vai no retângulo da cabeça: o centro dela e a escala dela sobre o dos botões. Some até a cabeça ter ~55%
+    // do tamanho dos botões, seja qual for a forma que a gota tiver no caminho.
+    const followHead = (g: HTMLElement, head: SVGPathElement | null, r: GooRect) => {
+      const b = head?.getBBox();
+      if (!b || !b.width || !b.height) return void (g.style.opacity = "0");
+      const sx = b.width / r.w;
+      const sy = b.height / r.h;
+      const dx = b.x + b.width / 2 - (r.x + r.w / 2);
+      const dy = b.y + b.height / 2 - (r.y + r.h / 2);
+      g.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+      g.style.opacity = String(Math.min(1, Math.max(0, (Math.min(sx, sy) - GHOST_GONE) / (1 - GHOST_GONE))) ** 2);
     };
     let frame = 0;
     const tick = () => {
@@ -99,8 +117,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
     const loop = () => {
       if (!frame) frame = requestAnimationFrame(tick);
     };
-    // A cópia dos botões que saíram, por lado. Some com a animação dela, ou quando o lado sai da volta.
-    const ghosts: Partial<Record<GooSide, HTMLElement>> = {};
+    // A cópia dos botões que saíram, por lado. Sai quando o lado deixa a volta (fim, ou reentrou).
     const removed: Partial<Record<GooSide, Element[]>> = {};
     const dropGhost = (side: GooSide) => {
       ghosts[side]?.remove();
@@ -124,9 +141,6 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
         for (const e of [c, ...Array.from(c.querySelectorAll("[id]"))]) e.removeAttribute("id");
         g.append(c);
       }
-      g.addEventListener("animationend", () => {
-        if (ghosts[side] === g) dropGhost(side);
-      });
       ghosts[side] = g;
       el.append(g);
     };
