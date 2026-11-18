@@ -21,7 +21,7 @@
       "click": ".kn-crumb-bt"
     },
     {
-      "click": ".kn-side-root-bt"
+      "click": ".kn-side-root-toggle"
     },
     {
       "click": "[data-root='open']"
@@ -94,7 +94,7 @@
       "click": ".kn-crumb-bt"
     },
     {
-      "click": ".kn-side-root-bt"
+      "click": ".kn-side-root-toggle"
     },
     {
       "waitFor": "[data-root='recent']:has-text('vault')"

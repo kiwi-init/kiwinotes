@@ -669,9 +669,36 @@ button.kn-side-head:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* a pasta escolhida (a do ⌘N): peso de texto, como a nota aberta */
+/* a pasta escolhida (a do ⌘N e do + Pasta): peso de texto e um fundo leve, para o destino ficar à vista (spec #19265) */
 .kn-side-item[data-selected] {
   color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+/* a pasta que acabou de nascer pisca de leve e some em ~1 s (spec #19265; FRESH_MS no NotesApp) */
+@keyframes kn-side-fresh {
+  0%,
+  35% {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+}
+.kn-side-item[data-fresh],
+.kn-side-rename[data-fresh] {
+  animation: kn-side-fresh 1.2s ease-out;
+  border-radius: var(--radius-sm);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kn-side-item[data-fresh],
+  .kn-side-rename[data-fresh] {
+    animation: none;
+    background: var(--accent-soft);
+  }
 }
 
 .kn-side-item[data-drop],
@@ -870,6 +897,29 @@ button.kn-side-head:focus-visible {
 /* ---- T5298 (#211): a pasta raiz é a primeira linha da árvore; "Abrir pasta…" e as recentes abrem ali mesmo ---- */
 .kn-side-root {
   margin-bottom: 8px;
+}
+.kn-side-root-row {
+  display: flex;
+  align-items: center;
+}
+.kn-side-root-toggle {
+  /* a seta e a pasta da raiz no mesmo prumo das da árvore: a seta em 0, a pasta em 16px (T19759, rodada 3) */
+  display: inline-grid;
+  flex: none;
+  place-items: center start;
+  width: 16px;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: default;
+}
+.kn-side-root-toggle:hover {
+  color: var(--text);
+}
+.kn-side-root-bt {
+  min-width: 0;
 }
 .kn-side-root-bt .kn-side-name {
   color: var(--text);
