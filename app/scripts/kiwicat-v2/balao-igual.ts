@@ -18,7 +18,7 @@
 //   texto  o balão como aparece. Só informa: a fonte e o "Ver mais" do app podem mudar a conta sem mudar a casca.
 // O overlay (T15095, #15179): o `#bubble` da página do overlay de verdade (`dist/catoverlay`, o build do Vite, como o
 // `kiwicat-bubble-check.ts`), com o gato na imagem parada (`backend=none`) e o balão pelo `kiwiOverlay.set`, como o
-// helper manda. Lá a largura é 280 (a janela tem 300), o rabo aponta para o meio do gato (para baixo, ou para cima com
+// helper manda. Lá a largura é 280 (a janela tem 300; aberto, até 480, spec #17673: `overlay-aberto-largo`), o rabo aponta para o meio do gato (para baixo, ou para cima com
 // o balão embaixo) e a linha das ações (o ×) fica sempre embaixo do texto: o balão é outro por desenho, então os
 // números do overlay só informam e não decidem o exit. A comparação recorta os dois balões pela caixa da casca (com o
 // rabo e a sombra) e encosta os dois no canto de cima à esquerda. `--sem-overlay` pula essa parte.
@@ -34,6 +34,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { serve } from "./servir";
+import { OPEN_SHELL_W, SHELL_W } from "../../ui/catoverlay/placement";
 
 const LIMIT = 0.01;
 const THRESHOLD = 8;
@@ -167,11 +168,14 @@ async function shotPacoteCrop(browser: Browser, origin: string, f: Frame, casca:
   }
 }
 
-type OverlayFrame = { name: string; texto: string; balao: "acima" | "abaixo"; pacote: Frame | null; abrir?: boolean };
+/** `largura` (spec #17673): a casca aberta que o helper manda; a janela ganha o espaço a mais do lado do balão. */
+type OverlayFrame = { name: string; texto: string; balao: "acima" | "abaixo"; pacote: Frame | null; abrir?: boolean; largura?: number };
 /** O `#bubble` do overlay de verdade, recortado pela casca. */
 async function shotOverlay(browser: Browser, port: number, f: OverlayFrame, casca: boolean): Promise<Buffer> {
   const sala = 360;
-  const context = await browser.newContext({ viewport: { width: 300, height: 240 + sala }, deviceScaleFactor: 2, colorScheme: "dark" });
+  const largura = f.largura ?? SHELL_W;
+  const width = 300 + largura - SHELL_W;
+  const context = await browser.newContext({ viewport: { width, height: 240 + sala }, deviceScaleFactor: 2, colorScheme: "dark" });
   try {
     // O `kiwiCat` do helper: a página manda o retângulo do balão; aqui ninguém precisa dele.
     await context.addInitScript(() => { (window as any).webkit = { messageHandlers: { kiwiCat: { postMessage: () => {} } } }; });
@@ -182,7 +186,7 @@ async function shotOverlay(browser: Browser, port: number, f: OverlayFrame, casc
     await page.waitForFunction(() => (window as any).kiwiCatReady === true, undefined, { timeout: 20_000 });
     // O fundo da página do pacote (o overlay é transparente) e o gato fora: só o balão entra no recorte.
     await page.addStyleTag({ content: "html, body { background: #090a0e !important; } #cat { visibility: hidden; }" });
-    await page.evaluate(([t]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, bubble: { text: t, error: false } }), [f.texto]);
+    await page.evaluate(([t, l]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 360, largura: l, bubble: { text: t, error: false } }), [f.texto, largura] as const);
     if (f.abrir) await page.click("#bubble-more");
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     await Bun.sleep(300); // a transição de 140 ms do balão
@@ -254,6 +258,7 @@ try {
       { name: "overlay-abaixo", texto: CURTO, balao: "abaixo", pacote: null },
       { name: "overlay-ver-mais", texto: LONGO, balao: "acima", pacote: null },
       { name: "overlay-aberto", texto: LONGO, balao: "acima", pacote: null, abrir: true },
+      { name: "overlay-aberto-largo", texto: LONGO, balao: "acima", pacote: null, abrir: true, largura: OPEN_SHELL_W },
     ];
     for (const f of ovFrames) {
       const pk = f.pacote;
