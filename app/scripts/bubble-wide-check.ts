@@ -3,8 +3,12 @@
 // nada abre na tela, nada liga o agente de verdade.
 //
 // Em cada janela (640 × 480, 1000 × 740 e 1440 × 900) e nos dois lugares do gato (o canto das Notas e o meio da Início):
-// - o balão aberto é mais largo que o fechado e tem menos linhas que o mesmo texto teria na largura do fechado;
-// - não passa de 480 px, fica dentro da janela (12 px de folga) e não cobre o corpo do gato;
+// - com o texto longo, o aberto fica em min(480, o espaço do lado) (±1 px): 480 no canto, o espaço do lado na Início, e o
+//   mesmo do fechado onde nem os 320 cabem. Os 420 de antes (a `main`) falham aqui;
+// - com uma resposta curta (uma linha e uma lista de itens curtos), o aberto alarga só o que o texto pede: entre 320 e
+//   480, sem encostar em nenhum dos dois (um 480 fixo falha aqui, e um 320 também);
+// - o aberto tem menos linhas que o mesmo texto teria na largura do fechado, fica dentro da janela (12 px de folga) e não
+//   cobre o corpo do gato;
 // - o Esc (o "Ver menos") volta ao balão pequeno, na largura de antes.
 // Sai a prancha `prancha.webp`, com o fechado e o aberto lado a lado. Tudo inventado (AGENTS.md).
 //
@@ -35,6 +39,8 @@ const LONGA = [
   "",
   "Os móveis grandes vão primeiro, e as plantas ficam para o domingo, no carro. Se chover, a Ana prefere adiar as plantas e levar só os livros.",
 ].join("\n");
+
+const CURTA = ["A lista da feira de sábado, que a Ana mandou ontem pelo grupo:", "", "- pão", "- leite", "- ovos", "- café", "- arroz", "- feijão", "- uva"].join("\n");
 
 const data = mkdtempSync(join(tmpdir(), "kiwi-largo-"));
 const registry = fakeRegistry([
@@ -73,6 +79,18 @@ const settle = (p: Page) => p.evaluate(() => Promise.all(document.getAnimations(
 type Box = { x: number; y: number; width: number; height: number };
 const box = async (p: Page, sel: string) => (await p.locator(sel).first().boundingBox()) as Box;
 
+/** O espaço do lado em que o balão abre: o `--kn-bub-room` resolvido, numa sonda irmã do balão (a mesma base do %). */
+const room = (p: Page) =>
+  p.evaluate(() => {
+    const big = document.querySelector<HTMLElement>(".kn-bubble-big")!;
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:absolute;visibility:hidden;width:var(--kn-bub-room)";
+    big.parentElement!.appendChild(probe);
+    const w = probe.getBoundingClientRect().width;
+    probe.remove();
+    return w;
+  });
+
 /** As linhas do texto do balão aberto, e quantas o mesmo texto teria na largura do fechado (a mesma caixa, mais estreita). */
 const lines = (p: Page, narrow: number) =>
   p.evaluate((narrow) => {
@@ -103,8 +121,13 @@ try {
     { width: 1000, height: 740 },
     { width: 1440, height: 900 },
   ];
-  for (const size of sizes)
-    for (const where of ["notes", "home"] as const) {
+  const cases = [
+    ...sizes.flatMap((size) => (["notes", "home"] as const).map((where) => ({ size, where, curta: false }))),
+    { size: sizes[2], where: "notes" as const, curta: true },
+    { size: sizes[2], where: "home" as const, curta: true },
+  ];
+  for (const { size, where, curta } of cases) {
+    const texto = curta ? CURTA : LONGA;
       // Uma janela por caso: o balão pequeno só sai sozinho, quando o texto acaba de passar.
       const w = await openWindow(browser, ctx, { window: "hub", scale: 2, theme: "light", ...size, motion: false, browser: "webkit", query: {} });
       const p = w.page;
@@ -115,25 +138,29 @@ try {
         if (where === "home") await p.waitForFunction(() => document.querySelector<HTMLElement>(".kn-hub")?.dataset.catAt === "home");
         else await p.waitForFunction(() => !document.querySelector<HTMLElement>(".kn-hub")?.dataset.catAt);
         await p.keyboard.press("Escape"); // o clique na aba da Início abre o menu dela
-        await invoke("agent.ask", { text: `/diga ${LONGA}` });
+        await invoke("agent.ask", { text: `/diga ${texto}` });
         await p.waitForSelector(`${BUBBLE} .kn-bubble-more`, { timeout: 30_000 });
         await p.waitForTimeout(2500); // o primeiro trecho acaba de ser digitado
         await settle(p);
         const small = await box(p, BUBBLE);
-        const tag = `${size.width}-${where}`;
+        const tag = `${size.width}-${where}${curta ? "-curta" : ""}`;
         await p.screenshot({ path: join(out, `${tag}-fechado.png`) });
         await p.locator(`${BUBBLE} .kn-bubble-more`).click();
         await p.waitForSelector(".kn-bubble-big");
         await settle(p);
         const big = await box(p, ".kn-bubble-big");
         const cat = await box(p, ".kn-kiwicat");
-        const what = `${size.width}×${size.height}, ${lugar}`;
-        // Mais largo, até 480, dentro da janela. Numa janela estreita, com o gato no meio, o lado não tem nem os 320 do
-        // fechado: aí o aberto ocupa o lado todo, até a folga de 12 px da borda, e não alarga mais.
-        const full = big.x <= 12.5 || big.x + big.width >= size.width - 12.5;
+        const what = `${size.width}×${size.height}, ${lugar}${curta ? ", resposta curta" : ""}`;
+        // A largura certa. Texto longo: min(480, o espaço do lado). Curta: só o que o texto pede, entre o fechado e 480.
+        const side = await room(p);
         const wider = big.width > small.width + 1;
-        assert.ok(wider || full, `${what}: o aberto (${big.width}) não é mais largo que o fechado (${small.width}) e ainda tem espaço`);
-        assert.ok(big.width <= 480.5, `${what}: o aberto passa de 480 (${big.width})`);
+        if (curta) {
+          // A linha mais longa pede mais que os 320 do fechado e menos que 480: nem o mínimo, nem o máximo.
+          assert.ok(big.width > 330 && big.width < 470, `${what}: a curta abriu com ${big.width} px, devia seguir o texto (entre 320 e 480)`);
+        } else {
+          const want = Math.min(480, side);
+          assert.ok(Math.abs(big.width - want) <= 1, `${what}: o aberto tem ${big.width} px, devia ter min(480, ${side}) = ${want}`);
+        }
         assert.ok(big.x >= 11.5 && big.x + big.width <= size.width - 11.5, `${what}: o aberto sai da janela (${big.x}–${big.x + big.width})`);
         assert.ok(big.y >= 0 && big.y + big.height <= size.height, `${what}: o aberto sai da janela na altura`);
         // Sem cobrir o corpo do gato.
@@ -142,9 +169,9 @@ try {
         assert.ok(!over, `${what}: o aberto cobre o gato`);
         // Menos linhas que na largura do fechado.
         const l = await lines(p, small.width);
-        if (wider) assert.ok(l.now < l.then, `${what}: ${l.now} linhas aberto, ${l.then} na largura do fechado`);
+        if (wider && !curta) assert.ok(l.now < l.then, `${what}: ${l.now} linhas aberto, ${l.then} na largura do fechado`);
         await p.screenshot({ path: join(out, `${tag}-aberto.png`) });
-        checks.push(`${what}: fechado ${Math.round(small.width)} px → aberto ${Math.round(big.width)} px, ${l.then} → ${l.now} linhas${wider ? "" : " (o lado não tem mais espaço)"}`);
+        checks.push(`${what}: fechado ${Math.round(small.width)} px → aberto ${Math.round(big.width)} px (o lado tem ${Math.round(side)}), ${l.then} → ${l.now} linhas${wider || curta ? "" : " (o lado não tem mais espaço)"}`);
         shots.push({ file: `${tag}-fechado.png`, caption: `${what}: fechado`, w: size.width }, { file: `${tag}-aberto.png`, caption: `${what}: aberto (Ver mais)`, w: size.width });
         // Ver menos: volta ao pequeno, na largura de antes.
         await p.keyboard.press("Escape");

@@ -147,7 +147,7 @@ try {
       check(m.h2 === "Feira da semana" && m.strong === "Ana" && m.code === "retornável" && m.li === 2, "aberto: título, negrito, código e lista formatados");
       check(m.wrapScrollW > m.wrapClientW + 20, `aberto: a tabela larga rola de lado na caixa dela (${m.wrapScrollW} > ${m.wrapClientW})`);
       check(m.bigScrollW <= m.bigClientW + 1 && m.bigWidth <= 480.5, `aberto: o balão não rola de lado e fica em ${Math.round(m.bigWidth)} px (≤ 480)`);
-      check(m.bigWidth > 320.5, `aberto: mais largo que o fechado (${Math.round(m.bigWidth)} > 320 px, spec #17673)`);
+      check(m.bigWidth >= 479, `aberto: a tabela larga leva o balão até os 480 px (${Math.round(m.bigWidth)}, spec #17673)`);
       check(m.perigosos === 0 && m.tagsComoTexto, "aberto: <script> e <img> ficam texto, sem elemento");
       check(m.linkHref === null && m.linkData === LINK, "aberto: o link vem sem href, com o endereço no data-href");
     }
