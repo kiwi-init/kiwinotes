@@ -223,11 +223,44 @@ public enum CatOverlayBubble {
         }
     }
 
+    /**
+     Os links de caminho do balão (spec #17683), como o app mandou: `{text, from, to, path, kind}`, com `kind` `note` ou
+     `file` e as posições dentro do texto. Os que não têm essa forma saem; no máximo 50.
+     */
+    public static func links(_ body: Any?, textLength: Int) -> [[String: Any]] {
+        guard let list = body as? [Any] else { return [] }
+        var out: [[String: Any]] = []
+        for item in list.prefix(50) {
+            guard let d = item as? [String: Any], let text = d["text"] as? String, let path = pathString(d["path"]),
+                  let kind = d["kind"] as? String, kind == "note" || kind == "file",
+                  let from = (d["from"] as? NSNumber)?.intValue, let to = (d["to"] as? NSNumber)?.intValue,
+                  from >= 0, from < to, to <= textLength else { continue }
+            out.append(["text": text, "from": from, "to": to, "path": path, "kind": kind])
+        }
+        return out
+    }
+
+    /**
+     O caminho que a pessoa clicou no balão (spec #17683): só um dos `shown` (os links do balão de agora), relativo e sem
+     `..`. Um `kiwi-file:` que a resposta escreveu sozinha não abre; o app ainda confere de novo na pasta.
+     */
+    public static func openPath(_ body: Any?, shown: [String]) -> String? {
+        guard let path = pathString(body), shown.contains(path) else { return nil }
+        return path
+    }
+
+    private static func pathString(_ body: Any?) -> String? {
+        guard let s = body as? String, !s.isEmpty, s.count <= 1024, !s.contains("\0"), !s.hasPrefix("/"), !s.hasPrefix("~"),
+              !s.split(separator: "/", omittingEmptySubsequences: false).contains("..") else { return nil }
+        return s
+    }
+
     /// `ask`: com a pergunta "Precisa de mais alguma coisa?" embaixo da resposta (spec #13380).
-    public static func script(text: String?, error: Bool, ask: Bool = false) -> String {
+    public static func script(text: String?, error: Bool, ask: Bool = false, links: [[String: Any]] = []) -> String {
         guard let text, !text.isEmpty else { return "null" }
         var object: [String: Any] = ["text": text, "error": error]
         if ask { object["ask"] = true }
+        if !links.isEmpty { object["links"] = links }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return "null" }
         // U+2028 e U+2029 são fim de linha em JavaScript antigo: escapados, o literal vale em qualquer WebKit.

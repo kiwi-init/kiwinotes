@@ -254,6 +254,7 @@ final class Helper {
             // A conversa contínua (spec #13380): um toque recomeça a espera; o × tira o gato.
             catOverlay.onTouch = { [weak self] in self?.emit("catOverlay.touch") }
             catOverlay.onClose = { [weak self] in self?.emit("catOverlay.close") }
+            catOverlay.onOpenPath = { [weak self] path in self?.emit("catOverlay.openPath", ["path": path]) }
         }
         learnPanel.enabled = !headless
         meeting.start()
@@ -1091,8 +1092,9 @@ final class Helper {
             let text = message.string("text")
             let error = message.fields["error"] as? Bool ?? false
             let ask = message.fields["ask"] as? Bool ?? false
+            let links = message.fields["links"]
             let cat = catOverlay
-            MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask) }
+            MainActor.assumeIsolated { cat.bubble(text: text, error: error, ask: ask, links: links) }
             reply(id, ok: true)
         case "catOverlay.unload":
             catOverlayLoaded = false

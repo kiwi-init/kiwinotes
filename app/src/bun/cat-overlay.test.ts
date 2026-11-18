@@ -567,6 +567,49 @@ describe("a fala pelo Control termina com um balão no overlay (spec #12938)", (
     expect(holdFn).toBeNull();
   });
 
+  test("o clique num caminho só abre o que o balão de agora mostra (spec #17683)", () => {
+    const r = rig();
+    talk(r);
+    expect(r.cat.shownPath("Plano.md")).toBe(false);
+    r.cat.turn({ ...doneWith("Veja Plano.md."), links: [{ text: "Plano.md", from: 5, to: 13, path: "Plano.md", kind: "note" }] } as AgentTurnEvent);
+    expect(r.cat.shownPath("Plano.md")).toBe(true);
+    expect(r.cat.shownPath("Outra.md")).toBe(false);
+    r.cat.close();
+    expect(r.cat.shownPath("Plano.md")).toBe(false);
+  });
+
+  test("o openPath do helper chega ao notes.openPath pelo attach, só para o caminho do balão", async () => {
+    let openFn: ((path: string) => void) | null = null;
+    const opened: string[] = [];
+    const logs: string[] = [];
+    const a = attachCatOverlay({
+      agent: { status: async () => ({ enabled: false }) as AgentStatus, onStatus: () => () => {}, onTurn: () => () => {} },
+      settings: { load: () => new Promise(() => {}) },
+      helper: { send: async () => ({ ok: true }), onReady: () => () => {}, onOpenPath: (fn) => ((openFn = fn), () => (openFn = null)) },
+      openPath: async (p) => {
+        opened.push(p);
+        if (p === "Sumiu.md") throw Object.assign(new Error("no note"), { code: "E_NOT_FOUND" });
+      },
+      pageDir: "/x",
+      where: () => {},
+      log: (m) => logs.push(m),
+    });
+    const shown = new Set(["Plano.md", "Sumiu.md"]);
+    a.overlay.shownPath = (p: string) => shown.has(p);
+    let touched = 0;
+    a.overlay.touch = () => void touched++;
+    openFn!("Plano.md");
+    openFn!("../fora.md");
+    openFn!(42 as unknown as string);
+    openFn!("Sumiu.md");
+    await Bun.sleep(0);
+    expect(opened).toEqual(["Plano.md", "Sumiu.md"]);
+    expect(touched).toBe(2);
+    expect(logs).toEqual(["[cat-overlay] openPath: fora do balão", "[cat-overlay] openPath: fora do balão", "[cat-overlay] openPath: E_NOT_FOUND"]);
+    a.stop();
+    expect(openFn).toBeNull();
+  });
+
   test("um erro do agente: o balão diz o erro em palavras, e o gato fica como numa resposta", () => {
     const r = rig();
     talk(r);

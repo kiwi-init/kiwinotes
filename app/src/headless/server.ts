@@ -329,8 +329,10 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
           onHold: (fn) => session.sidecar.on("catOverlay.hold", (e) => fn(e.held === true)),
           onTouch: (fn) => session.sidecar.on("catOverlay.touch", () => fn()),
           onClose: (fn) => session.sidecar.on("catOverlay.close", () => fn()),
+          onOpenPath: (fn) => session.sidecar.on("catOverlay.openPath", (e) => fn(e.path)),
         }
       : { send: async (c) => (event("catOverlay.command", c), { ok: true }), onReady: () => () => {} },
+    openPath: async (p) => capabilities["notes.openPath"]({ path: p }),
     pageDir: path.resolve(import.meta.dirname, "..", "..", "dist", "catoverlay"),
     where: (overlay) => event("kiwicat.where", { overlay }),
     log: (m) => console.log(m),

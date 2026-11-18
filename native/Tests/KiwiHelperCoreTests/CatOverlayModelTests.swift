@@ -136,6 +136,32 @@ final class CatOverlayModelTests: XCTestCase {
         }
     }
 
+    /// Spec #17683: os links de caminho vão à página só com a forma certa, e o clique só abre um deles.
+    func testBubblePathLinksAndOpenPath() {
+        let good: [String: Any] = ["text": "Plano.md", "from": 5, "to": 13, "path": "Plano.md", "kind": "note"]
+        let list: [Any] = [
+            good,
+            ["text": "x", "from": 0, "to": 1, "path": "/etc/hosts", "kind": "file"],
+            ["text": "x", "from": 0, "to": 1, "path": "../fora.pdf", "kind": "file"],
+            ["text": "x", "from": 0, "to": 1, "path": "a.pdf", "kind": "app"],
+            ["text": "x", "from": 3, "to": 99, "path": "a.pdf", "kind": "file"],
+            ["text": "x", "from": 2, "to": 2, "path": "a.pdf", "kind": "file"],
+            "lixo",
+        ]
+        let links = CatOverlayBubble.links(list, textLength: 14)
+        XCTAssertEqual(links.count, 1)
+        XCTAssertEqual(links.first?["path"] as? String, "Plano.md")
+        XCTAssertTrue(CatOverlayBubble.links(nil, textLength: 10).isEmpty)
+        XCTAssertEqual(CatOverlayBubble.links(Array(repeating: good, count: 80), textLength: 14).count, 50)
+        let script = CatOverlayBubble.script(text: "Veja Plano.md.", error: false, links: links)
+        XCTAssertTrue(script.contains("\"links\":[{"), script)
+        XCTAssertFalse(CatOverlayBubble.script(text: "Oi", error: false).contains("links"))
+        XCTAssertEqual(CatOverlayBubble.openPath("Plano.md", shown: ["Plano.md"]), "Plano.md")
+        for bad: Any? in ["Outra.md", "../Plano.md", "/Plano.md", "", 42, nil] {
+            XCTAssertNil(CatOverlayBubble.openPath(bad, shown: ["Plano.md", "../Plano.md", "/Plano.md", ""]), "\(String(describing: bad))")
+        }
+    }
+
     /// Spec #13378 e #504: só o balão pega o clique; o gato e o espaço transparente deixam passar.
     func testOnlyTheBubbleTakesTheClick() {
         let panel = CGRect(x: 100, y: 100, width: 300, height: 600)

@@ -351,6 +351,14 @@ export class CatOverlay {
     this.waitIdle();
   }
 
+  /**
+   * O link de um caminho que o balão de agora mostra (spec #17683): só o que veio nos `links` dele. Um `kiwi-file:` que
+   * a resposta escreveu sozinha, ou de um balão que já saiu, não abre.
+   */
+  shownPath(path: string): boolean {
+    return this.phase === "lingering" && this.bubbleShown && !!this.bubbleNow?.links?.some((l) => l.path === path);
+  }
+
   /** O × do balão ou da cabeça (spec #13380, o `catOverlay.close`): o gato sai na hora. */
   close(): void {
     if (!this.overlayShown || this.phase === "corner") return;
@@ -523,7 +531,11 @@ export interface CatOverlayWiring {
     /** Clicou ou rolou no balão, ou fechou no × (spec #13380: os eventos `catOverlay.touch` e `catOverlay.close`). */
     onTouch?(fn: () => void): () => void;
     onClose?(fn: () => void): () => void;
+    /** Clicou num caminho do balão (spec #17683, o evento `catOverlay.openPath`). */
+    onOpenPath?(fn: (path: string) => void): () => void;
   };
+  /** Abre um caminho da pasta (spec #17683, o `notes.openPath`, que confere de novo). */
+  openPath?(path: string): Promise<unknown>;
   /** A pasta da página (`views/ui/catoverlay`). */
   pageDir: string;
   /** O gato foi para o overlay, ou voltou (o evento `kiwicat.where`). */
@@ -573,6 +585,11 @@ export function attachCatOverlay(w: CatOverlayWiring): AttachedCatOverlay {
     w.helper?.onHold?.((held) => overlay.hold(held)) ?? (() => {}),
     w.helper?.onTouch?.(() => overlay.touch()) ?? (() => {}),
     w.helper?.onClose?.(() => overlay.close()) ?? (() => {}),
+    w.helper?.onOpenPath?.((path) => {
+      if (typeof path !== "string" || !overlay.shownPath(path)) return w.log?.("[cat-overlay] openPath: fora do balão");
+      overlay.touch();
+      void w.openPath?.(path).catch((e) => w.log?.(`[cat-overlay] openPath: ${String((e as { code?: string })?.code ?? (e as Error)?.message ?? e)}`));
+    }) ?? (() => {}),
   ];
   // A primeira leitura não passa por cima de um evento que chegou antes dela.
   void w.agent.status().then((s) => {

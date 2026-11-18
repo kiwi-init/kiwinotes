@@ -434,7 +434,9 @@ export function startCatOverlay(sidecar: Sidecar): void {
       onHold: (fn) => sidecar.on("catOverlay.hold", (e) => fn(e.held === true)),
       onTouch: (fn) => sidecar.on("catOverlay.touch", () => fn()),
       onClose: (fn) => sidecar.on("catOverlay.close", () => fn()),
+      onOpenPath: (fn) => sidecar.on("catOverlay.openPath", (e) => fn(e.path)),
     },
+    openPath: async (p) => capabilities["notes.openPath"]({ path: p }),
     pageDir: path.join(PATHS.VIEWS_FOLDER, "ui", "catoverlay"),
     where: (overlay) => {
       for (const rpc of rpcs.values()) rpc.send.event({ name: "kiwicat.where", payload: { overlay } });
