@@ -11,7 +11,7 @@
 // marcadas cujo dono já saiu.
 
 import { afterAll, afterEach, beforeEach } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -35,8 +35,12 @@ function alive(pid: number): boolean {
 /**
  * As pastas de rodadas que já acabaram: só as `kr-*` com a marca deste preload e cujo dono saiu. Nunca pelo prefixo
  * só, e nunca a de uma rodada viva (de outro agente na mesma máquina).
+ *
+ * A varredura nunca falha (T18063): com várias cópias do `bun test` juntas, duas varrem a mesma pasta ao mesmo tempo,
+ * e uma pegava EPERM no meio da outra e derrubava a rodada antes dos testes. Uma pasta que não sai fica para a próxima
+ * varredura, e só conta como apagada a que deixou de existir. `beforeRemove` é só dos testes: a outra cópia no meio.
  */
-export function sweepFinishedRuns(root = system): string[] {
+export function sweepFinishedRuns(root = system, beforeRemove?: (dir: string) => void): string[] {
   const removed: string[] = [];
   let names: string[];
   try {
@@ -53,8 +57,16 @@ export function sweepFinishedRuns(root = system): string[] {
       continue;
     }
     if (!Number.isInteger(pid) || pid <= 0 || alive(pid)) continue;
-    rmSync(dir, { recursive: true, force: true });
-    removed.push(dir);
+    beforeRemove?.(dir);
+    if (!existsSync(dir)) continue;
+    try {
+      // A marca sai por último: uma pasta que fica pela metade continua marcada, e a próxima varredura a leva.
+      for (const entry of readdirSync(dir)) if (entry !== MARK) rmSync(path.join(dir, entry), { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Outra cópia apagando junto, ou um arquivo sem permissão: fica para a próxima varredura.
+    }
+    if (!existsSync(dir)) removed.push(dir);
   }
   return removed;
 }

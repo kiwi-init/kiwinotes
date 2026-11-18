@@ -1,6 +1,6 @@
 // O ajudante das pastas temporárias dos testes (spec #10077, issue #416).
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
@@ -108,5 +108,37 @@ describe("tempDir", () => {
     mark("kiwi-outra", gone);
     expect(sweepFinishedRuns(root)).toEqual([path.join(root, "kr-acabou")]);
     expect(readdirSync(root).sort()).toEqual(["kiwi-outra", "kr-semmarca", "kr-viva"]);
+  });
+
+  // T18063: em rodadas paralelas, a varredura dava EPERM numa pasta de outra cópia e derrubava o `bun test` antes dos
+  // testes. Uma pasta que não sai (sem permissão, ou apagada por outra cópia no meio) fica para a próxima rodada.
+  test("uma pasta que não sai não derruba a varredura, e as outras saem", () => {
+    const root = tempDir("kiwi-tmp-sweep-");
+    const gone = Bun.spawnSync(["true"]).pid;
+    for (const name of ["kr-a", "kr-presa", "kr-z"]) {
+      mkdirSync(path.join(root, name, "dentro"), { recursive: true });
+      writeFileSync(path.join(root, name, "dentro", "f"), "x");
+      writeFileSync(path.join(root, name, ".kiwi-run"), String(gone));
+    }
+    // Sem escrita na pasta de dentro: o arquivo dela não sai (EACCES; o EPERM do relato é da mesma família).
+    const stuck = path.join(root, "kr-presa", "dentro");
+    chmodSync(stuck, 0o500);
+    try {
+      expect(() => sweepFinishedRuns(root)).not.toThrow();
+      expect(readdirSync(root).sort()).toEqual(["kr-presa"]);
+    } finally {
+      chmodSync(stuck, 0o700);
+    }
+    // Liberada, a próxima varredura leva a que ficou.
+    expect(sweepFinishedRuns(root)).toEqual([path.join(root, "kr-presa")]);
+  });
+
+  test("uma pasta que outra cópia apagou entre a lista e o apagar não conta nem falha", () => {
+    const root = tempDir("kiwi-tmp-sweep-");
+    const gone = Bun.spawnSync(["true"]).pid;
+    mkdirSync(path.join(root, "kr-sumiu"));
+    writeFileSync(path.join(root, "kr-sumiu", ".kiwi-run"), String(gone));
+    // A outra cópia apaga a pasta no meio: aqui, logo depois de ler a marca.
+    expect(sweepFinishedRuns(root, (dir) => rmSync(dir, { recursive: true, force: true }))).toEqual([]);
   });
 });
