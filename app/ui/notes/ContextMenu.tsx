@@ -2,7 +2,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-type Action = { label: string; hint?: string; danger?: boolean; disabled?: boolean; checked?: boolean };
+/** `labelClass` (spec #17703): o rótulo mostra o que a opção faz, no próprio estilo (`kn-menu-bold`, `kn-menu-h1`…). */
+type Action = { label: string; hint?: string; danger?: boolean; disabled?: boolean; checked?: boolean; labelClass?: string };
 export type MenuItem =
   | (Action & { kind?: "item"; onSelect(): void })
   | (Action & { kind: "submenu"; items: MenuItem[] })
@@ -86,7 +87,7 @@ function MenuPanel({ x, y, parentLeft, items, owner, onClose, onBack, autoFocus,
           onMouseMove={() => { if (sel !== i) { setSel(i); setChild(null); } if (it.kind === "submenu" && child?.index !== i) open(i, false); }}
           onMouseDown={(e) => e.preventDefault()} onClick={() => choose(i)}>
           {checks ? <span className="kn-menu-check">{it.checked ? "✓" : ""}</span> : null}
-          <span className="kn-menu-label">{it.label}</span>
+          <span className={it.labelClass ? `kn-menu-label ${it.labelClass}` : "kn-menu-label"}>{it.label}</span>
           {it.hint ? <span className="kn-menu-hint">{it.hint}</span> : null}
           {it.kind === "submenu" ? <span className="kn-menu-arrow" aria-hidden>›</span> : null}
         </div>;

@@ -97,6 +97,20 @@ export function calloutAtCursor(state: EditorState): ReturnType<typeof calloutAt
 }
 
 /**
+ * O Formatar no próprio estilo (spec #17703): cada opção mostra o que faz no texto, como as "Ferramentas de texto"
+ * (MAIÚSCULAS, minúsculas). Os estilos, em `notes.css`, são os do editor: o realce, o comentário e o código.
+ */
+export const FORMAT_STYLE: Record<string, string> = {
+  "Mod-b": "kn-menu-bold",
+  "Mod-i": "kn-menu-italic",
+  "Shift-Mod-x": "kn-menu-strike",
+  "Shift-Mod-h": "kn-menu-highlight",
+  "Mod-e": "kn-menu-code",
+  "Mod-/": "kn-menu-comment",
+  "Mod-\\": "kn-menu-clear",
+};
+
+/**
  * O menu do botão direito do editor. `plain` (spec #13385): o de um texto puro (.txt), o mesmo menu sem o que só existe
  * numa nota (o link para outra nota e dividir a nota). A formatação entra como Markdown simples (`# `, `- `, `**`).
  */
@@ -112,7 +126,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
   };
   const command = (key: string): MenuItem => {
     const item = FORMAT_KEYS.find((item) => item.key === key)!;
-    return { label: item.label, onSelect: perform(() => { item.run(view); }) };
+    return { label: item.label, labelClass: FORMAT_STYLE[key], onSelect: perform(() => { item.run(view); }) };
   };
   const insertBlock = (id: string) => perform(() => {
     const sel = view.state.selection.main, line = view.state.doc.lineAt(sel.from);
