@@ -81,6 +81,10 @@ export interface SidebarProps {
    */
   onNewNote?(folder: string): void;
   onNewFolder?(folder: string): void;
+  /** A pasta que acabou de ser criada (spec #19265): a linha dela pisca de leve, e a árvore rola até ela. */
+  fresh?: string | null;
+  /** A pasta nova ficou fora da vista mesmo assim: quem chama mostra um aviso curto de onde ela nasceu. */
+  onFreshHidden?(path: string): void;
   /**
    * A pasta raiz das notas (T5298, issue #211): a primeira linha da árvore. Ela abre ali mesmo o "Abrir pasta…" e as
    * pastas recentes, para que a árvore seja o lugar único de navegação, sem controle extra ao lado dela.
@@ -115,6 +119,11 @@ function ModifiedAt({ value }: { value?: string }) {
     </time>
   );
 }
+
+/** O que fica por cima da árvore e tem o próprio Esc: o menu, a busca, o aviso. */
+const ESC_LAYERS = ".kn-menu, .kn-palette-scrim, .kn-toast";
+/** Quando conferir se a pasta nova ficou à vista: depois da rolagem até ela. */
+const FRESH_CHECK_MS = 250;
 
 /** "na raiz" ou "em Projetos": onde os botões do topo criam. */
 export const whereLabel = (folder: string) => (folder ? `em ${folder.slice(folder.lastIndexOf("/") + 1)}` : "na raiz");
@@ -161,7 +170,7 @@ export function visibleRange(count: number, rowHeight: number, listTop: number, 
 }
 
 /** O campo de renomear: Enter grava, Esc desiste, sair do campo grava. */
-function RenameInput({ initial, depth, onDone }: { initial: string; depth: number; onDone(name: string | null): void }) {
+function RenameInput({ initial, depth, fresh, onDone }: { initial: string; depth: number; fresh?: boolean; onDone(name: string | null): void }) {
   const ref = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(initial);
   const done = useRef(false);
@@ -173,11 +182,13 @@ function RenameInput({ initial, depth, onDone }: { initial: string; depth: numbe
   useEffect(() => {
     ref.current?.focus();
     ref.current?.select();
+    ref.current?.scrollIntoView?.({ block: "nearest" });
   }, []);
   return (
     <input
       ref={ref}
       className="kn-side-rename"
+      data-fresh={fresh || undefined}
       aria-label="Novo nome"
       style={{ marginLeft: depth * 14 }}
       value={value}
@@ -378,7 +389,7 @@ export function Sidebar(p: SidebarProps) {
       if (n.kind === "file") return fileItem(n, depth);
       const expanded = p.open.has(n.path);
       return p.renaming === `f:${n.path}` ? (
-          <RenameInput key={`f:${n.path}`} initial={n.name} depth={depth} onDone={(name) => p.onRename({ kind: "folder", path: n.path }, name)} />
+          <RenameInput key={`f:${n.path}`} initial={n.name} depth={depth} fresh={p.fresh === n.path} onDone={(name) => p.onRename({ kind: "folder", path: n.path }, name)} />
         ) : (
           <div key={`f:${n.path}`} className="kn-side-row" data-menu={p.menuOn === `f:${n.path}` || undefined} style={rowStyle(false, false)}>
             <button
@@ -388,6 +399,7 @@ export function Sidebar(p: SidebarProps) {
               data-path={n.path}
               aria-keyshortcuts="Shift+F10"
               data-selected={p.selectedFolder === n.path || undefined}
+              data-fresh={p.fresh === n.path || undefined}
               data-menu={p.menuOn === `f:${n.path}` || undefined}
               data-drop={dropOn === n.path || undefined}
               aria-expanded={expanded}
@@ -446,6 +458,39 @@ export function Sidebar(p: SidebarProps) {
     if (top < nav.scrollTop || top + rowHeight > nav.scrollTop + nav.clientHeight) nav.scrollTop = top - nav.clientHeight / 2;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.renaming, virtual]);
+  // Esc numa linha da árvore com uma pasta escolhida volta à raiz (spec #19265); com a raiz já escolhida, ele fecha a
+  // árvore, como antes. Só com o foco numa linha (o teclado): com o mouse, o Esc segue fechando a árvore, e a raiz se
+  // escolhe pelo clique no topo. Na captura da janela, antes do Esc do TreePopover, que respeita o preventDefault.
+  const escState = useRef({ selected: p.selectedFolder, select: p.onSelectFolder });
+  escState.current = { selected: p.selectedFolder, select: p.onSelectFolder };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const nav = navRef.current;
+      const { selected, select } = escState.current;
+      const el = document.activeElement;
+      if (e.key !== "Escape" || e.defaultPrevented || !selected || !nav || document.querySelector(ESC_LAYERS)) return;
+      if (!(el instanceof HTMLElement) || !nav.contains(el) || !el.classList.contains("kn-side-item")) return;
+      e.preventDefault();
+      select("");
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, []);
+  // A pasta nova fora da vista mesmo depois de rolar (spec #19265): o aviso diz onde ela nasceu.
+  useEffect(() => {
+    const nav = navRef.current;
+    const path = p.fresh;
+    if (!path || !nav || !p.onFreshHidden) return;
+    // Depois da rolagem: na lista virtual, a linha só existe quando a janela dela é desenhada.
+    const id = setTimeout(() => {
+      const el = nav.querySelector<HTMLElement>("[data-fresh]");
+      const box = el?.getBoundingClientRect();
+      const view = nav.getBoundingClientRect();
+      if (!box || box.bottom <= view.top || box.top >= view.bottom || !box.height) p.onFreshHidden?.(path);
+    }, FRESH_CHECK_MS);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.fresh]);
 
   return (
     <nav
@@ -579,7 +624,7 @@ export function Sidebar(p: SidebarProps) {
         </button>
       ) : null}
       </div>
-      {!searching && p.root ? <RootFolder root={p.root} /> : null}
+      {!searching && p.root ? <RootFolder root={p.root} selected={p.selectedFolder === ""} onSelect={() => p.onSelectFolder("")} /> : null}
       {!searching && p.onDaily ? (
         <button type="button" className="kn-side-item kn-side-daily" onClick={() => p.onDaily?.()} title={`Nota do dia${dailyKey ? ` (${dailyKey})` : ""}`}>
           <TreeIcon name="today" />
@@ -682,17 +727,22 @@ function tagItems(tags: TagNode[], depth: number, onTag: (tag: string) => void, 
 }
 
 /** A pasta raiz no topo da árvore: um clique mostra, logo abaixo e dentro da árvore, o "Abrir pasta…" e as recentes. */
-function RootFolder({ root }: { root: SideRoot }) {
+function RootFolder({ root, selected, onSelect }: { root: SideRoot; selected: boolean; onSelect(): void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="kn-side-root" data-open={open || undefined}>
       <button
         type="button"
         className="kn-side-item kn-side-root-bt"
+        data-selected={selected || undefined}
         aria-expanded={open}
         aria-label={`Pasta das notas: ${root.name}`}
-        title={root.path}
-        onClick={() => setOpen(!open)}
+        title={`${root.path} · o + Nota e o + Pasta criam aqui`}
+        // O clique na raiz também a escolhe (spec #19265): o jeito óbvio de voltar a criar ao lado das outras pastas.
+        onClick={() => {
+          onSelect();
+          setOpen(!open);
+        }}
       >
         <Twisty open={open} />
         <TreeIcon name={open ? "folder-open" : "folder"} />

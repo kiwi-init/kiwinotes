@@ -161,4 +161,22 @@ describe("a barra", () => {
     expect(out).toContain('<div class="kn-side-head" data-section="tags">Tags</div>');
     expect(out).toContain(">#ideia<");
   });
+
+  test("spec #19265: a pasta nova pisca, e só ela; a escolhida fica destacada e o + Pasta diz onde cria", () => {
+    const out = html({ fresh: "Arquivo", selectedFolder: "Projetos" });
+    expect(count(out, "data-fresh")).toBe(1);
+    expect(out).toMatch(/data-path="Arquivo"[^>]*data-fresh="true"/);
+    expect(out).toMatch(/data-path="Projetos"[^>]*data-selected="true"/);
+    expect(out).toContain('title="Nova pasta em Projetos"');
+    expect(count(html({ fresh: "Arquivo", renaming: "f:Arquivo" }), 'class="kn-side-rename" data-fresh="true"')).toBe(1);
+    expect(count(html({}), "data-fresh")).toBe(0);
+  });
+
+  test("spec #19265: com a raiz escolhida, a linha da raiz no topo fica destacada; com uma pasta, não", () => {
+    const root = { name: "Projeto X", path: "/exemplo/Projeto X", recent: [], onOpen: () => {} };
+    const atRoot = html({ root, selectedFolder: "" });
+    expect(atRoot).toMatch(/kn-side-root-bt" data-selected="true"/);
+    expect(atRoot).toContain('title="Nova pasta na raiz"');
+    expect(html({ root, selectedFolder: "Projetos" })).not.toMatch(/kn-side-root-bt" data-selected/);
+  });
 });

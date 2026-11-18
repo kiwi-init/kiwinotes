@@ -43,7 +43,7 @@ import { focusEditor, insertIntoEditor,
 } from "./NoteEditor.tsx";
 import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
-import { type SideRoot, type SideTarget, Sidebar } from "./Sidebar.tsx";
+import { type SideRoot, type SideTarget, Sidebar, whereLabel } from "./Sidebar.tsx";
 import { ancestors, buildTree, editedLabel, filterTree, filterTreeToPaths, recentNotes, type SortBy,
 } from "./tree.ts";
 import { TrashView } from "./TrashView.tsx";
@@ -68,6 +68,8 @@ const LINK_SAFE_NOTE = " (sem # ^ | [ ], que quebram os [[links]] para ela)";
 
 /** A ordem da árvore fica no navegador da janela (uma conveniência de quem vê, T2469). */
 const SORT_KEY = "kiwi.notes.sort";
+/** Quanto tempo a linha da pasta nova fica realçada (spec #19265); o CSS some no mesmo tempo. */
+const FRESH_MS = 1200;
 const loadSort = (): SortBy => {
   try {
     const v = localStorage.getItem(SORT_KEY);
@@ -212,6 +214,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const [versionsOf, setVersionsOf] = useState<{ path: string; title: string; content: string;
   } | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  // A pasta que acabou de nascer (spec #19265): a linha dela pisca por ~1 s.
+  const [fresh, setFresh] = useState<string | null>(null);
+  useEffect(() => {
+    if (!fresh) return;
+    const t = setTimeout(() => setFresh(null), FRESH_MS);
+    return () => clearTimeout(t);
+  }, [fresh]);
   /** O meio da janela: a nota, ou a Lixeira do app (T2593). */
   const [view, setView] = useState<"note" | "trash" | "canvas" | "file">("note");
   /** O arquivo que não é nota aberto no lugar dela (T7103, spec #7079). */
@@ -1051,9 +1060,11 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     const r = await folders.create(join(parent, freeName("Nova pasta", taken))).catch(failed_("criar a pasta"));
     if (!r) return;
     await after();
-    setOpenFolders((o) => new Set([...o, ...ancestors(`${r.path}/x`)]));
-    setSelectedFolder(r.path);
+    // Spec #19265: a pasta escolhida não muda. Antes ela virava a nova, e o próximo clique criava uma dentro da outra.
+    // A nova aparece na hora: a árvore abre até ela, rola, a linha pisca de leve e o nome já vem em foco.
+    setOpenFolders((o) => new Set([...o, ...ancestors(r.path)]));
     setRenaming(`f:${r.path}`);
+    setFresh(r.path);
   };
 
   const renameItem = async (target: SideTarget, name: string | null) => {
@@ -1227,6 +1238,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
         ...(api.canvas ? [{ label: "Novo quadro branco aqui", onSelect: () => void newCanvas(t.path) }] : []),
         { label: "Nova pasta aqui", onSelect: () => void newFolder(t.path), disabled: !folders,
         },
+        { label: "Nova pasta ao lado", onSelect: () => void newFolder(folderOf(t.path)), disabled: !folders },
         { kind: "separator" },
         { label: "Renomear", onSelect: () => setRenaming(`f:${t.path}`), disabled: !folders,
         },
@@ -1608,6 +1620,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           onOpenFile={api.files ? openVaultFile : undefined}
           onNewNote={(f) => void create("Sem título", true, f)}
           onNewFolder={folders ? (f) => void newFolder(f) : undefined}
+          fresh={fresh}
+          onFreshHidden={(path) => say(`Pasta criada ${whereLabel(folderOf(path))}`)}
           showExtensions={prefs.showExtensions}
           dailyFolder={prefs.dailyFolder}
           onDaily={api.extras ? () => void openDaily() : undefined}

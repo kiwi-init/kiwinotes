@@ -44,12 +44,77 @@
       "press": "Enter"
     },
     {
-      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-selected]:has-text('Ideias')",
-      "name": "a pasta Ideias foi criada na raiz e ficou escolhida"
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Ideias']",
+      "name": "a pasta Ideias foi criada na raiz"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-selected]",
+      "count": 0,
+      "name": "spec #19265: a pasta nova não vira a escolhida"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-new[data-new='folder'][title='Nova pasta na raiz']",
+      "count": 1,
+      "name": "o + Pasta continua criando na raiz"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-new[data-new='folder']",
+      "name": "+ Pasta de novo"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-rename[data-fresh]",
+      "name": "a pasta nova vem realçada, com o nome em foco"
+    },
+    {
+      "screenshot": "pasta-nova-realcada.png"
+    },
+    {
+      "fill": ".kn-tree-pop .kn-side-rename",
+      "text": "Rascunhos"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Rascunhos']",
+      "name": "dois cliques seguidos: Rascunhos nasce na raiz, irmã de Ideias"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path^='Ideias/']",
+      "count": 0,
+      "name": "nada aninhado dentro de Ideias"
     },
     {
       "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')",
       "name": "escolhe Projetos"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-new[data-new='note'][aria-label='Nova nota em Projetos']"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-search",
+      "name": "o teclado na árvore: a busca"
+    },
+    {
+      "press": "ArrowDown",
+      "name": "↓ entra na 1ª linha"
+    },
+    {
+      "press": "Escape",
+      "name": "Esc numa linha da árvore"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-new[data-new='folder'][title='Nova pasta na raiz']",
+      "name": "spec #19265: o Esc escolhe a raiz"
+    },
+    {
+      "expectCount": ".kn-tree-pop[data-open]",
+      "count": 1,
+      "name": "e a árvore segue aberta (com a raiz já escolhida, o Esc fecha, como antes)"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')",
+      "name": "escolhe Projetos de novo"
     },
     {
       "waitFor": ".kn-tree-pop .kn-side-new[data-new='note'][aria-label='Nova nota em Projetos']"
@@ -93,8 +158,32 @@
       "press": "Escape"
     },
     {
-      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-selected]:has-text('Nova pasta')",
-      "name": "a subpasta nova fica com o nome padrão"
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Projetos/Nova pasta']",
+      "name": "a subpasta nova fica com o nome padrão, dentro de Projetos"
+    },
+    {
+      "expectCount": ".kn-tree-pop .kn-side-new[data-new='folder'][title='Nova pasta em Projetos']",
+      "count": 1,
+      "name": "e Projetos continua a escolhida"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Ideias']",
+      "button": "right",
+      "name": "o menu de Ideias"
+    },
+    {
+      "click": ".kn-menu-item:has-text('Nova pasta ao lado')",
+      "name": "spec #19265: Nova pasta ao lado"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-rename[data-fresh]"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": ".kn-tree-pop .kn-side-item[data-kind='folder'][data-path='Nova pasta']",
+      "name": "nasce na raiz, ao lado de Ideias, não dentro"
     },
     {
       "screenshot": "botoes-criar-depois.png"
