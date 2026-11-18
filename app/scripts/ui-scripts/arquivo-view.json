@@ -6,7 +6,7 @@
     { "expectText": ".kn-file-title", "text": "contrato.pdf", "name": "o nome do arquivo no topo" },
     { "expectCount": ".kn-file-head .kn-file-open", "count": 1, "name": "o botão Abrir no app padrão no topo" },
     { "expectText": ".kn-file-head .kn-file-open", "text": "Abrir no app padrão" },
-    { "waitFor": ".kn-file[data-state='unsupported'] .kn-file-notice", "name": "sem visualizador para o tipo (a base, T7103), o aviso oferece o app padrão" },
+    { "waitFor": ".kn-file[data-state='ready']", "name": "o PDF abre no visualizador dele, com o app padrão no topo (o tipo sem visualizador tem o cartão: arquivo-cartao.json, T19316)" },
     { "expectCount": ".kn-note-editor", "count": 0, "name": "o editor da nota não aparece junto" },
     { "screenshot": "01-arquivo.png" },
     { "click": ".kn-file-head .kn-file-open", "name": "o botão chama o files.open (no headless, só registra)" },
