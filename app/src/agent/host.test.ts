@@ -29,7 +29,7 @@ function tmp(): string {
 /** Um host com o agente falso. `log` recebe cada abertura de sessão que o falso viu; `resume` muda como ele retoma. */
 function fakeHost(
   dir: string,
-  extra: { resume?: "resume" | "load" | "none"; command?: readonly string[]; sessionOptions?: Record<string, unknown> } = {},
+  extra: { resume?: "resume" | "load" | "none"; command?: readonly string[]; sessionOptions?: Record<string, unknown>; webTools?: () => boolean } = {},
 ) {
   const log = path.join(dir, "fake-log.jsonl");
   const h = new AgentHost({
@@ -38,6 +38,7 @@ function fakeHost(
     dir: path.join(dir, "agent"),
     env: { ...process.env, KIWI_FAKE_AGENT_LOG: log, KIWI_FAKE_AGENT_RESUME: extra.resume ?? "resume" },
     sessionOptions: extra.sessionOptions,
+    ...(extra.webTools ? { webTools: extra.webTools } : {}),
   });
   hosts.push(h);
   // Como as sessões abriram: o agente falso também anota cada `session/prompt` (spec #11084), que fica de fora aqui.
@@ -252,17 +253,36 @@ describe("o isolamento", () => {
     expect(created!.params.cwd).toBe(path.join(dir, "agent", "work"));
     expect(created!.params.mcpServers).toEqual([]);
     expect(created!.params._meta).toEqual(SESSION_META);
-    expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: ["WebSearch", "WebFetch"], allowDangerouslySkipPermissions: false });
+    expect(ISOLATION_META.claudeCode.options).toEqual({ settingSources: [], strictMcpConfig: true, tools: [], allowDangerouslySkipPermissions: false });
   });
 
   test("o enxuto (spec #19273): só a busca e a leitura de página entre as embutidas, e compacta em 200 mil", async () => {
     const dir = tmp();
-    const { h, opened } = fakeHost(dir);
+    const { h, opened } = fakeHost(dir, { webTools: () => true });
     await h.start();
     const options = (opened()[0]!.params._meta as { claudeCode: { options: Record<string, unknown> } }).claudeCode.options;
     expect(options.tools).toEqual([...WEB_TOOLS]);
     expect(options.tools).not.toContain("Bash");
     expect(options.settings).toEqual({ autoCompactWindow: 200_000 });
+    expect(h.sessionWeb).toBe(true);
+  });
+
+  test("web desligada: as ferramentas de web nem existem na sessão, e a sessão nova segue o interruptor (revisão do T19300)", async () => {
+    const dir = tmp();
+    let web = false;
+    const { h, opened } = fakeHost(dir, { webTools: () => web });
+    await h.start();
+    const tools = (n: number) => (opened()[n]!.params._meta as { claudeCode: { options: { tools: string[] } } }).claudeCode.options.tools;
+    expect(tools(0)).toEqual([]);
+    expect(h.sessionWeb).toBe(false);
+    web = true;
+    await h.newSession();
+    expect(tools(1)).toEqual([...WEB_TOOLS]);
+    expect(h.sessionWeb).toBe(true);
+    web = false;
+    await h.newSession();
+    expect(tools(2)).toEqual([]);
+    expect(h.sessionWeb).toBe(false);
   });
 
   test("opções a mais vão junto, mas nunca trocam o isolamento (T8540)", async () => {
@@ -479,7 +499,7 @@ describe("as ferramentas do Kiwi no host (spec #7496)", () => {
     const p = opened().find((l) => l.method === "session/new")!.params;
     expect(p.mcpServers).toEqual([server]);
     expect(p._meta.claudeCode.options.allowedTools).toEqual(["mcp__kiwi__*"]);
-    expect(p._meta.claudeCode.options.tools).toEqual([...WEB_TOOLS]);
+    expect(p._meta.claudeCode.options.tools).toEqual([]);
   });
 
   test("um agente que não diz saber o HTTP do MCP não recebe o servidor", async () => {
@@ -488,7 +508,7 @@ describe("as ferramentas do Kiwi no host (spec #7496)", () => {
     const p = opened().find((l) => l.method === "session/new")!.params;
     expect(p.mcpServers).toEqual([]);
     expect(p._meta.claudeCode.options.allowedTools).not.toContain("mcp__kiwi__*");
-    expect(p._meta.claudeCode.options.tools).toEqual([...WEB_TOOLS]);
+    expect(p._meta.claudeCode.options.tools).toEqual([]);
   });
 
   test("a permissão: aceita a ferramenta do Kiwi, recusa o Bash", async () => {

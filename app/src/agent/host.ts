@@ -37,10 +37,11 @@ import { AgentError, classifyAgentError } from "./errors.ts";
  * - `settingSources: []` não carrega as configurações da pessoa (`~/.claude`, as do projeto e as locais), com os
  *   hooks, as regras e os servidores MCP do terminal;
  * - `strictMcpConfig` usa só os servidores MCP que o Kiwi mandar (o das ferramentas do Kiwi, spec #7496, ou nenhum);
- * - `tools` só com a busca e a leitura de página (`WEB_TOOLS`, spec #19273): desliga as outras embutidas (o shell e a
- *   edição de arquivos). As ferramentas MCP não são embutidas: as do Kiwi continuam visíveis (doc do Agent SDK). As da
- *   web existem na sessão, mas só passam com "Pesquisar na web" ligado (`webTools`, no pedido de permissão): sem elas na
- *   lista, o interruptor ligado não tinha o que liberar. Trocar o interruptor vale no pedido seguinte, sem reabrir;
+ * - `tools: []` desliga as ferramentas embutidas (o shell, a edição de arquivos). As ferramentas MCP não são embutidas:
+ *   as do Kiwi continuam visíveis (doc do Agent SDK). Com "Pesquisar na web" ligado, a sessão abre com a busca e a
+ *   leitura de página (`WEB_TOOLS`, spec #19273, em `sessionBase`); desligado, elas não existem na sessão, e não há
+ *   pré-aprovação do agente que as chame (revisão do T19300). Trocar o interruptor reabre a sessão no pedido seguinte
+ *   (`sessionWeb`), e o pedido de permissão ainda confere o `webTools` (a segunda trava);
  * - `allowDangerouslySkipPermissions: false` desliga o modo que pula as permissões (spec #8368). Sem ele, um
  *   `"defaultMode": "bypassPermissions"` no `~/.claude/settings.json` da pessoa vira `--permission-mode=bypassPermissions`
  *   no Claude Code: foi o que a prova do builder viu, com o adaptador de verdade e um `claude` falso. Com ele, a sessão
@@ -56,7 +57,7 @@ export const ISOLATION_META = {
     options: {
       settingSources: [] as string[],
       strictMcpConfig: true,
-      tools: ["WebSearch", "WebFetch"] as string[],
+      tools: [] as string[],
       allowDangerouslySkipPermissions: false,
     },
   },
@@ -129,8 +130,9 @@ export interface AgentHostOptions {
    */
   kiwiTools?: { servers: () => McpServer[]; prefix: string };
   /**
-   * "Pesquisar na web" (spec #11908): consultado a cada pedido de permissão. Ligado, o Kiwi aceita as ferramentas de web
-   * do próprio agente (`WEB_TOOLS`); desligado, ou sem a opção, elas são recusadas como qualquer outra. O Kiwi não faz
+   * "Pesquisar na web" (spec #11908): consultado ao abrir a sessão e a cada pedido de permissão. Ligado, a sessão abre
+   * com as ferramentas de web do próprio agente (`WEB_TOOLS`) e o Kiwi as aceita; desligado, ou sem a opção, elas ficam
+   * fora da sessão e, se pedidas, são recusadas como qualquer outra. O Kiwi não faz
    * nenhuma chamada de rede: quem busca e lê as páginas é o agente, com o login dele.
    */
   webTools?: () => boolean;
@@ -170,6 +172,8 @@ export class AgentHost {
   private sessionId: string | null = null;
   /** A sessão aberta nasceu agora (`session/new`) e ainda não recebeu pedido: a janela (T13835) pode começar nela. */
   private fresh = false;
+  /** O `webTools()` da última abertura de sessão: com ele, as ferramentas de web estão no `tools` dela. */
+  private openedWeb = false;
   /** O `initialize` da conexão aberta: a sessão nova da janela (T13835) abre com as mesmas capacidades. */
   private init: InitializeResponse | null = null;
   private turn: Turn | null = null;
@@ -303,6 +307,11 @@ export class AgentHost {
     return this.sessionId;
   }
 
+  /** A sessão aberta tem a busca e a leitura de página (`WEB_TOOLS`): o "Pesquisar na web" de quando ela abriu. */
+  get sessionWeb(): boolean {
+    return this.openedWeb;
+  }
+
   /** A sessão aberta é nova e vazia: nenhum pedido foi a ela (nem um `/usage`). */
   get sessionFresh(): boolean {
     return this.fresh && this.sessionId !== null;
@@ -338,10 +347,13 @@ export class AgentHost {
     const kiwi = this.o.kiwiTools;
     // O servidor do Kiwi vai pelo HTTP do MCP: só para um agente que diz saber (`mcpCapabilities.http`).
     const mcpServers = kiwi && init.agentCapabilities?.mcpCapabilities?.http ? kiwi.servers() : [];
+    // Fora do interruptor, as ferramentas de web nem existem na sessão (revisão do T19300).
+    this.openedWeb = this.o.webTools?.() === true;
     const options = {
       ...structuredClone(LEAN_SESSION_OPTIONS),
       ...structuredClone(this.o.sessionOptions ?? {}),
       ...structuredClone(ISOLATION_META.claudeCode.options),
+      ...(this.openedWeb ? { tools: [...WEB_TOOLS] as string[] } : {}),
       ...(mcpServers.length && kiwi ? { allowedTools: [`${kiwi.prefix}*`] } : {}),
     };
     return { cwd: this.workDir, mcpServers, _meta: { claudeCode: { options } } };

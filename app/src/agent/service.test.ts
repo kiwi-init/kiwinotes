@@ -11,7 +11,7 @@ import { adapterRoot, agentDir } from "./adapter/open.ts";
 import { fakeNotices } from "./fake/notices.ts";
 import { FAKE_AGENT_COMMAND, FAKE_CLAUDE } from "./fake/index.ts";
 import { fakeRegistry, type FakeRegistry } from "./fake/registry.ts";
-import { AgentHost } from "./host.ts";
+import { AgentHost, WEB_TOOLS } from "./host.ts";
 import { AgentService, AgentServiceError, cheapestModel, ECONOMY_INSTRUCTIONS, SUMMARY_ECONOMY_QUESTION } from "./service.ts";
 import { ROUTINE_LABELS, routineDeclined, routineEconomyQuestion } from "./routines.ts";
 import { DEFAULT_AGENT_ROUTINES } from "../shared/agent-routines.ts";
@@ -955,6 +955,33 @@ describe("Pesquisar na web (spec #11908)", () => {
     // Desligado de novo: negado de novo.
     await m.svc.configure({ webSearch: false });
     expect((await askAndWait(m, "/web outra busca")).at(-1)).toMatchObject({ text: "web negada: a busca não aconteceu." });
+  });
+
+  test("desligado por construção (revisão do T19300): a sessão abre sem as ferramentas de web, e trocar o interruptor reabre a sessão no pedido seguinte", async () => {
+    const m = make();
+    await readyNow(m);
+    const tools = () =>
+      m
+        .log()
+        .filter((l) => l.method === "session/new" || l.method === "session/resume" || l.method === "session/load")
+        .map((l) => (l.params as { _meta: { claudeCode: { options: { tools: string[] } } } })._meta.claudeCode.options.tools);
+    // Ligado de fábrica: a sessão aberta já tem a busca e a leitura de página.
+    await askAndWait(m, "oi");
+    expect(tools().at(-1)).toEqual([...WEB_TOOLS]);
+    const opened = tools().length;
+    // Desligado: o pedido seguinte vai a uma sessão nova, sem elas.
+    await m.svc.configure({ webSearch: false });
+    await askAndWait(m, "oi de novo");
+    expect(tools()).toHaveLength(opened + 1);
+    expect(tools().at(-1)).toEqual([]);
+    // Sem troca, a sessão segue.
+    await askAndWait(m, "mais um");
+    expect(tools()).toHaveLength(opened + 1);
+    // Ligado de novo: outra sessão, com elas.
+    await m.svc.configure({ webSearch: true });
+    await askAndWait(m, "e agora");
+    expect(tools()).toHaveLength(opened + 2);
+    expect(tools().at(-1)).toEqual([...WEB_TOOLS]);
   });
 });
 

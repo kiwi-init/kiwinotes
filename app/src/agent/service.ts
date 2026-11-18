@@ -1066,6 +1066,8 @@ export class AgentService {
     // aplica a escolha (revisão #17024).
     const busy = () => !!this.turn || !!this.usageRun || !!this.limitProbe;
     if (busy()) return this.status();
+    // A sessão aberta aqui já sai com a web do interruptor: o 1º pedido não precisa reabrir.
+    this.webNow = s.webSearch === true;
     try {
       if (!this.host?.running) await this.openProgram();
       else {
@@ -2199,7 +2201,8 @@ export class AgentService {
     const now = (this.d.now ?? Date.now)();
     const saved = this.loadWindow();
     const w = saved && saved.sessionId === host.session ? saved : null;
-    const reason: WindowCloseReason | null = windowCloseReason(w, { now, asked: this.windowAsked, conversationOpen: this.conversationOpen(), ...this.d.window });
+    // O interruptor da web mudou: a sessão abre de novo com as ferramentas certas (revisão do T19300).
+    const reason: WindowCloseReason | null = host.sessionWeb !== this.webNow ? "web" : windowCloseReason(w, { now, asked: this.windowAsked, conversationOpen: this.conversationOpen(), ...this.d.window });
     if (!reason) {
       this.registro.novoPedido();
       return "";
@@ -2362,7 +2365,8 @@ export class AgentService {
     // As instruções da pessoa (spec #11469): valem a partir do pedido seguinte. Elas vão no começo fixo de todo pedido,
     // por fora do filtro do pedido: um trecho com cara de senha ou token é recusado aqui, e nada é gravado (revisão do
     // T11667). Assim o começo continua com os mesmos bytes, sem marcador no meio.
-    // "Pesquisar na web" (spec #11908): vale já no próximo pedido de permissão do agente, sem reabrir a sessão.
+    // "Pesquisar na web" (spec #11908): vale já no próximo pedido de permissão, e o pedido seguinte abre uma sessão com as
+    // ferramentas de web, ou sem elas (`openWindow`, revisão do T19300).
     if (o.webSearch !== undefined) {
       patch.webSearch = o.webSearch === true;
       patch.webSearchChosen = true;
