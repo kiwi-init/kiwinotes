@@ -1,9 +1,13 @@
 // Shared by the tree and the editor. Submenus stay on screen; keyboard arrows traverse each level.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { MenuIcon, type MenuIconName } from "./editor/menuIcons.tsx";
 
-/** `labelClass` (spec #17703): o rótulo mostra o que a opção faz, no próprio estilo (`kn-menu-bold`, `kn-menu-h1`…). */
-type Action = { label: string; hint?: string; danger?: boolean; disabled?: boolean; checked?: boolean; labelClass?: string };
+/**
+ * `icon` e `labelClass` (spec #17703): o desenho à esquerda (`menuIcons.tsx`) e a classe do rótulo, para a opção
+ * mostrar o que faz (o Título 1 grande, o Negrito em negrito).
+ */
+type Action = { label: string; hint?: string; danger?: boolean; disabled?: boolean; checked?: boolean; icon?: MenuIconName; labelClass?: string };
 export type MenuItem =
   | (Action & { kind?: "item"; onSelect(): void })
   | (Action & { kind: "submenu"; items: MenuItem[] })
@@ -73,9 +77,11 @@ function MenuPanel({ x, y, parentLeft, items, owner, onClose, onBack, autoFocus,
     e.preventDefault(); e.stopPropagation();
   };
   const checks = items.some((it) => it.kind !== "separator" && it.kind !== "title" && it.checked !== undefined);
+  // Com um ícone no painel, toda opção ganha a vaga dele, e os rótulos ficam alinhados.
+  const icons = items.some((it) => it.kind !== "separator" && it.kind !== "title" && it.icon);
   const branch = child && items[child.index];
   return <>
-    <div ref={ref} className="kn-menu" data-menu-owner={owner} data-checks={checks || undefined} role="menu" aria-label={label} tabIndex={-1}
+    <div ref={ref} className="kn-menu" data-menu-owner={owner} data-checks={checks || undefined} data-icons={icons || undefined} role="menu" aria-label={label} tabIndex={-1}
       style={pos} onScroll={() => setChild(null)} onKeyDown={onKey} onContextMenu={(e) => e.preventDefault()}>
       {items.map((it, i) => {
         if (it.kind === "separator") return <div key={i} className="kn-menu-sep" role="separator" />;
@@ -87,6 +93,7 @@ function MenuPanel({ x, y, parentLeft, items, owner, onClose, onBack, autoFocus,
           onMouseMove={() => { if (sel !== i) { setSel(i); setChild(null); } if (it.kind === "submenu" && child?.index !== i) open(i, false); }}
           onMouseDown={(e) => e.preventDefault()} onClick={() => choose(i)}>
           {checks ? <span className="kn-menu-check">{it.checked ? "✓" : ""}</span> : null}
+          {icons ? (it.icon ? <MenuIcon name={it.icon} /> : <span className="kn-menu-icon" aria-hidden />) : null}
           <span className={it.labelClass ? `kn-menu-label ${it.labelClass}` : "kn-menu-label"}>{it.label}</span>
           {it.hint ? <span className="kn-menu-hint">{it.hint}</span> : null}
           {it.kind === "submenu" ? <span className="kn-menu-arrow" aria-hidden>›</span> : null}

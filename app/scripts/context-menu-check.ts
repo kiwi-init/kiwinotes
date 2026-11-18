@@ -4,7 +4,8 @@
 //
 //   bun scripts/context-menu-check.ts [pasta]
 //
-// Sai na pasta: `medidas.json` e os prints `menu-md.png`, `menu-txt.png` e `menu-txt-escuro.png`.
+// Sai na pasta: `medidas.json` e os prints `menu-md.png`, `menu-txt.png` e `menu-txt-escuro.png`. No Parágrafo, nos dois
+// temas, confere a cascata dos títulos e os ícones (spec #17703).
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -83,6 +84,35 @@ async function choose(p: Page, ...path: string[]) {
   }
 }
 
+/**
+ * O Parágrafo aberto (spec #17703, T18385): o tamanho e o peso de cada rótulo, o ícone, e a largura do submenu. Os
+ * títulos descem do 1 ao 6, as listas, a citação e o marcar tarefa têm ícone, e o submenu não fica largo demais.
+ */
+async function paragraphLook(p: Page, theme: string) {
+  const look = await p.evaluate(() => {
+    const menu = [...document.querySelectorAll<HTMLElement>(".kn-menu")].at(-1)!;
+    const items = [...menu.querySelectorAll<HTMLElement>(".kn-menu-item")].map((row) => {
+      const label = row.querySelector<HTMLElement>(".kn-menu-label")!;
+      const cs = getComputedStyle(label);
+      const icon = row.querySelector<SVGElement>("svg.kn-menu-icon");
+      return { label: label.textContent, size: parseFloat(cs.fontSize), weight: cs.fontWeight, icon: icon?.dataset.icon ?? null,
+        iconColor: icon ? getComputedStyle(icon).color : null, h: row.getBoundingClientRect().height };
+    });
+    return { width: Math.round(menu.getBoundingClientRect().width), items };
+  });
+  const titles = look.items.filter((it) => it.label?.startsWith("Título"));
+  const problems: string[] = [];
+  if (titles.length !== 6 || titles.some((t, i) => i > 0 && t.size >= titles[i - 1]!.size)) problems.push(`os títulos não descem: ${titles.map((t) => t.size)}`);
+  if (titles.some((t) => t.weight !== "600")) problems.push("título sem o peso 600");
+  const corpo = look.items.find((it) => it.label === "Corpo");
+  if (!corpo || corpo.weight === "600" || corpo.size > titles.at(-1)!.size) problems.push("o Corpo não está no normal");
+  for (const [label, icon] of [["Lista", "bullet"], ["Lista numerada", "numbered"], ["Lista de tarefas", "task"], ["Citação", "quote"], ["Marcar tarefa", "check"]]) {
+    if (look.items.find((it) => it.label === label)?.icon !== icon) problems.push(`${label} sem o ícone ${icon}`);
+  }
+  if (look.width > 280) problems.push(`o Parágrafo ficou largo: ${look.width} px`);
+  return { theme, width: look.width, titles: titles.map((t) => t.size), icons: look.items.filter((it) => it.icon).map((it) => `${it.label}: ${it.icon} ${it.iconColor}`), problems };
+}
+
 const pct = (xs: number[], q: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(xs.length * q))]!;
 const browser = await webkit.launch({ headless: true });
 const result: Record<string, unknown> = {};
@@ -118,6 +148,9 @@ try {
       await openTime(t.page, ".kn-file-text-area .cm-line >> nth=0");
       await t.page.locator(".kn-menu .kn-menu-item", { hasText: "Parágrafo" }).hover();
       await Bun.sleep(200);
+      const look = await paragraphLook(t.page, theme);
+      result.paragrafoEscuro = look;
+      if (look.problems.length) ok = false;
       await t.page.screenshot({ path: join(out, "menu-txt-escuro.png") });
       await t.close();
       continue;
@@ -133,6 +166,9 @@ try {
     result.txtMenu = await t.page.locator(".kn-menu .kn-menu-item").allTextContents();
     await t.page.locator(".kn-menu .kn-menu-item", { hasText: "Parágrafo" }).hover();
     await Bun.sleep(200);
+    const look = await paragraphLook(t.page, theme);
+    result.paragrafo = look;
+    if (look.problems.length) ok = false;
     await t.page.screenshot({ path: join(out, "menu-txt.png") });
     await choose(t.page, "Título 1");
     // Lista na 2ª linha.
