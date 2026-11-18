@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, type Page } from "playwright-core";
-import { BUBBLE_H, overlayPlacement } from "../ui/catoverlay/placement";
+import { BUBBLE_H, OPEN_SHELL_W, openPlacement, overlayPlacement, SHELL_W } from "../ui/catoverlay/placement";
 import { CAT_BODY } from "../ui/kiwicat-v2/bubbleTail";
 
 const app = resolve(import.meta.dir, "..");
@@ -58,10 +58,11 @@ const report: { scope: string; checks: string[]; problems: string[] } = {
 const shots: { file: string; caption: string; w: number; h: number }[] = [];
 
 type Posts = { bubble: { x: number; y: number; w: number; h: number } | null; open: boolean }[];
-async function openPage(query: string, theme: "light" | "dark", sala: number) {
+/** `largura` (spec #17673): a casca aberta que o helper daria; a janela já vem com o espaço a mais do lado do balão. */
+async function openPage(query: string, theme: "light" | "dark", sala: number, largura = SHELL_W) {
   const q = new URLSearchParams(query);
   const place = overlayPlacement(q);
-  const width = place.winW;
+  const width = openPlacement(place, largura).winW;
   const height = place.catH + sala;
   const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, colorScheme: theme });
   // O `kiwiCat` do helper: guarda o que a página manda.
@@ -83,6 +84,12 @@ const bubbleBox = (p: Page) => p.evaluate(() => {
   return { x: r.left, y: r.top, w: r.width, h: r.height, bottom: r.bottom, right: r.right };
 });
 /** Dois quadros e o fim das transições do balão (140 ms). */
+/** O corpo do gato na página (`CAT_BODY`): o balão aberto não pode passar por cima dele. */
+const catBody = (p: Page) =>
+  p.evaluate((b) => {
+    const c = document.getElementById("cat")!.getBoundingClientRect();
+    return { x: c.left + c.width * b.x0, y: c.top + c.height * b.y0, right: c.left + c.width * b.x1, bottom: c.top + c.height * b.y1 };
+  }, CAT_BODY);
 const settle = async (p: Page) => {
   await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await Bun.sleep(220);
@@ -225,8 +232,9 @@ try {
     await ctx.close();
   }
 
-  // 3. As 6 posições × os 2 limites de tamanho, com o espaço que o helper daria (o máximo e o mínimo): o balão aberto
-  //    fica dentro da janela.
+  // 3. As 6 posições × os 2 limites de tamanho, com o espaço que o helper daria (o máximo e o mínimo) e a largura do
+  //    aberto (spec #17673: 280 de hoje, 380 quando a borda da tela corta, 480 no máximo): o balão, fechado e aberto,
+  //    fica dentro da janela e fora do corpo do gato; aberto com espaço, ele alarga para o lado e não passa da largura.
   const sides = [
     ["center", "acima"], ["center", "acima"], ["left", "abaixo"], ["right", "abaixo"], ["left", "acima"], ["right", "acima"],
   ] as const;
@@ -234,44 +242,65 @@ try {
   let checked = 0;
   for (let i = 0; i < sides.length; i++) {
     for (const escala of ["0.60", "1.60"]) {
-      for (const sala of [BUBBLE_H, 360]) {
+      for (const sala of [BUBBLE_H, 360]) for (const largura of [SHELL_W, 380, OPEN_SHELL_W]) {
         const [lado, balao] = sides[i]!;
-        const { ctx, p, width, height } = await openPage(`escala=${escala}&lado=${lado}&balao=${balao}`, "light", sala);
-        await p.evaluate(([t, s]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: s, bubble: { text: t, error: false } }), [LONG, sala] as const);
+        const { ctx, p, width, height } = await openPage(`escala=${escala}&lado=${lado}&balao=${balao}`, "light", sala, largura);
+        await p.evaluate(([t, s, l]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: s, largura: l, bubble: { text: t, error: false } }), [LONG, sala, largura] as const);
         await settle(p);
+        let closedW = 0;
         for (const open of [false, true]) {
           if (open) {
             await p.click("#bubble-more");
             await settle(p);
           }
           const b = await bubbleBox(p);
-          const what = `${names[i]} ${escala} sala ${sala} ${open ? "aberto" : "fechado"}`;
+          const body = await catBody(p);
+          const what = `${names[i]} ${escala} sala ${sala} largura ${largura} ${open ? "aberto" : "fechado"}`;
           assert.ok(b.x >= 0 && b.y >= 0 && b.right <= width + 0.5 && b.bottom <= height + 0.5, `balão fora da janela: ${what} ${JSON.stringify(b)} em ${width}×${height}`);
+          const covers = b.x < body.right - 0.5 && b.right > body.x + 0.5 && b.y < body.bottom - 0.5 && b.bottom > body.y + 0.5;
+          assert.ok(!covers, `o balão cobre o gato: ${what} ${JSON.stringify(b)} × corpo ${JSON.stringify(body)}`);
+          if (!open) closedW = b.w;
+          else {
+            // O texto longo pede mais que 480, e a janela tem o espaço que o helper reserva (`openPlacement`): o aberto
+            // chega à largura toda, nem 1 px a menos (um teto escondido de 380 passaria por um "alargou" frouxo).
+            assert.ok(Math.abs(b.w - largura) <= 1, `o aberto não tem a largura do helper: ${what} ${b.w} ≠ ${largura}`);
+            if (largura > SHELL_W) assert.ok(b.w > closedW + 50, `o aberto não alargou: ${what} ${closedW} → ${b.w}`);
+          }
           checked++;
         }
         await ctx.close();
       }
     }
   }
-  report.checks.push(`the bubble, closed and open, stays inside the window in the 6 positions × 0.6 and 1.6 × the smallest and largest room (${checked} cases)`);
+  report.checks.push(`the bubble, closed and open, stays inside the window and off the cat body in the 6 positions × 0.6 and 1.6 × the smallest and largest room × open width 280, 380 and 480, and the open one is exactly the width the helper gives (±1 px) (${checked} cases)`);
 
   // 4. O rabo (T14933, spec #14896; T16754, harry #16786): nas 6 posições, a 1×, 0,6× e 1,6×, o rabo sai da quina do
   //    balão do lado do gato e a ponta encosta na quina do corpo dele (`CAT_BODY`). A ponta do traço, no SVG de 34 × 24,
   //    está em (28,5; 19,5); virado, o SVG espelha em volta do meio. O `bubble-tail-check` passa pelo hub também.
   let tails = 0;
   for (let i = 0; i < sides.length; i++) {
-    for (const escala of ["1.00", "0.60", "1.60"]) {
+    for (const escala of ["1.00", "0.60", "1.60"]) for (const aberto of [false, true]) {
       const [lado, balao] = sides[i]!;
-      const { ctx, p, width, height } = await openPage(`escala=${escala}&lado=${lado}&balao=${balao}`, "light", BUBBLE_H);
-      await p.evaluate((t) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: 112, bubble: { text: t, error: false } }), SHORT);
+      // Aberto (spec #17673): o balão largo de 480, com a resposta longa; o rabo continua no gato.
+      const sala = aberto ? 360 : BUBBLE_H;
+      const largura = aberto ? OPEN_SHELL_W : SHELL_W;
+      const { ctx, p, width, height } = await openPage(`escala=${escala}&lado=${lado}&balao=${balao}`, "light", sala, largura);
+      await p.evaluate(([t, s, l]) => (window as any).kiwiOverlay.set({ estado: "pronto", visible: true, sala: s, largura: l, bubble: { text: t, error: false } }), [aberto ? LONG : SHORT, sala, largura] as const);
       await settle(p);
+      if (aberto) {
+        await p.click("#bubble-more");
+        await settle(p);
+        // "Aberto a 480" é a 480 mesmo, antes de olhar o rabo.
+        const w = (await bubbleBox(p)).w;
+        assert.ok(w >= OPEN_SHELL_W - 1, `o aberto não chegou a 480: ${names[i]} ${escala} ${w}`);
+      }
       const m = await p.evaluate(() => {
         const svg = document.querySelector("#bubble .kn-bubble-tail")!;
         const t = svg.getBoundingClientRect();
         const c = document.getElementById("cat")!.getBoundingClientRect();
         return { side: svg.getAttribute("data-side"), t: { x: t.left, y: t.top, w: t.width, h: t.height, bottom: t.bottom }, cat: { x: c.left, y: c.top, w: c.width, h: c.height } };
       });
-      const what = `${names[i]} ${escala}`;
+      const what = `${names[i]} ${escala}${aberto ? " aberto 480" : ""}`;
       const up = balao === "abaixo";
       const right = lado !== "left";
       assert.equal(m.side, `${up ? "top" : "bottom"}-${right ? "right" : "left"}`, `o rabo na quina do lado do gato: ${what}`);
@@ -282,12 +311,13 @@ try {
       const bodyY = m.cat.y + m.cat.h * (up ? CAT_BODY.y1 : CAT_BODY.y0);
       assert.ok(Math.hypot(tipX - bodyX, tipY - bodyY) <= 2, `a ponta encosta no corpo do gato: ${what} ponta ${tipX},${tipY} × corpo ${bodyX},${bodyY}`);
       assert.ok(m.t.x >= 0 && m.t.y >= 0 && m.t.bottom <= height && m.t.x + m.t.w <= width, `o rabo dentro da janela: ${what}`);
-      if (escala === "1.00") await shot(p, `6-rabo-${names[i]}.png`, `O rabo: ${names[i]} (${m.side})`, width, height);
+      if (escala === "1.00" && !aberto) await shot(p, `6-rabo-${names[i]}.png`, `O rabo: ${names[i]} (${m.side})`, width, height);
+      if (escala === "1.00" && aberto) await shot(p, `7-largo-${names[i]}.png`, `Aberto, 480: ${names[i]} (${m.side})`, width, height);
       tails++;
       await ctx.close();
     }
   }
-  report.checks.push(`the tail leaves the bubble corner next to the cat and its tip touches the cat body, in the 6 positions × 1, 0.6 and 1.6 (${tails} cases)`);
+  report.checks.push(`the tail leaves the bubble corner next to the cat and its tip touches the cat body, in the 6 positions × 1, 0.6 and 1.6, closed and open at 480 (${tails} cases)`);
 
   // 5. O markdown (spec #17679, T17985): fechado, o resumo sai sem os símbolos; aberto, os elementos montados (título,
   //    lista, tabela, código e link), e um <script> ou <img onerror> do texto fica texto. O link não tem href e só manda

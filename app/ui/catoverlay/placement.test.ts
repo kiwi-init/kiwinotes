@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { overlayPlacement } from "./placement.ts";
+import { openPlacement, openShellWidth, overlayPlacement } from "./placement.ts";
 
 test("a página lê a escala, o lado e o balão da URL do helper (spec #12949)", () => {
   expect(overlayPlacement(new URLSearchParams(""))).toMatchObject({ scale: 1, catW: 192, catH: 240, winH: 352, lado: "center", balao: "acima" });
@@ -28,4 +28,23 @@ test("o balão fica do lado do gato, com a ponta do rabo no corpo dele (T16754)"
   expect(overlayPlacement(new URLSearchParams("escala=0.60&lado=right&balao=acima"))).toMatchObject({ winW: 115 + 261, catX: 261, tail: "bottom-right" });
   expect(overlayPlacement(new URLSearchParams("lado=right&balao=abaixo")).tail).toBe("top-right");
   expect(overlayPlacement(new URLSearchParams("lado=left")).tail).toBe("bottom-left");
+});
+
+// Spec #17673 (harry): o balão aberto cresce para o lado, até a casca de 480. A janela ganha o que o Swift reservou
+// (`testOpenBubbleGrowsSidewaysAwayFromTheCat`), do lado do balão, e o gato fica onde estava na tela.
+test("o balão aberto alarga para o lado, para longe do gato (spec #17673)", () => {
+  expect(openShellWidth(480)).toBe(480);
+  expect(openShellWidth(9000)).toBe(480);
+  expect(openShellWidth(100)).toBe(280);
+  expect(openShellWidth("480")).toBe(280);
+  expect(openShellWidth(Number.NaN)).toBe(280);
+
+  const center = overlayPlacement(new URLSearchParams(""));
+  // O balão à esquerda: a janela cresce para a esquerda, e o gato anda o mesmo tanto na página.
+  expect(openPlacement(center, 480)).toEqual({ winW: center.winW + 200, catX: center.catX + 200 });
+  expect(openPlacement(center, 280)).toEqual({ winW: center.winW, catX: center.catX });
+
+  // Nos cantos da esquerda o balão vai à direita: a janela cresce para a direita, e o gato fica no 0.
+  const left = overlayPlacement(new URLSearchParams("escala=1.60&lado=left&balao=abaixo"));
+  expect(openPlacement(left, 400)).toEqual({ winW: left.winW + 120, catX: 0 });
 });

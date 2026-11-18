@@ -412,6 +412,15 @@
   overflow-wrap: anywhere;
 }
 
+/* A resposta aberta no [Ver mais] (spec #17673): a regra do overlay. Alarga para o lado só o que o texto pede, da largura
+   do fechado (320) até 480 px, no espaço do lado em que abre, e só depois desce (até o máximo da altura). Uma tabela larga
+   leva até os 480 e rola na caixa dela. A proposta da reunião fica como está. */
+.kn-bubble-big.kn-bubble-wide {
+  width: max-content;
+  min-width: min(320px, var(--kn-bub-room, 320px));
+  max-width: min(480px, var(--kn-bub-room, 480px));
+}
+
 /* A régua do balão: o mesmo texto, fora da tela, para medir se um trecho cabe. */
 .kn-bubble-measure {
   position: absolute;

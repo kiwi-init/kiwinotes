@@ -197,7 +197,9 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
         let frame = placement.windowFrame(visible: targetVisibleFrame())
         panel.setFrame(frame, display: false)
         let sala = Int(placement.bubbleRoom(in: frame))
-        script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true, sala: \(sala), bubble: \(bubble)})")
+        // A largura do balão aberto (spec #17673): o espaço que a janela reservou para o lado.
+        let largura = Int(placement.openShellWidth(in: frame))
+        script("window.kiwiOverlay?.set({estado: '\(Self.safe(estado))', visible: true, sala: \(sala), largura: \(largura), bubble: \(bubble)})")
         if !panel.isVisible { panel.orderFrontRegardless() }
         // O mouse sobre o gato mostra o × da cabeça, e só o balão e os × pegam o clique (spec #13378, #13380).
         trackMouse(true)
