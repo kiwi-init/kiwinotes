@@ -2,15 +2,16 @@
 // caixas clicáveis e as tabelas aparecem como tabela até o cursor entrar nelas. Como no Obsidian, a nota continua
 // sendo o .md puro: nada aqui muda o texto, só como ele aparece.
 
+import { isolateHistory, redo, undo } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Range, StateEffect, StateField } from "@codemirror/state";
+import { type EditorState, type Range, StateEffect, StateField, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import type { SyntaxNode, Tree } from "@lezer/common";
 
 import { tagsInLine } from "../../../src/shared/tags.ts";
 import { parseLinks } from "../links.ts";
 import { footnoteJump, footnoteLabel, footnotesOf, superscript } from "./footnotes.ts";
-import { parseTable } from "./table.ts";
+import { type CellMove, cellAt, cellDisplay, cellOf, cellRange, moveCell, parseTable, setCell, TABLE_ACTIONS, type TableAction, tableAction } from "./table.ts";
 
 // ---------------------------------------------------------------- links
 
@@ -503,12 +504,78 @@ export function rawCellStart(line: string, col: number): number {
   return Math.min(i, line.length);
 }
 
+/**
+ * A célula editada no lugar (T19814, spec #19323): `from` é o começo da tabela no texto, `row` e `col` como em
+ * `cellOf` (0 é o cabeçalho, 2 em diante os dados). `select` seleciona o texto todo ao entrar (Tab e Enter); o clique
+ * põe o cursor no fim.
+ */
+export interface TableCell { from: number; row: number; col: number; select?: boolean }
+export const setTableCell = StateEffect.define<TableCell | null>();
+
+/** As teclas do campo que viram atalho da tabela (`TABLE_ACTIONS`), pela tecla física: o ⌥ troca a letra no Mac. */
+function actionFor(e: KeyboardEvent): TableAction | null {
+  if (!(e.metaKey || e.ctrlKey) || !e.altKey) return null;
+  for (const action of TABLE_ACTIONS) {
+    if (!action.key) continue;
+    const parts = action.key.split("-");
+    const key = parts.at(-1)!;
+    const code = /^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : /^\d$/.test(key) ? `Digit${key}` : key;
+    if (e.code === code && parts.includes("Shift") === e.shiftKey) return action.id;
+  }
+  return null;
+}
+
+/**
+ * Abre a célula `cell` e já põe o foco no campo dela: o DOM muda no próprio `dispatch`, e uma tecla logo depois (o
+ * próximo Tab, um atalho) não pode cair fora dele, esperando o quadro seguinte.
+ */
+function openCell(view: EditorView, spec: TransactionSpec, cell: TableCell | null) {
+  view.dispatch({ ...spec, effects: setTableCell.of(cell) });
+  const input = cell ? view.dom.querySelector<HTMLInputElement>(".cm-md-table-input") : null;
+  if (!input || input === document.activeElement) return;
+  input.focus({ preventScroll: true });
+  if (cell!.select) input.select();
+  else input.setSelectionRange(input.value.length, input.value.length);
+}
+
 class TableWidget extends WidgetType {
-  constructor(readonly text: string, readonly from: number) {
+  constructor(readonly text: string, readonly from: number, readonly editing: TableCell | null) {
     super();
   }
   eq(other: TableWidget) {
-    return other.text === this.text && other.from === this.from;
+    const a = this.editing, b = other.editing;
+    return other.text === this.text && other.from === this.from && a?.row === b?.row && a?.col === b?.col;
+  }
+  /**
+   * Grava a célula e anda (`move`), ou só fecha o campo (`move` null). Sem mudança no texto, nada vai ao histórico.
+   * `false` quando a tabela mudou por baixo (o campo então só fecha).
+   */
+  private commit(view: EditorView, row: number, col: number, typed: string, move: CellMove | null | TableCell, action?: TableAction): boolean {
+    const { from, text } = this;
+    if (view.state.sliceDoc(from, from + text.length) !== text) {
+      view.dispatch({ effects: setTableCell.of(null) });
+      return false;
+    }
+    const t = parseTable(text);
+    const before = t ? cellOf(t, row, col) : undefined;
+    let next = before !== undefined && cellDisplay(before) !== typed ? setCell(text, row, col, typed) ?? text : text;
+    let target: TableCell | null = null;
+    if (move && typeof move === "object") target = move;
+    else if (move) {
+      const m = moveCell(next, row, col, move);
+      if (m) { next = m.text; target = { from, row: m.row, col: m.col, select: true }; }
+    }
+    if (action) {
+      const [anchor] = cellRange(next, row, col);
+      const r = tableAction(next, anchor, action);
+      if (r) {
+        const at = cellAt(r.text, r.anchor);
+        next = r.text;
+        target = { from, row: at.row === 1 ? 0 : at.row, col: at.col };
+      } else target = { from, row, col };
+    }
+    openCell(view, next !== text ? { changes: { from, to: from + text.length, insert: next }, userEvent: "input.table", annotations: isolateHistory.of("full") } : {}, target);
+    return true;
   }
   toDOM(view: EditorView) {
     const t = parseTable(this.text);
@@ -520,23 +587,85 @@ class TableWidget extends WidgetType {
     table.className = "cm-md-table";
     wrap.append(table);
     if (!t) return wrap;
+    // O clique no espaço em volta das células não põe o cursor na tabela (ela viraria texto).
+    wrap.addEventListener("mousedown", (e) => {
+      if (!(e.target instanceof Element && e.target.closest(".cm-md-table-input"))) e.preventDefault();
+    });
     const lines = this.text.split("\n");
+    /** O campo aberto agora, para o clique noutra célula gravar o que já foi digitado. */
+    let open: { input: HTMLInputElement; row: number; col: number; done: boolean } | null = null;
     const cell = (tag: "th" | "td", text: string, row: number, col: number) => {
       const el = document.createElement(tag);
-      el.textContent = text.replace(/\\\|/g, "|");
+      const shown = cellDisplay(text);
       const a = t.align[col];
       if (a) el.style.textAlign = a;
       let offset = 0;
       for (let i = 0; i < row; i++) offset += lines[i]!.length + 1;
       const cellPos = this.from + offset + rawCellStart(lines[row]!, col);
       el.dataset.kiwiTablePos = String(cellPos);
+      const editing = this.editing && this.editing.row === row && this.editing.col === col ? this.editing : null;
+      if (editing) {
+        el.classList.add("cm-md-table-editing");
+        const input = document.createElement("input");
+        input.className = "cm-md-table-input";
+        input.value = shown;
+        input.setAttribute("aria-label", row === 0 ? `Cabeçalho, coluna ${col + 1}` : `Linha ${row - 1}, coluna ${col + 1}`);
+        const fit = () => { input.size = Math.max(4, [...input.value].length + 1); };
+        fit();
+        input.addEventListener("input", fit);
+        const state = { input, row, col, done: false };
+        open = state;
+        const finish = (move: CellMove | null, action?: TableAction) => {
+          if (state.done) return;
+          state.done = true;
+          if (!this.commit(view, row, col, input.value, move, action) || (!move && !action)) view.focus();
+          // Uma ação que não vale ali (apagar o cabeçalho) deixa a mesma célula: o widget é igual, o campo fica, e segue vivo.
+          else if (input.isConnected) state.done = false;
+        };
+        input.addEventListener("keydown", (e) => {
+          if (e.isComposing) return;
+          const action = actionFor(e);
+          if (action) { e.preventDefault(); finish(null, action); return; }
+          if (e.key === "Tab") { e.preventDefault(); finish(e.shiftKey ? "prev" : "next"); }
+          else if (e.key === "Enter") { e.preventDefault(); finish("down"); }
+          else if (e.key === "Escape") {
+            e.preventDefault();
+            state.done = true;
+            view.dispatch({ effects: setTableCell.of(null) });
+            view.focus();
+          } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && input.value === shown) {
+            // Sem nada digitado, o ⌘Z desfaz a tabela (o histórico da nota), não o campo.
+            e.preventDefault();
+            state.done = true;
+            view.dispatch({ effects: setTableCell.of(null) });
+            view.focus();
+            (e.shiftKey ? redo : undo)(view);
+          }
+        });
+        // Um campo que sai do DOM (a tabela redesenhada) não grava: o blur ali viria no meio de outra mudança.
+        input.addEventListener("blur", () => { if (input.isConnected) finish(null); });
+        el.append(input);
+        // O `openCell` já pôs o foco; este é para quando a célula volta aberta por outro caminho (o desfazer).
+        requestAnimationFrame(() => {
+          if (!input.isConnected || input === document.activeElement) return;
+          input.focus({ preventScroll: true });
+          if (editing.select) input.select();
+          else input.setSelectionRange(input.value.length, input.value.length);
+        });
+      } else el.textContent = shown;
       el.addEventListener("mousedown", (e) => {
-        // Keep the widget alive until contextmenu reaches NoteEditor on a secondary click.
-        if (e.button !== 0 || e.ctrlKey) { e.preventDefault(); return; }
+        if (open && e.target === open.input) return;
         e.preventDefault();
-        // Clicar numa célula põe o cursor nela: a tabela vira texto para editar.
-        view.dispatch({ selection: { anchor: cellPos } });
-        view.focus();
+        const current = open && !open.done ? open : null;
+        if (current) current.done = true;
+        // O botão direito só grava o campo aberto: o menu vem no contextmenu, pela posição da célula.
+        if (e.button !== 0 || e.ctrlKey) {
+          if (current) this.commit(view, current.row, current.col, current.input.value, null);
+          return;
+        }
+        const target: TableCell = { from: this.from, row, col };
+        if (current) this.commit(view, current.row, current.col, current.input.value, target);
+        else openCell(view, {}, target);
       });
       return el;
     };
@@ -549,35 +678,52 @@ class TableWidget extends WidgetType {
     });
     return wrap;
   }
-  ignoreEvent() {
-    return false;
+  /** O campo da célula é dele: o CodeMirror não trata a digitação, as setas nem a seleção ali. */
+  ignoreEvent(e: Event) {
+    return e.target instanceof Element && !!e.target.closest(".cm-md-table-input");
   }
 }
 
-function buildTables(state: EditorState): DecorationSet {
+/**
+ * Se a tabela vira texto: só com o cursor nela, que o clique não põe mais (ele abre o campo da célula). Chegam lá as
+ * setas, a busca, o desfazer e o "Editar como Markdown" do menu. O cursor na ponta também conta: digitado ali, o texto
+ * entraria na última linha da tabela sem a pessoa ver.
+ */
+const insideTable = (state: EditorState, from: number, to: number) =>
+  state.selection.ranges.some((r) => r.to >= from && r.from <= to);
+
+function buildTables(state: EditorState, editing: TableCell | null): DecorationSet {
   const out: Range<Decoration>[] = [];
   syntaxTree(state).iterate({
     enter: (node) => {
       if (node.name !== "Table") return;
       const from = state.doc.lineAt(node.from).from;
       const to = state.doc.lineAt(node.to).to;
-      if (state.selection.ranges.some((r) => r.to >= from && r.from <= to)) return false;
+      if (insideTable(state, from, to)) return false;
       const text = state.doc.sliceString(from, to);
-      if (parseTable(text)) out.push(Decoration.replace({ widget: new TableWidget(text, from), block: true }).range(from, to));
+      const cell = editing?.from === from ? editing : null;
+      if (parseTable(text)) out.push(Decoration.replace({ widget: new TableWidget(text, from, cell), block: true }).range(from, to));
       return false;
     },
   });
   return Decoration.set(out);
 }
 
-/** As tabelas aparecem como tabela; com o cursor dentro, voltam a ser texto (as decorações de bloco vêm de um StateField). */
-export const tablePreview = StateField.define<DecorationSet>({
-  create: buildTables,
+/**
+ * As tabelas aparecem sempre como tabela (spec #19323); o clique abre um campo só na célula. O texto cru volta com o
+ * cursor dentro dela, pelo menu ou pela busca. `cell` é a célula aberta, que some quando a nota muda por fora.
+ */
+export const tablePreview = StateField.define<{ cell: TableCell | null; deco: DecorationSet }>({
+  create: (state) => ({ cell: null, deco: buildTables(state, null) }),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) return buildTables(tr.state);
+    let cell = value.cell, set = false;
+    for (const e of tr.effects) if (e.is(setTableCell)) { cell = e.value; set = true; }
+    if (!set && cell && tr.docChanged) cell = null;
+    if (set || cell !== value.cell || tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state))
+      return { cell, deco: buildTables(tr.state, cell) };
     return value;
   },
-  provide: (f) => EditorView.decorations.from(f),
+  provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
 });
 
 

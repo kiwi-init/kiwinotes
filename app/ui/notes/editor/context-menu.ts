@@ -129,7 +129,7 @@ export const PARAGRAPH_LOOK: Record<string, { icon?: MenuIconName; labelClass?: 
  * numa nota (o link para outra nota e dividir a nota). A formatação entra como Markdown simples (`# `, `- `, `**`).
  * `code` (T19312): o de um arquivo de código, sem Formatar, Parágrafo e Inserir, que são Markdown.
  */
-export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void, onRenameHeading?: (offset: number, title: string, source: string) => void, opts: { plain?: boolean; code?: boolean } = {}): MenuItem[] {
+export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError: (message: string) => void, onSplit?: () => void, onRenameHeading?: (offset: number, title: string, source: string) => void, opts: { plain?: boolean; code?: boolean; tablePos?: number } = {}): MenuItem[] {
   const chosenState = view.state;
   const safe = () => unchanged(view, chosenState);
   // O foco antes da ação (T6377): despachada com o editor ainda sem foco, o texto digitado logo depois caía fora dela.
@@ -152,17 +152,23 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
   });
   const heading = onRenameHeading ? headingAtCursor(chosenState) : undefined;
   const selected = !view.state.selection.main.empty;
-  const range = tableAt(view.state);
-  const ctx = range && view.state.selection.ranges.length === 1
-    ? tableContext(view.state.sliceDoc(range.from, range.to), view.state.selection.main.head - range.from) : null;
-  const tableItems: MenuItem[] = ctx ? [{ kind: "submenu", label: "Tabela", items:
-    ([ ["row", "Linha"], ["column", "Coluna"], ["align", "Alinhamento"], ["sort", "Ordenar pela coluna"] ] as const).map(([group, label]): MenuItem => ({
+  // A tabela desenhada (T19814) manda a célula do clique (`tablePos`): as ações valem para ela, e o cursor não entra.
+  const at = opts.tablePos;
+  const range = tableAt(view.state, at);
+  const ctx = range && (at !== undefined || view.state.selection.ranges.length === 1)
+    ? tableContext(view.state.sliceDoc(range.from, range.to), (at ?? view.state.selection.main.head) - range.from) : null;
+  const tableItems: MenuItem[] = ctx ? [{ kind: "submenu", label: "Tabela", items: [
+    ...([ ["row", "Linha"], ["column", "Coluna"], ["align", "Alinhamento"], ["sort", "Ordenar pela coluna"] ] as const).map(([group, label]): MenuItem => ({
       kind: "submenu", label, items: TABLE_ACTIONS.filter((item) => item.group === group).map((item) => ({
         label: item.label, hint: item.hint, disabled: !canTableAction(ctx, item.id),
         checked: "align" in item ? (ctx.table.align[ctx.col] ?? null) === item.align : undefined,
-        onSelect: perform(() => { tableActionCommand(item.id)(view); }),
+        onSelect: perform(() => { tableActionCommand(item.id)(view, at); }),
       })),
-    })) }, { kind: "separator" }] : [];
+    })),
+    ...(at === undefined ? [] : [{ kind: "separator" as const },
+      // O Markdown cru, só quando a pessoa pede (spec #19323): o cursor entra na célula, e a tabela vira texto.
+      { label: "Editar como Markdown", onSelect: perform(() => view.dispatch({ selection: { anchor: at }, scrollIntoView: true })) }]),
+  ] }, { kind: "separator" }] : [];
   const callout = opts.plain ? null : calloutAtCursor(chosenState);
   const calloutItems: MenuItem[] = callout ? [{ kind: "submenu", label: "Tipo do callout", items: CALLOUT_KINDS.map((kind): MenuItem => ({
     // Só o título (spec #12626): o menu é de texto, e o glifo saiu.

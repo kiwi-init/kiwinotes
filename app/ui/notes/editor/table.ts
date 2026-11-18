@@ -149,6 +149,50 @@ function select(t: Table, row: number, col: number): TableEdit {
   return { text, anchor, head };
 }
 
+// A célula editada no lugar (T19814, spec #19323): a tabela fica desenhada, e só uma célula vira campo de texto. O
+// campo mostra o `\|` como `|`; na volta, o `|` digitado vira `\|` de novo, para não abrir uma coluna.
+
+/** O texto da célula como a pessoa vê e edita: o pipe sem a barra. */
+export const cellDisplay = (raw: string) => raw.replace(/\\\|/g, "|");
+
+/** O texto digitado de volta ao Markdown da célula: uma linha só, com o pipe escapado. */
+export const cellSource = (typed: string) => cellDisplay(typed.replace(/\r?\n/g, " ")).replace(/\|/g, "\\|").trim();
+
+/** A célula da linha `row` (0 é o cabeçalho, 2 em diante os dados; a 1 é o separador) e coluna `col`. */
+export function cellOf(t: Table, row: number, col: number): string | undefined {
+  return row === 0 ? t.header[col] : t.rows[row - 2]?.[col];
+}
+
+/** Grava `typed` na célula e alinha a tabela. `null` quando o texto não é tabela ou a célula não existe. */
+export function setCell(text: string, row: number, col: number, typed: string): string | null {
+  const t = parseTable(text);
+  if (!t || cellOf(t, row, col) === undefined) return null;
+  if (row === 0) t.header[col] = cellSource(typed);
+  else t.rows[row - 2]![col] = cellSource(typed);
+  return formatTable(t);
+}
+
+export type CellMove = "next" | "prev" | "down";
+
+/**
+ * Para onde o Tab (`next`), o ⇧Tab (`prev`) e o Enter (`down`) levam a célula editada. Passar da última linha abre uma
+ * linha vazia, e a tabela volta realinhada; sem linha nova, o texto volta igual.
+ */
+export function moveCell(text: string, row: number, col: number, move: CellMove): { text: string; row: number; col: number } | null {
+  const t = parseTable(text);
+  if (!t) return null;
+  const cols = t.header.length;
+  if (move === "down") row = row === 0 ? 2 : row + 1;
+  else if (move === "next" && ++col >= cols) { col = 0; row = row === 0 ? 2 : row + 1; }
+  else if (move === "prev" && --col < 0) {
+    if (row === 0) return { text, row: 0, col: 0 };
+    col = cols - 1; row = row === 2 ? 0 : row - 1;
+  }
+  if (row - 2 < t.rows.length) return { text, row, col };
+  t.rows.push(Array(cols).fill(""));
+  return { text: formatTable(t), row: t.rows.length + 1, col };
+}
+
 // E3 (T5557): shared by the context menu and table-only keyboard commands. Original Kiwi code.
 export const TABLE_ACTIONS = [
   { id: "row.insertAbove", group: "row", label: "Inserir acima", key: "Mod-Alt-Shift-ArrowUp", hint: "⇧⌥⌘↑" },

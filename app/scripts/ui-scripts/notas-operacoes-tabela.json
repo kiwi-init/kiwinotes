@@ -67,14 +67,34 @@
       "name": "duplica a linha pelo teclado do menu, sem atalho global"
     },
     {
-      "expectCount": ".cm-line:has-text('Bia')",
-      "count": 2
+      "expectCount": ".cm-md-table tbody td:has-text('Bia')",
+      "count": 2,
+      "name": "a tabela segue desenhada depois do menu (T19814)"
     },
     {
-      "press": "Meta+Alt+ArrowDown"
+      "expectCount": ".cm-line:has-text('| Bia')",
+      "count": 0
     },
     {
-      "waitFor": ".cm-line:has-text('Ana') + .cm-line:has-text('Bia')"
+      "click": ".cm-md-table tbody tr:nth-child(2) td:first-child",
+      "name": "o clique abre só a célula"
+    },
+    {
+      "waitFor": ".cm-md-table td.cm-md-table-editing .cm-md-table-input:focus"
+    },
+    {
+      "expectCount": ".cm-md-table",
+      "count": 1
+    },
+    {
+      "press": "Meta+Alt+ArrowDown",
+      "name": "os atalhos da tabela valem dentro da célula"
+    },
+    {
+      "waitFor": ".cm-md-table tbody tr:nth-child(2) td:first-child:has-text('Ana')"
+    },
+    {
+      "waitFor": ".cm-md-table tbody tr:nth-child(3) td.cm-md-table-editing:first-child"
     },
     {
       "press": "Meta+Alt+Shift+D"
@@ -83,10 +103,12 @@
       "press": "Meta+Alt+e"
     },
     {
-      "click": ".cm-rendered p:has-text('Fim.')"
+      "press": "Escape",
+      "name": "o Esc fecha a célula"
     },
     {
-      "waitFor": ".cm-md-table"
+      "expectCount": ".cm-md-table-input",
+      "count": 0
     },
     {
       "expectCount": ".cm-md-table th",
@@ -121,12 +143,6 @@
       "click": "[aria-label='Coluna'] > .kn-menu-item:has-text('Mover à direita')"
     },
     {
-      "click": ".cm-rendered p:has-text('Fim.')"
-    },
-    {
-      "waitFor": ".cm-md-table"
-    },
-    {
       "waitFor": ".cm-md-table th:nth-child(3)[style*='center']"
     },
     {
@@ -153,12 +169,6 @@
     },
     {
       "click": "[aria-label='Ordenar pela coluna'] > .kn-menu-item:has-text('Crescente')"
-    },
-    {
-      "click": ".cm-rendered p:has-text('Fim.')"
-    },
-    {
-      "waitFor": ".cm-md-table"
     },
     {
       "expectText": ".cm-md-table tbody tr:first-child td:first-child",
@@ -194,29 +204,25 @@
       "click": "[aria-label='Linha'] > .kn-menu-item:has-text('Apagar linha')"
     },
     {
-      "click": ".cm-rendered p:has-text('Fim.')"
-    },
-    {
-      "waitFor": ".cm-md-table"
-    },
-    {
       "expectCount": ".cm-md-table tbody tr",
       "count": 3
     },
     {
       "click": ".cm-md-table th:nth-child(3)"
+    },
+    {
+      "waitFor": ".cm-md-table-input:focus"
     },
     {
       "press": "Meta+Alt+Shift+Backspace"
     },
     {
-      "press": "Meta+z"
+      "expectCount": ".cm-md-table th",
+      "count": 2
     },
     {
-      "click": ".cm-rendered p:has-text('Fim.')"
-    },
-    {
-      "waitFor": ".cm-md-table"
+      "press": "Meta+z",
+      "name": "sem nada digitado, o ⌘Z desfaz a tabela"
     },
     {
       "expectCount": ".cm-md-table th",
@@ -226,13 +232,10 @@
       "click": ".cm-md-table th:nth-child(3)"
     },
     {
+      "waitFor": ".cm-md-table-input:focus"
+    },
+    {
       "press": "Meta+Shift+Z"
-    },
-    {
-      "click": ".cm-rendered p:has-text('Fim.')"
-    },
-    {
-      "waitFor": ".cm-md-table"
     },
     {
       "expectCount": ".cm-md-table th",
@@ -242,13 +245,11 @@
       "click": ".cm-md-table th:nth-child(2)"
     },
     {
-      "press": "Meta+Alt+Backspace"
+      "waitFor": ".cm-md-table-input:focus"
     },
     {
-      "click": ".cm-rendered p:has-text('Fim.')"
-    },
-    {
-      "waitFor": ".cm-md-table"
+      "press": "Meta+Alt+Backspace",
+      "name": "apagar o cabeçalho não vale"
     },
     {
       "expectCount": ".cm-md-table th",
@@ -257,9 +258,6 @@
     {
       "expectCount": ".cm-md-table tbody tr",
       "count": 3
-    },
-    {
-      "click": ".cm-md-table th:nth-child(2)"
     },
     {
       "press": "Meta+Alt+Shift+ArrowUp"
@@ -280,10 +278,7 @@
       "press": "Meta+Alt+s"
     },
     {
-      "click": ".cm-rendered p:has-text('Fim.')"
-    },
-    {
-      "waitFor": ".cm-md-table"
+      "press": "Escape"
     },
     {
       "expectCount": ".cm-md-table tbody tr",
@@ -294,6 +289,46 @@
       "text": "Dani"
     },
     {
+      "click": ".cm-md-table tbody tr:first-child td:first-child",
+      "name": "Esc desfaz o que foi digitado na célula"
+    },
+    {
+      "waitFor": ".cm-md-table-input:focus"
+    },
+    {
+      "type": "zzz"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "expectCount": ".cm-md-table td:has-text('zzz')",
+      "count": 0
+    },
+    {
+      "click": ".cm-md-table tbody tr:last-child td:first-child",
+      "name": "Enter na última linha abre uma linha nova"
+    },
+    {
+      "waitFor": ".cm-md-table-input:focus"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "type": "Eva"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "expectCount": ".cm-md-table tbody tr",
+      "count": 6
+    },
+    {
+      "press": "Escape"
+    },
+    {
       "waitFor": ".cm-md-table td:has-text('Céu | mar')"
     },
     {
@@ -301,6 +336,40 @@
     },
     {
       "screenshot": "05-resultado.png"
+    },
+    {
+      "click": ".cm-md-table tbody tr:first-child td:first-child",
+      "button": "right"
+    },
+    {
+      "waitFor": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "hover": ".kn-menu:not([aria-label]) > .kn-menu-item:has-text('Tabela')"
+    },
+    {
+      "waitFor": "[role=menu][aria-label='Tabela']"
+    },
+    {
+      "click": "[aria-label='Tabela'] > .kn-menu-item:has-text('Editar como Markdown')"
+    },
+    {
+      "waitFor": ".cm-line:has-text('| Nome')",
+      "name": "o Markdown cru só pelo menu"
+    },
+    {
+      "expectCount": ".cm-md-table",
+      "count": 0
+    },
+    {
+      "screenshot": "06-markdown.png"
+    },
+    {
+      "click": ".cm-rendered p:has-text('Fim.')"
+    },
+    {
+      "waitFor": ".cm-md-table",
+      "name": "o cursor sai e a tabela volta"
     }
   ]
 }

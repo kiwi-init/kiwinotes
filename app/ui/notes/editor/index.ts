@@ -152,8 +152,8 @@ export function headingCompletion(content: (target: string) => Promise<string | 
  */
 const treeUpTo = (state: EditorState, pos: number) => ensureSyntaxTree(state, Math.min(state.doc.length, pos + 1), 50) ?? syntaxTree(state);
 
-export function tableAt(state: EditorState): { from: number; to: number } | null {
-  const pos = state.selection.main.head;
+/** A tabela em volta de `pos` (o cursor, se não vier): o menu de uma tabela desenhada manda a posição da célula. */
+export function tableAt(state: EditorState, pos = state.selection.main.head): { from: number; to: number } | null {
   for (const side of [-1, 1] as const) {
     for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = treeUpTo(state, pos).resolveInner(pos, side); n; n = n.parent) {
       if (n.name === "Table") return { from: state.doc.lineAt(n.from).from, to: state.doc.lineAt(n.to).to };
@@ -163,17 +163,18 @@ export function tableAt(state: EditorState): { from: number; to: number } | null
 }
 
 function tableCommand(step: (text: string, offset: number) => ReturnType<typeof tableEnter>, structural = false) {
-  return (view: EditorView): boolean => {
-    const range = tableAt(view.state);
+  // `at` (T19814): a célula de uma tabela desenhada, vinda do menu. Aí o cursor fica onde está, e a tabela, desenhada.
+  return (view: EditorView, at?: number): boolean => {
+    const range = tableAt(view.state, at);
     if (!range) return false;
     // Consume unavailable structural shortcuts instead of falling through to ordinary text editing.
-    if (structural && view.state.selection.ranges.length !== 1) return true;
+    if (at === undefined && structural && view.state.selection.ranges.length !== 1) return true;
     const text = view.state.doc.sliceString(range.from, range.to);
-    const r = step(text, view.state.selection.main.head - range.from);
+    const r = step(text, (at ?? view.state.selection.main.head) - range.from);
     if (!r) return structural;
     view.dispatch({
       changes: { from: range.from, to: range.to, insert: r.text },
-      selection: { anchor: range.from + r.anchor, head: range.from + r.head },
+      ...(at === undefined ? { selection: { anchor: range.from + r.anchor, head: range.from + r.head } } : {}),
       scrollIntoView: true,
       userEvent: "input.table",
       ...(structural ? { annotations: isolateHistory.of("full") } : {}),
@@ -304,9 +305,20 @@ const theme = EditorView.theme({
   // A tabela larga rola dentro dela, nunca a nota (T5299).
   ".cm-md-table-wrap": { padding: "4px 0 10px", maxWidth: "100%", overflowX: "auto" },
   // As células não quebram no meio da palavra (o `anywhere` da linha não vale aqui): a tabela rola dentro dela.
-  ".cm-md-table": { borderCollapse: "collapse", fontSize: "13px", cursor: "text", overflowWrap: "normal", whiteSpace: "nowrap" },
-  ".cm-md-table th": { fontSize: "11px", fontWeight: "400", color: "var(--text-3)", textAlign: "left", padding: "0 28px 8px 0" },
-  ".cm-md-table td": { padding: "0 28px 4px 0", fontVariantNumeric: "tabular-nums" },
+  // As linhas da tabela (spec #19323): borda fina em volta, entre as linhas e entre as colunas, o cabeçalho com fundo e
+  // as linhas alternadas. `separate` com espaço 0, porque o `collapse` ignora o canto arredondado.
+  ".cm-md-table": { borderCollapse: "separate", borderSpacing: "0", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", overflow: "hidden", fontSize: "13px", cursor: "text", overflowWrap: "normal", whiteSpace: "nowrap" },
+  ".cm-md-table th, .cm-md-table td": { padding: "5px 12px", borderRight: "1px solid var(--border-strong)", borderBottom: "1px solid var(--border-strong)", minWidth: "3ch" },
+  ".cm-md-table tr > :last-child": { borderRight: "none" },
+  ".cm-md-table tbody tr:last-child > *": { borderBottom: "none" },
+  ".cm-md-table th": { fontSize: "12px", fontWeight: "600", color: "var(--text-2)", textAlign: "left", background: "var(--surface-2)" },
+  ".cm-md-table td": { fontVariantNumeric: "tabular-nums" },
+  // A célula vazia (a linha nova do Enter na última) mantém a altura de uma linha de texto.
+  ".cm-md-table :is(th, td):empty::after": { content: '"\\200b"' },
+  ".cm-md-table tbody tr:nth-child(even) > td": { background: "var(--surface-hover)" },
+  // A célula aberta (T19814): o campo ocupa o lugar do texto, com o mesmo tamanho de letra, e a borda de foco.
+  ".cm-md-table .cm-md-table-editing": { boxShadow: "inset 0 0 0 2px var(--accent)", background: "var(--bg)" },
+  ".cm-md-table-input": { font: "inherit", color: "inherit", textAlign: "inherit", background: "transparent", border: "none", outline: "none", padding: "0", margin: "0", minWidth: "100%" },
   ".cm-tooltip": { border: "none", borderRadius: "10px", background: "var(--surface)", boxShadow: "var(--shadow-pop)" },
   // Com as duas classes: o tema base do CodeMirror põe monospace em `.cm-tooltip.cm-tooltip-autocomplete > ul`.
   ".cm-tooltip.cm-tooltip-autocomplete > ul": { fontFamily: "var(--ui, var(--font))", fontSize: "13px", padding: "4px 0" },
