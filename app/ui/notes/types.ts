@@ -117,7 +117,7 @@ export interface NotesApi {
    * As notas fixadas (T2469): ficam nas `AppSettings` (`pinned`, #2475), fora do frontmatter, para não mexer no arquivo
    * da pessoa por uma preferência da janela. O engine corrige os paths quando a nota muda de nome, de pasta ou some.
    */
-  pins?: { list(): Promise<string[]>; set(paths: string[]): Promise<string[]> };
+  pins?: { list(): Promise<string[]>; set(paths: string[]): Promise<string[]>; onChanged?(fn: (paths: string[]) => void): () => void };
   /**
    * Os projetos (spec #9847, contrato 1.49.0): uma pasta marcada, com a nota principal. As regras (um dentro do outro, a
    * pasta das reuniões) são do engine; a janela só não oferece o que ele recusaria.
