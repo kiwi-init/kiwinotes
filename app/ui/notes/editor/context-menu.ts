@@ -5,6 +5,7 @@ import type { EditorState, TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { startCompletion } from "@codemirror/autocomplete";
 import type { MenuItem } from "../ContextMenu.tsx";
+import type { MenuIconName } from "./menuIcons.tsx";
 import { FORMAT_KEYS, tableAt, tableActionCommand } from "./index.ts";
 import { insertLink } from "./format.ts";
 import { slashInsert } from "./slash.ts";
@@ -97,6 +98,33 @@ export function calloutAtCursor(state: EditorState): ReturnType<typeof calloutAt
 }
 
 /**
+ * O Formatar no próprio estilo (spec #17703): cada opção mostra o que faz no texto, como as "Ferramentas de texto"
+ * (MAIÚSCULAS, minúsculas). Os estilos, em `notes.css`, são os do editor: o realce, o comentário e o código.
+ */
+export const FORMAT_STYLE: Record<string, string> = {
+  "Mod-b": "kn-menu-bold",
+  "Mod-i": "kn-menu-italic",
+  "Shift-Mod-x": "kn-menu-strike",
+  "Shift-Mod-h": "kn-menu-highlight",
+  "Mod-e": "kn-menu-code",
+  "Mod-/": "kn-menu-comment",
+  "Mod-\\": "kn-menu-clear",
+};
+
+/**
+ * O jeito de cada opção do Parágrafo (spec #17703): os títulos em cascata (`kn-menu-h1`…`h6`), o Corpo no normal, e
+ * um ícone nas listas, na citação e no marcar tarefa.
+ */
+export const PARAGRAPH_LOOK: Record<string, { icon?: MenuIconName; labelClass?: string }> = {
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [`Mod-${n}`, { labelClass: `kn-menu-h${n}` }])),
+  "Shift-Mod-8": { icon: "bullet" },
+  "Shift-Mod-7": { icon: "numbered" },
+  "Shift-Mod-9": { icon: "task" },
+  "Shift-Mod-.": { icon: "quote" },
+  "Mod-l": { icon: "check" },
+};
+
+/**
  * O menu do botão direito do editor. `plain` (spec #13385): o de um texto puro (.txt), o mesmo menu sem o que só existe
  * numa nota (o link para outra nota e dividir a nota). A formatação entra como Markdown simples (`# `, `- `, `**`).
  */
@@ -112,7 +140,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
   };
   const command = (key: string): MenuItem => {
     const item = FORMAT_KEYS.find((item) => item.key === key)!;
-    return { label: item.label, onSelect: perform(() => { item.run(view); }) };
+    return { label: item.label, labelClass: FORMAT_STYLE[key], ...PARAGRAPH_LOOK[key], onSelect: perform(() => { item.run(view); }) };
   };
   const insertBlock = (id: string) => perform(() => {
     const sel = view.state.selection.main, line = view.state.doc.lineAt(sel.from);
@@ -153,14 +181,15 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
       ...[1, 2, 3, 4, 5, 6].map((n) => command(`Mod-${n}`)), command("Mod-0"),
       { kind: "separator" }, ...["Shift-Mod-8", "Shift-Mod-7", "Shift-Mod-9", "Shift-Mod-.", "Mod-l"].map(command),
     ] },
+    // O Inserir com um ícone em cada opção (spec #17703), os mesmos do menu do "/".
     { kind: "submenu", label: "Inserir", items: [
-      { label: "Link", onSelect: perform(() => view.dispatch(insertLink(view.state))) },
-      ...(opts.plain ? [] : [{ label: "Link para nota", onSelect: insertBlock("link") }]),
-      { label: "Tabela", onSelect: insertBlock("table") },
-      { label: "Bloco de código", onSelect: insertBlock("code") },
-      { label: "Separador", onSelect: insertBlock("divider") },
-      { label: "Callout", onSelect: insertBlock("callout") },
-      { label: "Nota de rodapé", onSelect: perform(() => view.dispatch(insertFootnote(view.state))) },
+      { label: "Link", icon: "link", onSelect: perform(() => view.dispatch(insertLink(view.state))) },
+      ...(opts.plain ? [] : [{ label: "Link para nota", icon: "note-link" as const, onSelect: insertBlock("link") }]),
+      { label: "Tabela", icon: "table", onSelect: insertBlock("table") },
+      { label: "Bloco de código", icon: "code", onSelect: insertBlock("code") },
+      { label: "Separador", icon: "divider", onSelect: insertBlock("divider") },
+      { label: "Callout", icon: "callout", onSelect: insertBlock("callout") },
+      { label: "Nota de rodapé", icon: "footnote", onSelect: perform(() => view.dispatch(insertFootnote(view.state))) },
     ] },
     { kind: "submenu", label: "Ferramentas de texto", items: TEXT_TOOLS.map(item => ({ label: item.label,
       disabled: !textTool(chosenState, item.id), onSelect: perform(() => { const tr = textTool(view.state, item.id); if (tr) view.dispatch(tr); }),

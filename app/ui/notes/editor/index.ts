@@ -28,6 +28,7 @@ import { type EmbedSource, notePreview } from "./embeds.tsx";
 import { fullTree, toRenderable } from "./rendered.ts";
 import { TABLE_ACTIONS, tableAction, tableEnter, tableTab, type TableAction } from "./table.ts";
 import { slashInsert, slashMatches, slashTrigger, readSlashUsage, recordSlashUse } from "./slash.ts";
+import { menuIconElement, type MenuIconName } from "./menuIcons.tsx";
 import { insertFootnote } from "./footnotes.ts";
 import { linkFromPaste, listIndent, toggleHeading, wrapLink } from "./text.ts";
 import { exitEmptyItem, hangingIndent } from "./lists.ts";
@@ -328,6 +329,9 @@ const theme = EditorView.theme({
   ".kn-fmt-bt:hover": { background: "var(--wash-2, var(--surface-hover))", color: "var(--ink, var(--text))" },
   ".kn-fmt-italic": { fontStyle: "italic", fontFamily: "Georgia, serif" },
   ".kn-fmt-code": { fontFamily: "var(--mono, var(--font-mono))", fontSize: "11px" },
+  // O ícone do bloco no "/" (spec #17703): o mesmo do menu do botão direito, 16 px e na cor da linha.
+  ".kn-slash-icon": { display: "inline-flex", verticalAlign: "-3px", marginRight: "8px", color: "inherit" },
+  ".kn-slash-icon svg": { width: "16px", height: "16px" },
   ".cm-completionDetail": { marginLeft: "10px", fontStyle: "normal", color: "var(--text-3)", fontWeight: "400" },
   ".cm-completionMatchedText": { textDecoration: "none", color: "var(--accent-text)" },
 });
@@ -412,7 +416,12 @@ export function editorExtensions(opts: Omit<EditorOptions, "parent" | "doc" | "r
     ...(opts.embed ? [notePreview(opts.embed, (content) => embedMarkdown(content, links), opts)] : []),
     ]),
     ...(opts.attachments ? [attachmentInput(opts.attachments, (t) => opts.onError?.(t))] : []),
-    autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets), headingCompletion((target) => opts.headingContent?.(target) ?? Promise.resolve(null))], icons: false, closeOnBlur: true }),
+    autocompletion({ override: [slashCompletion(opts), linkCompletion(opts.linkTargets), headingCompletion((target) => opts.headingContent?.(target) ?? Promise.resolve(null))], icons: false, closeOnBlur: true,
+      // O ícone de cada bloco do "/" (spec #17703), antes do rótulo; os outros menus (links, títulos) não têm.
+      addToOptions: [{ position: 20, render: (c: Completion) => {
+        const icon = (c as SlashCompletion).knIcon;
+        return icon ? menuIconElement(icon) : null;
+      } }] }),
     // Enter no item vazio sai da lista (T6379): antes do Enter do lang-markdown, que faria a lista "solta"; depois do
     // autocomplete (o Enter que aceita a sugestão vem primeiro).
     Prec.highest(keymap.of([{ key: "Enter", run: exitEmptyItem }])),
@@ -515,6 +524,9 @@ export function stateFor(doc: string, extensions: Extension[]): EditorState {
 
 // ---------------------------------------------------------------- o comando "/" (T2660)
 
+/** Um item do "/" com o ícone dele (spec #17703), que o `addToOptions` desenha. */
+type SlashCompletion = Completion & { knIcon?: MenuIconName };
+
 /** O menu do "/": no começo da linha ou depois de um espaço. O texto de cada item vem do slash.ts. */
 export function slashCompletion(opts: Pick<EditorOptions, "onSlashTemplate">) {
   return (ctx: CompletionContext): CompletionResult | null => {
@@ -527,8 +539,9 @@ export function slashCompletion(opts: Pick<EditorOptions, "onSlashTemplate">) {
     }
     const from = line.from + trig.from;
     const usage = readSlashUsage();
-    const options: Completion[] = slashMatches(trig.typed, usage).map((it, i) => ({
+    const options: SlashCompletion[] = slashMatches(trig.typed, usage).map((it, i) => ({
       label: it.label,
+      knIcon: it.icon,
       detail: it.detail,
       section: !trig.typed && Object.keys(usage).length ? (usage[it.id] ? { name: "Mais usados", rank: 0 } : { name: "Outros comandos", rank: 1 }) : undefined,
       // A ordem do slash.ts, não a do filtro do CodeMirror.

@@ -755,6 +755,46 @@ button.kn-side-head:focus-visible {
   flex: 1;
 }
 
+/* O Formatar no próprio estilo (spec #17703), como no editor: o realce, o comentário e o código. O tamanho é o do menu. */
+.kn-menu-bold { font-weight: 700; }
+.kn-menu-italic { font-style: italic; }
+.kn-menu-strike { text-decoration: line-through; }
+.kn-menu-highlight { flex: none; margin-right: auto; padding: 0 3px; border-radius: 2px; background: color-mix(in srgb, #f6c945 32%, transparent); }
+.kn-menu-code { font-family: var(--font-mono); font-size: 0.92em; }
+/* O comentário com o `%%` do editor em volta: só o marcador fica apagado. Em `--text-3` inteiro, o rótulo parecia um item
+   desligado (`.kn-menu-item[aria-disabled]`, revisão do T18383). */
+.kn-menu-comment::before { content: "%% "; color: var(--text-3); font-family: var(--font-mono); font-size: 0.92em; }
+.kn-menu-comment::after { content: " %%"; color: var(--text-3); font-family: var(--font-mono); font-size: 0.92em; }
+/* Limpar formatação: o texto sem nada, que é o que ela deixa. Na cor normal: num tom mais leve, parecia desligado. */
+.kn-menu-clear { color: var(--text); font-weight: 400; font-style: normal; text-decoration: none; }
+
+/* Spec #17703: o ícone à esquerda da opção (menuIcons.tsx), no cinza do texto secundário; a vaga vazia alinha os rótulos. */
+.kn-menu-icon {
+  flex: none;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 2px;
+  color: var(--text-2);
+}
+
+.kn-menu-item[aria-disabled] .kn-menu-icon {
+  color: var(--text-3);
+}
+
+/* Os títulos em cascata (spec #17703): o Título 1 o maior, o 6 do tamanho do menu; no peso dos títulos da nota (600) e
+   o 5 e o 6 no cinza deles (.cm-h5, .cm-h6). A linha fica justa para o menu não crescer. */
+.kn-menu-h1, .kn-menu-h2, .kn-menu-h3, .kn-menu-h4, .kn-menu-h5, .kn-menu-h6 {
+  font-weight: 600;
+  line-height: 1.2;
+}
+.kn-menu-h1 { font-size: 18px; }
+.kn-menu-h2 { font-size: 17px; }
+.kn-menu-h3 { font-size: 16px; }
+.kn-menu-h4 { font-size: 15px; }
+.kn-menu-h5 { font-size: 14px; color: var(--text-2); }
+.kn-menu-h6 { font-size: 13px; color: var(--text-2); }
+
 .kn-menu-hint {
   margin-left: 18px;
   font-size: var(--t-stamp);
