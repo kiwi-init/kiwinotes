@@ -1419,6 +1419,9 @@ export class Vault {
     await rename(fromAbs, toAbs);
     // O índice segue a pasta sem reler o disco (T20166): o rename não muda inode, tamanho nem data de nada de dentro.
     this.moveInIndex(from, to);
+    // O que entrou ou saiu por fora dentro dela e o índice ainda não viu (o debounce do watcher): a subárvore movida
+    // confere com o disco, notas, pastas e arquivos (T20166, rodada 2: o scan de depois pegava isso).
+    await this.catchUpTree(to);
     const updatedLinks = await this.rewriteAll(moves, makeResolver(before, aliasesBefore), makeResolver(after, aliasesAfter));
     this.emit([from, to, ...moves.keys(), ...moves.values()]);
     return { path: to, moved: moves.size, updatedLinks };
@@ -1784,6 +1787,73 @@ export class Vault {
       mtimeMs: s.mtimeMs,
     };
     return entry;
+  }
+
+  /**
+   * Confere uma subárvore com o disco (T20166): as notas que entraram são lidas, as que saíram saem, e as pastas, os
+   * arquivos e os pacotes ficam como estão no disco. Só ela, com o `lstat` só dos arquivos de dentro, como o scan faria.
+   */
+  private async catchUpTree(top: string): Promise<void> {
+    const notes = new Map<string, string>();
+    const folders = new Set<string>([top]);
+    const files = new Map<string, VaultFile>();
+    const packages = new Set<string>();
+    const walk = async (rel: string): Promise<void> => {
+      const directory = path.join(this.root, rel);
+      const names = (await readdir(directory).catch(() => [] as string[])).filter((n) => !n.startsWith(".") && n !== "node_modules");
+      const stats = await Promise.all(names.map((n) => lstat(path.join(directory, n)).catch(() => null)));
+      for (const [at, name] of names.entries()) {
+        const s = stats[at];
+        if (!s || s.isSymbolicLink()) continue;
+        const child = `${rel}/${name}`;
+        const key = child.normalize("NFC");
+        if (s.isDirectory() && isPackageDir(name, await packageEntries(path.join(this.root, child)))) {
+          packages.add(key);
+          files.set(key, fileEntry(key, s));
+        } else if (s.isDirectory()) {
+          folders.add(key);
+          await walk(child);
+        } else if (s.isFile() && /\.md$/i.test(name)) notes.set(key, child);
+        else if (s.isFile()) files.set(key, fileEntry(key, s));
+      }
+    };
+    await walk(top);
+    const under = (p: string) => p === top || p.startsWith(`${top}/`);
+    let changed = false;
+    for (const p of [...this.notes.keys()]) {
+      if (!under(p) || notes.has(p)) continue;
+      this.notes.delete(p);
+      this.touch(p);
+      changed = true;
+    }
+    for (const [p, rel] of notes) {
+      if (this.notes.has(p)) continue;
+      const abs = path.join(this.root, rel);
+      this.scanReads++;
+      const content = await readFile(abs, "utf8").catch(() => null);
+      if (content !== null && (await this.index(p, content, abs).catch(() => null))) changed = true;
+    }
+    if (changed) {
+      this.searchDirty = true;
+      this.resolver = null;
+    }
+    for (const f of [...this.folders]) if (under(f) && !folders.has(f)) this.folders.delete(f);
+    for (const f of folders) this.folders.add(f);
+    const changedFiles: string[] = [];
+    for (const p of [...this.files.keys()]) {
+      if (!under(p) || files.has(p)) continue;
+      this.files.delete(p);
+      changedFiles.push(p);
+    }
+    for (const [p, f] of files) {
+      const was = this.files.get(p);
+      if (was && was.size === f.size && was.mtime === f.mtime) continue;
+      this.files.set(p, f);
+      changedFiles.push(p);
+    }
+    if (changedFiles.length) this.filesChanged(changedFiles);
+    for (const p of [...this.packages]) if (under(p) && !packages.has(p)) this.packages.delete(p);
+    for (const p of packages) this.packages.add(p);
   }
 
   /**
