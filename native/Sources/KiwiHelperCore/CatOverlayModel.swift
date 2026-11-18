@@ -140,16 +140,22 @@ public struct CatPlacement: Equatable, Sendable {
         return CGRect(x: x.rounded(), y: y.rounded(), width: s.width, height: s.height)
     }
 
-    /// Onde o gato fica dentro da janela `frame` (na tela).
+    /// Onde o gato fica dentro da janela `frame` (na tela). Ele encosta no lado da janela oposto ao do balão, que pode
+    /// ter a largura do balão aberto reservada (spec #17673).
     public func catRect(in frame: CGRect) -> CGRect {
         let c = catSize
-        let x = frame.minX + catOffsetX
+        let x = bubbleLeft ? frame.maxX - c.width : frame.minX
         let y = bubbleBelow ? frame.maxY - c.height : frame.minY
         return CGRect(x: x, y: y, width: c.width, height: c.height)
     }
 
     /// O balão aberto (spec #13378) cresce até esta altura, com o texto todo rolando dentro dele.
     public static let openBubbleMaxHeight: CGFloat = 360
+
+    /// O espaço do balão aberto na largura (spec #17673, harry #17673): 500, com a casca de 480; o fechado tem 300 e 280.
+    public static let openBubbleWidth: CGFloat = 500
+    /// A casca do balão é 20 pt mais estreita que o espaço dele (a de 280 nos 300).
+    public static let bubbleShellInset: CGFloat = 20
 
     /**
      A janela na tela (spec #13378): a do `frame`, com o espaço do balão aberto já reservado, para o "ver mais" não
@@ -162,7 +168,18 @@ public struct CatPlacement: Equatable, Sendable {
         let cat = catRect(in: closed)
         let room = bubbleBelow ? cat.minY - visible.minY : visible.maxY - cat.maxY
         let h = max(CatOverlayLayout.bubbleHeight, min(Self.openBubbleMaxHeight, room.rounded(.down)))
-        return CGRect(x: closed.minX, y: bubbleBelow ? cat.minY - h : cat.minY, width: closed.width, height: cat.height + h)
+        // Na largura (spec #17673): o balão aberto cresce primeiro para o lado, para longe do gato, até
+        // `openBubbleWidth`, sem passar da área útil e nunca menos que o fechado. O gato não sai do lugar.
+        let side = bubbleLeft ? closed.minX - visible.minX : visible.maxX - closed.maxX
+        let extra = max(0, min(Self.openBubbleWidth - CatOverlayLayout.bubbleWidth, side.rounded(.down)))
+        return CGRect(x: bubbleLeft ? closed.minX - extra : closed.minX, y: bubbleBelow ? cat.minY - h : cat.minY,
+                      width: closed.width + extra, height: cat.height + h)
+    }
+
+    /// A largura da casca do balão aberto numa janela `frame` (spec #17673): de 280 (sem espaço a mais) a 480. É o
+    /// `largura` que a página recebe.
+    public func openShellWidth(in frame: CGRect) -> CGFloat {
+        CatOverlayLayout.bubbleWidth + max(0, frame.width - size.width) - Self.bubbleShellInset
     }
 
     /// O espaço do balão numa janela `frame` (a do `frame` ou a do `windowFrame`): a altura que sobra além do gato.
@@ -171,7 +188,7 @@ public struct CatPlacement: Equatable, Sendable {
     /// Onde o balão fica dentro da janela `frame` (na tela): o espaço todo dele.
     public func bubbleRect(in frame: CGRect) -> CGRect {
         let L = CatOverlayLayout.self
-        let w = L.bubbleWidth, h = bubbleRoom(in: frame)
+        let w = L.bubbleWidth + max(0, frame.width - size.width), h = bubbleRoom(in: frame)
         let cat = catRect(in: frame)
         // A ponta do rabo na borda do corpo do lado do balão; a casca 7,5 pt além dela (T16754).
         let x = bubbleLeft ? cat.minX + cat.width * L.bodyX0 + L.tailTipX - w : cat.minX + cat.width * L.bodyX1 - L.tailTipX

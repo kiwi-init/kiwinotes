@@ -14,7 +14,7 @@ import "../kiwicat-v2/bubble.css";
 import "../kiwicat-v2/bubble-md.css";
 import { DEFAULT_CAT_COLOR, catPalette, isCatColorChoice } from "../../src/shared/kiwicat-colors";
 import { createKiwiCat } from "../kiwicat/cat";
-import { overlayPlacement } from "./placement";
+import { openPlacement, openShellWidth, overlayPlacement } from "./placement";
 import { tailSvg } from "../kiwicat-v2/bubbleTail";
 import type { BubbleLink } from "../../src/shared/ui-contract";
 import { plainMarkdown, renderMarkdown } from "../src/bubbleMarkdown";
@@ -41,6 +41,8 @@ interface OverlayStats {
   bubbleOpen: boolean;
   /** O espaço do balão na janela, em pontos (o helper manda: `set({sala})`). */
   sala: number;
+  /** A casca do balão aberto, de 280 a 480 (o helper manda: `set({largura})`, spec #17673). */
+  largura: number;
   /** A pergunta "Precisa de mais alguma coisa?" no balão (spec #13380). */
   bubbleAsk: boolean;
   /** O mouse sobre o gato: o × da cabeça aparece (o helper manda: `set({catHover})`). */
@@ -49,7 +51,7 @@ interface OverlayStats {
 
 const stats: OverlayStats = {
   ready: false, backend: null, firstFrameMs: null, shows: 0, visible: false, estado: "repouso", cor: "", bubble: null,
-  bubbleMore: false, bubbleOpen: false, sala: 112, bubbleAsk: false, catHover: false,
+  bubbleMore: false, bubbleOpen: false, sala: 112, largura: 280, bubbleAsk: false, catHover: false,
 };
 const bubbleEl = document.getElementById("bubble")!;
 const bubbleText = document.getElementById("bubble-text")!;
@@ -288,7 +290,7 @@ function measureFirstFrame(start: number) {
 
 const api = {
   set(input: {
-    estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; catHover?: boolean;
+    estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; largura?: number; catHover?: boolean;
     bubble?: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown } | null;
   }) {
     // O mouse sobre o gato (spec #13380): o × da cabeça aparece, e o helper passa a deixar o clique nele.
@@ -303,6 +305,15 @@ const api = {
       stats.sala = Math.round(input.sala);
       css.setProperty("--sala", `${stats.sala}px`);
       css.setProperty("--win-h", `${place.catH + stats.sala}px`);
+    }
+    // A largura do balão aberto (spec #17673): a janela já tem o espaço a mais do lado do balão; o gato anda o mesmo
+    // tanto na página para ficar onde estava na tela.
+    if (input.largura !== undefined && openShellWidth(input.largura) !== stats.largura) {
+      stats.largura = openShellWidth(input.largura);
+      const open = openPlacement(place, stats.largura);
+      css.setProperty("--largura", `${stats.largura}px`);
+      css.setProperty("--win-w", `${open.winW}px`);
+      css.setProperty("--cat-x", `${open.catX}px`);
     }
     // O balão da resposta (spec #12938): `null` tira.
     if (input.bubble !== undefined) setBubble(input.bubble);

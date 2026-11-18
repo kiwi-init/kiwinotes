@@ -63,3 +63,25 @@ export function overlayPlacement(query: URLSearchParams): OverlayPlacement {
   };
   return { scale, catW, catH, winW: catW + extra, winH: catH + BUBBLE_H, lado, balao, catX, tail, bubble };
 }
+
+/**
+ * O balão aberto mais largo (spec #17673, harry): no "Ver mais" ele cresce primeiro para o lado, até a casca de 480, e
+ * só depois para baixo; no "Ver menos" volta à de 280. A regra é a mesma no Hub (`CatBubble.tsx`).
+ */
+export const SHELL_W = 280;
+export const OPEN_SHELL_W = 480;
+
+/** A largura da casca aberta que o helper manda (`largura`), dentro de 280–480; o que não é número fica em 280. */
+export function openShellWidth(largura: unknown): number {
+  return typeof largura === "number" && Number.isFinite(largura) ? Math.round(Math.min(Math.max(largura, SHELL_W), OPEN_SHELL_W)) : SHELL_W;
+}
+
+/**
+ * A janela com a largura do balão aberto reservada (`CatPlacement.windowFrame` no Swift): o espaço a mais fica do lado
+ * do balão, para longe do gato, e o gato não sai do lugar na tela. A casca continua presa pelo lado do gato (--bub-*).
+ */
+export function openPlacement(place: OverlayPlacement, largura: number): { winW: number; catX: number } {
+  const more = openShellWidth(largura) - SHELL_W;
+  const bubbleLeft = place.lado !== "left";
+  return { winW: place.winW + more, catX: place.catX + (bubbleLeft ? more : 0) };
+}

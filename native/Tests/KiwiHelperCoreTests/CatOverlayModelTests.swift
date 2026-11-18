@@ -98,6 +98,45 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertEqual(big.windowFrame(visible: small).maxY, small.maxY, accuracy: 1)
     }
 
+    /// Spec #17673 (harry): o balão aberto cresce para o lado, para longe do gato, até a casca de 480, sem passar da
+    /// área útil; o gato não sai do lugar, e a página recebe a largura (`largura`) de 280 a 480.
+    func testOpenBubbleGrowsSidewaysAwayFromTheCat() {
+        let screens = [
+            CGRect(x: 0, y: 80, width: 1512, height: 870),
+            CGRect(x: 0, y: 70, width: 1280, height: 650),
+            CGRect(x: -1920, y: 0, width: 1920, height: 1055),
+            CGRect(x: 0, y: 0, width: 700, height: 870),
+        ]
+        for visible in screens {
+            for position in CatPosition.allCases {
+                for scale in [0.6, 1, 1.6] {
+                    let p = CatPlacement(position: position, scale: scale)
+                    let closed = p.frame(visible: visible)
+                    let window = p.windowFrame(visible: visible)
+                    let bubble = p.bubbleRect(in: window)
+                    let cat = p.catRect(in: window)
+                    let shell = p.openShellWidth(in: window)
+                    let what = "\(position.rawValue) \(scale) em \(visible)"
+                    XCTAssertTrue(visible.contains(window), "janela fora: \(what)")
+                    XCTAssertEqual(cat, p.catRect(in: closed), "o gato saiu do lugar: \(what)")
+                    XCTAssertFalse(cat.intersects(bubble), "balão em cima do gato: \(what)")
+                    XCTAssertGreaterThanOrEqual(shell, 280, what)
+                    XCTAssertLessThanOrEqual(shell, 480, what)
+                    XCTAssertEqual(bubble.width, shell + CatPlacement.bubbleShellInset, accuracy: 0.5, what)
+                    // Cresce para longe do gato: o lado do gato fica onde estava.
+                    if p.bubbleLeft { XCTAssertEqual(window.maxX, closed.maxX, what) } else { XCTAssertEqual(window.minX, closed.minX, what) }
+                    if visible.width >= 1280 { XCTAssertEqual(shell, 480, "com espaço, a casca larga: \(what)") }
+                }
+            }
+        }
+        // Sem espaço do lado do balão, ele fica entre 280 e 480, colado na borda da área útil.
+        let narrow = CGRect(x: 0, y: 0, width: 700, height: 870)
+        let center = CatPlacement(position: .center, scale: 1.6)
+        let w = center.windowFrame(visible: narrow)
+        XCTAssertEqual(w.minX, narrow.minX)
+        XCTAssertLessThan(center.openShellWidth(in: w), 480)
+    }
+
     /// T16754 (harry #16786): o balão fica do lado do gato, com a ponta do rabo (7,5 pt para dentro da quina) na borda do
     /// corpo dele, e a janela tem a largura do gato e do que o balão passa dele, a mesma da página (`placement.ts`).
     func testTheBubbleCornerTouchesTheCatBody() {
@@ -116,7 +155,8 @@ final class CatOverlayModelTests: XCTestCase {
                 XCTAssertEqual(tip, edge, accuracy: 0.5, "a ponta na borda do corpo: \(what)")
                 XCTAssertGreaterThanOrEqual(bubble.minX, f.minX - 0.5, "o balão dentro da janela: \(what)")
                 XCTAssertLessThanOrEqual(bubble.maxX, f.maxX + 0.5, "o balão dentro da janela: \(what)")
-                XCTAssertEqual(f.width, cat.width + p.overhang, what)
+                XCTAssertEqual(p.frame(visible: visible).width, cat.width + p.overhang, what)
+                XCTAssertEqual(f.width - p.size.width, p.openShellWidth(in: f) - 280, what)
             }
         }
         // As larguras que a página também calcula (placement.test.ts): 1× no centro, 1,6× à esquerda, 0,6× à direita.
