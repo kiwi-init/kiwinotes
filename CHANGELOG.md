@@ -4,6 +4,24 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.4](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.4) (2026-11-18)
+
+- **Os botões das Notas saem da barra de abas como uma gota (T18646, T18647, T18648, spec #17725)** ([#61](https://github.com/kiwi-init/kiwinotes/pull/61))
+- **Teste do download lento: prazo de 500 ms, pedaços de 25 ms (T18750)** ([#59](https://github.com/kiwi-init/kiwinotes/pull/59))
+- **ajustes-models-check: os roteiros de Ajustes que precisam de modelo rodam com o modelo deste Mac, clonado (T18690)** ([#57](https://github.com/kiwi-init/kiwinotes/pull/57))
+- **Três ajustes do onboarding do agente (T18613, T18614, T18615, spec #17709)** ([#55](https://github.com/kiwi-init/kiwinotes/pull/55))
+- **Falar com o Kiwi-cat abaixa o som de fundo, como o ditado (T18409, T18410, T18411, spec #17697)** ([#53](https://github.com/kiwi-init/kiwinotes/pull/53))
+- **Menu do botão direito com estilos e ícones (T18383, T18385, T18386, spec #17703)** ([#51](https://github.com/kiwi-init/kiwinotes/pull/51))
+- **O balão do gato cresce para o lado no Ver mais (T18310, T18311, T18312, spec #17673)** ([#49](https://github.com/kiwi-init/kiwinotes/pull/49))
+- **Os caminhos no balão do gato viram link e abrem no lugar certo (T18126, T18127, T18128, spec #17683)** ([#47](https://github.com/kiwi-init/kiwinotes/pull/47))
+- **O balão do gato mostra o markdown formatado (T17984, T17985, T17986, spec #17679)** ([#42](https://github.com/kiwi-init/kiwinotes/pull/42))
+- **test/preload: a varredura das rodadas antigas nunca derruba o bun test (T18063)** ([#44](https://github.com/kiwi-init/kiwinotes/pull/44))
+- **A nota não muda de cara quando o cursor entra (T17783, T17784, T17785, spec #17690)** ([#38](https://github.com/kiwi-init/kiwinotes/pull/38))
+- **AGENTS.md: todo exemplo é fictício, por inteiro (T17959, spec #17952)** ([#40](https://github.com/kiwi-init/kiwinotes/pull/40))
+- **O agente vê todos os arquivos da pasta, não só as notas (T17599, T17600, spec #17587)** ([#36](https://github.com/kiwi-init/kiwinotes/pull/36))
+- **arquivo.md: os commits do repo antigo sem link (T17522)** ([#33](https://github.com/kiwi-init/kiwinotes/pull/33))
+- **Tirar o kiwi-cat-familia do repo (T17495, spec #17478)** ([#32](https://github.com/kiwi-init/kiwinotes/pull/32))
+
 ## [2026.11.3](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.3) (2026-11-17)
 
 - **Sobre lado a lado: a faixa da atualização com a barra e as Licenças à parte (T17098, T17097, spec #16837)** ([#23](https://github.com/kiwi-init/kiwinotes/pull/23))
