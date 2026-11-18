@@ -111,12 +111,13 @@ export function Section({ title, children }: { title: string; children: ReactNod
   );
 }
 
-export function Row({ label, hint, children }: { label: string; hint?: string; children?: ReactNode }) {
+/** `oneLine`: a frase fica numa linha só e corta com "…" (a linha não muda de altura quando a frase muda, spec #17709). */
+export function Row({ label, hint, oneLine = false, children }: { label: string; hint?: string; oneLine?: boolean; children?: ReactNode }) {
   return (
     <div className="kn-row">
       <div className="kn-row-text">
         <div className="kn-row-label">{label}</div>
-        {hint ? <div className="kn-row-hint">{hint}</div> : null}
+        {hint ? <div className={oneLine ? "kn-row-hint kn-row-hint-line" : "kn-row-hint"} title={oneLine ? hint : undefined}>{hint}</div> : null}
       </div>
       {children}
     </div>

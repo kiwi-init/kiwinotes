@@ -58,7 +58,7 @@ export const CAT_PALETTES = [
   },
   {
     id: "soul-claro",
-    name: "Soul Mist · Claro (Ref.)",
+    name: "Soul Mist",
     description: "Fundo branco fiel ao vídeo MP4 com tinta escura e fita ciano-azul-magenta",
     prismStops: ["#22D3EE", "#3B82F6", "#EC4899"],
     surfaceBg: "#FFFFFF",

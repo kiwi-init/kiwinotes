@@ -37,13 +37,16 @@ function tokenPalettes(): PackagePalette[] {
 }
 
 const strip = ({ isSelected: _, ...rest }: PackagePalette) => rest;
+/** O único nome que o app troca (harry, #17713, spec #17709): o do pacote cresce a caixa da cor. O resto, campo a campo. */
+const RENAMED: Record<string, string> = { "soul-claro": "Soul Mist" };
+const asApp = (p: PackagePalette) => ({ ...strip(p), name: RENAMED[p.id] ?? p.name });
 
 describe("as paletas do KiwiCat", () => {
   test("são as 5 do pacote, na mesma ordem e campo a campo (ids, prismStops, accentColor, eyeColor e o resto)", () => {
     const tsx = tsxPalettes();
     expect(tsx.map((p) => p.id)).toEqual(["prisma-original", "kiwi-neon", "ambar-solar", "soul-claro", "nevoa-violeta"]);
     const ours: PackagePalette[] = CAT_PALETTES.map((p) => ({ ...p, prismStops: [...p.prismStops], isSelected: false }));
-    expect(ours.map(strip)).toEqual(tsx.map(strip));
+    expect(ours.map(strip)).toEqual(tsx.map(asApp));
     // As duas cópias do pacote concordam entre si.
     expect(tokenPalettes()).toEqual(tsx);
   });
@@ -71,5 +74,25 @@ describe("as paletas do KiwiCat", () => {
     expect(options.map((o) => o.id)).toEqual(CAT_PALETTES.map((p) => p.id));
     expect(options[0]).toEqual({ id: "prisma-original", label: "Prisma Original", hex: "#F472B6", prismStops: ["#22D3EE", "#6366F1", "#EC4899"] });
     expect(catSwatchCss(options[0]!.prismStops)).toBe("linear-gradient(135deg, #22D3EE, #6366F1, #EC4899)");
+  });
+
+  test("nenhum nome passa do tamanho dos outros (spec #17709): a caixa da cor não cresce ao trocar", () => {
+    const names = CAT_PALETTES.map((p) => p.name as string);
+    expect(names).toEqual(["Prisma Original", "Kiwi Elétrico", "Âmbar Noturno", "Soul Mist", "Névoa Violeta"]);
+    // O maior dos 5 é o "Prisma Original" (15); nenhum passa disso, nem leva os " · " e "(Ref.)" do pacote.
+    for (const n of names) {
+      expect(n.length, n).toBeLessThanOrEqual(15);
+      expect(n, n).not.toMatch(/[·()]/);
+    }
+  });
+
+  test("a frase da cor fica numa linha só, no onboarding e em Ajustes (a mesma CatColorRow)", () => {
+    const row = readFileSync(join(import.meta.dir, "../../ui/settings/CatRow.tsx"), "utf8");
+    expect(row).toMatch(/<Row label=\{label\} hint=\{hint\} oneLine>\s*<div className="kn-cat-color">/);
+    const css = readFileSync(join(import.meta.dir, "../../ui/src/kit/kit.css"), "utf8");
+    const line = css.match(/\.kn-row-hint-line\s*\{([^}]*)\}/)?.[1] ?? "";
+    for (const rule of ["white-space: nowrap", "overflow: hidden", "text-overflow: ellipsis"]) expect(line).toContain(rule);
+    const onboarding = readFileSync(join(import.meta.dir, "../../ui/hub/onboarding/Onboarding.tsx"), "utf8");
+    expect(onboarding).toContain("<CatColorRow ");
   });
 });

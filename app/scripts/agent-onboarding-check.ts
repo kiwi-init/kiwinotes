@@ -200,14 +200,25 @@ try {
       const swatch = p.getByRole("dialog").getByRole("radio", { name: "Prisma Original" });
       assert.equal(await swatch.getAttribute("aria-checked"), "true");
       const swatches = p.getByRole("dialog").getByRole("radiogroup", { name: "Cor do Kiwi Cat" }).getByRole("radio");
-      assert.deepEqual(await swatches.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label"))), ["Prisma Original", "Kiwi Elétrico", "Âmbar Noturno", "Soul Mist · Claro (Ref.)", "Névoa Violeta"]);
+      assert.deepEqual(await swatches.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label"))), ["Prisma Original", "Kiwi Elétrico", "Âmbar Noturno", "Soul Mist", "Névoa Violeta"]);
       assert.match(await swatch.evaluate((e) => getComputedStyle(e).backgroundImage), /linear-gradient/, "a amostra é o gradiente da paleta");
       assert.equal(await p.locator(".kn-onb-color .kn-cat-color canvas, .kn-onb-color .kn-cat-preview").count(), 0, "sem o gatinho da linha: um gato só");
-      await p.getByRole("dialog").getByRole("radio", { name: "Kiwi Elétrico" }).click();
-      for (let i = 0; (await invoke("settings.get")).kiwicat.cor !== "kiwi-neon"; i++) { assert.ok(i < 50, "a cor vai para os ajustes"); await Bun.sleep(100); }
+      // Spec #17709: a caixa da cor tem a mesma altura com qualquer uma das 5, e a frase cabe numa linha.
+      const box = p.locator(".kn-onb-color .kn-row").first();
+      const heights: Record<string, number> = {};
+      for (const [id, name] of [["kiwi-neon", "Kiwi Elétrico"], ["ambar-solar", "Âmbar Noturno"], ["soul-claro", "Soul Mist"], ["nevoa-violeta", "Névoa Violeta"], ["prisma-original", "Prisma Original"], ["kiwi-neon", "Kiwi Elétrico"]] as const) {
+        await p.getByRole("dialog").getByRole("radio", { name }).click();
+        for (let i = 0; (await invoke("settings.get")).kiwicat.cor !== id; i++) { assert.ok(i < 50, `${name} vai para os ajustes`); await Bun.sleep(100); }
+        await p.waitForFunction((n) => document.querySelector(".kn-onb-color .kn-row-hint")?.textContent?.startsWith(n) === true, name);
+        heights[name] = Math.round((await box.boundingBox())!.height);
+        const hint = p.locator(".kn-onb-color .kn-row-hint");
+        const lines = await hint.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+        assert.equal(lines, 1, `a frase de ${name} numa linha`);
+      }
+      assert.equal(new Set(Object.values(heights)).size, 1, `a caixa da cor com a mesma altura: ${JSON.stringify(heights)}`);
       await shot(p, "7-cor-light.png");
       assert.equal((await invoke("agent.activity")).requests.length, asked, "os passos 2 a 7 não mandam pedido");
-      report.checks.push("steps 5-7 (T11999): the Template editor from Settings; the top-level folders with the marked project checked, and checking another marks it; the 5 palette swatches (spec #14963) with prisma-original selected, each a gradient of its prismStops, and picking one changes the setting; none of them sends a request");
+      report.checks.push("steps 5-7 (T11999): the Template editor from Settings; the top-level folders with the marked project checked, and checking another marks it; the 5 palette swatches (spec #14963) with prisma-original selected, each a gradient of its prismStops, and picking one changes the setting; the colour box keeps one height and a one-line sentence with each of the 5 (spec #17709); none of them sends a request");
       await p.locator(".kn-onb-actions button:has-text('Continuar')").click();
       await stepIs(p, 8);
       // Passo 8 (spec #12949): onde o gato aparece por cima dos apps e o tamanho, com a prévia da tela. Mudar salva.
