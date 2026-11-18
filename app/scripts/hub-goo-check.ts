@@ -47,14 +47,15 @@ const FRAMES = Array.from({ length: 12 }, (_, i) => i / 11);
 /** Um pixel do rastro: um canal com mais que isto de diferença da barra parada. */
 const TRAIL_DIFF = 32;
 /**
- * A borda da pílula parada na main antes da Gota 2 (b3f76782), com a medida do `analyze`: o piso da borda (#19034).
- * Os botões das Notas não servem de régua no escuro: lá eles mesmos ficam em ~4. A pílula não fica abaixo de 90%
- * disto, e a gota, em cada quadro, não fica abaixo de 80% (na main, a gota do escuro ficava em ~14 contra 21: a
- * mancha sem borda do #18974).
+ * O piso da borda (#19034), com a medida do `analyze`; os botões das Notas não servem de régua no escuro (~4).
+ * - A pílula parada na main antes da Gota 2 (b3f76782), com a janela já de pé: 57 e 27,8, igual em duas rodadas
+ *   (T19175). A pílula não fica abaixo de 90% disto.
+ * - A gota, em cada quadro, não fica abaixo de `DROP_RING` (o mesmo número da rodada 1: 80% da pílula medida então,
+ *   39 e 21). Na main, a gota do claro dava 33 e a do escuro ~14: a mancha sem borda do #18974, que não passa.
  */
-const PILL_RING = { light: 39, dark: 21 };
+const PILL_RING = { light: 57, dark: 27.8 };
 const PILL_MIN = 0.9;
-const RING_MIN = 0.8;
+const DROP_RING = { light: 31.2, dark: 16.8 };
 /** No 1º quadro depois do clique da volta (9%), os botões ainda com esta fração do conteúdo de antes (#18974). */
 const BUTTONS_EARLY = 0.3;
 const MIN_MS = 350;
@@ -213,6 +214,21 @@ const slotBox = (p: Page, side: "start" | "end") => p.evaluate((s) => {
   const r = Math.max(...kids.map((k) => k.right)), b = Math.max(...kids.map((k) => k.bottom));
   return { x: l - bar.x, y: t - bar.y, w: r - l, h: b - t };
 }, side);
+
+/**
+ * O `settle` e mais a entrada da janela: o `window-in` do Hub (480 ms de escala e o fade) ainda corre quando ele volta,
+ * e um print no meio dela pega a pílula um pouco menor e mais clara, num ponto diferente a cada rodada (T19175: a
+ * borda clara dava 55 numa e 37 noutra). Espera todas as animações finitas acabarem.
+ */
+const ready = async (p: Page) => {
+  await settle(p);
+  await p.evaluate(() => Promise.all(document.getAnimations()
+    .filter((a) => Number.isFinite(Number(a.effect?.getComputedTiming().endTime)))
+    .map((a) => a.finished)));
+};
+
+/** Os pixels de tela por px CSS da página (a escala dos prints). */
+const dpr = async (p: Page) => (await p.evaluate(() => devicePixelRatio)) || 1;
 
 const near = (a: Box, b: Box, tol = 1.5) =>
   Math.abs(a.x - b.x) <= tol && Math.abs(a.y - b.y) <= tol && Math.abs(a.w - b.w) <= tol && Math.abs(a.h - b.h) <= tol;
@@ -398,7 +414,7 @@ async function analyze(lab: Page, scale: number, geo: Geometry, rest: Buffer, cu
 /** Uma ida ou uma volta, quadro a quadro; `rest` é o print da barra parada em Ajustes, na mesma escala. */
 async function frames(p: Page, lab: Page, rest: Buffer, dir: string, section: string, kind: "in" | "out") {
   for (const sub of ["lado-inicio", "lado-fim", "mascara"]) mkdirSync(join(dir, sub), { recursive: true });
-  const scale = (await p.evaluate(() => devicePixelRatio)) || 1;
+  const scale = await dpr(p);
   // Na volta, o conteúdo dos botões antes do clique, para ver se eles somem de cara.
   const before = kind === "out" ? await geometry(p) : null;
   const shownInk = before ? (await analyze(lab, scale, before, rest, await shot(p), null, before.buttons)).ink : 0;
@@ -531,7 +547,7 @@ try {
     // 1. Quadro a quadro.
     const w = await openWindow(browser, ctx, { ...base, scale: 2, theme, motion: true });
     try {
-      await settle(w.page);
+      await ready(w.page);
       const first = await phases(w.page);
       assert.deepEqual([first.start, first.end], ["hidden", "hidden"], `Ajustes abriu com botões na barra: ${JSON.stringify(first)}`);
       const rest = await shot(w.page, join(out, theme, "parada.png"));
@@ -544,7 +560,7 @@ try {
       assert.deepEqual([shown.slotStart, shown.slotEnd], ["shown", "shown"], JSON.stringify(shown));
       assert.ok(shown.buttons.start > 0 && shown.buttons.end > 0, `as Notas não puseram botões dos dois lados: ${JSON.stringify(shown)}`);
       const shownGeo = await geometry(w.page);
-      const buttonsRing = (await analyze(lab, 2, shownGeo, rest, await shot(w.page, join(out, theme, "notas.png")), null)).ring.buttons;
+      const buttonsRing = (await analyze(lab, await dpr(w.page), shownGeo, rest, await shot(w.page, join(out, theme, "notas.png")), null)).ring.buttons;
       const last = ida.frames.at(-1)!;
       for (const side of SIDES) {
         const b = await slotBox(w.page, side);
@@ -557,13 +573,13 @@ try {
       const weak = [...ida.frames.map((f) => ["ida", f] as const), ...volta.frames.map((f) => ["volta", f] as const)].flatMap(([dir, f]) =>
         SIDES.flatMap((side) => {
           const r = f.ring[side];
-          return r !== null && r < RING_MIN * PILL_RING[theme] ? [`${dir} ${Math.round(f.t * 100)}% ${side}: ${r.toFixed(0)}`] : [];
+          return r !== null && r < DROP_RING[theme] ? [`${dir} ${Math.round(f.t * 100)}% ${side}: ${r.toFixed(0)}`] : [];
         }));
       metrics[`${theme}.borda`] = { buttons: buttonsRing, pill: pillRing, drop: weak };
       console.log(`borda ${theme}: botões ${buttonsRing}, pílula ${pillRing}, gota ${JSON.stringify(ida.frames.concat(volta.frames).map((f) => [f.ring.start, f.ring.end]))}`);
       assert.ok(pillRing !== null && pillRing >= PILL_MIN * PILL_RING[theme],
         `a borda da pílula parada (${theme}) ficou em ${pillRing?.toFixed(0)}, abaixo da main (${PILL_RING[theme]}, mínimo ${PILL_MIN * 100}%)`);
-      assert.deepEqual(weak, [], `a borda da gota some no fundo (${theme}: mínimo ${RING_MIN * 100}% da borda da pílula na main, ${PILL_RING[theme]})`);
+      assert.deepEqual(weak, [], `a borda da gota some no fundo (${theme}: mínimo ${DROP_RING[theme]})`);
       for (const side of SIDES) {
         assert.equal(back.shape[side].kind, "none", `no fim da volta sobra gota fora da pílula do lado ${side}: ${JSON.stringify(back.shape[side])}, colunas ${back.cols[side].slice(0, 40)}`);
       }
@@ -576,7 +592,7 @@ try {
     // 2. Tempo real, com vídeo.
     const v = await openWindow(browser, ctx, { ...base, scale: 1, theme, motion: true, video: join(out, theme, "video") });
     try {
-      await settle(v.page);
+      await ready(v.page);
       const restV = await shot(v.page);
       const trails: string[] = [];
       let rounds = 0;
@@ -591,7 +607,7 @@ try {
         await waitPhase(v.page, "hidden");
         // Depois da volta em tempo real, a barra é a de antes: nenhum resto de pintura do caminho da gota.
         const after = await shot(v.page, join(out, theme, `depois-da-volta-${++rounds}.png`));
-        const a = await analyze(lab, 1, await geometry(v.page), restV, after, null);
+        const a = await analyze(lab, await dpr(v.page), await geometry(v.page), restV, after, null);
         if (a.trail.count > 0) trails.push(`${a.trail.count} px em ${JSON.stringify(a.trail.at)}`);
         return { ida, volta, slowFrameReports: reports() - before };
       };
@@ -624,14 +640,14 @@ try {
   // 3. Reduzir movimento: o do Mac e o do Kiwi.
   const mac = await openWindow(browser, ctx, { ...base, scale: 2, theme: "light", motion: false });
   try {
-    await settle(mac.page);
+    await ready(mac.page);
     metrics["reduzir-mac"] = await reduced(mac.page, join(out, "reduzir-mac"));
   } finally {
     await mac.close();
   }
   const kiwi = await openWindow(browser, ctx, { ...base, scale: 2, theme: "light", motion: true });
   try {
-    await settle(kiwi.page);
+    await ready(kiwi.page);
     await kiwi.page.evaluate(() => {
       document.documentElement.dataset.motion = "reduced";
     });
