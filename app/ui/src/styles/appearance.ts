@@ -72,7 +72,7 @@ export function themeVars(theme: ColorTheme): Record<string, string> {
     // O anel que a gota pinta em SVG: na gota, e embaixo da pílula (somado ao `--shadow-float` dela). No escuro, o
     // `--line-3` some no #000 do OLED Black (#19033, #19049): um pouco de `--ink` no tom dele.
     "--float-ring": dark ? "color-mix(in srgb, var(--line-3) 95%, var(--ink))" : "var(--line-3)",
-    "--float-ring-under": dark ? "var(--float-ring)" : "var(--line-2)",
+    "--float-ring-under": dark ? "var(--float-ring)" : "color-mix(in srgb, var(--line-2), var(--line-3))",
     "--shadow-1": dark ? "0 1px 2px rgb(0 0 0 / 0.3), 0 0 0 0.5px var(--line)" : "0 1px 2px rgb(0 0 0 / 0.05), 0 0 0 0.5px var(--line)",
     "--shadow-2": dark ? "0 4px 14px rgb(0 0 0 / 0.35), 0 0 0 0.5px var(--line)" : "0 4px 14px rgb(0 0 0 / 0.07), 0 0 0 0.5px var(--line)",
     "--shadow-pop": `0 0 0 1px var(--line-2), 0 16px 48px rgb(0 0 0 / ${dark ? 0.32 : 0.16})`,

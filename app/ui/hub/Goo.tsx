@@ -17,14 +17,12 @@ import "./goo.css";
 import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
 import { GOO_FALLBACK_MS, type GooPhase, type GooRect, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
-import { type GooParts, gooDropParts, roundRect } from "./goo-shape.ts";
+import { GOO_BEATS, type GooParts, gooDropParts, roundRect } from "./goo-shape.ts";
 
 const SIDES: GooSide[] = ["start", "end"];
 const PARTS: (keyof GooParts)[] = ["edge", "speck", "head"];
 /** O fade dos botões com "reduzir movimento" (o `--fast`, com folga). */
 const REDUCED_MS = 220;
-/** A escala da cabeça (sobre os botões) em que a cópia dos botões já sumiu. */
-const GHOST_GONE = 0.55;
 
 const reducedMotion = () =>
   document.documentElement.dataset.motion === "reduced" ||
@@ -90,29 +88,33 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       const ph = phases.current[side];
       const target = rects[side];
       let parts: GooParts = { head: "", edge: "", speck: "" };
+      let t = 1;
       if ((ph === "entering" || ph === "leaving") && rects.tabs && target) {
         const clock = el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`);
         const timing = clock?.getAnimations()[0]?.effect?.getComputedTiming();
         const p = Number(timing?.progress ?? 0);
-        parts = gooDropParts(ph === "entering" ? p : 1 - p, { side, tabs: rects.tabs, target, radius: radius(), back: ph === "leaving" });
+        t = ph === "entering" ? p : 1 - p;
+        parts = gooDropParts(t, { side, tabs: rects.tabs, target, radius: radius(), back: ph === "leaving" });
       }
       for (const k of PARTS) paths[side].parts[k]?.setAttribute("d", parts[k]);
       const all = parts.edge + parts.speck + parts.head;
       for (const w of paths[side].whole) w.setAttribute("d", all);
       const g = ghosts[side];
-      if (g && target) followHead(g, parts.head ? paths[side].parts.head : null, target);
+      if (g && target) followHead(g, parts.head ? paths[side].parts.head : null, target, t);
     };
-    // A cópia vai no retângulo da cabeça: o centro dela e a escala dela sobre o dos botões. Some até a cabeça ter ~55%
-    // do tamanho dos botões, seja qual for a forma que a gota tiver no caminho.
-    const followHead = (g: HTMLElement, head: SVGPathElement | null, r: GooRect) => {
+    // A cópia vai no centro da cabeça, com uma escala só (o texto não deforma), por dentro dela. Some enquanto a gota
+    // desamassa, da mola até a lágrima (de `t` 1 até a chegada, `GOO_BEATS.arrive`): na corrida só há a gota, e a cópia
+    // não cobre o anel dela.
+    const followHead = (g: HTMLElement, head: SVGPathElement | null, r: GooRect, t: number) => {
       const b = head?.getBBox();
       if (!b || !b.width || !b.height) return void (g.style.opacity = "0");
       const sx = b.width / r.w;
       const sy = b.height / r.h;
       const dx = b.x + b.width / 2 - (r.x + r.w / 2);
       const dy = b.y + b.height / 2 - (r.y + r.h / 2);
-      g.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
-      g.style.opacity = String(Math.min(1, Math.max(0, (Math.min(sx, sy) - GHOST_GONE) / (1 - GHOST_GONE))) ** 2);
+      g.style.transform = `translate(${dx}px, ${dy}px) scale(${Math.min(1, sx, sy)})`;
+      const fade = Math.min(1, Math.max(0, (t - GOO_BEATS.arrive) / (1 - GOO_BEATS.arrive)));
+      g.style.opacity = String(fade);
     };
     let frame = 0;
     const tick = () => {
