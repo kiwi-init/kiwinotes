@@ -106,18 +106,23 @@ test("sem cabeçalho nenhum por um tempo, desiste com E_MODEL_DOWNLOAD, e o fetc
 
 test("um corpo que anda devagar, mas anda, não desiste; o signal de fora aborta e não deixa o .part", async () => {
   const root = tmp();
+  // Cada pedaço chega em 25 ms, 20× antes do prazo de 500 ms: o CI lento atrasa um timer em mais de 70 ms (T18750),
+  // e o prazo de 100 ms de antes caía. O download inteiro (40 pedaços) ainda dura mais que o prazo.
+  const stallMs = 500;
   const slow = async (url: string) => {
     const b = files[url.split("/resolve/abc123/")[1] as keyof typeof files];
     let i = 0;
     return new Response(new ReadableStream({
       async pull(c) {
-        await Bun.sleep(30); // cada pedaço chega antes do prazo de 100 ms
+        await Bun.sleep(25);
         if (i >= b.length) return c.close();
-        c.enqueue(b.slice(i, (i += 1000)));
+        c.enqueue(b.slice(i, (i += 100)));
       },
     }));
   };
-  expect(await ensureModel(root, manifest, { fetch: slow, stallMs: 100 })).toBe(modelDir(root, manifest));
+  const t0 = Date.now();
+  expect(await ensureModel(root, manifest, { fetch: slow, stallMs })).toBe(modelDir(root, manifest));
+  expect(Date.now() - t0).toBeGreaterThan(stallMs);
 
   const other = tmp();
   const abort = new AbortController();
