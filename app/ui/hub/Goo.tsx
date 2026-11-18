@@ -6,6 +6,10 @@
 // é a animação CSS de um `.kn-goo-drop` invisível por lado (`kn-goo-in-*`/`kn-goo-out-*`, no `goo.css`): o quadro lê o
 // progresso dela, e o `animationend` anda a fase (`goo.ts`). Parar a animação (`pause`, `currentTime`) para a gota no
 // quadro. Com "reduzir movimento", não há gota: os botões só aparecem e somem com um fade.
+//
+// Os botões na volta (T18949): a seção tira os botões da barra de uma vez (o React desmonta), e a gota que voltava sem
+// eles era o "rastro preto" no escuro. Uma cópia dos últimos botões (`.kn-goo-ghost`) fica na camada, no lugar deles, e
+// some nos primeiros ~25% da volta enquanto a gota assume. É só desenho: `inert`, sem clique, fora do leitor de tela.
 
 import "./goo.css";
 
@@ -95,7 +99,41 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
     const loop = () => {
       if (!frame) frame = requestAnimationFrame(tick);
     };
+    // A cópia dos botões que saíram, por lado. Some com a animação dela, ou quando o lado sai da volta.
+    const ghosts: Partial<Record<GooSide, HTMLElement>> = {};
+    const removed: Partial<Record<GooSide, Element[]>> = {};
+    const dropGhost = (side: GooSide) => {
+      ghosts[side]?.remove();
+      delete ghosts[side];
+    };
+    const spawnGhost = (side: GooSide) => {
+      dropGhost(side);
+      const nodes = removed[side] ?? [];
+      delete removed[side];
+      const r = rects[side];
+      const slot = slots[side];
+      if (!nodes.length || !r || !slot || reducedMotion()) return;
+      const g = document.createElement("div");
+      g.className = "kn-goo-ghost";
+      g.dataset.side = side;
+      g.inert = true;
+      g.setAttribute("aria-hidden", "true");
+      Object.assign(g.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px`, gap: getComputedStyle(slot).gap });
+      for (const n of nodes) {
+        const c = n.cloneNode(true) as Element;
+        for (const e of [c, ...Array.from(c.querySelectorAll("[id]"))]) e.removeAttribute("id");
+        g.append(c);
+      }
+      g.addEventListener("animationend", () => {
+        if (ghosts[side] === g) dropGhost(side);
+      });
+      ghosts[side] = g;
+      el.append(g);
+    };
+
     const show = (side: GooSide, phase: GooPhase) => {
+      if (phase === "leaving") spawnGhost(side);
+      else dropGhost(side);
       phases.current[side] = phase;
       el.dataset[side] = phase;
       const drop = el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`);
@@ -133,7 +171,10 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
     const mos = SIDES.map((side) => {
       const slot = slots[side];
       if (!slot) return null;
-      const mo = new MutationObserver(() => {
+      const mo = new MutationObserver((records) => {
+        // Os botões que saíram: viram a cópia se o lado entrar na volta agora.
+        const gone = records.flatMap((r) => Array.from(r.removedNodes)).filter((n): n is Element => n instanceof Element);
+        removed[side] = gone.length ? gone : undefined;
         watchChildren();
         update(side);
       });
@@ -153,7 +194,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       ro.disconnect();
       for (const mo of mos) mo?.disconnect();
       el.removeEventListener("animationend", onEnd);
-      for (const side of SIDES) clearTimeout(timers.current[side]);
+      for (const side of SIDES) (clearTimeout(timers.current[side]), dropGhost(side));
     };
   }, [bar, start, end]);
 
