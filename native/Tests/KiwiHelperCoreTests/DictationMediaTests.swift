@@ -70,6 +70,18 @@ final class DictationMediaTests: XCTestCase {
         XCTAssertThrowsError(try media.startCapture(meetingActive: false) { throw NSError(domain: "fake mic busy", code: 1) })
         XCTAssertEqual(fake.values[fake.a], 0.8)
     }
+    func testResumingMyMeetingChannelMidAgentRecordingGivesTheVolumeBack() {
+        // meeting.resumeMine (the person's own channel coming back) ends the media like meeting.start; the agent's
+        // late end() then writes nothing, and the next capture during the meeting leaves the volume alone.
+        let fake = FakeVolume(), journal = FakeMediaJournal(), media = DictationMedia(volume: fake, journal: journal)
+        media.startCapture(meetingActive: false) {}
+        XCTAssertEqual(fake.values[fake.a]!, 0.2, accuracy: 0.0001)
+        media.end() // meeting.resumeMine
+        XCTAssertEqual(fake.values[fake.a], 0.8); XCTAssertNil(journal.changes)
+        media.end() // finishAgentRecording
+        media.startCapture(meetingActive: true) {}
+        XCTAssertEqual(fake.values[fake.a], 0.8); XCTAssertEqual(fake.writes.count, 2)
+    }
     func testAgentRecordingDuringAMeetingLeavesTheVolumeAlone() {
         let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
         media.startCapture(meetingActive: true) {}

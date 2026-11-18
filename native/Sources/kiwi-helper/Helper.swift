@@ -1001,7 +1001,8 @@ final class Helper {
             if headless && ["meeting.start", "meeting.resumeMine"].contains(message.type) {
                 return reply(id, ok: false, error: "headless_no_mic")
             }
-            if message.type == "meeting.start" { media.end() }
+            // L8 (spec #17697): a meeting taking the mic gives the volume back first, also when "mine" resumes.
+            if ["meeting.start", "meeting.resumeMine"].contains(message.type) { media.end() }
             do {
                 let result = try handleMeeting(message)
                 reply(id, ok: result.ok, error: result.error, result.data)
@@ -1269,7 +1270,7 @@ final class Helper {
         object["type"] = type
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               let message = try? InboundMessage.decode(data) else { return }
-        if type == "meeting.start" { media.end() }
+        if ["meeting.start", "meeting.resumeMine"].contains(type) { media.end() }
         do { _ = try handleMeeting(message) } catch { emit("meeting.error", ["error": "meeting_unavailable"]) }
     }
 
