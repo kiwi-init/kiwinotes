@@ -3,10 +3,13 @@
 // local, 16 px, traço de 1,3 na cor do texto (`currentColor`), então seguem o tema claro e o escuro. Sem lib nem CDN.
 
 import type { ReactElement } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 
 export type MenuIconName =
   | "bullet" | "numbered" | "task" | "quote" | "check"
-  | "link" | "note-link" | "table" | "code" | "divider" | "callout" | "footnote";
+  | "link" | "note-link" | "table" | "code" | "divider" | "callout" | "footnote"
+  | "h1" | "h2" | "template" | "date";
 
 const dot = (cx: number, cy: number) => <circle cx={cx} cy={cy} r=".9" fill="currentColor" stroke="none" />;
 /** O número pequeno, no traço (o `text` mudaria de fonte e de peso com o tema). */
@@ -85,6 +88,34 @@ const PATHS: Record<MenuIconName, ReactElement> = {
       <path d="M11.5 3.6l1-.6v4" />
     </>
   ),
+  // Título e subtítulo (o menu do "/"): o H e o número, no traço.
+  h1: (
+    <>
+      <path d="M2.5 4v8M7.5 4v8M2.5 8h5" />
+      <path d="M10.5 6l2-1.2V12" />
+    </>
+  ),
+  h2: (
+    <>
+      <path d="M2.5 4v8M7.5 4v8M2.5 8h5" />
+      <path d="M10 6.2c.3-.8.9-1.2 1.6-1.2.8 0 1.4.6 1.4 1.3 0 1.4-3 2.5-3 4.7h3" />
+    </>
+  ),
+  // Modelo: a folha com as linhas tracejadas, para preencher.
+  template: (
+    <>
+      <rect x="3" y="2.5" width="10" height="11" rx="1.5" />
+      <path d="M5.5 6h5M5.5 8.5h5M5.5 11h3" strokeDasharray="1.4 1.3" />
+    </>
+  ),
+  // Data: o calendário.
+  date: (
+    <>
+      <rect x="2.5" y="3.5" width="11" height="10" rx="1.5" />
+      <path d="M2.5 6.8h11M5.5 2v3M10.5 2v3" />
+      {dot(6, 9.8)}{dot(10, 9.8)}
+    </>
+  ),
 };
 
 /** Os nomes, para o teste conferir que cada um desenha. */
@@ -97,4 +128,26 @@ export function MenuIcon({ name }: { name: MenuIconName }) {
       {PATHS[name]}
     </svg>
   );
+}
+
+/**
+ * O ícone como elemento do DOM, para o menu do "/" (o autocomplete do CodeMirror, que não é React). O SVG é o mesmo do
+ * `MenuIcon`: montado uma vez por nome pelo React e clonado depois, sem passar por texto.
+ */
+const drawn = new Map<MenuIconName, Node>();
+export function menuIconElement(name: MenuIconName): HTMLElement {
+  let svg = drawn.get(name);
+  if (!svg) {
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    flushSync(() => root.render(<MenuIcon name={name} />));
+    svg = host.firstChild!.cloneNode(true);
+    root.unmount();
+    drawn.set(name, svg);
+  }
+  const span = document.createElement("span");
+  span.className = "kn-slash-icon";
+  span.setAttribute("aria-hidden", "true");
+  span.append(svg.cloneNode(true));
+  return span;
 }

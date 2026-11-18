@@ -3,6 +3,7 @@
 // CodeMirror). A lógica do texto fica aqui, sem o editor, para os testes.
 
 import { formatDate } from "../../../src/shared/templates.ts";
+import type { MenuIconName } from "./menuIcons.tsx";
 
 export interface SlashItem {
   id: string;
@@ -10,26 +11,28 @@ export interface SlashItem {
   /** Palavras que também acham o item ("h1", "todo"…). */
   words: string;
   detail: string;
+  /** O ícone à esquerda (spec #17703): o mesmo desenho do menu do botão direito (`menuIcons.tsx`). */
+  icon: MenuIconName;
 }
 
 export const SLASH_ITEMS: SlashItem[] = [
-  { id: "h1", label: "Título", words: "titulo h1 cabecalho heading", detail: "#" },
-  { id: "h2", label: "Subtítulo", words: "subtitulo h2 secao", detail: "##" },
-  { id: "list", label: "Lista", words: "lista bullet topicos", detail: "-" },
-  { id: "numbered", label: "Lista numerada", words: "numerada ordenada 1.", detail: "1." },
-  { id: "todo", label: "Checklist", words: "checklist tarefa todo caixa", detail: "- [ ]" },
-  { id: "table", label: "Tabela", words: "tabela table", detail: "| |" },
-  { id: "code", label: "Código", words: "codigo code bloco", detail: "```" },
-  { id: "quote", label: "Citação", words: "citacao quote", detail: ">" },
-  { id: "callout", label: "Callout", words: "callout aviso nota destaque", detail: "> [!note]" },
-  { id: "divider", label: "Divisor", words: "divisor linha separador hr", detail: "---" },
-  { id: "link", label: "Link para nota", words: "link nota wikilink", detail: "[[ ]]" },
+  { id: "h1", label: "Título", words: "titulo h1 cabecalho heading", detail: "#", icon: "h1" },
+  { id: "h2", label: "Subtítulo", words: "subtitulo h2 secao", detail: "##", icon: "h2" },
+  { id: "list", label: "Lista", words: "lista bullet topicos", detail: "-", icon: "bullet" },
+  { id: "numbered", label: "Lista numerada", words: "numerada ordenada 1.", detail: "1.", icon: "numbered" },
+  { id: "todo", label: "Checklist", words: "checklist tarefa todo caixa", detail: "- [ ]", icon: "task" },
+  { id: "table", label: "Tabela", words: "tabela table", detail: "| |", icon: "table" },
+  { id: "code", label: "Código", words: "codigo code bloco", detail: "```", icon: "code" },
+  { id: "quote", label: "Citação", words: "citacao quote", detail: ">", icon: "quote" },
+  { id: "callout", label: "Callout", words: "callout aviso nota destaque", detail: "> [!note]", icon: "callout" },
+  { id: "divider", label: "Divisor", words: "divisor linha separador hr", detail: "---", icon: "divider" },
+  { id: "link", label: "Link para nota", words: "link nota wikilink", detail: "[[ ]]", icon: "note-link" },
   // A nota de rodapé precisa da nota inteira (o próximo número e o fim): o editor insere (`insertFootnote`).
-  { id: "footnote", label: "Nota de rodapé", words: "rodape footnote referencia fonte", detail: "[^1]" },
-  { id: "template", label: "Modelo", words: "modelo template", detail: "…" },
-  { id: "tomorrow", label: "Amanhã", words: "amanha tomorrow", detail: "AAAA-MM-DD" },
-  { id: "yesterday", label: "Ontem", words: "ontem yesterday", detail: "AAAA-MM-DD" },
-  { id: "today", label: "Data de hoje", words: "data hoje dia date", detail: "AAAA-MM-DD" },
+  { id: "footnote", label: "Nota de rodapé", words: "rodape footnote referencia fonte", detail: "[^1]", icon: "footnote" },
+  { id: "template", label: "Modelo", words: "modelo template", detail: "…", icon: "template" },
+  { id: "tomorrow", label: "Amanhã", words: "amanha tomorrow", detail: "AAAA-MM-DD", icon: "date" },
+  { id: "yesterday", label: "Ontem", words: "ontem yesterday", detail: "AAAA-MM-DD", icon: "date" },
+  { id: "today", label: "Data de hoje", words: "data hoje dia date", detail: "AAAA-MM-DD", icon: "date" },
 ];
 
 const fold = (s: string) =>
