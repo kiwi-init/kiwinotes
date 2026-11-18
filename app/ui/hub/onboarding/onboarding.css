@@ -74,7 +74,6 @@
   margin: var(--space-2) 0 0;
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--border);
-  border-top: 4px solid var(--kn-onb-cor, var(--accent));
   border-radius: var(--r-card, 12px);
   background: var(--surface);
   box-shadow: var(--shadow-1);
