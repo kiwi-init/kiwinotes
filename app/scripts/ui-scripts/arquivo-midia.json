@@ -1,0 +1,32 @@
+{
+  "window": "notes",
+  "size": "1280x800",
+  "steps": [
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Midia/feira.mp3 e Midia/cena.mp4 de 2 s, gerados pelo say e pelo ffmpeg, Midia/quebrado.mp3 que é texto, Midia/enorme.mov de 4 GB esparso, e uma nota)" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Midia')", "name": "abre a pasta Midia" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('feira')", "name": "clica no mp3" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-media[data-kind='audio'][data-loaded] audio.kn-file-media-player[controls][src^='blob:']", "name": "o áudio abre no player, de um blob:, e o WebKit lê a duração (T19315)" },
+    { "expectText": ".kn-file-title", "text": "feira.mp3" },
+    { "expectCount": "audio[autoplay], video[autoplay]", "count": 0, "name": "nada toca sozinho" },
+    { "screenshot": "01-audio.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore de novo" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('cena')", "name": "clica no mp4" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-media[data-kind='video'][data-loaded] video.kn-file-media-player[controls][src^='blob:']", "name": "o vídeo abre no player, com o primeiro quadro carregado" },
+    { "expectText": ".kn-file-title", "text": "cena.mp4" },
+    { "expectNoHScroll": ".kn-file-media", "name": "o vídeo cabe na área" },
+    { "screenshot": "02-video.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore mais uma vez" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('quebrado')", "name": "clica no mp3 que não é áudio" },
+    { "expectText": ".kn-file[data-state='ready'] .kn-file-notice", "text": "Não deu para tocar este arquivo aqui. Abra no app padrão.", "name": "o aviso, sem player quebrado" },
+    { "expectCount": ".kn-file-actions button:has-text('Abrir no app padrão')", "count": 1, "name": "e o app padrão no topo" },
+    { "screenshot": "03-quebrado.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore outra vez" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('enorme')", "name": "clica num .mov de 4 GB (esparso)" },
+    { "waitFor": ".kn-file[data-state='tooLarge'] .kn-file-notice", "name": "o engine nem lê: o aviso do tamanho (#19727)" },
+    { "expectText": ".kn-file-notice", "text": "Este arquivo tem 4 GB, e o Kiwi Notes mostra aqui até 25 MB.", "name": "o tamanho e o limite" },
+    { "expectCount": ".kn-file-actions button:has-text('Abrir no app padrão')", "count": 1, "name": "e o app padrão" },
+    { "expectCount": "video, audio", "count": 0, "name": "nenhum player" },
+    { "screenshot": "04-enorme.png" }
+  ]
+}

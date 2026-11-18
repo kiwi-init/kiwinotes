@@ -508,3 +508,30 @@
 .kn-file-drawio-area[hidden] {
   display: none;
 }
+
+/* ---------------------------------------------------------- o áudio e o vídeo (T19315) */
+
+/* o player do WebKit no meio, no fundo das imagens; o vídeo cabe inteiro na área, o áudio numa barra */
+.kn-file-media {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: var(--surface-2);
+}
+
+.kn-file-media-player {
+  display: block;
+  max-width: 100%;
+}
+
+.kn-file-media[data-kind="video"] .kn-file-media-player {
+  max-height: 100%;
+  background: #000;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.kn-file-media[data-kind="audio"] .kn-file-media-player {
+  width: min(560px, 100%);
+}

@@ -55,6 +55,8 @@ describe("trava das janelas (T1378)", () => {
     expect(d.get("connect-src")).toEqual(["ws://127.0.0.1:*"]);
     // Nada da internet, nem imagem: a de fora numa nota vem do engine como `data:`, depois do clique (T2984, #3039).
     expect(d.get("img-src")).toEqual(["'self'", "views:", "data:"]);
+    // Mídia só de `blob:`: o áudio e o vídeo das Notas, montados dos bytes lidos (T19315).
+    expect(d.get("media-src")).toEqual(["blob:"]);
     expect(d.get("object-src")).toEqual(["'none'"]);
     expect(d.get("base-uri")).toEqual(["'none'"]);
     expect(VIEWS_CSP).not.toContain("'unsafe-eval'");

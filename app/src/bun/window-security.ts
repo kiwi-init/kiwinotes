@@ -19,6 +19,8 @@
  *   O app usa o `executeJavascript`, que vem do WebView e não passa pela CSP;
  * - `img-src` sem `https:`: a imagem de fora de uma nota é baixada pelo engine, só depois do clique da pessoa, e chega
  *   como `data:` (T2984, #3039). Assim nenhum desenho (o Markdown, o mermaid, um CSS) baixa algo sozinho;
+ * - `media-src blob:` (T19315): o áudio e o vídeo de um arquivo nas Notas, que a UI monta dos bytes lidos pelo engine.
+ *   Um `blob:` só sai de um script da própria página: nada toca da rede nem do disco direto;
  * - `object-src`, `frame-src`, `base-uri` e `form-action` em `'none'`: nada de plugin, iframe, `<base>` nem form que
  *   leve a outro lugar.
  */
@@ -28,6 +30,7 @@ export const VIEWS_CSP = [
   "style-src 'self' views: 'unsafe-inline'",
   "img-src 'self' views: data:",
   "font-src 'self' views: data:",
+  "media-src blob:",
   "connect-src ws://127.0.0.1:*",
   "object-src 'none'",
   "frame-src 'none'",

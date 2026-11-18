@@ -64,6 +64,12 @@ describe("ler um arquivo do cofre (T7103)", () => {
     truncateSync(path.join(root, "no-limite.txt"), MAX_VIEW_TEXT_BYTES);
     expect(await v.readFile("grande.txt", "text")).toEqual({ path: "grande.txt", size: MAX_VIEW_TEXT_BYTES + 1, tooLarge: true, limit: MAX_VIEW_TEXT_BYTES });
     expect(await v.readFile("grande.pdf", "binary")).toEqual({ path: "grande.pdf", size: MAX_VIEW_BYTES + 1, tooLarge: true, limit: MAX_VIEW_BYTES });
+    // Um vídeo de vários GB (T19315, #19727): só o tamanho, antes de ler um byte. O arquivo é esparso: não ocupa o disco.
+    const t0 = performance.now();
+    writeFileSync(path.join(root, "Projeto X.mov"), "");
+    truncateSync(path.join(root, "Projeto X.mov"), 4 * 1024 ** 3);
+    expect(await v.readFile("Projeto X.mov", "binary")).toEqual({ path: "Projeto X.mov", size: 4 * 1024 ** 3, tooLarge: true, limit: MAX_VIEW_BYTES });
+    expect(performance.now() - t0).toBeLessThan(1000);
     // O mesmo arquivo de texto cabe no limite do binário.
     expect(await v.readFile("grande.txt", "binary")).toMatchObject({ size: MAX_VIEW_TEXT_BYTES + 1, version: expect.any(String) });
     expect(await v.readFile("no-limite.txt", "text")).toMatchObject({ size: MAX_VIEW_TEXT_BYTES, text: expect.any(String) });
