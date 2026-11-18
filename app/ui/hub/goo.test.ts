@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import { type GooBox, type GooPhase, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars } from "./goo.ts";
+import { type GooBox, type GooPhase, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
 
 describe("as fases", () => {
   test("a primeira medida não anima: com botões já está na barra, sem botões não há gota", () => {
@@ -52,6 +52,26 @@ describe("as medidas", () => {
 
   test("as variáveis levam o nome do lado", () => {
     expect(gooVars("end", { x: 1, y: 2, w: 3, h: 4 })).toEqual({ "--goo-end-x": "1px", "--goo-end-y": "2px", "--goo-end-w": "3px", "--goo-end-h": "4px" });
+  });
+});
+
+describe("o que o ResizeObserver olha", () => {
+  test("olha os botões novos e larga os que saíram, sem repetir os que ficaram", () => {
+    expect(gooWatchDiff(new Set(), ["caminho", "nova", "buscar"])).toEqual({ add: ["caminho", "nova", "buscar"], drop: [] });
+    // Notas → Ditado: os botões das Notas saem, o do Ditado entra.
+    expect(gooWatchDiff(new Set(["caminho", "nova", "buscar"]), ["ditado"])).toEqual({ add: ["ditado"], drop: ["caminho", "nova", "buscar"] });
+    expect(gooWatchDiff(new Set(["nova"]), ["nova"])).toEqual({ add: [], drop: [] });
+  });
+
+  test("ir e voltar entre seções não acumula nada", () => {
+    let watched = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      for (const now of [["caminho", "nova"], [], ["ditado"]]) {
+        const { add, drop } = gooWatchDiff(watched, now);
+        watched = new Set([...watched].filter((c) => !drop.includes(c)).concat(add));
+      }
+    }
+    expect([...watched]).toEqual(["ditado"]);
   });
 });
 
