@@ -115,8 +115,11 @@ class Builder {
         const url = c.getChild("URL");
         const marks = c.getChildren("LinkMark");
         const label = marks.length >= 2 ? this.inline(c, marks[0]!.to, marks[1]!.from) : [this.text(c)];
+        // `[c]` ou `[a][b]`, sem `(…)`: uma referência, e o balão não tem nenhuma definida. No CommonMark isso é
+        // texto, com os colchetes.
+        if (marks.length >= 2 && this.src[marks[1]!.to] !== "(") return ["[", ...label, this.src.slice(marks[1]!.from, c.to)];
         const href = url ? safeHref(this.text(url)) : null;
-        // Sem endereço que preste (um `javascript:`, uma referência): só o texto do link.
+        // Sem endereço que preste (um `javascript:`): só o texto do link.
         return href ? [node("a", tidy(label), { href })] : label;
       }
       case "Autolink": {
@@ -253,8 +256,56 @@ class Builder {
 
 /** A resposta em árvore de elementos (só as tags de `MdTag`; o texto, sempre string). */
 export function parseMarkdown(text: string): MdNode[] {
-  const tree = parser.parse(text);
+  let tree = parser.parse(text);
+  const nested = escapeNestedBrackets(text, tree.topNode);
+  if (nested !== text) {
+    text = nested;
+    tree = parser.parse(text);
+  }
   return new Builder(text).blocks(tree.topNode);
+}
+
+/** Onde o `[` não é marca: código, endereço, tag HTML, escape. */
+const LITERAL = new Set(["InlineCode", "FencedCode", "CodeBlock", "Autolink", "URL", "HTMLTag", "HTMLBlock", "Escape"]);
+
+/**
+ * `[link [aninhado]](url)` é um link com o texto "link [aninhado]" no CommonMark: o `[aninhado]` só seria link se
+ * houvesse a referência, e o balão não tem referências. O lezer o lê como link e o de fora fica cru. Aqui os
+ * colchetes de dentro do texto de um link viram `\[` `\]`, fora do código; um `[x](y)` de dentro continua link.
+ */
+function escapeNestedBrackets(text: string, top: SyntaxNode): string {
+  const literal = new Uint8Array(text.length);
+  const cursor = top.cursor();
+  do {
+    if (LITERAL.has(cursor.name)) literal.fill(1, cursor.from, cursor.to);
+  } while (cursor.next());
+  const escape = new Set<number>();
+  for (let open = 0; open < text.length; open++) {
+    if (text[open] !== "[" || literal[open]) continue;
+    const inner: number[][] = [];
+    const stack: number[] = [];
+    let close = -1;
+    // O texto do link fica no parágrafo: para numa linha vazia.
+    for (let i = open + 1; i < text.length && !(text[i] === "\n" && text[i + 1] === "\n"); i++) {
+      if (literal[i]) continue;
+      if (text[i] === "[") stack.push(i);
+      else if (text[i] === "]") {
+        if (stack.length === 0) {
+          close = i;
+          break;
+        }
+        const from = stack.pop()!;
+        if (text[i + 1] !== "(") inner.push([from, i]);
+      }
+    }
+    if (close < 0 || text[close + 1] !== "(" || inner.length === 0) continue;
+    for (const [a, b] of inner) escape.add(a!).add(b!);
+    open = close;
+  }
+  if (escape.size === 0) return text;
+  let out = "";
+  for (let i = 0; i < text.length; i++) out += escape.has(i) ? `\\${text[i]}` : text[i];
+  return out;
 }
 
 /** Os blocos que levam quebra de linha no texto corrido. */

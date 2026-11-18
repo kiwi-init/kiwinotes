@@ -154,6 +154,23 @@ describe("o texto corrido do balão fechado", () => {
     expect(plainMarkdown("> uma ideia\n> em duas linhas\n\n3. três\n4. quatro")).toBe("uma ideia\nem duas linhas\n3. três\n4. quatro");
   });
 
+  test("colchete dentro do texto do link (CommonMark): o link fica, com o colchete no texto", () => {
+    const link = (t: string) => find(parseMarkdown(t), "a").map((a) => [text(a), a.attrs?.href]);
+    expect(link("[link [aninhado]](https://example.com/a)")).toEqual([["link [aninhado]", "https://example.com/a"]]);
+    expect(link("Veja [a [b [c]] d](https://example.com/a) e [outro](https://example.com/b).")).toEqual([
+      ["a [b [c]] d", "https://example.com/a"],
+      ["outro", "https://example.com/b"],
+    ]);
+    expect(plainMarkdown("[link [aninhado]](https://example.com/a)")).toBe("link [aninhado]");
+    // Um link de dentro ganha, como no CommonMark (e o endereço de fora fica um endereço solto, que o GFM linka);
+    // o código e as caixas não mudam.
+    expect(link("[a [b](https://example.com/b)](https://example.com/a)")).toEqual([
+      ["b", "https://example.com/b"],
+      ["https://example.com/a", "https://example.com/a"],
+    ]);
+    expect(plainMarkdown("`[a [b]](x)` e\n\n- [ ] [c]")).toBe("[a [b]](x) e\n• ☐ [c]");
+  });
+
   test("texto sem markdown passa igual", () => {
     expect(plainMarkdown("Pronto, salvei a nota.")).toBe("Pronto, salvei a nota.");
   });
