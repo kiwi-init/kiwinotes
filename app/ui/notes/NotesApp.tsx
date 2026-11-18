@@ -17,7 +17,6 @@ import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/sha
 import { Popover } from "./Popover.tsx";
 import { TreePopover } from "./TreePopover.tsx";
 import { NoteWidthHandles } from "./NoteWidth.tsx";
-import { mayBeText } from "../../src/shared/file-view.ts";
 import { NOTE_WIDTH } from "../../src/shared/note-width.ts";
 import { ContextMenu, type MenuItem } from "./ContextMenu.tsx";
 import { FolderConfirmation, useNotesFolders, type FolderController } from "./NotesFolder.tsx";
@@ -54,7 +53,6 @@ import { hasFilters, parseQuery, type SavedSearch, searchTooLong,
 import { type Toast, UndoToast } from "./UndoToast.tsx";
 import { CanvasView } from "./canvas/CanvasView.tsx";
 import { FileView, type FilesApi } from "./files/FileView.tsx";
-import { viewerFor } from "./files/viewers.ts";
 import { allFolders, loadCollapsed, loadOpenFolders, saveCollapsed, saveOpenFolders, type SectionId, toggled } from "./sidebarState.ts";
 import { UnlinkedMentions } from "./UnlinkedMentions.tsx";
 import type { Backlink, Note, NoteMeta, NotesApi, SaveResult, TagNode, VaultListing, VaultFile, ExportFormat, TreePrefs, ProjectView,
@@ -833,11 +831,12 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
 
   /** Um arquivo do vault que não é nota, pela árvore ou por um `[[link]]` (T7616). */
   const openVaultFile = (p: string) => {
-    // O quadro branco abre no Kiwi (T6600); o resto, no app padrão do Mac.
+    // O quadro branco abre no Kiwi (T6600).
     if (api.canvas && /\.canvas$/i.test(p)) return void openCanvas(p);
-    // O tipo que tem visualizador abre nas Notas (T7103, spec #7079), e um sem visualizador que pode ser texto também
-    // (T19313): o view lê e confere; um binário mostra o "Abrir no app padrão".
-    if (api.files?.read && (viewerFor(p) || mayBeText(p))) return void openFileView(p);
+    // Todo o resto abre nas Notas (spec #19277): o tipo com visualizador (T7103), o que é texto (T19313), e o que não
+    // é ganha o cartão do arquivo (T19316), com o app padrão e o Finder. Só um engine antigo, sem `files.read`, manda
+    // direto para o app padrão do Mac.
+    if (api.files?.read) return void openFileView(p);
     setTreeOpen(false);
     api.files?.open(p).catch(failed_("abrir o arquivo"));
   };
@@ -1444,6 +1443,19 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     const have = new Set((listing.files ?? []).map((f) => f.path));
     return { ...listing, files: [...(listing.files ?? []), ...searchFiles.filter((f) => !have.has(f.path))] };
   }, [listing, searchFiles]);
+  // O tamanho e a data de um arquivo, para o cartão (T19316): da lista da árvore, ou, se a pasta dele ainda não abriu
+  // (um `[[link]]`, a busca), da busca de arquivos do engine, pelas palavras do caminho inteiro.
+  const filesRef = useRef(treeListing?.files);
+  filesRef.current = treeListing?.files;
+  const statFile = useCallback(
+    async (p: string): Promise<VaultFile | null> => {
+      const known = filesRef.current?.find((f) => f.path === p);
+      if (known) return known;
+      const found = await api.findFiles?.(p).catch(() => null);
+      return found?.find((f) => f.path === p) ?? null;
+    },
+    [api],
+  );
   const fullTree = useMemo(() => (treeListing ? buildTree(treeListing, sortBy, projectMains) : []), [treeListing, sortBy, projectMains],
   );
   // Grava as pastas abertas; com o cofre lido, as que foram apagadas saem da lista (revisão do T7390).
@@ -1661,6 +1673,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
             flushRef={fileFlush}
             widthHandles={widthHandles}
             onOpenExternal={(p) => void api.files?.open(p).catch(failed_("abrir o arquivo"))}
+            onReveal={folders ? (p) => void folders.reveal(p).catch(failed_("mostrar no Finder")) : undefined}
+            stat={statFile}
           />
         ) : view === "trash" && api.extras ? (
           <TrashView

@@ -1,0 +1,40 @@
+{
+  "window": "notes",
+  "size": "1280x800",
+  "query": { "note": "Arquivo/fundo/disco" },
+  "steps": [
+    {
+      "waitFor": ".kn-file[data-state='unsupported'] .kn-file-card",
+      "name": "um binário sem extensão, numa pasta que a árvore nunca abriu, abre no cartão (antes, no cofre: Arquivo/fundo/disco, 2 KB de zeros; Projeto X/backup.zip, 300 KB; Projeto X/enorme.pdf, 4 GB esparso; e uma nota)"
+    },
+    { "expectText": ".kn-file-card-name", "text": "disco", "name": "o nome" },
+    { "expectText": ".kn-file-card-facts", "text": "Arquivo sem extensão", "name": "o tipo" },
+    { "waitFor": ".kn-file-card-facts dd:has-text('2 KB')", "name": "o tamanho, pela busca do engine (a pasta não abriu)" },
+    { "waitFor": ".kn-file-card-facts dt:has-text('Modificado')", "name": "e a data" },
+    { "expectCount": ".kn-file-open", "count": 1, "name": "um só Abrir no app padrão, no cartão (#19747)" },
+    { "expectCount": ".kn-file-head .kn-file-open", "count": 0, "name": "o topo fica só com o nome" },
+    { "expectCount": ".kn-file-reveal", "count": 1, "name": "e o Mostrar no Finder" },
+    { "screenshot": "01-sem-extensao.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projeto X')", "name": "abre a pasta Projeto X" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('backup')", "name": "clica no .zip: antes ia direto para o app padrão" },
+    { "waitFor": ".kn-file[data-state='unsupported'] .kn-file-card-name:has-text('backup.zip')", "name": "agora abre o cartão, nas Notas" },
+    { "expectText": ".kn-file-card-facts", "text": "Arquivo ZIP", "name": "o tipo" },
+    { "waitFor": ".kn-file-card-facts dd:has-text('300 KB')", "name": "o tamanho, da lista da árvore" },
+    { "expectCount": ".kn-file-open", "count": 1, "name": "um só Abrir no app padrão" },
+    { "click": ".kn-file-reveal", "name": "Mostrar no Finder (no headless, só o log)" },
+    { "click": ".kn-file-open", "name": "Abrir no app padrão (no headless, só o log)" },
+    { "expectCount": ".kn-toast", "count": 0, "name": "nenhum dos dois deu erro" },
+    { "screenshot": "02-zip.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore de novo" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('enorme')", "name": "clica no PDF de 4 GB" },
+    {
+      "waitFor": ".kn-file[data-state='tooLarge'] .kn-file-card p:has-text('Este arquivo tem 4 GB, e o Kiwi Notes mostra aqui até 25 MB.')",
+      "name": "grande demais: o mesmo cartão, com o motivo"
+    },
+    { "expectText": ".kn-file-card-facts", "text": "Arquivo PDF", "name": "o tipo" },
+    { "expectCount": ".kn-file-open", "count": 1, "name": "um só Abrir no app padrão (antes eram dois, #19747)" },
+    { "expectCount": ".kn-file-reveal", "count": 1, "name": "e o Mostrar no Finder" },
+    { "screenshot": "03-grande-demais.png" }
+  ]
+}
