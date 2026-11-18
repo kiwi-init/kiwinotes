@@ -688,10 +688,13 @@ final class Helper {
         recordingTarget = .agent
         agentConfirmed = false
         agentDropped = false
-        // The media (L8) isn't lowered: pausing the music is only for the dictation (#4756).
+        // Spec #17697: the media (L8) goes down as the mic opens, like the dictation's, and comes back at the end,
+        // the cancel or the drop. During a recorded meeting it isn't touched.
         do {
-            emit("agent.record.started", ["reason": reason])
-            try audio.start()
+            try media.startCapture(meetingActive: meeting.isRecording) {
+                emit("agent.record.started", ["reason": reason])
+                try audio.start()
+            }
         } catch {
             talk.reset(.agent)
             agentGate.reset()
@@ -761,6 +764,7 @@ final class Helper {
     /// nothing when Esc came first. The samples live only in memory: no dump, no journal; the audio is gone after.
     private func finishAgentRecording(_ samples: [Float], reason: String, mode: String, lost: String?, releasedAt: TimeInterval?) {
         recordingTarget = nil
+        media.end()
         agentGate.reset()
         agentConfirmTimer?.cancel()
         if agentConfirmed { cues.playEnd() }
@@ -858,6 +862,7 @@ final class Helper {
         if recordingTarget == .agent {
             // Spec #9876: the audio is thrown away; the sound only if the listening had been confirmed.
             _ = audio.stop()
+            media.end()
             agentConfirmTimer?.cancel()
             if agentConfirmed { cues.playEnd() }
             agentGate.reset()

@@ -52,6 +52,38 @@ private final class FileFakeVolume: MediaVolumeControl {
     }
 }
 final class DictationMediaTests: XCTestCase {
+    // Spec #17697: the Kiwi-cat's recording uses the same media as the dictation (Helper.startAgentRecording opens the
+    // mic inside `startCapture`; the end, the cancel and the drop call `end()`). Each way out gives the volume back.
+    func testAgentRecordingLowersAndEveryEndingGivesTheVolumeBack() {
+        for ending in ["stopped", "cancelled", "lost"] {
+            let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
+            var during: Float?
+            media.startCapture(meetingActive: false) { during = fake.values[fake.a] }
+            XCTAssertEqual(during!, 0.2, accuracy: 0.0001, ending)
+            XCTAssertEqual(fake.values[fake.a]!, 0.2, accuracy: 0.0001, ending)
+            media.end() // finishAgentRecording, cancelRecording (agent) and audio.onLost all end here
+            XCTAssertEqual(fake.values[fake.a]!, 0.8, accuracy: 0.0001, ending)
+        }
+    }
+    func testAgentMicFailingToOpenGivesTheVolumeBack() {
+        let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
+        XCTAssertThrowsError(try media.startCapture(meetingActive: false) { throw NSError(domain: "fake mic busy", code: 1) })
+        XCTAssertEqual(fake.values[fake.a], 0.8)
+    }
+    func testAgentRecordingDuringAMeetingLeavesTheVolumeAlone() {
+        let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
+        media.startCapture(meetingActive: true) {}
+        media.end()
+        XCTAssertTrue(fake.writes.isEmpty)
+    }
+    func testMeetingStartingMidAgentRecordingGivesTheVolumeBack() {
+        let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
+        media.startCapture(meetingActive: false) {}
+        media.end() // meeting.start
+        XCTAssertEqual(fake.values[fake.a], 0.8)
+        media.end() // the agent's recording then ends: nothing more to give back
+        XCTAssertEqual(fake.writes.count, 2)
+    }
     func testLowersBeforeCaptureAndRestoresWhenCaptureEnds() throws {
         let fake = FakeVolume(), media = DictationMedia(volume: fake, journal: FakeMediaJournal())
         media.startCapture { XCTAssertEqual(fake.values[fake.a]!, 0.2, accuracy: 0.0001) }
