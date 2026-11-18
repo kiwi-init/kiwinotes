@@ -41,8 +41,9 @@ export const OVERLAY_TIMES = {
 } as const;
 
 /**
- * O texto do agente sem a marcação (spec #12938): o balão do overlay mostra texto corrido, sem `#` de título, `**`,
- * crases, `[texto](link)` nem `>` de citação. Um título vira uma frase; os itens de lista ficam com "•".
+ * O texto do agente sem a marcação (spec #12938): texto corrido, sem `#` de título, `**`, crases, `[texto](link)` nem
+ * `>` de citação. Um título vira uma frase; os itens de lista ficam com "•". Desde o spec #17679, o balão recebe o
+ * markdown (a página monta os elementos e tira os símbolos do fechado); isto só diz se sobra algo para mostrar.
  */
 export function plainBubbleText(markdown: string): string {
   const parts: string[] = [];
@@ -257,10 +258,14 @@ export class CatOverlay {
     }
   }
 
-  /** A resposta final: o que veio depois da última ferramenta; sem texto, o que ele fez. */
+  /**
+   * A resposta final: o que veio depois da última ferramenta; sem texto, o que ele fez. Vai o markdown (spec #17679): a
+   * página do overlay monta a tabela, os títulos e as listas no aberto, e o fechado sai sem os símbolos.
+   */
   private answerOf(full: string): string {
     const said = full && full.startsWith(this.said.slice(0, this.closedLen)) ? full : this.said;
-    const answer = plainBubbleText(said.slice(this.closedLen)) || plainBubbleText(said);
+    const tail = said.slice(this.closedLen).trim();
+    const answer = plainBubbleText(tail) ? tail : plainBubbleText(said) ? said.trim() : "";
     return answer || (this.usedTool ? "Feito." : "Pronto.");
   }
 

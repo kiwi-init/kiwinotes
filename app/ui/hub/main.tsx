@@ -3,6 +3,7 @@
 // saiu. O Sobre virou um assunto de Configurações (spec #11966): a seção `about` do contrato abre Ajustes › Sobre. Dos lados das abas, a seção na tela põe os botões dela (`TopBar`, por portal). Uma seção visitada fica
 // montada (só escondida), para a nota em edição e o autosave não se perderem ao trocar de seção.
 import "../kiwicat-v2/bubble.css";
+import "../kiwicat-v2/bubble-md.css";
 import "./hub.css";
 import { DoubtCard } from "./DoubtCard";
 import { KiwiCat, useAgentCat } from "./KiwiCat";

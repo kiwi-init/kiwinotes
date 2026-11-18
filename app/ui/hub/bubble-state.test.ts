@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AgentTurnEvent } from "../../src/shared/ui-contract";
-import { ANSWER_HOLD_MS, BubbleFeed, readingMs, splitChunks, TYPE_MS, WEB_LINE } from "./bubble-state";
+import { ANSWER_HOLD_MS, BubbleFeed, bubblePlain, readingMs, splitChunks, TYPE_MS, WEB_LINE } from "./bubble-state";
 
 const fits = (max: number) => (s: string) => [...s].length <= max;
 const ev = (e: Record<string, unknown>) => ({ id: "p1", ...e }) as AgentTurnEvent;
@@ -324,4 +324,121 @@ describe("a resposta de antes espera a nova entrar (T15377)", () => {
     f.heard("p2", "abre a nota", 200);
     expect(f.view(200)!.full).toBe("“abre a nota”");
   });
+});
+
+describe("o markdown no balão pequeno (spec #17679)", () => {
+  const RESPOSTA = [
+    "Resumo: o **prazo final do Projeto X fica para sexta-feira** e a Ana confirma.",
+    "",
+    "## Quem faz o quê",
+    "",
+    "| Nome | Prazo | Status |",
+    "|---|---|---|",
+    "| Ana | sexta | ok |",
+    "| Bruno | segunda | `revisar` |",
+  ].join("\n");
+  const SIMBOLOS = /[|*#`]/;
+
+  test("pelo done: nenhum trecho com |, **, # ou `", () => {
+    const f = new BubbleFeed(fits(40));
+    f.event(ev({ type: "started" }), 0);
+    f.event(ev({ type: "done", stopReason: "end_turn", text: RESPOSTA }), 0);
+    const { chunks } = play(f, 0);
+    expect(chunks.length).toBeGreaterThan(2);
+    for (const c of chunks) expect(c).not.toMatch(SIMBOLOS);
+    expect(chunks.join(" ")).toContain("Ana · sexta · ok");
+  });
+
+  test("chegando aos pedaços: nenhum trecho, nem o que ainda está chegando, com os símbolos", () => {
+    const f = new BubbleFeed(fits(40));
+    f.event(ev({ type: "started" }), 0);
+    const seen: string[] = [];
+    let now = 0;
+    for (let i = 0; i < RESPOSTA.length; i += 7) {
+      f.event(ev({ type: "text", text: RESPOSTA.slice(i, i + 7) }), now);
+      const v = f.view(now);
+      if (v) seen.push(v.full);
+      now += 50;
+    }
+    f.event(ev({ type: "done", stopReason: "end_turn", text: RESPOSTA }), now);
+    const { chunks } = play(f, now);
+    for (const c of [...seen, ...chunks]) expect(c).not.toMatch(SIMBOLOS);
+    expect(chunks.join(" ")).toContain("Bruno · segunda · revisar");
+  });
+});
+
+describe("o texto inteiro no balão pequeno, chegando aos pedaços (spec #17679, T17984)", () => {
+  const TEXTOS = [
+    "Veja [o plano](https://example.com/plano) e `config.json` antes de sexta.",
+    "Texto antes\n| a | b |\n|---|---|\n| 1 | 2 |\nDepois da tabela vem um parágrafo bem comprido para cortar em vários trechos.",
+    [
+      "## Lista da Ana",
+      "",
+      "1. comprar **pão integral** na padaria",
+      "2. levar o `cupom` e o [mapa](https://example.com/mapa)",
+      "",
+      "- [x] café separado",
+      "- [ ] leite, se tiver",
+      "",
+      "| Item | Loja | Preço |",
+      "|:--|:-:|--:|",
+      "| Pão | Padaria | 8 |",
+      "| Café | | 22 |",
+      "",
+      "Depois, o *resto* fica para ~~segunda~~ terça, combinado com o Projeto X.",
+    ].join("\n"),
+    [
+      "# Como rodar",
+      "",
+      "> Antes, confira a pasta do Projeto X",
+      "> e o arquivo de exemplo.",
+      "",
+      "```sh",
+      "bun run exemplo --pasta notas",
+      "",
+      "echo pronto",
+      "```",
+      "",
+      "Mais em https://example.com/guia ou com a Ana, numa linha bem comprida que passa do balão.",
+    ].join("\n"),
+  ];
+  const words = (s: string) => s.split(/\s+/).filter(Boolean);
+
+  for (const [n, texto] of TEXTOS.entries()) {
+    test(`texto ${n + 1}: as palavras de todos os trechos são as do texto corrido, e nenhum símbolo`, () => {
+      const want = words(bubblePlain(texto, true));
+      for (const size of [1, 2, 3, 5, 7, 11, 13, 17, 1000]) {
+        for (const max of [25, 40, 60]) {
+          const f = new BubbleFeed(fits(max), true);
+          f.event(ev({ type: "started" }), 0);
+          // O texto de cada balão (pela chave): o último que ele mostrou é o trecho completo. E nenhum, nem no meio, com símbolo.
+          const byKey = new Map<number, string>();
+          const views: string[] = [];
+          const look = (t: number) => {
+            const v = f.view(t);
+            if (!v) return;
+            byKey.set(v.key, v.full);
+            views.push(v.full);
+          };
+          let now = 0;
+          for (let i = 0; i < texto.length; i += size) {
+            f.event(ev({ type: "text", text: texto.slice(i, i + size) }), now);
+            look(now);
+            now += 10;
+          }
+          f.event(ev({ type: "done", stopReason: "end_turn", text: texto }), now);
+          for (let t = now; t < now + 600_000; ) {
+            look(t);
+            const next = f.nextWake(t);
+            if (!Number.isFinite(next)) break;
+            t = next;
+          }
+          const all = [...byKey.values()];
+          const got = words(all.join(" "));
+          expect({ size, max, got: got.join(" ") }).toEqual({ size, max, got: want.join(" ") });
+          for (const c of views) expect(c).not.toMatch(/[|*#`]/);
+        }
+      }
+    });
+  }
 });

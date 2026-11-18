@@ -208,6 +208,21 @@ public enum CatOverlayBubble {
         return CGRect(x: v[0], y: v[1], width: v[2], height: v[3])
     }
 
+    /**
+     O link que a pessoa clicou no balão (spec #17679): a página manda o endereço do `.kn-md-link`, que não tem `href` e
+     não abre sozinho. Só `http`, `https` e `mailto` abrem, com host (o `mailto`, com o destinatário); qualquer outro
+     esquema, um texto vazio ou longo demais é nenhum link.
+     */
+    public static func link(_ body: Any?) -> URL? {
+        guard let s = body as? String, !s.isEmpty, s.count <= 2048, let url = URL(string: s),
+              let scheme = url.scheme?.lowercased() else { return nil }
+        switch scheme {
+        case "http", "https": return (url.host ?? "").isEmpty ? nil : url
+        case "mailto": return url.absoluteString.count > "mailto:".count ? url : nil
+        default: return nil
+        }
+    }
+
     /// `ask`: com a pergunta "Precisa de mais alguma coisa?" embaixo da resposta (spec #13380).
     public static func script(text: String?, error: Bool, ask: Bool = false) -> String {
         guard let text, !text.isEmpty else { return "null" }

@@ -11,10 +11,12 @@
 
 import "../src/styles/tokens.css";
 import "../kiwicat-v2/bubble.css";
+import "../kiwicat-v2/bubble-md.css";
 import { DEFAULT_CAT_COLOR, catPalette, isCatColorChoice } from "../../src/shared/kiwicat-colors";
 import { createKiwiCat } from "../kiwicat/cat";
 import { overlayPlacement } from "./placement";
 import { tailSvg } from "../kiwicat-v2/bubbleTail";
+import { plainMarkdown, renderMarkdown } from "../src/bubbleMarkdown";
 import { EXIT_MS, exitStyle, HIDDEN_STYLE, shownStyle, type CatTransitionStyle } from "./transition";
 import type { FogState } from "../kiwicat/visual";
 
@@ -52,7 +54,7 @@ const bubbleText = document.getElementById("bubble-text")!;
 const moreButton = document.getElementById("bubble-more") as HTMLButtonElement;
 const bubbleSr = document.getElementById("bubble-sr")!;
 const catClose = document.getElementById("cat-close") as HTMLButtonElement;
-type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true };
+type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true; link?: string };
 const post = (m: KiwiCatMessage) =>
   (window as { webkit?: { messageHandlers?: { kiwiCat?: { postMessage(m: unknown): void } } } }).webkit?.messageHandlers?.kiwiCat?.postMessage(m);
 const rectOf = (el: Element) => {
@@ -80,6 +82,13 @@ function touched() {
 }
 bubbleEl.addEventListener("click", touched);
 bubbleText.addEventListener("scroll", touched, { passive: true });
+/** Um link do markdown (spec #17679) não tem `href` e não abre sozinho: só o clique da pessoa manda o endereço ao helper. */
+bubbleText.addEventListener("click", (e) => {
+  const a = (e.target as Element | null)?.closest?.(".kn-md-link") as HTMLElement | null;
+  if (!a?.dataset.href) return;
+  e.preventDefault();
+  post({ link: a.dataset.href });
+});
 /** O × do balão e o da cabeça: o gato sai na hora. */
 for (const x of [document.getElementById("bubble-close")!, catClose]) {
   x.addEventListener("click", (e) => {
@@ -93,11 +102,19 @@ bubbleEl.addEventListener("transitionend", report);
 
 const fits = () => bubbleText.scrollHeight <= bubbleText.clientHeight + 1;
 
+/** O balão aberto (spec #17679): o markdown montado em elementos, nunca HTML. */
+function showFull(text: string) {
+  bubbleText.replaceChildren(renderMarkdown(text));
+  bubbleText.classList.add("kn-md");
+}
+
 /**
  * O resumo do balão fechado (revisão do #526): o começo que cabe nas três linhas, cortado numa palavra. Com "…" no fim,
- * menos quando o corte já termina a frase ("pessoas." fica sem as reticências). Devolve se cortou.
+ * menos quando o corte já termina a frase ("pessoas." fica sem as reticências). Devolve se cortou. O texto chega sem os
+ * símbolos do markdown (`plainMarkdown`, spec #17679).
  */
 function fitSummary(full: string): boolean {
+  bubbleText.classList.remove("kn-md");
   bubbleText.textContent = full;
   if (fits()) return false;
   const words = full.split(" ");
@@ -132,8 +149,8 @@ function setOpen(open: boolean) {
   moreButton.textContent = open ? "Ver menos" : "Ver mais";
   moreButton.setAttribute("aria-expanded", String(open));
   if (stats.bubble) {
-    if (open) bubbleText.textContent = stats.bubble.text;
-    else fitSummary(stats.bubble.text);
+    if (open) showFull(stats.bubble.text);
+    else fitSummary(plainMarkdown(stats.bubble.text));
   }
   bubbleText.scrollTop = 0;
   fades();
@@ -142,9 +159,9 @@ function setOpen(open: boolean) {
 
 /** O texto passa das três linhas: só aí o "Ver mais" aparece. */
 function measureMore() {
-  stats.bubbleMore = stats.bubble !== null && fitSummary(stats.bubble.text);
+  stats.bubbleMore = stats.bubble !== null && fitSummary(plainMarkdown(stats.bubble.text));
   bubbleEl.dataset.more = String(stats.bubbleMore);
-  if (stats.bubbleOpen && stats.bubble) bubbleText.textContent = stats.bubble.text;
+  if (stats.bubbleOpen && stats.bubble) showFull(stats.bubble.text);
 }
 
 moreButton.addEventListener("click", (e) => {
@@ -156,11 +173,11 @@ moreButton.addEventListener("click", (e) => {
 function setAsk(on: boolean) {
   stats.bubbleAsk = on;
   bubbleEl.dataset.ask = String(on);
-  bubbleSr.textContent = stats.bubble ? `${stats.bubble.text}${on ? ` Precisa de mais alguma coisa?` : ""}` : "";
+  bubbleSr.textContent = stats.bubble ? `${plainMarkdown(stats.bubble.text)}${on ? ` Precisa de mais alguma coisa?` : ""}` : "";
 }
 
 /**
- * O balão (spec #12938): só texto (`textContent`), nunca HTML. Uma resposta nova chega fechada; a mesma resposta com ou
+ * O balão (spec #12938): só texto (`textContent`) ou o markdown montado em elementos (spec #17679), nunca HTML. Uma resposta nova chega fechada; a mesma resposta com ou
  * sem a pergunta (spec #13380) só muda a pergunta, e o balão fica como a pessoa deixou.
  */
 function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown } | null) {

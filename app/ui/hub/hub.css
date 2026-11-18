@@ -347,8 +347,7 @@
 }
 .kn-bubble[data-error] .kn-bubble-text { white-space: nowrap; }
 .kn-bubble[data-error] .kn-bubble-ghost,
-.kn-bubble[data-error] .kn-bubble-typed,
-.kn-bubble[data-error] .kn-bubble-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kn-bubble[data-error] .kn-bubble-typed { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* A troca entre os balões (spec #11652, `BubblePresence.tsx`). O lugar do balão fica no canto, e a casca dentro dele
    deixa de ser absoluta. O balão que sai encolhe e esmaece na direção da ponta (180 ms); o novo cresce dela, com mola
@@ -377,10 +376,6 @@
 .kn-bubble-text { display: grid; overflow-wrap: anywhere; white-space: pre-wrap; }
 .kn-bubble-ghost, .kn-bubble-typed { grid-area: 1 / 1; }
 .kn-bubble-ghost { visibility: hidden; }
-.kn-bubble-line, .kn-bubble-li { display: block; }
-.kn-bubble-mark { font-weight: 600; }
-.kn-bubble code, .kn-bubble-big code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
-.kn-bubble-pre { margin: 2px 0; font: 0.92em / 1.35 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .kn-bubble-more {
   display: inline-block;
   margin-top: 4px;
@@ -404,7 +399,7 @@
   z-index: 8;
   box-sizing: border-box;
   /* O espaço do lado em que ele abre. */
-  width: min(420px, var(--kn-bub-room));
+  width: min(420px, var(--kn-bub-room, 420px)); /* sem o lado medido, 420: uma tabela larga nunca o alarga (T17986) */
   max-height: min(60%, 420px);
   overflow: auto;
   /* A casca é a do pacote (bubble.css); o grande lê com mais folga, sem o rabo. */

@@ -1,0 +1,43 @@
+/* O markdown no balão do gato (spec #17679, T17986): os elementos do montador (`ui/src/bubbleMarkdown.ts`), com as
+   classes `kn-md-*`, dentro de um `.kn-md`. É o mesmo arquivo no Hub (`.kn-bubble-big-text`) e no overlay; cada um
+   guarda no próprio CSS só o tamanho e o lugar do balão. O texto corre normal (o `pre-wrap` fica no código), e a
+   tabela larga rola de lado na própria caixa (`.kn-md-scroll`), sem alargar o balão nem espremer as colunas. */
+.kn-md { white-space: normal; overflow-wrap: anywhere; }
+.kn-md > :first-child { margin-top: 0; }
+.kn-md > :last-child { margin-bottom: 0; }
+.kn-md :is(p, ul, ol, blockquote, pre, .kn-md-scroll) { margin: 0 0 8px; }
+.kn-md :is(h1, h2, h3, h4, h5, h6) { margin: 10px 0 4px; font-weight: 650; line-height: 1.3; }
+.kn-md h1 { font-size: 1.25em; }
+.kn-md h2 { font-size: 1.15em; }
+.kn-md :is(h3, h4, h5, h6) { font-size: 1em; }
+.kn-md :is(ul, ol) { padding-left: 20px; }
+.kn-md li { margin: 2px 0; }
+.kn-md li:has(> .kn-md-task) { list-style: none; margin-left: -18px; }
+.kn-md .kn-md-task { margin-right: 4px; }
+.kn-md li:has(> .kn-md-task.is-checked) { opacity: 0.7; text-decoration: line-through; }
+.kn-md blockquote { padding-left: 10px; border-left: 2px solid color-mix(in srgb, currentColor 35%, transparent); opacity: 0.85; }
+.kn-md hr { margin: 10px 0; border: 0; border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
+.kn-md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+.kn-md pre {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font: 0.92em / 1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+  overflow-x: auto;
+}
+.kn-md pre code { font-size: 1em; }
+.kn-md .kn-md-link { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.kn-md .kn-md-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.kn-md .kn-md-table { border-collapse: collapse; font-size: 0.92em; line-height: 1.35; overflow-wrap: normal; }
+.kn-md .kn-md-table :is(th, td) {
+  padding: 4px 10px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.kn-md .kn-md-table th { font-weight: 650; border-bottom-color: color-mix(in srgb, currentColor 35%, transparent); }
+.kn-md .kn-md-table tr:last-child td { border-bottom: 0; }
+.kn-md .kn-md-table .kn-md-align-center { text-align: center; }
+.kn-md .kn-md-table .kn-md-align-right { text-align: right; }

@@ -222,6 +222,11 @@ final class CatOverlay: NSObject, WKNavigationDelegate {
 
     fileprivate func pageTouched() { if gate.shows { onTouch?() } }
     fileprivate func pageClosed() { if gate.shows { onClose?() } }
+    fileprivate func pageLink(_ body: Any) {
+        guard gate.shows, let url = CatOverlayBubble.link(body) else { return }
+        NSWorkspace.shared.open(url)
+        onTouch?()
+    }
 
     private func resetBubble() {
         bubbleRect = nil
@@ -418,9 +423,11 @@ final class CatPageMessages: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let body = message.body as? [String: Any]
-        // Uma mensagem por vez: um toque, o ×, ou as medidas (o balão e o × da cabeça).
+        // Uma mensagem por vez: um toque, o ×, um link, ou as medidas (o balão e o × da cabeça).
         if body?["touch"] as? Bool == true { return MainActor.assumeIsolated { overlay?.pageTouched() } }
         if body?["closed"] as? Bool == true { return MainActor.assumeIsolated { overlay?.pageClosed() } }
+        // Um link do balão que a pessoa clicou (spec #17679): abre no app padrão, só http(s) e mailto.
+        if let link = body?["link"] { return MainActor.assumeIsolated { overlay?.pageLink(link) } }
         let rect = CatOverlayBubble.rect(body?["bubble"])
         let open = body?["open"] as? Bool ?? false
         let close = CatOverlayBubble.rect(body?["close"])
