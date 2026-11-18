@@ -278,12 +278,19 @@ try {
     }
     await p.waitForSelector(theme === "light" ? ".kn-onb-card dd:has-text('Clientes'):has-text('Kiwi')" : ".kn-onb-card dd:has-text('Kiwi')", { timeout: 15000 });
     if (theme === "light") assert.equal(await p.locator(".kn-onb-card dd").first().textContent(), "Kiwi Elétrico");
+    // Spec #17709 (T18615): o cartão do "Pronto!" sem a faixa de cor em cima: a borda de cima é a fina dos outros lados.
+    const borders = await p.locator(".kn-onb-card").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { top: cs.borderTopWidth, side: cs.borderLeftWidth, topColor: cs.borderTopColor, sideColor: cs.borderLeftColor };
+    });
+    assert.equal(borders.top, borders.side, `a borda de cima do cartão (${borders.top}) tem que ser a dos lados (${borders.side})`);
+    assert.equal(borders.topColor, borders.sideColor, "a borda de cima do cartão tem a cor dos lados, sem a cor do gato");
     await shot(p, `10-pronto-${theme}.png`);
     await p.locator(".kn-onb-actions button:has-text('Pronto')").click();
     await p.waitForSelector(".kn-onb", { state: "detached", timeout: 15000 });
     assert.equal((await onboarding()).state, "done");
     if (theme === "light") {
-      report.checks.push("the final card shows the colour, the tone, the projects and the shortcut; Pronto ends it");
+      report.checks.push("the final card shows the colour, the tone, the projects and the shortcut, with no colour stripe on top (spec #17709); Pronto ends it");
       // 2. "Refazer o onboarding" em Ajustes abre de novo, do passo 1; fechar no meio termina com o que foi escolhido.
       await p.locator("button:has-text('Refazer o onboarding')").click();
       await p.waitForSelector(".kn-onb", { timeout: 15000 });

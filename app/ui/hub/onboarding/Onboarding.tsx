@@ -571,7 +571,7 @@ function DoneStep({ status, settings }: { status: AgentStatus; settings: AppSett
     ["O atalho", shortcutSummary(status.controlShortcut, holdName(settings.shortcuts.agent))],
   ];
   return (
-    <dl className="kn-onb-card" style={{ "--kn-onb-cor": color.hex } as React.CSSProperties}>
+    <dl className="kn-onb-card">
       {rows.map(([k, v]) => (
         <div key={k} className="kn-onb-card-row">
           <dt>{k}</dt>
