@@ -360,13 +360,17 @@ function mountNode(doc: MdDocument, n: MdChild): unknown {
 }
 
 /** Monta a árvore no DOM, nó por nó. Nunca `innerHTML`. */
-export function mountMarkdown(nodes: MdNode[], doc: MdDocument = document as unknown as MdDocument): MdElement {
+export function mountMarkdown(nodes: MdNode[]): DocumentFragment;
+export function mountMarkdown(nodes: MdNode[], doc: MdDocument): MdElement;
+export function mountMarkdown(nodes: MdNode[], doc: MdDocument = document as unknown as MdDocument): MdElement | DocumentFragment {
   const frag = doc.createDocumentFragment();
   for (const n of nodes) frag.append(mountNode(doc, n));
   return frag;
 }
 
 /** O atalho: o texto do agente já montado (`mountMarkdown(parseMarkdown(text))`). */
-export function renderMarkdown(text: string, doc?: MdDocument): MdElement {
-  return mountMarkdown(parseMarkdown(text), doc);
+export function renderMarkdown(text: string): DocumentFragment;
+export function renderMarkdown(text: string, doc: MdDocument): MdElement;
+export function renderMarkdown(text: string, doc?: MdDocument): MdElement | DocumentFragment {
+  return doc ? mountMarkdown(parseMarkdown(text), doc) : mountMarkdown(parseMarkdown(text));
 }
