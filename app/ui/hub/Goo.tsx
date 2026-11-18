@@ -1,18 +1,21 @@
-// A camada da gota na barra do Hub (spec #17725, T18646): atrás das abas e dos botões das seções, uma forma "gooey"
-// (desfoque + limiar no alfa, um filtro SVG local) feita da pílula de abas e de uma gota de cada lado. Quando a seção
-// põe os botões dela na barra, a gota daquele lado brota da pílula, se solta e vira os botões; quando tira, a gota
-// volta pingando para a pílula. Na cor e no vidro da barra (`--float`, a borda em `--border`), nunca azul.
+// A camada da gota na barra do Hub (spec #17725): atrás das abas e dos botões das seções, uma gota de cada lado.
+// Quando a seção põe os botões dela na barra, a gota daquele lado brota da pílula, se solta e vira os botões; quando
+// tira, a gota faz o caminho de volta. Na cor e na borda da pílula (`--float`, o anel e o realce do `--shadow-float`).
 //
-// Este arquivo mede e manda as fases (`goo.ts`); o movimento da ida e da volta (os @keyframes) mora no `goo.css`
-// (T18647). Com "reduzir movimento", não há gota: os botões só aparecem e somem com um fade.
+// Desde a Gota 2 (T18948) a forma é desenhada, sem filtro: a cada quadro, um caminho SVG de `goo-shape.ts`. O relógio
+// é a animação CSS de um `.kn-goo-drop` invisível por lado (`kn-goo-in-*`/`kn-goo-out-*`, no `goo.css`): o quadro lê o
+// progresso dela, e o `animationend` anda a fase (`goo.ts`). Parar a animação (`pause`, `currentTime`) para a gota no
+// quadro. Com "reduzir movimento", não há gota: os botões só aparecem e somem com um fade.
 
 import "./goo.css";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
-import { GOO_FALLBACK_MS, type GooPhase, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
+import { GOO_FALLBACK_MS, type GooPhase, type GooRect, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
+import { type GooParts, gooDropParts } from "./goo-shape.ts";
 
 const SIDES: GooSide[] = ["start", "end"];
+const PARTS: (keyof GooParts)[] = ["edge", "speck", "head"];
 /** O fade dos botões com "reduzir movimento" (o `--fast`, com folga). */
 const REDUCED_MS = 220;
 
@@ -38,6 +41,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
   const layer = useRef<HTMLDivElement>(null);
   const phases = useRef<Record<GooSide, GooPhase>>({ start: "hidden", end: "hidden" });
   const timers = useRef<Partial<Record<GooSide, ReturnType<typeof setTimeout>>>>({});
+  const id = useId().replace(/:/g, "");
 
   useLayoutEffect(() => {
     const el = layer.current;
@@ -48,15 +52,48 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
     const write = (vars: Record<string, string>) => {
       for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v);
     };
+    const rects: { tabs: GooRect | null } & Partial<Record<GooSide, GooRect>> = { tabs: null };
     const measure = () => {
       const t = gooRect(tabs, bar);
-      if (t) write(gooVars("tabs", t));
+      if (t) (rects.tabs = t, write(gooVars("tabs", t)));
       for (const side of SIDES) {
         const slot = slots[side];
         // Sem botões, o lado guarda o último retângulo: é dali que a gota volta.
         const r = slot && contentRect(slot, bar);
-        if (r) write(gooVars(side, r));
+        if (r) (rects[side] = r, write(gooVars(side, r)));
       }
+    };
+
+    // O desenho: um quadro por `requestAnimationFrame` enquanto algum lado anda (`entering`/`leaving`).
+    const paths = Object.fromEntries(
+      SIDES.map((side) => [side, {
+        parts: Object.fromEntries(PARTS.map((p) => [p, el.querySelector<SVGPathElement>(`.kn-goo-path[data-side="${side}"][data-part="${p}"]`)])),
+        whole: Array.from(el.querySelectorAll<SVGPathElement>(`.kn-goo-whole[data-side="${side}"]`)),
+      }]),
+    ) as Record<GooSide, { parts: Record<keyof GooParts, SVGPathElement | null>; whole: SVGPathElement[] }>;
+    const radius = () => parseFloat(getComputedStyle(el).getPropertyValue("--r-ctl")) || 10;
+    const draw = (side: GooSide) => {
+      const ph = phases.current[side];
+      const target = rects[side];
+      let parts: GooParts = { head: "", edge: "", speck: "" };
+      if ((ph === "entering" || ph === "leaving") && rects.tabs && target) {
+        const clock = el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`);
+        const timing = clock?.getAnimations()[0]?.effect?.getComputedTiming();
+        const p = Number(timing?.progress ?? 0);
+        parts = gooDropParts(ph === "entering" ? p : 1 - p, { side, tabs: rects.tabs, target, radius: radius() });
+      }
+      for (const k of PARTS) paths[side].parts[k]?.setAttribute("d", parts[k]);
+      const all = parts.edge + parts.speck + parts.head;
+      for (const w of paths[side].whole) w.setAttribute("d", all);
+    };
+    let frame = 0;
+    const tick = () => {
+      frame = 0;
+      for (const side of SIDES) draw(side);
+      if (SIDES.some((s) => phases.current[s] === "entering" || phases.current[s] === "leaving")) frame = requestAnimationFrame(tick);
+    };
+    const loop = () => {
+      if (!frame) frame = requestAnimationFrame(tick);
     };
     const show = (side: GooSide, phase: GooPhase) => {
       phases.current[side] = phase;
@@ -65,6 +102,8 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       if (drop) drop.dataset.phase = phase;
       const slot = slots[side];
       if (slot) slot.dataset.goo = phase;
+      draw(side);
+      loop();
       clearTimeout(timers.current[side]);
       if (phase === "entering" || phase === "leaving") {
         timers.current[side] = setTimeout(() => show(side, gooOnAnimationEnd(phases.current[side])), reducedMotion() ? REDUCED_MS : GOO_FALLBACK_MS);
@@ -110,6 +149,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
     el.addEventListener("animationend", onEnd);
 
     return () => {
+      cancelAnimationFrame(frame);
       ro.disconnect();
       for (const mo of mos) mo?.disconnect();
       el.removeEventListener("animationend", onEnd);
@@ -123,27 +163,32 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
 
   return (
     <div className="kn-goo" ref={layer} aria-hidden="true" data-start="hidden" data-end="hidden">
-      <svg className="kn-goo-defs" width="0" height="0" focusable="false">
-        <filter id="kn-goo" x="-20%" y="-60%" width="140%" height="220%" colorInterpolationFilters="sRGB">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
-          {/* O limiar no alfa junta o que o desfoque encostou: a pílula e a gota viram uma forma só. */}
-          <feColorMatrix in="blur" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="goo" />
-          {/* A borda de 1 px da barra (o anel do --shadow-float) em volta da forma inteira. */}
-          <feMorphology in="goo" operator="dilate" radius="1" result="grown" />
-          <feFlood className="kn-goo-edge" result="edgeColor" />
-          <feComposite in="edgeColor" in2="grown" operator="in" result="edge" />
-          <feMerge>
-            <feMergeNode in="edge" />
-            <feMergeNode in="goo" />
-          </feMerge>
-        </filter>
-      </svg>
-      <div className="kn-goo-shapes">
-        <span className="kn-goo-base" />
+      <svg className="kn-goo-draw" focusable="false">
+        <defs>
+          {SIDES.map((side) => (
+            <clipPath key={side} id={`${id}-clip-${side}`}>
+              <path className="kn-goo-whole" data-side={side} />
+            </clipPath>
+          ))}
+        </defs>
         {SIDES.map((side) => (
-          <span key={side} className="kn-goo-drop" data-side={side} data-phase="hidden" />
+          <g key={side} className="kn-goo-side" data-side={side}>
+            {PARTS.map((part) => (
+              <path key={part} className="kn-goo-path" data-side={side} data-part={part} />
+            ))}
+            {/* O realce de 1 px em cima, o `inset 0 1px 0 var(--line)` da pílula no escuro: a forma pintada no tom do
+                realce e, 1 px abaixo, a forma de novo na cor dela, os dois cortados pela própria forma. */}
+            <g className="kn-goo-highlight" clipPath={`url(#${id}-clip-${side})`}>
+              <path className="kn-goo-whole kn-goo-hl-band" data-side={side} />
+              <path className="kn-goo-whole kn-goo-hl-cover" data-side={side} transform="translate(0 1)" />
+            </g>
+          </g>
         ))}
-      </div>
+      </svg>
+      {/* Os relógios da ida e da volta, um por lado: invisíveis, só a animação CSS. */}
+      {SIDES.map((side) => (
+        <span key={side} className="kn-goo-drop" data-side={side} data-phase="hidden" />
+      ))}
     </div>
   );
 }

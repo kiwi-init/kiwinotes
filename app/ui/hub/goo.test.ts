@@ -78,12 +78,19 @@ describe("o que o ResizeObserver olha", () => {
 describe("o CSS", () => {
   const css = readFileSync(new URL("./goo.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 
-  test("a gota tem a cor da barra, nunca uma cor fixa", () => {
-    const body = css.match(/\.kn-goo-base,\s*\.kn-goo-drop \{([^}]*)\}/)?.[1] ?? "";
-    expect(body).toContain("background: var(--float)");
-    // A borda: a mesma da pílula, que no escuro soma o anel dela ao do filtro (#18827).
-    expect(css).toMatch(/\.kn-goo-edge \{\s*flood-color: var\(--border-strong\);/);
+  test("a gota tem a cor e a borda da pílula, nunca uma cor fixa", () => {
+    const body = css.match(/\.kn-goo-path \{([^}]*)\}/)?.[1] ?? "";
+    expect(body).toContain("fill: var(--float)");
+    // A borda: o anel do `--shadow-float` (o `--line-2` dos temas), por fora; no escuro, sem ela a gota era uma mancha
+    // escura correndo pela barra (o "rastro preto", T18949).
+    expect(body).toContain("stroke: var(--line-2, var(--border))");
+    expect(body).toContain("paint-order: stroke fill");
+    expect(css).toMatch(/\.kn-goo-hl-band \{\s*fill: var\(--float-highlight, transparent\);/);
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i);
+  });
+
+  test("sem filtro de desfoque: a forma é desenhada", () => {
+    expect(css).not.toMatch(/filter:/);
   });
 
   test("cada fase que anda tem a sua animação, e reduzir movimento tira a gota", () => {
