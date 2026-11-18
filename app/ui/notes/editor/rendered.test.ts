@@ -243,6 +243,8 @@ describe("onde cai o clique", () => {
   test("no primeiro caractere, logo depois da marcação que abre; com tudo, o fim", () => {
     expect(sourceOffset("**a**", "a", 0)).toBe(2);
     expect(sourceOffset("- item", "item", 0)).toBe(2);
+    // O clique antes da 1ª letra de um negrito no item (spec #17690): depois do `- **`, não no começo da linha.
+    expect(sourceOffset("- **maçã** verde", "maçã verde", 0)).toBe(4);
     expect(sourceOffset("abc", "abc", 3)).toBe(3);
   });
 });

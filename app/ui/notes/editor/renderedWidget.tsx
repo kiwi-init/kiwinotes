@@ -581,7 +581,10 @@ class RenderedWidget extends WidgetType {
       before.setStart(dom, 0);
       before.setEnd(caret.startContainer, caret.startOffset);
       const shown = before.toString();
-      return sourceOffset(this.source, shown, shown.length);
+      // O texto inteiro do bloco, não só o de antes: o `**` logo antes da letra clicada se acha pela letra seguinte.
+      const all = document.createRange();
+      all.selectNodeContents(dom);
+      return sourceOffset(this.source, all.toString(), shown.length);
     } catch {
       // Um ponto que não dá para medir (dentro de um desenho): o começo do bloco.
       return 0;
