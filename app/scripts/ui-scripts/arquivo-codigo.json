@@ -78,8 +78,8 @@
     },
     {
       "expectText": ".kn-file-text .cm-line:last-child",
-      "text": "  return 0",
-      "name": "a linha começa com o recuo"
+      "text": "    return 0",
+      "name": "a linha começa com o recuo do arquivo: 4 espaços, como o resto do .py (T19403)"
     },
     {
       "waitFor": ".kn-file-text[data-save='saved']",

@@ -9,10 +9,10 @@
 // texto inteiro a cada tecla: num .txt de 1 MB, de 47 a 53 ms por tecla no WebKit, e a escrita travava. O CodeMirror só
 // desenha as linhas na tela, e a sessão lê o texto só quando grava. Como no .md, a gravação é silenciosa (sem
 // "Gravando…/Gravado"), e o texto quebra na largura da nota. O ⌘F busca e troca (T19312); o código tem os números de
-// linha, e o Tab recua.
+// linha, e o Tab recua como o arquivo já recua (T19403).
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { syntaxHighlighting } from "@codemirror/language";
+import { indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +24,7 @@ import { editorMenu } from "../editor/context-menu.ts";
 import { searchOnly } from "../editor/search-fold.ts";
 
 import { codeHighlight, codeLanguageFor, isCodeFile } from "./code-languages.ts";
+import { detectIndent } from "./indent.ts";
 import { detectEol, TextSession, type TextSaveState, toEditor } from "./textSession.ts";
 import type { FileViewerProps } from "./viewers.ts";
 
@@ -101,6 +102,8 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
     const parent = host.current;
     if (!parent) return;
     const lang = new Compartment();
+    // O Tab recua como o arquivo (T19403): tab, ou o passo de espaços dele; 4 no .py e 2 no resto, sem nada recuado.
+    const indent = detectIndent(initial.text, path);
     const v = new EditorView({
       parent,
       state: EditorState.create({
@@ -109,7 +112,8 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.lineWrapping,
-          EditorState.tabSize.of(2),
+          EditorState.tabSize.of(indent.tabSize),
+          indentUnit.of(indent.unit),
           EditorState.readOnly.of(readOnly),
           EditorView.editable.of(!readOnly),
           EditorView.contentAttributes.of({
