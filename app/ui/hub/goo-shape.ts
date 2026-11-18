@@ -105,22 +105,25 @@ export function gooDropParts(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS)
     return { ua, tu: b / len, tv: (ua + rp) / len };
   };
 
-  // A gota solta: a frente com cantos de raio `fr`, atrás cantos `br`, que fecham em ponta (`point` 1) ou redondos (0).
-  const blob = (cu: number, cv: number, af: number, ab: number, b: number, fr: [number, number], br: [number, number], point: number) => {
-    const frx = Math.max(0.5, Math.min(fr[0], af + ab));
-    const fry = Math.max(0.5, Math.min(fr[1], b));
-    const brx = Math.max(0.5, Math.min(br[0], af + ab - frx));
-    const bry = Math.max(0.5, Math.min(br[1], b));
+  // A gota solta: cada ponta (a frente, `+u`, e a de trás) tem os cantos de raio `rx`/`ry` e fecha redonda (`point` 0)
+  // ou numa ponta de lágrima (1): afilada mas convexa, a curva chega nela ainda inclinada, sem bico côncavo.
+  type End = { rx: number; ry: number; point: number };
+  const blob = (cu: number, cv: number, af: number, ab: number, b: number, fe: End, be: End) => {
+    const frx = Math.max(0.5, Math.min(fe.rx, af + ab));
+    const fry = Math.max(0.5, Math.min(fe.ry, b));
+    const brx = Math.max(0.5, Math.min(be.rx, af + ab - frx));
+    const bry = Math.max(0.5, Math.min(be.ry, b));
     const uf = cu + af;
     const ub = cu - ab;
-    // A ponta da lágrima é afilada mas convexa: a curva chega nela ainda inclinada, sem bico côncavo.
-    const c2u = lerp(ub, ub + brx * 0.12, point);
-    const c2v = lerp(b - bry * (1 - K), b - bry * 0.62, point);
+    const f2u = lerp(uf, uf - frx * 0.12, fe.point);
+    const f2v = lerp(b - fry * (1 - K), b - fry * 0.62, fe.point);
+    const b2u = lerp(ub, ub + brx * 0.12, be.point);
+    const b2v = lerp(b - bry * (1 - K), b - bry * 0.62, be.point);
     return (
-      `M${P(uf - frx, cv - b)}A${n2(frx)} ${n2(fry)} 0 0 ${sweep} ${P(uf, cv - b + fry)}` +
-      `L${P(uf, cv + b - fry)}A${n2(frx)} ${n2(fry)} 0 0 ${sweep} ${P(uf - frx, cv + b)}` +
-      `L${P(ub + brx, cv + b)}C${P(ub + brx * (1 - K), cv + b)} ${P(c2u, cv + c2v)} ${P(ub, cv + b - bry)}` +
-      `L${P(ub, cv - b + bry)}C${P(c2u, cv - c2v)} ${P(ub + brx * (1 - K), cv - b)} ${P(ub + brx, cv - b)}Z`
+      `M${P(uf - frx, cv - b)}C${P(uf - frx * (1 - K), cv - b)} ${P(f2u, cv - f2v)} ${P(uf, cv - b + fry)}` +
+      `L${P(uf, cv + b - fry)}C${P(f2u, cv + f2v)} ${P(uf - frx * (1 - K), cv + b)} ${P(uf - frx, cv + b)}` +
+      `L${P(ub + brx, cv + b)}C${P(ub + brx * (1 - K), cv + b)} ${P(b2u, cv + b2v)} ${P(ub, cv + b - bry)}` +
+      `L${P(ub, cv - b + bry)}C${P(b2u, cv - b2v)} ${P(ub + brx * (1 - K), cv - b)} ${P(ub + brx, cv - b)}Z`
     );
   };
 
@@ -164,38 +167,52 @@ export function gooDropParts(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS)
   const bp = reach - rx1 * Math.sqrt(1 - (NECK / ry1) ** 2);
   const tu = dir > 0 ? g.target.x + g.target.w / 2 - x0 : x0 - (g.target.x + g.target.w / 2);
   const tv = g.target.y + g.target.h / 2 - cy;
-  // O tamanho na chegada: comprida no sentido do movimento, um pouco mais baixa que os botões.
-  const aT = Math.max(g.target.w * 0.56, HB * 1.4);
-  const bT = Math.min(HB, g.target.h * 0.43);
+  // A gota solta é sempre lágrima (#19093): a ponta que vai na frente é um semicírculo da altura dela, e só a cauda
+  // afina para trás. Na ida a frente redonda vai para os botões; na volta, para a pílula (a cauda fica nos botões).
+  // Estica no máximo ~1.6:1 e não fica mais baixa que ~80% dos botões.
+  const bT = Math.min(HB, g.target.h * 0.45);
+  const d = 0.25 * bT; // o quanto a cauda passa da metade, na chegada (comprimento total 2.5 bT)
 
-  let head: { cu: number; cv: number; af: number; ab: number; b: number; fr: [number, number]; br: [number, number]; point: number };
+  let head: { cu: number; cv: number; af: number; ab: number; b: number; fe: End; be: End };
   if (t < beats.arrive) {
-    // Corre: da lágrima que soltou até a chegada. Estica mais no meio do caminho, onde vai mais rápido.
+    // Corre: da lágrima que soltou até a chegada. A cauda estica mais no meio do caminho, onde vai mais rápido.
     const r = span(t, beats.pinch, beats.arrive);
     const m = smooth(r);
     const speed = Math.sin(Math.PI * r);
-    const af = lerp(rx1, aT * 0.9, m) * (1 + 0.12 * speed);
-    const ab = lerp(reach - bp - 1, aT * 1.1, m) * (1 + 0.3 * speed);
-    const b = lerp(ry1, bT, m) * (1 - 0.1 * speed);
-    // O centro: da soltura até que a caixa da gota fique no meio dos botões.
+    const b = lerp(ry1, bT, m) * (1 - 0.05 * speed);
+    // A frente vira semicírculo logo depois de soltar (a elipse do pescoço arredonda no primeiro quinto da corrida).
+    const round = lerp(rx1, b, smooth(span(r, 0, 0.2)));
+    const tail = lerp(reach - bp - 1, bT * 1.5, m) + 0.55 * bT * speed;
+    // Na volta (`r` de 1 a 0), a ponta redonda vai na frente, para a pílula; só perto dela (`r` < 0.3) a gota vira
+    // e a ponta afilada encosta na pílula, onde o pescoço se forma.
+    const sw = g.back ? smooth(span(r, 0, 0.3)) : 0;
+    const af = lerp(round, tail, sw);
+    const ab = lerp(tail, round, sw);
     const cu = lerp(reach, tu + (ab - af) / 2, m);
-    head = { cu, cv: lerp(0, tv, m), af, ab, b, fr: [af, b], br: [ab, b], point: lerp(1, 0.35, m) };
+    head = {
+      cu, cv: lerp(0, tv, m), af, ab, b,
+      fe: { rx: af, ry: b, point: sw }, be: { rx: ab, ry: b, point: 1 - sw },
+    };
   } else {
-    // Chega: amassa no retângulo dos botões, passa um pouco do ponto e assenta (uma mola).
+    // Chega: a lágrima amassa no retângulo dos botões, passa um pouco do ponto e assenta (uma mola).
     const q = span(t, beats.arrive, 1);
     const f = Math.cos(2.4 * Math.PI * q) * (1 - q) ** 2;
-    const w = g.target.w + (2 * aT - g.target.w) * f;
+    // Passa do ponto pouco (a mola, -0.12): passar muito da largura dos botões deixa o anel por fora deles.
+    const w = g.target.w + (2 * (bT + d) - g.target.w) * Math.max(f, -0.12);
     const h = g.target.h + (2 * bT - g.target.h) * Math.max(f, -0.25);
-    const af = w / 2 - 0.1 * aT * f;
-    const ab = w / 2 + 0.1 * aT * f;
+    const sd = g.back ? -d : d;
+    const af = w / 2 - sd * f;
+    const ab = w / 2 + sd * f;
     const c = smooth(Math.min(1, q * 2.5));
     const rr = Math.min(radius, w / 2, h / 2);
+    const pt = 1 - c;
     head = {
       cu: tu + (ab - af) / 2, cv: tv, af, ab, b: h / 2,
-      fr: [lerp(af, rr, c), lerp(h / 2, rr, c)], br: [lerp(ab, rr, c), lerp(h / 2, rr, c)], point: 0.35 * (1 - c),
+      fe: { rx: lerp(af, rr, c), ry: lerp(h / 2, rr, c), point: g.back ? pt : 0 },
+      be: { rx: lerp(ab, rr, c), ry: lerp(h / 2, rr, c), point: g.back ? 0 : pt },
     };
   }
-  parts.head = blob(head.cu, head.cv, head.af, head.ab, head.b, head.fr, head.br, head.point);
+  parts.head = blob(head.cu, head.cv, head.af, head.ab, head.b, head.fe, head.be);
 
   const st = span(t, beats.pinch, beats.settle);
   if (st < 1) {

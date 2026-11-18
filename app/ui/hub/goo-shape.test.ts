@@ -7,8 +7,7 @@ import { GOO_BEATS, type GooGeom, gooDropParts, gooDropPath, gooSizes, roundRect
 
 type Pt = [number, number];
 
-/** Os pontos de um caminho (M, C, A, L, H, V, Z, como o goo-shape escreve): os das curvas pelo polígono de controle, os
- *  arcos amostrados pelo centro. Dá a caixa e o número de pedaços (subcaminhos). */
+/** Os pontos de um caminho (M, C, A, L, H, V, Z, como o goo-shape escreve): as curvas e os arcos amostrados. Dá a caixa e o número de pedaços (subcaminhos). */
 function points(d: string): { pts: Pt[]; subpaths: number } {
   const tok = d.match(/[MCALHVZ]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? [];
   const pts: Pt[] = [];
@@ -25,8 +24,15 @@ function points(d: string): { pts: Pt[]; subpaths: number } {
     else if (cmd === "H") (cur = [num(), cur[1]], pts.push(cur));
     else if (cmd === "V") (cur = [cur[0], num()], pts.push(cur));
     else if (cmd === "C") {
-      for (let k = 0; k < 3; k++) pts.push([num(), num()]);
-      cur = pts.at(-1)!;
+      const [c1, c2, p1]: Pt[] = [[num(), num()], [num(), num()], [num(), num()]];
+      const p0 = cur;
+      for (let k = 1; k <= 16; k++) {
+        const u = k / 16;
+        const m = 1 - u;
+        const f = (i: 0 | 1) => m * m * m * p0[i] + 3 * m * m * u * c1[i] + 3 * m * u * u * c2[i] + u * u * u * p1[i];
+        pts.push([f(0), f(1)]);
+      }
+      cur = p1;
     } else if (cmd === "A") {
       const [rx0, ry0, , large, sweep, x, y] = [num(), num(), num(), num(), num(), num(), num()];
       pts.push(...arc(cur, [x, y], rx0, ry0, large === 1, sweep === 1));
@@ -154,11 +160,49 @@ describe("o volume e o movimento (#19016)", () => {
     expect(ratio(mid)).toBeGreaterThan(ratio(GOO_BEATS.pinch + 0.01));
   });
 
-  test("na chegada, amassa: passa da largura dos botões e volta", () => {
-    expect(w(gooDropParts(GOO_BEATS.arrive + 0.005, end).head)).toBeGreaterThan(end.target.w);
+  test("na chegada, amassa: passa da largura dos botões e assenta nela", () => {
     const widths = steps(40).map((s) => w(gooDropParts(GOO_BEATS.arrive + s * (0.999 - GOO_BEATS.arrive), end).head));
-    expect(Math.min(...widths)).toBeLessThan(end.target.w);
+    expect(Math.max(...widths)).toBeGreaterThan(end.target.w);
     expect(Math.abs(widths.at(-1)! - end.target.w)).toBeLessThan(1);
+  });
+
+  test("no caminho é lágrima, não disco: no máximo ~1.6:1 e com ~80% da altura dos botões (#19093)", () => {
+    for (const back of [false, true]) {
+      for (const s of steps(20)) {
+        const t = GOO_BEATS.pinch + 0.005 + s * (GOO_BEATS.arrive - GOO_BEATS.pinch - 0.01);
+        const head = gooDropParts(t, { ...end, back }).head;
+        expect(w(head) / h(head)).toBeLessThanOrEqual(1.65);
+        expect(h(head)).toBeGreaterThanOrEqual(end.target.h * 0.8);
+      }
+    }
+  });
+
+  test("a ponta redonda vai na frente: para os botões na ida, para a pílula na volta (lágrima, não lente)", () => {
+    // A altura da gota no quarto da frente e no de trás: na lágrima, a frente fica quase com a altura toda e a cauda
+    // afina; numa lente ou numa elipse, os dois quartos são iguais.
+    const quarters = (d: string) => {
+      const { pts } = points(d);
+      const b = box(d)!;
+      const q = (b.r - b.l) / 4;
+      const tall = (lo: number, hi: number) => {
+        const ys = pts.filter(([x]) => x >= lo && x <= hi).map(([, y]) => y);
+        return Math.max(...ys) - Math.min(...ys);
+      };
+      return { right: tall(b.r - q, b.r) / (b.b - b.t), left: tall(b.l, b.l + q) / (b.b - b.t) };
+    };
+    for (const s of [0.25, 0.5, 0.75, 0.95]) {
+      const t = GOO_BEATS.pinch + s * (GOO_BEATS.arrive - GOO_BEATS.pinch);
+      // Ida: a gota vai para a direita (os botões); a frente é a direita.
+      const ida = quarters(gooDropParts(t, end).head);
+      expect(ida.right).toBeGreaterThanOrEqual(0.9);
+      expect(ida.left).toBeLessThan(ida.right - 0.1);
+      // Volta: vai para a pílula (a esquerda); a frente é a esquerda. Perto da pílula (s < 0.3) ela vira para o pescoço.
+      if (s >= 0.4) {
+        const volta = quarters(gooDropParts(t, { ...end, back: true }).head);
+        expect(volta.left).toBeGreaterThanOrEqual(0.9);
+        expect(volta.right).toBeLessThan(volta.left - 0.1);
+      }
+    }
   });
 
   test("o pescoço mais fino fica mais largo que o traço de 2 px (não some no escuro)", () => {
