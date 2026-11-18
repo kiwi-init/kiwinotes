@@ -9,7 +9,7 @@
 // texto inteiro a cada tecla: num .txt de 1 MB, de 47 a 53 ms por tecla no WebKit, e a escrita travava. O CodeMirror só
 // desenha as linhas na tela, e a sessão lê o texto só quando grava. Como no .md, a gravação é silenciosa (sem
 // "Gravando…/Gravado"), e o texto quebra na largura da nota. O ⌘F busca e troca (T19312); o código tem os números de
-// linha, e o Tab recua como o arquivo já recua (T19403).
+// linha, e o Tab recua como o arquivo já recua (T19403). O .html tem a prévia ao lado (T19314, `htmlPreview.ts`).
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { indentUnit, syntaxHighlighting } from "@codemirror/language";
@@ -24,6 +24,7 @@ import { editorMenu } from "../editor/context-menu.ts";
 import { searchOnly } from "../editor/search-fold.ts";
 
 import { codeHighlight, codeLanguageFor, isCodeFile } from "./code-languages.ts";
+import { isHtmlFile, previewDocument } from "./htmlPreview.ts";
 import { detectIndent } from "./indent.ts";
 import { detectEol, TextSession, type TextSaveState, toEditor } from "./textSession.ts";
 import type { FileViewerProps } from "./viewers.ts";
@@ -60,7 +61,10 @@ const codeGutter = [
   }),
 ];
 
-export function TextViewer({ path, file, files, flushRef, widthHandles }: FileViewerProps) {
+/** A pausa na digitação antes de a prévia do .html desenhar de novo (T19314): uma página grande não pisca a cada tecla. */
+export const PREVIEW_DELAY_MS = 300;
+
+export function TextViewer({ path, file, files, flushRef, widthHandles, preview = false }: FileViewerProps) {
   const initial = "text" in file ? file : { text: "", version: file.version };
   const notUtf8 = "readOnly" in file && file.readOnly === true;
   const mixedEol = detectEol(initial.text) === null;
@@ -74,6 +78,12 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
   const language = codeLanguageFor(path);
   const code = isCodeFile(path);
   const [colored, setColored] = useState(false);
+  // A prévia do .html (T19314): o texto que ela desenha, atrás do editor por `PREVIEW_DELAY_MS`.
+  const showPreview = preview && isHtmlFile(path);
+  const [previewText, setPreviewText] = useState(initial.text);
+  const previewOn = useRef(showPreview);
+  previewOn.current = showPreview;
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Uma sessão por arquivo aberto (o `FileView` monta de novo a cada caminho).
   const session = useMemo(
@@ -134,6 +144,10 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
           lang.of([]),
           // A pessoa digitou: a sessão só marca, e lê o texto inteiro quando grava (depois da pausa).
           EditorView.updateListener.of((u) => {
+            if (u.docChanged && previewOn.current) {
+              if (previewTimer.current) clearTimeout(previewTimer.current);
+              previewTimer.current = setTimeout(() => setPreviewText(u.view.state.doc.toString()), PREVIEW_DELAY_MS);
+            }
             if (!u.docChanged || u.transactions.some((tr) => tr.annotation(fromDisk))) return;
             session.touch(() => u.view.state.doc.toString());
           }),
@@ -156,6 +170,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
         });
     return () => {
       alive = false;
+      if (previewTimer.current) clearTimeout(previewTimer.current);
       view.current = null;
       v.destroy();
     };
@@ -172,6 +187,11 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
       session.dispose();
     };
   }, [flushRef, session, readOnly]);
+
+  // A prévia voltou: desenha o texto de agora, que pode ter mudado enquanto ela estava escondida.
+  useEffect(() => {
+    if (showPreview && view.current) setPreviewText(view.current.state.doc.toString());
+  }, [showPreview]);
 
   // O arquivo mudou no disco e o `FileView` leu de novo.
   useEffect(() => {
@@ -235,9 +255,10 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
           {menuError}
         </div>
       ) : null}
-      <div className="kn-file-text-body">
-        {/* As alças da largura (spec #13383): nas bordas da coluna do texto, como na nota. */}
-        {widthHandles ? <NoteWidthFrame>{widthHandles}</NoteWidthFrame> : null}
+      <div className="kn-file-text-body" data-preview={showPreview ? "on" : undefined}>
+        {/* As alças da largura (spec #13383): nas bordas da coluna do texto, como na nota. Com a prévia, cada lado tem a
+            metade da janela, e as alças saem. */}
+        {widthHandles && !showPreview ? <NoteWidthFrame>{widthHandles}</NoteWidthFrame> : null}
         <div
           ref={host}
           className="kn-file-text-editor"
@@ -259,6 +280,10 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
             openMenu(at.left, at.bottom, false);
           }}
         />
+        {showPreview ? (
+          // Isolada (htmlPreview.ts): sem script, sem rede, sem sair dali.
+          <iframe className="kn-file-preview" sandbox="" srcDoc={previewDocument(previewText)} title={`Prévia de ${path.split("/").at(-1)}`} />
+        ) : null}
       </div>
       {menu ? <ContextMenu {...menu} onClose={() => setMenu(null)} onRestoreFocus={() => view.current?.focus()} /> : null}
     </div>

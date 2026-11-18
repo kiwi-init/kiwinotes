@@ -1,0 +1,105 @@
+{
+  "window": "notes",
+  "size": "1280x800",
+  "steps": [
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre (antes, no cofre: site/pagina.html, com o próprio CSS, e uma nota; as travas da prévia estão no html-preview-isolation.test.ts)"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('site')",
+      "name": "abre a pasta site"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('pagina')",
+      "name": "clica no .html"
+    },
+    {
+      "waitFor": ".kn-file[data-state='ready'] .kn-file-text[data-code='colored'] .kn-file-text-area",
+      "name": "o código abre no editor, com cor (T19312)"
+    },
+    {
+      "waitFor": ".kn-file-text-body[data-preview] iframe.kn-file-preview[sandbox='']",
+      "name": "e a prévia ao lado, num iframe com o sandbox vazio (T19314)"
+    },
+    {
+      "expectCount": ".kn-file-preview-toggle[aria-pressed='true']",
+      "count": 1,
+      "name": "o botão Prévia no topo, ligado"
+    },
+    {
+      "expectText": "iframe.kn-file-preview >> internal:control=enter-frame >> h1",
+      "text": "Olá, Ana",
+      "name": "a prévia desenha a página"
+    },
+    {
+      "screenshot": "01-previa.png"
+    },
+    {
+      "click": ".kn-file-text-area",
+      "name": "o cursor vai para o código"
+    },
+    {
+      "press": "Meta+ArrowDown",
+      "name": "fim do arquivo"
+    },
+    {
+      "type": "<h2>Linha nova",
+      "name": "digita um título novo depois do </html>"
+    },
+    {
+      "waitFor": ".kn-file-text[data-save='saved']",
+      "name": "grava sozinho"
+    },
+    {
+      "expectText": "iframe.kn-file-preview >> internal:control=enter-frame >> h2",
+      "text": "Linha nova",
+      "name": "a prévia acompanha a digitação"
+    },
+    {
+      "screenshot": "02-editada.png"
+    },
+    {
+      "click": ".kn-file-preview-toggle",
+      "name": "desliga a prévia"
+    },
+    {
+      "expectCount": "iframe.kn-file-preview",
+      "count": 0,
+      "name": "o código fica com a largura toda"
+    },
+    {
+      "expectCount": ".kn-file-preview-toggle[aria-pressed='false']",
+      "count": 1,
+      "name": "o botão fica desligado"
+    },
+    {
+      "click": ".kn-file-text-area",
+      "name": "o cursor volta ao código"
+    },
+    {
+      "press": "Meta+ArrowDown",
+      "name": "fim do arquivo"
+    },
+    {
+      "type": "<h3>Sem prévia",
+      "name": "digita com a prévia escondida"
+    },
+    {
+      "click": ".kn-file-preview-toggle",
+      "name": "liga a prévia de novo"
+    },
+    {
+      "expectText": "iframe.kn-file-preview >> internal:control=enter-frame >> h3",
+      "text": "Sem prévia",
+      "name": "ela volta com o texto de agora"
+    },
+    {
+      "screenshot": "03-sem-previa-e-de-volta.png"
+    }
+  ]
+}
