@@ -94,24 +94,55 @@
   to { transform: translateX(1px); }
 }
 
-/* Os botões nascem de dentro da gota: aparecem quando ela chega (52–74%) e já respondem ao clique desde o começo
-   (nada de `pointer-events: none`). Na volta, eles já saíram do lado, e só a gota volta. */
+/* Os botões nascem de dentro da gota (T18949): aparecem enquanto ela vira o retângulo deles e assenta (78–100%), não
+   no meio do caminho. Já respondem ao clique desde o começo (nada de `pointer-events: none`). */
 .kn-hub-slot[data-goo="entering"] > * {
   animation: kn-goo-buttons-in var(--goo-ms) linear both;
 }
 
 @keyframes kn-goo-buttons-in {
   0%,
-  52% {
+  78% {
     opacity: 0;
     transform: scale(0.96);
-  }
-  74% {
-    opacity: 1;
   }
   100% {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Na volta, a cópia dos botões que saíram (`Goo.tsx`) fica no lugar deles, por cima da gota, e some nos primeiros 25%:
+   a gota assume sem o salto do quadro 0. Só desenho: `inert` e sem clique. */
+.kn-goo-ghost {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  animation: kn-goo-ghost-out var(--goo-ms-out, 400ms) linear both;
+}
+.kn-goo-ghost[data-side="end"] {
+  justify-content: flex-end;
+}
+/* A cópia mede em pixel inteiro (o botão tem 98,45 px, ela 98): sem encolher e sem reticências, senão o meio pixel
+   vira "Not…" no rótulo. */
+.kn-goo-ghost > * {
+  flex: none;
+}
+.kn-goo .kn-goo-ghost * {
+  text-overflow: clip;
+  overflow: visible;
+}
+
+@keyframes kn-goo-ghost-out {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  25%,
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
   }
 }
 
