@@ -111,7 +111,7 @@ describe("o agente pela CLI headless (T8678)", () => {
     expect(turn.map((e) => e.type)).toEqual(["started", "status", "status", "text", "text", "done"]);
     expect(turn.at(-1)).toMatchObject({ stopReason: "end_turn", text: 'Você disse: "oi". Este é o turno 1 desta sessão.' });
     const open = (await invoke("agent.status")).json!.value;
-    expect(open).toMatchObject({ program: "open", session: { model: "default", effort: "default" } });
+    expect(open).toMatchObject({ program: "open", session: { model: "default", effort: "low" } }); // o gato pede esforço baixo por padrão (T19300)
 
     // Cancelar um pedido longo.
     const slow = (await invoke("agent.ask", { text: "/lento" })).json!.value.id as string;
