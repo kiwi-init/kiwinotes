@@ -70,4 +70,48 @@ describe("as citações", () => {
     expect(sniff("resume essa nota", idx).kind).toBe("nada");
     expect(certo(sniff("o que foi decidido na última reunião?", idx))).toBe("Reuniões/2026-11-13 · Alinhamento.md");
   });
+
+  describe("o aberto nas Notas (T19969, spec #19269)", () => {
+    const csv = "Dados/dados-exemplo.csv";
+    const aberto = (r: ReturnType<typeof sniff>) => (r.kind === "certo" ? `${r.hit.target.kind}:${r.hit.target.path}` : r.kind);
+
+    test("as frases, digitadas e faladas, apontam o arquivo aberto", () => {
+      for (const pedido of [
+        "tá vendo o arquivo que eu tô com aberto aqui? escreve nele um resumo",
+        "nesse arquivo, monta uma tabela com nome e total",
+        "neste arquivo tem quantas linhas?",
+        "o que tá aberto fala de quê?",
+        "soma a coluna B dessa planilha",
+        "nessa tabela, qual o maior valor?",
+        "resume esse documento",
+        "nesse CSV, quantas linhas?",
+        "nesse cê esse vê, quantas linhas?",
+        "o arquivo aberto tem cabeçalho?",
+        "tá vendo esse aqui?",
+      ])
+        expect([pedido, aberto(sniff(pedido, idx, { openNote: csv }))]).toEqual([pedido, `arquivo:${csv}`]);
+    });
+
+    test("uma nota aberta é nota: o arquivo, a nota e o .txt", () => {
+      expect(aberto(sniff("nesse arquivo, põe um título", idx, { openNote: "Pessoal/Lista de compras.md" }))).toBe("nota:Pessoal/Lista de compras.md");
+      expect(aberto(sniff("nesse arquivo, põe um título", idx, { openNote: "Soltas/rascunho-exemplo.txt" }))).toBe("nota:Soltas/rascunho-exemplo.txt");
+      expect(aberto(sniff("resume esse pdf", idx, { openNote: "Docs/manual-exemplo.pdf" }))).toBe("arquivo:Docs/manual-exemplo.pdf");
+    });
+
+    test("sem apontar, o aberto não entra; \"uma tabela\" não aponta", () => {
+      expect(sniff("monta uma tabela com nome e total", idx, { openNote: csv }).kind).toBe("nada");
+      expect(sniff("o que é um arquivo csv?", idx, { openNote: csv }).kind).toBe("nada");
+    });
+
+    test("outra nota citada pelo nome vale mais que o aberto", () => {
+      expect(aberto(sniff("copia esse arquivo para a Lista de compras", idx, { openNote: csv }))).toBe("nota:Pessoal/Lista de compras.md");
+      expect(aberto(sniff("escreve aqui na Lista de compras", idx, { openNote: csv }))).toBe("nota:Pessoal/Lista de compras.md");
+    });
+
+    test("sem nada aberto, a frase pede a pergunta; o \"aqui\" sozinho não", () => {
+      expect(sniff("nesse arquivo, monta uma tabela", idx)).toEqual({ kind: "nada", semAberto: true });
+      expect(sniff("o que tá aberto?", idx)).toEqual({ kind: "nada", semAberto: true });
+      expect(sniff("aqui está a lista de amanhã", idx)).toEqual({ kind: "nada" });
+    });
+  });
 });

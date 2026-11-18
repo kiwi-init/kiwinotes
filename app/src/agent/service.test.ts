@@ -19,6 +19,7 @@ import type { AgentRoutineEvent } from "../shared/ui-contract.ts";
 import { DEFAULT_NOTE_MODEL, noteModelText, sanitizeNoteModel } from "./note-model.ts";
 import { PREFIX_RESEND_EVERY } from "./fixed-prefix.ts";
 import { instructionsText } from "./memory.ts";
+import { PACKAGE_HEAD_NONE } from "./pacote.ts";
 import { EMPTY_READER, readerFromCapabilities, type VaultReader } from "./tools/reader.ts";
 import { writerFromCapabilities, type VaultWriter } from "./tools/writer.ts";
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
@@ -1657,15 +1658,34 @@ describe("a escrita e o registro do agente (spec #8356)", () => {
       expect(done.at(-1)).toMatchObject({ type: "done", text: expect.stringContaining("março") });
     });
 
-    test('"essa nota" é a nota aberta na janela Notas; sem nota aberta, nada vai', async () => {
+    test('"essa nota" é a nota aberta na janela Notas; sem nada aberto, o agente pergunta qual (T19969)', async () => {
       const m = make({ reader: memoryReader(NOTES) });
       await readyNow(m);
       await askAndWait(m, "resume essa nota");
+      expect(promptsOf(m).at(-1)).toContain(PACKAGE_HEAD_NONE);
+      expect(promptsOf(m).at(-1)).not.toContain("nota: ");
+      // "Aqui" sozinho, sem nada aberto, é só a palavra: nada vai.
+      await askAndWait(m, "aqui está o que eu pensei para amanhã");
       expect(promptsOf(m).at(-1)).not.toContain("[O Kiwi achou");
       m.svc.setOpenNote("Ideias.md");
       await askAndWait(m, "resume essa nota");
       expect(promptsOf(m).at(-1)).toContain("nota: Ideias.md");
       expect(promptsOf(m).at(-1)).toContain("gatos");
+    });
+
+    test('"esse arquivo" é o arquivo aberto nas Notas: o cartão e o nome dito antes; fechada a janela, pergunta (T19969)', async () => {
+      const m = make({ reader: memoryReader(NOTES) });
+      await readyNow(m);
+      m.svc.setOpenNote("Dados/dados-exemplo.csv");
+      await askAndWait(m, "tá vendo esse arquivo aberto aqui? monta uma tabela com os totais");
+      const p = promptsOf(m).at(-1)!;
+      expect(p).toContain("arquivo aberto nas Notas: Dados/dados-exemplo.csv");
+      expect(p).toContain("kiwi ler/arquivo");
+      expect(p).toContain('("No dados-exemplo.csv:")');
+      // A janela das Notas fechou (o Bun avisa com null): "esse arquivo" não é mais nada, e ele pergunta.
+      m.svc.setOpenNote(null);
+      await askAndWait(m, "nesse arquivo, soma a coluna B");
+      expect(promptsOf(m).at(-1)).toContain(PACKAGE_HEAD_NONE);
     });
 
     test("renomear uma nota refaz o índice: o nome novo acha, o velho não (revisão do T14359)", async () => {

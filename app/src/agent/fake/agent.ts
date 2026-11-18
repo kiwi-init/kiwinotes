@@ -18,6 +18,8 @@
 //                        Várias ferramentas num pedido: uma linha `/tool` para cada, depois de uma linha de texto ou
 //                        não (spec #9480: "Mude o prazo\n/tool notes_read …\n/tool notes_write …")
 //   /permissao-kiwi    pede permissão para usar o `mcp__kiwi__kiwi` e conta o que o Kiwi respondeu
+//   (pacote do aberto)  T19969: com um arquivo aberto nas Notas, diz "No <nome>:" e lê pelo files_read; sem nada aberto,
+//                      pergunta qual
 //   (uma pergunta, com "?")  procura nas notas, lê a 1ª achada e responde com o começo dela: o "Testar" dos Ajustes
 //
 // O ambiente:
@@ -703,6 +705,20 @@ const app = agent({ name: "kiwi-fake-agent" })
             out.push(r.isError ? `erro da ferramenta: ${r.text}` : r.text);
           }
           await say(client, sessionId, out.join("\n"));
+          return { stopReason: "end_turn" };
+        }
+        // O aberto nas Notas (T19969): sem nada aberto, pergunta qual; com um arquivo aberto, diz o nome antes, lê pela
+        // ferramenta e conta as linhas, como o agente de verdade faria.
+        if (pkg?.includes("mas nada está aberto lá agora")) {
+          await say(client, sessionId, "Qual nota ou arquivo? Nada está aberto nas Notas agora.");
+          return { stopReason: "end_turn" };
+        }
+        const openFile = /arquivo aberto nas Notas: (.+?)\. /.exec(pkg ?? "")?.[1];
+        if (openFile && kiwiServers.has(sessionId)) {
+          await think(client, sessionId);
+          const r = await useTool(client, sessionId, "files_read", { caminho: openFile });
+          const lines = r.isError ? 0 : ((JSON.parse(r.text) as { sumario?: { linhas?: number } }).sumario?.linhas ?? 0);
+          await say(client, sessionId, r.isError ? `erro da ferramenta: ${r.text}` : `No ${openFile.split("/").pop()}: li o arquivo, a tabela tem ${lines} linhas, com o cabeçalho.`);
           return { stopReason: "end_turn" };
         }
         if (text.endsWith("?") && kiwiServers.has(sessionId)) {

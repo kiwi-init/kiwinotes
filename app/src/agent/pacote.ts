@@ -9,7 +9,8 @@
 //   linha, até um "]" sozinho.
 
 import { markdownStructure } from "../shared/markdown-structure.ts";
-import type { FaroHit, FaroResult } from "./faro.ts";
+import { type FaroHit, type FaroResult, OPEN_SAID } from "./faro.ts";
+import { fileFormat } from "./tools/files.ts";
 import { matchScore } from "./tools/find.ts";
 import type { VaultReader } from "./tools/reader.ts";
 import { jaEntregue, type RegistroEntrega, soDiferenca } from "./entrega.ts";
@@ -24,6 +25,12 @@ export const PACKAGE_HEAD = "[O Kiwi achou nas suas notas o que o pedido cita. U
 /** No provável: os cartões, para o agente escolher. Começa igual ("[O Kiwi achou"), e termina na mesma marca. */
 export const PACKAGE_HEAD_MAYBE = "[O Kiwi achou nas suas notas mais de um alvo parecido com o que o pedido cita. Escolha pelo pedido e leia só o certo:";
 export const PACKAGE_END = "[/O Kiwi achou]";
+/** A pessoa apontou o aberto nas Notas ("esse arquivo") e nada está aberto (T19969): o agente pergunta, não chuta. */
+export const PACKAGE_HEAD_NONE =
+  "[O Kiwi achou que o pedido fala do que está aberto nas Notas, mas nada está aberto lá agora. Pergunte à pessoa qual nota ou arquivo é, sem chutar, e não mexa em nada até ela dizer.";
+/** O aberto nas Notas (T19969): antes de mexer, o agente diz em qual arquivo vai trabalhar. */
+export const OPEN_SAY = (name: string) =>
+  `A pessoa apontou o que está aberto nas Notas. Comece a resposta dizendo em qual arquivo vai trabalhar ("No ${name}:").`;
 
 /** O que foi entregue, para a Atividade ("o Kiwi entregou"). */
 export interface Delivered {
@@ -41,7 +48,7 @@ export interface PackageDeps {
   registro?: RegistroEntrega;
 }
 
-const KIND_LABEL = { nota: "nota", pasta: "pasta", projeto: "projeto", reuniao: "reunião" } as const;
+const KIND_LABEL = { nota: "nota", pasta: "pasta", projeto: "projeto", reuniao: "reunião", arquivo: "arquivo" } as const;
 
 /** O sumário de um texto: os títulos, com o nível e o tamanho de cada seção. */
 function outline(content: string): { titulo: string; nivel: number; from: number; to: number }[] {
@@ -108,9 +115,20 @@ async function folderBlock(d: PackageDeps, path: string): Promise<string> {
   ].join("\n");
 }
 
+/**
+ * Um arquivo que não é nota, aberto nas Notas (T19969): só o cartão. O conteúdo, o agente lê pela ferramenta, como
+ * qualquer arquivo; e ele não se edita no lugar: o que a pessoa pedir para escrever vai num arquivo novo ou numa nota.
+ */
+function fileBlock(path: string): string {
+  const card = `arquivo aberto nas Notas: ${path}`;
+  if (!fileFormat(path)) return `${card}. O Kiwi não lê esse tipo de arquivo: diga isso à pessoa, sem inventar o conteúdo.`;
+  return `${card}. O texto não vai junto: leia com kiwi ler/arquivo. O Kiwi não edita esse arquivo no lugar: para escrever o que a pessoa pediu, gere um arquivo novo com kiwi escrever/arquivo (ou escreva numa nota) e diga isso a ela.`;
+}
+
 /** Um alvo do faro no pacote. */
 async function targetBlock(d: PackageDeps, h: FaroHit, request: string, withText: boolean): Promise<string | null> {
   const t = h.target;
+  if (t.kind === "arquivo") return fileBlock(t.path);
   if (t.kind === "pasta") return folderBlock(d, t.path);
   if (t.kind === "projeto") {
     const head = `projeto: ${t.title} (pasta ${t.path})`;
@@ -126,7 +144,7 @@ async function targetBlock(d: PackageDeps, h: FaroHit, request: string, withText
  * escolher. Devolve também o que foi entregue, para a Atividade.
  */
 export async function buildPackage(d: PackageDeps, r: FaroResult, request: string): Promise<{ text: string; delivered: Delivered[] } | null> {
-  if (r.kind === "nada") return null;
+  if (r.kind === "nada") return r.semAberto ? { text: `${PACKAGE_HEAD_NONE}\n${PACKAGE_END}`, delivered: [] } : null;
   const hits = r.kind === "certo" ? [r.hit] : r.hits;
   const withText = r.kind === "certo";
   const blocks: string[] = [];
@@ -134,8 +152,10 @@ export async function buildPackage(d: PackageDeps, r: FaroResult, request: strin
   for (const h of hits) {
     const b = await targetBlock(d, h, request, withText).catch(() => null);
     if (!b) continue;
-    blocks.push(b);
-    delivered.push({ path: h.target.kind === "projeto" && h.target.main ? h.target.main : h.target.path, kind: h.target.kind, text: withText });
+    // O aberto que ela apontou: o nome dele vem dito antes de qualquer mudança.
+    const said = withText && h.how === "apontado" && h.said === OPEN_SAID ? `\n${OPEN_SAY(h.target.path.split("/").pop()!)}` : "";
+    blocks.push(b + said);
+    delivered.push({ path: h.target.kind === "projeto" && h.target.main ? h.target.main : h.target.path, kind: h.target.kind, text: withText && h.target.kind !== "arquivo" });
   }
   if (!blocks.length) return null;
   return { text: `${withText ? PACKAGE_HEAD : PACKAGE_HEAD_MAYBE}\n${blocks.join(withText ? "\n\n" : "\n")}\n${PACKAGE_END}`, delivered };

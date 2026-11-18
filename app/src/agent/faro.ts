@@ -98,7 +98,8 @@ export function soundKey(name: string): string {
 // ── O índice de nomes e as citações ─────────────────────────────────────────────────────────────────────────────────
 
 
-export type FaroKind = "nota" | "pasta" | "projeto" | "reuniao";
+/** `arquivo`: um arquivo que não é nota (csv, pdf, código…), só quando a pessoa aponta o aberto nas Notas (T19969). */
+export type FaroKind = "nota" | "pasta" | "projeto" | "reuniao" | "arquivo";
 
 /** Um alvo do índice: o tipo, o caminho e os nomes pelos quais a pessoa o chama. */
 export interface FaroTarget {
@@ -190,7 +191,8 @@ export interface FaroHit {
   how: "nome" | "som" | "apontado" | "trilha";
 }
 
-export type FaroResult = { kind: "certo"; hit: FaroHit } | { kind: "provavel"; hits: FaroHit[] } | { kind: "nada" };
+/** No "nada", `semAberto`: a pessoa apontou o aberto ("esse arquivo") e nada está aberto nas Notas; o agente pergunta. */
+export type FaroResult = { kind: "certo"; hit: FaroHit } | { kind: "provavel"; hits: FaroHit[] } | { kind: "nada"; semAberto?: true };
 
 /** As palavras que dizem o tipo do alvo. */
 const TYPE_WORDS: [RegExp, FaroKind][] = [
@@ -199,9 +201,34 @@ const TYPE_WORDS: [RegExp, FaroKind][] = [
   [/\breuni(ao|oes)\b/, "reuniao"],
   [/\bnotas?\b/, "nota"],
 ];
-/** "Essa nota", "aqui": a nota aberta no app. "A última reunião", "a reunião de ontem": a mais nova. */
-const POINT_NOTE = /\b(ess[ae]|est[ae]|nessa|nesta|desta|dessa) nota\b|\baqui\b/;
+/**
+ * O que a pessoa aponta como o aberto nas Notas (T14359, T19969): "essa nota", "nesse arquivo", "nessa planilha",
+ * "neste csv", "o arquivo que eu tô com aberto", "o que tá aberto", "aqui". O texto já vem sem acento e minúsculo
+ * ("tô" é "to", "está" é "esta"). "Uma tabela" não aponta nada: só o demonstrativo ou o "aberto".
+ */
+const OPEN_THINGS = "nota|arquivo|planilha|tabela|documento|doc|docx|texto|csv|tsv|pdf|xlsx|json|codigo|pagina|imagem|foto|apresentacao";
+const POINT_OPEN = new RegExp(
+  [
+    `\\b[nd]?(ess|est)[ae] (${OPEN_THINGS})\\b`,
+    `\\b(${OPEN_THINGS}) (que (eu )?(to|estou|esta|ta|deixei) (com )?)?abert[oa]\\b`,
+    `\\bo que (eu )?(to|estou|esta|ta|deixei) (com )?abert[oa]\\b`,
+  ].join("|"),
+);
+/** "Aqui" também aponta o aberto; sozinho, sem nada aberto, é só a palavra ("aqui está a lista"): não pede pergunta. */
+const POINT_HERE = /\baqui\b/;
+/** "A última reunião", "a reunião de ontem": a mais nova. */
 const POINT_MEETING = /\b(ultima|recente) reuniao\b|\breuniao (de ontem|de hoje|mais recente)\b/;
+
+/** O `said` do alvo que veio do aberto nas Notas. */
+export const OPEN_SAID = "o aberto nas Notas";
+
+/** O alvo do aberto nas Notas: o do índice (nota, reunião), ou um arquivo pelo caminho. `.md` e `.txt` são notas. */
+function openTarget(idx: FaroIndex, path: string): FaroTarget {
+  const known = idx.targets.find((x) => x.path === path && x.kind !== "pasta" && x.kind !== "projeto");
+  if (known) return known;
+  const name = path.split("/").pop()!;
+  return /\.(md|txt)$/i.test(name) ? { kind: "nota", path, title: name.replace(/\.(md|txt)$/i, ""), names: [] } : { kind: "arquivo", path, title: name, names: [] };
+}
 
 /** Um nome que vários alvos têm ("prazo", "lista") diz pouco: acima disto, ele não conta. */
 export const GENERIC_MAX = 3;
@@ -222,10 +249,9 @@ export function sniff(request: string, idx: FaroIndex, ctx: { openNote?: string 
     const was = byTarget.get(h.target);
     if (!was || was.score < h.score) byTarget.set(h.target, h);
   };
-  if (ctx.openNote && POINT_NOTE.test(text)) {
-    const t = idx.targets.find((x) => x.path === ctx.openNote) ?? { kind: "nota" as const, path: ctx.openNote, title: ctx.openNote.split("/").pop()!, names: [] };
-    keep({ target: t, said: "essa nota", score: 2, how: "apontado" });
-  }
+  // O aberto nas Notas (T19969): a nota, ou qualquer arquivo no visualizador. As siglas faladas contam ("nesse cê esse vê").
+  const pointed = POINT_OPEN.test(text) || POINT_OPEN.test(plain(joinSpelledLetters(request)));
+  const open = (pointed || POINT_HERE.test(text)) && ctx.openNote ? openTarget(idx, ctx.openNote) : null;
   if (idx.lastMeeting && POINT_MEETING.test(text)) {
     const t = idx.targets.find((x) => x.path === idx.lastMeeting)!;
     if (t) keep({ target: t, said: "a última reunião", score: 2, how: "apontado" });
@@ -277,7 +303,14 @@ export function sniff(request: string, idx: FaroIndex, ctx: { openNote?: string 
   const hits = all
     .filter((h) => h.how === "apontado" || h.how === "trilha" || !all.some((o) => o !== h && o.score > h.score && plain(o.said).includes(plain(h.said)) && plain(o.said) !== plain(h.said)))
     .sort((a, b) => b.score - a.score);
-  if (!hits.length) return { kind: "nada" };
+  // O aberto vale, a não ser que a pessoa cite outro alvo pelo nome ("aqui na nota Compras"): aí vale o citado, e o
+  // aberto fica abaixo dele.
+  if (open && !byTarget.has(open)) {
+    const cited = hits.some((h) => (h.how === "nome" || h.how === "som") && h.target.path !== open.path);
+    hits.push({ target: open, said: OPEN_SAID, score: cited ? 0 : 2, how: "apontado" });
+    hits.sort((a, b) => b.score - a.score);
+  }
+  if (!hits.length) return pointed && !ctx.openNote ? { kind: "nada", semAberto: true } : { kind: "nada" };
   if (hits.length === 1 || hits[0]!.score - hits[1]!.score >= CERTO_MARGIN) return { kind: "certo", hit: hits[0]! };
   return { kind: "provavel", hits: hits.slice(0, PROVAVEL_MAX) };
 }
