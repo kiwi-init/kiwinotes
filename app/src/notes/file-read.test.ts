@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { directInvoke } from "../bun/ui-engine.ts";
-import { fileSize, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
+import { fileSize, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES, mayBeText } from "../shared/file-view.ts";
 import { UI_CAPABILITIES } from "../shared/ui-contract.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { Vault, versionOf } from "./vault.ts";
@@ -240,6 +240,19 @@ describe("gravar um texto do cofre (T7105)", () => {
     // Um tipo que nunca é texto, e o quadro branco (que tem a própria tela), seguem fora.
     expect(await save("pacote.zip", "PK texto", "x")).toBe("E_BAD_ARGS");
     expect(await save("quadro.canvas", "{}", "[]")).toBe("E_BAD_ARGS");
+  });
+
+  test("documento-pacote listado como arquivo não abre como texto (revisão #19650)", async () => {
+    const { v } = await vault({
+      "Projeto X/Carta.rtfd/TXT.rtf": "{\\rtf1 exemplo}",
+      "Projeto X/Resumo.pages/Index.zip": "PK",
+      "Ana.md": "# Ana\n",
+    });
+    const packages = v.list().files.map((f) => f.path).filter((p) => !p.endsWith(".md"));
+    expect(packages).toEqual(["Projeto X/Carta.rtfd", "Projeto X/Resumo.pages"]);
+    // A árvore manda ao app padrão, sem a tela de texto, que daria "não está mais na pasta".
+    for (const p of packages) expect(mayBeText(p)).toBe(false);
+    expect(await v.saveFile("Projeto X/Carta.rtfd", "x", versionOf("")).catch((e) => e.code)).toBe("E_BAD_ARGS");
   });
 
   test("pela capacidade `files.save` do contrato", async () => {

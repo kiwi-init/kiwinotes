@@ -2,6 +2,8 @@
 // do `files.read`. Acima deles, o Kiwi avisa e oferece o app padrão do Mac, em vez de carregar o arquivo na memória.
 
 /** O maior arquivo lido em binário (pdf, docx, xlsx, imagem): 25 MB, como o maior anexo. */
+import { PACKAGE_MARKS } from "./attachments.ts";
+
 export const MAX_VIEW_BYTES = 25 * 1024 * 1024;
 
 /** O maior arquivo lido como texto (txt, csv, json…): 5 MB, como o quadro branco. */
@@ -71,7 +73,7 @@ export const NEVER_TEXT: ReadonlySet<string> = new Set([
 /**
  * Um arquivo sem visualizador próprio que pode abrir como texto (T19313): o `Dockerfile`, um `LEIAME`, um `.vue` ou
  * uma extensão que ninguém lembrou. Nem nota (`.md`), nem quadro branco, nem um tipo com visualizador, nem um de
- * `NEVER_TEXT`. O conteúdo decide: `looksLikeText`.
+ * `NEVER_TEXT`, nem um documento-pacote (`PACKAGE_MARKS`). O conteúdo decide: `looksLikeText`.
  */
 export function mayBeText(name: string): boolean {
   const base = (name.split("/").at(-1) ?? "").toLowerCase();
@@ -79,7 +81,8 @@ export function mayBeText(name: string): boolean {
   const double = /\.([a-z0-9]+\.[a-z0-9]+)$/.exec(base)?.[1];
   const single = /\.([a-z0-9]+)$/.exec(base)?.[1];
   if ((double && VIEWER_TYPES.includes(double)) || (single && VIEWER_TYPES.includes(single))) return false;
-  return !single || !NEVER_TEXT.has(single);
+  // Um documento-pacote (`.rtfd`, `.pages`…) é uma pasta no disco: ler como texto daria "não está mais na pasta".
+  return !single || !(NEVER_TEXT.has(single) || single in PACKAGE_MARKS);
 }
 
 /** É texto: lido em UTF-8 sem perda (sem `readOnly`) e sem o byte zero, que nenhum texto tem e todo binário tem. */

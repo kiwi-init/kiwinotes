@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { PACKAGE_MARKS } from "../../../src/shared/attachments.ts";
 import { CODE_TYPES, EDITABLE_TEXT, looksLikeText, mayBeText, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
 import type { FileContent } from "../types.ts";
 import { type FileViewer, loadFile, viewerFor, VIEWERS } from "./viewers.ts";
@@ -122,6 +123,8 @@ test("sem visualizador (T19313): o que é texto no disco abre no editor dos text
 test("pode ser texto (T19313): sem visualizador, sem ser nota e fora da lista do que nunca é texto", () => {
   for (const name of ["Dockerfile", "Projeto X/LEIAME", "site/pagina.vue", "dados.novo", "Dockerfile.dev"]) expect(mayBeText(name)).toBe(true);
   for (const name of ["nota.md", "nota.markdown", "quadro.canvas", "a.txt", "a.py", "a.pdf", "fluxo.drawio.svg", "pacote.zip", "Slides.KEY", ""]) expect(mayBeText(name)).toBe(false);
+  // Documento-pacote é pasta no disco: sempre o app padrão, nunca a leitura como texto (revisão #19650).
+  for (const ext of Object.keys(PACKAGE_MARKS)) expect(mayBeText(`Projeto X/Carta.${ext}`)).toBe(false);
   expect(looksLikeText("FROM exemplo\n")).toBe(true);
   expect(looksLikeText("PK\u0003\u0004\0\0")).toBe(false);
 });
