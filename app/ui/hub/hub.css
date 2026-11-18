@@ -376,6 +376,8 @@
 .kn-bubble-text { display: grid; overflow-wrap: anywhere; white-space: pre-wrap; }
 .kn-bubble-ghost, .kn-bubble-typed { grid-area: 1 / 1; }
 .kn-bubble-ghost { visibility: hidden; }
+/* A nota ou o arquivo no trecho (spec #17683): como o link do balão grande (`bubble-md.css`). */
+.kn-bubble-typed .kn-md-file { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .kn-bubble-more {
   display: inline-block;
   margin-top: 4px;

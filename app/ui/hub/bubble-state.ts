@@ -12,7 +12,8 @@
 // - O markdown (spec #17679): o balão pequeno mostra o texto corrido, sem `**`, `#`, `|` nem a crase. O corte é feito
 //   nesse texto, e não no cru: um trecho com a metade de uma tabela ou de um negrito não sai com os símbolos.
 
-import type { AgentTurnEvent } from "../../src/shared/ui-contract";
+import type { AgentTurnEvent, BubbleLink } from "../../src/shared/ui-contract";
+import { linkLabel } from "../../src/shared/bubble-links";
 import { plainMarkdown } from "../src/bubbleMarkdown";
 import { limitBubble } from "../settings/usageText";
 
@@ -185,6 +186,39 @@ export interface BubbleView {
   more: boolean;
   /** Muda a cada trecho novo (a troca de um balão para outro, spec #11652); igual enquanto o texto do trecho chega. */
   key: number;
+  /** As notas e os arquivos do trecho (spec #17683), nas posições do `full`: só nos trechos que saem depois do `done`. */
+  links?: ChunkLink[];
+}
+
+/** Uma nota ou um arquivo dentro de um trecho do balão pequeno: o rótulo em `full.slice(from, to)`. */
+export type ChunkLink = { from: number; to: number; path: string };
+
+type Item = { text: string; links?: ChunkLink[] };
+
+/**
+ * Onde cada link do `done` cai no texto corrido do segmento (spec #17683). O main dá a posição no texto cru; aqui se
+ * acha o rótulo, na ordem, a partir da palavra em que a menção começa (e não o primeiro "Plano" do texto). O que não se
+ * acha fica sem link.
+ */
+export function plainLinks(raw: string, links: readonly BubbleLink[], base = 0): ChunkLink[] {
+  const plain = plainOf(raw);
+  const starts = [...plain.matchAll(/\S+/g)].map((m) => m.index!);
+  const out: ChunkLink[] = [];
+  let at = 0;
+  for (const l of [...links].sort((a, b) => a.from - b.from)) {
+    const from = l.from - base;
+    if (from < 0 || l.to - base > raw.length) continue;
+    const label = plainOf(linkLabel(l.text)).trim();
+    if (!label) continue;
+    // A palavra da menção no corrido, contada pelo corrido do que vem antes dela; duas de folga para trás.
+    const word = words(plainOf(raw.slice(0, from))).length;
+    const near = starts[Math.max(0, Math.min(word - 2, starts.length - 1))] ?? 0;
+    const i = plain.indexOf(label, Math.max(at, near));
+    if (i < 0) continue;
+    out.push({ from: i, to: i + label.length, path: l.path });
+    at = i + label.length;
+  }
+  return out;
 }
 
 interface Head {
@@ -196,6 +230,7 @@ interface Head {
   completeAt: number;
   /** O texto entendido da fala pelo Control (spec #9876): sai quando a resposta começa a chegar. */
   heard?: boolean;
+  links?: ChunkLink[];
 }
 
 /**
@@ -208,7 +243,7 @@ export class BubbleFeed {
   private request: string | null = null;
   private readonly finished = new Set<string>();
   /** Os trechos completos que esperam a vez. */
-  private queue: string[] = [];
+  private queue: Item[] = [];
   /** O segmento aberto, cru (desde a última ferramenta). */
   private open = "";
   /** O texto corrido do segmento aberto que já virou trecho completo (o texto, e não a posição: revisão 2 do T17984). */
@@ -219,6 +254,8 @@ export class BubbleFeed {
   private keys = 0;
   /** Tudo o que o agente disse no pedido (o [Ver mais]). */
   private said = "";
+  /** As notas e os arquivos que o `done` achou no `said` (spec #17683): viram link no balão grande. */
+  private saidLinks: readonly BubbleLink[] = [];
   /** O que foi dito antes do segmento aberto (antes da última ferramenta). */
   private closedLen = 0;
   private ended = false;
@@ -248,6 +285,11 @@ export class BubbleFeed {
   /** O texto inteiro do pedido, para o [Ver mais]. */
   all(): string {
     return this.said;
+  }
+
+  /** Os links do `done` (spec #17683), nas posições do `all()`. Vazio enquanto a resposta chega. */
+  links(): readonly BubbleLink[] {
+    return this.saidLinks;
   }
 
   /** O que o leitor de tela anuncia: uma vez, no fim, com o texto inteiro. Quem lê consome. */
@@ -293,7 +335,7 @@ export class BubbleFeed {
       this.closedLen = this.said.length;
       // A web (spec #11908): o balão diz que o agente saiu do cofre, até o próximo texto ou ferramenta.
       if ("tool" in e && e.tool === "web" && !this.dismissed) {
-        this.queue.push(WEB_LINE);
+        this.queue.push({ text: WEB_LINE });
         this.next(now);
       }
     } else if (e.type === "done") {
@@ -301,7 +343,10 @@ export class BubbleFeed {
       if (e.stopReason !== "end_turn" || this.dismissed) {
         this.clear();
         if (e.stopReason === "end_turn") {
-          if (e.text) this.said = e.text;
+          if (e.text) {
+            this.said = e.text;
+            this.saidLinks = e.links ?? [];
+          }
           // Fechar o balão é fechar o desenho: o leitor de tela ainda ouve a resposta, uma vez, no fim (revisão #10936).
           if (this.said.trim()) this.announced = this.said;
         }
@@ -312,6 +357,7 @@ export class BubbleFeed {
         // na fila continua; o resto entra agora. Se o texto não bate com o que chegou em pedaços, fica o que chegou.
         if (e.text.startsWith(this.said.slice(0, this.closedLen))) this.open = e.text.slice(this.closedLen + this.segmentShown());
         this.said = e.text;
+        this.saidLinks = e.links ?? [];
       }
       this.chunkOpen(now, true);
       if (this.said.trim()) this.announced = this.said;
@@ -323,7 +369,7 @@ export class BubbleFeed {
       const line = limitBubble(e.status, e.percent, e.resetsAt, this.wall());
       if (e.status === "out") this.outLine = line;
       else if (!this.dismissed) {
-        this.queue.unshift(line);
+        this.queue.unshift({ text: line });
         if (!this.head) this.next(now);
       }
     } else if (e.type === "error") {
@@ -378,7 +424,7 @@ export class BubbleFeed {
     const text = cutAtCodePoint(h.text, typed);
     // A linha da web (spec #11908) não é o que o agente disse: ela sozinha não pede o [Ver mais].
     const more = !this.error && (this.queue.length > 0 || (h.text !== WEB_LINE && bubblePlain(this.said, true).trim() !== h.text.trim()));
-    return { text, full: h.text, error: this.error, more, key: h.key };
+    return { text, full: h.text, error: this.error, more, key: h.key, ...(h.links ? { links: h.links } : {}) };
   }
 
   /** Quando o balão muda de novo (a próxima letra ou o fim da leitura); Infinity se nada muda sozinho. */
@@ -400,6 +446,7 @@ export class BubbleFeed {
     this.stable = 0;
     this.head = null;
     this.said = "";
+    this.saidLinks = [];
     this.closedLen = 0;
     this.ended = false;
     this.error = false;
@@ -456,7 +503,20 @@ export class BubbleFeed {
     const rest = this.openShown(all);
     const chunks = splitChunks(rest, this.fits);
     const complete = all ? chunks : chunks.slice(0, -1);
-    for (const c of complete) this.queue.push(c.text);
+    // Os links do `done` (spec #17683): só com ele, e só quando o segmento aberto é o fim do texto que o `done` trouxe.
+    const found =
+      all && this.saidLinks.length && this.said.endsWith(this.open)
+        ? plainLinks(this.open, this.saidLinks, this.said.length - this.open.length)
+        : [];
+    const skip = plainOf(this.open).length - rest.length;
+    for (const c of complete) {
+      // Um rótulo cortado entre dois trechos (um caminho com espaço): cada trecho leva o seu pedaço, com o mesmo caminho.
+      const start = skip + c.end - c.text.length;
+      const links = found
+        .filter((l) => l.from < skip + c.end && l.to > start)
+        .map((l) => ({ from: Math.max(l.from, start) - start, to: Math.min(l.to, skip + c.end) - start, path: l.path }));
+      this.queue.push(links.length ? { text: c.text, links } : { text: c.text });
+    }
     if (all) {
       this.open = "";
       this.cut = "";
@@ -469,7 +529,8 @@ export class BubbleFeed {
     if (h && !h.complete) {
       const first = this.queue.shift();
       if (first !== undefined) {
-        h.text = first;
+        h.text = first.text;
+        if (first.links) h.links = first.links;
         h.complete = true;
         h.completeAt = now;
       } else h.text = this.openTyping().trimStart();
@@ -481,7 +542,7 @@ export class BubbleFeed {
   private next(at: number): void {
     const t = this.queue.shift();
     if (t !== undefined) {
-      this.head = { key: ++this.keys, text: t, complete: true, shownAt: at, completeAt: at };
+      this.head = { key: ++this.keys, text: t.text, complete: true, shownAt: at, completeAt: at, ...(t.links ? { links: t.links } : {}) };
       return;
     }
     const open = this.openTyping().trimStart();

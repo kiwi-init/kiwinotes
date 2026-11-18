@@ -16,6 +16,7 @@ import { DEFAULT_CAT_COLOR, catPalette, isCatColorChoice } from "../../src/share
 import { createKiwiCat } from "../kiwicat/cat";
 import { overlayPlacement } from "./placement";
 import { tailSvg } from "../kiwicat-v2/bubbleTail";
+import type { BubbleLink } from "../../src/shared/ui-contract";
 import { plainMarkdown, renderMarkdown } from "../src/bubbleMarkdown";
 import { EXIT_MS, exitStyle, HIDDEN_STYLE, shownStyle, type CatTransitionStyle } from "./transition";
 import type { FogState } from "../kiwicat/visual";
@@ -32,7 +33,8 @@ interface OverlayStats {
   estado: string;
   cor: string;
   /** O balão na tela agora (spec #12938), ou null. */
-  bubble: { text: string; error: boolean } | null;
+  /** `links` (spec #17683): as notas e os arquivos que o main achou na resposta, que viram link no balão aberto. */
+  bubble: { text: string; error: boolean; links: BubbleLink[] } | null;
   /** O texto não cabe nas três linhas: o "Ver mais" aparece (spec #13378). */
   bubbleMore: boolean;
   /** O balão aberto no "Ver mais". */
@@ -54,7 +56,7 @@ const bubbleText = document.getElementById("bubble-text")!;
 const moreButton = document.getElementById("bubble-more") as HTMLButtonElement;
 const bubbleSr = document.getElementById("bubble-sr")!;
 const catClose = document.getElementById("cat-close") as HTMLButtonElement;
-type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true; link?: string };
+type KiwiCatMessage = { bubble?: unknown; open?: boolean; close?: unknown; touch?: true; closed?: true; link?: string; openPath?: string };
 const post = (m: KiwiCatMessage) =>
   (window as { webkit?: { messageHandlers?: { kiwiCat?: { postMessage(m: unknown): void } } } }).webkit?.messageHandlers?.kiwiCat?.postMessage(m);
 const rectOf = (el: Element) => {
@@ -85,6 +87,12 @@ bubbleText.addEventListener("scroll", touched, { passive: true });
 /** Um link do markdown (spec #17679) não tem `href` e não abre sozinho: só o clique da pessoa manda o endereço ao helper. */
 bubbleText.addEventListener("click", (e) => {
   const a = (e.target as Element | null)?.closest?.(".kn-md-link") as HTMLElement | null;
+  // Uma nota ou um arquivo da pasta (spec #17683): o caminho vai ao helper, que pede ao app para abrir.
+  if (a?.dataset.path) {
+    e.preventDefault();
+    post({ openPath: a.dataset.path });
+    return;
+  }
   if (!a?.dataset.href) return;
   e.preventDefault();
   post({ link: a.dataset.href });
@@ -103,8 +111,8 @@ bubbleEl.addEventListener("transitionend", report);
 const fits = () => bubbleText.scrollHeight <= bubbleText.clientHeight + 1;
 
 /** O balão aberto (spec #17679): o markdown montado em elementos, nunca HTML. */
-function showFull(text: string) {
-  bubbleText.replaceChildren(renderMarkdown(text));
+function showFull(text: string, links: readonly BubbleLink[]) {
+  bubbleText.replaceChildren(renderMarkdown(text, undefined, links));
   bubbleText.classList.add("kn-md");
 }
 
@@ -149,7 +157,7 @@ function setOpen(open: boolean) {
   moreButton.textContent = open ? "Ver menos" : "Ver mais";
   moreButton.setAttribute("aria-expanded", String(open));
   if (stats.bubble) {
-    if (open) showFull(stats.bubble.text);
+    if (open) showFull(stats.bubble.text, stats.bubble.links);
     else fitSummary(plainMarkdown(stats.bubble.text));
   }
   bubbleText.scrollTop = 0;
@@ -161,7 +169,7 @@ function setOpen(open: boolean) {
 function measureMore() {
   stats.bubbleMore = stats.bubble !== null && fitSummary(plainMarkdown(stats.bubble.text));
   bubbleEl.dataset.more = String(stats.bubbleMore);
-  if (stats.bubbleOpen && stats.bubble) showFull(stats.bubble.text);
+  if (stats.bubbleOpen && stats.bubble) showFull(stats.bubble.text, stats.bubble.links);
 }
 
 moreButton.addEventListener("click", (e) => {
@@ -180,8 +188,9 @@ function setAsk(on: boolean) {
  * O balão (spec #12938): só texto (`textContent`) ou o markdown montado em elementos (spec #17679), nunca HTML. Uma resposta nova chega fechada; a mesma resposta com ou
  * sem a pergunta (spec #13380) só muda a pergunta, e o balão fica como a pessoa deixou.
  */
-function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown } | null) {
+function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown } | null) {
   const text = b && typeof b.text === "string" ? b.text : "";
+  const links = linksOf(b?.links);
   const ask = b?.ask === true;
   if (!text) {
     stats.bubble = null;
@@ -192,16 +201,34 @@ function setBubble(b: { text?: unknown; error?: unknown; ask?: unknown } | null)
     return;
   }
   if (stats.bubble && stats.bubble.text === text && stats.bubble.error === (b?.error === true)) {
+    // Os links podem chegar depois do texto (com a pergunta): o aberto se monta de novo, no mesmo lugar.
+    if (JSON.stringify(links) !== JSON.stringify(stats.bubble.links)) {
+      stats.bubble.links = links;
+      if (stats.bubbleOpen) {
+        const top = bubbleText.scrollTop;
+        showFull(text, links);
+        bubbleText.scrollTop = top;
+      }
+    }
     setAsk(ask);
     report();
     return;
   }
-  stats.bubble = { text, error: b?.error === true };
+  stats.bubble = { text, error: b?.error === true, links };
   setAsk(ask);
   bubbleEl.dataset.error = String(stats.bubble.error);
   bubbleEl.dataset.on = "true";
   setOpen(false);
   measureMore();
+}
+/** Os links que vieram do helper, conferidos na forma: o que não for um `BubbleLink` some. */
+function linksOf(raw: unknown): BubbleLink[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (l): l is BubbleLink =>
+      !!l && typeof l === "object" && typeof l.text === "string" && typeof l.path === "string" && l.path !== "" &&
+      Number.isInteger(l.from) && Number.isInteger(l.to) && (l.kind === "note" || l.kind === "file"),
+  );
 }
 const root = document.getElementById("root")!;
 // Só a prova do helper (`kiwi-helper --cat-probe --backend …`) pede um caminho: o app usa o automático.
@@ -262,7 +289,7 @@ function measureFirstFrame(start: number) {
 const api = {
   set(input: {
     estado?: string; visible?: boolean; voz?: number | null; cor?: string; sala?: number; catHover?: boolean;
-    bubble?: { text?: unknown; error?: unknown; ask?: unknown } | null;
+    bubble?: { text?: unknown; error?: unknown; ask?: unknown; links?: unknown } | null;
   }) {
     // O mouse sobre o gato (spec #13380): o × da cabeça aparece, e o helper passa a deixar o clique nele.
     if (typeof input.catHover === "boolean" && input.catHover !== stats.catHover) {

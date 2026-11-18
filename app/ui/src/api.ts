@@ -106,6 +106,8 @@ export const api = {
     semanticStatus: () => invoke("notes.semanticStatus", {}),
     /** Mostra no Finder (o arquivo que o agente gerou, spec #11549). */
     reveal: (path: string) => invoke("notes.reveal", { path }),
+    /** Abre uma nota ou um arquivo da pasta no lugar certo (spec #17683): o clique num link do balão. */
+    openPath: (path: string) => invoke("notes.openPath", { path }),
   },
   /** A seção Sobre (T2386): a versão, o canal e as atualizações. */
   app: {

@@ -9,6 +9,9 @@
 import type { SyntaxNode } from "@lezer/common";
 import { GFM, parser as baseParser } from "@lezer/markdown";
 
+import { kiwiFilePath, linkify } from "../../src/shared/bubble-links.ts";
+import type { BubbleLink } from "../../src/shared/ui-contract.ts";
+
 const parser = baseParser.configure(GFM);
 
 /** As tags que o balão monta. `task` é a caixa de um item `- [ ]`. */
@@ -21,6 +24,8 @@ export type MdTag =
 export type MdAttrs = {
   /** O endereço do link (só `http`, `https` e `mailto`). */
   href?: string;
+  /** O caminho de uma nota ou arquivo da pasta (spec #17683), relativo a ela: um link `kiwi-file:` que o main achou. */
+  path?: string;
   /** O número do primeiro item de uma lista numerada, quando não é 1. */
   start?: number;
   /** A caixa marcada. */
@@ -77,7 +82,8 @@ function gap(text: string): MdChild[] {
 }
 
 class Builder {
-  constructor(readonly src: string) {}
+  /** `files`: os caminhos que o main conferiu na pasta. Só eles viram link `kiwi-file:`; o resto fica texto. */
+  constructor(readonly src: string, readonly files: ReadonlySet<string> = new Set()) {}
 
   text(n: { from: number; to: number }): string {
     return this.src.slice(n.from, n.to);
@@ -118,6 +124,10 @@ class Builder {
         // `[c]` ou `[a][b]`, sem `(…)`: uma referência, e o balão não tem nenhuma definida. No CommonMark isso é
         // texto, com os colchetes.
         if (marks.length >= 2 && this.src[marks[1]!.to] !== "(") return ["[", ...label, this.src.slice(marks[1]!.from, c.to)];
+        // Uma nota ou um arquivo da pasta (spec #17683): só se o main achou esse caminho nesta resposta. Um
+        // `[x](kiwi-file:…)` que a resposta escreveu sozinha fica texto.
+        const path = url ? kiwiFilePath(this.text(url)) : null;
+        if (path !== null) return this.files.has(path) ? [node("a", tidy(label), { path })] : label;
         const href = url ? safeHref(this.text(url)) : null;
         // Sem endereço que preste (um `javascript:`): só o texto do link.
         return href ? [node("a", tidy(label), { href })] : label;
@@ -255,14 +265,23 @@ class Builder {
 }
 
 /** A resposta em árvore de elementos (só as tags de `MdTag`; o texto, sempre string). */
-export function parseMarkdown(text: string): MdNode[] {
+export function parseMarkdown(text: string, files?: ReadonlySet<string>): MdNode[] {
   let tree = parser.parse(text);
   const nested = escapeNestedBrackets(text, tree.topNode);
   if (nested !== text) {
     text = nested;
     tree = parser.parse(text);
   }
-  return new Builder(text).blocks(tree.topNode);
+  return new Builder(text, files).blocks(tree.topNode);
+}
+
+/**
+ * A resposta com as notas e os arquivos que o main achou (spec #17683) como links: o texto com cada menção trocada
+ * por `[rótulo](kiwi-file:…)` e os caminhos que podem virar link. Sem `links`, o texto como veio.
+ */
+export function withFileLinks(text: string, links?: readonly BubbleLink[]): { text: string; files: ReadonlySet<string> } {
+  if (!links?.length) return { text, files: new Set() };
+  return { text: linkify(text, links), files: new Set(links.map((l) => l.path)) };
 }
 
 /** Onde o `[` não é marca: código, endereço, tag HTML, escape. */
@@ -384,6 +403,14 @@ function mountNode(doc: MdDocument, n: MdChild): unknown {
   if (typeof n === "string") return doc.createTextNode(n);
   const el = doc.createElement(DOM_TAG[n.tag]);
   const a = n.attrs;
+  if (n.tag === "a" && a?.path) {
+    // A nota ou o arquivo (spec #17683): também sem `href`. O clique manda o caminho para o app abrir.
+    el.setAttribute("class", "kn-md-link kn-md-file");
+    el.setAttribute("data-path", a.path);
+    el.setAttribute("title", a.path);
+    el.setAttribute("role", "link");
+    el.setAttribute("tabindex", "0");
+  }
   if (n.tag === "a" && a?.href) {
     // Sem `href`: o clique não navega sozinho. O balão lê o `data-href` e abre, no clique da pessoa.
     el.setAttribute("class", "kn-md-link");
@@ -423,8 +450,10 @@ export function mountMarkdown(nodes: MdNode[], doc: MdDocument = document as unk
 }
 
 /** O atalho: o texto do agente já montado (`mountMarkdown(parseMarkdown(text))`). */
-export function renderMarkdown(text: string): DocumentFragment;
-export function renderMarkdown(text: string, doc: MdDocument): MdElement;
-export function renderMarkdown(text: string, doc?: MdDocument): MdElement | DocumentFragment {
-  return doc ? mountMarkdown(parseMarkdown(text), doc) : mountMarkdown(parseMarkdown(text));
+export function renderMarkdown(text: string, doc?: undefined, links?: readonly BubbleLink[]): DocumentFragment;
+export function renderMarkdown(text: string, doc: MdDocument, links?: readonly BubbleLink[]): MdElement;
+export function renderMarkdown(text: string, doc?: MdDocument, links?: readonly BubbleLink[]): MdElement | DocumentFragment {
+  const md = withFileLinks(text, links);
+  const nodes = parseMarkdown(md.text, md.files);
+  return doc ? mountMarkdown(nodes, doc) : mountMarkdown(nodes);
 }

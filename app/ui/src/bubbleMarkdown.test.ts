@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 
+import type { BubbleLink } from "../../src/shared/ui-contract.ts";
 import { type MdChild, type MdDocument, type MdNode, mountMarkdown, parseMarkdown, plainMarkdown, renderMarkdown } from "./bubbleMarkdown.ts";
 
 /** Uma resposta inventada do agente: título, lista com caixas, tabela de 3 colunas, código e link. */
@@ -173,5 +174,33 @@ describe("o texto corrido do balão fechado", () => {
 
   test("texto sem markdown passa igual", () => {
     expect(plainMarkdown("Pronto, salvei a nota.")).toBe("Pronto, salvei a nota.");
+  });
+});
+
+describe("as notas e os arquivos da pasta como link (spec #17683)", () => {
+  const RESP = "Criei [[Plano|o plano]] e salvei `Projeto X/relatorio.pdf`. Veja também [isto](kiwi-file:segredo.md).";
+  const at = (text: string, path: string, kind: BubbleLink["kind"]): BubbleLink => {
+    const from = RESP.indexOf(text);
+    return { text, from, to: from + text.length, path, kind };
+  };
+  const LINKS = [at("[[Plano|o plano]]", "Plano.md", "note"), at("`Projeto X/relatorio.pdf`", "Projeto X/relatorio.pdf", "file")];
+  const out = html(renderMarkdown(RESP, fakeDoc(), LINKS) as unknown as Fake);
+
+  test("cada menção achada pelo main vira link com o caminho, sem href", () => {
+    expect(out).toContain('<a class="kn-md-link kn-md-file" data-path="Plano.md" title="Plano.md" role="link" tabindex="0">o plano</a>');
+    expect(out).toContain('<a class="kn-md-link kn-md-file" data-path="Projeto X/relatorio.pdf" title="Projeto X/relatorio.pdf" role="link" tabindex="0"><code>Projeto X/relatorio.pdf</code></a>');
+    expect(out).not.toMatch(/ href=/);
+  });
+
+  test("um kiwi-file: que a resposta escreveu sozinha fica texto", () => {
+    expect(out).toContain("Veja também isto.");
+    expect(out).not.toContain("segredo.md");
+    expect(html(renderMarkdown("[x](kiwi-file:Plano.md)", fakeDoc()) as unknown as Fake)).toBe("<p>x</p>");
+  });
+
+  test("sem links, o [[…]] fica como está; a posição que não bate com o texto não vira link", () => {
+    expect(plainMarkdown("Criei [[Plano]].")).toBe("Criei [[Plano]].");
+    const wrong = { ...LINKS[0]!, from: 0, to: LINKS[0]!.text.length };
+    expect(html(renderMarkdown(RESP, fakeDoc(), [wrong]) as unknown as Fake)).not.toContain("data-path");
   });
 });
