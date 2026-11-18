@@ -106,18 +106,34 @@ async function settle(p: Page) {
   await Bun.sleep(200);
 }
 
+interface Cursor {
+  /** A linha do `.md`, a partir de 1. */
+  line: number;
+  /** A coluna do cursor na linha, a partir de 0. */
+  col: number;
+  text: string;
+}
+
 /**
- * O número e o texto da linha do `.md` onde está o cursor, pelo próprio editor: a `EditorView` que o CodeMirror pendura no DOM
- * (`cmTile.root.view`, o que o `EditorView.findFromDOM` lê; a página não importa módulos).
+ * Onde está o cursor no `.md`, pelo próprio editor: a `EditorView` que o CodeMirror pendura no DOM (`cmTile.root.view`,
+ * o que o `EditorView.findFromDOM` lê; a página não importa módulos).
  */
-async function lineOfCursor(p: Page): Promise<string> {
+async function cursorAt(p: Page): Promise<Cursor | null> {
   return p.evaluate(() => {
-    const dom = document.querySelector(".kn-note-editor .cm-content") as unknown as { cmTile?: { root?: { view?: { state: { doc: { lineAt(n: number): { number: number; text: string } }; selection: { main: { head: number } } } } } } };
+    const dom = document.querySelector(".kn-note-editor .cm-content") as unknown as { cmTile?: { root?: { view?: { state: { doc: { lineAt(n: number): { number: number; from: number; text: string } }; selection: { main: { head: number } } } } } } };
     const view = dom.cmTile?.root?.view;
-    if (!view) return "";
-    const line = view.state.doc.lineAt(view.state.selection.main.head);
-    return `${line.number}: ${line.text}`;
+    if (!view) return null;
+    const head = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(head);
+    return { line: line.number, col: head - line.from, text: line.text };
   });
+}
+
+/** O cursor está dentro da palavra (do começo ao fim dela, na primeira vez que ela aparece na linha). */
+function insideWord(c: Cursor | null, word: string): boolean {
+  if (!c) return false;
+  const at = c.text.indexOf(word);
+  return at >= 0 && c.col >= at && c.col <= at + word.length;
 }
 
 /** Clica no meio da palavra, como a pessoa faz para escrever ali. */
@@ -139,9 +155,10 @@ result.checks = {};
 
 /**
  * Compara com a nota sem foco: nenhuma palavra muda de altura, e as de fora da linha do cursor nem de recuo. Na linha do
- * cursor, as marcas que aparecem (`**`) empurram o resto da linha para o lado: ali só a altura conta.
+ * cursor, a marca que aparece (`**`) empurra para o lado o que vem depois dela: ali o recuo só conta nas palavras de
+ * `keepX`, as que não têm marca à mostra antes delas. É o recuo do item cru, o pulo que o harry viu.
  */
-function sameSpots(name: string, base: Record<string, Spot | null>, now: Record<string, Spot | null>, cursorLine: number) {
+function sameSpots(name: string, base: Record<string, Spot | null>, now: Record<string, Spot | null>, cursorLine: number, keepX: string[]) {
   const moved: Record<string, { dx: number; dy: number }> = {};
   for (const w of Object.keys(PROBES)) {
     const a = base[w];
@@ -152,7 +169,7 @@ function sameSpots(name: string, base: Record<string, Spot | null>, now: Record<
     }
     const dx = Math.round((b.x - a.x) * 10) / 10;
     const dy = Math.round((b.y - a.y) * 10) / 10;
-    const xCounts = PROBES[w] !== cursorLine;
+    const xCounts = PROBES[w] !== cursorLine || keepX.includes(w);
     if (Math.abs(dy) > TOLERANCE || (xCounts && Math.abs(dx) > TOLERANCE)) moved[w] = { dx, dy };
   }
   check(`${name}: nenhuma linha muda de lugar`, Object.keys(moved).length === 0, Object.keys(moved).length ? { moved } : undefined);
@@ -187,29 +204,33 @@ try {
   check("a nota abre com todas as palavras à mostra", missing.length === 0, missing.length ? { missing } : undefined);
   check("sem foco, a lista está desenhada", ["maçã", "banana", "cereja"].every((x) => !/\*\*|\[\[|^[-*+] /.test(base[x]?.line ?? "")));
 
-  // Os estados: onde o cursor vai, como, e a linha do `.md` em que ele fica.
-  const states: { name: string; file: string; go: () => Promise<void>; line: number; at: string }[] = [
-    { name: "1-cursor-fora", file: "1-cursor-fora.png", go: () => clickWord(p, "antes"), line: 0, at: "antes" },
-    { name: "2-cursor-no-item", file: "2-cursor-no-item.png", go: () => clickWord(p, "banana"), line: 5, at: "banana" },
-    { name: "3-cursor-no-negrito", file: "3-cursor-no-negrito.png", go: () => clickWord(p, "maçã"), line: 4, at: "maçã" },
-    { name: "4-seta-para-baixo", file: "4-seta-para-baixo.png", go: async () => { await p.keyboard.press("ArrowDown"); await settle(p); }, line: 5, at: "banana" },
-    { name: "4b-seta-para-cima", file: "4b-seta-para-cima.png", go: async () => { await clickWord(p, "cereja"); await p.keyboard.press("ArrowUp"); await settle(p); }, line: 5, at: "banana" },
-    { name: "5-cursor-no-titulo", file: "5-cursor-no-titulo.png", go: () => clickWord(p, "Frutas"), line: 2, at: "Frutas" },
-    { name: "6-cursor-depois", file: "6-cursor-depois.png", go: () => clickWord(p, "Depois"), line: 8, at: "Depois" },
+  // Os estados: onde o cursor vai, como, a linha do `.md` em que ele fica, a palavra em que ele tem de estar e as palavras
+  // da linha dele que não podem andar para o lado (nenhuma marca à mostra antes delas).
+  const states: { name: string; file: string; go: () => Promise<void>; line: number; at: string; keepX: string[] }[] = [
+    { name: "1-cursor-fora", file: "1-cursor-fora.png", go: () => clickWord(p, "antes"), line: 0, at: "antes", keepX: ["antes"] },
+    { name: "2-cursor-no-item", file: "2-cursor-no-item.png", go: () => clickWord(p, "banana"), line: 5, at: "banana", keepX: ["banana", "Feira"] },
+    { name: "3-cursor-no-negrito", file: "3-cursor-no-negrito.png", go: () => clickWord(p, "maçã"), line: 4, at: "maçã", keepX: [] },
+    { name: "4-seta-para-baixo", file: "4-seta-para-baixo.png", go: async () => { await p.keyboard.press("ArrowDown"); await settle(p); }, line: 5, at: "banana", keepX: ["banana", "Feira"] },
+    { name: "4b-seta-para-cima", file: "4b-seta-para-cima.png", go: async () => { await clickWord(p, "cereja"); await p.keyboard.press("ArrowUp"); await settle(p); }, line: 5, at: "banana", keepX: ["banana", "Feira"] },
+    { name: "5-cursor-no-titulo", file: "5-cursor-no-titulo.png", go: () => clickWord(p, "Frutas"), line: 2, at: "Frutas", keepX: ["Frutas"] },
+    { name: "6-cursor-depois", file: "6-cursor-depois.png", go: () => clickWord(p, "Depois"), line: 8, at: "Depois", keepX: ["Depois"] },
   ];
   for (const s of states) {
     await s.go();
     const now = await measure(p, words);
     result[s.name] = now;
-    // O cursor foi mesmo para a linha certa: senão, a lista toda desenhada passaria sem provar nada.
-    const cursorLine = await lineOfCursor(p);
-    check(`${s.name}: o cursor está na linha do "${s.at}"`, cursorLine.includes(s.at), { cursorLine });
+    // O cursor foi mesmo para dentro da palavra: na linha certa, mas no começo dela, nenhuma marca apareceria e o estado
+    // passaria sem provar nada (revisão do T17785).
+    const c = await cursorAt(p);
+    check(`${s.name}: o cursor está dentro do "${s.at}"`, insideWord(c, s.at), { cursor: c && `${c.line}:${c.col}: ${c.text}` });
     await shot(s.file);
-    sameSpots(s.name, base, now, s.line);
+    sameSpots(s.name, base, now, s.line, s.keepX);
     othersDrawn(s.name, now, s.line);
   }
-  // No item do cursor, só a marca debaixo dele: com o cursor no "maçã", o "pera" da mesma linha continua sem `**`.
+  // No item do cursor, só a marca debaixo dele: com o cursor no "maçã", o `**maçã**` à mostra, e o "pera" da mesma linha
+  // continua sem `**`.
   const onBold = result["3-cursor-no-negrito"] as Record<string, Spot | null>;
+  check("3-cursor-no-negrito: a marca debaixo do cursor aparece", /\*\*maçã\*\*/.test(onBold.maçã?.line ?? ""), { line: onBold.maçã?.line });
   check("3-cursor-no-negrito: o outro negrito da linha continua desenhado", !/\*\*pera\*\*/.test(onBold.pera?.line ?? ""), { line: onBold.pera?.line });
   check("3-cursor-no-negrito: o negrito continua negrito", (onBold.maçã?.weight ?? 0) >= 600 && (onBold.pera?.weight ?? 0) >= 600, { maçã: onBold.maçã?.weight, pera: onBold.pera?.weight });
   // Com o cursor no "banana", o link do mesmo item fica desenhado: o cursor não está nele.
