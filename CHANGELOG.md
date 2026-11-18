@@ -4,6 +4,11 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.5](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.5) (2026-11-18)
+
+- **Gota 2: a forma da gota desenhada quadro a quadro, sem o rastro preto na volta (T18948, T18949, spec #17725)** ([#66](https://github.com/kiwi-init/kiwinotes/pull/66))
+- **Gota: o ResizeObserver larga os botões que saem da barra (T18917)** ([#64](https://github.com/kiwi-init/kiwinotes/pull/64))
+
 ## [2026.11.4](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.4) (2026-11-18)
 
 - **Os botões das Notas saem da barra de abas como uma gota (T18646, T18647, T18648, spec #17725)** ([#61](https://github.com/kiwi-init/kiwinotes/pull/61))
