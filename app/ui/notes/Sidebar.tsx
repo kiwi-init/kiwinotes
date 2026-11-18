@@ -15,7 +15,7 @@ import { TreeIcon, Twisty } from "./treeIcons.tsx";
 import { type SavedSearch, SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { SectionId } from "./sidebarState.ts";
-import { canDrop, type Dragged, dropFolder, type DropRow } from "./treeDrop.ts";
+import { canDrop, type Dragged, dropEdge, dropFolder, type DropRow, springFolder, springOpener } from "./treeDrop.ts";
 import type { NoteMeta, TagNode } from "./types.ts";
 
 /** Em que o botão direito (ou o arrastar) caiu. */
@@ -225,6 +225,15 @@ export function Sidebar(p: SidebarProps) {
   // O que está sendo arrastado (T19937): o `dragover` não lê o `dataTransfer`, e o destino depende do que se arrasta.
   const dragged = useRef<Dragged | null>(null);
   const [dragging, setDragging] = useState(false);
+  // A linha fina onde o item cai: a linha sob o mouse (`kind:path`) e a borda dela.
+  const [dropLine, setDropLine] = useState<{ row: string; edge: "top" | "bottom" } | null>(null);
+  // Segurar sobre uma pasta fechada abre ela (spec #19261). O `latest` dá ao timer as props de quando ele dispara.
+  const latest = useRef(p);
+  latest.current = p;
+  const spring = useMemo(() => springOpener((folder) => {
+    if (!latest.current.open.has(folder)) latest.current.onToggle(folder);
+  }), []);
+  useEffect(() => () => spring.cancel(), [spring]);
   // A janela da rolagem, para a lista virtual (T7875): o `nav` é quem rola.
   const navRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -286,8 +295,10 @@ export function Sidebar(p: SidebarProps) {
           },
           onDragEnd: () => {
             dragged.current = null;
+            spring.cancel();
             setDragging(false);
             setDropOn(null);
+            setDropLine(null);
           },
         }
       : {};
@@ -296,8 +307,10 @@ export function Sidebar(p: SidebarProps) {
     e.stopPropagation();
     const what = dragged.current;
     dragged.current = null;
+    spring.cancel();
     setDragging(false);
     setDropOn(null);
+    setDropLine(null);
     if (what && folder !== null) p.onDrop?.(what, folder);
   };
   /** O fundo da árvore e a faixa "Raiz": soltar ali põe na pasta dada (a raiz). */
@@ -305,7 +318,10 @@ export function Sidebar(p: SidebarProps) {
     p.onDrop
       ? {
           onDragOver: (e: DragEvent) => {
-            if (!e.dataTransfer.types.includes(DRAG) || !canDrop(dragged.current, folder)) return;
+            if (!e.dataTransfer.types.includes(DRAG)) return;
+            spring.cancel();
+            setDropLine(null);
+            if (!canDrop(dragged.current, folder)) return;
             e.preventDefault();
             e.stopPropagation();
             setDropOn(folder);
@@ -320,20 +336,33 @@ export function Sidebar(p: SidebarProps) {
    */
   const rowDrop = (row: DropRow) => {
     if (!p.onDrop) return {};
-    const target = (e: DragEvent) => {
+    const at = (e: DragEvent) => {
       const r = e.currentTarget.getBoundingClientRect();
-      return dropFolder(row, r.height ? (e.clientY - r.top) / r.height : 0.5, dragged.current);
+      return r.height ? (e.clientY - r.top) / r.height : 0.5;
     };
+    const target = (e: DragEvent) => dropFolder(row, at(e), dragged.current);
+    const key = `${row.kind}:${row.path}`;
     return {
+      "data-drop-line": dropLine?.row === key ? dropLine.edge : undefined,
       onDragOver: (e: DragEvent) => {
         if (!e.dataTransfer.types.includes(DRAG)) return;
         // A linha decide sozinha: o fundo (a raiz) não pega o que ela recusou.
         e.stopPropagation();
-        const folder = target(e);
+        const y = at(e);
+        const folder = dropFolder(row, y, dragged.current);
+        const edge = dropEdge(row, y, folder);
+        spring.over(springFolder(row, y, dragged.current));
         setDropOn(folder);
+        setDropLine((d) => (edge ? (d?.row === key && d.edge === edge ? d : { row: key, edge }) : null));
         if (folder === null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
+      },
+      onDragLeave: (e: DragEvent) => {
+        // Sair da linha (não para um filho dela) desliga o timer e a linha fina.
+        if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+        spring.over(null);
+        setDropLine((d) => (d?.row === key ? null : d));
       },
       onDrop: (e: DragEvent) => dropped(e, target(e)),
     };

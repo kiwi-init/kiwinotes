@@ -554,7 +554,7 @@ button.kn-side-head:focus-visible {
 }
 /* o item já está na raiz: a faixa fica, apagada, para dizer onde é a raiz */
 .kn-side-rootdrop[data-off] {
-  opacity: 0.5;
+  color: var(--text-3);
 }
 .kn-side-new {
   flex: none;
@@ -739,6 +739,15 @@ button.kn-side-head:focus-visible {
 .kn-side-item[data-drop] {
   background: var(--accent-soft);
   border-radius: var(--radius-sm);
+}
+
+/* a linha fina onde o item cai, na borda da linha sob o mouse (T19937, spec #19261); a linha tem overflow escondido,
+   por isso é uma sombra de dentro, não um ::after */
+.kn-side-item[data-drop-line="top"] {
+  box-shadow: inset 0 2px 0 var(--accent-text);
+}
+.kn-side-item[data-drop-line="bottom"] {
+  box-shadow: inset 0 -2px 0 var(--accent-text);
 }
 
 .kn-side-rename {

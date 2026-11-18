@@ -1,7 +1,7 @@
 // Onde cai o que se arrasta na árvore (T19937, spec #19261). Caminhos inventados.
 import { describe, expect, test } from "bun:test";
 
-import { canDrop, dropFolder } from "./treeDrop.ts";
+import { canDrop, dropEdge, dropFolder, springFolder, springOpener } from "./treeDrop.ts";
 
 const nota = { kind: "note" as const, path: "Projetos/Plano.md" };
 const pasta = { kind: "folder" as const, path: "Projetos" };
@@ -51,5 +51,65 @@ describe("canDrop", () => {
   test("um nome que começa igual não é subpasta", () => {
     expect(canDrop(pasta, "Projetos 2")).toBe(true);
     expect(canDrop(pasta, "Projetos/x")).toBe(false);
+  });
+});
+
+describe("dropEdge", () => {
+  test("a linha na borda mais perto, quando o destino é ao lado", () => {
+    const row = { kind: "folder" as const, path: "Ideias" };
+    expect(dropEdge(row, 0.1, "")).toBe("top");
+    expect(dropEdge(row, 0.9, "")).toBe("bottom");
+    expect(dropEdge(row, 0.5, "Ideias")).toBeNull();
+    expect(dropEdge({ kind: "note", path: "Ideias/Lista.md" }, 0.7, "Ideias")).toBe("bottom");
+    expect(dropEdge(row, 0.1, null)).toBeNull();
+  });
+});
+
+describe("segurar sobre a pasta fechada", () => {
+  test("springFolder: só o meio de uma pasta fechada, e não a que se arrasta", () => {
+    const ideias = { kind: "folder" as const, path: "Ideias" };
+    expect(springFolder(ideias, 0.5, nota)).toBe("Ideias");
+    expect(springFolder(ideias, 0.1, nota)).toBeNull();
+    expect(springFolder({ ...ideias, expanded: true }, 0.5, nota)).toBeNull();
+    expect(springFolder({ kind: "note", path: "Ideias/Lista.md" }, 0.5, nota)).toBeNull();
+    expect(springFolder({ kind: "folder", path: "Projetos" }, 0.5, pasta)).toBeNull();
+    expect(springFolder({ kind: "folder", path: "Projetos/Velhos" }, 0.5, pasta)).toBeNull();
+    expect(springFolder(ideias, 0.5, null)).toBeNull();
+  });
+
+  function fake() {
+    const due = new Map<number, () => void>();
+    let n = 0;
+    const opened: string[] = [];
+    const s = springOpener((f) => opened.push(f), 600, {
+      set: (fn) => (due.set(++n, fn), n),
+      clear: (id) => due.delete(id as number),
+    });
+    const tick = () => {
+      for (const [id, fn] of [...due]) (due.delete(id), fn());
+    };
+    return { s, opened, tick, pending: () => due.size };
+  }
+
+  test("abre depois do tempo, e a mesma pasta não reinicia o timer", () => {
+    const { s, opened, tick, pending } = fake();
+    s.over("Ideias");
+    s.over("Ideias");
+    expect(pending()).toBe(1);
+    tick();
+    expect(opened).toEqual(["Ideias"]);
+  });
+
+  test("sair da linha, ir para outra ou soltar cancela", () => {
+    const { s, opened, tick, pending } = fake();
+    s.over("Ideias");
+    s.over(null);
+    expect(pending()).toBe(0);
+    s.over("Ideias");
+    s.over("Projetos");
+    expect(pending()).toBe(1);
+    s.cancel();
+    tick();
+    expect(opened).toEqual([]);
   });
 });
