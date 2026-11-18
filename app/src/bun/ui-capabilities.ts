@@ -25,7 +25,8 @@ import { filePath, folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { type AttachmentData, type Attachments, attachmentsFolder,
 } from "../notes/attachments.ts";
 import { openMode } from "../shared/attachments.ts";
-import { openTarget } from "../shared/file-view.ts";
+import { looksLikeText, mayBeText, openTarget, type OpenTarget } from "../shared/file-view.ts";
+import type { FileContent } from "../notes/vault.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
 import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
@@ -1045,9 +1046,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
       const rel = filePath(asked);
       const { abs, mode } = await v.locateFile(rel);
-      if (opened === "app") deps.openFile?.(abs, openMode(abs, mode));
+      // Sem visualizador próprio, mas talvez texto (o `Dockerfile`, um `.vue`, T20047): o mesmo critério das Notas
+      // (`loadAsText`, T19313). Lido como texto, em UTF-8 sem perda, sem o byte zero e no limite, abre nas Notas; um
+      // binário ou grande demais vai ao app padrão, como antes, sem passar por um view que só diria "Abrir no app padrão".
+      const target: OpenTarget = opened === "app" && mayBeText(rel) && (await opensAsText(v, rel)) ? "viewer" : opened;
+      if (target === "app") deps.openFile?.(abs, openMode(abs, mode));
       else deps.openInNotes?.(rel);
-      return { opened };
+      return { opened: target };
     },
     "files.read": async (args) => {
       const a = fields(args, "files.read", ["path", "as"]);
@@ -1665,4 +1670,10 @@ function pinnedList(value: unknown): string[] {
     if (!out.includes(p)) out.push(p);
   }
   return out;
+}
+
+/** Um arquivo sem visualizador abre como texto nas Notas (T20047): o mesmo que o `loadAsText` da UI confere. */
+async function opensAsText(v: { readFile(path: unknown, as?: unknown): Promise<FileContent> }, rel: string): Promise<boolean> {
+  const file = await v.readFile(rel, "text").catch(() => null);
+  return !!file && !("tooLarge" in file) && "text" in file && !file.readOnly && looksLikeText(file.text);
 }

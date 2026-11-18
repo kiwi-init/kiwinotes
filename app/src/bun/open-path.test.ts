@@ -33,6 +33,12 @@ const FILES: Record<string, string> = {
   "Projeto X/rodar.sh": "#!/bin/sh\n",
   "Projeto X/pacote.zip": "PK",
   "Projeto X/instalar.command": "#!/bin/sh\n",
+  // Sem visualizador próprio (T20047): o que é texto no disco abre nas Notas, como na árvore (T19313).
+  "Projeto X/Dockerfile": "FROM exemplo:1\n",
+  "Projeto X/Tela.vue": "<template><p>Olá, Ana</p></template>\n",
+  "Projeto X/LEIAME": "Leia isto.\n",
+  "Projeto X/dados-sem-tipo": "\u0000\u0001binário",
+  "Projeto X/enorme-sem-tipo": "a".repeat(5 * 1024 * 1024 + 1),
 };
 
 async function setup() {
@@ -69,7 +75,7 @@ async function setup() {
   return { openPath, inNotes, inApp };
 }
 
-test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem, quadro e código no visualizador; o resto no app do Mac", async () => {
+test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem, quadro, código e o texto sem tipo no visualizador; o resto no app do Mac", async () => {
   const { openPath, inNotes, inApp } = await setup();
   const opened: Record<string, unknown> = {};
   for (const p of Object.keys(FILES)) {
@@ -89,7 +95,14 @@ test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem, quadro e códig
     // O código abre como texto nas Notas (T19312), mesmo com o bit de execução: ali ele só é lido, nunca roda.
     "Projeto X/rodar.sh": "viewer",
     "Projeto X/pacote.zip": "app",
-    "Projeto X/instalar.command": "app",
+    // Um script é texto: abre nas Notas, onde só é lido, como o .sh (T20047). Antes ia ao Finder.
+    "Projeto X/instalar.command": "viewer",
+    "Projeto X/Dockerfile": "viewer",
+    "Projeto X/Tela.vue": "viewer",
+    "Projeto X/LEIAME": "viewer",
+    // O binário e o texto grande demais para as Notas seguem no app padrão, sem passar pelo view.
+    "Projeto X/dados-sem-tipo": "app",
+    "Projeto X/enorme-sem-tipo": "app",
   });
   expect(inNotes).toEqual([
     "Feira.md",
@@ -101,12 +114,17 @@ test("nota e .txt abrem nas Notas; pdf, csv, docx, xlsx, imagem, quadro e códig
     "Projeto X/foto.png",
     "Projeto X/quadro.canvas",
     "Projeto X/rodar.sh",
+    "Projeto X/instalar.command",
+    "Projeto X/Dockerfile",
+    "Projeto X/Tela.vue",
+    "Projeto X/LEIAME",
   ]);
   // O que rodaria algo (o bit de execução) só aparece no Finder, como no `files.open`.
   expect(inApp).toEqual([
     ["Projeto X/apresentacao.key", "app"],
     ["Projeto X/pacote.zip", "finder"], // fora da OPENS_IN_APP: só no Finder
-    ["Projeto X/instalar.command", "finder"],
+    ["Projeto X/dados-sem-tipo", "finder"],
+    ["Projeto X/enorme-sem-tipo", "finder"],
   ]);
 });
 

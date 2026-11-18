@@ -5,10 +5,11 @@ import { type BubbleLinkResolver, findBubbleLinks } from "./bubble-links.ts";
 
 // Uma pasta inventada (spec #17952).
 const notes = ["Plano.md", "Reuniões/Ata de março.md", "Projeto X/Roteiro.md"];
-const files = ["Anexos/orcamento.pdf", "lista.txt", "Projeto X/fotos/capa.png", "dados (v2).csv"];
+const files = ["Anexos/orcamento.pdf", "lista.txt", "Projeto X/fotos/capa.png", "dados (v2).csv", "Projeto X/Dockerfile"];
 const note = makeResolver(notes);
 const file = makeFileResolver(files);
-const r: BubbleLinkResolver = { note: (t) => note(t), file: (t) => file(t) };
+// Como o `fileAt` do cofre: o caminho exato, com a pasta, também sem extensão (T20047).
+const r: BubbleLinkResolver = { note: (t) => note(t), file: (t) => file(t) ?? (t.includes("/") && files.includes(t) ? t : null) };
 const pick = (text: string) => findBubbleLinks(text, r).map((l) => [l.text, l.path, l.kind]);
 
 describe("findBubbleLinks (spec #17683)", () => {
@@ -63,6 +64,14 @@ describe("findBubbleLinks (spec #17683)", () => {
       ["`Plano.md`", "Plano.md", "note"],
       ["`Projeto X/Roteiro`", "Projeto X/Roteiro.md", "note"],
     ]);
+  });
+
+  test("um arquivo sem extensão vira link pelo caminho com a pasta, nunca pelo nome solto (T20047)", () => {
+    expect(pick("Veja `Projeto X/Dockerfile` e [o build](Projeto%20X/Dockerfile).")).toEqual([
+      ["`Projeto X/Dockerfile`", "Projeto X/Dockerfile", "file"],
+      ["[o build](Projeto%20X/Dockerfile)", "Projeto X/Dockerfile", "file"],
+    ]);
+    expect(pick("O `Dockerfile`, o Dockerfile e o `Projeto X/Makefile`.")).toEqual([]);
   });
 
   test("um link web fica com o construtor, e a menção não se repete por dentro de outra", () => {
