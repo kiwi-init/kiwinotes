@@ -15,6 +15,9 @@ public protocol MediaVolumeControl: AnyObject {
 
 /// Original Kiwi implementation of the approved lower-volume option. No player commands, devices or timers here.
 /// Main-thread ownership lasts only through microphone capture, not transcription/insertion or meetings.
+/// The rule (spec #17697, which replaces the "dictation only" of #4756): the volume goes down while the mic records a
+/// dictation **or a talk to the Kiwi-cat**, and comes back when that recording ends, is cancelled or loses the mic.
+/// Never during a meeting. Proof without the real mic or the Mac's sound: `bun scripts/agent-media-check.ts` (T18410).
 public final class DictationMedia {
     private let volume: MediaVolumeControl?
     private let notify: (String) -> Void
