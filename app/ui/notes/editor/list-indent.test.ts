@@ -4,11 +4,11 @@
 import { describe, expect, test } from "bun:test";
 
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 
 import { wikiLinkSyntax } from "./index.ts";
 import { inlineDecorations, itemHasGap, listItemAtLine } from "./livePreview.ts";
+import { fullTree } from "./rendered.ts";
 
 const md = markdown({ base: markdownLanguage, extensions: [wikiLinkSyntax] });
 const stateOf = (doc: string, cursor = 0) => EditorState.create({ doc, selection: { anchor: cursor }, extensions: [md] });
@@ -33,7 +33,7 @@ const at = (s: string, plus = 0) => NOTE.indexOf(s) + plus;
 type Found = { from: number; to: number; text: string; cls?: string; widget?: { text?: string; level?: number; constructor: { name: string } } };
 function decos(cursor: number): Found[] {
   const s = stateOf(NOTE, cursor);
-  const set = inlineDecorations(s, true, [{ from: 0, to: s.doc.length }], { status: () => "ok" } as never);
+  const set = inlineDecorations(s, true, [{ from: 0, to: s.doc.length }], { status: () => "ok" } as never, fullTree(s));
   const out: Found[] = [];
   for (let c = set.iter(); c.value; c.next()) {
     const spec = c.value.spec as { widget?: Found["widget"]; class?: string };
@@ -92,7 +92,8 @@ describe("o \"## \" do título", () => {
 
 describe("o bloco desenhado que começa no meio da lista", () => {
   const s = stateOf(NOTE);
-  const tree = syntaxTree(s);
+  // A árvore inteira: a do `syntaxTree` para no orçamento de tempo do parser e vem parcial com a máquina carregada.
+  const tree = fullTree(s);
   const item = (line: string) => listItemAtLine(s, tree, s.doc.lineAt(at(line)).from);
   test("o 2º item e o aninhado guardam o espaço; o 1º e as linhas fora da lista, não", () => {
     expect(itemHasGap(item("- item um")!)).toBe(false);

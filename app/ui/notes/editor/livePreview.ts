@@ -194,8 +194,9 @@ function buildInline(view: EditorView, resolver: LinkResolver): DecorationSet {
 
 /**
  * As decorações do preview em linha, sem DOM (testadas): `focused` é o editor com foco, `ranges` os trechos na tela.
+ * `tree`: no editor, a que o parser já fez; nos testes, a inteira (`fullTree`), que não depende do orçamento de tempo.
  */
-export function inlineDecorations(state: EditorState, focused: boolean, ranges: readonly { from: number; to: number }[], resolver: LinkResolver): DecorationSet {
+export function inlineDecorations(state: EditorState, focused: boolean, ranges: readonly { from: number; to: number }[], resolver: LinkResolver, tree: Tree = syntaxTree(state)): DecorationSet {
   // Spec #17690: a marca só aparece no trecho exato onde está o cursor (o `**` do negrito em que ele está, o link em que
   // ele está), e não na linha inteira. O resto da linha continua desenhado, sem nada pular.
   const near = (from: number, to: number) => focused && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
@@ -204,7 +205,6 @@ export function inlineDecorations(state: EditorState, focused: boolean, ranges: 
     return p ? near(p.from, p.to) : false;
   };
   const out: Range<Decoration>[] = [];
-  const tree = syntaxTree(state);
 
   for (const { from, to } of ranges) {
     tree.iterate({

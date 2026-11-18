@@ -30,7 +30,7 @@ const firsts = (doc: string, cursor: number, focused = true) => renderedBlocks(s
 /** O texto que o preview esconde (as marcas que somem), na ordem. */
 function hidden(doc: string, cursor: number, focused = true): string[] {
   const s = stateOf(doc, cursor);
-  const set = inlineDecorations(s, focused, [{ from: 0, to: s.doc.length }], { status: () => "ok" } as never);
+  const set = inlineDecorations(s, focused, [{ from: 0, to: s.doc.length }], { status: () => "ok" } as never, fullTree(s));
   const out: string[] = [];
   for (let c = set.iter(); c.value; c.next()) {
     const spec = c.value.spec as { widget?: unknown; class?: string };
@@ -42,7 +42,7 @@ function hidden(doc: string, cursor: number, focused = true): string[] {
 const hiddenIn = (line: string, cursor: number, focused = true) => {
   const from = NOTE.indexOf(line);
   const s = stateOf(NOTE, cursor);
-  const set = inlineDecorations(s, focused, [{ from: 0, to: s.doc.length }], { status: () => "ok" } as never);
+  const set = inlineDecorations(s, focused, [{ from: 0, to: s.doc.length }], { status: () => "ok" } as never, fullTree(s));
   const out: string[] = [];
   for (let c = set.iter(); c.value; c.next()) {
     const spec = c.value.spec as { widget?: unknown };
