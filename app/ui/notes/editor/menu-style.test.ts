@@ -1,5 +1,5 @@
 // Spec #17703: no menu do botão direito, cada opção mostra o que faz. O Formatar, cada uma no próprio estilo; o
-// Parágrafo e o Inserir, com a cascata dos títulos e os ícones (partes B e C entram aqui quando chegarem).
+// Parágrafo, com a cascata dos títulos e os ícones (parte B); o Inserir, com um ícone em cada opção (parte C).
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -59,4 +59,22 @@ test("o rótulo leva a classe; sem ela, fica como antes", () => {
   // O resto do menu não muda: Recortar, Copiar e Colar sem classe.
   const top = menu().filter((it) => it.kind !== "separator" && it.kind !== "title" && it.kind !== "submenu");
   for (const it of top) if (["Recortar", "Copiar", "Colar"].includes(it.label)) expect((it as { labelClass?: string }).labelClass).toBeUndefined();
+});
+
+test("o Parágrafo: os títulos em cascata, do 1 (maior) ao 6 (menor), e ícone no resto, menos o Corpo", () => {
+  const items = submenu(menu(), "Parágrafo");
+  const titles = items.filter((it) => it.label.startsWith("Título"));
+  expect(titles.map((it) => it.labelClass)).toEqual([1, 2, 3, 4, 5, 6].map((n) => `kn-menu-h${n}`));
+  // A regra só do tamanho (a primeira com a classe é a do grupo, com o peso).
+  const sizes = titles.map((it) => Number(css.match(new RegExp(`\\.${it.labelClass} \\{ font-size: (\\d+)px`))?.[1]));
+  expect(sizes.every((n) => n > 0)).toBe(true);
+  for (let i = 1; i < sizes.length; i++) expect(sizes[i], `Título ${i + 1} menor que o ${i}`).toBeLessThan(sizes[i - 1]!);
+  for (const it of items.filter((it) => !it.label.startsWith("Título") && it.label !== "Corpo")) expect(it.icon, it.label).toBeString();
+});
+
+test("o Inserir: cada opção com o seu ícone, sem repetir", () => {
+  const items = submenu(menu(), "Inserir");
+  expect(items.length).toBe(7);
+  for (const it of items) expect(it.icon, it.label).toBeString();
+  expect(new Set(items.map((it) => it.icon)).size).toBe(items.length);
 });
