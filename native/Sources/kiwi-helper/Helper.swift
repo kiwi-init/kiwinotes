@@ -74,6 +74,8 @@ final class Helper {
     /// `--headless` (T1739): for the agents' CLI. No hotkey tap, no overlay, no mic, no permission asks, and every
     /// insert is a dry run. Nothing reaches the screen or the person's keyboard, clipboard or microphone.
     private let headless: Bool
+    /// O mic silencioso do headless (T18410); nil no app.
+    private let silentMic: SilentMic?
     private let meetingDirectory: URL?
     private let meetingMic = MeetingMicrophone()
     private var meetings: MeetingCommands?
@@ -103,9 +105,20 @@ final class Helper {
         self.meetingDirectory = meetingDirectory
         let mic = MicSelection()
         self.mic = mic
-        audio = AudioCapture(makeEngine: { AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) }) })
+        // Headless (T18410): o mic é o silencioso, que nunca abre um dispositivo; e com KIWI_DEBUG o volume é o falso,
+        // que só escreve no log. Assim o `debug.agentRecording` prova a L8 sem o mic e sem o som do Mac.
+        let silentMic = headless ? SilentMic() : nil
+        self.silentMic = silentMic
+        audio = AudioCapture(makeEngine: {
+            if let silentMic { return silentMic.engine() }
+            return AVMicEngine(device: mic.pick().device.map { AudioDeviceID($0.id) })
+        })
         let dataDirectory = meetingDirectory?.deletingLastPathComponent()
-        media = DictationMedia(volume: headless || ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1" ? nil : OutputVolume(),
+        let debugEnv = ProcessInfo.processInfo.environment["KIWI_DEBUG"] == "1"
+        let volume: MediaVolumeControl? = headless && debugEnv
+            ? LoggedVolume(log: { [weak self] in self?.emit("log", ["level": "info", "message": $0]) })
+            : headless || debugEnv ? nil : OutputVolume()
+        media = DictationMedia(volume: volume,
                                journal: dataDirectory.map { FileMediaVolumeJournal(file: $0.appendingPathComponent("dictation-media-volume.json")) },
                                notify: { [weak self] code in self?.emit("log", ["level": "info", "message": code]) })
         tap = HotkeyTap { [weak self] event in self?.onTap(event) }
@@ -688,10 +701,13 @@ final class Helper {
         recordingTarget = .agent
         agentConfirmed = false
         agentDropped = false
-        // The media (L8) isn't lowered: pausing the music is only for the dictation (#4756).
+        // Spec #17697: the media (L8) goes down as the mic opens, like the dictation's, and comes back at the end,
+        // the cancel or the drop. During a recorded meeting it isn't touched.
         do {
-            emit("agent.record.started", ["reason": reason])
-            try audio.start()
+            try media.startCapture(meetingActive: meeting.isRecording) {
+                emit("agent.record.started", ["reason": reason])
+                try audio.start()
+            }
         } catch {
             talk.reset(.agent)
             agentGate.reset()
@@ -761,6 +777,7 @@ final class Helper {
     /// nothing when Esc came first. The samples live only in memory: no dump, no journal; the audio is gone after.
     private func finishAgentRecording(_ samples: [Float], reason: String, mode: String, lost: String?, releasedAt: TimeInterval?) {
         recordingTarget = nil
+        media.end()
         agentGate.reset()
         agentConfirmTimer?.cancel()
         if agentConfirmed { cues.playEnd() }
@@ -858,6 +875,7 @@ final class Helper {
         if recordingTarget == .agent {
             // Spec #9876: the audio is thrown away; the sound only if the listening had been confirmed.
             _ = audio.stop()
+            media.end()
             agentConfirmTimer?.cancel()
             if agentConfirmed { cues.playEnd() }
             agentGate.reset()
@@ -983,7 +1001,8 @@ final class Helper {
             if headless && ["meeting.start", "meeting.resumeMine"].contains(message.type) {
                 return reply(id, ok: false, error: "headless_no_mic")
             }
-            if message.type == "meeting.start" { media.end() }
+            // L8 (spec #17697): a meeting taking the mic gives the volume back first, also when "mine" resumes.
+            if ["meeting.start", "meeting.resumeMine"].contains(message.type) { media.end() }
             do {
                 let result = try handleMeeting(message)
                 reply(id, ok: result.ok, error: result.error, result.data)
@@ -1137,6 +1156,8 @@ final class Helper {
             }
         case "debug.transcribe" where debugCommands:
             debugTranscribe(id, message)
+        case "debug.agentRecording" where debugCommands:
+            debugAgentRecording(id, message)
         case "notify":
             reply(id, ok: false, error: "not_implemented")
         default:
@@ -1249,7 +1270,7 @@ final class Helper {
         object["type"] = type
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               let message = try? InboundMessage.decode(data) else { return }
-        if type == "meeting.start" { media.end() }
+        if ["meeting.start", "meeting.resumeMine"].contains(type) { media.end() }
         do { _ = try handleMeeting(message) } catch { emit("meeting.error", ["error": "meeting_unavailable"]) }
     }
 
@@ -1314,6 +1335,35 @@ final class Helper {
         emit("record.started", started)
         overlay.set(.listening)
         finishRecording(samples, reason: "debug", mode: "debug")
+    }
+
+    /// T18410 (spec #17697): a fala com o Kiwi-cat pelo caminho de verdade, no headless, com o mic silencioso e o volume
+    /// que só escreve no log: `start` abre a gravação do agente (como a tecla segurada depois do tempo), `stop` é soltar,
+    /// `cancel` é o ⌃C/Esc, e `drop` corta o áudio do mic, que o watchdog derruba como um mic que caiu.
+    private func debugAgentRecording(_ id: String?, _ message: InboundMessage) {
+        guard headless, let silentMic else { return reply(id, ok: false, error: "headless_only") }
+        switch message.string("action") {
+        case "start":
+            guard recordingTarget == nil, !audio.isRecording else { return reply(id, ok: false, error: "already_recording") }
+            silentMic.starved = false
+            if let code = startAgentRecording(reason: "debug") { return reply(id, ok: false, error: code) }
+            confirmAgent(latched: false)
+            reply(id, ok: true)
+        case "stop":
+            guard recordingTarget == .agent else { return reply(id, ok: false, error: "not_recording") }
+            reply(id, ok: true)
+            stopRecording(reason: "hotkey", mode: "hold")
+        case "cancel":
+            guard recordingTarget == .agent else { return reply(id, ok: false, error: "not_recording") }
+            reply(id, ok: true)
+            cancelRecording(reason: "hotkey")
+        case "drop":
+            guard recordingTarget == .agent else { return reply(id, ok: false, error: "not_recording") }
+            silentMic.starved = true
+            reply(id, ok: true)
+        default:
+            reply(id, ok: false, error: "invalid_value")
+        }
     }
 
     /// Spec #9876: the WAV plays in real time, like a key held while talking: its level goes out as `audio.level` (the
