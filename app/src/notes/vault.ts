@@ -457,6 +457,8 @@ export class Vault {
   private seq = 0;
   private touchedAt = new Map<string, number>();
   private scans = 0;
+  /** Uma operação trocou pastas no índice durante um scan (T20166): ao fim dele, outro, para não ficar o de antes. */
+  private staleScan = false;
   private readonly reconcileMs: number;
   private readonly listeners = new Set<(paths: string[]) => void>();
   private readonly otherListeners = new Set<(paths: string[]) => void>();
@@ -501,7 +503,9 @@ export class Vault {
       // Lixeira do macOS, como teria ido.
       await this.loadRegistry();
       await this.flushLeftoverUndo();
-      await this.scan();
+      // Só a abertura mostra a barra de progresso (T20166): a de uma operação virava um `notes.folderChanged` a cada 128
+      // itens, centenas pela ponte a cada renomear.
+      await this.scan({ progress: true });
       if (this.watchOnOpen) this.watch();
     })();
     return this.ready;
@@ -559,7 +563,7 @@ export class Vault {
     if (this.closed) return;
     const before = this.snapshot();
     const files = new Map(this.files);
-    await this.scan({ quiet: true });
+    await this.scan();
     if (this.closed) return;
     const after = this.snapshot();
     const changed = [...after].filter(([p, v]) => before.get(p)?.version !== v.version).map(([p]) => p);
@@ -1245,8 +1249,10 @@ export class Vault {
     const toAbs = inside(this.root, to);
     if (!(await exists(fromAbs))) throw new VaultError("E_NOT_FOUND", `no note ${from}`);
     // O índice pode estar atrás do disco (o debounce do watcher, um evento perdido, uma nota criada fora): o rename
-    // reescreve outras notas, então parte do disco, nunca do que está na memória (revisão #1397).
-    await this.scan();
+    // reescreve outras notas, então parte do disco, nunca do que está na memória (revisão #1397). Sem o scan inteiro
+    // (T20166, 2 s com 12 mil notas): as notas que entraram ou saíram vêm pelos nomes; as que mudaram, pelo `stat` lá
+    // embaixo, que já relê as descartadas.
+    await this.catchUp();
     // Num disco sem diferença de maiúscula, "nota.md" → "Nota.md" é a mesma nota: vale.
     if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
     const before = [...this.notes.keys()];
@@ -1259,7 +1265,8 @@ export class Vault {
     this.touch(from);
     this.searchDirty = true;
     this.resolver = null;
-    const content = moved?.content ?? (await readFile(toAbs, "utf8"));
+    // Do disco: a nota pode ter mudado por fora depois do índice (sem o scan, o `moved` pode estar atrás).
+    const content = await readFile(toAbs, "utf8").catch(() => moved?.content ?? "");
     const entry = await this.index(to, content, toAbs);
 
     let updatedLinks = 0;
@@ -1448,8 +1455,8 @@ export class Vault {
     const s = await lstat(fromAbs).catch(() => null);
     if (!s?.isDirectory()) throw new VaultError("E_NOT_FOUND", `no folder ${from}`);
     if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
-    // Do disco, como o rename de nota (revisão #1397): o índice pode estar atrás.
-    await this.scan();
+    // Do disco, como o rename de nota (revisão #1397): o índice pode estar atrás. Sem o scan inteiro (T20166).
+    await this.catchUp();
     const before = [...this.notes.keys()];
     const moves = new Map<string, string>();
     for (const p of before) if (p.startsWith(`${from}/`)) moves.set(p, `${to}${p.slice(from.length)}`);
@@ -1458,7 +1465,8 @@ export class Vault {
     const aliasesAfter = new Map([...aliasesBefore].map(([p, a]) => [moves.get(p) ?? p, a] as const));
     await mkdir(path.dirname(toAbs), { recursive: true });
     await rename(fromAbs, toAbs);
-    await this.scan();
+    // O índice segue a pasta sem reler o disco (T20166): o rename não muda inode, tamanho nem data de nada de dentro.
+    this.moveInIndex(from, to);
     const updatedLinks = await this.rewriteAll(moves, makeResolver(before, aliasesBefore), makeResolver(after, aliasesAfter));
     this.emit([from, to, ...moves.keys(), ...moves.values()]);
     return { path: to, moved: moves.size, updatedLinks };
@@ -1473,7 +1481,8 @@ export class Vault {
     if (!s?.isDirectory()) throw new VaultError("E_NOT_FOUND", `no folder ${p}`);
     const gone = [...this.notes.keys()].filter((n) => n.startsWith(`${p}/`));
     await this.stage(p, abs, "folder");
-    await this.scan();
+    // Sai do índice o que estava dentro, sem reler o disco (T20166).
+    this.moveInIndex(p, null);
     this.emit([p, ...gone]);
     return true;
   }
@@ -1491,7 +1500,9 @@ export class Vault {
     if (item.timer) clearTimeout(item.timer);
     this.staged.delete(p);
     await rm(path.dirname(item.abs), { recursive: true, force: true });
-    await this.scan();
+    // A nota volta sozinha, sem o scan (T20166); a pasta traz o que tinha dentro, e aí o scan (com o cache) é quem lê.
+    if (item.kind === "note") await this.index(p, await readFile(abs, "utf8"), abs);
+    else await this.scan();
     const back = item.kind === "note" ? [p] : [p, ...[...this.notes.keys()].filter((n) => n.startsWith(`${p}/`))];
     this.emit(back);
     return { path: p };
@@ -1823,11 +1834,150 @@ export class Vault {
     return entry;
   }
 
+  /**
+   * A pasta `from` (e o que tem dentro) passa para `to` no índice, ou sai dele com `to` null (T20166): as notas, as
+   * pastas, os arquivos e os pacotes, sem reler o disco. Quem chama já mudou o disco.
+   */
+  private moveInIndex(from: string, to: string | null): void {
+    const under = (p: string) => p === from || p.startsWith(`${from}/`);
+    const map = (p: string) => (to === null ? null : to + p.slice(from.length));
+    const notes = new Map<string, Entry>();
+    for (const [p, e] of this.notes) {
+      if (!under(p)) {
+        notes.set(p, e);
+        continue;
+      }
+      this.touch(p);
+      const q = map(p);
+      if (q === null) continue;
+      this.touch(q);
+      notes.set(q, { ...e, meta: { ...e.meta, path: q, folder: parentOf(q) } });
+    }
+    this.notes = notes;
+    const folders = new Set<string>();
+    for (const f of this.folders) {
+      if (!under(f)) folders.add(f);
+      else if (to !== null) folders.add(map(f)!);
+    }
+    if (to !== null) for (let f = to; f; f = parentOf(f)) folders.add(f);
+    this.folders = folders;
+    const files = new Map<string, VaultFile>();
+    const changedFiles: string[] = [];
+    for (const [p, f] of this.files) {
+      if (!under(p)) {
+        files.set(p, f);
+        continue;
+      }
+      changedFiles.push(p);
+      const q = map(p);
+      if (q === null) continue;
+      changedFiles.push(q);
+      files.set(q, { ...f, path: q });
+    }
+    this.files = files;
+    if (changedFiles.length) this.filesChanged(changedFiles);
+    this.packages = new Set([...this.packages].flatMap((p) => (!under(p) ? [p] : to === null ? [] : [map(p)!])));
+    this.searchDirty = true;
+    this.resolver = null;
+    if (this.scans) this.staleScan = true;
+  }
+
   /** O caminho → os apelidos, só das notas que têm algum (para o resolver). */
   private aliasMap(notes: ReadonlyMap<string, Entry> = this.notes): Map<string, string[]> {
     const out = new Map<string, string[]>();
     for (const [p, e] of notes) if (e.aliases.length) out.set(p, e.aliases);
     return out;
+  }
+
+  /**
+   * As notas do disco, só os caminhos (T20166): um `readdir` com o tipo por pasta, várias pastas ao mesmo tempo, sem o
+   * `lstat` de cada item que o scan faz. Pula o que o scan pula (oculto, `node_modules`, link simbólico). `null` quando
+   * nem a raiz se lê: quem chama não tira nota nenhuma por isso.
+   */
+  private async notesOnDisk(): Promise<Map<string, string> | null> {
+    const out = new Map<string, string>();
+    const queue = [""];
+    let rootOk = false;
+    const one = async (rel: string) => {
+      const entries = await readdir(path.join(this.root, rel), { withFileTypes: true }).catch(() => null);
+      if (!entries) return;
+      if (!rel) rootOk = true;
+      for (const d of entries) {
+        const name = d.name;
+        if (name.startsWith(".") || name === "node_modules" || d.isSymbolicLink()) continue;
+        const child = rel ? `${rel}/${name}` : name;
+        let file = d.isFile();
+        let dir = d.isDirectory();
+        // Um disco que não diz o tipo (de rede): o `lstat` decide.
+        if (!file && !dir) {
+          const s = await lstat(path.join(this.root, child)).catch(() => null);
+          if (!s || s.isSymbolicLink()) continue;
+          file = s.isFile();
+          dir = s.isDirectory();
+        }
+        if (dir) queue.push(child);
+        else if (file && /\.md$/i.test(name)) out.set(child.normalize("NFC"), child);
+      }
+    };
+    await new Promise<void>((resolve, reject) => {
+      let running = 0;
+      const pump = () => {
+        if (!queue.length && !running) return resolve();
+        while (running < 32 && queue.length) {
+          running++;
+          one(queue.pop()!).then(() => {
+            running--;
+            pump();
+          }, reject);
+        }
+      };
+      pump();
+    });
+    return rootOk ? out : null;
+  }
+
+  /**
+   * Traz o índice de notas até o disco sem o scan inteiro (T20166): tira as que sumiram e lê só as que entraram. As que
+   * mudaram de conteúdo não aparecem aqui (isso pede o `stat` de cada uma): quem precisa delas confere à parte.
+   */
+  private async catchUp(): Promise<void> {
+    const disk = await this.notesOnDisk();
+    if (!disk) return this.scan();
+    let changed = false;
+    // As que saíram ficam pelo inode: uma pasta renomeada por fora volta com o cache (T5352), sem reler.
+    const byIno = new Map<number, Entry>();
+    for (const [p, e] of [...this.notes]) {
+      if (disk.has(p)) continue;
+      byIno.set(e.ino, e);
+      this.notes.delete(p);
+      this.touch(p);
+      changed = true;
+    }
+    const added = [...disk].filter(([p]) => !this.notes.has(p));
+    for (let i = 0; i < added.length; i += READ_AT_ONCE) {
+      await Promise.all(
+        added.slice(i, i + READ_AT_ONCE).map(async ([p, rel]) => {
+          const abs = path.join(this.root, rel);
+          const s = await lstat(abs).catch(() => null);
+          if (!s?.isFile()) return;
+          const kept = this.reuse(p, s, byIno);
+          if (kept) {
+            this.notes.set(p, kept);
+            this.touch(p);
+            for (let f = kept.meta.folder; f; f = parentOf(f)) this.folders.add(f);
+            changed = true;
+            return;
+          }
+          this.scanReads++;
+          const content = await readFile(abs, "utf8").catch(() => null);
+          if (content !== null && (await this.index(p, content, abs).catch(() => null))) changed = true;
+        }),
+      );
+    }
+    if (changed) {
+      this.searchDirty = true;
+      this.resolver = null;
+    }
   }
 
   /**
@@ -1855,18 +2005,26 @@ export class Vault {
     if (this.scans) this.touchedAt.set(p, ++this.seq);
   }
 
-  private async scan(o: { quiet?: boolean } = {}): Promise<void> {
+  private async scan(o: { progress?: boolean } = {}): Promise<void> {
     this.scans++;
     const started = ++this.seq;
     try {
       await this.scanFrom(started, o);
     } finally {
-      if (--this.scans === 0) this.touchedAt.clear();
+      if (--this.scans === 0) {
+        this.touchedAt.clear();
+        // Uma pasta mudou de lugar no índice enquanto este scan andava (T20166): ele pode ter visto o disco de antes nas
+        // pastas e nos arquivos (as notas o `touchedAt` cobre). Uma releitura com o cache acerta.
+        if (this.staleScan && !this.closed) {
+          this.staleScan = false;
+          void this.scan().catch((e) => console.error("[notes] rescan failed:", e));
+        }
+      }
     }
   }
 
-  private async scanFrom(started: number, o: { quiet?: boolean }): Promise<void> {
-    const progress = o.quiet ? undefined : this.onIndexProgress;
+  private async scanFrom(started: number, o: { progress?: boolean }): Promise<void> {
+    const progress = o.progress ? this.onIndexProgress : undefined;
     const notes = new Map<string, Entry>();
     const folders = new Set<string>();
     const files = new Map<string, VaultFile>();

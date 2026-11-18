@@ -78,11 +78,12 @@ test("mover para outra pasta sem ninguém citar relê só a própria nota (os [x
 
 test("uma nota escrita por fora depois do scan(), que passou a citar a nota, também é atualizada (#7980)", async () => {
   const { v, root } = await vault({ ...loose, "Pessoas/João Silva.md": "sobre ele", "Tarde.md": "ainda nada" });
-  // Entre o scan() do rename e o laço: o Obsidian (ou outro app) grava um link para a nota.
-  const self = v as unknown as { scan: () => Promise<void> };
-  const scan = self.scan.bind(v);
-  self.scan = async () => {
-    await scan();
+  // Entre a conferida do índice (o catchUp do rename, T20166) e o laço: o Obsidian (ou outro app) grava um link para a
+  // nota.
+  const self = v as unknown as { catchUp: () => Promise<void> };
+  const catchUp = self.catchUp.bind(v);
+  self.catchUp = async () => {
+    await catchUp();
     const abs = path.join(root, "Tarde.md");
     writeFileSync(abs, "agora [[João Silva]]");
     const t = statSync(abs).mtimeMs / 1000 + 5;
