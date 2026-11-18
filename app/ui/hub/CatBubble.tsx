@@ -6,6 +6,8 @@
 // - [Ver mais] abre o balão grande, com a resposta inteira e rolagem; fecha com um clique fora ou com Esc. O Esc só é
 //   ouvido enquanto o balão grande está aberto.
 // - Leitor de tela: a resposta é anunciada uma vez, no fim, inteira.
+// - O markdown (spec #17679, T17986): o pequeno mostra o texto corrido, sem símbolos (`plainMarkdown`); o grande, formatado
+//   (títulos, listas, código, tabela que rola de lado), pelo mesmo montador do overlay. Um link só abre no clique.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -13,7 +15,8 @@ import { api } from "../src/api";
 import { BUBBLE_LINES, BubbleFeed, type BubbleView } from "./bubble-state";
 import { BubblePresence } from "./BubblePresence";
 import { BubbleTail } from "./BubbleTail";
-import { renderLite } from "./bubbleText";
+import { plainMarkdown } from "../src/bubbleMarkdown";
+import { MdView, openMdLink } from "./bubbleMd";
 
 /** Mede no mesmo estilo do balão: o texto cabe em 320 px (a casca do pacote) e 3 linhas? */
 function measurer(): { fits: (s: string) => boolean; dispose: () => void } {
@@ -138,8 +141,8 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
           >
             {/* O trecho inteiro, invisível, segura o tamanho do balão enquanto a digitação anda. */}
             <div className="kn-bubble-text" aria-hidden="true">
-              <div className="kn-bubble-ghost">{renderLite(view.full)}</div>
-              <div className="kn-bubble-typed">{renderLite(view.text)}</div>
+              <div className="kn-bubble-ghost">{plainMarkdown(view.full)}</div>
+              <div className="kn-bubble-typed">{plainMarkdown(view.text)}</div>
             </div>
             {view.more ? (
               <button
@@ -160,8 +163,13 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
         ) : null}
       </BubblePresence>
       {bigOpen && !hidden ? (
-        <div className="kn-bubble-big" ref={big} onMouseDown={keepFocus} aria-label="A resposta do agente">
-          <div className="kn-bubble-big-text">{renderLite(said)}</div>
+        <div className="kn-bubble-big" ref={big} onMouseDown={keepFocus} onClick={(e) => openMdLink(e.target)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && openMdLink(e.target)) e.preventDefault();
+          }}
+          aria-label="A resposta do agente"
+        >
+          <MdView className="kn-bubble-big-text" text={said} />
         </div>
       ) : null}
       <div className="kn-visually-hidden" aria-live="polite">
