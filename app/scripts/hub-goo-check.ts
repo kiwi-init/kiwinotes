@@ -12,7 +12,7 @@
 // botões só fazem o fade (OUT/reduzir-mac, OUT/reduzir-kiwi).
 //
 // Confere: as fases (entering → shown, leaving → hidden), a duração (350–500 ms), a gota longe da pílula no meio da
-// ida e no lugar dos botões no fim, e o texto e os ícones fora do filtro e por cima da gota em todos os quadros.
+// ida e no lugar dos botões no fim, e o texto e os ícones fora de filtro e por cima da gota em todos os quadros.
 // Sem um headless de pé, sobe o seu (`cli start --no-helper`) e o derruba no fim, passe ou falhe. Sem OUT, os prints
 // vão para uma pasta nova do tmp, que fica (a saída diz onde).
 import assert from "node:assert/strict";
@@ -31,9 +31,9 @@ const out = resolve(outArg ?? mkdtempSync(join(tmpdir(), "kn-hub-goo-out-")));
 const data = mkdtempSync(join(tmpdir(), "kn-hub-goo-"));
 mkdirSync(out, { recursive: true });
 
-/** Os tempos de cada quadro, em fração da animação: os do goo.css (estufa 18%, pescoço 36%, solta 50%, passa 72%,
- *  mola 86%) e os do meio deles. */
-const FRAMES = [0, 0.09, 0.18, 0.27, 0.36, 0.43, 0.5, 0.61, 0.72, 0.86, 1];
+/** Os tempos de cada quadro, em fração da animação: os do goo-shape.ts (barriga até 20%, pescoço até 46%, a beira volta
+ *  reta até 68%, a gota corre até o fim) e os do meio deles. */
+const FRAMES = [0, 0.07, 0.14, 0.2, 0.28, 0.36, 0.43, 0.5, 0.58, 0.68, 0.8, 0.9, 1];
 const MIN_MS = 350;
 const MAX_MS = 500;
 /** Idas e voltas em tempo real, por tema. */
@@ -50,7 +50,7 @@ const ctx: UiContext = {
 };
 
 type Box = { x: number; y: number; w: number; h: number };
-type Frame = { t: number; start: Box; end: Box; tabs: Box; opacity: { start: string; end: string } };
+type Frame = { t: number; start: Box; end: Box; tabs: Box };
 
 /** As fases dos dois lados e dos slots. */
 const phases = (p: Page) => p.evaluate(() => {
@@ -94,10 +94,13 @@ const crisp = (p: Page) => p.evaluate(() => {
     if (hit && !el.contains(hit) && !hit.contains(el)) problems.push(`${name}: coberto por ${hit.className}`);
   }
   see.remove();
-  const shapes = document.querySelector<HTMLElement>(".kn-goo-shapes");
-  const filter = shapes ? getComputedStyle(shapes).filter : "sem .kn-goo-shapes";
-  if (!filter.includes("kn-goo")) problems.push(`a forma não passa pelo filtro gooey: ${filter}`);
-  if (shapes?.textContent?.trim()) problems.push("texto dentro da forma filtrada");
+  // A gota é desenhada (T18948): caminhos SVG, sem filtro e sem texto dentro.
+  const draw = document.querySelector<SVGElement>(".kn-goo-draw");
+  if (!draw) problems.push("sem .kn-goo-draw");
+  else {
+    if (getComputedStyle(draw).filter !== "none") problems.push(`a gota passa por um filter: ${getComputedStyle(draw).filter}`);
+    if (draw.textContent?.trim()) problems.push("texto dentro da gota");
+  }
   return { checked: els.length, problems };
 });
 
@@ -127,24 +130,23 @@ const clickAndPause = (p: Page, section: string) => p.evaluate(async (s) => {
   return list.map((a) => ({ name: (a as CSSAnimation).animationName, ms: Number(a.effect!.getComputedTiming().duration) }));
 }, section);
 
-/** Põe as animações paradas na fração `f` e mede a gota e a pílula. */
-const seek = (p: Page, f: number) => p.evaluate((frac) => {
+/** Põe as animações paradas na fração `f` e mede a gota (a parte que vira os botões) e a pílula. */
+const seek = (p: Page, f: number) => p.evaluate(async (frac) => {
   for (const a of (window as unknown as { __goo: Animation[] }).__goo) {
     const ms = Number(a.effect!.getComputedTiming().duration);
     // Um pouco antes do fim, para a animação não acabar (e o `animationend` não andar a fase). Com "reduzir
     // movimento", o base.css corta as animações para 0,01 ms: o "um pouco" é proporcional.
     a.currentTime = Math.min(frac * ms, ms * 0.999);
   }
+  // A gota se desenha no próximo quadro.
+  for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(r));
   const bar = document.querySelector(".kn-hub-top")!.getBoundingClientRect();
   const box = (el: Element): { x: number; y: number; w: number; h: number } => {
     const r = el.getBoundingClientRect();
     return { x: r.x - bar.x, y: r.y - bar.y, w: r.width, h: r.height };
   };
-  const drop = (s: string) => document.querySelector(`.kn-goo-drop[data-side="${s}"]`)!;
-  return {
-    t: frac, start: box(drop("start")), end: box(drop("end")), tabs: box(document.querySelector(".kn-tabs")!),
-    opacity: { start: getComputedStyle(drop("start")).opacity, end: getComputedStyle(drop("end")).opacity },
-  };
+  const head = (s: string) => document.querySelector(`.kn-goo-path[data-side="${s}"][data-part="head"]`)!;
+  return { t: frac, start: box(head("start")), end: box(head("end")), tabs: box(document.querySelector(".kn-tabs")!) };
 }, f);
 
 /** Solta as animações e a reserva de 900 ms. */
@@ -291,8 +293,9 @@ try {
       assert.deepEqual([first.start, first.end], ["hidden", "hidden"], `Ajustes abriu com botões na barra: ${JSON.stringify(first)}`);
       const ida = await frames(w.page, join(out, theme, "ida"), "notes", "in");
       const mid = ida.frames.find((f) => f.t === 0.5)!;
-      assert.ok(mid.start.x + mid.start.w < mid.tabs.x - 20, `no meio da ida a gota da esquerda ainda está na pílula: ${JSON.stringify(mid)}`);
-      assert.ok(mid.end.x > mid.tabs.x + mid.tabs.w + 20, `no meio da ida a gota da direita ainda está na pílula: ${JSON.stringify(mid)}`);
+      // No meio da ida, a gota já se soltou da pílula (goo-shape.ts: o pescoço parte em 46%).
+      assert.ok(mid.start.w > 0 && mid.start.x + mid.start.w < mid.tabs.x - 4, `no meio da ida a gota da esquerda ainda está presa à pílula: ${JSON.stringify(mid)}`);
+      assert.ok(mid.end.w > 0 && mid.end.x > mid.tabs.x + mid.tabs.w + 4, `no meio da ida a gota da direita ainda está presa à pílula: ${JSON.stringify(mid)}`);
       const shown = await phases(w.page);
       assert.deepEqual([shown.slotStart, shown.slotEnd], ["shown", "shown"], JSON.stringify(shown));
       assert.ok(shown.buttons.start > 0 && shown.buttons.end > 0, `as Notas não puseram botões dos dois lados: ${JSON.stringify(shown)}`);
