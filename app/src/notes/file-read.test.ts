@@ -167,6 +167,21 @@ describe("gravar um texto do cofre (T7105)", () => {
     expect(mode("Nota.md")).toBe(0o600);
   });
 
+  test("o código (T19312): um .py, um .css e um .html gravam como os textos, e o executável continua executável", async () => {
+    const { v, root } = await vault({ "Projeto X/script.py": "print('oi')\n", "site/estilo.css": "a {}\n", "site/index.html": "<p>oi</p>\n", "rodar.sh": "echo oi\n" });
+    chmodSync(path.join(root, "rodar.sh"), 0o755);
+    for (const [rel, before, after] of [
+      ["Projeto X/script.py", "print('oi')\n", "print('olá')\n"],
+      ["site/estilo.css", "a {}\n", "a { color: red; }\n"],
+      ["site/index.html", "<p>oi</p>\n", "<p>olá</p>\n"],
+      ["rodar.sh", "echo oi\n", "echo olá\n"],
+    ] as const) {
+      expect((await v.saveFile(rel, after, versionOf(before))).saved).toBe(true);
+      expect(read(root, rel)).toBe(after);
+    }
+    expect(statSync(path.join(root, "rodar.sh")).mode & 0o777).toBe(0o755);
+  });
+
   test("com a versão velha não escreve, e devolve o de agora", async () => {
     const { v, root } = await vault({ "a.json": "{}" });
     const before = await v.readFile("a.json", "text");

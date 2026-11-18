@@ -1,5 +1,6 @@
-// txt, log, json e yaml dentro das Notas (T7105, spec #7079): o texto num editor simples, que grava sozinho no
-// arquivo. Sem realce nem formatação: o arquivo sai como a pessoa escreveu, com o fim de linha que tinha (`\r\n` do
+// txt, log, json e yaml dentro das Notas (T7105, spec #7079), e o código (py, ts, css, html…, T19312): o texto num
+// editor simples, que grava sozinho no arquivo. O código e o json/yaml ganham cor (`code-languages.ts`), carregada
+// depois de o texto aparecer; o .txt e o .log seguem sem. Sem formatação: o arquivo sai como a pessoa escreveu, com o fim de linha que tinha (`\r\n` do
 // Windows volta `\r\n`, embora o editor trabalhe em `\n`). Só é lido, sem gravar: um texto que não é UTF-8
 // (`readOnly`), porque gravar trocaria os bytes que o Kiwi não entendeu, e um com fins de linha misturados, porque
 // não há como devolver cada linha com o fim que tinha.
@@ -10,7 +11,8 @@
 // "Gravando…/Gravado"), e o texto quebra na largura da nota.
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { Annotation, EditorSelection, EditorState, Transaction } from "@codemirror/state";
+import { syntaxHighlighting } from "@codemirror/language";
+import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -19,6 +21,7 @@ import { ContextMenu, type MenuItem } from "../ContextMenu.tsx";
 import { NoteWidthFrame } from "../NoteWidth.tsx";
 import { editorMenu } from "../editor/context-menu.ts";
 
+import { codeHighlight, codeLanguageFor } from "./code-languages.ts";
 import { detectEol, TextSession, type TextSaveState, toEditor } from "./textSession.ts";
 import type { FileViewerProps } from "./viewers.ts";
 
@@ -51,6 +54,9 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
   const [menuError, setMenuError] = useState<string | null>(null);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  // A linguagem do código (T19312): `undefined` no .txt e no .log, que seguem sem cor nem o menu de código.
+  const language = codeLanguageFor(path);
+  const [colored, setColored] = useState(false);
 
   // Uma sessão por arquivo aberto (o `FileView` monta de novo a cada caminho).
   const session = useMemo(
@@ -78,6 +84,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
   useEffect(() => {
     const parent = host.current;
     if (!parent) return;
+    const lang = new Compartment();
     const v = new EditorView({
       parent,
       state: EditorState.create({
@@ -99,6 +106,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
             ...(readOnly ? { "aria-readonly": "true" } : {}),
           }),
           theme,
+          lang.of([]),
           // A pessoa digitou: a sessão só marca, e lê o texto inteiro quando grava (depois da pausa).
           EditorView.updateListener.of((u) => {
             if (!u.docChanged || u.transactions.some((tr) => tr.annotation(fromDisk))) return;
@@ -108,7 +116,21 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
       }),
     });
     view.current = v;
+    // A cor chega depois do texto: a linguagem é um import à parte, e o arquivo já pode ser lido e editado sem ela.
+    let alive = true;
+    setColored(false);
+    if (language)
+      void language()
+        .then((ext) => {
+          if (!alive) return;
+          v.dispatch({ effects: lang.reconfigure([ext, syntaxHighlighting(codeHighlight)]) });
+          setColored(true);
+        })
+        .catch(() => {
+          // Sem a linguagem, o arquivo continua aberto e editável, só sem cor.
+        });
     return () => {
+      alive = false;
       view.current = null;
       v.destroy();
     };
@@ -146,13 +168,13 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
       ...(has("clipboard.write") ? { write: (text: string) => appApi.copy(text) } : {}),
       ...(has("clipboard.read") ? { read: () => appApi.readClipboard() } : {}),
     };
-    setMenu({ x, y, items: editorMenu(v, clipboard, setMenuError, undefined, undefined, { plain: true }) });
+    setMenu({ x, y, items: editorMenu(v, clipboard, setMenuError, undefined, undefined, { plain: true, code: !!language }) });
   };
 
   // Sem "Gravando…/Gravado" na tela (spec #13382): como numa nota .md, a gravação é silenciosa, e só o erro e o conflito
   // aparecem. O `data-save` diz o estado aos scripts de prova.
   return (
-    <div className="kn-file-text" data-save={state}>
+    <div className="kn-file-text" data-save={state} data-code={language ? (colored ? "colored" : "loading") : undefined}>
       {readOnly ? (
         <div className="kn-file-text-note" role="status">
           {notUtf8

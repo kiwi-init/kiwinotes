@@ -9,8 +9,18 @@ export const MAX_VIEW_TEXT_BYTES = 5 * 1024 * 1024;
 
 export type FileReadAs = "text" | "binary";
 
-/** Os textos que as Notas abrem editáveis e gravam de volta (T7105): só estes o `files.save` aceita. */
-export const EDITABLE_TEXT = new Set(["txt", "log", "json", "yaml", "yml"]);
+/**
+ * O código que as Notas abrem editável e com cor (spec #19277, T19312). A cor de cada um (a linguagem do CodeMirror) fica
+ * em `ui/notes/files/code-languages.ts`, e o teste de lá confere que as duas listas batem.
+ */
+export const CODE_TYPES: readonly string[] = [
+  "py", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "css", "scss", "less", "html", "htm", "xml", "sql",
+  "sh", "bash", "zsh", "swift", "rb", "go", "rs", "c", "h", "cpp", "cc", "hpp", "java", "kt", "kts", "cs", "scala",
+  "dart", "lua", "r", "pl", "ps1", "toml", "ini", "conf", "properties", "proto", "diff", "patch",
+];
+
+/** Os textos que as Notas abrem editáveis e gravam de volta (T7105, e o código do T19312): só estes o `files.save` aceita. */
+export const EDITABLE_TEXT = new Set(["txt", "log", "json", "yaml", "yml", ...CODE_TYPES]);
 
 export const isEditableText = (name: string): boolean => EDITABLE_TEXT.has((/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? "").toLowerCase());
 
@@ -36,7 +46,7 @@ export function fileSize(bytes: number): string {
  */
 export const VIEWER_TYPES: readonly string[] = [
   "txt", "log", "json", "yaml", "yml", "csv", "tsv", "pdf", "docx", "xlsx",
-  "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "svg", "drawio", "drawio.svg",
+  "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "svg", "drawio", "drawio.svg", ...CODE_TYPES,
 ];
 
 /** Onde um arquivo do cofre abre pelo clique no balão do gato (spec #17683): nas Notas, num visualizador, ou no app do Mac. */

@@ -1,0 +1,25 @@
+{
+  "window": "notes",
+  "steps": [
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Projeto X/feira.py, site/estilo.css e uma nota)" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projeto X')", "name": "abre a pasta Projeto X" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('feira')", "name": "clica no .py" },
+    { "waitFor": ".kn-file[data-state='ready'] .kn-file-text-area", "name": "o .py abre nas Notas, no editor dos textos (T19312)" },
+    { "expectText": ".kn-file-title", "text": "feira.py", "name": "com o nome no topo" },
+    { "waitFor": ".kn-file-text[data-code='colored']", "name": "e com cor, depois de a linguagem carregar" },
+    { "expectCount": ".kn-file-text-note", "count": 0, "name": "editável, sem aviso de só leitura" },
+    { "click": ".kn-file-text-area", "name": "o cursor vai para o código" },
+    { "press": "Meta+ArrowDown", "name": "fim do arquivo" },
+    { "type": "# fim", "name": "digita um comentário" },
+    { "waitFor": ".kn-file-text[data-save='saved']", "name": "grava sozinho" },
+    { "invoke": "files.read", "args": { "path": "Projeto X/feira.py", "as": "text" }, "name": "o arquivo no disco tem a linha nova" },
+    { "screenshot": "01-python.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore de novo" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('site')", "name": "abre a pasta site" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('estilo')", "name": "clica no .css" },
+    { "waitFor": ".kn-file-text[data-code='colored']", "name": "o .css abre com cor" },
+    { "expectText": ".kn-file-title", "text": "estilo.css" },
+    { "screenshot": "02-css.png" }
+  ]
+}

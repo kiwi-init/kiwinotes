@@ -5,7 +5,7 @@
 import { type ComponentType, lazy, type MutableRefObject, type ReactNode } from "react";
 
 import { extOf } from "../../../src/shared/attachments.ts";
-import type { FileReadAs } from "../../../src/shared/file-view.ts";
+import { CODE_TYPES, type FileReadAs } from "../../../src/shared/file-view.ts";
 import type { FileContent, NotesApi } from "../types.ts";
 import { ImageViewer } from "./ImageViewer.tsx";
 import { TableViewer } from "./TableViewer.tsx";
@@ -78,6 +78,8 @@ export const VIEWERS: Record<string, FileViewer> = {
   // T7112: o diagrama do draw.io, pelo viewer oficial do pack. O `.drawio.svg` já é um desenho: abre como imagem.
   drawio: { as: "text", View: DrawioViewer },
   "drawio.svg": image,
+  // T19312: o código, editável e com cor, no mesmo editor dos textos.
+  ...Object.fromEntries(CODE_TYPES.map((ext) => [ext, text])),
 };
 
 /** O visualizador de um arquivo pelo nome, ou `undefined`. `.drawio.svg` conta como `drawio.svg` antes de `svg`. */

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { EDITABLE_TEXT, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
+import { CODE_TYPES, EDITABLE_TEXT, openTarget, VIEWER_TYPES } from "../../../src/shared/file-view.ts";
 import type { FileContent } from "../types.ts";
 import { type FileViewer, loadFile, viewerFor, VIEWERS } from "./viewers.ts";
 
@@ -22,7 +22,8 @@ test("o visualizador vem da extensão, sem ligar para maiúsculas nem para a pas
 });
 
 test("os formatos registrados: os textos (T7105), as tabelas (T7107) e o pdf (T7109), o docx (T7110), o xlsx (T7111), as imagens (T7113) e o draw.io (T7112); o resto segue abrindo no app padrão", () => {
-  expect(Object.keys(VIEWERS).sort()).toEqual(["bmp", "csv", "docx", "drawio", "drawio.svg", "gif", "heic", "heif", "jpeg", "jpg", "json", "log", "pdf", "png", "svg", "tsv", "txt", "webp", "xlsx", "yaml", "yml"]);
+  // O código (T19312) entra pelo `CODE_TYPES`, no editor dos textos.
+  expect(Object.keys(VIEWERS).sort()).toEqual([...["bmp", "csv", "docx", "drawio", "drawio.svg", "gif", "heic", "heif", "jpeg", "jpg", "json", "log", "pdf", "png", "svg", "tsv", "txt", "webp", "xlsx", "yaml", "yml"], ...CODE_TYPES].sort());
   // O pdf é lido em binário (T7109).
   expect(viewerFor("Docs/Contrato.PDF")?.as).toBe("binary");
   // O docx também (T7110), e o .doc antigo segue no app padrão.
@@ -78,6 +79,19 @@ test("a lista de tipos do engine (spec #17683) é a mesma do VIEWERS, e o `.txt`
   expect(openTarget("fluxo.drawio.svg")).toBe("viewer");
   expect(openTarget("quadro.canvas")).toBe("viewer");
   expect(openTarget("contas.numbers")).toBe("app");
+  // O código (T19312) abre nas Notas.
+  expect(openTarget("Projeto X/script.PY")).toBe("viewer");
+  expect(openTarget("site/index.html")).toBe("viewer");
   expect(openTarget("sem-extensao")).toBe("app");
   expect(openTarget("Pasta.pdf/arquivo")).toBe("app");
+});
+
+test("o código (T19312): py, ts, css, html, sh… abrem no editor dos textos, editáveis; o .doc e o .numbers não", () => {
+  for (const name of ["script.py", "App.TSX", "estilo.css", "index.html", "rodar.sh", "consulta.sql", "Main.swift", "config.toml", "app.ini"]) {
+    expect(viewerFor(name)).toBe(viewerFor("a.txt"));
+    expect(EDITABLE_TEXT.has(name.split(".").at(-1)!.toLowerCase())).toBe(true);
+  }
+  for (const ext of CODE_TYPES) expect(VIEWER_TYPES).toContain(ext);
+  // Sem repetir o que já tinha visualizador próprio.
+  for (const ext of ["txt", "csv", "pdf", "svg", "drawio", "md"]) expect(CODE_TYPES).not.toContain(ext);
 });

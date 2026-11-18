@@ -78,3 +78,15 @@ test("o Inserir: cada opção com o seu ícone, sem repetir", () => {
   for (const it of items) expect(it.icon, it.label).toBeString();
   expect(new Set(items.map((it) => it.icon)).size).toBe(items.length);
 });
+
+test("no código (T19312) o menu fica sem o Markdown: sem Formatar, Parágrafo e Inserir; as ferramentas de texto e o recortar/copiar ficam", () => {
+  const state = EditorState.create({ doc: "def soma(a):\n    return a + 1\n", selection: { anchor: 4, head: 8 } });
+  const view = { state, dom: { isConnected: true }, dispatch() {}, focus() {} } as unknown as EditorView;
+  const labels = (items: MenuItem[]) => items.flatMap((it) => ("label" in it ? [it.label] : []));
+  const code = labels(editorMenu(view, {}, () => {}, undefined, undefined, { plain: true, code: true }));
+  for (const gone of ["Formatar", "Parágrafo", "Inserir"]) expect(code).not.toContain(gone);
+  for (const kept of ["Ferramentas de texto", "Recortar", "Copiar"]) expect(code).toContain(kept);
+  // O .txt continua com o menu de antes.
+  const plain = labels(editorMenu(view, {}, () => {}, undefined, undefined, { plain: true }));
+  for (const kept of ["Formatar", "Parágrafo", "Inserir"]) expect(plain).toContain(kept);
+});
