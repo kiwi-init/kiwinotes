@@ -23,8 +23,8 @@
       "name": "o código abre no editor, com cor (T19312)"
     },
     {
-      "waitFor": ".kn-file-text-body[data-preview] iframe.kn-file-preview[sandbox='']",
-      "name": "e a prévia ao lado, num iframe com o sandbox vazio (T19314)"
+      "waitFor": ".kn-file-text-body[data-preview] iframe.kn-file-preview[sandbox=''][srcdoc^='<!doctype html><meta http-equiv=\"Content-Security-Policy\" content=\"default-src \\'none\\'']",
+      "name": "e a prévia ao lado, num iframe com o sandbox vazio e a CSP da prévia no começo do srcdoc (T19314)"
     },
     {
       "expectCount": ".kn-file-preview-toggle[aria-pressed='true']",
