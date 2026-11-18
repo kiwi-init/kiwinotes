@@ -7,6 +7,7 @@ export type { AgentRoutine, AgentRoutines, CustomRoutine, CustomRoutineInput, Ro
 import type { LinkWarning, RefactorResult } from "../notes/refactor.ts";
 import type { SpellingResult } from "./spelling.ts";
 import type { IntroLayout } from "./intro-layout.ts";
+import type { OpenTarget } from "./file-view.ts";
 // O contrato entre o engine do Kiwi Notes (o main em Bun) e as UIs do AppEngine (T1192, ADR 0006).
 //
 // Uma UI só chama o main por `engine.invoke(cap, args)` com um destes nomes. Os nomes são estáveis: tirar ou mudar
@@ -301,7 +302,7 @@ export interface UiCapabilities {
    * A seção que o hub deve mostrar ao abrir (1.4.0, T2121): o menu da barra ou o atalho pediu "Notas", "Ditado"…
    * Devolve e esquece; null é "a de sempre". Com o hub já aberto, o pedido chega pelo evento `hub.navigate`.
    */
-  "hub.section": { args: Record<string, never>; result: { section: HubSection | null };
+  "hub.section": { args: Record<string, never>; result: { section: HubSection | null; path?: string };
   };
   /**
    * A intro da abertura do zero terminou (1.5.0, T2308): no último frame, no clique para pular ou no "Reduzir
@@ -403,6 +404,13 @@ export interface UiCapabilities {
    * dá E_BAD_ARGS: abre no Kiwi. No headless e com KIWI_DEBUG=1, só registra.
    */
   "files.open": { args: { path: string }; result: true };
+  /**
+   * Abre um caminho do cofre que o agente citou no balão do gato (spec #17683, T18127), pelo clique da pessoa: `.md` e
+   * `.txt` nas Notas (`note`), um tipo com visualizador nas Notas (`viewer`), o resto no app padrão do Mac (`app`, como o
+   * `files.open`). O caminho é relativo à pasta aberta e é conferido aqui: fora dela, por um link simbólico ou que não
+   * existe dá erro, e nada abre. No headless e com KIWI_DEBUG=1, o app do Mac só registra.
+   */
+  "notes.openPath": { args: { path: string }; result: { opened: OpenTarget } };
   /**
    * O conteúdo de um arquivo do vault que não é nota (1.39.0, T7103), para as Notas mostrarem na própria janela: com
    * `as: "text"`, o texto em UTF-8 (até 5 MB); com `"binary"` (o padrão), os bytes em base64 (até 25 MB). Acima do
@@ -1155,6 +1163,7 @@ export const UI_CAPABILITIES = [
   "notes.restore",
   "notes.reveal",
   "files.open",
+  "notes.openPath",
   "files.read",
   "files.save",
   "files.create",
@@ -1249,7 +1258,7 @@ export interface UiEvents {
   /** Arquivos que não são nota apareceram, mudaram ou sumiram, inclusive fora do app (1.19.0): a árvore lista de novo. */
   "files.changed": { paths: string[]; folderId?: string };
   /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */
-  "hub.navigate": { section: HubSection };
+  "hub.navigate": { section: HubSection; path?: string };
   /** As atualizações mudaram (checando, baixando, pronta, a última checagem): a seção Sobre acompanha (1.6.0). */
   "updates.status": UpdatesView;
   /** As Configurações mudaram (1.8.0): todas as janelas trocam a Aparência na hora, sem reiniciar. */

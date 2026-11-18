@@ -1,5 +1,5 @@
 import { type NoteModel, noteModelSaved, readNoteModel, writeNoteModel } from "../agent/note-model.ts";
-import { realpathSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { isSpellingLanguage, isSpellingWord, NO_SPELLING, spellingResult, type SpellingResult } from "../shared/spelling.ts";
@@ -21,10 +21,11 @@ import { catSize, isCatPosition, isCatSize } from "../shared/kiwicat-place.ts";
 import { isCustomRoutineId, isRoutineKind, isRoutineTime, ROUTINE_KINDS, routineFolder } from "../shared/agent-routines.ts";
 import { type AppSettings, MAX_PINNED, type SettingsPatch,
 } from "../store/settings.ts";
-import { folderPath, notePath, VaultError } from "../notes/paths.ts";
+import { filePath, folderPath, notePath, VaultError } from "../notes/paths.ts";
 import { type AttachmentData, type Attachments, attachmentsFolder,
 } from "../notes/attachments.ts";
 import { openMode } from "../shared/attachments.ts";
+import { openTarget } from "../shared/file-view.ts";
 import { RemoteImageError } from "../notes/remote-image.ts";
 import { type AudioInputs, isMicrophoneChoice } from "../shared/microphone.ts";
 import { attachmentHits, type OcrIndex } from "../notes/ocr.ts";
@@ -115,7 +116,12 @@ export interface CapabilityDeps {
   clipboardRead?(): string | null;
   spelling?(word: string, language?: string): SpellingResult | Promise<SpellingResult>;
   /** A seção pedida para o hub que ainda vai abrir (T2121): devolve e esquece. Sem ela, null. */
-  hubSection?(): HubSection | null;
+  hubSection?(): { section: HubSection; path?: string } | null;
+  /**
+   * Traz o hub para a frente nas Notas, com este arquivo do cofre aberto (o clique no balão do gato, spec #17683). Sem
+   * isto (o headless, os testes), o `notes.openPath` só confere o caminho.
+   */
+  openInNotes?(path: string): void;
   /** A intro avisou que terminou (T2308): o hub segue. */
   introDone?(): void;
   /** Onde o hub vai aparecer, para a moldura da intro (T16769). */
@@ -769,7 +775,8 @@ export function uiCapabilities(deps: CapabilityDeps,
     },
     "hub.section": (args) => {
       noArgs(args, "hub.section");
-      return { section: deps.hubSection?.() ?? null };
+      const r = deps.hubSection?.() ?? null;
+      return r ? r : { section: null };
     },
     "app.about": (args) => {
       noArgs(args, "app.about");
@@ -1022,6 +1029,25 @@ export function uiCapabilities(deps: CapabilityDeps,
       const { abs, mode } = await (await vault()).locateFile(fields(args, "files.open", ["path"]).path);
       deps.openFile?.(abs, openMode(abs, mode));
       return true as const;
+    },
+    "notes.openPath": async (args) => {
+      const asked = fields(args, "notes.openPath", ["path"]).path;
+      if (typeof asked !== "string") throw new VaultError("E_BAD_ARGS", "path must be a string");
+      // O caminho veio do texto do agente: confere de novo aqui (spec #17683), sem confiar em quem achou o link. Só um
+      // arquivo de verdade dentro da pasta aberta, sem passar por link simbólico (`inside`), e que existe.
+      const v = await vault();
+      const opened = openTarget(asked);
+      if (/\.md$/i.test(asked)) {
+        const rel = notePath(asked);
+        if (!lstatSync(await v.locate(rel), { throwIfNoEntry: false })?.isFile()) throw new VaultError("E_NOT_FOUND", `no note ${rel}`);
+        deps.openInNotes?.(rel);
+        return { opened };
+      }
+      const rel = filePath(asked);
+      const { abs, mode } = await v.locateFile(rel);
+      if (opened === "app") deps.openFile?.(abs, openMode(abs, mode));
+      else deps.openInNotes?.(rel);
+      return { opened };
     },
     "files.read": async (args) => {
       const a = fields(args, "files.read", ["path", "as"]);
