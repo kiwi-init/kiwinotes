@@ -1,7 +1,24 @@
 {
   "window": "hub",
-  "query": { "section": "notes" },
+  "query": {
+    "section": "notes"
+  },
   "steps": [
+    {
+      "invoke": "settings.set",
+      "args": {
+        "noteWidth": 940
+      },
+      "name": "a largura salva, 940 (o que o notas-largura deixa no fim): o script roda sozinho, sem depender do outro nem do tamanho da janela (T19426)"
+    },
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Largura salva",
+        "content": "Uma nota curta para ver a largura.\n"
+      },
+      "name": "uma nota própria (inventada)"
+    },
     {
       "waitFor": ".kn-crumb-bt"
     },
@@ -9,7 +26,7 @@
       "click": ".kn-crumb-bt"
     },
     {
-      "click": ".kn-side-item:has-text('Linhas longas')"
+      "click": ".kn-side-item:has-text('Largura salva')"
     },
     {
       "waitFor": ".cm-content"
@@ -19,8 +36,8 @@
     },
     {
       "expectWidth": ".kn-page",
-      "min": 900,
-      "max": 1000,
+      "min": 939,
+      "max": 941,
       "name": "a largura voltou salva numa janela nova"
     },
     {

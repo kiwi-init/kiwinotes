@@ -1,0 +1,77 @@
+{
+  "window": "hub",
+  "query": {
+    "section": "notes"
+  },
+  "steps": [
+    {
+      "invoke": "notes.create",
+      "args": {
+        "title": "Fluxo curto",
+        "content": "Um fluxo de exemplo.\n\n```mermaid\ngraph LR\n  A[Começo do pedido] --> B[Separar os itens]\n  B --> C[Entregar ao cliente]\n```\n\nFim.\n"
+      },
+      "name": "uma nota com um diagrama pequeno (inventada)"
+    },
+    {
+      "waitFor": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-crumb-bt"
+    },
+    {
+      "click": ".kn-side-item:has-text('Fluxo curto')"
+    },
+    {
+      "waitFor": ".kn-mermaid-drawn svg",
+      "name": "o diagrama desenha"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "expectWidth": ".kn-mermaid-drawn svg",
+      "min": 519,
+      "max": 521,
+      "name": "na largura padrão, o diagrama cabe inteiro (520 px, escala 1)"
+    },
+    {
+      "hover": ".kn-width-handle[data-side='left']"
+    },
+    {
+      "drag": ".kn-width-handle[data-side='left']",
+      "x": 2000,
+      "name": "estreita a nota até o mínimo"
+    },
+    {
+      "expectWidth": ".kn-page",
+      "min": 479,
+      "max": 481
+    },
+    {
+      "expectWidth": ".kn-mermaid-drawn svg",
+      "min": 364,
+      "max": 470,
+      "name": "o diagrama encolhe junto, depois do arrasto (T19426: o ajuste foi para o próximo quadro)"
+    },
+    {
+      "screenshot": "01-no-minimo.png"
+    },
+    {
+      "drag": ".kn-width-handle[data-side='right']",
+      "x": 140,
+      "name": "alarga de novo"
+    },
+    {
+      "expectWidth": ".kn-mermaid-drawn svg",
+      "min": 519,
+      "max": 521,
+      "name": "e volta ao tamanho inteiro"
+    },
+    {
+      "screenshot": "02-de-volta.png"
+    }
+  ]
+}

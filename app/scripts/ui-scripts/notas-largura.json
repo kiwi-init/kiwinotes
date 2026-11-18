@@ -1,6 +1,8 @@
 {
   "window": "hub",
-  "query": { "section": "notes" },
+  "query": {
+    "section": "notes"
+  },
   "steps": [
     {
       "invoke": "notes.create",
@@ -91,11 +93,30 @@
       "screenshot": "07-no-maximo.png"
     },
     {
+      "drag": ".kn-width-handle[data-side='left']",
+      "x": 2000,
+      "name": "volta ao mínimo (480)"
+    },
+    {
       "drag": ".kn-width-handle[data-side='right']",
-      "x": -200
+      "x": 230,
+      "name": "e alarga 460 px: uma largura conhecida, que não depende do tamanho da janela (T19426)"
+    },
+    {
+      "expectWidth": ".kn-page",
+      "min": 939,
+      "max": 941,
+      "name": "fica em 940"
     },
     {
       "wait": 500
+    },
+    {
+      "invoke": "settings.get",
+      "expect": {
+        "noteWidth": 940
+      },
+      "name": "e o soltar guardou 940 nas configurações (o notas-largura-salva confere a volta)"
     }
   ]
 }

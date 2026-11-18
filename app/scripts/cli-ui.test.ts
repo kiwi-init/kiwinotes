@@ -165,6 +165,14 @@ describe("invoke num roteiro (#1835)", () => {
     await expect(runStep(page, { invoke: "notes.save", args: { path: "a.md", content: "x", baseVersion: "v0" } }, dir, v.send)).rejects.toThrow("não gravou");
   });
 
+  test("expect confere as chaves pedidas da resposta, e só elas (T19426)", async () => {
+    const send = async () => ({ ok: true, value: { noteWidth: 940, showExtensions: false } });
+    expect(await runStep(page, { invoke: "settings.get", expect: { noteWidth: 940 } }, dir, send)).toEqual({ value: { noteWidth: 940, showExtensions: false } });
+    await expect(runStep(page, { invoke: "settings.get", expect: { noteWidth: 760 } }, dir, send)).rejects.toThrow("esperava noteWidth = 760, veio 940");
+    await expect(runStep(page, { invoke: "settings.get", expect: { dailyFolder: "Diário" } }, dir, send)).rejects.toThrow("veio undefined");
+    expect(() => parseScript([{ invoke: "settings.get", expect: [940] }])).toThrow("expect é um objeto");
+  });
+
   test("current de uma nota que não existe diz qual", async () => {
     const v = vault();
     await expect(runStep(page, { invoke: "notes.save", args: { path: "b.md", content: "x", baseVersion: "current" } }, dir, v.send)).rejects.toThrow("E_NOT_FOUND");

@@ -281,8 +281,12 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
     const svg = el?.querySelector("svg");
     if (!el || !svg) return;
     const natural = svg.viewBox.baseVal.width || svg.getBoundingClientRect().width;
+    let width = -1;
+    let frame = 0;
     const fit = () => {
-      const room = el.clientWidth - 24;
+      frame = 0;
+      width = el.clientWidth;
+      const room = width - 24;
       const scale = Math.max(MIN_SCALE, Math.min(1, room / natural));
       svg.style.width = `${natural * scale}px`;
       svg.style.height = "auto";
@@ -290,9 +294,18 @@ export function MermaidBlock({ source, code, onLink, onShown }: { source: string
       onShown?.();
     };
     fit();
-    const watch = new ResizeObserver(fit);
+    // Só a largura da caixa muda a escala, e o ajuste vai para o próximo quadro (T19426): o `fit` muda a altura da
+    // própria caixa (o svg com `height: auto`), e refazer dentro do aviso dava "ResizeObserver loop completed with
+    // undelivered notifications" a cada arrasto da largura da nota.
+    const watch = new ResizeObserver(() => {
+      if (el.clientWidth === width || frame) return;
+      frame = requestAnimationFrame(fit);
+    });
     watch.observe(el);
-    return () => watch.disconnect();
+    return () => {
+      watch.disconnect();
+      cancelAnimationFrame(frame);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn, showCode]);
   useEffect(() => {
