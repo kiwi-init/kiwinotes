@@ -5,6 +5,7 @@ import type { EditorState, TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { startCompletion } from "@codemirror/autocomplete";
 import type { MenuItem } from "../ContextMenu.tsx";
+import type { MenuIconName } from "./menuIcons.tsx";
 import { FORMAT_KEYS, tableAt, tableActionCommand } from "./index.ts";
 import { insertLink } from "./format.ts";
 import { slashInsert } from "./slash.ts";
@@ -111,6 +112,19 @@ export const FORMAT_STYLE: Record<string, string> = {
 };
 
 /**
+ * O jeito de cada opção do Parágrafo (spec #17703): os títulos em cascata (`kn-menu-h1`…`h6`), o Corpo no normal, e
+ * um ícone nas listas, na citação e no marcar tarefa.
+ */
+export const PARAGRAPH_LOOK: Record<string, { icon?: MenuIconName; labelClass?: string }> = {
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [`Mod-${n}`, { labelClass: `kn-menu-h${n}` }])),
+  "Shift-Mod-8": { icon: "bullet" },
+  "Shift-Mod-7": { icon: "numbered" },
+  "Shift-Mod-9": { icon: "task" },
+  "Shift-Mod-.": { icon: "quote" },
+  "Mod-l": { icon: "check" },
+};
+
+/**
  * O menu do botão direito do editor. `plain` (spec #13385): o de um texto puro (.txt), o mesmo menu sem o que só existe
  * numa nota (o link para outra nota e dividir a nota). A formatação entra como Markdown simples (`# `, `- `, `**`).
  */
@@ -126,7 +140,7 @@ export function editorMenu(view: EditorView, clipboard: EditorClipboard, onError
   };
   const command = (key: string): MenuItem => {
     const item = FORMAT_KEYS.find((item) => item.key === key)!;
-    return { label: item.label, labelClass: FORMAT_STYLE[key], onSelect: perform(() => { item.run(view); }) };
+    return { label: item.label, labelClass: FORMAT_STYLE[key], ...PARAGRAPH_LOOK[key], onSelect: perform(() => { item.run(view); }) };
   };
   const insertBlock = (id: string) => perform(() => {
     const sel = view.state.selection.main, line = view.state.doc.lineAt(sel.from);
