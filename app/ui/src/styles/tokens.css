@@ -95,6 +95,9 @@
   --shadow-float: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 0.08), 0 4px 12px rgb(0 0 0 / 0.06);
   /* O realce de cima do `--shadow-float` (o `inset`), em separado para quem desenha a forma em SVG (a gota, T18948). */
   --float-highlight: transparent;
+  /* O anel da gota e o de baixo da pílula, também desenhados em SVG (T18948). */
+  --float-ring: var(--border-strong);
+  --float-ring-under: var(--border);
 
   /* movimento */
   --ease: cubic-bezier(0.32, 0.72, 0, 1);

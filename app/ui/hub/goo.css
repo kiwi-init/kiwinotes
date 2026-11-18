@@ -28,9 +28,10 @@
   position: relative;
 }
 
-/* A gota desenhada (T18948): um caminho SVG por quadro, na cor da pílula e com a borda dela. O anel do
-   `--shadow-float` é o `--line-2` nos temas (o `--border` sem tema), 1 px por fora: o traço tem 2 px e fica atrás do
-   preenchimento. Sem filtro: a forma é exata em qualquer quadro (o desfoque + limiar do T18646 virava pílulas). */
+/* A gota desenhada (T18948): um caminho SVG por quadro, na cor da pílula. A borda é o `--float-ring`, 1 px por fora
+   (o traço tem 2 px e fica atrás do preenchimento), como o anel do filtro da Gota 1: sem ele, no OLED Black, a gota e
+   a pílula ficavam sem borda (#18827, #19033). Embaixo da pílula fica a mesma forma (`.kn-goo-base`), e o anel do
+   `--shadow-float` dela soma com este. Sem filtro: a forma é exata em qualquer quadro. */
 .kn-goo-draw {
   position: absolute;
   inset: 0;
@@ -40,10 +41,14 @@
 }
 .kn-goo-path {
   fill: var(--float);
-  stroke: var(--line-2, var(--border));
+  stroke: var(--float-ring, var(--border-strong));
   stroke-width: 2px;
   stroke-linejoin: round;
   paint-order: stroke fill;
+}
+/* Embaixo da pílula, mais um anel: somado ao do `--shadow-float` dela, dá o tom da pílula na main (#19034). */
+.kn-goo-base {
+  stroke: var(--float-ring-under, var(--border));
 }
 /* O realce de cima da pílula no escuro (`inset 0 1px 0 var(--line)`); no claro, `--float-highlight` é transparente. */
 .kn-goo-hl-band {

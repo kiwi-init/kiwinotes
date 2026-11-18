@@ -3,14 +3,14 @@
 import { describe, expect, test } from "bun:test";
 
 import type { GooRect } from "./goo.ts";
-import { GOO_BEATS, type GooGeom, gooDropParts, gooDropPath, roundRect } from "./goo-shape.ts";
+import { GOO_BEATS, type GooGeom, gooDropParts, gooDropPath, gooSizes, roundRect } from "./goo-shape.ts";
 
 type Pt = [number, number];
 
-/** Os pontos de um caminho (M, C, A, H, V, Z, como o goo-shape escreve): os das curvas pelo polígono de controle, os
+/** Os pontos de um caminho (M, C, A, L, H, V, Z, como o goo-shape escreve): os das curvas pelo polígono de controle, os
  *  arcos amostrados pelo centro. Dá a caixa e o número de pedaços (subcaminhos). */
 function points(d: string): { pts: Pt[]; subpaths: number } {
-  const tok = d.match(/[MCAHVZ]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? [];
+  const tok = d.match(/[MCALHVZ]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? [];
   const pts: Pt[] = [];
   let i = 0;
   let cur: Pt = [0, 0];
@@ -21,6 +21,7 @@ function points(d: string): { pts: Pt[]; subpaths: number } {
     if (/[A-Z]/.test(tok[i]!)) cmd = tok[i++]!;
     if (cmd === "Z") continue;
     if (cmd === "M") (cur = [num(), num()], pts.push(cur), subpaths++);
+    else if (cmd === "L") (cur = [num(), num()], pts.push(cur));
     else if (cmd === "H") (cur = [num(), cur[1]], pts.push(cur));
     else if (cmd === "V") (cur = [cur[0], num()], pts.push(cur));
     else if (cmd === "C") {
@@ -111,8 +112,13 @@ describe("os tempos da referência", () => {
     expect(speck.r - speck.l).toBeLessThan((head.b - head.t) / 3);
   });
 
+  test("na volta, sem respingo: ele só existe na ida", () => {
+    for (const t of steps(100)) expect(gooDropParts(t, { ...end, back: true }).speck).toBe("");
+    expect(gooDropParts(GOO_BEATS.pinch + 0.02, { ...end, back: true }).edge).not.toBe("");
+  });
+
   test("depois de assentar, a beira está reta de novo e o respingo sumiu", () => {
-    for (const t of [GOO_BEATS.settle + 0.01, 0.8, 1]) {
+    for (const t of [GOO_BEATS.settle + 0.01, GOO_BEATS.arrive, 0.95, 1]) {
       const p = gooDropParts(t, end);
       expect(p.edge).toBe("");
       expect(p.speck).toBe("");
@@ -125,6 +131,41 @@ describe("os tempos da referência", () => {
   });
 });
 
+describe("o volume e o movimento (#19016)", () => {
+  const h = (d: string) => (box(d)!.b - box(d)!.t);
+  const w = (d: string) => (box(d)!.r - box(d)!.l);
+
+  test("a barriga já toma a ponta inteira da pílula", () => {
+    expect(h(gooDropParts(GOO_BEATS.belly - 0.01, end).head)).toBeGreaterThanOrEqual(tabs.h * 0.9);
+  });
+
+  test("a gota solta já tem quase a altura dos botões: não nasce bolinha", () => {
+    for (const t of [GOO_BEATS.pinch + 0.005, (GOO_BEATS.pinch + GOO_BEATS.arrive) / 2, GOO_BEATS.arrive]) {
+      expect(h(gooDropParts(t, end).head)).toBeGreaterThanOrEqual(end.target.h * 0.75);
+    }
+  });
+
+  test("no caminho, a gota é mais comprida que alta, e mais no meio, onde vai mais rápido", () => {
+    const ratio = (t: number) => w(gooDropParts(t, end).head) / h(gooDropParts(t, end).head);
+    const mid = (GOO_BEATS.pinch + GOO_BEATS.arrive) / 2;
+    for (const t of steps(20).map((s) => GOO_BEATS.pinch + 0.005 + s * (GOO_BEATS.arrive - GOO_BEATS.pinch - 0.01))) {
+      expect(ratio(t)).toBeGreaterThan(1.2);
+    }
+    expect(ratio(mid)).toBeGreaterThan(ratio(GOO_BEATS.pinch + 0.01));
+  });
+
+  test("na chegada, amassa: passa da largura dos botões e volta", () => {
+    expect(w(gooDropParts(GOO_BEATS.arrive + 0.005, end).head)).toBeGreaterThan(end.target.w);
+    const widths = steps(40).map((s) => w(gooDropParts(GOO_BEATS.arrive + s * (0.999 - GOO_BEATS.arrive), end).head));
+    expect(Math.min(...widths)).toBeLessThan(end.target.w);
+    expect(Math.abs(widths.at(-1)! - end.target.w)).toBeLessThan(1);
+  });
+
+  test("o pescoço mais fino fica mais largo que o traço de 2 px (não some no escuro)", () => {
+    expect(2 * gooSizes(32).neck).toBeGreaterThan(2);
+  });
+});
+
 describe("o desenho", () => {
   test("os dois lados são o espelho um do outro", () => {
     const mirror = (x: number) => 2 * (tabs.x + tabs.w / 2) - x;
@@ -132,7 +173,9 @@ describe("o desenho", () => {
       const a = points(gooDropPath(t, start)).pts.map(([x, y]) => `${mirror(x).toFixed(1)},${y.toFixed(1)}`).sort();
       const b = points(gooDropPath(t, end)).pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).sort();
       // Os arcos são amostrados a partir de pontas diferentes; a caixa basta.
-      expect(box(a.map((p) => `M${p}`).join("") || "M0,0")).toEqual(box(b.map((p) => `M${p}`).join("") || "M0,0"));
+      const ba = box(a.map((p) => `M${p}`).join("") || "M0,0")!;
+      const bb = box(b.map((p) => `M${p}`).join("") || "M0,0")!;
+      for (const k of ["l", "r", "t", "b"] as const) expect(Math.abs(ba[k] - bb[k])).toBeLessThan(0.2);
     }
   });
 
@@ -170,7 +213,7 @@ describe("o desenho", () => {
   });
 
   test("tempos ajustáveis: a coreografia muda os números e a forma acompanha", () => {
-    const beats = { belly: 0.1, pinch: 0.3, settle: 0.5 };
+    const beats = { belly: 0.1, pinch: 0.3, settle: 0.5, arrive: 0.8 };
     expect(gooDropParts(0.32, end, beats).edge).not.toBe("");
     expect(gooDropParts(0.32, end).edge).toBe("");
   });

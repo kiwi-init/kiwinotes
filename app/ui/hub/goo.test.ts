@@ -81,9 +81,9 @@ describe("o CSS", () => {
   test("a gota tem a cor e a borda da pílula, nunca uma cor fixa", () => {
     const body = css.match(/\.kn-goo-path \{([^}]*)\}/)?.[1] ?? "";
     expect(body).toContain("fill: var(--float)");
-    // A borda: o anel do `--shadow-float` (o `--line-2` dos temas), por fora; no escuro, sem ela a gota era uma mancha
-    // escura correndo pela barra (o "rastro preto", T18949).
-    expect(body).toContain("stroke: var(--line-2, var(--border))");
+    // A borda: o `--float-ring` (o `--line-3`, mais forte no escuro), por fora; mais fraca, no escuro a gota e a pílula
+    // ficavam sem borda (o "rastro preto", T18949; #19033).
+    expect(body).toContain("stroke: var(--float-ring, var(--border-strong))");
     expect(body).toContain("paint-order: stroke fill");
     expect(css).toMatch(/\.kn-goo-hl-band \{\s*fill: var\(--float-highlight, transparent\);/);
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i);

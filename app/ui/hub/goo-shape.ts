@@ -1,12 +1,14 @@
 // A forma da gota, desenhada quadro a quadro (spec #17725, Gota 2, T18948). Sem filtro: para cada `t` da ida (0 → 1),
-// um caminho SVG com o que estiver na tela naquele quadro. A volta é o mesmo caminho, com `t` de 1 a 0.
+// um caminho SVG com o que estiver na tela naquele quadro. A volta é o mesmo caminho, com `t` de 1 a 0: o botão vira
+// uma lágrima do tamanho dele, anda, toca a pílula, abre o pescoço e é sugado.
 //
 // Os tempos, na ordem do desenho de referência (a barra deitada: a gota sai pelo lado da pílula de abas):
-// 1. barriga: a beira da pílula estufa, larga e rasa, e vai fundando;
-// 2. pescoço: os ombros entram, a barriga vira um pescoço e a cabeça vira uma lágrima; o pescoço afina até 1 px;
-// 3. solta: o pescoço parte. Na beira fica um cone, que arredonda e volta a ficar reto; entre os dois fica um
-//    respingo pequeno, que some; a cabeça perde a ponta e fica redonda;
-// 4. corre: a cabeça vai até o lugar dos botões e vira o retângulo arredondado deles.
+// 1. barriga: a ponta inteira da pílula estufa, larga e rasa, e vai fundando;
+// 2. pescoço: os ombros entram, a barriga vira um pescoço e a cabeça cresce até quase a altura dos botões;
+// 3. solta: o pescoço parte. Na beira fica um cone, que volta para a pílula; entre os dois, um respingo pequeno;
+// 4. corre: a gota, uma lágrima com a ponta para trás, estica no sentido do movimento;
+// 5. chega: amassa no retângulo dos botões e assenta com uma mola.
+// O volume fica quase o mesmo do começo ao fim: a gota não nasce bolinha para inchar no fim (#19016).
 //
 // Coordenadas locais: `u` é a distância para fora da beira da pílula (o lado `end` vai para a direita, o `start` para a
 // esquerda) e `v` é a altura a partir do meio da pílula. A forma fica atrás da pílula: o que estiver em `u < 0` some
@@ -17,14 +19,16 @@ import type { GooRect, GooSide } from "./goo.ts";
 /** Os tempos da ida, em frações de `t`. A coreografia (T18949) ajusta estes números e a duração. */
 export const GOO_BEATS = {
   /** Até aqui, a barriga. */
-  belly: 0.2,
+  belly: 0.16,
   /** Até aqui, o pescoço; aqui ele parte. */
-  pinch: 0.46,
-  /** Até aqui, o cone da beira volta a ficar reto, o respingo some e a cabeça perde a ponta. */
-  settle: 0.68,
+  pinch: 0.42,
+  /** Até aqui, o cone volta para a pílula e o respingo some. */
+  settle: 0.6,
+  /** Aqui a gota chega aos botões; dali ao fim, amassa e assenta. */
+  arrive: 0.82,
 } as const;
 
-export type GooBeats = { belly: number; pinch: number; settle: number };
+export type GooBeats = { belly: number; pinch: number; settle: number; arrive: number };
 
 export interface GooGeom {
   side: GooSide;
@@ -34,28 +38,8 @@ export interface GooGeom {
   target: GooRect;
   /** O raio dos cantos dos botões (o `--r-ctl`). */
   radius?: number;
-}
-
-const clamp = (x: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
-const lerp = (a: number, b: number, s: number) => a + (b - a) * s;
-const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
-const easeOut = (s: number) => 1 - (1 - s) ** 3;
-const easeInOut = (s: number) => (s < 0.5 ? 4 * s ** 3 : 1 - (-2 * s + 2) ** 3 / 2);
-const smooth = (s: number) => s * s * (3 - 2 * s);
-const n2 = (x: number) => (Math.round(x * 100) / 100).toString();
-
-/** As medidas da gota, tiradas da altura da pílula (32 px no Hub). */
-export function gooSizes(h: number) {
-  return {
-    /** O raio da cabeça. */
-    head: h * 0.3,
-    /** Meia altura da base da barriga, na beira. */
-    base: h * 0.38,
-    /** O comprimento do pescoço, da beira ao centro da cabeça, quando parte. */
-    reach: h * 0.85,
-    /** O raio do respingo. */
-    speck: Math.max(1.5, h * 0.06),
-  };
+  /** Na volta (`t` de 1 a 0): sem respingo, que só existe na ida, como na referência (#19075). */
+  back?: boolean;
 }
 
 /** As partes de um quadro, cada uma um caminho SVG (vazio quando não está na tela): a gota presa à pílula ou solta
@@ -67,6 +51,31 @@ export interface GooParts {
 }
 
 const NONE: GooParts = { head: "", edge: "", speck: "" };
+const K = 0.5523; // o ponto de controle de um quarto de elipse
+
+const clamp = (x: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
+const lerp = (a: number, b: number, s: number) => a + (b - a) * s;
+const span = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
+const easeOut = (s: number) => 1 - (1 - s) ** 3;
+const smooth = (s: number) => s * s * (3 - 2 * s);
+const n2 = (x: number) => (Math.round(x * 100) / 100).toString();
+
+/** As medidas da gota: `h` é a altura da pílula, `th` a dos botões (32 px os dois, no Hub). */
+export function gooSizes(h: number, th = h) {
+  const head = Math.min(h, th) * 0.44;
+  return {
+    /** Meia altura da barriga na beira: quase a ponta inteira da pílula. */
+    base: (h / 2) * 0.95,
+    /** Meia altura da gota solta: perto da dos botões. */
+    head,
+    /** Da beira ao centro da gota, quando o pescoço parte. */
+    reach: head * 1.3 + h * 0.55,
+    /** O raio do respingo. */
+    speck: Math.max(1.5, h * 0.07),
+    /** Meia largura do pescoço mais fino: o pescoço fica acima dos 2 px do traço, e o anel não some no escuro. */
+    neck: 1.6,
+  };
+}
 
 /** O caminho SVG da gota inteira no quadro `t` (0 a 1), na barra. */
 export function gooDropPath(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS): string {
@@ -78,12 +87,14 @@ export function gooDropPath(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS):
 export function gooDropParts(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS): GooParts {
   t = clamp(t);
   if (t <= 0) return NONE;
+  const radius = g.radius ?? 10;
+  if (t >= 1) return { ...NONE, head: roundRect(g.target.x + g.target.w / 2, g.target.y + g.target.h / 2, g.target.w, g.target.h, radius) };
   const dir = g.side === "end" ? 1 : -1;
   const x0 = g.side === "end" ? g.tabs.x + g.tabs.w : g.tabs.x;
   const cy = g.tabs.y + g.tabs.h / 2;
-  const { head: R, base: B, reach, speck } = gooSizes(g.tabs.h);
+  const { base: B, head: HB, reach, speck, neck: NECK } = gooSizes(g.tabs.h, g.target.h);
   const P = (u: number, v: number) => `${n2(x0 + dir * u)},${n2(cy + v)}`;
-  // O arco do lado de fora da cabeça: horário na tela para a direita, anti-horário espelhado.
+  // O arco que anda no sentido do relógio na tela, para a direita; espelhado, ao contrário.
   const sweep = dir > 0 ? 1 : 0;
 
   // Os ombros saem da ponta redonda da pílula pela tangente dela: a barriga parece a própria ponta estufando.
@@ -91,32 +102,52 @@ export function gooDropParts(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS)
   const shoulder = (b: number) => {
     const ua = -(rp - Math.sqrt(Math.max(0, rp * rp - b * b)));
     const len = Math.hypot(b, ua + rp) || 1;
-    // A tangente, de cima para fora: anda em `u` e desce para o meio.
     return { ua, tu: b / len, tv: (ua + rp) / len };
   };
 
-  // 1. A barriga: a ponta estufa, larga e rasa, e vai fundando, com o fundo redondo.
+  // A gota solta: a frente com cantos de raio `fr`, atrás cantos `br`, que fecham em ponta (`point` 1) ou redondos (0).
+  const blob = (cu: number, cv: number, af: number, ab: number, b: number, fr: [number, number], br: [number, number], point: number) => {
+    const frx = Math.max(0.5, Math.min(fr[0], af + ab));
+    const fry = Math.max(0.5, Math.min(fr[1], b));
+    const brx = Math.max(0.5, Math.min(br[0], af + ab - frx));
+    const bry = Math.max(0.5, Math.min(br[1], b));
+    const uf = cu + af;
+    const ub = cu - ab;
+    // A ponta da lágrima é afilada mas convexa: a curva chega nela ainda inclinada, sem bico côncavo.
+    const c2u = lerp(ub, ub + brx * 0.12, point);
+    const c2v = lerp(b - bry * (1 - K), b - bry * 0.62, point);
+    return (
+      `M${P(uf - frx, cv - b)}A${n2(frx)} ${n2(fry)} 0 0 ${sweep} ${P(uf, cv - b + fry)}` +
+      `L${P(uf, cv + b - fry)}A${n2(frx)} ${n2(fry)} 0 0 ${sweep} ${P(uf - frx, cv + b)}` +
+      `L${P(ub + brx, cv + b)}C${P(ub + brx * (1 - K), cv + b)} ${P(c2u, cv + c2v)} ${P(ub, cv + b - bry)}` +
+      `L${P(ub, cv - b + bry)}C${P(c2u, cv - c2v)} ${P(ub + brx * (1 - K), cv - b)} ${P(ub + brx, cv - b)}Z`
+    );
+  };
+
+  // 1. A barriga: a ponta inteira estufa, larga e rasa, e vai fundando, com o fundo redondo.
+  const dBelly = g.tabs.h * 0.6;
   if (t < beats.belly) {
     const s = easeOut(span(t, 0, beats.belly));
-    const d = R * 1.2 * s;
-    const b = B;
-    const { ua, tu, tv } = shoulder(b);
-    // O fundo é largo (os pontos de controle perto dos ombros): uma barriga, não uma ponta.
+    const d = dBelly * s;
+    const { ua, tu, tv } = shoulder(B);
     const k = (d - ua) * 0.55;
     const head =
-      `M${P(ua, -b)}C${P(ua + tu * k, -b + tv * k)} ${P(d, -b * 0.85)} ${P(d, 0)}` +
-      `C${P(d, b * 0.85)} ${P(ua + tu * k, b - tv * k)} ${P(ua, b)}Z`;
+      `M${P(ua, -B)}C${P(ua + tu * k, -B + tv * k)} ${P(d, -B * 0.85)} ${P(d, 0)}` +
+      `C${P(d, B * 0.85)} ${P(ua + tu * k, B - tv * k)} ${P(ua, B)}Z`;
     return { ...NONE, head };
   }
 
-  // 2. O pescoço: a cabeça se afasta e se alonga numa lágrima, os ombros entram e o pescoço afina até 1 px.
+  // 2. O pescoço: a cabeça se afasta, cresce até a altura da gota solta e se alonga numa lágrima; os ombros entram e o
+  // pescoço afina até o mínimo.
+  const ry1 = HB;
+  const rx1 = HB * 1.3;
   if (t < beats.pinch) {
     const s = span(t, beats.belly, beats.pinch);
-    const rx = R * lerp(1, 1.18, s);
-    const ry = R * lerp(1, 0.94, s);
-    const cu = lerp(R * 1.2 - rx, reach, easeInOut(s));
-    const neck = lerp(ry * 0.8, 0.5, smooth(s));
-    const b = lerp(B, B * 0.78, s);
+    const ry = lerp(B * 0.88, ry1, smooth(s));
+    const rx = lerp(B * 0.88, rx1, smooth(s));
+    const cu = lerp(dBelly - B * 0.88, reach, smooth(s));
+    const neck = lerp(ry * 0.85, NECK, smooth(s));
+    const b = lerp(B, B * 0.62, s);
     const { ua, tu, tv } = shoulder(b);
     // O ponto onde o pescoço encontra a cabeça, em cima da elipse.
     const un = cu - rx * Math.sqrt(1 - (neck / ry) ** 2);
@@ -128,52 +159,62 @@ export function gooDropParts(t: number, g: GooGeom, beats: GooBeats = GOO_BEATS)
     return { ...NONE, head };
   }
 
-  // 3 e 4. Solta: o fio parte onde estava o pescoço (`bp`). Na beira fica o cone, que volta para a pílula; no ponto
-  // do corte, o respingo, que aparece com a folga e some; a cabeça, com a ponta virada para o corte, corre e vira os
-  // botões. A cabeça na hora de soltar tem a frente onde a lágrima do pescoço tinha (o raio maior, 1.18).
+  // 3 a 5. Solta: o fio parte onde estava o pescoço (`bp`).
   const parts: GooParts = { ...NONE };
-  const st = span(t, beats.pinch, beats.settle);
-  const e = easeOut(st);
-  const bp = reach - R * 1.18;
-  if (st < 1) {
-    // O cone da beira: pontudo logo depois de partir, arredonda e afunda na pílula.
-    const tip = (bp - 1) * (1 - e);
-    const sh = B * 0.78;
-    const { ua, tu, tv } = shoulder(sh);
-    const k = Math.max(1, tip - ua) * 0.45;
-    const w = lerp(0, sh * 0.6, smooth(st));
-    parts.edge =
-      `M${P(ua, -sh)}C${P(ua + tu * k, -sh + tv * k)} ${P(tip, -w)} ${P(tip, 0)}` +
-      `C${P(tip, w)} ${P(ua + tu * k, sh - tv * k)} ${P(ua, sh)}Z`;
-    // O respingo: cresce com a folga entre o cone e a gota e encolhe até sumir.
-    const r = speck * Math.sin(Math.PI * Math.min(1, st * 1.25));
-    if (r > 0.2) {
-      const su = bp + R * 0.25 * st;
-      parts.speck = `M${P(su - r, 0)}A${n2(r)} ${n2(r)} 0 1 0 ${P(su + r, 0)}A${n2(r)} ${n2(r)} 0 1 0 ${P(su - r, 0)}Z`;
-    }
-  }
-
-  // A cabeça: corre do ponto onde soltou até o meio dos botões.
-  const run = easeInOut(span(t, beats.pinch, 1));
+  const bp = reach - rx1 * Math.sqrt(1 - (NECK / ry1) ** 2);
   const tu = dir > 0 ? g.target.x + g.target.w / 2 - x0 : x0 - (g.target.x + g.target.w / 2);
   const tv = g.target.y + g.target.h / 2 - cy;
-  const c0 = reach + R * 0.18;
-  const cu = lerp(c0, tu, run);
-  const cv = lerp(0, tv, run);
-  // A ponta começa logo depois do corte e encolhe até a cabeça ficar redonda.
-  const tail0 = c0 - R - (bp + 1);
-  const tail = tail0 * (1 - e);
-  if (tail > 0.3) {
-    const tp = cu - R - tail;
-    const q = 1 - tail / Math.max(tail0, 0.01);
-    parts.head =
-      `M${P(tp, cv)}C${P(tp + tail * 0.3, cv - R * 0.4 * (0.3 + q))} ${P(cu - R * 0.55, cv - R)} ${P(cu, cv - R)}` +
-      `A${n2(R)} ${n2(R)} 0 0 ${sweep} ${P(cu + R, cv)}A${n2(R)} ${n2(R)} 0 0 ${sweep} ${P(cu, cv + R)}` +
-      `C${P(cu - R * 0.55, cv + R)} ${P(tp + tail * 0.3, cv + R * 0.4 * (0.3 + q))} ${P(tp, cv)}Z`;
+  // O tamanho na chegada: comprida no sentido do movimento, um pouco mais baixa que os botões.
+  const aT = Math.max(g.target.w * 0.56, HB * 1.4);
+  const bT = Math.min(HB, g.target.h * 0.43);
+
+  let head: { cu: number; cv: number; af: number; ab: number; b: number; fr: [number, number]; br: [number, number]; point: number };
+  if (t < beats.arrive) {
+    // Corre: da lágrima que soltou até a chegada. Estica mais no meio do caminho, onde vai mais rápido.
+    const r = span(t, beats.pinch, beats.arrive);
+    const m = smooth(r);
+    const speed = Math.sin(Math.PI * r);
+    const af = lerp(rx1, aT * 0.9, m) * (1 + 0.12 * speed);
+    const ab = lerp(reach - bp - 1, aT * 1.1, m) * (1 + 0.3 * speed);
+    const b = lerp(ry1, bT, m) * (1 - 0.1 * speed);
+    // O centro: da soltura até que a caixa da gota fique no meio dos botões.
+    const cu = lerp(reach, tu + (ab - af) / 2, m);
+    head = { cu, cv: lerp(0, tv, m), af, ab, b, fr: [af, b], br: [ab, b], point: lerp(1, 0.35, m) };
   } else {
-    // Redonda, e no fim o retângulo arredondado dos botões.
-    const m = smooth(span(run, 0.5, 1));
-    parts.head = roundRect(x0 + dir * cu, cy + cv, lerp(2 * R, g.target.w, m), lerp(2 * R, g.target.h, m), lerp(R, g.radius ?? 10, m));
+    // Chega: amassa no retângulo dos botões, passa um pouco do ponto e assenta (uma mola).
+    const q = span(t, beats.arrive, 1);
+    const f = Math.cos(2.4 * Math.PI * q) * (1 - q) ** 2;
+    const w = g.target.w + (2 * aT - g.target.w) * f;
+    const h = g.target.h + (2 * bT - g.target.h) * Math.max(f, -0.25);
+    const af = w / 2 - 0.1 * aT * f;
+    const ab = w / 2 + 0.1 * aT * f;
+    const c = smooth(Math.min(1, q * 2.5));
+    const rr = Math.min(radius, w / 2, h / 2);
+    head = {
+      cu: tu + (ab - af) / 2, cv: tv, af, ab, b: h / 2,
+      fr: [lerp(af, rr, c), lerp(h / 2, rr, c)], br: [lerp(ab, rr, c), lerp(h / 2, rr, c)], point: 0.35 * (1 - c),
+    };
+  }
+  parts.head = blob(head.cu, head.cv, head.af, head.ab, head.b, head.fr, head.br, head.point);
+
+  const st = span(t, beats.pinch, beats.settle);
+  if (st < 1) {
+    // O cone da beira: pontudo logo depois de partir, arredonda e afunda na pílula.
+    const tip = (bp - 1) * (1 - easeOut(st));
+    const sh = B * 0.62;
+    const { ua, tu: su, tv: sv } = shoulder(sh);
+    const k = Math.max(1, tip - ua) * 0.45;
+    const w = lerp(NECK, sh * 0.6, smooth(st));
+    parts.edge =
+      `M${P(ua, -sh)}C${P(ua + su * k, -sh + sv * k)} ${P(tip, -w)} ${P(tip, 0)}` +
+      `C${P(tip, w)} ${P(ua + su * k, sh - sv * k)} ${P(ua, sh)}Z`;
+    // O respingo: no meio da folga entre o cone e a ponta da gota, cresce e some.
+    const tail = head.cu - head.ab;
+    const rs = Math.min(speck * Math.sin(Math.PI * Math.min(1, st * 1.25)), (tail - tip) / 2 - 0.4);
+    if (rs > 0.2 && !g.back) {
+      const c = (tip + tail) / 2;
+      parts.speck = `M${P(c - rs, 0)}A${n2(rs)} ${n2(rs)} 0 1 0 ${P(c + rs, 0)}A${n2(rs)} ${n2(rs)} 0 1 0 ${P(c - rs, 0)}Z`;
+    }
   }
   return parts;
 }

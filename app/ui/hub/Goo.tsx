@@ -12,7 +12,7 @@ import "./goo.css";
 import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
 import { GOO_FALLBACK_MS, type GooPhase, type GooRect, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
-import { type GooParts, gooDropParts } from "./goo-shape.ts";
+import { type GooParts, gooDropParts, roundRect } from "./goo-shape.ts";
 
 const SIDES: GooSide[] = ["start", "end"];
 const PARTS: (keyof GooParts)[] = ["edge", "speck", "head"];
@@ -52,10 +52,17 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
     const write = (vars: Record<string, string>) => {
       for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v);
     };
+    const radius = () => parseFloat(getComputedStyle(el).getPropertyValue("--r-ctl")) || 10;
     const rects: { tabs: GooRect | null } & Partial<Record<GooSide, GooRect>> = { tabs: null };
+    const base = el.querySelector<SVGPathElement>(".kn-goo-base");
     const measure = () => {
       const t = gooRect(tabs, bar);
-      if (t) (rects.tabs = t, write(gooVars("tabs", t)));
+      if (t) {
+        rects.tabs = t;
+        write(gooVars("tabs", t));
+        // A pílula embaixo da pílula: o anel dela soma com o do `--shadow-float`, como na gota (o tom da main, #19034).
+        base?.setAttribute("d", roundRect(t.x + t.w / 2, t.y + t.h / 2, t.w, t.h, radius()));
+      }
       for (const side of SIDES) {
         const slot = slots[side];
         // Sem botões, o lado guarda o último retângulo: é dali que a gota volta.
@@ -71,7 +78,6 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
         whole: Array.from(el.querySelectorAll<SVGPathElement>(`.kn-goo-whole[data-side="${side}"]`)),
       }]),
     ) as Record<GooSide, { parts: Record<keyof GooParts, SVGPathElement | null>; whole: SVGPathElement[] }>;
-    const radius = () => parseFloat(getComputedStyle(el).getPropertyValue("--r-ctl")) || 10;
     const draw = (side: GooSide) => {
       const ph = phases.current[side];
       const target = rects[side];
@@ -80,7 +86,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
         const clock = el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`);
         const timing = clock?.getAnimations()[0]?.effect?.getComputedTiming();
         const p = Number(timing?.progress ?? 0);
-        parts = gooDropParts(ph === "entering" ? p : 1 - p, { side, tabs: rects.tabs, target, radius: radius() });
+        parts = gooDropParts(ph === "entering" ? p : 1 - p, { side, tabs: rects.tabs, target, radius: radius(), back: ph === "leaving" });
       }
       for (const k of PARTS) paths[side].parts[k]?.setAttribute("d", parts[k]);
       const all = parts.edge + parts.speck + parts.head;
@@ -171,6 +177,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
             </clipPath>
           ))}
         </defs>
+        <path className="kn-goo-path kn-goo-base" />
         {SIDES.map((side) => (
           <g key={side} className="kn-goo-side" data-side={side}>
             {PARTS.map((part) => (
