@@ -196,7 +196,7 @@ export function CatBubble({ reduced, hidden = false, onShown, drop }: { reduced:
         ) : null}
       </BubblePresence>
       {bigOpen && !hidden ? (
-        <div className="kn-bubble-big" ref={big} onMouseDown={keepFocus} onClick={(e) => openMdLink(e.target)}
+        <div className="kn-bubble-big kn-bubble-wide" ref={big} onMouseDown={keepFocus} onClick={(e) => openMdLink(e.target)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && openMdLink(e.target)) e.preventDefault();
           }}

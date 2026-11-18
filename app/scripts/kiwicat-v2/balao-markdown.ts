@@ -4,7 +4,7 @@
 //
 // - fechado, o balão pequeno mostra o texto corrido, sem `**`, `#`, `|` nem a crase;
 // - aberto ([Ver mais]), a tabela é uma tabela de verdade (3 colunas, nenhum `|` no texto do balão);
-// - a tabela larga rola de lado dentro da própria caixa, e o balão não: ele fica na largura dele (até 420 px);
+// - a tabela larga rola de lado dentro da própria caixa, e o balão não: ele fica na largura dele (até 480 px, spec #17673);
 // - `<script>` e `<img>` aparecem como texto, e não há nenhum elemento `script`, `img` ou `iframe` no balão;
 // - o link não tem `href` (nada abre sozinho); um clique nele abre o endereço uma vez, e só ele.
 //
@@ -146,7 +146,8 @@ try {
       check(!m.pipes, "aberto: nenhum | no texto do balão");
       check(m.h2 === "Feira da semana" && m.strong === "Ana" && m.code === "retornável" && m.li === 2, "aberto: título, negrito, código e lista formatados");
       check(m.wrapScrollW > m.wrapClientW + 20, `aberto: a tabela larga rola de lado na caixa dela (${m.wrapScrollW} > ${m.wrapClientW})`);
-      check(m.bigScrollW <= m.bigClientW + 1 && m.bigWidth <= 420.5, `aberto: o balão não rola de lado e fica em ${Math.round(m.bigWidth)} px (≤ 420)`);
+      check(m.bigScrollW <= m.bigClientW + 1 && m.bigWidth <= 480.5, `aberto: o balão não rola de lado e fica em ${Math.round(m.bigWidth)} px (≤ 480)`);
+      check(m.bigWidth > 320.5, `aberto: mais largo que o fechado (${Math.round(m.bigWidth)} > 320 px, spec #17673)`);
       check(m.perigosos === 0 && m.tagsComoTexto, "aberto: <script> e <img> ficam texto, sem elemento");
       check(m.linkHref === null && m.linkData === LINK, "aberto: o link vem sem href, com o endereço no data-href");
     }
