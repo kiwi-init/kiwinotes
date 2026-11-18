@@ -27,6 +27,8 @@ export interface FileViewerProps {
   flushRef: MutableRefObject<(() => Promise<boolean>) | null>;
   /** As alças da largura da nota (spec #13383): um visualizador de texto as põe nas bordas da coluna. */
   widthHandles?: ReactNode;
+  /** A prévia do .html ao lado do código (T19314): o botão "Prévia" do topo do `FileView` liga e desliga. */
+  preview?: boolean;
 }
 
 export interface FileViewer {

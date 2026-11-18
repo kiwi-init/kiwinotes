@@ -89,6 +89,31 @@
   min-height: 0;
 }
 
+/* O botão "Prévia" ligado (T19314): a cor do destaque, como o "Fixar" da lateral. */
+.kn-file-preview-toggle[aria-pressed="true"] {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+/* O .html com a prévia (T19314): o código à esquerda e a página à direita, meio a meio. */
+.kn-file-text-body[data-preview] {
+  flex-direction: row;
+}
+
+.kn-file-text-body[data-preview] .kn-file-text-editor {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A página desenha no branco de um navegador, nos dois temas: o HTML sem fundo próprio conta com ele. */
+.kn-file-preview {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 0;
+  border-left: 1px solid var(--border, var(--surface-2));
+  background: #fff;
+}
+
 /* O editor do texto (spec #13382): o CodeMirror, que ocupa o resto da altura e rola sozinho. A coluna e a letra ficam
    no tema dele, no TextViewer. */
 .kn-file-text-editor {

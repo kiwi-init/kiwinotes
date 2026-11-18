@@ -1,11 +1,12 @@
 // Um arquivo do cofre que não é nota, aberto no lugar da nota (spec #7079, T7103): o nome no topo, o botão "Abrir no
-// app padrão" e, embaixo, o visualizador do tipo (`viewers.ts`). O view só lê: nada aqui escreve no arquivo. Grande
+// app padrão" (e, num .html, o "Prévia", T19314) e, embaixo, o visualizador do tipo (`viewers.ts`). O view só lê: nada aqui escreve no arquivo. Grande
 // demais, sem visualizador, sumido ou com erro, ele diz o que houve e oferece o app padrão.
 
 import { type MutableRefObject, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 
 import { fileSize } from "../../../src/shared/file-view.ts";
 import { fileType } from "../tree.ts";
+import { isHtmlFile } from "./htmlPreview.ts";
 import { TreeIcon } from "../treeIcons.tsx";
 import { type FilesApi, type FileState, type FileViewer, loadFile, viewerFor } from "./viewers.ts";
 import "./files.css";
@@ -29,6 +30,9 @@ export function FileView({ files, path, onOpenExternal, flushRef, widthHandles, 
   const [state, setState] = useState<FileState>({ kind: "loading" });
   const generation = useRef(0);
   const name = path.split("/").at(-1)!;
+  // O .html abre com a prévia ao lado do código (T19314); o botão "Prévia" a esconde para dar a largura ao código.
+  const [preview, setPreview] = useState(true);
+  const html = isHtmlFile(path);
 
   useEffect(() => {
     let alive = true;
@@ -73,13 +77,20 @@ export function FileView({ files, path, onOpenExternal, flushRef, widthHandles, 
           {name}
         </h1>
         {state.kind === "ready" ? <span className="kn-file-meta">{fileSize(state.file.size)}</span> : null}
-        <span className="kn-file-actions">{open}</span>
+        <span className="kn-file-actions">
+          {html && state.kind === "ready" ? (
+            <button type="button" className="kn-bt kn-file-preview-toggle" aria-pressed={preview} onClick={() => setPreview((on) => !on)}>
+              Prévia
+            </button>
+          ) : null}
+          {open}
+        </span>
       </header>
       <div className="kn-file-body" aria-busy={state.kind === "loading" ? "true" : undefined}>
         {state.kind === "ready" ? (
           // Um visualizador pesado (o pdf) chega depois, por import dinâmico.
           <Suspense fallback={null}>
-            <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} widthHandles={widthHandles} />
+            <state.viewer.View path={path} file={state.file} files={files} flushRef={flushRef} widthHandles={widthHandles} preview={html && preview} />
           </Suspense>
         ) : state.kind === "tooLarge" ? (
           notice(`Este arquivo tem ${fileSize(state.size)}, e o Kiwi Notes mostra aqui até ${fileSize(state.limit)}.`)
