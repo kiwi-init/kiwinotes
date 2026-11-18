@@ -69,7 +69,10 @@ export const CODE_LANGUAGES: Record<string, LanguageLoader> = {
   pl: legacy(async () => (await import("@codemirror/legacy-modes/mode/perl")).perl),
   ps1: legacy(async () => (await import("@codemirror/legacy-modes/mode/powershell")).powerShell),
   toml: legacy(async () => (await import("@codemirror/legacy-modes/mode/toml")).toml),
+  tex: legacy(async () => (await import("@codemirror/legacy-modes/mode/stex")).stex),
   ini: properties,
+  cfg: properties,
+  env: properties,
   conf: properties,
   properties,
   proto: legacy(async () => (await import("@codemirror/legacy-modes/mode/protobuf")).protobuf),
@@ -80,11 +83,19 @@ export const CODE_LANGUAGES: Record<string, LanguageLoader> = {
   yml: legacy(async () => (await import("@codemirror/legacy-modes/mode/yaml")).yaml),
 };
 
-/** A linguagem de um arquivo pelo nome, ou `undefined` (o .txt e o .log seguem sem cor). */
+/** O código que abre editável sem cor: o legacy-modes não tem modo de PHP. */
+export const CODE_WITHOUT_COLOR: ReadonlySet<string> = new Set(["php"]);
+
+const extOf = (name: string) => /\.([a-z0-9]+)$/i.exec(name.split("/").at(-1) ?? "")?.[1]?.toLowerCase();
+
+/** A linguagem de um arquivo pelo nome, ou `undefined` (o .txt e o .log seguem sem cor, e o .php também). */
 export function codeLanguageFor(name: string): LanguageLoader | undefined {
-  const ext = /\.([a-z0-9]+)$/i.exec(name.split("/").at(-1) ?? "")?.[1]?.toLowerCase();
+  const ext = extOf(name);
   return ext ? CODE_LANGUAGES[ext] : undefined;
 }
+
+/** É código (os números de linha e o menu sem Markdown): tem cor, ou é de `CODE_TYPES` mesmo sem ela (o .php). */
+export const isCodeFile = (name: string): boolean => codeLanguageFor(name) !== undefined || CODE_WITHOUT_COLOR.has(extOf(name) ?? "");
 
 /** As cores do código, na paleta do tema. Sem fundo nem negrito pesado: a cor sozinha separa as partes. */
 export const codeHighlight = HighlightStyle.define([

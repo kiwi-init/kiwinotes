@@ -16,7 +16,7 @@ export type FileReadAs = "text" | "binary";
 export const CODE_TYPES: readonly string[] = [
   "py", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "css", "scss", "less", "html", "htm", "xml", "sql",
   "sh", "bash", "zsh", "swift", "rb", "go", "rs", "c", "h", "cpp", "cc", "hpp", "java", "kt", "kts", "cs", "scala",
-  "dart", "lua", "r", "pl", "ps1", "toml", "ini", "conf", "properties", "proto", "diff", "patch",
+  "dart", "lua", "r", "pl", "ps1", "php", "tex", "toml", "ini", "cfg", "conf", "env", "properties", "proto", "diff", "patch",
 ];
 
 /** Os textos que as Notas abrem editáveis e gravam de volta (T7105, e o código do T19312): só estes o `files.save` aceita. */

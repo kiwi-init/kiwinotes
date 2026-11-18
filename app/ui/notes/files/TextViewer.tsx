@@ -8,20 +8,22 @@
 // O editor é o CodeMirror, o mesmo das notas .md, sem o Markdown (spec #13382). O `<textarea>` de antes refazia o
 // texto inteiro a cada tecla: num .txt de 1 MB, de 47 a 53 ms por tecla no WebKit, e a escrita travava. O CodeMirror só
 // desenha as linhas na tela, e a sessão lê o texto só quando grava. Como no .md, a gravação é silenciosa (sem
-// "Gravando…/Gravado"), e o texto quebra na largura da nota.
+// "Gravando…/Gravado"), e o texto quebra na largura da nota. O ⌘F busca e troca (T19312); o código tem os números de
+// linha, e o Tab recua.
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api as appApi, has } from "../../src/api.ts";
 import { ContextMenu, type MenuItem } from "../ContextMenu.tsx";
 import { NoteWidthFrame } from "../NoteWidth.tsx";
 import { editorMenu } from "../editor/context-menu.ts";
+import { searchOnly } from "../editor/search-fold.ts";
 
-import { codeHighlight, codeLanguageFor } from "./code-languages.ts";
+import { codeHighlight, codeLanguageFor, isCodeFile } from "./code-languages.ts";
 import { detectEol, TextSession, type TextSaveState, toEditor } from "./textSession.ts";
 import type { FileViewerProps } from "./viewers.ts";
 
@@ -44,6 +46,19 @@ const theme = EditorView.theme({
   ".cm-line": { padding: "0" },
 });
 
+/**
+ * Os números de linha do código (T19312). A coluna dos números e o texto andam juntos no meio, na largura da nota: a
+ * margem automática da esquerda fica nos números, a da direita no texto.
+ */
+const codeGutter = [
+  lineNumbers(),
+  EditorView.theme({
+    ".cm-gutters": { marginLeft: "auto", background: "none", border: "none", color: "var(--text-3)" },
+    ".cm-lineNumbers .cm-gutterElement": { padding: "0 4px 0 12px", fontVariantNumeric: "tabular-nums" },
+    ".cm-content": { margin: "0 auto 0 0", paddingLeft: "16px" },
+  }),
+];
+
 export function TextViewer({ path, file, files, flushRef, widthHandles }: FileViewerProps) {
   const initial = "text" in file ? file : { text: "", version: file.version };
   const notUtf8 = "readOnly" in file && file.readOnly === true;
@@ -56,6 +71,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
   const view = useRef<EditorView | null>(null);
   // A linguagem do código (T19312): `undefined` no .txt e no .log, que seguem sem cor nem o menu de código.
   const language = codeLanguageFor(path);
+  const code = isCodeFile(path);
   const [colored, setColored] = useState(false);
 
   // Uma sessão por arquivo aberto (o `FileView` monta de novo a cada caminho).
@@ -105,7 +121,12 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
             autocorrect: "off",
             ...(readOnly ? { "aria-readonly": "true" } : {}),
           }),
+          // O código ganha os números de linha; o tema dele vem antes do `theme`, porque no CodeMirror o tema de antes
+          // ganha, e a margem do texto muda.
+          ...(code ? [codeGutter] : []),
           theme,
+          // ⌘F busca e troca, como na nota .md.
+          searchOnly,
           lang.of([]),
           // A pessoa digitou: a sessão só marca, e lê o texto inteiro quando grava (depois da pausa).
           EditorView.updateListener.of((u) => {
@@ -168,7 +189,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles }: FileVi
       ...(has("clipboard.write") ? { write: (text: string) => appApi.copy(text) } : {}),
       ...(has("clipboard.read") ? { read: () => appApi.readClipboard() } : {}),
     };
-    setMenu({ x, y, items: editorMenu(v, clipboard, setMenuError, undefined, undefined, { plain: true, code: !!language }) });
+    setMenu({ x, y, items: editorMenu(v, clipboard, setMenuError, undefined, undefined, { plain: true, code }) });
   };
 
   // Sem "Gravando…/Gravado" na tela (spec #13382): como numa nota .md, a gravação é silenciosa, e só o erro e o conflito

@@ -38,12 +38,20 @@ export function searchablePreviews(previews: Extension[]): Extension {
     destroy() { this.destroyed = true; }
   })];
 }
-export const searchAndFold = [editorPhrases, search({ top: true }), listFolding, foldGutter({ domEventHandlers: { mousedown(view, _line, event) { event.preventDefault(); view.focus(); return false; } } }), keymap.of([...SEARCH_KEYS, ...foldKeymap]),
-  EditorView.theme({
+/** O painel do ⌘F nas cores do tema: o da nota .md e o do código (T19312) são o mesmo. */
+const searchTheme = EditorView.theme({
     '.cm-panels': { backgroundColor: 'var(--surface-2)', color: 'var(--text)', borderColor: 'var(--border)', maxWidth: '100%' },
     '.cm-search': { padding: '10px 28px 10px 10px', fontFamily: 'var(--font)', fontSize: '12px', lineHeight: '1.8' },
     '.cm-search .cm-textfield': { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '5px', padding: '4px 7px', maxWidth: '100%' },
     '.cm-search .cm-button': { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '5px', padding: '3px 7px' },
+    '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, #f6c945 30%, transparent)' },
+    '.cm-searchMatch-selected': { backgroundColor: 'var(--accent-soft)', outline: '1px solid var(--accent)' },
+});
+/** Buscar e trocar (⌘F, ⌘⌥F) sem a dobra: o editor dos textos e do código (T19312). */
+export const searchOnly: Extension = [editorPhrases, search({ top: true }), keymap.of(SEARCH_KEYS), searchTheme];
+export const searchAndFold = [editorPhrases, search({ top: true }), listFolding, foldGutter({ domEventHandlers: { mousedown(view, _line, event) { event.preventDefault(); view.focus(); return false; } } }), keymap.of([...SEARCH_KEYS, ...foldKeymap]),
+  searchTheme,
+  EditorView.theme({
     '.cm-gutters': { background: 'transparent', color: 'var(--text-3)', border: 'none', cursor: 'pointer' },
     // Some lines have top padding (the 2 px between list items); keep the arrow beside their text baseline.
     '.cm-foldGutter .cm-gutterElement': { display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
@@ -51,6 +59,4 @@ export const searchAndFold = [editorPhrases, search({ top: true }), listFolding,
     // texto da nota inteira anda 2 px a cada clique.
     '.cm-foldGutter, .cm-foldGutter .cm-gutterElement': { width: '12px', minWidth: '12px', boxSizing: 'border-box', overflow: 'hidden' },
     '.cm-foldPlaceholder': { background: 'var(--surface-2)', color: 'var(--text-2)', borderColor: 'var(--border)', padding: '0 5px', borderRadius: '4px' },
-    '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, #f6c945 30%, transparent)' },
-    '.cm-searchMatch-selected': { backgroundColor: 'var(--accent-soft)', outline: '1px solid var(--accent)' },
   })];

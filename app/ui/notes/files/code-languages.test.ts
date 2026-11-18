@@ -5,11 +5,16 @@ import { EditorState } from "@codemirror/state";
 import { highlightTree } from "@lezer/highlight";
 
 import { CODE_TYPES } from "../../../src/shared/file-view.ts";
-import { CODE_LANGUAGES, codeHighlight, codeLanguageFor } from "./code-languages.ts";
+import { CODE_LANGUAGES, CODE_WITHOUT_COLOR, codeHighlight, codeLanguageFor, isCodeFile } from "./code-languages.ts";
 
-test("toda extensão de código tem a linguagem dela, e o json e o yaml também; o .txt e o .log seguem sem cor", () => {
-  for (const ext of CODE_TYPES) expect(CODE_LANGUAGES[ext]).toBeFunction();
-  expect(Object.keys(CODE_LANGUAGES).sort()).toEqual([...CODE_TYPES, "json", "yaml", "yml"].sort());
+test("toda extensão de código tem a linguagem dela (menos o .php), e o json e o yaml também; o .txt e o .log seguem sem cor", () => {
+  for (const ext of CODE_TYPES) if (!CODE_WITHOUT_COLOR.has(ext)) expect(CODE_LANGUAGES[ext]).toBeFunction();
+  expect(Object.keys(CODE_LANGUAGES).sort()).toEqual([...CODE_TYPES.filter((e) => !CODE_WITHOUT_COLOR.has(e)), "json", "yaml", "yml"].sort());
+  for (const ext of CODE_WITHOUT_COLOR) expect(CODE_TYPES).toContain(ext);
+  // Os do spec que entraram na 2ª rodada: o .tex com o stex, o .cfg e o .env com o properties.
+  expect(codeLanguageFor("artigo.tex")).toBe(CODE_LANGUAGES.tex!);
+  expect(codeLanguageFor("app.cfg")).toBe(CODE_LANGUAGES.ini!);
+  expect(codeLanguageFor("pasta/.env")).toBe(CODE_LANGUAGES.ini!);
   expect(codeLanguageFor("Projeto X/script.PY")).toBe(CODE_LANGUAGES.py!);
   expect(codeLanguageFor("lista.txt")).toBeUndefined();
   expect(codeLanguageFor("saida.log")).toBeUndefined();
@@ -48,4 +53,9 @@ test("o realce pinta com as cores do tema: palavra-chave, texto, número e comen
   expect(tcolor("number")).toContain("--c-teal");
   expect(tcolor('"ok"')).toContain("--c-green");
   expect(tcolor("// conta")).toContain("--ink-3");
+});
+
+test("é código (números de linha, menu sem Markdown): o que tem cor e o .php; o .txt, o .log e o .md não", () => {
+  for (const name of ["a.py", "b.TS", "c.css", "d.json", "e.yaml", "f.php", "g.tex", ".env"]) expect(isCodeFile(name)).toBe(true);
+  for (const name of ["lista.txt", "saida.log", "nota.md", "sem-extensao"]) expect(isCodeFile(name)).toBe(false);
 });

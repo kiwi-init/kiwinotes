@@ -87,7 +87,7 @@ test("a lista de tipos do engine (spec #17683) é a mesma do VIEWERS, e o `.txt`
 });
 
 test("o código (T19312): py, ts, css, html, sh… abrem no editor dos textos, editáveis; o .doc e o .numbers não", () => {
-  for (const name of ["script.py", "App.TSX", "estilo.css", "index.html", "rodar.sh", "consulta.sql", "Main.swift", "config.toml", "app.ini"]) {
+  for (const name of ["script.py", "App.TSX", "estilo.css", "index.html", "rodar.sh", "consulta.sql", "Main.swift", "config.toml", "app.ini", "index.php", "artigo.tex", "app.cfg", "pasta/.env"]) {
     expect(viewerFor(name)).toBe(viewerFor("a.txt"));
     expect(EDITABLE_TEXT.has(name.split(".").at(-1)!.toLowerCase())).toBe(true);
   }
