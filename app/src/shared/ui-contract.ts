@@ -1067,6 +1067,14 @@ export interface AgentModelChoice {
 }
 
 /** Um pedaço da resposta ao vivo de um pedido (`agent.turn`, 1.41.0). */
+/**
+ * Uma menção na resposta do agente a uma nota ou a um arquivo que existe na pasta (spec #17683). `text` é o trecho
+ * literal (`[[Plano|apelido]]`, `` `Plano.md` ``, `[a nota](Plano.md)`, `Reuniões/Plano.md`) e fica em
+ * `[from, to)` do texto (índices de string do JS). `path` é relativo à pasta, achado no índice dela: nunca fora.
+ * `kind`: `note` para `.md` e `.txt` (abrem nas Notas), `file` para o resto.
+ */
+export type BubbleLink = { text: string; from: number; to: number; path: string; kind: "note" | "file" };
+
 export type AgentTurnEvent = { id: string } & (
   | { type: "started" }
   | { type: "status"; status: "opening" | "thinking" }
@@ -1076,7 +1084,8 @@ export type AgentTurnEvent = { id: string } & (
   | { type: "status"; status: "running"; tool: string; target?: string }
   | { type: "text"; text: string }
   | { type: "permission"; tool: string; decision: "denied" }
-  | { type: "done"; stopReason: string; text: string }
+  /** `links` (spec #17683): as notas e os arquivos da pasta que a resposta cita, conferidos no main (ver `BubbleLink`). */
+  | { type: "done"; stopReason: string; text: string; links?: BubbleLink[] }
   | { type: "error"; code: string; message: string }
   /**
    * O limite (1.54.0, spec #11084): `warning` é o aviso do próprio agente (uma vez por janela, sem bloquear); `out`, o

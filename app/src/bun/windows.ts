@@ -230,6 +230,11 @@ stores.agent.useReader(readerFromCapabilities(capabilities));
 stores.agent.useNoteModel(async () => readNoteModel((await stores.folders.current()).notes.root));
 // A memória do agente (spec #11469) fica no cofre aberto.
 stores.agent.useVaultRoot(async () => (await stores.folders.current()).notes.root);
+// Os links do balão (spec #17683): só o que está no índice da pasta aberta.
+stores.agent.useLinkResolver(async () => {
+  const v = (await stores.folders.current()).notes;
+  return { note: (t) => v.resolve(t), file: (t) => v.resolveFiles([t])[t] ?? null };
+});
 stores.agent.useGlossary(async () => (await stores.dictionary.load()).map((t) => t.term));
 stores.agent.useWriter(writerFromCapabilities(capabilities));
 // O desfazer (spec #9353), pelas mesmas capacidades: a janela das Notas vê a nota voltar.
