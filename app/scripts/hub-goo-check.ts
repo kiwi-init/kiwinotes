@@ -72,6 +72,11 @@ const waitPhase = (p: Page, phase: string) => p.waitForFunction((ph) => {
 /** O texto e os ícones nítidos: nenhum deles dentro da camada ou embaixo de um `filter`, e por cima da gota no quadro. */
 const crisp = (p: Page) => p.evaluate(() => {
   const problems: string[] = [];
+  // A camada tem `pointer-events: none`, e o `elementFromPoint` passa reto por ela: durante o teste, ela vira
+  // "clicável" para o teste a ver (sem isso, a gota por cima do texto passava; revisão do T18648).
+  const see = document.createElement("style");
+  see.textContent = ".kn-goo, .kn-goo * { pointer-events: auto !important; }";
+  document.head.append(see);
   const els = [
     ...document.querySelectorAll<HTMLElement>(".kn-tab"),
     ...document.querySelectorAll<HTMLElement>(".kn-hub-slot button"),
@@ -88,6 +93,7 @@ const crisp = (p: Page) => p.evaluate(() => {
     const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
     if (hit && !el.contains(hit) && !hit.contains(el)) problems.push(`${name}: coberto por ${hit.className}`);
   }
+  see.remove();
   const shapes = document.querySelector<HTMLElement>(".kn-goo-shapes");
   const filter = shapes ? getComputedStyle(shapes).filter : "sem .kn-goo-shapes";
   if (!filter.includes("kn-goo")) problems.push(`a forma não passa pelo filtro gooey: ${filter}`);
