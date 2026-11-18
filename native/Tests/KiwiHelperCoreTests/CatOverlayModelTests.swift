@@ -125,6 +125,17 @@ final class CatOverlayModelTests: XCTestCase {
         XCTAssertEqual(CatPlacement(position: .bottomRight, scale: 0.6).size.width, 115 + 261)
     }
 
+    /// Spec #17679: o link do balão só abre com http(s) (com host) e mailto; o resto não abre.
+    func testBubbleLinkOnlyOpensWebAndMail() {
+        XCTAssertEqual(CatOverlayBubble.link("https://exemplo.com/a?b=1")?.absoluteString, "https://exemplo.com/a?b=1")
+        XCTAssertEqual(CatOverlayBubble.link("HTTP://exemplo.com")?.host, "exemplo.com")
+        XCTAssertEqual(CatOverlayBubble.link("mailto:ana@exemplo.com")?.scheme, "mailto")
+        for bad: Any? in ["javascript:alert(1)", "file:///etc/passwd", "kiwinotes://x", "https://", "mailto:", "", "exemplo.com",
+                          String(repeating: "a", count: 3000), 42, nil] {
+            XCTAssertNil(CatOverlayBubble.link(bad), "\(String(describing: bad))")
+        }
+    }
+
     /// Spec #13378 e #504: só o balão pega o clique; o gato e o espaço transparente deixam passar.
     func testOnlyTheBubbleTakesTheClick() {
         let panel = CGRect(x: 100, y: 100, width: 300, height: 600)
