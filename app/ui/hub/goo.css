@@ -15,10 +15,11 @@
   --goo-tabs-h: 32px;
 }
 
-/* O tempo e a curva valem para a gota e para os botões (irmãos dela na barra). */
+/* O tempo e a curva valem para a gota e para os botões (irmãos dela na barra). A ida tem 460 ms (o spec pede 350–500);
+   a curva é linear porque cada quadro da coreografia (T18647) traz a sua. */
 .kn-hub-top {
-  --goo-ms: 640ms;
-  --goo-ease: cubic-bezier(0.5, 0, 0.2, 1);
+  --goo-ms: 460ms;
+  --goo-ease: linear;
 }
 
 /* Os botões das seções ficam por cima da camada. */
@@ -91,16 +92,72 @@
   animation-name: kn-goo-out-end;
 }
 
-/* O provisório da camada: a gota sai da beira da pílula e vira o retângulo dos botões (e volta). */
+/* A coreografia (T18647), a referência do harry em quadros: a borda da pílula estufa (0–18%), a barriga estica num
+   pescoço curto (18–36%), o pescoço afina e a gota redonda se solta (36–50%), corre até o lugar dos botões e cresce,
+   passando um pouco (50–72%), e assenta com uma mola leve (72–100%). O pescoço e o respingo são do filtro: enquanto a
+   gota fica a menos de ~10 px da pílula, o desfoque + limiar as junta numa forma só; quando ela se afasta, a ponte
+   afina e some. O pescoço e a gota solta têm tamanho fixo (56 e 44 px): numa janela larga, a gota não vira uma barra
+   comprida até os botões. Cada quadro tem a sua curva; a animação em si é linear. A volta faz o caminho contrário. */
+
+/* A volta é mais curta: a gota corre para a pílula e afunda nela, sem mola. */
+.kn-goo-drop[data-phase="leaving"] {
+  animation-duration: 400ms;
+}
+
 @keyframes kn-goo-in-start {
-  from {
+  0% {
     left: calc(var(--goo-tabs-x) + 4px);
     top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 8px);
     width: 16px;
     height: 16px;
     border-radius: 50%;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
   }
-  to {
+  18% {
+    /* estufa: a gota passa da beira e a pílula faz uma barriga */
+    left: calc(var(--goo-tabs-x) - 12px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 9px);
+    width: 20px;
+    height: 18px;
+    border-radius: 50%;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  36% {
+    /* estica: presa à pílula por um pescoço curto */
+    left: calc(var(--goo-tabs-x) - 58px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 10px);
+    width: 56px;
+    height: 20px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.7, 0.6);
+  }
+  50% {
+    /* solta: a ponte afina e some, e a gota redonda segue o caminho */
+    left: calc(var(--goo-tabs-x) - 96px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 12px);
+    width: 44px;
+    height: 24px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1);
+  }
+  72% {
+    /* chega e passa um pouco do lugar */
+    left: calc(var(--goo-start-x) - 4px);
+    top: calc(var(--goo-start-y) + 1px);
+    width: calc(var(--goo-start-w) + 2px);
+    height: calc(var(--goo-start-h) - 2px);
+    border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.4, 1);
+  }
+  86% {
+    left: calc(var(--goo-start-x) + 1px);
+    top: calc(var(--goo-start-y) - 0.5px);
+    width: calc(var(--goo-start-w) - 1px);
+    height: calc(var(--goo-start-h) + 1px);
+    border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.4, 1);
+  }
+  100% {
     left: var(--goo-start-x);
     top: var(--goo-start-y);
     width: var(--goo-start-w);
@@ -110,14 +167,59 @@
 }
 
 @keyframes kn-goo-in-end {
-  from {
-    left: calc(var(--goo-tabs-x) + var(--goo-tabs-w) - 20px);
+  0% {
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) - 20px);
     top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 8px);
     width: 16px;
     height: 16px;
     border-radius: 50%;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
   }
-  to {
+  18% {
+    /* estufa: a gota passa da beira e a pílula faz uma barriga */
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) - 8px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 9px);
+    width: 20px;
+    height: 18px;
+    border-radius: 50%;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  36% {
+    /* estica: presa à pílula por um pescoço curto */
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) + 2px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 10px);
+    width: 56px;
+    height: 20px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.7, 0.6);
+  }
+  50% {
+    /* solta: a ponte afina e some, e a gota redonda segue o caminho */
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) + 52px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 12px);
+    width: 44px;
+    height: 24px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1);
+  }
+  72% {
+    /* chega e passa um pouco do lugar */
+    left: calc(var(--goo-end-x) + 2px);
+    top: calc(var(--goo-end-y) + 1px);
+    width: calc(var(--goo-end-w) + 2px);
+    height: calc(var(--goo-end-h) - 2px);
+    border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.4, 1);
+  }
+  86% {
+    left: var(--goo-end-x);
+    top: calc(var(--goo-end-y) - 0.5px);
+    width: calc(var(--goo-end-w) - 1px);
+    height: calc(var(--goo-end-h) + 1px);
+    border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.4, 1);
+  }
+  100% {
     left: var(--goo-end-x);
     top: var(--goo-end-y);
     width: var(--goo-end-w);
@@ -127,14 +229,50 @@
 }
 
 @keyframes kn-goo-out-start {
-  from {
+  0% {
     left: var(--goo-start-x);
     top: var(--goo-start-y);
     width: var(--goo-start-w);
     height: var(--goo-start-h);
     border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.4);
   }
-  to {
+  18% {
+    left: calc(var(--goo-start-x) + 2px);
+    top: calc(var(--goo-start-y) + 1px);
+    width: calc(var(--goo-start-w) - 3px);
+    height: calc(var(--goo-start-h) - 2px);
+    border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0.4);
+  }
+  50% {
+    /* redonda, a caminho da pílula */
+    left: calc(var(--goo-tabs-x) - 96px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 12px);
+    width: 44px;
+    height: 24px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
+  }
+  68% {
+    /* encosta: o pescoço volta a aparecer */
+    left: calc(var(--goo-tabs-x) - 58px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 10px);
+    width: 56px;
+    height: 20px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  84% {
+    /* afunda na pílula */
+    left: calc(var(--goo-tabs-x) - 12px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 9px);
+    width: 20px;
+    height: 18px;
+    border-radius: 50%;
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+  100% {
     left: calc(var(--goo-tabs-x) + 4px);
     top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 8px);
     width: 16px;
@@ -144,15 +282,51 @@
 }
 
 @keyframes kn-goo-out-end {
-  from {
+  0% {
     left: var(--goo-end-x);
     top: var(--goo-end-y);
     width: var(--goo-end-w);
     height: var(--goo-end-h);
     border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.4);
   }
-  to {
-    left: calc(var(--goo-tabs-x) + var(--goo-tabs-w) - 20px);
+  18% {
+    left: calc(var(--goo-end-x) + 1px);
+    top: calc(var(--goo-end-y) + 1px);
+    width: calc(var(--goo-end-w) - 3px);
+    height: calc(var(--goo-end-h) - 2px);
+    border-radius: var(--r-ctl);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0.4);
+  }
+  50% {
+    /* redonda, a caminho da pílula */
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) + 52px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 12px);
+    width: 44px;
+    height: 24px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
+  }
+  68% {
+    /* encosta: o pescoço volta a aparecer */
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) + 2px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 10px);
+    width: 56px;
+    height: 20px;
+    border-radius: 999px;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  84% {
+    /* afunda na pílula */
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) - 8px);
+    top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 9px);
+    width: 20px;
+    height: 18px;
+    border-radius: 50%;
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+  100% {
+    left: calc((var(--goo-tabs-x) + var(--goo-tabs-w)) - 20px);
     top: calc(var(--goo-tabs-y) + var(--goo-tabs-h) / 2 - 8px);
     width: 16px;
     height: 16px;
@@ -160,18 +334,24 @@
   }
 }
 
-/* Os botões esperam a gota chegar e aparecem no fim dela. */
+/* Os botões nascem de dentro da gota: aparecem quando ela chega (52–74%) e já respondem ao clique desde o começo
+   (nada de `pointer-events: none`). Na volta, eles já saíram do lado, e só a gota volta. */
 .kn-hub-slot[data-goo="entering"] > * {
   animation: kn-goo-buttons-in var(--goo-ms) linear both;
 }
 
 @keyframes kn-goo-buttons-in {
   0%,
-  75% {
+  52% {
     opacity: 0;
+    transform: scale(0.96);
+  }
+  74% {
+    opacity: 1;
   }
   100% {
     opacity: 1;
+    transform: none;
   }
 }
 
