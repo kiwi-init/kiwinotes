@@ -96,7 +96,8 @@ describe("o cache do índice por mtime e tamanho (T5352)", () => {
     writeFileSync(abs, "zzzz");
     const t = statSync(abs).mtimeMs / 1000 + 5;
     utimesSync(abs, t, t);
-    await v.rename("B.md", "C.md");
+    // O scan com o cache (o rename não faz mais o scan inteiro, T20166; a conferida do reconcile faz).
+    await v.reconcile();
     expect(v.scanReads).toBe(3);
     expect(v.search("zzzz", 5).map((h) => h.path)).toEqual(["A.md"]);
   });
