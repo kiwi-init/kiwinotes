@@ -1,5 +1,5 @@
 // A página do balão do app para o balao-igual (T15095, spec #14896): o `CatBubble` do hub de verdade, com a casca
-// comum (`ui/kiwicat-v2/bubble.css`, T14933) e o `hub.css`, alimentado por um `window.engine` falso que manda um pedido
+// comum (`ui/kiwicat-v2/bubble.css`, T14933), o markdown (`bubble-md.css`, T17986) e o `hub.css`, alimentado por um `window.engine` falso que manda um pedido
 // do agente (`agent.turn`: started, text, done). O contrato é o da `balao-pacote.tsx`: `?texto=&rabo=&fundo=`, o balão
 // com o canto de cima à esquerda em (24, 24) e `window.kiwiReady = true`. Mais:
 //   ?abrir=1   clica no [Ver mais] depois da digitação: o balão grande (`.kn-bubble-big`) fica na tela.
@@ -7,6 +7,7 @@
 // `window.kiwiSkip` com o motivo e não desenha nada.
 import { createRoot } from "react-dom/client";
 import bubbleCss from "../../ui/kiwicat-v2/bubble.css" with { type: "text" };
+import bubbleMdCss from "../../ui/kiwicat-v2/bubble-md.css" with { type: "text" };
 import hubCss from "../../ui/hub/hub.css" with { type: "text" };
 import { CatBubble } from "../../ui/hub/CatBubble";
 import { TYPE_MS } from "../../ui/hub/bubble-state";
@@ -23,7 +24,7 @@ if ((q.get("rabo") ?? "right") !== "right") {
 } else {
   // Só o lugar muda: o hub põe o balão no canto, ao lado do gato; aqui ele vai para (24, 24), como o do pacote.
   const place = ".kn-bubble-slot, .kn-bubble-big { left: 24px; top: 24px; right: auto; bottom: auto; }";
-  for (const css of [bubbleCss, hubCss, place]) {
+  for (const css of [bubbleCss, bubbleMdCss, hubCss, place]) {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.appendChild(style);
