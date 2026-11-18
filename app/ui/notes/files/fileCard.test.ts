@@ -3,7 +3,8 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { modified, typeLabel } from "./fileCard.ts";
+import { PACKAGE_MARKS } from "../../../src/shared/attachments.ts";
+import { isPackageName, modified, typeLabel } from "./fileCard.ts";
 import { viewerFor } from "./viewers.ts";
 
 describe("cartão do arquivo", () => {
@@ -22,6 +23,12 @@ describe("cartão do arquivo", () => {
   test("a data da última mudança, em português; uma inválida some", () => {
     expect(modified("2026-03-04T15:06:00")).toMatch(/^4 de mar\.? de 2026.*15:06$/);
     expect(modified("ontem")).toBe("");
+  });
+
+  test("um documento-pacote não mostra o tamanho: o da lista é o da pasta (revisão #19798)", () => {
+    for (const ext of Object.keys(PACKAGE_MARKS)) expect(isPackageName(`Projeto X/Carta.${ext}`)).toBe(true);
+    expect(isPackageName("Ana/Resumo.PAGES")).toBe(true);
+    for (const name of ["backup.zip", "Makefile", "pages", "Carta.pages.zip", "exemplo.constructor"]) expect(isPackageName(name)).toBe(false);
   });
 
   test("os tipos do cartão não têm visualizador próprio", () => {

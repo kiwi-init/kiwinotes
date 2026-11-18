@@ -1,4 +1,7 @@
-// O que o cartão do arquivo sem visualizador diz (T19316, spec #19277): o tipo e a data, em palavras.
+// O que o cartão do arquivo sem visualizador diz (T19316, spec #19277): o tipo e a data, em palavras, e quando o
+// tamanho não vale.
+
+import { extOf, PACKAGE_MARKS } from "../../../src/shared/attachments.ts";
 
 /**
  * O tipo, pela extensão: "Arquivo ZIP", ou "Arquivo sem extensão". Como na árvore (`splitExt`), o ponto do começo
@@ -16,3 +19,10 @@ export function modified(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR", { dateStyle: "medium", timeStyle: "short" });
 }
+
+/**
+ * Um documento-pacote (`.pages`, `.numbers`, `.key`, `.rtfd`): no disco é uma pasta, e o `size` da lista é o da
+ * entrada da pasta (uns 96 B), não o do documento. O cartão não mostra esse tamanho (revisão #19798). Um `.pages`
+ * antigo, de arquivo só, também fica sem: melhor faltar que mentir.
+ */
+export const isPackageName = (name: string): boolean => Object.hasOwn(PACKAGE_MARKS, extOf(name));

@@ -9,7 +9,7 @@ import { type MutableRefObject, type ReactNode, Suspense, useEffect, useRef, use
 import type { VaultFile } from "../types.ts";
 
 import { fileSize } from "../../../src/shared/file-view.ts";
-import { modified, typeLabel } from "./fileCard.ts";
+import { isPackageName, modified, typeLabel } from "./fileCard.ts";
 import { fileType } from "../tree.ts";
 import { isHtmlFile } from "./htmlPreview.ts";
 import { TreeIcon } from "../treeIcons.tsx";
@@ -87,7 +87,8 @@ export function FileView({ files, path, onOpenExternal, onReveal, stat, flushRef
       Abrir no app padrão
     </button>
   );
-  const size = state.kind === "tooLarge" ? state.size : info?.size;
+  // O tamanho de um pacote seria o da pasta, não o do documento: fica de fora (revisão #19798).
+  const size = state.kind === "tooLarge" ? state.size : isPackageName(name) ? undefined : info?.size;
   const fileCard = (text: string) => (
     <section className="kn-file-notice kn-file-card" role="status" aria-label={name}>
       <span className="kn-file-card-icon" aria-hidden="true">

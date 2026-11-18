@@ -5,7 +5,7 @@
   "steps": [
     {
       "waitFor": ".kn-file[data-state='unsupported'] .kn-file-card",
-      "name": "um binário sem extensão, numa pasta que a árvore nunca abriu, abre no cartão (antes, no cofre: Arquivo/fundo/disco, 2 KB de zeros; Projeto X/backup.zip, 300 KB; Projeto X/enorme.pdf, 4 GB esparso; e uma nota)"
+      "name": "um binário sem extensão, numa pasta que a árvore nunca abriu, abre no cartão (antes, no cofre: Arquivo/fundo/disco, 2 KB de zeros; Projeto X/backup.zip, 300 KB; Projeto X/Carta.pages, um pacote com o Index.zip; Projeto X/enorme.pdf, 4 GB esparso; e uma nota)"
     },
     { "expectText": ".kn-file-card-name", "text": "disco", "name": "o nome" },
     { "expectText": ".kn-file-card-facts", "text": "Arquivo sem extensão", "name": "o tipo" },
@@ -27,6 +27,15 @@
     { "expectCount": ".kn-toast", "count": 0, "name": "nenhum dos dois deu erro" },
     { "screenshot": "02-zip.png" },
     { "click": ".kn-crumb-bt", "name": "abre a árvore de novo" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('Carta')", "name": "clica no Carta.pages, um pacote (uma pasta no disco)" },
+    { "waitFor": ".kn-file[data-state='unsupported'] .kn-file-card-name:has-text('Carta.pages')", "name": "abre o cartão, sem ler o pacote" },
+    { "expectText": ".kn-file-card-facts", "text": "Arquivo PAGES", "name": "o tipo" },
+    { "waitFor": ".kn-file-card-facts dt:has-text('Modificado')", "name": "a data chegou da lista" },
+    { "expectCount": ".kn-file-card-facts dt:has-text('Tamanho')", "count": 0, "name": "e sem o tamanho: o da lista seria o da pasta (revisão #19798)" },
+    { "expectCount": ".kn-file-open", "count": 1, "name": "um só Abrir no app padrão" },
+    { "expectCount": ".kn-toast", "count": 0, "name": "sem erro" },
+    { "screenshot": "03-pacote.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore mais uma vez" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('enorme')", "name": "clica no PDF de 4 GB" },
     {
       "waitFor": ".kn-file[data-state='tooLarge'] .kn-file-card p:has-text('Este arquivo tem 4 GB, e o Kiwi Notes mostra aqui até 25 MB.')",
@@ -35,6 +44,6 @@
     { "expectText": ".kn-file-card-facts", "text": "Arquivo PDF", "name": "o tipo" },
     { "expectCount": ".kn-file-open", "count": 1, "name": "um só Abrir no app padrão (antes eram dois, #19747)" },
     { "expectCount": ".kn-file-reveal", "count": 1, "name": "e o Mostrar no Finder" },
-    { "screenshot": "03-grande-demais.png" }
+    { "screenshot": "04-grande-demais.png" }
   ]
 }
