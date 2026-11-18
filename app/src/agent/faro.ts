@@ -223,20 +223,21 @@ const POINT_MEETING = /\b(ultima|recente) reuniao\b|\breuniao (de ontem|de hoje|
 export const OPEN_SAID = "o aberto nas Notas";
 
 /**
- * O que vem antes de uma palavra solta para ela ser o nome de um destino: "na nota Resumo", "para o Resumo". Um "na" ou
- * "no" sozinho não basta: "o maior valor na coluna B" e "quanto dá no total" falam do aberto.
+ * O que vem antes de um nome para ele ser o destino ou o lugar do pedido (T19969). Uma palavra solta só depois de
+ * "nota", "pasta", "projeto", "para a" ou "pra" ("na nota Resumo", "para o Total"): um "na" ou "no" sozinho não basta,
+ * porque "o maior valor na coluna B" e "quanto dá no total" falam do aberto. Um nome de várias palavras vale também
+ * depois de "na", "no" e "em" ("escreve aqui na Lista de compras"). Em qualquer outro lugar da frase ("monta uma lista
+ * de tarefas", "qual o maior valor"), o nome é só o que a pessoa disse, e o aberto fica na frente.
  */
-const CITE_BEFORE = "(?:nota|pasta|projeto|pra|pro|para(?: a| o)?)";
+const CITE_BEFORE_WORD = "(?:nota|pasta|projeto|pra|pro|para(?: a| o)?)";
+const CITE_BEFORE_NAME = "(?:nota|pasta|projeto|pra|pro|para(?: a| o)?|na|no|nas|nos|em)";
 
-/**
- * Uma citação forte o bastante para passar na frente do aberto (T19969): um nome de duas palavras ou mais, ou uma
- * palavra logo depois de "nota", "pasta", "projeto", "para a" ou "pra". `text` é o pedido já no `plain`.
- */
+/** Uma citação forte o bastante para passar na frente do aberto (T19969). `text` é o pedido já no `plain`. */
 function strongCitation(text: string, said: string): boolean {
   const s = plain(said).trim();
-  if (s.split(/\s+/).length >= 2) return true;
+  const before = s.split(/\s+/).length >= 2 ? CITE_BEFORE_NAME : CITE_BEFORE_WORD;
   const esc = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`\\b${CITE_BEFORE} ${esc}\\b`).test(text);
+  return new RegExp(`\\b${before} ${esc}\\b`).test(text);
 }
 
 /** O alvo do aberto nas Notas: o do índice (nota, reunião), ou um arquivo pelo caminho. `.md` e `.txt` são notas. */

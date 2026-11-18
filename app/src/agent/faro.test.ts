@@ -110,7 +110,7 @@ describe("as citações", () => {
 
     test("uma palavra solta que é o nome de uma nota não tira o aberto da frente (revisão do T19969)", () => {
       const comuns = buildIndex({
-        notes: ["Pessoal/Total.md", "Pessoal/Resumo.md", "Pessoal/Tabela.md", "Pessoal/Coluna.md", "Projeto X/Linhas.md", "Pessoal/Lista de compras.md"].map(note),
+        notes: ["Pessoal/Total.md", "Pessoal/Resumo.md", "Pessoal/Tabela.md", "Pessoal/Coluna.md", "Projeto X/Linhas.md", "Pessoal/Lista de compras.md", "Pessoal/Lista de tarefas.md", "Projeto X/Maior valor.md"].map(note),
         folders: ["Pessoal", "Projeto X"],
         projects: [],
         meetings: [],
@@ -124,12 +124,18 @@ describe("as citações", () => {
         "nesse arquivo, monta uma tabela com nome e total",
         "nessa planilha, qual o maior valor na coluna B?",
         "nesse arquivo, quanto dá no total?",
+        // Um nome de várias palavras fora do lugar de destino também é só o que a pessoa disse (rodada 2).
+        "nesse arquivo, monta uma lista de tarefas",
+        "qual o maior valor dessa planilha?",
+        "nessa tabela, qual o maior valor?",
       ])
         expect([pedido, aberto(sniff(pedido, comuns, { openNote: csv }))]).toEqual([pedido, `arquivo:${csv}`]);
       // A citação forte vale: o nome inteiro, ou a palavra depois de "nota" ou "para o".
       expect(aberto(sniff("copia esse arquivo para a Lista de compras", comuns, { openNote: csv }))).toBe("nota:Pessoal/Lista de compras.md");
       expect(aberto(sniff("põe os totais desse arquivo na nota Resumo", comuns, { openNote: csv }))).toBe("nota:Pessoal/Resumo.md");
       expect(aberto(sniff("copia esse arquivo para o Total", comuns, { openNote: csv }))).toBe("nota:Pessoal/Total.md");
+      expect(aberto(sniff("escreve aqui na Lista de tarefas", comuns, { openNote: csv }))).toBe("nota:Pessoal/Lista de tarefas.md");
+      expect(aberto(sniff("põe o maior valor desse arquivo no Maior valor", comuns, { openNote: csv }))).toBe("nota:Projeto X/Maior valor.md");
     });
 
     test("sem nada aberto, a frase pede a pergunta; o \"aqui\" sozinho não", () => {
