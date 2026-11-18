@@ -459,6 +459,13 @@ describe("as notas e os arquivos no balão pequeno (spec #17683)", () => {
     expect(plainLinks(TEXTO, LINKS)[0]!.from).toBe(plain.indexOf("o plano"));
   });
 
+  test("o corrido do balão pequeno mostra o nome da nota, sem os colchetes (#18271)", () => {
+    const raw = "Veja [[Plano]], [[Plano|o plano]], [[Plano#Seção]] e ![[img.png]].";
+    expect(bubblePlain(raw, true)).toBe("Veja Plano, o plano, Plano e img.png.");
+    // Chegando: o `[[` sem o `]]` ainda não sai.
+    expect(bubblePlain("Veja o [[Pla", false)).not.toContain("[");
+  });
+
   test("os trechos que saem depois do done levam o link, no rótulo certo", () => {
     for (const [size, max] of [[1000, 40], [3, 40], [7, 25], [1000, 120]] as const) {
       const f = new BubbleFeed(fits(max), true);
@@ -467,7 +474,11 @@ describe("as notas e os arquivos no balão pequeno (spec #17683)", () => {
       const byKey = new Map<number, [string, string][]>();
       const look = (t: number) => {
         const v = f.view(t);
-        if (v) byKey.set(v.key, (v.links ?? []).map((l) => [v.full.slice(l.from, l.to), l.path]));
+        if (v) {
+          // O balão pequeno nunca mostra o `[[…]]` (#18271).
+          expect(v.full).not.toContain("[[");
+          byKey.set(v.key, (v.links ?? []).map((l) => [v.full.slice(l.from, l.to), l.path]));
+        }
       };
       let now = 0;
       // Pedaços pequenos: a resposta só chega até antes do código; o resto vem com o done.
@@ -487,9 +498,12 @@ describe("as notas e os arquivos no balão pequeno (spec #17683)", () => {
       const linked = new Map<string, string>();
       for (const pieces of byKey.values()) for (const [label, path] of pieces) linked.set(path, `${linked.get(path) ?? ""} ${label}`.trim());
       // O pdf sai depois do done sempre. "o plano" leva o link quando o trecho dele ainda não tinha saído (com a
-      // resposta inteira no done, sempre); quando leva, é ele, e nunca o "Plano" solto do começo.
+      // resposta inteira no done, sempre), e só a parte que saiu depois do done quando ele ficou entre dois trechos (o
+      // que já está na tela não muda, #18144); nunca o "Plano" solto do começo.
       expect({ size, max, pdf: linked.get("Projeto X/relatorio.pdf") }).toEqual({ size, max, pdf: "Projeto X/relatorio.pdf" });
-      if (cut === 0 || linked.has("Plano.md")) expect({ size, max, plano: linked.get("Plano.md") }).toEqual({ size, max, plano: "o plano" });
+      if (cut === 0) expect({ size, max, plano: linked.get("Plano.md") }).toEqual({ size, max, plano: "o plano" });
+      const plano = linked.get("Plano.md");
+      if (plano !== undefined) expect({ size, max, plano, part: plano.length > 0 && "o plano".endsWith(plano) }).toEqual({ size, max, plano, part: true });
       expect([...linked.keys()].every((p) => p === "Plano.md" || p === "Projeto X/relatorio.pdf")).toBe(true);
       expect(f.links()).toEqual(LINKS);
     }

@@ -205,8 +205,28 @@ describe("as notas e os arquivos da pasta como link (spec #17683)", () => {
     expect(got).toContain("E outro.");
   });
 
-  test("sem links, o [[…]] fica como está; a posição que não bate com o texto não vira link", () => {
-    expect(plainMarkdown("Criei [[Plano]].")).toBe("Criei [[Plano]].");
+  test("o [[…]] mostra só o nome, sem os colchetes, com ou sem link (#18271); no código fica como está", () => {
+    expect(plainMarkdown("Criei [[Plano]] e [[Viagem/Roteiro#Dia 1|o roteiro]].")).toBe("Criei Plano e o roteiro.");
+    expect(["[[Plano]]", "[[Plano|o plano]]", "[[Plano#Seção]]", "![[img.png]]"].map((t) => plainMarkdown(t))).toEqual(["Plano", "o plano", "Plano", "img.png"]);
+    expect(plainMarkdown("Veja ![[foto.png]], [[a*b*]] e `[[Plano]]`.")).toBe("Veja foto.png, a*b* e [[Plano]].");
+    expect(plainMarkdown("```\n[[Plano]]\n```")).toBe("[[Plano]]");
+    expect(plainMarkdown(RESP)).toBe("Criei o plano e salvei Projeto X/relatorio.pdf. Veja também isto.");
+  });
+
+  test("só o esquema desta montagem e um caminho da lista viram link", () => {
+    const files = { scheme: "kn0123456789abcdef:", paths: new Set(["Outro.md"]) };
+    expect(find(parseMarkdown("[x](kn0123456789abcdef:Plano.md)", files), "a")).toEqual([]);
+    expect(find(parseMarkdown("[x](kn0123456789abcdef:Outro.md)", files), "a")).toEqual([{ tag: "a", attrs: { path: "Outro.md" }, children: ["x"] }]);
+    expect(find(parseMarkdown("[x](kn00000000000000ff:Outro.md)", files), "a")).toEqual([]);
+  });
+
+  test("muito colchete sem par não fica lento (#18278)", () => {
+    const t0 = performance.now();
+    plainMarkdown(`${"[a ".repeat(20_000)}[b](https://example.com/b)`);
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+
+  test("a posição que não bate com o texto não vira link", () => {
     const wrong = { ...LINKS[0]!, from: 0, to: LINKS[0]!.text.length };
     expect(html(renderMarkdown(RESP, fakeDoc(), [wrong]) as unknown as Fake)).not.toContain("data-path");
   });

@@ -9,7 +9,7 @@
 import type { SyntaxNode } from "@lezer/common";
 import { GFM, parser as baseParser } from "@lezer/markdown";
 
-import { kiwiFilePath, linkify } from "../../src/shared/bubble-links.ts";
+import { kiwiFilePath, linkify, linkLabel } from "../../src/shared/bubble-links.ts";
 import type { BubbleLink } from "../../src/shared/ui-contract.ts";
 
 const parser = baseParser.configure(GFM);
@@ -271,6 +271,11 @@ class Builder {
 /** A resposta em árvore de elementos (só as tags de `MdTag`; o texto, sempre string). */
 export function parseMarkdown(text: string, files?: FileLinks): MdNode[] {
   let tree = parser.parse(text);
+  const wiki = wikiLabels(text, tree.topNode);
+  if (wiki !== text) {
+    text = wiki;
+    tree = parser.parse(text);
+  }
   const nested = escapeNestedBrackets(text, tree.topNode);
   if (nested !== text) {
     text = nested;
@@ -302,43 +307,60 @@ function fileScheme(): string {
 /** Onde o `[` não é marca: código, endereço, tag HTML, escape. */
 const LITERAL = new Set(["InlineCode", "FencedCode", "CodeBlock", "Autolink", "URL", "HTMLTag", "HTMLBlock", "Escape"]);
 
+/** 1 onde o texto é literal (código, endereço, tag HTML, escape): ali nenhum colchete é marca. */
+function literalMask(text: string, top: SyntaxNode): Uint8Array {
+  const literal = new Uint8Array(text.length);
+  const cursor = top.cursor();
+  do {
+    if (LITERAL.has(cursor.name)) literal.fill(1, cursor.from, cursor.to);
+  } while (cursor.next());
+  return literal;
+}
+
+/**
+ * O `[[alvo]]` e o `[[alvo|apelido]]` das notas (spec #17683, #18271): o balão mostra só o nome, sem os colchetes,
+ * como no balão aberto. Fora do código; o nome vai escapado, para não virar outra marca.
+ */
+function wikiLabels(text: string, top: SyntaxNode): string {
+  if (!text.includes("[[")) return text;
+  const literal = literalMask(text, top);
+  return text.replace(/!?\[\[[^\[\]\n]+\]\]/g, (m, at: number) =>
+    literal[at] || literal[at + m.length - 1] ? m : linkLabel(m.replace(/^!/, "")).replace(/[\\`*_[\]<>|~!]/g, "\\$&"),
+  );
+}
+
 /**
  * `[link [aninhado]](url)` é um link com o texto "link [aninhado]" no CommonMark: o `[aninhado]` só seria link se
  * houvesse a referência, e o balão não tem referências. O lezer o lê como link e o de fora fica cru. Aqui os
  * colchetes de dentro do texto de um link viram `\[` `\]`, fora do código; um `[x](y)` de dentro continua link.
  */
 function escapeNestedBrackets(text: string, top: SyntaxNode): string {
-  const literal = new Uint8Array(text.length);
-  const cursor = top.cursor();
-  do {
-    if (LITERAL.has(cursor.name)) literal.fill(1, cursor.from, cursor.to);
-  } while (cursor.next());
-  const escape = new Set<number>();
-  for (let open = 0; open < text.length; open++) {
-    if (text[open] !== "[" || literal[open]) continue;
-    const inner: number[][] = [];
-    const stack: number[] = [];
-    let close = -1;
-    // O texto do link fica no parágrafo: para numa linha vazia.
-    for (let i = open + 1; i < text.length && !(text[i] === "\n" && text[i + 1] === "\n"); i++) {
-      if (literal[i]) continue;
-      if (text[i] === "[") stack.push(i);
-      else if (text[i] === "]") {
-        if (stack.length === 0) {
-          close = i;
-          break;
-        }
-        const from = stack.pop()!;
-        if (text[i + 1] !== "(") inner.push([from, i]);
+  if (!text.includes("](")) return text;
+  const literal = literalMask(text, top);
+  // Uma passada, com uma pilha (o #18278: procurar o par de cada `[` era quadrático). Cada `[` aberto guarda os pares de
+  // dentro que não são link; ao fechar um link com algum, eles viram escape; senão, sobem para o de fora.
+  const escape: number[] = [];
+  let stack: { at: number; inner: number[] }[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (literal[i]) continue;
+    const ch = text[i];
+    // O texto do link fica no parágrafo: uma linha vazia fecha tudo.
+    if (ch === "\n" && text[i + 1] === "\n") stack = [];
+    else if (ch === "[") stack.push({ at: i, inner: [] });
+    else if (ch === "]" && stack.length) {
+      const open = stack.pop()!;
+      const parent = stack.at(-1);
+      if (text[i + 1] === "(") {
+        if (open.inner.length) escape.push(...open.inner);
+      } else if (parent) {
+        parent.inner.push(...open.inner, open.at, i);
       }
     }
-    if (close < 0 || text[close + 1] !== "(" || inner.length === 0) continue;
-    for (const [a, b] of inner) escape.add(a!).add(b!);
-    open = close;
   }
-  if (escape.size === 0) return text;
+  if (escape.length === 0) return text;
+  const marks = new Set(escape);
   let out = "";
-  for (let i = 0; i < text.length; i++) out += escape.has(i) ? `\\${text[i]}` : text[i];
+  for (let i = 0; i < text.length; i++) out += marks.has(i) ? `\\${text[i]}` : text[i];
   return out;
 }
 
