@@ -2,7 +2,7 @@
   "window": "notes",
   "size": "1280x800",
   "steps": [
-    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Midia/feira.mp3 e Midia/cena.mp4 de 2 s, gerados pelo say e pelo ffmpeg, Midia/quebrado.mp3 que é texto, e uma nota)" },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Midia/feira.mp3 e Midia/cena.mp4 de 2 s, gerados pelo say e pelo ffmpeg, Midia/quebrado.mp3 que é texto, Midia/enorme.mov de 4 GB esparso, e uma nota)" },
     { "click": ".kn-crumb-bt", "name": "abre a árvore" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Midia')", "name": "abre a pasta Midia" },
     { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('feira')", "name": "clica no mp3" },
@@ -20,6 +20,13 @@
     { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('quebrado')", "name": "clica no mp3 que não é áudio" },
     { "expectText": ".kn-file[data-state='ready'] .kn-file-notice", "text": "Não deu para tocar este arquivo aqui. Abra no app padrão.", "name": "o aviso, sem player quebrado" },
     { "expectCount": ".kn-file-actions button:has-text('Abrir no app padrão')", "count": 1, "name": "e o app padrão no topo" },
-    { "screenshot": "03-quebrado.png" }
+    { "screenshot": "03-quebrado.png" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore outra vez" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('enorme')", "name": "clica num .mov de 4 GB (esparso)" },
+    { "waitFor": ".kn-file[data-state='tooLarge'] .kn-file-notice", "name": "o engine nem lê: o aviso do tamanho (#19727)" },
+    { "expectText": ".kn-file-notice", "text": "Este arquivo tem 4 GB, e o Kiwi Notes mostra aqui até 25 MB.", "name": "o tamanho e o limite" },
+    { "expectCount": ".kn-file-actions button:has-text('Abrir no app padrão')", "count": 1, "name": "e o app padrão" },
+    { "expectCount": "video, audio", "count": 0, "name": "nenhum player" },
+    { "screenshot": "04-enorme.png" }
   ]
 }
