@@ -903,10 +903,11 @@ button.kn-side-head:focus-visible {
   align-items: center;
 }
 .kn-side-root-toggle {
+  /* a seta e a pasta da raiz no mesmo prumo das da árvore: a seta em 0, a pasta em 16px (T19759, rodada 3) */
   display: inline-grid;
   flex: none;
-  place-items: center;
-  width: 18px;
+  place-items: center start;
+  width: 16px;
   align-self: stretch;
   padding: 0;
   border: 0;
