@@ -6,6 +6,7 @@ import "../kiwicat-v2/bubble.css";
 import "../kiwicat-v2/bubble-md.css";
 import "./hub.css";
 import { DoubtCard } from "./DoubtCard";
+import { GooLayer } from "./Goo.tsx";
 import { KiwiCat, useAgentCat } from "./KiwiCat";
 import { Onboarding } from "./onboarding/Onboarding.tsx";
 
@@ -295,11 +296,14 @@ function Hub() {
   // Os dois lados da barra, para a seção na tela pôr os botões dela.
   const [start, setStart] = useState<HTMLElement | null>(null);
   const [end, setEnd] = useState<HTMLElement | null>(null);
+  const [bar, setBar] = useState<HTMLElement | null>(null);
 
   return (
     <HubNavContext.Provider value={{ openSettings }}>
       <div className="kn-hub" data-entering="true" ref={ref}>
-        <header className="kn-hub-top electrobun-webkit-app-region-drag">
+        <header className="kn-hub-top electrobun-webkit-app-region-drag" ref={setBar}>
+          {/* A gota (spec #17725): os botões de cada lado brotam da pílula de abas e voltam para ela. */}
+          <GooLayer bar={bar} start={start} end={end} />
           <div className="kn-hub-slot kn-hub-start" ref={setStart} />
           <Tabs section={section} onGo={go} homeView={homeView} onHomeView={setHomeView} />
           <div className="kn-hub-slot kn-hub-end" ref={setEnd} />
