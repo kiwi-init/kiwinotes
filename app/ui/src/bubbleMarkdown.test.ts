@@ -198,6 +198,13 @@ describe("as notas e os arquivos da pasta como link (spec #17683)", () => {
     expect(html(renderMarkdown("[x](kiwi-file:Plano.md)", fakeDoc()) as unknown as Fake)).toBe("<p>x</p>");
   });
 
+  test("mesmo com um caminho que o main achou, o link que a resposta escreveu fica texto", () => {
+    const text = `${RESP} E [outro](kiwi-file:Plano.md).`;
+    const got = html(renderMarkdown(text, fakeDoc(), LINKS) as unknown as Fake);
+    expect(got.match(/data-path="Plano.md"/g)).toHaveLength(1);
+    expect(got).toContain("E outro.");
+  });
+
   test("sem links, o [[…]] fica como está; a posição que não bate com o texto não vira link", () => {
     expect(plainMarkdown("Criei [[Plano]].")).toBe("Criei [[Plano]].");
     const wrong = { ...LINKS[0]!, from: 0, to: LINKS[0]!.text.length };

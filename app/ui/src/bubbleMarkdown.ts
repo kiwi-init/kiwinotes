@@ -82,8 +82,11 @@ function gap(text: string): MdChild[] {
 }
 
 class Builder {
-  /** `files`: os caminhos que o main conferiu na pasta. Só eles viram link `kiwi-file:`; o resto fica texto. */
-  constructor(readonly src: string, readonly files: ReadonlySet<string> = new Set()) {}
+  /**
+   * `files`: os caminhos que o main conferiu na pasta, e `scheme`, o esquema só desta montagem que o `linkify` usou.
+   * Só um link com esse esquema e um desses caminhos vira link de arquivo; o resto fica texto.
+   */
+  constructor(readonly src: string, readonly files: FileLinks = NO_FILES) {}
 
   text(n: { from: number; to: number }): string {
     return this.src.slice(n.from, n.to);
@@ -124,10 +127,11 @@ class Builder {
         // `[c]` ou `[a][b]`, sem `(…)`: uma referência, e o balão não tem nenhuma definida. No CommonMark isso é
         // texto, com os colchetes.
         if (marks.length >= 2 && this.src[marks[1]!.to] !== "(") return ["[", ...label, this.src.slice(marks[1]!.from, c.to)];
-        // Uma nota ou um arquivo da pasta (spec #17683): só se o main achou esse caminho nesta resposta. Um
-        // `[x](kiwi-file:…)` que a resposta escreveu sozinha fica texto.
-        const path = url ? kiwiFilePath(this.text(url)) : null;
-        if (path !== null) return this.files.has(path) ? [node("a", tidy(label), { path })] : label;
+        // Uma nota ou um arquivo da pasta (spec #17683): só o link que o `withFileLinks` pôs, com o esquema desta
+        // montagem e um caminho que o main achou nesta resposta. Um `[x](kiwi-file:…)` que a resposta escreveu
+        // sozinha fica texto, mesmo com um caminho da lista.
+        const path = url && this.files.scheme ? kiwiFilePath(this.text(url), this.files.scheme) : null;
+        if (path !== null) return this.files.paths.has(path) ? [node("a", tidy(label), { path })] : label;
         const href = url ? safeHref(this.text(url)) : null;
         // Sem endereço que preste (um `javascript:`): só o texto do link.
         return href ? [node("a", tidy(label), { href })] : label;
@@ -265,7 +269,7 @@ class Builder {
 }
 
 /** A resposta em árvore de elementos (só as tags de `MdTag`; o texto, sempre string). */
-export function parseMarkdown(text: string, files?: ReadonlySet<string>): MdNode[] {
+export function parseMarkdown(text: string, files?: FileLinks): MdNode[] {
   let tree = parser.parse(text);
   const nested = escapeNestedBrackets(text, tree.topNode);
   if (nested !== text) {
@@ -279,9 +283,20 @@ export function parseMarkdown(text: string, files?: ReadonlySet<string>): MdNode
  * A resposta com as notas e os arquivos que o main achou (spec #17683) como links: o texto com cada menção trocada
  * por `[rótulo](kiwi-file:…)` e os caminhos que podem virar link. Sem `links`, o texto como veio.
  */
-export function withFileLinks(text: string, links?: readonly BubbleLink[]): { text: string; files: ReadonlySet<string> } {
-  if (!links?.length) return { text, files: new Set() };
-  return { text: linkify(text, links), files: new Set(links.map((l) => l.path)) };
+export function withFileLinks(text: string, links?: readonly BubbleLink[]): { text: string; files: FileLinks } {
+  if (!links?.length) return { text, files: NO_FILES };
+  const scheme = fileScheme();
+  return { text: linkify(text, links, scheme), files: { scheme, paths: new Set(links.map((l) => l.path)) } };
+}
+
+/** Os links de arquivo de uma montagem: o esquema que só ela conhece e os caminhos conferidos. */
+export type FileLinks = { readonly scheme: string; readonly paths: ReadonlySet<string> };
+const NO_FILES: FileLinks = { scheme: "", paths: new Set() };
+
+/** Um esquema novo a cada montagem (`kn` + 16 hex): a resposta não tem como escrever um igual. */
+function fileScheme(): string {
+  const b = crypto.getRandomValues(new Uint8Array(8));
+  return `kn${[...b].map((x) => x.toString(16).padStart(2, "0")).join("")}:`;
 }
 
 /** Onde o `[` não é marca: código, endereço, tag HTML, escape. */

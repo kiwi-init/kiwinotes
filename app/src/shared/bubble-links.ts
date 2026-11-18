@@ -7,15 +7,15 @@ import type { BubbleLink } from "./ui-contract.ts";
 export const KIWI_FILE_SCHEME = "kiwi-file:";
 
 /** O href de um caminho da pasta. Os parênteses também vão codificados, para não fechar o `(…)` do markdown. */
-export function kiwiFileHref(path: string): string {
-  return KIWI_FILE_SCHEME + encodeURIComponent(path).replace(/[()'*!]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+export function kiwiFileHref(path: string, scheme: string = KIWI_FILE_SCHEME): string {
+  return scheme + encodeURIComponent(path).replace(/[()'*!]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 /** O caminho de um href `kiwi-file:`, ou null quando não é um (ou não decodifica). */
-export function kiwiFilePath(href: string): string | null {
-  if (!href.startsWith(KIWI_FILE_SCHEME)) return null;
+export function kiwiFilePath(href: string, scheme: string = KIWI_FILE_SCHEME): string | null {
+  if (!href.startsWith(scheme)) return null;
   try {
-    const p = decodeURIComponent(href.slice(KIWI_FILE_SCHEME.length));
+    const p = decodeURIComponent(href.slice(scheme.length));
     return p ? p : null;
   } catch {
     return null;
@@ -38,9 +38,10 @@ function escapeLabel(label: string): string {
 
 /**
  * A resposta com cada menção virando link. As que não batem com o texto na posição (a resposta mudou) ficam como estão,
- * e as que se cruzam valem só a primeira.
+ * e as que se cruzam valem só a primeira. `scheme`: quem monta pode trocar o `kiwi-file:` por um só dele, para separar
+ * os links que pôs dos que a resposta escreveu.
  */
-export function linkify(text: string, links: readonly BubbleLink[] | undefined): string {
+export function linkify(text: string, links: readonly BubbleLink[] | undefined, scheme: string = KIWI_FILE_SCHEME): string {
   if (!links?.length) return text;
   const ok = [...links]
     .filter((l) => l.from >= 0 && l.to <= text.length && l.from < l.to && text.slice(l.from, l.to) === l.text)
@@ -49,7 +50,7 @@ export function linkify(text: string, links: readonly BubbleLink[] | undefined):
   let at = 0;
   for (const l of ok) {
     if (l.from < at) continue;
-    out += text.slice(at, l.from) + `[${escapeLabel(linkLabel(l.text))}](${kiwiFileHref(l.path)})`;
+    out += text.slice(at, l.from) + `[${escapeLabel(linkLabel(l.text))}](${kiwiFileHref(l.path, scheme)})`;
     at = l.to;
   }
   return out + text.slice(at);
