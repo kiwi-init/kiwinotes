@@ -221,20 +221,28 @@ const tempo = async <T>(f: () => Promise<T>): Promise<[T, number]> => {
 export const MEDIDAS = 3;
 
 /**
- * Mede `f` até `vezes` vezes e para na primeira que fica em `max` ms. Devolve o resultado da última e os tempos de todas;
- * `ok` só é falso se todas passaram de `max`. A primeira medida é a fria (o pdf carrega o PDF.js nela); as outras já vêm
- * com o código carregado, e é por isso que só contam quando a fria passa do máximo.
+ * Mede `f` até `vezes` vezes e para na primeira que fica em `max` ms. Devolve o resultado da última e os tempos de todas.
+ * A 1ª medida é a fria, a que a pessoa vê (o pdf carrega o PDF.js nela); as outras já vêm com o código carregado e são
+ * muito mais rápidas. Por isso a fria tem um teto próprio, `tetoFrio` (2× o máximo): acima dele, `ok` é falso e não se
+ * repete, porque uma abertura fria que dobrou de tempo não é tremor do CI. Abaixo dele, `ok` só é falso se todas passam
+ * de `max`.
  */
-export async function medirAte<T>(f: () => Promise<T>, max: number, vezes = MEDIDAS): Promise<{ r: T; ms: number[]; ok: boolean }> {
+export async function medirAte<T>(
+  f: () => Promise<T>,
+  max: number,
+  vezes = MEDIDAS,
+  tetoFrio = 2 * max,
+): Promise<{ r: T; ms: number[]; ok: boolean; fria: boolean }> {
   const ms: number[] = [];
   let r!: T;
   for (let i = 0; i < vezes; i++) {
     let t: number;
     [r, t] = await tempo(f);
     ms.push(t);
-    if (t <= max) return { r, ms, ok: true };
+    if (i === 0 && t > tetoFrio) return { r, ms, ok: false, fria: true };
+    if (t <= max) return { r, ms, ok: true, fria: false };
   }
-  return { r, ms, ok: false };
+  return { r, ms, ok: false, fria: false };
 }
 
 const motivo = (e: unknown) => (e instanceof Error ? e.message : String(e)).split("\n")[0]!;
@@ -246,7 +254,7 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
     const f = FAMILIAS[tipo]!;
     const rel = c.caminho("Loja", tipo);
     try {
-      const { r: aberto, ms, ok } = await medirAte(async () => {
+      const { r: aberto, ms, ok, fria } = await medirAte(async () => {
         const r = await c.ler(tipo, rel);
         return "bytes" in r ? f.abrir(r.bytes, rel) : null;
       }, ABRE_MS);
@@ -254,7 +262,9 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
       if (f.temTexto && !aberto.includes(MARCA)) return "abriu sem o texto de dentro";
       const sem = (f.tambem ?? []).filter((t) => !aberto.includes(t));
       if (sem.length) return `abriu sem: ${sem.map((t) => `"${t.slice(0, 30)}…"`).join(", ")}`;
-      return ok ? null : `levou ${ms.join(", ")} ms em ${ms.length} medidas (o máximo é ${ABRE_MS})`;
+      if (ok) return null;
+      if (fria) return `a 1ª abertura levou ${ms[0]} ms (o teto dela é ${2 * ABRE_MS})`;
+      return `levou ${ms.join(", ")} ms em ${ms.length} medidas (o máximo é ${ABRE_MS})`;
     } catch (e) {
       return `não abriu: ${motivo(e)}`;
     }

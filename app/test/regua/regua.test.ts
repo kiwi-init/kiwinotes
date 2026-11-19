@@ -94,7 +94,7 @@ describe("o teste do teste", () => {
     expect(julgar("docx", 3, { kind: "falta", ref: "issue #156" }, "a busca não acha o conteúdo")).toBeNull();
   });
 
-  test("o tempo de abrir falha só se todas as medidas passam do máximo (T22099)", async () => {
+  test("o tempo de abrir falha se todas as medidas passam do máximo, ou se a 1ª passa do teto dela (T22099)", async () => {
     const espera = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
     let n = 0;
     const lentoUmaVez = await medirAte(async () => (n++ === 0 ? espera(60) : undefined), 40);
@@ -109,6 +109,12 @@ describe("o teste do teste", () => {
     expect(sempreLento.ok).toBe(false);
     expect(sempreLento.ms.length).toBe(3);
     expect(sempreLento.ms.every((t) => t > 40)).toBe(true);
+
+    // A fria acima do teto (2× o máximo) falha mesmo que as outras fossem rápidas: o código carregado não esconde a 1ª.
+    let m = 0;
+    const friaLenta = await medirAte(async () => (m++ === 0 ? espera(100) : undefined), 40);
+    expect(friaLenta).toMatchObject({ ok: false, fria: true });
+    expect(friaLenta.ms.length).toBe(1);
   });
 
   test('"n/a" e "abre fora" não rodam', () => {
