@@ -623,13 +623,16 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   };
 
   const open = useCallback(
-    // `keepSearch`: a nota que as Notas abrem sozinhas ao carregar não fecha a busca pedida de outra aba (spec #16821).
+    // `keepSearch`: a nota que as Notas abrem sozinhas ao carregar não fecha a busca pedida de outra aba (spec #16821),
+    // nem a árvore que a pessoa já abriu enquanto ela carregava (T23119). O clique da pessoa fecha as duas.
     async (path: string, keepSearch = false) => {
       if (!(await leave())) return;
       const n = await api.get(path).catch(() => null);
       if (n) show(n);
-      if (!keepSearch) setPalette(false);
-      setTreeOpen(false);
+      if (!keepSearch) {
+        setPalette(false);
+        setTreeOpen(false);
+      }
       setBackOpen(false);
     },
     [api, leave, show],
@@ -642,8 +645,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       setFocusMode(false);
       setBoard(p);
       setView("canvas");
-      if (!keepSearch) setPalette(false);
-      setTreeOpen(false);
+      if (!keepSearch) {
+        setPalette(false);
+        setTreeOpen(false);
+      }
       setBackOpen(false);
     },
     [leave],
@@ -657,8 +662,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       setFileOpen(p);
       setFileAt(at ? { path: p, at: { ...at } } : null);
       setView("file");
-      if (!keepSearch) setPalette(false);
-      setTreeOpen(false);
+      if (!keepSearch) {
+        setPalette(false);
+        setTreeOpen(false);
+      }
       setBackOpen(false);
     },
     [leave],
