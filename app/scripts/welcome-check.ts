@@ -80,7 +80,7 @@ try {
     await p.waitForSelector(".kn-welcome-bubble", { timeout: 15000 });
     // O balão se escreve aos poucos, e o texto inteiro está lá para o leitor de tela.
     await Bun.sleep(1600);
-    const partial = (await p.locator(".kn-welcome-text > span").first().textContent()) ?? "";
+    const partial = (await p.locator(".kn-welcome-text > span[aria-hidden]").first().textContent()) ?? "";
     assert.ok(partial.length > 10 && partial.length < 120, `no meio, um pedaço: ${partial.length}`);
     // O leitor de tela ouve o texto inteiro desde o começo, e uma vez só (o pedaço que se escreve fica de fora).
     const tree = await p.locator(".kn-welcome").ariaSnapshot();
