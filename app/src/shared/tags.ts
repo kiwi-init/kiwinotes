@@ -30,9 +30,13 @@ export const tagKey = (t: string) => t.toLocaleLowerCase("pt-BR");
 
 /** As `#tag` do corpo (sem o frontmatter), fora de blocos de código, de código na linha e de comentários `%%`. */
 export function bodyTags(body: string): string[] {
+  // Sem nenhum `#palavra`, nada a conferir: a maioria das notas não tem tag, e o parse do Markdown inteiro era o maior
+  // custo da abertura de uma pasta grande (spec #24228, T24286: ~8 s em 90 mil notas, a cada abertura).
+  const found = [...body.matchAll(BODY_TAG)];
+  if (!found.length) return [];
   const context = markdownStructure(body);
   const out: string[] = [];
-  for (const m of body.matchAll(BODY_TAG)) {
+  for (const m of found) {
     if (!context.prose(m.index!)) continue;
     let node = context.tree.resolveInner(m.index!, 1), linked = false;
     for (; node; node = node.parent!) if (["URL", "Link", "Image"].includes(node.name)) { linked = true; break; }
