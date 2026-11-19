@@ -10,7 +10,7 @@ O que todo tipo de arquivo cumpre nas Notas (spec #21156 do Kiwi, task T21236). 
 
 | # | O item | Vale para | Como se confere |
 |---|---|---|---|
-| 1 | **Abre rápido** e legível de primeira, sem ajuste da pessoa | todos | teste: a fixture difícil abre pelo leitor do app em até 1,5 s, com o texto de dentro (a 1ª abertura, a fria, tem de ficar em até 3 s; acima de 1,5 s, ela se repete até 3 vezes e falha se nenhuma fica em 1,5 s) |
+| 1 | **Abre rápido** e legível de primeira, sem ajuste da pessoa | todos | teste: a fixture difícil abre pelo leitor do app em até 1,5 s, com o texto de dentro (a 1ª abertura, a fria, tem de ficar em até 3 s; acima de 1,5 s, ela se repete até 3 vezes e falha se nenhuma fica em 1,5 s). O docx abre nas Notas pelo motor do T21151, que desenha num canvas: a prova dele é o `app/scripts/docx-check.ts`, com a mesma regra |
 | 2 | **Arquivo grande** não trava: rola liso ou avisa o limite | todos | teste: acima do limite (5 MB de texto, 25 MB de binário) vem o aviso; a planilha e o csv de 50 mil linhas e a nota de 2 MB abrem em até 10 s |
 | 3 | **Buscar dentro** (⌘F) | todos com texto | pela leitura do código (é da tela) |
 | 4 | **Entra na busca do app** e no ⌘K | todos com texto | teste: a palavra que só existe dentro do arquivo é achada pelo `vault.search` |
@@ -44,7 +44,7 @@ O teste lê esta tabela entre os marcadores. Nos itens com teste, um "cumpre" qu
 | **csv** | `csv` `tsv` | cumpre | cumpre | falta spec #21065 | falta spec #21165 | falta spec #21065 | falta spec #21065 | cumpre | cumpre | falta spec #21033 | cumpre | cumpre | cumpre |
 | **código** | `CODE_TYPES` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre |
 | **pdf** | `pdf` | cumpre | cumpre | cumpre | falta issue #156 | n/a: o Kiwi só mostra o pdf | n/a: o Kiwi só mostra o pdf | n/a: o Kiwi só mostra o pdf | cumpre | n/a: o Kiwi só mostra o pdf | cumpre | cumpre | cumpre |
-| **docx** | `docx` | cumpre | cumpre | falta spec #21080 | falta issue #156 | falta spec #21080 | falta spec #21080 | falta issue #182 | cumpre | falta spec #21155 | cumpre | cumpre | cumpre |
+| **docx** | `docx` | cumpre | cumpre | cumpre | falta issue #156 | falta spec #21080 | falta spec #21080 | falta issue #182 | cumpre | falta spec #21155 | cumpre | cumpre | cumpre |
 | **xlsx** | `xlsx` | cumpre | cumpre | falta spec #21065 | falta issue #156 | falta spec #21065 | falta spec #21065 | falta issue #182 | cumpre | falta spec #21033 | cumpre | cumpre | cumpre |
 | **imagem** | `png` `jpg` `jpeg` `gif` `webp` `heic` `heif` `bmp` | cumpre | cumpre | n/a: sem texto (o OCR fica fora da régua) | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só mostra a imagem | n/a: o Kiwi só mostra a imagem | n/a: o Kiwi só mostra a imagem | n/a: sem texto (o OCR fica fora da régua) | n/a: o Kiwi só mostra a imagem | cumpre | cumpre | cumpre |
 | **svg** | `svg` `drawio.svg` | cumpre | cumpre | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: o Kiwi só mostra o desenho | n/a: o Kiwi só mostra o desenho | n/a: o Kiwi só mostra o desenho | n/a: abre como imagem, e o texto é a marcação do desenho | n/a: o Kiwi só mostra o desenho | cumpre | cumpre | cumpre |

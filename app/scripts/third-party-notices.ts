@@ -45,10 +45,21 @@ function readPkg(dir: string): Pkg {
   return { name: json.name, version: json.version, license, dir, dependencies: Object.keys(json.dependencies ?? {}) };
 }
 
-/** O texto da licença que o pacote traz (LICENSE, LICENCE, COPYING, com ou sem extensão). */
+/**
+ * O texto da licença que o pacote traz (LICENSE, LICENCE, COPYING, com ou sem extensão). Quando ele traz também os
+ * avisos do que vai embutido nele (o THIRD_PARTY_NOTICES e a pasta `licenses/`, como o motor do docx, T21151), eles
+ * vão junto, depois da licença.
+ */
 function licenseText(dir: string): string | null {
-  const file = readdirSync(dir).find((f) => /^(licen[sc]e|copying)(\.(md|txt|markdown))?$/i.test(f));
-  return file ? readFileSync(path.join(dir, file), "utf8") : null;
+  const files = readdirSync(dir);
+  const file = files.find((f) => /^(licen[sc]e|copying)(\.(md|txt|markdown))?$/i.test(f));
+  if (!file) return null;
+  const parts = [readFileSync(path.join(dir, file), "utf8").trim()];
+  const notices = files.find((f) => /^third[-_]party[-_]notices(\.(md|txt))?$/i.test(f));
+  if (notices) parts.push(readFileSync(path.join(dir, notices), "utf8").trim());
+  const extra = path.join(dir, "licenses");
+  if (existsSync(extra)) for (const f of readdirSync(extra).sort()) parts.push(`${"-".repeat(40)}\nlicenses/${f}\n\n${readFileSync(path.join(extra, f), "utf8").trim()}`);
+  return parts.join("\n\n");
 }
 
 /** As dependências de cada biblioteca, sem repetir, na ordem em que aparecem. */

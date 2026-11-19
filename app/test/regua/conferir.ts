@@ -47,7 +47,10 @@ export interface Familia {
 
 const texto = (b: Uint8Array) => new TextDecoder().decode(b);
 
-/** O docx como o `DocxViewer`: o tamanho aberto do zip, o mammoth e só o HTML da lista. */
+/**
+ * O docx aberto: o tamanho aberto do zip, como o `DocxViewer` confere antes do motor, e o texto pelo mammoth, como o
+ * agente lê. O motor das Notas (T21151) desenha num canvas, fora do `bun test`: a prova dele é o `scripts/docx-check.ts`.
+ */
 async function abrirDocx(b: Uint8Array): Promise<string | null> {
   if (!checkZip(b).ok) return null;
   const mammoth = (await import("mammoth")).default;

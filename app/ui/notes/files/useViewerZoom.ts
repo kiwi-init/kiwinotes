@@ -75,7 +75,9 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
   const hold = (el: HTMLElement, sel: string, at: Point): Hold | undefined => {
     const now = performance.now();
     const h = held.current;
-    if (h && now - h.t < 400 && Math.abs(h.at.x - at.x) < 2 && Math.abs(h.at.y - at.y) < 2 && h.el.isConnected) {
+    const same = h && now - h.t < 400 && Math.abs(h.at.x - at.x) < 2 && Math.abs(h.at.y - at.y) < 2 ? again(el, sel, h.el) : undefined;
+    if (h && same) {
+      h.el = same;
       h.t = now;
       return h;
     }
@@ -127,10 +129,11 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
     if (Math.abs(scale - p.to) > 1e-4) return;
     pending.current = null;
     if (onApplied?.(p)) return;
-    if (p.on) {
+    const on = p.on && anchor ? again(el, anchor, p.on.el) : undefined;
+    if (p.on && on) {
       // Onde o ponto do elemento foi parar, e a rolagem que o põe de volta embaixo dos dedos.
       const box = el.getBoundingClientRect();
-      const r = p.on.el.getBoundingClientRect();
+      const r = on.getBoundingClientRect();
       el.scrollLeft += r.left + p.on.u * r.width - (box.left + p.at.x);
       el.scrollTop += r.top + p.on.v * r.height - (box.top + p.at.y);
       wrote.current = null;
@@ -140,7 +143,7 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
     el.scrollLeft = to.left;
     el.scrollTop = to.top;
     wrote.current = { want: to, got: { left: el.scrollLeft, top: el.scrollTop } };
-  }, [scale, target, pad?.x, pad?.y, onApplied]);
+  }, [scale, target, pad?.x, pad?.y, onApplied, anchor]);
 
   useEffect(() => {
     const el = target.current;
@@ -222,4 +225,15 @@ export function useViewerZoom({ path, target, scale, set, min, max, pad, anchor,
   }, [enabled, zoomTo]);
 
   return { zoomBy, zoomTo };
+}
+
+/**
+ * O elemento do `anchor` depois do zoom. Quem desenha de novo na escala nova (as páginas do docx, T21151) troca o
+ * elemento: aí vale o novo com o mesmo `data-page-index`. Sem ele, nenhum (o ponto é medido de novo).
+ */
+function again(root: HTMLElement, sel: string, old: HTMLElement): HTMLElement | undefined {
+  if (old.isConnected) return old;
+  const key = old.dataset.pageIndex;
+  if (key === undefined) return undefined;
+  return [...root.querySelectorAll<HTMLElement>(sel)].find((e) => e.dataset.pageIndex === key);
 }

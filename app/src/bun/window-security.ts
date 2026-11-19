@@ -18,7 +18,8 @@
  * - sem `'unsafe-eval'`: o `evaluateJavascriptWithResponse` do preload (`new Function`) devolve o erro em vez de rodar.
  *   O app usa o `executeJavascript`, que vem do WebView e não passa pela CSP;
  * - `img-src` sem `https:`: a imagem de fora de uma nota é baixada pelo engine, só depois do clique da pessoa, e chega
- *   como `data:` (T2984, #3039). Assim nenhum desenho (o Markdown, o mermaid, um CSS) baixa algo sozinho;
+ *   como `data:` (T2984, #3039). Assim nenhum desenho (o Markdown, o mermaid, um CSS) baixa algo sozinho. Com `blob:`
+ *   (T21151): as imagens de dentro de um docx, que o motor dele monta dos bytes do arquivo, como a mídia abaixo;
  * - `media-src blob:` (T19315): o áudio e o vídeo de um arquivo nas Notas, que a UI monta dos bytes lidos pelo engine.
  *   Um `blob:` só sai de um script da própria página: nada toca da rede nem do disco direto;
  * - `object-src`, `frame-src`, `base-uri` e `form-action` em `'none'`: nada de plugin, iframe, `<base>` nem form que
@@ -28,7 +29,7 @@ export const VIEWS_CSP = [
   "default-src 'self' views:",
   "script-src 'self' views: 'wasm-unsafe-eval'",
   "style-src 'self' views: 'unsafe-inline'",
-  "img-src 'self' views: data:",
+  "img-src 'self' views: data: blob:",
   "font-src 'self' views: data:",
   "media-src blob:",
   "connect-src ws://127.0.0.1:*",
