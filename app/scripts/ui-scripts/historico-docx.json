@@ -1,0 +1,105 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "files.create",
+      "args": {
+        "folder": "Docs",
+        "name": "proposta.docx",
+        "base64": "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"
+      },
+      "name": "engine: um docx inventado (a proposta.docx das fixtures)"
+    },
+    {
+      "waitFor": ".kn-crumb-bt",
+      "name": "a janela Notas abre"
+    },
+    {
+      "click": ".kn-crumb-bt",
+      "name": "abre a árvore"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Docs')",
+      "name": "abre a pasta Docs"
+    },
+    {
+      "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('proposta')",
+      "name": "abre o proposta.docx"
+    },
+    {
+      "waitFor": ".kn-file[data-state='ready'] .docx-page",
+      "name": "as páginas do docx"
+    },
+    {
+      "name": "o cursor no título",
+      "click": ".kn-file .docx-page :text('Proposta de mudança')"
+    },
+    {
+      "press": "End"
+    },
+    {
+      "type": " da Ana",
+      "name": "a pessoa escreve no fim do título"
+    },
+    {
+      "wait": 1500,
+      "name": "o docx grava, e o histórico guarda o original e o novo"
+    },
+    {
+      "click": ".kn-file-versions",
+      "name": "o botão Versões no topo do docx"
+    },
+    {
+      "waitFor": ".kn-versions-it >> nth=1",
+      "name": "a original e a editada"
+    },
+    {
+      "click": ".kn-versions-it >> nth=1",
+      "name": "a mais velha"
+    },
+    {
+      "waitFor": ".kn-versions-preview .docx-page:has-text('Proposta de mudança')",
+      "name": "a versão abre nas páginas do docx"
+    },
+    {
+      "waitFor": ".kn-versions-preview .docx-page:has-text('da Ana')",
+      "state": "detached",
+      "name": "a versão é a de antes da edição"
+    },
+    {
+      "expectText": ".kn-versions-preview",
+      "text": "Só leitura: a versão de",
+      "name": "só leitura, e diz por quê"
+    },
+    {
+      "expectText": ".kn-versions-stats",
+      "text": "Restaurar troca o arquivo de agora por esta versão"
+    },
+    {
+      "screenshot": "versoes-docx.png"
+    },
+    {
+      "click": ".kn-versions-actions .kn-bt",
+      "name": "Restaurar a de antes"
+    },
+    {
+      "expectCount": ".kn-versions",
+      "count": 0,
+      "name": "o painel fecha"
+    },
+    {
+      "waitFor": ".kn-file .docx-page:has-text('da Ana')",
+      "state": "detached",
+      "name": "o docx aberto volta ao de antes"
+    },
+    {
+      "expectText": ".kn-file .docx-page",
+      "text": "Proposta de mudança"
+    },
+    {
+      "expectCount": ".kn-file-text-note",
+      "count": 0,
+      "name": "sem aviso: o restaurar não é uma mudança de fora com edição perdida"
+    }
+  ]
+}

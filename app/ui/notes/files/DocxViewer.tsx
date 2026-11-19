@@ -34,9 +34,11 @@ type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "t
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 
-export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewerProps) {
+export function DocxViewer({ path, file, files, flushRef, at, kiwi, readOnly }: FileViewerProps) {
   const incoming = "base64" in file ? file.base64 : "";
   // O que está aberto no motor. Uma leitura nova (outro app gravou) só reabre se não for a nossa própria gravação.
+  // Cada leitura nova é um objeto novo e reabre, mesmo com os bytes e a versão da primeira (restaurar a versão de antes
+  // de uma edição, T22797).
   const [source, setSource] = useState({ base64: incoming, version: file.version });
   const base64 = source.base64;
   const [notice, setNotice] = useState<string | null>(null);
@@ -60,6 +62,9 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
     // biome-ignore lint/correctness/useExhaustiveDependencies: file.version só vale na criação
     [path, files],
   );
+  // Só leitura com o motivo (T22797): a versão antiga no painel Versões se olha e não se edita.
+  const editable = saver.canSave && !readOnly;
+  const readOnlyNote = readOnly ? `Só leitura: ${readOnly}` : "Só leitura: este Kiwi ainda não grava documentos.";
   const kiwiSource = useRef(kiwi);
   kiwiSource.current = kiwi;
   // As gravações do gato tocam uma depois da outra.
@@ -175,7 +180,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
         if (!alive || !el) return;
         const r = mountDocx(el, bytes, {
           zoom: zoomAtMount.current,
-          editable: saver.canSave,
+          editable,
           onEdit: () => {
             setNotice(null);
             // O texto mudou: a busca lê os parágrafos de novo, e as marcas velhas saem.
@@ -217,8 +222,9 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
     };
     // Reabre a cada leitura nova (um `setSource`), mesmo com os bytes de antes: o desfazer da Atividade volta o arquivo
     // de quando abriu, e a tela pode estar com o que o gato tocou.
+    // O `editable` muda ao abrir uma versão antiga, só leitura (T22797).
     // biome-ignore lint/correctness/useExhaustiveDependencies: reabre só quando a leitura muda
-  }, [source, saver]);
+  }, [source, saver, editable]);
 
   // O zoom vai ao motor, que desenha as páginas de novo na escala nova (o texto fica nítido, sem esticar a imagem). Antes
   // do `useViewerZoom`, e também num efeito de layout: quando ele mede onde o ponto dos dedos foi parar, as páginas já
@@ -320,9 +326,9 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
       onFocus={placeBar}
       onBlur={placeBar}
     >
-      {notice || (ready && !saver.canSave) ? (
+      {notice || (ready && !editable) ? (
         <div className="kn-file-text-note" role="status">
-          {notice ?? "Só leitura: este Kiwi ainda não grava documentos."}
+          {notice ?? readOnlyNote}
         </div>
       ) : null}
       <div className="kn-file-pdf-bar" role="toolbar" aria-label="Documento">
@@ -374,7 +380,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
       <div className="kn-file-docx-scroll docx-editor docx-editor__scroll-container" ref={scroller} tabIndex={0} aria-label="Páginas do documento" onScroll={bar ? placeBar : undefined}>
         <div className="docx-paginated-surface" ref={host} />
       </div>
-      {bar && ready && saver.canSave ? (
+      {bar && ready && editable ? (
         <DocxFormatBar
           spot={bar}
           onFormat={(action) => {
