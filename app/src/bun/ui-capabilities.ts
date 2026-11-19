@@ -152,8 +152,8 @@ export interface CapabilityDeps {
     | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile" | "createFile" | "deleteFile" | "renameFile"
   > &
     // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu. Sem o
-    // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`.
-    Partial<Pick<Vault, "noteInodes" | "noteMetas" | "folderList" | "filesIn" | "filesMatching" | "resolveFiles">>;
+    // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`. Sem o `saveFileBytes` (T21107), a planilha não grava.
+    Partial<Pick<Vault, "noteInodes" | "noteMetas" | "folderList" | "filesIn" | "filesMatching" | "resolveFiles" | "saveFileBytes">>;
   /**
    * O histórico de versões das notas (T2680), fora do vault. Sem ele (testes antigos), as capacidades `notes.version*`
    * respondem lista vazia e E_NOT_FOUND, e o save não guarda versão.
@@ -1100,7 +1100,13 @@ export function uiCapabilities(deps: CapabilityDeps,
       return (await vault()).readFile(a.path, a.as ?? "binary");
     },
     "files.save": async (args) => {
-      const a = fields(args, "files.save", ["path", "content", "baseVersion"]);
+      const a = fields(args, "files.save", ["path", "content", "base64", "baseVersion"]);
+      if (a.base64 !== undefined && a.content !== undefined) throw bad("files.save: send content or base64, not both");
+      if (a.base64 !== undefined) {
+        const v = await vault();
+        if (!v.saveFileBytes) throw bad("files.save: this vault can't save spreadsheets");
+        return v.saveFileBytes(a.path, a.base64, a.baseVersion);
+      }
       return (await vault()).saveFile(a.path, a.content, a.baseVersion);
     },
     "files.create": async (args) => {

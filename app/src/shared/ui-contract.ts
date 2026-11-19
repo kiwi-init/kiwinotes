@@ -254,7 +254,9 @@ export type { NoteModel };
 // 1.87.0 (T20868, spec #20843): o evento `agent.wrote`, o que uma escrita do agente mudou e onde, para a janela das
 //   Notas mostrar o Kiwi escrevendo. Só acréscimo.
 // 1.88.0 (T21325, spec #21283): o `aprendendo` no `AgentTrailView`, a trilha que ainda espera a segunda vez. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.88.0";
+// 1.89.0 (T21107, spec #21065): o `files.save` grava planilha (xlsx, csv, tsv) com `base64` no lugar de `content`. Só
+//   acréscimo.
+export const UI_CONTRACT_VERSION = "1.89.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -447,8 +449,13 @@ export interface UiCapabilities {
    * Grava um texto do vault aberto nas Notas (1.40.0, T7105): só `.txt`, `.log`, `.json`, `.yaml` e `.yml`, só num
    * arquivo que já existe, até 5 MB. Condicional como o save das notas: com `baseVersion` velha não escreve e devolve
    * o de agora. Outro tipo de arquivo, ou um texto que não é UTF-8 (`readOnly` no `files.read`), dá E_BAD_ARGS.
+   *
+   * Planilha (1.89.0, T21107): `.xlsx`, `.csv` e `.tsv` gravam com `base64` (os bytes, até 25 MB) no lugar de
+   * `content`, e a versão é a do `files.read` binário. O csv não precisa ser UTF-8 (a codificação dele fica). Um xlsx
+   * que abre só para leitura (senha, macro, estrutura desconhecida), ou bytes novos que não são um xlsx legível, dão
+   * E_BAD_ARGS com o motivo, e nada é escrito.
    */
-  "files.save": { args: { path: string; content: string; baseVersion: string }; result: FileSaveResult };
+  "files.save": { args: { path: string; content?: string; base64?: string; baseVersion: string }; result: FileSaveResult };
   /**
    * Um arquivo novo que o agente gerou (1.62.0, spec #11549): txt, csv, xlsx, docx ou pdf, em base64, até 25 MB. Nunca
    * por cima de outro: com o nome já usado na pasta, ele ganha um número. A versão é a do `files.read`.
