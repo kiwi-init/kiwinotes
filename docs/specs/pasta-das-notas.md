@@ -20,4 +20,4 @@ bun test src/notes/folders-workspace.test.ts src/headless/guard.test.ts ui/notes
 bun run typecheck
 ```
 
-O roteiro visual em `scripts/ui-scripts/notas-pasta.json` usa a CLI headless e pastas sintéticas; preparação e evidência em `T5161/` (no branch `evidence`). A validação no Obsidian real fica com o harry, via lead.
+Os roteiros visuais `scripts/ui-scripts/notas-pasta.json` e `notas-pasta-na-arvore.json` usam a CLI headless e pastas sintéticas. Rode-os pelo `bun scripts/notas-pasta-check.ts [prints] [vezes]`, que cria as pastas, sobe o headless com o seletor falso e sai com 1 se algum falhar (T19835); sozinhos, eles param no preparo. A validação no Obsidian real fica com o harry, via lead.
