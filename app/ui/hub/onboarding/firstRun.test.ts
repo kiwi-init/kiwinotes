@@ -19,6 +19,8 @@ test("a linha do modelo segue o download, e a barra só tem fração quando ela 
   expect(modelLine({ state: "loading" }).text).toBe("Carregando o modelo…");
   expect(modelLine({ state: "ready" })).toMatchObject({ text: "Pronto para ditar.", done: true, fraction: 1 });
   expect(modelLine({ state: "ready", boosting: "loading" }).text).toContain("99 MB");
+  // Sem palavras no dicionário, o vocabulário não baixa (T20949): a linha não fala dele.
+  expect(modelLine({ state: "ready", boosting: "off" }).text).toBe("Pronto para ditar.");
   expect(modelLine({ state: "unavailable" })).toMatchObject({ failed: true, fraction: null });
 });
 
