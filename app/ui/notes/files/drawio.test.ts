@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { deflateRawSync } from "node:zlib";
 
-import { checkDrawio, DRAWIO_LIMITS } from "./drawio.ts";
+import { checkDrawio, DRAWIO_LIMITS, drawioPages } from "./drawio.ts";
 
 /** Uma página comprimida como o draw.io grava: deflate cru do XML (passado pelo encodeURIComponent), em base64. */
 const packed = (xml: string) => deflateRawSync(Buffer.from(encodeURIComponent(xml))).toString("base64");
@@ -40,5 +40,27 @@ describe("o viewer que vai no pack (T7112)", () => {
   test("é o da versão fixada: o sha256 do viewer e da licença batem", async () => {
     const { checkDrawio: checkVendored } = await import("../../../scripts/drawio-viewer.ts");
     expect(checkVendored()).toEqual([]);
+  });
+});
+
+describe("o texto do diagrama (T22217)", () => {
+  test("os rótulos de cada página, com o nome e o id, em XML e comprimida", () => {
+    const text = readFileSync(new URL("../../../test/fixtures/files/fluxo.drawio", import.meta.url), "utf8");
+    const pages = drawioPages(text)!;
+    expect(pages.map((p) => p.name)).toEqual(["Fluxo", "Outra"]);
+    expect(pages[0]!.labels.map((l) => l.text)).toContain("Tem estoque?");
+    expect(pages[1]!.labels).toEqual([{ id: "a", text: "Segunda página" }]);
+    const html = '<mxGraphModel><root><mxCell id="c" value="&lt;b&gt;Caixa&lt;/b&gt;&lt;br&gt;de &amp;amp; frutas&lt;div&gt;maduras&lt;/div&gt;" style="rounded=0;html=1;" vertex="1"/><mxCell id="p" value="a &lt; b" style="rounded=0" vertex="1"/><UserObject label="Objeto A" id="u"><mxCell style="x"/></UserObject><mxCell id="s" value="" vertex="1"/></root></mxGraphModel>';
+    expect(drawioPages(`<mxfile><diagram name="Z">${packed(html)}</diagram></mxfile>`)).toEqual([
+      { name: "Z", labels: [{ id: "c", text: "Caixa\nde & frutas\nmaduras" }, { id: "p", text: "a < b" }, { id: "u", text: "Objeto A" }] },
+    ]);
+    // O formato antigo, o mxGraphModel solto: uma página sem nome.
+    expect(drawioPages(html)![0]!.labels.length).toBe(3);
+  });
+
+  test("o que não é diagrama, ou a bomba, dá null sem abrir", () => {
+    expect(drawioPages("<html></html>")).toBeNull();
+    const bomb = `<mxfile><diagram>${deflateRawSync(Buffer.alloc(30 * 1024 * 1024, 0x61)).toString("base64")}</diagram></mxfile>`;
+    expect(drawioPages(bomb)).toBeNull();
   });
 });

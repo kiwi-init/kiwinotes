@@ -368,6 +368,11 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
         const x = a as { path: string; content: string; baseVersion: string };
         return v.saveFile(x.path, x.content, x.baseVersion);
       },
+      "notes.canvasGet": (a) => v.getCanvas((a as { path: string }).path),
+      "notes.canvasSave": (a) => {
+        const x = a as { path: string; content: string; baseVersion: string };
+        return v.saveCanvas(x.path, x.content, x.baseVersion);
+      },
     });
     try {
       const n = await w.get(rel);

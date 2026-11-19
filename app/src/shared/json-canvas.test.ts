@@ -7,6 +7,7 @@ import {
   boundsOf,
   bringToFront,
   canvasColor,
+  canvasTexts,
   CanvasParseError,
   edgeGeometry,
   facingSide,
@@ -165,5 +166,33 @@ describe("a geometria do quadro (T6600)", () => {
     expect(canvasColor("red; background: url(x)")).toBeNull();
     expect(canvasColor("7")).toBeNull();
     expect(canvasColor(3)).toBeNull();
+  });
+});
+
+describe("o texto do quadro (T22217)", () => {
+  test("cartão, nota, link, grupo e seta, na ordem do arquivo; sem texto e o que não desenha ficam de fora", () => {
+    const doc = parseCanvas(JSON.stringify({
+      nodes: [
+        { id: "g", type: "group", label: "Feira", x: 0, y: 0, width: 500, height: 400 },
+        { id: "t", type: "text", text: "Comprar caju\ne pitanga", x: 10, y: 10, width: 100, height: 60 },
+        { id: "vazio", type: "text", text: "   ", x: 10, y: 90, width: 100, height: 60 },
+        { id: "f", type: "file", file: "Receitas/Bolo.md", subpath: "#Massa", x: 200, y: 10, width: 100, height: 60 },
+        { id: "l", type: "link", url: "https://exemplo.com", x: 200, y: 90, width: 100, height: 60 },
+        { id: "quebrado", type: "text", text: "sem caixa" },
+      ],
+      edges: [
+        { id: "e1", fromNode: "t", toNode: "f", label: "depois" },
+        { id: "e2", fromNode: "t", toNode: "l" },
+        { id: "e3", fromNode: "t", toNode: "sumiu", label: "solta" },
+      ],
+    }));
+    expect(canvasTexts(doc)).toEqual([
+      { id: "g", kind: "group", text: "Feira" },
+      { id: "t", kind: "text", text: "Comprar caju\ne pitanga" },
+      { id: "f", kind: "file", text: "Receitas/Bolo.md#Massa" },
+      { id: "l", kind: "link", text: "https://exemplo.com" },
+      { id: "e1", kind: "edge", text: "depois" },
+    ]);
+    expect(canvasTexts(parseCanvas(""))).toEqual([]);
   });
 });
