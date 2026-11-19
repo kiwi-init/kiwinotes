@@ -51,7 +51,7 @@ export interface FileViewer {
 // O visualizador de pdf traz o pdf.js (1,7 MB com o worker): só carrega quando um pdf abre. O `FileView` espera por
 // ele num <Suspense>.
 const PdfViewer = lazy(() => import("./PdfViewer.tsx").then((m) => ({ default: m.PdfViewer })));
-// O de docx traz o mammoth: também só quando um docx abre.
+// O de docx traz o motor do @docx-editor.dev/core (T21151): também só quando um docx abre.
 const DocxViewer = lazy(() => import("./DocxViewer.tsx").then((m) => ({ default: m.DocxViewer })));
 // O de xlsx traz o SheetJS: só quando uma planilha abre.
 const XlsxViewer = lazy(() => import("./XlsxViewer.tsx").then((m) => ({ default: m.XlsxViewer })));
@@ -76,7 +76,7 @@ export const VIEWERS: Record<string, FileViewer> = {
   tsv: table,
   // T7109: o pdf, pelo pdf.js do pack.
   pdf: { as: "binary", View: PdfViewer },
-  // T7110: o docx formatado, pelo mammoth do pack. Só o `.docx`: o `.doc` antigo é outro formato.
+  // T7110: o docx; desde o T21151, as páginas como no Word. Só o `.docx`: o `.doc` antigo é outro formato.
   docx: { as: "binary", View: DocxViewer },
   // T7111: a planilha, pelo SheetJS do pack. Só o `.xlsx` (o `.xls` antigo e o `.ods` seguem no app padrão).
   xlsx: { as: "binary", View: XlsxViewer },

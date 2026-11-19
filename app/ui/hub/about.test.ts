@@ -111,13 +111,13 @@ describe("os créditos (spec #7079)", () => {
     expect(CREDITS.find((c) => c.pkg === "xlsx")?.license).toBe(xlsx.license);
     const acp = JSON.parse(readFileSync(new URL("../../node_modules/@agentclientprotocol/sdk/package.json", import.meta.url), "utf8")) as { license: string; author: string };
     expect(CREDITS.find((c) => c.pkg === "@agentclientprotocol/sdk")).toMatchObject({ license: acp.license, by: acp.author });
-    // As duas do spec #11549 (gerar pdf e docx): a licença que o pacote declara.
-    for (const pkg of ["pdf-lib", "docx"]) {
+    // As duas do spec #11549 (gerar pdf e docx) e o motor do docx nas Notas (T21151): a licença que o pacote declara.
+    for (const pkg of ["pdf-lib", "docx", "@docx-editor.dev/core"]) {
       const j = JSON.parse(readFileSync(new URL(`../../node_modules/${pkg}/package.json`, import.meta.url), "utf8")) as { license: string };
       expect(CREDITS.find((c) => c.pkg === pkg)?.license).toBe(j.license);
     }
     expect(creditsLine()).toBe(
-      "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); SheetJS Community Edition, de SheetJS LLC (Apache-2.0); draw.io, de JGraph Ltd (Apache-2.0); pdf-lib, de Andrew Dillon (MIT); docx, de Dolan Miu (MIT); Agent Client Protocol SDK, de Zed Industries (Apache-2.0).",
+      "Com PDF.js, da Mozilla (Apache-2.0); Mammoth, de Michael Williamson (BSD-2-Clause); docx-editor, de eigenpal (Apache-2.0); SheetJS Community Edition, de SheetJS LLC (Apache-2.0); draw.io, de JGraph Ltd (Apache-2.0); pdf-lib, de Andrew Dillon (MIT); docx, de Dolan Miu (MIT); Agent Client Protocol SDK, de Zed Industries (Apache-2.0).",
     );
     expect(creditsLine([])).toBe("");
     expect(creditsLine([CREDITS[0]!, { name: "X", by: "Y", license: "MIT", use: "z", pkg: "x" }])).toBe("Com PDF.js, da Mozilla (Apache-2.0); X, de Y (MIT).");
@@ -136,6 +136,10 @@ describe("o arquivo de avisos de terceiros (revisão do T7109)", () => {
     for (const c of CREDITS) expect(file).toContain(`(${c.pkg}), de ${c.by}`);
     // As dependências que vão junto também (revisão do T7110): as do mammoth, com a licença MIT do jszip e a do pako.
     for (const dep of ["jszip", "pako", "@xmldom/xmldom", "underscore", "lop"]) expect(file).toContain(`(${dep}), de seus autores`);
+    // O motor do docx (T21151): os avisos dele e as licenças do que ele traz pronto (a HarfBuzz e os ícones).
+    expect(file).toContain("harfbuzzjs 1.6.4");
+    expect(file).toContain("HarfBuzz is licensed under the so-called");
+    expect(file).toContain("Material Symbols");
     // O viewer do draw.io, que vai copiado no repo (T7112): a versão fixada e a licença da JGraph.
     const { DRAWIO_VERSION } = await import("../../scripts/drawio-viewer.ts");
     expect(file).toContain(`draw.io ${DRAWIO_VERSION} (jgraph/drawio), de JGraph Ltd`);

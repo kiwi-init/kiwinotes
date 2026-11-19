@@ -1,74 +1,139 @@
-// O docx dentro das Notas (T7110, spec #7079): o texto formatado, com títulos, listas, tabelas e imagens, pelo mammoth
-// (BSD-2-Clause), que vai no pack da UI e só carrega quando um docx abre. Só leitura: para editar, "Abrir no app
-// padrão". O HTML do mammoth não entra na página como HTML: `docx.ts` o lê e só o que está na lista vira elemento.
-// Um link de fora abre no navegador padrão; uma âncora (nota de rodapé) rola dentro do documento.
+// O docx dentro das Notas (T7110; desde o T21151, spec #21080, como no Word): as páginas do documento, com a fonte, as
+// tabelas, as imagens, o cabeçalho e o rodapé, pelo motor do @docx-editor.dev/core (`docxEngine.ts`), que só carrega
+// quando um docx abre. Só leitura: o arquivo não é gravado, e fica como estava, byte a byte. O ⌘F acha no texto do
+// corpo; o zoom é o de todo arquivo (a pinça e o ⌘+, ⌘−, ⌘0). Ao fechar, o motor é solto (#22186, a decisão do harry
+// em #22216): a memória do documento volta.
 
-import { createElement, type ReactNode, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
+import { externalUrl } from "../links.ts";
 import { bytesOf } from "./csv.ts";
-import { type DocNode, docWarnings, ID_PREFIX, parseDocHtml } from "./docx.ts";
-import { checkZip, MAX_DOC_HTML } from "./zipSize.ts";
+import type { DocxHandle } from "./docxEngine.ts";
+import { type DocxMatch, type DocxParagraph, docxParagraphs, findInDocx } from "./docxFind.ts";
+import { stepMatch } from "./pdfSearch.ts";
 import { useViewerZoom } from "./useViewerZoom.ts";
 import type { FileViewerProps } from "./viewers.ts";
-import { recallZoom } from "./zoom.ts";
+import { checkZip } from "./zipSize.ts";
+import { recallZoom, stepZoom } from "./zoom.ts";
 
-type State = { kind: "loading" } | { kind: "ready"; nodes: DocNode[]; warnings: number } | { kind: "tooLarge" } | { kind: "error" };
+type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "tooLarge" } | { kind: "error" };
+
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3;
 
 export function DocxViewer({ path, file }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
   const [state, setState] = useState<State>({ kind: "loading" });
-  const page = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  // O zoom (T21238): o `zoom` do CSS na página, como o do Pages; o ponto embaixo dos dedos fica parado. `null` é 100%.
+  const host = useRef<HTMLDivElement>(null);
+  const engine = useRef<DocxHandle | null>(null);
+  const queryBox = useRef<HTMLInputElement>(null);
+  // O zoom (T21238): `null` é 100%, como o Word abre.
   const [zoom, setZoom] = useState<number | null>(() => recallZoom(path));
   useEffect(() => setZoom(recallZoom(path)), [path]);
   const z = zoom ?? 1;
-  useViewerZoom({ path, target: scroller, scale: z, set: setZoom, min: 0.5, max: 3, anchor: ".kn-file-docx-page", enabled: state.kind === "ready" });
+  const zoomAtMount = useRef(z);
+  zoomAtMount.current = z;
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState<DocxMatch[] | null>(null);
+  const [current, setCurrent] = useState(-1);
+  const paragraphs = useRef<DocxParagraph[] | null>(null);
 
+  // Abre o documento no motor. Outro arquivo, ou o mesmo que mudou no disco: solta o de antes.
   useEffect(() => {
     let alive = true;
     setState({ kind: "loading" });
+    setMatches(null);
+    setCurrent(-1);
+    paragraphs.current = null;
     void (async () => {
       try {
         const bytes = bytesOf(base64);
-        // Antes do mammoth, o tamanho aberto (revisão do T7110): um docx pequeno pode descompactar em centenas de MB.
+        // Antes do motor, o tamanho aberto (revisão do T7110): um docx pequeno pode descompactar em centenas de MB.
         const zip = checkZip(bytes);
         if (!zip.ok) {
           if (alive) setState({ kind: zip.reason === "too-large" ? "tooLarge" : "error" });
           return;
         }
-        const mammoth = (await import("mammoth")).default;
-        const r = await mammoth.convertToHtml(
-          { arrayBuffer: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer },
-          // Os arquivos de fora que um docx pode apontar ficam desligados (o padrão do mammoth, escrito aqui de propósito).
-          { idPrefix: ID_PREFIX, externalFileAccess: false },
-        );
-        if (!alive) return;
-        // O que o tamanho do zip não pega: uma parte pequena que vira muito HTML.
-        if (r.value.length > MAX_DOC_HTML) return setState({ kind: "tooLarge" });
-        setState({ kind: "ready", nodes: parseDocHtml(r.value), warnings: docWarnings(r.messages) });
+        const { mountDocx } = await import("./docxEngine.ts");
+        const el = host.current;
+        if (!alive || !el) return;
+        const r = mountDocx(el, bytes, {
+          zoom: zoomAtMount.current,
+          onLink: (href) => {
+            const url = externalUrl(href);
+            // O `newWindow: "external"` da janela manda para o navegador padrão.
+            if (url) window.open(url, "_blank", "noopener,noreferrer");
+          },
+        });
+        if (!r.ok) return setState({ kind: "error" });
+        engine.current = r.handle;
+        setState({ kind: "ready", pages: r.handle.pages() });
       } catch {
         if (alive) setState({ kind: "error" });
       }
     })();
     return () => {
       alive = false;
+      engine.current?.destroy();
+      engine.current = null;
+      paragraphs.current = null;
     };
   }, [base64]);
 
-  const onClick = (e: React.MouseEvent) => {
-    const a = (e.target as HTMLElement).closest("a");
-    if (!a) return;
-    e.preventDefault();
-    const href = a.getAttribute("href");
-    if (!href) return;
-    if (href.startsWith("#")) {
-      page.current?.querySelector(`[id="${href.slice(1)}"]`)?.scrollIntoView({ block: "center" });
+  // O zoom vai ao motor, que desenha as páginas de novo na escala nova (o texto fica nítido, sem esticar a imagem). Antes
+  // do `useViewerZoom`, e também num efeito de layout: quando ele mede onde o ponto dos dedos foi parar, as páginas já
+  // estão no tamanho novo.
+  useLayoutEffect(() => {
+    engine.current?.setZoom(z);
+  }, [z, state.kind]);
+  const { zoomBy, zoomTo } = useViewerZoom({ path, target: scroller, scale: z, set: setZoom, min: MIN_ZOOM, max: MAX_ZOOM, anchor: ".docx-page", enabled: state.kind === "ready" });
+
+  // A busca, um pouco depois da última tecla. O texto dos parágrafos é lido do motor uma vez, na primeira busca.
+  useEffect(() => {
+    if (state.kind !== "ready") return;
+    if (!query.trim()) {
+      setMatches(null);
+      setCurrent(-1);
       return;
     }
-    // O `newWindow: "external"` da janela manda para o navegador padrão; `href` já passou pelo `externalUrl`.
-    window.open(href, "_blank", "noopener,noreferrer");
+    const timer = setTimeout(() => {
+      if (!engine.current) return;
+      paragraphs.current ??= docxParagraphs(engine.current.pieces());
+      const found = findInDocx(paragraphs.current, query);
+      setMatches(found);
+      setCurrent(found.length ? 0 : -1);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [query, state.kind]);
+
+  // As marcas na página, e o achado da vez à vista.
+  useEffect(() => {
+    const e = engine.current;
+    if (!e) return;
+    e.mark(matches ?? [], current);
+    const m = matches && current >= 0 ? matches[current] : undefined;
+    if (m) e.reveal(m);
+  }, [matches, current]);
+
+  const step = useCallback((direction: 1 | -1) => setCurrent((c) => stepMatch(c, matches?.length ?? 0, direction)), [matches]);
+
+  // ⌘F em qualquer lugar do documento vai para a busca; ⌘G e ⇧⌘G andam pelos achados.
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (!e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "f") {
+      e.preventDefault();
+      queryBox.current?.focus();
+      queryBox.current?.select();
+    } else if (k === "g" && matches?.length) {
+      e.preventDefault();
+      step(e.shiftKey ? -1 : 1);
+    }
   };
+
+  const count = useMemo(() => (matches === null ? "" : matches.length ? `${current + 1} de ${matches.length.toLocaleString("pt-BR")}` : "Nada encontrado"), [matches, current]);
 
   if (state.kind === "error") {
     return (
@@ -84,22 +149,59 @@ export function DocxViewer({ path, file }: FileViewerProps) {
       </div>
     );
   }
-  if (state.kind === "loading") return <div className="kn-file-docx" aria-busy="true" />;
+  const ready = state.kind === "ready";
   return (
-    <div className="kn-file-docx" ref={scroller}>
-      {state.warnings ? (
-        <div className="kn-file-text-note kn-file-docx-note" role="status">
-          Parte da formatação deste documento não aparece aqui. Para ver como ele é, abra no app padrão.
-        </div>
-      ) : null}
-      {/* biome-ignore lint: o clique só trata links (a navegação é do teclado, pelos <a>) */}
-      <div className="kn-file-docx-page" ref={page} onClick={onClick} style={z === 1 ? undefined : { zoom: z, width: Math.min(720, scroller.current?.clientWidth ?? 720), maxWidth: "none" }}>
-        {render(state.nodes)}
+    // biome-ignore lint: o ⌘F e o ⌘G do documento; o foco fica nos controles e nas páginas
+    <div className="kn-file-pdf kn-file-docx" aria-busy={ready ? undefined : "true"} onKeyDown={onKeyDown}>
+      <div className="kn-file-pdf-bar" role="toolbar" aria-label="Documento">
+        <span className="kn-file-pdf-group">
+          <button type="button" className="kn-bt" aria-label="Diminuir o zoom" disabled={!ready || z <= MIN_ZOOM} onClick={() => zoomBy(stepZoom(z, -1, MIN_ZOOM, MAX_ZOOM) / z)}>
+            −
+          </button>
+          <span className="kn-file-pdf-zoom" aria-live="polite">{`${Math.round(z * 100)}%`}</span>
+          <button type="button" className="kn-bt" aria-label="Aumentar o zoom" disabled={!ready || z >= MAX_ZOOM} onClick={() => zoomBy(stepZoom(z, 1, MIN_ZOOM, MAX_ZOOM) / z)}>
+            +
+          </button>
+          <button type="button" className="kn-bt" disabled={!ready || zoom === null} onClick={() => zoomTo(null)}>
+            100%
+          </button>
+        </span>
+        <span className="kn-file-pdf-page">{ready ? `${state.pages} ${state.pages === 1 ? "página" : "páginas"}` : ""}</span>
+        <span className="kn-file-pdf-group kn-file-pdf-find">
+          <input
+            ref={queryBox}
+            className="kn-file-pdf-query"
+            type="search"
+            placeholder="Buscar no documento"
+            aria-label="Buscar no documento"
+            value={query}
+            disabled={!ready}
+            {...NO_TEXT_ASSIST}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                step(e.shiftKey ? -1 : 1);
+              }
+              if (e.key === "Escape") setQuery("");
+            }}
+          />
+          <span className="kn-file-pdf-count" aria-live="polite">
+            {count}
+          </span>
+          <button type="button" className="kn-bt" aria-label="Achado anterior" disabled={!matches?.length} onClick={() => step(-1)}>
+            ↑
+          </button>
+          <button type="button" className="kn-bt" aria-label="Próximo achado" disabled={!matches?.length} onClick={() => step(1)}>
+            ↓
+          </button>
+        </span>
+      </div>
+      {/* Com foco (o clique numa página): as setas e o Page Down rolam, e o ⌘F chega aqui. */}
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a área rolável do documento, como a do pdf no Preview */}
+      <div className="kn-file-docx-scroll docx-editor docx-editor__scroll-container" ref={scroller} tabIndex={0} aria-label="Páginas do documento">
+        <div className="docx-paginated-surface" ref={host} />
       </div>
     </div>
   );
-}
-
-function render(nodes: DocNode[]): ReactNode[] {
-  return nodes.map((n, i) => (typeof n === "string" ? n : createElement(n.tag, { key: i, ...n.attrs }, ...(n.children.length ? [render(n.children)] : []))));
 }

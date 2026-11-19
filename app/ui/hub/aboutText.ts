@@ -78,7 +78,9 @@ export const DIAG_HINT = "Versões, permissões e o log do app, sem texto nem á
  */
 export const CREDITS: readonly { name: string; by: string; license: string; use: string; /** O pacote npm, de onde vem o texto da licença (ou o repo, para o que vai copiado no app). */ pkg: string }[] = [
   { name: "PDF.js", by: "Mozilla", license: "Apache-2.0", use: "abrir pdf nas Notas e ler pdf para o agente", pkg: "pdfjs-dist" },
-  { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "abrir docx nas Notas e ler docx para o agente", pkg: "mammoth" },
+  { name: "Mammoth", by: "Michael Williamson", license: "BSD-2-Clause", use: "ler docx para o agente", pkg: "mammoth" },
+  // O docx nas Notas, em páginas como no Word (T21151, spec #21080). O npm não diz o autor: é o repo eigenpal/docx-editor.
+  { name: "docx-editor", by: "eigenpal", license: "Apache-2.0", use: "abrir docx nas Notas, em páginas como no Word", pkg: "@docx-editor.dev/core" },
   { name: "SheetJS Community Edition", by: "SheetJS LLC", license: "Apache-2.0", use: "abrir xlsx nas Notas, e ler e gerar xlsx com o agente", pkg: "xlsx" },
   // Não vem do npm: o viewer oficial vai no repo, com a licença (`scripts/drawio-viewer.ts`, T7112).
   { name: "draw.io", by: "JGraph Ltd", license: "Apache-2.0", use: "abrir diagramas .drawio nas Notas", pkg: "jgraph/drawio" },

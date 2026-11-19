@@ -54,7 +54,8 @@ describe("trava das janelas (T1378)", () => {
     // Só o socket local da ponte do RPC (#1419): com 'none' o preload lança no `new WebSocket` e a janela não sobe.
     expect(d.get("connect-src")).toEqual(["ws://127.0.0.1:*"]);
     // Nada da internet, nem imagem: a de fora numa nota vem do engine como `data:`, depois do clique (T2984, #3039).
-    expect(d.get("img-src")).toEqual(["'self'", "views:", "data:"]);
+    // `blob:` são as imagens de um docx, montadas dos bytes dele pelo motor (T21151).
+    expect(d.get("img-src")).toEqual(["'self'", "views:", "data:", "blob:"]);
     // Mídia só de `blob:`: o áudio e o vídeo das Notas, montados dos bytes lidos (T19315).
     expect(d.get("media-src")).toEqual(["blob:"]);
     expect(d.get("object-src")).toEqual(["'none'"]);

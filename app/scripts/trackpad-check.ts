@@ -183,7 +183,7 @@ interface Case {
 const CASES: Case[] = [
   { file: "Loja/pedidos-grande.xlsx", area: ".kn-grid", under: ".kn-grid-cell", at: [0.55, 0.6], ready: ".kn-grid .kn-grid-cell" },
   { file: "Loja/precos.csv", area: ".kn-grid", under: ".kn-grid-cell", at: [0.12, 0.5], ready: ".kn-grid .kn-grid-cell" },
-  { file: "Docs/proposta.docx", area: ".kn-file-docx", under: ".kn-file-docx-page > *", at: [0.5, 0.3], ready: ".kn-file-docx-page" },
+  { file: "Docs/proposta.docx", area: ".kn-file-docx-scroll", under: ".docx-page", at: [0.5, 0.3], ready: ".docx-page" },
   { file: "Docs/relatorio.pdf", area: ".kn-file-pdf-scroll", under: ".kn-file-pdf-sheet", at: [0.5, 0.4], ready: ".kn-file-pdf-sheet canvas" },
   { file: "Docs/mapa.svg", area: ".kn-file-image-area", under: ".kn-file-image-img", at: [0.6, 0.55], ready: ".kn-file-image-img" },
   { file: "Docs/lista.txt", area: ".kn-file-text-editor .cm-scroller", under: ".cm-line", at: [0.3, 0.5], axis: "y", ready: ".cm-line" },
