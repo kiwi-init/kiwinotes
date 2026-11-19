@@ -1,0 +1,27 @@
+# Ensaio do T21438 (não entra): o mesmo typecheck no macOS, com o devkit do Hutch, para comparar com o do Linux.
+name: ensaio-typecheck
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  typecheck-macos:
+    name: typecheck (macOS, ensaio)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.hutch
+          key: hutch-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/hutch-pin.json') }}
+      - run: bun run prepare:eb
+      - run: bun run typecheck
