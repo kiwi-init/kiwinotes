@@ -41,6 +41,8 @@ final class Inserter {
     var onChecked: ((PasteVerdict, _ typed: Bool, _ app: String?) -> Void)?
     /// L23: the person corrected the pasted text right after the paste: what Kiwi pasted and how it reads now.
     var onEdited: ((_ pasted: String, _ edited: String, _ app: String?) -> Void)?
+    /// Issue #1: a line for the log about the edit watch, never with text.
+    var onEditLog: ((String) -> Void)?
     private let edits = DispatchQueue(label: "kiwi.paste-edits")
     /// Sobe a cada colagem: a conferência da anterior para, e nada é digitado por cima do ditado novo.
     private var generation = 0
@@ -144,13 +146,25 @@ final class Inserter {
                 }
             }
             DispatchQueue.main.async { self.onChecked?(verdict, typed, app) }
-            if case .confirmed = verdict, !typed, let beforeValue = before.value,
-               let now = Self.focus(app: pid).element.flatMap(Self.snapshot), now.element == before.element,
-               let afterValue = now.value,
-               let region = PastedRegion.locate(before: beforeValue, after: afterValue, pasted: text) {
-                self.watchEdit(region, element: before.element, pid: pid, app: app, current: current)
+            guard case .confirmed = verdict, !typed else { return }
+            // Issue #1: why the watch didn't start, only a reason and counts.
+            guard let beforeValue = before.value else { return self.logEdit("not watched (unreadable_before)", app: app) }
+            guard let now = Self.focus(app: pid).element.flatMap(Self.snapshot) else {
+                return self.logEdit("not watched (focus_left)", app: app)
             }
+            guard now.element == before.element else { return self.logEdit("not watched (element_changed)", app: app) }
+            guard let afterValue = now.value else { return self.logEdit("not watched (unreadable)", app: app) }
+            guard let region = PastedRegion.locate(before: beforeValue, after: afterValue, pasted: text) else {
+                let why = PastedRegion.whyNotLocated(before: beforeValue, after: afterValue, pasted: text)
+                return self.logEdit("not watched (\(why))", app: app)
+            }
+            self.watchEdit(region, element: before.element, pid: pid, app: app, current: current)
         }
+    }
+
+    /// Issue #1: the edit watch in the log, `paste: edit …`, without text: the reason, counts and the bundle id.
+    private func logEdit(_ what: String, app: String?) {
+        DispatchQueue.main.async { self.onEditLog?("paste: edit \(what) · \(app ?? "-")") }
     }
 
     /// L23: reads the field for a short while after the paste. Reports the pasted stretch once the person stopped
@@ -159,31 +173,29 @@ final class Inserter {
     private func watchEdit(_ region: PastedRegion, element: Int, pid: pid_t?, app: String?, current: @escaping () -> Bool) {
         edits.async { [weak self] in
             let start = ProcessInfo.processInfo.systemUptime
-            var last: String?
-            var changedAt = start
-            var reads = 0
-            func report(_ edited: String) {
-                DispatchQueue.main.async { self?.onEdited?(region.pasted, edited, app) }
+            var watcher = PasteEditWatcher(region: region, element: element, start: start)
+            func finish(_ step: PasteEditWatcher.Step) {
+                let after = String(format: "%.1f", ProcessInfo.processInfo.systemUptime - start)
+                let counts = "after \(after) s · reads \(watcher.reads) · edits seen \(watcher.changes)"
+                switch step {
+                case let .report(edited):
+                    self?.logEdit("reported · \(counts)", app: app)
+                    DispatchQueue.main.async { self?.onEdited?(region.pasted, edited, app) }
+                case let .stop(reason):
+                    self?.logEdit("watch ended (\(reason)) · \(counts)", app: app)
+                case .wait: break
+                }
             }
             while ProcessInfo.processInfo.systemUptime - start < PasteEditWatch.window {
                 Thread.sleep(forTimeInterval: PasteEditWatch.interval)
-                guard current() else { return }
-                // The focus left the field, the text around the paste changed, or the stretch was emptied (sent).
-                guard let snap = Self.focus(app: pid).element.flatMap(Self.snapshot), snap.element == element,
-                      let value = snap.value, value.hasPrefix(region.prefix), value.hasSuffix(region.suffix),
-                      value.count > region.prefix.count + region.suffix.count else { break }
-                let edited = region.edited(value)
-                let now = ProcessInfo.processInfo.systemUptime
-                if edited != last {
-                    last = edited
-                    changedAt = now
-                    reads = 1
-                    continue
-                }
-                reads += 1
-                if let edited, now - changedAt >= PasteEditWatch.settle { return report(edited) }
+                let isCurrent = current()
+                let read: PasteEditWatcher.Read = isCurrent
+                    ? Self.focus(app: pid).element.flatMap(Self.snapshot).map { .field(element: $0.element, value: $0.value) } ?? .none
+                    : .none
+                let step = watcher.read(read, at: ProcessInfo.processInfo.systemUptime, current: isCurrent)
+                if step != .wait { return finish(step) }
             }
-            if let last, reads >= 2 { report(last) }
+            finish(watcher.end("window"))
         }
     }
 

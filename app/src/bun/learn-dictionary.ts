@@ -4,7 +4,7 @@
 
 import path from "node:path";
 
-import { type LearnedPair, learnedPair, withLearned } from "../cleanup/learn.ts";
+import { explainPair, type LearnedPair, type PairRefusal, withLearned } from "../cleanup/learn.ts";
 import { toneFor } from "../cleanup/tone.ts";
 import type { DictionaryTerm } from "../store/dictionary.ts";
 import { readJson, writeJson } from "../store/files.ts";
@@ -43,11 +43,26 @@ export async function offerFromEdit(
   store: LearningStore,
   edit: { pasted: string; edited: string; app?: string },
 ): Promise<LearnedPair | null> {
-  if (edit.app && toneFor(edit.app) === "literal") return null;
-  const pair = learnedPair(edit.pasted, edit.edited);
-  if (!pair) return null;
-  if (!withLearned(await store.load(), pair)) return null;
-  if ((await readDeclined(store))[keyOf(pair)]) return null;
+  const offer = await explainOffer(store, edit);
+  return "reason" in offer ? null : offer;
+}
+
+/**
+ * Por que uma correção não vira pergunta (issue #1), para o log, sem texto: `literal` (terminal ou editor de código),
+ * uma regra do `explainPair`, `in_dictionary` (o dicionário já tem a troca, ou está cheio) ou `declined` ("Agora não").
+ */
+export type OfferRefusal = "literal" | PairRefusal | "in_dictionary" | "declined";
+
+/** O `offerFromEdit`, com o motivo quando não há o que perguntar. */
+export async function explainOffer(
+  store: LearningStore,
+  edit: { pasted: string; edited: string; app?: string },
+): Promise<LearnedPair | { reason: OfferRefusal }> {
+  if (edit.app && toneFor(edit.app) === "literal") return { reason: "literal" };
+  const pair = explainPair(edit.pasted, edit.edited);
+  if ("reason" in pair) return pair;
+  if (!withLearned(await store.load(), pair)) return { reason: "in_dictionary" };
+  if ((await readDeclined(store))[keyOf(pair)]) return { reason: "declined" };
   return pair;
 }
 
@@ -74,6 +89,8 @@ export type SendOffer = (offer: { type: "learn.offer"; from: string; to: string 
  */
 export class CorrectionOffers {
   private offered: LearnedPair | null = null;
+  /** Por que a última correção não virou cartão (issue #1): a regra, ou `card` quando o helper não mostrou. */
+  lastRefusal: OfferRefusal | "card" | null = null;
 
   constructor(
     private readonly store: LearningStore,
@@ -83,10 +100,17 @@ export class CorrectionOffers {
 
   /** O `paste.edited`: true quando o cartão foi mostrado. */
   async edited(edit: { pasted: string; edited: string; app?: string }): Promise<boolean> {
-    const pair = await offerFromEdit(this.store, edit);
-    if (!pair) return false;
+    const pair = await explainOffer(this.store, edit);
+    if ("reason" in pair) {
+      this.lastRefusal = pair.reason;
+      return false;
+    }
     const shown = await this.send({ type: "learn.offer", from: pair.from, to: pair.to }).catch(() => undefined);
-    if (!shown?.ok) return false;
+    if (!shown?.ok) {
+      this.lastRefusal = "card";
+      return false;
+    }
+    this.lastRefusal = null;
     this.offered = pair;
     return true;
   }

@@ -372,6 +372,8 @@ export class Session {
   /** A troca de um termo no trecho colado vira a pergunta do cartão (`CorrectionOffers`). */
   private async learn(pasted: string, edited: string, app?: string): Promise<void> {
     if (await this.offers.edited({ pasted, edited, ...(app ? { app } : {}) })) console.log("[learn] offered a correction");
+    // Issue #1: o motivo, nunca o texto.
+    else console.log(`[learn] not offered: ${this.offers.lastRefusal ?? "-"} · ${app ?? "-"}`);
   }
 
   private async learnAnswered(from: string, to: string, answer: LearnAnswer): Promise<void> {

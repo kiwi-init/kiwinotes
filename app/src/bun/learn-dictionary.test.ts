@@ -88,4 +88,30 @@ describe("CorrectionOffers", () => {
     writeFileSync(declinedFile(store), JSON.stringify({ version: 1, candidates: { "cilo→SILO": { count: 1, at: "2026-11-06T00:00:00.000Z" } } }));
     expect(await offers.edited(cilo)).toBe(true);
   });
+
+  // Issue #1: por que não perguntou, para o log, sem o texto.
+  test("lastRefusal diz o motivo da última correção que não virou cartão", async () => {
+    const { offers } = setup();
+    expect(await offers.edited({ ...cilo, app: "com.apple.Terminal" })).toBe(false);
+    expect(offers.lastRefusal).toBe("literal");
+    expect(await offers.edited({ pasted: "mas eu fui", edited: "mais eu fui" })).toBe(false);
+    expect(offers.lastRefusal).toBe("common");
+    expect(await offers.edited(cilo)).toBe(true);
+    expect(offers.lastRefusal).toBeNull();
+    expect(await offers.answered({ from: "Cilo", to: "SILO", answer: "add" })).toBe("learned");
+    expect(await offers.edited(cilo)).toBe(false);
+    expect(offers.lastRefusal).toBe("in_dictionary");
+  });
+
+  test("lastRefusal: recusada antes, ou o cartão não apareceu", async () => {
+    const a = setup();
+    await a.offers.edited(cilo);
+    await a.offers.answered({ from: "Cilo", to: "SILO", answer: "notNow" });
+    expect(await a.offers.edited(cilo)).toBe(false);
+    expect(a.offers.lastRefusal).toBe("declined");
+    // A mesma pasta: outra troca, que ninguém recusou.
+    const b = setup(false);
+    expect(await b.offers.edited({ pasted: "o cluster de cubernetes caiu", edited: "o cluster de Kubernetes caiu" })).toBe(false);
+    expect(b.offers.lastRefusal).toBe("card");
+  });
 });

@@ -128,6 +128,7 @@ final class Helper {
         inserter.onChecked = { [weak self] verdict, typed, app in
             self?.emit("log", ["level": "info", "message": "paste: \(verdict.log)\(typed ? " · typed instead" : "") · \(app ?? "-")"])
         }
+        inserter.onEditLog = { [weak self] line in self?.emit("log", ["level": "info", "message": line]) }
         // L23: a correção logo depois da colagem vai ao app, que decide se vira dicionário. Só o trecho colado.
         inserter.onEdited = { [weak self] pasted, edited, app in
             var fields: [String: Any] = ["pasted": pasted, "edited": edited]
