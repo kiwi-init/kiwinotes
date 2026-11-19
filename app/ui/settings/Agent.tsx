@@ -271,7 +271,7 @@ export function AgentSection() {
 }
 
 /** A tela "Antes de ligar o …" (ADR 0011), dentro da seção, na primeira vez que a pessoa liga. */
-function Consent({ name, onYes, onNo }: { name: string; onYes: () => void; onNo: () => void }) {
+export function Consent({ name, onYes, onNo }: { name: string; onYes: () => void; onNo: () => void }) {
   const t = consentText(name);
   return (
     <div className="kn-agent-consent" role="group" aria-label={t.title}>
