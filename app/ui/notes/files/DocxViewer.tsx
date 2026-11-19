@@ -19,6 +19,7 @@ import { reducedMotion } from "../kiwiWrite.ts";
 import { externalUrl } from "../links.ts";
 import { bytesOf } from "./csv.ts";
 import type { DocxHandle } from "./docxEngine.ts";
+import { barSpot, type DocxBarSpot, DocxFormatBar } from "./DocxFormatBar.tsx";
 import { caretReporter, DocxSaver } from "./docxSaver.ts";
 import { docxBodyParagraphs, sameText } from "./docxText.ts";
 import { type DocxMatch, type DocxParagraph, docxParagraphs, findInDocx } from "./docxFind.ts";
@@ -132,6 +133,18 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
   const [matches, setMatches] = useState<DocxMatch[] | null>(null);
   const [current, setCurrent] = useState(-1);
   const paragraphs = useRef<DocxParagraph[] | null>(null);
+  // A barra de formatação em cima da seleção (T23238), medida no quadro seguinte à mudança.
+  const frame = useRef<HTMLDivElement>(null);
+  const [bar, setBar] = useState<DocxBarSpot | null>(null);
+  const barFrame = useRef(0);
+  const placeBar = useCallback(() => {
+    cancelAnimationFrame(barFrame.current);
+    barFrame.current = requestAnimationFrame(() => {
+      const inDoc = host.current?.contains(document.activeElement) ?? false;
+      setBar(inDoc ? barSpot(engine.current, frame.current) : null);
+    });
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(barFrame.current), []);
 
   // O parágrafo com o cursor da pessoa, para o gato esperar ela sair dele (T21231).
   const owner = useMemo(() => `docx-${Math.random().toString(36).slice(2, 10)}`, []);
@@ -172,6 +185,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
             saver.edited();
           },
           onCaret: (id) => tellCaret.current(id),
+          onSelection: placeBar,
           onLink: (href) => {
             const url = externalUrl(href);
             // O `newWindow: "external"` da janela manda para o navegador padrão.
@@ -199,6 +213,7 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
       engine.current?.destroy();
       engine.current = null;
       paragraphs.current = null;
+      setBar(null);
     };
     // Reabre a cada leitura nova (um `setSource`), mesmo com os bytes de antes: o desfazer da Atividade volta o arquivo
     // de quando abriu, e a tela pode estar com o que o gato tocou.
@@ -296,7 +311,15 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
   const ready = state.kind === "ready";
   return (
     // biome-ignore lint: o ⌘F e o ⌘G do documento; o foco fica nos controles e nas páginas
-    <div className="kn-file-pdf kn-file-docx" aria-busy={ready ? undefined : "true"} onKeyDown={onKeyDown}>
+    <div
+      ref={frame}
+      className="kn-file-pdf kn-file-docx"
+      aria-busy={ready ? undefined : "true"}
+      onKeyDown={onKeyDown}
+      // Sair das páginas (a busca, outro painel) esconde a barra; voltar a mostra de novo.
+      onFocus={placeBar}
+      onBlur={placeBar}
+    >
       {notice || (ready && !saver.canSave) ? (
         <div className="kn-file-text-note" role="status">
           {notice ?? "Só leitura: este Kiwi ainda não grava documentos."}
@@ -348,9 +371,18 @@ export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewer
       </div>
       {/* Com foco (o clique numa página): as setas e o Page Down rolam, e o ⌘F chega aqui. */}
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: a área rolável do documento, como a do pdf no Preview */}
-      <div className="kn-file-docx-scroll docx-editor docx-editor__scroll-container" ref={scroller} tabIndex={0} aria-label="Páginas do documento">
+      <div className="kn-file-docx-scroll docx-editor docx-editor__scroll-container" ref={scroller} tabIndex={0} aria-label="Páginas do documento" onScroll={bar ? placeBar : undefined}>
         <div className="docx-paginated-surface" ref={host} />
       </div>
+      {bar && ready && saver.canSave ? (
+        <DocxFormatBar
+          spot={bar}
+          onFormat={(action) => {
+            engine.current?.format(action);
+            placeBar();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
