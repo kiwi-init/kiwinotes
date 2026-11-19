@@ -49,3 +49,14 @@ export function wheelFactor(deltaY: number, pinch: boolean): number {
   const speed = pinch ? 0.01 : 0.002;
   return Math.exp(-Math.max(-100, Math.min(100, deltaY)) * speed);
 }
+
+/**
+ * A vista que mostra `b` no meio (o achado do ⌘F, T22217): o zoom de agora, se `b` cabe nele e dá para ler; senão o
+ * que cabe, até 100%.
+ */
+export function reveal(v: Viewport, b: Box, width: number, height: number, pad = 80): Viewport {
+  // O maior zoom em que `b` cabe inteiro, sem o teto de 100% do `fit`.
+  const fits = Math.min((width - 2 * pad) / Math.max(b.width, 1), (height - 2 * pad) / Math.max(b.height, 1));
+  const zoom = clampZoom(v.zoom <= fits ? Math.max(v.zoom, Math.min(0.6, fits)) : Math.min(fits, 1));
+  return { zoom, tx: width / 2 - (b.x + b.width / 2) * zoom, ty: height / 2 - (b.y + b.height / 2) * zoom };
+}

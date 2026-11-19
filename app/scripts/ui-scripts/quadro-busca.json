@@ -1,0 +1,40 @@
+{
+  "window": "notes",
+  "steps": [
+    {
+      "invoke": "notes.canvasCreate",
+      "args": {
+        "folder": "Projetos",
+        "title": "Feira",
+        "content": "{\n\t\"nodes\":[\n\t\t{\"id\":\"g1\",\"type\":\"group\",\"x\":-460,\"y\":-260,\"width\":1200,\"height\":640,\"label\":\"Feira de sábado\",\"color\":\"4\"},\n\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"## Lista\\n\\n- [x] Caju\\n- [ ] Pitanga\\n- [ ] Pão de queijo\",\"x\":-420,\"y\":-200,\"width\":320,\"height\":200},\n\t\t{\"id\":\"t2\",\"type\":\"text\",\"text\":\"Levar as **sacolas** de pano\",\"x\":-420,\"y\":80,\"width\":320,\"height\":100,\"color\":\"2\"},\n\t\t{\"id\":\"t3\",\"type\":\"text\",\"text\":\"Devolver as Sacolas da Ana\",\"x\":0,\"y\":-120,\"width\":320,\"height\":100,\"color\":\"6\"},\n\t\t{\"id\":\"t4\",\"type\":\"text\",\"text\":\"Comprar flores\",\"x\":420,\"y\":120,\"width\":260,\"height\":100}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e1\",\"fromNode\":\"t1\",\"fromSide\":\"right\",\"toNode\":\"t3\",\"toSide\":\"left\",\"label\":\"depois\"},\n\t\t{\"id\":\"e2\",\"fromNode\":\"t3\",\"fromSide\":\"right\",\"toNode\":\"t4\",\"toSide\":\"left\"}\n\t],\n\t\"metadata\":{\"version\":\"1.0-1.0\",\"frontmatter\":{}}\n}"
+      },
+      "name": "um quadro inventado, com dois cartões que falam de sacolas"
+    },
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Projetos')", "name": "abre a pasta Projetos" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file'][data-type='canvas']:has-text('Feira')", "name": "abre o quadro" },
+    { "waitFor": ".kn-canvas-node[data-id='t2'] .kn-canvas-md", "name": "o quadro aparece" },
+    { "click": ".kn-canvas-node[data-id='t4']", "name": "o foco no quadro" },
+    { "press": "Meta+f", "name": "o ⌘F abre a barra de busca" },
+    { "waitFor": ".kn-findbar-query", "name": "a barra com o campo" },
+    { "type": "SACOLAS", "name": "procura sem acento e sem maiúscula" },
+    { "expectText": ".kn-findbar-count", "text": "1 de 2", "name": "dois achados, o primeiro na vez" },
+    { "expectCount": ".kn-canvas-node.is-selected[data-id='t3']", "count": 1, "name": "o primeiro na ordem de leitura (o de cima) fica selecionado" },
+    { "expectCount": ".kn-canvas-node.is-found", "count": 2, "name": "os dois achados marcados" },
+    { "press": "Enter", "name": "o Enter vai ao próximo" },
+    { "expectText": ".kn-findbar-count", "text": "2 de 2" },
+    { "expectCount": ".kn-canvas-node.is-selected[data-id='t2']", "count": 1, "name": "o de baixo fica selecionado" },
+    { "wait": 400 },
+    { "screenshot": "01-quadro-busca.png" },
+    { "press": "Shift+Enter", "name": "o Shift+Enter volta" },
+    { "expectText": ".kn-findbar-count", "text": "1 de 2" },
+    { "fill": ".kn-findbar-query", "text": "depois", "name": "o rótulo de uma seta também é achado" },
+    { "expectText": ".kn-findbar-count", "text": "1 de 1" },
+    { "expectCount": ".kn-canvas-edge-label.is-selected", "count": 1, "name": "a seta fica selecionada" },
+    { "fill": ".kn-findbar-query", "text": "manga" },
+    { "expectText": ".kn-findbar-count", "text": "Nada encontrado", "name": "nada achado" },
+    { "press": "Escape", "name": "o Esc fecha a barra" },
+    { "expectCount": ".kn-findbar", "count": 0 }
+  ]
+}

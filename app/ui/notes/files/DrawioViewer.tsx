@@ -12,7 +12,9 @@
 import viewerUrl from "./drawio/viewer-static.min.js?url";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { checkDrawio } from "./drawio.ts";
+import { FindBar, useFindKey } from "../FindBar.tsx";
+import { findIds, stepFind } from "../find.ts";
+import { checkDrawio, drawioPages } from "./drawio.ts";
 import { installDrawioGuard, pointViewerAtPack } from "./drawioGuard.ts";
 import type { FileViewerProps } from "./viewers.ts";
 
@@ -26,10 +28,37 @@ const TOOLBAR_PT = [
   "layers=Camadas",
 ].join("\n");
 
+/** O pouco do mxGraph que o ⌘F usa (T22217): a célula pelo id e onde ela está desenhada. */
+interface DrawioCellState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface DrawioGraph {
+  container?: HTMLElement;
+  model: { getCell(id: string): unknown };
+  view: { getState(cell: unknown): DrawioCellState | null };
+}
+
+interface DrawioViewerInstance {
+  graph?: DrawioGraph;
+  currentPage?: number;
+  selectPage?(index: number): void;
+  destroy?: () => void;
+}
+
+interface DrawioHighlight {
+  highlight(state: unknown): void;
+  destroy(): void;
+}
+
 interface DrawioGlobals {
   mxResources?: { parse(text: string): void };
-  GraphViewer?: new (container: HTMLElement, xml: Element, config: Record<string, unknown>) => { graph?: unknown; destroy?: () => void };
+  GraphViewer?: new (container: HTMLElement, xml: Element, config: Record<string, unknown>) => DrawioViewerInstance;
   mxUtils?: { parseXml(xml: string): Document };
+  mxCellHighlight?: new (graph: DrawioGraph, color: string, strokeWidth: number) => DrawioHighlight;
 }
 
 let loading: Promise<DrawioGlobals> | null = null;
@@ -64,6 +93,71 @@ export function DrawioViewer({ file }: FileViewerProps) {
   // O arquivo é conferido antes do viewer carregar: um que não é diagrama, ou que passa do teto, nem chega nele.
   const check = useMemo(() => checkDrawio(text), [text]);
   const [state, setState] = useState<State>({ kind: "loading" });
+  const wrap = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<{ viewer: DrawioViewerInstance; dx: DrawioGlobals } | null>(null);
+  const mark = useRef<DrawioHighlight | null>(null);
+
+  // ---------------------------------------------------------------- o ⌘F (T22217)
+
+  // Os rótulos de todas as páginas, na ordem delas: o id de cada um é `página:célula`.
+  const labels = useMemo(
+    () => (check.ok ? (drawioPages(text) ?? []) : []).flatMap((p, page) => p.labels.map((l) => ({ id: `${page}:${l.id}`, text: l.text }))),
+    [text, check],
+  );
+  const [find, setFind] = useState<{ query: string; index: number } | null>(null);
+  const findInput = useRef<HTMLInputElement>(null);
+  const found = useMemo(() => (find ? findIds(labels, find.query) : []), [labels, find?.query]);
+
+  const unmark = () => {
+    mark.current?.destroy();
+    mark.current = null;
+  };
+  // O achado da vez: a página dele na frente, a célula com o contorno verde, e o diagrama rolado até ela.
+  const goToFound = (index: number) => {
+    setFind((f) => (f ? { ...f, index } : f));
+    unmark();
+    const id = found[index];
+    const v = viewerRef.current;
+    if (id === undefined || !v) return;
+    const cut = id.indexOf(":");
+    const page = Number(id.slice(0, cut));
+    try {
+      if (v.viewer.currentPage !== page) v.viewer.selectPage?.(page);
+      const graph = v.viewer.graph;
+      const cell = graph?.model.getCell(id.slice(cut + 1));
+      const shown = cell ? graph!.view.getState(cell) : null;
+      if (!graph || !shown || !v.dx.mxCellHighlight) return;
+      mark.current = new v.dx.mxCellHighlight(graph, "#2ea05a", 4);
+      mark.current.highlight(shown);
+      // A área rola, o papel do diagrama não (overflow hidden): o meio da célula vai para o meio da área.
+      const area = box.current;
+      const paper = graph.container?.getBoundingClientRect();
+      if (area && paper) {
+        const a = area.getBoundingClientRect();
+        area.scrollBy({
+          left: paper.left + shown.x + shown.width / 2 - (a.left + a.width / 2),
+          top: paper.top + shown.y + shown.height / 2 - (a.top + a.height / 2),
+        });
+      }
+    } catch {
+      // Uma célula numa camada escondida, ou que o viewer não desenhou: a contagem anda, sem o contorno.
+    }
+  };
+  useEffect(() => {
+    if (find && found.length && (find.index < 0 || find.index >= found.length)) goToFound(0);
+    if (find && !found.length) unmark();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found]);
+  const openFind = () => {
+    if (state.kind !== "ready") return;
+    if (find) findInput.current?.select();
+    else setFind({ query: "", index: -1 });
+  };
+  const closeFind = () => {
+    unmark();
+    setFind(null);
+  };
+  useFindKey(wrap, openFind);
 
   useEffect(() => {
     let alive = true;
@@ -74,7 +168,7 @@ export function DrawioViewer({ file }: FileViewerProps) {
       return;
     }
     setState({ kind: "loading" });
-    let viewer: { destroy?: () => void } | null = null;
+    let viewer: DrawioViewerInstance | null = null;
     const container = document.createElement("div");
     container.className = "kn-file-drawio-graph";
     loadViewer().then(
@@ -94,6 +188,7 @@ export function DrawioViewer({ file }: FileViewerProps) {
             "auto-fit": true,
             highlight: "#2ea05a",
           });
+          viewerRef.current = { viewer, dx };
           setState({ kind: "ready" });
         } catch {
           host.replaceChildren();
@@ -104,6 +199,10 @@ export function DrawioViewer({ file }: FileViewerProps) {
     );
     return () => {
       alive = false;
+      mark.current?.destroy();
+      mark.current = null;
+      viewerRef.current = null;
+      setFind(null);
       viewer?.destroy?.();
       host.replaceChildren();
     };
@@ -111,7 +210,21 @@ export function DrawioViewer({ file }: FileViewerProps) {
 
   const failed = state.kind === "tooLarge" || state.kind === "error";
   return (
-    <div className="kn-file-drawio" data-state={state.kind}>
+    <div className="kn-file-drawio" data-state={state.kind} ref={wrap}>
+      {find && state.kind === "ready" ? (
+        <div className="kn-file-drawio-find">
+          <FindBar
+            label="Procurar no diagrama"
+            query={find.query}
+            index={find.index}
+            total={found.length}
+            inputRef={findInput}
+            onQuery={(query) => setFind({ query, index: -1 })}
+            onStep={(dir) => goToFound(stepFind(find.index, found.length, dir))}
+            onClose={closeFind}
+          />
+        </div>
+      ) : null}
       {failed ? (
         <div className="kn-file-notice" role="status">
           <p>{state.kind === "tooLarge" ? "Este diagrama é grande demais para abrir aqui. Abra no app padrão." : "Não deu para abrir este diagrama. Abra no app padrão."}</p>

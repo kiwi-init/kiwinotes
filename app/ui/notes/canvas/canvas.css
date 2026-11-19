@@ -172,6 +172,20 @@
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* os achados do ⌘F (T22217): todos marcados de leve; o da vez fica selecionado */
+.kn-canvas-node.is-found:not(.is-selected) {
+  box-shadow: var(--shadow-1), 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.kn-canvas-head .kn-findbar {
+  pointer-events: auto;
+  align-self: center;
+  padding: 4px 6px;
+  border-radius: var(--r-card, 12px);
+  background: var(--surface);
+  box-shadow: var(--shadow-2, var(--shadow-1));
+}
+
 .kn-canvas-group-label {
   position: absolute;
   left: 0;
