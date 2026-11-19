@@ -136,12 +136,14 @@ describe("DocxSaver", () => {
 
   test("a gravação da pessoa que perde para a do gato enquanto ele toca: não reabre, e grava de novo sobre a versão dele", async () => {
     const stale = { base64: b64("O que o agente gravou"), version: "v-agente" };
-    const { saver, calls, edit, notices, reloads } = setup({ stale });
+    const opts: { stale?: typeof stale } = { stale };
+    const { saver, calls, edit, notices, reloads } = setup(opts);
     edit("A Ana digitando");
     const going = saver.flush();
     expect(saver.unsaved).toBe(true);
     saver.hold();
     expect(await going).toBe(false);
+    delete opts.stale;
     expect(reloads).toEqual([]);
     expect(notices).toEqual([]);
     expect(saver.pending).toBe(true);
@@ -149,6 +151,23 @@ describe("DocxSaver", () => {
     saver.release();
     await tick(60);
     expect(calls.map((c) => c.base)).toEqual(["v1", "v-agente"]);
+  });
+
+  test("a recusa que chega depois de a tela adotar a versão do gato: grava de novo, sem reabrir", async () => {
+    const stale = { base64: b64("O que o agente gravou"), version: "v-agente" };
+    const opts: { stale?: typeof stale } = { stale };
+    const { saver, calls, edit, notices, reloads } = setup(opts);
+    edit("A Ana digitando");
+    const going = saver.flush();
+    saver.hold();
+    saver.adopt("v-agente");
+    saver.release();
+    expect(await going).toBe(false);
+    delete opts.stale;
+    await tick(60);
+    expect(reloads).toEqual([]);
+    expect(calls.map((c) => c.base)).toEqual(["v1", "v-agente"]);
+    expect(notices).toEqual([]);
   });
 
   test("sem saveBytes, nada grava", async () => {

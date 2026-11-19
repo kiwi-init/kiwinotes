@@ -149,6 +149,7 @@ export class DocxSaver {
   private async write(b64: string): Promise<boolean> {
     try {
       this.written = b64;
+      const base = this.disk;
       const r = await this.o.files.saveBytes!(this.o.path, b64, this.disk);
       if (r.saved) {
         this.disk = r.version;
@@ -156,8 +157,10 @@ export class DocxSaver {
       }
       // Foi o gato, que está tocando a versão dele na tela agora (T21231): a edição da pessoa já está na tela por cima
       // dela, e grava de novo no `release`, sobre a versão dele. Se a tela não bater, o documento abre do disco.
-      if (this.held) {
+      // Ou o gato já tocou e a tela adotou a versão dele (a recusa chegou depois): grava de novo, por cima dela.
+      if (this.held || ("version" in r.current && r.current.version === this.disk && base !== this.disk)) {
         this.dirty = true;
+        if (!this.held) this.edited();
         return false;
       }
       // Mudou no disco desde a nossa versão: vale o arquivo de lá, como numa nota com conflito.
