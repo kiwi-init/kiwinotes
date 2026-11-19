@@ -1,0 +1,18 @@
+loja: Loja Exemplo
+nota: caixa quindimrosa
+itens:
+  - produto: Parafuso sextavado
+    secao: Ferragens
+    quantidade: 120
+  - produto: Martelo de unha
+    secao: Ferramentas
+    quantidade: 14
+  - produto: Fita isolante
+    secao: Elétrica
+    quantidade: 48
+  - produto: Tinta acrílica branca
+    secao: Pintura
+    quantidade: 9
+  - produto: Lâmpada de LED
+    secao: Elétrica
+    quantidade: 60
