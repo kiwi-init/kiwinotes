@@ -33,6 +33,16 @@ describe("a ferramenta única (T14563)", () => {
     }
   });
 
+  test("a ação padrão que o alvo levaria a outra leva o como: ler um .canvas é o notes_read, não o files_read (T22217)", () => {
+    const quadro = kiwiCallFor("notes_read", { path: "Loja/Feira.canvas" });
+    expect(quadro).toEqual({ fazer: "ler", alvo: "Loja/Feira.canvas", opcoes: { como: "nota" } });
+    expect(resolveKiwiCall(quadro)).toMatchObject({ tool: "notes_read", args: { path: "Loja/Feira.canvas" } });
+    // A nota .md já cai no notes_read: sem o como.
+    const nota = kiwiCallFor("notes_read", { path: "Loja/Plano.md" });
+    expect(nota).toEqual({ fazer: "ler", alvo: "Loja/Plano.md" });
+    expect(resolveKiwiCall(nota)).toMatchObject({ tool: "notes_read", args: { path: "Loja/Plano.md" } });
+  });
+
   test("criar: o alvo é Pasta/Título; um título com barra fica título, nunca vira pasta", () => {
     expect(kiwiCallFor("notes_create", { folder: "Projetos", title: "Ideias", text: "x" })).toEqual({ fazer: "escrever", alvo: "Projetos/Ideias", texto: "x", opcoes: { como: "criar" } });
     expect(resolveKiwiCall({ fazer: "escrever", alvo: "Projetos/Ideias.md", opcoes: { como: "criar" } }).args).toEqual({ folder: "Projetos", title: "Ideias" });
