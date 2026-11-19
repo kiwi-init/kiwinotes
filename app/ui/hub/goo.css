@@ -16,10 +16,11 @@
   --goo-tabs-h: 32px;
 }
 
-/* O tempo vale para a gota e para os botões (irmãos dela na barra). A ida tem 460 ms (o spec pede 350–500), a volta
-   400 ms; o relógio é linear porque as curvas de cada quadro estão no `goo-shape.ts`. */
+/* O tempo vale para a gota e para os botões (irmãos dela na barra). A ida tem 500 ms (o spec pede 350–500; eram 460
+   até a chegada ganhar quadros, #231), a volta 400 ms; o relógio é linear porque as curvas de cada quadro estão no
+   `goo-shape.ts`. */
 .kn-hub-top {
-  --goo-ms: 460ms;
+  --goo-ms: 500ms;
   --goo-ms-out: 400ms;
 }
 
@@ -56,6 +57,23 @@
 }
 .kn-goo-hl-cover {
   fill: var(--float);
+}
+/* A cabeça de cada lado (#231): uma camada própria em volta do ponto da soltura, que o `transform` (uma animação WAAPI
+   do `Goo.tsx`) leva pelo caminho no compositor. O SVG dentro dela fica na origem da barra (o `Goo.tsx` põe a caixa e o
+   deslocamento); o `will-change` deixa a camada pronta antes do clique, sem criá-la no 1º quadro. */
+.kn-goo-run {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+.kn-goo-run-draw {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
 }
 /* O relógio de cada lado: invisível; a animação dele dá o progresso do quadro, e o fim dela anda a fase. */
 .kn-goo-drop {

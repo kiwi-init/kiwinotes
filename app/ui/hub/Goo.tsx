@@ -7,6 +7,14 @@
 // progresso dela, e o `animationend` anda a fase (`goo.ts`). Parar a animação (`pause`, `currentTime`) para a gota no
 // quadro. Com "reduzir movimento", não há gota: os botões só aparecem e somem com um fade.
 //
+// O compositor (#231, medida em #23816): o WKWebView dá o rAF a ~60 Hz mesmo na tela de 120 Hz, e na corrida a cabeça
+// andava ~35 px por quadro. A cabeça mora numa camada própria por lado (`.kn-goo-run`), que anda pelo ponto do
+// `gooHeadAnchor` numa animação WAAPI de `transform`: o Core Animation a toca na taxa da tela, fora da thread principal,
+// e ela segue lisa mesmo com a página presa. O caminho dela é desenhado relativo a esse ponto, no rAF, e só muda de
+// forma (a cauda, a mola), não de lugar. A animação segue o relógio: começa junto e para junto (o `pause` dos roteiros).
+// Um quadro longo (a seção nova montando, ~50 ms) fora da corrida segura o relógio pelo tempo perdido: a gota não pula
+// a barriga (era de 0% a 12% num quadro só). Na corrida não segura: o compositor não parou.
+//
 // Os botões na volta (T18949): a seção tira os botões da barra de uma vez (o React desmonta), e a gota que voltava sem
 // eles era o "rastro preto" no escuro. Uma cópia dos últimos botões (`.kn-goo-ghost`) fica na camada e anda com a
 // cabeça da gota (o mesmo centro e a mesma escala, quadro a quadro), esmaecendo conforme a cabeça encolhe: um objeto
@@ -17,10 +25,16 @@ import "./goo.css";
 import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
 import { GOO_FALLBACK_MS, type GooPhase, type GooRect, type GooSide, gooOnAnimationEnd, gooOnButtons, gooRect, gooVars, gooWatchDiff } from "./goo.ts";
-import { GOO_BEATS, type GooParts, gooDropParts, roundRect } from "./goo-shape.ts";
+import { GOO_BEATS, type GooGeom, type GooParts, gooDropParts, gooHeadAnchor, roundRect } from "./goo-shape.ts";
 
 const SIDES: GooSide[] = ["start", "end"];
-const PARTS: (keyof GooParts)[] = ["edge", "speck", "head"];
+/** As partes da camada de baixo; a cabeça vai na camada da corrida. */
+const PARTS = ["edge", "speck"] as const;
+/** Um quadro mais longo que isto (dois quadros de 60 Hz) segura o relógio fora da corrida. */
+const HOLD_MS = 34;
+const FRAME_MS = 1000 / 60;
+/** Quantos pontos do caminho da cabeça a animação do compositor leva (o erro entre eles fica abaixo de 0,5 px). */
+const RUN_KEYS = 48;
 /** O fade dos botões com "reduzir movimento" (o `--fast`, com folga). */
 const REDUCED_MS = 220;
 
@@ -58,21 +72,27 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v);
     };
     const radius = () => parseFloat(getComputedStyle(el).getPropertyValue("--r-ctl")) || 10;
+    // O raio, lido na medida e não a cada quadro.
+    let rad = radius();
     const rects: { tabs: GooRect | null } & Partial<Record<GooSide, GooRect>> = { tabs: null };
     const base = el.querySelector<SVGPathElement>(".kn-goo-base");
     const measure = () => {
+      rad = radius();
       const t = gooRect(tabs, bar);
       if (t) {
         rects.tabs = t;
         write(gooVars("tabs", t));
         // A pílula embaixo da pílula: o anel dela soma com o do `--shadow-float`, como na gota (o tom da main, #19034).
-        base?.setAttribute("d", roundRect(t.x + t.w / 2, t.y + t.h / 2, t.w, t.h, radius()));
+        base?.setAttribute("d", roundRect(t.x + t.w / 2, t.y + t.h / 2, t.w, t.h, rad));
       }
       for (const side of SIDES) {
         const slot = slots[side];
         // Sem botões, o lado guarda o último retângulo: é dali que a gota volta.
         const r = slot && contentRect(slot, bar);
         if (r) (rects[side] = r, write(gooVars(side, r)));
+        place(side);
+        // A barra mudou no meio da corrida: a animação refeita para os lugares novos, no mesmo tempo do relógio.
+        if (runs[side]) startRun(side);
       }
     };
 
@@ -81,26 +101,127 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       SIDES.map((side) => [side, {
         parts: Object.fromEntries(PARTS.map((p) => [p, el.querySelector<SVGPathElement>(`.kn-goo-path[data-side="${side}"][data-part="${p}"]`)])),
         whole: Array.from(el.querySelectorAll<SVGPathElement>(`.kn-goo-whole[data-side="${side}"]`)),
+        head: el.querySelector<SVGPathElement>(`.kn-goo-path[data-side="${side}"][data-part="head"]`),
+        headWhole: Array.from(el.querySelectorAll<SVGPathElement>(`.kn-goo-whole-head[data-side="${side}"]`)),
+        run: el.querySelector<HTMLElement>(`.kn-goo-run[data-side="${side}"]`),
+        at: el.querySelector<SVGGElement>(`.kn-goo-run[data-side="${side}"] .kn-goo-run-at`),
+        svg: el.querySelector<SVGSVGElement>(`.kn-goo-run[data-side="${side}"] svg`),
       }]),
-    ) as Record<GooSide, { parts: Record<keyof GooParts, SVGPathElement | null>; whole: SVGPathElement[] }>;
+    ) as Record<GooSide, {
+      parts: Record<(typeof PARTS)[number], SVGPathElement | null>; whole: SVGPathElement[];
+      head: SVGPathElement | null; headWhole: SVGPathElement[];
+      run: HTMLElement | null; at: SVGGElement | null; svg: SVGSVGElement | null;
+    }>;
     const ghosts: Partial<Record<GooSide, HTMLElement>> = {};
+    const clockOf = (side: GooSide) =>
+      el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`)?.getAnimations()[0] ?? null;
+    const geom = (side: GooSide): GooGeom | null => {
+      const target = rects[side];
+      return rects.tabs && target ? { side, tabs: rects.tabs, target, radius: rad, back: phases.current[side] === "leaving" } : null;
+    };
+
+    // A camada da corrida: a caixa dela fica em volta do ponto da soltura (o `gooHeadAnchor` em 0), onde a cabeça está
+    // sempre, relativa ao ponto; o `transform` a leva até o ponto do quadro.
+    const origin: Partial<Record<GooSide, { x: number; y: number }>> = {};
+    const runs: Partial<Record<GooSide, Animation>> = {};
+    const offset = (side: GooSide, g: GooGeom, t: number) => {
+      const o = origin[side]!;
+      const a = gooHeadAnchor(t, g);
+      return { x: a.x - o.x, y: a.y - o.y };
+    };
+    const place = (side: GooSide) => {
+      const g = geom(side);
+      const { run, svg } = paths[side];
+      if (!g || !run || !svg) return;
+      const o = gooHeadAnchor(0, g);
+      origin[side] = o;
+      // Metade da caixa: a metade dos botões (a mola passa ~12% dela) e a gota presa à pílula, com folga para o anel.
+      const hw = Math.ceil(Math.max(g.target.w * 0.62, g.tabs.h * 2) + 8);
+      const hh = Math.ceil(Math.max(g.target.h, g.tabs.h) + 8);
+      Object.assign(run.style, { left: `${o.x - hw}px`, top: `${o.y - hh}px`, width: `${hw * 2}px`, height: `${hh * 2}px` });
+      // O SVG fica na origem da barra (as coordenadas do `goo-shape.ts`), visto pela caixa.
+      Object.assign(svg.style, { left: `${hw - o.x}px`, top: `${hh - o.y}px` });
+    };
+    /** A animação da corrida de um lado: o `transform` do ponto, quadro a quadro do relógio. */
+    const startRun = (side: GooSide) => {
+      stopRun(side);
+      const g = geom(side);
+      const clock = clockOf(side);
+      const run = paths[side].run;
+      if (!g || !clock || !run || !origin[side]) return;
+      const back = phases.current[side] === "leaving";
+      const keys = Array.from({ length: RUN_KEYS + 1 }, (_, i) => {
+        const p = i / RUN_KEYS;
+        const d = offset(side, g, back ? 1 - p : p);
+        return { offset: p, transform: `translate(${d.x}px, ${d.y}px)` };
+      });
+      const a = run.animate(keys, { duration: Number(clock.effect?.getComputedTiming().duration ?? 0), easing: "linear", fill: "both" });
+      a.pause();
+      runs[side] = a;
+      syncRun(side);
+    };
+    const stopRun = (side: GooSide) => {
+      runs[side]?.cancel();
+      delete runs[side];
+    };
+    /** A corrida no tempo do relógio: o mesmo início, ou parada no mesmo ponto quando o relógio para. */
+    const syncRun = (side: GooSide) => {
+      const a = runs[side];
+      const clock = clockOf(side);
+      if (!a || !clock) return;
+      if (clock.playState === "running" && clock.startTime !== null) {
+        if (a.playState !== "running") a.play();
+        if (a.startTime !== clock.startTime) a.startTime = clock.startTime;
+      } else {
+        if (a.playState !== "paused") a.pause();
+        if (a.currentTime !== clock.currentTime) a.currentTime = clock.currentTime;
+      }
+    };
+    /** Um quadro longo fora da corrida: o relógio (e os botões, que andam com ele) recua o tempo perdido. */
+    const hold = (side: GooSide, debt: number) => {
+      const t = progress(side);
+      if (t > GOO_BEATS.pinch && t < GOO_BEATS.arrive) return;
+      const slot = slots[side];
+      const anims = [clockOf(side), ...Array.from(slot?.children ?? []).flatMap((c) => c.getAnimations())];
+      for (const a of anims) {
+        if (a && a.playState === "running" && a.startTime !== null) a.startTime = Number(a.startTime) + debt;
+      }
+    };
+    /** O `t` do lado agora (0 a 1 na ida; na volta, de 1 a 0). */
+    const progress = (side: GooSide) => {
+      const ph = phases.current[side];
+      const p = Number(clockOf(side)?.effect?.getComputedTiming().progress ?? 0);
+      return ph === "entering" ? p : ph === "leaving" ? 1 - p : ph === "shown" ? 1 : 0;
+    };
+
     const draw = (side: GooSide) => {
       const ph = phases.current[side];
       const target = rects[side];
+      const g = geom(side);
       let parts: GooParts = { head: "", edge: "", speck: "" };
       let t = 1;
-      if ((ph === "entering" || ph === "leaving") && rects.tabs && target) {
-        const clock = el.querySelector<HTMLElement>(`.kn-goo-drop[data-side="${side}"]`);
-        const timing = clock?.getAnimations()[0]?.effect?.getComputedTiming();
-        const p = Number(timing?.progress ?? 0);
-        t = ph === "entering" ? p : 1 - p;
-        parts = gooDropParts(t, { side, tabs: rects.tabs, target, radius: radius(), back: ph === "leaving" });
+      if ((ph === "entering" || ph === "leaving") && g) {
+        t = progress(side);
+        parts = gooDropParts(t, g);
+      } else if (ph === "shown" && g) {
+        parts = gooDropParts(1, g);
       }
       for (const k of PARTS) paths[side].parts[k]?.setAttribute("d", parts[k]);
-      const all = parts.edge + parts.speck + parts.head;
-      for (const w of paths[side].whole) w.setAttribute("d", all);
-      const g = ghosts[side];
-      if (g && target) followHead(g, parts.head ? paths[side].parts.head : null, target, t);
+      const low = parts.edge + parts.speck;
+      for (const w of paths[side].whole) w.setAttribute("d", low);
+      // A cabeça, relativa ao ponto deste quadro; a camada já está nele (a animação, ou o lugar parado).
+      const { head, headWhole, at, run } = paths[side];
+      head?.setAttribute("d", parts.head);
+      for (const w of headWhole) w.setAttribute("d", parts.head);
+      if (g && origin[side] && at && run) {
+        const d = offset(side, g, t);
+        at.setAttribute("transform", `translate(${-d.x} ${-d.y})`);
+        // Com a animação, ela leva a camada; sem ela (parada), o lugar fica no estilo.
+        if (runs[side]) syncRun(side);
+        else run.style.transform = `translate(${d.x}px, ${d.y}px)`;
+      }
+      const gh = ghosts[side];
+      if (gh && target) followHead(gh, parts.head ? head : null, target, t);
     };
     // A cópia vai no centro da cabeça, com uma escala só (o texto não deforma), por dentro dela. Some enquanto a gota
     // desamassa, da mola até a lágrima (de `t` 1 até a chegada, `GOO_BEATS.arrive`): na corrida só há a gota, e a cópia
@@ -117,10 +238,17 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       g.style.opacity = String(fade);
     };
     let frame = 0;
-    const tick = () => {
+    let lastTick = 0;
+    const tick = (now: number) => {
       frame = 0;
+      const gap = lastTick ? now - lastTick : 0;
+      lastTick = now;
+      if (gap > HOLD_MS) {
+        for (const side of SIDES) if (runs[side]) hold(side, gap - FRAME_MS);
+      }
       for (const side of SIDES) draw(side);
       if (SIDES.some((s) => phases.current[s] === "entering" || phases.current[s] === "leaving")) frame = requestAnimationFrame(tick);
+      else lastTick = 0;
     };
     const loop = () => {
       if (!frame) frame = requestAnimationFrame(tick);
@@ -162,6 +290,8 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       if (drop) drop.dataset.phase = phase;
       const slot = slots[side];
       if (slot) slot.dataset.goo = phase;
+      if ((phase === "entering" || phase === "leaving") && !reducedMotion()) startRun(side);
+      else stopRun(side);
       draw(side);
       loop();
       clearTimeout(timers.current[side]);
@@ -216,7 +346,7 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
       ro.disconnect();
       for (const mo of mos) mo?.disconnect();
       el.removeEventListener("animationend", onEnd);
-      for (const side of SIDES) (clearTimeout(timers.current[side]), dropGhost(side));
+      for (const side of SIDES) (clearTimeout(timers.current[side]), dropGhost(side), stopRun(side));
     };
   }, [bar, start, end]);
 
@@ -231,6 +361,11 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
           {SIDES.map((side) => (
             <clipPath key={side} id={`${id}-clip-${side}`}>
               <path className="kn-goo-whole" data-side={side} />
+            </clipPath>
+          ))}
+          {SIDES.map((side) => (
+            <clipPath key={side} id={`${id}-clip-head-${side}`}>
+              <path className="kn-goo-whole-head" data-side={side} />
             </clipPath>
           ))}
         </defs>
@@ -249,6 +384,20 @@ export function GooLayer({ bar, start, end }: { bar: HTMLElement | null; start: 
           </g>
         ))}
       </svg>
+      {/* A cabeça de cada lado, na camada da corrida: o mesmo desenho, com o realce cortado por ela. */}
+      {SIDES.map((side) => (
+        <div key={side} className="kn-goo-run" data-side={side}>
+          <svg className="kn-goo-run-draw" focusable="false">
+            <g className="kn-goo-run-at">
+              <path className="kn-goo-path" data-side={side} data-part="head" />
+              <g className="kn-goo-highlight" clipPath={`url(#${id}-clip-head-${side})`}>
+                <path className="kn-goo-whole-head kn-goo-hl-band" data-side={side} />
+                <path className="kn-goo-whole-head kn-goo-hl-cover" data-side={side} transform="translate(0 1)" />
+              </g>
+            </g>
+          </svg>
+        </div>
+      ))}
       {/* Os relógios da ida e da volta, um por lado: invisíveis, só a animação CSS. */}
       {SIDES.map((side) => (
         <span key={side} className="kn-goo-drop" data-side={side} data-phase="hidden" />

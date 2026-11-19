@@ -8,6 +8,9 @@
 //    entre quadros, do clique até 1 s depois, fica abaixo dos 100 ms do slowFrames (spec #12918), e o slowFrames do
 //    app (`diagnostics.slowFrame`) não acusa nada. Uma rodada lenta se repete uma vez (a máquina é dividida). No CI
 //    (`CI=1`), o tempo só vai para o log: a VM não tem um relógio de quadros confiável; o resto barra igual.
+// 3. A seção lenta (#231): um quadro de 80 ms de propósito logo depois de a gota começar, como a seção nova montando. O
+//    relógio, lido depois de cada desenho, não anda mais que 8% entre dois desenhos fora da corrida: a gota segura o
+//    tempo perdido em vez de pular (na main de antes, pulava de 0% para 12%, e com 80 ms, mais de 20%).
 // E "reduzir movimento", o do Mac (`prefers-reduced-motion`) e o do Kiwi (`data-motion="reduced"`): sem gota, os
 // botões só fazem o fade (OUT/reduzir-mac, OUT/reduzir-kiwi).
 //
@@ -34,6 +37,7 @@ import { webkit, type Browser, type Page } from "playwright-core";
 
 import { SLOW_FRAME_MS, WATCH_MS } from "../ui/src/slowFrames.ts";
 import { request } from "./cli.ts";
+import { GOO_BEATS } from "../ui/hub/goo-shape.ts";
 import { dripProblem, dropShape, type DropShape } from "./goo-profile.ts";
 import { openWindow, settle, type UiContext } from "./ui-page.ts";
 
@@ -481,6 +485,66 @@ async function realtime(p: Page, section: string) {
   });
 }
 
+/** Fora da corrida, o relógio não anda mais que isto entre dois desenhos (dois quadros de 60 Hz na ida são 6,7%). */
+const SLOW_STEP = 0.08;
+/** O quadro preso de propósito na seção lenta. */
+const SLOW_BLOCK_MS = 80;
+
+/**
+ * A troca com um quadro de `SLOW_BLOCK_MS` no 2º quadro da gota. Devolve, a cada desenho da cabeça (um
+ * MutationObserver no `d` dela, que roda logo depois do quadro da gota), o tempo e o progresso do relógio.
+ */
+async function slowSection(p: Page, section: string) {
+  await p.evaluate((block) => {
+    const w = window as unknown as { __slow: { at: number; p: number; phase: string }[]; __slowStop: () => void };
+    const goo = document.querySelector<HTMLElement>(".kn-goo")!;
+    const head = document.querySelector('.kn-goo-path[data-side="end"][data-part="head"]')!;
+    const clock = () => document.querySelector('.kn-goo-drop[data-side="end"]')!.getAnimations()[0];
+    w.__slow = [];
+    const draws = new MutationObserver(() => {
+      const a = clock();
+      w.__slow.push({ at: performance.now(), p: Number(a?.effect?.getComputedTiming().progress ?? -1), phase: goo.dataset.end ?? "" });
+    });
+    draws.observe(head, { attributes: true, attributeFilter: ["d"] });
+    let armed = true;
+    const start = new MutationObserver(() => {
+      if (!armed || (goo.dataset.end !== "entering" && goo.dataset.end !== "leaving")) return;
+      armed = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const until = performance.now() + block;
+        while (performance.now() < until);
+      }));
+    });
+    start.observe(goo, { attributes: true, attributeFilter: ["data-end"] });
+    w.__slowStop = () => (draws.disconnect(), start.disconnect());
+  }, SLOW_BLOCK_MS);
+  await p.locator(`.kn-tab[data-section="${section}"]`).click();
+  await waitPhase(p, section === "notes" ? "shown" : "hidden");
+  return p.evaluate(() => {
+    const w = window as unknown as { __slow: { at: number; p: number; phase: string }[]; __slowStop: () => void };
+    w.__slowStop();
+    return w.__slow;
+  });
+}
+
+/** O maior passo do relógio entre dois desenhos, fora da corrida (lá o compositor anda sozinho), e o maior intervalo. */
+function slowSteps(draws: { at: number; p: number; phase: string }[]) {
+  const moving = draws.filter((d) => (d.phase === "entering" || d.phase === "leaving") && d.p >= 0);
+  let step = 0;
+  let gap = 0;
+  for (let i = 1; i < moving.length; i++) {
+    const a = moving[i - 1]!;
+    const b = moving[i]!;
+    if (b.phase !== a.phase) continue;
+    gap = Math.max(gap, b.at - a.at);
+    const t = (x: typeof a) => (x.phase === "entering" ? x.p : 1 - x.p);
+    const inRun = (x: number) => x > GOO_BEATS.pinch && x < GOO_BEATS.arrive;
+    if (inRun(t(a)) || inRun(t(b))) continue;
+    step = Math.max(step, Math.abs(b.p - a.p));
+  }
+  return { step, gap };
+}
+
 /** "Reduzir movimento": sem gota, os botões só fazem o fade; três quadros dele. */
 async function reduced(p: Page, dir: string) {
   mkdirSync(dir, { recursive: true });
@@ -637,7 +701,26 @@ try {
     }
   }
 
-  // 3. Reduzir movimento: o do Mac e o do Kiwi.
+  // 3. A seção lenta: a gota segura o tempo do quadro preso, sem pular.
+  const sl = await openWindow(browser, ctx, { ...base, scale: 1, theme: "light", motion: true });
+  try {
+    await ready(sl.page);
+    const res: Record<string, { step: number; gap: number }> = {};
+    for (const [dir, section] of [["ida", "notes"], ["volta", "settings"]] as const) {
+      res[dir] = slowSteps(await slowSection(sl.page, section));
+      await sl.page.waitForTimeout(200);
+    }
+    metrics["secao-lenta"] = res;
+    console.log(`seção lenta: ${JSON.stringify(res)}`);
+    for (const [dir, r] of Object.entries(res)) {
+      assert.ok(r.gap >= SLOW_BLOCK_MS * 0.9, `a ${dir} não pegou o quadro preso de ${SLOW_BLOCK_MS} ms (maior intervalo ${r.gap.toFixed(0)} ms)`);
+      assert.ok(r.step <= SLOW_STEP, `a gota pulou na ${dir}: o relógio andou ${(r.step * 100).toFixed(1)}% num desenho (máximo ${SLOW_STEP * 100}%) com um quadro de ${SLOW_BLOCK_MS} ms`);
+    }
+  } finally {
+    await sl.close();
+  }
+
+  // 4. Reduzir movimento: o do Mac e o do Kiwi.
   const mac = await openWindow(browser, ctx, { ...base, scale: 2, theme: "light", motion: false });
   try {
     await ready(mac.page);
@@ -660,6 +743,7 @@ try {
     const t = metrics[`${theme}.tempoReal`] as { worst: number };
     console.log(`ok ${theme}: ida e volta quadro a quadro, com pescoço, gota solta e sem rastro; pior quadro em tempo real ${t.worst.toFixed(1)} ms (meta ${SLOW_FRAME_MS})`);
   }
+  console.log(`ok seção lenta: a gota segura o quadro preso de ${SLOW_BLOCK_MS} ms, sem pular`);
   console.log("ok reduzir movimento (Mac e Kiwi): sem gota; os botões entram com o fade, que o base.css corta para 0,01 ms");
   console.log(`quadros, vídeos e metrics.json em ${out}`);
 } finally {
