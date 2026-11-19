@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { linkFromPaste, listIndent, wordCount } from "./editor/text.ts";
 import { MockVault } from "./mock.ts";
 import { paletteItems } from "./palette.ts";
+import { cellRef, fileAtLabel } from "../../src/shared/file-view.ts";
 import { buildTree, filterTree, recentNotes, type TreeNode } from "./tree.ts";
 import type { NoteMeta } from "./types.ts";
 
@@ -249,10 +250,21 @@ describe("o ⌘K lista os arquivos de texto (T21240, spec #21165)", () => {
     for (const ranked of [false, true]) {
       const items = paletteItems(n, "carambola", [hit], [], ranked, byName).filter((i) => i.kind === "note");
       expect(items).toEqual([
-        { kind: "note", path: "Codigo/horta.py", title: "horta.py", detail: "Codigo", snippet: "return 'carambola'", format: "py", line: 4 },
+        { kind: "note", path: "Codigo/horta.py", title: "horta.py", detail: "Codigo", snippet: "return 'carambola'", format: "py", at: { line: 4 } },
         { kind: "note", path: "Dados/carambola.csv", title: "carambola.csv", detail: "Dados", format: "csv" },
       ]);
     }
+  });
+
+  test("o achado no pdf, no docx e no xlsx abre no lugar dele (T22218)", () => {
+    const at = { sheet: "Contagem", cell: "B7" };
+    const hit = { path: "Dados/loja.xlsx", title: "loja.xlsx", snippet: "carambola", score: 1, file: { format: "xlsx", size: 10, mtime: "" }, at };
+    const [item] = paletteItems([], "carambola", [hit], [], false, []).filter((i) => i.kind === "note");
+    expect(item).toMatchObject({ path: "Dados/loja.xlsx", format: "xlsx", at });
+    expect([{ line: 3 }, { page: 2 }, { paragraph: 4 }, at].map(fileAtLabel)).toEqual(["linha 3", "pág. 2", "§4", "Contagem!B7"]);
+    expect(cellRef("IV3")).toEqual({ line: 3, col: 255 });
+    expect(cellRef("b7")).toEqual({ line: 7, col: 1 });
+    expect(cellRef("7B")).toBeNull();
   });
 
   test("a nota segue sem formato nem linha", () => {

@@ -239,7 +239,7 @@ export function TextViewer({ path, file, files, flushRef, widthHandles, preview 
   // A linha da busca (T21240): rola até ela, no meio da tela, e a seleciona inteira.
   useEffect(() => {
     const v = view.current;
-    if (!v || !at) return;
+    if (!v || !at || !("line" in at)) return;
     const line = v.state.doc.line(Math.min(Math.max(1, Math.floor(at.line)), v.state.doc.lines));
     v.dispatch({ selection: { anchor: line.from, head: line.to }, effects: [markFound.of(line.from), EditorView.scrollIntoView(line.from, { y: "center" })] });
     v.focus();

@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { cellRef } from "../../../src/shared/file-view.ts";
 import type { Display } from "../../../src/shared/sheet/ops.ts";
 import { type Decimal, sheetDisplay } from "./sheet-doc.ts";
 import { kiwiSheetOf } from "./kiwi-sheet.ts";
@@ -14,7 +15,7 @@ import { systemDecimal } from "./sheet.ts";
 import { SheetPane } from "./SheetPane.tsx";
 import type { FileViewerProps } from "./viewers.ts";
 
-export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly }: FileViewerProps) {
+export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly, at }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
   const name = path.split("/").at(-1) ?? path;
   const decimal: Decimal = useMemo(() => systemDecimal(), []);
@@ -28,6 +29,11 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly }: File
   }, [decimal]);
   const session = useSheetSession({ path, name, base64, version: file.version, files, flushRef, display, kiwi, readOnly });
   const [tab, setTab] = useState<string | null>(null);
+  // A célula que a busca achou (T22218): a aba dela vem para a frente, e a grade a seleciona. Um pedido novo a cada `at`.
+  const found = useMemo(() => (at && "sheet" in at ? { sheet: at.sheet, cell: cellRef(at.cell) } : null), [at]);
+  useEffect(() => {
+    if (found) setTab(found.sheet);
+  }, [found]);
   // O Kiwi Cat gravou: a aba onde ele mexeu vem para a frente (T21114).
   useEffect(() => {
     const at = session.kiwi ? kiwiSheetOf(session.kiwi.ops) : null;
@@ -88,7 +94,7 @@ export function XlsxViewer({ path, file, files, flushRef, kiwi, readOnly }: File
           <p>{sheets.length ? "Esta aba está vazia." : "Esta planilha não tem abas para mostrar."}</p>
         </div>
       ) : (
-        <SheetPane key={sheet.name} session={session} doc={doc} sheet={sheet} decimal={decimal} widthMemory={widthMemory} zoomKey={path} />
+        <SheetPane key={sheet.name} session={session} doc={doc} sheet={sheet} decimal={decimal} widthMemory={widthMemory} zoomKey={path} goTo={found?.cell && found.sheet === sheet.name ? found.cell : undefined} />
       )}
     </div>
   );

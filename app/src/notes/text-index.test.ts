@@ -51,6 +51,8 @@ describe("o que entra no índice", () => {
   test("a linha e o trecho do 1º termo, sem acento nem maiúscula", () => {
     expect(lineOf("um\ndois\n  Três maçãs aqui\n", ["macas"])).toEqual({ line: 3, snippet: "Três maçãs aqui" });
     expect(lineOf("nada", ["outra"])).toBeNull();
+    // O documento (T22218) leva menos texto antes do termo: a página do pdf é uma linha só.
+    expect(lineOf(`${"caju e manga. ".repeat(10)}A graviola chegou.`, ["graviola"], 24)!.snippet).toBe("…manga. caju e manga. A graviola chegou.");
   });
 
   test("numa linha com recuo e espaços no meio, o trecho tem o termo (revisão do T21240)", () => {

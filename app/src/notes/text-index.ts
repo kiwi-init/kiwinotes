@@ -141,9 +141,13 @@ function decode(b: Uint8Array): string {
 /**
  * A linha (de 1) e o trecho em volta do 1º termo que aparece numa linha, sem diferenciar maiúscula nem acento. A posição
  * vem do mesmo texto que o trecho corta (os espaços já juntados), pelo mapa da dobra: numa linha com recuo ou com
- * espaços no meio, o trecho não se perde (revisão do T21240).
+ * espaços no meio, o trecho não se perde (revisão do T21240). `lead`: quanto do texto antes do termo o trecho leva; a
+ * linha do pdf é a página inteira, e a lista do ⌘K corta o trecho numa linha só, então o documento leva menos (T22218).
  */
-export function lineOf(text: string, terms: readonly string[]): { line: number; snippet: string } | null {
+/** O texto antes do termo no trecho de um documento (T22218): umas quatro palavras. */
+const DOC_SNIPPET_LEAD = 24;
+
+export function lineOf(text: string, terms: readonly string[], lead = 60): { line: number; snippet: string } | null {
   const lines = text.split(/\r?\n/);
   for (const t of terms) {
     for (let i = 0; i < lines.length; i++) {
@@ -155,7 +159,7 @@ export function lineOf(text: string, terms: readonly string[]): { line: number; 
       if (k < 0) continue;
       const at = map[k] ?? 0;
       const to = (map[k + t.length - 1] ?? at) + 1;
-      const start = Math.max(0, at - 60);
+      const start = Math.max(0, at - lead);
       const end = Math.min(flat.length, to + 100);
       return { line: i + 1, snippet: `${start > 0 ? "…" : ""}${flat.slice(start, end).trim()}${end < flat.length ? "…" : ""}` };
     }
@@ -411,7 +415,7 @@ export class TextIndex {
       if (q.notText.some((t) => body.includes(t))) continue;
       if (!terms.every((t) => body.includes(t) || where.includes(t))) continue;
       // No quadro e no diagrama, a linha é do texto extraído, não do arquivo: o trecho vai, a linha não.
-      const at = raw ? lineOf(raw, terms) : null;
+      const at = raw ? lineOf(raw, terms, doc ? DOC_SNIPPET_LEAD : undefined) : null;
       if (at && isDrawing(r.path)) {
         out.push({ ...hit, snippet: at.snippet });
         continue;

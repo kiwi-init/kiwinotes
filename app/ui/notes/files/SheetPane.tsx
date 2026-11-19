@@ -29,8 +29,8 @@ interface Props {
   countHeader?: boolean;
   /** O arquivo, para o zoom da grade ficar guardado por ele (T21238). */
   zoomKey?: string;
-  /** Abrir com a seleção nesta linha do arquivo (T21240). */
-  goTo?: { line: number } | undefined;
+  /** Abrir com a seleção nesta linha do arquivo (T21240), e nesta coluna (a célula achada no xlsx, T22218). */
+  goTo?: { line: number; col?: number } | undefined;
 }
 
 export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, countHeader = true, zoomKey, goTo }: Props) {

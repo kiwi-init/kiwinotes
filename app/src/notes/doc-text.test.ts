@@ -10,7 +10,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import mammoth from "mammoth";
 
 import { zipBytes } from "../../test/office-files.ts";
-import { type DocNode, parseDocHtml } from "../../ui/notes/files/docx.ts";
+import { docParagraphs, parseDocHtml } from "../../ui/notes/files/docx.ts";
 import { ABA_LARGA, MARCA, PASTA, xlsxGrande } from "../../test/regua/arquivos.ts";
 import { columnName, docLines, docText, DocTextError, isDocText } from "./doc-text.ts";
 
@@ -51,27 +51,33 @@ describe("docText: as fixtures da régua", () => {
   }, 60_000); // gerar a planilha com o SheetJS leva segundos
 });
 
-/** Os blocos com texto que o visualizador do docx mostra (o mammoth), na ordem: o que o número do parágrafo conta. */
-async function viewerBlocks(bytes: Uint8Array): Promise<string[]> {
-  const out: string[] = [];
-  const text = (n: DocNode): string => (typeof n === "string" ? n : n.children.map(text).join(""));
-  const walk = (list: DocNode[]) => {
-    for (const n of list) {
-      if (typeof n === "string") continue;
-      if (/^(p|h[1-6])$/.test(n.tag)) {
-        const t = text(n).replace(/\s+/g, " ").trim();
-        if (t) out.push(t);
-      } else walk(n.children);
-    }
-  };
-  walk(parseDocHtml((await mammoth.convertToHtml({ buffer: Buffer.from(bytes) })).value));
-  return out;
-}
+/** Os parágrafos com texto que o visualizador do docx mostra (o mammoth), na ordem: o que o número do parágrafo conta. */
+const viewerBlocks = async (bytes: Uint8Array) => docParagraphs(parseDocHtml((await mammoth.convertToHtml({ buffer: Buffer.from(bytes) })).value));
 
 describe("docText: docx", () => {
   test("o número do parágrafo é o do visualizador (o mammoth): a imagem e a equação não contam", async () => {
     const bytes = fixture("estoque.docx");
     const mine = (await docText("estoque.docx", bytes)).segments.map((s) => s.text);
+    expect(mine).toEqual(await viewerBlocks(bytes));
+  });
+
+  test("a lista com subitem e a tabela contam como o visualizador", async () => {
+    const item = (t: string, lvl: number) => `<w:p><w:pPr><w:numPr><w:ilvl w:val="${lvl}"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>${t}</w:t></w:r></w:p>`;
+    const numbering = `<?xml version="1.0" encoding="UTF-8"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
+    const body = p("Antes") + item("Caixa", 0) + item("Fita", 1) + item("Parafuso", 0) + `<w:tbl><w:tr><w:tc>${p("Seção")}</w:tc><w:tc>${p("12")}</w:tc></w:tr></w:tbl>` + p("Depois");
+    const rels = `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>`;
+    const bytes = zipBytes(
+      {
+        "word/document.xml": `<?xml version="1.0" encoding="UTF-8"?><w:document ${W}><w:body>${body}</w:body></w:document>`,
+        "word/numbering.xml": numbering,
+        "word/_rels/document.xml.rels": rels,
+      },
+      { deflate: true },
+    );
+    const html = (await mammoth.convertToHtml({ buffer: Buffer.from(bytes) })).value;
+    expect(html).toContain("<li>Caixa<ol><li>Fita</li></ol></li>");
+    const mine = (await docText("a.docx", bytes)).segments.map((s) => s.text);
+    expect(mine).toEqual(["Antes", "Caixa", "Fita", "Parafuso", "Seção", "12", "Depois"]);
     expect(mine).toEqual(await viewerBlocks(bytes));
   });
 

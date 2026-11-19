@@ -8,10 +8,10 @@
 
 import { decodeEntities, pdfjs, pdfPageLines, zipExtract } from "../agent/tools/files.ts";
 import { ZIP_LIMITS, zipEntries, type ZipEntry } from "../../ui/notes/files/zipSize.ts";
-import { MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
+import { type DocPlace, MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
 
 /** Onde um pedaço do texto está no arquivo. */
-export type DocPlace = { page: number } | { paragraph: number } | { sheet: string; cell: string };
+export type { DocPlace };
 
 export interface DocSegment {
   at: DocPlace;
