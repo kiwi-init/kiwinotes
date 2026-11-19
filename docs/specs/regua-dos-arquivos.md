@@ -38,11 +38,11 @@ O teste lê esta tabela entre os marcadores. Nos itens com teste, um "cumpre" qu
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **nota** | `md` | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | cumpre | falta spec #21198 |
 | **txt** | `txt` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | cumpre | cumpre | cumpre | cumpre | falta spec #21198 |
-| **log** | `log` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | falta spec #21158 | falta spec #21158 | cumpre | cumpre | falta spec #21198 |
-| **json** | `json` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | cumpre | falta spec #21158 | cumpre | cumpre | falta spec #21198 |
-| **yaml** | `yaml` `yml` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | falta spec #21158 | falta spec #21158 | cumpre | cumpre | falta spec #21198 |
+| **log** | `log` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | cumpre | cumpre | cumpre | cumpre | falta spec #21198 |
+| **json** | `json` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | cumpre | cumpre | cumpre | cumpre | falta spec #21198 |
+| **yaml** | `yaml` `yml` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | cumpre | cumpre | cumpre | cumpre | falta spec #21198 |
 | **csv** | `csv` `tsv` | cumpre | cumpre | falta spec #21065 | falta spec #21165 | falta spec #21065 | falta spec #21065 | falta spec #21160 | cumpre | falta spec #21033 | cumpre | cumpre | falta spec #21198 |
-| **código** | `CODE_TYPES` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | falta spec #21158 | falta spec #21158 | cumpre | cumpre | falta spec #21198 |
+| **código** | `CODE_TYPES` | cumpre | cumpre | cumpre | falta spec #21165 | cumpre | cumpre | falta spec #21160 | cumpre | cumpre | cumpre | cumpre | falta spec #21198 |
 | **pdf** | `pdf` | cumpre | cumpre | cumpre | falta issue #156 | n/a: o Kiwi só mostra o pdf | n/a: o Kiwi só mostra o pdf | n/a: o Kiwi só mostra o pdf | cumpre | n/a: o Kiwi só mostra o pdf | cumpre | cumpre | falta spec #21198 |
 | **docx** | `docx` | cumpre | cumpre | falta spec #21080 | falta issue #156 | falta spec #21080 | falta spec #21080 | falta spec #21160 | cumpre | falta spec #21155 | cumpre | cumpre | falta spec #21198 |
 | **xlsx** | `xlsx` | cumpre | cumpre | falta spec #21065 | falta issue #156 | falta spec #21065 | falta spec #21065 | falta spec #21160 | cumpre | falta spec #21033 | cumpre | cumpre | falta spec #21198 |

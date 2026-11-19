@@ -6,13 +6,14 @@
 // - **A cópia de antes nas Versões:** o `notes.save` vai com `snapshot: true`, e o texto de antes vira uma versão na
 //   hora, sem o intervalo de 2 minutos do histórico.
 // - **Nada apaga, renomeia nem move:** o escritor só conhece sete capacidades (`notes.get`, `notes.save`,
-//   `notes.create`, `notes.folder`, `files.create`, o arquivo novo do spec #11549, e `files.read` e `files.save`, o `.txt`
-//   do spec #13379), e nenhuma outra passa por ele.
-// - **O `.txt` (spec #13379):** se lê e grava como texto, com a mesma conferência da versão (`files.save` com
-//   `baseVersion`). Ele não tem as Versões das notas: a cópia de antes fica no registro do agente, e o [Desfazer] volta.
+//   `notes.create`, `notes.folder`, `files.create`, o arquivo novo do spec #11549, e `files.read` e `files.save`, os
+//   textos do spec #13379), e nenhuma outra passa por ele.
+// - **O `.txt` e os outros textos (spec #13379, #21158):** o log, o json, o yaml e o código (`EDITABLE_TEXT`) se leem e
+//   gravam como texto, com a mesma conferência da versão (`files.save` com `baseVersion`). Eles não têm as Versões das
+//   notas: a cópia de antes fica no registro do agente, e o [Desfazer] volta.
 
 import type { FileContent, FileSaveResult } from "../../notes/vault.ts";
-import { isTextNote, textNote } from "./reader.ts";
+import { isTextFile, textNote } from "./reader.ts";
 
 /** A nota que o escritor lê antes de mudar. */
 export interface WriterNote {
@@ -58,9 +59,9 @@ export function writerFromCapabilities(caps: Record<WriterCapability, (args: unk
   const call = async <T>(cap: WriterCapability, args: unknown): Promise<T> => (await caps[cap](args)) as T;
   return {
     get: async (path) =>
-      isTextNote(path) ? note(textNote(await call<FileContent>("files.read", { path, as: "text" }))) : note(await call<NoteResult>("notes.get", { path })),
+      isTextFile(path) ? note(textNote(await call<FileContent>("files.read", { path, as: "text" }))) : note(await call<NoteResult>("notes.get", { path })),
     save: async (path, content, baseVersion) => {
-      if (isTextNote(path)) {
+      if (isTextFile(path)) {
         const r = await call<FileSaveResult>("files.save", { path, content, baseVersion });
         return r.saved ? { saved: true, path: r.path, version: r.version } : { saved: false };
       }

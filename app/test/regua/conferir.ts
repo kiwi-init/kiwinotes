@@ -13,7 +13,7 @@ import * as XLSX from "xlsx";
 import { MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES } from "../../src/shared/file-view.ts";
 import { Vault, type FileContent } from "../../src/notes/vault.ts";
 import { fileFormat, readDocument } from "../../src/agent/tools/files.ts";
-import { isTextNote } from "../../src/agent/tools/reader.ts";
+import { isTextFile } from "../../src/agent/tools/reader.ts";
 import { writerFromCapabilities } from "../../src/agent/tools/writer.ts";
 import { parseTable } from "../../ui/notes/files/csv.ts";
 import { parseDocHtml, docText } from "../../ui/notes/files/docx.ts";
@@ -305,7 +305,7 @@ export const CONFERIR: Partial<Record<number, (c: Cofre, tipo: string) => Promis
     const rel = c.caminho("Loja", tipo);
     try {
       if (rel.endsWith(".md")) return (await c.vault.get(rel)).content.includes(MARCA) ? null : "o notes_read não traz o texto";
-      if (isTextNote(rel)) {
+      if (isTextFile(rel)) {
         const r = await c.vault.readFile(rel, "text");
         return "text" in r && r.text.includes(MARCA) ? null : "o notes_read não traz o texto";
       }

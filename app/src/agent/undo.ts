@@ -14,6 +14,7 @@
 //   qualquer mudança.
 
 import { versionOf } from "../notes/vault.ts";
+import { isEditableText } from "../shared/file-view.ts";
 import { ACTIVITY_KEEP_MS, ACTIVITY_LIST_MAX, type ActivityChange, type AgentActivity } from "./activity.ts";
 import type { AgentUndoNote, AgentUndoResult } from "../shared/ui-contract.ts";
 
@@ -35,8 +36,8 @@ type UndoCapability = (typeof UNDO_CAPABILITIES)[number];
 
 const codeOf = (e: unknown) => (e as { code?: string })?.code;
 const isNote = (path: string) => /\.md$/i.test(path);
-/** O `.txt` que o agente mudou (spec #13379): volta como texto, pelo `files.save`. */
-const isText = (path: string) => /\.txt$/i.test(path);
+/** O arquivo de texto que o agente mudou (o `.txt` do spec #13379, e o código, o json… do #21158): volta pelo `files.save`. */
+const isText = (path: string) => isEditableText(path);
 const withFolder = (args: Record<string, unknown>, folderId?: string) => (folderId ? { ...args, folderId } : args);
 
 /** A pasta trocou entre a conferência e a chamada: o `folderCapabilities` recusa o id velho. */
@@ -44,8 +45,8 @@ export class OtherFolder extends Error {}
 
 /**
  * O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as sete acima. Um arquivo que não é nota (o que
- * o agente gerou, spec #11549) é lido pelo `files.read` (só a versão) e vai para a Lixeira pelo `files.delete`. Um `.txt`
- * que o agente mudou (spec #13379) é lido como texto e volta pelo `files.save`.
+ * o agente gerou, spec #11549) é lido pelo `files.read` (só a versão) e vai para a Lixeira pelo `files.delete`. Um arquivo de
+ * texto que o agente mudou (spec #13379) é lido como texto e volta pelo `files.save`.
  */
 export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: unknown) => unknown>): UndoNotes {
   const call = async <T>(cap: UndoCapability, args: unknown): Promise<T> => {
