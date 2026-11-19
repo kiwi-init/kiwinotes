@@ -145,8 +145,11 @@ export function palavrasDoNome(pedido: string, lugar: LugarDaNota): { palavras: 
   for (const w of palavrasDe(pedido)) {
     const k = chaveDaPalavra(w);
     const n = nameKey(w);
-    const doNome = nomes.find((x) => x.chaves.has(k) || (x.sigla !== null && x.sigla === n));
-    if (!doNome || vistas.has(k) || (w.length < 3 && doNome.sigla !== n)) continue;
+    // A sigla das iniciais só vale escrita em maiúsculas ("HN"): em minúsculas, "em" e "da" seriam a sigla de
+    // "Ensaio Mensal" e de "Diário Antigo" (revisão do T21325).
+    const sigla = siglaEscrita(w);
+    const doNome = nomes.find((x) => x.chaves.has(k) || (sigla && x.sigla === n));
+    if (!doNome || vistas.has(k) || (w.length < 3 && !(sigla && doNome.sigla === n))) continue;
     if (VAZIAS.has(n) || VAZIAS.has(k)) continue;
     vistas.set(k, w);
     if (!vizinhos.some((v) => v.chaves.has(k) || v.sigla === n)) fortes.push(k);
@@ -154,6 +157,15 @@ export function palavrasDoNome(pedido: string, lugar: LugarDaNota): { palavras: 
   const chaves = [...vistas.keys()].slice(0, TRILHA_PALAVRAS);
   return { palavras: chaves.map((k) => vistas.get(k)!), chaves, fortes: fortes.filter((k) => chaves.includes(k)) };
 }
+
+/** Uma sigla escrita como sigla: só maiúsculas, duas letras ou mais ("HN", "ONG"). */
+const siglaEscrita = (w: string): boolean => /^\p{Lu}{2,}$/u.test(w);
+
+/**
+ * Uma chave curta e comum ("em", "da", "que") só casa escrita em maiúsculas no pedido: veio de uma sigla, e em
+ * minúsculas ela está em quase todo pedido.
+ */
+const soEmMaiusculas = (k: string): boolean => /^\p{L}{1,3}$/u.test(k) && (palavraComum(k) || VAZIAS.has(k));
 
 /** O que uma trilha casou num pedido. */
 export interface TrilhaCasada {
@@ -169,8 +181,11 @@ export interface TrilhaCasada {
 export function trilhasDoPedido(pedido: string, trilhas: readonly Trilha[]): TrilhaCasada[] {
   if (!trilhas.length) return [];
   // Todas as palavras do pedido, mesmo as comuns: a trilha pode ter uma palavra comum que veio do nome da pasta.
-  const tem = new Set(palavrasDe(pedido).map(chaveDaPalavra));
-  for (const w of palavrasDe(pedido)) tem.add(nameKey(w));
+  const tem = new Set<string>();
+  for (const w of palavrasDe(pedido)) {
+    const curta = [chaveDaPalavra(w), nameKey(w)];
+    for (const k of curta) if (!soEmMaiusculas(k) || siglaEscrita(w)) tem.add(k);
+  }
   const out: TrilhaCasada[] = [];
   for (const t of trilhas) {
     if (!t.chaves.length) continue;
@@ -208,7 +223,11 @@ export function limparTrilha(t: Trilha): Trilha | null {
   if (!j.length) return null;
   const chaves = j.map((i) => t.chaves[i]!);
   const palavras = j.map((i) => t.palavras[i] ?? t.chaves[i]!);
-  const fortes = j.filter((i) => raraDeVerdade(t.palavras[i] ?? "", false)).map((i) => t.chaves[i]!);
+  // A trilha antiga não guarda a posição da palavra no pedido: a maiúscula do começo da frase não faz nome próprio,
+  // e só o código e a sigla ficam fortes (revisão do T21325).
+  const fortes = j.filter((i) => raraDeVerdade(t.palavras[i] ?? "", true)).map((i) => t.chaves[i]!);
+  // Uma palavra sozinha que não é forte nunca mais casa: a trilha sai, em vez de ficar na tela como se valesse.
+  if (chaves.length < 2 && !fortes.length) return null;
   const { candidatas: _c, fortes: _f, ...rest } = t;
   return { ...rest, chaves, palavras, ...(fortes.length ? { fortes } : {}) };
 }
@@ -300,8 +319,14 @@ export class TrilhaStore {
       palavras.set(k, w);
       if (raras.fortes.includes(k)) fortes.add(k);
     }
-    const chaves = [...palavras.keys()].slice(0, TRILHA_PALAVRAS);
+    let chaves = [...palavras.keys()].slice(0, TRILHA_PALAVRAS);
     const espera = fora.filter((x) => !palavras.has(x.k));
+    // Uma palavra sozinha que não é forte (o pedaço do nome que um vizinho também tem) não casa: ela fica em
+    // "Aprendendo", à espera de outra, em vez de aparecer como trilha que vale (revisão do T21325).
+    if (chaves.length === 1 && !fortes.has(chaves[0]!)) {
+      if (!espera.some((x) => x.k === chaves[0])) espera.unshift({ k: chaves[0]!, w: palavras.get(chaves[0]!)! });
+      chaves = [];
+    }
     const t: Trilha = {
       id: mesma?.id ?? `t${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       palavras: chaves.map((k) => palavras.get(k)!),

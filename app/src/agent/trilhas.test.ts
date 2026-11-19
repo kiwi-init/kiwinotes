@@ -138,6 +138,31 @@ describe("o nome da pasta vale mais (spec #21283)", () => {
     expect(casadas("e a escola?")).toEqual(["Horta Escola/Plantio.md"]);
     expect(casadas("e a horta?")).toEqual([]);
   });
+
+  test("a sigla das iniciais só vale em maiúsculas: \"em\" e \"da\" não viram palavra-chave (revisão do T21325)", () => {
+    const { s } = store();
+    const ensaio: LugarDaNota = { nomes: ["Ensaio Mensal", "Pauta"], vizinhos: ["Ensaio Anual"] };
+    expect(palavrasDoNome("o que ficou em aberto", ensaio).chaves).toEqual([]);
+    expect(palavrasDoNome("o que ficou da conversa", { nomes: ["Diário Antigo"], vizinhos: [] }).chaves).toEqual([]);
+    expect(s.aprender("o que ficou em aberto", "Ensaio Mensal/Pauta.md", null, ensaio)).toBeNull();
+    expect(trilhasDoPedido("escreve um poema em verso", s.list())).toEqual([]);
+    // Escrita como sigla, vale; e uma trilha com ela só casa com a sigla escrita assim.
+    expect(palavrasDoNome("e o EM de março?", ensaio)).toMatchObject({ chaves: ["em"], fortes: ["em"] });
+    s.aprender("e o EM de março?", "Ensaio Mensal/Pauta.md", null, ensaio);
+    expect(trilhasDoPedido("e o EM de abril?", s.list()).map((c) => c.trilha.path)).toEqual(["Ensaio Mensal/Pauta.md"]);
+    expect(trilhasDoPedido("escreve um poema em verso", s.list())).toEqual([]);
+  });
+
+  test("uma palavra sozinha que não é forte fica em Aprendendo, sem parecer trilha que vale", () => {
+    const { s } = store();
+    const t = s.aprender("e a horta?", "Horta Norte/Plantio.md", null, horta("Horta Norte/Plantio.md"))!;
+    expect(aprendendo(t)).toBe(true);
+    expect(t.candidatas?.palavras).toEqual(["horta"]);
+    // Com o pedaço único na próxima, vira trilha.
+    const u = s.aprender("e a horta do norte?", "Horta Norte/Plantio.md", null, horta("Horta Norte/Plantio.md"))!;
+    expect(u.id).toBe(t.id);
+    expect(u).toMatchObject({ palavras: ["horta", "norte"], fortes: ["norte"], vezes: 2 });
+  });
 });
 
 describe("fora do nome: rara e na segunda vez", () => {
@@ -159,7 +184,10 @@ describe("fora do nome: rara e na segunda vez", () => {
     const lugar: LugarDaNota = { nomes: ["Trabalho", "Plano"], vizinhos: [], muitas };
     s.aprender("o cronograma do lançamento", "Trabalho/Plano.md", null, lugar);
     const t = s.aprender("e o cronograma do lançamento?", "Trabalho/Plano.md", null, lugar)!;
-    expect(t.palavras).toEqual(["lançamento"]);
+    // Sobra só "lançamento", sozinha e fraca: fica em Aprendendo, e "cronograma" não entra nem lá.
+    expect(t.palavras).toEqual([]);
+    expect(t.candidatas?.palavras).toEqual(["lançamento"]);
+    expect(t.candidatas?.chaves).not.toContain("cronograma");
   });
 
   test("uma trilha de uma palavra comum não casa com nada; a de uma palavra rara de verdade casa", () => {
@@ -198,20 +226,25 @@ describe("o disco", () => {
     expect(new TrilhaStore(dir).list().map((x) => x.path)).toEqual(["Pessoal/Outra.md"]);
   });
 
-  test("as trilhas antigas são limpas uma vez: saem as palavras comuns, e a vazia some", () => {
+  test("as trilhas antigas são limpas uma vez: saem as palavras comuns, e a vazia e a de uma palavra fraca somem", () => {
     const { dir } = store();
     const velha = (id: string, palavras: string[], p: string): Trilha => ({ id, palavras, chaves: palavras.map((w) => w.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "")), path: p, vezes: 2, em: 5 });
     writeFileSync(
       path.join(dir, "trilhas.json"),
-      JSON.stringify({ version: 1, trilhas: [velha("a", ["verdade", "compras", "festa"], "Festa.md"), velha("b", ["verdade", "orçamento", "Lisboa"], "Lisboa.md"), velha("c", ["realmente", "beleza"], "X.md")] }),
+      JSON.stringify({ version: 1, trilhas: [velha("a", ["verdade", "compras", "festa"], "Festa.md"), velha("b", ["verdade", "orçamento", "Lisboa"], "Lisboa.md"), velha("c", ["realmente", "beleza"], "X.md"), velha("d", ["verdade", "encanador"], "Casa.md"), velha("e", ["Orçamento", "Q3"], "Q3.md")] }),
     );
     const s = new TrilhaStore(dir);
-    expect(s.list().map((t) => [t.id, t.palavras, t.fortes])).toEqual([["b", ["orçamento", "Lisboa"], ["lisboa"]]]);
+    // A trilha antiga não sabe a posição da palavra: a maiúscula de "Lisboa" e de "Orçamento" pode ser do começo da
+    // frase, e só o código fica forte. A "d" ficou com uma palavra fraca e sai.
+    expect(s.list().map((t) => [t.id, t.palavras, t.fortes])).toEqual([
+      ["b", ["orçamento", "Lisboa"], undefined],
+      ["e", ["Orçamento", "Q3"], ["q3"]],
+    ]);
     const disco = JSON.parse(readFileSync(path.join(dir, "trilhas.json"), "utf8"));
     expect(disco.version).toBe(2);
-    expect(disco.trilhas).toHaveLength(1);
+    expect(disco.trilhas).toHaveLength(2);
     // Só uma vez: abrir de novo não muda nada.
-    expect(new TrilhaStore(dir).list().map((t) => t.id)).toEqual(["b"]);
+    expect(new TrilhaStore(dir).list().map((t) => t.id)).toEqual(["b", "e"]);
   });
 
   test("um arquivo estragado vai para o lado, e as trilhas começam de novo", () => {
