@@ -14,7 +14,8 @@
 // | repouso-foco | o mesmo, com a janela na frente e ninguém mexendo                                                  |
 // | indexando-   | a 1ª passada do índice do conteúdo numa pasta inventada grande de código e JSON, sem tela: o       |
 // |   codigo     | principal com média < 50% e nenhum segundo acima de 100% (o teto do índice, T24286). Mede a passada|
-// |              | até ela acabar (5 s quietos, até `--seconds`), e ela tem de durar 20 s, senão não mediu nada       |
+// |              | até ela acabar (5 s quietos, até `--seconds`), e ela tem de durar 20 s, senão não mediu nada. E a  |
+// |              | média < 35%: o teto do índice (25%) com folga, que a régua de 50% sozinha não pega                 |
 // | indexando-md | a pasta grande só de `.md`: as notas não passam pelo índice do conteúdo (ele é dos outros arquivos);|
 // |              | o que sobra no fundo, em `--seconds` depois da lista (a busca aquecida, as tags), com a mesma régua|
 // | cedendo      | a passada de código com a pessoa escrevendo (um `notes.save` por segundo): o portão fecha, a       |
@@ -380,7 +381,11 @@ async function indexing(name: string, kind: "md" | "code", files: number, typing
       ? [{ label: "principal com a pessoa escrevendo", max: 10, got: avg }]
       : [{ label: "principal (média)", max: 50, got: avg }, { label: "principal (pico de 1 s)", max: 100, got: peak }];
     // A prova de que o roteiro mediu a passada: ela seguia no fim da janela, ou voltou quando a pessoa parou.
-    if (kind === "code" && !typing) limits.push({ label: "a passada durou (s)", max: Infinity, min: MIN_PASS, got: active });
+    if (kind === "code" && !typing) {
+      // O teto do índice (`DUTY` 25%, T24286) com folga: sem ele, a passada vai a ~45% e ainda cabe na régua de 50%.
+      limits.push({ label: "principal no teto do índice (25% + folga)", max: 35, got: avg });
+      limits.push({ label: "a passada durou (s)", max: Infinity, min: MIN_PASS, got: active });
+    }
     if (typing) {
       const back = await samplePid(main, 30);
       limits.push({ label: "a passada voltou sem a pessoa (pico em 30 s)", max: Infinity, min: MOVING, got: back.peak });
