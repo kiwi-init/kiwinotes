@@ -251,8 +251,9 @@ stores.agent.startRoutines();
 
 /** O RPC de cada janela aberta, para os eventos que valem para todas (`notes.changed`). */
 const rpcs = new Map<WindowName, { send: { event(e: { name: string; payload: unknown }): void } }>();
-stores.folders.onNotesChanged((folder, paths) => {
-  for (const rpc of rpcs.values()) rpc.send.event({ name: "notes.changed", payload: { paths, folderId: folder.id } });
+stores.folders.onNotesChanged((folder, paths, listing) => {
+  const payload = { paths, folderId: folder.id, listing: listing() };
+  for (const rpc of rpcs.values()) rpc.send.event({ name: "notes.changed", payload });
 });
 // A tela de Início (T15847): uma nota, um ditado ou uma reunião que mudou vira um `home.changed` só, depois da rajada.
 const homeChanges = new HomeChanges(() => {

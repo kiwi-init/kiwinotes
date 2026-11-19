@@ -8,6 +8,7 @@ import { MockVault } from "./mock.ts";
 import { applyFilesDelta, type FilesDelta } from "./files-delta.ts";
 import type { AttachmentFile, AttachmentSource } from "./editor/attachments.ts";
 import type { SavedSearch } from "../../src/shared/query.ts";
+import type { ListingPatch } from "../../src/shared/ui-contract.ts";
 import type { ExtrasApi, FoldersApi, VersionsApi, NoteMeta, NotesApi, TagNode, ExportFormat, TreePrefs, VaultFile, VaultListing,
 } from "./types.ts";
 
@@ -68,6 +69,13 @@ export function engineNotes(
           ),
         set: (pinned: string[]) => call<{ pinned?: string[] }>("settings.set", { pinned }).then((s) => s.pinned ?? [],
           ),
+        // O engine corrige as fixadas sozinho (renomear, mover, apagar, pela janela, pelo agente ou por fora) e manda as
+        // configurações novas no `settings.changed` (T20167): a janela relê dali, não depois de cada operação.
+        onChanged: (fn: (pinned: string[]) => void) =>
+          on("settings.changed", (s) => {
+            const pinned = (s as { pinned?: unknown } | undefined)?.pinned;
+            if (Array.isArray(pinned)) fn(pinned.filter((p): p is string => typeof p === "string"));
+          }),
       }
     : undefined;
   // Os projetos (1.49.0, spec #9847): o evento só vale para a pasta de notas desta janela.
@@ -259,7 +267,7 @@ export function engineNotes(
     backlinks: (path) => call("notes.backlinks", { path }),
     resolve: (link) => call("notes.resolve", { link }),
     ...(has("notes.embed") ? { embed: (link: string) => call("notes.embed", { link }) } : {}),
-    onChanged: (fn) => on("notes.changed", (payload) => {const e=payload as {paths:string[];folderId?:string};if(!folderId||!e.folderId||e.folderId===folderId)fn(e.paths);}),
+    onChanged: (fn) => on("notes.changed", (payload) => {const e=payload as {paths:string[];folderId?:string;listing?:ListingPatch|null};if(!folderId||!e.folderId||e.folderId===folderId)fn(e.paths,e.listing);}),
   };
 }
 

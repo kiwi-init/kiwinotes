@@ -15,6 +15,9 @@ import { TopBar } from "../src/topbar.tsx";
 import { useShortcuts } from "../src/useShortcuts.ts";
 import { DEFAULT_SHORTCUTS, matchesKeyEvent, shortcutLabel } from "../../src/shared/shortcuts.ts";
 import { Popover } from "./Popover.tsx";
+import { PatchedListing } from "./listing-patch.ts";
+import { useWhenShown } from "./when-shown.ts";
+import { ReloadQueue } from "./reload-queue.ts";
 import { TreePopover } from "./TreePopover.tsx";
 import { NoteWidthHandles } from "./NoteWidth.tsx";
 import { NOTE_WIDTH } from "../../src/shared/note-width.ts";
@@ -313,23 +316,32 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
    */
   const [orphans, setOrphans] = useState<Draft[]>([]);
 
-  const refresh = useCallback(
+  /**
+   * A lista inteira, uma por vez (spec #20118, T20167): um pedido durante outra espera uma só no fim, e a operação da
+   * própria janela usa a recarga do `notes.changed` dela (`ReloadQueue`), sem pedir de novo.
+   */
+  /** Os pedaços do `notes.changed` (U2) que chegam com a lista inteira no ar vão de novo por cima dela. */
+  const patched = useMemo(() => new PatchedListing(), []);
+  const lists = useMemo(
     () =>
-      api.list().then(
-        (l) => {
-          setListing(l);
-          setFailed(false);
-          // As tags andam com a lista (T2619): o mesmo notes.changed refaz as duas.
-          api.tags?.().then(setTagList, () => {});
-          return l;
-        },
-        () => {
-          setFailed(true);
-          return null;
-        },
+      new ReloadQueue<VaultListing | null>(() =>
+        patched.fetch(() => api.list()).then(
+          (l) => {
+            listingRef.current = l;
+            setListing(l);
+            setFailed(false);
+            return l;
+          },
+          () => {
+            setFailed(true);
+            return null;
+          },
+        ),
       ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [api],
   );
+  const refresh = useCallback(() => lists.request(), [lists]);
 
   /**
    * Só mudaram notas que já estão na lista (o save da nota aberta, uma edição no Obsidian): troca os dados delas, sem
@@ -354,7 +366,6 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       const next = { ...l, notes };
       listingRef.current = next;
       setListing(next);
-      api.tags?.().then(setTagList, () => {});
       return next;
     },
     [api],
@@ -606,7 +617,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
       setPalette(false);
       setTreeOpen(false);
       if (!n) return;
-      await refresh();
+      await lists.after([n.path]);
       show(n);
       requestAnimationFrame(() => {
         if (focusTitle) (document.querySelector(".kn-title") as HTMLInputElement | null)?.select();
@@ -653,11 +664,21 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   // recarrega se não tem nada pendente; com edição pendente, o próximo save mostra o conflito.
   useEffect(
     () =>
-      api.onChanged((paths) => {
+      api.onChanged((paths, patch) => {
         // O rascunho do que foi digitado antes de olhar o disco (T7876): a nota pode ter sumido fora (T7513).
         settleRef.current();
         setVaultVersion((n) => n + 1);
-        void (async () => (await patchListing(paths)) ?? (await refresh()))().then((l) => {
+        // Anotado na hora (T20167): a resposta da operação da janela chega depois deste aviso, e o after() dela usa esta.
+        // Com o pedaço da lista no aviso (U2, T20249), nada se pede ao engine: a janela troca só ele.
+        const update = (): Promise<VaultListing | null> => {
+          const next = patched.apply(listingRef.current, patch!);
+          if (!next) return lists.request();
+          listingRef.current = next;
+          setListing(next);
+          return Promise.resolve(next);
+        };
+        const load = patch ? update() : (async () => (await patchListing(paths)) ?? (await lists.request()))();
+        void lists.track(paths, load).then((l) => {
           if (!l) return;
           // Nota que sumiu (apagada ou renomeada fora) leva o rascunho junto (#1525). A aberta com edição pendente fica:
           // o texto ainda está no editor, e o aviso de erro do save deixa a pessoa decidir.
@@ -887,11 +908,11 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   }, [api, leave, refresh, show]);
   openDailyRef.current = openDaily;
 
-  // O número da Lixeira, na lateral.
-  useEffect(() => {
-    api.extras?.trashList().then((items) => setTrashCount(items.length), () => {},
-    );
-  }, [api, vaultVersion]);
+  // O número da Lixeira e as tags (T2619), na árvore: só com ela aberta, e só se o cofre mudou desde a última vez (U4).
+  useWhenShown(treeOpen, vaultVersion, () => {
+    api.extras?.trashList().then((items) => setTrashCount(items.length), () => {});
+    api.tags?.().then(setTagList, () => {});
+  });
 
   const rename = async () => {
     const typed = title.trim().replace(/[\\/:]/g, "-");
@@ -990,18 +1011,25 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const pins = api.pins;
   useEffect(() => {
     pins?.list().then(setPinned, () => {});
+    return pins?.onChanged?.(setPinned);
   }, [pins]);
   const projectsApi = api.projects;
-  const reloadProjects = () => void projectsApi?.list().then(setProjectList, () => {});
+  // Os projetos andam como a lista (T20167): um pedido por vez, e o da operação é o do notes.changed dela.
+  const projectLists = useMemo(
+    () => projectsApi && new ReloadQueue(() => projectsApi.list().then(setProjectList, () => {})),
+    [projectsApi],
+  );
   // Relê quando os projetos mudam por outro lugar (a CLI, outra janela), e quando as notas mudam: a nota principal
-  // apagada ou a pasta renomeada por fora o engine já corrigiu.
+  // apagada ou a pasta renomeada por fora o engine já corrigiu. Só com a árvore, um menu dela ou um seletor na tela
+  // (U4): é onde os projetos aparecem.
+  const [projectsVersion, setProjectsVersion] = useState(0);
   useEffect(() => {
     if (!projectsApi) return;
-    reloadProjects();
-    const offs = [projectsApi.onChanged(reloadProjects), api.onChanged(() => reloadProjects())];
+    const bump = () => setProjectsVersion((n) => n + 1);
+    const offs = [projectsApi.onChanged(bump), api.onChanged(bump)];
     return () => offs.forEach((off) => off());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectsApi, api]);
+  useWhenShown(treeOpen || Boolean(moving || picking || projectPick), projectsVersion, () => void projectLists?.request());
   const projectByFolder = useMemo(() => new Map(projectList.projects.map((x) => [x.folder, x] as const)), [projectList]);
   const projectMains = useMemo(() => new Set(projectList.projects.flatMap((x) => (x.main ? [x.main] : []))), [projectList]);
   const insideOrIs = (folder: string, p: string) => p === folder || p.startsWith(`${folder}/`);
@@ -1012,7 +1040,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     !projectList.projects.some((x) => insideOrIs(x.folder, folder) || insideOrIs(folder, x.folder));
   const projectAction = (what: string, run: () => Promise<unknown>) =>
     void run().then(
-      () => reloadProjects(),
+      () => void projectLists?.request(),
       (e) => {
         const code = errorCode(e);
         say(
@@ -1029,13 +1057,18 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const failed_ = (what: string) => (e: unknown) => say(`Não deu para ${what}${errorCode(e) === "E_EXISTS" ? ": já existe um com esse nome" : ""}.`,
     );
 
-  /** Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. */
-  const after = async (moved?: { from: string; to: string }) => {
-    await refresh();
+  /**
+   * Depois de mexer no vault: a lista de novo, e a nota aberta reaberta no lugar novo, se ela mudou de path. A lista é
+   * a do `notes.changed` da operação, que chega antes da resposta (T20167); sem ele, pedida agora. Os projetos andam
+   * com o mesmo aviso, quando estão na tela (U4).
+   * As fixadas vêm do `settings.changed`, quando o engine as corrige.
+   */
+  const after = async (change: string[] | { from: string; to: string }) => {
+    const moved = Array.isArray(change) ? undefined : change;
+    const paths = moved ? [moved.from, moved.to] : (change as string[]);
+    await lists.after(paths);
     links.clear();
-    // O engine corrige as fixadas (renomear, mover, apagar); a janela só relê.
-    pins?.list().then(setPinned, () => {});
-    reloadProjects();
+    if (!pins?.onChanged) pins?.list().then(setPinned, () => {});
     // A pasta escolhida acompanha o renomear e o mover (T3371): a "Nova pasta" que virou "Ideias" continua sendo onde
     // o + Nota e o + Pasta criam.
     if (moved) {
@@ -1060,7 +1093,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     );
     const r = await folders.create(join(parent, freeName("Nova pasta", taken))).catch(failed_("criar a pasta"));
     if (!r) return;
-    await after();
+    await after([r.path]);
     // Spec #19265: a pasta escolhida não muda. Antes ela virava a nova, e o próximo clique criava uma dentro da outra.
     // A nova aparece na hora: a árvore abre até ela, rola, a linha pisca de leve e o nome já vem em foco.
     setOpenFolders((o) => new Set([...o, ...ancestors(r.path)]));
@@ -1136,7 +1169,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const duplicate = async (path: string) => {
     const n = await folders?.duplicateNote(path).catch(failed_("duplicar a nota"));
     if (!n) return;
-    await after();
+    await after([n.path]);
     await open(n.path);
   };
 
@@ -1200,7 +1233,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
           ? await api.files?.delete?.(target.path).catch(failed_("apagar o arquivo"))
           : await folders?.delete(target.path).catch(failed_("apagar a pasta"));
     if (!r) return;
-    await after();
+    await after([target.path]);
     // O engine guarda o apagado por 10 min antes da Lixeira (#2493); o aviso dura 8 s, então o Desfazer sempre chega a tempo.
     say(
       `“${name}” foi para a Lixeira.`,
@@ -1212,7 +1245,7 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
                   const now = await pins.list().catch(() => []);
                   await pins.set([...new Set([...now, ...wasPinned])]).then(setPinned, () => {});
                 }
-                await after();
+                await after([target.path, back.path]);
                 if (target.kind === "note") await open(back.path);
               },
               failed_("desfazer"))

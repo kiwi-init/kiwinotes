@@ -21,7 +21,7 @@ import type { HomePending, HomeToday, HomeWeek } from "./home.ts";
 import type { AgentMeetingSettings, AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import type { TagNode } from "./tags.ts";
-import type { Backlink, CanvasFile, CanvasSaveResult, FileContent, FileSaveResult, FolderNode, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
+import type { Backlink, CanvasFile, CanvasSaveResult, FileContent, FileSaveResult, FolderNode, ListingPatch, Note, NoteMeta, SaveResult, SearchHit, TrashItem, VaultFile,
 } from "../notes/vault.ts";
 import type { AttachmentData, SavedAttachment } from "../notes/attachments.ts";
 import type { AudioInputs } from "./microphone.ts";
@@ -68,7 +68,7 @@ export interface PreciseStatus {
 export type NoteEmbed =
   | { path: string; title: string; kind: "note" | "heading" | "block"; content: string }
   | { path: string; title: string; missing: string };
-export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, Note, NoteMeta, SaveResult, SearchHit, Snippet, TrashItem };
+export type { AliasWarning, Backlink, DictionaryTerm, FolderNode, HistoryEntry, HistoryPage, ListingPatch, Note, NoteMeta, SaveResult, SearchHit, Snippet, TrashItem };
 
 /** A versão do contrato que este engine implementa (semver estrito). */
 // 1.1.0 (T1316): as capacidades `notes.*` e o evento `notes.changed`, só acréscimos.
@@ -244,7 +244,8 @@ export type { NoteModel };
 // 1.84.0 (T19878, spec #19256): o `files.rename`, renomear ou mover um arquivo que não é nota pelo menu da árvore, com os
 //   links das notas reescritos. O `baseVersion` do `files.delete` fica opcional (o "Apagar" do menu), e o
 //   `notes.reveal` e o `notes.restore` valem também para esses arquivos. Só acréscimo.
-export const UI_CONTRACT_VERSION = "1.84.0";
+// 1.85.0 (T20249, spec #20118): o `listing` no `notes.changed`, o pedaço da lista que mudou. Só acréscimo.
+export const UI_CONTRACT_VERSION = "1.85.0";
 /** O que as UIs deste build pedem no `requiresContract` do ui.json. */
 export const UI_REQUIRES_CONTRACT = "^1.0.0";
 /** O esquema dos dados que as UIs escrevem. As UIs de hoje não guardam nada próprio: tudo passa pelo engine. */
@@ -1264,7 +1265,11 @@ export interface UiEvents {
   "history.added": HistoryEntry;
   "history.changed": Record<string,never>;
   /** Notas criadas, mudadas, apagadas ou renomeadas, inclusive fora do app (o watcher do vault). */
-  "notes.changed": { paths: string[]; folderId?: string };
+  /**
+   * Com o `listing` (1.85.0, spec #20118): o estado de agora dos `paths` e de tudo debaixo deles, para a janela trocar
+   * só esse pedaço da lista. `null`: grande demais, peça a lista.
+   */
+  "notes.changed": { paths: string[]; folderId?: string; listing?: ListingPatch | null };
   /** Arquivos que não são nota apareceram, mudaram ou sumiram, inclusive fora do app (1.19.0): a árvore lista de novo. */
   "files.changed": { paths: string[]; folderId?: string };
   /** O hub aberto vai para uma seção (1.4.0, T2121): o menu da barra ou o atalho pediram. */

@@ -11,7 +11,7 @@ import {
   type SettingsStore,
   sanitizeSettings,
 } from "../store/settings.ts";
-import { Vault, type IndexProgress } from "./vault.ts";
+import { Vault, type IndexProgress, type ListingPatch } from "./vault.ts";
 import { NoteVersions } from "./versions.ts";
 import { DictationNotes } from "./fromDictation.ts";
 import { MeetingNotes } from "./meetings.ts";
@@ -196,7 +196,7 @@ export class NotesFolders {
   private ready?: Promise<void>;
   private queue: Promise<unknown> = Promise.resolve();
   private listeners = new Set<(view: FolderView) => void>();
-  private changes = new Set<(folder: FolderRef, paths: string[]) => void>();
+  private changes = new Set<(folder: FolderRef, paths: string[], listing: () => ListingPatch | null) => void>();
   private fileChanges = new Set<(folder: FolderRef, paths: string[]) => void>();
   private progress: FolderView["progress"] = {
     phase: "idle",
@@ -283,7 +283,10 @@ export class NotesFolders {
       ),
     };
     notes.onChanged((paths) => {
-      for (const fn of this.changes) fn(ref, paths);
+      // O pedaço da lista de agora (spec #20118, U2), uma vez por aviso e só se alguém ouve: a janela troca só ele.
+      let patch: ListingPatch | null | undefined;
+      const listing = () => (patch === undefined ? (patch = notes.listingPatch(paths)) : patch);
+      for (const fn of this.changes) fn(ref, paths, listing);
     });
     notes.onOtherFiles((paths) => {
       for (const fn of this.fileChanges) fn(ref, paths);
@@ -361,7 +364,7 @@ export class NotesFolders {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
   }
-  onNotesChanged(fn: (folder: FolderRef, paths: string[]) => void): () => void {
+  onNotesChanged(fn: (folder: FolderRef, paths: string[], listing: () => ListingPatch | null) => void): () => void {
     this.changes.add(fn);
     return () => this.changes.delete(fn);
   }
