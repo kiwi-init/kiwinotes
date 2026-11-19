@@ -2,7 +2,7 @@
 // caminhos (lead #20854). No hub de verdade, com o AppEngine headless, o agente de mentira (`KIWI_FAKE_AGENT`) e o passo
 // das permissões de mentira (`KIWI_FAKE_SETUP`), num WebKit headless. Nada pede ao macOS e nada aparece na tela de ninguém.
 //
-// - **Primeira abertura, Vamos lá:** o balão se escreve; Vamos lá → as permissões; o app fecha no meio e a boas-vindas
+// - **Primeira abertura, Vamos lá:** o balão se escreve; Vamos lá → o que o Kiwi faz (T20838) → Pular → as permissões; o app fecha no meio e a boas-vindas
 //   volta; de novo Vamos lá → Continuar → o consentimento (ADR 0011) → Ligar → o onboarding do agente no passo 1.
 // - **A próxima abertura:** sem boas-vindas; o onboarding do agente segue aberto.
 // - **Agora não:** as permissões → o Hub, sem consentimento e com o agente desligado; a próxima abertura vai direto ao Hub.
@@ -91,6 +91,9 @@ try {
     assert.equal(await p.evaluate(() => (document.activeElement as HTMLElement | null)?.textContent), "Vamos lá");
     await shot(p, "boas-vindas-dark.png");
     await button(p, "Vamos lá").click();
+    // O que o Kiwi faz (T20838), e o Pular segue para as permissões.
+    await p.waitForSelector(".kn-show", { timeout: 15000 });
+    await button(p, "Pular").click();
     await p.waitForSelector(".kn-setup", { timeout: 15000 });
     // O app fecha antes do Continuar.
     await h.close();
@@ -102,6 +105,9 @@ try {
     await p.waitForSelector(".kn-welcome-bubble", { timeout: 15000 });
     await shot(p, "boas-vindas-light.png");
     await button(p, "Vamos lá").click();
+    // O que o Kiwi faz (T20838), e o Pular segue para as permissões.
+    await p.waitForSelector(".kn-show", { timeout: 15000 });
+    await button(p, "Pular").click();
     await p.waitForSelector(".kn-setup", { timeout: 15000 });
     await p.locator(".kn-onb-actions button").click();
     // O Continuar grava o done, e o consentimento vem por cima, mesmo com o `firstRun` já `done`.

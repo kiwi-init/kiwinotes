@@ -15,6 +15,7 @@ import { Consent } from "../../settings/Agent.tsx";
 import { api, has } from "../../src/api.ts";
 import { Button } from "../../src/kit/index.tsx";
 import { FirstRunSetup } from "./FirstRunSetup.tsx";
+import { KiwiShowcase } from "./KiwiShowcase.tsx";
 import { BigCat } from "./Onboarding.tsx";
 import {
   typedLength,
@@ -27,8 +28,8 @@ import {
   type WelcomeFlow,
 } from "./welcomeText.ts";
 
-/** A tela do que o Kiwi faz (T20838) ainda não está neste build: o Vamos lá vai direto às permissões. */
-const TOUR = false;
+/** A tela do que o Kiwi faz (T20838) está neste build: o Vamos lá passa por ela antes das permissões. */
+const TOUR = true;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -146,7 +147,11 @@ export function Welcome({ settings, onClosed }: { settings: AppSettings; onClose
     case "welcome":
       return <Hello settings={settings} onChoose={go} />;
     case "tour":
-      return null;
+      // Continuar e Pular seguem para as permissões.
+      return (
+        <KiwiShowcase onContinue={() => go("next")} onSkip={() => go("next")} cor={settings.kiwicat.cor}
+          reduced={settings.appearance.motion === "reduced"} />
+      );
     case "setup":
       return <FirstRunSetup onDone={() => go("next")} />;
     case "consent":
