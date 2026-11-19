@@ -4,6 +4,24 @@ O que entrou em cada versão do Kiwi Notes, a mais nova primeiro. Cada linha é 
 
 Os arquivos de cada versão, assinados e notarizados, estão em [Releases](https://github.com/kiwi-init/kiwinotes/releases).
 
+## [2026.11.7](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.7) (2026-11-19)
+
+- **Índice do conteúdo: cada transação fica em 1 MB de texto (P0 #23988)** ([#243](https://github.com/kiwi-init/kiwinotes/pull/243))
+- **Colagem: o helper lê o layout do teclado na main antes do ⌘V (T23991)** ([#241](https://github.com/kiwi-init/kiwinotes/pull/241))
+- **Planilha: o gravado reabre no Kiwi e pelo SheetJS (T23457)** ([#224](https://github.com/kiwi-init/kiwinotes/pull/224))
+- **CI: os roteiros do histórico dos arquivos (T23443)** ([#222](https://github.com/kiwi-init/kiwinotes/pull/222))
+- **Primeira abertura: o balão espera a intro, e os roteiros no CI (T23565)** ([#228](https://github.com/kiwi-init/kiwinotes/pull/228))
+- **Docx: editar nas Notas e gravar sem perda (T21152)** ([#200](https://github.com/kiwi-init/kiwinotes/pull/200))
+- **Régua: a pasta dos arquivos difíceis no teste (T23519)** ([#226](https://github.com/kiwi-init/kiwinotes/pull/226))
+- **Notas: a nota que abre sozinha não fecha a árvore (T23119)** ([#220](https://github.com/kiwi-init/kiwinotes/pull/220))
+- **Roteiro arquivo-drawio: espera a nota abrir antes da árvore (T23119)** ([#214](https://github.com/kiwi-init/kiwinotes/pull/214))
+- **Régua: o teste do tempo de abrir com relógio falso (T23067)** ([#209](https://github.com/kiwi-init/kiwinotes/pull/209))
+- **Docx: a busca conta os parágrafos como o motor, e a caixa de texto não desloca a marca (T22847)** ([#205](https://github.com/kiwi-init/kiwinotes/pull/205))
+- **Régua: planilha e csv em dia, pela grade e pelo gato (T22627)** ([#192](https://github.com/kiwi-init/kiwinotes/pull/192))
+- **Trackpad: nota, drawio e mídia (T22178)** ([#180](https://github.com/kiwi-init/kiwinotes/pull/180))
+- **Ditado: o log diz por que a correção não virou cartão (issue #1)** ([#204](https://github.com/kiwi-init/kiwinotes/pull/204))
+- **Busca no conteúdo de pdf, docx e xlsx, aberta no lugar do achado (T22218)** ([#190](https://github.com/kiwi-init/kiwinotes/pull/190))
+
 ## [2026.11.6](https://github.com/kiwi-init/kiwinotes/releases/tag/v2026.11.6) (2026-11-19)
 
 - **Roteiro notas-versoes: o passo 23 de volta (T22780)** ([#202](https://github.com/kiwi-init/kiwinotes/pull/202))
