@@ -31,6 +31,8 @@ export class DocxSaver {
   private written: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private saving: Promise<boolean> | null = null;
+  /** O gato está tocando na tela (T21231): a edição da pessoa espera para gravar. */
+  private held = false;
 
   constructor(
     private readonly o: DocxSaverOptions,
@@ -47,9 +49,15 @@ export class DocxSaver {
     return this.dirty;
   }
 
+  /** Há edição da pessoa que o disco ainda não tem: por gravar, ou gravando agora (T21231). */
+  get unsaved(): boolean {
+    return this.dirty || !!this.saving;
+  }
+
   /** O documento foi aberto de novo, com estes bytes do disco: as edições de antes não valem mais. */
   opened(version: string): void {
     this.cancel();
+    this.held = false;
     this.disk = version;
     this.dirty = false;
   }
@@ -69,6 +77,27 @@ export class DocxSaver {
     return false;
   }
 
+  /** Estes bytes são os nossos, ou esta versão é a que já temos: nada a abrir. */
+  known(base64: string, version: string): boolean {
+    return base64 === this.written || version === this.disk;
+  }
+
+  /**
+   * O gato vai tocar as mudanças dele na tela (T21231): até o `release`, nada grava (os bytes da tela estariam no meio,
+   * sobre a versão de antes dele).
+   */
+  hold(): void {
+    this.cancel();
+    this.held = true;
+  }
+
+  /** O fim do `hold`: a edição da pessoa que esperou grava agora, por cima da versão do gato. */
+  release(): void {
+    if (!this.held) return;
+    this.held = false;
+    if (this.dirty) this.edited();
+  }
+
   /**
    * O agente gravou o arquivo, e as mudanças dele já estão na tela (T21231, `play(docxOps)`): a versão dele vira a base,
    * sem reabrir e sem aviso. Uma edição da pessoa que ainda não foi gravada segue, agora por cima da versão do agente.
@@ -82,6 +111,7 @@ export class DocxSaver {
     if (!this.canSave) return;
     this.dirty = true;
     this.cancel();
+    if (this.held) return;
     this.timer = setTimeout(() => {
       this.timer = null;
       void this.flush();
@@ -91,7 +121,7 @@ export class DocxSaver {
   /** Grava agora o que falta. Os bytes saem do motor nesta chamada, antes de qualquer espera. */
   flush(): Promise<boolean> {
     this.cancel();
-    if (!this.dirty || !this.o.files.saveBytes) return this.saving ?? Promise.resolve(true);
+    if (this.held || !this.dirty || !this.o.files.saveBytes) return this.saving ?? Promise.resolve(true);
     let b64: string;
     try {
       b64 = base64Of(this.o.bytes());
@@ -123,6 +153,12 @@ export class DocxSaver {
       if (r.saved) {
         this.disk = r.version;
         return true;
+      }
+      // Foi o gato, que está tocando a versão dele na tela agora (T21231): a edição da pessoa já está na tela por cima
+      // dela, e grava de novo no `release`, sobre a versão dele. Se a tela não bater, o documento abre do disco.
+      if (this.held) {
+        this.dirty = true;
+        return false;
       }
       // Mudou no disco desde a nossa versão: vale o arquivo de lá, como numa nota com conflito.
       this.o.notice(CHANGED_OUTSIDE);

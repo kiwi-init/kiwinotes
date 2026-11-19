@@ -106,6 +106,51 @@ describe("DocxSaver", () => {
     expect(notices).toEqual([]);
   });
 
+  test("hold: enquanto o gato toca, a edição da pessoa não grava; o release grava por cima da versão dele", async () => {
+    const { saver, calls, edit } = setup();
+    edit("A Ana digitando");
+    saver.hold();
+    edit("A Ana digitando mais");
+    await tick(60);
+    expect(await saver.flush()).toBe(true);
+    expect(calls).toEqual([]);
+    expect(saver.pending).toBe(true);
+    saver.adopt("v-agente");
+    saver.release();
+    await tick(60);
+    expect(calls).toEqual([{ base64: b64("A Ana digitando mais"), base: "v-agente" }]);
+  });
+
+  test("hold e a tela que não bateu: a leitura do disco reabre, avisa, e o release não grava nada", async () => {
+    const { saver, calls, edit, notices } = setup();
+    edit("A Ana digitando");
+    saver.hold();
+    expect(saver.known(b64("O que o agente gravou"), "v-agente")).toBe(false);
+    expect(saver.incoming(b64("O que o agente gravou"), "v-agente")).toBe(false);
+    saver.release();
+    await tick(60);
+    expect(calls).toEqual([]);
+    expect(notices).toEqual([CHANGED_OUTSIDE]);
+    expect(saver.known("", "v-agente")).toBe(true);
+  });
+
+  test("a gravação da pessoa que perde para a do gato enquanto ele toca: não reabre, e grava de novo sobre a versão dele", async () => {
+    const stale = { base64: b64("O que o agente gravou"), version: "v-agente" };
+    const { saver, calls, edit, notices, reloads } = setup({ stale });
+    edit("A Ana digitando");
+    const going = saver.flush();
+    expect(saver.unsaved).toBe(true);
+    saver.hold();
+    expect(await going).toBe(false);
+    expect(reloads).toEqual([]);
+    expect(notices).toEqual([]);
+    expect(saver.pending).toBe(true);
+    saver.adopt("v-agente");
+    saver.release();
+    await tick(60);
+    expect(calls.map((c) => c.base)).toEqual(["v1", "v-agente"]);
+  });
+
   test("sem saveBytes, nada grava", async () => {
     const saver = new DocxSaver({ path: "a.docx", files: {}, bytes: () => enc("x"), notice: () => {}, reload: () => {} }, "v1");
     expect(saver.canSave).toBe(false);

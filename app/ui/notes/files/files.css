@@ -832,3 +832,27 @@
 .kn-file-docx-mark[data-current] {
   background: rgba(255, 138, 0, 0.55);
 }
+
+/* O Kiwi Cat escrevendo no docx (T21231): o texto dele realçado na cor do gato, que some sozinho; o que vai sair, riscado
+   de leve antes de sair; e o cursor com a etiqueta, como o de outra pessoa num documento compartilhado. */
+.kn-file-docx-kiwi {
+  position: absolute;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--kiwi-accent) 26%, transparent);
+  pointer-events: none;
+}
+.kn-file-docx-kiwi[data-gone] {
+  background:
+    linear-gradient(transparent calc(50% - 1px), color-mix(in srgb, var(--kiwi-accent) 75%, transparent) calc(50% - 1px), color-mix(in srgb, var(--kiwi-accent) 75%, transparent) calc(50% + 1px), transparent calc(50% + 1px)),
+    color-mix(in srgb, var(--kiwi-accent) 12%, transparent);
+}
+.kn-file-docx-kiwi[data-fading] {
+  animation: kn-kiwi-fade 2.6s ease-in 0.5s forwards;
+}
+.kn-kiwi-cursor.kn-file-docx-kiwi-cursor {
+  position: absolute;
+  z-index: 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kn-file-docx-kiwi[data-fading] { animation: none; }
+}

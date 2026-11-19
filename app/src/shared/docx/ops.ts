@@ -13,6 +13,25 @@ export type DocxOp =
   /** Apaga o parágrafo inteiro. */
   | { op: "delete"; paragraphId: string };
 
+/**
+ * Onde as operações deixam o documento: `touched`, os parágrafos que ficam com o texto do gato (trocados ou novos), e
+ * `gone`, os que ele apagou. O realce vai nos primeiros; a conferência com o disco olha os dois.
+ */
+export function docxOpsResult(ops: readonly DocxOp[]): { touched: string[]; gone: string[] } {
+  const touched = new Set<string>();
+  const gone = new Set<string>();
+  for (const o of ops) {
+    if (o.op === "delete") {
+      touched.delete(o.paragraphId);
+      gone.add(o.paragraphId);
+    } else {
+      gone.delete(o.paragraphId);
+      touched.add(o.paragraphId);
+    }
+  }
+  return { touched: [...touched], gone: [...gone] };
+}
+
 /** Os parágrafos que as operações mudam ou apagam: a pessoa escrevendo num deles faz o gato esperar. */
 export function docxOpsTouch(ops: readonly DocxOp[]): Set<string> {
   const out = new Set<string>();

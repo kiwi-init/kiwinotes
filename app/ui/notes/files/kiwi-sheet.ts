@@ -3,6 +3,7 @@
 // ficou no fim (uma linha inserida depois a empurra, uma apagada a tira), na aba com o nome do fim. Sem React e sem
 // DOM, para os testes.
 
+import type { DocxOp } from "../../../src/shared/docx/ops.ts";
 import { flatOps, type Grid, type SheetOp } from "../../../src/shared/sheet/ops.ts";
 
 export interface KiwiCellStep {
@@ -25,6 +26,8 @@ export interface KiwiSheetSteps {
 /** De onde a janela tira o que o gato gravou: o aviso do `agent.wrote` (pelo caminho e pela versão), e a cor dele. */
 export interface KiwiSheetSource {
   take(path: string, version: string): { sheetOps?: SheetOp[] } | null;
+  /** O mesmo para o docx (T21231): as operações das gravações do gato que levaram o arquivo até `version`. */
+  takeDocx?(path: string, version: string): { docxOps?: DocxOp[] } | null;
   cor: unknown;
 }
 
