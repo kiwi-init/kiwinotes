@@ -10,11 +10,13 @@
 //   do `files.changed` dele.
 
 import { liveEdits } from "../shared/live-edits.ts";
+import type { SheetOp } from "../shared/sheet/ops.ts";
 import type { UiEvents } from "../shared/ui-contract.ts";
-import { versionOf } from "../notes/vault.ts";
+import { bytesVersion, versionOf } from "../notes/vault.ts";
 import type { VaultWriter } from "./tools/writer.ts";
+import { SheetEditing } from "./sheet-editing.ts";
 
-/** O `agent.wrote` do contrato (1.87.0). */
+/** O `agent.wrote` do contrato (1.87.0; as `sheetOps` da planilha, 1.90.0). */
 export type AgentWrote = UiEvents["agent.wrote"];
 
 interface Pending {
@@ -27,6 +29,8 @@ interface Pending {
 /** As escritas do agente que estão gravando agora, à espera do aviso do cofre. */
 export class LiveWrites {
   private pending: Pending[] = [];
+  /** As células que a pessoa está editando nas planilhas abertas (`files.editing`, T21114). */
+  readonly editing = new SheetEditing();
   private listeners = new Set<(e: Omit<AgentWrote, "folderId">) => void>();
 
   /** Os avisos que não vão com um evento do cofre (o arquivo novo do `files_create`): saem na hora. */
@@ -89,6 +93,23 @@ export function liveWriter(inner: VaultWriter, live: LiveWrites, turnId: () => s
         done();
       }
     },
+    // A planilha (T21114): o aviso leva as operações, e a grade aberta toca cada uma.
+    ...(inner.getBytes ? { getBytes: inner.getBytes.bind(inner) } : {}),
+    // A pessoa com a caixa aberta na célula que o gato vai mudar: ele espera (T21114).
+    waitCells: (path: string, ops: readonly SheetOp[], ms?: number) => live.editing.waitFree(path, ops, ms),
+    ...(inner.saveBytes
+      ? {
+          saveBytes: async (path: string, base64: string, baseVersion: string, sheetOps?: readonly SheetOp[]) => {
+            const version = bytesVersion(Buffer.from(base64, "base64"));
+            const done = live.expect({ path, baseVersion, version, ...turn(), ...(sheetOps?.length ? { sheetOps: [...sheetOps] } : {}) });
+            try {
+              return await inner.saveBytes!(path, base64, baseVersion, sheetOps);
+            } finally {
+              done();
+            }
+          },
+        }
+      : {}),
     createFile: async (folder, name, bytes) => {
       // O caminho só se sabe depois do `files.changed` dele: o aviso sai em seguida, só com o caminho.
       const r = await inner.createFile(folder, name, bytes);

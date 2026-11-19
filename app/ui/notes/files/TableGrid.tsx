@@ -8,6 +8,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
 import { ContextMenu, type MenuItem } from "../ContextMenu.tsx";
 import { columnName } from "./csv.ts";
+import type { GridKiwi } from "./kiwi-sheet-play.ts";
 import { CELL_PAD, columnWidths, isNumeric, offsetsOf, ROW_H, trimEmpty, visibleRange, type Viewport } from "./grid.ts";
 import { clipboardText, findCells, parseClipboard, type Range, rangeOf } from "./sheet-doc.ts";
 import { type Cell, cellAddress, cellText, clampCell, dragWidth, firstVisible, fitWidth, moveCell, scrollToShow, withCustom } from "./selection.ts";
@@ -32,6 +33,8 @@ export interface GridEdit {
   redo(): void;
   /** A fórmula que o Kiwi não sabe refazer: a célula fica marcada, e a barra diz por quê. */
   staleAt?(r: number, c: number): boolean;
+  /** A caixa de digitar abriu nesta célula, ou fechou (`null`), depois de gravar (T21114: o Kiwi Cat espera). */
+  editing?(cell: Cell | null): void;
 }
 
 /** A ordem e o filtro da vista (nada grava). `label`: o que está valendo, para o rodapé; `null` sem nenhum. */
@@ -70,6 +73,10 @@ interface GridProps {
   rowNumbers?: number[];
   edit?: GridEdit;
   view?: GridView;
+  /** O Kiwi Cat tocando a gravação dele por cima (T21114): o texto que ele digita, a etiqueta e o realce. */
+  kiwi?: GridKiwi | null;
+  /** O Kiwi Cat inseriu ou apagou linhas: a caixa aberta vai para esta célula (`row` -1: ela saiu). `n` muda a cada vez. */
+  moveEditing?: { row: number; col: number; n: number } | null;
 }
 
 /** A coluna dos números das linhas: no mínimo esta largura (px). */
@@ -131,7 +138,7 @@ interface Editing {
  * dos números paradas. Todas as linhas e colunas: só as células que estão na tela são montadas, e a rolagem segue lisa
  * com 256 colunas e 100.000 linhas. As linhas e colunas vazias do fim não contam (na grade que edita, a folga fica).
  */
-export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "" }: GridProps) {
+export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "", kiwi, moveEditing }: GridProps) {
   const editable = !!edit;
   const { rows, columns } = useMemo(
     () => (editable ? { rows: rawRows, columns: rawColumns } : trimEmpty(rawHeader, rawRows, rawColumns)),
@@ -176,6 +183,25 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     editingRef.current = e;
     setEditingState(e);
   };
+  // O app sabe qual célula tem a caixa aberta (T21114). Fechar já gravou: a edição entrou antes deste aviso.
+  const editingAt = editing ? `${editing.row}:${editing.col}` : "";
+  const reportEditing = edit?.editing;
+  useEffect(() => {
+    const e = editingRef.current;
+    reportEditing?.(e ? { row: e.row, col: e.col } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingAt]);
+  // A linha da caixa andou com a gravação do gato: a caixa vai junto, com o que a pessoa já digitou.
+  useEffect(() => {
+    const e = editingRef.current;
+    if (!moveEditing || !e) return;
+    if (moveEditing.row < 0) setEditing(null);
+    else if (moveEditing.row !== e.row || moveEditing.col !== e.col) {
+      setEditing({ ...e, row: moveEditing.row, col: moveEditing.col });
+      setSelected({ row: moveEditing.row, col: moveEditing.col });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveEditing?.n]);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [find, setFind] = useState<{ query: string; index: number } | null>(null);
   const findInput = useRef<HTMLInputElement>(null);
@@ -253,6 +279,16 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     const el = scroll.current;
     return el ? { left: el.scrollLeft / z, top: el.scrollTop / z, width: el.clientWidth / z - numW, height: el.clientHeight / z - head } : null;
   };
+  // O gato rola até a célula que ele digita, como a pessoa veria um colega digitando.
+  const kiwiAt = kiwi?.at ? `${kiwi.at.row}:${kiwi.at.col}` : "";
+  useEffect(() => {
+    const el = scroll.current;
+    const v = liveView();
+    if (!kiwi?.at || !el || !v || !offsets) return;
+    const to = scrollToShow(kiwi.at, offsets, v, true);
+    if (to.left !== v.left || to.top !== v.top) el.scrollTo(to.left * z, to.top * z);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kiwiAt, !!offsets]);
   const select = (cell: Cell, byKey = false, extend = false) => {
     setSelected(cell);
     if (!extend) setAnchor(null);
@@ -542,9 +578,11 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     if (measure) setCustom(c, fitWidth(c, header, rows, measure));
   };
 
-  const cell = (text: string, r: number, c: number, role: "gridcell" | "columnheader") => {
+  const cell = (fileText: string, r: number, c: number, role: "gridcell" | "columnheader") => {
     const on = sel?.row === r && sel.col === c;
     const isOpen = editing && editing.row === r && editing.col === c;
+    const text = kiwi?.text(r, c) ?? fileText;
+    const kiwiMark = kiwi?.mark(r, c);
     return (
       <div
         key={c}
@@ -560,6 +598,9 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
         data-active={on && multi ? "" : undefined}
         data-stale={edit?.staleAt?.(r, c) ? "" : undefined}
         data-editing={isOpen ? "" : undefined}
+        data-kiwi={kiwiMark}
+        data-kiwi-new={kiwi?.isNew(r, c) ? "" : undefined}
+        data-kiwi-below={kiwiMark === "typing" && r <= 1 ? "" : undefined}
         style={{ left: numW + offsets![c]!, width: widths![c] }}
       >
         {isOpen ? (
@@ -575,6 +616,17 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
             onKeyDown={onEditorKey}
             onBlur={() => close(true)}
           />
+        ) : kiwiMark === "typing" ? (
+          <>
+            {text}
+            <span className="kn-kiwi-cursor" aria-hidden="true">
+              <span className="kn-kiwi-caret" />
+              <span className={kiwi!.tagStill ? "kn-kiwi-tag kn-kiwi-tag-still" : "kn-kiwi-tag"}>
+                {kiwi!.face ? <img className="kn-kiwi-face" src={kiwi!.face} alt="" draggable={false} /> : <span className="kn-kiwi-face" />}
+                Kiwi
+              </span>
+            </span>
+          </>
         ) : (
           text
         )}
@@ -585,7 +637,13 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
   const findCount = find && find.query.trim() ? (hits.length ? `${find.index >= 0 ? find.index + 1 : 0} de ${hits.length}` : "nada") : "";
 
   return (
-    <div className="kn-file-table-wrap">
+    <div
+      className="kn-file-table-wrap"
+      data-kiwi-play={kiwi ? (kiwi.fading ? "fading" : "on") : undefined}
+      // Um clique ou uma tecla durante o toque do gato pula para o fim (e faz o que faria).
+      onPointerDownCapture={kiwi && !kiwi.fading ? kiwi.skip : undefined}
+      onKeyDownCapture={kiwi && !kiwi.fading ? kiwi.skip : undefined}
+    >
       <div className="kn-grid-bar">
         <span className="kn-grid-addr" aria-label="Célula selecionada">
           {sel ? (multi && area ? `${cellAddress({ row: area.r0, col: area.c0 }, firstRow)}:${cellAddress({ row: area.r1, col: area.c1 }, firstRow)}` : cellAddress(sel, firstRow)) : ""}

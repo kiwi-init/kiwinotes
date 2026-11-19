@@ -1109,6 +1109,18 @@ export function uiCapabilities(deps: CapabilityDeps,
       }
       return (await vault()).saveFile(a.path, a.content, a.baseVersion);
     },
+    "files.editing": (args) => {
+      const a = fields(args, "files.editing", ["path", "owner", "cell"]);
+      if (typeof a.path !== "string" || !a.path) throw bad("files.editing: path is the file's path");
+      if (typeof a.owner !== "string" || !a.owner || a.owner.length > 100) throw bad("files.editing: owner is a short name");
+      const c = a.cell as { sheet?: unknown; row?: unknown; col?: unknown } | null;
+      if (c !== null) {
+        const pos = (n: unknown) => Number.isInteger(n) && (n as number) >= 0;
+        if (!c || typeof c !== "object" || typeof c.sheet !== "string" || !pos(c.row) || !pos(c.col)) throw bad("files.editing: cell is {sheet, row, col} or null");
+      }
+      deps.agent?.liveWrites.editing.set(a.owner, a.path.replace(/^\/+/, ""), c as { sheet: string; row: number; col: number } | null);
+      return { ok: true as const };
+    },
     "files.create": async (args) => {
       const a = fields(args, "files.create", ["folder", "name", "base64"]);
       if (typeof a.base64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(a.base64)) throw bad("files.create: base64 must be base64 text");

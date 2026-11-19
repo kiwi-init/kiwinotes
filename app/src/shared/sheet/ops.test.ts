@@ -87,6 +87,19 @@ describe("operações na grade", () => {
     expect(() => checkOp({ op: "deleteRows", sheet: "Estoque", at: 0, count: 0 }, names)).toThrow(SheetOpError);
     expect(() => checkOp({ op: "set", sheet: "Estoque", row: -1, col: 0, value: 1 }, names)).toThrow(SheetOpError);
   });
+
+  test("num lote, a aba nova e o nome novo valem para as operações seguintes (T21114)", () => {
+    const names = ["Estoque", "Resumo"];
+    const set = (sheet: string) => ({ op: "set" as const, sheet, row: 0, col: 0, value: 1 });
+    expect(() => checkOp({ op: "batch", ops: [{ op: "addSheet", name: "Notas" }, set("Notas")] }, names)).not.toThrow();
+    expect(() => checkOp({ op: "batch", ops: [{ op: "renameSheet", sheet: "Resumo", name: "Painel" }, set("Painel")] }, names)).not.toThrow();
+    expect(() => checkOp({ op: "batch", ops: [{ op: "renameSheet", sheet: "Resumo", name: "Painel" }, set("Resumo")] }, names)).toThrow("não há aba chamada Resumo");
+    expect(() => checkOp({ op: "batch", ops: [set("Notas"), { op: "addSheet", name: "Notas" }] }, names)).toThrow(SheetOpError);
+    const g: Grid = { sheets: [{ name: "Estoque", rows: [] }] };
+    const after = applyToGrid(g, { op: "batch", ops: [{ op: "addSheet", name: "Notas" }, set("Notas")] });
+    expect(after.sheets.map((s) => s.name)).toEqual(["Estoque", "Notas"]);
+    expect(after.sheets[1]!.rows[0]![0]!.value).toBe(1);
+  });
 });
 
 describe("desfazer e refazer", () => {

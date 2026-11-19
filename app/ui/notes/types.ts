@@ -169,6 +169,8 @@ export interface NotesApi {
     save?(path: string, content: string, baseVersion: string): Promise<FileSaveResult>;
     /** Grava os bytes de uma planilha (xlsx, csv, tsv) aberta nas Notas (T21107/T21109, contrato 1.89.0), em base64. */
     saveBytes?(path: string, base64: string, baseVersion: string): Promise<FileSaveResult>;
+    /** A célula com a caixa de edição aberta numa planilha, ou `null` (T21114, contrato 1.90.0): o Kiwi Cat espera. */
+    editing?(path: string, owner: string, cell: { sheet: string; row: number; col: number } | null): Promise<{ ok: true }>;
     /** Renomeia ou move, com os links das notas atrás (T19878, contrato 1.84.0). Num engine antigo, o menu não tem. */
     rename?(path: string, newPath: string): Result<"files.rename">;
     /** Para o Lixo, sem versão (o "Apagar" do menu, T19878); o Desfazer é o `folders.restore`. */

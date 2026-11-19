@@ -13,7 +13,7 @@
 // - **Pelas capacidades das janelas** (`UNDO_CAPABILITIES`): a janela das Notas recebe o `notes.changed` como de
 //   qualquer mudança.
 
-import { versionOf } from "../notes/vault.ts";
+import { bytesVersion, versionOf } from "../notes/vault.ts";
 import { isEditableText } from "../shared/file-view.ts";
 import { ACTIVITY_KEEP_MS, ACTIVITY_LIST_MAX, type ActivityChange, type AgentActivity } from "./activity.ts";
 import type { AgentUndoNote, AgentUndoResult } from "../shared/ui-contract.ts";
@@ -38,6 +38,10 @@ const codeOf = (e: unknown) => (e as { code?: string })?.code;
 const isNote = (path: string) => /\.md$/i.test(path);
 /** O arquivo de texto que o agente mudou (o `.txt` do spec #13379, e o código, o json… do #21158): volta pelo `files.save`. */
 const isText = (path: string) => isEditableText(path);
+/** A planilha que o agente mudou (T21114): a cópia de antes é o arquivo em base64, e volta pelo `files.save` com `base64`. */
+const isSheet = (path: string) => /\.(xlsx|csv|tsv)$/i.test(path);
+/** A versão do texto guardado no registro: a da planilha é a dos bytes. */
+const copyVersion = (path: string, copy: string) => (isSheet(path) ? bytesVersion(Buffer.from(copy, "base64")) : versionOf(copy));
 const withFolder = (args: Record<string, unknown>, folderId?: string) => (folderId ? { ...args, folderId } : args);
 
 /** A pasta trocou entre a conferência e a chamada: o `folderCapabilities` recusa o id velho. */
@@ -73,6 +77,10 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
           const f = await call<{ version?: string; text?: string }>("files.read", withFolder({ path, as: "text" }, folderId));
           return { content: f.text ?? "", version: f.version ?? "" };
         }
+        if (isSheet(path)) {
+          const f = await call<{ version?: string; base64?: string }>("files.read", withFolder({ path, as: "binary" }, folderId));
+          return { content: f.base64 ?? "", version: f.version ?? "" };
+        }
         if (!isNote(path)) {
           const f = await call<{ version?: string }>("files.read", withFolder({ path, as: "binary" }, folderId));
           // Um arquivo grande demais para ler volta sem versão: não dá para conferir, então não é o do agente.
@@ -88,6 +96,7 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
     save: async (path, content, baseVersion, folderId) => {
       try {
         if (isText(path)) return (await call<{ saved: boolean }>("files.save", withFolder({ path, content, baseVersion }, folderId))).saved === true;
+        if (isSheet(path)) return (await call<{ saved: boolean }>("files.save", withFolder({ path, base64: content, baseVersion }, folderId))).saved === true;
         const r = await call<{ saved: boolean }>("notes.save", withFolder({ path, content, baseVersion, snapshot: true }, folderId));
         return r.saved === true;
       } catch (e) {
@@ -257,7 +266,7 @@ export async function undo(d: UndoDeps, requestId: string, change?: number): Pro
       }
       if (current.version !== last.version) {
         // Já de volta ao texto de antes (um desfazer que gravou e não chegou a anotar): só anota.
-        if (before !== null && current.version === versionOf(before)) {
+        if (before !== null && current.version === copyVersion(g.path, before)) {
           await d.activity.markUndone(requestId, g.indexes);
           notes.push({ path: g.path, result: "already", changes: nums, message: "Já estava de volta ao texto de antes." });
         } else refuse(MESSAGES.changed(g.path, created));

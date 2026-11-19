@@ -23,6 +23,7 @@ import type { VaultFile } from "../../notes/vault.ts";
 import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument, splitZipPath } from "./files.ts";
 import { buildFile, CREATE_FORMATS, type CreateContent, type CreateFormat, type DocBlock } from "./files-create.ts";
 import type { VaultWriter, WriterNote } from "./writer.ts";
+import { SHEETS_EDIT_CHANGES, SHEETS_READ_ROWS, SheetToolError, type SheetChange, sheetsEdit, sheetsRead } from "./sheets.ts";
 import { FACT_MAX_CHARS, MEMORY_MAX, MemoryError } from "../memory.ts";
 import {
   PROPOSAL_CANDIDATES_MAX,
@@ -84,6 +85,7 @@ export const KIWI_READ_TOOL_NAMES = [
   "projects_list",
   "project_status",
   "files_read",
+  "sheets_read",
 ] as const;
 export const KIWI_WRITE_TOOL_NAMES = [
   "notes_create",
@@ -96,6 +98,7 @@ export const KIWI_WRITE_TOOL_NAMES = [
   "notes_organize_folder",
   "project_diary_add",
   "files_create",
+  "sheets_edit",
 ] as const;
 /** O diário do agente num projeto (spec #11469, T11670): a seção no fim da nota principal, uma linha com data por vez. */
 export const DIARY_SECTION = "Diário do agente";
@@ -280,6 +283,21 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     },
   },
   {
+    name: "sheets_read",
+    title: "Ler as células de uma planilha",
+    description: `Lê as células de uma planilha do cofre (xlsx, csv ou tsv) para mudá-la com o sheets_edit: linhas com os valores (número é número; vazia é null), formulas (A1 → "=SUM(B2:B4)", em inglês como no Excel) e textos (o que a célula mostra quando o formato muda o valor: moeda, data, porcentagem). Devolve a versao, as abas e o tamanho dos dados. Sem intervalo, as ${SHEETS_READ_ROWS} primeiras linhas da aba. Para só entender o conteúdo de uma planilha, o files_read também serve.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        caminho: { type: "string", description: "O caminho da planilha no cofre (ex.: Projetos/Kiwi/vendas.xlsx)." },
+        aba: { type: "string", description: "A aba; sem ela, a primeira. O csv e o tsv não têm abas." },
+        intervalo: { type: "string", description: "As células, no jeito do Excel (ex.: A1:F40 ou C7)." },
+      },
+      required: ["caminho"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "notes_create",
     title: "Criar uma nota",
     description: `Cria uma nota nova numa pasta do Kiwi, com o título e o texto em Markdown. Se já existe uma nota com esse título na pasta, a nova ganha um número ("Título 2"): a resposta diz o caminho que ela ganhou. Até ${WRITE_MAX_CHARS} caracteres. Não cria notas de reunião.`,
@@ -433,6 +451,41 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
       additionalProperties: false,
     },
     writes: true,
+  },
+  {
+    name: "sheets_edit",
+    title: "Mudar uma planilha",
+    description: `Muda uma planilha do cofre (xlsx, csv ou tsv) na frente da pessoa: se ela está aberta, a grade mostra cada mudança. Leia antes com o sheets_read e mande a versao. As mudanças vão na ordem, cada uma sobre o resultado da anterior: celulas ({"B3": 12, "C3": "texto", "D3": "=B3*2", "E3": null}; a fórmula começa com "=" e vai em inglês como no Excel; null ou "" apaga), inserir_linhas e apagar_linhas (linha a partir de 1, quantidade), inserir_colunas e apagar_colunas (coluna pela letra, quantidade), nova_aba e renomear_aba (nome). As fórmulas que dependem do que mudou recalculam; o resto do arquivo (estilos, gráficos, larguras) fica como estava. No csv e no tsv, tudo é texto. Se a pessoa está digitando numa célula que você muda, o Kiwi espera ela sair; se demorar, nada é escrito e vem E_BUSY com a célula: mude as outras sem ela. Até ${SHEETS_EDIT_CHANGES} mudanças por vez. Aparece na Atividade com [Desfazer].`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        caminho: { type: "string", description: "O caminho da planilha no cofre." },
+        versao: { type: "string", description: "A versao que o sheets_read devolveu." },
+        mudancas: {
+          type: "array",
+          minItems: 1,
+          maxItems: SHEETS_EDIT_CHANGES,
+          items: {
+            type: "object",
+            properties: {
+              tipo: { type: "string", enum: ["celulas", "inserir_linhas", "apagar_linhas", "inserir_colunas", "apagar_colunas", "nova_aba", "renomear_aba"] },
+              aba: { type: "string", description: "A aba; sem ela, a primeira. No renomear_aba, a aba que muda de nome." },
+              celulas: { type: "object", additionalProperties: { type: ["string", "number", "boolean", "null"] }, description: 'Célula → valor, ex.: {"B3": 12, "D3": "=B3*C3"}.' },
+              linha: { type: "integer", minimum: 1, description: "A linha (a partir de 1): onde inserir, ou a primeira a apagar." },
+              coluna: { type: "string", description: "A letra da coluna: onde inserir, ou a primeira a apagar." },
+              quantidade: { type: "integer", minimum: 1, maximum: 10000, description: "Quantas linhas ou colunas; sem ela, 1." },
+              nome: { type: "string", description: "O nome da aba nova, ou o nome novo." },
+            },
+            required: ["tipo"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["caminho", "versao", "mudancas"],
+      additionalProperties: false,
+    },
+    writes: true,
+    replaces: true,
   },
   {
     name: "files_create",
@@ -1320,6 +1373,17 @@ async function run(
       }
       return { value: { path: n.path, titulo: n.title, ...versao, ...chunk(content, offset, max) }, target: n.path };
     }
+    case "sheets_read": {
+      const a = args(raw, ["caminho", "aba", "intervalo"]);
+      const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
+      try {
+        const value = await sheetsRead(reader, { caminho: path, aba: str(a, "aba", false, 200), intervalo: str(a, "intervalo", false, 40) }, (t) => seen(path, t));
+        return { value, target: path };
+      } catch (e) {
+        if (e instanceof SheetToolError) throw new ToolError(e.code, e.message);
+        throw e;
+      }
+    }
     case "files_read": {
       const a = args(raw, ["caminho", "parte"]);
       const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
@@ -1636,6 +1700,23 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
   switch (name) {
     case "files_create":
       return createFile(writer, raw, guard, where);
+    case "sheets_edit": {
+      const a = args(raw, ["caminho", "versao", "mudancas"]);
+      const path = str(a, "caminho", true)!.trim().replace(/^\/+/, "");
+      const versao = str(a, "versao", true, 200)!;
+      if (!Array.isArray(a.mudancas)) throw new ToolError("E_BAD_ARGS", "mudancas é uma lista");
+      try {
+        const r = await sheetsEdit(writer, journal, { caminho: path, versao, mudancas: a.mudancas as SheetChange[] }, (p, t) => restore(guard, p, t));
+        return {
+          value: { caminho: r.path, versao: r.version, mudou: `${a.mudancas.length} mudança(s)${r.cells ? `, ${r.cells} célula(s)` : ""}` },
+          target: r.path,
+          change: { kind: "replaced", path: r.path, before: r.before, after: r.after, version: r.version, copy: r.copy, ...where },
+        };
+      } catch (e) {
+        if (e instanceof SheetToolError) throw new ToolError(e.code, e.message);
+        throw e;
+      }
+    }
     case "notes_create": {
       const a = args(raw, ["folder", "title", "text"]);
       const title = str(a, "title", true, 200)!;

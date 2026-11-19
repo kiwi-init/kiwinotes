@@ -15,11 +15,11 @@ export { TableGrid } from "./TableGrid.tsx";
 
 const ENCODINGS = { "utf-8": "UTF-8", "utf-16le": "UTF-16", "utf-16be": "UTF-16", "windows-1252": "Windows-1252" } as const;
 
-export function TableViewer({ path, file, files, flushRef }: FileViewerProps) {
+export function TableViewer({ path, file, files, flushRef, kiwi }: FileViewerProps) {
   // Um engine antigo entrega o texto: vira bytes em UTF-8, como estava.
   const base64 = useMemo(() => ("base64" in file ? file.base64 : "text" in file ? base64Of(new TextEncoder().encode(file.text)) : ""), [file]);
   const name = path.split("/").at(-1) ?? path;
-  const session = useSheetSession({ path, name, base64, version: file.version, files, flushRef, display: plainDisplay });
+  const session = useSheetSession({ path, name, base64, version: file.version, files, flushRef, display: plainDisplay, kiwi });
   // As larguras que a pessoa arrastou valem enquanto o arquivo está aberto, mesmo quando ele recarrega (T21040).
   const widthMemory = useMemo(() => new Map<string, Record<number, number>>(), [path]);
   const { state } = session;
