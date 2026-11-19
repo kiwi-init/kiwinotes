@@ -161,8 +161,8 @@ try {
     const item = p.locator(`.kn-tree-pop .kn-side-item[data-path="${rel}"]`);
     await item.waitFor({ timeout: 1500 }).catch(() => p.click(".kn-tree-pop button[data-all='expand']"));
     await item.click();
-    await p.locator(".kn-tree-pop").waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
-    await p.waitForTimeout(300);
+    // A árvore abre ao passar o mouse: ele sai dela, para ela fechar e não cobrir o documento no print.
+    await p.mouse.move(900, 560);
   };
   try {
     await p.waitForSelector(".kn-file[data-state='ready'] .docx-page", { timeout: 30000 });
@@ -181,9 +181,14 @@ try {
     await cursorShows.catch(async (e) => {
       throw new Error(`sem o cursor do gato (mesma montagem: ${await sameMount()}): ${e}`);
     });
-    assert.equal((await p.locator(".kn-kiwi-tag").first().innerText()).trim(), "Kiwi");
     await p.waitForFunction(() => document.querySelector(".docx-paginated-surface")?.textContent?.includes("As canecas"), null, { timeout: 8000 });
-    assert.ok(Number(await p.locator(".kn-file-docx-kiwi-cursor .kn-kiwi-tag").first().evaluate((t) => getComputedStyle(t).opacity)) > 0.9, "a etiqueta à vista");
+    // O painter refaz o cursor a cada quadro: a leitura vai de uma vez, na página, no elemento de agora.
+    const label = await p.evaluate(() => {
+      const t = document.querySelector(".kn-file-docx-kiwi-cursor .kn-kiwi-tag") as HTMLElement | null;
+      return t ? { text: t.textContent?.trim(), opacity: Number(getComputedStyle(t).opacity) } : null;
+    });
+    assert.equal(label?.text, "Kiwi");
+    assert.ok(label.opacity > 0.9, `a etiqueta à vista (opacidade ${label.opacity})`);
     await shot(p, "01-gato-digitando");
     checks.push("o gato grava e a tela toca: o cursor com a etiqueta Kiwi, o texto entrando");
     await p.waitForSelector(".kn-file-docx-kiwi[data-fading]", { timeout: 8000 });
@@ -250,6 +255,7 @@ try {
     await catEdits(FECHADO, [{ tipo: "trocar", paragrafo: 3, de: "quintas", para: "sextas" }]);
     await openFile(FECHADO);
     await p.waitForSelector(".kn-file[data-state='ready'] .kn-file-docx-kiwi", { timeout: 15000 });
+    await p.locator(".kn-tree-pop").waitFor({ state: "detached", timeout: 1000 }).catch(() => {});
     assert.equal(await p.locator(".kn-file-docx-kiwi-cursor").count(), 0, "fechado: só o realce");
     assert.ok((await screenText()).includes("Empresa Y entrega às sextas."));
     await shot(p, "05-fechado-realce-ao-abrir");
