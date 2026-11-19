@@ -728,13 +728,13 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     () =>
       api.onAgentWrote?.((e) => {
         // A nota anima no editor; o arquivo que abre fora dele (um .txt, uma planilha) mostra só o aviso no card.
-        if (e.edits || e.sheetOps) kiwiWrites.current.add(e);
+        if (e.edits || e.sheetOps || e.docxOps) kiwiWrites.current.add(e);
         setKiwiTouched(e.path);
       }),
     [api],
   );
   // A planilha aberta toca as operações do Kiwi (T21114): ela pega a gravação pelo caminho e pela versão que recarregou.
-  const kiwiSheets = useMemo(() => ({ take: (p: string, v: string) => kiwiWrites.current.takeSheet(p, v), cor: prefs.catColor }), [prefs.catColor]);
+  const kiwiSheets = useMemo(() => ({ take: (p: string, v: string) => kiwiWrites.current.takeSheet(p, v), takeDocx: (p: string, v: string) => kiwiWrites.current.takeDocx(p, v), catWroteDocx: (p: string, b: string, v: string) => kiwiWrites.current.catWroteDocx(p, b, v), cor: prefs.catColor }), [prefs.catColor]);
   useEffect(() => {
     if (!kiwiTouched) return;
     const t = setTimeout(() => setKiwiTouched(null), 4000);

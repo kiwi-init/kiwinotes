@@ -50,8 +50,11 @@ const isNote = (path: string) => /\.md$/i.test(path);
 const isText = (path: string) => isEditableText(path);
 /** O quadro branco que o gato mudou (T22217): a cópia de antes é o JSON, e volta pelo `notes.canvasSave`, que confere a versão. */
 const isCanvas = (path: string) => /\.canvas$/i.test(path);
-/** A planilha que o agente mudou (T21114): a cópia de antes é o arquivo em base64, e volta pelo `files.save` com `base64`. */
-const isSheet = (path: string) => /\.(xlsx|csv|tsv)$/i.test(path);
+/**
+ * A planilha (T21114) ou o docx (T21231) que o agente mudou: a cópia de antes é o arquivo em base64, e volta pelo
+ * `files.save` com `base64`.
+ */
+const isSheet = (path: string) => /\.(xlsx|csv|tsv|docx)$/i.test(path);
 /** A versão do texto guardado no registro: a da planilha é a dos bytes. */
 const copyVersion = (path: string, copy: string) => (isSheet(path) ? bytesVersion(Buffer.from(copy, "base64")) : versionOf(copy));
 const withFolder = (args: Record<string, unknown>, folderId?: string) => (folderId ? { ...args, folderId } : args);

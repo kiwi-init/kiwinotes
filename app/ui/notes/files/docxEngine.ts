@@ -7,7 +7,10 @@ import "@docx-editor.dev/core/styles/editor.css";
 import { mountPaginatedSurface, type PaginatedSurface } from "@docx-editor.dev/core/editor";
 import { forEachSemanticSpan, keyedRangeRects, type SemanticLayout, tryCreateCanvasMeasurer } from "@docx-editor.dev/core/layout";
 
+import type { DocxOp } from "../../../src/shared/docx/ops.ts";
 import type { DocxMatch, DocxPiece } from "./docxFind.ts";
+import { paraIds } from "./docxIds.ts";
+import { DocxKiwi, type KiwiPlayOptions } from "./docxKiwi.ts";
 import { wordMeasurer } from "./docxMetrics.ts";
 import { keepUntouchedParts } from "./docxParts.ts";
 import { tidyDocx } from "./docxRuns.ts";
@@ -41,6 +44,13 @@ export interface DocxHandle {
   revealParagraph(id: string): void;
   /** Rola até o alto de uma página (a primeira é 0). */
   revealPage(index: number): void;
+  /**
+   * Toca as mudanças que o Kiwi Cat gravou (T21231): o cursor dele, o texto entrando, o realce. `false`: uma não deu
+   * para tocar, e quem chamou abre o arquivo do disco.
+   */
+  play(ops: readonly DocxOp[], o: KiwiPlayOptions): Promise<boolean>;
+  /** Só o realce destes parágrafos (pelo `w14:paraId`), de uma vez (T21231). */
+  glow(paragraphIds: Iterable<string>): void;
   /** O docx com as edições, com os trechos iguais juntos (T21152). */
   save(): Uint8Array;
   undo(): void;
@@ -58,8 +68,8 @@ interface Options {
   /** Cada edição que mudou o documento. */
   onEdit(): void;
   /**
-   * O parágrafo com o cursor da pessoa, ou `null` quando o foco sai do documento ou ele fecha (T21231: o gato espera a
-   * pessoa sair do parágrafo antes de mudá-lo). Só chama quando muda.
+   * O parágrafo com o cursor da pessoa (o `w14:paraId`, o id que o agente usa), ou `null` quando o foco sai do
+   * documento ou ele fecha (T21231: o gato espera a pessoa sair do parágrafo antes de mudá-lo). Só chama quando muda.
    */
   onCaret?(paragraphId: string | null): void;
   /** Um clique num link de fora: quem abre é o visualizador, depois de conferir o endereço. */
@@ -73,7 +83,12 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, editable
   // Uma cópia dos bytes abertos: o motor pode ficar com o buffer que recebeu.
   const original = bytes.slice();
   let lastCaret: string | null = null;
-  const caret = (id: string | null) => {
+  // O id da tela (o nó) vira o do arquivo pela sessão do motor (`docxIds.ts`); antes de a superfície existir, nada.
+  let toParaId: ((node: string) => string | null) | null = null;
+  let kiwi: DocxKiwi | null = null;
+  const caret = (node: string | null) => {
+    if (kiwi?.playing) return;
+    const id = node && toParaId ? toParaId(node) : null;
     if (id === lastCaret) return;
     lastCaret = id;
     onCaret?.(id);
@@ -82,7 +97,10 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, editable
   const base = context ? tryCreateCanvasMeasurer({ context, scale: PT_TO_PX }) : null;
   const r = mountPaginatedSurface(host, bytes, {
     editingMode: editable ? "edit" : "view",
-    onEdit: () => onEdit(),
+    // As edições que o gato toca na tela já estão no disco: não são da pessoa.
+    onEdit: () => {
+      if (!kiwi?.playing) onEdit();
+    },
     onChange: (state) => caret(host.contains(host.ownerDocument.activeElement) ? state.selection.head.paragraphId : null),
     scale: zoom * PT_TO_PX,
     ...(base ? { measurer: wordMeasurer(base), producer: "kiwi-word-lines" } : {}),
@@ -97,14 +115,20 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, editable
     if (!host.contains(e.relatedTarget as Node | null)) leave();
   });
   let surface: Scalable | null = r.surface;
+  const ids = paraIds(r.surface);
+  toParaId = ids ? (node) => ids.paraIdOf(node) : null;
+  // O cursor de quando o documento abriu chegou antes da tradução: vai agora.
+  if (host.contains(host.ownerDocument.activeElement)) caret(r.surface.state().selection.head.paragraphId);
+  kiwi = new DocxKiwi(() => surface, editable);
   const win = host.ownerDocument.defaultView;
   if (win) win.__kiwiDocxLive = (win.__kiwiDocxLive ?? 0) + 1;
   let marks: { matches: DocxMatch[]; current: number } = { matches: [], current: -1 };
 
   surface.setHighlightPainter((frame) => {
     const { layer, layout, scale } = frame;
+    const cat = kiwi?.paint(frame) ?? [];
     if (!marks.matches.length) {
-      if (layer.childElementCount) layer.replaceChildren();
+      if (cat.length || layer.childElementCount) layer.replaceChildren(...cat);
       return;
     }
     const ranges = marks.matches.map((m, i) => ({ key: String(i), from: { paragraphId: m.paragraphId, offset: m.from }, to: { paragraphId: m.paragraphId, offset: m.to } }));
@@ -126,7 +150,7 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, editable
         els.push(el);
       }
     }
-    layer.replaceChildren(...els);
+    layer.replaceChildren(...els, ...cat);
   });
 
   const handle: DocxHandle = {
@@ -147,6 +171,8 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, editable
     revealPage(index) {
       surface?.revealPage(index, { block: "start", offsetPx: 0 });
     },
+    play: (ops, o) => kiwi?.play(ops, o) ?? Promise.resolve(false),
+    glow: (list) => kiwi?.glow(list),
     save() {
       if (!surface) throw new Error("o documento já foi fechado");
       surface.flushPendingInput();
@@ -157,6 +183,7 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, editable
     redo: () => surface?.redo(),
     destroy() {
       if (!surface) return;
+      kiwi?.destroy();
       surface.setHighlightPainter(null);
       surface.destroy();
       caret(null);

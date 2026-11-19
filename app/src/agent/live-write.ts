@@ -11,6 +11,7 @@
 
 import { liveEdits } from "../shared/live-edits.ts";
 import type { SheetOp } from "../shared/sheet/ops.ts";
+import type { DocxOp } from "../shared/docx/ops.ts";
 import type { UiEvents } from "../shared/ui-contract.ts";
 import { bytesVersion, versionOf } from "../notes/vault.ts";
 import type { VaultWriter } from "./tools/writer.ts";
@@ -97,13 +98,22 @@ export function liveWriter(inner: VaultWriter, live: LiveWrites, turnId: () => s
     ...(inner.getBytes ? { getBytes: inner.getBytes.bind(inner) } : {}),
     // A pessoa com a caixa aberta na célula que o gato vai mudar: ele espera (T21114).
     waitCells: (path: string, ops: readonly SheetOp[], ms?: number) => live.editing.waitFree(path, ops, ms),
+    // A pessoa escrevendo no parágrafo do docx que o gato vai mudar: ele espera (T21231).
+    waitParagraphs: (path: string, ids: readonly string[], ms?: number) => live.editing.waitParagraphs(path, ids, ms),
     ...(inner.saveBytes
       ? {
-          saveBytes: async (path: string, base64: string, baseVersion: string, sheetOps?: readonly SheetOp[]) => {
+          saveBytes: async (path: string, base64: string, baseVersion: string, sheetOps?: readonly SheetOp[], docxOps?: readonly DocxOp[]) => {
             const version = bytesVersion(Buffer.from(base64, "base64"));
-            const done = live.expect({ path, baseVersion, version, ...turn(), ...(sheetOps?.length ? { sheetOps: [...sheetOps] } : {}) });
+            const done = live.expect({
+              path,
+              baseVersion,
+              version,
+              ...turn(),
+              ...(sheetOps?.length ? { sheetOps: [...sheetOps] } : {}),
+              ...(docxOps?.length ? { docxOps: [...docxOps] } : {}),
+            });
             try {
-              return await inner.saveBytes!(path, base64, baseVersion, sheetOps);
+              return await inner.saveBytes!(path, base64, baseVersion, sheetOps, docxOps);
             } finally {
               done();
             }

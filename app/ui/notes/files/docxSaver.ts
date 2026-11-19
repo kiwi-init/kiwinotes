@@ -9,6 +9,10 @@ import type { FilesApi } from "./viewers.ts";
 /** Quanto a gravação espera depois da última edição (ms), como a planilha. */
 export const DOCX_SAVE_DELAY = 400;
 
+/** Por quanto a recusa espera o aviso da gravação do gato chegar: CAT_GRACE_TRIES × CAT_GRACE_MS. */
+const CAT_GRACE_MS = 50;
+const CAT_GRACE_TRIES = 6;
+
 export const CHANGED_OUTSIDE = "O arquivo mudou fora do Kiwi: abri a versão nova, e a última edição não foi gravada.";
 export const SAVE_FAILED = "Não deu para gravar este documento agora. O Kiwi tenta de novo na próxima edição.";
 
@@ -20,6 +24,11 @@ export interface DocxSaverOptions {
   notice(text: string | null): void;
   /** Outro app gravou antes de nós: abrir estes bytes no lugar. */
   reload(base64: string, version: string): void;
+  /**
+   * `version` saiu de gravações do Kiwi Cat sobre `base` (T21231)? O aviso dele (o `agent.wrote`) pode chegar um pouco
+   * depois da recusa: o gravador pergunta de novo por um instante.
+   */
+  catWrote?(base: string, version: string): boolean;
   delay?: number;
 }
 
@@ -31,6 +40,8 @@ export class DocxSaver {
   private written: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private saving: Promise<boolean> | null = null;
+  /** O gato está tocando na tela (T21231): a edição da pessoa espera para gravar. */
+  private held = false;
 
   constructor(
     private readonly o: DocxSaverOptions,
@@ -47,9 +58,15 @@ export class DocxSaver {
     return this.dirty;
   }
 
+  /** Há edição da pessoa que o disco ainda não tem: por gravar, ou gravando agora (T21231). */
+  get unsaved(): boolean {
+    return this.dirty || !!this.saving;
+  }
+
   /** O documento foi aberto de novo, com estes bytes do disco: as edições de antes não valem mais. */
   opened(version: string): void {
     this.cancel();
+    this.held = false;
     this.disk = version;
     this.dirty = false;
   }
@@ -69,6 +86,27 @@ export class DocxSaver {
     return false;
   }
 
+  /** Estes bytes são os nossos, ou esta versão é a que já temos: nada a abrir. */
+  known(base64: string, version: string): boolean {
+    return base64 === this.written || version === this.disk;
+  }
+
+  /**
+   * O gato vai tocar as mudanças dele na tela (T21231): até o `release`, nada grava (os bytes da tela estariam no meio,
+   * sobre a versão de antes dele).
+   */
+  hold(): void {
+    this.cancel();
+    this.held = true;
+  }
+
+  /** O fim do `hold`: a edição da pessoa que esperou grava agora, por cima da versão do gato. */
+  release(): void {
+    if (!this.held) return;
+    this.held = false;
+    if (this.dirty) this.edited();
+  }
+
   /**
    * O agente gravou o arquivo, e as mudanças dele já estão na tela (T21231, `play(docxOps)`): a versão dele vira a base,
    * sem reabrir e sem aviso. Uma edição da pessoa que ainda não foi gravada segue, agora por cima da versão do agente.
@@ -82,6 +120,7 @@ export class DocxSaver {
     if (!this.canSave) return;
     this.dirty = true;
     this.cancel();
+    if (this.held) return;
     this.timer = setTimeout(() => {
       this.timer = null;
       void this.flush();
@@ -91,7 +130,7 @@ export class DocxSaver {
   /** Grava agora o que falta. Os bytes saem do motor nesta chamada, antes de qualquer espera. */
   flush(): Promise<boolean> {
     this.cancel();
-    if (!this.dirty || !this.o.files.saveBytes) return this.saving ?? Promise.resolve(true);
+    if (this.held || !this.dirty || !this.o.files.saveBytes) return this.saving ?? Promise.resolve(true);
     let b64: string;
     try {
       b64 = base64Of(this.o.bytes());
@@ -119,10 +158,25 @@ export class DocxSaver {
   private async write(b64: string): Promise<boolean> {
     try {
       this.written = b64;
+      const base = this.disk;
       const r = await this.o.files.saveBytes!(this.o.path, b64, this.disk);
       if (r.saved) {
         this.disk = r.version;
         return true;
+      }
+      // Foi o gato, que está tocando a versão dele na tela agora (T21231): a edição da pessoa já está na tela por cima
+      // dela, e grava de novo no `release`, sobre a versão dele. Se a tela não bater, o documento abre do disco.
+      // Ou o gato já tocou e a tela adotou a versão dele (a recusa chegou depois): grava de novo, por cima dela.
+      if (this.held || ("version" in r.current && r.current.version === this.disk && base !== this.disk)) {
+        this.dirty = true;
+        if (!this.held) this.edited();
+        return false;
+      }
+      // O gato gravou e a tela ainda não recebeu (revisão #23268): a edição fica por gravar, a tela toca a versão dele,
+      // e o `release` grava a edição por cima. Se a tela não puder tocar, ela abre do disco, com o aviso.
+      if ("version" in r.current && (await this.catWrote(base, r.current.version))) {
+        this.dirty = true;
+        return false;
       }
       // Mudou no disco desde a nossa versão: vale o arquivo de lá, como numa nota com conflito.
       this.o.notice(CHANGED_OUTSIDE);
@@ -139,8 +193,36 @@ export class DocxSaver {
     }
   }
 
+  private async catWrote(base: string, version: string): Promise<boolean> {
+    const ask = this.o.catWrote;
+    if (!ask) return false;
+    for (let n = 0; ; n++) {
+      if (ask(base, version)) return true;
+      if (n >= CAT_GRACE_TRIES) return false;
+      await new Promise((go) => setTimeout(go, CAT_GRACE_MS));
+    }
+  }
+
   private cancel(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
+}
+
+/**
+ * O parágrafo do cursor da pessoa, para o gato (T21231). Ao sair de um parágrafo com uma edição por gravar, grava antes
+ * de dizer o novo: senão o gato, que esperava ela sair, gravaria por cima de um texto que o disco ainda não tem (revisão
+ * #23268). Com a gravação dela no disco, a versão muda, e o gato recebe E_CHANGED em vez de gravar.
+ */
+export function caretReporter(saver: Pick<DocxSaver, "unsaved" | "flush">, send: (id: string | null) => Promise<unknown>): (id: string | null) => void {
+  let last: string | null | undefined;
+  let chain: Promise<unknown> = Promise.resolve();
+  return (id) => {
+    if (id === last) return;
+    last = id;
+    chain = chain.then(async () => {
+      if (saver.unsaved) await saver.flush().catch(() => false);
+      await send(id).catch(() => {});
+    });
+  };
 }

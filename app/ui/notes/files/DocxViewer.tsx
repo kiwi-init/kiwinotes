@@ -4,14 +4,23 @@
 // com a versão do disco: se outro app mudou o arquivo, vale o de lá, e a barra avisa. Aberto e fechado sem edição, o
 // arquivo fica como estava, byte a byte. O ⌘F acha no texto do corpo; o zoom é o de todo arquivo (a pinça e o ⌘+, ⌘−, ⌘0). Ao fechar, o motor é solto (#22186, a decisão do harry
 // em #22216): a memória do documento volta.
+//
+// O Kiwi Cat ao vivo (T21231, spec #21155): quando o agente grava o docx aberto, a tela toca as mudanças dele por cima
+// do documento (`docxKiwi.ts`) e confere com o arquivo gravado; se não bate, abre o do disco, só com o realce. Com o
+// docx fechado, o realce vem na primeira abertura. O parágrafo com o cursor da pessoa vai ao `files.editing`, e o gato
+// espera ela sair dele.
 
 import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { docxOpsResult } from "../../../src/shared/docx/ops.ts";
 import { NO_TEXT_ASSIST } from "../../src/textAssist.ts";
+import { kiwiFaceUrl } from "../editor/kiwi-face.ts";
+import { reducedMotion } from "../kiwiWrite.ts";
 import { externalUrl } from "../links.ts";
 import { bytesOf } from "./csv.ts";
 import type { DocxHandle } from "./docxEngine.ts";
-import { DocxSaver } from "./docxSaver.ts";
+import { caretReporter, DocxSaver } from "./docxSaver.ts";
+import { docxBodyParagraphs, sameText } from "./docxText.ts";
 import { type DocxMatch, type DocxParagraph, docxParagraphs, findInDocx } from "./docxFind.ts";
 import { stepMatch } from "./pdfSearch.ts";
 import { useViewerZoom } from "./useViewerZoom.ts";
@@ -24,7 +33,7 @@ type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "t
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 
-export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps) {
+export function DocxViewer({ path, file, files, flushRef, at, kiwi }: FileViewerProps) {
   const incoming = "base64" in file ? file.base64 : "";
   // O que está aberto no motor. Uma leitura nova (outro app gravou) só reabre se não for a nossa própria gravação.
   const [source, setSource] = useState({ base64: incoming, version: file.version });
@@ -42,6 +51,7 @@ export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps)
           },
           notice: setNotice,
           reload: (b64, version) => setSource({ base64: b64, version }),
+          catWrote: (base, version) => !!kiwiSource.current?.catWroteDocx?.(path, base, version),
         },
         file.version,
       ),
@@ -49,9 +59,56 @@ export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps)
     // biome-ignore lint/correctness/useExhaustiveDependencies: file.version só vale na criação
     [path, files],
   );
+  const kiwiSource = useRef(kiwi);
+  kiwiSource.current = kiwi;
+  // As gravações do gato tocam uma depois da outra.
+  const playing = useRef<Promise<void>>(Promise.resolve());
+  // Os parágrafos para realçar quando o documento abrir de novo (o gato gravou e a tela não pôde tocar).
+  const glowNext = useRef<string[] | null>(null);
+  const mounted = useRef(false);
   useEffect(() => {
-    if (!saver.incoming(incoming, file.version)) setSource({ base64: incoming, version: file.version });
-  }, [saver, incoming, file.version]);
+    const version = file.version;
+    const b64 = incoming;
+    if (saver.known(b64, version)) {
+      saver.incoming(b64, version);
+      return;
+    }
+    const ops = kiwiSource.current?.takeDocx?.(path, version)?.docxOps;
+    if (!ops?.length) {
+      if (!saver.incoming(b64, version)) setSource({ base64: b64, version });
+      return;
+    }
+    const result = docxOpsResult(ops);
+    const reopen = () => {
+      glowNext.current = result.touched;
+      if (!saver.incoming(b64, version)) setSource({ base64: b64, version });
+    };
+    playing.current = playing.current.then(async () => {
+      const e = engine.current;
+      if (!e || !mounted.current) return reopen();
+      saver.hold();
+      let ok = false;
+      try {
+        ok = await e.play(ops, { face: kiwiFaceUrl(kiwiSource.current?.cor), reduced: reducedMotion() });
+        // A tela tem de ter o texto do arquivo: o que a pessoa ainda não gravou fica, o resto confere todo.
+        ok = ok && engine.current === e && sameText(docxBodyParagraphs(e.save()), docxBodyParagraphs(bytesOf(b64)), { pending: saver.unsaved, ...result });
+      } catch {
+        ok = false;
+      }
+      if (engine.current !== e) return;
+      // O gato mudou o texto (o tocar não passa pelo `onEdit`): a busca e o `at` leem os parágrafos de novo.
+      paragraphs.current = null;
+      setMatches((m) => (m ? null : m));
+      setCurrent(-1);
+      if (ok) {
+        saver.adopt(version);
+        saver.release();
+      } else {
+        saver.release();
+        reopen();
+      }
+    });
+  }, [saver, incoming, file.version, path]);
   useEffect(() => {
     const flush = () => saver.flush();
     flushRef.current = flush;
@@ -76,9 +133,17 @@ export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps)
   const [current, setCurrent] = useState(-1);
   const paragraphs = useRef<DocxParagraph[] | null>(null);
 
+  // O parágrafo com o cursor da pessoa, para o gato esperar ela sair dele (T21231).
+  const owner = useMemo(() => `docx-${Math.random().toString(36).slice(2, 10)}`, []);
+  const tellCaret = useRef<(id: string | null) => void>(() => {});
+  // Sair do parágrafo grava antes a edição da pessoa, e só então o gato fica sabendo (revisão #23268).
+  const reportCaret = useMemo(() => caretReporter(saver, (id) => files.editing?.(path, owner, null, id) ?? Promise.resolve()), [saver, files, path, owner]);
+  tellCaret.current = reportCaret;
+
   // Abre o documento no motor. Outro arquivo, ou o mesmo que mudou no disco: solta o de antes.
   useEffect(() => {
     let alive = true;
+    mounted.current = false;
     setState({ kind: "loading" });
     setMatches(null);
     setCurrent(-1);
@@ -106,6 +171,7 @@ export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps)
             setCurrent(-1);
             saver.edited();
           },
+          onCaret: (id) => tellCaret.current(id),
           onLink: (href) => {
             const url = externalUrl(href);
             // O `newWindow: "external"` da janela manda para o navegador padrão.
@@ -115,6 +181,11 @@ export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps)
         if (!r.ok) return setState({ kind: "error" });
         engine.current = r.handle;
         saver.opened(source.version);
+        mounted.current = true;
+        // O que o gato mudou com o docx fechado (ou o que a tela não pôde tocar): só o realce, de uma vez.
+        const glow = glowNext.current ?? docxOpsResultOf(kiwiSource.current?.takeDocx?.(path, source.version)?.docxOps);
+        glowNext.current = null;
+        if (glow?.length) r.handle.glow(glow);
         setState({ kind: "ready", pages: r.handle.pages() });
       } catch {
         if (alive) setState({ kind: "error" });
@@ -122,14 +193,17 @@ export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps)
     })();
     return () => {
       alive = false;
+      mounted.current = false;
       // Saiu do documento com uma edição por gravar: os bytes saem do motor agora, antes de soltá-lo.
       if (engine.current) void saver.flush();
       engine.current?.destroy();
       engine.current = null;
       paragraphs.current = null;
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: reabre só quando os bytes mudam
-  }, [base64, saver]);
+    // Reabre a cada leitura nova (um `setSource`), mesmo com os bytes de antes: o desfazer da Atividade volta o arquivo
+    // de quando abriu, e a tela pode estar com o que o gato tocou.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: reabre só quando a leitura muda
+  }, [source, saver]);
 
   // O zoom vai ao motor, que desenha as páginas de novo na escala nova (o texto fica nítido, sem esticar a imagem). Antes
   // do `useViewerZoom`, e também num efeito de layout: quando ele mede onde o ponto dos dedos foi parar, as páginas já
@@ -280,3 +354,5 @@ export function DocxViewer({ path, file, files, flushRef, at }: FileViewerProps)
     </div>
   );
 }
+
+const docxOpsResultOf = (ops: Parameters<typeof docxOpsResult>[0] | undefined) => (ops?.length ? docxOpsResult(ops).touched : null);

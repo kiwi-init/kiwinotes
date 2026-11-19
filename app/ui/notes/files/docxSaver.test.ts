@@ -5,13 +5,13 @@ import { describe, expect, test } from "bun:test";
 
 import type { FileSaveResult } from "../types.ts";
 import { base64Of } from "./csv.ts";
-import { CHANGED_OUTSIDE, DocxSaver, SAVE_FAILED } from "./docxSaver.ts";
+import { CHANGED_OUTSIDE, caretReporter, DocxSaver, SAVE_FAILED } from "./docxSaver.ts";
 
 const enc = (t: string) => new TextEncoder().encode(t);
 const b64 = (t: string) => base64Of(enc(t));
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-function setup(opts: { fail?: boolean; stale?: { base64: string; version: string } } = {}) {
+function setup(opts: { fail?: boolean; stale?: { base64: string; version: string }; catWrote?: (base: string, version: string) => boolean } = {}) {
   let doc = "Proposta da Ana";
   let n = 0;
   const calls: { base64: string; base: string }[] = [];
@@ -32,6 +32,7 @@ function setup(opts: { fail?: boolean; stale?: { base64: string; version: string
       bytes: () => enc(doc),
       notice: (t) => notices.push(t),
       reload: (base64) => reloads.push(base64),
+      ...(opts.catWrote ? { catWrote: opts.catWrote } : {}),
     },
     "v1",
   );
@@ -106,11 +107,161 @@ describe("DocxSaver", () => {
     expect(notices).toEqual([]);
   });
 
+  test("hold: enquanto o gato toca, a edição da pessoa não grava; o release grava por cima da versão dele", async () => {
+    const { saver, calls, edit } = setup();
+    edit("A Ana digitando");
+    saver.hold();
+    edit("A Ana digitando mais");
+    await tick(60);
+    expect(await saver.flush()).toBe(true);
+    expect(calls).toEqual([]);
+    expect(saver.pending).toBe(true);
+    saver.adopt("v-agente");
+    saver.release();
+    await tick(60);
+    expect(calls).toEqual([{ base64: b64("A Ana digitando mais"), base: "v-agente" }]);
+  });
+
+  test("hold e a tela que não bateu: a leitura do disco reabre, avisa, e o release não grava nada", async () => {
+    const { saver, calls, edit, notices } = setup();
+    edit("A Ana digitando");
+    saver.hold();
+    expect(saver.known(b64("O que o agente gravou"), "v-agente")).toBe(false);
+    expect(saver.incoming(b64("O que o agente gravou"), "v-agente")).toBe(false);
+    saver.release();
+    await tick(60);
+    expect(calls).toEqual([]);
+    expect(notices).toEqual([CHANGED_OUTSIDE]);
+    expect(saver.known("", "v-agente")).toBe(true);
+  });
+
+  test("a gravação da pessoa que perde para a do gato enquanto ele toca: não reabre, e grava de novo sobre a versão dele", async () => {
+    const stale = { base64: b64("O que o agente gravou"), version: "v-agente" };
+    const opts: { stale?: typeof stale } = { stale };
+    const { saver, calls, edit, notices, reloads } = setup(opts);
+    edit("A Ana digitando");
+    const going = saver.flush();
+    expect(saver.unsaved).toBe(true);
+    saver.hold();
+    expect(await going).toBe(false);
+    delete opts.stale;
+    expect(reloads).toEqual([]);
+    expect(notices).toEqual([]);
+    expect(saver.pending).toBe(true);
+    saver.adopt("v-agente");
+    saver.release();
+    await tick(60);
+    expect(calls.map((c) => c.base)).toEqual(["v1", "v-agente"]);
+  });
+
+  test("a recusa que chega depois de a tela adotar a versão do gato: grava de novo, sem reabrir", async () => {
+    const stale = { base64: b64("O que o agente gravou"), version: "v-agente" };
+    const opts: { stale?: typeof stale } = { stale };
+    const { saver, calls, edit, notices, reloads } = setup(opts);
+    edit("A Ana digitando");
+    const going = saver.flush();
+    saver.hold();
+    saver.adopt("v-agente");
+    saver.release();
+    expect(await going).toBe(false);
+    delete opts.stale;
+    await tick(60);
+    expect(reloads).toEqual([]);
+    expect(calls.map((c) => c.base)).toEqual(["v1", "v-agente"]);
+    expect(notices).toEqual([]);
+  });
+
   test("sem saveBytes, nada grava", async () => {
     const saver = new DocxSaver({ path: "a.docx", files: {}, bytes: () => enc("x"), notice: () => {}, reload: () => {} }, "v1");
     expect(saver.canSave).toBe(false);
     saver.edited();
     expect(saver.pending).toBe(false);
     expect(await saver.flush()).toBe(true);
+  });
+
+  // Revisão #23268, item 1: a gravação da pessoa recusada pela do gato antes de a tela receber a versão dele.
+  describe("a recusa pela gravação do gato, antes de a tela receber", () => {
+    const stale = { base64: b64("O que o agente gravou"), version: "v-agente" };
+    async function cat(catWrote: (base: string, version: string) => boolean) {
+      const opts: { stale?: typeof stale; catWrote: typeof catWrote } = { stale, catWrote };
+      const t = setup(opts);
+      t.edit("A Ana digitando noutro parágrafo");
+      expect(await t.saver.flush()).toBe(false);
+      delete opts.stale;
+      return t;
+    }
+    test("sem aviso e sem reabrir; a edição fica por gravar e grava por cima da versão do gato depois que a tela toca", async () => {
+      const { saver, calls, notices, reloads } = await cat((base, v) => base === "v1" && v === "v-agente");
+      expect(notices).toEqual([]);
+      expect(reloads).toEqual([]);
+      expect(saver.pending).toBe(true);
+      // A versão do gato chega: não é nossa, e a tela vai tocá-la.
+      expect(saver.known(stale.base64, "v-agente")).toBe(false);
+      saver.hold();
+      saver.adopt("v-agente");
+      saver.release();
+      await tick(60);
+      expect(calls.map((c) => c.base)).toEqual(["v1", "v-agente"]);
+      expect(calls[1]?.base64).toBe(b64("A Ana digitando noutro parágrafo"));
+      expect(notices).toEqual([]);
+    });
+    test("o aviso do gato chega um pouco depois da recusa: ainda conta", async () => {
+      let known = false;
+      setTimeout(() => (known = true), 120);
+      const { notices, reloads, saver } = await cat(() => known);
+      expect(notices).toEqual([]);
+      expect(reloads).toEqual([]);
+      expect(saver.pending).toBe(true);
+    });
+    test("uma versão que não é do gato: vale o arquivo de fora, com o aviso", async () => {
+      const { notices, reloads } = await cat(() => false);
+      expect(notices).toEqual([CHANGED_OUTSIDE]);
+      expect(reloads).toEqual([stale.base64]);
+    });
+  });
+
+  // Revisão #23268, item 2: sair do parágrafo dentro dos 400 ms da gravação.
+  describe("caretReporter", () => {
+    test("sair do parágrafo com uma edição por gravar: grava antes, e só então diz o parágrafo novo", async () => {
+      const order: string[] = [];
+      let release!: () => void;
+      const saver = {
+        unsaved: true,
+        flush: () =>
+          new Promise<boolean>((go) => {
+            order.push("grava");
+            release = () => {
+              saver.unsaved = false;
+              order.push("gravou");
+              go(true);
+            };
+          }),
+      };
+      const tell = caretReporter(saver, async (id) => void order.push(`cursor ${id}`));
+      tell("Q");
+      await tick(20);
+      expect(order).toEqual(["grava"]);
+      release();
+      await tick(0);
+      expect(order).toEqual(["grava", "gravou", "cursor Q"]);
+    });
+    test("sem edição por gravar, o cursor vai na hora; o mesmo parágrafo não vai de novo", async () => {
+      const sent: (string | null)[] = [];
+      const tell = caretReporter({ unsaved: false, flush: async () => true }, async (id) => void sent.push(id));
+      tell("P");
+      tell("P");
+      tell(null);
+      await tick(0);
+      expect(sent).toEqual(["P", null]);
+    });
+    test("com o DocxSaver de verdade: a edição está no disco antes de o gato saber que a pessoa saiu", async () => {
+      const { saver, calls, edit } = setup();
+      const sent: { id: string | null; saves: number }[] = [];
+      const tell = caretReporter(saver, async (id) => void sent.push({ id, saves: calls.length }));
+      edit("A Ana digitou no parágrafo do gato");
+      tell("Q");
+      await tick(5);
+      expect(sent).toEqual([{ id: "Q", saves: 1 }]);
+    });
   });
 });

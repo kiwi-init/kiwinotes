@@ -1,6 +1,7 @@
 // A célula que a pessoa está editando na planilha (T21114, spec #21033): a janela avisa pelo `files.editing` qual
 // célula tem a caixa de edição aberta, e o `sheets_edit` que mudaria essa célula espera a pessoa sair dela antes de
-// gravar. Com um teto: a caixa esquecida aberta não prende o gato, ele recebe um erro e segue com o resto.
+// gravar. Com um teto: a caixa esquecida aberta não prende o gato, ele recebe um erro e segue com o resto. O docx
+// (T21231) avisa do mesmo jeito o parágrafo com o cursor da pessoa, e o `docx_edit` que o mudaria espera.
 
 import { flatOps, type SheetOp } from "../shared/sheet/ops.ts";
 
@@ -11,7 +12,7 @@ export interface EditingCell {
   col: number;
 }
 
-/** Quanto o `sheets_edit` espera a pessoa sair da célula, no máximo. */
+/** Quanto o `sheets_edit` espera a pessoa sair da célula (e o `docx_edit`, do parágrafo), no máximo. */
 export const SHEET_EDIT_WAIT_MS = 8_000;
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -53,6 +54,8 @@ export function opsTouchCell(ops: readonly SheetOp[], cell: EditingCell): boolea
 /** As caixas abertas, por janela e por caminho, e quem espera alguma fechar. */
 export class SheetEditing {
   private open = new Map<string, Map<string, EditingCell>>();
+  /** O parágrafo do docx com o cursor da pessoa, por caminho e por janela (T21231). */
+  private paras = new Map<string, Map<string, string>>();
   private waiters = new Set<() => void>();
 
   /** A janela `owner` abriu a caixa em `cell` de `path`, ou fechou (`null`). */
@@ -63,6 +66,26 @@ export class SheetEditing {
     if (byOwner.size) this.open.set(path, byOwner);
     else this.open.delete(path);
     for (const w of [...this.waiters]) w();
+  }
+
+  /** A janela `owner` pôs o cursor no parágrafo `paragraphId` do docx `path`, ou saiu dele (`null`). */
+  setParagraph(owner: string, path: string, paragraphId: string | null): void {
+    const byOwner = this.paras.get(path) ?? new Map<string, string>();
+    if (paragraphId) byOwner.set(owner, paragraphId);
+    else byOwner.delete(owner);
+    if (byOwner.size) this.paras.set(path, byOwner);
+    else this.paras.delete(path);
+    for (const w of [...this.waiters]) w();
+  }
+
+  /**
+   * Espera até nenhum cursor em `path` estar num dos `ids`, por até `ms`. Dá o parágrafo que ainda prende no fim do
+   * prazo (`busy`), ou nenhum; `waited` diz se houve espera.
+   */
+  async waitParagraphs(path: string, ids: readonly string[], ms = SHEET_EDIT_WAIT_MS): Promise<{ busy: string | null; waited: boolean }> {
+    const wanted = new Set(ids);
+    const blocking = () => [...(this.paras.get(path)?.values() ?? [])].find((id) => wanted.has(id)) ?? null;
+    return this.until(blocking, ms);
   }
 
   /** As células com a caixa aberta em `path`. */
@@ -76,10 +99,14 @@ export class SheetEditing {
    */
   async waitFree(path: string, ops: readonly SheetOp[], ms = SHEET_EDIT_WAIT_MS): Promise<{ busy: EditingCell | null; waited: boolean }> {
     const blocking = () => this.cells(path).find((c) => opsTouchCell(ops, c)) ?? null;
-    const first = blocking();
-    if (!first) return { busy: null, waited: false };
+    return this.until(blocking, ms);
+  }
+
+  /** Espera `blocking` não dar nada, por até `ms`. */
+  private async until<T>(blocking: () => T | null, ms: number): Promise<{ busy: T | null; waited: boolean }> {
+    if (!blocking()) return { busy: null, waited: false };
     return await new Promise((resolve) => {
-      const done = (busy: EditingCell | null) => {
+      const done = (busy: T | null) => {
         clearTimeout(timer);
         this.waiters.delete(check);
         resolve({ busy, waited: true });
