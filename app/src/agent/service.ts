@@ -2083,7 +2083,7 @@ export class AgentService {
     }
   }
 
-  /** A nota aberta na janela Notas (T14359), que a tela avisa: "essa nota" no pedido é ela. Só na memória. */
+  /** O aberto na janela Notas (T14359, T19969), nota ou arquivo, que a tela avisa: "essa nota", "esse arquivo". Só na memória. */
   private openNote: string | null = null;
   /** O índice de nomes do faro (T14359), refeito só quando a lista do cofre muda. */
   private faroIndex: { key: string; idx: FaroIndex } | null = null;

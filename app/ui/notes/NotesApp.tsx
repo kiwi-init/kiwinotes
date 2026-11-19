@@ -151,11 +151,6 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   const readOnlyRef = useRef(false);
   readOnlyRef.current = note?.readOnly === true;
   const [docKey, setDocKey] = useState("");
-  // A nota aberta, para o agente (T14359): "essa nota" no pedido é ela. Fora de vista, nenhuma.
-  const openForAgent = active ? (note?.path ?? null) : null;
-  useEffect(() => {
-    api.agentOpenNote?.(openForAgent);
-  }, [api, openForAgent]);
   const [headingJump, setHeadingJump] = useState<{ path: string; heading: string; sequence: number } | null>(null);
   const shown = useRef(0);
   const [body, setBody] = useState("");
@@ -232,6 +227,15 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
   /** O quadro branco aberto (T6600), e o "grava antes de sair" dele. */
   const [board, setBoard] = useState<string | null>(null);
   const boardFlush = useRef<(() => Promise<boolean>) | null>(null);
+  // O aberto, para o agente (T14359, T19969): "essa nota", "esse arquivo" no pedido é ele. A nota, o arquivo no
+  // visualizador ou o quadro, o último em destaque, mesmo com as Notas fora de vista e a pessoa falando pelo gato. Com a
+  // janela fechada, o Bun esquece (`windows.ts`).
+  const openForAgent = view === "note" ? (note?.path ?? null) : view === "file" ? fileOpen : view === "canvas" ? board : null;
+  useEffect(() => {
+    api.agentOpenNote?.(openForAgent);
+  }, [api, openForAgent]);
+  // Trocar de pasta remonta as Notas: o aberto da pasta antiga não vale mais.
+  useEffect(() => () => api.agentOpenNote?.(null), [api]);
   /** Sobe a cada mudança no vault: a Lixeira e o "Mencionada sem link" se refazem (T2593). */
   const [vaultVersion, setVaultVersion] = useState(0);
   const [linkWarnings, setLinkWarnings] = useState<LinkWarning[]>([]);

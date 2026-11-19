@@ -552,6 +552,8 @@ export async function revealHub(): Promise<boolean> {
 /** A intro fechou: o próximo plano (outra abertura do zero não acontece no mesmo processo) é lido de novo. */
 onWindowClosed((name) => {
   if (name === "intro") introPlan = null;
+  // A janela das Notas fechou (T19969): o aberto nelas não é mais "esse arquivo" para o agente.
+  if (name === "hub" || name === "notes") stores.agent.setOpenNote(null);
 });
 
 /** Manda um evento a uma janela aberta. Devolve se ela estava aberta. */

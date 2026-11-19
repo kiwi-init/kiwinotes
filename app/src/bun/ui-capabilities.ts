@@ -1536,11 +1536,12 @@ export function uiCapabilities(deps: CapabilityDeps,
         return { ok: true as const };
       });
     },
-    // A nota aberta na janela Notas (T14359): só o caminho, na memória do serviço, para o faro saber o que é "essa nota".
+    // O aberto na janela Notas (T14359, T19969): a nota ou o arquivo, só o caminho, na memória do serviço, para o faro
+    // saber o que é "essa nota" e "esse arquivo".
     "agent.openNote": (args) => {
       const path = (args as { path?: unknown } | null)?.path;
       if (path !== null && (typeof path !== "string" || path.length > 2000))
-        throw Object.assign(new Error("agent.openNote: path é o caminho de uma nota, ou null"), { code: "E_BAD_ARGS" });
+        throw Object.assign(new Error("agent.openNote: path é o caminho da nota ou do arquivo aberto, ou null"), { code: "E_BAD_ARGS" });
       return agentCall(async (agent) => {
         agent.setOpenNote(path);
         return { ok: true as const };
