@@ -48,7 +48,7 @@ export function TableViewer({ path, file, files, flushRef, kiwi, at }: FileViewe
           {session.notice}
         </div>
       ) : null}
-      <SheetPane session={session} doc={state.doc} sheet={sheet} decimal="," countHeader={false} widthMemory={widthMemory} zoomKey={path} foot={enc && enc !== "utf-8" ? `lido como ${ENCODINGS[enc]}` : null} goTo={at} />
+      <SheetPane session={session} doc={state.doc} sheet={sheet} decimal="," countHeader={false} widthMemory={widthMemory} zoomKey={path} foot={enc && enc !== "utf-8" ? `lido como ${ENCODINGS[enc]}` : null} goTo={at && "line" in at ? at : undefined} />
     </div>
   );
 }

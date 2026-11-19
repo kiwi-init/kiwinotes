@@ -1,0 +1,120 @@
+{
+ "_": "T22218: rode antes o scripts/busca-documentos-seed.ts DIR (o pdf, o docx e o xlsx do roteiro).",
+ "window": "notes",
+ "steps": [
+  {
+   "waitFor": ".kn-crumb-bt",
+   "name": "a janela Notas abre"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "press": "Meta+k"
+  },
+  {
+   "type": "graviola"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('bancas.xlsx')",
+   "name": "o xlsx achado pelo conteúdo"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('folheto.pdf')",
+   "name": "o pdf achado pelo conteúdo"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('relatorio.docx')",
+   "name": "o docx achado pelo conteúdo"
+  },
+  {
+   "expectText": ".kn-palette .kn-palette-it:has-text('folheto.pdf') .kn-palette-type",
+   "text": "pdf:pág. 3",
+   "name": "o pdf e a página"
+  },
+  {
+   "expectText": ".kn-palette .kn-palette-it:has-text('relatorio.docx') .kn-palette-type",
+   "text": "docx:§30",
+   "name": "o docx e o parágrafo"
+  },
+  {
+   "expectText": ".kn-palette .kn-palette-it:has-text('bancas.xlsx') .kn-palette-type",
+   "text": "xlsx:Contagem!C40",
+   "name": "o xlsx, a aba e a célula"
+  },
+  {
+   "screenshot": "cmdk-documentos.png"
+  },
+  {
+   "press": "Escape"
+  },
+  {
+   "press": "Meta+k"
+  },
+  {
+   "type": "graviola"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('folheto.pdf')"
+  },
+  {
+   "click": ".kn-palette .kn-palette-it:has-text('folheto.pdf')",
+   "name": "abre o folheto.pdf"
+  },
+  {
+   "waitFor": ".kn-file-pdf-page:has-text('Página 3 de 4')",
+   "name": "o pdf abre na página 3"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "screenshot": "pdf-na-pagina.png"
+  },
+  {
+   "press": "Meta+k"
+  },
+  {
+   "type": "graviola"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('relatorio.docx')"
+  },
+  {
+   "click": ".kn-palette .kn-palette-it:has-text('relatorio.docx')",
+   "name": "abre o relatorio.docx"
+  },
+  {
+   "expectCount": ".kn-file-docx-mark[data-current]",
+   "count": 1,
+   "name": "o parágrafo achado com a marca do motor"
+  },
+  {
+   "screenshot": "docx-no-paragrafo.png"
+  },
+  {
+   "press": "Meta+k"
+  },
+  {
+   "type": "graviola"
+  },
+  {
+   "waitFor": ".kn-palette .kn-palette-it:has-text('bancas.xlsx')"
+  },
+  {
+   "click": ".kn-palette .kn-palette-it:has-text('bancas.xlsx')",
+   "name": "abre o bancas.xlsx"
+  },
+  {
+   "waitFor": ".kn-file-sheet-tab[aria-selected='true']:has-text('Contagem')",
+   "name": "a aba da célula na frente"
+  },
+  {
+   "waitFor": "[role='gridcell'][aria-selected='true']:has-text('graviola madura')",
+   "name": "a célula C40 selecionada"
+  },
+  {
+   "screenshot": "xlsx-na-celula.png"
+  }
+ ]
+}

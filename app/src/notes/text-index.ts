@@ -9,6 +9,9 @@
 // - Acima de `MAX_VIEW_TEXT_BYTES` (5 MB), ou com cara de binário, o arquivo entra só pelo nome.
 // - O `.env` e afins (`isSecretFile`) ficam de fora, nem pelo nome.
 // - O cache do SQLite fica pequeno (o relatório da RAM, #159, pôs o FTS5 entre as causas).
+// - O pdf, o docx e o xlsx (T22218, issue #156): o texto de dentro sai pelo `docText`, um pedaço (a página, o parágrafo,
+//   a célula) por linha. Como tirar o texto custa (o pdf, ~30 ms), o índice guarda também o texto tirado, com o lugar
+//   de cada linha (`docs`), e a busca confere por ele, sem abrir o arquivo de novo. Até `MAX_VIEW_BYTES` (25 MB).
 
 import { Database } from "bun:sqlite";
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
@@ -16,10 +19,11 @@ import path from "node:path";
 
 import { drawioPages } from "../../ui/notes/files/drawio.ts";
 import { isSecretFile, textNoteTitle } from "../agent/tools/reader.ts";
-import { isEditableText, MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
+import { isEditableText, MAX_VIEW_BYTES, MAX_VIEW_TEXT_BYTES } from "../shared/file-view.ts";
 import { canvasTexts, parseCanvas } from "../shared/json-canvas.ts";
 import { parseQuery } from "../shared/query.ts";
 import { fold, foldWithMap } from "../store/text.ts";
+import { type DocPlace, docText, isDocText } from "./doc-text.ts";
 import { inside } from "./paths.ts";
 import type { VaultFile } from "./vault.ts";
 
@@ -50,13 +54,30 @@ export function searchableText(p: string, raw: string): string {
   return raw;
 }
 
+/** O que o índice lê: os textos acima, o pdf, o docx e o xlsx (T22218). */
+export const isIndexedFile = (p: string): boolean => isIndexedText(p) || (isDocText(p) && !isSecretFile(p));
+
+/** O lugar de uma linha do texto tirado, guardado numa linha só: `p3`, `§12`, `cA1\tAba`. */
+const placeKey = (at: DocPlace): string => ("page" in at ? `p${at.page}` : "paragraph" in at ? `§${at.paragraph}` : `c${at.cell}\t${at.sheet}`);
+function placeOf(key: string): DocPlace | undefined {
+  if (key[0] === "p") return { page: Number(key.slice(1)) };
+  if (key[0] === "§") return { paragraph: Number(key.slice(1)) };
+  if (key[0] === "c") {
+    const tab = key.indexOf("\t");
+    return { sheet: key.slice(tab + 1), cell: key.slice(1, tab) };
+  }
+  return undefined;
+}
+
 /** O formato que a busca mostra: "py", "json", "csv"… */
 export const formatOf = (p: string): string => (/\.([a-z0-9]+)$/i.exec(p)?.[1] ?? "").toLowerCase();
 
 /** Muda quando o esquema muda: o índice velho é apagado e refeito. */
-const SCHEMA = 2;
+const SCHEMA = 3;
 /** Quantos arquivos por lote, e a pausa entre os lotes. */
 const BATCH = 40;
+/** O texto (em caracteres) que um lote segura na memória antes de gravar. */
+const BATCH_TEXT = 8 * 1024 * 1024;
 /** O cache de páginas do SQLite, em KB (o padrão é 2 MB por conexão; aqui 512 KB). */
 const CACHE_KB = 512;
 /**
@@ -74,6 +95,8 @@ export interface TextHit {
   score: number;
   /** A linha do 1º termo achado, contada de 1. Sem ela (achou só pelo nome), o arquivo abre no começo. */
   line?: number;
+  /** No pdf, no docx e no xlsx (T22218), onde o arquivo abre: a página, o parágrafo ou a célula. */
+  at?: DocPlace;
   /** Veio só pelo índice, sem ler o arquivo (passou do que a busca lê): as palavras estão nele, a frase não é conferida. */
   approx?: boolean;
   file: { format: string; size: number; mtime: string };
@@ -86,6 +109,8 @@ export interface TextIndexOptions {
   dir: string;
   /** O maior texto lido; acima disto, só o nome (testes usam um menor). */
   maxBytes?: number;
+  /** O maior pdf, docx ou xlsx lido (o arquivo, não o texto); acima disto, só o nome. */
+  maxDocBytes?: number;
   /** A pausa entre os lotes (nos testes, nenhuma). */
   pause?(): Promise<void>;
   /** O que uma busca lê no total e por arquivo (testes usam menos). */
@@ -113,12 +138,16 @@ function decode(b: Uint8Array): string {
   }
 }
 
+/** O texto antes do termo no trecho de um documento (T22218): umas quatro palavras. */
+const DOC_SNIPPET_LEAD = 24;
+
 /**
  * A linha (de 1) e o trecho em volta do 1º termo que aparece numa linha, sem diferenciar maiúscula nem acento. A posição
  * vem do mesmo texto que o trecho corta (os espaços já juntados), pelo mapa da dobra: numa linha com recuo ou com
- * espaços no meio, o trecho não se perde (revisão do T21240).
+ * espaços no meio, o trecho não se perde (revisão do T21240). `lead`: quanto do texto antes do termo o trecho leva; a
+ * linha do pdf é a página inteira, e a lista do ⌘K corta o trecho numa linha só, então o documento leva menos (T22218).
  */
-export function lineOf(text: string, terms: readonly string[]): { line: number; snippet: string } | null {
+export function lineOf(text: string, terms: readonly string[], lead = 60): { line: number; snippet: string } | null {
   const lines = text.split(/\r?\n/);
   for (const t of terms) {
     for (let i = 0; i < lines.length; i++) {
@@ -130,7 +159,7 @@ export function lineOf(text: string, terms: readonly string[]): { line: number; 
       if (k < 0) continue;
       const at = map[k] ?? 0;
       const to = (map[k + t.length - 1] ?? at) + 1;
-      const start = Math.max(0, at - 60);
+      const start = Math.max(0, at - lead);
       const end = Math.min(flat.length, to + 100);
       return { line: i + 1, snippet: `${start > 0 ? "…" : ""}${flat.slice(start, end).trim()}${end < flat.length ? "…" : ""}` };
     }
@@ -147,7 +176,7 @@ export class TextIndex {
   private readonly maxBytes: number;
   private readonly pause: () => Promise<void>;
   /** O que a sessão fez (o teste da 2ª abertura e a medição). */
-  readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0 };
+  readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0, docs: 0 };
   /** Os bytes que a última busca leu do disco (o teste do orçamento). */
   lastSearchBytes = 0;
 
@@ -185,7 +214,9 @@ export class TextIndex {
     db.exec(`PRAGMA cache_size=-${CACHE_KB}; PRAGMA mmap_size=0; PRAGMA temp_store=FILE; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL`);
     const v = (db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
     if (v !== SCHEMA) {
-      db.exec("DROP TABLE IF EXISTS files; DROP TABLE IF EXISTS body");
+      db.exec("DROP TABLE IF EXISTS files; DROP TABLE IF EXISTS body; DROP TABLE IF EXISTS docs");
+      // O texto tirado do pdf, do docx e do xlsx: `places` tem o lugar de cada linha de `text`, na mesma ordem.
+      db.exec("CREATE TABLE docs(id INTEGER PRIMARY KEY, bytes INTEGER NOT NULL, text TEXT NOT NULL, places TEXT NOT NULL)");
       db.exec("CREATE TABLE files(id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, mtime TEXT NOT NULL, size INTEGER NOT NULL, name_only INTEGER NOT NULL)");
       const fts = "name, text, detail=column, tokenize='unicode61 remove_diacritics 2'";
       try {
@@ -208,7 +239,7 @@ export class TextIndex {
   /** Todos os arquivos da pasta (na abertura): lê só os novos e os que mudaram, e tira os que saíram. */
   sync(files: Iterable<VaultFile>): Promise<void> {
     const want = new Map<string, VaultFile>();
-    for (const f of files) if (isIndexedText(f.path)) want.set(f.path, f);
+    for (const f of files) if (isIndexedFile(f.path)) want.set(f.path, f);
     return this.queue(async () => {
       const db = await this.open();
       if (this.closed) return;
@@ -229,7 +260,7 @@ export class TextIndex {
    * ignorado.
    */
   update(paths: readonly string[], stat: (p: string) => VaultFile | undefined): Promise<void> {
-    const list = paths.filter(isIndexedText);
+    const list = paths.filter(isIndexedFile);
     if (!list.length) return Promise.resolve();
     return this.queue(async () => {
       const db = await this.open();
@@ -254,21 +285,37 @@ export class TextIndex {
   private remove(db: Database, paths: readonly string[]) {
     const delFile = db.query("DELETE FROM files WHERE path=? RETURNING id");
     const delBody = db.query("DELETE FROM body WHERE rowid=?");
+    const delDoc = db.query("DELETE FROM docs WHERE id=?");
     db.transaction(() => {
       for (const p of paths) {
         const row = delFile.get(p) as { id: number } | null;
-        if (row) delBody.run(row.id);
+        if (row) {
+          delBody.run(row.id);
+          delDoc.run(row.id);
+        }
       }
     })();
     this.stats.removed += paths.length;
   }
 
   private async index(files: readonly VaultFile[]): Promise<void> {
-    for (let i = 0; i < files.length; i += BATCH) {
+    let i = 0;
+    while (i < files.length) {
       if (this.closed) return;
-      const batch: { f: VaultFile; text: string | null }[] = [];
-      for (const f of files.slice(i, i + BATCH)) {
+      const batch: { f: VaultFile; text: string | null; places?: string }[] = [];
+      // O lote fecha em `BATCH` arquivos ou em `BATCH_TEXT` de texto guardado na memória (T22218: uma planilha tirada
+      // chega a 5 MB de texto, e 40 delas de uma vez seriam 200 MB).
+      let held = 0;
+      while (i < files.length && batch.length < BATCH && held < BATCH_TEXT) {
+        const f = files[i++]!;
         let text: string | null = null;
+        if (isDocText(f.path)) {
+          const doc = await this.readDoc(f);
+          if (doc === undefined) continue; // sumiu ou saiu da pasta por um link
+          batch.push(doc ? { f, text: doc.text, places: doc.places } : { f, text: null });
+          held += doc ? doc.text.length + doc.places.length : 0;
+          continue;
+        }
         if (f.size <= this.maxBytes) {
           let abs: string;
           try {
@@ -281,6 +328,7 @@ export class TextIndex {
           if (bytes.byteLength <= this.maxBytes && !looksBinary(bytes)) text = searchableText(f.path, decode(bytes));
         }
         batch.push({ f, text });
+        held += text?.length ?? 0;
       }
       const db = this.db;
       if (!db || this.closed) return;
@@ -289,16 +337,20 @@ export class TextIndex {
       );
       const delBody = db.query("DELETE FROM body WHERE rowid=?");
       const addBody = db.query("INSERT INTO body(rowid, name, text) VALUES (?,?,?)");
+      const delDoc = db.query("DELETE FROM docs WHERE id=?");
+      const addDoc = db.query("INSERT INTO docs(id, bytes, text, places) VALUES (?,?,?,?)");
       db.transaction(() => {
-        for (const { f, text } of batch) {
+        for (const { f, text, places } of batch) {
           const { id } = upFile.get(f.path, f.mtime, f.size, text === null ? 1 : 0) as { id: number };
           delBody.run(id);
+          delDoc.run(id);
           addBody.run(id, fold(f.path), text ?? "");
+          if (text !== null && places !== undefined) addDoc.run(id, Buffer.byteLength(text), text, places);
           if (text === null) this.stats.nameOnly++;
           else this.stats.read++;
         }
       })();
-      if (i + BATCH < files.length) await this.pause();
+      if (i < files.length) await this.pause();
     }
   }
 
@@ -342,30 +394,71 @@ export class TextIndex {
       const f = stat(r.path);
       if (!f) continue; // saiu e o aviso ainda não chegou
       const hit = { path: r.path, title: textNoteTitle(r.path), score: -r.rank, file: { format: formatOf(r.path), size: f.size, mtime: f.mtime } };
+      // O pdf, o docx e o xlsx contam pelo texto já tirado, que é o que a busca lê (T22218).
+      const isDoc = !r.nameOnly && isDocText(r.path);
+      const cost = isDoc ? this.storedDocSize(db, r.path) : f.size;
       // Passou do que a busca lê: vem pelo índice só, aproximado (o FTS já tem todas as palavras e nenhuma do `-`).
-      if (!r.nameOnly && (f.size > perFile || f.size > budget)) {
+      if (!r.nameOnly && (cost > perFile || cost > budget)) {
         out.push({ ...hit, snippet: "", approx: true });
         continue;
       }
-      // O texto vem do disco (o índice só tem as palavras); o arquivo grande demais ou binário fica só pelo nome.
-      const raw = r.nameOnly ? "" : await this.readText(r.path, perFile);
+      // O texto vem do disco (o índice só tem as palavras); o arquivo grande demais ou binário fica só pelo nome. O do
+      // pdf, do docx e do xlsx vem do texto já tirado, com o lugar de cada linha.
+      const doc = isDoc ? this.storedDoc(db, r.path) : null;
+      const raw = r.nameOnly ? "" : isDoc ? (doc?.text ?? "") : await this.readText(r.path, perFile);
       if (!r.nameOnly) {
-        budget -= f.size;
-        this.lastSearchBytes += f.size;
+        budget -= cost;
+        this.lastSearchBytes += cost;
       }
       if (raw === null) continue;
       const body = fold(raw).replace(/\s+/g, " ");
       if (q.notText.some((t) => body.includes(t))) continue;
       if (!terms.every((t) => body.includes(t) || where.includes(t))) continue;
       // No quadro e no diagrama, a linha é do texto extraído, não do arquivo: o trecho vai, a linha não.
-      const at = raw ? lineOf(raw, terms) : null;
+      const at = raw ? lineOf(raw, terms, doc ? DOC_SNIPPET_LEAD : undefined) : null;
       if (at && isDrawing(r.path)) {
         out.push({ ...hit, snippet: at.snippet });
         continue;
       }
-      out.push({ ...hit, snippet: at?.snippet ?? "", ...(at ? { line: at.line } : {}) });
+      const place = at && doc ? placeOf(doc.places.split("\n")[at.line - 1] ?? "") : undefined;
+      out.push({ ...hit, snippet: at?.snippet ?? "", ...(at && !doc ? { line: at.line } : {}), ...(place ? { at: place } : {}) });
     }
     return out;
+  }
+
+  /**
+   * O texto de dentro de um pdf, docx ou xlsx (T22218), uma linha por pedaço, e o lugar de cada linha. `null`: entra só
+   * pelo nome (grande demais, quebrado, com senha, sem texto); `undefined`: sumiu ou saiu da pasta por um link.
+   */
+  private async readDoc(f: VaultFile): Promise<{ text: string; places: string } | null | undefined> {
+    if (f.size > (this.o.maxDocBytes ?? MAX_VIEW_BYTES)) return null;
+    let abs: string;
+    try {
+      abs = inside(this.o.root, f.path);
+    } catch {
+      return undefined;
+    }
+    const bytes = await readFile(abs).catch(() => undefined);
+    if (bytes === undefined) return undefined;
+    if (bytes.byteLength > (this.o.maxDocBytes ?? MAX_VIEW_BYTES)) return null;
+    try {
+      const d = await docText(f.path, new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), this.maxBytes);
+      if (!d.segments.length) return null;
+      this.stats.docs++;
+      return { text: d.segments.map((s) => s.text).join("\n"), places: d.segments.map((s) => placeKey(s.at)).join("\n") };
+    } catch {
+      return null; // não abre: fica pelo nome, como o binário
+    }
+  }
+
+  /** O tamanho (em bytes) do texto já tirado de um pdf, docx ou xlsx: o que a busca leria. */
+  private storedDocSize(db: Database, rel: string): number {
+    return (db.query("SELECT d.bytes AS bytes FROM docs d JOIN files f ON f.id = d.id WHERE f.path=?").get(rel) as { bytes: number } | null)?.bytes ?? 0;
+  }
+
+  /** O texto já tirado de um pdf, docx ou xlsx (T22218), para a busca conferir sem abrir o arquivo. */
+  private storedDoc(db: Database, rel: string): { text: string; places: string } | null {
+    return db.query("SELECT d.text AS text, d.places AS places FROM docs d JOIN files f ON f.id = d.id WHERE f.path=?").get(rel) as { text: string; places: string } | null;
   }
 
   /** O texto de um arquivo indexado, para a busca conferir; `null` se sumiu ou saiu da pasta por um link. */

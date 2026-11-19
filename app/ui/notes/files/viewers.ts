@@ -6,7 +6,7 @@
 import { type ComponentType, lazy, type MutableRefObject, type ReactNode } from "react";
 
 import { extOf } from "../../../src/shared/attachments.ts";
-import { CODE_TYPES, type FileReadAs, looksLikeText, mayBeText } from "../../../src/shared/file-view.ts";
+import { CODE_TYPES, type FileAt, type FileReadAs, looksLikeText, mayBeText } from "../../../src/shared/file-view.ts";
 import type { FileContent, NotesApi } from "../types.ts";
 import type { KiwiSheetSource } from "./kiwi-sheet.ts";
 import { ImageViewer } from "./ImageViewer.tsx";
@@ -36,9 +36,10 @@ export interface FileViewerProps {
   kiwi?: KiwiSheetSource;
   /**
    * Abrir numa linha (T21240): a busca achou o termo nela. O texto rola até ela e a seleciona; a tabela, até a linha da
-   * grade. Um objeto novo a cada pedido, para a mesma linha pedida de novo rolar outra vez.
+   * grade. Um objeto novo a cada pedido, para a mesma linha pedida de novo rolar outra vez. No pdf, no docx e no xlsx
+   * (T22218), o lugar achado: a página, o parágrafo, a aba e a célula.
    */
-  at?: { line: number };
+  at?: FileAt;
   /** Só leitura, e por quê (T22432): uma versão antiga no painel Versões, que se olha e não se edita. */
   readOnly?: string;
 }

@@ -38,7 +38,7 @@ interface Size {
 
 type Problem = "password" | "error";
 
-export function PdfViewer({ path, file }: FileViewerProps) {
+export function PdfViewer({ path, file, at }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [sizes, setSizes] = useState<Size[]>([]);
@@ -176,6 +176,17 @@ export function PdfViewer({ path, file }: FileViewerProps) {
       clearTimeout(timer);
     };
   }, [doc, query, loadTexts]);
+
+  // A página que a busca achou (T22218): o topo dela, uma vez por pedido, quando as medidas das páginas já existem.
+  const wentTo = useRef<FileViewerProps["at"] | null>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !doc || !width || !at || !("page" in at) || wentTo.current === at || !tops.length) return;
+    wentTo.current = at;
+    const n = Math.min(Math.max(1, Math.floor(at.page)), tops.length);
+    el.scrollTo({ top: Math.max(0, tops[n - 1]! - GUTTER) });
+    setPage(n);
+  }, [at, doc, tops, width]);
 
   // O achado da vez vai para a tela.
   useEffect(() => {

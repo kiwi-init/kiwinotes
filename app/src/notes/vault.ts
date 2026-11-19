@@ -19,7 +19,7 @@ import path from "node:path";
 import { makeFileResolver, makeResolver, noteName, parseLinks, type Resolver, rewriteLinksMany } from "../shared/wikilinks.ts";
 import { fold, foldWithMap } from "../store/text.ts";
 import { extOf, isPackageDir, PACKAGE_MARKS } from "../shared/attachments.ts";
-import { isEditableText, looksLikeText, MAX_VIEW_BYTES, mayBeText, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
+import { type DocPlace, isEditableText, looksLikeText, MAX_VIEW_BYTES, mayBeText, MAX_VIEW_TEXT_BYTES, viewLimit } from "../shared/file-view.ts";
 import { approxWord, typoBudget, wordsOf } from "../shared/fuzzy.ts";
 import { hasPositive, MAX_SEARCH_QUERY, oneSpace, parseQuery, searchTooLong } from "../shared/query.ts";
 import { bodyTags, cleanTag, hasTag, tagKey, type TagNode, tagTree, uniqueTags } from "../shared/tags.ts";
@@ -98,6 +98,8 @@ export interface SearchHit {
   file?: { format: string; size: number; mtime: string };
   /** A linha achada, de 1 (T21240): o arquivo abre nela. */
   line?: number;
+  /** No pdf, no docx e no xlsx (T22218): a página, o parágrafo ou a célula achada, onde o arquivo abre. */
+  at?: DocPlace;
 }
 
 /** Quantas notas a busca pelo sentido traz no máximo, além das que casam pelas palavras. */

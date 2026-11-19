@@ -11,6 +11,29 @@ export const MAX_VIEW_TEXT_BYTES = 5 * 1024 * 1024;
 
 export type FileReadAs = "text" | "binary";
 
+/** Onde um achado da busca está dentro do pdf, do docx ou do xlsx (T22218): a página, o parágrafo com texto, a célula. */
+export type DocPlace = { page: number } | { paragraph: number } | { sheet: string; cell: string };
+
+/** Onde abrir o arquivo achado pela busca: a linha do texto (T21240) ou o lugar no documento (T22218). */
+export type FileAt = { line: number } | DocPlace;
+
+/** "IV3" → a linha 3 e a coluna 255 (a A é a 0); null se não é uma referência de célula. */
+export function cellRef(cell: string): { line: number; col: number } | null {
+  const m = /^([A-Z]{1,3})([1-9]\d*)$/.exec(cell.toUpperCase());
+  if (!m) return null;
+  let col = 0;
+  for (const ch of m[1]!) col = col * 26 + (ch.charCodeAt(0) - 64);
+  return { line: Number(m[2]), col: col - 1 };
+}
+
+/** O lugar curto, para a lista: "linha 3", "pág. 2", "§4", "Aba!B7". */
+export function fileAtLabel(at: FileAt): string {
+  if ("line" in at) return `linha ${at.line}`;
+  if ("page" in at) return `pág. ${at.page}`;
+  if ("paragraph" in at) return `§${at.paragraph}`;
+  return `${at.sheet}!${at.cell}`;
+}
+
 /**
  * O código que as Notas abrem editável e com cor (spec #19277, T19312). A cor de cada um (a linguagem do CodeMirror) fica
  * em `ui/notes/files/code-languages.ts`, e o teste de lá confere que as duas listas batem.

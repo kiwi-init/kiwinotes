@@ -22,7 +22,7 @@ type State = { kind: "loading" } | { kind: "ready"; pages: number } | { kind: "t
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 
-export function DocxViewer({ path, file }: FileViewerProps) {
+export function DocxViewer({ path, file, at }: FileViewerProps) {
   const base64 = "base64" in file ? file.base64 : "";
   const [state, setState] = useState<State>({ kind: "loading" });
   const scroller = useRef<HTMLDivElement>(null);
@@ -116,6 +116,19 @@ export function DocxViewer({ path, file }: FileViewerProps) {
     const m = matches && current >= 0 ? matches[current] : undefined;
     if (m) e.reveal(m);
   }, [matches, current]);
+
+  // O parágrafo que a busca do app achou (T22218): o n-ésimo com texto, contado como o `docText` do índice, ganha a marca
+  // da vez e vai para a tela. O ⌘F, quando a pessoa busca, troca as marcas.
+  useEffect(() => {
+    const e = engine.current;
+    if (!e || state.kind !== "ready" || !at || !("paragraph" in at)) return;
+    paragraphs.current ??= docxParagraphs(e.pieces());
+    const p = paragraphs.current[at.paragraph - 1];
+    if (!p) return;
+    const found = { paragraphId: p.id, from: p.offsets[0]!, to: p.offsets[p.text.length]!, page: p.page };
+    e.mark([found], 0);
+    e.reveal(found);
+  }, [at, state.kind]);
 
   const step = useCallback((direction: 1 | -1) => setCurrent((c) => stepMatch(c, matches?.length ?? 0, direction)), [matches]);
 

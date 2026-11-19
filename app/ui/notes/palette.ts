@@ -4,12 +4,16 @@
 import { lexicalMatch, WORD } from "../../src/shared/lexical.ts";
 import { highlightRanges, type Range, subsequence, subsequenceScore } from "../../src/shared/fuzzy.ts";
 import { hasFilters, parseQuery } from "../../src/shared/query.ts";
+import type { FileAt } from "../../src/shared/file-view.ts";
 import type { NoteMeta, SearchHit, VaultFile } from "./types.ts";
 
 export type PaletteItem =
   /** `semantic` (T6013): achada só pelo sentido, sem nenhuma palavra da busca. */
-  /** `format` e `line` (T21240): um arquivo que não é nota (o código, o json, o csv), aberto na linha achada. */
-  | { kind: "note"; path: string; title: string; detail: string; snippet?: string; semantic?: boolean; format?: string; line?: number }
+  /**
+   * `format` e `at` (T21240, T22218): um arquivo que não é nota (o código, o json, o csv, o pdf, o docx, o xlsx), aberto
+   * na linha, na página, no parágrafo ou na célula achada.
+   */
+  | { kind: "note"; path: string; title: string; detail: string; snippet?: string; semantic?: boolean; format?: string; at?: FileAt }
   | { kind: "create"; title: string }
   /** Um comando da janela (T2619: "Nova nota a partir de modelo…"). */
   | { kind: "command"; id: string; title: string };
@@ -82,7 +86,7 @@ export function paletteItems(notes: NoteMeta[], query: string, textHits: SearchH
   const folderOf = (path: string) => notes.find((n) => n.path === path)?.folder ?? dirOf(path);
   const hitItem = (h: SearchHit): PaletteItem => ({
     kind: "note", path: h.path, title: h.title, detail: folderOf(h.path), snippet: h.snippet,
-    ...(h.semantic ? { semantic: true } : {}), ...(h.file ? { format: h.file.format } : {}), ...(h.line ? { line: h.line } : {}),
+    ...(h.semantic ? { semantic: true } : {}), ...(h.file ? { format: h.file.format } : {}), ...(h.line ? { at: { line: h.line } } : h.at ? { at: h.at } : {}),
   });
   const fileItems = (seen: Set<string>): PaletteItem[] =>
     files.filter((f) => !seen.has(f.path) && !/\.md$/i.test(f.path)).map((f) => ({ kind: "note", path: f.path, title: f.path.split("/").at(-1)!, detail: dirOf(f.path), format: formatOf(f.path) }));

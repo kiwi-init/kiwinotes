@@ -8,7 +8,7 @@ import { type MutableRefObject, type ReactNode, Suspense, useEffect, useRef, use
 
 import type { VaultFile } from "../types.ts";
 
-import { fileSize, hasVersions } from "../../../src/shared/file-view.ts";
+import { type FileAt, fileSize, hasVersions } from "../../../src/shared/file-view.ts";
 import { isPackageName, modified, typeLabel } from "./fileCard.ts";
 import { fileType } from "../tree.ts";
 import { isHtmlFile } from "./htmlPreview.ts";
@@ -36,8 +36,8 @@ interface Props {
   kiwi?: KiwiSheetSource;
   /** Só para testes e para os PRs dos formatos: no app, o visualizador vem do registro. */
   viewer?: FileViewer;
-  /** A linha onde abrir (T21240): a da busca. */
-  at?: { line: number };
+  /** Onde abrir, o achado da busca: a linha (T21240), ou a página, o parágrafo ou a célula (T22218). */
+  at?: FileAt;
   /** "Versões" (T21239, spec #21160): o histórico do arquivo de texto, como o da nota. Sem ele, o botão não aparece. */
   onVersions?(path: string): void;
 }

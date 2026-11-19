@@ -2,13 +2,15 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { deflateRawSync } from "node:zlib";
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { uiCapabilities } from "../bun/ui-capabilities.ts";
 import { DEFAULT_SETTINGS } from "../store/settings.ts";
 import { tempDir } from "../../test/tmp.ts";
-import { isIndexedText, lineOf, TextIndex } from "./text-index.ts";
+import { zipBytes } from "../../test/office-files.ts";
+import { ABA_LARGA, MARCA, PASTA } from "../../test/regua/arquivos.ts";
+import { isIndexedFile, isIndexedText, lineOf, TextIndex } from "./text-index.ts";
 import { Vault, type VaultFile } from "./vault.ts";
 
 const open: { close(): unknown }[] = [];
@@ -49,6 +51,8 @@ describe("o que entra no índice", () => {
   test("a linha e o trecho do 1º termo, sem acento nem maiúscula", () => {
     expect(lineOf("um\ndois\n  Três maçãs aqui\n", ["macas"])).toEqual({ line: 3, snippet: "Três maçãs aqui" });
     expect(lineOf("nada", ["outra"])).toBeNull();
+    // O documento (T22218) leva menos texto antes do termo: a página do pdf é uma linha só.
+    expect(lineOf(`${"caju e manga. ".repeat(10)}A graviola chegou.`, ["graviola"], 24)!.snippet).toBe("…manga. caju e manga. A graviola chegou.");
   });
 
   test("numa linha com recuo e espaços no meio, o trecho tem o termo (revisão do T21240)", () => {
@@ -262,5 +266,85 @@ describe("arquivos estranhos (spec #21165)", () => {
     const t = f.index();
     await t.sync(f.all());
     expect(paths(await t.search("pequi", 10, f.stat))).toEqual(["a.txt"]);
+  });
+});
+
+describe("o pdf, o docx e o xlsx (T22218, issue #156)", () => {
+  const fixture = (name: string) => new Uint8Array(readFileSync(path.join(PASTA, name)));
+  const W = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`;
+  const docx = (...ps: string[]) =>
+    zipBytes({ "word/document.xml": `<w:document ${W}><w:body>${ps.map((t) => `<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`).join("")}</w:body></w:document>` }, { deflate: true });
+
+  test("entram no índice; o .env continua fora", () => {
+    for (const p of ["a.pdf", "b.docx", "c.XLSX"]) expect(`${p} ${isIndexedFile(p)}`).toBe(`${p} true`);
+    for (const p of ["a.doc", "b.xls", ".env", "foto.png", "nota.md"]) expect(`${p} ${isIndexedFile(p)}`).toBe(`${p} false`);
+  });
+
+  test("a marca de dentro dos três é achada, com a página, o parágrafo e a célula", async () => {
+    const f = folder({ "Loja/estoque.pdf": fixture("estoque.pdf"), "Loja/estoque.docx": fixture("estoque.docx"), "Loja/estoque.xlsx": fixture("estoque.xlsx") });
+    const t = f.index();
+    await t.sync(f.all());
+    expect(t.stats).toMatchObject({ docs: 3, read: 3, nameOnly: 0 });
+    const hits = await t.search(MARCA, 20, f.stat);
+    expect(paths(hits)).toEqual(["Loja/estoque.docx", "Loja/estoque.pdf", "Loja/estoque.xlsx"]);
+    const by = (p: string) => hits.find((h) => h.path === p)!;
+    expect(by("Loja/estoque.pdf")).toMatchObject({ at: { page: 1 }, file: { format: "pdf" } });
+    expect(by("Loja/estoque.docx")).toMatchObject({ at: { paragraph: 2 }, file: { format: "docx" } });
+    expect(by("Loja/estoque.xlsx")).toMatchObject({ at: { sheet: ABA_LARGA, cell: "IV3" }, file: { format: "xlsx" } });
+    for (const h of hits) {
+      expect(h.snippet).toContain(MARCA);
+      expect(h.line).toBeUndefined();
+      expect(h.approx).toBeUndefined();
+    }
+  });
+
+  test("a busca confere pelo texto guardado: com o arquivo trocado no disco e sem aviso, nada é aberto de novo", async () => {
+    const f = folder({ "Docs/a.docx": docx("um texto de bacuri", "outro parágrafo de cupuaçu") });
+    const t = f.index();
+    await t.sync(f.all());
+    // Troca o arquivo por um que não abre, sem avisar o índice: a busca ainda acha pelo que guardou.
+    writeFileSync(path.join(f.root, "Docs/a.docx"), "quebrado");
+    const [hit] = await t.search("cupuacu", 20, f.stat);
+    expect(hit).toMatchObject({ path: "Docs/a.docx", at: { paragraph: 2 } });
+    expect(hit!.snippet).toContain("cupuaçu");
+  });
+
+  test("o que muda é lido de novo; o que sai some do texto guardado também", async () => {
+    const f = folder({ "Docs/a.docx": docx("primeiro bacuri") });
+    const first = f.index();
+    await first.sync(f.all());
+    await first.close();
+    writeFileSync(path.join(f.root, "Docs/a.docx"), docx("agora", "segundo murici"));
+    const second = f.index();
+    await second.sync(f.all());
+    expect(second.stats).toMatchObject({ docs: 1, read: 1 });
+    expect(await second.search("bacuri", 20, f.stat)).toEqual([]);
+    expect(await second.search("murici", 20, f.stat)).toMatchObject([{ path: "Docs/a.docx", at: { paragraph: 2 } }]);
+    rmSync(path.join(f.root, "Docs/a.docx"));
+    await second.update(["Docs/a.docx"], f.stat);
+    expect(await second.search("murici", 20, f.stat)).toEqual([]);
+  });
+
+  test("quebrado, sem texto ou grande demais: só pelo nome, sem erro", async () => {
+    const f = folder({ "X/quebrado-jambo.pdf": "não é pdf", "X/vazio-jambo.docx": docx(), "X/grande-jambo.xlsx": new Uint8Array(4096), "X/ok.docx": docx("jambo aqui") });
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => {}, maxDocBytes: 2048 });
+    open.push(t);
+    await t.sync(f.all());
+    expect(t.stats).toMatchObject({ docs: 1, read: 1, nameOnly: 3 });
+    const hits = await t.search("jambo", 20, f.stat);
+    expect(paths(hits)).toEqual(["X/grande-jambo.xlsx", "X/ok.docx", "X/quebrado-jambo.pdf", "X/vazio-jambo.docx"]);
+    expect(hits.filter((h) => h.at).map((h) => h.path)).toEqual(["X/ok.docx"]);
+  });
+
+  test("o orçamento da busca conta o texto tirado, não o tamanho do arquivo", async () => {
+    // Um docx pequeno no disco com muito texto: passa do que a busca lê por arquivo e vem aproximado.
+    const f = folder({ "D/longo.docx": docx(...Array.from({ length: 400 }, (_, i) => `linha ${i} de pequi`)), "D/curto.docx": docx("pequi") });
+    const t = new TextIndex({ root: f.root, dir: path.join(f.base, "dados", "text-index"), pause: async () => {}, readFile: 2048 });
+    open.push(t);
+    await t.sync(f.all());
+    expect(statSync(path.join(f.root, "D/longo.docx")).size).toBeLessThan(2048);
+    const hits = await t.search("pequi", 20, f.stat);
+    expect(hits.find((h) => h.path === "D/longo.docx")).toMatchObject({ approx: true, snippet: "" });
+    expect(hits.find((h) => h.path === "D/curto.docx")).toMatchObject({ at: { paragraph: 1 } });
   });
 });

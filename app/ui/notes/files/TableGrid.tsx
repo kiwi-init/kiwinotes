@@ -78,7 +78,7 @@ interface GridProps {
   /** O Kiwi Cat inseriu ou apagou linhas: a caixa aberta vai para esta célula (`row` -1: ela saiu). `n` muda a cada vez. */
   moveEditing?: { row: number; col: number; n: number } | null;
   /** Abrir com a seleção nesta linha do arquivo (a busca achou o termo nela, T21240). */
-  goTo?: { line: number };
+  goTo?: { line: number; col?: number };
 }
 
 /** A coluna dos números das linhas: no mínimo esta largura (px). */
@@ -304,7 +304,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
 
   // A busca abriu o arquivo numa linha (T21240): a seleção vai para ela uma vez, quando a grade já tem as medidas. A
   // linha da grade é a que mostra o número dela, para valer na vista ordenada ou filtrada também.
-  const went = useRef<{ line: number } | null>(null);
+  const went = useRef<{ line: number; col?: number } | null>(null);
   useEffect(() => {
     if (!goTo || !offsets || !columns || went.current === goTo) return;
     went.current = goTo;
@@ -312,7 +312,8 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     if (goTo.line === firstRow - 1) row = 0;
     else if (rowNumbers) row = rowNumbers.indexOf(goTo.line) + 1;
     if (row < 0 || row > rows.length) return;
-    select({ row, col: 0 });
+    // A célula achada no xlsx (T22218): a coluna dela; no csv, a primeira.
+    select({ row, col: Math.max(0, Math.min(goTo.col ?? 0, columns - 1)) });
   }, [goTo, offsets, columns, rows.length, firstRow, rowNumbers]);
 
   // A caixa de digitar: fechar grava (o Esc não), e a seleção anda como no Excel.

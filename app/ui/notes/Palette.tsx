@@ -8,12 +8,13 @@ import { type PaletteCommand, type PaletteItem, paletteItems, snippetRanges, tit
 import { NO_TEXT_ASSIST } from "../src/textAssist.ts";
 import type { NoteMeta, NotesApi, SearchHit, VaultFile } from "./types.ts";
 import { SEARCH_TOO_LONG, searchTooLong } from "../../src/shared/query.ts";
+import { type FileAt, fileAtLabel } from "../../src/shared/file-view.ts";
 
 export interface PaletteProps {
   api: NotesApi;
   notes: NoteMeta[];
   /** `line` (T21240): um arquivo de texto achado pelo conteúdo abre na linha. */
-  onOpen(path: string, line?: number): void;
+  onOpen(path: string, at?: FileAt): void;
   onCreate(title: string): void;
   onClose(): void;
   /** A busca já aberta com um texto (T2619: o clique numa #tag abre com `tag:…`). */
@@ -57,7 +58,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
 
   const choose = (item: PaletteItem | undefined) => {
     if (!item) return;
-    if (item.kind === "note") onOpen(item.path, item.line);
+    if (item.kind === "note") onOpen(item.path, item.at);
     else if (item.kind === "command") onCommand?.(item.id, query);
     else onCreate(item.title);
   };
@@ -106,7 +107,7 @@ export function Palette({ api, notes, onOpen, onCreate, onClose, initialQuery = 
                     {it.snippet ? <Snippet text={plainSnippet(it.snippet)} query={query} /> : null}
                   </span>
                   <span className="kn-palette-r">
-                    {it.format ? <span className="kn-palette-type" title={it.line ? `Linha ${it.line}` : undefined}>{it.format}{it.line ? `:${it.line}` : ""}</span> : null}
+                    {it.format ? <span className="kn-palette-type" title={it.at ? fileAtLabel(it.at) : undefined}>{it.format}{it.at ? `:${"line" in it.at ? it.at.line : fileAtLabel(it.at)}` : ""}</span> : null}
                     {it.semantic ? <span className="kn-palette-why" title="Sem as palavras da busca, mas sobre o mesmo assunto">pelo sentido</span> : null}
                     {it.detail}
                   </span>
