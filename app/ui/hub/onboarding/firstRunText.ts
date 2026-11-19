@@ -28,7 +28,7 @@ export const MODEL_TITLE = "O modelo de voz";
 export const MODEL_WHY =
   `O ditado roda no seu Mac, sem internet. Para isso, o Kiwi baixa o modelo uma vez: cerca de ${SETUP_MODEL_MB.main} MB, ` +
   `e os ${SETUP_MODEL_MB.boosting} MB do vocabulário só quando você puser palavras no dicionário. Dá para continuar ` +
-  "enquanto ele baixa.";
+  "enquanto o modelo baixa.";
 
 /** A linha do modelo agora, e a fração da barra (`null`: sem barra). */
 export function modelLine(m: SetupModel): { text: string; fraction: number | null; done: boolean; failed: boolean } {
