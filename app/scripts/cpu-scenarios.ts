@@ -12,6 +12,13 @@
 // | repouso      | o Hub, as Notas e os Ajustes abertos e parados, com o agente falso ligado (o gato aparece), o índice |
 // |              | pronto, e a pessoa em outro app (o `blur` em cada janela): tela e helper < 1%, tudo < 2%           |
 // | repouso-foco | o mesmo, com a janela na frente e ninguém mexendo                                                  |
+// | indexando-   | a 1ª passada do índice do conteúdo numa pasta inventada grande de código e JSON, sem tela: o       |
+// |   codigo     | principal com média < 50% e nenhum segundo acima de 100% (o teto do índice, T24286). Mede a passada|
+// |              | até ela acabar (5 s quietos, até `--seconds`), e ela tem de durar 20 s, senão não mediu nada       |
+// | indexando-md | a pasta grande só de `.md`: as notas não passam pelo índice do conteúdo (ele é dos outros arquivos);|
+// |              | o que sobra no fundo, em `--seconds` depois da lista (a busca aquecida, as tags), com a mesma régua|
+// | cedendo      | a passada de código com a pessoa escrevendo (um `notes.save` por segundo): o portão fecha, a       |
+// |              | passada para e o principal fica < 10%. Depois, 30 s sem escrever: a passada tem de voltar          |
 //
 // - Antes de medir o repouso, o roteiro espera o app assentar (`waitQuiet`: janelas de 5 s até a soma ficar na régua
 //   de "tudo", no máximo 60 s) e diz quanto esperou. O trabalho do começo não conta; um timer à toa nunca assenta.
@@ -65,6 +72,8 @@ export interface ScenarioResult {
   name: string;
   seconds: number;
   cpu: CpuByRole | null;
+  /** O segundo mais alto do principal (os roteiros do índice). */
+  peak?: number;
   limits: { label: string; max: number; got: number; ok: boolean }[];
   skipped?: string;
   /** Os segundos que o repouso esperou o app assentar antes de medir (`waitQuiet`). */
@@ -270,6 +279,124 @@ async function idle(name: string, windows: UiWindow[], limits: Limit[], away: bo
   }
 }
 
+/**
+ * Uma pasta inventada grande, num gerador fixo (sempre a mesma pasta). `md`: notas com tarefas e links. `code`: 2/3
+ * de módulos `.ts` e 1/3 de `.json`.
+ */
+function bigVault(root: string, files: number, kind: "md" | "code") {
+  const words = "kiwi nota reunião projeto ideia pauta prazo exemplo semana feira pão bairro sábado lista tarefa plano".split(" ");
+  let seed = 24485;
+  const text = (n: number) => Array.from({ length: n }, () => words[(seed = (seed * 1103515245 + 12345) % 2 ** 31) % words.length]).join(" ");
+  for (let i = 0; i < files; i++) {
+    const dir = path.join(root, `Pasta ${i % 100}`, `Sub ${i % 7}`);
+    if (i < 700) mkdirSync(dir, { recursive: true });
+    if (kind === "md") writeFileSync(path.join(dir, `Nota ${i}.md`), `# Nota ${i}\n\n${text(120)}\n\n- [ ] ${text(5)}\n\n[[Nota ${(i + 1) % files}]]\n`);
+    else if (i % 3 < 2) writeFileSync(path.join(dir, `mod${i}.ts`), `export function f${i}(a: number) {\n  // ${text(30)}\n  return a + ${i};\n}\n`.repeat(20));
+    else writeFileSync(path.join(dir, `dados${i}.json`), JSON.stringify({ id: i, itens: text(200).split(" ") }));
+  }
+}
+
+/**
+ * A CPU do principal a cada segundo, por `seconds`, enquanto `during` roda ao lado: a média e o segundo mais alto.
+ * `quiet`: para antes quando o principal fica 5 s seguidos abaixo dele (o trabalho acabou), e a média e o tempo
+ * (`active`) ficam só com o trecho que andou.
+ */
+async function samplePid(pid: number, seconds: number, during?: (stop: () => boolean) => Promise<void>, quiet?: number) {
+  const cpu = () => processTable().get(pid)?.cpu;
+  const first = cpu();
+  if (first == null) throw new Error("o principal sumiu");
+  let last = first, lastT = performance.now(), done = false;
+  const began = lastT;
+  const each: number[] = [];
+  const side = during?.(() => done);
+  const marks: { c: number; t: number }[] = [];
+  for (let k = 0; k < seconds; k++) {
+    await Bun.sleep(1000);
+    const c = cpu() ?? last, t = performance.now();
+    each.push(((c - last) / ((t - lastT) / 1000)) * 100);
+    marks.push({ c, t });
+    last = c; lastT = t;
+    if (quiet != null && each.length > 5 && each.slice(-5).every((x) => x < quiet)) break;
+  }
+  done = true;
+  await side;
+  const round = (n: number) => Math.round(n * 100) / 100;
+  // Sem o trecho quieto do fim, quando parou por ele.
+  const quietEnd = quiet != null && each.length < seconds ? 5 : 0;
+  const end = marks[marks.length - 1 - quietEnd] ?? { c: first, t: began };
+  const active = (end.t - began) / 1000;
+  return {
+    avg: round(active > 0 ? ((end.c - first) / active) * 100 : 0),
+    peak: round(Math.max(0, ...each)),
+    active: Math.round(active),
+  };
+}
+
+/**
+ * A 1ª passada do índice do conteúdo numa pasta grande, sem tela e sem helper (só o principal conta). Mede desde que a
+ * lista das notas voltou: a busca já está aquecida (o `warm` em fatias, sem teto de propósito, T24286), e o que sobra
+ * é a passada. `typing`: um `notes.save` por segundo, a pessoa escrevendo, e o portão segura a passada.
+ */
+async function indexing(name: string, kind: "md" | "code", files: number, typing: boolean): Promise<ScenarioResult> {
+  // A passada anda: o principal passa disto (o repouso fica perto de 1%).
+  const MOVING = 3;
+  // Menos que isso não é a passada de uma pasta grande: o roteiro não mediu o que diz.
+  const MIN_PASS = 20;
+  const base = path.join(tmpdir(), "kn-cpu.noindex");
+  mkdirSync(base, { recursive: true });
+  const data = mkdtempSync(path.join(base, "run-"));
+  const env = { KIWI_DEBUG: "1" };
+  let stop: (() => Promise<void>) | null = null;
+  try {
+    const vault = path.join(data, "vault");
+    bigVault(vault, files, kind);
+    const r = await cliRun(data, ["start", "--no-helper"], env);
+    if (r.code !== 0) throw new Error(`o headless não subiu (${r.code})`);
+    stop = async () => {
+      await cliRun(data, ["stop"], env);
+      for (let i = 0; i < 40 && existsSync(path.join(data, "control.sock")); i++) await Bun.sleep(100);
+    };
+    const invoke = async (cap: string, args: unknown = {}) => {
+      const res = (await request(data, { cmd: "invoke", cap, args })) as { ok: boolean; value?: any; code?: string } | null;
+      if (!res?.ok) throw new Error(`${cap}: ${res?.code ?? "o headless caiu"}`);
+      return res.value;
+    };
+    const main = (JSON.parse(readFileSync(stateFile(data), "utf8")) as { pid: number }).pid;
+    await invoke("notes.list");
+    const draft = "Rascunho.md";
+    writeFileSync(path.join(vault, draft), "# Rascunho\n");
+    const write = async (stopped: () => boolean) => {
+      let text = "# Rascunho\n";
+      while (!stopped()) {
+        const before = await invoke("notes.get", { path: draft });
+        text += "Mais uma linha de exemplo.\n";
+        await invoke("notes.save", { path: draft, content: text, baseVersion: before.version });
+        await Bun.sleep(1000);
+      }
+    };
+    const { avg, peak, active } = await samplePid(main, SECONDS, typing ? write : undefined, kind === "code" && !typing ? MOVING : undefined);
+    const limits: { label: string; max: number; got: number; min?: number }[] = typing
+      ? [{ label: "principal com a pessoa escrevendo", max: 10, got: avg }]
+      : [{ label: "principal (média)", max: 50, got: avg }, { label: "principal (pico de 1 s)", max: 100, got: peak }];
+    // A prova de que o roteiro mediu a passada: ela seguia no fim da janela, ou voltou quando a pessoa parou.
+    if (kind === "code" && !typing) limits.push({ label: "a passada durou (s)", max: Infinity, min: MIN_PASS, got: active });
+    if (typing) {
+      const back = await samplePid(main, 30);
+      limits.push({ label: "a passada voltou sem a pessoa (pico em 30 s)", max: Infinity, min: MOVING, got: back.peak });
+    }
+    return {
+      name,
+      seconds: active,
+      cpu: { main: avg, helper: 0, webview: 0, gpu: 0 },
+      peak,
+      limits: limits.map(({ min, ...l }) => ({ ...l, ok: l.got <= l.max && l.got >= (min ?? -Infinity) })),
+    };
+  } finally {
+    await stop?.().catch(() => {});
+    rmSync(data, { recursive: true, force: true });
+  }
+}
+
 const REST: Limit[] = [
   { roles: ["webview", "gpu"], max: 1, label: "tela (webview + gpu)" },
   { roles: ["helper"], max: 1, label: "helper" },
@@ -281,6 +408,11 @@ const scenarios: Record<string, () => Promise<ScenarioResult>> = {
   repouso: () => idle("repouso", ["hub", "notes", "settings"], REST, true),
   // A janela do Kiwi na frente, sem ninguém mexer.
   "repouso-foco": () => idle("repouso-foco", ["hub", "notes", "settings"], REST, false),
+  // A pasta grande que a pessoa acabou de abrir (o 200% do #24228): a passada anda com o teto.
+  "indexando-md": () => indexing("indexando-md", "md", 20_000, false),
+  "indexando-codigo": () => indexing("indexando-codigo", "code", 30_000, false),
+  // A mesma passada com a pessoa escrevendo: ela para.
+  cedendo: () => indexing("cedendo", "code", 30_000, true),
 };
 
 if (import.meta.main) {
@@ -293,8 +425,12 @@ if (import.meta.main) {
     results.push(r);
     if (r.skipped) { console.log(`${name}: pulado (${r.skipped})`); continue; }
     const c = r.cpu!;
-    console.log(`${name} (${r.seconds} s${r.warmup ? `, depois de ${r.warmup} s assentando` : ""}): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%`);
-    for (const l of r.limits) console.log(`  ${l.ok ? "ok " : "PASSOU"} ${l.label}: ${l.got}% (teto ${l.max}%)`);
+    console.log(`${name} (${r.seconds} s${r.warmup ? `, depois de ${r.warmup} s assentando` : ""}): main ${c.main}% · helper ${c.helper}% · webview ${c.webview}% · gpu ${c.gpu}%${r.peak != null ? ` · pico do main ${r.peak}%` : ""}`);
+    for (const l of r.limits) {
+      const unit = l.label.endsWith("(s)") ? "" : "%";
+      const ruler = Number.isFinite(l.max) ? `teto ${l.max}${unit}` : "tem de andar";
+      console.log(`  ${l.ok ? "ok " : Number.isFinite(l.max) ? "PASSOU" : "PAROU"} ${l.label}: ${l.got}${unit} (${ruler})`);
+    }
   }
   if (OUT) writeFileSync(OUT, JSON.stringify(results, null, 2));
   if (FAIL && results.some((r) => r.limits.some((l) => !l.ok))) process.exit(1);
