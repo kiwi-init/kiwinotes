@@ -169,6 +169,12 @@ KIWI_AGENT_UI_ONLY=aviso bun scripts/agent-ui-check.ts                 # a linha
 KIWI_FAKE_UPDATES='{"state":"downloading","version":"2026.11.3","done":39845888,"total":63963136}' bun run cli start --no-helper --data /tmp/kn-test
 ```
 
+**O passo da primeira abertura (T20796, spec #20780)**: `KIWI_FAKE_SETUP` é o `{permissions, model}` em JSON que o `setup.status` mostra; o botão de uma permissão só a marca como dada, sem helper nem macOS. O headless não grava o `firstRun` sozinho: um `settings.json` com `"firstRun": "pending"` na pasta de dados mostra o passo no hub. `bun scripts/first-run-check.ts [pasta]` faz isso e tira os prints:
+
+```sh
+KIWI_FAKE_SETUP='{"permissions":{"inputMonitoring":"undetermined","accessibility":"denied"},"model":{"state":"loading","phase":"downloading","fraction":0.42}}' bun run cli start --no-helper --data /tmp/kn-test
+```
+
 **A seção Agente dos Ajustes (T8762, spec #8373)**, de ponta a ponta, num comando só: `bun scripts/agent-ui-check.ts [pasta]` sobe o headless com o agente falso e um registro falso e lento, e roda na janela de verdade, num WebKit headless, os roteiros `ajustes-agente*.json`:
 - o fluxo inteiro: ligar com a tela do aviso, baixar, cancelar, testar, os erros, o modelo, desligar e remover;
 - os estados do Claude Code: não instalado, não logado e numa versão antiga, que o `claude` falso finge com `KIWI_FAKE_CLAUDE_VERSION` e `KIWI_FAKE_CLAUDE_LOGGED_IN=0`;

@@ -2,6 +2,7 @@
 // Notas e a Aparência (T2503); o resto da tela de Configurações ainda é casca.
 
 import { NOTE_WIDTH, sanitizeNoteWidth } from "../shared/note-width.ts";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_SUMMARY_SETTINGS, sanitizeSummarySettings, type SummarySettings } from "../shared/summary-settings.ts";
 
@@ -80,6 +81,11 @@ export interface AppSettings {
     /** O tamanho dele, em vezes o de hoje (de 0,6 a 1,6). */
     tamanho: number;
   };
+  /**
+   * A primeira abertura (T20796, spec #20780): `pending` só numa instalação nova (sem settings.json), até o fim do passo
+   * das permissões e do modelo. Se o app fechar no meio, segue `pending` e o passo volta. Quem já usa o app: `done`.
+   */
+  firstRun: "pending" | "done";
 }
 
 export interface AgentSettings {
@@ -229,7 +235,7 @@ export function sanitizeAgentSettings(input: unknown): AgentSettings {
 /** Até quantas fixadas. */
 export const MAX_PINNED = 200;
 
-export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default } };
+export const DEFAULT_SETTINGS: AppSettings = { shortcuts: sanitizeShortcuts({}), notesShortcut: sanitizeShortcuts({}).notes, pinned: [], appearance: DEFAULT_APPEARANCE, templatesFolder: DEFAULT_TEMPLATES_FOLDER, dailyFolder: "Diário", attachmentsFolder: DEFAULT_ATTACHMENTS_FOLDER, ocr: true, semanticSearch: true, savedSearches: [], microphone: DEFAULT_MICROPHONE, showExtensions: false, cues: true, preciseDictation: false, meetings: DEFAULT_MEETING_SETTINGS, noteWidth: NOTE_WIDTH.default, agent: DEFAULT_AGENT_SETTINGS, kiwicat: { show: true, overlay: true, cor: DEFAULT_CAT_COLOR, posicao: DEFAULT_CAT_POSITION, tamanho: CAT_SIZE.default }, firstRun: "done" };
 
 /** Uma pasta de modelos que vale: relativa, sem `..` nem ponto no começo de um pedaço (a validação de vault é do engine). */
 export function sanitizeTemplatesFolder(input: unknown): string {
@@ -301,6 +307,7 @@ export function sanitizeSettings(input: unknown): AppSettings {
       posicao: o.kiwicat && typeof o.kiwicat === "object" && isCatPosition((o.kiwicat as Record<string, unknown>).posicao) ? (o.kiwicat as { posicao: CatPosition }).posicao : DEFAULT_CAT_POSITION,
       tamanho: catSize(o.kiwicat && typeof o.kiwicat === "object" ? (o.kiwicat as Record<string, unknown>).tamanho : undefined),
     },
+    firstRun: o.firstRun === "pending" ? "pending" : "done",
   });
 }
 
@@ -322,6 +329,17 @@ export class SettingsStore {
 
   async load(): Promise<AppSettings> {
     return sanitizeSettings(await readJson<SettingsFile>(this.file));
+  }
+
+  /**
+   * Na abertura do app (T20796): sem settings.json e sem nenhum dos `traces` (arquivos que um app já usado deixa, como o
+   * permissions.json de quem nunca mexeu nas Configurações), é uma instalação nova, e o arquivo nasce com
+   * `firstRun: "pending"`. Na fila, para nenhuma gravação de antes criar o arquivo no meio. Devolve o `firstRun` de agora.
+   */
+  async beginFirstRun(traces: string[] = []): Promise<AppSettings["firstRun"]> {
+    const used = () => [this.file, ...traces].some((f) => existsSync(f));
+    const s = await this.update(() => (used() ? null : { firstRun: "pending" }));
+    return s.firstRun;
   }
 
   /** As gravações, uma depois da outra: ler, mesclar e gravar sem outra no meio (o `fixPinned` e a Aparência). */

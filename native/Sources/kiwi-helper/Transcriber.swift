@@ -57,6 +57,14 @@ actor Transcriber {
         onBoosting = handler
     }
 
+    /// The main model's download, for the first-run step (T20796): the fraction (0 to 1) and the phase (`listing`,
+    /// `downloading`, `compiling`). Called off the actor, as FluidAudio reports it.
+    private var onDownload: (@Sendable (Double, String) -> Void)?
+
+    func setDownloadHandler(_ handler: @escaping @Sendable (Double, String) -> Void) {
+        onDownload = handler
+    }
+
     /// Starts loading the CTC model (downloading it the first time), without waiting. Once at a time, and after a
     /// failure not again before `ctcRetryAfter`, so an offline Mac doesn't try on every dictation.
     func prepareBoosting() {
@@ -102,8 +110,17 @@ actor Transcriber {
         if let manager { return manager }
         if let loading { return try await loading.value }
         let version = self.version
+        let onDownload = self.onDownload
         let task = Task { () throws -> AsrManager in
-            let models = try await AsrModels.downloadAndLoad(version: version)
+            let models = try await AsrModels.downloadAndLoad(version: version) { progress in
+                let phase: String
+                switch progress.phase {
+                case .listing: phase = "listing"
+                case .downloading: phase = "downloading"
+                case .compiling: phase = "compiling"
+                }
+                onDownload?(progress.fractionCompleted, phase)
+            }
             let manager = AsrManager(config: .default)
             try await manager.loadModels(models)
             return manager

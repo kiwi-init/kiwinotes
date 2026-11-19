@@ -1,3 +1,4 @@
+import type { CapabilityDeps } from "../bun/ui-capabilities.ts";
 import { fakeSpelling } from "./spelling.ts";
 import { fakeNotices, isNoticePermission } from "../agent/fake/notices.ts";
 import { NO_SPELLING } from "../shared/spelling.ts";
@@ -177,8 +178,16 @@ export async function startHeadless(o: HeadlessOptions): Promise<{ stop(): Promi
   let agentVoice: import("../bun/agent-voice.ts").AttachedAgentVoice | undefined;
   // O Sobre com um estado de atualização de mentira (T17098): `KIWI_FAKE_UPDATES` é o UpdatesView em JSON.
   const about = process.env.KIWI_FAKE_UPDATES ? (await import("./fake-updates.ts")).fakeAbout(process.env.KIWI_FAKE_UPDATES) : undefined;
+  // O passo da primeira abertura (T20796): `KIWI_FAKE_SETUP` é o estado de mentira; com o helper, o estado dele, mas o
+  // botão nunca pede ao macOS no headless (nenhum diálogo na tela de ninguém).
+  const setup: CapabilityDeps["setup"] = process.env.KIWI_FAKE_SETUP
+    ? (await import("./fake-setup.ts")).fakeSetup(process.env.KIWI_FAKE_SETUP)
+    : session
+      ? { live: () => session.setupLive(), request: async (p) => void console.log(`[headless] setup.request (not asked): ${p}`), done: () => {} }
+      : undefined;
   const capabilities = uiCapabilities({
     about,
+    setup,
     spelling,
     meetings,
     dictionary: stores.dictionary,

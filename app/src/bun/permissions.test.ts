@@ -207,3 +207,47 @@ describe("permissões de reunião com helper falso", () => {
     }
   });
 });
+
+describe("primeira abertura (T20796) com helper falso", () => {
+  test("com o firstRun pending, nada sai sozinho; o botão do passo pede e anota", async () => {
+    const { sidecar, asked, resets, emit } = fake();
+    const store = memoryStore();
+    const flow = new PermissionFlow(sidecar, store, () => {});
+    let pending = true;
+    flow.holdWhile(async () => pending);
+    flow.attach();
+    await emit(ready(perms({})));
+    await emit(changed(perms({})));
+    expect(asked).toEqual([]);
+    await flow.requestFromSetup("accessibility");
+    expect(asked).toEqual(["accessibility"]);
+    expect(resets).toEqual([]);
+    expect(store.saved).toEqual(["accessibility"]);
+    // O passo acaba sem o botão do atalho: o que ficou sem pedir sai como na abertura de sempre, e só ele.
+    pending = false;
+    flow.setupDone();
+    await Bun.sleep(5);
+    expect(asked).toEqual(["accessibility", "inputMonitoring"]);
+    flow.detach();
+  });
+
+  test("o app fechou no meio: na próxima abertura, ainda pending, nada sai sozinho", async () => {
+    const { sidecar, asked, emit } = fake();
+    const flow = new PermissionFlow(sidecar, memoryStore(["inputMonitoring"]), () => {});
+    flow.holdWhile(async () => true);
+    flow.attach();
+    await emit(ready(perms({})));
+    expect(asked).toEqual([]);
+    flow.detach();
+  });
+
+  test("quem já usa o app (firstRun done) segue como hoje", async () => {
+    const { sidecar, asked, emit } = fake();
+    const flow = new PermissionFlow(sidecar, memoryStore(), () => {});
+    flow.holdWhile(async () => false);
+    flow.attach();
+    await emit(ready(perms({})));
+    expect(asked).toEqual(["inputMonitoring"]);
+    flow.detach();
+  });
+});

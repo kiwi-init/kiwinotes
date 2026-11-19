@@ -17,6 +17,7 @@ import type { DictionaryTerm } from "../store/dictionary.ts";
 import { DEFAULT_SETTINGS, type AppSettings } from "../store/settings.ts";
 import type { Snippet } from "../store/snippets.ts";
 import { Dictation } from "./dictation.ts";
+import type { SetupModel, SetupStatus } from "../shared/first-run.ts";
 import { fileAskedStore, missing, PermissionFlow } from "./permissions.ts";
 import { MeetingLiveTracker } from "./meetings.ts";
 import { MeetingAcks } from "./meeting-acks.ts";
@@ -71,6 +72,8 @@ export interface SessionStatus {
   stt: SttState;
   /** O modelo do boosting do vocabulário (T1973); `undefined` até o helper dizer. */
   boosting?: Extract<Event, { type: "stt.boosting" }>["state"];
+  /** O download do modelo principal, só enquanto ele baixa (T20796): o passo da primeira abertura mostra o progresso. */
+  download?: { fraction: number; phase: Extract<Event, { type: "stt.download" }>["phase"] };
   hotkeyActive: boolean;
   /** Os atalhos têm prioridade sobre os dos outros apps (T5349); `false` sem Acessibilidade, `undefined` num helper antigo. */
   hotkeyPriority?: boolean;
@@ -114,6 +117,7 @@ export class Session {
   readonly precise: PreciseDictation;
   private stt: SttState = "starting";
   private boosting: SessionStatus["boosting"];
+  private download: SessionStatus["download"];
   private statusListeners = new Set<(s: SessionStatus) => void>();
   /** L26: a correção depois de colar vira pergunta no cartão do helper. */
   private readonly offers = new CorrectionOffers(stores.dictionary, (c) => this.sidecar.send(c), (terms) => this.dictionaryChanged(terms));
@@ -195,11 +199,17 @@ export class Session {
       this.meetings.reset();
       this.stt = "starting";
       this.boosting = undefined;
+      this.download = undefined;
       this.emitStatus();
       void this.syncAll();
     });
     this.sidecar.on("stt.status", (e) => {
       this.stt = e.state;
+      if (e.state !== "loading") this.download = undefined;
+      this.emitStatus();
+    });
+    this.sidecar.on("stt.download", (e) => {
+      this.download = { fraction: e.fraction, phase: e.phase };
       this.emitStatus();
     });
     this.sidecar.on("stt.boosting", (e) => {
@@ -283,7 +293,18 @@ export class Session {
 
   status(): SessionStatus {
     const ready = this.sidecar.ready;
-    return { supervision:this.sidecar.supervision(), connected: !!ready, stt: this.stt, boosting: this.boosting, hotkeyActive: ready?.hotkeyActive ?? false, hotkeyPriority: ready?.hotkeyPriority, missing: missing(ready?.permissions) };
+    return { supervision:this.sidecar.supervision(), connected: !!ready, stt: this.stt, boosting: this.boosting, ...(this.download ? { download: this.download } : {}), hotkeyActive: ready?.hotkeyActive ?? false, hotkeyPriority: ready?.hotkeyPriority, missing: missing(ready?.permissions) };
+  }
+
+  /**
+   * O passo da primeira abertura (T20796): as duas permissões e o modelo de voz agora; `null` sem o helper de pé.
+   */
+  setupLive(): { permissions: SetupStatus["permissions"]; model: SetupModel } | null {
+    const ready = this.sidecar.ready;
+    if (!ready) return null;
+    const { inputMonitoring, accessibility } = ready.permissions;
+    const model: SetupModel = { state: this.stt, ...this.download, ...(this.boosting ? { boosting: this.boosting } : {}) };
+    return { permissions: { inputMonitoring, accessibility }, model };
   }
 
   onStatus(fn: (s: SessionStatus) => void): () => void {
