@@ -16,6 +16,7 @@ import { statusLabel } from "./session-status.ts";
 import { helperPath, Session, session, type SessionStatus } from "./session.ts";
 import { helperRunner } from "../notes/ocr.ts";
 import { helperPdf } from "../notes/export.ts";
+import { wireGate } from "../notes/semantic/gate.ts";
 import { stores } from "./stores.ts";
 import { installFileLog } from "./file-log.ts";
 import { AppUpdates, channelOf, updateMenuLabel, updatesView } from "./updates.ts";
@@ -189,19 +190,9 @@ dictation.sidecar.on("audio.inputs.changed", () => {
   for (const w of ["hub", "settings"] as const) sendToWindow(w, "audio.inputs.changed", {});
 });
 // A busca pelo sentido para enquanto a pessoa dita, fala com o agente ou grava uma reunião (spec #24228).
-dictation.sidecar.on("record.started", () => stores.gate.hold("dictation"));
-for (const t of ["record.stopped", "record.cancelled"] as const) dictation.sidecar.on(t, () => stores.gate.release("dictation"));
-dictation.sidecar.on("agent.record.started", () => stores.gate.hold("agent"));
-for (const t of ["agent.record.stopped", "agent.record.cancelled"] as const) dictation.sidecar.on(t, () => stores.gate.release("agent"));
-// O helper que cai no meio de uma gravação não manda o fim dela: o `ready` do helper novo solta as duas.
-dictation.sidecar.on("ready", () => {
-  stores.gate.release("dictation");
-  stores.gate.release("agent");
-});
+wireGate(dictation.sidecar, dictation.meetings, stores.gate);
 // A gravação de reunião começou, parou ou pausou o canal "você" (R6): o card ao vivo da aba Reuniões.
 dictation.meetings.onChange((live) => {
-  if (live.recording) stores.gate.hold("meeting");
-  else stores.gate.release("meeting");
   sendToWindow("hub", "meetings.live", live);
   // A que parou vira a "última reunião" da tela de Início (T15847).
   homeChanged();

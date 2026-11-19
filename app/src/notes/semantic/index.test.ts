@@ -291,3 +291,43 @@ test("um trecho por chamada ao modelo: a inferência segura o laço do Bun enqua
   expect(passages.length).toBeGreaterThan(1);
   for (const c of passages) expect(c.texts).toHaveLength(1);
 });
+
+test("uma nota apagada continua fora depois de reabrir, antes de qualquer sync (o retrato antigo e o .add)", async () => {
+  const { dir, index } = setup();
+  const notes = [doc("Viagem.md", "viagem de férias na praia"), doc("Bolo.md", "receita de bolo de cenoura"), doc("Backup.md", "backup do servidor")];
+  index.sync(notes);
+  await index.idle();
+  index.sync(notes.filter((d) => d.path !== "Bolo.md"));
+  await index.idle();
+  expect(existsSync(path.join(dir, "vectors.add"))).toBe(true);
+
+  const again = setup(dir);
+  const hits = await again.index.query("cozinha", 10);
+  expect(hits.map((h) => h.path).sort()).toEqual(["Backup.md", "Viagem.md"]);
+});
+
+test("o portão é conferido a cada chamada ao modelo: uma nota longa para no meio quando o ditado começa", async () => {
+  const { dir, model } = setup();
+  let closed = false;
+  let open!: () => void;
+  const opened = new Promise<void>((r) => (open = r));
+  const index = new SemanticIndex({
+    dir,
+    engine: { start: async () => model, loaded: () => model },
+    dim: DIM,
+    pause: async () => {},
+    gate: { wait: async () => void (closed && (await opened)) },
+  });
+  const counting = model.embed.bind(model);
+  model.embed = async (texts, kind) => {
+    if (model.calls.length === 1) closed = true; // o ditado começou depois da 2ª chamada
+    return counting(texts, kind);
+  };
+  index.sync([doc("Longa.md", Array.from({ length: 6 }, (_, i) => `backup do servidor ${i} `.repeat(60)).join("\n\n"))]);
+  await Bun.sleep(30);
+  expect(model.calls.filter((c) => c.kind === "passage")).toHaveLength(2);
+  open();
+  await index.idle();
+  expect(model.calls.filter((c) => c.kind === "passage").length).toBeGreaterThan(2);
+  expect(index.status()).toEqual({ notes: 1, indexed: 1 });
+});

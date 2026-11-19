@@ -177,6 +177,8 @@ export class SemanticIndex {
   /** O que mudou desde a última gravação: vai para o `.add`. */
   private changed = new Set<string>();
   private gone = new Set<string>();
+  /** O tempo do modelo no lote, sem as esperas do portão. */
+  private busy = 0;
   private lastSave = 0;
   private closed = false;
   private readonly dim: number;
@@ -248,9 +250,9 @@ export class SemanticIndex {
       const model = await this.o.engine.start();
       if (!model) break;
       const batch = this.queue.splice(0, BATCH);
-      const t0 = this.now();
+      this.busy = 0;
       for (const p of batch) await this.embedNote(model, p);
-      const busy = this.now() - t0;
+      const busy = this.busy;
       await this.save(false);
       // O modelo trabalha no máximo `DUTY` do tempo: depois de `busy` ms, espera o resto.
       await this.pause(Math.max(25, (busy * (1 - DUTY)) / DUTY));
@@ -263,7 +265,14 @@ export class SemanticIndex {
     if (!d || this.notes.get(p)?.version === d.version) return;
     const chunks = noteChunks(d.title, d.content);
     const vectors: Float32Array[] = [];
-    for (let i = 0; i < chunks.length; i += PER_CALL) vectors.push(...(await model.embed(chunks.slice(i, i + PER_CALL), "passage")));
+    for (let i = 0; i < chunks.length; i += PER_CALL) {
+      // O portão a cada chamada, não só entre lotes: uma nota longa não segue rodando depois que o ditado começa.
+      await this.o.gate?.wait(() => this.closed);
+      if (this.closed) return;
+      const t0 = this.now();
+      vectors.push(...(await model.embed(chunks.slice(i, i + PER_CALL), "passage")));
+      this.busy += this.now() - t0;
+    }
     this.embedded += chunks.length;
     // A nota pode ter mudado enquanto o modelo rodava: só fica se ainda é a mesma versão.
     if (this.wanted.get(p)?.version !== d.version || this.closed) return;

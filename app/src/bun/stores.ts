@@ -35,7 +35,9 @@ const semantic = new SemanticEngine({
 });
 // Quando o modelo pode indexar (spec #24228): para com a pessoa ditando, gravando, falando com o agente ou digitando, e
 // na bateria. O headless não confere a bateria (os roteiros e o CI dão o mesmo resultado em qualquer Mac).
-const gate = new BackgroundGate({ battery: process.env.KIWI_HEADLESS === "1" ? null : undefined });
+// Na CLI headless, sem a bateria e sem o tempo parado do Mac: os testes não dependem de quem está na máquina.
+const headless = process.env.KIWI_HEADLESS === "1";
+const gate = new BackgroundGate(headless ? { battery: null, systemIdle: null } : {});
 let folders: NotesFolders;
 // O headless apaga para `<data>/trash`, nunca para o Lixo do macOS da pessoa (T7681).
 const trash = process.env.KIWI_HEADLESS === "1" ? headlessTrash(path.join(dir, "trash")) : undefined;
