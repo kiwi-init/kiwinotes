@@ -69,11 +69,19 @@ const fromOutside = (text: string) => {
   assert.notEqual(next, xml, "o parágrafo de fora entrou");
   return writeZip(PROPOSTA, parts, new Map([["word/document.xml", new TextEncoder().encode(next)]]));
 };
-// Caixa 8 do spec #21080 (T23170): o docx com senha é um arquivo do Office cifrado, não um zip. Este é inventado: o
-// começo de um (o "Compound File" da Microsoft) e bytes ao acaso, o bastante para ninguém abrir. E um docx que o motor
-// não desenha: a proposta com o `document.xml` quebrado.
+// Caixa 8 do spec #21080 (T23170): o docx com senha é um arquivo do Office cifrado, não um zip. Os dois são inventados:
+// o começo de um "Compound File" da Microsoft e bytes ao acaso; o com senha leva o nome do fluxo `EncryptedPackage` em
+// UTF-16LE, e o antigo (um .doc de antes de 2007 renomeado) não. E um docx que o motor não desenha: a proposta com o
+// `document.xml` quebrado.
+const compound = (encrypted: boolean) => {
+  const b = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...Array.from({ length: 4096 }, (_, i) => (i * 37) % 251)]);
+  if (encrypted) b.set([..."EncryptedPackage"].flatMap((c) => [c.charCodeAt(0), 0]), 1024);
+  return b;
+};
 const SENHA = "Docs/com-senha.docx";
-put(SENHA, new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...Array.from({ length: 4096 }, (_, i) => (i * 37) % 251)]));
+put(SENHA, compound(true));
+const ANTIGO = "Docs/antigo.docx";
+put(ANTIGO, compound(false));
 const QUEBRADO = "Docs/quebrado.docx";
 put(QUEBRADO, writeZip(PROPOSTA, readZip(PROPOSTA), new Map([["word/document.xml", new TextEncoder().encode("<w:document><w:body><w:p")]])));
 // O docx com controle de alterações (T21152): digitar logo depois da inserção do Bruno faz o motor gravar o parágrafo
@@ -672,6 +680,7 @@ try {
   // Caixa 8: o docx com senha e o que o motor não desenha abrem só com o aviso do porquê, e nada é gravado.
   for (const [rel, why, words] of [
     [SENHA, "password", "senha"],
+    [ANTIGO, "format", ".doc antigo"],
     [QUEBRADO, "engine", "não conseguiu mostrar"],
   ] as const) {
     const start = sha(rel);

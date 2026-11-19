@@ -6,11 +6,25 @@ import { readZip } from "./sheet/zip.ts";
 
 export type DocxCheck = { editable: true } | { editable: false; reason: "password" | "not-docx" };
 
-/** O começo de um arquivo do Office cifrado (o "Compound File" da Microsoft). */
+/** O começo de um arquivo do Office no formato antigo (o "Compound File" da Microsoft): o docx cifrado, mas também o
+ *  `.doc`, o `.xls` e o `.ppt` de antes de 2007. */
 const CFB = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+/** O nome do fluxo que só o docx cifrado tem, em UTF-16LE no diretório do Compound File (T23170): sem ele, o arquivo
+ *  é do formato antigo, não um docx com senha. */
+const ENCRYPTED_PACKAGE = new Uint8Array([..."EncryptedPackage"].flatMap((c) => [c.charCodeAt(0), 0]));
+
+function hasBytes(bytes: Uint8Array, needle: Uint8Array): boolean {
+  const first = needle[0]!;
+  for (let i = bytes.indexOf(first); i !== -1 && i <= bytes.length - needle.length; i = bytes.indexOf(first, i + 1)) {
+    let k = 1;
+    while (k < needle.length && bytes[i + k] === needle[k]) k++;
+    if (k === needle.length) return true;
+  }
+  return false;
+}
 
 export function inspectDocx(bytes: Uint8Array): DocxCheck {
-  if (CFB.every((b, i) => bytes[i] === b)) return { editable: false, reason: "password" };
+  if (CFB.every((b, i) => bytes[i] === b)) return { editable: false, reason: hasBytes(bytes, ENCRYPTED_PACKAGE) ? "password" : "not-docx" };
   try {
     const names = new Set(readZip(bytes).map((p) => p.name));
     if (names.has("[Content_Types].xml") && names.has("word/document.xml")) return { editable: true };
