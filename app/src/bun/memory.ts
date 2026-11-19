@@ -40,7 +40,9 @@ export function processMemory(pid: number): ProcessMemory | null {
   const buf = new Uint8Array(SIZE);
   if (l.symbols.proc_pid_rusage(pid, RUSAGE_INFO_V4, ptr(buf)) !== 0) return null;
   const v = new DataView(buf.buffer);
-  return { now: Number(v.getBigUint64(OFF_PHYS_FOOTPRINT, true)), peak: Number(v.getBigUint64(OFF_LIFETIME_MAX, true)) };
+  const now = Number(v.getBigUint64(OFF_PHYS_FOOTPRINT, true));
+  // O kernel atualiza o pico com atraso: um processo que acabou de abrir pode dar o pico abaixo do agora (T21014, #21601).
+  return { now, peak: Math.max(Number(v.getBigUint64(OFF_LIFETIME_MAX, true)), now) };
 }
 
 /** O que o `cli mem` devolve: o principal (com o heap do JS) e o helper, se estiver de pé. Tudo em bytes. */

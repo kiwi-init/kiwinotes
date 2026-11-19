@@ -10,13 +10,14 @@
 // | 3. Reunião      | 5 min de reunião do `say` nos dois canais, em tempo real (veja abaixo)                                |
 // | 4. Agente       | o agente falso, com 20 respostas longas e 20 leituras de arquivo                                      |
 // | 5. Janelas      | o Hub e as Notas abertos e fechados 20 vezes no WebKit headless                                       |
+// | 6. Somados      | o 1, o 2, o 4 e o 5 em seguida, num app só, sem reiniciar (lead #21589)                              |
 //
 // - **A reunião são dois processos** (lead #21126, #21127): o headless não grava reunião de um WAV. O helper roda o
 //   pipeline inteiro da reunião (`kiwi-helper --meeting-live <wav> --realtime --segments-live`, os dois streamings, o filtro de eco, a
 //   diarização), e cada `segment` dele vai, no ritmo do WAV, para um principal que escreve a nota pelo `MeetingNotes`
 //   de verdade (`mem-meeting-notes.ts`). O WAV é o `say.limpo` do banco das reuniões (`scripts/meeting-bench`), repetido
 //   até 5 min.
-// - **Os roteiros 2 e 3 usam o STT:** cada um pega `kiwi lock bench --ttl 10m` antes e solta depois (AGENTS.md). Sem o
+// - **Os roteiros 2, 3 e 6 usam o STT:** cada um pega `kiwi lock bench --ttl 10m` antes e solta depois (AGENTS.md). Sem o
 //   bench, o roteiro sai com `skipped`.
 // - O helper vem de `KIWI_HELPER` ou do build do `native/` (o mesmo do headless). Nada do mic, nada na tela, nada das
 //   notas de ninguém: só o app sem tela que o próprio script abre é medido. A saída é só números.
@@ -38,7 +39,7 @@ import { openWindow, type UiContext } from "./ui-page.ts";
 const APP = path.resolve(import.meta.dir, "..");
 const argv = process.argv.slice(2);
 const opt = (f: string) => (argv.includes(f) ? argv[argv.indexOf(f) + 1] : undefined);
-const ONLY = opt("--only")?.split(",").map(Number) ?? [1, 2, 3, 4, 5];
+const ONLY = opt("--only")?.split(",").map(Number) ?? [1, 2, 3, 4, 5, 6];
 const AFTER_S = Number(opt("--after") ?? 30);
 const OUT = opt("--out");
 const HELPER = process.env.KIWI_HELPER || defaultHelper(APP);
@@ -271,37 +272,123 @@ function meetingWav(out: string, seconds: number): string | null {
 
 // ---------------------------------------------------------------- os roteiros
 
+// Os passos de cada roteiro, à parte: o 6 roda os mesmos, um depois do outro, numa sessão só.
+
+async function folderSteps(app: App): Promise<Record<string, number>> {
+  const list = await app.invoke("notes.list");
+  let reads = 0;
+  for (const q of ["feira", "Projeto", "prazo", "kiwi nota", "Nota 1999", "sábado bairro"]) await app.invoke("notes.search", { query: q, limit: 50 });
+  for (let i = 0; i < 2000; i += 10, reads++) await app.invoke("notes.get", { path: `Pasta ${i % 40}/Nota ${i}.md` });
+  // Os CSV de 20 MB: o `files.read` recusa (`tooLarge`, acima do limite), e a RAM não deve subir por eles.
+  let refused = 0;
+  for (let i = 0; i < 2; i++) if ((await app.invoke("files.read", { path: `Anexos/planilha-${i}.csv`, as: "text" })).tooLarge) refused++;
+  return { notes: list.notes.length, reads, searches: 6, bigReadsRefused: refused };
+}
+
+/** Os WAVs do `say` para os ditados, numa pasta própria que o `cleanup` apaga. */
+function dictationWavs() {
+  const dir = mkdtempSync(path.join(tmpdir(), "kn-mem-wav-"));
+  const files = PHRASES.map((p, i) => {
+    const f = path.join(dir, `d${i}.wav`);
+    sayWav(f, p);
+    return f;
+  });
+  return { files, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+async function dictationSteps(data: string, files: string[]): Promise<Record<string, number>> {
+  let ok = 0;
+  for (let i = 0; i < 50; i++) {
+    const r = await cliRun(data, ["dictate", files[i % files.length]!, "--note"], { KIWI_DEBUG: "1" });
+    if (r.code === 0) ok++;
+  }
+  return { dictations: 50, ok };
+}
+
+/** O agente falso: o registro de pacotes de mentira e o env do app que o usa. */
+function fakeAgent() {
+  const registry = fakeRegistry([
+    { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
+    { name: "zod", version: "4.6.7", files: { "index.js": "" } },
+  ]);
+  // Os pacotes fixados num tmp próprio, já escritos: o env pode ser copiado antes do `prepare` (o roteiro 6 faz isso).
+  const dir = mkdtempSync(path.join(tmpdir(), "kn-mem-agent-"));
+  const packages = path.join(dir, "packages.json");
+  writeFileSync(packages, JSON.stringify(registry.pinned));
+  return {
+    env: { KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, KIWI_ADAPTER_PACKAGES: packages } as Env,
+    /** Os 20 arquivos de ~150 KB que o agente lê. */
+    prepare(data: string) {
+      const r = rng(4);
+      mkdirSync(path.join(data, "vault", "Projeto X"), { recursive: true });
+      for (let i = 0; i < 20; i++) writeFileSync(path.join(data, "vault", "Projeto X", `relatorio-${i}.txt`), `${text(r, 20_000)}\n`);
+    },
+    stop: () => {
+      registry.stop();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+async function agentSteps(app: App): Promise<Record<string, number>> {
+  await app.invoke("agent.enable", { consent: true });
+  await app.invoke("agent.download");
+  await app.invoke("agent.configure", { onboarding: { state: "done" } });
+  for (let n = 0; (await app.invoke("agent.status")).adapter.phase !== "ready"; n++) {
+    if (n > 600) throw new Error("o agente falso não ficou pronto");
+    await Bun.sleep(100);
+  }
+  const r = rng(44);
+  const idle = async () => {
+    for (let n = 0; (await app.invoke("agent.status")).busy; n++) {
+      if (n > 1200) throw new Error("o agente falso não terminou");
+      await Bun.sleep(50);
+    }
+  };
+  for (let i = 0; i < 20; i++) {
+    // Uma resposta longa (~20 mil caracteres) e uma leitura de arquivo de ~150 KB, como num pedido de verdade.
+    await app.invoke("agent.ask", { text: `/diga ${text(r, 3000)}` });
+    await idle();
+    await app.invoke("agent.ask", { text: `/ler-arquivo Projeto X/relatorio-${i}.txt` });
+    await idle();
+  }
+  // As leituras que o agente fez de fato, pelo registro do Kiwi: um roteiro que não leu nada não mede o que diz.
+  const activity = (await app.invoke("agent.activity", { limit: 100 })).requests as { reads: { tool: string }[] }[];
+  const fileReads = activity.reduce((n, q) => n + q.reads.filter((x) => /files_read/.test(x.tool)).length, 0);
+  return { answers: 20, asked: 40, fileReads };
+}
+
+async function windowSteps(app: App): Promise<Record<string, number>> {
+  const browser = await webkit.launch({ headless: true });
+  try {
+    let opened = 0;
+    for (let i = 0; i < 20; i++) {
+      for (const window of ["hub", "notes"] as const) {
+        const w = await openWindow(browser, app.ctx, { window, scale: 1, theme: "light", width: 1180, height: 760, browser: "webkit", motion: false, query: {} });
+        await w.page.waitForTimeout(300);
+        await w.close();
+        opened++;
+      }
+    }
+    return { windows: opened };
+  } finally {
+    await browser.close();
+  }
+}
+
 const scenarios: Record<number, () => Promise<ScenarioResult>> = {
   1: () => {
-    let made = { notes: 0, files: 0 };
-    return measured(1, "Pasta grande", { prepare: (data) => void (made = bigVault(path.join(data, "vault"))) }, async (app) => {
-      const list = await app.invoke("notes.list");
-      let reads = 0;
-      for (const q of ["feira", "Projeto", "prazo", "kiwi nota", "Nota 1999", "sábado bairro"]) await app.invoke("notes.search", { query: q, limit: 50 });
-      for (let i = 0; i < 2000; i += 10, reads++) await app.invoke("notes.get", { path: `Pasta ${i % 40}/Nota ${i}.md` });
-      // Os CSV de 20 MB: o `files.read` recusa (`tooLarge`, acima do limite), e a RAM não deve subir por eles.
-      let refused = 0;
-      for (let i = 0; i < 2; i++) if ((await app.invoke("files.read", { path: `Anexos/planilha-${i}.csv`, as: "text" })).tooLarge) refused++;
-      return { notes: list.notes.length, files: made.files, reads, searches: 6, bigReadsRefused: refused };
-    });
+    let files = 0;
+    return measured(1, "Pasta grande", { prepare: (data) => void (files = bigVault(path.join(data, "vault")).files) }, async (app) => ({
+      ...(await folderSteps(app)),
+      files,
+    }));
   },
 
   2: () =>
     withBench(2, "Ditados", () => {
-      const wavs = mkdtempSync(path.join(tmpdir(), "kn-mem-wav-"));
-      const files = PHRASES.map((p, i) => {
-        const f = path.join(wavs, `d${i}.wav`);
-        sayWav(f, p);
-        return f;
-      });
-      return measured(2, "Ditados", { helper: true, env: { KIWI_STT_BOOSTING: "off" } }, async (_app, data) => {
-        let ok = 0;
-        for (let i = 0; i < 50; i++) {
-          const r = await cliRun(data, ["dictate", files[i % files.length]!, "--note"], { KIWI_DEBUG: "1" });
-          if (r.code === 0) ok++;
-        }
-        return { dictations: 50, ok };
-      }).finally(() => rmSync(wavs, { recursive: true, force: true }));
+      const wavs = dictationWavs();
+      return measured(2, "Ditados", { helper: true, env: { KIWI_STT_BOOSTING: "off" } }, (_app, data) => dictationSteps(data, wavs.files)).finally(wavs.cleanup);
     }),
 
   3: () =>
@@ -318,71 +405,39 @@ const scenarios: Record<number, () => Promise<ScenarioResult>> = {
     }),
 
   4: () => {
-    const registry = fakeRegistry([
-      { name: "@agentclientprotocol/claude-agent-acp", version: "0.106.0", files: { "dist/index.js": "" } },
-      { name: "zod", version: "4.6.7", files: { "index.js": "" } },
-    ]);
-    let packages = "";
-    return measured(
-      4,
-      "Agente",
-      {
-        env: { KIWI_FAKE_AGENT: "1", KIWI_ADAPTER_REGISTRY: registry.url, get KIWI_ADAPTER_PACKAGES() { return packages; } },
-        prepare: (data) => {
-          packages = path.join(data, "packages.json");
-          writeFileSync(packages, JSON.stringify(registry.pinned));
-          const r = rng(4);
-          mkdirSync(path.join(data, "vault", "Projeto X"), { recursive: true });
-          for (let i = 0; i < 20; i++) writeFileSync(path.join(data, "vault", "Projeto X", `relatorio-${i}.txt`), `${text(r, 20_000)}\n`);
-        },
-      },
-      async (app) => {
-        await app.invoke("agent.enable", { consent: true });
-        await app.invoke("agent.download");
-        await app.invoke("agent.configure", { onboarding: { state: "done" } });
-        for (let n = 0; (await app.invoke("agent.status")).adapter.phase !== "ready"; n++) {
-          if (n > 600) throw new Error("o agente falso não ficou pronto");
-          await Bun.sleep(100);
-        }
-        const r = rng(44);
-        const idle = async () => {
-          for (let n = 0; (await app.invoke("agent.status")).busy; n++) {
-            if (n > 1200) throw new Error("o agente falso não terminou");
-            await Bun.sleep(50);
-          }
-        };
-        for (let i = 0; i < 20; i++) {
-          // Uma resposta longa (~20 mil caracteres) e uma leitura de arquivo de ~150 KB, como num pedido de verdade.
-          await app.invoke("agent.ask", { text: `/diga ${text(r, 3000)}` });
-          await idle();
-          await app.invoke("agent.ask", { text: `/ler-arquivo Projeto X/relatorio-${i}.txt` });
-          await idle();
-        }
-        // As leituras que o agente fez de fato, pelo registro do Kiwi: um roteiro que não leu nada não mede o que diz.
-        const activity = (await app.invoke("agent.activity", { limit: 100 })).requests as { reads: { tool: string }[] }[];
-        const fileReads = activity.reduce((n, q) => n + q.reads.filter((x) => /files_read/.test(x.tool)).length, 0);
-        return { answers: 20, asked: 40, fileReads };
-      },
-    ).finally(() => registry.stop());
+    const agent = fakeAgent();
+    return measured(4, "Agente", { env: agent.env, prepare: (data) => agent.prepare(data) }, agentSteps).finally(agent.stop);
   },
 
-  5: () =>
-    measured(5, "Janelas", { prepare: (data) => void bigVault0(path.join(data, "vault")) }, async (app) => {
-      const browser = await webkit.launch({ headless: true });
-      try {
-        let opened = 0;
-        for (let i = 0; i < 20; i++) {
-          for (const window of ["hub", "notes"] as const) {
-            const w = await openWindow(browser, app.ctx, { window, scale: 1, theme: "light", width: 1180, height: 760, browser: "webkit", motion: false, query: {} });
-            await w.page.waitForTimeout(300);
-            await w.close();
-            opened++;
-          }
-        }
-        return { windows: opened };
-      } finally {
-        await browser.close();
-      }
+  5: () => measured(5, "Janelas", { prepare: (data) => void bigVault0(path.join(data, "vault")) }, windowSteps),
+
+  // Os roteiros somados (lead #21589): o app do 1º passo segue aberto pelos outros, sem reiniciar, como o de quem usa
+  // o Kiwi o dia inteiro. A reunião fica de fora: ela não roda dentro do headless (são dois processos, veja o 3).
+  6: () =>
+    withBench(6, "1, 2, 4 e 5 somados (uma sessão)", () => {
+      const wavs = dictationWavs();
+      const agent = fakeAgent();
+      return measured(
+        6,
+        "1, 2, 4 e 5 somados (uma sessão)",
+        {
+          helper: true,
+          env: { KIWI_STT_BOOSTING: "off", ...agent.env },
+          prepare: (data) => {
+            bigVault(path.join(data, "vault"));
+            agent.prepare(data);
+          },
+        },
+        async (app, data) => ({
+          ...(await folderSteps(app)),
+          ...(await dictationSteps(data, wavs.files)),
+          ...(await agentSteps(app)),
+          ...(await windowSteps(app)),
+        }),
+      ).finally(() => {
+        wavs.cleanup();
+        agent.stop();
+      });
     }),
 };
 
