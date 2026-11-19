@@ -34,6 +34,9 @@ export type WorkerRequest = { id: number } & (
   | { op: "close" }
 );
 export type WorkerReply = { id: number; value?: unknown; error?: string };
+/** Um `console.error` ou `console.warn` do worker: o `console` dele não passa pela cópia para o `kiwi.log` (`teeConsole`),
+ *  e o main o escreve pelo dele (revisão do #246). */
+export type WorkerLog = { log: "error" | "warn"; args: string[] };
 
 /** `mainThread`: onde o índice rodou (o teste confere que não foi no main). */
 export type WorkerStats = TextIndex["stats"] & { lastSearchBytes: number; heapBytes: number; mainThread: boolean };
@@ -78,7 +81,11 @@ export class TextIndexWorker implements TextIndexApi {
     const w = new Worker(this.script);
     // O worker não segura o processo aberto: quem fecha é o `close()`.
     (w as Worker & { unref(): void }).unref();
-    w.onmessage = (e: MessageEvent<WorkerReply>) => {
+    w.onmessage = (e: MessageEvent<WorkerReply | WorkerLog>) => {
+      if ("log" in e.data) {
+        console[e.data.log](...e.data.args);
+        return;
+      }
       const p = this.pending.get(e.data.id);
       if (!p) return;
       this.pending.delete(e.data.id);

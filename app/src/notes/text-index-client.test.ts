@@ -115,6 +115,22 @@ describe("o índice num Worker (P0 #23988)", () => {
     expect(createTextIndex({ root: "/nao/existe", dir: "/nao/existe/idx" })).toBeInstanceOf(TextIndexWorker);
   });
 
+  test("o erro de uma passada no worker chega ao console do main, e daí ao kiwi.log (revisão do #246)", async () => {
+    const f = folder({ "a.md": "carambola" });
+    // Um arquivo no lugar da pasta dos dados: o SQLite não abre, e a passada falha lá dentro do worker.
+    writeFileSync(path.join(f.base, "dados"), "não é uma pasta");
+    const errors: string[] = [];
+    const spy = spyOn(console, "error").mockImplementation((...a: unknown[]) => void errors.push(a.join(" ")));
+    try {
+      const t = f.worker();
+      await t.sync(f.all());
+      await t.idle();
+      expect(errors.some((e) => e.startsWith("[text-index]"))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test("um build sem o workers/ roda no main e avisa no log (lead, #24141)", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     try {

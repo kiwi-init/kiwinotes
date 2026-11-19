@@ -8,10 +8,17 @@
 import { heapStats } from "bun:jsc";
 
 import { TextIndex } from "./text-index.ts";
-import type { WorkerReply, WorkerRequest } from "./text-index-client.ts";
+import type { WorkerLog, WorkerReply, WorkerRequest } from "./text-index-client.ts";
 import type { VaultFile } from "./vault.ts";
 
 declare const self: Worker;
+
+// O `console` do worker não passa pelo `teeConsole` do main: os erros e avisos daqui (uma passada que falhou no SQLite,
+// na leitura ou na extração) iriam só ao stderr, fora do `kiwi.log`. Vão ao main, que os escreve pelo dele.
+const text = (a: unknown) => (a instanceof Error ? a.message : typeof a === "string" ? a : Bun.inspect(a));
+for (const level of ["error", "warn"] as const) {
+  console[level] = (...args: unknown[]) => postMessage({ log: level, args: args.map(text) } satisfies WorkerLog);
+}
 
 let index: TextIndex | null = null;
 
