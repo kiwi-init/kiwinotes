@@ -28,7 +28,7 @@ import { contextOf, linkSpans, unlinkedSpans } from "./mentions.ts";
 import { canvasPath, fileNameFor, filePath, folderPath, inside, linkSafeTarget, notePath, VaultError } from "./paths.ts";
 import { CanvasParseError, parseCanvas, stringifyCanvas } from "../shared/json-canvas.ts";
 import { applyTextEdits, headingFor, headingKey, markdownStructure } from "../shared/markdown-structure.ts";
-import { noteReferences, referenceTarget, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
+import { noteReferences, referenceTarget, rewriteFileReferences, rewriteHeadingReferences, rewriteNoteReferences, rewriteTag, validTag, type LinkWarning, type RefactorResult } from "./refactor.ts";
 
 export interface NoteMeta {
   /** Relativo ao vault, POSIX, com `.md`. */
@@ -854,18 +854,66 @@ export class Vault {
    * Manda para a Lixeira um arquivo que não é nota, se ele ainda está em `baseVersion` (o desfazer de um arquivo que o
    * agente gerou, spec #11549): os 10 minutos no Desfazer do app, depois a Lixeira do macOS, como uma nota.
    */
-  async deleteFile(input: unknown, baseVersion: unknown): Promise<true> {
+  async deleteFile(input: unknown, baseVersion?: unknown): Promise<true> {
     const p = filePath(input);
-    if (typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
+    if (baseVersion !== undefined && typeof baseVersion !== "string") throw new VaultError("E_BAD_ARGS", "baseVersion must be a string");
     const abs = inside(this.root, p);
     const s = await lstat(abs).catch(() => null);
-    if (!s?.isFile() || this.packageOf(p)) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
+    // Sem `baseVersion`, o "Apagar" do menu da árvore (T19878): qualquer arquivo, um pacote (`.pages`) inclusive.
+    const isPackage = baseVersion === undefined && s?.isDirectory() && this.packages.has(p);
+    if (!(s?.isFile() || isPackage) || this.packageOf(p)) throw new VaultError("E_NOT_FOUND", `no file ${p}`);
     // O tipo "note" da Lixeira do app é o de um arquivo só: a volta é pelo caminho, como a de uma nota.
     await this.stage(p, abs, "note", baseVersion);
     if (this.files.delete(p)) this.filesChanged([p]);
     this.touch(p);
     await this.fileWritten(p);
     return true;
+  }
+
+  /**
+   * Renomeia ou move um arquivo que não é nota (T19878, spec #19256) e troca os links das notas que apontavam para ele:
+   * `[[arquivo.pdf]]`, `![[foto.png]]`, `[texto](pasta/arquivo.csv)` e `![](foto.png)`. A extensão fica a mesma, e nada
+   * vai por cima de outro arquivo. Cada nota é reescrita com a mesma guarda do renomear de nota (`refactorNote`).
+   */
+  async renameFile(input: unknown, target: unknown): Promise<{ path: string; updatedLinks: number; skippedPaths: string[] }> {
+    const from = filePath(input);
+    const to = filePath(target);
+    if (extOf(from) !== extOf(to)) throw new VaultError("E_BAD_ARGS", "a file keeps its type");
+    const fromAbs = inside(this.root, from);
+    const toAbs = inside(this.root, to);
+    const s = await lstat(fromAbs).catch(() => null);
+    if (!(s?.isFile() || (s?.isDirectory() && this.packages.has(from))) || this.packageOf(from)) throw new VaultError("E_NOT_FOUND", `no file ${from}`);
+    if (from === to) return { path: to, updatedLinks: 0, skippedPaths: [] };
+    // Num disco sem diferença de maiúscula, "a.pdf" → "A.pdf" é o mesmo arquivo: vale.
+    if (from.toLowerCase() !== to.toLowerCase() && (await exists(toAbs))) throw new VaultError("E_EXISTS", `${to} already exists`);
+    // Do disco, como o renomear de nota (revisão #1397): o índice pode estar atrás.
+    await this.scan();
+    const before = [...this.files.keys()];
+    if (!before.includes(from)) before.push(from);
+    const after = before.map((f) => (f === from ? to : f));
+    await mkdir(path.dirname(toAbs), { recursive: true });
+    if (from.toLowerCase() === to.toLowerCase()) {
+      const mid = `${fromAbs}.${randomBytes(4).toString("hex")}.tmp`;
+      await rename(fromAbs, mid);
+      await rename(mid, toAbs);
+    } else {
+      await rename(fromAbs, toAbs);
+    }
+    if (this.files.delete(from)) this.filesChanged([from]);
+    await this.fileWritten(to, [from]);
+    const resolveBefore = makeFileResolver(before);
+    const resolveAfter = makeFileResolver(after);
+    // Só lê do disco quem pode citar o arquivo: o nome dele no texto (decodificado, sem maiúscula), como no T7877.
+    const fromKey = from.slice(from.lastIndexOf("/") + 1).normalize("NFC").toLowerCase();
+    let updatedLinks = 0;
+    const skippedPaths: string[] = [];
+    for (const e of [...this.notes.values()]) {
+      if (!looseDecode(e.content).normalize("NFC").toLowerCase().includes(fromKey)) continue;
+      const result = await this.refactorNote(e.meta.path, (disk) => rewriteFileReferences(disk, e.meta.path, from, to, resolveBefore, resolveAfter));
+      if (result.skipped) skippedPaths.push(e.meta.path);
+      updatedLinks += result.count;
+    }
+    return { path: to, updatedLinks, skippedPaths };
   }
 
   async get(input: unknown): Promise<Note> {

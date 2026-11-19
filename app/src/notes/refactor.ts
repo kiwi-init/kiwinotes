@@ -26,7 +26,8 @@ interface Reference {
     targetFrom: number;
     targetTo: number;
 }
-export function noteReferences(content: string): Reference[] {
+/** Com `files` (T19878), também os `[texto](arquivo.pdf)` e as imagens `![](foto.png)`, para o renomear de um arquivo. */
+export function noteReferences(content: string, files = false): Reference[] {
     const context = markdownStructure(content), out: Reference[] = [];
     for (const m of content.matchAll(/(!?)\[\[([^\[\]\n|]*)(\|[^\]\n]*)?\]\]/g)) {
         const escaped = (/\\+$/.exec(content.slice(0, m.index!))?.[0].length ?? 0) % 2 === 1;
@@ -39,7 +40,7 @@ export function noteReferences(content: string): Reference[] {
         out.push({ from: m.index!, to: m.index! + m[0].length, target, fragment, fragmentFrom: hash < 0 ? start + raw.length : start + hash + 1, fragmentTo: start + raw.length, kind: "wiki", targetFrom: start, targetTo: hash < 0 ? start + raw.length : start + hash });
     }
     context.tree.iterate({ enter(node) {
-            if (!["Link", "LinkReference"].includes(node.name) || !context.prose(node.from))
+            if (!(files ? ["Link", "LinkReference", "Image"] : ["Link", "LinkReference"]).includes(node.name) || !context.prose(node.from))
                 return;
             const url = node.node.getChild("URL");
             if (!url)
@@ -60,7 +61,7 @@ export function noteReferences(content: string): Reference[] {
             catch {
                 return;
             }
-            if (target && /\.[^/]+$/.test(target) && !target.toLowerCase().endsWith(".md"))
+            if (!files && target && /\.[^/]+$/.test(target) && !target.toLowerCase().endsWith(".md"))
                 return;
             if (!target && hash < 0)
                 return;
@@ -131,6 +132,66 @@ export function rewriteNoteReferences(content: string, sourceBefore: string, sou
     // Os links das propriedades (T7986): `up: "[[A]]"` ou uma lista deles. O frontmatter não é prosa, então o laço de
     // cima não os via; cada valor de texto passa pela mesma regra e volta no mesmo estilo (aspas), e o resto do YAML fica.
     const fm = frontmatterLinks(content, (value) => rewriteNoteReferences(value, sourceBefore, sourceAfter, from, to, before, after));
+    const out: { content: string; count: number; unsupported?: boolean } = { content: applyTextEdits(content, [...edits, ...fm.edits]), count: edits.length + fm.count };
+    if (fm.unsupported)
+        out.unsupported = true;
+    return out;
+}
+
+/** O caminho de um `[texto](alvo)` relativo à nota `source` (ou à raiz, com `/` no começo); `null` se sai do cofre. */
+function joinFrom(source: string, target: string): string | null {
+    const parts = target.startsWith("/") ? [] : source.split("/").slice(0, -1);
+    for (const part of target.split("/")) {
+        if (!part || part === ".")
+            continue;
+        if (part === "..") {
+            if (!parts.length)
+                return null;
+            parts.pop();
+        }
+        else
+            parts.push(part);
+    }
+    return parts.join("/");
+}
+
+/** O caminho de `to` a partir da pasta da nota `source`, com cada pedaço codificado, como no renomear de nota. */
+function relativeFrom(source: string, to: string): string {
+    const directory = source.split("/").slice(0, -1), parts = to.split("/");
+    while (directory.length && parts.length && directory[0] === parts[0]) {
+        directory.shift();
+        parts.shift();
+    }
+    return [...directory.map(() => ".."), ...parts].map(encodeURIComponent).join("/");
+}
+
+/**
+ * Depois de renomear ou mover um arquivo que não é nota de `from` para `to` (T19878, spec #19256): troca na nota
+ * `source` os `[[arquivo.pdf]]`, `![[foto.png]]`, `[texto](pasta/arquivo.csv)` e `![](foto.png)` que apontavam para ele.
+ * O `[[…]]` segue a regra do Obsidian (`makeFileResolver`): só o nome quando ele basta para achar `to`, senão o caminho.
+ * A seção, a página (`#page=2`) e o apelido ficam. Código e comentários não mudam, como no renomear de nota.
+ */
+export function rewriteFileReferences(content: string, source: string, from: string, to: string, before: Resolver, after: Resolver): { content: string; count: number; unsupported?: boolean } {
+    const edits: TextEdit[] = [];
+    const key = (s: string) => s.normalize("NFC").toLowerCase();
+    const name = to.slice(to.lastIndexOf("/") + 1);
+    const wiki = after(name) === to ? name : to;
+    for (const ref of noteReferences(content, true)) {
+        if (!ref.target)
+            continue;
+        if (ref.kind === "wiki") {
+            if (before(ref.target) !== from || content.slice(ref.targetFrom, ref.targetTo) === wiki)
+                continue;
+            edits.push({ from: ref.targetFrom, to: ref.targetTo, insert: wiki });
+        }
+        else {
+            const joined = joinFrom(source, ref.target);
+            if (joined === null || key(joined) !== key(from))
+                continue;
+            edits.push({ from: ref.targetFrom, to: ref.targetTo, insert: ref.target.startsWith("/") ? `/${to.split("/").map(encodeURIComponent).join("/")}` : relativeFrom(source, to) });
+        }
+    }
+    const fm = frontmatterLinks(content, (value) => rewriteFileReferences(value, source, from, to, before, after));
     const out: { content: string; count: number; unsupported?: boolean } = { content: applyTextEdits(content, [...edits, ...fm.edits]), count: edits.length + fm.count };
     if (fm.unsupported)
         out.unsupported = true;

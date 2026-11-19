@@ -147,7 +147,7 @@ export interface CapabilityDeps {
     | "moveNote" | "duplicate" | "restore" | "locate" | "createFolder" | "moveFolder" | "deleteFolder"
     | "onExternalMoves" | "existing" | "tags" | "templates" | "notesContaining" | "onOtherFiles" | "root"
     | "daily" | "createFromLink" | "unlinkedMentions" | "linkMentions" | "trashList" | "trashEmpty" | "locateFile" | "embed"
-    | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile" | "createFile" | "deleteFile"
+    | "getCanvas" | "saveCanvas" | "createCanvas" | "renameCanvas" | "readFile" | "saveFile" | "createFile" | "deleteFile" | "renameFile"
   > &
     // O inode de cada nota (spec #9874): sem ele (os vaults de mentira), o projeto só segue o que o watcher viu. Sem o
     // `folderList` (spec #12918), o `notes.folders` tira as pastas do `list()`.
@@ -1065,6 +1065,10 @@ export function uiCapabilities(deps: CapabilityDeps,
     "files.delete": async (args) => {
       const a = fields(args, "files.delete", ["path", "baseVersion"]);
       return (await vault()).deleteFile(a.path, a.baseVersion);
+    },
+    "files.rename": async (args) => {
+      const a = fields(args, "files.rename", ["path", "newPath"]);
+      return (await vault()).renameFile(a.path, a.newPath);
     },
     "notes.canvasGet": async (args) => (await vault()).getCanvas(fields(args, "notes.canvasGet", ["path"]).path),
     "notes.canvasSave": async (args) => {
