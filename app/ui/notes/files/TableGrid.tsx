@@ -11,6 +11,8 @@ import { columnName } from "./csv.ts";
 import { CELL_PAD, columnWidths, isNumeric, offsetsOf, ROW_H, trimEmpty, visibleRange, type Viewport } from "./grid.ts";
 import { clipboardText, findCells, parseClipboard, type Range, rangeOf } from "./sheet-doc.ts";
 import { type Cell, cellAddress, cellText, clampCell, dragWidth, firstVisible, fitWidth, moveCell, scrollToShow, withCustom } from "./selection.ts";
+import { useViewerZoom } from "./useViewerZoom.ts";
+import { recallZoom } from "./zoom.ts";
 
 /**
  * O que a grade pede a quem edita, nas coordenadas da grade: a linha 0 é a de cima (parada), a `r` é `rows[r - 1]`. Quem
@@ -40,7 +42,12 @@ export interface GridView {
   label: string | null;
 }
 
+/** Os limites do zoom da grade (T21238). */
+const GRID_ZOOM = { min: 0.5, max: 3 };
+
 interface GridProps {
+  /** O arquivo, para o zoom ficar guardado por ele (T21238). Sem ele, o zoom vale enquanto a grade está na tela. */
+  zoomKey?: string;
   /** A linha de cima, parada ao rolar: os nomes das colunas do csv, ou a linha 1 da planilha. */
   header: string[];
   rows: string[][];
@@ -124,7 +131,7 @@ interface Editing {
  * dos números paradas. Todas as linhas e colunas: só as células que estão na tela são montadas, e a rolagem segue lisa
  * com 256 colunas e 100.000 linhas. As linhas e colunas vazias do fim não contam (na grade que edita, a folga fica).
  */
-export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec }: GridProps) {
+export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumns, foot, firstRow = 1, rowTotal, columnTotal, widthMemory, name = "", rowNumbers, edit, view: viewSpec, zoomKey = "" }: GridProps) {
   const editable = !!edit;
   const { rows, columns } = useMemo(
     () => (editable ? { rows: rawRows, columns: rawColumns } : trimEmpty(rawHeader, rawRows, rawColumns)),
@@ -138,6 +145,12 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     return { rows: t.rows.length, columns: Math.max(1, t.columns) };
   }, [editable, rawHeader, rawRows, rawColumns]);
   const scroll = useRef<HTMLDivElement>(null);
+  // O zoom (T21238): o `zoom` do CSS na grade inteira, e as contas seguem em px de 100%. A rolagem, em px da tela, vai
+  // dividida por ele. `null` é 100%.
+  const [zoomState, setZoom] = useState<number | null>(() => recallZoom(zoomKey));
+  useEffect(() => setZoom(recallZoom(zoomKey)), [zoomKey]);
+  const z = zoomState ?? 1;
+  useViewerZoom({ path: zoomKey, target: scroll, scale: z, set: setZoom, ...GRID_ZOOM });
   // As larguras ficam no estado: a de abertura, pelo conteúdo, e por cima as que a pessoa arrastou (T21040).
   const [baseWidths, setWidths] = useState<number[] | null>(null);
   const [custom, setCustomState] = useState<Record<number, number>>(() => widthMemory?.get(name) ?? {});
@@ -199,7 +212,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     let frame = 0;
     const read = () => {
       frame = 0;
-      setView({ left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth - numW, height: el.clientHeight - head });
+      setView({ left: el.scrollLeft / z, top: el.scrollTop / z, width: el.clientWidth / z - numW, height: el.clientHeight / z - head });
     };
     const later = () => {
       if (!frame) frame = requestAnimationFrame(read);
@@ -213,7 +226,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
       ro.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [numW, head]);
+  }, [numW, head, z]);
 
   const offsets = useMemo(() => (widths && widths.length === columns ? offsetsOf(widths) : null), [widths, columns]);
   const n = (value: number) => value.toLocaleString("pt-BR");
@@ -238,7 +251,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
   /** A área das células agora (sem as partes paradas), lida da rolagem e não do estado, que chega um quadro depois. */
   const liveView = (): Viewport | null => {
     const el = scroll.current;
-    return el ? { left: el.scrollLeft, top: el.scrollTop, width: el.clientWidth - numW, height: el.clientHeight - head } : null;
+    return el ? { left: el.scrollLeft / z, top: el.scrollTop / z, width: el.clientWidth / z - numW, height: el.clientHeight / z - head } : null;
   };
   const select = (cell: Cell, byKey = false, extend = false) => {
     setSelected(cell);
@@ -248,7 +261,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
     const v = liveView();
     if (!el || !v || !offsets) return;
     const to = scrollToShow(cell, offsets, v, byKey);
-    if (to.left !== v.left || to.top !== v.top) el.scrollTo(to.left, to.top);
+    if (to.left !== v.left || to.top !== v.top) el.scrollTo(to.left * z, to.top * z);
   };
 
   // A caixa de digitar: fechar grava (o Esc não), e a seleção anda como no Excel.
@@ -516,7 +529,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
   };
   const onResizeMove = (e: React.PointerEvent) => {
     const d = drag.current;
-    if (d) setCustom(d.col, dragWidth(d.start, e.clientX - d.x0));
+    if (d) setCustom(d.col, dragWidth(d.start, (e.clientX - d.x0) / z));
   };
   const onResizeUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
@@ -617,7 +630,7 @@ export function TableGrid({ header: rawHeader, rows: rawRows, columns: rawColumn
         onKeyDown={onKeyDown}
         onContextMenu={onContextMenu}
       >
-        <div className="kn-grid-canvas" style={{ width, height: head + rows.length * ROW_H }}>
+        <div className="kn-grid-canvas" style={{ width, height: head + rows.length * ROW_H, zoom: z === 1 ? undefined : z }}>
           <div className="kn-grid-head" role="rowgroup" style={{ width, height: head }}>
             <div className="kn-grid-letters" aria-hidden="true" style={{ width }}>
               <div className="kn-grid-n kn-grid-corner" style={{ width: numW }} />

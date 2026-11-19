@@ -23,9 +23,11 @@ interface Props {
   foot?: string | null;
   /** O csv conta as linhas sem a dos nomes das colunas, como antes; a planilha conta a linha 1 também. */
   countHeader?: boolean;
+  /** O arquivo, para o zoom da grade ficar guardado por ele (T21238). */
+  zoomKey?: string;
 }
 
-export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, countHeader = true }: Props) {
+export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, countHeader = true, zoomKey }: Props) {
   const editable = !session.readOnly;
   const [spec, setSpec] = useState<ViewSpec>({});
   const texts = useMemo(() => sheetTexts(sheet), [sheet]);
@@ -96,6 +98,7 @@ export function SheetPane({ session, doc, sheet, decimal, widthMemory, foot, cou
     <TableGrid
       name={sheet.name}
       widthMemory={widthMemory}
+      zoomKey={zoomKey}
       header={header}
       rows={rows}
       columns={columns}
