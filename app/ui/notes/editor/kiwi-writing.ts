@@ -152,6 +152,25 @@ export function kiwiWritingState(state: EditorState): { phase: KiwiPhase; cursor
   return { phase: v.phase, cursor: v.cursor, highlights, removing: v.removing };
 }
 
+/**
+ * Os trechos que ficam crus enquanto o Kiwi escreve e o realce some: o cursor dele, o que sai e o que entrou. O preview
+ * desenhado (`rendered.ts`) troca o bloco por um widget, e o cursor e o realce ficariam escondidos dentro dele.
+ */
+export function kiwiRawRanges(state: EditorState): [number, number][] {
+  const v = state.field(kiwiWritingField, false);
+  if (!v || v.phase === "idle") return [];
+  const out: [number, number][] = [];
+  if (v.cursor !== null) out.push([v.cursor, v.cursor]);
+  if (v.removing) out.push([v.removing.from, v.removing.to]);
+  v.highlights.between(0, state.doc.length, (from, to) => void out.push([from, to]));
+  return out;
+}
+
+/** A escrita do Kiwi mudou o que fica cru (o preview desenhado se refaz). */
+export function kiwiRawChanged(tr: Transaction): boolean {
+  return tr.startState.field(kiwiWritingField, false) !== tr.state.field(kiwiWritingField, false);
+}
+
 /** A extensão do editor: o campo e o filtro. O pulo pelo clique ou tecla é do `playKiwiWrite`. */
 export function kiwiWritingExtension(): Extension {
   return [kiwiWritingField, kiwiFilter];
