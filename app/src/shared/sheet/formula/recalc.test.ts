@@ -67,7 +67,7 @@ describe("recalc: a grade", () => {
     const resumo = g.sheets[1]!;
     const prazo = resumo.rows.findIndex((r) => r?.[1]?.formula?.includes("Fornecedores["));
     expect(prazo).toBeGreaterThanOrEqual(0);
-    expect(resumo.rows[prazo]![1]).toMatchObject({ stale: true, value: book.sheets[1]!.rows[prazo]![1]!.value });
+    expect(resumo.rows[prazo]![1]).toMatchObject({ stale: "recheck", value: book.sheets[1]!.rows[prazo]![1]!.value });
     expect(cell(g, "E8")!.stale).toBeUndefined();
   });
 
@@ -79,9 +79,9 @@ describe("recalc: a grade", () => {
     const r = recalc(g);
     expect(r.sheets[0]!.rows[0]!.map((c) => [c!.value, c!.stale ?? false])).toEqual([
       [2, false],
-      [7, true],
-      [14, true],
-      [14, true],
+      [7, "recheck"],
+      [14, "recheck"],
+      [14, "recheck"],
       [6, false],
     ]);
     expect(recalcOps(g, r)).toEqual([{ op: "cached", sheet: "Caixa", row: 0, col: 4, value: 6 }]);
@@ -94,9 +94,9 @@ describe("recalc: a grade", () => {
     // O PROCV de texto numa coluna de números dá #VALUE! no HyperFormula e #N/A no Excel: fica o #N/A, marcado.
     expect(r.sheets[0]!.rows[0]!.slice(1).map((c) => [c!.value, c!.stale ?? false])).toEqual([
       ["#DIV/0!", false],
-      ["#N/A", true],
-      [null, true],
-      [null, true],
+      ["#N/A", "recheck"],
+      [null, "recheck"],
+      [null, "recheck"],
     ]);
     // A célula que já tinha o mesmo erro não é marcada.
     const ja = small([[null, "=SQRT(-1)"]]);
@@ -188,7 +188,9 @@ describe("calibrate: o que o Excel gravou manda", () => {
   test("a fórmula em que o HyperFormula não chega ao valor do Excel fica marcada, e quem depende dela também", () => {
     const c = calibrate(g);
     const marcadas = c.sheets[0]!.rows[0]!.flatMap((x, i) => (x?.stale ? [x.formula ?? i] : []));
-    expect(marcadas).toEqual(["INT(-1.5)", 'TEXT(1234.5,"#,##0.00")', "D1*2", "NOW()"]);
+    // O INT calcula como no Excel (vai ao motor como FLOOR.MATH); o TEXT está na lista das divergências.
+    expect(marcadas).toEqual(['TEXT(1234.5,"#,##0.00")', "NOW()"]);
+    expect(c.sheets[0]!.rows[0]!.map((x) => x!.stale).filter(Boolean)).toEqual([true, true]);
   });
 
   test("o double inteiro e a conta com faixas, como no Excel", () => {
@@ -208,8 +210,57 @@ describe("calibrate: o que o Excel gravou manda", () => {
         { op: "cached", sheet: "Caixa", row: 0, col: 12, value: 7 },
       ],
     });
-    expect(grid.sheets[0]!.rows[0]![3]).toMatchObject({ value: -2, stale: true });
-    expect(grid.sheets[0]!.rows[0]![9]).toMatchObject({ value: -4, stale: true });
+    expect(grid.sheets[0]!.rows[0]![5]).toMatchObject({ value: "1,234.50", stale: true });
+    expect(grid.sheets[0]!.rows[0]![10]).toMatchObject({ value: 46000.5, stale: true });
+  });
+});
+
+describe("as marcas: a que fica e a que se confere de novo", () => {
+  test("reescrita a fórmula que não batia, a que dependia dela calcula", () => {
+    const g = {
+      sheets: [
+        {
+          name: "Caixa",
+          rows: [
+            [
+              { value: 5, text: "5" },
+              { value: 3, formula: "ROUNDDOWN(A1/2,0)*1.5", text: "3" },
+              { value: 6, formula: "B1*2", text: "6" },
+              { value: 1, formula: "C1-5", text: "1" },
+            ] as GridCell[],
+          ],
+        },
+      ],
+    };
+    // B1 grava 3, e o motor dá 3: para forçar a divergência, o arquivo diz 4.
+    g.sheets[0]!.rows[0]![1]!.value = 4;
+    const c = calibrate(g);
+    expect(c.sheets[0]!.rows[0]!.slice(1).map((x) => x!.stale)).toEqual([true, "recheck", "recheck"]);
+    // Num recálculo qualquer, B1 continua marcada (fica), e C1 e D1 continuam porque B1 continua.
+    const r = recalc(c);
+    expect(r.sheets[0]!.rows[0]!.slice(1).map((x) => [x!.value, x!.stale])).toEqual([
+      [4, true],
+      [6, "recheck"],
+      [1, "recheck"],
+    ]);
+    // A pessoa reescreve B1: a marca sai dela, e C1 e D1 calculam.
+    const { grid, batch } = edit(r, { op: "set", sheet: "Caixa", row: 0, col: 1, value: null, formula: "A1+1" });
+    expect(grid.sheets[0]!.rows[0]!.slice(1).map((x) => [x!.value, x!.stale ?? null])).toEqual([
+      [6, null],
+      [12, null],
+      [7, null],
+    ]);
+    expect(batch.op === "batch" && batch.ops.length).toBe(4);
+  });
+
+  test("sem valor gravado, a divergência conhecida não passa calada", () => {
+    const r = recalc(small([[-1.5, "=INT(A1)", '=TEXT(1234.5,"#,##0.00")', '=TEXT(A1,"0%")&"INT(x)"', '="TEXT("&A1']]));
+    expect(r.sheets[0]!.rows[0]!.slice(1).map((x) => [x!.value, x!.stale ?? null])).toEqual([
+      [-2, null],
+      [null, "recheck"],
+      [null, "recheck"],
+      ["TEXT(-1.5", null],
+    ]);
   });
 });
 

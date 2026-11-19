@@ -44,10 +44,26 @@ function forEngine(formula: string): string {
   const parts = formula.split(/("(?:[^"]|"")*"|'(?:[^']|'')*')/);
   return `=${parts
     .map((p, i) =>
-      i % 2 ? p : p.replace(/\b_xl(?:fn|ws)\./gi, "").replace(/(?<![\w.$])(TRUE|FALSE)\b(?!\s*[(!])/gi, (m) => `${m.toUpperCase()}()`),
+      i % 2
+        ? p
+        : p
+            .replace(/\b_xl(?:fn|ws)\./gi, "")
+            .replace(/(?<![\w.$])(TRUE|FALSE)\b(?!\s*[(!])/gi, (m) => `${m.toUpperCase()}()`)
+            // O INT do HyperFormula trunca (INT(-1,5) = -1); o do Excel arredonda para baixo (-2), como o FLOOR.MATH.
+            .replace(/(?<![\w.$])INT(?=\s*\()/gi, "FLOOR.MATH"),
     )
     .join("")}`;
 }
+
+/**
+ * As funções em que o HyperFormula dá outro resultado que o Excel, e que a tradução acima não conserta. A fórmula que usa
+ * uma delas sai marcada, como a que ele não sabe calcular. **A próxima divergência achada entra aqui** (com um teste).
+ * - `TEXT`: ele lê só parte dos formatos (`"#,##0.00"` e `"0%"` saem errados).
+ */
+const DIVERGE = /(?<![\w.$])TEXT\s*\(/i;
+
+/** A fórmula usa uma função de `DIVERGE`, fora do texto entre aspas e dos nomes de aba. */
+const diverges = (formula: string) => formula.split(/"(?:[^"]|"")*"|'(?:[^']|'')*'/).some((p) => DIVERGE.test(p));
 
 /** O conteúdo de uma célula para o HyperFormula. O texto vai com `'`, para "007" ou "=x" continuarem texto. */
 function content(c: GridCell | undefined): CellValue {
@@ -123,6 +139,8 @@ function run(grid: Grid, display: Display, names: readonly DefinedName[], calibr
     const key = (a: SimpleCellAddress) => `${a.sheet}:${a.row}:${a.col}`;
 
     // O que não dá para calcular, e tudo o que depende disso, de célula em célula e de faixa em faixa.
+    // `own`: não bateu com o Excel na calibração (ou já vinha assim); fica. `stale`: tudo o que sai marcado agora.
+    const own = new Set<string>();
     const stale = new Set<string>();
     const queue: (SimpleCellAddress | SimpleCellRange)[] = [];
     grid.sheets.forEach((s, i) =>
@@ -132,9 +150,11 @@ function run(grid: Grid, display: Display, names: readonly DefinedName[], calibr
           const v = hf.getCellValue(at(i, row, col));
           const unsure =
             c.stale === true ||
+            diverges(c.formula) ||
             (calibrating && c.value !== null && !close(valueOf(v), c.value)) ||
             (v instanceof DetailedCellError && (CANT.has(v.type) || (!SURE_ERROR.has(v.type) && valueOf(v) !== c.value)));
           if (unsure) {
+            if (c.stale === true || (calibrating && c.value !== null && !close(valueOf(v), c.value))) own.add(key(at(i, row, col)));
             stale.add(key(at(i, row, col)));
             queue.push(at(i, row, col));
           }
@@ -160,7 +180,11 @@ function run(grid: Grid, display: Display, names: readonly DefinedName[], calibr
           r?.map((c, col): GridCell | undefined => {
             if (c?.formula === undefined) return c;
             const { stale: _old, ...cell } = c;
-            if (stale.has(key(at(i, row, col)))) return c.stale ? c : { ...cell, stale: true };
+            const k = key(at(i, row, col));
+            if (stale.has(k)) {
+              const mark = own.has(k) ? true : "recheck";
+              return c.stale === mark ? c : { ...cell, stale: mark };
+            }
             const value = valueOf(hf.getCellValue(at(i, row, col)));
             return close(value, cell.value) ? cell : { ...cell, value, text: display(value, cell.format) };
           }),
