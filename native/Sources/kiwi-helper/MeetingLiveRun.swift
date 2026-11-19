@@ -27,6 +27,8 @@ enum MeetingLiveRun {
         /// T21014: seconds to stay alive after the `stats` line, with the transcriber already gone, as the app's helper
         /// stays up after a meeting: to read how much of the VBx peak it gives back (`--linger 40`).
         var linger: Double = 0
+        /// T22375: o dicionário da pessoa (`--dictionary`), como o app passa ao transcritor da reunião.
+        var dictionary: TranscriptDictionary = .empty
     }
 
     private final class Collector: @unchecked Sendable {
@@ -57,7 +59,7 @@ enum MeetingLiveRun {
         var options = LiveMeetingTranscriber.Options.fromEnvironment()
         if o.language != .auto { options.asr = options.asr.applying(language: Language(rawValue: o.language.rawValue)) }
         let t = LiveMeetingTranscriber(
-            session: UUID().uuidString, output: o.output, dictionary: .empty, options: options,
+            session: UUID().uuidString, output: o.output, dictionary: o.dictionary, options: options,
             systemAudio: { system },
             emit: { type, fields in
                 collected.lock.withLock {

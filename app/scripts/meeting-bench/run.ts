@@ -1,5 +1,6 @@
 // Roda o banco das reuniões (T20237, spec #20181) etapa por etapa e escreve o relatório. Pesado: pegue o bench antes
-// (`kiwi lock bench --ttl 10m --wait 30m`); com `--lock`, o script renova o lease antes de cada rodada.
+// (`kiwi lock bench --ttl 10m --wait 30m`). Com `--lock`, o script pega o bench a cada etapa e solta no fim dela; só pede
+// de novo depois que outro pegou e soltou, ou com 5 min livre e ninguém na fila (a fila nem sempre espera ativa).
 //
 //   bun scripts/meeting-bench/prepare.ts && bun scripts/meeting-bench/build.ts
 //   bun scripts/meeting-bench/run.ts [--lock] [--only say,mls] [--force]
@@ -21,6 +22,9 @@
 //            12,6%); o Parakeet em batch roda com e sem, para a diferença ser do modelo e não do VAD (#20668).
 // No `limpo` rodam todas; nas variantes de captura (eco, ruído, baixo), só o caminho do app (live e nota). O `eco` roda
 // com `--output speaker` (o filtro de eco ligado, como sem fone); o resto com `headphones`.
+// - livedic, batchdic, batchvaddic: os mesmos com o dicionário da pessoa (`DICTIONARY`, `--dictionary`), só a correção
+//            fonética do texto, que o app já faz na reunião (T22375).
+// - batchctc, batchvadctc: e o CTC antes dela, como no ditado: os termos achados no áudio de cada pedaço (`--ctc`).
 // Tudo fica em `<banco>/resultados/`, fora do repo; o relatório também (`relatorio.md`), e só ele se cola no thread.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -28,7 +32,7 @@ import { join, resolve } from "node:path";
 
 import type { Truth } from "./build.ts";
 import { BENCH, CANDIDATES, MODELS } from "./prepare.ts";
-import { score, type TurnScore } from "./score.ts";
+import { DICTIONARY, score, type TurnScore } from "./score.ts";
 
 const args = process.argv.slice(2);
 const flag = (f: string) => args.includes(f);
@@ -40,7 +44,11 @@ const MEETINGS = join(BENCH, "reunioes");
 const OUT = join(BENCH, "resultados");
 mkdirSync(OUT, { recursive: true });
 
-const STAGES = ["batch", "stream", "live", "live48k", "livept", "livefalante", "nota", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad"] as const;
+const STAGES = ["batch", "stream", "live", "live48k", "livept", "livefalante", "nota", "wsmall", "wturbo", "batchvad", "wsmallvad", "wturbovad",
+  "livedic", "batchdic", "batchctc", "batchvaddic", "batchvadctc"] as const;
+const VOCAB: Stage[] = ["live", "livedic", "batch", "batchdic", "batchctc", "batchvad", "batchvaddic", "batchvadctc"];
+const DICT = join(BENCH, "dicionario.txt");
+writeFileSync(DICT, `${DICTIONARY.join("\n")}\n`);
 type Stage = (typeof STAGES)[number];
 const helperArgs = (stage: Stage, wav: string, variant: string): string[] | null => {
   const output = ["--output", variant === "eco" ? "speaker" : "headphones"];
@@ -52,6 +60,11 @@ const helperArgs = (stage: Stage, wav: string, variant: string): string[] | null
     case "live48k": return ["--meeting-live", wav, ...output, "--capture", "48000"];
     case "livept": return ["--meeting-live", wav, ...output, "--language", "pt"];
     case "livefalante": return ["--meeting-live", wav, "--output", "speaker"];
+    case "livedic": return ["--meeting-live", wav, ...output, "--dictionary", DICT];
+    case "batchdic": return ["--meeting", wav, "--asr", "batch", "--diarizer", "none", "--dictionary", DICT];
+    case "batchctc": return ["--meeting", wav, "--asr", "batch", "--diarizer", "none", "--dictionary", DICT, "--ctc"];
+    case "batchvaddic": return ["--meeting", wav, "--asr", "batch", "--chunk-vad", "--diarizer", "none", "--dictionary", DICT];
+    case "batchvadctc": return ["--meeting", wav, "--asr", "batch", "--chunk-vad", "--diarizer", "none", "--dictionary", DICT, "--ctc"];
     case "nota": return null;
     case "wsmall": case "wturbo": case "wsmallvad": case "wturbovad": {
       const m = CANDIDATES.find((c) => c.stage === stage.replace(/vad$/, ""))!;
@@ -79,6 +92,23 @@ for (const name of names) {
     const r = stage === "nota"
       ? spawnSync("bun", [join(import.meta.dir, "nota.ts"), join(OUT, `${name}.live.jsonl`)], { maxBuffer: 1 << 28 })
       : spawnSync(HELPER, helperArgs(stage, join(MEETINGS, `${name}.wav`), variant)!, { maxBuffer: 1 << 28 });
+    // Uma etapa por vez com o bench: entre elas, a vez é de quem está na fila.
+    // E uma pausa antes de pedir de novo: sem ela, o próximo da fila não chega a pegar.
+    if (flag("--lock") && stage !== "nota") {
+      // Solta o bench e só volta para a fila quando ninguém mais espera por ele: quem pediu entra antes da próxima etapa.
+      spawnSync("kiwi", ["unlock", "bench"], { stdio: "ignore" });
+      // Quem está na fila nem sempre espera ativo: volta só depois que outro pegou e soltou, ou com 5 min livre e ninguém na fila.
+      let other = false, free = 0;
+      for (let i = 0; i < 720; i++) {
+        Bun.sleepSync(10_000);
+        const line = spawnSync("kiwi", ["status"]).stdout.toString().split("\n").find((l) => l.includes("bench:")) ?? "";
+        const held = /bench: [a-z-]+, \d+m left/.test(line);
+        if (held) { other = true; free = 0; continue; }
+        free += 10;
+        if (line.includes("next:")) continue;
+        if (other || free >= 300) break;
+      }
+    }
     if (r.status !== 0) {
       console.error(`${name} ${stage}: falhou (${r.status}): ${r.stderr?.toString().slice(-300)}`);
       continue;
@@ -111,7 +141,7 @@ const LABEL: Record<string, string> = { say: "say (roteiro, sintético)", mls: "
 
 const md: string[] = [];
 md.push("**WER por etapa** (limpo; erros somados sobre as palavras de cada fonte)", "");
-const PATH = STAGES.filter((st) => !st.startsWith("w") && !st.endsWith("vad"));
+const PATH = STAGES.filter((st) => !st.startsWith("w") && !st.endsWith("vad") && !VOCAB.slice(1).includes(st) || st === "batch");
 md.push(`| Fonte | min | ${PATH.join(" | ")} |`, `|---|---|${PATH.map(() => "---").join("|")}|`);
 for (const s of sources) md.push(`| ${LABEL[s] ?? s} | ${minutes(s).toFixed(1)} | ${PATH.map((st) => werOf(s, "limpo", st)).join(" | ")} |`);
 md.push("", "**Captura** (live → nota; e as palavras de eco no canal você)", "");
@@ -144,6 +174,17 @@ if (say.length) {
   md.push(`| ${STAGES.map((st) => { const r = rows.get(`say.limpo.${st}`); return r ? `${r.terms}%` : "—"; }).join(" | ")} |`);
   const missed = rows.get("say.limpo.live")?.terms_missed as string[] | undefined;
   if (missed?.length) md.push("", `No live, faltaram: ${missed.join(", ")}.`);
+}
+// T22375: o dicionário da pessoa. WER no limpo, e quantos dos termos do dicionário saem certos no say.
+if (VOCAB.some((st) => names.some((n) => rows.has(`${n}.${st}`) && st.match(/dic|ctc/)))) {
+  md.push("", "**Vocabulário da pessoa** (WER no limpo; `dic` = a correção fonética que o app já faz, `ctc` = o CTC antes dela)", "");
+  md.push(`| Fonte | ${VOCAB.join(" | ")} |`, `|---|${VOCAB.map(() => "---").join("|")}|`);
+  for (const s of sources) md.push(`| ${LABEL[s] ?? s} | ${VOCAB.map((st) => werOf(s, "limpo", st)).join(" | ")} |`);
+  md.push(`| say: termos do dicionário | ${VOCAB.map((st) => { const r = rows.get(`say.limpo.${st}`); return r?.dict != null ? `${r.dict}%` : "—"; }).join(" | ")} |`);
+  for (const st of VOCAB) {
+    const m = rows.get(`say.limpo.${st}`)?.dict_missed as string[] | undefined;
+    if (m?.length) md.push("", `${st}, faltaram: ${m.join(", ")}.`);
+  }
 }
 md.push("", "**Piores falas** (live, limpo; só o ID e as palavras erradas, `ref→asr`, `−` faltou, `+` sobrou)", "");
 const worst = names.filter((n) => n.endsWith(".limpo")).flatMap((n) => rows.get(`${n}.live`)?.turns ?? [])

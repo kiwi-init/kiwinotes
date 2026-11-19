@@ -29,6 +29,10 @@ enum MeetingBench {
         /// No batch e no Whisper, só a fala que o Silero acha (o VAD do ditado), um pedaço por vez. Sem isso, nos silêncios
         /// longos de cada canal, o Whisper pula trechos e inventa texto; o Parakeet roda igual, para comparar (#20668).
         var chunkVAD = false
+        /// T22375: o dicionário da pessoa (`--dictionary`). No batch, a correção fonética do texto de cada pedaço, como o
+        /// ditado e a reunião ao vivo fazem; com `ctc`, antes dela o CTC acha os termos no áudio do pedaço (`--ctc`).
+        var dictionary: TranscriptDictionary = .empty
+        var ctc = false
     }
 
     static let sampleRate = 16_000.0
@@ -78,12 +82,15 @@ enum MeetingBench {
         }
         let models = try await AsrModels.downloadAndLoad(version: .ultra)
         let vad = o.chunkVAD ? try await VadManager(config: VadConfig(defaultThreshold: 0.7)) : nil
+        let terms = o.dictionary.terms
+        let session = o.ctc && !terms.isEmpty
+            ? try await Transcriber.session(terms: terms, ctc: try await CtcModels.downloadAndLoad(variant: .ctc110m)) : nil
         try await withThrowingTaskGroup(of: Void.self) { group in
             for (i, samples) in channels.enumerated() {
                 group.addTask {
                     switch o.asr {
                     case .stream: try await streamChannel(samples, name: names[i], models: models, o: o)
-                    case .batch: try await batchChannel(samples, name: names[i], models: models, vad: vad)
+                    case .batch: try await batchChannel(samples, name: names[i], models: models, vad: vad, dictionary: o.dictionary, session: session)
                     case .none, .whisper: break
                     }
                 }
@@ -93,17 +100,65 @@ enum MeetingBench {
         return Date().timeIntervalSince(start)
     }
 
-    private static func batchChannel(_ samples: [Float], name: String, models: AsrModels, vad: VadManager?) async throws {
+    private static func batchChannel(_ samples: [Float], name: String, models: AsrModels, vad: VadManager?,
+                                     dictionary: TranscriptDictionary, session: VocabularyBoostingSession?) async throws {
         let manager = AsrManager(config: .default)
         try await manager.loadModels(models)
         for (offset, piece) in try await speechPieces(samples, vad: vad) {
             var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
             let result = try await manager.transcribe(piece, decoderState: &state)
             let base = Double(offset) / sampleRate
-            for w in words(result.tokenTimings ?? []) {
+            var found = words(result.tokenTimings ?? [])
+            if !dictionary.terms.isEmpty {
+                var raw = found.map(\.text).joined(separator: " ")
+                if let session { raw = await Transcriber.rescored(raw, timings: result.tokenTimings ?? [], audio: piece, session: session) }
+                found = retimed(found, as: TranscriptPostProcessor.process(raw, dictionary: dictionary))
+            }
+            for w in found {
                 emit(["type": "word", "channel": name, "start": base + w.start, "end": base + w.end, "text": w.text])
             }
         }
+    }
+
+    /// As palavras de `text` com os tempos das de `words` (T22375): a palavra que ficou igual guarda o seu, e as trocadas
+    /// entre duas iguais dividem o trecho das que saíram dali. Pelo LCS das palavras sem pontuação e sem caixa.
+    static func retimed(_ words: [(text: String, start: Double, end: Double, firmAt: Double?)], as text: String)
+        -> [(text: String, start: Double, end: Double, firmAt: Double?)] {
+        let new = text.split(separator: " ").map(String.init)
+        let key = { (w: String) in w.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let a = words.map { key($0.text) }, b = new.map(key)
+        var lcs = Array(repeating: Array(repeating: 0, count: b.count + 1), count: a.count + 1)
+        for i in stride(from: a.count - 1, through: 0, by: -1) {
+            for j in stride(from: b.count - 1, through: 0, by: -1) {
+                lcs[i][j] = a[i] == b[j] ? lcs[i + 1][j + 1] + 1 : max(lcs[i + 1][j], lcs[i][j + 1])
+            }
+        }
+        var out: [(text: String, start: Double, end: Double, firmAt: Double?)] = []
+        var i = 0, j = 0, gapI = 0, gapJ = 0
+        func flush() {
+            // As novas de gapJ..<j ocupam o trecho das antigas de gapI..<i (ou o ponto entre as vizinhas).
+            let n = j - gapJ
+            guard n > 0 else { return }
+            let from = gapI < i ? words[gapI].start : (gapI > 0 ? words[gapI - 1].end : (words.first?.start ?? 0))
+            let to = gapI < i ? words[i - 1].end : from
+            for k in 0..<n {
+                let s = from + (to - from) * Double(k) / Double(n), e = from + (to - from) * Double(k + 1) / Double(n)
+                out.append((new[gapJ + k], s, e, nil))
+            }
+        }
+        while i < a.count || j < b.count {
+            if i < a.count, j < b.count, a[i] == b[j] {
+                flush()
+                out.append((new[j], words[i].start, words[i].end, words[i].firmAt))
+                i += 1; j += 1; gapI = i; gapJ = j
+            } else if j < b.count, i == a.count || lcs[i][j + 1] >= lcs[i + 1][j] {
+                j += 1
+            } else {
+                i += 1
+            }
+        }
+        flush()
+        return out
     }
 
     /// Os pedaços do canal (começo em amostras, áudio): ele inteiro, ou cada fala que o VAD achou.

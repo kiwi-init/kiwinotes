@@ -85,6 +85,14 @@ export const TERMS = ["Ana", "Carla", "Bruno", "Diego", "Elisa", "Mariana", "Joa
   "sourdough", "centeio", "alecrim", "broa", "sova", "catorze", "dezoito", "quatro mil e duzentos", "seiscentos e cinquenta",
   "oitenta", "quarenta", "trezentos e doze", "gerador", "contêineres", "voluntários"];
 
+/**
+ * O dicionário de uma pessoa nessa reunião (T22375): os nomes e as palavras de fora que ela poria lá. Os números e as
+ * palavras comuns dos `TERMS` não: ninguém põe "oitenta" no dicionário. Na CORAA e no MLS, que não falam deles, ele mede
+ * o outro lado: as trocas erradas por um termo que ninguém disse.
+ */
+export const DICTIONARY = ["Ana", "Carla", "Bruno", "Diego", "Elisa", "Mariana", "Joana", "Vila Serena", "levain", "focaccia", "ciabatta",
+  "sourdough", "centeio", "alecrim", "broa", "sova"];
+
 const mid = (w: { start: number; end: number }) => (w.start + w.end) / 2;
 const inside = (t: Turn, w: Word, pad = 0.5) => w.channel === t.channel && mid(w) >= t.start - pad && mid(w) <= t.end + pad;
 
@@ -133,18 +141,25 @@ export function score(truthPath: string, resultPath: string) {
     const ref = truth.turns.map((t) => normalize(t.text).join(" ")).join(" | ");
     const hyp = words.sort((a, b) => a.start - b.start).flatMap((w) => normalize(w.text)).join(" ");
     const count = (s: string, term: string) => s.split(` ${term} `).length - 1;
-    let want = 0, got = 0;
-    const missed: string[] = [];
-    for (const term of TERMS) {
-      const t = normalize(term).join(" ");
-      const r = count(` ${ref} `, t), h = Math.min(r, count(` ${hyp} `, t));
-      want += r; got += h;
-      if (h < r) missed.push(term);
-    }
-    out.terms = want ? +((got / want) * 100).toFixed(0) : null;
-    out.terms_got = got;
-    out.terms_want = want;
-    out.terms_missed = missed;
+    const recall = (list: string[]) => {
+      let want = 0, got = 0;
+      const missed: string[] = [];
+      for (const term of list) {
+        const t = normalize(term).join(" ");
+        const r = count(` ${ref} `, t), h = Math.min(r, count(` ${hyp} `, t));
+        want += r; got += h;
+        if (h < r) missed.push(term);
+      }
+      return { pct: want ? +((got / want) * 100).toFixed(0) : null, got, want, missed };
+    };
+    const t = recall(TERMS);
+    out.terms = t.pct;
+    out.terms_got = t.got;
+    out.terms_want = t.want;
+    out.terms_missed = t.missed;
+    const d = recall(DICTIONARY);
+    out.dict = d.pct;
+    out.dict_missed = d.missed;
   }
 
   const lags = words.filter((w) => w.firmAt !== undefined).map((w) => w.firmAt! - w.end).sort((a, b) => a - b);
