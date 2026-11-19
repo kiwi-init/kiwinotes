@@ -67,7 +67,8 @@ jobs:
       run:
         working-directory: app
     steps:
-      - name: "pulado: ${{ needs.changes.outputs.bun_reason }}"
+      # Quando o job roda, o passo aparece como "motivo do pulo", pulado, e o merge-gate o ignora.
+      - name: "${{ needs.changes.outputs.bun == 'skip' && format('pulado: {0}', needs.changes.outputs.bun_reason) || 'motivo do pulo' }}"
         if: needs.changes.outputs.bun == 'skip'
         working-directory: .
         env:
@@ -199,7 +200,8 @@ jobs:
       run:
         working-directory: native
     steps:
-      - name: "pulado: ${{ needs.changes.outputs.swift_reason }}"
+      # Quando o job roda, o passo aparece como "motivo do pulo", pulado, e o merge-gate o ignora.
+      - name: "${{ needs.changes.outputs.swift == 'skip' && format('pulado: {0}', needs.changes.outputs.swift_reason) || 'motivo do pulo' }}"
         if: needs.changes.outputs.swift == 'skip'
         working-directory: .
         env:
