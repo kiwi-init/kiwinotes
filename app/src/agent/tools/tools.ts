@@ -18,7 +18,7 @@ import { splitMeetingNote, transcriptSection, isMeetingNote } from "../../shared
 import { closest, folderNames, nearSections, noteCard, noteNamed, noteNames } from "./find.ts";
 import { markdownStructure, headingFor, type NoteHeading } from "../../shared/markdown-structure.ts";
 import { STATUS_OUTLINE_MAX, STATUS_RECENT } from "../../notes/projects.ts";
-import { hasSections, isSecretFile, isTextFile, searchFileNames, textFormat, type VaultReader } from "./reader.ts";
+import { hasSections, isCanvasFile, isSecretFile, isTextFile, searchFileNames, textFormat, type VaultReader } from "./reader.ts";
 import type { VaultFile } from "../../notes/vault.ts";
 import { lineOf } from "../../notes/text-index.ts";
 import { FILE_FORMATS, FILES_INDEX_MAX, FILES_READ_MAX_BYTES, FileReadError, fileFormat, readDocument, splitZipPath } from "./files.ts";
@@ -272,7 +272,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
   {
     name: "files_read",
     title: "Ler um arquivo do cofre",
-    description: `Lê um arquivo do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página; o pptx, o texto de cada slide; o html, o texto sem as tags; o json e o xml, o texto. O zip devolve a lista do que há nele; um arquivo de dentro se lê pelo caminho do zip com o de dentro (ex.: Projetos/fotos.zip/dentro/tabela.csv). Devolve o sumário (as abas, as páginas, os slides, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md ou .txt do cofre) ou um arquivo de texto (código, yaml, log), use notes_read.`,
+    description: `Lê um arquivo do cofre (${FILE_FORMATS.join(", ")}) como texto: a planilha vira uma tabela por aba, com o cabeçalho; o docx, o texto com os títulos; o pdf, o texto de cada página; o pptx, o texto de cada slide; o html, o texto sem as tags; o json e o xml, o texto; o quadro branco (.canvas), o texto de cada cartão, grupo e seta; o diagrama (.drawio), os rótulos de cada página. O zip devolve a lista do que há nele; um arquivo de dentro se lê pelo caminho do zip com o de dentro (ex.: Projetos/fotos.zip/dentro/tabela.csv). Devolve o sumário (as abas, as páginas, os slides, as linhas), o índice das partes e uma parte de cada vez (a 1ª, sem parte). Para ler o resto, peça a parte pelo número. Até 20 MB. Para uma nota (.md ou .txt do cofre) ou um arquivo de texto (código, yaml, log), use notes_read.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -355,7 +355,7 @@ export const KIWI_TOOLS: readonly KiwiToolDef[] = [
     name: "notes_edit",
     title: "Trocar um trecho de uma nota",
     description:
-      "Troca um trecho de uma nota por outro, sem mandar a nota inteira: old é o trecho como está na nota (uma linha, uma frase), text o que entra no lugar (vazio tira o trecho). O trecho tem de aparecer uma vez só; com section, procura só nela. Sem ler antes: a versao do cartão basta, e é opcional.",
+      "Troca um trecho de uma nota por outro, sem mandar a nota inteira: old é o trecho como está na nota (uma linha, uma frase), text o que entra no lugar (vazio tira o trecho). O trecho tem de aparecer uma vez só; com section, procura só nela. Sem ler antes: a versao do cartão basta, e é opcional. Num quadro branco (.canvas), a nota é o JSON do arquivo: troque o trecho de dentro do \"text\" do cartão, como o notes_read mostra (o \\n é a quebra de linha); o Kiwi só grava um quadro que abre.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1758,6 +1758,8 @@ async function write(writer: VaultWriter, journal: WriteJournal, name: string, r
       const path = str(a, "path", true)!;
       const sent = str(a, "text", true, Number.MAX_SAFE_INTEGER)!;
       if (!sent.trim()) throw new ToolError("E_BAD_ARGS", "text está vazio");
+      // O quadro é um JSON (T22217): um texto no fim dele quebraria o arquivo.
+      if (isCanvasFile(path)) throw new ToolError("E_BAD_ARGS", `${path.trim()} é um quadro branco (JSON): nada foi escrito. Troque o "text" de um cartão com notes_edit, ou mande o quadro inteiro com notes_write.`);
       const sentSection = str(a, "section", false, 500)?.trim() || undefined;
       const version = str(a, "version", false, 200);
       // Sem a versão, o Kiwi usa a que acabou de ler; se a nota muda bem no meio, ele lê de novo e tenta outra vez.

@@ -1,0 +1,27 @@
+{
+  "window": "notes",
+  "steps": [
+    { "waitFor": ".kn-crumb-bt", "name": "a janela Notas abre (antes, no cofre: Diagramas/fluxo.drawio de test/fixtures/files, com 2 páginas, a segunda comprimida)" },
+    { "click": ".kn-crumb-bt", "name": "abre a árvore" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='folder']:has-text('Diagramas')", "name": "abre a pasta Diagramas" },
+    { "click": ".kn-tree-pop .kn-side-item[data-kind='file']:has-text('fluxo')", "name": "abre o diagrama" },
+    { "waitFor": ".kn-file-drawio[data-state='ready'] .kn-file-drawio-graph svg", "name": "o diagrama aparece" },
+    { "press": "Meta+f", "name": "o ⌘F abre a barra de busca do diagrama" },
+    { "waitFor": ".kn-file-drawio-find .kn-findbar-query", "name": "a barra com o campo" },
+    { "type": "ESTOQUE", "name": "procura sem maiúscula, num rótulo com HTML (<b>Tem</b> estoque?)" },
+    { "expectText": ".kn-findbar-count", "text": "1 de 1" },
+    { "waitFor": ".kn-file-drawio-graph svg [stroke='#2ea05a']", "name": "a célula achada ganha o contorno verde" },
+    { "wait": 300 },
+    { "screenshot": "01-drawio-busca.png" },
+    { "fill": ".kn-findbar-query", "text": "segunda pagina", "name": "o rótulo da página 2, que vem comprimida, sem acento" },
+    { "expectText": ".kn-findbar-count", "text": "1 de 1" },
+    { "expectText": ".kn-file-drawio-graph", "text": "2 / 2", "name": "o viewer vai para a página do achado" },
+    { "waitFor": ".kn-file-drawio-graph svg [stroke='#2ea05a']" },
+    { "wait": 300 },
+    { "screenshot": "02-drawio-busca-pagina-2.png" },
+    { "fill": ".kn-findbar-query", "text": "manga" },
+    { "expectText": ".kn-findbar-count", "text": "Nada encontrado" },
+    { "press": "Escape", "name": "o Esc fecha a barra" },
+    { "expectCount": ".kn-findbar", "count": 0 }
+  ]
+}

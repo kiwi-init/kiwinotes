@@ -2,13 +2,14 @@
 // agente vê a pasta de notas aberta agora, com a busca pelo sentido e o texto dos anexos quando estão ligados, e passa
 // pela mesma fronteira do cofre (sem `..`, sem link simbólico para fora: `E_OUTSIDE_VAULT`).
 //
-// Nada aqui escreve: o leitor só conhece sete capacidades de leitura (`notes.search`, `notes.list`, `notes.get`,
-// `meetings.list`, `projects.list`, `projects.status` e `files.read`, spec #11549), e nenhuma outra passa por ele. Marcar ou desmarcar um projeto
+// Nada aqui escreve: o leitor só conhece oito capacidades de leitura (`notes.search`, `notes.list`, `notes.get`,
+// `meetings.list`, `projects.list`, `projects.status`, `files.read`, spec #11549, e `notes.canvasGet`, o quadro do
+// T22217), e nenhuma outra passa por ele. Marcar ou desmarcar um projeto
 // é da pessoa (spec #9874): o leitor não tem como.
 
 import type { MeetingNote } from "../../shared/meetings.ts";
 import type { ProjectInfo, ProjectStatus } from "../../notes/projects.ts";
-import type { FileContent, VaultFile } from "../../notes/vault.ts";
+import type { CanvasFile, FileContent, VaultFile } from "../../notes/vault.ts";
 import { isEditableText } from "../../shared/file-view.ts";
 
 /**
@@ -25,6 +26,18 @@ export const isTextFile = (path: string): boolean => isEditableText(path) && !is
  * que conhece, e uma senha qualquer num `.env` iria inteira ao modelo (ADR 0011).
  */
 export const isSecretFile = (path: string): boolean => /^\.env(?:\..*)?$|\.env$/i.test(path.split("/").pop() ?? path);
+
+/**
+ * O quadro branco (T22217): o gato lê o texto dos cartões pelo `files_read`, e para mudar lê e grava o `.canvas` como
+ * um texto (o JSON do arquivo), pelas capacidades do quadro (`notes.canvasGet` e `notes.canvasSave`). O save confere a
+ * versão, e só aceita um JSON Canvas que abre: o agente não deixa um quadro quebrado.
+ */
+export const isCanvasFile = (path: string): boolean => /\.canvas$/i.test(path.trim());
+
+/** O quadro lido como uma nota: o JSON e a versão. O título é o nome sem o `.canvas`, como na árvore. */
+export function canvasNote(f: CanvasFile): { path: string; title: string; mtime: string; content: string; version: string } {
+  return { path: f.path, title: (f.path.split("/").pop() ?? f.path).replace(/\.canvas$/i, ""), mtime: "", content: f.content, version: f.version };
+}
 
 /** O formato de um arquivo de texto, para o agente não tratar código como nota: "txt", "py", "json"… */
 export const textFormat = (path: string): string => (/\.([a-z0-9]+)$/i.exec(path)?.[1] ?? "").toLowerCase();
@@ -110,12 +123,20 @@ export function textNote(f: FileContent): { path: string; title: string; mtime: 
 }
 
 /** As únicas capacidades que o leitor chama. */
-export const READER_CAPABILITIES = ["notes.search", "notes.list", "notes.get", "meetings.list", "projects.list", "projects.status", "files.read"] as const;
+export const READER_CAPABILITIES = ["notes.search", "notes.list", "notes.get", "meetings.list", "projects.list", "projects.status", "files.read", "notes.canvasGet"] as const;
 type ReaderCapability = (typeof READER_CAPABILITIES)[number];
+/** A do quadro (T22217) é opcional: um app sem quadros responde que não há. */
+type OptionalReaderCapability = "notes.canvasGet";
 
-/** O leitor sobre as capacidades do app (as de `uiCapabilities`): só as sete de leitura. */
-export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unknown) => unknown>): VaultReader {
-  const call = async <T>(cap: ReaderCapability, args: unknown): Promise<T> => (await caps[cap](args)) as T;
+/** O leitor sobre as capacidades do app (as de `uiCapabilities`): só as de leitura acima. */
+export function readerFromCapabilities(
+  caps: Record<Exclude<ReaderCapability, OptionalReaderCapability>, (args: unknown) => unknown> & Partial<Record<OptionalReaderCapability, (args: unknown) => unknown>>,
+): VaultReader {
+  const call = async <T>(cap: ReaderCapability, args: unknown): Promise<T> => {
+    const fn = caps[cap];
+    if (!fn) throw Object.assign(new Error(`o Kiwi não abre ${cap === "notes.canvasGet" ? "quadros" : cap} aqui`), { code: "E_BAD_ARGS" });
+    return (await fn(args)) as T;
+  };
   const listed = () => call<{ folders: string[]; notes: ReaderNoteMeta[]; files?: VaultFile[] }>("notes.list", undefined);
   return {
     // Uma busca só (T21240): as notas e o texto de todo arquivo de texto vêm do mesmo índice que as Notas e o ⌘K usam.
@@ -126,7 +147,12 @@ export function readerFromCapabilities(caps: Record<ReaderCapability, (args: unk
       const files = (r.files ?? []).filter((f) => !isSecretFile(f.path));
       return { folders: r.folders, notes: [...r.notes, ...files.filter((f) => isTextFile(f.path)).map(textMeta)], files: files.filter((f) => !isTextFile(f.path)) };
     },
-    get: async (path) => (isTextFile(path) ? textNote(await call<FileContent>("files.read", { path, as: "text" })) : call("notes.get", { path })),
+    get: async (path) =>
+      isCanvasFile(path)
+        ? canvasNote(await call<CanvasFile>("notes.canvasGet", { path }))
+        : isTextFile(path)
+          ? textNote(await call<FileContent>("files.read", { path, as: "text" }))
+          : call("notes.get", { path }),
     meetings: async () => (await call<{ meetings: MeetingNote[] }>("meetings.list", undefined)).meetings,
     projects: async () => (await call<{ projects: ProjectInfo[] }>("projects.list", undefined)).projects,
     projectStatus: (folder) => call("projects.status", { folder }),

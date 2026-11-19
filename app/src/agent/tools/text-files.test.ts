@@ -174,6 +174,37 @@ describe("o Kiwi Cat edita qualquer arquivo de texto (spec #21158)", () => {
     expect([t.read("Loja/estoque.py"), t.read("Loja/estoque.json"), t.read("Loja/caixa.log")]).toEqual([PY, JSON_, LOG]);
   });
 
+  test("o desfazer volta o quadro que o gato mudou, e a nota do mesmo pedido, byte a byte (T22217)", async () => {
+    const QUADRO =
+      '{\n\t"nodes":[\n\t\t{"id":"a1","type":"text","text":"Comprar caju","x":0,"y":0,"width":240,"height":120}\n\t],\n\t"edges":[]\n}';
+    const t = setup({ "Loja/Feira.canvas": QUADRO });
+    await t.begin();
+    await t.tool("notes_edit", { path: "Loja/Feira.canvas", old: "Comprar caju", text: "Comprar umbu" });
+    await t.tool("notes_append", { path: "Loja/Plano.md", text: "levar as sacolas" });
+    expect(t.read("Loja/Feira.canvas")).toContain("Comprar umbu");
+    const r = await t.undo();
+    expect(r.notes.map((n: { path: string; result: string }) => `${n.path} ${n.result}`).sort()).toEqual([
+      "Loja/Feira.canvas restored",
+      "Loja/Plano.md restored",
+    ]);
+    expect(t.read("Loja/Feira.canvas")).toBe(QUADRO);
+    expect(t.read("Loja/Plano.md")).toBe("# Plano\n\nabrir no sábado\n");
+  });
+
+  test("o quadro mudado pela pessoa depois do gato não volta (T22217)", async () => {
+    const QUADRO = '{"nodes":[{"id":"a1","type":"text","text":"Comprar caju","x":0,"y":0,"width":240,"height":120}],"edges":[]}';
+    const t = setup({ "Loja/Feira.canvas": QUADRO });
+    await t.begin();
+    await t.tool("notes_edit", { path: "Loja/Feira.canvas", old: "Comprar caju", text: "Comprar umbu" });
+    const pessoa = QUADRO.replace("Comprar caju", "Comprar pitanga");
+    t.write("Loja/Feira.canvas", pessoa);
+    const r = await t.undo();
+    expect(r.notes.map((n: { path: string; result: string; reason?: string }) => `${n.path} ${n.result} ${n.reason}`)).toEqual([
+      "Loja/Feira.canvas refused E_CHANGED",
+    ]);
+    expect(t.read("Loja/Feira.canvas")).toBe(pessoa);
+  });
+
   test("o .env fica fora do gato: não lê, não lista, não acha, não grava; e a senha não sai em nada", async () => {
     // Uma senha inventada, num formato que o guardrail não reconhece.
     const ENV = "LOJA_SENHA=quindim-azul-42\nLOJA_PORTA=8080\n";

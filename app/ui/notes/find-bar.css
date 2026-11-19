@@ -1,0 +1,25 @@
+/* A barra do ⌘F do quadro branco e do diagrama (T22217). */
+.kn-findbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.kn-findbar-query {
+  width: 200px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--r-row, 8px);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.kn-findbar-count {
+  min-width: 64px;
+  color: var(--text-3);
+  font-size: var(--t-meta, 12px);
+  font-variant-numeric: tabular-nums;
+}

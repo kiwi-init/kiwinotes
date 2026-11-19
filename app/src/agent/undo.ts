@@ -31,13 +31,25 @@ export interface UndoNotes {
 }
 
 /** As únicas capacidades que o desfazer chama. */
-export const UNDO_CAPABILITIES = ["notes.folder", "notes.get", "notes.save", "notes.delete", "files.read", "files.save", "files.delete"] as const;
+export const UNDO_CAPABILITIES = [
+  "notes.folder",
+  "notes.get",
+  "notes.save",
+  "notes.delete",
+  "files.read",
+  "files.save",
+  "files.delete",
+  "notes.canvasGet",
+  "notes.canvasSave",
+] as const;
 type UndoCapability = (typeof UNDO_CAPABILITIES)[number];
 
 const codeOf = (e: unknown) => (e as { code?: string })?.code;
 const isNote = (path: string) => /\.md$/i.test(path);
 /** O arquivo de texto que o agente mudou (o `.txt` do spec #13379, e o código, o json… do #21158): volta pelo `files.save`. */
 const isText = (path: string) => isEditableText(path);
+/** O quadro branco que o gato mudou (T22217): a cópia de antes é o JSON, e volta pelo `notes.canvasSave`, que confere a versão. */
+const isCanvas = (path: string) => /\.canvas$/i.test(path);
 /** A planilha que o agente mudou (T21114): a cópia de antes é o arquivo em base64, e volta pelo `files.save` com `base64`. */
 const isSheet = (path: string) => /\.(xlsx|csv|tsv)$/i.test(path);
 /** A versão do texto guardado no registro: a da planilha é a dos bytes. */
@@ -48,9 +60,10 @@ const withFolder = (args: Record<string, unknown>, folderId?: string) => (folder
 export class OtherFolder extends Error {}
 
 /**
- * O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as sete acima. Um arquivo que não é nota (o que
+ * O desfazer sobre as capacidades do app (as de `uiCapabilities`): só as de cima. Um arquivo que não é nota (o que
  * o agente gerou, spec #11549) é lido pelo `files.read` (só a versão) e vai para a Lixeira pelo `files.delete`. Um arquivo de
- * texto que o agente mudou (spec #13379) é lido como texto e volta pelo `files.save`.
+ * texto que o agente mudou (spec #13379) é lido como texto e volta pelo `files.save`; o quadro (T22217), pelo
+ * `notes.canvasGet` e o `notes.canvasSave`.
  */
 export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: unknown) => unknown>): UndoNotes {
   const call = async <T>(cap: UndoCapability, args: unknown): Promise<T> => {
@@ -73,6 +86,10 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
     },
     get: async (path, folderId) => {
       try {
+        if (isCanvas(path)) {
+          const f = await call<{ content: string; version: string }>("notes.canvasGet", withFolder({ path }, folderId));
+          return { content: f.content, version: f.version };
+        }
         if (isText(path)) {
           const f = await call<{ version?: string; text?: string }>("files.read", withFolder({ path, as: "text" }, folderId));
           return { content: f.text ?? "", version: f.version ?? "" };
@@ -95,6 +112,7 @@ export function undoNotesFromCapabilities(caps: Record<UndoCapability, (args: un
     },
     save: async (path, content, baseVersion, folderId) => {
       try {
+        if (isCanvas(path)) return (await call<{ saved: boolean }>("notes.canvasSave", withFolder({ path, content, baseVersion }, folderId))).saved === true;
         if (isText(path)) return (await call<{ saved: boolean }>("files.save", withFolder({ path, content, baseVersion }, folderId))).saved === true;
         if (isSheet(path)) return (await call<{ saved: boolean }>("files.save", withFolder({ path, base64: content, baseVersion }, folderId))).saved === true;
         const r = await call<{ saved: boolean }>("notes.save", withFolder({ path, content, baseVersion, snapshot: true }, folderId));

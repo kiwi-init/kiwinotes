@@ -249,6 +249,14 @@ export function kiwiCallFor(tool: string, args: Record<string, unknown> = {}): R
     else opcoes[inverso[k] ?? k] = v;
   }
   if (Object.keys(opcoes).length) out.opcoes = opcoes;
+  // A ação padrão que o alvo levaria a outra (o ler de um .canvas vai ao files_read, T22217): o como explícito.
+  if (acao.padrao) {
+    let outra = false;
+    try {
+      outra = resolveKiwiCall(out).tool !== acao.tool;
+    } catch {}
+    if (outra) out.opcoes = { ...opcoes, como: acao.como };
+  }
   return out;
 }
 

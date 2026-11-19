@@ -644,6 +644,13 @@
   display: none;
 }
 
+/* o ⌘F do diagrama (T22217): a barra em cima da área, à direita */
+.kn-file-drawio-find {
+  display: flex;
+  padding: 8px 24px 0;
+  background: var(--surface-2);
+}
+
 /* ---------------------------------------------------------- o áudio e o vídeo (T19315) */
 
 /* o player do WebKit no meio, no fundo das imagens; o vídeo cabe inteiro na área, o áudio numa barra */

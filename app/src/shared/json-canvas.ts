@@ -303,3 +303,34 @@ export function canvasColor(color: unknown): string | null {
   if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) return color;
   return null;
 }
+
+// ---------------------------------------------------------------- o texto do quadro (T22217)
+
+/** Um pedaço de texto do quadro: o de um cartão, o caminho de uma nota, o endereço, o rótulo de um grupo ou de uma seta. */
+export interface CanvasText {
+  /** O id do nó ou da seta, para o ⌘F levar até ele. */
+  id: string;
+  kind: "text" | "file" | "link" | "group" | "edge";
+  text: string;
+}
+
+/**
+ * O texto do quadro, na ordem do arquivo: os nós e depois as setas. É o que o ⌘F procura, o que a busca das Notas
+ * indexa e o que o Kiwi Cat lê pelo `files_read`. Nó ou seta sem texto não entra.
+ */
+export function canvasTexts(doc: CanvasDoc): CanvasText[] {
+  const out: CanvasText[] = [];
+  const put = (id: string, kind: CanvasText["kind"], v: unknown) => {
+    if (typeof v === "string" && v.trim()) out.push({ id, kind, text: v });
+  };
+  for (const n of doc.nodes) {
+    if (!isDrawableNode(n)) continue;
+    if (n.type === "text") put(n.id, "text", n.text);
+    else if (n.type === "file") put(n.id, "file", n.subpath ? `${n.file ?? ""}${n.subpath}` : n.file);
+    else if (n.type === "link") put(n.id, "link", n.url);
+    else if (n.type === "group") put(n.id, "group", n.label);
+  }
+  const ids = new Set(doc.nodes.filter(isDrawableNode).map((n) => n.id));
+  for (const e of doc.edges) if (isDrawableEdge(e, ids)) put(e.id, "edge", e.label);
+  return out;
+}

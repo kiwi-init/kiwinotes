@@ -13,6 +13,8 @@ import { decodeText, parseTable } from "../../../ui/notes/files/csv.ts";
 import { parseDocHtml, type DocNode } from "../../../ui/notes/files/docx.ts";
 import { checkZip, ZIP_LIMITS, zipEntries, type ZipEntry } from "../../../ui/notes/files/zipSize.ts";
 import { Inflate } from "pako/lib/inflate.js";
+import { canvasTexts, CanvasParseError, parseCanvas, type CanvasText } from "../../shared/json-canvas.ts";
+import { drawioPages } from "../../../ui/notes/files/drawio.ts";
 
 /** O maior arquivo que o agente lê (o spec): 20 MB. */
 export const FILES_READ_MAX_BYTES = 20 * 1024 * 1024;
@@ -21,7 +23,7 @@ export const SHEET_PART_ROWS = 2_000;
 /** Quantas partes o índice mostra; o resto é contado. */
 export const FILES_INDEX_MAX = 100;
 
-export const FILE_FORMATS = ["csv", "xlsx", "docx", "pdf", "txt", "pptx", "json", "xml", "html", "md", "zip"] as const;
+export const FILE_FORMATS = ["csv", "xlsx", "docx", "pdf", "txt", "pptx", "json", "xml", "html", "md", "zip", "canvas", "drawio"] as const;
 export type FileFormat = (typeof FILE_FORMATS)[number];
 
 export class FileReadError extends Error {
@@ -65,6 +67,8 @@ export interface FileDocument {
     abas?: { nome: string; linhas: number; colunas: number }[];
     paginas?: number;
     slides?: number;
+    /** No quadro branco: quantos cartões, grupos e setas têm texto. */
+    itens?: number;
     /** No zip: quantos arquivos há dentro (sem contar as pastas). */
     arquivos?: number;
     linhas?: number;
@@ -279,6 +283,9 @@ function slideLines(xml: string): string[] {
 
 const kb = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
+/** Como cada pedaço do quadro aparece para o agente. */
+const CANVAS_KIND: Readonly<Record<CanvasText["kind"], string>> = { text: "cartão", file: "nota", link: "link", group: "grupo", edge: "seta" };
+
 /** O texto como linhas, numa parte só por trecho (o txt, o md, o xml e o json). */
 function textDoc(format: FileFormat, text: string, name: string, maxChars: number, warnings: string[]): FileDocument {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -323,6 +330,35 @@ async function readFormat(path: string, bytes: Uint8Array, maxChars: number): Pr
         warnings.push("Não é um JSON válido: vai o texto como está.");
       }
       return textDoc(format, pretty, "JSON", maxChars, warnings);
+    }
+    case "canvas": {
+      // O quadro branco (T22217): o texto de cada cartão, com o tipo e o id. A forma do quadro (as posições, as cores)
+      // fica de fora; para mudar um cartão, o agente lê o arquivo com o notes_read e troca o trecho com o notes_edit.
+      let items: CanvasText[];
+      try {
+        items = canvasTexts(parseCanvas(decodeText(bytes).text));
+      } catch (e) {
+        throw new FileReadError("E_BAD_ARGS", e instanceof CanvasParseError ? `o quadro não abre: ${e.message}` : "o quadro não abre");
+      }
+      const lines = items.flatMap((it) => {
+        const [first = "", ...rest] = it.text.replace(/\r\n?/g, "\n").split("\n");
+        return [`${CANVAS_KIND[it.kind]} ${it.id}: ${first}`, ...rest.map((l) => `  ${l}`)];
+      });
+      const caracteres = items.reduce((n, it) => n + it.text.length, 0);
+      warnings.push("Para mudar o texto de um cartão: kiwi ler/nota no quadro (o JSON) e kiwi escrever/trecho no \"text\" dele.");
+      return { format, summary: { itens: items.length, caracteres }, parts: partition([{ name: "Quadro", unit: "trecho", lines }], maxChars), warnings };
+    }
+    case "drawio": {
+      // O diagrama (T22217): os rótulos de cada página, com o id da forma. O desenho se muda no draw.io.
+      const pages = drawioPages(decodeText(bytes).text);
+      if (!pages) throw new FileReadError("E_BAD_ARGS", "o diagrama não abre: não é um .drawio, ou abre grande demais");
+      const blocks: Block[] = pages.map((p, i) => ({
+        name: `Página ${i + 1}${p.name ? ` (${p.name})` : ""}`,
+        unit: "trecho",
+        lines: p.labels.flatMap((l) => l.text.split("\n").map((t, k) => (k ? `  ${t}` : `${l.id}: ${t}`))),
+      }));
+      const caracteres = pages.reduce((n, p) => n + p.labels.reduce((m, l) => m + l.text.length, 0), 0);
+      return { format, summary: { paginas: pages.length, caracteres }, parts: partition(blocks, maxChars), warnings };
     }
     case "html": {
       const lines = htmlLines(decodeText(bytes).text);

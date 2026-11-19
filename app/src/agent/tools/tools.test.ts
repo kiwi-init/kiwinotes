@@ -449,7 +449,10 @@ describe("a fronteira do cofre: nada escreve, nada sai", () => {
   });
 
   test("depois de usar todas as ferramentas, nenhum arquivo do cofre mudou, e só as capacidades de leitura foram chamadas", async () => {
-    const { config, root, called } = await setup({ "Dados/tabela.csv": "Nome;Valor\nAna;10\n" });
+    const { config, root, called } = await setup({
+      "Dados/tabela.csv": "Nome;Valor\nAna;10\n",
+      "Dados/Feira.canvas": '{"nodes":[{"id":"a","type":"text","text":"Comprar caju","x":0,"y":0,"width":100,"height":40}],"edges":[]}',
+    });
     await Bun.sleep(30);
     const before = snapshot(root);
     await tool(config, "notes_search", { query: "Kiwi" });
@@ -462,12 +465,16 @@ describe("a fronteira do cofre: nada escreve, nada sai", () => {
     expect((await tool(config, "projects_list", {})).value.total).toBe(1);
     expect((await tool(config, "project_status", { projeto: "Projetos" })).value.pasta).toBe("Projetos");
     expect((await tool(config, "files_read", { caminho: "Dados/tabela.csv" })).value.formato).toBe("csv");
+    // O quadro branco (T22217): o texto pelo files_read, e o JSON pelo notes_read (pelo notes.canvasGet).
+    expect((await tool(config, "files_read", { caminho: "Dados/Feira.canvas" })).value.formato).toBe("canvas");
+    const nr = await tool(config, "notes_read", { path: "Dados/Feira.canvas" });
+    expect(JSON.stringify(nr.value)).toContain("Comprar caju");
     await Bun.sleep(50);
     expect(snapshot(root)).toEqual(before);
     expect([...called].sort()).toEqual([...READER_CAPABILITIES].sort());
   });
 
-  test("o leitor só conhece as sete capacidades de leitura", () => {
+  test("o leitor só conhece as capacidades de leitura dele", () => {
     const reader: VaultReader = readerFromCapabilities(
       new Proxy({} as never, {
         get: (_t, cap: string) => {

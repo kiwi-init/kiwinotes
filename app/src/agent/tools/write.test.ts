@@ -402,6 +402,39 @@ describe("o teto de cada escrita", () => {
   });
 });
 
+/** Um quadro inventado, no formato que o Obsidian grava (um nó por linha, com tabs). */
+const QUADRO = '{\n\t"nodes":[\n\t\t{"id":"a1","type":"text","text":"Comprar caju\\ne pitanga","x":0,"y":0,"width":240,"height":60},\n\t\t{"id":"a2","type":"text","text":"Ligar para a Ana","x":300,"y":0,"width":240,"height":60}\n\t],\n\t"edges":[]\n}';
+
+describe("o quadro branco (T22217)", () => {
+  test("o gato lê o quadro pelo files_read, troca o texto de um cartão pelo notes_edit, e o resto do arquivo fica como estava", async () => {
+    const { config, root, read, kept } = await setup();
+    writeFileSync(path.join(root, "Feira.canvas"), QUADRO);
+    const doc = await tool(config, "files_read", { caminho: "Feira.canvas" });
+    expect(doc.error).toBeUndefined();
+    expect(JSON.stringify(doc.value)).toContain("cartão a1: Comprar caju");
+    const n = await tool(config, "notes_read", { path: "Feira.canvas" });
+    expect(n.value.conteudo ?? n.value.texto ?? JSON.stringify(n.value)).toContain("Ligar para a Ana");
+    const r = await tool(config, "notes_edit", { path: "Feira.canvas", old: "Ligar para a Ana", text: "Ligar para a Bia" });
+    expect(r.error).toBeUndefined();
+    expect(read("Feira.canvas")).toBe(QUADRO.replace("Ligar para a Ana", "Ligar para a Bia"));
+    expect(kept.length).toBe(1);
+  });
+
+  test("o que quebraria o quadro não é gravado: o acrescentar no fim, e o texto que não abre como quadro", async () => {
+    const { config, root, read } = await setup();
+    writeFileSync(path.join(root, "Feira.canvas"), QUADRO);
+    const app = await tool(config, "notes_append", { path: "Feira.canvas", text: "mais uma linha" });
+    expect(app.error).toContain("E_BAD_ARGS");
+    expect(app.error).toContain("notes_edit");
+    const bad = await tool(config, "notes_edit", { path: "Feira.canvas", old: '"edges":[]', text: '"edges":[' });
+    expect(bad.error).toContain("E_BAD_ARGS");
+    const n = await tool(config, "notes_read", { path: "Feira.canvas" });
+    const whole = await tool(config, "notes_write", { path: "Feira.canvas", text: "não é json", version: n.value.versao });
+    expect(whole.error).toContain("E_BAD_ARGS");
+    expect(read("Feira.canvas")).toBe(QUADRO);
+  });
+});
+
 describe("a fronteira do cofre", () => {
   test("fora do cofre, por link simbólico, uma nota que não é .md ou que não é UTF-8: nada é escrito", async () => {
     const { config, base, root } = await setup();
@@ -416,8 +449,11 @@ describe("a fronteira do cofre", () => {
     expect(readFileSync(path.join(root, "Latin.md"))).toEqual(Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
   });
 
-  test("o escritor só chama as sete capacidades dele", async () => {
-    const { config, called } = await setup();
+  test("o escritor só chama as capacidades dele", async () => {
+    const { config, called, root } = await setup();
+    // O quadro branco (T22217) se lê e grava pelas capacidades do quadro.
+    writeFileSync(path.join(root, "Feira.canvas"), QUADRO);
+    await tool(config, "notes_edit", { path: "Feira.canvas", old: "Comprar caju", text: "Comprar umbu" });
     await tool(config, "notes_create", { title: "Nova", text: "x" });
     await tool(config, "files_create", { formato: "txt", nome: "Novo", conteudo: { blocos: [{ tipo: "paragrafo", texto: "x" }] } });
     await tool(config, "notes_append", { path: "Nova.md", text: "y" });

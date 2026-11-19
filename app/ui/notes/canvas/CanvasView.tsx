@@ -10,8 +10,10 @@ import {
   addNode,
   arrowHead,
   boundsOf,
+  type Box,
   bringToFront,
   canvasColor,
+  canvasTexts,
   type CanvasDoc,
   type CanvasEdge,
   type CanvasNode,
@@ -42,7 +44,9 @@ import { errorCode } from "../errors.ts";
 import type { CanvasApi, CanvasFile, NotesApi } from "../types.ts";
 import { CanvasMarkdown, type CanvasLinks } from "./CanvasMarkdown.tsx";
 import { canvasName, noteSection } from "./names.ts";
-import { fit, pan, toWorld, type Viewport, wheelFactor, zoomAt } from "./viewport.ts";
+import { FindBar, useFindKey } from "../FindBar.tsx";
+import { findIds, stepFind } from "../find.ts";
+import { fit, pan, reveal, toWorld, type Viewport, wheelFactor, zoomAt } from "./viewport.ts";
 import "./canvas.css";
 
 const SIDES: CanvasSide[] = ["top", "right", "bottom", "left"];
@@ -100,6 +104,10 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
   const [connecting, setConnecting] = useState<{ from: string; side: CanvasSide; to: Point } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [title, setTitle] = useState(canvasName(path));
+  // O ⌘F (T22217): aberta, a busca e o achado da vez (−1 enquanto a pessoa digita).
+  const [find, setFind] = useState<{ query: string; index: number } | null>(null);
+  const findInput = useRef<HTMLInputElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
 
   const board = useRef<HTMLDivElement>(null);
   const docRef = useRef<CanvasDoc | null>(null);
@@ -269,6 +277,54 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
     const r = board.current?.getBoundingClientRect();
     return { width: r?.width ?? 800, height: r?.height ?? 600 };
   };
+  // ---------------------------------------------------------------- o ⌘F (T22217)
+
+  // Onde cada item fica: o cartão pelo canto, a seta pelo meio (é lá que o rótulo dela aparece).
+  const boxOf = useCallback(
+    (id: string): Box | null => {
+      const n = byId.get(id);
+      if (n) return n;
+      const x = edges.find((e) => e.id === id);
+      if (!x) return null;
+      const m = edgeGeometry(byId.get(x.fromNode)!, byId.get(x.toNode)!, x.fromSide, x.toSide).middle;
+      return { x: m.x - 100, y: m.y - 30, width: 200, height: 60 };
+    },
+    [byId, edges],
+  );
+  // Os achados na ordem de leitura do quadro: de cima para baixo, da esquerda para a direita.
+  const found = useMemo(() => {
+    if (!doc || !find?.query.trim()) return [];
+    const items = canvasTexts(doc).map((t) => ({ ...t, at: boxOf(t.id) ?? { x: 0, y: 0 } }));
+    items.sort((a, b) => a.at.y - b.at.y || a.at.x - b.at.x);
+    return findIds(items, find.query);
+  }, [doc, find?.query, boxOf]);
+  const foundSet = useMemo(() => new Set(found), [found]);
+
+  const goToFound = (index: number) => {
+    const id = found[index];
+    setFind((f) => (f ? { ...f, index } : f));
+    if (id === undefined) return;
+    setSelected(new Set([id]));
+    const b = boxOf(id);
+    const { width, height } = size();
+    if (b) setVp((v) => reveal(v, b, width, height));
+  };
+  // Enquanto a pessoa digita, o primeiro achado; se o quadro muda e o achado da vez sumiu, também.
+  useEffect(() => {
+    if (find && found.length && (find.index < 0 || find.index >= found.length)) goToFound(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found]);
+
+  const openFind = () => {
+    if (find) findInput.current?.select();
+    else setFind({ query: "", index: -1 });
+  };
+  const closeFind = () => {
+    setFind(null);
+    board.current?.focus();
+  };
+  useFindKey(wrap, openFind);
+
   const fitAll = useCallback(() => {
     const { width, height } = size();
     setVp(fit(boundsOf(nodes), width, height));
@@ -640,7 +696,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
   const status = saveState === "saving" || saveState === "pending" ? "Gravando…" : saveState === "saved" ? "Gravado" : "";
 
   return (
-    <div className="kn-canvas-wrap">
+    <div className="kn-canvas-wrap" ref={wrap}>
       <div className="kn-canvas-head">
         <input
           className="kn-canvas-title"
@@ -661,6 +717,18 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
         <span className="kn-canvas-status" aria-live="polite">
           {status}
         </span>
+        {find ? (
+          <FindBar
+            label="Procurar no quadro"
+            query={find.query}
+            index={find.index}
+            total={found.length}
+            inputRef={findInput}
+            onQuery={(query) => setFind({ query, index: -1 })}
+            onStep={(dir) => goToFound(stepFind(find.index, found.length, dir))}
+            onClose={closeFind}
+          />
+        ) : null}
       </div>
       {conflict ? (
         <div className="kn-conflict kn-canvas-alert" role="alert">
@@ -723,7 +791,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
       >
         <div className="kn-canvas-world" style={{ transform: `translate(${vp.tx}px, ${vp.ty}px) scale(${vp.zoom})` }}>
           {groups.map((n) => (
-            <NodeBox key={n.id} node={n} selected={selected.has(n.id)} editing={editing === n.id} handlers={handlers} api={api} links={links} />
+            <NodeBox key={n.id} node={n} selected={selected.has(n.id)} found={foundSet.has(n.id)} editing={editing === n.id} handlers={handlers} api={api} links={links} />
           ))}
           <svg className="kn-canvas-edges" width="1" height="1" overflow="visible" aria-hidden="true">
             {edges.map((x) => (
@@ -771,7 +839,7 @@ export function CanvasView({ api, path, flushRef, onOpenLink, onOpenNote, onOpen
             );
           })}
           {cards.map((n) => (
-            <NodeBox key={n.id} node={n} selected={selected.has(n.id)} editing={editing === n.id} handlers={handlers} api={api} links={links} />
+            <NodeBox key={n.id} node={n} selected={selected.has(n.id)} found={foundSet.has(n.id)} editing={editing === n.id} handlers={handlers} api={api} links={links} />
           ))}
           {single && !editing ? <Handles node={single} handlers={handlers} zoom={vp.zoom} /> : null}
         </div>
@@ -811,15 +879,16 @@ const colorStyle = (color: unknown): React.CSSProperties | undefined => {
   return c ? ({ "--node-color": c } as React.CSSProperties) : undefined;
 };
 
-const NodeBox = memo(function NodeBox({ node, selected, editing, handlers, api, links }: {
+const NodeBox = memo(function NodeBox({ node, selected, found, editing, handlers, api, links }: {
   node: CanvasNode;
   selected: boolean;
+  found: boolean;
   editing: boolean;
   handlers: MutableRefObject<Handlers>;
   api: NotesApi;
   links: CanvasLinks;
 }) {
-  const cls = `kn-canvas-node kn-canvas-type-${["text", "file", "link", "group"].includes(node.type) ? node.type : "other"}${selected ? " is-selected" : ""}${canvasColor(node.color) ? " has-color" : ""}`;
+  const cls = `kn-canvas-node kn-canvas-type-${["text", "file", "link", "group"].includes(node.type) ? node.type : "other"}${selected ? " is-selected" : ""}${found ? " is-found" : ""}${canvasColor(node.color) ? " has-color" : ""}`;
   const style: React.CSSProperties = { left: node.x, top: node.y, width: node.width, height: node.height, ...colorStyle(node.color) };
   const common = {
     "data-id": node.id,
