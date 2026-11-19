@@ -48,7 +48,7 @@ import { focusEditor, insertIntoEditor,
 import { type KiwiEditor, KiwiQueue, KiwiWrites, reducedMotion, startKiwiWrite } from "./kiwiWrite.ts";
 import { KiwiNotice } from "./KiwiNotice.tsx";
 import { setKiwiFace } from "./editor/kiwi-writing.ts";
-import { kiwiFaceElement } from "./editor/kiwi-face.ts";
+import { kiwiFace, kiwiFaceElement } from "./editor/kiwi-face.ts";
 import { catPalette } from "../../src/shared/kiwicat-colors.ts";
 import { fillTemplate } from "../../src/shared/templates.ts";
 import { Palette } from "./Palette.tsx";
@@ -714,7 +714,10 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     return () => clearTimeout(t);
   }, [kiwiTouched]);
   // O rostinho do cursor do Kiwi na cor escolhida nos Ajustes.
-  useEffect(() => setKiwiFace(() => kiwiFaceElement(prefs.catColor)), [prefs.catColor]);
+  useEffect(() => {
+    void kiwiFace(prefs.catColor); // desenha já, para a primeira etiqueta sair com o rosto
+    setKiwiFace(() => kiwiFaceElement(prefs.catColor));
+  }, [prefs.catColor]);
 
   // Mudou no disco (pelo app ou fora dele, no Obsidian): a lista, os links e os backlinks se refazem. A nota aberta só
   // recarrega se não tem nada pendente; com edição pendente, o próximo save mostra o conflito.
