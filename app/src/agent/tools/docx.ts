@@ -118,11 +118,12 @@ export class DocxDoc {
         const tabela = ++n;
         this.run<{ handles: Handle[] }>({ op: "getTableRows", table: t }, "ler").handles.forEach((row, l) => {
           this.rowBodies(row).forEach((cb, c) => {
+            // O `getParagraphs` da célula traz também os da tabela de dentro: ela marca os dela primeiro.
+            walk(cb);
             for (const p of this.run<{ handles: Handle[] }>({ op: "getParagraphs", body: cb }, "ler").handles) {
               const id = this.id(p);
               if (!out.has(id)) out.set(id, { tabela, linha: l + 1, coluna: c + 1, row });
             }
-            walk(cb);
           });
         });
       }
