@@ -76,8 +76,12 @@ export const formatOf = (p: string): string => (/\.([a-z0-9]+)$/i.exec(p)?.[1] ?
 const SCHEMA = 4;
 /** Quantos arquivos por lote, e a pausa entre os lotes. */
 const BATCH = 40;
-/** O texto (em caracteres) que um lote segura na memória antes de gravar. */
-const BATCH_TEXT = 8 * 1024 * 1024;
+/**
+ * O texto (em caracteres) de uma transação. O FTS5 tokeniza tudo dentro dela, de uma vez, na thread do main: com 40 logs de
+ * 2 MB, o laço do Bun ficava preso 1,1 s por lote, e o histórico do Ditado e a colagem esperavam atrás (P0 #23988). Com
+ * 1 MB, uma transação fica em uns 15 ms. Um arquivo maior que isto vai sozinho.
+ */
+export const BATCH_TEXT = 1024 * 1024;
 /** O cache de páginas do SQLite, em KB (o padrão é 2 MB por conexão; aqui 512 KB). */
 const CACHE_KB = 512;
 /**
@@ -113,6 +117,8 @@ export interface TextIndexOptions {
   maxDocBytes?: number;
   /** A pausa entre os lotes (nos testes, nenhuma). */
   pause?(): Promise<void>;
+  /** O texto de uma transação (`BATCH_TEXT`; testes usam menos). */
+  batchText?: number;
   /** O que uma busca lê no total e por arquivo (testes usam menos). */
   readTotal?: number;
   readFile?: number;
@@ -167,6 +173,10 @@ export function lineOf(text: string, terms: readonly string[], lead = 60): { lin
   return null;
 }
 
+/** Um arquivo lido para o lote: o texto (`null` entra só pelo nome) e, no pdf, docx e xlsx, os lugares. */
+type Item = { f: VaultFile; text: string | null; places?: string };
+const itemText = (it: Item): number => (it.text?.length ?? 0) + (it.places?.length ?? 0);
+
 export class TextIndex {
   private db: Database | null = null;
   private opening: Promise<Database> | null = null;
@@ -176,7 +186,7 @@ export class TextIndex {
   private readonly maxBytes: number;
   private readonly pause: () => Promise<void>;
   /** O que a sessão fez (o teste da 2ª abertura e a medição). */
-  readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0, docs: 0 };
+  readonly stats = { read: 0, nameOnly: 0, removed: 0, skipped: 0, batches: 0, maxBatchText: 0, overCap: 0, alone: 0, docs: 0 };
   /** Os bytes que a última busca leu do disco (o teste do orçamento). */
   lastSearchBytes = 0;
 
@@ -299,21 +309,37 @@ export class TextIndex {
   }
 
   private async index(files: readonly VaultFile[]): Promise<void> {
+    const cap = this.o.batchText ?? BATCH_TEXT;
     let i = 0;
-    while (i < files.length) {
+    /** O arquivo que não coube no lote de antes: abre o próximo. */
+    let carry: Item | null = null;
+    while (i < files.length || carry) {
       if (this.closed) return;
-      const batch: { f: VaultFile; text: string | null; places?: string }[] = [];
-      // O lote fecha em `BATCH` arquivos ou em `BATCH_TEXT` de texto guardado na memória (T22218: uma planilha tirada
-      // chega a 5 MB de texto, e 40 delas de uma vez seriam 200 MB).
+      const batch: Item[] = [];
+      // O lote fecha em `BATCH` arquivos ou antes de passar de `cap` de texto (P0 #23988: é o que a transação tokeniza
+      // de uma vez no main; T22218: e o que ele segura na memória). O arquivo que passaria vai para o próximo lote.
       let held = 0;
-      while (i < files.length && batch.length < BATCH && held < BATCH_TEXT) {
+      const add = (item: Item): boolean => {
+        const size = itemText(item);
+        if (batch.length && held + size > cap) {
+          carry = item;
+          return false;
+        }
+        batch.push(item);
+        held += size;
+        return true;
+      };
+      if (carry) {
+        add(carry);
+        carry = null;
+      }
+      while (i < files.length && batch.length < BATCH && !carry) {
         const f = files[i++]!;
         let text: string | null = null;
         if (isDocText(f.path)) {
           const doc = await this.readDoc(f);
           if (doc === undefined) continue; // sumiu ou saiu da pasta por um link
-          batch.push(doc ? { f, text: doc.text, places: doc.places } : { f, text: null });
-          held += doc ? doc.text.length + doc.places.length : 0;
+          add(doc ? { f, text: doc.text, places: doc.places } : { f, text: null });
           continue;
         }
         if (f.size <= this.maxBytes) {
@@ -327,8 +353,7 @@ export class TextIndex {
           if (bytes === undefined) continue; // sumiu entre o aviso e a leitura: o próximo aviso diz
           if (bytes.byteLength <= this.maxBytes && !looksBinary(bytes)) text = searchableText(f.path, decode(bytes));
         }
-        batch.push({ f, text });
-        held += text?.length ?? 0;
+        add({ f, text });
       }
       const db = this.db;
       if (!db || this.closed) return;
@@ -350,7 +375,11 @@ export class TextIndex {
           else this.stats.read++;
         }
       })();
-      if (i < files.length) await this.pause();
+      this.stats.batches++;
+      this.stats.maxBatchText = Math.max(this.stats.maxBatchText, held);
+      // Acima do teto, só um arquivo sozinho (`alone`); um lote de vários acima dele (`overCap`) é o que travava o laço.
+      if (held > cap) this.stats[batch.length > 1 ? "overCap" : "alone"]++;
+      if (i < files.length || carry) await this.pause();
     }
   }
 
