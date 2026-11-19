@@ -338,10 +338,12 @@ export class DocxKiwi {
     const r = s.applyTableCommandPlan(st.plan);
     if (!r.ok) return false;
     s.flushPendingInput();
-    // As células novas têm de ganhar os mesmos ids que ganharam no arquivo: as operações seguintes falam por eles.
     const fresh = ids.order().filter((n) => !before.has(n));
     if (fresh.length !== op.cells.length) return false;
-    for (const [i, node] of fresh.entries()) if (ids.paraIdOf(node)?.toUpperCase() !== op.cells[i]!.paragraphId.toUpperCase()) return false;
+    // O motor dá o id da célula nova pelo nó, e os nós que a tela já criou (a digitação animada cria alguns) mudam a
+    // conta: a célula pode ganhar na tela um id diferente do arquivo. A linha entra escrita do mesmo jeito, e no fim a
+    // tela diz `false`: o visualizador abre o do disco, com o realce, e os ids voltam a ser os do arquivo.
+    const same = fresh.every((node, i) => ids.paraIdOf(node)?.toUpperCase() === op.cells[i]!.paragraphId.toUpperCase());
     this.reveal(s, { paragraphId: fresh[0]!, offset: 0 }, { block: "centerIfNeeded" });
     for (const [i, node] of fresh.entries()) {
       const text = op.cells[i]!.text;
@@ -352,7 +354,8 @@ export class DocxKiwi {
       if (animate) await wait(KIWI_GAP_MS);
     }
     this.repaint(s);
-    return true;
+    if (!same && animate) await wait(KIWI_HOLD_MS);
+    return same;
   }
 
   private fade(): void {
