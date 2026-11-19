@@ -1275,8 +1275,8 @@ function Notes({ api, drafts, active, openRequest, searchRequest = 0, searchSeen
     }
     if (!/\.md$/i.test(path)) {
       if (view === "file" && fileOpen === path && fileFlush.current && !(await fileFlush.current())) return;
-      // O xlsx (T22432): a versão abre no visualizador da planilha, sem o texto de agora.
-      if (/\.xlsx$/i.test(path)) return setVersionsOf({ path, title, content: "" });
+      // O xlsx (T22432) e o docx (T22797): a versão abre no visualizador do arquivo, sem o texto de agora.
+      if (/\.(xlsx|docx)$/i.test(path)) return setVersionsOf({ path, title, content: "" });
       const f = await api.files?.read?.(path, "text").catch(() => null);
       if (f && "text" in f) setVersionsOf({ path, title, content: f.text });
       return;

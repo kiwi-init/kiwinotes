@@ -58,11 +58,11 @@ export const isEditableText = (name: string): boolean => EDITABLE_TEXT.has((/\.(
 export const hasTextVersions = (name: string): boolean => isEditableText(name) || /\.(csv|tsv)$/i.test(name);
 
 /**
- * Tudo o que tem o painel Versões (T22432, issue #182): os de texto, o xlsx (a versão abre só leitura no visualizador
- * dele) e o quadro branco (o diff dos cartões e das setas). O docx entra quando o Kiwi o gravar (spec #21080): até lá,
- * ele não tem versões para mostrar.
+ * Tudo o que tem o painel Versões (T22432, issue #182): os de texto, o xlsx e o docx (a versão abre só leitura no
+ * visualizador dele; o docx desde o T22797, quando o Kiwi passou a gravá-lo) e o quadro branco (o diff dos cartões e
+ * das setas).
  */
-export const hasVersions = (name: string): boolean => hasTextVersions(name) || /\.(xlsx|canvas)$/i.test(name);
+export const hasVersions = (name: string): boolean => hasTextVersions(name) || /\.(xlsx|docx|canvas)$/i.test(name);
 
 export const viewLimit = (as: FileReadAs): number => (as === "text" ? MAX_VIEW_TEXT_BYTES : MAX_VIEW_BYTES);
 
