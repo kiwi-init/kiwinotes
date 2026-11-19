@@ -152,3 +152,44 @@ describe("apagar e mostrar um arquivo", () => {
     expect(await v.locate("docs/exemplo.pdf")).toBe(path.join(root, "docs/exemplo.pdf"));
   });
 });
+
+describe("o menu da árvore num pacote (.pages) (T20402)", () => {
+  const pkg = { "Nota.md": "Ver [[Relatório.pages]].\n", "Relatório.pages/Index.zip": "zip", "Relatório.pages/Data/foto.png": "png" };
+
+  test("apagar o pacote vai para a Lixeira, e o desfazer traz ele de volta", async () => {
+    const { v, root } = await vault(pkg);
+    // Sem scan: quem põe o pacote de volta na lista é o ramo de pacote do `restore` (o `isDirectory()`).
+    const inner = v as unknown as { scan(o?: unknown): Promise<void> };
+    const scan = inner.scan.bind(v);
+    let scans = 0;
+    inner.scan = (o?: unknown) => (scans++, scan(o));
+    await v.deleteFile("Relatório.pages");
+    expect(existsSync(path.join(root, "Relatório.pages"))).toBe(false);
+    expect((v.list().files ?? []).map((f) => f.path)).not.toContain("Relatório.pages");
+    await v.restore("Relatório.pages");
+    expect(readFileSync(path.join(root, "Relatório.pages/Data/foto.png"), "utf8")).toBe("png");
+    expect((v.list().files ?? []).map((f) => f.path)).toContain("Relatório.pages");
+    expect(v.list().folders).not.toContain("Relatório.pages");
+    expect(scans).toBe(0);
+    // Volta como pacote, não como pasta: dá para apagar de novo pelo menu.
+    await v.deleteFile("Relatório.pages");
+    expect(existsSync(path.join(root, "Relatório.pages"))).toBe(false);
+  });
+
+  test("renomear e mover o pacote, com o link da nota atrás", async () => {
+    const { v, root, read } = await vault(pkg);
+    const r = await v.renameFile("Relatório.pages", "Arquivo/Relatório final.pages");
+    expect(r.updatedLinks).toBe(1);
+    expect(existsSync(path.join(root, "Arquivo/Relatório final.pages/Index.zip"))).toBe(true);
+    expect(read("Nota.md")).toBe("Ver [[Relatório final.pages]].\n");
+    expect((v.list().files ?? []).map((f) => f.path)).toContain("Arquivo/Relatório final.pages");
+  });
+
+  test("o que está dentro do pacote continua de fora do menu", async () => {
+    const { v } = await vault(pkg);
+    expect(await code(v.deleteFile("Relatório.pages/Index.zip"))).toBe("E_NOT_FOUND");
+    expect(await code(v.renameFile("Relatório.pages/Index.zip", "Index.zip"))).toBe("E_NOT_FOUND");
+    // Com `baseVersion`, o desfazer do agente: só arquivo comum.
+    expect(await code(v.deleteFile("Relatório.pages", "x"))).toBe("E_NOT_FOUND");
+  });
+});
