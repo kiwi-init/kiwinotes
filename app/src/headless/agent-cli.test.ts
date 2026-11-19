@@ -113,8 +113,9 @@ describe("o agente pela CLI headless (T8678)", () => {
     const open = (await invoke("agent.status")).json!.value;
     expect(open).toMatchObject({ program: "open", session: { model: "default", effort: "low" } }); // o gato pede esforço baixo por padrão (T19300)
 
-    // Cancelar um pedido longo.
-    const slow = (await invoke("agent.ask", { text: "/lento" })).json!.value.id as string;
+    // Cancelar um pedido longo: o `/ate-cancelar` só para com o cancelar. Com o `/lento` (2 s), num runner lento o
+    // pedido acabava antes de o cancelar chegar, e o `done` vinha com `end_turn` (T20776).
+    const slow = (await invoke("agent.ask", { text: "/ate-cancelar" })).json!.value.id as string;
     await until(async () => (await agentEvents()).some((e) => e.event === "agent.turn" && e.payload.id === slow && e.payload.type === "text"));
     expect((await invoke("agent.cancel")).json!.ok).toBe(true);
     await until(async () =>
