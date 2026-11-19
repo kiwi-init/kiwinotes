@@ -59,7 +59,7 @@ function setup(o: { maxBinaryBytes?: number } = {}) {
     call("files.save", { path: p, content, baseVersion: (await read(p)).version, ...extra });
   const list = async (p: string) => (await call("files.versions", { path: p })).versions as { id: string; at: string; size: number }[];
   const text = async (p: string, id: string) => (await call("files.version", { path: p, id })).content as string;
-  return { call, caps, data, root, read, save, list, text, advance: (ms: number) => (t += ms) };
+  return { call, caps, data, root, vault, read, save, list, text, advance: (ms: number) => (t += ms) };
 }
 
 describe("files.save guarda versões (T21239)", () => {
@@ -256,5 +256,59 @@ describe("o quadro branco (T22432, issue #182)", () => {
     expect(l.length).toBe(2);
     // A versão guardada é sempre um quadro que abriu: o restaurar passa pelo mesmo `saveCanvas`.
     expect(await call("files.restoreVersion", { path: c.path, id: l[1]!.id })).toMatchObject({ saved: true });
+  });
+});
+
+describe("gravar não lê o arquivo inteiro à toa (T22576)", () => {
+  /** Conta as vezes que a capacidade lê o arquivo (`readFile`) e o quadro (`getCanvas`) por fora do próprio save. */
+  function spy(vault: Vault) {
+    const n = { file: 0, canvas: 0 };
+    const readFile = vault.readFile.bind(vault);
+    const getCanvas = vault.getCanvas.bind(vault);
+    vault.readFile = ((...a: Parameters<typeof vault.readFile>) => (n.file++, readFile(...a))) as typeof vault.readFile;
+    vault.getCanvas = ((...a: Parameters<typeof vault.getCanvas>) => (n.canvas++, getCanvas(...a))) as typeof vault.getCanvas;
+    return n;
+  }
+
+  test("com histórico, o files.save só lê o que o próprio save confere; a 1ª versão e o snapshot ainda leem o de antes", async () => {
+    const { call, vault, read, list, text, advance } = setup();
+    const p = "Loja/lista.txt";
+    const save = async (content: string, extra: object = {}) => {
+      const baseVersion = (await read(p)).version;
+      const n = spy(vault);
+      await call("files.save", { path: p, content, baseVersion, ...extra });
+      return n.file;
+    };
+    // A 1ª: sem histórico, lê o de antes (para a versão original) e o save confere a dele.
+    expect(await save("café\n")).toBe(2);
+    expect(await text(p, (await list(p))[1]!.id)).toBe(FILES[p]!);
+    // Com histórico: só a leitura do save (a da versão de base).
+    advance(300_000);
+    expect(await save("café\nleite\n")).toBe(1);
+    advance(10_000);
+    expect(await save("café\nleite\npão\n")).toBe(1);
+    // A cópia do agente (`snapshot`) ainda lê o de antes, e guarda na hora.
+    advance(10_000);
+    const before = (await list(p)).length;
+    expect(await save("chá\n", { snapshot: true })).toBe(2);
+    const l = await list(p);
+    expect(l.length).toBeGreaterThan(before);
+    expect(await Promise.all(l.map((v) => text(p, v.id)))).toContain("café\nleite\npão\n");
+  });
+
+  test("com histórico, o notes.canvasSave não relê o quadro antes de gravar", async () => {
+    const { call, vault, list } = setup();
+    const board = (t: string) => JSON.stringify({ nodes: [{ id: "a", type: "text", text: t, x: 0, y: 0, width: 200, height: 80 }], edges: [] });
+    const c = await call("notes.canvasCreate", { folder: "Loja", title: "Plano", content: board("um") });
+    let version = c.version;
+    const save = async (t: string) => {
+      const n = spy(vault);
+      version = (await call("notes.canvasSave", { path: c.path, content: board(t), baseVersion: version })).version;
+      return n.canvas;
+    };
+    expect(await save("dois")).toBe(2);
+    expect((await call("files.version", { path: c.path, id: (await list(c.path))[1]!.id })).content).toBe(board("um"));
+    expect(await save("três")).toBe(1);
+    expect(await save("quatro")).toBe(1);
   });
 });

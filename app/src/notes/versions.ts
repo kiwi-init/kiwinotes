@@ -132,6 +132,18 @@ export class NoteVersions {
     });
   }
 
+  /**
+   * Se a nota (ou o arquivo) já tem alguma versão (T22576). Sem nenhuma, quem grava precisa do conteúdo de antes para a
+   * 1ª versão; com histórico, o `record` não usa o `before`, e ler o arquivo inteiro só para isso é tempo jogado fora.
+   * Entra na fila, depois das gravações que já foram pedidas.
+   */
+  hasHistory(notePath: string): Promise<boolean> {
+    return this.serial(async () => {
+      const id = await this.idFor(notePath, false);
+      return id !== null && (await this.latest(id)) !== null;
+    });
+  }
+
   /** Grava já o que está pendente (de uma nota, ou de todas). */
   flush(notePath?: string): Promise<void> {
     return this.serial(async () => {
