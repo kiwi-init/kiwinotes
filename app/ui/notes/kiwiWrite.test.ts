@@ -69,6 +69,16 @@ describe("as escritas esperando a recarga", () => {
     expect(w.takeSheet("estoque.xlsx", "c")).toBeNull();
     expect(w.takeSheet("outra.xlsx", "c")).toEqual({ sheetOps: set(9) });
   });
+
+  test("o docx fechado (T21231): as operações de todas as gravações, na ordem, uma vez só", () => {
+    const w = new KiwiWrites();
+    const troca = (t: string) => [{ op: "replace" as const, paragraphId: "1A2B3C4D", from: 0, to: 3, text: t }];
+    w.add({ path: "carta.docx", baseVersion: "a", version: "b", docxOps: troca("Olá") });
+    w.add({ path: "carta.docx", baseVersion: "b", version: "c", docxOps: troca("Oi") });
+    expect(w.takeSheet("carta.docx", "c")).toBeNull();
+    expect(w.takeDocx("carta.docx", "c")).toEqual({ docxOps: [...troca("Olá"), ...troca("Oi")] });
+    expect(w.takeDocx("carta.docx", "c")).toBeNull();
+  });
 });
 
 // #21094: duas escritas seguidas do mesmo pedido (`notes_edit` e depois `notes_append`), cada uma com o seu `agent.wrote`

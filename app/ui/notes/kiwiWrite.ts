@@ -10,6 +10,7 @@ import { splitFrontmatter } from "./frontmatter.ts";
 import { applyKiwiEdits, bodyEdits, type KiwiEdit, type KiwiWriteEnd } from "./editor/kiwi-writing.ts";
 import type { AgentWrote } from "./types.ts";
 import type { SheetOp } from "../../src/shared/sheet/ops.ts";
+import type { DocxOp } from "../../src/shared/docx/ops.ts";
 
 /** Quantas escritas esperam a recarga, no máximo (uma que nunca recarregou não fica para sempre). */
 const KEEP = 32;
@@ -18,8 +19,8 @@ const KEEP = 32;
 export class KiwiWrites {
   private byKey = new Map<string, AgentWrote>();
   add(e: AgentWrote): void {
-    // A nota anima pelos trechos; a planilha, pelas operações (T21114).
-    if (!(e.edits || e.sheetOps?.length) || !e.version) return;
+    // A nota anima pelos trechos; a planilha (T21114) e o docx (T21231), pelas operações.
+    if (!(e.edits || e.sheetOps?.length || e.docxOps?.length) || !e.version) return;
     const key = `${e.path}@${e.version}`;
     this.byKey.delete(key);
     this.byKey.set(key, e);
@@ -37,17 +38,27 @@ export class KiwiWrites {
    * recebido várias, e ao abrir o realce mostra todas, na ordem. Uma vez só.
    */
   takeSheet(path: string, version: string): { sheetOps: SheetOp[] } | null {
+    const chain = this.chain(path, version, "sheetOps");
+    return chain.length ? { sheetOps: chain.flatMap((e) => e.sheetOps!) } : null;
+  }
+  /** O mesmo para o docx fechado (T21231): as operações de todas as gravações, na ordem, para o realce ao abrir. */
+  takeDocx(path: string, version: string): { docxOps: DocxOp[] } | null {
+    const chain = this.chain(path, version, "docxOps");
+    return chain.length ? { docxOps: chain.flatMap((e) => e.docxOps!) } : null;
+  }
+  /** As gravações seguidas com `field` que levaram `path` até `version`, da mais antiga à mais nova; tira cada uma. */
+  private chain(path: string, version: string, field: "sheetOps" | "docxOps"): AgentWrote[] {
     const chain: AgentWrote[] = [];
     let v: string | undefined = version;
     while (v && chain.length < KEEP) {
       const key: string = `${path}@${v}`;
       const e = this.byKey.get(key);
-      if (!e?.sheetOps?.length) break;
+      if (!e?.[field]?.length) break;
       this.byKey.delete(key);
       chain.unshift(e);
       v = e.baseVersion;
     }
-    return chain.length ? { sheetOps: chain.flatMap((e) => e.sheetOps!) } : null;
+    return chain;
   }
 }
 
