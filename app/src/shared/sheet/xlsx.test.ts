@@ -7,7 +7,7 @@ import { join } from "node:path";
 import * as XLSX from "xlsx";
 
 import type { SheetOp } from "./ops.ts";
-import { inspectXlsx, patchXlsx, readXlsx } from "./xlsx.ts";
+import { inspectXlsx, patchXlsx, readXlsx, renameTableColumn } from "./xlsx.ts";
 import { partText, readZip, writeZip } from "./zip.ts";
 
 const original = new Uint8Array(readFileSync(join(import.meta.dir, "../../../test/fixtures/sheet/estoque.xlsx")));
@@ -213,7 +213,7 @@ describe("abas", () => {
     expect(changedParts(original, out)).toEqual(["xl/charts/chart1.xml", "xl/workbook.xml", "xl/worksheets/sheet2.xml"]);
     expect(cell(out, "Resumo", "B2")?.formula).toBe("SUM('Loja centro'!E2:E7)");
     expect(text(out, "xl/charts/chart1.xml")).toContain("<f>'Loja centro'!$C$2:$C$7</f>");
-    expect(sheetJs(out).SheetNames).toEqual(["Loja centro", "Resumo"]);
+    expect(sheetJs(out).SheetNames).toEqual(["Loja centro", "Resumo", "Fornecedores"]);
   });
 
   test("nova aba: a parte, o Override, a relação e o <sheet>; nada mais muda", () => {
@@ -221,11 +221,71 @@ describe("abas", () => {
       { op: "addSheet", name: "Compras" },
       { op: "set", sheet: "Compras", row: 0, col: 0, value: "Fornecedor" },
     ]);
-    expect(changedParts(original, out)).toEqual(["[Content_Types].xml", "xl/_rels/workbook.xml.rels", "xl/workbook.xml", "xl/worksheets/sheet3.xml"]);
+    expect(changedParts(original, out)).toEqual(["[Content_Types].xml", "xl/_rels/workbook.xml.rels", "xl/workbook.xml", "xl/worksheets/sheet4.xml"]);
     expect(cell(out, "Compras", "A1")).toEqual({ value: "Fornecedor" });
     const js = sheetJs(out);
-    expect(js.SheetNames).toEqual(["Estoque", "Resumo", "Compras"]);
+    expect(js.SheetNames).toEqual(["Estoque", "Resumo", "Fornecedores", "Compras"]);
     expect(js.Sheets.Compras!.A1.v).toBe("Fornecedor");
+  });
+});
+
+describe("tabela (revisão do T21107)", () => {
+  const column = (bytes: Uint8Array) => [...text(bytes, "xl/tables/table1.xml").matchAll(/<tableColumn\b[^>]*\bname="([^"]*)"/g)].map((m) => m[1]);
+
+  test("mudar o cabeçalho troca o tableColumn e as referências estruturadas", () => {
+    const out = patchXlsx(original, [{ op: "set", sheet: "Fornecedores", row: 0, col: 2, value: "Prazo (dias)" }]);
+    expect(column(out)).toEqual(["Fornecedor", "Cidade", "Prazo (dias)"]);
+    expect(cell(out, "Fornecedores", "C1")).toEqual({ value: "Prazo (dias)" });
+    expect(cell(out, "Resumo", "B3")).toMatchObject({ formula: "AVERAGE(Fornecedores[Prazo (dias)])" });
+    expect(text(out, "xl/workbook.xml")).toContain(">Fornecedores[[#Data],[Prazo (dias)]]</definedName>");
+    expect(changedParts(original, out)).toEqual(["xl/tables/table1.xml", "xl/workbook.xml", "xl/worksheets/sheet2.xml", "xl/worksheets/sheet3.xml"]);
+    const js = sheetJs(out);
+    expect(js.Sheets.Fornecedores!.C1.v).toBe("Prazo (dias)");
+    expect(js.Sheets.Resumo!.B3.f).toBe("AVERAGE(Fornecedores[Prazo (dias)])");
+  });
+
+  test("como no Excel: número vira texto, nome repetido ganha um número", () => {
+    const out = patchXlsx(original, [
+      { op: "set", sheet: "Fornecedores", row: 0, col: 1, value: 2026 },
+      { op: "set", sheet: "Fornecedores", row: 0, col: 2, value: "fornecedor" },
+    ]);
+    expect(column(out)).toEqual(["Fornecedor", "2026", "fornecedor2"]);
+    expect(cell(out, "Fornecedores", "B1")).toEqual({ value: "2026" });
+    expect(cell(out, "Fornecedores", "C1")).toEqual({ value: "fornecedor2" });
+    // A célula de dados e a de fora da tabela continuam livres.
+    const free = patchXlsx(original, [{ op: "set", sheet: "Fornecedores", row: 1, col: 2, value: 12 }, { op: "set", sheet: "Fornecedores", row: 0, col: 4, value: "" }]);
+    expect(changedParts(original, free)).toEqual(["xl/worksheets/sheet3.xml"]);
+  });
+
+  test("cabeçalho vazio ou com fórmula é recusado com o motivo", () => {
+    expect(() => patchXlsx(original, [{ op: "set", sheet: "Fornecedores", row: 0, col: 0, value: null }])).toThrow("não pode ficar vazio");
+    expect(() => patchXlsx(original, [{ op: "set", sheet: "Fornecedores", row: 0, col: 0, value: " " }])).toThrow("não pode ficar vazio");
+    expect(() => patchXlsx(original, [{ op: "set", sheet: "Fornecedores", row: 0, col: 0, value: null, formula: "1+1" }])).toThrow("não leva fórmula");
+  });
+
+  test("apagar o cabeçalho sem a tabela é recusado; uma linha de dados sai e a tabela encolhe", () => {
+    expect(() => patchXlsx(original, [{ op: "deleteRows", sheet: "Fornecedores", at: 0, count: 1 }])).toThrow("o cabeçalho de uma tabela sairia sem ela");
+    const out = patchXlsx(original, [{ op: "deleteRows", sheet: "Fornecedores", at: 1, count: 1 }]);
+    expect(text(out, "xl/tables/table1.xml")).toContain('ref="A1:C3"');
+    expect(column(out)).toEqual(["Fornecedor", "Cidade", "Prazo"]);
+  });
+
+  test("a linha de totais também só sai com a tabela", () => {
+    const zip = readZip(original);
+    const table = zip.find((p) => p.name === "xl/tables/table1.xml")!;
+    const withTotals = writeZip(original, zip, new Map([["xl/tables/table1.xml", new TextEncoder().encode(partText(original, table).replace('headerRowCount="1"', 'headerRowCount="1" totalsRowCount="1"'))]]), new Set());
+    expect(() => patchXlsx(withTotals, [{ op: "deleteRows", sheet: "Fornecedores", at: 3, count: 1 }])).toThrow("a linha de totais de uma tabela sairia sem ela");
+    expect(() => patchXlsx(withTotals, [{ op: "deleteRows", sheet: "Fornecedores", at: 2, count: 1 }])).not.toThrow();
+  });
+
+  test("a referência estruturada: as formas do arquivo, o escape com ', e o que não é dela", () => {
+    const r = (f: string) => renameTableColumn(f, "Vendas", "Qtd [un]", "Itens");
+    expect(r("SUM(Vendas[Qtd '[un']])")).toBe("SUM(Vendas[Itens])");
+    expect(r("Vendas[[#This Row],[Qtd '[un']]]*2")).toBe("Vendas[[#This Row],[Itens]]*2");
+    expect(r("SUM(vendas[[Qtd '[un']]:[Preço]])")).toBe("SUM(vendas[[Itens]:[Preço]])");
+    expect(r('"Vendas[Qtd \'[un\']]"&Outras[Qtd \'[un\']]&MinhasVendas[Qtd \'[un\']]')).toBe('"Vendas[Qtd \'[un\']]"&Outras[Qtd \'[un\']]&MinhasVendas[Qtd \'[un\']]');
+    expect(renameTableColumn("Vendas[#Headers]", "Vendas", "#Headers", "x")).toBe("Vendas[#Headers]");
+    expect(renameTableColumn("Vendas[Preço]", "Vendas", "Preço", "Preço # 'final'")).toBe("Vendas[Preço '# ''final'']");
   });
 });
 
@@ -281,7 +341,7 @@ describe("só leitura, com o motivo", () => {
 describe("ler", () => {
   test("valores, fórmulas, formatos e nomes", () => {
     const book = readXlsx(original);
-    expect(book.sheets.map((s) => s.name)).toEqual(["Estoque", "Resumo"]);
+    expect(book.sheets.map((s) => s.name)).toEqual(["Estoque", "Resumo", "Fornecedores"]);
     expect(cell(original, "Estoque", "A2")).toEqual({ value: "Caneca azul" });
     expect(cell(original, "Estoque", "D2")).toEqual({ value: 24.9, format: '"R$" #,##0.00' });
     expect(cell(original, "Estoque", "E8")).toEqual({ value: null, formula: "SUM(E2:E7)", format: '"R$" #,##0.00' });

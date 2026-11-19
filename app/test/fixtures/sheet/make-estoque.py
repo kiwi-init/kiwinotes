@@ -7,6 +7,7 @@ from openpyxl.chart import BarChart, Reference
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.workbook.defined_name import DefinedName
 
 wb = Workbook()
@@ -54,4 +55,12 @@ r = wb.create_sheet("Resumo")
 r.append(["Itens em estoque", "=Estoque!C8"])
 r.append(["Valor total", "=SUM(Estoque!E2:E7)"])
 r["B2"].number_format = '"R$" #,##0.00'
+# Uma tabela (revisão do T21107): o cabeçalho tem de bater com o `tableColumn`, e as referências estruturadas seguem o nome.
+f = wb.create_sheet("Fornecedores")
+f.append(["Fornecedor", "Cidade", "Prazo"])
+for linha in [("Olaria Exemplo", "Cidade A", 10), ("Vidraria Modelo", "Cidade B", 7), ("Tecelagem Teste", "Cidade C", 15)]:
+    f.append(list(linha))
+f.add_table(Table(displayName="Fornecedores", ref="A1:C4", tableStyleInfo=TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)))
+r.append(["Prazo médio", "=AVERAGE(Fornecedores[Prazo])"])
+wb.defined_names["Prazos"] = DefinedName("Prazos", attr_text="Fornecedores[[#Data],[Prazo]]")
 wb.save(os.path.join(os.path.dirname(os.path.abspath(__file__)), "estoque.xlsx"))

@@ -135,7 +135,8 @@ function applyOp(book: Book, op: Exclude<SheetOp, { op: "batch" }>): void {
   return shiftSheet(book, info, shiftOf(op)!);
 }
 
-function setCell(book: Book, info: SheetInfo, op: Extract<SheetOp, { op: "set" }>): void {
+function setCell(book: Book, info: SheetInfo, input: Extract<SheetOp, { op: "set" }>): void {
+  const op = tableHeader(book, info, input);
   let xml = expandShared(book.text(info.path));
   const here = { row: op.row, col: op.col };
   for (const f of elements(xml, "f")) {
@@ -179,6 +180,123 @@ function setCell(book: Book, info: SheetInfo, op: Extract<SheetOp, { op: "set" }
   });
   book.setText(info.path, serializeSheet(model));
   if (hadFormula || op.formula !== undefined) book.formulasChanged();
+}
+
+/**
+ * A célula é o cabeçalho de uma tabela (revisão do T21107): o Excel exige que ela bata com o `tableColumn name`, senão
+ * repara o arquivo. O nome novo vai para a tabela e para as referências estruturadas (`Tabela1[Nome]`) das fórmulas, dos
+ * nomes definidos, das colunas calculadas e dos gráficos. Como no Excel, o cabeçalho é texto (número vira texto), e um
+ * nome repetido na tabela ganha um número (`Qtd2`). Vazio ou fórmula no cabeçalho são recusados com o motivo.
+ */
+function tableHeader(book: Book, info: SheetInfo, op: Extract<SheetOp, { op: "set" }>): Extract<SheetOp, { op: "set" }> {
+  for (const r of book.rels(info.path).filter((r) => r.type.endsWith("/table"))) {
+    const t = book.text(r.path);
+    const tAttrs = /<table\b([^>]*)>/.exec(t)?.[1] ?? "";
+    const ends = rangeEnds(attr(tAttrs, "ref") ?? "");
+    if (!ends || attr(tAttrs, "headerRowCount") === "0") continue;
+    const [p, q] = ends;
+    if (op.row !== p.row || op.col < p.col! || op.col > q.col!) continue;
+    if (op.formula !== undefined) throw new SheetOpError("o cabeçalho de uma tabela não leva fórmula");
+    const typed = op.value === null ? "" : typeof op.value === "boolean" ? (op.value ? "VERDADEIRO" : "FALSO") : String(op.value);
+    if (!typed.trim()) throw new SheetOpError("o cabeçalho de uma tabela não pode ficar vazio");
+    const columns = elements(t, "tableColumn").map((c) => unescapeXml(attr(c.attrs, "name") ?? ""));
+    const index = op.col - p.col!;
+    const from = columns[index];
+    if (from === undefined) continue;
+    const taken = new Set(columns.filter((_, i) => i !== index).map((c) => c.toLowerCase()));
+    let name = typed;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${typed}${n}`;
+    if (name !== from) {
+      let i = 0;
+      const attrValue = escapeXml(name).replace(/\n/g, "&#10;").replace(/\r/g, "&#13;");
+      book.setText(r.path, editTags(t, ["tableColumn"], (a) => (i++ === index ? setAttr(a, "name", attrValue) : a)));
+      renameColumnEverywhere(book, unescapeXml(attr(tAttrs, "displayName") ?? attr(tAttrs, "name") ?? ""), from, name);
+    }
+    return { op: "set", sheet: op.sheet, row: op.row, col: op.col, value: name, ...(op.format ? { format: op.format } : {}) };
+  }
+  return op;
+}
+
+function renameColumnEverywhere(book: Book, table: string, from: string, to: string): void {
+  if (!table) return;
+  const f = (x: string) => renameTableColumn(x, table, from, to);
+  let changed = false;
+  const edit = (path: string, next: (xml: string) => string) => {
+    const before = book.text(path);
+    const after = next(before);
+    if (after !== before) {
+      book.setText(path, after);
+      changed = true;
+    }
+  };
+  edit(book.workbook, (xml) => mapElements(xml, "definedName", (_, inner) => escapeXml(f(unescapeXml(inner)))));
+  for (const sheet of book.sheets()) {
+    if (sheet.kind !== "worksheet") continue;
+    edit(sheet.path, (xml) => mapFormulas(xml, f));
+    for (const r of book.rels(sheet.path).filter((r) => r.type.endsWith("/table"))) {
+      edit(r.path, (xml) => ["calculatedColumnFormula", "totalsRowFormula"].reduce((x, tag) => mapElements(x, tag, (_, inner) => escapeXml(f(unescapeXml(inner)))), xml));
+    }
+  }
+  for (const chart of book.charts()) edit(chart, (xml) => mapFormulas(xml, f));
+  if (changed) book.formulasChanged();
+}
+
+/**
+ * Troca a coluna `from` por `to` nas referências estruturadas da tabela `table` (`Tabela1[Nome]`,
+ * `Tabela1[[#This Row],[Nome]]`, `Tabela1[[Nome]:[Qtd]]`), fora do texto entre aspas. Dentro dos colchetes, `'` escapa
+ * o caractere seguinte (`[`, `]`, `#` e `'`).
+ */
+export function renameTableColumn(formula: string, table: string, from: string, to: string): string {
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const unesc = (n: string) => n.replace(/'(.)/g, "$1");
+  const esc = (n: string) => n.replace(/['#[\]]/g, "'$&");
+  const close = (text: string, open: number) => {
+    let depth = 0;
+    for (let i = open; i < text.length; i++) {
+      if (text[i] === "'") i++;
+      else if (text[i] === "[") depth++;
+      else if (text[i] === "]" && --depth === 0) return i;
+    }
+    return -1;
+  };
+  const column = (spec: string) => (!spec.startsWith("#") && same(unesc(spec), from) ? esc(to) : spec);
+  let out = "";
+  for (let i = 0; i < formula.length; ) {
+    if (formula[i] === '"') {
+      let j = i + 1;
+      while (j < formula.length && !(formula[j] === '"' && formula[j + 1] !== '"')) j += formula[j] === '"' ? 2 : 1;
+      out += formula.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    const open = i + table.length;
+    if (same(formula.slice(i, open), table) && formula[open] === "[" && !/[\w.\\]/.test(formula[i - 1] ?? "")) {
+      const end = close(formula, open);
+      if (end < 0) return out + formula.slice(i);
+      const inner = formula.slice(open + 1, end);
+      let next = "";
+      if (!inner.startsWith("[")) next = column(inner);
+      else
+        for (let k = 0; k < inner.length; ) {
+          if (inner[k] !== "[") {
+            next += inner[k++];
+            continue;
+          }
+          const e = close(inner, k);
+          if (e < 0) {
+            next += inner.slice(k);
+            break;
+          }
+          next += `[${column(inner.slice(k + 1, e))}]`;
+          k = e + 1;
+        }
+      out += `${formula.slice(i, open)}[${next}]`;
+      i = end + 1;
+      continue;
+    }
+    out += formula[i++];
+  }
+  return out;
 }
 
 /** O conteúdo de uma célula nova: os filhos e o tipo; `null` para a vazia. */
@@ -229,6 +347,13 @@ function shiftSheet(book: Book, info: SheetInfo, s: Shift): void {
     if (s.axis === "col" && crosses(ref, s)) throw new SheetOpError(`não dá para ${what} dentro de uma tabela`);
     const next = shiftRange(ref, s);
     if (next === null || spanOf(next, "row") < 2) throw new SheetOpError(`não dá para ${what}: uma tabela ficaria sem linhas`);
+    // O cabeçalho e a linha de totais só saem com a tabela inteira (revisão do T21107): sem eles, a primeira linha de dados
+    // viraria o cabeçalho, e os `tableColumn` não bateriam mais.
+    const tAttrs = /<table\b([^>]*)>/.exec(t)?.[1] ?? "";
+    const ends = rangeEnds(ref);
+    const gone = (row: number | undefined) => s.axis === "row" && s.count < 0 && row !== undefined && row >= s.at && row <= s.at - s.count - 1;
+    if (attr(tAttrs, "headerRowCount") !== "0" && gone(ends?.[0].row)) throw new SheetOpError(`não dá para ${what}: o cabeçalho de uma tabela sairia sem ela`);
+    if (Number(attr(tAttrs, "totalsRowCount") ?? "0") > 0 && gone(ends?.[1].row)) throw new SheetOpError(`não dá para ${what}: a linha de totais de uma tabela sairia sem ela`);
     tableXml.set(path, editTags(t, ["table", "autoFilter", "sortState"], (attrs) => mapAttr(attrs, "ref", (r) => shiftRange(r, s) ?? r)));
   }
 
