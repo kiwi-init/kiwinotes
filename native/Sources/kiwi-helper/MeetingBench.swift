@@ -29,6 +29,10 @@ enum MeetingBench {
         /// No batch e no Whisper, só a fala que o Silero acha (o VAD do ditado), um pedaço por vez. Sem isso, nos silêncios
         /// longos de cada canal, o Whisper pula trechos e inventa texto; o Parakeet roda igual, para comparar (#20668).
         var chunkVAD = false
+        /// T22375: o dicionário da pessoa (`--dictionary`). No batch, a correção fonética do texto de cada pedaço, como o
+        /// ditado e a reunião ao vivo fazem; com `ctc`, antes dela o CTC acha os termos no áudio do pedaço (`--ctc`).
+        var dictionary: TranscriptDictionary = .empty
+        var ctc = false
     }
 
     static let sampleRate = 16_000.0
@@ -78,12 +82,15 @@ enum MeetingBench {
         }
         let models = try await AsrModels.downloadAndLoad(version: .ultra)
         let vad = o.chunkVAD ? try await VadManager(config: VadConfig(defaultThreshold: 0.7)) : nil
+        let terms = o.dictionary.terms
+        let session = o.ctc && !terms.isEmpty
+            ? try await Transcriber.session(terms: terms, ctc: try await CtcModels.downloadAndLoad(variant: .ctc110m)) : nil
         try await withThrowingTaskGroup(of: Void.self) { group in
             for (i, samples) in channels.enumerated() {
                 group.addTask {
                     switch o.asr {
                     case .stream: try await streamChannel(samples, name: names[i], models: models, o: o)
-                    case .batch: try await batchChannel(samples, name: names[i], models: models, vad: vad)
+                    case .batch: try await batchChannel(samples, name: names[i], models: models, vad: vad, dictionary: o.dictionary, session: session)
                     case .none, .whisper: break
                     }
                 }
@@ -93,14 +100,21 @@ enum MeetingBench {
         return Date().timeIntervalSince(start)
     }
 
-    private static func batchChannel(_ samples: [Float], name: String, models: AsrModels, vad: VadManager?) async throws {
+    private static func batchChannel(_ samples: [Float], name: String, models: AsrModels, vad: VadManager?,
+                                     dictionary: TranscriptDictionary, session: VocabularyBoostingSession?) async throws {
         let manager = AsrManager(config: .default)
         try await manager.loadModels(models)
         for (offset, piece) in try await speechPieces(samples, vad: vad) {
             var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
             let result = try await manager.transcribe(piece, decoderState: &state)
             let base = Double(offset) / sampleRate
-            for w in words(result.tokenTimings ?? []) {
+            var found = words(result.tokenTimings ?? [])
+            if !dictionary.terms.isEmpty {
+                var raw = found.map(\.text).joined(separator: " ")
+                if let session { raw = await Transcriber.rescored(raw, timings: result.tokenTimings ?? [], audio: piece, session: session) }
+                found = WordRetiming.retimed(found, as: TranscriptPostProcessor.process(raw, dictionary: dictionary))
+            }
+            for w in found {
                 emit(["type": "word", "channel": name, "start": base + w.start, "end": base + w.end, "text": w.text])
             }
         }

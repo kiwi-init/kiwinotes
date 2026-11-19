@@ -226,13 +226,23 @@ if let (input, output) = exportPDF {
     NSApplication.shared.run()
 }
 
-if let meeting {
-    Task { exit(await MeetingBench.run(meeting)) }
+/// T22375: o `--dictionary` também vale nas medidas da reunião.
+func meetingDictionary() -> TranscriptDictionary {
+    guard let dictionaryFile else { return .empty }
+    guard let read = TranscribeFiles.readDictionary(dictionaryFile) else { exit(2) }
+    return read
+}
+
+if var meeting {
+    meeting.dictionary = meetingDictionary()
+    meeting.ctc = useCTC
+    Task { [meeting] in exit(await MeetingBench.run(meeting)) }
     CFRunLoopRun()
 }
 
 if var meetingLive {
     meetingLive.language = language
+    meetingLive.dictionary = meetingDictionary()
     Task { exit(await MeetingLiveRun.run(meetingLive)) }
     CFRunLoopRun()
 }

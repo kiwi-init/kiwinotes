@@ -8,16 +8,12 @@ enum TranscribeFiles {
     static func run(_ paths: [String], dictionaryFile: String?, language: TranscriptionLanguage, vad: Bool,
                     ctc: Bool = false) async -> Int32 {
         let stt = Transcriber(vocabularyBoosting: ctc)
-        var entries: [DictionaryEntry] = []
+        var dictionary = TranscriptDictionary.empty
         if let dictionaryFile {
-            guard let text = try? String(contentsOfFile: dictionaryFile, encoding: .utf8) else {
-                FileHandle.standardError.write(Data("can't read \(dictionaryFile)\n".utf8))
-                return 2
-            }
-            entries = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty && !$0.hasPrefix("#") }.map { DictionaryEntry(term: $0) }
+            guard let read = readDictionary(dictionaryFile) else { return 2 }
+            dictionary = read
         }
-        await stt.configure(language: language, dictionary: TranscriptDictionary(entries), vad: vad)
+        await stt.configure(language: language, dictionary: dictionary, vad: vad)
         let loadStart = ProcessInfo.processInfo.systemUptime
         do {
             try await stt.warmUp()
@@ -45,6 +41,16 @@ enum TranscribeFiles {
             }
         }
         return 0
+    }
+
+    /// A dictionary file: one term per line, `#` for comments. Nil (and the reason on stderr) when it can't be read.
+    static func readDictionary(_ path: String) -> TranscriptDictionary? {
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+            FileHandle.standardError.write(Data("can't read \(path)\n".utf8))
+            return nil
+        }
+        return TranscriptDictionary(text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }.map { DictionaryEntry(term: $0) })
     }
 
     /// 16 kHz mono, as the mic delivers it.

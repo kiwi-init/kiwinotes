@@ -190,19 +190,32 @@ actor Transcriber {
             throw Failure.failed
         }
         var raw = result.text
-        if let session = await boostingSession(),
-           let rescored = await session.rescore(text: raw, tokenTimings: result.tokenTimings ?? [], audioSamples: audio),
-           rescored.wasModified {
-            // Swap by swap (T1973): the rescorer's answer mixes right swaps with wrong ones on Portuguese.
-            let timings = result.tokenTimings ?? []
-            let confidence = VocabularyRescoreGuard.wordConfidence(tokens: timings.map { ($0.token, Double($0.confidence)) })
-            raw = VocabularyRescoreGuard.apply(original: raw, confidence: confidence, swaps: rescored.replacements.compactMap { r in
-                guard r.shouldReplace, let term = r.replacementWord, let score = r.replacementScore else { return nil }
-                return .init(from: r.originalWord, to: term, margin: Double(score - r.originalScore))
-            })
+        if let session = await boostingSession() {
+            raw = await Self.rescored(raw, timings: result.tokenTimings ?? [], audio: audio, session: session)
         }
         let text = TranscriptPostProcessor.process(raw, dictionary: dictionary)
         return Output(raw: raw, text: text, lang: SpokenLanguage.detect(text))
+    }
+
+    /// The model's text after the CTC rescoring, swap by swap (T1973): the rescorer's answer mixes right swaps with wrong
+    /// ones on Portuguese, and `VocabularyRescoreGuard` keeps only the ones that pass on their own. The dictation and the
+    /// meetings (T22375) both go through here.
+    static func rescored(_ text: String, timings: [TokenTiming], audio: [Float], session: VocabularyBoostingSession) async -> String {
+        guard let rescored = await session.rescore(text: text, tokenTimings: timings, audioSamples: audio), rescored.wasModified else { return text }
+        let confidence = VocabularyRescoreGuard.wordConfidence(tokens: timings.map { ($0.token, Double($0.confidence)) })
+        return VocabularyRescoreGuard.apply(original: text, confidence: confidence, swaps: rescored.replacements.compactMap { r in
+            guard r.shouldReplace, let term = r.replacementWord, let score = r.replacementScore else { return nil }
+            return .init(from: r.originalWord, to: term, margin: Double(score - r.originalScore))
+        })
+    }
+
+    /// The session for a list of terms, with the dictation's thresholds (FluidAudio #967): a wrong replacement costs
+    /// more than a miss.
+    static func session(terms: [String], ctc: CtcModels) async throws -> VocabularyBoostingSession {
+        try await VocabularyBoostingSession(
+            vocabulary: CustomVocabularyContext(terms: terms.map { CustomVocabularyTerm(text: $0) }),
+            ctcModels: ctc,
+            thresholds: .init(cbw: 0, minSimilarity: 0.7))
     }
 
     /// Seconds of speech in the clip by the same VAD (Silero, threshold 0.7), for the precise route (T7454): a hum or
@@ -241,11 +254,7 @@ actor Transcriber {
             return nil
         }
         do {
-            // Dictation thresholds (FluidAudio #967): a wrong replacement costs more than a miss.
-            let session = try await VocabularyBoostingSession(
-                vocabulary: CustomVocabularyContext(terms: terms.map { CustomVocabularyTerm(text: $0) }),
-                ctcModels: ctc,
-                thresholds: .init(cbw: 0, minSimilarity: 0.7))
+            let session = try await Self.session(terms: terms, ctc: ctc)
             boosting = (terms, session)
             return session
         } catch {
