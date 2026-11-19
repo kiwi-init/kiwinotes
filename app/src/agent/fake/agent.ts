@@ -6,6 +6,8 @@
 // O que ele faz depende do pedido:
 //   (qualquer texto)   pensa, responde "Você disse: …" e conta o turno da sessão (para provar que ela foi retomada)
 //   /lento             pensa, usa a ferramenta Read e responde em 20 pedaços, um a cada 100 ms; respeita o cancelar
+//   /ate-cancelar      pensa e responde um pedaço a cada 100 ms até o cancelar (no máximo 60 s): o cancelar sempre pega
+//                      o pedido no meio, mesmo num runner lento (T20776)
 //   /permissao         pede permissão para usar o Bash e conta o que o Kiwi respondeu
 //   /sem-login         falha com o `authRequired` do ACP
 //   /limite            falha com a mensagem de limite de uso
@@ -612,6 +614,15 @@ const app = agent({ name: "kiwi-fake-agent" })
         });
         const outcome = res.outcome.outcome === "selected" ? res.outcome.optionId : res.outcome.outcome;
         await say(client, sessionId, `permissão: ${outcome}`);
+        return { stopReason: "end_turn" };
+      }
+      case "/ate-cancelar": {
+        await think(client, sessionId);
+        for (let i = 1, end = Date.now() + 60_000; Date.now() < end; i++) {
+          if (cancelled.has(sessionId)) return { stopReason: "cancelled" };
+          await say(client, sessionId, `pedaço ${i} `);
+          await Bun.sleep(100);
+        }
         return { stopReason: "end_turn" };
       }
       case "/lento": {
