@@ -111,4 +111,5 @@ try {
 } finally {
   await browser.close();
   await cli(["stop"]).catch(() => {});
+  registry.stop(); // o registro falso é um Bun.serve: aberto, o processo não sai (T21513)
 }
