@@ -6,11 +6,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import * as XLSX from "xlsx";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-
-import mammoth from "mammoth";
+import { openTreeSession } from "@docx-editor.dev/core/binding";
 
 import { zipBytes } from "../../test/office-files.ts";
-import { docParagraphs, parseDocHtml } from "../../ui/notes/files/docx.ts";
 import { ABA_LARGA, MARCA, PASTA, xlsxGrande } from "../../test/regua/arquivos.ts";
 import { columnName, docLines, docText, DocTextError, isDocText } from "./doc-text.ts";
 
@@ -51,69 +49,127 @@ describe("docText: as fixtures da régua", () => {
   }, 60_000); // gerar a planilha com o SheetJS leva segundos
 });
 
-/** Os parágrafos com texto que o visualizador do docx mostra (o mammoth), na ordem: o que o número do parágrafo conta. */
-const viewerBlocks = async (bytes: Uint8Array) => docParagraphs(parseDocHtml((await mammoth.convertToHtml({ buffer: Buffer.from(bytes) })).value));
+// Os namespaces de um docx como o Word grava: a caixa de texto (o desenho e o VML) e a equação.
+const NS = [
+  W,
+  `xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"`,
+  `xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"`,
+  `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`,
+  `xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"`,
+  `xmlns:v="urn:schemas-microsoft-com:vml"`,
+  `xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"`,
+  `mc:Ignorable="wps"`,
+].join(" ");
+
+/** Um docx inteiro (com o `[Content_Types].xml` e as relações), que o motor do visualizador abre. */
+const docxInteiro = (body: string) =>
+  zipBytes(
+    {
+      "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+      "_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+      "word/document.xml": `<?xml version="1.0" encoding="UTF-8"?><w:document ${NS}><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`,
+    },
+    { deflate: true },
+  );
+
+/** A caixa de texto como o Word grava: o `mc:Choice` com o desenho (`wps:txbx`) e o `mc:Fallback` com o VML. */
+const caixa = (texts: string[]) => {
+  const content = `<w:txbxContent>${texts.map(p).join("")}</w:txbxContent>`;
+  const graphic = `<wp:extent cx="2000000" cy="600000"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="1" name="Caixa 1"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="600000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></wps:spPr><wps:txbx>${content}</wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic>`;
+  const anchor = `<wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>3000000</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>${graphic}</wp:anchor>`;
+  return `<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>${anchor}</w:drawing></mc:Choice><mc:Fallback><w:pict><v:shape><v:textbox>${content}</v:textbox></v:shape></w:pict></mc:Fallback></mc:AlternateContent></w:r>`;
+};
+
+/**
+ * O lugar de cada palavra pelo motor do visualizador (T22847): o número (de 1) do parágrafo do corpo onde ela está,
+ * contado pela lista do próprio motor (`paragraphIds`). A palavra numa caixa de texto fica no parágrafo que segura a
+ * caixa: o id dela começa pelo dele.
+ */
+function lugarNoMotor(bytes: Uint8Array): (palavra: string) => number[] {
+  const r = openTreeSession(bytes);
+  if (!r.ok) throw new Error(`o motor não abriu: ${r.reason}`);
+  const ids = r.session.paragraphIds();
+  return (palavra) =>
+    r.session.findText(palavra, { stories: "body" }).matches.map((m) => ids.findIndex((id) => m.blockId === id || m.blockId.startsWith(`${id}.`)) + 1);
+}
+
+/**
+ * Cada pedaço do docText está, pelo motor, no parágrafo que ele diz: confere por todas as palavras dele. `semBusca`: as
+ * palavras que a busca do motor não alcança (a caixa de texto antiga, só VML), conferidas à parte.
+ */
+async function confereComOMotor(bytes: Uint8Array, semBusca: string[] = []): Promise<void> {
+  const noMotor = lugarNoMotor(bytes);
+  const { segments } = await docText("a.docx", bytes);
+  expect(segments.length).toBeGreaterThan(0);
+  for (const s of segments) {
+    if (!("paragraph" in s.at)) throw new Error("não é um parágrafo");
+    for (const palavra of s.text.split(" ").filter((w) => w.length > 2 && !semBusca.includes(w))) expect({ palavra, lugares: noMotor(palavra) }).toMatchObject({ palavra, lugares: expect.arrayContaining([s.at.paragraph]) });
+  }
+}
 
 describe("docText: docx", () => {
-  test("o número do parágrafo é o do visualizador (o mammoth): a imagem e a equação não contam", async () => {
-    const bytes = fixture("estoque.docx");
-    const mine = (await docText("estoque.docx", bytes)).segments.map((s) => s.text);
-    expect(mine).toEqual(await viewerBlocks(bytes));
-  });
-
-  test("a lista com subitem e a tabela contam como o visualizador", async () => {
-    const item = (t: string, lvl: number) => `<w:p><w:pPr><w:numPr><w:ilvl w:val="${lvl}"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>${t}</w:t></w:r></w:p>`;
-    const numbering = `<?xml version="1.0" encoding="UTF-8"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
-    const body = p("Antes") + item("Caixa", 0) + item("Fita", 1) + item("Parafuso", 0) + `<w:tbl><w:tr><w:tc>${p("Seção")}</w:tc><w:tc>${p("12")}</w:tc></w:tr></w:tbl>` + p("Depois");
-    const rels = `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>`;
-    const bytes = zipBytes(
-      {
-        "word/document.xml": `<?xml version="1.0" encoding="UTF-8"?><w:document ${W}><w:body>${body}</w:body></w:document>`,
-        "word/numbering.xml": numbering,
-        "word/_rels/document.xml.rels": rels,
-      },
-      { deflate: true },
-    );
-    const html = (await mammoth.convertToHtml({ buffer: Buffer.from(bytes) })).value;
-    expect(html).toContain("<li>Caixa<ol><li>Fita</li></ol></li>");
-    const mine = (await docText("a.docx", bytes)).segments.map((s) => s.text);
-    expect(mine).toEqual(["Antes", "Caixa", "Fita", "Parafuso", "Seção", "12", "Depois"]);
-    expect(mine).toEqual(await viewerBlocks(bytes));
-  });
-
-  test("o tab e a quebra viram espaço; o código de campo e o parágrafo vazio ficam de fora", async () => {
+  test("a caixa de texto antes do parágrafo procurado não muda o número dele: o mesmo do motor (T22847)", async () => {
     const body =
-      p("Primeiro") +
-      `<w:p/><w:p><w:pPr/></w:p>` +
-      `<w:p><w:r><w:t>Caixa</w:t><w:tab/><w:t>azul</w:t><w:br/><w:t>fundo</w:t></w:r></w:p>` +
-      `<w:p><w:r><w:instrText> PAGE </w:instrText></w:r><w:r><w:t>Página &amp; seção &lt;1&gt;</w:t></w:r></w:p>`;
-    const d = await docText("a.docx", docx(body));
-    expect(d.segments).toEqual([
-      { at: { paragraph: 1 }, text: "Primeiro" },
-      { at: { paragraph: 2 }, text: "Caixa azul fundo" },
-      { at: { paragraph: 3 }, text: "Página & seção <1>" },
+      p("Antes") +
+      `<w:p>${caixa(["Na caixa um", "Na caixa dois"])}<w:r><w:t>Fora</w:t></w:r></w:p>` +
+      `<w:p>${caixa(["Caixa sozinha"])}</w:p>` +
+      p("A graviola chegou na sexta.");
+    const bytes = docxInteiro(body);
+    const graviola = (await docText("a.docx", bytes)).segments.find((s) => s.text.includes("graviola"));
+    expect(graviola?.at).toEqual({ paragraph: lugarNoMotor(bytes)("graviola")[0] });
+    expect(graviola?.at).toEqual({ paragraph: 4 });
+  });
+
+  test("o texto da caixa fica no parágrafo que a segura, uma vez só (sem o mc:Fallback)", async () => {
+    const body = p("Antes") + `<w:p>${caixa(["Na caixa"])}<w:r><w:t>Fora</w:t></w:r></w:p>` + `<w:p>${caixa(["Caixa sozinha"])}</w:p>` + p("Depois");
+    const { segments } = await docText("a.docx", docxInteiro(body));
+    expect(segments).toEqual([
+      { at: { paragraph: 1 }, text: "Antes" },
+      { at: { paragraph: 2 }, text: "Fora" },
+      { at: { paragraph: 2 }, text: "Na caixa" },
+      { at: { paragraph: 3 }, text: "Caixa sozinha" },
+      { at: { paragraph: 4 }, text: "Depois" },
     ]);
   });
 
-  test("a caixa de texto sai uma vez só (sem o mc:Fallback), logo depois do parágrafo que a segura, como no visualizador", async () => {
-    // Como o Word grava: o `mc:Choice` com o desenho (`wps:txbx`) e o `mc:Fallback` com o VML (`v:textbox`).
-    const NS = [
-      W,
-      `xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"`,
-      `xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"`,
-      `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`,
-      `xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"`,
-      `xmlns:v="urn:schemas-microsoft-com:vml"`,
-    ].join(" ");
-    const box = (t: string) => `<w:txbxContent>${p(t)}</w:txbxContent>`;
-    const choice = `<mc:Choice Requires="wps"><w:drawing><wp:anchor><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:txbx>${box("Na caixa")}</wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice>`;
-    const fallback = `<mc:Fallback><w:pict><v:shape><v:textbox>${box("Na caixa")}</v:textbox></v:shape></w:pict></mc:Fallback>`;
-    const body = p("Antes") + `<w:p><w:r><mc:AlternateContent>${choice}${fallback}</mc:AlternateContent></w:r><w:r><w:t>Fora</w:t></w:r></w:p>` + p("Depois");
-    const bytes = zipBytes({ "word/document.xml": `<?xml version="1.0" encoding="UTF-8"?><w:document ${NS}><w:body>${body}</w:body></w:document>` }, { deflate: true });
-    const mine = (await docText("a.docx", bytes)).segments;
-    expect(mine.map((s) => s.text)).toEqual(["Antes", "Fora", "Na caixa", "Depois"]);
-    expect(mine.map((s) => s.text)).toEqual(await viewerBlocks(bytes));
-    expect(mine.map((s) => s.at)).toEqual([1, 2, 3, 4].map((paragraph) => ({ paragraph })));
+  test("o parágrafo vazio, o só de espaços, o só de tab e o da equação contam no número, como no motor; o texto deles não entra", async () => {
+    const body =
+      p("Primeiro") +
+      `<w:p/><w:p><w:pPr/></w:p>` +
+      p("   ") +
+      `<w:p><w:r><w:tab/></w:r></w:p>` +
+      `<w:p><m:oMathPara><m:oMath><m:r><m:t>x=2</m:t></m:r></m:oMath></m:oMathPara></w:p>` +
+      `<w:p><w:r><w:t xml:space="preserve">Texto e </w:t></w:r><m:oMath><m:r><m:t>y</m:t></m:r></m:oMath></w:p>` +
+      `<w:p><w:r><w:t>Caixa</w:t><w:tab/><w:t>azul</w:t><w:br/><w:t>fundo</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:instrText> PAGE </w:instrText></w:r><w:r><w:t>Página &amp; seção &lt;1&gt;</w:t></w:r></w:p>`;
+    const bytes = docxInteiro(body);
+    expect((await docText("a.docx", bytes)).segments).toEqual([
+      { at: { paragraph: 1 }, text: "Primeiro" },
+      { at: { paragraph: 7 }, text: "Texto e" },
+      { at: { paragraph: 8 }, text: "Caixa azul fundo" },
+      { at: { paragraph: 9 }, text: "Página & seção <1>" },
+    ]);
+    await confereComOMotor(bytes);
+  });
+
+  test("o controle de conteúdo, a tabela dentro da tabela e a caixa de texto antiga (só VML): o mesmo número do motor", async () => {
+    const body =
+      `<w:sdt><w:sdtPr/><w:sdtContent>${p("No controle")}${p("")}</w:sdtContent></w:sdt>` +
+      `<w:tbl><w:tr><w:tc>${p("Célula")}<w:tbl><w:tr><w:tc>${p("Dentro")}</w:tc></w:tr></w:tbl>${p("")}</w:tc></w:tr></w:tbl>` +
+      `<w:p><w:r><w:pict><v:shape><v:textbox><w:txbxContent>${p("Caixa antiga")}</w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>` +
+      p("Fim");
+    const bytes = docxInteiro(body);
+    await confereComOMotor(bytes, ["Caixa", "antiga"]);
+    // A busca do motor não entra na caixa só VML: o número dela vem da lista do motor (o 6º dos 7 parágrafos do corpo).
+    const r = openTreeSession(bytes);
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.session.paragraphIds()).toHaveLength(7);
+    expect((await docText("a.docx", bytes)).segments.find((s) => s.text === "Caixa antiga")?.at).toEqual({ paragraph: 6 });
+  });
+
+  test("as fixtures do repo: cada pedaço no parágrafo que o motor diz", async () => {
+    await confereComOMotor(fixture("estoque.docx"));
+    await confereComOMotor(new Uint8Array(readFileSync(path.join(import.meta.dir, "../../test/fixtures/files/proposta.docx"))));
   });
 
   test("sem o document.xml, ou que não é zip: erro", async () => {

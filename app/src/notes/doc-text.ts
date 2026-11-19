@@ -2,8 +2,8 @@
 //
 // - Tudo local: o pdf pelo PDF.js que o app já usa, o docx pelo `word/document.xml` e o xlsx pelas células e pelo
 //   `sharedStrings.xml`, lidos direto do zip, sem o mammoth nem o SheetJS (mais leves para 200 arquivos de uma vez).
-// - Cada pedaço sabe onde está: a página do pdf, o parágrafo do docx (contado de 1, só os que têm texto) ou a célula
-//   do xlsx (a aba e o `A1`). O índice guarda um pedaço por linha, e a linha achada diz onde o arquivo abre.
+// - Cada pedaço sabe onde está: a página do pdf, o parágrafo do docx (contado de 1, todos os do corpo, como o motor do
+//   visualizador) ou a célula do xlsx (a aba e o `A1`). O índice guarda um pedaço por linha, e a linha achada diz onde o arquivo abre.
 // - Um teto de caracteres (`maxChars`): passou, o resto fica de fora, e `truncated` diz isso.
 
 import { decodeEntities, pdfjs, pdfPageLines, zipExtract } from "../agent/tools/files.ts";
@@ -151,10 +151,13 @@ function attr(attrs: string, name: string): string | undefined {
 
 /**
  * Os parágrafos do `word/document.xml`, na ordem: o texto dos `<w:t>` (o inserido de uma alteração controlada entra; o
- * excluído, `<w:delText>`, e o código de campo, `<w:instrText>`, não), o tab e a quebra como espaço. Um parágrafo dentro
- * de outro (a caixa de texto) sai separado, logo depois do que o segura. Só os que têm texto contam no número, como no
- * visualizador (o mammoth pula o parágrafo vazio); a equação (`<m:t>`) fica de fora pelo mesmo motivo: o mammoth não a
- * mostra.
+ * excluído, `<w:delText>`, e o código de campo, `<w:instrText>`, não), o tab e a quebra como espaço.
+ *
+ * O número conta como o motor do visualizador (T22847): todo parágrafo do corpo, o da célula e o do controle de
+ * conteúdo também, mesmo o vazio, o só de espaços, o de equação ou o que só segura uma caixa de texto (a lista
+ * `paragraphIds` do motor). Só entra no índice o que tem texto. O parágrafo de dentro de outro (a caixa de texto) não
+ * conta: o texto dele fica no número do parágrafo que segura a caixa, logo depois do texto deste. A equação (`<m:t>`)
+ * fica de fora do texto.
  */
 function docxText(bytes: Uint8Array, out: Collector): void {
   const pkg = new Package(bytes, "docx");
@@ -162,8 +165,7 @@ function docxText(bytes: Uint8Array, out: Collector): void {
   if (raw === null) throw new DocTextError("não é um docx que abre");
   // O `mc:Fallback` repete o texto do `mc:Choice` (a caixa de texto do Word novo e a do antigo): fica só um.
   const doc = raw.replace(/<mc:Fallback\b[\s\S]*?<\/mc:Fallback>/g, "");
-  // Cada parágrafo aberto guarda o texto dele e os de dentro (a caixa de texto), que saem logo depois dele, como no
-  // mammoth: primeiro o parágrafo que segura a caixa, depois os da caixa, na ordem.
+  // Cada parágrafo aberto guarda o texto dele e os de dentro (a caixa de texto), que saem com o número dele.
   const stack: { text: string; inner: string[] }[] = [];
   let n = 0;
   const tag = /<(\/?)(w:p|w:t|w:tab|w:br|w:cr)\b([^>]*?)(\/?)>/g;
@@ -171,13 +173,21 @@ function docxText(bytes: Uint8Array, out: Collector): void {
   while ((m = tag.exec(doc))) {
     const [, close, name, , self] = m;
     if (name === "w:p") {
-      if (self) continue;
-      if (!close) stack.push({ text: "", inner: [] });
-      else if (stack.length) {
-        const p = stack.pop()!;
-        const texts = [p.text, ...p.inner];
-        if (stack.length) stack[stack.length - 1]!.inner.push(...texts);
-        else for (const text of texts) if (oneLine(text) && !out.add({ paragraph: ++n }, text)) return;
+      if (self) {
+        if (!stack.length) n++;
+        continue;
+      }
+      if (!close) {
+        stack.push({ text: "", inner: [] });
+        continue;
+      }
+      const p = stack.pop();
+      if (!p) continue;
+      const texts = [p.text, ...p.inner];
+      if (stack.length) stack[stack.length - 1]!.inner.push(...texts);
+      else {
+        n++;
+        for (const text of texts) if (oneLine(text) && !out.add({ paragraph: n }, text)) return;
       }
     } else if (!stack.length || close) {
       continue;

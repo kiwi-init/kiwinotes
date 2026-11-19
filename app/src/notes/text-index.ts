@@ -73,7 +73,7 @@ function placeOf(key: string): DocPlace | undefined {
 export const formatOf = (p: string): string => (/\.([a-z0-9]+)$/i.exec(p)?.[1] ?? "").toLowerCase();
 
 /** Muda quando o esquema muda: o índice velho é apagado e refeito. */
-const SCHEMA = 3;
+const SCHEMA = 4;
 /** Quantos arquivos por lote, e a pausa entre os lotes. */
 const BATCH = 40;
 /** O texto (em caracteres) que um lote segura na memória antes de gravar. */

@@ -30,6 +30,13 @@ export interface DocxHandle {
   mark(matches: DocxMatch[], current: number): void;
   /** Rola até o achado, só se ele não está à vista. */
   reveal(match: DocxMatch): void;
+  /**
+   * O id do n-ésimo parágrafo do corpo (de 1), pela lista do motor: o `{ paragraph: n }` que a busca das Notas acha
+   * conta os mesmos (T22847). `null` se não existe.
+   */
+  paragraphId(n: number): string | null;
+  /** Rola até um parágrafo, mesmo sem texto desenhado (o que só segura uma caixa de texto). */
+  revealParagraph(id: string): void;
   /** Rola até o alto de uma página (a primeira é 0). */
   revealPage(index: number): void;
   /** Solta o motor e o documento (#22186): a memória volta ao fechar o arquivo. */
@@ -103,6 +110,10 @@ export function mountDocx(host: HTMLElement, bytes: Uint8Array, { zoom, onLink }
     },
     reveal(m) {
       surface?.revealPosition({ paragraphId: m.paragraphId, offset: m.from }, { block: "centerIfNeeded" });
+    },
+    paragraphId: (n) => (surface && n >= 1 ? (surface.session.paragraphIds()[n - 1] ?? null) : null),
+    revealParagraph(id) {
+      surface?.revealParagraph(id, { block: "centerIfNeeded" });
     },
     revealPage(index) {
       surface?.revealPage(index, { block: "start", offsetPx: 0 });

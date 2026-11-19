@@ -6,7 +6,7 @@
 //   bun run cli start --data DIR --no-helper
 //   bun run cli ui notes --script scripts/ui-scripts/busca-documentos.json --out DIR/prints --data DIR
 
-import { Document, Packer, Paragraph, TextRun } from "docx";
+import { Document, Packer, Paragraph, Textbox, TextRun } from "docx";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -27,8 +27,9 @@ for (let n = 1; n <= 4; n++) {
   if (n === 3) page.drawText("A graviola chegou na sexta.", { x: 50, y: 60, size: 14, font });
 }
 
-// O docx: a palavra no parágrafo 30, depois de um título e de 28 itens. Um docx inteiro (o pacote `docx`, como o do
-// docx-check), que o motor do visualizador abre.
+// O docx: a palavra no parágrafo 31, depois de um título, de 28 itens e de uma caixa de texto no meio deles (T22847: o
+// parágrafo da caixa conta, o texto de dentro dela não). Um docx inteiro (o pacote `docx`, como o do docx-check), que o
+// motor do visualizador abre.
 const par = (t: string) => new Paragraph({ children: [new TextRun(t)] });
 const docx = new Uint8Array(
   await Packer.toBuffer(
@@ -37,7 +38,9 @@ const docx = new Uint8Array(
         {
           children: [
             par("Relatório da feira"),
-            ...Array.from({ length: 28 }, (_, i) => par(`Item ${i + 1}: a banca de caju abriu cedo e fechou às seis.`)),
+            ...Array.from({ length: 10 }, (_, i) => par(`Item ${i + 1}: a banca de caju abriu cedo e fechou às seis.`)),
+            new Textbox({ children: [par("Aviso: o mercado abre às sete."), par("Traga a sacola.")], style: { width: "3in", height: "0.8in" } }),
+            ...Array.from({ length: 18 }, (_, i) => par(`Item ${i + 11}: a banca de caju abriu cedo e fechou às seis.`)),
             par("A graviola chegou na sexta, e a banca dela fechou mais tarde."),
             ...Array.from({ length: 20 }, (_, i) => par(`Nota ${i + 1}: sem novidade.`)),
           ],
